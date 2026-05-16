@@ -7,8 +7,6 @@ export interface ImportDef {
   path: string;
   alias: string;
   loc: SourceLoc;
-  /** Top-level `#` lines immediately before this import (formatter). */
-  leadingComments?: string[];
 }
 
 /** `import script "<path>" as <name>` — binds an external script file as a local script symbol. */
@@ -18,8 +16,6 @@ export interface ScriptImportDef {
   /** Bound script name. */
   alias: string;
   loc: SourceLoc;
-  /** Top-level `#` lines immediately before this import (formatter). */
-  leadingComments?: string[];
 }
 
 export interface RuleRefDef {
@@ -52,16 +48,12 @@ export interface MatchExprDef {
 }
 
 export type ConstRhs =
-  | { kind: "expr"; bashRhs: string; /** `const x = """..."""` — runtime dedents margin. */ tripleQuoted?: boolean }
+  | { kind: "expr"; bashRhs: string }
   | { kind: "run_capture"; ref: WorkflowRefDef; args?: string; bareIdentifierArgs?: string[]; async?: boolean }
   | { kind: "ensure_capture"; ref: RuleRefDef; args?: string; bareIdentifierArgs?: string[] }
   | {
       kind: "prompt_capture";
       raw: string;
-      /** Body source: "string" (quoted literal), "identifier" (bare var ref), "triple_quoted" (""" block). */
-      bodyKind?: "string" | "identifier" | "triple_quoted";
-      /** Original identifier name when bodyKind is "identifier". */
-      bodyIdentifier?: string;
       loc: SourceLoc;
       returns?: string;
     }
@@ -70,7 +62,7 @@ export type ConstRhs =
 
 /** RHS of `channel <- …` */
 export type SendRhsDef =
-  | { kind: "literal"; token: string; /** `channel <- """..."""` — runtime dedents margin. */ tripleQuoted?: boolean }
+  | { kind: "literal"; token: string }
   | { kind: "var"; bash: string }
   | { kind: "run"; ref: WorkflowRefDef; args?: string; bareIdentifierArgs?: string[] }
   /** Parsed then rejected in validation (use `run ref` to capture a return value). */
@@ -92,8 +84,6 @@ export interface ChannelDef {
   name: string;
   routes?: WorkflowRefDef[];
   loc: SourceLoc;
-  /** Top-level `#` lines immediately before this channel (formatter). */
-  leadingComments?: string[];
 }
 
 export interface WorkflowDef {
@@ -114,8 +104,6 @@ export interface ScriptDef {
   body: string;
   /** Fence language tag (e.g. "python3", "node"). Maps to `#!/usr/bin/env <lang>`. */
   lang?: string;
-  /** How the body was provided: "backtick" (single `), "fenced" (``` block). */
-  bodyKind: "backtick" | "fenced";
   loc: SourceLoc;
 }
 
@@ -153,10 +141,6 @@ export type WorkflowStepDef =
   | {
       type: "prompt";
       raw: string;
-      /** Body source: "string" (quoted literal), "identifier" (bare var ref), "triple_quoted" (""" block). */
-      bodyKind?: "string" | "identifier" | "triple_quoted";
-      /** Original identifier name when bodyKind is "identifier". */
-      bodyIdentifier?: string;
       loc: SourceLoc;
       /** When set, capture prompt stdout into this variable name. */
       captureName?: string;
@@ -171,8 +155,6 @@ export type WorkflowStepDef =
   | {
       type: "fail";
       message: string;
-      /** Set when `fail """..."""`; runtime dedents margin. */
-      tripleQuoted?: boolean;
       loc: SourceLoc;
     }
   | {
@@ -184,8 +166,6 @@ export type WorkflowStepDef =
   | {
       type: "log";
       message: string;
-      /** Set when `log """..."""`; runtime dedents margin. */
-      tripleQuoted?: boolean;
       loc: SourceLoc;
       /** When set, log message comes from a managed inline-script call. */
       managed?: { kind: "run_inline_script"; body: string; lang?: string; args?: string; bareIdentifierArgs?: string[] };
@@ -193,8 +173,6 @@ export type WorkflowStepDef =
   | {
       type: "logerr";
       message: string;
-      /** Set when `logerr """..."""`; runtime dedents margin. */
-      tripleQuoted?: boolean;
       loc: SourceLoc;
       /** When set, logerr message comes from a managed inline-script call. */
       managed?: { kind: "run_inline_script"; body: string; lang?: string; args?: string; bareIdentifierArgs?: string[] };
@@ -208,14 +186,6 @@ export type WorkflowStepDef =
   | {
       type: "return";
       value: string;
-      /** Set when `return """..."""`; runtime dedents margin. */
-      tripleQuoted?: boolean;
-      /**
-       * Original source expression when `return <expr>` was bare-identifier
-       * sugar (`return response` → value `"${response}"`). Preserved so the
-       * formatter can emit the bare form authored by the user.
-       */
-      bareSource?: string;
       loc: SourceLoc;
       /** When set, return value comes from a managed run/ensure/match instead of the literal `value`. */
       managed?:
@@ -284,8 +254,6 @@ export interface jaiphModule {
   filePath: string;
   /** Optional in-file workflow metadata (agent model, command, run options). */
   metadata?: WorkflowMetadata;
-  /** Top-level `#` lines immediately before `config {` (formatter). */
-  configLeadingComments?: string[];
   imports: ImportDef[];
   /** `import script "<path>" as <name>` declarations. */
   scriptImports?: ScriptImportDef[];
@@ -298,10 +266,6 @@ export interface jaiphModule {
   envDecls?: EnvDeclDef[];
   /** Present only when parsing a *.test.jh file. */
   tests?: TestBlockDef[];
-  /** Encounter order of rule / script / workflow / env / test (excludes imports, config, channels). */
-  topLevelOrder?: TopLevelEmitOrder[];
-  /** Top-level `#` lines after the last declaration (formatter). */
-  trailingTopLevelComments?: string[];
 }
 
 /** Docker sandbox runtime configuration. */
@@ -310,11 +274,6 @@ export interface RuntimeConfig {
   dockerNetwork?: string;
   dockerTimeoutSeconds?: number;
 }
-
-/** One line inside `config { }`: comment or assignment (formatter round-trip order). */
-export type ConfigBodyPart =
-  | { kind: "comment"; text: string }
-  | { kind: "assign"; key: string };
 
 /** In-file workflow metadata (replaces config file for V1). */
 export interface WorkflowMetadata {
@@ -329,8 +288,6 @@ export interface WorkflowMetadata {
   run?: { debug?: boolean; logsDir?: string; recoverLimit?: number };
   runtime?: RuntimeConfig;
   module?: { name?: string; version?: string; description?: string };
-  /** Preserves `#` lines and assignment order inside `config { }` (formatter). */
-  configBodySequence?: ConfigBodyPart[];
 }
 
 /** Step inside a test block. Only present when module is a test file (*.test.jh). */
@@ -397,8 +354,6 @@ export interface TestBlockDef {
   description: string;
   steps: TestStepDef[];
   loc: SourceLoc;
-  /** Top-level `#` lines immediately before this `test` block (formatter). */
-  leadingComments?: string[];
 }
 
 export interface JaiphTestModule {

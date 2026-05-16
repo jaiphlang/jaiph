@@ -1,6 +1,7 @@
 import type { ConstRhs, RuleRefDef, WorkflowRefDef } from "../types";
+import { createTrivia, type Trivia } from "./trivia";
 import { fail, parseCallRef, rejectTrailingContent } from "./core";
-import { parseTripleQuoteBlock, tripleQuoteBodyToRaw } from "./triple-quote";
+import { dedentTripleQuotedBody, parseTripleQuoteBlock, tripleQuoteBodyToRaw } from "./triple-quote";
 import { parseAnonymousInlineScript } from "./inline-script";
 import { parsePromptStep } from "./prompt";
 import { parseMatchExpr } from "./match";
@@ -58,6 +59,7 @@ export function parseConstRhs(
   col: number,
   forRule: boolean,
   constName: string,
+  trivia: Trivia = createTrivia(),
 ): { value: ConstRhs; nextLineIdx: number } {
   const head = rhs.trimStart();
   if (head.startsWith("prompt ")) {
@@ -67,22 +69,26 @@ export function parseConstRhs(
     const innerRaw = lines[lineIdx];
     const promptCol = innerRaw.indexOf("prompt") + 1;
     const promptArg = rhs.slice(rhs.indexOf("prompt") + "prompt".length).trimStart();
-    const result = parsePromptStep(filePath, lines, lineIdx, promptArg, promptCol, constName);
+    const result = parsePromptStep(filePath, lines, lineIdx, promptArg, promptCol, constName, trivia);
     const st = result.step;
     if (st.type !== "prompt" || st.captureName !== constName) {
       fail(filePath, "const ... = prompt internal parse error", lineNo, col);
     }
-    return {
-      value: {
-        kind: "prompt_capture",
-        raw: st.raw,
-        loc: st.loc,
-        returns: st.returns,
-        ...(st.bodyKind ? { bodyKind: st.bodyKind } : {}),
-        ...(st.bodyIdentifier ? { bodyIdentifier: st.bodyIdentifier } : {}),
-      },
-      nextLineIdx: result.nextLineIdx,
+    const promptTrivia = trivia.getNode(st);
+    const value: ConstRhs = {
+      kind: "prompt_capture",
+      raw: st.raw,
+      loc: st.loc,
+      returns: st.returns,
     };
+    if (promptTrivia) {
+      trivia.setNode(value, {
+        ...(promptTrivia.bodyKind ? { bodyKind: promptTrivia.bodyKind } : {}),
+        ...(promptTrivia.bodyIdentifier ? { bodyIdentifier: promptTrivia.bodyIdentifier } : {}),
+        ...(promptTrivia.rawBody !== undefined ? { rawBody: promptTrivia.rawBody } : {}),
+      });
+    }
+    return { value, nextLineIdx: result.nextLineIdx };
   }
   if (head.startsWith("run ")) {
     const rest = head.slice("run ".length).trim();
@@ -168,7 +174,9 @@ export function parseConstRhs(
     tqLines[lineIdx] = head;
     const { body, nextIdx, afterClose } = parseTripleQuoteBlock(filePath, tqLines, lineIdx);
     if (afterClose) fail(filePath, 'unexpected content after closing """', nextIdx);
-    return { value: { kind: "expr", bashRhs: tripleQuoteBodyToRaw(body), tripleQuoted: true }, nextLineIdx: nextIdx - 1 };
+    const value: ConstRhs = { kind: "expr", bashRhs: tripleQuoteBodyToRaw(dedentTripleQuotedBody(body)) };
+    trivia.setNode(value, { tripleQuoted: true, rawBody: body });
+    return { value, nextLineIdx: nextIdx - 1 };
   }
   const callLike = head.includes("(") ? parseCallRef(head.trimEnd()) : null;
   if (callLike) {

@@ -20,33 +20,13 @@
   "scripts": [
     {
       "body": "true",
-      "bodyKind": "backtick",
       "comments": [],
       "name": "ok_impl"
     },
     {
       "body": "printf '%s' \"$1\" > \"$2\"",
-      "bodyKind": "backtick",
       "comments": [],
       "name": "save"
-    }
-  ],
-  "topLevelOrder": [
-    {
-      "index": 0,
-      "kind": "rule"
-    },
-    {
-      "index": 0,
-      "kind": "script"
-    },
-    {
-      "index": 1,
-      "kind": "script"
-    },
-    {
-      "index": 0,
-      "kind": "workflow"
     }
   ],
   "workflows": [

@@ -1,6 +1,7 @@
 import type { WorkflowStepDef } from "../types";
+import { createTrivia, type Trivia } from "./trivia";
 import { fail, hasUnescapedClosingQuote, indexOfClosingDoubleQuote } from "./core";
-import { parseTripleQuoteBlock, tripleQuoteBodyToRaw } from "./triple-quote";
+import { dedentTripleQuotedBody, parseTripleQuoteBlock, tripleQuoteBodyToRaw } from "./triple-quote";
 
 /**
  * Prompt body source tag stored in the AST.
@@ -181,6 +182,7 @@ export function parsePromptStep(
   promptArg: string,
   promptCol: number,
   captureName?: string,
+  trivia: Trivia = createTrivia(),
 ): { step: WorkflowStepDef; nextLineIdx: number } {
   const lineNo = lineIdx + 1;
 
@@ -214,8 +216,9 @@ export function parsePromptStep(
       tripleQuoteLineIdx,
     );
 
-    // Wrap body in quotes so the runtime's interpolateWithCaptures can process ${} vars
-    const raw = tripleQuoteBodyToRaw(body);
+    // Wrap body in quotes so the runtime's interpolateWithCaptures can process ${} vars.
+    // Apply the same dedent at parse time so the runtime no longer needs a tripleQuoted flag.
+    const raw = tripleQuoteBodyToRaw(dedentTripleQuotedBody(body));
 
     const linesForReturns = lines.length === 0 ? tqLines : lines;
     let returnsSchema: string | undefined = returnsOnClosingLine;
@@ -235,15 +238,16 @@ export function parsePromptStep(
       }
     }
 
+    const step = {
+      type: "prompt" as const,
+      raw,
+      loc: { line: lineNo, col: promptCol },
+      ...(captureName ? { captureName } : {}),
+      ...(returnsSchema !== undefined ? { returns: returnsSchema } : {}),
+    };
+    trivia.setNode(step, { bodyKind: "triple_quoted", rawBody: body });
     return {
-      step: {
-        type: "prompt",
-        raw,
-        bodyKind: "triple_quoted",
-        loc: { line: lineNo, col: promptCol },
-        ...(captureName ? { captureName } : {}),
-        ...(returnsSchema !== undefined ? { returns: returnsSchema } : {}),
-      },
+      step,
       nextLineIdx: consumeEndIdx - 1,
     };
   }
@@ -263,15 +267,16 @@ export function parsePromptStep(
       lines,
       lineIdx,
     );
+    const step = {
+      type: "prompt" as const,
+      raw: promptRaw,
+      loc: { line: lineNo, col: promptCol },
+      ...(captureName ? { captureName } : {}),
+      ...(returnsSchema !== undefined ? { returns: returnsSchema } : {}),
+    };
+    trivia.setNode(step, { bodyKind: "string" });
     return {
-      step: {
-        type: "prompt",
-        raw: promptRaw,
-        bodyKind: "string",
-        loc: { line: lineNo, col: promptCol },
-        ...(captureName ? { captureName } : {}),
-        ...(returnsSchema !== undefined ? { returns: returnsSchema } : {}),
-      },
+      step,
       nextLineIdx: nextIndex - 1,
     };
   }
@@ -299,16 +304,16 @@ export function parsePromptStep(
 
   // Store as "${identifier}" so the runtime interpolates the variable
   const raw = `"\${${identifier}}"`;
+  const step = {
+    type: "prompt" as const,
+    raw,
+    loc: { line: lineNo, col: promptCol },
+    ...(captureName ? { captureName } : {}),
+    ...(returnsSchema !== undefined ? { returns: returnsSchema } : {}),
+  };
+  trivia.setNode(step, { bodyKind: "identifier", bodyIdentifier: identifier });
   return {
-    step: {
-      type: "prompt",
-      raw,
-      bodyKind: "identifier",
-      bodyIdentifier: identifier,
-      loc: { line: lineNo, col: promptCol },
-      ...(captureName ? { captureName } : {}),
-      ...(returnsSchema !== undefined ? { returns: returnsSchema } : {}),
-    },
+    step,
     nextLineIdx: nextIndex - 1,
   };
 }

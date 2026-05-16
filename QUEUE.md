@@ -13,34 +13,6 @@ Process rules:
 
 ***
 
-## Split source-fidelity data from the semantic AST into a Trivia / CST layer #dev-ready
-
-**Design reference:** `design/2026-05-15-parser-compiler-simplification.md` § Appendix A.
-
-**Why:** `WorkflowStepDef` and `jaiphModule` today carry roughly ten fields whose only consumer is the formatter: `leadingComments`, `configLeadingComments`, `trailingTopLevelComments`, `configBodySequence`, `topLevelOrder`, `bareSource`, the `tripleQuoted` flags on literal/return/log/fail/send/const, `bodyKind`, `bodyIdentifier`. Every validator/emitter path has to ignore or thread these through unchanged. Pulling them out before the AST is collapsed (next task) lets the new `Expr` shape be designed against the *semantic* core only.
-
-**Scope:**
-
-- Introduce a `Trivia` layer (parallel map keyed by node id, or a CST node with both a semantic and a syntactic side) that owns all source-fidelity data currently on the AST.
-- Every formatter-only field listed above is removed from `WorkflowStepDef`, `jaiphModule`, `ConstRhs`, `SendRhsDef`, and any other AST type, and re-homed in `Trivia`.
-- `parsejaiph` returns `{ ast, trivia }` (or equivalent) instead of a single fat AST.
-- The formatter is rewritten to read from `Trivia` alongside the AST. No other consumer (validator, emitter, transpiler, runtime) reads `Trivia` at all.
-- Round-trip behavior is bit-for-bit identical for every fixture under `test-fixtures/` and `examples/`.
-
-**Acceptance criteria** (each verified by a test):
-
-1. None of the listed fields appear on any `WorkflowStepDef` variant, `jaiphModule`, `ConstRhs`, `SendRhsDef`, or other semantic AST type. A type-level test fails if any of them reappears.
-2. Validator and emitter source files do not reference `Trivia` or its fields. A grep test fails if they do.
-3. Formatter round-trip is bit-for-bit on every fixture under `test-fixtures/` and `examples/`. Add an explicit test that parses → formats → parses → formats and asserts both formatted outputs match.
-4. `npm test` passes, including formatter round-trip tests and the golden corpus.
-5. `npm run build` passes; TypeScript strict-mode errors are zero.
-
-**Out of scope:** the `Expr` collapse (next task) — this refactor only relocates source-fidelity fields, it does not change the semantic AST's shape. Surface syntax.
-
-**Dependency:** Refactor 5 (ModuleGraph, previous task) should be complete first so the parser is already I/O-pure when its return shape changes.
-
-***
-
 ## Collapse `bareIdentifierArgs` into a typed `Arg[]` on every call site #dev-ready
 
 **Design reference:** `design/2026-05-15-parser-compiler-simplification.md` § Appendix D.

@@ -7,16 +7,12 @@ function unescapeDslDoubleQuotedInner(inner: string): string {
 }
 
 /**
- * Values stored as `tripleQuoteBodyToRaw(parsedBody)` keep source indentation for the formatter.
- * At runtime, apply common-leading-whitespace removal (same as historical parse-time dedent).
+ * Apply common-leading-whitespace dedent to a `tripleQuoteBodyToRaw`-encoded
+ * value. Still used for match-arm bodies (which carry their own
+ * `tripleQuotedBody` flag and are not part of the trivia split).
  */
 export function tripleQuotedRawForRuntime(raw: string): string {
   if (raw.length < 2 || raw[0] !== '"' || raw[raw.length - 1] !== '"') return raw;
   const inner = unescapeDslDoubleQuotedInner(raw.slice(1, -1));
   return tripleQuoteBodyToRaw(dedentCommonLeadingWhitespace(inner));
-}
-
-/** Plain multiline text from `log """…"""` / `logerr` / `fail` (no surrounding quotes in AST). */
-export function plainMultilineOrchestrationForRuntime(text: string): string {
-  return dedentCommonLeadingWhitespace(text);
 }

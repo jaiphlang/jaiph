@@ -1,4 +1,5 @@
-import { jaiphModule } from "./types";
+import { jaiphModule, TopLevelEmitOrder } from "./types";
+import { Trivia, createTrivia } from "./parse/trivia";
 import { fail } from "./parse/core";
 import { parseChannelLine } from "./parse/channels";
 import { parseEnvDecl } from "./parse/env";
@@ -9,7 +10,17 @@ import { parseScriptBlock } from "./parse/scripts";
 import { parseWorkflowBlock } from "./parse/workflows";
 import { parseTestBlock } from "./parse/tests";
 
+export interface ParseResult {
+  ast: jaiphModule;
+  trivia: Trivia;
+}
+
 export function parsejaiph(source: string, filePath: string): jaiphModule {
+  return parsejaiphWithTrivia(source, filePath).ast;
+}
+
+export function parsejaiphWithTrivia(source: string, filePath: string): ParseResult {
+  const trivia = createTrivia();
   const lines = source.split(/\r?\n/);
   const mod: jaiphModule = {
     filePath,
@@ -19,8 +30,8 @@ export function parsejaiph(source: string, filePath: string): jaiphModule {
     rules: [],
     scripts: [],
     workflows: [],
-    topLevelOrder: [],
   };
+  const topLevelOrder: TopLevelEmitOrder[] = [];
   let i = 0;
   let pendingTopLevelComments: string[] = [];
 
@@ -48,10 +59,10 @@ export function parsejaiph(source: string, filePath: string): jaiphModule {
         fail(filePath, "duplicate config block (only one allowed per file)", lineNo, 1);
       }
       if (pendingTopLevelComments.length > 0) {
-        mod.configLeadingComments = [...pendingTopLevelComments];
+        trivia.setModule({ configLeadingComments: [...pendingTopLevelComments] });
         pendingTopLevelComments = [];
       }
-      const { metadata, nextIndex } = parseConfigBlock(filePath, lines, i - 1);
+      const { metadata, nextIndex } = parseConfigBlock(filePath, lines, i - 1, trivia);
       mod.metadata = metadata;
       i = nextIndex;
       continue;
@@ -60,7 +71,7 @@ export function parsejaiph(source: string, filePath: string): jaiphModule {
     if (line.startsWith("import script ")) {
       const si = parseScriptImportLine(filePath, line, raw, lineNo);
       if (pendingTopLevelComments.length > 0) {
-        si.leadingComments = [...pendingTopLevelComments];
+        trivia.setNode(si, { leadingComments: [...pendingTopLevelComments] });
         pendingTopLevelComments = [];
       }
       if (!mod.scriptImports) mod.scriptImports = [];
@@ -71,7 +82,7 @@ export function parsejaiph(source: string, filePath: string): jaiphModule {
     if (line.startsWith("import ")) {
       const imp = parseImportLine(filePath, line, raw, lineNo);
       if (pendingTopLevelComments.length > 0) {
-        imp.leadingComments = [...pendingTopLevelComments];
+        trivia.setNode(imp, { leadingComments: [...pendingTopLevelComments] });
         pendingTopLevelComments = [];
       }
       mod.imports.push(imp);
@@ -81,7 +92,7 @@ export function parsejaiph(source: string, filePath: string): jaiphModule {
     if (line.startsWith("channel ")) {
       const ch = parseChannelLine(filePath, line, raw, lineNo);
       if (pendingTopLevelComments.length > 0) {
-        ch.leadingComments = [...pendingTopLevelComments];
+        trivia.setNode(ch, { leadingComments: [...pendingTopLevelComments] });
         pendingTopLevelComments = [];
       }
       mod.channels.push(ch);
@@ -99,11 +110,14 @@ export function parsejaiph(source: string, filePath: string): jaiphModule {
         filePath,
         lines,
         i - 1,
-        pendingTopLevelComments.length > 0 ? [...pendingTopLevelComments] : undefined,
+        trivia,
       );
+      if (pendingTopLevelComments.length > 0) {
+        trivia.setNode(testBlock, { leadingComments: [...pendingTopLevelComments] });
+      }
       pendingTopLevelComments = [];
       mod.tests.push(testBlock);
-      mod.topLevelOrder!.push({ kind: "test", index: mod.tests.length - 1 });
+      topLevelOrder.push({ kind: "test", index: mod.tests.length - 1 });
       i = nextIndex;
       continue;
     }
@@ -118,43 +132,43 @@ export function parsejaiph(source: string, filePath: string): jaiphModule {
         mod.envDecls = [];
       }
       mod.envDecls.push(envDecl);
-      mod.topLevelOrder!.push({ kind: "env", index: mod.envDecls.length - 1 });
+      topLevelOrder.push({ kind: "env", index: mod.envDecls.length - 1 });
       i = nextIndex;
       continue;
     }
 
     if (/^(export\s+)?rule\s/.test(line)) {
-      const { rule, nextIndex, exported } = parseRuleBlock(filePath, lines, i - 1, pendingTopLevelComments);
+      const { rule, nextIndex, exported } = parseRuleBlock(filePath, lines, i - 1, pendingTopLevelComments, trivia);
       pendingTopLevelComments = [];
       if (exported) {
         mod.exports.push(rule.name);
       }
       mod.rules.push(rule);
-      mod.topLevelOrder!.push({ kind: "rule", index: mod.rules.length - 1 });
+      topLevelOrder.push({ kind: "rule", index: mod.rules.length - 1 });
       i = nextIndex;
       continue;
     }
 
     if (/^(export\s+)?script\s/.test(line)) {
-      const { scriptDef, nextIndex, exported } = parseScriptBlock(filePath, lines, i - 1, pendingTopLevelComments);
+      const { scriptDef, nextIndex, exported } = parseScriptBlock(filePath, lines, i - 1, pendingTopLevelComments, trivia);
       pendingTopLevelComments = [];
       if (exported) {
         mod.exports.push(scriptDef.name);
       }
       mod.scripts.push(scriptDef);
-      mod.topLevelOrder!.push({ kind: "script", index: mod.scripts.length - 1 });
+      topLevelOrder.push({ kind: "script", index: mod.scripts.length - 1 });
       i = nextIndex;
       continue;
     }
 
     if (/^(export\s+)?workflow\s/.test(line)) {
-      const { workflow, nextIndex, exported } = parseWorkflowBlock(filePath, lines, i - 1, pendingTopLevelComments);
+      const { workflow, nextIndex, exported } = parseWorkflowBlock(filePath, lines, i - 1, pendingTopLevelComments, trivia);
       pendingTopLevelComments = [];
       if (exported) {
         mod.exports.push(workflow.name);
       }
       mod.workflows.push(workflow);
-      mod.topLevelOrder!.push({ kind: "workflow", index: mod.workflows.length - 1 });
+      topLevelOrder.push({ kind: "workflow", index: mod.workflows.length - 1 });
       i = nextIndex;
       continue;
     }
@@ -162,8 +176,9 @@ export function parsejaiph(source: string, filePath: string): jaiphModule {
     fail(filePath, `unsupported top-level statement: ${line}`, lineNo);
   }
 
+  trivia.setModule({ topLevelOrder });
   if (pendingTopLevelComments.length > 0) {
-    mod.trailingTopLevelComments = [...pendingTopLevelComments];
+    trivia.setModule({ trailingTopLevelComments: [...pendingTopLevelComments] });
   }
 
   // Unified namespace: imports, channels, rules, workflows, scripts, and consts all share one name space.
@@ -189,5 +204,5 @@ export function parsejaiph(source: string, filePath: string): jaiphModule {
     }
   }
 
-  return mod;
+  return { ast: mod, trivia };
 }

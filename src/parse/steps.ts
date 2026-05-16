@@ -1,4 +1,5 @@
 import type { WorkflowStepDef } from "../types";
+import { createTrivia, type Trivia } from "./trivia";
 import { parseConstRhs } from "./const-rhs";
 import { fail, indexOfClosingDoubleQuote, isRef, parseCallRef, parseLogMessageRhs, rejectTrailingContent } from "./core";
 import { parseAnonymousInlineScript } from "./inline-script";
@@ -91,6 +92,7 @@ function parseCatchStatement(
   lineNo: number,
   col: number,
   stmt: string,
+  trivia: Trivia,
 ): WorkflowStepDef {
   const t = stmt.trim();
   if (!t) {
@@ -148,12 +150,15 @@ function parseCatchStatement(
       : isBare
         ? bareIdentifierToQuotedString(retVal)
         : retVal;
-    return {
+    const step: WorkflowStepDef = {
       type: "return",
       value,
       loc: { line: lineNo, col },
-      ...(isBareDotted || isBare ? { bareSource: retVal.trim() } : {}),
     };
+    if (isBareDotted || isBare) {
+      trivia.setNode(step, { bareSource: retVal.trim() });
+    }
+    return step;
   }
   if (/^fail\s+/.test(t)) {
     const arg = t.slice("fail".length).trimStart();
@@ -172,7 +177,7 @@ function parseCatchStatement(
     const name = constMatch[1];
     const rhs = constMatch[2].trim();
     const syntheticLines = [t];
-    const { value } = parseConstRhs(filePath, syntheticLines, 0, rhs, lineNo, col, false, name);
+    const { value } = parseConstRhs(filePath, syntheticLines, 0, rhs, lineNo, col, false, name, trivia);
     return {
       type: "const",
       name,
@@ -230,7 +235,7 @@ function parseCatchStatement(
             if (after.startsWith("{") && after.endsWith("}")) {
               const blockContent = after.slice(1, -1).trim();
               const stmts = splitCatchStatements(blockContent);
-              const blockSteps = stmts.map((s) => parseCatchStatement(filePath, lineNo, col, s));
+              const blockSteps = stmts.map((s) => parseCatchStatement(filePath, lineNo, col, s, trivia));
               return {
                 type: "run",
                 workflow: { value: callPart.ref, loc: { line: lineNo, col } },
@@ -240,7 +245,7 @@ function parseCatchStatement(
               };
             }
             if (!after.startsWith("{") && after) {
-              const singleStep = parseCatchStatement(filePath, lineNo, col, after);
+              const singleStep = parseCatchStatement(filePath, lineNo, col, after, trivia);
               return {
                 type: "run",
                 workflow: { value: callPart.ref, loc: { line: lineNo, col } },
@@ -270,7 +275,7 @@ function parseCatchStatement(
             if (after.startsWith("{") && after.endsWith("}")) {
               const blockContent = after.slice(1, -1).trim();
               const stmts = splitCatchStatements(blockContent);
-              const blockSteps = stmts.map((s) => parseCatchStatement(filePath, lineNo, col, s));
+              const blockSteps = stmts.map((s) => parseCatchStatement(filePath, lineNo, col, s, trivia));
               return {
                 type: "run",
                 workflow: { value: callPart.ref, loc: { line: lineNo, col } },
@@ -280,7 +285,7 @@ function parseCatchStatement(
               };
             }
             if (!after.startsWith("{") && after) {
-              const singleStep = parseCatchStatement(filePath, lineNo, col, after);
+              const singleStep = parseCatchStatement(filePath, lineNo, col, after, trivia);
               return {
                 type: "run",
                 workflow: { value: callPart.ref, loc: { line: lineNo, col } },
@@ -322,7 +327,7 @@ function parseCatchStatement(
             if (after.startsWith("{") && after.endsWith("}")) {
               const blockContent = after.slice(1, -1).trim();
               const stmts = splitCatchStatements(blockContent);
-              const blockSteps = stmts.map((s) => parseCatchStatement(filePath, lineNo, col, s));
+              const blockSteps = stmts.map((s) => parseCatchStatement(filePath, lineNo, col, s, trivia));
               return {
                 type: "ensure",
                 ref: { value: callPart.ref, loc: { line: lineNo, col } },
@@ -332,7 +337,7 @@ function parseCatchStatement(
               };
             }
             if (!after.startsWith("{") && after) {
-              const singleStep = parseCatchStatement(filePath, lineNo, col, after);
+              const singleStep = parseCatchStatement(filePath, lineNo, col, after, trivia);
               return {
                 type: "ensure",
                 ref: { value: callPart.ref, loc: { line: lineNo, col } },
@@ -370,7 +375,7 @@ function parseCatchStatement(
   if (t.startsWith("prompt ")) {
     return parsePromptStep(
       filePath, [], lineNo - 1, t.slice("prompt ".length).trimStart(),
-      col + t.indexOf("prompt"),
+      col + t.indexOf("prompt"), undefined, trivia,
     ).step;
   }
   if (t.startsWith("log ") || t === "log") {
@@ -400,6 +405,7 @@ export function parseEnsureStep(
   innerRaw: string,
   ensureBody: string,
   captureName?: string,
+  trivia: Trivia = createTrivia(),
 ): { step: WorkflowStepDef; nextIdx: number } {
   const catchIdx = ensureBody.indexOf(" catch ");
   const ensureCol = innerRaw.indexOf("ensure") + 1;
@@ -499,7 +505,7 @@ export function parseEnsureStep(
     if (statements.length === 0) {
       fail(filePath, "catch block must contain at least one statement", innerNo, catchCol);
     }
-    const blockSteps = statements.map((s) => parseCatchStatement(filePath, innerNo, 1, s));
+    const blockSteps = statements.map((s) => parseCatchStatement(filePath, innerNo, 1, s, trivia));
     return { step: { ...base, catch: { block: blockSteps, bindings } }, nextIdx: closeLineIdx };
   }
 
@@ -513,7 +519,7 @@ export function parseEnsureStep(
     if (statements.length === 0) {
       fail(filePath, "catch block must contain at least one statement", innerNo, catchCol);
     }
-    const blockSteps = statements.map((s) => parseCatchStatement(filePath, innerNo, catchCol, s));
+    const blockSteps = statements.map((s) => parseCatchStatement(filePath, innerNo, catchCol, s, trivia));
     return { step: { ...base, catch: { block: blockSteps, bindings } }, nextIdx: idx };
   }
 
@@ -521,7 +527,7 @@ export function parseEnsureStep(
     fail(filePath, "catch requires a body after bindings", innerNo, catchCol);
   }
 
-  const singleStep = parseCatchStatement(filePath, innerNo, catchCol, afterBindings);
+  const singleStep = parseCatchStatement(filePath, innerNo, catchCol, afterBindings, trivia);
   return { step: { ...base, catch: { single: singleStep, bindings } }, nextIdx: idx };
 }
 
@@ -537,6 +543,7 @@ export function parseRunRecoverStep(
   innerRaw: string,
   runBody: string,
   captureName?: string,
+  trivia: Trivia = createTrivia(),
 ): { step: WorkflowStepDef; nextIdx: number } | null {
   // Match ` recover(`, ` recover `, or ` recover` at end of line
   const recoverMatch = runBody.match(/ recover(?=[\s(]|$)/);
@@ -615,7 +622,7 @@ export function parseRunRecoverStep(
     if (statements.length === 0) {
       fail(filePath, "recover block must contain at least one statement", innerNo, recoverCol);
     }
-    const blockSteps = statements.map((s) => parseCatchStatement(filePath, innerNo, 1, s));
+    const blockSteps = statements.map((s) => parseCatchStatement(filePath, innerNo, 1, s, trivia));
     return { step: { ...base, recover: { block: blockSteps, bindings } }, nextIdx: closeLineIdx };
   }
 
@@ -629,7 +636,7 @@ export function parseRunRecoverStep(
     if (statements.length === 0) {
       fail(filePath, "recover block must contain at least one statement", innerNo, recoverCol);
     }
-    const blockSteps = statements.map((s) => parseCatchStatement(filePath, innerNo, recoverCol, s));
+    const blockSteps = statements.map((s) => parseCatchStatement(filePath, innerNo, recoverCol, s, trivia));
     return { step: { ...base, recover: { block: blockSteps, bindings } }, nextIdx: idx };
   }
 
@@ -637,7 +644,7 @@ export function parseRunRecoverStep(
     fail(filePath, "recover requires a body after bindings", innerNo, recoverCol);
   }
 
-  const singleStep = parseCatchStatement(filePath, innerNo, recoverCol, afterBindings);
+  const singleStep = parseCatchStatement(filePath, innerNo, recoverCol, afterBindings, trivia);
   return { step: { ...base, recover: { single: singleStep, bindings } }, nextIdx: idx };
 }
 
@@ -653,6 +660,7 @@ export function parseRunCatchStep(
   innerRaw: string,
   runBody: string,
   captureName?: string,
+  trivia: Trivia = createTrivia(),
 ): { step: WorkflowStepDef; nextIdx: number } | null {
   const catchIdx = runBody.indexOf(" catch ");
   if (catchIdx === -1) return null;
@@ -730,7 +738,7 @@ export function parseRunCatchStep(
     if (statements.length === 0) {
       fail(filePath, "catch block must contain at least one statement", innerNo, catchCol);
     }
-    const blockSteps = statements.map((s) => parseCatchStatement(filePath, innerNo, 1, s));
+    const blockSteps = statements.map((s) => parseCatchStatement(filePath, innerNo, 1, s, trivia));
     return { step: { ...base, catch: { block: blockSteps, bindings } }, nextIdx: closeLineIdx };
   }
 
@@ -744,7 +752,7 @@ export function parseRunCatchStep(
     if (statements.length === 0) {
       fail(filePath, "catch block must contain at least one statement", innerNo, catchCol);
     }
-    const blockSteps = statements.map((s) => parseCatchStatement(filePath, innerNo, catchCol, s));
+    const blockSteps = statements.map((s) => parseCatchStatement(filePath, innerNo, catchCol, s, trivia));
     return { step: { ...base, catch: { block: blockSteps, bindings } }, nextIdx: idx };
   }
 
@@ -752,6 +760,6 @@ export function parseRunCatchStep(
     fail(filePath, "catch requires a body after bindings", innerNo, catchCol);
   }
 
-  const singleStep = parseCatchStatement(filePath, innerNo, catchCol, afterBindings);
+  const singleStep = parseCatchStatement(filePath, innerNo, catchCol, afterBindings, trivia);
   return { step: { ...base, catch: { single: singleStep, bindings } }, nextIdx: idx };
 }
