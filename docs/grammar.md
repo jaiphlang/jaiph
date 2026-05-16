@@ -1062,9 +1062,11 @@ single_workflow_stmt = ensure_stmt | run_stmt | run_catch_stmt | run_recover_stm
                 | const_decl_step
                 | return_stmt | fail_stmt | log_stmt | logerr_stmt
                 | send_stmt ;
-  (* Actual catch/recover bodies use parseCatchStatement in src/parse/steps.ts: a richer subset
-     than this sketch, including inline shell text for workflow recovery blocks — rule bodies still
-     reject unstructured shell via the visitor's RULE_SCOPE (validate-step.ts). *)
+  (* Actual catch/recover bodies are parsed by the same parseBlockStatement used at the top level
+     (dispatched through parseAttachedBlock in src/parse/steps.ts), so every statement form
+     accepted in a workflow / rule body is accepted identically inside a catch / recover body —
+     including inline shell text for workflow bodies. Rule bodies still reject unstructured shell
+     via the visitor's RULE_SCOPE (validate-step.ts). *)
 ```
 
 ## Validation Rules
