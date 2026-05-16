@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { parsejaiph } from "../../parser";
+import { parsejaiphWithTrivia } from "../../parser";
 import { emitModule } from "../../format/emit";
 
 export function runFormat(args: string[]): number {
@@ -52,16 +52,16 @@ export function runFormat(args: string[]): number {
     const firstLine = source.split(/\r?\n/, 1)[0];
     const shebang = firstLine.startsWith("#!") ? firstLine : null;
 
-    let mod;
+    let parsed;
     try {
-      mod = parsejaiph(source, abs);
+      parsed = parsejaiphWithTrivia(source, abs);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       process.stderr.write(`parse error: ${msg}\n`);
       return 1;
     }
 
-    let formatted = emitModule(mod, { indent });
+    let formatted = emitModule(parsed.ast, parsed.trivia, { indent });
     if (shebang) {
       formatted = shebang + "\n\n" + formatted;
     }

@@ -1,6 +1,7 @@
 import type { SendRhsDef, WorkflowRefDef } from "../types";
+import { createTrivia, type Trivia } from "./trivia";
 import { fail, hasUnescapedClosingQuote, indexOfClosingDoubleQuote, isRef, parseCallRef, rejectTrailingContent } from "./core";
-import { parseTripleQuoteBlock, tripleQuoteBodyToRaw } from "./triple-quote";
+import { dedentTripleQuotedBody, parseTripleQuoteBlock, tripleQuoteBodyToRaw } from "./triple-quote";
 
 const SEND_RHS_HINT =
   'send right-hand side must be a quoted string ("..."), a variable ($name or ${...}), or "run <ref> [args]" — not raw shell; use a script or use const';
@@ -13,6 +14,7 @@ export function parseSendRhs(
   col: number,
   lines?: string[],
   idx?: number,
+  trivia: Trivia = createTrivia(),
 ): { rhs: SendRhsDef; nextIdx: number } {
   const t = rhs.trim();
   const defaultNext = (idx ?? lineNo - 1) + 1;
@@ -24,7 +26,9 @@ export function parseSendRhs(
     tqLines[idx] = t;
     const { body, nextIdx, afterClose } = parseTripleQuoteBlock(filePath, tqLines, idx);
     if (afterClose) fail(filePath, 'unexpected content after closing """', nextIdx);
-    return { rhs: { kind: "literal", token: tripleQuoteBodyToRaw(body), tripleQuoted: true }, nextIdx };
+    const rhsNode: SendRhsDef = { kind: "literal", token: tripleQuoteBodyToRaw(dedentTripleQuotedBody(body)) };
+    trivia.setNode(rhsNode, { tripleQuoted: true, rawBody: body });
+    return { rhs: rhsNode, nextIdx };
   }
   if (t.startsWith('"')) {
     if (!hasUnescapedClosingQuote(t, 1)) {

@@ -14,12 +14,18 @@ import type {
   TopLevelEmitOrder,
 } from "../types";
 import { parseCallRef } from "../parse/core";
+import { createTrivia, type NodeTrivia, type Trivia } from "../parse/trivia";
 
 export interface EmitOptions {
   indent: number;
 }
 
 const DEFAULT_OPTIONS: EmitOptions = { indent: 2 };
+
+/** Lookup helper: trivia entry for a node, with safe empty default. */
+function tn(trivia: Trivia, node: object): NodeTrivia {
+  return trivia.getNode(node) ?? {};
+}
 
 /** When `topLevelOrder` is missing (hand-built AST), match pre–source-order emit behavior. */
 function legacyTopLevelOrder(mod: jaiphModule): TopLevelEmitOrder[] {
@@ -36,14 +42,30 @@ function legacyTopLevelOrder(mod: jaiphModule): TopLevelEmitOrder[] {
   return o;
 }
 
-function topLevelOrderForEmit(mod: jaiphModule): TopLevelEmitOrder[] {
-  if (mod.topLevelOrder && mod.topLevelOrder.length > 0) return mod.topLevelOrder;
+function topLevelOrderForEmit(mod: jaiphModule, trivia: Trivia): TopLevelEmitOrder[] {
+  const order = trivia.getModule().topLevelOrder;
+  if (order && order.length > 0) return order;
   return legacyTopLevelOrder(mod);
 }
 
-export function emitModule(mod: jaiphModule, opts: EmitOptions = DEFAULT_OPTIONS): string {
+export function emitModule(
+  mod: jaiphModule,
+  triviaOrOpts: Trivia | EmitOptions = createTrivia(),
+  optsArg?: EmitOptions,
+): string {
+  // Backwards-compatible: callers may pass (mod, opts) when they don't care about trivia.
+  let trivia: Trivia;
+  let opts: EmitOptions;
+  if (triviaOrOpts instanceof Object && "indent" in triviaOrOpts && !("getModule" in triviaOrOpts)) {
+    trivia = createTrivia();
+    opts = triviaOrOpts as EmitOptions;
+  } else {
+    trivia = triviaOrOpts as Trivia;
+    opts = optsArg ?? DEFAULT_OPTIONS;
+  }
   const sections: string[] = [];
   const pad = " ".repeat(opts.indent);
+  const modTrivia = trivia.getModule();
 
   // Shebang — we don't store it in the AST, so the caller must prepend it if needed.
   // (handled by the format command reading the first line of the original source)
@@ -51,16 +73,14 @@ export function emitModule(mod: jaiphModule, opts: EmitOptions = DEFAULT_OPTIONS
   const importLines: string[] = [];
   if (mod.scriptImports) {
     for (const si of mod.scriptImports) {
-      if (si.leadingComments?.length) {
-        importLines.push(emitCommentBlock(si.leadingComments));
-      }
+      const lc = tn(trivia, si).leadingComments;
+      if (lc?.length) importLines.push(emitCommentBlock(lc));
       importLines.push(`import script "${si.path}" as ${si.alias}`);
     }
   }
   for (const imp of mod.imports) {
-    if (imp.leadingComments?.length) {
-      importLines.push(emitCommentBlock(imp.leadingComments));
-    }
+    const lc = tn(trivia, imp).leadingComments;
+    if (lc?.length) importLines.push(emitCommentBlock(lc));
     importLines.push(`import "${imp.path}" as ${imp.alias}`);
   }
   if (importLines.length > 0) {
@@ -68,17 +88,16 @@ export function emitModule(mod: jaiphModule, opts: EmitOptions = DEFAULT_OPTIONS
   }
 
   if (mod.metadata) {
-    if (mod.configLeadingComments?.length) {
-      sections.push(emitCommentBlock(mod.configLeadingComments));
+    if (modTrivia.configLeadingComments?.length) {
+      sections.push(emitCommentBlock(modTrivia.configLeadingComments));
     }
-    sections.push(emitConfig(mod.metadata, pad));
+    sections.push(emitConfig(mod.metadata, pad, trivia));
   }
 
   const channelLines: string[] = [];
   for (const ch of mod.channels) {
-    if (ch.leadingComments?.length) {
-      channelLines.push(emitCommentBlock(ch.leadingComments));
-    }
+    const lc = tn(trivia, ch).leadingComments;
+    if (lc?.length) channelLines.push(emitCommentBlock(lc));
     channelLines.push(emitChannel(ch));
   }
   if (channelLines.length > 0) {
@@ -87,7 +106,7 @@ export function emitModule(mod: jaiphModule, opts: EmitOptions = DEFAULT_OPTIONS
 
   const exportedNames = new Set(mod.exports);
 
-  for (const item of topLevelOrderForEmit(mod)) {
+  for (const item of topLevelOrderForEmit(mod, trivia)) {
     if (item.kind === "env") {
       const env = mod.envDecls![item.index];
       const envLines: string[] = [];
@@ -99,12 +118,12 @@ export function emitModule(mod: jaiphModule, opts: EmitOptions = DEFAULT_OPTIONS
       continue;
     }
     if (item.kind === "rule") {
-      sections.push(emitRule(mod.rules[item.index], pad, exportedNames.has(mod.rules[item.index].name)));
+      sections.push(emitRule(mod.rules[item.index], pad, exportedNames.has(mod.rules[item.index].name), trivia));
       continue;
     }
     if (item.kind === "script") {
       sections.push(
-        emitScript(mod.scripts[item.index], pad, exportedNames.has(mod.scripts[item.index].name)),
+        emitScript(mod.scripts[item.index], pad, exportedNames.has(mod.scripts[item.index].name), trivia),
       );
       continue;
     }
@@ -114,15 +133,16 @@ export function emitModule(mod: jaiphModule, opts: EmitOptions = DEFAULT_OPTIONS
           mod.workflows[item.index],
           pad,
           exportedNames.has(mod.workflows[item.index].name),
+          trivia,
         ),
       );
       continue;
     }
-    sections.push(emitTestBlock(mod.tests![item.index], pad));
+    sections.push(emitTestBlock(mod.tests![item.index], pad, trivia));
   }
 
-  if (mod.trailingTopLevelComments?.length) {
-    sections.push(emitCommentBlock(mod.trailingTopLevelComments));
+  if (modTrivia.trailingTopLevelComments?.length) {
+    sections.push(emitCommentBlock(modTrivia.trailingTopLevelComments));
   }
 
   return sections.join("\n\n") + "\n";
@@ -185,10 +205,11 @@ function emitConfigKeyLines(meta: WorkflowMetadata, key: string, pad: string): s
   }
 }
 
-function emitConfig(meta: WorkflowMetadata, pad: string): string {
+function emitConfig(meta: WorkflowMetadata, pad: string, trivia: Trivia): string {
   const lines: string[] = ["config {"];
-  if (meta.configBodySequence?.length) {
-    for (const part of meta.configBodySequence) {
+  const seq = trivia.getNode(meta)?.configBodySequence;
+  if (seq?.length) {
+    for (const part of seq) {
       if (part.kind === "comment") {
         lines.push(`${pad}${part.text}`);
       } else {
@@ -255,22 +276,23 @@ function emitCommentBlock(comments: string[]): string {
   return emitComments(comments).join("\n");
 }
 
-function emitRule(rule: RuleDef, pad: string, exported: boolean): string {
+function emitRule(rule: RuleDef, pad: string, exported: boolean, trivia: Trivia): string {
   const lines: string[] = [];
   lines.push(...emitComments(rule.comments));
   const paramStr = `(${rule.params.join(", ")})`;
   const prefix = exported ? "export " : "";
   lines.push(`${prefix}rule ${rule.name}${paramStr} {`);
-  lines.push(...emitSteps(rule.steps, pad, pad));
+  lines.push(...emitSteps(rule.steps, pad, pad, trivia));
   lines.push("}");
   return lines.join("\n");
 }
 
-function emitScript(script: ScriptDef, _pad: string, exported: boolean): string {
+function emitScript(script: ScriptDef, _pad: string, exported: boolean, trivia: Trivia): string {
   const lines: string[] = [];
   lines.push(...emitComments(script.comments));
   const prefix = exported ? "export " : "";
-  if (script.bodyKind === "fenced" || script.lang || script.body.includes("\n")) {
+  const bodyKind = tn(trivia, script).scriptBodyKind;
+  if (bodyKind === "fenced" || script.lang || script.body.includes("\n")) {
     const langTag = script.lang ?? "";
     lines.push(`${prefix}script ${script.name} = \`\`\`${langTag}`);
     for (const bl of script.body.split("\n")) {
@@ -283,7 +305,7 @@ function emitScript(script: ScriptDef, _pad: string, exported: boolean): string 
   return lines.join("\n");
 }
 
-function emitWorkflow(wf: WorkflowDef, pad: string, exported: boolean): string {
+function emitWorkflow(wf: WorkflowDef, pad: string, exported: boolean, trivia: Trivia): string {
   const lines: string[] = [];
   lines.push(...emitComments(wf.comments));
 
@@ -292,13 +314,13 @@ function emitWorkflow(wf: WorkflowDef, pad: string, exported: boolean): string {
   lines.push(`${prefix}workflow ${wf.name}${paramStr} {`);
 
   if (wf.metadata) {
-    const configLines = emitConfig(wf.metadata, pad);
+    const configLines = emitConfig(wf.metadata, pad, trivia);
     for (const cl of configLines.split("\n")) {
       lines.push(`${pad}${cl}`);
     }
   }
 
-  lines.push(...emitSteps(wf.steps, pad, pad));
+  lines.push(...emitSteps(wf.steps, pad, pad, trivia));
 
   lines.push("}");
   return lines.join("\n");
@@ -329,10 +351,10 @@ function emitLogMessageRhs(message: string): string {
   return JSON.stringify(message);
 }
 
-function emitSteps(steps: WorkflowStepDef[], pad: string, currentIndent: string): string[] {
+function emitSteps(steps: WorkflowStepDef[], pad: string, currentIndent: string, trivia: Trivia): string[] {
   const lines: string[] = [];
   for (const step of steps) {
-    lines.push(...emitStep(step, pad, currentIndent));
+    lines.push(...emitStep(step, pad, currentIndent, trivia));
   }
   return lines;
 }
@@ -470,9 +492,10 @@ function emitMatchArm(arm: import("../types").MatchArmDef, armIndent: string, bo
   return [`${armIndent}${patStr} => ${arm.body}`];
 }
 
-function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string): string[] {
+function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string, trivia: Trivia): string[] {
   const lines: string[] = [];
   const ci = currentIndent;
+  const stepTrivia = tn(trivia, step);
 
   switch (step.type) {
     case "blank_line":
@@ -499,12 +522,12 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string): st
         const b = step.catch.bindings;
         const bindStr = `(${b.failure})`;
         if ("single" in step.catch) {
-          const recoverLines = emitStep(step.catch.single, pad, "");
+          const recoverLines = emitStep(step.catch.single, pad, "", trivia);
           const recoverText = recoverLines.map((l) => l.trim()).join("\n");
           lines.push(`${ci}${capture}ensure ${ref} catch ${bindStr} ${recoverText}`);
         } else {
           lines.push(`${ci}${capture}ensure ${ref} catch ${bindStr} {`);
-          lines.push(...emitSteps(step.catch.block, pad, ci + pad));
+          lines.push(...emitSteps(step.catch.block, pad, ci + pad, trivia));
           lines.push(`${ci}}`);
         }
       } else {
@@ -521,24 +544,24 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string): st
         const b = step.recover.bindings;
         const bindStr = `(${b.failure})`;
         if ("single" in step.recover) {
-          const recoverLines = emitStep(step.recover.single, pad, "");
+          const recoverLines = emitStep(step.recover.single, pad, "", trivia);
           const recoverText = recoverLines.map((l) => l.trim()).join("\n");
           lines.push(`${ci}${capture}run ${asyncPrefix}${ref} recover ${bindStr} ${recoverText}`);
         } else {
           lines.push(`${ci}${capture}run ${asyncPrefix}${ref} recover ${bindStr} {`);
-          lines.push(...emitSteps(step.recover.block, pad, ci + pad));
+          lines.push(...emitSteps(step.recover.block, pad, ci + pad, trivia));
           lines.push(`${ci}}`);
         }
       } else if (step.catch) {
         const b = step.catch.bindings;
         const bindStr = `(${b.failure})`;
         if ("single" in step.catch) {
-          const recoverLines = emitStep(step.catch.single, pad, "");
+          const recoverLines = emitStep(step.catch.single, pad, "", trivia);
           const recoverText = recoverLines.map((l) => l.trim()).join("\n");
           lines.push(`${ci}${capture}run ${asyncPrefix}${ref} catch ${bindStr} ${recoverText}`);
         } else {
           lines.push(`${ci}${capture}run ${asyncPrefix}${ref} catch ${bindStr} {`);
-          lines.push(...emitSteps(step.catch.block, pad, ci + pad));
+          lines.push(...emitSteps(step.catch.block, pad, ci + pad, trivia));
           lines.push(`${ci}}`);
         }
       } else {
@@ -566,10 +589,12 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string): st
     case "prompt": {
       const capture = step.captureName ? `${step.captureName} = ` : "";
       const returns = step.returns ? ` returns "${step.returns}"` : "";
-      if (step.bodyKind === "identifier" && step.bodyIdentifier) {
-        lines.push(`${ci}${capture}prompt ${step.bodyIdentifier}${returns}`);
-      } else if (step.bodyKind === "triple_quoted") {
-        const inner = step.raw.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+      const bodyKind = stepTrivia.bodyKind;
+      const bodyIdentifier = stepTrivia.bodyIdentifier;
+      if (bodyKind === "identifier" && bodyIdentifier) {
+        lines.push(`${ci}${capture}prompt ${bodyIdentifier}${returns}`);
+      } else if (bodyKind === "triple_quoted") {
+        const inner = stepTrivia.rawBody ?? step.raw.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, "\\");
         lines.push(`${ci}${capture}prompt """`);
         for (const bl of inner.split("\n")) {
           lines.push(bl);
@@ -585,7 +610,8 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string): st
     }
 
     case "const": {
-      lines.push(`${ci}${emitConstStep(step.name, step.value)}`);
+      const valueTrivia = tn(trivia, step.value);
+      lines.push(`${ci}${emitConstStep(step.name, step.value, valueTrivia)}`);
       // Handle multi-line inline script capture body
       if (step.value.kind === "run_inline_script_capture" &&
           (step.value.lang || step.value.body.includes("\n"))) {
@@ -596,8 +622,8 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string): st
         lines.push(`${ci}\`\`\`(${argsStr})`);
       }
       // Handle multi-line triple-quoted prompt capture body
-      if (step.value.kind === "prompt_capture" && step.value.bodyKind === "triple_quoted") {
-        const inner = step.value.raw.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+      if (step.value.kind === "prompt_capture" && valueTrivia.bodyKind === "triple_quoted") {
+        const inner = valueTrivia.rawBody ?? step.value.raw.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, "\\");
         for (const bl of inner.split("\n")) {
           lines.push(bl);
         }
@@ -614,9 +640,8 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string): st
         lines.push(`${ci}}`);
       }
       // Handle multi-line triple-quoted expr (const name = """...""")
-      if (step.value.kind === "expr" && step.value.bashRhs.startsWith('"') &&
-          step.value.bashRhs.endsWith('"') && step.value.bashRhs.includes("\n")) {
-        const inner = step.value.bashRhs.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+      if (step.value.kind === "expr" && valueTrivia.tripleQuoted) {
+        const inner = valueTrivia.rawBody ?? step.value.bashRhs.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, "\\");
         for (const bl of inner.split("\n")) {
           lines.push(bl);
         }
@@ -626,8 +651,8 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string): st
     }
 
     case "fail": {
-      if (step.message.includes("\n")) {
-        const inner = step.message.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+      if (stepTrivia.tripleQuoted) {
+        const inner = stepTrivia.rawBody ?? step.message.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, "\\");
         lines.push(`${ci}fail """`);
         for (const bl of inner.split("\n")) {
           lines.push(bl);
@@ -642,9 +667,10 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string): st
     case "log":
       if (step.managed?.kind === "run_inline_script") {
         lines.push(...emitInlineScriptLines(`${ci}log run`, step.managed.body, step.managed.lang, step.managed.args, step.managed.bareIdentifierArgs, ci));
-      } else if (step.message.includes("\n")) {
+      } else if (stepTrivia.tripleQuoted) {
+        const inner = stepTrivia.rawBody ?? step.message;
         lines.push(`${ci}log """`);
-        for (const bl of step.message.split("\n")) {
+        for (const bl of inner.split("\n")) {
           lines.push(bl);
         }
         lines.push(`${ci}"""`);
@@ -656,9 +682,10 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string): st
     case "logerr":
       if (step.managed?.kind === "run_inline_script") {
         lines.push(...emitInlineScriptLines(`${ci}logerr run`, step.managed.body, step.managed.lang, step.managed.args, step.managed.bareIdentifierArgs, ci));
-      } else if (step.message.includes("\n")) {
+      } else if (stepTrivia.tripleQuoted) {
+        const inner = stepTrivia.rawBody ?? step.message;
         lines.push(`${ci}logerr """`);
-        for (const bl of step.message.split("\n")) {
+        for (const bl of inner.split("\n")) {
           lines.push(bl);
         }
         lines.push(`${ci}"""`);
@@ -682,10 +709,10 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string): st
         } else if (step.managed.kind === "run_inline_script") {
           lines.push(...emitInlineScriptLines(`${ci}return run`, step.managed.body, step.managed.lang, step.managed.args, step.managed.bareIdentifierArgs, ci));
         }
-      } else if (step.bareSource) {
-        lines.push(`${ci}return ${step.bareSource}`);
-      } else if (step.value.includes("\n")) {
-        const inner = step.value.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+      } else if (stepTrivia.bareSource) {
+        lines.push(`${ci}return ${stepTrivia.bareSource}`);
+      } else if (stepTrivia.tripleQuoted) {
+        const inner = stepTrivia.rawBody ?? step.value.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, "\\");
         lines.push(`${ci}return """`);
         for (const bl of inner.split("\n")) {
           lines.push(bl);
@@ -698,8 +725,9 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string): st
     }
 
     case "send": {
-      if (step.rhs.kind === "literal" && step.rhs.token.includes("\n")) {
-        const inner = step.rhs.token.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+      const rhsTrivia = tn(trivia, step.rhs);
+      if (step.rhs.kind === "literal" && rhsTrivia.tripleQuoted) {
+        const inner = rhsTrivia.rawBody ?? step.rhs.token.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, "\\");
         lines.push(`${ci}${step.channel} <- """`);
         for (const bl of inner.split("\n")) {
           lines.push(bl);
@@ -727,14 +755,14 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string): st
         ? `"${step.operand.value}"`
         : `/${step.operand.source}/`;
       lines.push(`${ci}if ${step.subject} ${step.operator} ${operandStr} {`);
-      lines.push(...emitSteps(step.body, pad, ci + pad));
+      lines.push(...emitSteps(step.body, pad, ci + pad, trivia));
       lines.push(`${ci}}`);
       break;
     }
 
     case "for_lines": {
       lines.push(`${ci}for ${step.iterVar} in ${step.sourceVar} {`);
-      lines.push(...emitSteps(step.body, pad, ci + pad));
+      lines.push(...emitSteps(step.body, pad, ci + pad, trivia));
       lines.push(`${ci}}`);
       break;
     }
@@ -743,10 +771,10 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string): st
   return lines;
 }
 
-function emitConstStep(name: string, value: ConstRhs): string {
+function emitConstStep(name: string, value: ConstRhs, valueTrivia: NodeTrivia): string {
   switch (value.kind) {
     case "expr":
-      if (value.bashRhs.startsWith('"') && value.bashRhs.endsWith('"') && value.bashRhs.includes("\n")) {
+      if (valueTrivia.tripleQuoted) {
         // Multi-line: caller handles remaining lines
         return `const ${name} = """`;
       }
@@ -759,10 +787,10 @@ function emitConstStep(name: string, value: ConstRhs): string {
       return `const ${name} = ensure ${emitRef(value.ref, value.args, value.bareIdentifierArgs)}`;
     case "prompt_capture": {
       const returns = value.returns ? ` returns "${value.returns}"` : "";
-      if (value.bodyKind === "identifier" && value.bodyIdentifier) {
-        return `const ${name} = prompt ${value.bodyIdentifier}${returns}`;
+      if (valueTrivia.bodyKind === "identifier" && valueTrivia.bodyIdentifier) {
+        return `const ${name} = prompt ${valueTrivia.bodyIdentifier}${returns}`;
       }
-      if (value.bodyKind === "triple_quoted") {
+      if (valueTrivia.bodyKind === "triple_quoted") {
         // Multi-line: caller handles remaining lines
         return `const ${name} = prompt """`;
       }
@@ -798,20 +826,21 @@ function emitSendRhs(rhs: SendRhsDef): string {
   }
 }
 
-function emitTestBlock(test: TestBlockDef, pad: string): string {
+function emitTestBlock(test: TestBlockDef, pad: string, trivia: Trivia): string {
   const lines: string[] = [];
-  if (test.leadingComments?.length) {
-    lines.push(...emitComments(test.leadingComments));
+  const lc = tn(trivia, test).leadingComments;
+  if (lc?.length) {
+    lines.push(...emitComments(lc));
   }
   lines.push(`test "${test.description}" {`);
   for (const step of test.steps) {
-    lines.push(...emitTestStep(step, pad));
+    lines.push(...emitTestStep(step, pad, trivia));
   }
   lines.push("}");
   return lines.join("\n");
 }
 
-function emitTestStep(step: TestStepDef, pad: string): string[] {
+function emitTestStep(step: TestStepDef, pad: string, trivia: Trivia): string[] {
   switch (step.type) {
     case "comment":
       return [`${pad}${step.text}`];
@@ -852,14 +881,14 @@ function emitTestStep(step: TestStepDef, pad: string): string[] {
     case "test_mock_workflow": {
       const paramStr = `(${step.params.join(", ")})`;
       const lines = [`${pad}mock workflow ${step.ref}${paramStr} {`];
-      lines.push(...emitSteps(step.steps, pad, pad + pad));
+      lines.push(...emitSteps(step.steps, pad, pad + pad, trivia));
       lines.push(`${pad}}`);
       return lines;
     }
     case "test_mock_rule": {
       const paramStr = `(${step.params.join(", ")})`;
       const lines = [`${pad}mock rule ${step.ref}${paramStr} {`];
-      lines.push(...emitSteps(step.steps, pad, pad + pad));
+      lines.push(...emitSteps(step.steps, pad, pad + pad, trivia));
       lines.push(`${pad}}`);
       return lines;
     }

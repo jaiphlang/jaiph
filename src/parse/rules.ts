@@ -1,4 +1,5 @@
 import type { RuleDef } from "../types";
+import { createTrivia, type Trivia } from "./trivia";
 import { braceDepthDelta, colFromRaw, fail, parseParamList, stripQuotes } from "./core";
 import { parseBlockStatement } from "./workflow-brace";
 
@@ -7,6 +8,7 @@ export function parseRuleBlock(
   lines: string[],
   startIndex: number,
   pendingComments: string[],
+  trivia: Trivia = createTrivia(),
 ): { rule: RuleDef; nextIndex: number; exported: boolean } {
   const lineNo = startIndex + 1;
   const raw = lines[startIndex];
@@ -133,7 +135,7 @@ export function parseRuleBlock(
       }
       continue;
     }
-    const st = parseBlockStatement(filePath, lines, i, { forRule: true });
+    const st = parseBlockStatement(filePath, lines, i, trivia, { forRule: true });
     if (st.step.type !== "shell") {
       flushCommand();
       rule.steps.push(st.step);

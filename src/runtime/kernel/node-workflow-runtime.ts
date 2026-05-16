@@ -12,10 +12,7 @@ import { buildStepDisplayParamPairs } from "../../cli/commands/format-params.js"
 import { resolveRuleRef, resolveScriptRef, resolveWorkflowRef, type RuntimeGraph } from "./graph";
 import type { WorkflowMetadata } from "../../types";
 import { extractJson, validateFields } from "./schema";
-import {
-  plainMultilineOrchestrationForRuntime,
-  tripleQuotedRawForRuntime,
-} from "../orchestration-text";
+import { tripleQuotedRawForRuntime } from "../orchestration-text";
 import {
   commaArgsToInterpolated,
   interpolate,
@@ -529,8 +526,7 @@ export class NodeWorkflowRuntime {
           if (result.status !== 0) return this.mergeStepResult(accOut, accErr, result);
           message = result.returnValue ?? result.output.trim();
         } else {
-          const raw = step.tripleQuoted ? plainMultilineOrchestrationForRuntime(step.message) : step.message;
-          const ir = await this.interpolateWithCaptures(raw, scope);
+          const ir = await this.interpolateWithCaptures(step.message, scope);
           if (!ir.ok) return this.mergeStepResult(accOut, accErr, ir.result);
           message = ir.value;
         }
@@ -546,8 +542,7 @@ export class NodeWorkflowRuntime {
         continue;
       }
       if (step.type === "fail") {
-        const failMsg = step.tripleQuoted ? tripleQuotedRawForRuntime(step.message) : step.message;
-        const failIr = await this.interpolateWithCaptures(failMsg, scope);
+        const failIr = await this.interpolateWithCaptures(step.message, scope);
         if (!failIr.ok) return this.mergeStepResult(accOut, accErr, failIr.result);
         const message = failIr.value;
         return this.mergeStepResult(accOut, accErr, { status: 1, output: "", error: message });
@@ -588,8 +583,7 @@ export class NodeWorkflowRuntime {
           return this.mergeStepResult(accOut, accErr, { status: 0, output: "", error: "", returnValue });
         }
         // Match Bash semantics: return "$var" should return var value, not literal quotes.
-        const retRaw = step.tripleQuoted ? tripleQuotedRawForRuntime(step.value) : step.value;
-        const retIr = await this.interpolateWithCaptures(retRaw, scope);
+        const retIr = await this.interpolateWithCaptures(step.value, scope);
         if (!retIr.ok) return this.mergeStepResult(accOut, accErr, retIr.result);
         returnValue = stripOuterQuotes(retIr.value);
         return this.mergeStepResult(accOut, accErr, { status: 0, output: "", error: "", returnValue });
@@ -605,9 +599,7 @@ export class NodeWorkflowRuntime {
         }
         let payload = "";
         if (step.rhs.kind === "literal") {
-          const sendTok =
-            step.rhs.tripleQuoted ? tripleQuotedRawForRuntime(step.rhs.token) : step.rhs.token;
-          const sendIr = await this.interpolateWithCaptures(sendTok, scope);
+          const sendIr = await this.interpolateWithCaptures(step.rhs.token, scope);
           if (!sendIr.ok) return this.mergeStepResult(accOut, accErr, sendIr.result);
           payload = stripOuterQuotes(sendIr.value);
         } else if (step.rhs.kind === "var") {
@@ -673,16 +665,14 @@ export class NodeWorkflowRuntime {
             error: 'prompt with "returns" schema must capture to a variable',
           });
         }
-        const r = await this.runPromptStep(scope, step.raw, step.bodyKind, step.returns, step.captureName, io);
+        const r = await this.runPromptStep(scope, step.raw, step.returns, step.captureName, io);
         accOut += r.output;
         if (!r.ok) return this.mergeStepResult(accOut, accErr, r.result);
         continue;
       }
       if (step.type === "const") {
         if (step.value.kind === "expr") {
-          const exprRhs =
-            step.value.tripleQuoted ? tripleQuotedRawForRuntime(step.value.bashRhs) : step.value.bashRhs;
-          const exprIr = await this.interpolateWithCaptures(exprRhs, scope);
+          const exprIr = await this.interpolateWithCaptures(step.value.bashRhs, scope);
           if (!exprIr.ok) return this.mergeStepResult(accOut, accErr, exprIr.result);
           scope.vars.set(step.name, stripOuterQuotes(exprIr.value));
           continue;
@@ -733,7 +723,6 @@ export class NodeWorkflowRuntime {
           const r = await this.runPromptStep(
             scope,
             step.value.raw,
-            step.value.bodyKind,
             step.value.returns,
             step.name,
             io,
@@ -1091,13 +1080,11 @@ export class NodeWorkflowRuntime {
   private async runPromptStep(
     scope: Scope,
     raw: string,
-    bodyKind: "string" | "identifier" | "triple_quoted" | undefined,
     returns: string | undefined,
     captureName: string | undefined,
     io: StepIO | undefined,
   ): Promise<{ ok: true; output: string } | { ok: false; result: StepResult; output: string }> {
-    const promptRaw = bodyKind === "triple_quoted" ? tripleQuotedRawForRuntime(raw) : raw;
-    const promptIr = await this.interpolateWithCaptures(promptRaw, scope);
+    const promptIr = await this.interpolateWithCaptures(raw, scope);
     if (!promptIr.ok) return { ok: false, result: promptIr.result, output: "" };
     let promptText = promptIr.value;
     const promptConfig = resolveConfig(scope.env);

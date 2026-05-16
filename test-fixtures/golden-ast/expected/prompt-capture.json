@@ -4,12 +4,6 @@
   "imports": [],
   "rules": [],
   "scripts": [],
-  "topLevelOrder": [
-    {
-      "index": 0,
-      "kind": "workflow"
-    }
-  ],
   "workflows": [
     {
       "comments": [],
@@ -20,7 +14,6 @@
           "name": "answer",
           "type": "const",
           "value": {
-            "bodyKind": "string",
             "kind": "prompt_capture",
             "raw": "\"What is your name?\""
           }

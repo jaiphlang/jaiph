@@ -1,4 +1,5 @@
 import type { WorkflowDef } from "../types";
+import { createTrivia, type Trivia } from "./trivia";
 import { fail, parseParamList } from "./core";
 import { parseBraceBlockBody } from "./workflow-brace";
 
@@ -7,6 +8,7 @@ export function parseWorkflowBlock(
   lines: string[],
   startIndex: number,
   pendingComments: string[],
+  trivia: Trivia = createTrivia(),
 ): { workflow: WorkflowDef; nextIndex: number; exported: boolean } {
   const lineNo = startIndex + 1;
   const rawDecl = lines[startIndex];
@@ -58,6 +60,7 @@ export function parseWorkflowBlock(
     lines,
     startIndex + 1,
     lineNo,
+    trivia,
     {
       forRule: false,
       preserveBlankLines: true,

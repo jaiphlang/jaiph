@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { parseConfigBlock } from "./metadata";
 import { parsejaiph } from "../parser";
+import { createTrivia } from "./trivia";
 
 test("parseConfigBlock: parses minimal config with one key", () => {
   const lines = [
@@ -132,9 +133,10 @@ test("parseConfigBlock: skips empty lines and comments", () => {
     "",
     "}",
   ];
-  const { metadata } = parseConfigBlock("test.jh", lines, 0);
+  const trivia = createTrivia();
+  const { metadata } = parseConfigBlock("test.jh", lines, 0, trivia);
   assert.equal(metadata.agent?.command, "claude");
-  assert.deepEqual(metadata.configBodySequence, [
+  assert.deepEqual(trivia.getNode(metadata)?.configBodySequence, [
     { kind: "comment", text: "# this is a comment" },
     { kind: "assign", key: "agent.command" },
   ]);

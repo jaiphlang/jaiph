@@ -1,4 +1,5 @@
 import type { MatchArmDef, TestBlockDef, WorkflowStepDef } from "../types";
+import { createTrivia, type Trivia } from "./trivia";
 import { colFromRaw, fail, hasUnescapedClosingQuote, isRef, parseParamList, stripQuotes } from "./core";
 import { parseMatchArms } from "./match";
 import { parseBraceBlockBody } from "./workflow-brace";
@@ -99,7 +100,7 @@ export function parseTestBlock(
   filePath: string,
   lines: string[],
   startIndex: number,
-  leadingComments?: string[],
+  trivia: Trivia = createTrivia(),
 ): { testBlock: TestBlockDef; nextIndex: number } {
   const lineNo = startIndex + 1;
   const raw = lines[startIndex];
@@ -115,9 +116,6 @@ export function parseTestBlock(
     steps: [],
     loc: { line: lineNo, col: raw.indexOf("test") + 1 },
   };
-  if (leadingComments && leadingComments.length > 0) {
-    testBlock.leadingComments = [...leadingComments];
-  }
 
   let i = startIndex + 1;
   for (; i < lines.length; i += 1) {
@@ -183,7 +181,7 @@ export function parseTestBlock(
     rejectOldMockSyntax(filePath, inner, "workflow", innerNo, col);
     const mockWfHeader = parseMockHeader(filePath, inner, "mock workflow ", innerNo, col);
     if (mockWfHeader) {
-      const { steps, nextIdx } = parseBraceBlockBody(filePath, lines, i + 1, innerNo, { forRule: false });
+      const { steps, nextIdx } = parseBraceBlockBody(filePath, lines, i + 1, innerNo, trivia, { forRule: false });
       testBlock.steps.push({ type: "test_mock_workflow", ref: mockWfHeader.ref, params: mockWfHeader.params, steps, loc });
       i = nextIdx - 1;
       continue;
@@ -193,7 +191,7 @@ export function parseTestBlock(
     rejectOldMockSyntax(filePath, inner, "rule", innerNo, col);
     const mockRuleHeader = parseMockHeader(filePath, inner, "mock rule ", innerNo, col);
     if (mockRuleHeader) {
-      const { steps, nextIdx } = parseBraceBlockBody(filePath, lines, i + 1, innerNo, { forRule: true });
+      const { steps, nextIdx } = parseBraceBlockBody(filePath, lines, i + 1, innerNo, trivia, { forRule: true });
       testBlock.steps.push({ type: "test_mock_rule", ref: mockRuleHeader.ref, params: mockRuleHeader.params, steps, loc });
       i = nextIdx - 1;
       continue;

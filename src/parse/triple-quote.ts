@@ -1,3 +1,4 @@
+import { dedentCommonLeadingWhitespace } from "./dedent";
 import { fail } from "./core";
 
 /** Per language.md: trim blank lines adjacent to opening/closing `"""` only — do not dedent inner margin. */
@@ -56,6 +57,15 @@ function joinTripleQuoteBody(bodyLines: string[]): string {
  */
 export function tripleQuoteBodyToRaw(body: string): string {
   return `"${body.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}
+
+/**
+ * Apply common-leading-whitespace dedent to a triple-quoted body. The parser
+ * applies this so the semantic AST string carries the runtime-ready form;
+ * runtime & validator stop needing a `tripleQuoted` flag.
+ */
+export function dedentTripleQuotedBody(body: string): string {
+  return dedentCommonLeadingWhitespace(body);
 }
 
 /**
