@@ -13,33 +13,6 @@ Process rules:
 
 ***
 
-## Replace fail-fast errors with a Diagnostics collector that aggregates per compile #dev-ready
-
-**Design reference:** `design/2026-05-15-parser-compiler-simplification.md` § Appendix B.
-
-**Why:** Today `fail()` (in `src/parse/core.ts`) and `jaiphError()` (in `src/errors.ts`) both throw on the first error. Users fix one error, recompile, fix the next, recompile. The validator also pre-orders some checks defensively because it knows it will only get to surface one error. A diagnostics collector lets the parser and validator append errors and the run report the full set at the end.
-
-**Scope:**
-
-- Introduce `class Diagnostics { errors: JaiphDiagnostic[]; add(...); hasFatal(): boolean; report(): never | void }` (or equivalent).
-- Parser and validator append diagnostics instead of throwing for non-fatal errors. A "fatal" tier remains for cases where continuing would produce garbage AST (unterminated triple-quote, unterminated brace block).
-- At the end of a compile, `Diagnostics.report()` either prints all collected errors sorted by file/line and exits non-zero, or returns cleanly. The CLI surfaces the full set instead of just the first.
-- Existing call sites of `fail()` / `jaiphError()` migrate to `diagnostics.add(...)` where the error is recoverable.
-
-**Acceptance criteria** (each verified by a test):
-
-1. A fixture containing **N ≥ 3 independent errors** (e.g. an undefined channel, a duplicate import alias, and an unknown ref in a `run` call) reports all N errors in one compile, not just the first. Add a test that asserts the full set is reported in source order.
-2. The existing single-error tests still pass: every `parse-*.test.ts` and `validate-*.test.ts` fixture that asserts a specific `{ message, line, col, code }` still gets exactly that error (now the only one in `Diagnostics`).
-3. `fail()` and `jaiphError()` throwing call-sites are reduced to a documented "fatal" subset (count it in the test). Non-fatal call-sites use the collector.
-4. CLI exit code on any non-empty `Diagnostics` is non-zero. Add an `e2e` or CLI test.
-5. `npm test` and `npm run build` pass.
-
-**Out of scope:** changing what counts as an error (the *what*) — this refactor only changes the *how*. LSP integration (a follow-up).
-
-**Dependency:** None hard, but cheapest to do immediately before the visitor-table validator refactor (next task), since the new visitor's per-step entry/exit is the natural place to plug in the collector.
-
-***
-
 ## Replace the 1,441-line validator switch with a per-step visitor table indexed by scope #dev-ready
 
 **Design reference:** `design/2026-05-15-parser-compiler-simplification.md` § Refactor 4.

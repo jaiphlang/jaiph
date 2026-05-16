@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import { jaiphError } from "../errors";
+import { Diagnostics } from "../diagnostics";
 import type { Arg, Expr, jaiphModule, MatchExprDef, WorkflowStepDef } from "../types";
 import type { ModuleGraph } from "./module-graph";
 import type { SubstitutionValidateEnv } from "./validate-substitution";
@@ -76,13 +76,14 @@ function hasShellRedirection(args: Arg[] | undefined): boolean {
 }
 
 function validateNoShellRedirection(
+  diag: Diagnostics,
   filePath: string,
   loc: { line: number; col: number },
   keyword: string,
   args: Arg[] | undefined,
 ): void {
   if (!hasShellRedirection(args)) return;
-  throw jaiphError(
+  diag.error(
     filePath,
     loc.line,
     loc.col,
@@ -91,9 +92,14 @@ function validateNoShellRedirection(
   );
 }
 
-function validateMatchExpr(filePath: string, expr: MatchExprDef, knownVars: Set<string>): void {
+function validateMatchExpr(
+  diag: Diagnostics,
+  filePath: string,
+  expr: MatchExprDef,
+  knownVars: Set<string>,
+): void {
   if (expr.arms.length === 0) {
-    throw jaiphError(filePath, expr.loc.line, expr.loc.col, "E_VALIDATE", "match must have at least one arm");
+    diag.error(filePath, expr.loc.line, expr.loc.col, "E_VALIDATE", "match must have at least one arm");
   }
   let wildcardCount = 0;
   for (const arm of expr.arms) {
@@ -104,7 +110,7 @@ function validateMatchExpr(filePath: string, expr: MatchExprDef, knownVars: Set<
       try {
         new RegExp(arm.pattern.source);
       } catch {
-        throw jaiphError(
+        diag.error(
           filePath,
           expr.loc.line,
           expr.loc.col,
@@ -115,7 +121,7 @@ function validateMatchExpr(filePath: string, expr: MatchExprDef, knownVars: Set<
     }
     const bodyTrimmed = (arm.tripleQuotedBody ? tripleQuotedRawForRuntime(arm.body) : arm.body).trimStart();
     if (/^return(\s|$)/.test(bodyTrimmed)) {
-      throw jaiphError(
+      diag.error(
         filePath,
         expr.loc.line,
         expr.loc.col,
@@ -124,7 +130,7 @@ function validateMatchExpr(filePath: string, expr: MatchExprDef, knownVars: Set<
       );
     }
     if (/`[^`]*`\s*\(/.test(bodyTrimmed) || bodyTrimmed.startsWith("```")) {
-      throw jaiphError(
+      diag.error(
         filePath,
         expr.loc.line,
         expr.loc.col,
@@ -141,7 +147,7 @@ function validateMatchExpr(filePath: string, expr: MatchExprDef, knownVars: Set<
         const startsArgs = /^\s+\S/.test(after);
         if ((startsCall || startsArgs) && ident !== "fail" && ident !== "run" && ident !== "ensure") {
           const hint = ident === "error" ? ` did you mean "fail"?` : "";
-          throw jaiphError(
+          diag.error(
             filePath,
             expr.loc.line,
             expr.loc.col,
@@ -150,7 +156,7 @@ function validateMatchExpr(filePath: string, expr: MatchExprDef, knownVars: Set<
           );
         }
         if (!startsCall && !startsArgs && after.trim() === "" && !knownVars.has(ident)) {
-          throw jaiphError(
+          diag.error(
             filePath,
             expr.loc.line,
             expr.loc.col,
@@ -162,10 +168,10 @@ function validateMatchExpr(filePath: string, expr: MatchExprDef, knownVars: Set<
     }
   }
   if (wildcardCount === 0) {
-    throw jaiphError(filePath, expr.loc.line, expr.loc.col, "E_VALIDATE", "match must have exactly one wildcard (_) arm");
+    diag.error(filePath, expr.loc.line, expr.loc.col, "E_VALIDATE", "match must have exactly one wildcard (_) arm");
   }
   if (wildcardCount > 1) {
-    throw jaiphError(filePath, expr.loc.line, expr.loc.col, "E_VALIDATE", "match must have exactly one wildcard (_) arm, found multiple");
+    diag.error(filePath, expr.loc.line, expr.loc.col, "E_VALIDATE", "match must have exactly one wildcard (_) arm, found multiple");
   }
 }
 
@@ -201,6 +207,7 @@ interface StepTreeWalk {
 }
 
 function walkStepTree(
+  diag: Diagnostics,
   filePath: string,
   steps: WorkflowStepDef[],
   envDecls: { name: string; loc: { line: number; col: number } }[] | undefined,
@@ -234,7 +241,7 @@ function walkStepTree(
   ): void => {
     const prev = b.get(name);
     if (prev) {
-      throw jaiphError(
+      diag.error(
         filePath,
         loc.line,
         loc.col,
@@ -243,7 +250,7 @@ function walkStepTree(
       );
     }
     if (moduleScripts.has(name)) {
-      throw jaiphError(
+      diag.error(
         filePath,
         loc.line,
         loc.col,
@@ -300,7 +307,7 @@ function walkStepTree(
       if (s.type === "for_lines") {
         knownVars.add(s.iterVar);
         if (bindings.has(s.iterVar)) {
-          throw jaiphError(
+          diag.error(
             filePath,
             s.loc.line,
             s.loc.col,
@@ -361,6 +368,7 @@ function lookupCalleeParams(
 }
 
 function validateArity(
+  diag: Diagnostics,
   filePath: string,
   loc: { line: number; col: number },
   ref: string,
@@ -373,7 +381,7 @@ function validateArity(
   if (params === undefined) return;
   const argCount = args?.length ?? 0;
   if (argCount !== params.length) {
-    throw jaiphError(
+    diag.error(
       filePath,
       loc.line,
       loc.col,
@@ -384,6 +392,7 @@ function validateArity(
 }
 
 function validateArgVarRefs(
+  diag: Diagnostics,
   filePath: string,
   loc: { line: number; col: number },
   args: Arg[] | undefined,
@@ -395,7 +404,7 @@ function validateArgVarRefs(
     if (a.kind !== "var") continue;
     if (recoverBindings?.has(a.name)) continue;
     if (knownVars.has(a.name)) continue;
-    throw jaiphError(
+    diag.error(
       filePath,
       loc.line,
       loc.col,
@@ -406,6 +415,7 @@ function validateArgVarRefs(
 }
 
 function validateNestedManagedCallArgs(
+  diag: Diagnostics,
   filePath: string,
   loc: { line: number; col: number },
   args: Arg[] | undefined,
@@ -413,11 +423,12 @@ function validateNestedManagedCallArgs(
   if (!args) return;
   for (const a of args) {
     if (a.kind !== "literal") continue;
-    checkNestedManagedInLiteral(filePath, loc, a.raw);
+    checkNestedManagedInLiteral(diag, filePath, loc, a.raw);
   }
 }
 
 function checkNestedManagedInLiteral(
+  diag: Diagnostics,
   filePath: string,
   loc: { line: number; col: number },
   raw: string,
@@ -429,7 +440,7 @@ function checkNestedManagedInLiteral(
     const before = stripped.slice(0, match.index).trimEnd();
     const lastToken = before.length === 0 ? "" : before.slice(before.lastIndexOf(" ") + 1);
     if (lastToken === "run" || lastToken === "ensure") continue;
-    throw jaiphError(
+    diag.error(
       filePath,
       loc.line,
       loc.col,
@@ -443,7 +454,7 @@ function checkNestedManagedInLiteral(
     const before = stripped.slice(0, btMatch.index).trimEnd();
     const lastToken = before.length === 0 ? "" : before.slice(before.lastIndexOf(" ") + 1);
     if (lastToken === "run" || lastToken === "ensure") continue;
-    throw jaiphError(
+    diag.error(
       filePath,
       loc.line,
       loc.col,
@@ -499,13 +510,43 @@ export function resolveScriptImportPath(fromFile: string, importPath: string): s
   return resolve(dirname(fromFile), importPath);
 }
 
+/**
+ * Legacy throwing entry. Builds a `Diagnostics` collector internally and
+ * throws the first sorted diagnostic via `jaiphError` so existing callers
+ * (and per-error tests) continue to see one error per failed compile.
+ *
+ * Use {@link collectDiagnostics} when you want the full set.
+ */
 export function validateReferences(graph: ModuleGraph): void {
-  for (const node of graph.modules.values()) {
-    validateModule(node.ast, graph);
-  }
+  const diag = collectDiagnostics(graph);
+  diag.throwFirstIfAny();
 }
 
+/**
+ * New entry: walk the graph and append every validation error into a fresh
+ * `Diagnostics`. Never throws on user-level validation errors — non-validator
+ * problems (internal bugs) still bubble up.
+ */
+export function collectDiagnostics(graph: ModuleGraph): Diagnostics {
+  const diag = new Diagnostics();
+  for (const node of graph.modules.values()) {
+    validateModuleInto(node.ast, graph, diag);
+  }
+  return diag;
+}
+
+/** Legacy throwing per-module wrapper (kept for `emitScriptsForModuleFromGraph`). */
 export function validateModule(ast: jaiphModule, graph: ModuleGraph): void {
+  const diag = new Diagnostics();
+  validateModuleInto(ast, graph, diag);
+  diag.throwFirstIfAny();
+}
+
+export function validateModuleInto(
+  ast: jaiphModule,
+  graph: ModuleGraph,
+  diag: Diagnostics,
+): void {
   const localChannels = new Set(ast.channels.map((c) => c.name));
   const localRules = new Set(ast.rules.map((r) => r.name));
   const localWorkflows = new Set(ast.workflows.map((w) => w.name));
@@ -515,53 +556,57 @@ export function validateModule(ast: jaiphModule, graph: ModuleGraph): void {
 
   if (ast.scriptImports) {
     for (const si of ast.scriptImports) {
-      const resolved = resolveScriptImportPath(ast.filePath, si.path);
-      if (!existsSync(resolved)) {
-        throw jaiphError(
-          ast.filePath,
-          si.loc.line,
-          si.loc.col,
-          "E_IMPORT_NOT_FOUND",
-          `import script "${si.alias}" resolves to missing file "${resolved}"`,
-        );
-      }
-      localScripts.add(si.alias);
+      diag.capture(() => {
+        const resolved = resolveScriptImportPath(ast.filePath, si.path);
+        if (!existsSync(resolved)) {
+          diag.error(
+            ast.filePath,
+            si.loc.line,
+            si.loc.col,
+            "E_IMPORT_NOT_FOUND",
+            `import script "${si.alias}" resolves to missing file "${resolved}"`,
+          );
+        }
+        localScripts.add(si.alias);
+      });
     }
   }
 
   const node = graph.modules.get(ast.filePath);
   for (const imp of ast.imports) {
-    if (importsByAlias.has(imp.alias)) {
-      throw jaiphError(
-        ast.filePath,
-        imp.loc.line,
-        imp.loc.col,
-        "E_VALIDATE",
-        `duplicate import alias "${imp.alias}"`,
-      );
-    }
-    const resolved = node?.imports.get(imp.alias);
-    if (!resolved) {
-      throw jaiphError(
-        ast.filePath,
-        imp.loc.line,
-        imp.loc.col,
-        "E_IMPORT_NOT_FOUND",
-        `import "${imp.alias}" could not be resolved`,
-      );
-    }
-    importsByAlias.set(imp.alias, resolved);
-    const importedAst = graph.modules.get(resolved)?.ast;
-    if (!importedAst) {
-      throw jaiphError(
-        ast.filePath,
-        imp.loc.line,
-        imp.loc.col,
-        "E_IMPORT_NOT_FOUND",
-        `import "${imp.alias}" resolves to missing file "${resolved}"`,
-      );
-    }
-    importedAstCache.set(resolved, importedAst);
+    diag.capture(() => {
+      if (importsByAlias.has(imp.alias)) {
+        diag.error(
+          ast.filePath,
+          imp.loc.line,
+          imp.loc.col,
+          "E_VALIDATE",
+          `duplicate import alias "${imp.alias}"`,
+        );
+      }
+      const resolved = node?.imports.get(imp.alias);
+      if (!resolved) {
+        diag.error(
+          ast.filePath,
+          imp.loc.line,
+          imp.loc.col,
+          "E_IMPORT_NOT_FOUND",
+          `import "${imp.alias}" could not be resolved`,
+        );
+      }
+      importsByAlias.set(imp.alias, resolved);
+      const importedAst = graph.modules.get(resolved)?.ast;
+      if (!importedAst) {
+        diag.error(
+          ast.filePath,
+          imp.loc.line,
+          imp.loc.col,
+          "E_IMPORT_NOT_FOUND",
+          `import "${imp.alias}" resolves to missing file "${resolved}"`,
+        );
+      }
+      importedAstCache.set(resolved, importedAst);
+    });
   }
 
   const refCtx: RefResolutionContext = {
@@ -637,7 +682,7 @@ export function validateModule(ast: jaiphModule, graph: ModuleGraph): void {
     for (const ref of extractDotFieldRefs(content)) {
       const fields = promptSchemas.get(ref.varName);
       if (!fields) {
-        throw jaiphError(
+        diag.error(
           ast.filePath,
           loc.line,
           loc.col,
@@ -646,7 +691,7 @@ export function validateModule(ast: jaiphModule, graph: ModuleGraph): void {
         );
       }
       if (!fields.includes(ref.fieldName)) {
-        throw jaiphError(
+        diag.error(
           ast.filePath,
           loc.line,
           loc.col,
@@ -660,10 +705,10 @@ export function validateModule(ast: jaiphModule, graph: ModuleGraph): void {
   const validateWorkflowStringCaptures = (content: string, loc: { line: number; col: number }): void => {
     for (const cap of extractInlineCaptures(content)) {
       if (cap.kind === "run") {
-        validateNoShellRedirection(ast.filePath, loc, "run", cap.args);
+        validateNoShellRedirection(diag, ast.filePath, loc, "run", cap.args);
         validateRef({ value: cap.ref, loc }, ast, refCtx, expectRunTargetRef);
       } else {
-        validateNoShellRedirection(ast.filePath, loc, "ensure", cap.args);
+        validateNoShellRedirection(diag, ast.filePath, loc, "ensure", cap.args);
         validateRef({ value: cap.ref, loc }, ast, refCtx, expectRuleRef);
       }
     }
@@ -672,10 +717,10 @@ export function validateModule(ast: jaiphModule, graph: ModuleGraph): void {
   const validateRuleStringCaptures = (content: string, loc: { line: number; col: number }): void => {
     for (const cap of extractInlineCaptures(content)) {
       if (cap.kind === "run") {
-        validateNoShellRedirection(ast.filePath, loc, "run", cap.args);
+        validateNoShellRedirection(diag, ast.filePath, loc, "run", cap.args);
         validateRef({ value: cap.ref, loc }, ast, refCtx, expectRunInRuleRef);
       } else {
-        validateNoShellRedirection(ast.filePath, loc, "ensure", cap.args);
+        validateNoShellRedirection(diag, ast.filePath, loc, "ensure", cap.args);
         validateRef({ value: cap.ref, loc }, ast, refCtx, expectRuleRef);
       }
     }
@@ -690,31 +735,31 @@ export function validateModule(ast: jaiphModule, graph: ModuleGraph): void {
   ): void => {
     if (body.kind === "call") {
       const loc = body.callee.loc;
-      validateNoShellRedirection(ast.filePath, loc, "run", body.args);
-      validateNestedManagedCallArgs(ast.filePath, loc, body.args);
+      validateNoShellRedirection(diag, ast.filePath, loc, "run", body.args);
+      validateNestedManagedCallArgs(diag, ast.filePath, loc, body.args);
       const isRuleScope = scope === "rule";
       if (!body.callee.value.includes(".") && knownVars.has(body.callee.value) && !localScripts.has(body.callee.value) && !(scope === "workflow" && localWorkflows.has(body.callee.value))) {
-        throw jaiphError(ast.filePath, loc.line, loc.col, "E_VALIDATE", `strings are not executable; "${body.callee.value}" is a string — use a script instead`);
+        diag.error(ast.filePath, loc.line, loc.col, "E_VALIDATE", `strings are not executable; "${body.callee.value}" is a string — use a script instead`);
       }
       validateRef(body.callee, ast, refCtx, isRuleScope ? expectRunInRuleRef : expectRunTargetRef);
-      validateArity(ast.filePath, loc, body.callee.value, body.args, "workflow", ast, refCtx);
-      validateArgVarRefs(ast.filePath, loc, body.args, knownVars, recoverBindings);
+      validateArity(diag, ast.filePath, loc, body.callee.value, body.args, "workflow", ast, refCtx);
+      validateArgVarRefs(diag, ast.filePath, loc, body.args, knownVars, recoverBindings);
       return;
     }
     if (body.kind === "ensure_call") {
       const loc = body.callee.loc;
-      validateNoShellRedirection(ast.filePath, loc, "ensure", body.args);
-      validateNestedManagedCallArgs(ast.filePath, loc, body.args);
+      validateNoShellRedirection(diag, ast.filePath, loc, "ensure", body.args);
+      validateNestedManagedCallArgs(diag, ast.filePath, loc, body.args);
       validateRef(body.callee, ast, refCtx, expectRuleRef);
-      validateArity(ast.filePath, loc, body.callee.value, body.args, "rule", ast, refCtx);
-      validateArgVarRefs(ast.filePath, loc, body.args, knownVars, recoverBindings);
+      validateArity(diag, ast.filePath, loc, body.callee.value, body.args, "rule", ast, refCtx);
+      validateArgVarRefs(diag, ast.filePath, loc, body.args, knownVars, recoverBindings);
       return;
     }
     if (body.kind === "inline_script") {
       return; // no ref to validate
     }
     if (body.kind === "match") {
-      validateMatchExpr(ast.filePath, body.match, knownVars);
+      validateMatchExpr(diag, ast.filePath, body.match, knownVars);
       return;
     }
   };
@@ -757,7 +802,7 @@ export function validateModule(ast: jaiphModule, graph: ModuleGraph): void {
       // const
       const scriptName = extractConstScriptName(expr.raw);
       if (scriptName && localScripts.has(scriptName)) {
-        throw jaiphError(ast.filePath, stepLoc.line, stepLoc.col, "E_VALIDATE", `scripts are not values; "${scriptName}" is a script definition`);
+        diag.error(ast.filePath, stepLoc.line, stepLoc.col, "E_VALIDATE", `scripts are not values; "${scriptName}" is a script definition`);
       }
       const inner = semanticQuotedOrchestrationInner(expr.raw);
       validateWorkflowStringCaptures(inner, stepLoc);
@@ -780,16 +825,16 @@ export function validateModule(ast: jaiphModule, graph: ModuleGraph): void {
       return;
     }
     if (expr.kind === "match") {
-      validateMatchExpr(ast.filePath, expr.match, knownVars);
+      validateMatchExpr(diag, ast.filePath, expr.match, knownVars);
       return;
     }
     if (expr.kind === "prompt") {
       if (label !== "const") {
-        throw jaiphError(ast.filePath, stepLoc.line, stepLoc.col, "E_VALIDATE", `prompt is not a valid ${label} value`);
+        diag.error(ast.filePath, stepLoc.line, stepLoc.col, "E_VALIDATE", `prompt is not a valid ${label} value`);
       }
       const promptIdent = promptBareIdentifier(expr.raw);
       if (promptIdent && localScripts.has(promptIdent)) {
-        throw jaiphError(ast.filePath, stepLoc.line, stepLoc.col, "E_VALIDATE", `scripts are not promptable; "${promptIdent}" is a script — use a string const instead`);
+        diag.error(ast.filePath, stepLoc.line, stepLoc.col, "E_VALIDATE", `scripts are not promptable; "${promptIdent}" is a script — use a string const instead`);
       }
       validatePromptString(expr.raw, ast.filePath, stepLoc.line, stepLoc.col);
       if (expr.returns !== undefined) {
@@ -806,14 +851,14 @@ export function validateModule(ast: jaiphModule, graph: ModuleGraph): void {
     }
     if (expr.kind === "bare_ref") {
       if (label !== "send") {
-        throw jaiphError(ast.filePath, expr.ref.loc.line, expr.ref.loc.col, "E_VALIDATE", `bare reference is only valid as a send payload`);
+        diag.error(ast.filePath, expr.ref.loc.line, expr.ref.loc.col, "E_VALIDATE", `bare reference is only valid as a send payload`);
       }
       validateRef(expr.ref, ast, refCtx, bareSendRefSpec);
       return;
     }
     if (expr.kind === "shell") {
       if (label !== "send") {
-        throw jaiphError(ast.filePath, expr.loc.line, expr.loc.col, "E_VALIDATE", `raw shell fragment is only valid as a send payload`);
+        diag.error(ast.filePath, expr.loc.line, expr.loc.col, "E_VALIDATE", `raw shell fragment is only valid as a send payload`);
       }
       validateManagedWorkflowShell(expr.command, makeSubEnv({ line: expr.loc.line, col: expr.loc.col }));
       return;
@@ -843,7 +888,7 @@ export function validateModule(ast: jaiphModule, graph: ModuleGraph): void {
       }
       const scriptName = extractConstScriptName(expr.raw);
       if (scriptName && localScripts.has(scriptName)) {
-        throw jaiphError(ast.filePath, stepLoc.line, stepLoc.col, "E_VALIDATE", `scripts are not values; "${scriptName}" is a script definition`);
+        diag.error(ast.filePath, stepLoc.line, stepLoc.col, "E_VALIDATE", `scripts are not values; "${scriptName}" is a script definition`);
       }
       validateRuleStringCaptures(stripDQ(expr.raw), stepLoc);
       validateSimpleInterpolationIdentifiers(
@@ -864,28 +909,33 @@ export function validateModule(ast: jaiphModule, graph: ModuleGraph): void {
       return;
     }
     if (expr.kind === "match") {
-      validateMatchExpr(ast.filePath, expr.match, knownVars);
+      validateMatchExpr(diag, ast.filePath, expr.match, knownVars);
       return;
     }
     if (expr.kind === "prompt") {
-      throw jaiphError(ast.filePath, stepLoc.line, stepLoc.col, "E_VALIDATE", "const ... = prompt is not allowed in rules");
+      diag.error(ast.filePath, stepLoc.line, stepLoc.col, "E_VALIDATE", "const ... = prompt is not allowed in rules");
     }
     if (expr.kind === "bare_ref" || expr.kind === "shell") {
-      throw jaiphError(ast.filePath, stepLoc.line, stepLoc.col, "E_VALIDATE", `${expr.kind} expression is not allowed in rules`);
+      diag.error(ast.filePath, stepLoc.line, stepLoc.col, "E_VALIDATE", `${expr.kind} expression is not allowed in rules`);
     }
   };
 
   for (const rule of ast.rules) {
-    const ruleWalk = walkStepTree(
-      ast.filePath,
-      rule.steps,
-      ast.envDecls,
-      rule.params,
-      rule.loc,
-      localScripts,
-      parseSchemaFieldNames,
-      { withPromptSchemas: false },
-    );
+    let ruleWalk: StepTreeWalk | undefined;
+    diag.capture(() => {
+      ruleWalk = walkStepTree(
+        diag,
+        ast.filePath,
+        rule.steps,
+        ast.envDecls,
+        rule.params,
+        rule.loc,
+        localScripts,
+        parseSchemaFieldNames,
+        { withPromptSchemas: false },
+      );
+    });
+    if (!ruleWalk) continue;
     const ruleKnownVars = ruleWalk.knownVars;
     const validateRuleStep = (s: WorkflowStepDef): void => {
       if (s.type === "trivia") return;
@@ -902,11 +952,11 @@ export function validateModule(ast: jaiphModule, graph: ModuleGraph): void {
             );
             return;
           }
-          throw jaiphError(ast.filePath, s.loc.line, s.loc.col, "E_VALIDATE", `unsupported ${s.level} message form`);
+          diag.error(ast.filePath, s.loc.line, s.loc.col, "E_VALIDATE", `unsupported ${s.level} message form`);
         }
         // fail
         if (s.message.kind !== "literal") {
-          throw jaiphError(ast.filePath, s.loc.line, s.loc.col, "E_VALIDATE", "fail message must be a literal string");
+          diag.error(ast.filePath, s.loc.line, s.loc.col, "E_VALIDATE", "fail message must be a literal string");
         }
         validateFailString(s.message.raw, ast.filePath, s.loc.line, s.loc.col);
         const failInner = semanticQuotedOrchestrationInner(s.message.raw);
@@ -918,7 +968,7 @@ export function validateModule(ast: jaiphModule, graph: ModuleGraph): void {
         return;
       }
       if (s.type === "send") {
-        throw jaiphError(ast.filePath, s.loc.line, s.loc.col, "E_VALIDATE", "send is not allowed in rules");
+        diag.error(ast.filePath, s.loc.line, s.loc.col, "E_VALIDATE", "send is not allowed in rules");
       }
       if (s.type === "return") {
         validateRuleValueExpr(s.value, s.loc, ruleKnownVars, "return");
@@ -931,15 +981,15 @@ export function validateModule(ast: jaiphModule, graph: ModuleGraph): void {
       if (s.type === "exec") {
         const body = s.body;
         if (body.kind === "prompt") {
-          throw jaiphError(ast.filePath, body.loc.line, body.loc.col, "E_VALIDATE", "prompt is not allowed in rules");
+          diag.error(ast.filePath, body.loc.line, body.loc.col, "E_VALIDATE", "prompt is not allowed in rules");
         }
         if (body.kind === "shell") {
-          throw jaiphError(ast.filePath, body.loc.line, body.loc.col, "E_VALIDATE", "inline shell steps are forbidden in rules; use explicit script blocks");
+          diag.error(ast.filePath, body.loc.line, body.loc.col, "E_VALIDATE", "inline shell steps are forbidden in rules; use explicit script blocks");
         }
         if (body.kind === "call" && (s as Extract<WorkflowStepDef, { type: "exec" }>).body.kind === "call") {
           const callBody = body;
           if (callBody.async) {
-            throw jaiphError(ast.filePath, callBody.callee.loc.line, callBody.callee.loc.col, "E_VALIDATE", "run async is not allowed in rules; use it in workflows only");
+            diag.error(ast.filePath, callBody.callee.loc.line, callBody.callee.loc.col, "E_VALIDATE", "run async is not allowed in rules; use it in workflows only");
           }
         }
         validateCallable(body, ruleKnownVars, "rule");
@@ -948,14 +998,14 @@ export function validateModule(ast: jaiphModule, graph: ModuleGraph): void {
       if (s.type === "if") {
         if (s.operand.kind === "regex") {
           try { new RegExp(s.operand.source); } catch {
-            throw jaiphError(ast.filePath, s.loc.line, s.loc.col, "E_VALIDATE", `invalid regex in if condition: /${s.operand.source}/`);
+            diag.error(ast.filePath, s.loc.line, s.loc.col, "E_VALIDATE", `invalid regex in if condition: /${s.operand.source}/`);
           }
         }
         return;
       }
       if (s.type === "for_lines") {
         if (!ruleKnownVars.has(s.sourceVar)) {
-          throw jaiphError(
+          diag.error(
             ast.filePath, s.loc.line, s.loc.col, "E_VALIDATE",
             `for ... in <name>: "${s.sourceVar}" is not a known variable in this scope`,
           );
@@ -966,7 +1016,7 @@ export function validateModule(ast: jaiphModule, graph: ModuleGraph): void {
       return _never;
     };
     for (const entry of ruleWalk.flat) {
-      validateRuleStep(entry.step);
+      diag.capture(() => validateRuleStep(entry.step));
     }
   }
 
@@ -974,51 +1024,58 @@ export function validateModule(ast: jaiphModule, graph: ModuleGraph): void {
     const parts = channel.split(".");
     if (parts.length === 1) {
       if (!localChannels.has(channel)) {
-        throw jaiphError(ast.filePath, loc.line, loc.col, "E_VALIDATE", `Channel "${channel}" is not defined`);
+        diag.error(ast.filePath, loc.line, loc.col, "E_VALIDATE", `Channel "${channel}" is not defined`);
       }
       return;
     }
     if (parts.length !== 2) {
-      throw jaiphError(ast.filePath, loc.line, loc.col, "E_VALIDATE", `Channel "${channel}" is not defined`);
+      diag.error(ast.filePath, loc.line, loc.col, "E_VALIDATE", `Channel "${channel}" is not defined`);
     }
     const [alias, importedChannel] = parts;
     const importedFile = importsByAlias.get(alias);
     if (!importedFile) {
-      throw jaiphError(ast.filePath, loc.line, loc.col, "E_VALIDATE", `Channel "${channel}" is not defined`);
+      diag.error(ast.filePath, loc.line, loc.col, "E_VALIDATE", `Channel "${channel}" is not defined`);
     }
     const importedAst = importedAstCache.get(importedFile)!;
     const importedChannels = new Set(importedAst.channels.map((c) => c.name));
     if (!importedChannels.has(importedChannel)) {
-      throw jaiphError(ast.filePath, loc.line, loc.col, "E_VALIDATE", `Channel "${channel}" is not defined`);
+      diag.error(ast.filePath, loc.line, loc.col, "E_VALIDATE", `Channel "${channel}" is not defined`);
     }
   };
 
   for (const ch of ast.channels) {
     if (ch.routes) {
       for (const wfRef of ch.routes) {
-        validateRef(wfRef, ast, refCtx, expectWorkflowRef);
-        const targetParams = resolveRouteTargetParams(wfRef.value, ast, refCtx);
-        if (targetParams !== undefined && targetParams !== 3) {
-          throw jaiphError(
-            ast.filePath, wfRef.loc.line, wfRef.loc.col, "E_VALIDATE",
-            `inbox route target "${wfRef.value}" must declare exactly 3 parameters (message, channel, sender), but declares ${targetParams}`,
-          );
-        }
+        diag.capture(() => {
+          validateRef(wfRef, ast, refCtx, expectWorkflowRef);
+          const targetParams = resolveRouteTargetParams(wfRef.value, ast, refCtx);
+          if (targetParams !== undefined && targetParams !== 3) {
+            diag.error(
+              ast.filePath, wfRef.loc.line, wfRef.loc.col, "E_VALIDATE",
+              `inbox route target "${wfRef.value}" must declare exactly 3 parameters (message, channel, sender), but declares ${targetParams}`,
+            );
+          }
+        });
       }
     }
   }
 
   for (const workflow of ast.workflows) {
-    const wfWalk = walkStepTree(
-      ast.filePath,
-      workflow.steps,
-      ast.envDecls,
-      workflow.params,
-      workflow.loc,
-      localScripts,
-      parseSchemaFieldNames,
-      { withPromptSchemas: true },
-    );
+    let wfWalk: StepTreeWalk | undefined;
+    diag.capture(() => {
+      wfWalk = walkStepTree(
+        diag,
+        ast.filePath,
+        workflow.steps,
+        ast.envDecls,
+        workflow.params,
+        workflow.loc,
+        localScripts,
+        parseSchemaFieldNames,
+        { withPromptSchemas: true },
+      );
+    });
+    if (!wfWalk) continue;
     const wfKnownVars = wfWalk.knownVars;
     const promptSchemas = wfWalk.promptSchemas;
 
@@ -1043,11 +1100,11 @@ export function validateModule(ast: jaiphModule, graph: ModuleGraph): void {
             );
             return;
           }
-          throw jaiphError(ast.filePath, s.loc.line, s.loc.col, "E_VALIDATE", `unsupported ${s.level} message form`);
+          diag.error(ast.filePath, s.loc.line, s.loc.col, "E_VALIDATE", `unsupported ${s.level} message form`);
         }
         // fail
         if (s.message.kind !== "literal") {
-          throw jaiphError(ast.filePath, s.loc.line, s.loc.col, "E_VALIDATE", "fail message must be a literal string");
+          diag.error(ast.filePath, s.loc.line, s.loc.col, "E_VALIDATE", "fail message must be a literal string");
         }
         validateFailString(s.message.raw, ast.filePath, s.loc.line, s.loc.col);
         const failInner = semanticQuotedOrchestrationInner(s.message.raw);
@@ -1076,7 +1133,7 @@ export function validateModule(ast: jaiphModule, graph: ModuleGraph): void {
         }
         if (body.kind === "shell") {
           if (hasUnquotedSendArrow(body.command) && matchSendOperator(body.command) === null) {
-            throw jaiphError(
+            diag.error(
               ast.filePath, body.loc.line, body.loc.col, "E_VALIDATE",
               "invalid send: channel must be a single name or `alias.name` (at most one dot in the channel part)",
             );
@@ -1085,14 +1142,14 @@ export function validateModule(ast: jaiphModule, graph: ModuleGraph): void {
           if (/^(?:[A-Za-z_][A-Za-z0-9_]*)(?:\.[A-Za-z_][A-Za-z0-9_]*)*$/.test(t)) {
             if (!t.includes(".")) {
               if (localScripts.has(t) || localWorkflows.has(t)) {
-                throw jaiphError(
+                diag.error(
                   ast.filePath, body.loc.line, body.loc.col, "E_VALIDATE",
                   `use run ${t}() — a bare name that refers to a script or workflow must use a managed run step`,
                 );
               }
             } else {
               validateRef({ value: t, loc: body.loc }, ast, refCtx, expectRunTargetRef);
-              throw jaiphError(
+              diag.error(
                 ast.filePath, body.loc.line, body.loc.col, "E_VALIDATE",
                 `use run ${t}() — "${t}" is a valid script or workflow reference; use a managed run step`,
               );
@@ -1106,14 +1163,14 @@ export function validateModule(ast: jaiphModule, graph: ModuleGraph): void {
       if (s.type === "if") {
         if (s.operand.kind === "regex") {
           try { new RegExp(s.operand.source); } catch {
-            throw jaiphError(ast.filePath, s.loc.line, s.loc.col, "E_VALIDATE", `invalid regex in if condition: /${s.operand.source}/`);
+            diag.error(ast.filePath, s.loc.line, s.loc.col, "E_VALIDATE", `invalid regex in if condition: /${s.operand.source}/`);
           }
         }
         return;
       }
       if (s.type === "for_lines") {
         if (!wfKnownVars.has(s.sourceVar)) {
-          throw jaiphError(
+          diag.error(
             ast.filePath, s.loc.line, s.loc.col, "E_VALIDATE",
             `for ... in <name>: "${s.sourceVar}" is not a known variable in this scope`,
           );
@@ -1125,68 +1182,73 @@ export function validateModule(ast: jaiphModule, graph: ModuleGraph): void {
     };
 
     for (const entry of wfWalk.flat) {
-      validateStep(entry.step, entry.recoverBindings);
+      diag.capture(() => validateStep(entry.step, entry.recoverBindings));
     }
   }
 
   if (ast.tests && ast.tests.length > 0) {
-    validateTestBlocks(ast, ast.tests);
+    validateTestBlocks(diag, ast, ast.tests);
   }
 }
 
-function validateTestBlocks(ast: jaiphModule, tests: import("../types").TestBlockDef[]): void {
+function validateTestBlocks(
+  diag: Diagnostics,
+  ast: jaiphModule,
+  tests: import("../types").TestBlockDef[],
+): void {
   for (const tb of tests) {
     const inScope = new Set<string>();
     for (const step of tb.steps) {
-      if (step.type === "test_const") {
-        inScope.add(step.name);
-        continue;
-      }
-      if (step.type === "test_run_workflow") {
-        if (step.captureName) inScope.add(step.captureName);
-        continue;
-      }
-      if (step.type === "test_mock_prompt" && step.responseVar) {
-        if (!inScope.has(step.responseVar)) {
-          throw jaiphError(
-            ast.filePath,
-            step.loc.line,
-            step.loc.col,
-            "E_VALIDATE",
-            `mock prompt: undefined name "${step.responseVar}" (declare it earlier with: const ${step.responseVar} = "…")`,
-          );
+      diag.capture(() => {
+        if (step.type === "test_const") {
+          inScope.add(step.name);
+          return;
         }
-        continue;
-      }
-      if (
-        step.type === "test_expect_contain" ||
-        step.type === "test_expect_not_contain" ||
-        step.type === "test_expect_equal"
-      ) {
-        if (!inScope.has(step.variable)) {
-          throw jaiphError(
-            ast.filePath,
-            step.loc.line,
-            step.loc.col,
-            "E_VALIDATE",
-            `${step.type.replace("test_", "")}: undefined name "${step.variable}" (capture it first with: const ${step.variable} = run …)`,
-          );
+        if (step.type === "test_run_workflow") {
+          if (step.captureName) inScope.add(step.captureName);
+          return;
         }
-        const refName =
+        if (step.type === "test_mock_prompt" && step.responseVar) {
+          if (!inScope.has(step.responseVar)) {
+            diag.error(
+              ast.filePath,
+              step.loc.line,
+              step.loc.col,
+              "E_VALIDATE",
+              `mock prompt: undefined name "${step.responseVar}" (declare it earlier with: const ${step.responseVar} = "…")`,
+            );
+          }
+          return;
+        }
+        if (
+          step.type === "test_expect_contain" ||
+          step.type === "test_expect_not_contain" ||
           step.type === "test_expect_equal"
-            ? step.expectedVar
-            : step.substringVar;
-        if (refName !== undefined && !inScope.has(refName)) {
-          throw jaiphError(
-            ast.filePath,
-            step.loc.line,
-            step.loc.col,
-            "E_VALIDATE",
-            `${step.type.replace("test_", "")}: undefined name "${refName}" (declare it earlier with: const ${refName} = "…")`,
-          );
+        ) {
+          if (!inScope.has(step.variable)) {
+            diag.error(
+              ast.filePath,
+              step.loc.line,
+              step.loc.col,
+              "E_VALIDATE",
+              `${step.type.replace("test_", "")}: undefined name "${step.variable}" (capture it first with: const ${step.variable} = run …)`,
+            );
+          }
+          const refName =
+            step.type === "test_expect_equal"
+              ? step.expectedVar
+              : step.substringVar;
+          if (refName !== undefined && !inScope.has(refName)) {
+            diag.error(
+              ast.filePath,
+              step.loc.line,
+              step.loc.col,
+              "E_VALIDATE",
+              `${step.type.replace("test_", "")}: undefined name "${refName}" (declare it earlier with: const ${refName} = "…")`,
+            );
+          }
         }
-        continue;
-      }
+      });
     }
   }
 }
