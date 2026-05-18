@@ -5,17 +5,15 @@ import { PassThrough } from "node:stream";
 import { randomUUID } from "node:crypto";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { inlineScriptName } from "../../inline-script-name";
-import type { MatchExprDef, WorkflowStepDef } from "../../types";
+import { argsToRuntimeString } from "../../parse/core";
+import type { CatchBody, Expr, MatchExprDef, WorkflowStepDef } from "../../types";
 import { executePrompt, resolveConfig, resolveModel, resolvePromptStepName } from "./prompt";
 import { appendRunSummaryLine } from "./emit";
 import { buildStepDisplayParamPairs } from "../../cli/commands/format-params.js";
 import { resolveRuleRef, resolveScriptRef, resolveWorkflowRef, type RuntimeGraph } from "./graph";
 import type { WorkflowMetadata } from "../../types";
 import { extractJson, validateFields } from "./schema";
-import {
-  plainMultilineOrchestrationForRuntime,
-  tripleQuotedRawForRuntime,
-} from "../orchestration-text";
+import { canonicalizeTripleQuotedString } from "../../parse/triple-quote";
 import {
   commaArgsToInterpolated,
   interpolate,
@@ -34,8 +32,6 @@ import { executeMockBodyDef, type MockBodyDef, type StepResult } from "./runtime
 import { linesOfDelimitedString } from "../string-lines";
 
 export type { MockBodyDef } from "./runtime-mock";
-
-type EnsureRecover = Extract<WorkflowStepDef, { type: "ensure" }>["catch"];
 
 const HANDLE_PREFIX = "__JAIPH_HANDLE__";
 
@@ -467,7 +463,7 @@ export class NodeWorkflowRuntime {
       if (matched) {
         let body = arm.body.trimStart();
         if (arm.tripleQuotedBody) {
-          body = tripleQuotedRawForRuntime(arm.body).trimStart();
+          body = canonicalizeTripleQuotedString(arm.body).trimStart();
         }
 
         // fail "message" — abort with failure
@@ -511,6 +507,72 @@ export class NodeWorkflowRuntime {
     return { ok: false, result: { status: 1, output: "", error: "match: no arm matched" } };
   }
 
+  /**
+   * Evaluate an `Expr` to its string value, executing any managed call
+   * (call/ensure_call/inline_script/match/prompt) and returning its captured
+   * result. Used by `const` / `return` / `send` / `say` step handlers so they
+   * don't each duplicate the dispatch table.
+   *
+   * `promptCaptureName` lets callers route prompt-side effects (e.g. schema
+   * field exports) into a scope binding; pass `undefined` for non-capture
+   * positions.
+   */
+  private async evaluateExpr(
+    scope: Scope,
+    expr: Expr,
+    promptCaptureName: string | undefined,
+    io: StepIO | undefined,
+  ): Promise<{ ok: true; value: string; output: string } | { ok: false; result: StepResult; output: string }> {
+    if (expr.kind === "literal") {
+      const ir = await this.interpolateWithCaptures(expr.raw, scope);
+      if (!ir.ok) return { ok: false, result: ir.result, output: "" };
+      return { ok: true, value: ir.value, output: "" };
+    }
+    if (expr.kind === "call") {
+      const r = await this.executeRunRef(scope, expr.callee.value, argsToRuntimeString(expr.args));
+      if (r.status !== 0) return { ok: false, result: r, output: "" };
+      return { ok: true, value: r.returnValue ?? r.output.trim(), output: "" };
+    }
+    if (expr.kind === "ensure_call") {
+      const r = await this.executeEnsureRef(scope, expr.callee.value, argsToRuntimeString(expr.args), undefined);
+      if (r.status !== 0) return { ok: false, result: r, output: "" };
+      return { ok: true, value: r.returnValue ?? r.output.trim(), output: "" };
+    }
+    if (expr.kind === "inline_script") {
+      const shebang = expr.lang ? `#!/usr/bin/env ${expr.lang}` : undefined;
+      const r = await this.executeInlineScript(scope, expr.body, shebang, argsToRuntimeString(expr.args));
+      if (r.status !== 0) return { ok: false, result: r, output: "" };
+      return { ok: true, value: r.returnValue ?? r.output.trim(), output: "" };
+    }
+    if (expr.kind === "match") {
+      const mr = await this.evaluateMatch(scope, expr.match);
+      if (!mr.ok) return { ok: false, result: mr.result, output: "" };
+      return { ok: true, value: mr.value, output: "" };
+    }
+    if (expr.kind === "prompt") {
+      if (expr.returns !== undefined && !promptCaptureName) {
+        return {
+          ok: false,
+          result: { status: 1, output: "", error: 'prompt with "returns" schema must capture to a variable' },
+          output: "",
+        };
+      }
+      const r = await this.runPromptStep(scope, expr.raw, expr.returns, promptCaptureName, io);
+      if (!r.ok) return { ok: false, result: r.result, output: r.output };
+      // For captured prompts `runPromptStep` writes the value into scope and we
+      // return that here; non-capture prompts (no binding) yield empty string.
+      const value = promptCaptureName ? (scope.vars.get(promptCaptureName) ?? "") : "";
+      return { ok: true, value, output: r.output };
+    }
+    // shell / bare_ref should never reach the runtime — validator rejects them
+    // outside their narrow send-RHS lane (and shell-as-send is rejected too).
+    return {
+      ok: false,
+      result: { status: 1, output: "", error: `unsupported expression kind in runtime: ${expr.kind}` },
+      output: "",
+    };
+  }
+
   private async executeSteps(scope: Scope, steps: WorkflowStepDef[], io?: StepIO): Promise<StepResult> {
     let accOut = "";
     let accErr = "";
@@ -519,24 +581,34 @@ export class NodeWorkflowRuntime {
     const localHandleIds: string[] = [];
     let asyncCounter = 0;
     for (const step of steps) {
-      if (step.type === "comment" || step.type === "blank_line") continue;
-      if (step.type === "log" || step.type === "logerr") {
-        const level = step.type === "log" ? "LOG" : "LOGERR";
+      if (step.type === "trivia") continue;
+      if (step.type === "say") {
         let message: string;
-        if (step.managed?.kind === "run_inline_script") {
-          const shebang = step.managed.lang ? `#!/usr/bin/env ${step.managed.lang}` : undefined;
-          const result = await this.executeInlineScript(scope, step.managed.body, shebang, step.managed.args ?? "");
+        if (step.message.kind === "inline_script") {
+          const shebang = step.message.lang ? `#!/usr/bin/env ${step.message.lang}` : undefined;
+          const result = await this.executeInlineScript(scope, step.message.body, shebang, argsToRuntimeString(step.message.args));
           if (result.status !== 0) return this.mergeStepResult(accOut, accErr, result);
           message = result.returnValue ?? result.output.trim();
-        } else {
-          const raw = step.tripleQuoted ? plainMultilineOrchestrationForRuntime(step.message) : step.message;
-          const ir = await this.interpolateWithCaptures(raw, scope);
+        } else if (step.message.kind === "literal") {
+          const ir = await this.interpolateWithCaptures(step.message.raw, scope);
           if (!ir.ok) return this.mergeStepResult(accOut, accErr, ir.result);
-          message = ir.value;
+          message = step.level === "fail" || step.level === "logerr"
+            ? stripOuterQuotes(ir.value)
+            : ir.value;
+        } else {
+          return this.mergeStepResult(accOut, accErr, {
+            status: 1,
+            output: "",
+            error: `unsupported ${step.level} message kind: ${step.message.kind}`,
+          });
         }
-        this.emitter.emitLog(level, message);
+        if (step.level === "fail") {
+          return this.mergeStepResult(accOut, accErr, { status: 1, output: "", error: message });
+        }
+        const eventLevel = step.level === "log" ? "LOG" : "LOGERR";
+        this.emitter.emitLog(eventLevel, message);
         const chunk = `${message}\n`;
-        if (level === "LOG") {
+        if (step.level === "log") {
           accOut += chunk;
           io?.appendOut(chunk);
         } else {
@@ -545,53 +617,18 @@ export class NodeWorkflowRuntime {
         }
         continue;
       }
-      if (step.type === "fail") {
-        const failMsg = step.tripleQuoted ? tripleQuotedRawForRuntime(step.message) : step.message;
-        const failIr = await this.interpolateWithCaptures(failMsg, scope);
-        if (!failIr.ok) return this.mergeStepResult(accOut, accErr, failIr.result);
-        const message = failIr.value;
-        return this.mergeStepResult(accOut, accErr, { status: 1, output: "", error: message });
-      }
-      if (step.type === "shell") {
-        const cmdIr = await this.interpolateWithCaptures(step.command, scope);
-        if (!cmdIr.ok) return this.mergeStepResult(accOut, accErr, cmdIr.result);
-        const stepName = `sh_line_${step.loc.line}`;
-        const result = await this.executeManagedStep(
-          "script",
-          stepName,
-          [],
-          (io) => this.executeShLine(scope, cmdIr.value, io),
-        );
-        if (result.status !== 0) return this.mergeStepResult(accOut, accErr, result);
-        continue;
-      }
       if (step.type === "return") {
-        if (step.managed) {
-          if (step.managed.kind === "match") {
-            const matchResult = await this.evaluateMatch(scope, step.managed.match);
-            if (!matchResult.ok) return this.mergeStepResult(accOut, accErr, matchResult.result);
-            returnValue = matchResult.value;
-            return this.mergeStepResult(accOut, accErr, { status: 0, output: "", error: "", returnValue });
-          }
-          if (step.managed.kind === "run_inline_script") {
-            const shebang = step.managed.lang ? `#!/usr/bin/env ${step.managed.lang}` : undefined;
-            const result = await this.executeInlineScript(scope, step.managed.body, shebang, step.managed.args ?? "");
-            if (result.status !== 0) return this.mergeStepResult(accOut, accErr, result);
-            returnValue = result.returnValue ?? result.output.trim();
-            return this.mergeStepResult(accOut, accErr, { status: 0, output: "", error: "", returnValue });
-          }
-          const result = step.managed.kind === "run"
-            ? await this.executeRunRef(scope, step.managed.ref.value, step.managed.args ?? "")
-            : await this.executeEnsureRef(scope, step.managed.ref.value, step.managed.args ?? "", undefined);
-          if (result.status !== 0) return this.mergeStepResult(accOut, accErr, result);
-          returnValue = result.returnValue ?? result.output.trim();
+        const value = step.value;
+        if (value.kind === "literal") {
+          const retIr = await this.interpolateWithCaptures(value.raw, scope);
+          if (!retIr.ok) return this.mergeStepResult(accOut, accErr, retIr.result);
+          returnValue = stripOuterQuotes(retIr.value);
           return this.mergeStepResult(accOut, accErr, { status: 0, output: "", error: "", returnValue });
         }
-        // Match Bash semantics: return "$var" should return var value, not literal quotes.
-        const retRaw = step.tripleQuoted ? tripleQuotedRawForRuntime(step.value) : step.value;
-        const retIr = await this.interpolateWithCaptures(retRaw, scope);
-        if (!retIr.ok) return this.mergeStepResult(accOut, accErr, retIr.result);
-        returnValue = stripOuterQuotes(retIr.value);
+        const r = await this.evaluateExpr(scope, value, undefined, io);
+        accOut += r.output;
+        if (!r.ok) return this.mergeStepResult(accOut, accErr, r.result);
+        returnValue = r.value;
         return this.mergeStepResult(accOut, accErr, { status: 0, output: "", error: "", returnValue });
       }
       if (step.type === "send") {
@@ -604,25 +641,20 @@ export class NodeWorkflowRuntime {
           });
         }
         let payload = "";
-        if (step.rhs.kind === "literal") {
-          const sendTok =
-            step.rhs.tripleQuoted ? tripleQuotedRawForRuntime(step.rhs.token) : step.rhs.token;
-          const sendIr = await this.interpolateWithCaptures(sendTok, scope);
+        const sendValue = step.value;
+        if (sendValue.kind === "literal") {
+          const sendIr = await this.interpolateWithCaptures(sendValue.raw, scope);
           if (!sendIr.ok) return this.mergeStepResult(accOut, accErr, sendIr.result);
           payload = stripOuterQuotes(sendIr.value);
-        } else if (step.rhs.kind === "var") {
-          const sendHandleErr = await this.resolveHandlesInInput(scope, step.rhs.bash);
-          if (sendHandleErr) return this.mergeStepResult(accOut, accErr, sendHandleErr);
-          payload = interpolate(step.rhs.bash, scope.vars, scope.env);
-        } else if (step.rhs.kind === "run") {
-          const runValue = await this.executeRunRef(scope, step.rhs.ref.value, step.rhs.args ?? "");
-          if (runValue.status !== 0) return this.mergeStepResult(accOut, accErr, runValue);
-          payload = runValue.returnValue ?? runValue.output.trim();
+        } else if (sendValue.kind === "call") {
+          const r = await this.executeRunRef(scope, sendValue.callee.value, argsToRuntimeString(sendValue.args));
+          if (r.status !== 0) return this.mergeStepResult(accOut, accErr, r);
+          payload = r.returnValue ?? r.output.trim();
         } else {
           return this.mergeStepResult(accOut, accErr, {
             status: 1,
             output: "",
-            error: "unsupported send rhs in node runtime",
+            error: `unsupported send value kind: ${sendValue.kind}`,
           });
         }
         this.inboxSeq += 1;
@@ -634,7 +666,6 @@ export class NodeWorkflowRuntime {
           sender: senderName,
           seqPadded,
         };
-        // Route to the nearest ancestor context that has a route for this channel.
         let targetCtx = ctx;
         let routed = false;
         for (let i = this.workflowCtxStack.length - 1; i >= 0; i -= 1) {
@@ -645,8 +676,6 @@ export class NodeWorkflowRuntime {
           }
         }
         targetCtx.queue.push(msg);
-        // Persist inbox file only when a route consumes the channel — otherwise
-        // the file would be dead audit data with no corresponding dispatch.
         if (routed) {
           const inboxFileDir = join(this.runDir, "inbox");
           mkdirSync(inboxFileDir, { recursive: true });
@@ -665,98 +694,54 @@ export class NodeWorkflowRuntime {
         );
         continue;
       }
-      if (step.type === "prompt") {
-        if (step.returns !== undefined && !step.captureName) {
-          return this.mergeStepResult(accOut, accErr, {
-            status: 1,
-            output: "",
-            error: 'prompt with "returns" schema must capture to a variable',
-          });
-        }
-        const r = await this.runPromptStep(scope, step.raw, step.bodyKind, step.returns, step.captureName, io);
-        accOut += r.output;
-        if (!r.ok) return this.mergeStepResult(accOut, accErr, r.result);
-        continue;
-      }
       if (step.type === "const") {
-        if (step.value.kind === "expr") {
-          const exprRhs =
-            step.value.tripleQuoted ? tripleQuotedRawForRuntime(step.value.bashRhs) : step.value.bashRhs;
-          const exprIr = await this.interpolateWithCaptures(exprRhs, scope);
+        const v = step.value;
+        if (v.kind === "literal") {
+          const exprIr = await this.interpolateWithCaptures(v.raw, scope);
           if (!exprIr.ok) return this.mergeStepResult(accOut, accErr, exprIr.result);
           scope.vars.set(step.name, stripOuterQuotes(exprIr.value));
           continue;
         }
-        if (step.value.kind === "run_capture") {
-          const captureRef = step.value.ref.value;
-          const captureArgs = step.value.args ?? "";
-          if (step.value.async) {
-            // Async capture: create handle, store in scope, register for join.
-            asyncCounter += 1;
-            const branchStack = [...this.getFrameStack()];
-            const branchIndices = [...this.getAsyncIndices(), asyncCounter];
-            const promise = this.asyncFrameStack.run(branchStack, () =>
-              this.asyncIndicesStorage.run(branchIndices, () =>
-                this.executeRunRef(scope, captureRef, captureArgs),
-              ),
-            );
-            const handleId = this.createHandle(captureRef, promise);
-            localHandleIds.push(handleId);
-            scope.vars.set(step.name, handleId);
-            continue;
-          }
-          const runResult = await this.executeRunRef(scope, captureRef, captureArgs);
-          if (runResult.status !== 0) return this.mergeStepResult(accOut, accErr, runResult);
-          scope.vars.set(step.name, runResult.returnValue ?? runResult.output.trim());
-          continue;
-        }
-        if (step.value.kind === "run_inline_script_capture") {
-          const shebang = step.value.lang ? `#!/usr/bin/env ${step.value.lang}` : undefined;
-          const result = await this.executeInlineScript(scope, step.value.body, shebang, step.value.args ?? "");
-          if (result.status !== 0) return this.mergeStepResult(accOut, accErr, result);
-          scope.vars.set(step.name, result.returnValue ?? result.output.trim());
-          continue;
-        }
-        if (step.value.kind === "ensure_capture") {
-          const ensureResult = await this.executeEnsureRef(scope, step.value.ref.value, step.value.args ?? "", undefined);
-          if (ensureResult.status !== 0) return this.mergeStepResult(accOut, accErr, ensureResult);
-          scope.vars.set(step.name, ensureResult.returnValue ?? ensureResult.output.trim());
-          continue;
-        }
-        if (step.value.kind === "match_expr") {
-          const matchResult = await this.evaluateMatch(scope, step.value.match);
-          if (!matchResult.ok) return this.mergeStepResult(accOut, accErr, matchResult.result);
-          scope.vars.set(step.name, matchResult.value);
-          continue;
-        }
-        if (step.value.kind === "prompt_capture") {
-          const r = await this.runPromptStep(
-            scope,
-            step.value.raw,
-            step.value.bodyKind,
-            step.value.returns,
-            step.name,
-            io,
+        if (v.kind === "call" && v.async) {
+          asyncCounter += 1;
+          const captureRef = v.callee.value;
+          const captureArgs = argsToRuntimeString(v.args);
+          const branchStack = [...this.getFrameStack()];
+          const branchIndices = [...this.getAsyncIndices(), asyncCounter];
+          const promise = this.asyncFrameStack.run(branchStack, () =>
+            this.asyncIndicesStorage.run(branchIndices, () =>
+              this.executeRunRef(scope, captureRef, captureArgs),
+            ),
           );
-          accOut += r.output;
-          if (!r.ok) return this.mergeStepResult(accOut, accErr, r.result);
+          const handleId = this.createHandle(captureRef, promise);
+          localHandleIds.push(handleId);
+          scope.vars.set(step.name, handleId);
           continue;
         }
+        const r = await this.evaluateExpr(scope, v, step.name, io);
+        accOut += r.output;
+        if (!r.ok) return this.mergeStepResult(accOut, accErr, r.result);
+        // Prompt handlers bind via captureName side effect inside runPromptStep;
+        // all other Expr kinds bind here.
+        if (v.kind !== "prompt") {
+          scope.vars.set(step.name, r.value);
+        }
+        continue;
       }
-      if (step.type === "run") {
-        if (step.async) {
+      if (step.type === "exec") {
+        const body = step.body;
+        if (body.kind === "call" && body.async) {
           asyncCounter += 1;
           const branchStack = [...this.getFrameStack()];
           const branchIndices = [...this.getAsyncIndices(), asyncCounter];
-          const ref = step.workflow.value;
-          const argsRaw = step.args ?? "";
+          const ref = body.callee.value;
+          const argsRaw = argsToRuntimeString(body.args);
           const runInBranch = (fn: () => Promise<StepResult>): Promise<StepResult> =>
             this.asyncFrameStack.run(branchStack, () =>
               this.asyncIndicesStorage.run(branchIndices, fn),
             );
           let promise: Promise<StepResult>;
           if (step.recover) {
-            // Async + recover loop: wrap retry logic in a single promise.
             const recoverLimit = this.resolveRecoverLimit(scope.filePath);
             const recover = step.recover;
             promise = runInBranch(async () => {
@@ -771,7 +756,6 @@ export class NodeWorkflowRuntime {
               return lastResult;
             });
           } else if (step.catch) {
-            // Async + catch: single-shot recovery in the async branch.
             const recover = step.catch;
             promise = runInBranch(async () => {
               const result = await this.executeRunRef(scope, ref, argsRaw);
@@ -789,55 +773,99 @@ export class NodeWorkflowRuntime {
           if (step.captureName) scope.vars.set(step.captureName, handleId);
           continue;
         }
-        if (step.recover) {
-          const limit = this.resolveRecoverLimit(scope.filePath);
-          let lastResult = await this.executeRunRef(scope, step.workflow.value, step.args ?? "");
-          let attempt = 1;
-          while (lastResult.status !== 0 && attempt <= limit) {
-            const rr = await this.runRecoverBody(scope, step.recover, `${lastResult.output}${lastResult.error}`);
-            if (rr.status !== 0 || rr.returnValue !== undefined) return this.mergeStepResult(accOut, accErr, rr);
-            lastResult = await this.executeRunRef(scope, step.workflow.value, step.args ?? "");
-            attempt += 1;
-          }
-          if (lastResult.status === 0) {
-            if (step.captureName) {
-              scope.vars.set(step.captureName, lastResult.returnValue ?? lastResult.output.trim());
+        if (body.kind === "call") {
+          if (step.recover) {
+            const limit = this.resolveRecoverLimit(scope.filePath);
+            const ref = body.callee.value;
+            const argsRaw = argsToRuntimeString(body.args);
+            let lastResult = await this.executeRunRef(scope, ref, argsRaw);
+            let attempt = 1;
+            while (lastResult.status !== 0 && attempt <= limit) {
+              const rr = await this.runRecoverBody(scope, step.recover, `${lastResult.output}${lastResult.error}`);
+              if (rr.status !== 0 || rr.returnValue !== undefined) return this.mergeStepResult(accOut, accErr, rr);
+              lastResult = await this.executeRunRef(scope, ref, argsRaw);
+              attempt += 1;
             }
+            if (lastResult.status === 0) {
+              if (step.captureName) {
+                scope.vars.set(step.captureName, lastResult.returnValue ?? lastResult.output.trim());
+              }
+            } else {
+              return this.mergeStepResult(accOut, accErr, lastResult);
+            }
+            continue;
+          }
+          const runResult = await this.executeRunRef(scope, body.callee.value, argsToRuntimeString(body.args));
+          if (runResult.status === 0) {
+            if (step.captureName) {
+              scope.vars.set(step.captureName, runResult.returnValue ?? runResult.output.trim());
+            }
+          } else if (step.catch) {
+            const rr = await this.runRecoverBody(scope, step.catch, `${runResult.output}${runResult.error}`);
+            if (rr.status !== 0 || rr.returnValue !== undefined) return this.mergeStepResult(accOut, accErr, rr);
           } else {
-            return this.mergeStepResult(accOut, accErr, lastResult);
+            return this.mergeStepResult(accOut, accErr, runResult);
           }
           continue;
         }
-        const runResult = await this.executeRunRef(scope, step.workflow.value, step.args ?? "");
-        if (runResult.status === 0) {
-          if (step.captureName) {
-            scope.vars.set(step.captureName, runResult.returnValue ?? runResult.output.trim());
+        if (body.kind === "ensure_call") {
+          const ensureResult = await this.executeEnsureRef(scope, body.callee.value, argsToRuntimeString(body.args), step.catch);
+          if (step.captureName && ensureResult.status === 0) {
+            scope.vars.set(step.captureName, ensureResult.returnValue ?? ensureResult.output.trim());
           }
-        } else if (step.catch) {
-          const rr = await this.runRecoverBody(scope, step.catch, `${runResult.output}${runResult.error}`);
-          if (rr.status !== 0 || rr.returnValue !== undefined) return this.mergeStepResult(accOut, accErr, rr);
-        } else {
-          return this.mergeStepResult(accOut, accErr, runResult);
+          if (ensureResult.status !== 0) return this.mergeStepResult(accOut, accErr, ensureResult);
+          if (ensureResult.recoverReturn) return this.mergeStepResult(accOut, accErr, ensureResult);
+          continue;
         }
-        continue;
-      }
-      if (step.type === "run_inline_script") {
-        const shebang = step.lang ? `#!/usr/bin/env ${step.lang}` : undefined;
-        const result = await this.executeInlineScript(scope, step.body, shebang, step.args ?? "");
-        if (step.captureName && result.status === 0) {
-          scope.vars.set(step.captureName, result.returnValue ?? result.output.trim());
+        if (body.kind === "inline_script") {
+          const shebang = body.lang ? `#!/usr/bin/env ${body.lang}` : undefined;
+          const result = await this.executeInlineScript(scope, body.body, shebang, argsToRuntimeString(body.args));
+          if (step.captureName && result.status === 0) {
+            scope.vars.set(step.captureName, result.returnValue ?? result.output.trim());
+          }
+          if (result.status !== 0) return this.mergeStepResult(accOut, accErr, result);
+          continue;
         }
-        if (result.status !== 0) return this.mergeStepResult(accOut, accErr, result);
-        continue;
-      }
-      if (step.type === "ensure") {
-        const ensureResult = await this.executeEnsureRef(scope, step.ref.value, step.args ?? "", step.catch);
-        if (step.captureName && ensureResult.status === 0) {
-          scope.vars.set(step.captureName, ensureResult.returnValue ?? ensureResult.output.trim());
+        if (body.kind === "prompt") {
+          if (body.returns !== undefined && !step.captureName) {
+            return this.mergeStepResult(accOut, accErr, {
+              status: 1,
+              output: "",
+              error: 'prompt with "returns" schema must capture to a variable',
+            });
+          }
+          const r = await this.runPromptStep(scope, body.raw, body.returns, step.captureName, io);
+          accOut += r.output;
+          if (!r.ok) return this.mergeStepResult(accOut, accErr, r.result);
+          continue;
         }
-        if (ensureResult.status !== 0) return this.mergeStepResult(accOut, accErr, ensureResult);
-        if (ensureResult.recoverReturn) return this.mergeStepResult(accOut, accErr, ensureResult);
-        continue;
+        if (body.kind === "match") {
+          const matchResult = await this.evaluateMatch(scope, body.match);
+          if (!matchResult.ok) return this.mergeStepResult(accOut, accErr, matchResult.result);
+          if (step.captureName) scope.vars.set(step.captureName, matchResult.value);
+          continue;
+        }
+        if (body.kind === "shell") {
+          const cmdIr = await this.interpolateWithCaptures(body.command, scope);
+          if (!cmdIr.ok) return this.mergeStepResult(accOut, accErr, cmdIr.result);
+          const stepName = `sh_line_${body.loc.line}`;
+          const result = await this.executeManagedStep(
+            "script",
+            stepName,
+            [],
+            (io) => this.executeShLine(scope, cmdIr.value, io),
+          );
+          if (step.captureName && result.status === 0) {
+            scope.vars.set(step.captureName, result.returnValue ?? result.output.trim());
+          }
+          if (result.status !== 0) return this.mergeStepResult(accOut, accErr, result);
+          continue;
+        }
+        return this.mergeStepResult(accOut, accErr, {
+          status: 1,
+          output: "",
+          error: `unsupported exec body kind in runtime: ${body.kind}`,
+        });
       }
       if (step.type === "if") {
         // Resolve handle if the subject variable is a handle.
@@ -881,12 +909,6 @@ export class NodeWorkflowRuntime {
           accOut += bodyResult.output;
           accErr += bodyResult.error;
         }
-        continue;
-      }
-      if (step.type === "match") {
-        const matchResult = await this.evaluateMatch(scope, step.expr);
-        if (!matchResult.ok) return this.mergeStepResult(accOut, accErr, matchResult.result);
-        // Standalone match: value is discarded
         continue;
       }
     }
@@ -1091,13 +1113,11 @@ export class NodeWorkflowRuntime {
   private async runPromptStep(
     scope: Scope,
     raw: string,
-    bodyKind: "string" | "identifier" | "triple_quoted" | undefined,
     returns: string | undefined,
     captureName: string | undefined,
     io: StepIO | undefined,
   ): Promise<{ ok: true; output: string } | { ok: false; result: StepResult; output: string }> {
-    const promptRaw = bodyKind === "triple_quoted" ? tripleQuotedRawForRuntime(raw) : raw;
-    const promptIr = await this.interpolateWithCaptures(promptRaw, scope);
+    const promptIr = await this.interpolateWithCaptures(raw, scope);
     if (!promptIr.ok) return { ok: false, result: promptIr.result, output: "" };
     let promptText = promptIr.value;
     const promptConfig = resolveConfig(scope.env);
@@ -1195,7 +1215,7 @@ export class NodeWorkflowRuntime {
     scope: Scope,
     ref: string,
     argsRaw: string,
-    catchDef: EnsureRecover | undefined,
+    catchDef: CatchBody | undefined,
   ): Promise<StepResult> {
     const resolvedArgs = await this.resolveArgsRaw(scope, argsRaw);
     if (!Array.isArray(resolvedArgs)) return resolvedArgs;

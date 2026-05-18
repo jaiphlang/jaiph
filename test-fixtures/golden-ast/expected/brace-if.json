@@ -9,10 +9,13 @@
       "params": [],
       "steps": [
         {
-          "type": "run",
-          "workflow": {
-            "value": "ok_impl"
-          }
+          "body": {
+            "callee": {
+              "value": "ok_impl"
+            },
+            "kind": "call"
+          },
+          "type": "exec"
         }
       ]
     }
@@ -20,33 +23,13 @@
   "scripts": [
     {
       "body": "true",
-      "bodyKind": "backtick",
       "comments": [],
       "name": "ok_impl"
     },
     {
       "body": "printf '%s' \"$1\" > \"$2\"",
-      "bodyKind": "backtick",
       "comments": [],
       "name": "save"
-    }
-  ],
-  "topLevelOrder": [
-    {
-      "index": 0,
-      "kind": "rule"
-    },
-    {
-      "index": 0,
-      "kind": "script"
-    },
-    {
-      "index": 1,
-      "kind": "script"
-    },
-    {
-      "index": 0,
-      "kind": "workflow"
     }
   ],
   "workflows": [
@@ -56,27 +39,39 @@
       "params": [],
       "steps": [
         {
+          "body": {
+            "callee": {
+              "value": "ok"
+            },
+            "kind": "ensure_call"
+          },
           "catch": {
             "bindings": {
               "failure": "err"
             },
             "block": [
               {
-                "args": "${err} \"error.log\"",
-                "bareIdentifierArgs": [
-                  "err"
-                ],
-                "type": "run",
-                "workflow": {
-                  "value": "save"
-                }
+                "body": {
+                  "args": [
+                    {
+                      "kind": "var",
+                      "name": "err"
+                    },
+                    {
+                      "kind": "literal",
+                      "raw": "\"error.log\""
+                    }
+                  ],
+                  "callee": {
+                    "value": "save"
+                  },
+                  "kind": "call"
+                },
+                "type": "exec"
               }
             ]
           },
-          "ref": {
-            "value": "ok"
-          },
-          "type": "ensure"
+          "type": "exec"
         }
       ]
     }

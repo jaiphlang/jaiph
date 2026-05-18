@@ -11,11 +11,11 @@ workflow default() {
   const ast = parsejaiph(src, "test.jh");
   assert.equal(ast.workflows.length, 1);
   const step = ast.workflows[0].steps[0];
-  assert.equal(step.type, "run_inline_script");
-  if (step.type === "run_inline_script") {
-    assert.equal(step.body, "echo hello");
-    assert.equal(step.lang, undefined);
-    assert.equal(step.args, undefined);
+  assert.equal(step.type, "exec");
+  if (step.type === "exec" && step.body.kind === "inline_script") {
+    assert.equal(step.body.body, "echo hello");
+    assert.equal(step.body.lang, undefined);
+    assert.equal(step.body.args, undefined);
     assert.equal(step.captureName, undefined);
   }
 });
@@ -28,10 +28,13 @@ workflow default() {
 `;
   const ast = parsejaiph(src, "test.jh");
   const step = ast.workflows[0].steps[0];
-  assert.equal(step.type, "run_inline_script");
-  if (step.type === "run_inline_script") {
-    assert.equal(step.body, "echo $1");
-    assert.equal(step.args, '"arg1" "arg2"');
+  assert.equal(step.type, "exec");
+  if (step.type === "exec" && step.body.kind === "inline_script") {
+    assert.equal(step.body.body, "echo $1");
+    assert.deepEqual(step.body.args, [
+      { kind: "literal", raw: '"arg1"' },
+      { kind: "literal", raw: '"arg2"' },
+    ]);
   }
 });
 
@@ -53,11 +56,8 @@ workflow default() {
   const ast = parsejaiph(src, "test.jh");
   const step = ast.workflows[0].steps[0];
   assert.equal(step.type, "const");
-  if (step.type === "const") {
-    assert.equal(step.value.kind, "run_inline_script_capture");
-    if (step.value.kind === "run_inline_script_capture") {
-      assert.equal(step.value.body, "echo hello");
-    }
+  if (step.type === "const" && step.value.kind === "inline_script") {
+    assert.equal(step.value.body, "echo hello");
   }
 });
 
@@ -71,10 +71,10 @@ test("parser: run script() with fenced block and lang tag", () => {
   ].join("\n");
   const ast = parsejaiph(src, "test.jh");
   const step = ast.workflows[0].steps[0];
-  assert.equal(step.type, "run_inline_script");
-  if (step.type === "run_inline_script") {
-    assert.equal(step.lang, "python3");
-    assert.equal(step.body, "print('hello')");
+  assert.equal(step.type, "exec");
+  if (step.type === "exec" && step.body.kind === "inline_script") {
+    assert.equal(step.body.lang, "python3");
+    assert.equal(step.body.body, "print('hello')");
   }
 });
 
@@ -104,11 +104,10 @@ test("parser: rule body supports multiline fenced run ```", () => {
   const ast = parsejaiph(src, "test.jh");
   assert.equal(ast.rules.length, 1);
   const step = ast.rules[0].steps[0];
-  assert.equal(step.type, "run_inline_script");
-  if (step.type === "run_inline_script") {
-    assert.ok(step.body.includes('if [ -z "$1" ]'));
-    assert.equal(step.args, "${name}");
-    assert.deepEqual(step.bareIdentifierArgs, ["name"]);
+  assert.equal(step.type, "exec");
+  if (step.type === "exec" && step.body.kind === "inline_script") {
+    assert.ok(step.body.body.includes('if [ -z "$1" ]'));
+    assert.deepEqual(step.body.args, [{ kind: "var", name: "name" }]);
   }
 });
 

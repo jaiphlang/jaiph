@@ -7,8 +7,6 @@ export interface ImportDef {
   path: string;
   alias: string;
   loc: SourceLoc;
-  /** Top-level `#` lines immediately before this import (formatter). */
-  leadingComments?: string[];
 }
 
 /** `import script "<path>" as <name>` — binds an external script file as a local script symbol. */
@@ -18,8 +16,6 @@ export interface ScriptImportDef {
   /** Bound script name. */
   alias: string;
   loc: SourceLoc;
-  /** Top-level `#` lines immediately before this import (formatter). */
-  leadingComments?: string[];
 }
 
 export interface RuleRefDef {
@@ -51,32 +47,58 @@ export interface MatchExprDef {
   loc: SourceLoc;
 }
 
-export type ConstRhs =
-  | { kind: "expr"; bashRhs: string; /** `const x = """..."""` — runtime dedents margin. */ tripleQuoted?: boolean }
-  | { kind: "run_capture"; ref: WorkflowRefDef; args?: string; bareIdentifierArgs?: string[]; async?: boolean }
-  | { kind: "ensure_capture"; ref: RuleRefDef; args?: string; bareIdentifierArgs?: string[] }
-  | {
-      kind: "prompt_capture";
-      raw: string;
-      /** Body source: "string" (quoted literal), "identifier" (bare var ref), "triple_quoted" (""" block). */
-      bodyKind?: "string" | "identifier" | "triple_quoted";
-      /** Original identifier name when bodyKind is "identifier". */
-      bodyIdentifier?: string;
-      loc: SourceLoc;
-      returns?: string;
-    }
-  | { kind: "run_inline_script_capture"; body: string; lang?: string; args?: string; bareIdentifierArgs?: string[] }
-  | { kind: "match_expr"; match: MatchExprDef };
+/**
+ * Single call argument, classified at parse time.
+ *
+ * - `var`: a bare identifier reference (e.g. `foo(task)` → `{ kind: "var", name: "task" }`).
+ *   The validator checks `name` against in-scope bindings; the runtime sees `${name}`.
+ * - `literal`: any other form (quoted string, `${…}` interpolation, nested `run …` /
+ *   `ensure …` / inline-script call). Stored verbatim as authored, between the surrounding commas.
+ */
+export type Arg =
+  | { kind: "literal"; raw: string }
+  | { kind: "var"; name: string };
 
-/** RHS of `channel <- …` */
-export type SendRhsDef =
-  | { kind: "literal"; token: string; /** `channel <- """..."""` — runtime dedents margin. */ tripleQuoted?: boolean }
-  | { kind: "var"; bash: string }
-  | { kind: "run"; ref: WorkflowRefDef; args?: string; bareIdentifierArgs?: string[] }
-  /** Parsed then rejected in validation (use `run ref` to capture a return value). */
-  | { kind: "bare_ref"; ref: WorkflowRefDef }
-  /** Shell fragment emitted as `"$(...)"` for inbox send. */
-  | { kind: "shell"; command: string; loc: SourceLoc };
+/**
+ * One expression — used wherever a value can appear:
+ * - `const name = <Expr>`
+ * - `return <Expr>`
+ * - `send channel <- <Expr>`
+ * - `log <Expr>` / `logerr <Expr>` / `fail <Expr>`
+ * - body of an `exec` step (managed call statement form, where the value is consumed
+ *   for its side effects + optional capture)
+ *
+ * Replaces the prior `ConstRhs` / `SendRhsDef` unions and the placeholder-string
+ * `managed:` sidecar on `return` / `log` / `logerr`.
+ *
+ * Kinds:
+ * - `literal`: a string or `$var` / `${var}` form — the raw text as it appears in source
+ *   (post-dedent for triple-quoted bodies; the formatter consults trivia for surface form).
+ * - `call`: a managed workflow/script call `ref(args)`. `async` is set when the source said
+ *   `run async ref(...)` in capture position.
+ * - `ensure_call`: a managed rule call `ref(args)`.
+ * - `inline_script`: an inline-script call (`` `body`(args) `` or fenced).
+ * - `prompt`: a prompt body. `raw` carries the JSON-quoted prompt text (or `"${identifier}"`
+ *   sugar). `returns` carries an optional flat returns schema.
+ * - `match`: a `match <subject> { ... }` expression evaluated for its value.
+ * - `shell`: a raw shell fragment used as a managed substitution on the send RHS.
+ * - `bare_ref`: a bare symbol on a send RHS (e.g. `channel <- foo`). Always rejected by the
+ *   validator; preserved so the error message can name the symbol.
+ */
+export type Expr =
+  | { kind: "literal"; raw: string }
+  | { kind: "call"; callee: WorkflowRefDef; args?: Arg[]; async?: boolean }
+  | { kind: "ensure_call"; callee: RuleRefDef; args?: Arg[] }
+  | { kind: "inline_script"; lang?: string; body: string; args?: Arg[] }
+  | { kind: "prompt"; raw: string; loc: SourceLoc; returns?: string }
+  | { kind: "match"; match: MatchExprDef }
+  | { kind: "shell"; command: string; loc: SourceLoc }
+  | { kind: "bare_ref"; ref: WorkflowRefDef };
+
+/** Body attached to a `catch` or `recover` clause on an exec step. */
+export type CatchBody =
+  | { single: WorkflowStepDef; bindings: { failure: string } }
+  | { block: WorkflowStepDef[]; bindings: { failure: string } };
 
 export interface RuleDef {
   name: string;
@@ -92,8 +114,6 @@ export interface ChannelDef {
   name: string;
   routes?: WorkflowRefDef[];
   loc: SourceLoc;
-  /** Top-level `#` lines immediately before this channel (formatter). */
-  leadingComments?: string[];
 }
 
 export interface WorkflowDef {
@@ -114,135 +134,58 @@ export interface ScriptDef {
   body: string;
   /** Fence language tag (e.g. "python3", "node"). Maps to `#!/usr/bin/env <lang>`. */
   lang?: string;
-  /** How the body was provided: "backtick" (single `), "fenced" (``` block). */
-  bodyKind: "backtick" | "fenced";
   loc: SourceLoc;
 }
 
+/**
+ * Eight workflow-step variants — all values that flow through a step live in `Expr`.
+ *
+ * - `exec`: side-effecting managed call statement (was: `run` / `ensure` /
+ *   `run_inline_script` / `prompt` / `shell` step / standalone `match`). The
+ *   discriminator now lives inside `body.kind`; `captureName` / `async` /
+ *   `catch` / `recover` are step-level attributes.
+ * - `const` / `return` / `send`: bind, propagate, or emit an `Expr` value.
+ * - `say`: was `log` / `logerr` / `fail`. `level: "fail"` aborts the workflow
+ *   with the message; otherwise the message is written to the corresponding
+ *   stream.
+ * - `if` / `for_lines`: control flow (unchanged shape).
+ * - `trivia`: formatter-only `comment` / `blank_line` slots — they have no
+ *   execution semantics and are skipped by the runtime / validator.
+ */
 export type WorkflowStepDef =
   | {
-      type: "ensure";
-      ref: RuleRefDef;
-      args?: string;
-      bareIdentifierArgs?: string[];
-      /** When set, capture step stdout into this variable name. */
+      type: "exec";
+      body: Expr;
+      /** When set, capture the result into this variable name. */
       captureName?: string;
       /** When set, catch failure and run recovery body once. */
-      catch?:
-        | { single: WorkflowStepDef; bindings: { failure: string } }
-        | { block: WorkflowStepDef[]; bindings: { failure: string } };
-    }
-  | {
-      type: "run";
-      workflow: WorkflowRefDef;
-      args?: string;
-      bareIdentifierArgs?: string[];
-      /** When set, capture step stdout into this variable name. */
-      captureName?: string;
-      /** When set, execute asynchronously with implicit join before workflow completes. */
-      async?: boolean;
-      /** When set, catch failure and run recovery body once. */
-      catch?:
-        | { single: WorkflowStepDef; bindings: { failure: string } }
-        | { block: WorkflowStepDef[]; bindings: { failure: string } };
+      catch?: CatchBody;
       /** When set, retry with repair loop semantics (try → fail → recover body → retry). */
-      recover?:
-        | { single: WorkflowStepDef; bindings: { failure: string } }
-        | { block: WorkflowStepDef[]; bindings: { failure: string } };
-    }
-  | {
-      type: "prompt";
-      raw: string;
-      /** Body source: "string" (quoted literal), "identifier" (bare var ref), "triple_quoted" (""" block). */
-      bodyKind?: "string" | "identifier" | "triple_quoted";
-      /** Original identifier name when bodyKind is "identifier". */
-      bodyIdentifier?: string;
-      loc: SourceLoc;
-      /** When set, capture prompt stdout into this variable name. */
-      captureName?: string;
-      /** When set, validate response JSON against this flat schema (field: string|number|boolean). */
-      returns?: string;
-    }
-  | {
-      type: "comment";
-      text: string;
-      loc: SourceLoc;
-    }
-  | {
-      type: "fail";
-      message: string;
-      /** Set when `fail """..."""`; runtime dedents margin. */
-      tripleQuoted?: boolean;
+      recover?: CatchBody;
       loc: SourceLoc;
     }
   | {
       type: "const";
       name: string;
-      value: ConstRhs;
-      loc: SourceLoc;
-    }
-  | {
-      type: "log";
-      message: string;
-      /** Set when `log """..."""`; runtime dedents margin. */
-      tripleQuoted?: boolean;
-      loc: SourceLoc;
-      /** When set, log message comes from a managed inline-script call. */
-      managed?: { kind: "run_inline_script"; body: string; lang?: string; args?: string; bareIdentifierArgs?: string[] };
-    }
-  | {
-      type: "logerr";
-      message: string;
-      /** Set when `logerr """..."""`; runtime dedents margin. */
-      tripleQuoted?: boolean;
-      loc: SourceLoc;
-      /** When set, logerr message comes from a managed inline-script call. */
-      managed?: { kind: "run_inline_script"; body: string; lang?: string; args?: string; bareIdentifierArgs?: string[] };
-    }
-  | {
-      type: "send";
-      channel: string;
-      rhs: SendRhsDef;
+      value: Expr;
       loc: SourceLoc;
     }
   | {
       type: "return";
-      value: string;
-      /** Set when `return """..."""`; runtime dedents margin. */
-      tripleQuoted?: boolean;
-      /**
-       * Original source expression when `return <expr>` was bare-identifier
-       * sugar (`return response` → value `"${response}"`). Preserved so the
-       * formatter can emit the bare form authored by the user.
-       */
-      bareSource?: string;
-      loc: SourceLoc;
-      /** When set, return value comes from a managed run/ensure/match instead of the literal `value`. */
-      managed?:
-        | { kind: "run"; ref: WorkflowRefDef; args?: string; bareIdentifierArgs?: string[] }
-        | { kind: "ensure"; ref: RuleRefDef; args?: string; bareIdentifierArgs?: string[] }
-        | { kind: "match"; match: MatchExprDef }
-        | { kind: "run_inline_script"; body: string; lang?: string; args?: string; bareIdentifierArgs?: string[] };
-    }
-  | {
-      type: "run_inline_script";
-      body: string;
-      /** Fence language tag (e.g. "node", "python3"). Maps to `#!/usr/bin/env <lang>`. */
-      lang?: string;
-      args?: string;
-      bareIdentifierArgs?: string[];
-      captureName?: string;
+      value: Expr;
       loc: SourceLoc;
     }
   | {
-      type: "shell";
-      command: string;
+      type: "send";
+      channel: string;
+      value: Expr;
       loc: SourceLoc;
-      captureName?: string;
     }
   | {
-      type: "match";
-      expr: MatchExprDef;
+      type: "say";
+      level: "log" | "logerr" | "fail";
+      message: Expr;
+      loc: SourceLoc;
     }
   | {
       type: "if";
@@ -261,8 +204,11 @@ export type WorkflowStepDef =
       loc: SourceLoc;
     }
   | {
-      /** Preserved intentional blank line between steps (formatter only). */
-      type: "blank_line";
+      /** Formatter-only: `# comment` line or preserved blank line between steps. */
+      type: "trivia";
+      kind: "comment" | "blank_line";
+      text?: string;
+      loc?: SourceLoc;
     };
 
 export interface EnvDeclDef {
@@ -284,8 +230,6 @@ export interface jaiphModule {
   filePath: string;
   /** Optional in-file workflow metadata (agent model, command, run options). */
   metadata?: WorkflowMetadata;
-  /** Top-level `#` lines immediately before `config {` (formatter). */
-  configLeadingComments?: string[];
   imports: ImportDef[];
   /** `import script "<path>" as <name>` declarations. */
   scriptImports?: ScriptImportDef[];
@@ -298,10 +242,6 @@ export interface jaiphModule {
   envDecls?: EnvDeclDef[];
   /** Present only when parsing a *.test.jh file. */
   tests?: TestBlockDef[];
-  /** Encounter order of rule / script / workflow / env / test (excludes imports, config, channels). */
-  topLevelOrder?: TopLevelEmitOrder[];
-  /** Top-level `#` lines after the last declaration (formatter). */
-  trailingTopLevelComments?: string[];
 }
 
 /** Docker sandbox runtime configuration. */
@@ -310,11 +250,6 @@ export interface RuntimeConfig {
   dockerNetwork?: string;
   dockerTimeoutSeconds?: number;
 }
-
-/** One line inside `config { }`: comment or assignment (formatter round-trip order). */
-export type ConfigBodyPart =
-  | { kind: "comment"; text: string }
-  | { kind: "assign"; key: string };
 
 /** In-file workflow metadata (replaces config file for V1). */
 export interface WorkflowMetadata {
@@ -329,8 +264,6 @@ export interface WorkflowMetadata {
   run?: { debug?: boolean; logsDir?: string; recoverLimit?: number };
   runtime?: RuntimeConfig;
   module?: { name?: string; version?: string; description?: string };
-  /** Preserves `#` lines and assignment order inside `config { }` (formatter). */
-  configBodySequence?: ConfigBodyPart[];
 }
 
 /** Step inside a test block. Only present when module is a test file (*.test.jh). */
@@ -397,8 +330,6 @@ export interface TestBlockDef {
   description: string;
   steps: TestStepDef[];
   loc: SourceLoc;
-  /** Top-level `#` lines immediately before this `test` block (formatter). */
-  leadingComments?: string[];
 }
 
 export interface JaiphTestModule {

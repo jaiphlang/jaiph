@@ -1,5 +1,5 @@
 import { resolve } from "node:path";
-import { jaiphModule, type WorkflowStepDef } from "../../types";
+import { jaiphModule, type Expr, type WorkflowStepDef } from "../../types";
 import { workflowSymbolForFile } from "../../transpiler";
 
 export type TreeRow = {
@@ -44,12 +44,24 @@ function selfRecursiveRunSiteCount(mod: jaiphModule, workflowName: string): numb
   }
   let count = 0;
   for (const step of workflow.steps) {
-    if (step.type === "run" && step.workflow.value === workflowName) {
+    if (step.type === "exec" && step.body.kind === "call" && step.body.callee.value === workflowName) {
       count += 1;
       continue;
     }
   }
   return count;
+}
+
+/** Short surface label for an Expr value (used in `return` / `const` rows). */
+function exprLabel(expr: Expr): string {
+  if (expr.kind === "literal") return expr.raw;
+  if (expr.kind === "call") return `run ${expr.callee.value}(...)`;
+  if (expr.kind === "ensure_call") return `ensure ${expr.callee.value}(...)`;
+  if (expr.kind === "inline_script") return "run `...`(...)";
+  if (expr.kind === "prompt") return `prompt ${expr.raw}`;
+  if (expr.kind === "match") return `match ${expr.match.subject}`;
+  if (expr.kind === "shell") return expr.command;
+  return expr.ref.value;
 }
 
 export function collectWorkflowChildren(
@@ -63,81 +75,77 @@ export function collectWorkflowChildren(
     return [];
   }
   const items: Array<{ label: string; nested?: string; stepFunc?: string }> = [];
+  const refStepFunc = (ref: string): string | undefined =>
+    symbols && ref.includes(".")
+      ? (() => {
+          const dot = ref.indexOf(".");
+          const alias = ref.slice(0, dot);
+          const name = ref.slice(dot + 1);
+          return `${symbols.get(alias) ?? alias}::${name}`;
+        })()
+      : currentSymbol
+        ? `${currentSymbol}::${ref}`
+        : undefined;
   const stepToItems = (s: WorkflowStepDef): Array<{ label: string; nested?: string; stepFunc?: string }> => {
-    if (s.type === "run") {
-      const wf = s.workflow.value;
-      const asyncPrefix = s.async ? "async " : "";
-      const stepFunc =
-        symbols && wf.includes(".")
-          ? (() => {
-              const dot = wf.indexOf(".");
-              const alias = wf.slice(0, dot);
-              const name = wf.slice(dot + 1);
-              return `${symbols.get(alias) ?? alias}::${name}`;
-            })()
-          : currentSymbol
-            ? `${currentSymbol}::${wf}`
-            : undefined;
-      const arr: Array<{ label: string; nested?: string; stepFunc?: string }> = [
-        { label: `${asyncPrefix}workflow ${wf}`, nested: wf, stepFunc },
-      ];
-      if (s.recover) {
-        const steps = "single" in s.recover ? [s.recover.single] : s.recover.block;
-        for (const r of steps) {
-          arr.push(...stepToItems(r));
+    if (s.type === "exec") {
+      const body = s.body;
+      if (body.kind === "call") {
+        const wf = body.callee.value;
+        const asyncPrefix = body.async ? "async " : "";
+        const arr: Array<{ label: string; nested?: string; stepFunc?: string }> = [
+          { label: `${asyncPrefix}workflow ${wf}`, nested: wf, stepFunc: refStepFunc(wf) },
+        ];
+        if (s.recover) {
+          const steps = "single" in s.recover ? [s.recover.single] : s.recover.block;
+          for (const r of steps) arr.push(...stepToItems(r));
+        } else if (s.catch) {
+          const steps = "single" in s.catch ? [s.catch.single] : s.catch.block;
+          for (const r of steps) arr.push(...stepToItems(r));
         }
-      } else if (s.catch) {
-        const steps = "single" in s.catch ? [s.catch.single] : s.catch.block;
-        for (const r of steps) {
-          arr.push(...stepToItems(r));
-        }
+        return arr;
       }
-      return arr;
-    }
-    if (s.type === "ensure") {
-      const ref = s.ref.value;
-      const stepFunc =
-        symbols && ref.includes(".")
-          ? (() => {
-              const dot = ref.indexOf(".");
-              const alias = ref.slice(0, dot);
-              const name = ref.slice(dot + 1);
-              return `${symbols.get(alias) ?? alias}::${name}`;
-            })()
-          : currentSymbol
-            ? `${currentSymbol}::${ref}`
-            : undefined;
-      const arr: Array<{ label: string; nested?: string; stepFunc?: string }> = [
-        { label: `rule ${ref}`, stepFunc },
-      ];
-      if (s.catch) {
-        const steps = "single" in s.catch ? [s.catch.single] : s.catch.block;
-        for (const r of steps) {
-          arr.push(...stepToItems(r));
+      if (body.kind === "ensure_call") {
+        const ref = body.callee.value;
+        const arr: Array<{ label: string; nested?: string; stepFunc?: string }> = [
+          { label: `rule ${ref}`, stepFunc: refStepFunc(ref) },
+        ];
+        if (s.catch) {
+          const steps = "single" in s.catch ? [s.catch.single] : s.catch.block;
+          for (const r of steps) arr.push(...stepToItems(r));
         }
+        return arr;
       }
-      return arr;
+      if (body.kind === "prompt") {
+        return [{ label: formatPromptLabel(body.raw), stepFunc: "jaiph::prompt" }];
+      }
+      if (body.kind === "inline_script") {
+        return [{ label: "script (inline)" }];
+      }
+      if (body.kind === "shell") {
+        const t = body.command.trim();
+        const label = t.length > 56 ? `${t.slice(0, 53)}...` : t;
+        return [{ label: `$ ${label}` }];
+      }
+      if (body.kind === "match") {
+        // standalone match — no nested rendering
+        return [];
+      }
+      return [];
     }
-    if (s.type === "prompt") {
-      return [{ label: formatPromptLabel(s.raw), stepFunc: "jaiph::prompt" }];
-    }
-    if (s.type === "log") {
-      return [{ label: `ℹ ${s.message}` }];
-    }
-    if (s.type === "logerr") {
-      return [{ label: `! ${s.message}` }];
+    if (s.type === "say") {
+      const msg = exprLabel(s.message);
+      if (s.level === "log") return [{ label: `ℹ ${msg}` }];
+      if (s.level === "logerr") return [{ label: `! ${msg}` }];
+      return [{ label: `fail ${msg}` }];
     }
     if (s.type === "send") {
       return [{ label: `${s.channel} <- send` }];
-    }
-    if (s.type === "fail") {
-      return [{ label: `fail ${s.message}` }];
     }
     if (s.type === "const") {
       const constItems: Array<{ label: string; nested?: string; stepFunc?: string }> = [
         { label: `const ${s.name}` },
       ];
-      if (s.value.kind === "match_expr") {
+      if (s.value.kind === "match") {
         for (const arm of s.value.match.arms) {
           const body = arm.body.trimStart();
           const runM = body.match(/^run\s+([A-Za-z_][A-Za-z0-9_.]*)\(/);
@@ -154,18 +162,10 @@ export function collectWorkflowChildren(
       return constItems;
     }
     if (s.type === "return") {
-      return [{ label: `return ${s.value}` }];
+      return [{ label: `return ${exprLabel(s.value)}` }];
     }
-    if (s.type === "comment") {
+    if (s.type === "trivia") {
       return [];
-    }
-    if (s.type === "run_inline_script") {
-      return [{ label: "script (inline)" }];
-    }
-    if (s.type === "shell") {
-      const t = s.command.trim();
-      const label = t.length > 56 ? `${t.slice(0, 53)}...` : t;
-      return [{ label: `$ ${label}` }];
     }
     return [];
   };
@@ -179,68 +179,7 @@ export function collectWorkflowChildren(
   }
 
   for (const step of workflow.steps) {
-    if (step.type === "ensure") {
-      items.push(...stepToItems(step));
-      continue;
-    }
-    if (step.type === "run") {
-      const wf = step.workflow.value;
-      const asyncPrefix = step.async ? "async " : "";
-      const stepFunc =
-        symbols && wf.includes(".")
-          ? (() => {
-              const dot = wf.indexOf(".");
-              const alias = wf.slice(0, dot);
-              const name = wf.slice(dot + 1);
-              return `${symbols.get(alias) ?? alias}::${name}`;
-            })()
-          : currentSymbol
-            ? `${currentSymbol}::${wf}`
-            : undefined;
-      items.push(...stepToItems(step));
-      continue;
-    }
-    if (step.type === "run_inline_script") {
-      items.push({ label: "script (inline)" });
-      continue;
-    }
-    if (step.type === "prompt") {
-      items.push({ label: formatPromptLabel(step.raw), stepFunc: "jaiph::prompt" });
-      continue;
-    }
-    if (step.type === "log") {
-      items.push({ label: `ℹ ${step.message}` });
-      continue;
-    }
-    if (step.type === "logerr") {
-      items.push({ label: `! ${step.message}` });
-      continue;
-    }
-    if (step.type === "send") {
-      items.push({ label: `${step.channel} <- send` });
-      continue;
-    }
-    if (step.type === "fail") {
-      items.push({ label: `fail ${step.message}` });
-      continue;
-    }
-    if (step.type === "const") {
-      items.push(...stepToItems(step));
-      continue;
-    }
-    if (step.type === "return") {
-      items.push({ label: `return ${step.value}` });
-      continue;
-    }
-    if (step.type === "comment") {
-      continue;
-    }
-    if (step.type === "shell") {
-      const t = step.command.trim();
-      const label = t.length > 56 ? `${t.slice(0, 53)}...` : t;
-      items.push({ label: `$ ${label}` });
-      continue;
-    }
+    items.push(...stepToItems(step));
   }
   return items;
 }

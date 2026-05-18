@@ -9,12 +9,6 @@
   ],
   "rules": [],
   "scripts": [],
-  "topLevelOrder": [
-    {
-      "index": 0,
-      "kind": "workflow"
-    }
-  ],
   "workflows": [
     {
       "comments": [],
@@ -22,16 +16,22 @@
       "params": [],
       "steps": [
         {
-          "type": "run",
-          "workflow": {
-            "value": "lib.setup"
-          }
+          "body": {
+            "callee": {
+              "value": "lib.setup"
+            },
+            "kind": "call"
+          },
+          "type": "exec"
         },
         {
-          "ref": {
-            "value": "lib.check"
+          "body": {
+            "callee": {
+              "value": "lib.check"
+            },
+            "kind": "ensure_call"
           },
-          "type": "ensure"
+          "type": "exec"
         }
       ]
     }

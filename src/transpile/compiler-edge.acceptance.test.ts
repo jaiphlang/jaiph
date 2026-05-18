@@ -366,9 +366,11 @@ test("ACCEPTANCE: prompt with returns schema (single-line) parses and emits type
   const step = mod.workflows[0].steps[0];
   assert.equal(step.type, "const");
   assert.ok(step.type === "const" && step.name === "result");
-  assert.ok(step.type === "const" && step.value.kind === "prompt_capture");
-  assert.ok(step.type === "const" && step.value.returns !== undefined);
-  assert.match(step.value.returns!, /type:\s*string/);
+  assert.ok(step.type === "const" && step.value.kind === "prompt");
+  if (step.type === "const" && step.value.kind === "prompt") {
+    assert.ok(step.value.returns !== undefined);
+    assert.match(step.value.returns!, /type:\s*string/);
+  }
 
   withTempDir("jaiph-acc-prompt-returns-", (root) => {
     writeFileSync(
@@ -398,10 +400,12 @@ test("ACCEPTANCE: prompt with returns schema (multiline continuation) parses", (
   assert.equal(mod.workflows.length, 1);
   const step = mod.workflows[0].steps[0];
   assert.equal(step.type, "const");
-  assert.ok(step.type === "const" && step.value.kind === "prompt_capture");
-  assert.ok(step.type === "const" && step.value.returns !== undefined);
-  assert.match(step.value.returns!, /type:\s*string/);
-  assert.match(step.value.returns!, /risk:\s*string/);
+  assert.ok(step.type === "const" && step.value.kind === "prompt");
+  if (step.type === "const" && step.value.kind === "prompt") {
+    assert.ok(step.value.returns !== undefined);
+    assert.match(step.value.returns!, /type:\s*string/);
+    assert.match(step.value.returns!, /risk:\s*string/);
+  }
 });
 
 test("ACCEPTANCE: unsupported type in returns schema fails with E_SCHEMA", () => {

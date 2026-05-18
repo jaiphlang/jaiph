@@ -1,4 +1,5 @@
-import type { ConfigBodyPart, WorkflowMetadata } from "../types";
+import type { WorkflowMetadata } from "../types";
+import type { Trivia, ConfigBodyPart } from "./trivia";
 import { colFromRaw, fail } from "./core";
 
 const ALLOWED_KEYS = new Set([
@@ -176,6 +177,7 @@ export function parseConfigBlock(
   filePath: string,
   lines: string[],
   startIndex: number,
+  trivia?: Trivia,
 ): { metadata: WorkflowMetadata; nextIndex: number } {
   const openLineNo = startIndex + 1;
   const rawOpen = lines[startIndex];
@@ -202,8 +204,8 @@ export function parseConfigBlock(
       continue;
     }
     if (line === "}") {
-      if (bodySequence.length > 0) {
-        out.configBodySequence = bodySequence;
+      if (bodySequence.length > 0 && trivia) {
+        trivia.setNode(out, { configBodySequence: bodySequence });
       }
       idx += 1;
       return { metadata: out, nextIndex: idx };

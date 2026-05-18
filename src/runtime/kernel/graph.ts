@@ -1,19 +1,9 @@
-import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { parsejaiph } from "../../parser";
+import { loadModuleGraph, type ModuleGraph, type ModuleNode } from "../../transpile/module-graph";
 import type { RuleDef, ScriptDef, WorkflowDef, WorkflowRefDef, RuleRefDef, jaiphModule } from "../../types";
-import { resolveImportPath } from "../../transpile/resolve";
 
-export interface RuntimeModuleNode {
-  filePath: string;
-  ast: jaiphModule;
-  imports: Map<string, string>;
-}
-
-export interface RuntimeGraph {
-  entryFile: string;
-  modules: Map<string, RuntimeModuleNode>;
-}
+export type RuntimeModuleNode = ModuleNode;
+export type RuntimeGraph = ModuleGraph;
 
 export interface ResolvedWorkflow {
   filePath: string;
@@ -30,41 +20,37 @@ export interface ResolvedScript {
   script: ScriptDef;
 }
 
-function buildNode(filePath: string, workspaceRoot?: string): RuntimeModuleNode {
-  const ast = parsejaiph(readFileSync(filePath, "utf8"), filePath);
-  const imports = new Map<string, string>();
-  for (const imp of ast.imports) {
-    imports.set(imp.alias, resolveImportPath(filePath, imp.path, workspaceRoot));
+/** Inject `ScriptDef` stubs for `import script` declarations so `resolveScriptRef` finds them. Idempotent. */
+function attachScriptImportStubs(ast: jaiphModule): void {
+  if (!ast.scriptImports) return;
+  for (const si of ast.scriptImports) {
+    if (ast.scripts.some((s) => s.name === si.alias)) continue;
+    ast.scripts.push({
+      name: si.alias,
+      comments: [],
+      body: "",
+      loc: si.loc,
+    });
   }
-  // Synthesise ScriptDef stubs for script imports so resolveScriptRef finds them.
-  if (ast.scriptImports) {
-    for (const si of ast.scriptImports) {
-      ast.scripts.push({
-        name: si.alias,
-        comments: [],
-        body: "",
-        bodyKind: "fenced",
-        loc: si.loc,
-      });
-    }
-  }
-  return { filePath, ast, imports };
 }
 
-export function buildRuntimeGraph(entryFile: string, workspaceRoot?: string): RuntimeGraph {
-  const entry = resolve(entryFile);
-  const modules = new Map<string, RuntimeModuleNode>();
-  const queue: string[] = [entry];
-  while (queue.length > 0) {
-    const current = queue.shift()!;
-    if (modules.has(current)) continue;
-    const node = buildNode(current, workspaceRoot);
-    modules.set(current, node);
-    for (const imported of node.imports.values()) {
-      if (!modules.has(imported)) queue.push(imported);
-    }
+/**
+ * Adapt a {@link ModuleGraph} for runtime dispatch by injecting `ScriptDef`
+ * stubs for `import script` declarations so `resolveScriptRef` lookups
+ * succeed for cross-module script imports. The injection mutates the AST
+ * in-place; the helper is idempotent so repeated calls are safe.
+ */
+export function buildRuntimeGraph(
+  source: string | ModuleGraph,
+  workspaceRoot?: string,
+): RuntimeGraph {
+  const graph = typeof source === "string"
+    ? loadModuleGraph(source, workspaceRoot)
+    : source;
+  for (const node of graph.modules.values()) {
+    attachScriptImportStubs(node.ast);
   }
-  return { entryFile: entry, modules };
+  return graph;
 }
 
 export function lookupWorkflow(graph: RuntimeGraph, fromFile: string, ref: WorkflowRefDef): WorkflowDef | null {

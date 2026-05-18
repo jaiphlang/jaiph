@@ -1,6 +1,7 @@
-import type { ConstRhs, RuleRefDef, WorkflowRefDef } from "../types";
+import type { Expr, RuleRefDef, WorkflowRefDef } from "../types";
+import { createTrivia, type Trivia } from "./trivia";
 import { fail, parseCallRef, rejectTrailingContent } from "./core";
-import { parseTripleQuoteBlock, tripleQuoteBodyToRaw } from "./triple-quote";
+import { dedentTripleQuotedBody, parseTripleQuoteBlock, tripleQuoteBodyToRaw } from "./triple-quote";
 import { parseAnonymousInlineScript } from "./inline-script";
 import { parsePromptStep } from "./prompt";
 import { parseMatchExpr } from "./match";
@@ -48,6 +49,7 @@ export function validateConstBashExpr(filePath: string, expr: string, lineNo: nu
 
 /**
  * Parse RHS after `const name = ` (trimmed). `forRule` disallows prompt capture.
+ * Returns an `Expr` node — the typed value-form that replaces the legacy `ConstRhs` union.
  */
 export function parseConstRhs(
   filePath: string,
@@ -58,7 +60,8 @@ export function parseConstRhs(
   col: number,
   forRule: boolean,
   constName: string,
-): { value: ConstRhs; nextLineIdx: number } {
+  trivia: Trivia = createTrivia(),
+): { value: Expr; nextLineIdx: number } {
   const head = rhs.trimStart();
   if (head.startsWith("prompt ")) {
     if (forRule) {
@@ -67,22 +70,24 @@ export function parseConstRhs(
     const innerRaw = lines[lineIdx];
     const promptCol = innerRaw.indexOf("prompt") + 1;
     const promptArg = rhs.slice(rhs.indexOf("prompt") + "prompt".length).trimStart();
-    const result = parsePromptStep(filePath, lines, lineIdx, promptArg, promptCol, constName);
+    const result = parsePromptStep(filePath, lines, lineIdx, promptArg, promptCol, constName, trivia);
     const st = result.step;
-    if (st.type !== "prompt" || st.captureName !== constName) {
+    if (st.type !== "exec" || st.body.kind !== "prompt" || st.captureName !== constName) {
       fail(filePath, "const ... = prompt internal parse error", lineNo, col);
     }
-    return {
-      value: {
-        kind: "prompt_capture",
-        raw: st.raw,
-        loc: st.loc,
-        returns: st.returns,
-        ...(st.bodyKind ? { bodyKind: st.bodyKind } : {}),
-        ...(st.bodyIdentifier ? { bodyIdentifier: st.bodyIdentifier } : {}),
-      },
-      nextLineIdx: result.nextLineIdx,
-    };
+    const promptBody = st.body;
+    if (promptBody.kind !== "prompt") {
+      fail(filePath, "const ... = prompt internal parse error", lineNo, col);
+    }
+    const promptTrivia = trivia.getNode(st);
+    if (promptTrivia) {
+      trivia.setNode(promptBody, {
+        ...(promptTrivia.bodyKind ? { bodyKind: promptTrivia.bodyKind } : {}),
+        ...(promptTrivia.bodyIdentifier ? { bodyIdentifier: promptTrivia.bodyIdentifier } : {}),
+        ...(promptTrivia.rawBody !== undefined ? { rawBody: promptTrivia.rawBody } : {}),
+      });
+    }
+    return { value: promptBody, nextLineIdx: result.nextLineIdx };
   }
   if (head.startsWith("run ")) {
     const rest = head.slice("run ".length).trim();
@@ -97,13 +102,9 @@ export function parseConstRhs(
         fail(filePath, "const ... = run async must target a valid reference", lineNo, col);
       }
       rejectTrailingContent(filePath, lineNo, "run async", call.rest);
-      const ref: WorkflowRefDef = { value: call.ref, loc: { line: lineNo, col } };
+      const callee: WorkflowRefDef = { value: call.ref, loc: { line: lineNo, col } };
       return {
-        value: {
-          kind: "run_capture", ref, args: call.args,
-          ...(call.bareIdentifierArgs ? { bareIdentifierArgs: call.bareIdentifierArgs } : {}),
-          async: true,
-        },
+        value: { kind: "call", callee, args: call.args, async: true },
         nextLineIdx: lineIdx,
       };
     }
@@ -111,11 +112,10 @@ export function parseConstRhs(
       const result = parseAnonymousInlineScript(filePath, lines, lineIdx, rest, lineNo, col);
       return {
         value: {
-          kind: "run_inline_script_capture",
+          kind: "inline_script",
           body: result.body,
           ...(result.lang ? { lang: result.lang } : {}),
           args: result.args,
-          ...(result.bareIdentifierArgs ? { bareIdentifierArgs: result.bareIdentifierArgs } : {}),
         },
         nextLineIdx: result.nextLineIdx - 1,
       };
@@ -128,12 +128,9 @@ export function parseConstRhs(
       fail(filePath, "const ... = run must target a valid reference", lineNo, col);
     }
     rejectTrailingContent(filePath, lineNo, "run", call.rest);
-    const ref: WorkflowRefDef = { value: call.ref, loc: { line: lineNo, col } };
+    const callee: WorkflowRefDef = { value: call.ref, loc: { line: lineNo, col } };
     return {
-      value: {
-        kind: "run_capture", ref, args: call.args,
-        ...(call.bareIdentifierArgs ? { bareIdentifierArgs: call.bareIdentifierArgs } : {}),
-      },
+      value: { kind: "call", callee, args: call.args },
       nextLineIdx: lineIdx,
     };
   }
@@ -146,12 +143,9 @@ export function parseConstRhs(
     if (call.rest.trim()) {
       fail(filePath, "const ... = ensure cannot use catch", lineNo, col);
     }
-    const ref: RuleRefDef = { value: call.ref, loc: { line: lineNo, col } };
+    const callee: RuleRefDef = { value: call.ref, loc: { line: lineNo, col } };
     return {
-      value: {
-        kind: "ensure_capture", ref, args: call.args,
-        ...(call.bareIdentifierArgs ? { bareIdentifierArgs: call.bareIdentifierArgs } : {}),
-      },
+      value: { kind: "ensure_call", callee, args: call.args },
       nextLineIdx: lineIdx,
     };
   }
@@ -160,7 +154,7 @@ export function parseConstRhs(
   if (constMatchHead) {
     const subject = constMatchHead[1].trim();
     const { expr, nextIndex } = parseMatchExpr(filePath, lines, lineIdx, subject, { line: lineNo, col });
-    return { value: { kind: "match_expr", match: expr }, nextLineIdx: nextIndex - 1 };
+    return { value: { kind: "match", match: expr }, nextLineIdx: nextIndex - 1 };
   }
   // const name = """..."""
   if (head.startsWith('"""')) {
@@ -168,7 +162,9 @@ export function parseConstRhs(
     tqLines[lineIdx] = head;
     const { body, nextIdx, afterClose } = parseTripleQuoteBlock(filePath, tqLines, lineIdx);
     if (afterClose) fail(filePath, 'unexpected content after closing """', nextIdx);
-    return { value: { kind: "expr", bashRhs: tripleQuoteBodyToRaw(body), tripleQuoted: true }, nextLineIdx: nextIdx - 1 };
+    const value: Expr = { kind: "literal", raw: tripleQuoteBodyToRaw(dedentTripleQuotedBody(body)) };
+    trivia.setNode(value, { tripleQuoted: true, rawBody: body });
+    return { value, nextLineIdx: nextIdx - 1 };
   }
   const callLike = head.includes("(") ? parseCallRef(head.trimEnd()) : null;
   if (callLike) {
@@ -182,10 +178,10 @@ export function parseConstRhs(
   validateConstBashExpr(filePath, head, lineNo, col);
   const isBareDotted = isBareDottedIdentifierReturn(head);
   const isBare = !isBareDotted && isBareIdentifierReturn(head);
-  const bashRhs = isBareDotted
+  const raw = isBareDotted
     ? dottedReturnToQuotedString(head)
     : isBare
       ? bareIdentifierToQuotedString(head)
       : head;
-  return { value: { kind: "expr", bashRhs }, nextLineIdx: lineIdx };
+  return { value: { kind: "literal", raw }, nextLineIdx: lineIdx };
 }

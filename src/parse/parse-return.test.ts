@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { parsejaiph } from "../parser";
 
-test("return run parses managed run call", () => {
+test("return run parses Expr.call", () => {
   const mod = parsejaiph(
     `workflow default() {\n  return run helper()\n}`,
     "test.jh",
@@ -10,26 +10,27 @@ test("return run parses managed run call", () => {
   const step = mod.workflows[0].steps[0];
   assert.equal(step.type, "return");
   if (step.type === "return") {
-    assert.ok(step.managed);
-    assert.equal(step.managed!.kind, "run");
-    assert.equal(step.managed!.ref.value, "helper");
-    assert.equal(step.managed!.args, undefined);
-    assert.equal(step.value, "run helper()");
+    assert.equal(step.value.kind, "call");
+    if (step.value.kind === "call") {
+      assert.equal(step.value.callee.value, "helper");
+      assert.equal(step.value.args, undefined);
+    }
   }
 });
 
-test("return run parses managed run call with args", () => {
+test("return run parses Expr.call with args", () => {
   const mod = parsejaiph(
     `workflow default() {\n  return run helper("a", "b")\n}`,
     "test.jh",
   );
   const step = mod.workflows[0].steps[0];
   assert.equal(step.type, "return");
-  if (step.type === "return") {
-    assert.ok(step.managed);
-    assert.equal(step.managed!.kind, "run");
-    assert.equal(step.managed!.ref.value, "helper");
-    assert.equal(step.managed!.args, '"a" "b"');
+  if (step.type === "return" && step.value.kind === "call") {
+    assert.equal(step.value.callee.value, "helper");
+    assert.deepEqual(step.value.args, [
+      { kind: "literal", raw: '"a"' },
+      { kind: "literal", raw: '"b"' },
+    ]);
   }
 });
 
@@ -40,14 +41,12 @@ test("return run parses dotted ref", () => {
   );
   const step = mod.workflows[0].steps[0];
   assert.equal(step.type, "return");
-  if (step.type === "return") {
-    assert.ok(step.managed);
-    assert.equal(step.managed!.kind, "run");
-    assert.equal(step.managed!.ref.value, "lib.helper");
+  if (step.type === "return" && step.value.kind === "call") {
+    assert.equal(step.value.callee.value, "lib.helper");
   }
 });
 
-test("return ensure parses managed ensure call", () => {
+test("return ensure parses Expr.ensure_call", () => {
   const mod = parsejaiph(
     `workflow default() {\n  return ensure check()\n}`,
     "test.jh",
@@ -55,60 +54,52 @@ test("return ensure parses managed ensure call", () => {
   const step = mod.workflows[0].steps[0];
   assert.equal(step.type, "return");
   if (step.type === "return") {
-    assert.ok(step.managed);
-    assert.equal(step.managed!.kind, "ensure");
-    assert.equal(step.managed!.ref.value, "check");
-    assert.equal(step.managed!.args, undefined);
-    assert.equal(step.value, "ensure check()");
+    assert.equal(step.value.kind, "ensure_call");
+    if (step.value.kind === "ensure_call") {
+      assert.equal(step.value.callee.value, "check");
+      assert.equal(step.value.args, undefined);
+    }
   }
 });
 
-test("return ensure parses managed ensure call with args", () => {
+test("return ensure parses Expr.ensure_call with args", () => {
   const mod = parsejaiph(
     `workflow default() {\n  return ensure check("x")\n}`,
     "test.jh",
   );
   const step = mod.workflows[0].steps[0];
   assert.equal(step.type, "return");
-  if (step.type === "return") {
-    assert.ok(step.managed);
-    assert.equal(step.managed!.kind, "ensure");
-    assert.equal(step.managed!.args, '"x"');
+  if (step.type === "return" && step.value.kind === "ensure_call") {
+    assert.deepEqual(step.value.args, [{ kind: "literal", raw: '"x"' }]);
   }
 });
 
-test("return run in rule parses managed run call", () => {
+test("return run in rule parses Expr.call", () => {
   const mod = parsejaiph(
     `script helper = \`echo "ok"\`\nrule my_rule() {\n  return run helper()\n}`,
     "test.jh",
   );
   const step = mod.rules[0].steps[0];
   assert.equal(step.type, "return");
-  if (step.type === "return") {
-    assert.ok(step.managed);
-    assert.equal(step.managed!.kind, "run");
-    assert.equal(step.managed!.ref.value, "helper");
+  if (step.type === "return" && step.value.kind === "call") {
+    assert.equal(step.value.callee.value, "helper");
   }
 });
 
-test("return ensure in rule parses managed ensure call", () => {
+test("return ensure in rule parses Expr.ensure_call", () => {
   const mod = parsejaiph(
     `rule sub_rule() {\n  return "ok"\n}\nrule my_rule() {\n  return ensure sub_rule()\n}`,
     "test.jh",
   );
-  const step = mod.rules[0].steps[1];
-  // The rule that contains `return ensure sub_rule()` is my_rule (index 1)
   const myRule = mod.rules.find(r => r.name === "my_rule")!;
   const retStep = myRule.steps[0];
   assert.equal(retStep.type, "return");
-  if (retStep.type === "return") {
-    assert.ok(retStep.managed);
-    assert.equal(retStep.managed!.kind, "ensure");
-    assert.equal(retStep.managed!.ref.value, "sub_rule");
+  if (retStep.type === "return" && retStep.value.kind === "ensure_call") {
+    assert.equal(retStep.value.callee.value, "sub_rule");
   }
 });
 
-test("return with string value has no managed field", () => {
+test("return with string value is Expr.literal", () => {
   const mod = parsejaiph(
     `workflow default() {\n  return "hello"\n}`,
     "test.jh",
@@ -116,12 +107,14 @@ test("return with string value has no managed field", () => {
   const step = mod.workflows[0].steps[0];
   assert.equal(step.type, "return");
   if (step.type === "return") {
-    assert.equal(step.managed, undefined);
-    assert.equal(step.value, '"hello"');
+    assert.equal(step.value.kind, "literal");
+    if (step.value.kind === "literal") {
+      assert.equal(step.value.raw, '"hello"');
+    }
   }
 });
 
-test("bare return has no managed field", () => {
+test("bare return is Expr.literal with empty string", () => {
   const mod = parsejaiph(
     `workflow default() {\n  return\n}`,
     "test.jh",
@@ -129,25 +122,25 @@ test("bare return has no managed field", () => {
   const step = mod.workflows[0].steps[0];
   assert.equal(step.type, "return");
   if (step.type === "return") {
-    assert.equal(step.managed, undefined);
-    assert.equal(step.value, '""');
+    assert.equal(step.value.kind, "literal");
+    if (step.value.kind === "literal") {
+      assert.equal(step.value.raw, '""');
+    }
   }
 });
 
-test("return run inline script parses managed inline script", () => {
+test("return run inline script parses Expr.inline_script", () => {
   const mod = parsejaiph(
     "workflow default() {\n  return run `cat report.txt`()\n}",
     "test.jh",
   );
   const step = mod.workflows[0].steps[0];
   assert.equal(step.type, "return");
-  if (step.type === "return") {
-    assert.ok(step.managed);
-    assert.equal(step.managed!.kind, "run_inline_script");
-    if (step.managed!.kind === "run_inline_script") {
-      assert.equal(step.managed!.body, "cat report.txt");
-      assert.equal(step.managed!.args, undefined);
-    }
+  if (step.type === "return" && step.value.kind === "inline_script") {
+    assert.equal(step.value.body, "cat report.txt");
+    assert.equal(step.value.args, undefined);
+  } else {
+    assert.fail(`expected return/inline_script, got ${step.type}`);
   }
 });
 
@@ -158,13 +151,9 @@ test("return run inline script with args", () => {
   );
   const step = mod.workflows[0].steps[0];
   assert.equal(step.type, "return");
-  if (step.type === "return") {
-    assert.ok(step.managed);
-    assert.equal(step.managed!.kind, "run_inline_script");
-    if (step.managed!.kind === "run_inline_script") {
-      assert.equal(step.managed!.body, "echo $1");
-      assert.equal(step.managed!.args, '"x"');
-    }
+  if (step.type === "return" && step.value.kind === "inline_script") {
+    assert.equal(step.value.body, "echo $1");
+    assert.deepEqual(step.value.args, [{ kind: "literal", raw: '"x"' }]);
   }
 });
 
@@ -175,18 +164,20 @@ test("return bare inline script is rejected", () => {
   );
 });
 
-test("log run inline script parses managed inline script", () => {
+test("log run inline script parses say with inline_script message", () => {
   const mod = parsejaiph(
     "workflow default() {\n  log run `cat report.txt`()\n}",
     "test.jh",
   );
   const step = mod.workflows[0].steps[0];
-  assert.equal(step.type, "log");
-  if (step.type === "log") {
-    assert.ok(step.managed);
-    assert.equal(step.managed!.kind, "run_inline_script");
-    assert.equal(step.managed!.body, "cat report.txt");
-    assert.equal(step.managed!.args, undefined);
+  assert.equal(step.type, "say");
+  if (step.type === "say") {
+    assert.equal(step.level, "log");
+    assert.equal(step.message.kind, "inline_script");
+    if (step.message.kind === "inline_script") {
+      assert.equal(step.message.body, "cat report.txt");
+      assert.equal(step.message.args, undefined);
+    }
   }
 });
 
@@ -196,12 +187,10 @@ test("log run inline script with args", () => {
     "test.jh",
   );
   const step = mod.workflows[0].steps[0];
-  assert.equal(step.type, "log");
-  if (step.type === "log") {
-    assert.ok(step.managed);
-    assert.equal(step.managed!.kind, "run_inline_script");
-    assert.equal(step.managed!.body, "echo $1");
-    assert.equal(step.managed!.args, '"x"');
+  assert.equal(step.type, "say");
+  if (step.type === "say" && step.message.kind === "inline_script") {
+    assert.equal(step.message.body, "echo $1");
+    assert.deepEqual(step.message.args, [{ kind: "literal", raw: '"x"' }]);
   }
 });
 
@@ -219,16 +208,15 @@ test("logerr bare inline script is rejected", () => {
   );
 });
 
-test("return bare identifier is sugar for interpolated string", () => {
+test("return bare identifier is sugar for interpolated literal", () => {
   const mod = parsejaiph(
     `workflow default() {\n  const response = "hello"\n  return response\n}`,
     "test.jh",
   );
   const step = mod.workflows[0].steps[1];
   assert.equal(step.type, "return");
-  if (step.type === "return") {
-    assert.equal(step.managed, undefined);
-    assert.equal(step.value, '"${response}"');
+  if (step.type === "return" && step.value.kind === "literal") {
+    assert.equal(step.value.raw, '"${response}"');
   }
 });
 
@@ -249,8 +237,8 @@ test("return bare identifier in brace block (if body)", () => {
   if (ifStep.type === "if") {
     const retStep = ifStep.body[0];
     assert.equal(retStep.type, "return");
-    if (retStep.type === "return") {
-      assert.equal(retStep.value, '"${msg}"');
+    if (retStep.type === "return" && retStep.value.kind === "literal") {
+      assert.equal(retStep.value.raw, '"${msg}"');
     }
   }
 });
@@ -270,14 +258,14 @@ test("return bare identifier in catch/recover block", () => {
     "test.jh",
   );
   const ensureStep = mod.workflows[0].steps[0];
-  assert.equal(ensureStep.type, "ensure");
-  if (ensureStep.type === "ensure") {
+  assert.equal(ensureStep.type, "exec");
+  if (ensureStep.type === "exec" && ensureStep.body.kind === "ensure_call") {
     assert.ok(ensureStep.catch);
     const recoverSteps = "block" in ensureStep.catch! ? ensureStep.catch!.block : [ensureStep.catch!.single];
     const retStep = recoverSteps[0];
     assert.equal(retStep.type, "return");
-    if (retStep.type === "return") {
-      assert.equal(retStep.value, '"${err}"');
+    if (retStep.type === "return" && retStep.value.kind === "literal") {
+      assert.equal(retStep.value.raw, '"${err}"');
     }
   }
 });
@@ -298,16 +286,14 @@ test("return run in ensure recover block", () => {
     "test.jh",
   );
   const ensureStep = mod.workflows[0].steps[0];
-  assert.equal(ensureStep.type, "ensure");
-  if (ensureStep.type === "ensure") {
+  assert.equal(ensureStep.type, "exec");
+  if (ensureStep.type === "exec" && ensureStep.body.kind === "ensure_call") {
     assert.ok(ensureStep.catch);
     const recoverSteps = "block" in ensureStep.catch! ? ensureStep.catch!.block : [ensureStep.catch!.single];
     const retStep = recoverSteps[0];
     assert.equal(retStep.type, "return");
-    if (retStep.type === "return") {
-      assert.ok(retStep.managed);
-      assert.equal(retStep.managed!.kind, "run");
-      assert.equal(retStep.managed!.ref.value, "helper");
+    if (retStep.type === "return" && retStep.value.kind === "call") {
+      assert.equal(retStep.value.callee.value, "helper");
     }
   }
 });

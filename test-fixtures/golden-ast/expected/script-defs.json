@@ -6,39 +6,18 @@
   "scripts": [
     {
       "body": "echo hello",
-      "bodyKind": "backtick",
       "comments": [],
       "name": "greet"
     },
     {
       "body": "echo \"line 1\"\necho \"line 2\"",
-      "bodyKind": "fenced",
       "comments": [],
       "name": "multiline"
     },
     {
       "body": "echo \"Hello ${USER}\"\necho \"${PATH:-/usr/bin}\"",
-      "bodyKind": "fenced",
       "comments": [],
       "name": "with_shell_expansion"
-    }
-  ],
-  "topLevelOrder": [
-    {
-      "index": 0,
-      "kind": "script"
-    },
-    {
-      "index": 1,
-      "kind": "script"
-    },
-    {
-      "index": 2,
-      "kind": "script"
-    },
-    {
-      "index": 0,
-      "kind": "workflow"
     }
   ],
   "workflows": [
@@ -48,16 +27,22 @@
       "params": [],
       "steps": [
         {
-          "type": "run",
-          "workflow": {
-            "value": "greet"
-          }
+          "body": {
+            "callee": {
+              "value": "greet"
+            },
+            "kind": "call"
+          },
+          "type": "exec"
         },
         {
-          "type": "run",
-          "workflow": {
-            "value": "multiline"
-          }
+          "body": {
+            "callee": {
+              "value": "multiline"
+            },
+            "kind": "call"
+          },
+          "type": "exec"
         }
       ]
     }

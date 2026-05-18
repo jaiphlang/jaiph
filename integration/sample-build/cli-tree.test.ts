@@ -172,7 +172,7 @@ test("jaiph run tree shows workflow params inline when run has key=value args", 
       [
         'import "sub.jh" as sub',
         "workflow default() {",
-        '  run sub.default(path="docs/cli.md" mode="strict")',
+        '  run sub.default(path="docs/cli.md", mode="strict")',
         "}",
         "",
       ].join("\n"),

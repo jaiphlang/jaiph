@@ -42,7 +42,7 @@ export async function main(argv: string[]): Promise<number> {
       return runFormat(rest);
     }
     if (cmd === "install") {
-      return runInstall(rest);
+      return await runInstall(rest);
     }
     if (cmd === "compile") {
       return runCompile(rest);

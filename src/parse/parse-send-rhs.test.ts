@@ -2,16 +2,16 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { parseSendRhs } from "./send-rhs";
 
-// === parseSendRhs: empty/whitespace RHS is now rejected ===
+// === parseSendRhs: empty/whitespace RHS is rejected ===
 
-test("parseSendRhs: empty RHS returns forward kind", () => {
+test("parseSendRhs: empty RHS throws", () => {
   assert.throws(
     () => parseSendRhs("test.jh", "", 1, 1),
     /send requires an explicit payload/,
   );
 });
 
-test("parseSendRhs: whitespace-only RHS returns forward kind", () => {
+test("parseSendRhs: whitespace-only RHS throws", () => {
   assert.throws(
     () => parseSendRhs("test.jh", "   ", 1, 1),
     /send requires an explicit payload/,
@@ -20,19 +20,19 @@ test("parseSendRhs: whitespace-only RHS returns forward kind", () => {
 
 // === parseSendRhs: literal ===
 
-test("parseSendRhs: quoted string returns literal kind", () => {
-  const { rhs } = parseSendRhs("test.jh", '"hello world"', 1, 1);
-  assert.equal(rhs.kind, "literal");
-  if (rhs.kind === "literal") {
-    assert.equal(rhs.token, '"hello world"');
+test("parseSendRhs: quoted string returns Expr.literal", () => {
+  const { value } = parseSendRhs("test.jh", '"hello world"', 1, 1);
+  assert.equal(value.kind, "literal");
+  if (value.kind === "literal") {
+    assert.equal(value.raw, '"hello world"');
   }
 });
 
 test("parseSendRhs: quoted string with escaped quote", () => {
-  const { rhs } = parseSendRhs("test.jh", '"say \\"hi\\""', 1, 1);
-  assert.equal(rhs.kind, "literal");
-  if (rhs.kind === "literal") {
-    assert.equal(rhs.token, '"say \\"hi\\""');
+  const { value } = parseSendRhs("test.jh", '"say \\"hi\\""', 1, 1);
+  assert.equal(value.kind, "literal");
+  if (value.kind === "literal") {
+    assert.equal(value.raw, '"say \\"hi\\""');
   }
 });
 
@@ -50,68 +50,68 @@ test("parseSendRhs: trailing content after quoted string throws", () => {
   );
 });
 
-// === parseSendRhs: run ===
+// === parseSendRhs: call ===
 
-test("parseSendRhs: run call returns run kind", () => {
-  const { rhs } = parseSendRhs("test.jh", "run my_script()", 1, 5);
-  assert.equal(rhs.kind, "run");
-  if (rhs.kind === "run") {
-    assert.equal(rhs.ref.value, "my_script");
-    assert.equal(rhs.ref.loc.line, 1);
-    assert.equal(rhs.ref.loc.col, 5);
+test("parseSendRhs: run call returns Expr.call", () => {
+  const { value } = parseSendRhs("test.jh", "run my_script()", 1, 5);
+  assert.equal(value.kind, "call");
+  if (value.kind === "call") {
+    assert.equal(value.callee.value, "my_script");
+    assert.equal(value.callee.loc.line, 1);
+    assert.equal(value.callee.loc.col, 5);
   }
 });
 
 test("parseSendRhs: run call with args", () => {
-  const { rhs } = parseSendRhs("test.jh", 'run my_script("arg1")', 1, 1);
-  assert.equal(rhs.kind, "run");
-  if (rhs.kind === "run") {
-    assert.equal(rhs.ref.value, "my_script");
-    assert.equal(rhs.args, '"arg1"');
+  const { value } = parseSendRhs("test.jh", 'run my_script("arg1")', 1, 1);
+  assert.equal(value.kind, "call");
+  if (value.kind === "call") {
+    assert.equal(value.callee.value, "my_script");
+    assert.deepEqual(value.args, [{ kind: "literal", raw: '"arg1"' }]);
   }
 });
 
 test("parseSendRhs: run call with dotted ref", () => {
-  const { rhs } = parseSendRhs("test.jh", "run lib.process()", 1, 1);
-  assert.equal(rhs.kind, "run");
-  if (rhs.kind === "run") {
-    assert.equal(rhs.ref.value, "lib.process");
+  const { value } = parseSendRhs("test.jh", "run lib.process()", 1, 1);
+  assert.equal(value.kind, "call");
+  if (value.kind === "call") {
+    assert.equal(value.callee.value, "lib.process");
   }
 });
 
-// === parseSendRhs: var ===
+// === parseSendRhs: bare variable (`$name`) is Expr.literal in the new model ===
 
-test("parseSendRhs: simple variable returns var kind", () => {
-  const { rhs } = parseSendRhs("test.jh", "$myVar", 1, 1);
-  assert.equal(rhs.kind, "var");
-  if (rhs.kind === "var") {
-    assert.equal(rhs.bash, "$myVar");
+test("parseSendRhs: simple variable returns Expr.literal", () => {
+  const { value } = parseSendRhs("test.jh", "$myVar", 1, 1);
+  assert.equal(value.kind, "literal");
+  if (value.kind === "literal") {
+    assert.equal(value.raw, "$myVar");
   }
 });
 
 test("parseSendRhs: underscore variable", () => {
-  const { rhs } = parseSendRhs("test.jh", "$_name", 1, 1);
-  assert.equal(rhs.kind, "var");
-  if (rhs.kind === "var") {
-    assert.equal(rhs.bash, "$_name");
+  const { value } = parseSendRhs("test.jh", "$_name", 1, 1);
+  assert.equal(value.kind, "literal");
+  if (value.kind === "literal") {
+    assert.equal(value.raw, "$_name");
   }
 });
 
 // === parseSendRhs: braced variable ===
 
-test("parseSendRhs: braced variable returns var kind", () => {
-  const { rhs } = parseSendRhs("test.jh", "${myVar}", 1, 1);
-  assert.equal(rhs.kind, "var");
-  if (rhs.kind === "var") {
-    assert.equal(rhs.bash, "${myVar}");
+test("parseSendRhs: braced variable returns Expr.literal", () => {
+  const { value } = parseSendRhs("test.jh", "${myVar}", 1, 1);
+  assert.equal(value.kind, "literal");
+  if (value.kind === "literal") {
+    assert.equal(value.raw, "${myVar}");
   }
 });
 
 test("parseSendRhs: nested braced variable", () => {
-  const { rhs } = parseSendRhs("test.jh", "${outer_${inner}}", 1, 1);
-  assert.equal(rhs.kind, "var");
-  if (rhs.kind === "var") {
-    assert.equal(rhs.bash, "${outer_${inner}}");
+  const { value } = parseSendRhs("test.jh", "${outer_${inner}}", 1, 1);
+  assert.equal(value.kind, "literal");
+  if (value.kind === "literal") {
+    assert.equal(value.raw, "${outer_${inner}}");
   }
 });
 
@@ -138,37 +138,37 @@ test("parseSendRhs: braced variable with command substitution throws", () => {
 
 // === parseSendRhs: bare_ref ===
 
-test("parseSendRhs: bare dotted ref returns bare_ref kind", () => {
-  const { rhs } = parseSendRhs("test.jh", "lib.handler", 1, 3);
-  assert.equal(rhs.kind, "bare_ref");
-  if (rhs.kind === "bare_ref") {
-    assert.equal(rhs.ref.value, "lib.handler");
-    assert.equal(rhs.ref.loc.line, 1);
-    assert.equal(rhs.ref.loc.col, 3);
+test("parseSendRhs: bare dotted ref returns Expr.bare_ref", () => {
+  const { value } = parseSendRhs("test.jh", "lib.handler", 1, 3);
+  assert.equal(value.kind, "bare_ref");
+  if (value.kind === "bare_ref") {
+    assert.equal(value.ref.value, "lib.handler");
+    assert.equal(value.ref.loc.line, 1);
+    assert.equal(value.ref.loc.col, 3);
   }
 });
 
 // === parseSendRhs: shell ===
 
-test("parseSendRhs: unrecognized expression returns shell kind", () => {
-  const { rhs } = parseSendRhs("test.jh", "echo hello | grep h", 1, 1);
-  assert.equal(rhs.kind, "shell");
-  if (rhs.kind === "shell") {
-    assert.equal(rhs.command, "echo hello | grep h");
-    assert.equal(rhs.loc.line, 1);
-    assert.equal(rhs.loc.col, 1);
+test("parseSendRhs: unrecognized expression returns Expr.shell", () => {
+  const { value } = parseSendRhs("test.jh", "echo hello | grep h", 1, 1);
+  assert.equal(value.kind, "shell");
+  if (value.kind === "shell") {
+    assert.equal(value.command, "echo hello | grep h");
+    assert.equal(value.loc.line, 1);
+    assert.equal(value.loc.col, 1);
   }
 });
 
 // === parseSendRhs: triple-quoted literal ===
 
-test("parseSendRhs: triple-quoted string returns literal kind", () => {
+test("parseSendRhs: triple-quoted string returns Expr.literal", () => {
   const lines = ['ch <- """', "  hello", "  world", '"""'];
-  const { rhs, nextIdx } = parseSendRhs("test.jh", '"""', 1, 6, lines, 0);
-  assert.equal(rhs.kind, "literal");
-  if (rhs.kind === "literal") {
-    assert.ok(rhs.token.includes("hello"));
-    assert.ok(rhs.token.includes("world"));
+  const { value, nextIdx } = parseSendRhs("test.jh", '"""', 1, 6, lines, 0);
+  assert.equal(value.kind, "literal");
+  if (value.kind === "literal") {
+    assert.ok(value.raw.includes("hello"));
+    assert.ok(value.raw.includes("world"));
   }
   assert.equal(nextIdx, 4);
 });

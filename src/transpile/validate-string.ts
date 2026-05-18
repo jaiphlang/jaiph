@@ -11,7 +11,7 @@
 
 import { jaiphError } from "../errors";
 import { parseCallRef } from "../parse/core";
-import { dedentCommonLeadingWhitespace } from "../parse/dedent";
+import type { Arg } from "../types";
 
 /**
  * Check for shell fallback/expansion syntax inside ${...} blocks.
@@ -99,7 +99,7 @@ const INLINE_CAPTURE_RE = /\$\{(run|ensure)\s+([^}]+)\}/g;
 export interface InlineCapture {
   kind: "run" | "ensure";
   ref: string;
-  args?: string;
+  args?: Arg[];
 }
 
 /** Extract ${run ref [args]} and ${ensure ref [args]} from string content (unquoted). */
@@ -281,7 +281,7 @@ export function validateJaiphStringContent(
       );
     }
 
-    if (call.args && /\$\{(?:run|ensure)\s/.test(call.args)) {
+    if (call.args?.some((a) => a.kind === "literal" && /\$\{(?:run|ensure)\s/.test(a.raw))) {
       throw jaiphError(
         filePath, line, col, "E_PARSE",
         `${context} cannot contain nested inline captures; extract to a const variable`,
@@ -298,15 +298,15 @@ export function validatePromptString(
   filePath: string,
   line: number,
   col: number,
-  opts?: { tripleQuoted?: boolean },
 ): void {
-  let content = stripDoubleQuotes(raw);
-  if (opts?.tripleQuoted) content = dedentCommonLeadingWhitespace(content);
+  const content = stripDoubleQuotes(raw);
   validateJaiphStringContent(content, filePath, line, col, "prompt");
 }
 
 /**
- * Validate a log/logerr message (inner content without quotes).
+ * Validate a log/logerr message (inner content without quotes). Triple-quoted
+ * messages arrive pre-dedented from the parser, so this validator no longer
+ * needs to know about that distinction.
  */
 export function validateLogString(
   message: string,
@@ -314,10 +314,8 @@ export function validateLogString(
   line: number,
   col: number,
   keyword: string,
-  opts?: { tripleQuoted?: boolean },
 ): void {
-  const text = opts?.tripleQuoted ? dedentCommonLeadingWhitespace(message) : message;
-  validateJaiphStringContent(text, filePath, line, col, keyword);
+  validateJaiphStringContent(message, filePath, line, col, keyword);
 }
 
 /**
@@ -328,10 +326,8 @@ export function validateFailString(
   filePath: string,
   line: number,
   col: number,
-  opts?: { tripleQuoted?: boolean },
 ): void {
-  let content = stripDoubleQuotes(message);
-  if (opts?.tripleQuoted) content = dedentCommonLeadingWhitespace(content);
+  const content = stripDoubleQuotes(message);
   validateJaiphStringContent(content, filePath, line, col, "fail");
 }
 
@@ -343,11 +339,9 @@ export function validateReturnString(
   filePath: string,
   line: number,
   col: number,
-  opts?: { tripleQuoted?: boolean },
 ): void {
   if (value.startsWith('"')) {
-    let content = stripDoubleQuotes(value);
-    if (opts?.tripleQuoted) content = dedentCommonLeadingWhitespace(content);
+    const content = stripDoubleQuotes(value);
     validateJaiphStringContent(content, filePath, line, col, "return");
   }
 }

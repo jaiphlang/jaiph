@@ -1,8 +1,8 @@
 import type {
+  Arg,
+  Expr,
   jaiphModule,
   WorkflowStepDef,
-  ConstRhs,
-  SendRhsDef,
   WorkflowDef,
   RuleDef,
   ScriptDef,
@@ -13,7 +13,7 @@ import type {
   WorkflowMetadata,
   TopLevelEmitOrder,
 } from "../types";
-import { parseCallRef } from "../parse/core";
+import { createTrivia, type NodeTrivia, type Trivia } from "../parse/trivia";
 
 export interface EmitOptions {
   indent: number;
@@ -21,7 +21,10 @@ export interface EmitOptions {
 
 const DEFAULT_OPTIONS: EmitOptions = { indent: 2 };
 
-/** When `topLevelOrder` is missing (hand-built AST), match pre–source-order emit behavior. */
+function tn(trivia: Trivia, node: object): NodeTrivia {
+  return trivia.getNode(node) ?? {};
+}
+
 function legacyTopLevelOrder(mod: jaiphModule): TopLevelEmitOrder[] {
   const o: TopLevelEmitOrder[] = [];
   if (mod.envDecls) {
@@ -36,31 +39,41 @@ function legacyTopLevelOrder(mod: jaiphModule): TopLevelEmitOrder[] {
   return o;
 }
 
-function topLevelOrderForEmit(mod: jaiphModule): TopLevelEmitOrder[] {
-  if (mod.topLevelOrder && mod.topLevelOrder.length > 0) return mod.topLevelOrder;
+function topLevelOrderForEmit(mod: jaiphModule, trivia: Trivia): TopLevelEmitOrder[] {
+  const order = trivia.getModule().topLevelOrder;
+  if (order && order.length > 0) return order;
   return legacyTopLevelOrder(mod);
 }
 
-export function emitModule(mod: jaiphModule, opts: EmitOptions = DEFAULT_OPTIONS): string {
+export function emitModule(
+  mod: jaiphModule,
+  triviaOrOpts: Trivia | EmitOptions = createTrivia(),
+  optsArg?: EmitOptions,
+): string {
+  let trivia: Trivia;
+  let opts: EmitOptions;
+  if (triviaOrOpts instanceof Object && "indent" in triviaOrOpts && !("getModule" in triviaOrOpts)) {
+    trivia = createTrivia();
+    opts = triviaOrOpts as EmitOptions;
+  } else {
+    trivia = triviaOrOpts as Trivia;
+    opts = optsArg ?? DEFAULT_OPTIONS;
+  }
   const sections: string[] = [];
   const pad = " ".repeat(opts.indent);
-
-  // Shebang — we don't store it in the AST, so the caller must prepend it if needed.
-  // (handled by the format command reading the first line of the original source)
+  const modTrivia = trivia.getModule();
 
   const importLines: string[] = [];
   if (mod.scriptImports) {
     for (const si of mod.scriptImports) {
-      if (si.leadingComments?.length) {
-        importLines.push(emitCommentBlock(si.leadingComments));
-      }
+      const lc = tn(trivia, si).leadingComments;
+      if (lc?.length) importLines.push(emitCommentBlock(lc));
       importLines.push(`import script "${si.path}" as ${si.alias}`);
     }
   }
   for (const imp of mod.imports) {
-    if (imp.leadingComments?.length) {
-      importLines.push(emitCommentBlock(imp.leadingComments));
-    }
+    const lc = tn(trivia, imp).leadingComments;
+    if (lc?.length) importLines.push(emitCommentBlock(lc));
     importLines.push(`import "${imp.path}" as ${imp.alias}`);
   }
   if (importLines.length > 0) {
@@ -68,17 +81,16 @@ export function emitModule(mod: jaiphModule, opts: EmitOptions = DEFAULT_OPTIONS
   }
 
   if (mod.metadata) {
-    if (mod.configLeadingComments?.length) {
-      sections.push(emitCommentBlock(mod.configLeadingComments));
+    if (modTrivia.configLeadingComments?.length) {
+      sections.push(emitCommentBlock(modTrivia.configLeadingComments));
     }
-    sections.push(emitConfig(mod.metadata, pad));
+    sections.push(emitConfig(mod.metadata, pad, trivia));
   }
 
   const channelLines: string[] = [];
   for (const ch of mod.channels) {
-    if (ch.leadingComments?.length) {
-      channelLines.push(emitCommentBlock(ch.leadingComments));
-    }
+    const lc = tn(trivia, ch).leadingComments;
+    if (lc?.length) channelLines.push(emitCommentBlock(lc));
     channelLines.push(emitChannel(ch));
   }
   if (channelLines.length > 0) {
@@ -87,7 +99,7 @@ export function emitModule(mod: jaiphModule, opts: EmitOptions = DEFAULT_OPTIONS
 
   const exportedNames = new Set(mod.exports);
 
-  for (const item of topLevelOrderForEmit(mod)) {
+  for (const item of topLevelOrderForEmit(mod, trivia)) {
     if (item.kind === "env") {
       const env = mod.envDecls![item.index];
       const envLines: string[] = [];
@@ -99,12 +111,12 @@ export function emitModule(mod: jaiphModule, opts: EmitOptions = DEFAULT_OPTIONS
       continue;
     }
     if (item.kind === "rule") {
-      sections.push(emitRule(mod.rules[item.index], pad, exportedNames.has(mod.rules[item.index].name)));
+      sections.push(emitRule(mod.rules[item.index], pad, exportedNames.has(mod.rules[item.index].name), trivia));
       continue;
     }
     if (item.kind === "script") {
       sections.push(
-        emitScript(mod.scripts[item.index], pad, exportedNames.has(mod.scripts[item.index].name)),
+        emitScript(mod.scripts[item.index], pad, exportedNames.has(mod.scripts[item.index].name), trivia),
       );
       continue;
     }
@@ -114,21 +126,21 @@ export function emitModule(mod: jaiphModule, opts: EmitOptions = DEFAULT_OPTIONS
           mod.workflows[item.index],
           pad,
           exportedNames.has(mod.workflows[item.index].name),
+          trivia,
         ),
       );
       continue;
     }
-    sections.push(emitTestBlock(mod.tests![item.index], pad));
+    sections.push(emitTestBlock(mod.tests![item.index], pad, trivia));
   }
 
-  if (mod.trailingTopLevelComments?.length) {
-    sections.push(emitCommentBlock(mod.trailingTopLevelComments));
+  if (modTrivia.trailingTopLevelComments?.length) {
+    sections.push(emitCommentBlock(modTrivia.trailingTopLevelComments));
   }
 
   return sections.join("\n\n") + "\n";
 }
 
-/** Emit lines for one `key = value` inside `config { }` (matches canonical value formatting). */
 function emitConfigKeyLines(meta: WorkflowMetadata, key: string, pad: string): string[] {
   switch (key) {
     case "agent.default_model":
@@ -159,8 +171,6 @@ function emitConfigKeyLines(meta: WorkflowMetadata, key: string, pad: string): s
       if (meta.run?.recoverLimit === undefined) return [];
       return [`${pad}run.recover_limit = ${meta.run.recoverLimit}`];
     case "runtime.docker_enabled":
-      // runtime.docker_enabled was removed; skip silently for back-compat with
-      // any cached AST that still carries the key in configBodySequence.
       return [];
     case "runtime.docker_image":
       if (meta.runtime?.dockerImage === undefined) return [];
@@ -185,10 +195,11 @@ function emitConfigKeyLines(meta: WorkflowMetadata, key: string, pad: string): s
   }
 }
 
-function emitConfig(meta: WorkflowMetadata, pad: string): string {
+function emitConfig(meta: WorkflowMetadata, pad: string, trivia: Trivia): string {
   const lines: string[] = ["config {"];
-  if (meta.configBodySequence?.length) {
-    for (const part of meta.configBodySequence) {
+  const seq = trivia.getNode(meta)?.configBodySequence;
+  if (seq?.length) {
+    for (const part of seq) {
       if (part.kind === "comment") {
         lines.push(`${pad}${part.text}`);
       } else {
@@ -227,7 +238,6 @@ function emitConfig(meta: WorkflowMetadata, pad: string): string {
   return lines.join("\n");
 }
 
-/** Top-level `const` RHS: bare slugs, JSON string, or triple-quoted when `"` / `\\` would break double-quote round-trip. */
 function emitEnvDecl(env: EnvDeclDef): string[] {
   if (env.value.includes("\n")) {
     const lines = [`const ${env.name} = """`];
@@ -250,27 +260,27 @@ function emitComments(comments: string[]): string[] {
   return comments.map((c) => (c.startsWith("#") ? c : `# ${c}`));
 }
 
-/** One section string: consecutive `#` lines stay single-spaced (module sections join with blank lines). */
 function emitCommentBlock(comments: string[]): string {
   return emitComments(comments).join("\n");
 }
 
-function emitRule(rule: RuleDef, pad: string, exported: boolean): string {
+function emitRule(rule: RuleDef, pad: string, exported: boolean, trivia: Trivia): string {
   const lines: string[] = [];
   lines.push(...emitComments(rule.comments));
   const paramStr = `(${rule.params.join(", ")})`;
   const prefix = exported ? "export " : "";
   lines.push(`${prefix}rule ${rule.name}${paramStr} {`);
-  lines.push(...emitSteps(rule.steps, pad, pad));
+  lines.push(...emitSteps(rule.steps, pad, pad, trivia));
   lines.push("}");
   return lines.join("\n");
 }
 
-function emitScript(script: ScriptDef, _pad: string, exported: boolean): string {
+function emitScript(script: ScriptDef, _pad: string, exported: boolean, trivia: Trivia): string {
   const lines: string[] = [];
   lines.push(...emitComments(script.comments));
   const prefix = exported ? "export " : "";
-  if (script.bodyKind === "fenced" || script.lang || script.body.includes("\n")) {
+  const bodyKind = tn(trivia, script).scriptBodyKind;
+  if (bodyKind === "fenced" || script.lang || script.body.includes("\n")) {
     const langTag = script.lang ?? "";
     lines.push(`${prefix}script ${script.name} = \`\`\`${langTag}`);
     for (const bl of script.body.split("\n")) {
@@ -283,7 +293,7 @@ function emitScript(script: ScriptDef, _pad: string, exported: boolean): string 
   return lines.join("\n");
 }
 
-function emitWorkflow(wf: WorkflowDef, pad: string, exported: boolean): string {
+function emitWorkflow(wf: WorkflowDef, pad: string, exported: boolean, trivia: Trivia): string {
   const lines: string[] = [];
   lines.push(...emitComments(wf.comments));
 
@@ -292,13 +302,13 @@ function emitWorkflow(wf: WorkflowDef, pad: string, exported: boolean): string {
   lines.push(`${prefix}workflow ${wf.name}${paramStr} {`);
 
   if (wf.metadata) {
-    const configLines = emitConfig(wf.metadata, pad);
+    const configLines = emitConfig(wf.metadata, pad, trivia);
     for (const cl of configLines.split("\n")) {
       lines.push(`${pad}${cl}`);
     }
   }
 
-  lines.push(...emitSteps(wf.steps, pad, pad));
+  lines.push(...emitSteps(wf.steps, pad, pad, trivia));
 
   lines.push("}");
   return lines.join("\n");
@@ -312,9 +322,8 @@ function emitChannel(ch: ChannelDef): string {
   return `channel ${ch.name}`;
 }
 
-/** `log` / `logerr` message: bare identifier form vs JSON-string form (matches parse storage). */
-function emitLogMessageRhs(message: string): string {
-  // Parser stores bare `log name` as the literal string `${name}` (interpolation sentinel).
+/** Bare-identifier form for `log <ident>` / `logerr <ident>`. */
+function emitLogLiteralRhs(message: string): string {
   if (
     message.length >= 3 &&
     message[0] === "$" &&
@@ -329,107 +338,27 @@ function emitLogMessageRhs(message: string): string {
   return JSON.stringify(message);
 }
 
-function emitSteps(steps: WorkflowStepDef[], pad: string, currentIndent: string): string[] {
+function emitSteps(steps: WorkflowStepDef[], pad: string, currentIndent: string, trivia: Trivia): string[] {
   const lines: string[] = [];
   for (const step of steps) {
-    lines.push(...emitStep(step, pad, currentIndent));
+    lines.push(...emitStep(step, pad, currentIndent, trivia));
   }
   return lines;
 }
 
-/** Try to parse `` `body`(args) `` from the start of a string. Returns consumed length or null. */
-function parseInlineScriptArg(s: string): { body: string; innerArgs: string; consumed: number } | null {
-  if (!s.startsWith("`")) return null;
-  const closeIdx = s.indexOf("`", 1);
-  if (closeIdx === -1) return null;
-  const body = s.slice(1, closeIdx);
-  const afterClose = s.slice(closeIdx + 1);
-  if (!afterClose.startsWith("(")) return null;
-  let depth = 1;
-  let j = 1;
-  let inQuote: string | null = null;
-  while (j < afterClose.length && depth > 0) {
-    const ch = afterClose[j];
-    if (inQuote) {
-      if (ch === inQuote && afterClose[j - 1] !== "\\") inQuote = null;
-    } else {
-      if (ch === '"' || ch === "'") inQuote = ch;
-      else if (ch === "(") depth++;
-      else if (ch === ")") depth--;
-    }
-    j++;
-  }
-  if (depth !== 0) return null;
-  const innerArgs = afterClose.slice(1, j - 1).trim();
-  return { body, innerArgs, consumed: closeIdx + 1 + j };
+function formatArgs(args: Arg[] | undefined): string {
+  if (!args || args.length === 0) return "";
+  return args.map((a) => (a.kind === "var" ? a.name : a.raw)).join(", ");
 }
 
-/** Convert space-separated args back to comma-separated format with bare identifiers. */
-function formatArgs(args: string, bareIdentifierArgs?: string[]): string {
-  const bare = new Set(bareIdentifierArgs ?? []);
-  const tokens: string[] = [];
-  let i = 0;
-  while (i < args.length) {
-    while (i < args.length && (args[i] === " " || args[i] === "\t")) i++;
-    if (i >= args.length) break;
-    const tail = args.slice(i);
-    const keyword = tail.startsWith("run ")
-      ? "run"
-      : tail.startsWith("ensure ")
-        ? "ensure"
-        : null;
-    if (keyword) {
-      const afterKeyword = args.slice(i + keyword.length).trimStart();
-      const skipped = args.slice(i + keyword.length).length - afterKeyword.length;
-      const call = parseCallRef(afterKeyword);
-      if (call && (call.rest.length === 0 || /^\s/.test(call.rest))) {
-        const consumed = afterKeyword.length - call.rest.length;
-        tokens.push(`${keyword} ${call.ref}(${formatArgs(call.args ?? "", call.bareIdentifierArgs)})`);
-        i += keyword.length + skipped + consumed;
-        continue;
-      }
-      // Try inline script form: run `body`(args)
-      if (keyword === "run") {
-        const inlineResult = parseInlineScriptArg(afterKeyword);
-        if (inlineResult) {
-          const formattedInner = inlineResult.innerArgs ? formatArgs(inlineResult.innerArgs) : "";
-          tokens.push(`run \`${inlineResult.body}\`(${formattedInner})`);
-          i += keyword.length + skipped + inlineResult.consumed;
-          continue;
-        }
-      }
-    }
-    if (args[i] === '"') {
-      let j = i + 1;
-      while (j < args.length && !(args[j] === '"' && args[j - 1] !== "\\")) j++;
-      tokens.push(args.slice(i, j + 1));
-      i = j + 1;
-    } else {
-      let j = i;
-      while (j < args.length && args[j] !== " " && args[j] !== "\t") j++;
-      const token = args.slice(i, j);
-      const m = token.match(/^\$\{([a-zA-Z_][a-zA-Z0-9_]*)\}$/);
-      if (m && bare.has(m[1])) {
-        tokens.push(m[1]);
-      } else {
-        tokens.push(token);
-      }
-      i = j;
-    }
-  }
-  return tokens.join(", ");
-}
-
-/** Emit inline script form: `prefix \`body\`(args)` or fenced block. */
 function emitInlineScriptLines(
   prefix: string,
   body: string,
-  lang?: string,
-  args?: string,
-  bareIdentifierArgs?: string[],
+  lang: string | undefined,
+  args: Arg[] | undefined,
   ci?: string,
 ): string[] {
-  const argsStr = formatArgs(args ?? "", bareIdentifierArgs);
+  const argsStr = formatArgs(args);
   if (lang || body.includes("\n")) {
     const langTag = lang ?? "";
     const result = [`${prefix} \`\`\`${langTag}`];
@@ -442,11 +371,8 @@ function emitInlineScriptLines(
   return [`${prefix} \`${body}\`(${argsStr})`];
 }
 
-function emitRef(ref: { value: string }, args?: string, bareIdentifierArgs?: string[]): string {
-  if (args !== undefined) {
-    return `${ref.value}(${formatArgs(args, bareIdentifierArgs)})`;
-  }
-  return `${ref.value}()`;
+function emitRef(ref: { value: string }, args: Arg[] | undefined): string {
+  return `${ref.value}(${formatArgs(args)})`;
 }
 
 function emitMatchPattern(p: import("../types").MatchPatternDef): string {
@@ -457,7 +383,6 @@ function emitMatchPattern(p: import("../types").MatchPatternDef): string {
 
 function emitMatchArm(arm: import("../types").MatchArmDef, armIndent: string, bodyIndent: string): string[] {
   const patStr = emitMatchPattern(arm.pattern);
-  // Multiline body (triple-quoted): body stored as "line1\nline2" with outer quotes and actual newlines.
   if (arm.body.startsWith('"') && arm.body.endsWith('"') && arm.body.includes("\n")) {
     const inner = arm.body.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, "\\");
     const lines: string[] = [`${armIndent}${patStr} => """`];
@@ -470,348 +395,303 @@ function emitMatchArm(arm: import("../types").MatchArmDef, armIndent: string, bo
   return [`${armIndent}${patStr} => ${arm.body}`];
 }
 
-function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string): string[] {
+/**
+ * Emit an `Expr` as it would appear after a `=` / `<-` / `return` / `log` etc.
+ * Multi-line value forms (inline-script fenced bodies, triple-quoted literals,
+ * match arm blocks, triple-quoted prompts) return additional lines via the
+ * `tail` array so the caller can append them at the right indent level.
+ */
+function emitExprFirstLine(
+  expr: Expr,
+  trivia: Trivia,
+  ci: string,
+  pad: string,
+): { head: string; tail: string[] } {
+  const valueTrivia = tn(trivia, expr);
+  if (expr.kind === "literal") {
+    if (valueTrivia.tripleQuoted) {
+      const inner = valueTrivia.rawBody ?? expr.raw.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+      const tail: string[] = [];
+      for (const bl of inner.split("\n")) tail.push(bl);
+      tail.push(`${ci}"""`);
+      return { head: '"""', tail };
+    }
+    if (valueTrivia.bareSource) {
+      return { head: valueTrivia.bareSource, tail: [] };
+    }
+    return { head: expr.raw, tail: [] };
+  }
+  if (expr.kind === "call") {
+    const asyncMod = expr.async ? "async " : "";
+    return { head: `run ${asyncMod}${emitRef(expr.callee, expr.args)}`, tail: [] };
+  }
+  if (expr.kind === "ensure_call") {
+    return { head: `ensure ${emitRef(expr.callee, expr.args)}`, tail: [] };
+  }
+  if (expr.kind === "inline_script") {
+    if (expr.lang || expr.body.includes("\n")) {
+      const langTag = expr.lang ?? "";
+      const tail: string[] = [];
+      for (const bl of expr.body.split("\n")) tail.push(bl);
+      tail.push(`${ci}\`\`\`(${formatArgs(expr.args)})`);
+      return { head: `run \`\`\`${langTag}`, tail };
+    }
+    return { head: `run \`${expr.body}\`(${formatArgs(expr.args)})`, tail: [] };
+  }
+  if (expr.kind === "prompt") {
+    const returns = expr.returns ? ` returns "${expr.returns}"` : "";
+    if (valueTrivia.bodyKind === "identifier" && valueTrivia.bodyIdentifier) {
+      return { head: `prompt ${valueTrivia.bodyIdentifier}${returns}`, tail: [] };
+    }
+    if (valueTrivia.bodyKind === "triple_quoted") {
+      const inner = valueTrivia.rawBody ?? expr.raw.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+      const tail: string[] = [];
+      for (const bl of inner.split("\n")) tail.push(bl);
+      tail.push(`${ci}"""`);
+      if (expr.returns) {
+        tail.push(`${ci}returns "${expr.returns}"`);
+      }
+      return { head: 'prompt """', tail };
+    }
+    return { head: `prompt ${expr.raw}${returns}`, tail: [] };
+  }
+  if (expr.kind === "match") {
+    const tail: string[] = [];
+    for (const arm of expr.match.arms) {
+      tail.push(...emitMatchArm(arm, `${ci}${pad}`, ci));
+    }
+    tail.push(`${ci}}`);
+    return { head: `match ${expr.match.subject} {`, tail };
+  }
+  if (expr.kind === "shell") {
+    return { head: expr.command, tail: [] };
+  }
+  // bare_ref
+  return { head: expr.ref.value, tail: [] };
+}
+
+function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string, trivia: Trivia): string[] {
   const lines: string[] = [];
   const ci = currentIndent;
 
-  switch (step.type) {
-    case "blank_line":
+  if (step.type === "trivia") {
+    if (step.kind === "blank_line") {
       lines.push("");
-      break;
+    } else {
+      lines.push(`${ci}${step.text ?? ""}`);
+    }
+    return lines;
+  }
 
-    case "comment":
-      lines.push(`${ci}${step.text}`);
-      break;
+  if (step.type === "say") {
+    const message = step.message;
+    if (step.level === "fail") {
+      // fail always takes a literal message; preserve triple-quoted form when present.
+      const msgTrivia = tn(trivia, message);
+      if (message.kind === "literal" && msgTrivia.tripleQuoted) {
+        const inner = msgTrivia.rawBody ?? message.raw.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+        lines.push(`${ci}fail """`);
+        for (const bl of inner.split("\n")) lines.push(bl);
+        lines.push(`${ci}"""`);
+      } else if (message.kind === "literal") {
+        lines.push(`${ci}fail ${message.raw}`);
+      } else {
+        const { head, tail } = emitExprFirstLine(message, trivia, ci, pad);
+        lines.push(`${ci}fail ${head}`);
+        lines.push(...tail);
+      }
+      return lines;
+    }
+    const verb = step.level;
+    if (message.kind === "inline_script") {
+      lines.push(...emitInlineScriptLines(`${ci}${verb} run`, message.body, message.lang, message.args, ci));
+      return lines;
+    }
+    if (message.kind === "literal") {
+      const msgTrivia = tn(trivia, message);
+      if (msgTrivia.tripleQuoted) {
+        const inner = msgTrivia.rawBody ?? message.raw;
+        lines.push(`${ci}${verb} """`);
+        for (const bl of inner.split("\n")) lines.push(bl);
+        lines.push(`${ci}"""`);
+      } else {
+        lines.push(`${ci}${verb} ${emitLogLiteralRhs(message.raw)}`);
+      }
+      return lines;
+    }
+    // Fallback for any other Expr kind (shouldn't occur per validator).
+    const { head, tail } = emitExprFirstLine(message, trivia, ci, pad);
+    lines.push(`${ci}${verb} ${head}`);
+    lines.push(...tail);
+    return lines;
+  }
 
-    case "shell": {
+  if (step.type === "shell" as never) {
+    // Defensive: should never appear in the new AST (shell is an exec body kind).
+    return lines;
+  }
+
+  if (step.type === "exec") {
+    const body = step.body;
+    if (body.kind === "shell") {
       if (step.captureName) {
-        lines.push(`${ci}${step.captureName} = ${step.command}`);
+        lines.push(`${ci}${step.captureName} = ${body.command}`);
       } else {
-        lines.push(`${ci}${step.command}`);
+        lines.push(`${ci}${body.command}`);
       }
-      break;
+      return lines;
     }
-
-    case "ensure": {
-      const ref = emitRef(step.ref, step.args, step.bareIdentifierArgs);
-      const capture = step.captureName ? `${step.captureName} = ` : "";
-      if (step.catch) {
-        const b = step.catch.bindings;
-        const bindStr = `(${b.failure})`;
-        if ("single" in step.catch) {
-          const recoverLines = emitStep(step.catch.single, pad, "");
-          const recoverText = recoverLines.map((l) => l.trim()).join("\n");
-          lines.push(`${ci}${capture}ensure ${ref} catch ${bindStr} ${recoverText}`);
-        } else {
-          lines.push(`${ci}${capture}ensure ${ref} catch ${bindStr} {`);
-          lines.push(...emitSteps(step.catch.block, pad, ci + pad));
-          lines.push(`${ci}}`);
-        }
-      } else {
-        lines.push(`${ci}${capture}ensure ${ref}`);
-      }
-      break;
-    }
-
-    case "run": {
-      const ref = emitRef(step.workflow, step.args, step.bareIdentifierArgs);
-      const capture = step.captureName ? `${step.captureName} = ` : "";
-      const asyncPrefix = step.async ? "async " : "";
+    const capture = step.captureName ? `${step.captureName} = ` : "";
+    if (body.kind === "call") {
+      const ref = emitRef(body.callee, body.args);
+      const asyncPrefix = body.async ? "async " : "";
       if (step.recover) {
         const b = step.recover.bindings;
         const bindStr = `(${b.failure})`;
         if ("single" in step.recover) {
-          const recoverLines = emitStep(step.recover.single, pad, "");
+          const recoverLines = emitStep(step.recover.single, pad, "", trivia);
           const recoverText = recoverLines.map((l) => l.trim()).join("\n");
           lines.push(`${ci}${capture}run ${asyncPrefix}${ref} recover ${bindStr} ${recoverText}`);
         } else {
           lines.push(`${ci}${capture}run ${asyncPrefix}${ref} recover ${bindStr} {`);
-          lines.push(...emitSteps(step.recover.block, pad, ci + pad));
+          lines.push(...emitSteps(step.recover.block, pad, ci + pad, trivia));
           lines.push(`${ci}}`);
         }
       } else if (step.catch) {
         const b = step.catch.bindings;
         const bindStr = `(${b.failure})`;
         if ("single" in step.catch) {
-          const recoverLines = emitStep(step.catch.single, pad, "");
+          const recoverLines = emitStep(step.catch.single, pad, "", trivia);
           const recoverText = recoverLines.map((l) => l.trim()).join("\n");
           lines.push(`${ci}${capture}run ${asyncPrefix}${ref} catch ${bindStr} ${recoverText}`);
         } else {
           lines.push(`${ci}${capture}run ${asyncPrefix}${ref} catch ${bindStr} {`);
-          lines.push(...emitSteps(step.catch.block, pad, ci + pad));
+          lines.push(...emitSteps(step.catch.block, pad, ci + pad, trivia));
           lines.push(`${ci}}`);
         }
       } else {
         lines.push(`${ci}${capture}run ${asyncPrefix}${ref}`);
       }
-      break;
+      return lines;
     }
-
-    case "run_inline_script": {
-      const capture = step.captureName ? `${step.captureName} = ` : "";
-      const argsStr = formatArgs(step.args ?? "", step.bareIdentifierArgs);
-      if (step.lang || step.body.includes("\n")) {
-        const langTag = step.lang ?? "";
-        lines.push(`${ci}${capture}run \`\`\`${langTag}`);
-        for (const bl of step.body.split("\n")) {
-          lines.push(bl);
-        }
-        lines.push(`${ci}\`\`\`(${argsStr})`);
-      } else {
-        lines.push(`${ci}${capture}run \`${step.body}\`(${argsStr})`);
-      }
-      break;
-    }
-
-    case "prompt": {
-      const capture = step.captureName ? `${step.captureName} = ` : "";
-      const returns = step.returns ? ` returns "${step.returns}"` : "";
-      if (step.bodyKind === "identifier" && step.bodyIdentifier) {
-        lines.push(`${ci}${capture}prompt ${step.bodyIdentifier}${returns}`);
-      } else if (step.bodyKind === "triple_quoted") {
-        const inner = step.raw.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, "\\");
-        lines.push(`${ci}${capture}prompt """`);
-        for (const bl of inner.split("\n")) {
-          lines.push(bl);
-        }
-        lines.push(`${ci}"""`);
-        if (step.returns) {
-          lines.push(`${ci}returns "${step.returns}"`);
-        }
-      } else {
-        lines.push(`${ci}${capture}prompt ${step.raw}${returns}`);
-      }
-      break;
-    }
-
-    case "const": {
-      lines.push(`${ci}${emitConstStep(step.name, step.value)}`);
-      // Handle multi-line inline script capture body
-      if (step.value.kind === "run_inline_script_capture" &&
-          (step.value.lang || step.value.body.includes("\n"))) {
-        for (const bl of step.value.body.split("\n")) {
-          lines.push(bl);
-        }
-        const argsStr = formatArgs(step.value.args ?? "", step.value.bareIdentifierArgs);
-        lines.push(`${ci}\`\`\`(${argsStr})`);
-      }
-      // Handle multi-line triple-quoted prompt capture body
-      if (step.value.kind === "prompt_capture" && step.value.bodyKind === "triple_quoted") {
-        const inner = step.value.raw.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, "\\");
-        for (const bl of inner.split("\n")) {
-          lines.push(bl);
-        }
-        lines.push(`${ci}"""`);
-        if (step.value.returns) {
-          lines.push(`${ci}returns "${step.value.returns}"`);
-        }
-      }
-      // Handle match expression arms and closing brace
-      if (step.value.kind === "match_expr") {
-        for (const arm of step.value.match.arms) {
-          lines.push(...emitMatchArm(arm, `${ci}${pad}`, ci));
-        }
-        lines.push(`${ci}}`);
-      }
-      // Handle multi-line triple-quoted expr (const name = """...""")
-      if (step.value.kind === "expr" && step.value.bashRhs.startsWith('"') &&
-          step.value.bashRhs.endsWith('"') && step.value.bashRhs.includes("\n")) {
-        const inner = step.value.bashRhs.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, "\\");
-        for (const bl of inner.split("\n")) {
-          lines.push(bl);
-        }
-        lines.push(`${ci}"""`);
-      }
-      break;
-    }
-
-    case "fail": {
-      if (step.message.includes("\n")) {
-        const inner = step.message.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, "\\");
-        lines.push(`${ci}fail """`);
-        for (const bl of inner.split("\n")) {
-          lines.push(bl);
-        }
-        lines.push(`${ci}"""`);
-      } else {
-        lines.push(`${ci}fail ${step.message}`);
-      }
-      break;
-    }
-
-    case "log":
-      if (step.managed?.kind === "run_inline_script") {
-        lines.push(...emitInlineScriptLines(`${ci}log run`, step.managed.body, step.managed.lang, step.managed.args, step.managed.bareIdentifierArgs, ci));
-      } else if (step.message.includes("\n")) {
-        lines.push(`${ci}log """`);
-        for (const bl of step.message.split("\n")) {
-          lines.push(bl);
-        }
-        lines.push(`${ci}"""`);
-      } else {
-        lines.push(`${ci}log ${emitLogMessageRhs(step.message)}`);
-      }
-      break;
-
-    case "logerr":
-      if (step.managed?.kind === "run_inline_script") {
-        lines.push(...emitInlineScriptLines(`${ci}logerr run`, step.managed.body, step.managed.lang, step.managed.args, step.managed.bareIdentifierArgs, ci));
-      } else if (step.message.includes("\n")) {
-        lines.push(`${ci}logerr """`);
-        for (const bl of step.message.split("\n")) {
-          lines.push(bl);
-        }
-        lines.push(`${ci}"""`);
-      } else {
-        lines.push(`${ci}logerr ${emitLogMessageRhs(step.message)}`);
-      }
-      break;
-
-    case "return": {
-      if (step.managed) {
-        if (step.managed.kind === "run") {
-          lines.push(`${ci}return run ${emitRef(step.managed.ref, step.managed.args, step.managed.bareIdentifierArgs)}`);
-        } else if (step.managed.kind === "ensure") {
-          lines.push(`${ci}return ensure ${emitRef(step.managed.ref, step.managed.args, step.managed.bareIdentifierArgs)}`);
-        } else if (step.managed.kind === "match") {
-          lines.push(`${ci}return match ${step.managed.match.subject} {`);
-          for (const arm of step.managed.match.arms) {
-            lines.push(...emitMatchArm(arm, `${ci}${pad}`, ci));
-          }
+    if (body.kind === "ensure_call") {
+      const ref = emitRef(body.callee, body.args);
+      if (step.catch) {
+        const b = step.catch.bindings;
+        const bindStr = `(${b.failure})`;
+        if ("single" in step.catch) {
+          const recoverLines = emitStep(step.catch.single, pad, "", trivia);
+          const recoverText = recoverLines.map((l) => l.trim()).join("\n");
+          lines.push(`${ci}${capture}ensure ${ref} catch ${bindStr} ${recoverText}`);
+        } else {
+          lines.push(`${ci}${capture}ensure ${ref} catch ${bindStr} {`);
+          lines.push(...emitSteps(step.catch.block, pad, ci + pad, trivia));
           lines.push(`${ci}}`);
-        } else if (step.managed.kind === "run_inline_script") {
-          lines.push(...emitInlineScriptLines(`${ci}return run`, step.managed.body, step.managed.lang, step.managed.args, step.managed.bareIdentifierArgs, ci));
         }
-      } else if (step.bareSource) {
-        lines.push(`${ci}return ${step.bareSource}`);
-      } else if (step.value.includes("\n")) {
-        const inner = step.value.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, "\\");
-        lines.push(`${ci}return """`);
-        for (const bl of inner.split("\n")) {
-          lines.push(bl);
-        }
-        lines.push(`${ci}"""`);
       } else {
-        lines.push(`${ci}return ${step.value}`);
+        lines.push(`${ci}${capture}ensure ${ref}`);
       }
-      break;
+      return lines;
     }
-
-    case "send": {
-      if (step.rhs.kind === "literal" && step.rhs.token.includes("\n")) {
-        const inner = step.rhs.token.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, "\\");
-        lines.push(`${ci}${step.channel} <- """`);
-        for (const bl of inner.split("\n")) {
-          lines.push(bl);
-        }
-        lines.push(`${ci}"""`);
+    if (body.kind === "inline_script") {
+      const argsStr = formatArgs(body.args);
+      if (body.lang || body.body.includes("\n")) {
+        const langTag = body.lang ?? "";
+        lines.push(`${ci}${capture}run \`\`\`${langTag}`);
+        for (const bl of body.body.split("\n")) lines.push(bl);
+        lines.push(`${ci}\`\`\`(${argsStr})`);
       } else {
-        const rhs = emitSendRhs(step.rhs);
-        lines.push(`${ci}${step.channel} <- ${rhs}`);
+        lines.push(`${ci}${capture}run \`${body.body}\`(${argsStr})`);
       }
-      break;
+      return lines;
     }
-
-
-    case "match": {
-      lines.push(`${ci}match ${step.expr.subject} {`);
-      for (const arm of step.expr.arms) {
+    if (body.kind === "prompt") {
+      const bodyTrivia = tn(trivia, body);
+      const returns = body.returns ? ` returns "${body.returns}"` : "";
+      if (bodyTrivia.bodyKind === "identifier" && bodyTrivia.bodyIdentifier) {
+        lines.push(`${ci}${capture}prompt ${bodyTrivia.bodyIdentifier}${returns}`);
+      } else if (bodyTrivia.bodyKind === "triple_quoted") {
+        const inner = bodyTrivia.rawBody ?? body.raw.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+        lines.push(`${ci}${capture}prompt """`);
+        for (const bl of inner.split("\n")) lines.push(bl);
+        lines.push(`${ci}"""`);
+        if (body.returns) lines.push(`${ci}returns "${body.returns}"`);
+      } else {
+        lines.push(`${ci}${capture}prompt ${body.raw}${returns}`);
+      }
+      return lines;
+    }
+    if (body.kind === "match") {
+      lines.push(`${ci}${capture}match ${body.match.subject} {`);
+      for (const arm of body.match.arms) {
         lines.push(...emitMatchArm(arm, `${ci}${pad}`, ci));
       }
       lines.push(`${ci}}`);
-      break;
+      return lines;
     }
+    // bare_ref / literal — not valid as exec body, but handle defensively.
+    const { head, tail } = emitExprFirstLine(body, trivia, ci, pad);
+    lines.push(`${ci}${capture}${head}`);
+    lines.push(...tail);
+    return lines;
+  }
 
-    case "if": {
-      const operandStr = step.operand.kind === "string_literal"
-        ? `"${step.operand.value}"`
-        : `/${step.operand.source}/`;
-      lines.push(`${ci}if ${step.subject} ${step.operator} ${operandStr} {`);
-      lines.push(...emitSteps(step.body, pad, ci + pad));
-      lines.push(`${ci}}`);
-      break;
-    }
+  if (step.type === "const") {
+    const { head, tail } = emitExprFirstLine(step.value, trivia, ci, pad);
+    lines.push(`${ci}const ${step.name} = ${head}`);
+    lines.push(...tail);
+    return lines;
+  }
 
-    case "for_lines": {
-      lines.push(`${ci}for ${step.iterVar} in ${step.sourceVar} {`);
-      lines.push(...emitSteps(step.body, pad, ci + pad));
-      lines.push(`${ci}}`);
-      break;
-    }
+  if (step.type === "return") {
+    const { head, tail } = emitExprFirstLine(step.value, trivia, ci, pad);
+    lines.push(`${ci}return ${head}`);
+    lines.push(...tail);
+    return lines;
+  }
+
+  if (step.type === "send") {
+    const { head, tail } = emitExprFirstLine(step.value, trivia, ci, pad);
+    lines.push(`${ci}${step.channel} <- ${head}`);
+    lines.push(...tail);
+    return lines;
+  }
+
+  if (step.type === "if") {
+    const operandStr = step.operand.kind === "string_literal"
+      ? `"${step.operand.value}"`
+      : `/${step.operand.source}/`;
+    lines.push(`${ci}if ${step.subject} ${step.operator} ${operandStr} {`);
+    lines.push(...emitSteps(step.body, pad, ci + pad, trivia));
+    lines.push(`${ci}}`);
+    return lines;
+  }
+
+  if (step.type === "for_lines") {
+    lines.push(`${ci}for ${step.iterVar} in ${step.sourceVar} {`);
+    lines.push(...emitSteps(step.body, pad, ci + pad, trivia));
+    lines.push(`${ci}}`);
+    return lines;
   }
 
   return lines;
 }
 
-function emitConstStep(name: string, value: ConstRhs): string {
-  switch (value.kind) {
-    case "expr":
-      if (value.bashRhs.startsWith('"') && value.bashRhs.endsWith('"') && value.bashRhs.includes("\n")) {
-        // Multi-line: caller handles remaining lines
-        return `const ${name} = """`;
-      }
-      return `const ${name} = ${value.bashRhs}`;
-    case "run_capture": {
-      const asyncMod = value.async ? "async " : "";
-      return `const ${name} = run ${asyncMod}${emitRef(value.ref, value.args, value.bareIdentifierArgs)}`;
-    }
-    case "ensure_capture":
-      return `const ${name} = ensure ${emitRef(value.ref, value.args, value.bareIdentifierArgs)}`;
-    case "prompt_capture": {
-      const returns = value.returns ? ` returns "${value.returns}"` : "";
-      if (value.bodyKind === "identifier" && value.bodyIdentifier) {
-        return `const ${name} = prompt ${value.bodyIdentifier}${returns}`;
-      }
-      if (value.bodyKind === "triple_quoted") {
-        // Multi-line: caller handles remaining lines
-        return `const ${name} = prompt """`;
-      }
-      return `const ${name} = prompt ${value.raw}${returns}`;
-    }
-    case "match_expr": {
-      // Multi-line format; return first line (const assignment opens the block)
-      return `const ${name} = match ${value.match.subject} {`;
-    }
-    case "run_inline_script_capture": {
-      const argsStr = formatArgs(value.args ?? "", value.bareIdentifierArgs);
-      if (value.lang || value.body.includes("\n")) {
-        const langTag = value.lang ?? "";
-        return `const ${name} = run \`\`\`${langTag}`;
-      }
-      return `const ${name} = run \`${value.body}\`(${argsStr})`;
-    }
-  }
-}
-
-function emitSendRhs(rhs: SendRhsDef): string {
-  switch (rhs.kind) {
-    case "literal":
-      return rhs.token;
-    case "var":
-      return rhs.bash;
-    case "run":
-      return `run ${emitRef(rhs.ref, rhs.args, rhs.bareIdentifierArgs)}`;
-    case "bare_ref":
-      return rhs.ref.value;
-    case "shell":
-      return rhs.command;
-  }
-}
-
-function emitTestBlock(test: TestBlockDef, pad: string): string {
+function emitTestBlock(test: TestBlockDef, pad: string, trivia: Trivia): string {
   const lines: string[] = [];
-  if (test.leadingComments?.length) {
-    lines.push(...emitComments(test.leadingComments));
+  const lc = tn(trivia, test).leadingComments;
+  if (lc?.length) {
+    lines.push(...emitComments(lc));
   }
   lines.push(`test "${test.description}" {`);
   for (const step of test.steps) {
-    lines.push(...emitTestStep(step, pad));
+    lines.push(...emitTestStep(step, pad, trivia));
   }
   lines.push("}");
   return lines.join("\n");
 }
 
-function emitTestStep(step: TestStepDef, pad: string): string[] {
+function emitTestStep(step: TestStepDef, pad: string, trivia: Trivia): string[] {
   switch (step.type) {
     case "comment":
       return [`${pad}${step.text}`];
@@ -852,14 +732,14 @@ function emitTestStep(step: TestStepDef, pad: string): string[] {
     case "test_mock_workflow": {
       const paramStr = `(${step.params.join(", ")})`;
       const lines = [`${pad}mock workflow ${step.ref}${paramStr} {`];
-      lines.push(...emitSteps(step.steps, pad, pad + pad));
+      lines.push(...emitSteps(step.steps, pad, pad + pad, trivia));
       lines.push(`${pad}}`);
       return lines;
     }
     case "test_mock_rule": {
       const paramStr = `(${step.params.join(", ")})`;
       const lines = [`${pad}mock rule ${step.ref}${paramStr} {`];
-      lines.push(...emitSteps(step.steps, pad, pad + pad));
+      lines.push(...emitSteps(step.steps, pad, pad + pad, trivia));
       lines.push(`${pad}}`);
       return lines;
     }

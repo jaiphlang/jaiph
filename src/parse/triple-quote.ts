@@ -1,3 +1,4 @@
+import { dedentCommonLeadingWhitespace } from "./dedent";
 import { fail } from "./core";
 
 /** Per language.md: trim blank lines adjacent to opening/closing `"""` only — do not dedent inner margin. */
@@ -56,6 +57,32 @@ function joinTripleQuoteBody(bodyLines: string[]): string {
  */
 export function tripleQuoteBodyToRaw(body: string): string {
   return `"${body.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}
+
+/**
+ * Apply common-leading-whitespace dedent to a triple-quoted body. The parser
+ * applies this so the semantic AST string carries the runtime-ready form;
+ * runtime & validator stop needing a `tripleQuoted` flag.
+ */
+export function dedentTripleQuotedBody(body: string): string {
+  return dedentCommonLeadingWhitespace(body);
+}
+
+function unescapeDslDoubleQuotedInner(inner: string): string {
+  return inner.replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+}
+
+/**
+ * Canonicalize a triple-quoted body that was stored in `tripleQuoteBodyToRaw`
+ * (`"…escaped…"`) form. Used by match-arm bodies, which still carry their own
+ * `tripleQuotedBody` flag instead of being dedented at parse time. The runtime
+ * and the validator share this helper so that "what the runtime executes" and
+ * "what the validator inspects" are bit-for-bit identical.
+ */
+export function canonicalizeTripleQuotedString(raw: string): string {
+  if (raw.length < 2 || raw[0] !== '"' || raw[raw.length - 1] !== '"') return raw;
+  const inner = unescapeDslDoubleQuotedInner(raw.slice(1, -1));
+  return tripleQuoteBodyToRaw(dedentCommonLeadingWhitespace(inner));
 }
 
 /**

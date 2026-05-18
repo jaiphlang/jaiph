@@ -1,0 +1,1969 @@
+{
+  "unterminated workflow block": {
+    "file": "input.jh",
+    "line": 1,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "unterminated block, expected \"}\""
+  },
+  "invalid script declaration": {
+    "file": "input.jh",
+    "line": 1,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "invalid script declaration"
+  },
+  "invalid rule declaration": {
+    "file": "input.jh",
+    "line": 1,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "invalid rule declaration"
+  },
+  "invalid workflow declaration": {
+    "file": "input.jh",
+    "line": 1,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "invalid workflow declaration"
+  },
+  "duplicate config block": {
+    "file": "input.jh",
+    "line": 5,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "duplicate config block (only one allowed per file)"
+  },
+  "unknown config key": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 3,
+    "code": "E_PARSE",
+    "message": "unknown config key: invalid.key. Allowed: agent.default_model, agent.command, agent.backend, agent.trusted_workspace, agent.cursor_flags, agent.claude_flags, run.logs_dir, run.debug, run.recover_limit, runtime.docker_image, runtime.docker_network, runtime.docker_timeout_seconds, module.name, module.version, module.description"
+  },
+  "single-quoted import path": {
+    "file": "input.jh",
+    "line": 1,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "single-quoted strings are not supported; use double quotes (\"...\") instead"
+  },
+  "import missing alias": {
+    "file": "input.jh",
+    "line": 1,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "import must match: import \"<path>\" as <alias>"
+  },
+  "command substitution in prompt": {
+    "file": "<no-error>",
+    "line": 0,
+    "col": 0,
+    "code": "OK",
+    "message": "compilation succeeded but fixture expected a parse error"
+  },
+  "rule without braces": {
+    "file": "input.jh",
+    "line": 1,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "rule declarations require parentheses: rule foo() { … } or rule foo(params) { … }"
+  },
+  "rule with parentheses (unterminated)": {
+    "file": "input.jh",
+    "line": 1,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "unterminated rule block: foo"
+  },
+  "rule with colon instead of braces": {
+    "file": "input.jh",
+    "line": 1,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "rule declarations require parentheses: rule foo() { … } or rule foo(params) { … }"
+  },
+  "export rule without braces": {
+    "file": "input.jh",
+    "line": 1,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "rule declarations require parentheses: rule bar() { … } or rule bar(params) { … }"
+  },
+  "rule with parentheses but no brace": {
+    "file": "input.jh",
+    "line": 1,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "rule declarations require braces: rule gate() { … } or rule gate(params) { … }"
+  },
+  "script without braces": {
+    "file": "input.jh",
+    "line": 1,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "script definitions require = after the name: script greet = `...`"
+  },
+  "script with parentheses": {
+    "file": "input.jh",
+    "line": 1,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "definitions must not use parentheses: script greet = `...`"
+  },
+  "script with parens but no braces": {
+    "file": "input.jh",
+    "line": 1,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "definitions must not use parentheses: script greet = `...`"
+  },
+  "workflow without braces": {
+    "file": "input.jh",
+    "line": 1,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "workflow declarations require parentheses: workflow default() { … } or workflow default(params) { … }"
+  },
+  "workflow with parentheses (unterminated)": {
+    "file": "input.jh",
+    "line": 1,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "unterminated block, expected \"}\""
+  },
+  "export workflow without braces": {
+    "file": "input.jh",
+    "line": 1,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "workflow declarations require parentheses: workflow main() { … } or workflow main(params) { … }"
+  },
+  "workflow with parentheses but no brace": {
+    "file": "input.jh",
+    "line": 1,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "workflow declarations require braces: workflow main() { … } or workflow main(params) { … }"
+  },
+  "duplicate config in same workflow": {
+    "file": "input.jh",
+    "line": 5,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "duplicate config block inside workflow (only one allowed per workflow)"
+  },
+  "config after steps in workflow": {
+    "file": "input.jh",
+    "line": 3,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "config block inside workflow must appear before any steps"
+  },
+  "runtime keys in workflow config": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "runtime.* keys are not allowed in workflow-level config (only agent.* and run.* keys)"
+  },
+  "script tag with manual shebang conflict": {
+    "file": "input.jh",
+    "line": 1,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "fence tag \"node\" already sets the shebang — remove the manual \"#!\" line"
+  },
+  "script tag with parentheses": {
+    "file": "input.jh",
+    "line": 1,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "unsupported top-level statement: script:node transform() {"
+  },
+  "script tag without braces": {
+    "file": "input.jh",
+    "line": 1,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "unsupported top-level statement: script:node transform"
+  },
+  "capture with run async rejected": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 3,
+    "code": "E_PARSE",
+    "message": "assignment without \"const\" is no longer supported; use \"const x = run async some_wf()\""
+  },
+  "run async with inline script rejected": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 3,
+    "code": "E_PARSE",
+    "message": "run async is not supported with inline scripts"
+  },
+  "old inline script syntax rejected": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "inline script syntax has changed: use run `body`(args) instead of run script(args) \"body\""
+  },
+  "invalid agent.backend value": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 3,
+    "code": "E_PARSE",
+    "message": "agent.backend must be \"cursor\", \"claude\", or \"codex\""
+  },
+  "invalid config value not quoted": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 3,
+    "code": "E_PARSE",
+    "message": "config value must be a quoted string or true/false: yes"
+  },
+  "config integer key rejects string value": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 3,
+    "code": "E_PARSE",
+    "message": "runtime.docker_timeout_seconds must be an integer"
+  },
+  "config array key rejects runtime.workspace (no longer supported)": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 3,
+    "code": "E_PARSE",
+    "message": "unknown config key: runtime.workspace. Allowed: agent.default_model, agent.command, agent.backend, agent.trusted_workspace, agent.cursor_flags, agent.claude_flags, run.logs_dir, run.debug, run.recover_limit, runtime.docker_image, runtime.docker_network, runtime.docker_timeout_seconds, module.name, module.version, module.description"
+  },
+  "config rejects runtime.docker_enabled (no longer supported)": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 3,
+    "code": "E_PARSE",
+    "message": "unknown config key: runtime.docker_enabled. Allowed: agent.default_model, agent.command, agent.backend, agent.trusted_workspace, agent.cursor_flags, agent.claude_flags, run.logs_dir, run.debug, run.recover_limit, runtime.docker_image, runtime.docker_network, runtime.docker_timeout_seconds, module.name, module.version, module.description"
+  },
+  "unknown runtime config key": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 3,
+    "code": "E_PARSE",
+    "message": "unknown config key: runtime.unknown_key. Allowed: agent.default_model, agent.command, agent.backend, agent.trusted_workspace, agent.cursor_flags, agent.claude_flags, run.logs_dir, run.debug, run.recover_limit, runtime.docker_image, runtime.docker_network, runtime.docker_timeout_seconds, module.name, module.version, module.description"
+  },
+  "if keyword with old syntax produces error": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 3,
+    "code": "E_PARSE",
+    "message": "invalid if syntax; expected: if <identifier> <op> <operand> { ... } where op is ==, !=, =~, or !~ and operand is \"string\" or /regex/"
+  },
+  "channel declaration must be single per line": {
+    "file": "input.jh",
+    "line": 1,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "invalid channel declaration; expected: channel <name> or channel <name> -> <workflow>"
+  },
+  "capture and send cannot be combined": {
+    "file": "<no-error>",
+    "line": 0,
+    "col": 0,
+    "code": "OK",
+    "message": "compilation succeeded but fixture expected a parse error"
+  },
+  "top-level local keyword is rejected": {
+    "file": "input.jh",
+    "line": 1,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "unsupported top-level statement: local greeting = \"hello world\""
+  },
+  "top-level const name collision with rule": {
+    "file": "input.jh",
+    "line": 1,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "duplicate name \"foo\" — variable name collides with rule of the same name"
+  },
+  "top-level const name collision with workflow": {
+    "file": "input.jh",
+    "line": 1,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "duplicate name \"default\" — variable name collides with workflow of the same name"
+  },
+  "top-level const name collision with script": {
+    "file": "input.jh",
+    "line": 1,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "duplicate name \"helper\" — variable name collides with script of the same name"
+  },
+  "const rejects bare call-like rhs without run": {
+    "file": "input.jh",
+    "line": 3,
+    "col": 13,
+    "code": "E_PARSE",
+    "message": "Script calls in const assignments must use run. Use: const x = run some_script(\"${arg}\")"
+  },
+  "unterminated rule block": {
+    "file": "input.jh",
+    "line": 1,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "unterminated rule block: bad"
+  },
+  "unsupported top-level statement": {
+    "file": "input.jh",
+    "line": 1,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "unsupported top-level statement: echo \"not allowed at top level\""
+  },
+  "multiline prompt string rejected": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 3,
+    "code": "E_PARSE",
+    "message": "multiline prompt strings are no longer supported; use a triple-quoted block instead: prompt \"\"\"...\"\"\"\""
+  },
+  "if keyword with not produces error": {
+    "file": "input.jh",
+    "line": 6,
+    "col": 3,
+    "code": "E_PARSE",
+    "message": "invalid if syntax; expected: if <identifier> <op> <operand> { ... } where op is ==, !=, =~, or !~ and operand is \"string\" or /regex/"
+  },
+  "invalid workflow reference shape with extra dots": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "run must target a valid reference: run ref() or run ref(args) — parentheses are required"
+  },
+  "prompt with returns without capture name": {
+    "file": "<no-error>",
+    "line": 0,
+    "col": 0,
+    "code": "OK",
+    "message": "compilation succeeded but fixture expected a parse error"
+  },
+  "ensure catch with args after catch": {
+    "file": "input.jh",
+    "line": 6,
+    "col": 22,
+    "code": "E_PARSE",
+    "message": "catch requires explicit bindings: catch (<name>) { ... }"
+  },
+  "ensure catch with multiple args after catch": {
+    "file": "input.jh",
+    "line": 6,
+    "col": 25,
+    "code": "E_PARSE",
+    "message": "catch requires explicit bindings: catch (<name>) { ... }"
+  },
+  "ensure catch without block": {
+    "file": "input.jh",
+    "line": 6,
+    "col": 33,
+    "code": "E_PARSE",
+    "message": "catch requires explicit bindings and a body: catch (<name>) { ... }"
+  },
+  "ensure catch without bindings (bare catch block)": {
+    "file": "input.jh",
+    "line": 5,
+    "col": 18,
+    "code": "E_PARSE",
+    "message": "catch requires explicit bindings: catch (<name>) { ... }"
+  },
+  "capture and send combined alt form": {
+    "file": "<no-error>",
+    "line": 0,
+    "col": 0,
+    "code": "OK",
+    "message": "compilation succeeded but fixture expected a parse error"
+  },
+  "reject bare $name in log message": {
+    "file": "<no-error>",
+    "line": 0,
+    "col": 0,
+    "code": "OK",
+    "message": "compilation succeeded but fixture expected a parse error"
+  },
+  "reject bare $name in prompt": {
+    "file": "<no-error>",
+    "line": 0,
+    "col": 0,
+    "code": "OK",
+    "message": "compilation succeeded but fixture expected a parse error"
+  },
+  "reject bare $1 in log message": {
+    "file": "<no-error>",
+    "line": 0,
+    "col": 0,
+    "code": "OK",
+    "message": "compilation succeeded but fixture expected a parse error"
+  },
+  "reject braced numeric ${1} in log message": {
+    "file": "<no-error>",
+    "line": 0,
+    "col": 0,
+    "code": "OK",
+    "message": "compilation succeeded but fixture expected a parse error"
+  },
+  "reject bare $name in fail message": {
+    "file": "<no-error>",
+    "line": 0,
+    "col": 0,
+    "code": "OK",
+    "message": "compilation succeeded but fixture expected a parse error"
+  },
+  "reject bare $name in return string": {
+    "file": "<no-error>",
+    "line": 0,
+    "col": 0,
+    "code": "OK",
+    "message": "compilation succeeded but fixture expected a parse error"
+  },
+  "reject shell fallback ${var:-fallback} in log": {
+    "file": "<no-error>",
+    "line": 0,
+    "col": 0,
+    "code": "OK",
+    "message": "compilation succeeded but fixture expected a parse error"
+  },
+  "reject shell fallback ${var:-fallback} in fail": {
+    "file": "<no-error>",
+    "line": 0,
+    "col": 0,
+    "code": "OK",
+    "message": "compilation succeeded but fixture expected a parse error"
+  },
+  "reject shell fallback ${var:-fallback} in prompt": {
+    "file": "<no-error>",
+    "line": 0,
+    "col": 0,
+    "code": "OK",
+    "message": "compilation succeeded but fixture expected a parse error"
+  },
+  "reject shell fallback ${var:-fallback} in const RHS": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 13,
+    "code": "E_PARSE",
+    "message": "shell fallback syntax (e.g. ${var:-default}) is not supported; use conditional logic or named params instead"
+  },
+  "reject shell expansion ${var:+alt} in log": {
+    "file": "<no-error>",
+    "line": 0,
+    "col": 0,
+    "code": "OK",
+    "message": "compilation succeeded but fixture expected a parse error"
+  },
+  "reject command substitution in log": {
+    "file": "<no-error>",
+    "line": 0,
+    "col": 0,
+    "code": "OK",
+    "message": "compilation succeeded but fixture expected a parse error"
+  },
+  "reject command substitution in logerr": {
+    "file": "<no-error>",
+    "line": 0,
+    "col": 0,
+    "code": "OK",
+    "message": "compilation succeeded but fixture expected a parse error"
+  },
+  "reject shell fallback in rule log": {
+    "file": "<no-error>",
+    "line": 0,
+    "col": 0,
+    "code": "OK",
+    "message": "compilation succeeded but fixture expected a parse error"
+  },
+  "nested inline capture rejected": {
+    "file": "<no-error>",
+    "line": 0,
+    "col": 0,
+    "code": "OK",
+    "message": "compilation succeeded but fixture expected a parse error"
+  },
+  "invalid inline run reference bad identifier": {
+    "file": "<no-error>",
+    "line": 0,
+    "col": 0,
+    "code": "OK",
+    "message": "compilation succeeded but fixture expected a parse error"
+  },
+  "match: unterminated string in pattern": {
+    "file": "input.jh",
+    "line": 4,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "unterminated string in match pattern"
+  },
+  "match: unterminated regex in pattern": {
+    "file": "input.jh",
+    "line": 4,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "unterminated regex in match pattern"
+  },
+  "match: empty regex in pattern": {
+    "file": "input.jh",
+    "line": 4,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "empty regex in match pattern"
+  },
+  "match: invalid regex in pattern": {
+    "file": "input.jh",
+    "line": 4,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "invalid regex in match pattern: /[invalid/"
+  },
+  "match: empty arm body": {
+    "file": "input.jh",
+    "line": 4,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "match arm body cannot be empty"
+  },
+  "match: unterminated string in arm body": {
+    "file": "input.jh",
+    "line": 4,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "unterminated string in match arm body"
+  },
+  "match: single-quoted pattern": {
+    "file": "input.jh",
+    "line": 4,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "single-quoted strings are not supported; use double quotes (\"...\") instead"
+  },
+  "match: single-quoted arm body": {
+    "file": "input.jh",
+    "line": 4,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "single-quoted strings are not supported; use double quotes (\"...\") instead"
+  },
+  "match: missing arrow after pattern": {
+    "file": "input.jh",
+    "line": 4,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "expected \"=>\" after match pattern"
+  },
+  "run async without parentheses requires parens": {
+    "file": "input.jh",
+    "line": 5,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "run async must target a valid reference: run async ref() or run async ref(args) — parentheses are required"
+  },
+  "log format not double-quoted": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 3,
+    "code": "E_PARSE",
+    "message": "log must match: log \"<message>\" or log <identifier>"
+  },
+  "unterminated log string": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 3,
+    "code": "E_PARSE",
+    "message": "multiline strings use triple quotes: log \"\"\"...\"\"\""
+  },
+  "logerr format not double-quoted": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 3,
+    "code": "E_PARSE",
+    "message": "logerr must match: logerr \"<message>\" or logerr <identifier>"
+  },
+  "unterminated logerr string": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 3,
+    "code": "E_PARSE",
+    "message": "multiline strings use triple quotes: logerr \"\"\"...\"\"\""
+  },
+  "invalid workflow reference in channel route": {
+    "file": "input.jh",
+    "line": 1,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "invalid workflow reference in channel route: \"123bad\""
+  },
+  "route inside workflow body is parse error": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "route declarations belong at the top level: channel findings -> analyst"
+  },
+  "if keyword in workflow with args produces error": {
+    "file": "input.jh",
+    "line": 5,
+    "col": 3,
+    "code": "E_PARSE",
+    "message": "invalid if syntax; expected: if <identifier> <op> <operand> { ... } where op is ==, !=, =~, or !~ and operand is \"string\" or /regex/"
+  },
+  "brace-if: wait in rules": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 3,
+    "code": "E_PARSE",
+    "message": "\"wait\" has been removed from the language"
+  },
+  "brace-if: prompt in rules": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 3,
+    "code": "E_PARSE",
+    "message": "prompt is not allowed in rules"
+  },
+  "brace-if: send in rules": {
+    "file": "input.jh",
+    "line": 3,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "send operator is not allowed in rules"
+  },
+  "if keyword with else branch produces error": {
+    "file": "input.jh",
+    "line": 5,
+    "col": 3,
+    "code": "E_PARSE",
+    "message": "invalid if syntax; expected: if <identifier> <op> <operand> { ... } where op is ==, !=, =~, or !~ and operand is \"string\" or /regex/"
+  },
+  "brace-if: const prompt in rules": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 13,
+    "code": "E_PARSE",
+    "message": "const ... = prompt is not allowed in rules"
+  },
+  "unterminated script block": {
+    "file": "input.jh",
+    "line": 1,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "unterminated fenced block: no closing ``` before end of file"
+  },
+  "metadata: runtime.workspace array rejected (single-quoted element)": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 3,
+    "code": "E_PARSE",
+    "message": "unknown config key: runtime.workspace. Allowed: agent.default_model, agent.command, agent.backend, agent.trusted_workspace, agent.cursor_flags, agent.claude_flags, run.logs_dir, run.debug, run.recover_limit, runtime.docker_image, runtime.docker_network, runtime.docker_timeout_seconds, module.name, module.version, module.description"
+  },
+  "metadata: runtime.workspace array rejected (unquoted element)": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 3,
+    "code": "E_PARSE",
+    "message": "unknown config key: runtime.workspace. Allowed: agent.default_model, agent.command, agent.backend, agent.trusted_workspace, agent.cursor_flags, agent.claude_flags, run.logs_dir, run.debug, run.recover_limit, runtime.docker_image, runtime.docker_network, runtime.docker_timeout_seconds, module.name, module.version, module.description"
+  },
+  "metadata: runtime.workspace array rejected (unclosed)": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 3,
+    "code": "E_PARSE",
+    "message": "unknown config key: runtime.workspace. Allowed: agent.default_model, agent.command, agent.backend, agent.trusted_workspace, agent.cursor_flags, agent.claude_flags, run.logs_dir, run.debug, run.recover_limit, runtime.docker_image, runtime.docker_network, runtime.docker_timeout_seconds, module.name, module.version, module.description"
+  },
+  "unterminated test block": {
+    "file": "input.test.jh",
+    "line": 3,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "unterminated test block: broken test"
+  },
+  "mock function deprecated": {
+    "file": "input.test.jh",
+    "line": 4,
+    "col": 3,
+    "code": "E_PARSE",
+    "message": "\"mock function\" is no longer supported; use \"mock script\""
+  },
+  "send rhs: unterminated braced interpolation": {
+    "file": "input.jh",
+    "line": 3,
+    "col": 12,
+    "code": "E_PARSE",
+    "message": "unterminated ${...} in send right-hand side"
+  },
+  "send rhs: command substitution inside braced interpolation": {
+    "file": "input.jh",
+    "line": 3,
+    "col": 12,
+    "code": "E_PARSE",
+    "message": "send right-hand side must be a quoted string (\"...\"), a variable ($name or ${...}), or \"run <ref> [args]\" — not raw shell; use a script or use const"
+  },
+  "inline script: unexpected content after": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 3,
+    "code": "E_PARSE",
+    "message": "unexpected content after anonymous inline script: 'extra_stuff'"
+  },
+  "inline script: unterminated parentheses": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "run must target a valid reference: run ref() or run ref(args) — parentheses are required"
+  },
+  "inline script without parentheses": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "run must target a valid reference: run ref() or run ref(args) — parentheses are required"
+  },
+  "old inline script empty body rejected": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "inline script syntax has changed: use run `body`(args) instead of run script(args) \"body\""
+  },
+  "inline script unterminated backtick": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 3,
+    "code": "E_PARSE",
+    "message": "unterminated inline script backtick — missing closing `"
+  },
+  "match: invalid pattern type": {
+    "file": "input.jh",
+    "line": 4,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "match pattern must be a string literal (\"...\"), regex (/…/), or wildcard (_)"
+  },
+  "match: unterminated match block": {
+    "file": "input.jh",
+    "line": 3,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "unterminated match block"
+  },
+  "match: empty match block": {
+    "file": "input.jh",
+    "line": 3,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "match must have at least one arm"
+  },
+  "catch: fail without double quote": {
+    "file": "input.jh",
+    "line": 6,
+    "col": 5,
+    "code": "E_PARSE",
+    "message": "fail must match: fail \"<reason>\" or fail \"\"\"...\"\"\""
+  },
+  "catch: unterminated fail string": {
+    "file": "input.jh",
+    "line": 6,
+    "col": 5,
+    "code": "E_PARSE",
+    "message": "multiline strings use triple quotes: fail \"\"\"...\"\"\""
+  },
+  "catch: log without double quote": {
+    "file": "input.jh",
+    "line": 6,
+    "col": 5,
+    "code": "E_PARSE",
+    "message": "log must match: log \"<message>\" or log <identifier>"
+  },
+  "catch: unterminated log string": {
+    "file": "input.jh",
+    "line": 6,
+    "col": 5,
+    "code": "E_PARSE",
+    "message": "multiline strings use triple quotes: log \"\"\"...\"\"\""
+  },
+  "catch: logerr without double quote": {
+    "file": "input.jh",
+    "line": 6,
+    "col": 5,
+    "code": "E_PARSE",
+    "message": "logerr must match: logerr \"<message>\" or logerr <identifier>"
+  },
+  "catch: unterminated logerr string": {
+    "file": "input.jh",
+    "line": 6,
+    "col": 5,
+    "code": "E_PARSE",
+    "message": "multiline strings use triple quotes: logerr \"\"\"...\"\"\""
+  },
+  "test: empty mock prompt block": {
+    "file": "input.test.jh",
+    "line": 4,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "mock prompt block must have at least one arm"
+  },
+  "test: unterminated mock block": {
+    "file": "input.test.jh",
+    "line": 5,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "unterminated mock block"
+  },
+  "test: mock prompt invalid format": {
+    "file": "input.test.jh",
+    "line": 4,
+    "col": 2,
+    "code": "E_PARSE",
+    "message": "mock prompt must be: mock prompt \"<response>\", mock prompt <const_name>, or mock prompt { \"pattern\" => \"response\", _ => \"default\" }"
+  },
+  "test: mock workflow with invalid ref (no parens)": {
+    "file": "input.test.jh",
+    "line": 4,
+    "col": 3,
+    "code": "E_PARSE",
+    "message": "unrecognized test step: mock workflow a.b.c {"
+  },
+  "test: mock rule with invalid ref (no parens)": {
+    "file": "input.test.jh",
+    "line": 4,
+    "col": 3,
+    "code": "E_PARSE",
+    "message": "unrecognized test step: mock rule a.b.c {"
+  },
+  "test: mock script with invalid ref (no parens)": {
+    "file": "input.test.jh",
+    "line": 4,
+    "col": 3,
+    "code": "E_PARSE",
+    "message": "unrecognized test step: mock script a.b.c {"
+  },
+  "run async without parens in workflow requires parens": {
+    "file": "input.jh",
+    "line": 5,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "run async must target a valid reference: run async ref() or run async ref(args) — parentheses are required"
+  },
+  "config block with content on same line as opening": {
+    "file": "input.jh",
+    "line": 1,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "config block must be exactly 'config {' on its own line"
+  },
+  "unterminated string in top-level const": {
+    "file": "input.jh",
+    "line": 1,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "multiline strings use triple quotes: const name = \"\"\"...\"\"\"\""
+  },
+  "top-level const with trailing content after quote": {
+    "file": "input.jh",
+    "line": 1,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "unexpected content after closing quote in const declaration"
+  },
+  "top-level const single-quoted string": {
+    "file": "input.jh",
+    "line": 1,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "single-quoted strings are not supported; use double quotes (\"...\") instead"
+  },
+  "workflow const with command substitution": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 13,
+    "code": "E_PARSE",
+    "message": "const value cannot use command substitution \"$(...)\"; use a script and const name = run ref"
+  },
+  "workflow const with bash percent expansion": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 13,
+    "code": "E_PARSE",
+    "message": "const value cannot use ${var%%...} expansion; use a script"
+  },
+  "workflow const with bash replace expansion": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 13,
+    "code": "E_PARSE",
+    "message": "const value cannot use ${var//...} expansion; use a script"
+  },
+  "workflow const with bash length expansion": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 13,
+    "code": "E_PARSE",
+    "message": "const value cannot use ${#var}; use a script"
+  },
+  "workflow const with shell fallback": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 13,
+    "code": "E_PARSE",
+    "message": "shell fallback syntax (e.g. ${var:-default}) is not supported; use conditional logic or named params instead"
+  },
+  "run without parentheses in workflow requires parens": {
+    "file": "input.jh",
+    "line": 3,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "run must target a valid reference: run ref() or run ref(args) — parentheses are required"
+  },
+  "return with single-quoted string": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 3,
+    "code": "E_PARSE",
+    "message": "single-quoted strings are not supported; use double quotes (\"...\") instead"
+  },
+  "capture and send combined in workflow body": {
+    "file": "<no-error>",
+    "line": 0,
+    "col": 0,
+    "code": "OK",
+    "message": "compilation succeeded but fixture expected a parse error"
+  },
+  "if keyword at top of workflow produces error": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 3,
+    "code": "E_PARSE",
+    "message": "invalid if syntax; expected: if <identifier> <op> <operand> { ... } where op is ==, !=, =~, or !~ and operand is \"string\" or /regex/"
+  },
+  "capture run without parentheses requires const": {
+    "file": "input.jh",
+    "line": 3,
+    "col": 3,
+    "code": "E_PARSE",
+    "message": "assignment without \"const\" is no longer supported; use \"const x = run helper\""
+  },
+  "const run without parentheses requires parens": {
+    "file": "input.jh",
+    "line": 3,
+    "col": 13,
+    "code": "E_PARSE",
+    "message": "const ... = run must target a valid reference"
+  },
+  "const ensure without parentheses requires parens": {
+    "file": "input.jh",
+    "line": 5,
+    "col": 13,
+    "code": "E_PARSE",
+    "message": "const ... = ensure must target a valid reference"
+  },
+  "triple-backtick prompt is rejected": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 3,
+    "code": "E_PARSE",
+    "message": "prompt blocks use triple quotes: prompt \"\"\"...\"\"\"; triple backticks are for scripts"
+  },
+  "unterminated triple-quoted prompt block": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "unterminated triple-quoted block: no closing \"\"\" before end of file"
+  },
+  "script with returns on closing fence rejected": {
+    "file": "input.jh",
+    "line": 1,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "unexpected content after closing fence: 'returns \"{ x: string }\"'"
+  },
+  "script with double-quoted body rejected": {
+    "file": "input.jh",
+    "line": 1,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "script bodies use backticks: script broken = `...`"
+  },
+  "script body with Jaiph interpolation rejected": {
+    "file": "input.jh",
+    "line": 1,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "script bodies cannot contain Jaiph interpolation (${name}); use $1, $2 positional arguments instead"
+  },
+  "script with brace-style body rejected": {
+    "file": "input.jh",
+    "line": 1,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "brace-style script bodies are no longer supported; use: script name = `...` or script name = ```...```"
+  },
+  "script body with bare identifier rejected": {
+    "file": "input.jh",
+    "line": 1,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "script bodies must be backtick or fenced block: script broken = `...` or script broken = ```...```"
+  },
+  "script body with trailing content after backtick": {
+    "file": "input.jh",
+    "line": 1,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "unexpected content after script body backtick: 'extra'"
+  },
+  "inline script fenced without argument list": {
+    "file": "input.jh",
+    "line": 4,
+    "col": 3,
+    "code": "E_PARSE",
+    "message": "anonymous inline script requires argument list after closing fence: ```(args) or ```()"
+  },
+  "inline script fenced with shebang and lang tag conflict": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 3,
+    "code": "E_PARSE",
+    "message": "fence tag \"node\" already sets the shebang — remove the manual \"#!\" line"
+  },
+  "inline script fenced unterminated in workflow": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "unterminated fenced block: no closing ``` before end of file"
+  },
+  "inline script single backtick without argument list": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 3,
+    "code": "E_PARSE",
+    "message": "anonymous inline script requires argument list after closing backtick: `body`(args) or `body`()"
+  },
+  "inline script fenced with invalid lang token": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "invalid opening fence: only a single lang token is allowed after ```"
+  },
+  "config block unterminated": {
+    "file": "input.jh",
+    "line": 1,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "config block not closed with '}'"
+  },
+  "config block with trailing content after close brace": {
+    "file": "input.jh",
+    "line": 1,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "config block must be exactly 'config {' on its own line"
+  },
+  "match subject with dollar prefix rejected": {
+    "file": "input.jh",
+    "line": 3,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "match subject should be a bare identifier: match varName { ... }"
+  },
+  "match subject with invalid identifier": {
+    "file": "input.jh",
+    "line": 3,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "match subject must be a valid identifier, got: 123"
+  },
+  "const run with invalid reference": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 13,
+    "code": "E_PARSE",
+    "message": "const ... = run must target a valid reference"
+  },
+  "const ensure with invalid reference": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 13,
+    "code": "E_PARSE",
+    "message": "const ... = ensure must target a valid reference"
+  },
+  "const ensure cannot use catch": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 13,
+    "code": "E_PARSE",
+    "message": "const ... = ensure cannot use catch"
+  },
+  "run with invalid reference in workflow": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "run must target a valid reference: run ref() or run ref(args) — parentheses are required"
+  },
+  "run async with invalid reference in workflow": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "run async must target a valid reference: run async ref() or run async ref(args) — parentheses are required"
+  },
+  "empty parameter name in parameter list": {
+    "file": "input.jh",
+    "line": 1,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "empty parameter name in parameter list"
+  },
+  "invalid parameter name in workflow": {
+    "file": "input.jh",
+    "line": 1,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "invalid parameter name \"123bad\"; must be an identifier"
+  },
+  "duplicate parameter name in workflow": {
+    "file": "input.jh",
+    "line": 1,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "duplicate parameter name \"a\""
+  },
+  "send with unterminated string": {
+    "file": "input.jh",
+    "line": 3,
+    "col": 12,
+    "code": "E_PARSE",
+    "message": "multiline strings use triple quotes: channel <- \"\"\"...\"\"\""
+  },
+  "triple-quote opening with content on same line": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "opening \"\"\" must not have content on the same line"
+  },
+  "log with trailing content after string": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 3,
+    "code": "E_PARSE",
+    "message": "unexpected content after log string: 'extra'"
+  },
+  "logerr with trailing content after string": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 3,
+    "code": "E_PARSE",
+    "message": "unexpected content after logerr string: 'extra'"
+  },
+  "catch: prompt capture without const": {
+    "file": "input.jh",
+    "line": 6,
+    "col": 5,
+    "code": "E_PARSE",
+    "message": "use \"const name = prompt ...\" to capture the prompt result (e.g. const answer = prompt \"...\" )"
+  },
+  "top-level const triple-quote with trailing content after close": {
+    "file": "input.jh",
+    "line": 3,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "unexpected content after closing \"\"\" in const declaration"
+  },
+  "unterminated return string in workflow": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 3,
+    "code": "E_PARSE",
+    "message": "multiline strings use triple quotes: return \"\"\"...\"\"\""
+  },
+  "unterminated fail string in workflow": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 3,
+    "code": "E_PARSE",
+    "message": "multiline strings use triple quotes: fail \"\"\"...\"\"\""
+  },
+  "if keyword after other steps produces error": {
+    "file": "input.jh",
+    "line": 3,
+    "col": 3,
+    "code": "E_PARSE",
+    "message": "invalid if syntax; expected: if <identifier> <op> <operand> { ... } where op is ==, !=, =~, or !~ and operand is \"string\" or /regex/"
+  },
+  "prompt assign without const in workflow": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 3,
+    "code": "E_PARSE",
+    "message": "use \"const name = prompt ...\" to capture the prompt result (e.g. const answer = prompt \"...\" )"
+  },
+  "fail without double quote in workflow body": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 3,
+    "code": "E_PARSE",
+    "message": "fail must match: fail \"<reason>\" or fail \"\"\"...\"\"\""
+  },
+  "unterminated multiline catch block": {
+    "file": "input.jh",
+    "line": 5,
+    "col": 18,
+    "code": "E_PARSE",
+    "message": "unterminated catch block, expected \"}\""
+  },
+  "duplicate name: rule and workflow": {
+    "file": "input.jh",
+    "line": 4,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "duplicate name \"foo\" — channels, rules, workflows, and scripts share a single namespace (already declared as rule)"
+  },
+  "duplicate name: script and workflow": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "duplicate name \"helper\" — channels, rules, workflows, and scripts share a single namespace (already declared as script)"
+  },
+  "duplicate name: rule and script": {
+    "file": "input.jh",
+    "line": 4,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "duplicate name \"foo\" — channels, rules, workflows, and scripts share a single namespace (already declared as rule)"
+  },
+  "channel route with no target after arrow": {
+    "file": "input.jh",
+    "line": 1,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "channel route requires at least one target workflow after ->"
+  },
+  "empty multiline catch block": {
+    "file": "input.jh",
+    "line": 5,
+    "col": 18,
+    "code": "E_PARSE",
+    "message": "catch block must contain at least one statement"
+  },
+  "ensure with invalid reference": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "ensure must target a valid reference: ensure ref() or ensure ref(args) — parentheses are required"
+  },
+  "config line without equals sign": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 3,
+    "code": "E_PARSE",
+    "message": "config line must be key = value: agent.backend"
+  },
+  "prompt with trailing non-returns content": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "after prompt string expected keyword \"returns\" with quoted schema (e.g. returns \"{ type: string }\") or end of line"
+  },
+  "prompt returns with single-quoted schema": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "single-quoted strings are not supported; use double quotes (\"...\") instead"
+  },
+  "unterminated returns schema string": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "unterminated returns schema string"
+  },
+  "test block without opening brace": {
+    "file": "input.test.jh",
+    "line": 3,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "test block must match: test \"description\" {"
+  },
+  "send with trailing content after string": {
+    "file": "input.jh",
+    "line": 3,
+    "col": 12,
+    "code": "E_PARSE",
+    "message": "send right-hand side must be a quoted string (\"...\"), a variable ($name or ${...}), or \"run <ref> [args]\" — not raw shell; use a script or use const"
+  },
+  "capture run with invalid reference in workflow": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 3,
+    "code": "E_PARSE",
+    "message": "assignment without \"const\" is no longer supported; use \"const x = run 123bad\""
+  },
+  "fenced script with shell parameter expansion is valid": {
+    "file": "<no-error>",
+    "line": 0,
+    "col": 0,
+    "code": "OK",
+    "message": "compilation succeeded but fixture expected a parse error"
+  },
+  "empty inline catch block": {
+    "file": "input.jh",
+    "line": 5,
+    "col": 18,
+    "code": "E_PARSE",
+    "message": "catch block must contain at least one statement"
+  },
+  "test: old camelCase expectContain rejected": {
+    "file": "input.test.jh",
+    "line": 4,
+    "col": 3,
+    "code": "E_PARSE",
+    "message": "camelCase assertions are no longer supported; use \"expect_contain\""
+  },
+  "test: old camelCase expectNotContain rejected": {
+    "file": "input.test.jh",
+    "line": 4,
+    "col": 3,
+    "code": "E_PARSE",
+    "message": "camelCase assertions are no longer supported; use \"expect_not_contain\""
+  },
+  "test: old camelCase expectEqual rejected": {
+    "file": "input.test.jh",
+    "line": 4,
+    "col": 3,
+    "code": "E_PARSE",
+    "message": "camelCase assertions are no longer supported; use \"expect_equal\""
+  },
+  "test: bare assignment without const/run rejected": {
+    "file": "input.test.jh",
+    "line": 4,
+    "col": 3,
+    "code": "E_PARSE",
+    "message": "use \"const out = run lib.default(…)\" to capture workflow output"
+  },
+  "test: bare workflow call without run rejected": {
+    "file": "input.test.jh",
+    "line": 4,
+    "col": 3,
+    "code": "E_PARSE",
+    "message": "use \"run lib.default(…)\" to call a workflow in tests"
+  },
+  "test: mock workflow without parens rejected": {
+    "file": "input.test.jh",
+    "line": 4,
+    "col": 3,
+    "code": "E_PARSE",
+    "message": "mock workflow requires parentheses: mock workflow lib.default() { … }"
+  },
+  "test: mock rule without parens rejected": {
+    "file": "input.test.jh",
+    "line": 4,
+    "col": 3,
+    "code": "E_PARSE",
+    "message": "mock rule requires parentheses: mock rule lib.check() { … }"
+  },
+  "test: mock script without parens rejected": {
+    "file": "input.test.jh",
+    "line": 4,
+    "col": 3,
+    "code": "E_PARSE",
+    "message": "mock script requires parentheses: mock script lib.helper() { … }"
+  },
+  "test: unrecognized line is E_PARSE": {
+    "file": "input.test.jh",
+    "line": 4,
+    "col": 3,
+    "code": "E_PARSE",
+    "message": "unrecognized test step: echo \"not valid\""
+  },
+  "ensure catch with unterminated bindings paren": {
+    "file": "input.jh",
+    "line": 5,
+    "col": 18,
+    "code": "E_PARSE",
+    "message": "unterminated catch bindings: expected \")\""
+  },
+  "ensure catch with empty bindings": {
+    "file": "input.jh",
+    "line": 5,
+    "col": 18,
+    "code": "E_PARSE",
+    "message": "catch requires exactly one binding: catch (<name>) { ... }"
+  },
+  "ensure catch with invalid binding name": {
+    "file": "input.jh",
+    "line": 5,
+    "col": 18,
+    "code": "E_PARSE",
+    "message": "invalid catch binding name: \"123bad\" — must be a valid identifier"
+  },
+  "ensure catch with no body after bindings": {
+    "file": "input.jh",
+    "line": 5,
+    "col": 18,
+    "code": "E_PARSE",
+    "message": "catch requires a body after bindings"
+  },
+  "run catch with unterminated bindings paren": {
+    "file": "input.jh",
+    "line": 5,
+    "col": 16,
+    "code": "E_PARSE",
+    "message": "unterminated catch bindings: expected \")\""
+  },
+  "run catch with empty bindings": {
+    "file": "input.jh",
+    "line": 5,
+    "col": 16,
+    "code": "E_PARSE",
+    "message": "catch requires exactly one binding: catch (<name>) { ... }"
+  },
+  "run catch with invalid binding name": {
+    "file": "input.jh",
+    "line": 5,
+    "col": 16,
+    "code": "E_PARSE",
+    "message": "invalid catch binding name: \"123bad\" — must be a valid identifier"
+  },
+  "run catch with no body after bindings": {
+    "file": "input.jh",
+    "line": 5,
+    "col": 16,
+    "code": "E_PARSE",
+    "message": "catch requires a body after bindings"
+  },
+  "ensure catch with multiple bindings rejected": {
+    "file": "input.jh",
+    "line": 5,
+    "col": 18,
+    "code": "E_PARSE",
+    "message": "catch accepts exactly one binding: catch (<name>) — the second binding (attempt) has been removed"
+  },
+  "run catch with multiple bindings rejected": {
+    "file": "input.jh",
+    "line": 5,
+    "col": 16,
+    "code": "E_PARSE",
+    "message": "catch accepts exactly one binding: catch (<name>) — the second binding (attempt) has been removed"
+  },
+  "inline catch fail without double quote": {
+    "file": "input.jh",
+    "line": 5,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "fail must match: fail \"<reason>\" or fail \"\"\"...\"\"\""
+  },
+  "inline catch unterminated fail string": {
+    "file": "input.jh",
+    "line": 5,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "multiline strings use triple quotes: fail \"\"\"...\"\"\""
+  },
+  "inline config block missing equals sign": {
+    "file": "input.jh",
+    "line": 1,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "config block must be exactly 'config {' on its own line"
+  },
+  "inline config block with unknown key": {
+    "file": "input.jh",
+    "line": 1,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "config block must be exactly 'config {' on its own line"
+  },
+  "inline config block rejects runtime.workspace (array opening)": {
+    "file": "input.jh",
+    "line": 1,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "config block must be exactly 'config {' on its own line"
+  },
+  "inline config block rejects runtime.workspace (non-empty array)": {
+    "file": "input.jh",
+    "line": 1,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "config block must be exactly 'config {' on its own line"
+  },
+  "config block header not exactly config brace": {
+    "file": "input.jh",
+    "line": 1,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "config block must be exactly 'config {' on its own line"
+  },
+  "config value with single-quoted string": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 3,
+    "code": "E_PARSE",
+    "message": "single-quoted strings are not supported; use double quotes (\"...\") instead"
+  },
+  "workflow body content after brace without closing on same line": {
+    "file": "input.jh",
+    "line": 1,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "expected newline after '{'"
+  },
+  "runtime keys in inline workflow config": {
+    "file": "input.jh",
+    "line": 1,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "expected newline after '{'"
+  },
+  "rule body content after brace without closing on same line": {
+    "file": "input.jh",
+    "line": 1,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "expected newline after '{'"
+  },
+  "prompt triple-quote closing with invalid trailing content": {
+    "file": "input.jh",
+    "line": 4,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "closing \"\"\" must be alone, or followed by returns \"{ ... }\" (same line)"
+  },
+  "prompt identifier body with single-quoted returns": {
+    "file": "input.jh",
+    "line": 3,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "single-quoted strings are not supported; use double quotes (\"...\") instead"
+  },
+  "prompt identifier body with non-returns trailing content": {
+    "file": "input.jh",
+    "line": 3,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "after prompt body expected keyword \"returns\" with quoted schema (e.g. returns \"{ type: string }\") or end of line"
+  },
+  "prompt identifier body with unterminated returns schema": {
+    "file": "input.jh",
+    "line": 3,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "unterminated returns schema string"
+  },
+  "script body with invalid rhs character": {
+    "file": "input.jh",
+    "line": 1,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "script body must be a backtick or fenced block: script broken = `...` or script broken = ```...```"
+  },
+  "match triple-quote arm closing with trailing content": {
+    "file": "input.jh",
+    "line": 6,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "closing \"\"\" in match arm must not have content on the same line"
+  },
+  "match: opening triple-quote in arm with content on same line": {
+    "file": "input.jh",
+    "line": 4,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "opening \"\"\" in match arm must not have content on the same line"
+  },
+  "match: unterminated triple-quoted block in arm": {
+    "file": "input.jh",
+    "line": 4,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "unterminated triple-quoted block in match arm: no closing \"\"\" before end of match"
+  },
+  "send with empty payload rejected": {
+    "file": "input.jh",
+    "line": 3,
+    "col": 12,
+    "code": "E_PARSE",
+    "message": "send requires an explicit payload: channel <- \"message\" — bare forward syntax (channel <-) has been removed"
+  },
+  "config after semicolon-separated steps in workflow": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 3,
+    "code": "E_PARSE",
+    "message": "unexpected content after log string: '; config { agent.backend = \"claude\" }'"
+  },
+  "mock prompt single-quoted string rejected": {
+    "file": "input.test.jh",
+    "line": 4,
+    "col": 2,
+    "code": "E_PARSE",
+    "message": "single-quoted strings are not supported; use double quotes (\"...\") instead"
+  },
+  "wait in catch block rejected": {
+    "file": "input.jh",
+    "line": 6,
+    "col": 5,
+    "code": "E_PARSE",
+    "message": "\"wait\" has been removed from the language"
+  },
+  "reserved keyword as parameter name": {
+    "file": "input.jh",
+    "line": 1,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "parameter name \"run\" is a reserved keyword"
+  },
+  "log triple-quote with trailing content": {
+    "file": "input.jh",
+    "line": 4,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "unexpected content after closing \"\"\""
+  },
+  "logerr triple-quote with trailing content": {
+    "file": "input.jh",
+    "line": 4,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "unexpected content after closing \"\"\""
+  },
+  "fail triple-quote with trailing content": {
+    "file": "input.jh",
+    "line": 4,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "unexpected content after closing \"\"\""
+  },
+  "return triple-quote with trailing content": {
+    "file": "input.jh",
+    "line": 4,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "unexpected content after closing \"\"\""
+  },
+  "send triple-quote with trailing content": {
+    "file": "input.jh",
+    "line": 5,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "unexpected content after closing \"\"\""
+  },
+  "wait in inline catch statement": {
+    "file": "input.jh",
+    "line": 5,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "\"wait\" has been removed from the language"
+  },
+  "catch block: assignment without const rejected": {
+    "file": "input.jh",
+    "line": 6,
+    "col": 5,
+    "code": "E_PARSE",
+    "message": "assignment without \"const\" is no longer supported; use \"const x = run helper()\""
+  },
+  "catch block: prompt assign without const": {
+    "file": "input.jh",
+    "line": 6,
+    "col": 5,
+    "code": "E_PARSE",
+    "message": "use \"const name = prompt ...\" to capture the prompt result (e.g. const answer = prompt \"...\" )"
+  },
+  "const run with old inline script syntax": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 13,
+    "code": "E_PARSE",
+    "message": "inline script syntax has changed: use const name = run `body`(args) instead of run script(args) \"body\""
+  },
+  "top-level const with invalid name": {
+    "file": "input.jh",
+    "line": 1,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "unsupported top-level statement: const 123bad = \"hello\""
+  },
+  "wait in workflow body rejected": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 3,
+    "code": "E_PARSE",
+    "message": "\"wait\" has been removed from the language"
+  },
+  "wait in workflow body after other steps rejected": {
+    "file": "input.jh",
+    "line": 3,
+    "col": 3,
+    "code": "E_PARSE",
+    "message": "\"wait\" has been removed from the language"
+  },
+  "shell redirection after const run call rejected": {
+    "file": "input.jh",
+    "line": 3,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "unexpected content after run call: '| grep ok'; shell redirection (>, |, &) is not supported — use a script block"
+  },
+  "shell redirection after send run call rejected": {
+    "file": "input.jh",
+    "line": 4,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "unexpected content after run call: '> output.txt'; shell redirection (>, |, &) is not supported — use a script block"
+  },
+  "prompt body must be string or identifier not number": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 13,
+    "code": "E_PARSE",
+    "message": "prompt body must be a quoted string, identifier, or triple-quoted block: const name = prompt \"text\" | prompt myVar | prompt \"\"\" ... \"\"\""
+  },
+  "send rhs trailing content after braced var": {
+    "file": "input.jh",
+    "line": 4,
+    "col": 12,
+    "code": "E_PARSE",
+    "message": "send right-hand side must be a quoted string (\"...\"), a variable ($name or ${...}), or \"run <ref> [args]\" — not raw shell; use a script or use const"
+  },
+  "config string key with boolean value": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 3,
+    "code": "E_PARSE",
+    "message": "agent.default_model must be a string"
+  },
+  "config boolean key with string value": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 3,
+    "code": "E_PARSE",
+    "message": "run.debug must be true or false"
+  },
+  "config keyword alone on a line": {
+    "file": "input.jh",
+    "line": 1,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "unsupported top-level statement: config"
+  },
+  "send multiline string without triple quotes": {
+    "file": "input.jh",
+    "line": 3,
+    "col": 5,
+    "code": "E_PARSE",
+    "message": "multiline strings use triple quotes: channel <- \"\"\"...\"\"\""
+  },
+  "send triple-quoted payload valid": {
+    "file": "<no-error>",
+    "line": 0,
+    "col": 0,
+    "code": "OK",
+    "message": "compilation succeeded but fixture expected a parse error"
+  },
+  "top-level script single backtick unterminated": {
+    "file": "input.jh",
+    "line": 1,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "unterminated inline script backtick — missing closing `"
+  },
+  "inline catch return without value": {
+    "file": "input.jh",
+    "line": 5,
+    "col": 18,
+    "code": "E_PARSE",
+    "message": "catch requires explicit bindings: catch (<name>) { ... }"
+  },
+  "run catch unterminated multiline block": {
+    "file": "input.jh",
+    "line": 5,
+    "col": 16,
+    "code": "E_PARSE",
+    "message": "unterminated catch block, expected \"}\""
+  },
+  "ensure catch unterminated multiline block": {
+    "file": "input.jh",
+    "line": 5,
+    "col": 18,
+    "code": "E_PARSE",
+    "message": "unterminated catch block, expected \"}\""
+  },
+  "inline script fenced unterminated in rule body": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "unterminated fenced block: no closing ``` before end of file"
+  },
+  "fail triple-quote opening with content on same line": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "opening \"\"\" must not have content on the same line"
+  },
+  "return triple-quote opening with content on same line": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "opening \"\"\" must not have content on the same line"
+  },
+  "logerr triple-quote opening with content on same line": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "opening \"\"\" must not have content on the same line"
+  },
+  "unterminated triple-quoted send block": {
+    "file": "input.jh",
+    "line": 3,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "unterminated triple-quoted block: no closing \"\"\" before end of file"
+  },
+  "run catch without bindings bare catch block": {
+    "file": "input.jh",
+    "line": 5,
+    "col": 16,
+    "code": "E_PARSE",
+    "message": "catch requires explicit bindings: catch (<name>) { ... }"
+  },
+  "log triple-quote opening with content on same line": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "opening \"\"\" must not have content on the same line"
+  },
+  "const triple-quote opening with content on same line": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "opening \"\"\" must not have content on the same line"
+  },
+  "unterminated triple-quoted log block": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "unterminated triple-quoted block: no closing \"\"\" before end of file"
+  },
+  "unterminated triple-quoted fail block": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "unterminated triple-quoted block: no closing \"\"\" before end of file"
+  },
+  "unterminated triple-quoted return block": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "unterminated triple-quoted block: no closing \"\"\" before end of file"
+  },
+  "unterminated triple-quoted const block": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "unterminated triple-quoted block: no closing \"\"\" before end of file"
+  },
+  "inline run catch with single fail statement": {
+    "file": "<no-error>",
+    "line": 0,
+    "col": 0,
+    "code": "OK",
+    "message": "compilation succeeded but fixture expected a parse error"
+  },
+  "send rhs with run to workflow": {
+    "file": "<no-error>",
+    "line": 0,
+    "col": 0,
+    "code": "OK",
+    "message": "compilation succeeded but fixture expected a parse error"
+  },
+  "send rhs with run to script": {
+    "file": "<no-error>",
+    "line": 0,
+    "col": 0,
+    "code": "OK",
+    "message": "compilation succeeded but fixture expected a parse error"
+  },
+  "return with bash exit code rejected in workflow": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 3,
+    "code": "E_PARSE",
+    "message": "bash exit codes are only valid in scripts; use return \"...\" for a workflow value"
+  },
+  "return with bash dollar-question rejected in workflow": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 3,
+    "code": "E_PARSE",
+    "message": "bash exit codes are only valid in scripts; use return \"...\" for a workflow value"
+  },
+  "if equality operator with regex operand rejected": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 3,
+    "code": "E_PARSE",
+    "message": "operator \"==\" requires a string operand (\"...\"), not a regex"
+  },
+  "if inequality operator with regex operand rejected": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 3,
+    "code": "E_PARSE",
+    "message": "operator \"!=\" requires a string operand (\"...\"), not a regex"
+  },
+  "if regex-match operator with string operand rejected": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 3,
+    "code": "E_PARSE",
+    "message": "operator \"=~\" requires a regex operand (/pattern/), not a string"
+  },
+  "if negative regex-match operator with string operand rejected": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 3,
+    "code": "E_PARSE",
+    "message": "operator \"!~\" requires a regex operand (/pattern/), not a string"
+  },
+  "const run async with inline script rejected": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 13,
+    "code": "E_PARSE",
+    "message": "run async is not supported with inline scripts"
+  },
+  "const run async with invalid reference": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 13,
+    "code": "E_PARSE",
+    "message": "const ... = run async must target a valid reference"
+  }
+}

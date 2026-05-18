@@ -27,7 +27,7 @@ Implications:
 - **Imports without `/`** — e.g. **`import "submod"`** — only relative-to-file lookup is attempted; there is **no** library fallback under `.jaiph/libs/` even if a matching folder name exists.
 - **`jaiph compile`** runs the same **`validateReferences`** check as **`jaiph run`** but does not emit **`scripts/`** or invoke **`buildRuntimeGraph()`** ([Architecture — Summary](architecture.md#summary)).
 
-**Workspace root:** whatever the invoking CLI path passes into **`emitScriptsForModule`** / **`validateReferences`**:
+**Workspace root:** whatever the invoking CLI path passes into **`loadModuleGraph`** (the single discovery routine consumed by **`validateReferences`** / **`emitScriptsForModuleFromGraph`**):
 
 - **`jaiph run`** and **`jaiph test`** on an explicit **`*.jh` / `*.test.jh`** file use **`detectWorkspaceRoot(dirname(entry))`** (same predicate for both commands).
 - **`jaiph test`** with **no** file argument discovers tests under **`detectWorkspaceRoot(process.cwd())`** (`src/cli/commands/test.ts`).
@@ -53,7 +53,9 @@ jaiph install https://github.com/you/queue-lib.git@v1.0
 jaiph install
 ```
 
-`jaiph install` writes **`.jaiph/libs.lock`** under the workspace root. Commit the lockfile; add **`.jaiph/libs/`** to `.gitignore` if you do not want vendored clones in version control. If **`.jaiph/libs/<name>/`** already exists, the clone is skipped unless you pass **`--force`** (URL / `@ref` parsing: [CLI — `jaiph install`](cli.md#jaiph-install)).
+`jaiph install` writes **`.jaiph/libs.lock`** under the workspace root. Commit the lockfile; add **`.jaiph/libs/`** to `.gitignore` if you do not want vendored clones in version control. If **`.jaiph/libs/<name>/`** already exists, the clone is skipped without invoking `git` unless you pass **`--force`** (URL / `@ref` parsing: [CLI — `jaiph install`](cli.md#jaiph-install)).
+
+Missing libraries are cloned **concurrently** (default 4 in flight), so restoring or installing several repositories at once does not pay full network/process latency one repo at a time. Failed clones still exit the command non-zero and do not produce a lock entry. Restore-from-lock (`jaiph install` with no args) does not invent new lock entries. See [CLI — `jaiph install`](cli.md#jaiph-install) for the full contract.
 
 The clone directory name is **`deriveLibName(url)`** (last path segment, **`.git`** stripped), so imports use that segment as **`lib-name`**.
 

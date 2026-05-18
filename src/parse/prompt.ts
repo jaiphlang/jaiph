@@ -1,9 +1,10 @@
-import type { WorkflowStepDef } from "../types";
+import type { Expr, WorkflowStepDef } from "../types";
+import { createTrivia, type Trivia } from "./trivia";
 import { fail, hasUnescapedClosingQuote, indexOfClosingDoubleQuote } from "./core";
-import { parseTripleQuoteBlock, tripleQuoteBodyToRaw } from "./triple-quote";
+import { dedentTripleQuotedBody, parseTripleQuoteBlock, tripleQuoteBodyToRaw } from "./triple-quote";
 
 /**
- * Prompt body source tag stored in the AST.
+ * Prompt body source tag stored in trivia.
  * - "string"        → single-line `"..."`
  * - "identifier"    → bare identifier after `prompt`
  * - "triple_quoted" → triple-quote `"""..."""` block
@@ -165,13 +166,14 @@ function parsePromptTripleQuoteBlock(
 }
 
 /**
- * Parse a prompt step (captured or uncaptured).
+ * Parse a prompt step (captured or uncaptured). Returns an `exec` step whose
+ * `body` is an `Expr` with `kind: "prompt"`.
+ *
  * Supports three body forms:
  *   1. Single-line string literal: prompt "text"
  *   2. Bare identifier: prompt myVar
  *   3. Triple-quoted block: prompt """ ... """
  *
- * Returns the parsed step and the 0-based line index to continue from.
  * For catch statements where multiline scanning is unnecessary, pass `[]` for lines.
  */
 export function parsePromptStep(
@@ -181,6 +183,7 @@ export function parsePromptStep(
   promptArg: string,
   promptCol: number,
   captureName?: string,
+  trivia: Trivia = createTrivia(),
 ): { step: WorkflowStepDef; nextLineIdx: number } {
   const lineNo = lineIdx + 1;
 
@@ -194,10 +197,29 @@ export function parsePromptStep(
     );
   }
 
+  const stepLoc = { line: lineNo, col: promptCol };
+
+  const buildStep = (
+    body: Expr,
+    bodyTrivia: { bodyKind?: PromptBodyKind; bodyIdentifier?: string; rawBody?: string },
+    nextLineIdx: number,
+  ): { step: WorkflowStepDef; nextLineIdx: number } => {
+    trivia.setNode(body, {
+      ...(bodyTrivia.bodyKind ? { bodyKind: bodyTrivia.bodyKind } : {}),
+      ...(bodyTrivia.bodyIdentifier ? { bodyIdentifier: bodyTrivia.bodyIdentifier } : {}),
+      ...(bodyTrivia.rawBody !== undefined ? { rawBody: bodyTrivia.rawBody } : {}),
+    });
+    const step: WorkflowStepDef = {
+      type: "exec",
+      body,
+      ...(captureName ? { captureName } : {}),
+      loc: stepLoc,
+    };
+    return { step, nextLineIdx };
+  };
+
   // --- Case 1: Triple-quoted block ---
   if (promptArg.startsWith('"""')) {
-    // Recover blocks pass `lines: []` and a single merged `promptArg` (multiline).
-    // Split into synthetic lines so `parseTripleQuoteBlock` sees an opening line of only `"""`.
     let tqLines: string[];
     let tripleQuoteLineIdx: number;
     if (lines.length === 0) {
@@ -213,10 +235,7 @@ export function parsePromptStep(
       tqLines,
       tripleQuoteLineIdx,
     );
-
-    // Wrap body in quotes so the runtime's interpolateWithCaptures can process ${} vars
-    const raw = tripleQuoteBodyToRaw(body);
-
+    const raw = tripleQuoteBodyToRaw(dedentTripleQuotedBody(body));
     const linesForReturns = lines.length === 0 ? tqLines : lines;
     let returnsSchema: string | undefined = returnsOnClosingLine;
     let consumeEndIdx = realNextIdx;
@@ -234,25 +253,17 @@ export function parsePromptStep(
         consumeEndIdx = pr.nextIndex;
       }
     }
-
-    return {
-      step: {
-        type: "prompt",
-        raw,
-        bodyKind: "triple_quoted",
-        loc: { line: lineNo, col: promptCol },
-        ...(captureName ? { captureName } : {}),
-        ...(returnsSchema !== undefined ? { returns: returnsSchema } : {}),
-      },
-      nextLineIdx: consumeEndIdx - 1,
+    const expr: Expr = {
+      kind: "prompt",
+      raw,
+      loc: stepLoc,
+      ...(returnsSchema !== undefined ? { returns: returnsSchema } : {}),
     };
+    return buildStep(expr, { bodyKind: "triple_quoted", rawBody: body }, consumeEndIdx - 1);
   }
 
   // --- Case 2: String literal ---
   if (promptArg.startsWith('"')) {
-    // Check for triple-quote opening: "\"\" (three quotes) — handle as triple-quoted block
-    // This won't match since we check for """ above first.
-    // Check for multiline quoted string (no closing quote on same line) — reject it
     if (!hasUnescapedClosingQuote(promptArg, 1)) {
       fail(filePath, 'multiline prompt strings are no longer supported; use a triple-quoted block instead: prompt """...""""', lineNo, promptCol);
     }
@@ -263,21 +274,16 @@ export function parsePromptStep(
       lines,
       lineIdx,
     );
-    return {
-      step: {
-        type: "prompt",
-        raw: promptRaw,
-        bodyKind: "string",
-        loc: { line: lineNo, col: promptCol },
-        ...(captureName ? { captureName } : {}),
-        ...(returnsSchema !== undefined ? { returns: returnsSchema } : {}),
-      },
-      nextLineIdx: nextIndex - 1,
+    const expr: Expr = {
+      kind: "prompt",
+      raw: promptRaw,
+      loc: stepLoc,
+      ...(returnsSchema !== undefined ? { returns: returnsSchema } : {}),
     };
+    return buildStep(expr, { bodyKind: "string" }, nextIndex - 1);
   }
 
   // --- Case 3: Bare identifier ---
-  // Greedy: take the first token as the identifier
   const identMatch = promptArg.match(/^([A-Za-z_][A-Za-z0-9_]*)/);
   if (!identMatch) {
     const msg = captureName
@@ -288,7 +294,6 @@ export function parsePromptStep(
   const identifier = identMatch[1];
   const afterIdent = promptArg.slice(identifier.length);
 
-  // Check for `returns` after the identifier
   const { returns: returnsSchema, nextIndex } = parseReturnsClause(
     filePath,
     lineNo,
@@ -297,18 +302,13 @@ export function parsePromptStep(
     lineIdx,
   );
 
-  // Store as "${identifier}" so the runtime interpolates the variable
+  // Store as "${identifier}" so the runtime interpolates the variable.
   const raw = `"\${${identifier}}"`;
-  return {
-    step: {
-      type: "prompt",
-      raw,
-      bodyKind: "identifier",
-      bodyIdentifier: identifier,
-      loc: { line: lineNo, col: promptCol },
-      ...(captureName ? { captureName } : {}),
-      ...(returnsSchema !== undefined ? { returns: returnsSchema } : {}),
-    },
-    nextLineIdx: nextIndex - 1,
+  const expr: Expr = {
+    kind: "prompt",
+    raw,
+    loc: stepLoc,
+    ...(returnsSchema !== undefined ? { returns: returnsSchema } : {}),
   };
+  return buildStep(expr, { bodyKind: "identifier", bodyIdentifier: identifier }, nextIndex - 1);
 }

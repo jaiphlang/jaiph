@@ -1,4 +1,5 @@
 import type { RuleDef } from "../types";
+import { createTrivia, type Trivia } from "./trivia";
 import { braceDepthDelta, colFromRaw, fail, parseParamList, stripQuotes } from "./core";
 import { parseBlockStatement } from "./workflow-brace";
 
@@ -7,6 +8,7 @@ export function parseRuleBlock(
   lines: string[],
   startIndex: number,
   pendingComments: string[],
+  trivia: Trivia = createTrivia(),
 ): { rule: RuleDef; nextIndex: number; exported: boolean } {
   const lineNo = startIndex + 1;
   const raw = lines[startIndex];
@@ -64,10 +66,11 @@ export function parseRuleBlock(
     const cmd = currentCommandLines.join("\n").trim();
     currentCommandLines = [];
     if (!cmd) return;
+    const loc = { line: accumShellLine, col: accumShellCol };
     rule.steps.push({
-      type: "shell",
-      command: stripQuotes(cmd),
-      loc: { line: accumShellLine, col: accumShellCol },
+      type: "exec",
+      body: { kind: "shell", command: stripQuotes(cmd), loc },
+      loc,
     });
   };
 
@@ -85,8 +88,8 @@ export function parseRuleBlock(
       } else {
         flushCommand();
         const lastStep = rule.steps[rule.steps.length - 1];
-        if (lastStep && lastStep.type !== "blank_line") {
-          rule.steps.push({ type: "blank_line" });
+        if (lastStep && !(lastStep.type === "trivia" && lastStep.kind === "blank_line")) {
+          rule.steps.push({ type: "trivia", kind: "blank_line" });
         }
       }
       continue;
@@ -101,7 +104,8 @@ export function parseRuleBlock(
       } else {
         flushCommand();
         rule.steps.push({
-          type: "comment",
+          type: "trivia",
+          kind: "comment",
           text: innerRaw.trim(),
           loc: { line: innerNo, col: 1 },
         });
@@ -133,8 +137,9 @@ export function parseRuleBlock(
       }
       continue;
     }
-    const st = parseBlockStatement(filePath, lines, i, { forRule: true });
-    if (st.step.type !== "shell") {
+    const st = parseBlockStatement(filePath, lines, i, trivia, { forRule: true });
+    const isShellExec = st.step.type === "exec" && st.step.body.kind === "shell";
+    if (!isShellExec) {
       flushCommand();
       rule.steps.push(st.step);
       i = st.nextIdx - 1;
@@ -158,7 +163,13 @@ export function parseRuleBlock(
   if (i >= lines.length) {
     fail(filePath, `unterminated rule block: ${rule.name}`, lineNo);
   }
-  while (rule.steps.length > 0 && rule.steps[rule.steps.length - 1].type === "blank_line") {
+  while (
+    rule.steps.length > 0 &&
+    (() => {
+      const last = rule.steps[rule.steps.length - 1];
+      return last.type === "trivia" && last.kind === "blank_line";
+    })()
+  ) {
     rule.steps.pop();
   }
   return { rule, nextIndex: i + 1, exported: isExported };

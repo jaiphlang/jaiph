@@ -65,34 +65,28 @@ test("validatePromptReturnsSchema: rejects malformed entry", () => {
 // --- validatePromptStepReturns ---
 
 test("validatePromptStepReturns: no error when no returns", () => {
-  const step = {
-    type: "prompt" as const,
-    raw: 'prompt "hello"',
-    loc: { line: 1, col: 1 },
-  };
-  validatePromptStepReturns(step, "test.jh");
+  validatePromptStepReturns(
+    { loc: { line: 1, col: 1 } },
+    undefined,
+    "test.jh",
+  );
 });
 
 test("validatePromptStepReturns: no error when returns with capture", () => {
-  const step = {
-    type: "prompt" as const,
-    raw: '"hello"',
-    loc: { line: 1, col: 1 },
-    captureName: "result",
-    returns: "{ name: string }",
-  };
-  validatePromptStepReturns(step, "test.jh");
+  validatePromptStepReturns(
+    { returns: "{ name: string }", loc: { line: 1, col: 1 } },
+    "result",
+    "test.jh",
+  );
 });
 
 test("validatePromptStepReturns: rejects returns without capture", () => {
-  const step = {
-    type: "prompt" as const,
-    raw: 'prompt "hello" returns "{ name: string }"',
-    loc: { line: 1, col: 1 },
-    returns: "{ name: string }",
-  };
   assert.throws(
-    () => validatePromptStepReturns(step, "test.jh"),
+    () => validatePromptStepReturns(
+      { returns: "{ name: string }", loc: { line: 1, col: 1 } },
+      undefined,
+      "test.jh",
+    ),
     /must capture to a variable/,
   );
 });

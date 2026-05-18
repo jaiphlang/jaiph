@@ -1,5 +1,4 @@
 import { jaiphError } from "../errors";
-import type { WorkflowStepDef } from "../types";
 
 const SUPPORTED_SCHEMA_TYPES = new Set<string>(["string", "number", "boolean"]);
 
@@ -51,20 +50,22 @@ export function validatePromptReturnsSchema(
   }
 }
 
+/** Validate that a prompt's optional returns schema is well-formed and bound to a capture. */
 export function validatePromptStepReturns(
-  step: Extract<WorkflowStepDef, { type: "prompt" }>,
+  prompt: { returns?: string; loc: { line: number; col: number } },
+  captureName: string | undefined,
   filePath: string,
 ): void {
-  if (step.returns !== undefined) {
-    if (!step.captureName) {
+  if (prompt.returns !== undefined) {
+    if (!captureName) {
       throw jaiphError(
         filePath,
-        step.loc.line,
-        step.loc.col,
+        prompt.loc.line,
+        prompt.loc.col,
         "E_PARSE",
         'prompt with "returns" schema must capture to a variable (e.g. const result = prompt "..." returns "{ ... }")',
       );
     }
-    validatePromptReturnsSchema(step.returns, filePath, step.loc.line, step.loc.col);
+    validatePromptReturnsSchema(prompt.returns, filePath, prompt.loc.line, prompt.loc.col);
   }
 }
