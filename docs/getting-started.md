@@ -7,15 +7,9 @@ redirect_from:
 
 # Getting started
 
-## Overview
+**Jaiph** is a language and runtime for defining and orchestrating AI agent workflows.
 
-**Jaiph** is a workflow language and toolchain for combining **prompts**, **rules**, **scripts**, and **workflows** — the usual building blocks for agent-style pipelines, automation, and review flows.
-
-You work in a workspace: author `.jh` modules and optional `*.test.jh` tests; the toolchain validates them, emits each `script` body under `scripts/` (and deterministic paths for inline scripts), then runs a Node workflow runtime that interprets the workflow AST in process. Orchestration stays in that interpreter — there is no separate “workflow shell” and no workflow-wide bash emitter; script steps are normal executables spawned as subprocesses. That matches how the CLI and kernel are wired; see [Architecture](architecture.md).
-
-The CLI (`run`, `test`, `compile`, `format`, `init`, `install`, `use`, and [file shorthand](cli.md#file-shorthand)) is what you install. `jaiph run` always starts the entry file’s `workflow default` ([CLI — `jaiph run`](cli.md#jaiph-run)). Local `jaiph run`, Docker-backed `jaiph run`, and `jaiph test` share that AST interpreter stack; sandboxing (Docker vs host) and how `__JAIPH_EVENT__` is shown differ by command and flags ([Architecture — Runtime vs CLI responsibilities](architecture.md#runtime-vs-cli-responsibilities)).
-
-This page is a map: it does not teach syntax end-to-end. Use the sections below for install steps, language reference, contracts, and runtime behavior.
+It allows you to combine agentic workflows with strict checks and script calls. It comes with built-in Docker sandboxing for agentic workflows, and a set of tooling to make your development faster and more efficient.
 
 ## Setup
 
