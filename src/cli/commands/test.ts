@@ -10,10 +10,23 @@ import { buildScriptsFromGraph, walkTestFiles } from "../../transpiler";
 import { loadModuleGraph } from "../../transpile/module-graph";
 import { jaiphError } from "../../errors";
 import { detectWorkspaceRoot } from "../shared/paths";
-import { parseArgs } from "../shared/usage";
+import { hasHelpFlag, parseArgs } from "../shared/usage";
 import { runTestFile } from "../../runtime/kernel/node-test-runner";
 
+const TEST_USAGE =
+  "Usage: jaiph test [path]\n\n" +
+  "Run *.test.jh modules. With no path, discovers every *.test.jh under the workspace\n" +
+  "root. With a directory, runs every *.test.jh underneath (recursive). With a single\n" +
+  "*.test.jh file, runs only that file.\n\n" +
+  "  -h, --help      show this help\n\n" +
+  "Example:\n" +
+  "  jaiph test ./e2e/say_hello.test.jh\n";
+
 export async function runTest(rest: string[]): Promise<number> {
+  if (hasHelpFlag(rest)) {
+    process.stdout.write(TEST_USAGE);
+    return 0;
+  }
   const { positional } = parseArgs(rest);
   const input = positional[0];
   const runArgs = positional.slice(1);

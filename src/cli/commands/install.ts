@@ -3,6 +3,17 @@ import { join } from "node:path";
 import { spawn } from "node:child_process";
 import { colorPalette } from "../shared/errors";
 import { detectWorkspaceRoot } from "../shared/paths";
+import { hasHelpFlag } from "../shared/usage";
+
+const INSTALL_USAGE =
+  "Usage: jaiph install [--force] [<repo-url[@version]> ...]\n\n" +
+  "With one or more URLs, shallow-clone each repo into .jaiph/libs/<name>/ and\n" +
+  "update .jaiph/libs.lock. With no args, restore every library listed in the\n" +
+  "lockfile.\n\n" +
+  "  --force         delete existing clone and re-clone\n" +
+  "  -h, --help      show this help\n\n" +
+  "Example:\n" +
+  "  jaiph install https://github.com/you/queue-lib.git@v1.0\n";
 
 interface LockEntry {
   name: string;
@@ -123,6 +134,10 @@ async function runWithConcurrency<T, R>(items: T[], limit: number, fn: (item: T)
 }
 
 export async function runInstall(rest: string[], opts: RunInstallOptions = {}): Promise<number> {
+  if (hasHelpFlag(rest)) {
+    process.stdout.write(INSTALL_USAGE);
+    return 0;
+  }
   const palette = colorPalette();
   const force = rest.includes("--force");
   const args = rest.filter((a) => a !== "--force");

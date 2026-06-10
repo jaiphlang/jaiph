@@ -15,7 +15,7 @@ This page lists **commands**, important **flags**, and **environment variables**
 
 **Commands:** `run`, `test`, `compile`, `format`, `init`, `install`, `use`.
 
-**Global options:** `-h` / `--help` and `-v` / `--version` are recognized only as the **first token after `jaiph`** (e.g. `jaiph --help`). They are not treated as global flags after a subcommand or a file path (`jaiph run --help` is **not** usage — use `jaiph --help`, or **`jaiph compile -h`** / **`jaiph compile --help`** for compile-specific usage — the `compile` command parses `-h` / `--help` after the subcommand). Running **`jaiph`** with no arguments prints the same overview and exits **0**.
+**Global options:** `jaiph --help` and `jaiph -h` print the overview; `jaiph --version` / `jaiph -v` prints the CLI version. **Each subcommand also recognizes `-h` / `--help` anywhere in its argument list** before positional processing and prints command-specific usage (flags + one example) to stdout — for example `jaiph run --help`, `jaiph test --help`, `jaiph compile -h`, `jaiph format --help`, `jaiph init --help`, `jaiph install --help`, and `jaiph use --help` all exit **0** with their own usage block. Running **`jaiph`** with no arguments prints the overview and exits **0**.
 
 Any other unknown first token prints `Unknown command: …`, repeats the overview, and exits **1**.
 

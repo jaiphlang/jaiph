@@ -1,4 +1,12 @@
 import { spawnSync } from "node:child_process";
+import { hasHelpFlag } from "../shared/usage";
+
+const USE_USAGE =
+  "Usage: jaiph use <version|nightly>\n\n" +
+  "Reinstall the jaiph CLI at a specific version tag, or 'nightly'.\n\n" +
+  "  -h, --help      show this help\n\n" +
+  "Example:\n" +
+  "  jaiph use nightly\n";
 
 function toInstallRef(version: string): string | undefined {
   const trimmed = version.trim();
@@ -12,6 +20,10 @@ function toInstallRef(version: string): string | undefined {
 }
 
 export function runUse(rest: string[]): number {
+  if (hasHelpFlag(rest)) {
+    process.stdout.write(USE_USAGE);
+    return 0;
+  }
   const version = rest[0];
   if (!version) {
     process.stderr.write("jaiph use requires a version (e.g. 0.9.4) or 'nightly'\n");

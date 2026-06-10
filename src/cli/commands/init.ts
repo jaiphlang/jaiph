@@ -2,6 +2,15 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync
 import { join, resolve } from "node:path";
 import { colorPalette } from "../shared/errors";
 import { resolveInstalledSkillPath } from "../shared/paths";
+import { hasHelpFlag } from "../shared/usage";
+
+const INIT_USAGE =
+  "Usage: jaiph init [workspace-path]\n\n" +
+  "Initialize a Jaiph workspace under <workspace-path> (defaults to the current\n" +
+  "directory). Writes .jaiph/bootstrap.jh, .jaiph/.gitignore, and .jaiph/SKILL.md.\n\n" +
+  "  -h, --help      show this help\n\n" +
+  "Example:\n" +
+  "  jaiph init\n";
 
 const BOOTSTRAP_TEMPLATE = `#!/usr/bin/env jaiph
 
@@ -34,6 +43,10 @@ workflow default() {
 const JAIPH_DIR_GITIGNORE_TEMPLATE = "runs\ntmp\n";
 
 export function runInit(rest: string[]): number {
+  if (hasHelpFlag(rest)) {
+    process.stdout.write(INIT_USAGE);
+    return 0;
+  }
   const workspaceArg = rest[0] ?? ".";
   const workspaceRoot = resolve(workspaceArg);
   const stats = statSync(workspaceRoot);

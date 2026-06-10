@@ -2,8 +2,22 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { parsejaiphWithTrivia } from "../../parser";
 import { emitModule } from "../../format/emit";
+import { hasHelpFlag } from "../shared/usage";
+
+const FORMAT_USAGE =
+  "Usage: jaiph format [--check] [--indent <n>] <file.jh ...>\n\n" +
+  "Rewrite .jh files into canonical style.\n\n" +
+  "  --check         exit non-zero when file(s) need formatting (no writes)\n" +
+  "  --indent <n>    spaces per indent level (default: 2)\n" +
+  "  -h, --help      show this help\n\n" +
+  "Example:\n" +
+  "  jaiph format flow.jh\n";
 
 export function runFormat(args: string[]): number {
+  if (hasHelpFlag(args)) {
+    process.stdout.write(FORMAT_USAGE);
+    return 0;
+  }
   let check = false;
   let indent = 2;
   const files: string[] = [];

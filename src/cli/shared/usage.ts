@@ -13,8 +13,8 @@ export function printUsage(): void {
       "  jaiph format [--check] [--indent <n>] <file.jh ...>",
       "  jaiph compile [--json] [--workspace <dir>] <file.jh | directory> ...",
       "",
-      "Global options (only as the first argument, before a subcommand or file path):",
-      "  -h, --help     show this usage",
+      "Global options:",
+      "  -h, --help     show this usage (jaiph --help) — each subcommand also accepts -h / --help",
       "  -v, --version  show version",
       "",
       "jaiph run:",
@@ -65,6 +65,19 @@ export function printUsage(): void {
       "",
     ].join("\n"),
   );
+}
+
+/**
+ * Returns true if any token before `--` is `-h` or `--help`.
+ * Subcommands call this at the top of their entry function so help requests
+ * never fall into positional / file-path resolution.
+ */
+export function hasHelpFlag(args: string[]): boolean {
+  for (const a of args) {
+    if (a === "--") return false;
+    if (a === "-h" || a === "--help") return true;
+  }
+  return false;
 }
 
 export function parseArgs(args: string[]): { target?: string; raw?: boolean; positional: string[] } {
