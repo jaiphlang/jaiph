@@ -14,18 +14,6 @@ Process rules:
 
 ***
 
-## Add an inbox dispatch iteration cap #dev-ready
-
-**Context.** `drainWorkflowQueue` in `src/runtime/kernel/node-workflow-runtime.ts` processes the in-memory channel queue with `while (cursor < queue.length)`; dispatched targets may send again, appending to the same queue. There is no iteration cap, so circular sends (A routes to B, B sends back to A's channel) loop until OOM. `docs/inbox.md` explicitly warns "Avoid unbounded circular sends" instead of the runtime enforcing a bound.
-
-**Change.** Add a hard cap on the number of messages drained per workflow frame. Default **1000**; overridable via env `JAIPH_INBOX_MAX_DISPATCH` (positive integer). On exceeding the cap, fail the owning workflow with a clear error, e.g. `E_INBOX_DISPATCH_LIMIT: drained 1000 messages without quiescing — likely a circular send (channel "<name>"); raise JAIPH_INBOX_MAX_DISPATCH if intentional`.
-
-**Acceptance criteria.**
-- Kernel/e2e test: a two-workflow circular send fails with the new error code instead of hanging; the error names the channel and the limit.
-- Test that `JAIPH_INBOX_MAX_DISPATCH=5` triggers the cap after 5 messages.
-- Normal multi-message fan-out below the cap is unaffected (existing inbox tests pass).
-- `docs/inbox.md` ("Error semantics" and the circular-sends bullet) and `docs/cli.md` (env var list) document the cap and env override.
-
 ## Honor workflow-level `run.recover_limit` #dev-ready
 
 **Context.** A workflow body may open with a `config { … }` block that overrides `agent.*` and `run.*` keys. But `resolveRecoverLimit` (`src/runtime/kernel/node-workflow-runtime.ts:1387`) reads only `moduleMeta?.run?.recoverLimit ?? 10` — a workflow-level `run.recover_limit = 3` parses fine and is silently ignored. `docs/configuration.md` documents this exception, which is a trap: config that validates but does nothing.

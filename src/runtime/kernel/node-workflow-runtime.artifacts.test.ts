@@ -864,3 +864,139 @@ test("NodeWorkflowRuntime: JAIPH_INBOX_PARALLEL has no effect on inbox dispatch 
   assert.deepEqual(without, withTrue);
   assert.deepEqual(without, ["consumer_a", "consumer_b"]);
 });
+
+async function runInboxCapScenario(opts: {
+  rootPrefix: string;
+  fileName: string;
+  source: string;
+  inboxMaxDispatch?: string;
+}): Promise<{ status: number; summary: string }> {
+  const root = mkdtempSync(join(tmpdir(), opts.rootPrefix));
+  try {
+    const jh = join(root, opts.fileName);
+    writeFileSync(jh, opts.source);
+    const graph = buildRuntimeGraph(jh);
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      JAIPH_TEST_MODE: "1",
+      JAIPH_RUNS_DIR: join(root, ".jaiph", "runs"),
+    };
+    delete env.JAIPH_INBOX_MAX_DISPATCH;
+    if (opts.inboxMaxDispatch !== undefined) {
+      env.JAIPH_INBOX_MAX_DISPATCH = opts.inboxMaxDispatch;
+    }
+    const runtime = new NodeWorkflowRuntime(graph, { env, cwd: root, suppressLiveEvents: true });
+    const prevSummary = process.env.JAIPH_RUN_SUMMARY_FILE;
+    process.env.JAIPH_RUN_SUMMARY_FILE = runtime.getSummaryFile();
+    let status: number;
+    try {
+      status = await runtime.runDefault([]);
+    } finally {
+      if (prevSummary === undefined) delete process.env.JAIPH_RUN_SUMMARY_FILE;
+      else process.env.JAIPH_RUN_SUMMARY_FILE = prevSummary;
+    }
+    runtime.stopHeartbeat();
+    const summary = readFileSync(runtime.getSummaryFile(), "utf8");
+    return { status, summary };
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+test("NodeWorkflowRuntime: circular inbox sends fail with E_INBOX_DISPATCH_LIMIT instead of hanging", async () => {
+  const { status, summary } = await runInboxCapScenario({
+    rootPrefix: "jaiph-inbox-cap-circular-",
+    fileName: "circular.jh",
+    inboxMaxDispatch: "10",
+    source: [
+      "channel ping -> on_ping",
+      "channel pong -> on_pong",
+      "",
+      "workflow on_ping(message, chan, sender) {",
+      '  pong <- "p"',
+      "}",
+      "",
+      "workflow on_pong(message, chan, sender) {",
+      '  ping <- "p"',
+      "}",
+      "",
+      "workflow default() {",
+      '  ping <- "start"',
+      "}",
+      "",
+    ].join("\n"),
+  });
+  assert.notEqual(status, 0, "circular sends must fail the workflow");
+  const failLine = summary.split("\n").find((line) => line.includes("E_INBOX_DISPATCH_LIMIT"));
+  assert.ok(failLine, `expected an E_INBOX_DISPATCH_LIMIT entry in run_summary.jsonl; got:\n${summary}`);
+  assert.match(failLine!, /drained 10 messages without quiescing/);
+  assert.match(failLine!, /channel \\"(ping|pong)\\"/);
+  assert.match(failLine!, /raise JAIPH_INBOX_MAX_DISPATCH if intentional/);
+});
+
+test("NodeWorkflowRuntime: JAIPH_INBOX_MAX_DISPATCH=5 triggers the cap after 5 messages", async () => {
+  const { status, summary } = await runInboxCapScenario({
+    rootPrefix: "jaiph-inbox-cap-five-",
+    fileName: "self_loop.jh",
+    inboxMaxDispatch: "5",
+    source: [
+      "channel loop -> on_loop",
+      "",
+      "workflow on_loop(message, chan, sender) {",
+      '  loop <- "again"',
+      "}",
+      "",
+      "workflow default() {",
+      '  loop <- "start"',
+      "}",
+      "",
+    ].join("\n"),
+  });
+  assert.notEqual(status, 0, "self-loop must fail the workflow");
+  const lines = summary.split("\n").filter((line) => line.trim().length > 0);
+  const dispatchStarts = lines.filter((line) => {
+    const evt = JSON.parse(line) as { type?: string };
+    return evt.type === "INBOX_DISPATCH_START";
+  });
+  assert.equal(dispatchStarts.length, 5, "exactly 5 dispatches should occur before the cap");
+  const failLine = lines.find((line) => line.includes("E_INBOX_DISPATCH_LIMIT"));
+  assert.ok(failLine, `expected E_INBOX_DISPATCH_LIMIT in summary; got:\n${summary}`);
+  assert.match(failLine!, /drained 5 messages without quiescing/);
+  assert.match(failLine!, /channel \\"loop\\"/);
+});
+
+test("NodeWorkflowRuntime: multi-message fan-out below the cap is unaffected", async () => {
+  const { status, summary } = await runInboxCapScenario({
+    rootPrefix: "jaiph-inbox-cap-fanout-",
+    fileName: "fanout.jh",
+    inboxMaxDispatch: "5",
+    source: [
+      "channel ch -> sink_a, sink_b, sink_c",
+      "",
+      "workflow producer() {",
+      '  ch <- "m1"',
+      '  ch <- "m2"',
+      '  ch <- "m3"',
+      "}",
+      "",
+      "workflow sink_a(message, chan, sender) {",
+      '  log "a"',
+      "}",
+      "",
+      "workflow sink_b(message, chan, sender) {",
+      '  log "b"',
+      "}",
+      "",
+      "workflow sink_c(message, chan, sender) {",
+      '  log "c"',
+      "}",
+      "",
+      "workflow default() {",
+      "  run producer()",
+      "}",
+      "",
+    ].join("\n"),
+  });
+  assert.equal(status, 0, "fan-out below the cap must succeed");
+  assert.ok(!summary.includes("E_INBOX_DISPATCH_LIMIT"), "must not flag the cap below the limit");
+});

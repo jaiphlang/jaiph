@@ -297,7 +297,7 @@ workflow default() {
 }
 ```
 
-Sends enqueue in memory; the queue drains after the owning workflow's steps complete, calling each target sequentially. A `->` inside a workflow body is a parse error. Sends on a channel with no route are silently dropped. There is no dispatch-cycle cap — avoid circular sends. Routed payloads are persisted under the run dir as `inbox/NNN-<channel>.txt`.
+Sends enqueue in memory; the queue drains after the owning workflow's steps complete, calling each target sequentially. A `->` inside a workflow body is a parse error. Sends on a channel with no route are silently dropped. Each workflow frame may drain at most **1000** messages before the runtime aborts the owning workflow with `E_INBOX_DISPATCH_LIMIT` (naming the channel that hit the cap); override via `JAIPH_INBOX_MAX_DISPATCH=<positive int>` only if the high volume is intentional. Routed payloads are persisted under the run dir as `inbox/NNN-<channel>.txt`.
 
 ### Concurrency: `run async`
 

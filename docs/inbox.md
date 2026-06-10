@@ -257,8 +257,15 @@ handling and `drainWorkflowQueue`.
      parameters (see [Ordering and sequence ids](#ordering-and-sequence-ids)).
 6. Pop the workflow context and return.
 
-There is no `E_DISPATCH_DEPTH` / `JAIPH_INBOX_MAX_DISPATCH_DEPTH` check in
-`NodeWorkflowRuntime`'s drain loop. Avoid unbounded circular sends in orchestration.
+**Dispatch cap.** `drainWorkflowQueue` enforces a hard cap on the number of
+messages drained per workflow frame. The default is **1000**; override with
+the environment variable **`JAIPH_INBOX_MAX_DISPATCH`** (positive integer; bad
+or missing values fall back to the default). When the cap is exceeded the
+owning workflow fails with status `1` and the error message
+`E_INBOX_DISPATCH_LIMIT: drained <N> messages without quiescing — likely a
+circular send (channel "<name>"); raise JAIPH_INBOX_MAX_DISPATCH if
+intentional` (the channel named is the next un-drained message's channel).
+See [Error semantics](#error-semantics) below.
 
 ### Implementation notes
 
@@ -287,8 +294,16 @@ fail-fast on the first non-zero exit).
   no targets (`routes.get(channel)` empty) → the message is **skipped** with no receivers
   (silent drop). This is intentional for optional subscribers; declare explicit routes if
   a missing handler should be an error.
-- **Circular sends:** the in-memory queue can grow without a built-in iteration
-  cap in `NodeWorkflowRuntime`. Avoid circular sends that grow the queue without bound.
+- **Circular sends — dispatch cap (`E_INBOX_DISPATCH_LIMIT`):** the runtime caps
+  the number of messages a single workflow frame may drain. The default cap is
+  **1000**; override with **`JAIPH_INBOX_MAX_DISPATCH=<n>`** (positive integer).
+  When the cap is exceeded `drainWorkflowQueue` aborts the owning workflow with
+  status `1` and the error message
+  `E_INBOX_DISPATCH_LIMIT: drained <N> messages without quiescing — likely a
+  circular send (channel "<name>"); raise JAIPH_INBOX_MAX_DISPATCH if
+  intentional`. The named channel is the next un-drained message's channel,
+  which is typically the channel involved in the cycle. Raise the cap only if
+  the high volume is genuinely intended.
 
 ## Trigger contract
 

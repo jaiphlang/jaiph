@@ -35,6 +35,17 @@ export type { MockBodyDef } from "./runtime-mock";
 
 const HANDLE_PREFIX = "__JAIPH_HANDLE__";
 
+const DEFAULT_INBOX_DISPATCH_LIMIT = 1000;
+
+function resolveInboxDispatchLimit(env: NodeJS.ProcessEnv): number {
+  const raw = env.JAIPH_INBOX_MAX_DISPATCH;
+  if (raw === undefined || raw === "") return DEFAULT_INBOX_DISPATCH_LIMIT;
+  if (!/^[0-9]+$/.test(raw)) return DEFAULT_INBOX_DISPATCH_LIMIT;
+  const n = Number.parseInt(raw, 10);
+  if (!Number.isFinite(n) || n <= 0) return DEFAULT_INBOX_DISPATCH_LIMIT;
+  return n;
+}
+
 type AsyncHandle = {
   ref: string;
   promise: Promise<StepResult>;
@@ -978,8 +989,17 @@ export class NodeWorkflowRuntime {
   }
 
   private async drainWorkflowQueue(scope: Scope, ctx: WorkflowContext): Promise<StepResult> {
+    const limit = resolveInboxDispatchLimit(this.env);
     let cursor = 0;
     while (cursor < ctx.queue.length) {
+      if (cursor >= limit) {
+        const blocker = ctx.queue[cursor]!;
+        return {
+          status: 1,
+          output: "",
+          error: `E_INBOX_DISPATCH_LIMIT: drained ${limit} messages without quiescing — likely a circular send (channel "${blocker.channel}"); raise JAIPH_INBOX_MAX_DISPATCH if intentional`,
+        };
+      }
       const msg = ctx.queue[cursor]!;
       cursor += 1;
       const targets = ctx.routes.get(msg.channel) ?? [];
