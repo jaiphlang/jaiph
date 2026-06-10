@@ -28,7 +28,7 @@ export function parseEnvDecl(
       fail(filePath, 'unexpected content after closing """ in const declaration', nextIdx);
     }
     return {
-      envDecl: { name, value: body, loc: { line: lineNo, col: 1 } },
+      envDecl: { name, value: body, loc: { line: lineNo, col: 1 }, wasQuoted: true },
       nextIndex: nextIdx,
     };
   }
@@ -48,7 +48,7 @@ export function parseEnvDecl(
     }
     const value = valuePart.slice(1, closeIdx);
     return {
-      envDecl: { name, value, loc: { line: lineNo, col: 1 } },
+      envDecl: { name, value, loc: { line: lineNo, col: 1 }, wasQuoted: true },
       nextIndex: startIndex + 1,
     };
   }

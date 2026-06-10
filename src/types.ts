@@ -218,6 +218,8 @@ export interface EnvDeclDef {
   value: string;
   loc: SourceLoc;
   comments?: string[];
+  /** True when the source value was written as a double-quoted string (single-line `"..."` or triple-quoted `"""..."""`). False/undefined for bare tokens. The formatter preserves this distinction so a quoted value stays quoted. */
+  wasQuoted?: boolean;
 }
 
 /** Source order of definitions below imports / config / channels (formatter and round-trip). */

@@ -14,19 +14,6 @@ Process rules:
 
 ***
 
-## Formatter must not strip quotes from top-level `const` string values #dev-ready
-
-**Context.** `jaiph format` rewrites a top-level `const x = ".jaiph/tmp/x.md"` to the unquoted bare-token form `const x = .jaiph/tmp/x.md` — but only when the value contains no spaces; values with spaces keep their quotes. The result is value-preserving and idempotent (verified), but the formatter silently changes the author's chosen delimiter and produces inconsistent output within one file (quoted and unquoted consts side by side, depending on whether the value happens to contain a space). A formatter should canonicalize to one stable form, not toggle forms based on value content. Reproduce: write a file with `const p = "some/path with space.md"` and `const q = ".jaiph/tmp/x.md"`, run `jaiph format` — `p` stays quoted, `q` loses its quotes. Top-level `const` emission lives in `src/format/emit.ts` (envDecls path); the parser is in `src/parser.ts` / `src/parse/`.
-
-**Change.** Canonical rule: a top-level `const` value written as a **double-quoted string** in the source is emitted **double-quoted**, always — regardless of spaces. Values written as **bare tokens** (e.g. `const MAX = 3`) stay bare. If the AST currently discards the was-quoted distinction, extend the env-decl AST node to retain it (and update golden AST fixtures accordingly). The same rule should hold for `"""…"""` values (already emitted verbatim).
-
-**Acceptance criteria.**
-- Formatter unit test: a quoted no-space value (`const q = ".jaiph/tmp/x.md"`) survives `jaiph format` with quotes intact; a quoted value with spaces also survives; a bare numeric token stays bare.
-- Idempotency test: formatting twice produces identical output for all three cases.
-- `jaiph compile` accepts the formatted output and `${q}` interpolation yields the same value as before formatting (runtime or kernel test).
-- Golden AST fixtures regenerated only if the AST shape changed, with the diff reviewed and explained in the commit message.
-- Existing `.jh` files in the repo reformatted with the fixed formatter (`jaiph format` over `.jaiph/*.jh`, `examples/`, `e2e/` fixtures that are format-clean today) — committed alongside, so `--check` stays green.
-
 ## Error-message quality pass: async handles, Docker timeout, empty stderr #dev-ready
 
 **Context.** Three runtime errors give users nothing to act on:

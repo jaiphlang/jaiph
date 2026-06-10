@@ -134,6 +134,8 @@ world
 """
 ```
 
+`jaiph format` preserves the source delimiter on each top-level `const`: a value written as a double-quoted string stays double-quoted (even when the value contains no whitespace), a bare token stays bare, and a `"""..."""` value is emitted verbatim. The formatter does not toggle between the quoted and bare forms based on value content. See [CLI — `jaiph format`](cli.md#jaiph-format).
+
 Variables are accessible as `${name}` inside that module's rules and workflows. They are **not** passed to script subprocesses — use arguments or shared libraries instead. Declaration order matters: `${name}` in a value only expands variables already bound above. Names share the unified namespace with channels, rules, workflows, and scripts. All bindings are immutable — see [Immutable Bindings](#immutable-bindings).
 
 Top-level `local` is rejected — use `const`.
@@ -954,6 +956,7 @@ Key rules:
 - **String quoting:** Jaiph has a four-delimiter system. `"..."` is the single-line string form (double quotes only — single-quoted strings are parse errors). `"""..."""` is the multiline string form; the opening `"""` must end the line, and the closing `"""` must be on its own line. A double-quoted string that spans multiple lines is rejected with a guidance error pointing to triple quotes. Use `\"` for literal double quotes and `\\` for literal backslashes. `${...}` interpolation works in both forms. Script bodies use single backtick (`` `...` ``) for single-line or triple backtick (`` ```...``` ``) for multi-line — normal shell quoting is allowed inside script bodies. Triple backticks in prompt/string context are rejected.
 - **Required call-site parentheses:** All call sites require parentheses — `run ref()`, not `run ref`. Bare identifiers without parentheses are `E_PARSE`.
 - **Top-level ordering:** The parser accepts top-level definitions in any order. `jaiph format` hoists `import`, `config`, and `channel` declarations to the top (in that order), but preserves the source-file order of all other definitions (`const`, `rule`, `script`, `workflow`, `test`). Comments before a hoisted construct move with it; comments before non-hoisted definitions stay in place. See [CLI — `jaiph format`](cli.md#jaiph-format).
+- **Top-level `const` quoting:** `jaiph format` preserves the source delimiter on each top-level `const` value — quoted values stay quoted, bare tokens stay bare, and `"""..."""` values are emitted verbatim. The formatter does not toggle between quoted and bare based on value content. See [Top-Level `const`](#top-level-const).
 
 ## EBNF (Practical Form)
 

@@ -599,4 +599,63 @@ describe("emitModule", () => {
     const twice = roundTrip(once);
     assert.equal(twice, once);
   });
+
+  it("preserves quotes on top-level const string values regardless of spaces", () => {
+    const source = [
+      'const p = "some/path with space.md"',
+      "",
+      'const q = ".jaiph/tmp/x.md"',
+      "",
+      "const MAX = 3",
+      "",
+      "workflow default() {",
+      "  log p",
+      "}",
+      "",
+    ].join("\n");
+    assert.equal(roundTrip(source), source);
+  });
+
+  it("top-level const quoting is idempotent across two format passes", () => {
+    const source = [
+      'const p = "some/path with space.md"',
+      "",
+      'const q = ".jaiph/tmp/x.md"',
+      "",
+      "const MAX = 3",
+      "",
+      "workflow default() {",
+      "  log p",
+      "}",
+      "",
+    ].join("\n");
+    const once = roundTrip(source);
+    const twice = roundTrip(once);
+    assert.equal(twice, once);
+    assert.equal(once, source);
+  });
+
+  it("preserves top-level const value bit-for-bit across format (so ${q} interpolation is identical)", () => {
+    const source = [
+      'const q = ".jaiph/tmp/x.md"',
+      "",
+      'const p = "some/path with space.md"',
+      "",
+      "const MAX = 3",
+      "",
+      "workflow default() {",
+      '  log "${q}"',
+      "}",
+      "",
+    ].join("\n");
+    const before = parsejaiphWithTrivia(source, "test.jh").ast;
+    const formatted = roundTrip(source);
+    const after = parsejaiphWithTrivia(formatted, "test.jh").ast;
+    assert.equal(after.envDecls!.length, before.envDecls!.length);
+    for (let i = 0; i < before.envDecls!.length; i++) {
+      assert.equal(after.envDecls![i].name, before.envDecls![i].name);
+      assert.equal(after.envDecls![i].value, before.envDecls![i].value);
+    }
+    assert.equal(before.envDecls![0].value, ".jaiph/tmp/x.md");
+  });
 });

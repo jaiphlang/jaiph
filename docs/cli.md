@@ -303,6 +303,8 @@ Reformat Jaiph source files to a canonical style. Paths must end with **`.jh`**,
 
 **Top-level ordering:** The formatter hoists `import`, `config`, and `channel` declarations to the top of the file (in that order, preserving source order within each group). All other top-level definitions — `const`, `rule`, `script`, `workflow`, and `test` blocks — keep their original relative order from the source file. Comments immediately before an `import`, `config`, or `channel` move with that construct when hoisted; comments before non-hoisted definitions stay in place.
 
+**Top-level `const` quoting:** The formatter preserves the source delimiter on each top-level `const` value. A value written as a **double-quoted string** (`const q = ".jaiph/tmp/x.md"`) is re-emitted double-quoted, always — regardless of whether it contains whitespace. A value written as a **bare token** (`const MAX = 3`) stays bare. A value written as `"""…"""` is emitted verbatim. The formatter does not toggle between the quoted and bare forms based on value content, so the same file does not end up mixing styles.
+
 ```bash
 jaiph format [--check] [--indent <n>] <path.jh ...>
 ```
