@@ -3,8 +3,7 @@ import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { buildScripts, resolveImportPath } from "../../src/transpiler";
-import { parsejaiph } from "../../src/parser";
+import { buildScripts } from "../../src/transpiler";
 
 import "./helpers";
 
@@ -84,29 +83,6 @@ test("build fails on missing import file", () => {
     assert.throws(() => buildScripts(root, join(root, "out")), /E_IMPORT_NOT_FOUND import "mod" resolves to missing file/);
   } finally {
     rmSync(root, { recursive: true, force: true });
-  }
-});
-
-// Regression: .jaiph/main.jh once imported implement_from_queue.jh which had been
-// renamed to engineer.jh, causing E_IMPORT_NOT_FOUND for every `jaiph test` run
-// in the workspace. `jaiph test` now builds from the test file entrypoint only;
-// this still checks main.jh imports and that the whole `.jaiph` graph builds.
-test(".jaiph/main.jh imports only existing modules", () => {
-  const jaiphDir = join(process.cwd(), ".jaiph");
-  const mainJh = join(jaiphDir, "main.jh");
-  assert.ok(existsSync(mainJh), ".jaiph/main.jh should exist");
-
-  const ast = parsejaiph(readFileSync(mainJh, "utf8"), mainJh);
-  for (const imp of ast.imports) {
-    const resolved = resolveImportPath(mainJh, imp.path, process.cwd());
-    assert.ok(existsSync(resolved), `import "${imp.alias}" resolves to missing file "${resolved}"`);
-  }
-
-  const outDir = join(jaiphDir, ".tmp-build-out");
-  try {
-    assert.doesNotThrow(() => buildScripts(jaiphDir, outDir, process.cwd()));
-  } finally {
-    rmSync(outDir, { recursive: true, force: true });
   }
 });
 

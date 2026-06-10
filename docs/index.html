@@ -530,7 +530,12 @@ Jaiph: Running async.jh<span class="run-banner-meta"> (Docker sandbox, fusefs)</
                 <p>Jaiph source code is built mostly with real Jaiph workflows. The
                     <a
                         href="https://github.com/jaiphlang/jaiph/blob/main/.jaiph/docs_parity.jh">.jaiph/docs_parity.jh</a>
-                    workflow runs documentation maintenance checks, changelog updates, and cross-doc consistency guards.
+                    workflow runs documentation maintenance checks, changelog updates, and cross-doc consistency guards;
+                    its three prompts instruct the agent to read and follow a vendored
+                    <a href="https://diataxis.fr/">Diátaxis</a> documentation skill at
+                    <code>.jaiph/skills/documentation-writer/SKILL.md</code> (sourced from
+                    <a href="https://github.com/github/awesome-copilot">github/awesome-copilot</a>) before writing any
+                    docs, so runs stay offline-safe and reproducible.
                     The <a href="https://github.com/jaiphlang/jaiph/blob/main/.jaiph/engineer.jh">.jaiph/engineer.jh</a>
                     workflow implements a queue-driven engineering loop that picks work, implements changes, verifies
                     CI, and updates queue state.
