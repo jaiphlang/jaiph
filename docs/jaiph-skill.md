@@ -252,7 +252,7 @@ run tests() recover (err) {
 
 - The binding (`err`) receives the merged stdout+stderr of the failed execution. Exactly one binding, always in parentheses — bare `catch {` is a parse error.
 - `catch` works on `ensure` and `run`; `recover` works on `run` (and `run async`) only. They are mutually exclusive on one step.
-- `recover` retries until success or `run.recover_limit` (default **10**, settable only in the **module-level** `config` block).
+- `recover` retries until success or `run.recover_limit` (default **10**; workflow-level config overrides module-level).
 - A common pattern: a `catch` whose body is the "else branch" — note `return` inside a catch body returns from the **enclosing workflow**.
 
 `recover` + `prompt` is Jaiph's signature loop for repetitive agent work: *check → if broken, ask agent to fix → re-check*, fully unattended.
@@ -318,7 +318,7 @@ Workflows only (rejected in rules); not combinable with inline scripts. `catch`/
 config {
   agent.backend = "claude"               # cursor | claude | codex
   agent.default_model = "claude-sonnet-4-6"
-  run.recover_limit = 5                  # module-level only
+  run.recover_limit = 5                  # workflow-level config also honored
   run.logs_dir = ".jaiph/runs"
 }
 ```

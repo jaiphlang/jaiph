@@ -143,7 +143,7 @@ The `catch` keyword is the user-facing name; the failure payload is the merged *
 Limits apply to the **retry loop** in `recover` (including `run async … recover`).
 
 - **Meaning:** `run.recover_limit` (default **10**) is the maximum number of **repair cycles** the runtime will execute after a failure: each cycle runs the `recover` body (when applicable) and then **re-runs** the target. Including the **first** attempt, the target may run **up to `recover_limit + 1` times** before the loop stops and surfaces the last failure.
-- **Config:** top-level `config { run.recover_limit = N }` in the **`.jh` file** whose module metadata is keyed by **`scope.filePath`** for that step list (`resolveRecoverLimit` reads `graph.modules.get(filePath)?.ast.metadata`). That is the file **currently executing** those steps—not necessarily the CLI entry file when you are deep in a nested `run`. Per-workflow nested `config { }` blocks are not read for this knob.
+- **Config:** `config { run.recover_limit = N }` resolves through the same precedence as other run keys — workflow-level `config` (the workflow currently executing the step) wins over the module-level `config` of the file whose `scope.filePath` is active for that step list, with the default of `10` when neither sets it. That is the file **currently executing** those steps—not necessarily the CLI entry file when you are deep in a nested `run`.
 
 ## Progress and events
 

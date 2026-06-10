@@ -27,8 +27,6 @@ For **agent and run keys**, the full precedence chain is:
 
 > **environment > workflow-level config > module-level config > defaults**
 
-`run.recover_limit` is an exception: only **module-level** values affect `run … recover` (see [Run keys](#run-keys)).
-
 For **`runtime.*` (image, network, timeout)**, the host CLI merges them when it **may spawn Docker** (`resolveDockerConfig` in `src/runtime/docker.ts`) — not inside `NodeWorkflowRuntime`. Precedence is **`JAIPH_DOCKER_*` environment > module-level `runtime.*` > defaults** (Docker on/off remains env-only, see above and [Precedence in detail](#precedence-in-detail)). A **host** invocation of **`jaiph run --raw`** skips that driver entirely and always runs the workflow runner **locally** (no container); **`runtime.*` is unused on that path**. Sandboxed workflows still run `jaiph run --raw …` **inside** the container. `runtime.*` cannot appear in workflow-level `config` blocks.
 
 ## In-file config blocks
@@ -100,7 +98,7 @@ workflow default() {
 
 - At most one per workflow; it must be the first non-comment construct in the body. A duplicate is `E_PARSE`: `duplicate config block inside workflow (only one allowed per workflow)`.
 - Only **`agent.*` and `run.*` keys** are allowed. Any `runtime.*` or `module.*` key is `E_PARSE`.
-- Workflow-level values apply to all steps in that workflow, including `ensure`d rules and scripts called from it, for **`agent.*`** and **`run.logs_dir`** / **`run.debug`** (merged when the workflow or cross-module `ensure` runs). **`run.recover_limit` is different:** the retry limit for `run … recover` comes only from the **module-level** `config` of the **`.jh` file that owns the current scope** when the step runs; a workflow-level `run.recover_limit` assignment is valid syntax but does **not** change recover behavior today.
+- Workflow-level values apply to all steps in that workflow, including `ensure`d rules and scripts called from it, for **`agent.*`** and **`run.logs_dir`** / **`run.debug`** (merged when the workflow or cross-module `ensure` runs). **`run.recover_limit`** follows the same precedence: a workflow-level override applies to `run … recover` steps inside that workflow, falling back to the module-level value (then default 10) when unset.
 - When the workflow finishes, the previous environment is restored.
 
 **Sibling isolation:** Each workflow gets its own clone of the parent environment. Sibling workflows never see each other's config — even when they execute sequentially. If workflow `alpha` sets `agent.backend = "claude"` and workflow `beta` only sets `agent.default_model = "beta-model"`, `beta` still sees the module-level backend (e.g. `"cursor"`), not `alpha`'s.
@@ -137,7 +135,7 @@ These control runtime behavior unrelated to the agent.
 |-----|------|---------|--------------|-------------|
 | `run.logs_dir` | string | `.jaiph/runs` | `JAIPH_RUNS_DIR` | Step log directory. Relative paths are joined with the workspace root; absolute paths are used as-is. |
 | `run.debug` | boolean | `false` | `JAIPH_DEBUG` | Enables debug tracing for the run. |
-| `run.recover_limit` | integer | `10` | _(no env override)_ | Maximum attempts for `run … recover` loops before the step fails (see [Language — `recover`](language.md#recover--repair-and-retry-loop)). Effective value comes **only** from the **module-level** `config` block of the **`.jh` file that owns the current scope** (the file containing the workflow or rule that executes the step). Workflow-level `run.recover_limit` does not apply. |
+| `run.recover_limit` | integer | `10` | _(no env override)_ | Maximum attempts for `run … recover` loops before the step fails (see [Language — `recover`](language.md#recover--repair-and-retry-loop)). Resolves through the standard precedence (workflow-level `config` > module-level `config` > default `10`); environment is not consulted. |
 
 ### Module keys
 
