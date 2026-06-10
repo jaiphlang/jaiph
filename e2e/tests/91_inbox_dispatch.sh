@@ -394,3 +394,52 @@ if [[ "$invalid_lines" -gt 0 ]]; then
   e2e::fail "run_summary.jsonl has ${invalid_lines} invalid JSON lines"
 fi
 e2e::pass "multi-target: run_summary.jsonl lines are valid JSON"
+
+e2e::section "Imported channel send: lib.topic normalizes to topic for routing"
+
+# Given — entry declares channel + route, lib declares the same channel,
+# entry workflow sends via the imported alias `lib.topic`
+e2e::file "lib_inbox.jh" <<'EOF'
+channel topic
+EOF
+
+e2e::file "main_imported_inbox.jh" <<'EOF'
+import "lib_inbox.jh" as lib
+
+channel topic -> handler
+
+script write_imported_received = `echo "$1" > imported_received.txt`
+workflow handler(message, chan, sender) {
+  run write_imported_received(message)
+}
+
+workflow default() {
+  lib.topic <- "x"
+}
+EOF
+
+# When
+e2e::run "main_imported_inbox.jh" >/dev/null
+
+# Then — handler was dispatched with payload "x"
+e2e::assert_file_exists "${TEST_DIR}/imported_received.txt" "handler invoked via lib.topic send"
+e2e::assert_equals "$(cat "${TEST_DIR}/imported_received.txt")" "x" "handler received payload via normalized channel key"
+
+# Then — inbox audit file uses bare channel name
+e2e::expect_file "*inbox/001-topic.txt" <<'EOF'
+x
+EOF
+
+# Then — INBOX_ENQUEUE in run_summary.jsonl uses bare channel name
+imported_run_dir="$(e2e::run_dir "main_imported_inbox.jh")"
+imported_summary="${imported_run_dir}/run_summary.jsonl"
+e2e::assert_file_exists "${imported_summary}" "imported send run_summary.jsonl exists"
+# assert_contains: run_summary.jsonl contains other lines with varying ts/run_id
+enqueue_channel="$(python3 -c "import json
+for line in open('${imported_summary}'):
+    obj = json.loads(line)
+    if obj.get('type') == 'INBOX_ENQUEUE':
+        print(obj['channel'])
+        break
+")"
+e2e::assert_equals "${enqueue_channel}" "topic" "INBOX_ENQUEUE channel is bare name (alias prefix stripped)"

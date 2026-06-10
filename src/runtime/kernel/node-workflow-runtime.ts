@@ -666,8 +666,14 @@ export class NodeWorkflowRuntime {
         this.inboxSeq += 1;
         const seqPadded = String(this.inboxSeq).padStart(3, "0");
         const senderName = ctx.workflowName;
+        // Validator (validateChannelRef) has already proven that an `alias.name`
+        // token refers to an existing imported channel. Routes are registered
+        // under the bare channel name, so strip the alias prefix so the same
+        // key resolves regardless of how the send was spelled.
+        const dotIdx = step.channel.indexOf(".");
+        const channelKey = dotIdx >= 0 ? step.channel.slice(dotIdx + 1) : step.channel;
         const msg: InboxMsg = {
-          channel: step.channel,
+          channel: channelKey,
           content: payload,
           sender: senderName,
           seqPadded,
@@ -675,7 +681,7 @@ export class NodeWorkflowRuntime {
         let targetCtx = ctx;
         let routed = false;
         for (let i = this.workflowCtxStack.length - 1; i >= 0; i -= 1) {
-          if (this.workflowCtxStack[i]!.routes.has(step.channel)) {
+          if (this.workflowCtxStack[i]!.routes.has(channelKey)) {
             targetCtx = this.workflowCtxStack[i]!;
             routed = true;
             break;
@@ -685,7 +691,7 @@ export class NodeWorkflowRuntime {
         if (routed) {
           const inboxFileDir = join(this.runDir, "inbox");
           mkdirSync(inboxFileDir, { recursive: true });
-          writeFileSync(join(inboxFileDir, `${seqPadded}-${step.channel}.txt`), payload, "utf8");
+          writeFileSync(join(inboxFileDir, `${seqPadded}-${channelKey}.txt`), payload, "utf8");
         }
         appendRunSummaryLine(
           JSON.stringify({
