@@ -14,17 +14,6 @@ Process rules:
 
 ***
 
-## Reject mixing `mock prompt { … }` with queued `mock prompt "…"` #dev-ready
-
-**Context.** In a `*.test.jh` test block, when a pattern-dispatch `mock prompt { … }` block is present, all queue-style `mock prompt "…"` / `mock prompt <const>` lines in the same block are **silently ignored** (`docs/testing.md` "Limitations" documents this). Silently ignoring authored mocks makes tests pass for the wrong reason.
-
-**Change.** Make the combination a compile-time error for the test file: when a single `test` block contains both a `mock prompt { … }` block and at least one queue-style `mock prompt` entry, fail with `E_PARSE` (or `E_VALIDATE`, matching how other test-block shape errors are reported) and a message like: `cannot mix "mock prompt { … }" with queued "mock prompt …" in one test block; choose one style`. Implementation likely lives where test blocks are parsed/validated (`parseTestBlock` and/or the test-file validation path; see `src/runtime/kernel/node-test-runner.ts` and the parser for test blocks).
-
-**Acceptance criteria.**
-- txtar fixture (or parser unit test) with a `.test.jh` file mixing both styles in one block fails with the new message; the same styles in **separate** test blocks of one file still pass.
-- `jaiph compile path/to/file.test.jh` surfaces the error (test files are validated when passed explicitly).
-- `docs/testing.md`: replace the "Do not combine…ignored" limitation bullets with the new error behavior.
-
 ## Formatter must not strip quotes from top-level `const` string values #dev-ready
 
 **Context.** `jaiph format` rewrites a top-level `const x = ".jaiph/tmp/x.md"` to the unquoted bare-token form `const x = .jaiph/tmp/x.md` — but only when the value contains no spaces; values with spaces keep their quotes. The result is value-preserving and idempotent (verified), but the formatter silently changes the author's chosen delimiter and produces inconsistent output within one file (quoted and unquoted consts side by side, depending on whether the value happens to contain a space). A formatter should canonicalize to one stable form, not toggle forms based on value content. Reproduce: write a file with `const p = "some/path with space.md"` and `const q = ".jaiph/tmp/x.md"`, run `jaiph format` — `p` stays quoted, `q` loses its quotes. Top-level `const` emission lives in `src/format/emit.ts` (envDecls path); the parser is in `src/parser.ts` / `src/parse/`.

@@ -375,6 +375,30 @@ function validateTestBlocks(
   tests: import("../types").TestBlockDef[],
 ): void {
   for (const tb of tests) {
+    // Reject mixing `mock prompt { … }` with queued `mock prompt "…"` /
+    // `mock prompt <const>` in one test block — previously the queue entries
+    // were silently ignored when a block was present, so authored mocks
+    // could mask bugs by going unused.
+    diag.capture(() => {
+      let blockStep: { loc: { line: number; col: number } } | undefined;
+      let queueStep: { loc: { line: number; col: number } } | undefined;
+      for (const step of tb.steps) {
+        if (step.type === "test_mock_prompt_block" && !blockStep) blockStep = step;
+        if (step.type === "test_mock_prompt" && !queueStep) queueStep = step;
+        if (blockStep && queueStep) break;
+      }
+      if (blockStep && queueStep) {
+        const loc = blockStep.loc.line > queueStep.loc.line ? blockStep.loc : queueStep.loc;
+        diag.error(
+          ast.filePath,
+          loc.line,
+          loc.col,
+          "E_VALIDATE",
+          'cannot mix "mock prompt { … }" with queued "mock prompt …" in one test block; choose one style',
+        );
+      }
+    });
+
     const inScope = new Set<string>();
     for (const step of tb.steps) {
       diag.capture(() => {

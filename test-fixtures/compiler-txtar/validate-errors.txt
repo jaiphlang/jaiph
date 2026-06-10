@@ -977,3 +977,43 @@ workflow default() {
   log "${x}"
 }
 
+=== test block: mix mock prompt block with queued mock prompt (block first)
+# @expect error E_VALIDATE "cannot mix "mock prompt { … }" with queued "mock prompt …" in one test block; choose one style"
+--- input.test.jh
+import "lib.jh" as m
+
+test "mixed mock prompt" {
+  mock prompt {
+    /hi/ => "hello"
+    _ => "default"
+  }
+  mock prompt "queued"
+  const response = run m.ask()
+  expect_contain response "hello"
+}
+--- lib.jh
+workflow ask() {
+  const r = prompt "say hi"
+  return r
+}
+
+=== test block: mix mock prompt block with queued mock prompt (queue first)
+# @expect error E_VALIDATE "cannot mix "mock prompt { … }" with queued "mock prompt …" in one test block; choose one style"
+--- input.test.jh
+import "lib.jh" as m
+
+test "mixed mock prompt" {
+  mock prompt "queued"
+  mock prompt {
+    /hi/ => "hello"
+    _ => "default"
+  }
+  const response = run m.ask()
+  expect_contain response "hello"
+}
+--- lib.jh
+workflow ask() {
+  const r = prompt "say hi"
+  return r
+}
+
