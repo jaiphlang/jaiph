@@ -247,6 +247,15 @@ function emitEnvDecl(env: EnvDeclDef): string[] {
     lines.push('"""');
     return lines;
   }
+  if (env.wasQuoted) {
+    // Author wrote a double-quoted string. Preserve the quoted form regardless
+    // of value content (the formatter must not toggle delimiters based on
+    // whether the value happens to contain a space).
+    if (/["\\]/.test(env.value)) {
+      return [`const ${env.name} = """`, env.value, '"""'];
+    }
+    return [`const ${env.name} = ${JSON.stringify(env.value)}`];
+  }
   if (/^[A-Za-z0-9_./@+#%^&=*:~?-]+$/.test(env.value)) {
     return [`const ${env.name} = ${env.value}`];
   }

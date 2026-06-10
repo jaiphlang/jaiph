@@ -150,6 +150,8 @@ world
 
 Values can be double-quoted strings (single-line), triple-quoted strings (multiline `"""..."""`), or a **bare** right-hand side: everything after `=` on that line becomes the stored string verbatim (including tokens that look like numbers, for example `const N = 42` keeps **`"42"`** as text for `${N}` — there is no separate numeric type).
 
+`jaiph format` preserves the source delimiter: a value written as `"..."` stays double-quoted (even when the value has no whitespace), a bare value stays bare, and `"""..."""` is emitted verbatim — the formatter does not toggle delimiters based on value content.
+
 Declaration order matters — `${name}` only expands variables already bound above. Module constants are **not** passed to script subprocesses; use arguments or shared libraries instead.
 
 ### Channels
