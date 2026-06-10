@@ -98,7 +98,7 @@ Each arm is `pattern => "response"`. Patterns can be:
 
 Without a `_` wildcard arm, an unmatched prompt fails the test.
 
-Do not combine `mock prompt { ... }` with inline `mock prompt "..."` in the same test block — when a block mock is present, inline queue entries are ignored.
+Combining `mock prompt { … }` with queue-style `mock prompt "…"` / `mock prompt <const>` in the same test block is a compile-time error (`E_VALIDATE`: `cannot mix "mock prompt { … }" with queued "mock prompt …" in one test block; choose one style`). Use one style per block; separate test blocks in the same file may use different styles.
 
 ### Mock workflow
 
@@ -424,7 +424,7 @@ The project includes a Playwright-based test (`e2e/playwright/landing-page.spec.
 ## Limitations (v1)
 
 - **Prompt mocks** must be written **inside the test file** (inline `mock prompt "…"`, `mock prompt <const>`, or `mock prompt { … }`) — there are no external mock-config file paths. Inline responses must use **double** quotes (not single quotes).
-- **Do not combine** `mock prompt { … }` with queue-style `mock prompt "…"` / `mock prompt <const>` in the same test block; when a block is present, queued entries are ignored.
+- **Combining** `mock prompt { … }` with queue-style `mock prompt "…"` / `mock prompt <const>` in the same test block is rejected at compile time (`E_VALIDATE`). Use one style per block; separate test blocks in the same file may use different styles.
 - **`mock workflow` / `mock rule` / `mock script`** require `ref()` with parentheses — empty `()` when there are no parameters.
 - **Capture**: only a **non-empty** return value on success bypasses concatenating `*.out` files; exit 0 with an empty return, failures without a runtime error string, and other edge cases use the `*.out` / aggregated-output path described above.
 - **`expect_*` right-hand side** is either a double-quoted literal or a test `const` name — not an arbitrary expression.

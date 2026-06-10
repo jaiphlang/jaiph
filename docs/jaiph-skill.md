@@ -380,7 +380,7 @@ test "failure path is handled" {
 - Mocks: `mock prompt "…"` (queued, one per prompt call), `mock prompt { /re/ => "…", _ => "…" }`, `mock workflow ref() { … }`, `mock rule ref() { … }`, `mock script ref() { shell lines }`. All mock refs need `()`.
 - Assertions: `expect_contain`, `expect_not_contain`, `expect_equal` — `expect_* <captureVar> "literal"` or a test-block `const` name.
 - For typed prompts, the mock text must be one line of valid JSON matching the schema.
-- Don't mix queued `mock prompt "…"` and a `mock prompt { … }` block in one test.
+- Mixing queued `mock prompt "…"` / `mock prompt <const>` and a `mock prompt { … }` block in one test is rejected at compile time (`E_VALIDATE`: `cannot mix "mock prompt { … }" with queued "mock prompt …" in one test block; choose one style`). Use one style per block; separate tests in the same file may use different styles.
 
 Write at least one test per workflow you author when the repo uses tests; mock every prompt so the suite is deterministic.
 

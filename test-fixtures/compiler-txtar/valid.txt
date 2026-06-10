@@ -1306,3 +1306,28 @@ workflow default() {
   }
   log "${x}"
 }
+
+=== test file: mock prompt block and queued mock prompt in separate test blocks
+# @expect ok
+--- input.test.jh
+import "lib.jh" as m
+
+test "uses pattern-dispatch mock" {
+  mock prompt {
+    /hi/ => "hello"
+    _ => "default"
+  }
+  const response = run m.ask()
+  expect_contain response "hello"
+}
+
+test "uses queue-style mock" {
+  mock prompt "queued"
+  const response = run m.ask()
+  expect_contain response "queued"
+}
+--- lib.jh
+workflow ask() {
+  const r = prompt "say hi"
+  return r
+}

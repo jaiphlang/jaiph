@@ -845,6 +845,24 @@
       "message": "${r.bogus}: field \"bogus\" is not defined in the returns schema for \"r\"; available fields: verdict"
     }
   ],
+  "validate-errors.txt > test block: mix mock prompt block with queued mock prompt (block first)": [
+    {
+      "file": "input.test.jh",
+      "line": 8,
+      "col": 3,
+      "code": "E_VALIDATE",
+      "message": "cannot mix \"mock prompt { … }\" with queued \"mock prompt …\" in one test block; choose one style"
+    }
+  ],
+  "validate-errors.txt > test block: mix mock prompt block with queued mock prompt (queue first)": [
+    {
+      "file": "input.test.jh",
+      "line": 5,
+      "col": 3,
+      "code": "E_VALIDATE",
+      "message": "cannot mix \"mock prompt { … }\" with queued \"mock prompt …\" in one test block; choose one style"
+    }
+  ],
   "validate-errors-multi-module.txt > duplicate import alias": [
     {
       "file": "main.jh",
