@@ -1,6 +1,7 @@
 #!/usr/bin/env jaiph
 
 import "jaiphlang/queue" as queue
+import "./lib_common.jh" as common
 
 config {
   agent.backend = "cursor"
@@ -10,28 +11,7 @@ config {
   # agent.claude_flags = "--permission-mode bypassPermissions"
 }
 
-script first_line_str = `printf '%s\n' "$1" | head -n 1`
-
-script rest_lines_str = `printf '%s\n' "$1" | tail -n +2`
-
-script arg_nonempty = `[ -n "$1" ]`
-
-script str_equals = `[ "$1" = "$2" ]`
-
-script mkdir_p_simple = `mkdir -p "$1"`
-
-script jaiph_tmp_dir = `printf '%s\n' "$JAIPH_WORKSPACE/.jaiph/tmp"`
-
 script jaiph_review_body_file = `printf '%s\n' "$JAIPH_WORKSPACE/.jaiph/tmp/architect_review_body.txt"`
-
-# Writes UTF-8 text to a path (path, then content).
-script save_string_to_file = ```python3
-import sys
-if len(sys.argv) < 3:
-    sys.exit(2)
-path, content = sys.argv[1], sys.argv[2]
-open(path, "w", encoding="utf-8").write(content)
-```
 
 # Packed as: first line = verdict, rest = updated_description (must stay top-level:
 # const … = prompt """…""" is not supported inside ensure … catch — see parseRecoverStatement).
@@ -93,31 +73,31 @@ workflow architect_agent_review(task) {
 }
 
 workflow review_one_header(header) {
-  run arg_nonempty(header) catch (err) {
+  run common.arg_nonempty(header) catch (err) {
     return ""
   }
   const task = run queue.get_task_by_header(header)
   ensure queue.task_is_dev_ready(task) catch (err) {
     const packed = run architect_agent_review(task)
-    const verdict = run first_line_str(packed)
-    const updated_description = run rest_lines_str(packed)
+    const verdict = run common.first_line_str(packed)
+    const updated_description = run common.rest_lines_str(packed)
     const body_file = run jaiph_review_body_file()
-    run mkdir_p_simple(run jaiph_tmp_dir())
-    run str_equals(verdict, "dev-ready") catch (err) {
-      run arg_nonempty(updated_description) catch (err) {
+    run common.mkdir_p_simple(run common.jaiph_tmp_dir())
+    run common.str_equals(verdict, "dev-ready") catch (err) {
+      run common.arg_nonempty(updated_description) catch (err) {
         fail "needs-work requires a non-empty updated_description (questions for the author)."
       }
-      run save_string_to_file(body_file, updated_description)
+      run common.save_string_to_file(body_file, updated_description)
       run queue.set_task_description_from_file(header, body_file)
       log "Needs work (description updated): ${header}"
       return ""
     }
-    run arg_nonempty(updated_description) catch (err) {
+    run common.arg_nonempty(updated_description) catch (err) {
       run queue.mark_task_dev_ready(header)
       log "Marked dev-ready: ${header}"
       return ""
     }
-    run save_string_to_file(body_file, updated_description)
+    run common.save_string_to_file(body_file, updated_description)
     run queue.set_task_description_from_file(header, body_file)
     run queue.mark_task_dev_ready(header)
     log "Marked dev-ready: ${header}"
@@ -128,16 +108,16 @@ workflow review_one_header(header) {
 
 workflow process_headers_recursive(header, remaining) {
   run review_one_header(header)
-  run arg_nonempty(remaining) catch (err) {
+  run common.arg_nonempty(remaining) catch (err) {
     return ""
   }
-  const next = run first_line_str(remaining)
-  const rest = run rest_lines_str(remaining)
+  const next = run common.first_line_str(remaining)
+  const rest = run common.rest_lines_str(remaining)
   run process_headers_recursive(next, rest)
 }
 
 workflow maybe_process_headers(first, rest) {
-  run arg_nonempty(first) catch (err) {
+  run common.arg_nonempty(first) catch (err) {
     return ""
   }
   run process_headers_recursive(first, rest)
@@ -145,8 +125,8 @@ workflow maybe_process_headers(first, rest) {
 
 workflow default() {
   const headers = run queue.get_all_task_headers()
-  const first = run first_line_str(headers)
-  const rest = run rest_lines_str(headers)
+  const first = run common.first_line_str(headers)
+  const rest = run common.rest_lines_str(headers)
   run maybe_process_headers(first, rest)
   ensure queue.all_dev_ready() catch (err) {
     fail "One or more tasks need work. Review the agent output above."

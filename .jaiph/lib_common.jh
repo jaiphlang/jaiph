@@ -1,0 +1,33 @@
+#!/usr/bin/env jaiph
+
+#
+# Shared string/file helpers for the .jaiph orchestration workflows.
+# Import as: import "./lib_common.jh" as common
+#
+# Writes UTF-8 text to a path: $1 = path, $2 = content.
+# python3 instead of `echo`, so backslashes and dash-leading content
+# are written verbatim. Content still travels through argv, so it is
+# subject to the OS ARG_MAX limit (~1 MB on macOS).
+export script save_string_to_file = ```python3
+import sys
+if len(sys.argv) < 3:
+    sys.exit(2)
+path, content = sys.argv[1], sys.argv[2]
+open(path, "w", encoding="utf-8").write(content)
+```
+
+export script first_line_str = `printf '%s\n' "$1" | head -n 1`
+
+export script rest_lines_str = `printf '%s\n' "$1" | tail -n +2`
+
+export script arg_nonempty = `[ -n "$1" ]`
+
+export script str_equals = `[ "$1" = "$2" ]`
+
+export script to_lower = `printf '%s' "$1" | tr '[:upper:]' '[:lower:]'`
+
+export script mkdir_p_simple = `mkdir -p "$1"`
+
+export script rm_file_simple = `rm -f "$1"`
+
+export script jaiph_tmp_dir = `printf '%s\n' "$JAIPH_WORKSPACE/.jaiph/tmp"`

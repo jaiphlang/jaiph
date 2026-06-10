@@ -1,0 +1,138 @@
+#!/usr/bin/env jaiph
+
+#
+# Security review of code changes. Reviews uncommitted changes by default,
+# or a git diff range passed as the first argument:
+#   jaiph run .jaiph/security_review.jh              # staged + unstaged + untracked
+#   jaiph run .jaiph/security_review.jh "main..HEAD" # a ref range
+# Writes a markdown report to .jaiph/tmp and publishes it as a run artifact.
+# Fails when any HIGH severity finding is confirmed.
+#
+# Review methodology adapted from anthropics/claude-code-security-review
+# (claudecode/prompts.py): high-confidence findings only, explicit
+# false-positive exclusions, severity + confidence scoring.
+#
+import "./lib_common.jh" as common
+import "jaiphlang/artifacts" as artifacts
+
+config {
+  agent.backend = "claude"
+  agent.claude_flags = "--permission-mode bypassPermissions"
+}
+
+const report_file = .jaiph/tmp/security_review_report.md
+
+const reviewer_role = """
+  You are a senior security engineer conducting a focused security review.
+  Identify HIGH-CONFIDENCE security vulnerabilities with real exploitation
+  potential. Minimize false positives: flag only issues where you are more
+  than 80% confident of actual exploitability in this codebase.
+
+  Vulnerability classes to examine:
+  1. Input validation: SQL/command/template/NoSQL injection, XXE,
+     path traversal.
+  2. Authentication & authorization: bypass logic, privilege escalation,
+     session flaws, JWT issues, insecure direct object references.
+  3. Crypto & secrets: hardcoded credentials, weak algorithms, improper key
+     storage, certificate validation bypasses, insecure randomness.
+  4. Code execution: unsafe deserialization, eval/exec on untrusted input,
+     unsafe YAML/pickle loading, XSS (reflected, stored, DOM-based).
+  5. Data exposure: secrets or PII in logs, debug info leaks, overly
+     revealing error messages, sensitive data written to artifacts.
+
+  Severity scale:
+  - HIGH: directly exploitable; leads to RCE, data breach, or auth bypass.
+  - MEDIUM: exploitable under specific conditions, significant impact.
+  - LOW: defense-in-depth gaps or low-impact weaknesses.
+
+  Do NOT report (out of scope, treated as noise):
+  - Denial of service, rate limiting, memory/CPU exhaustion.
+  - Missing input validation on non-security-critical fields without a
+    demonstrated security impact.
+  - Any finding you cannot back with a concrete exploit scenario.
+  - Style, performance, or general code-quality issues.
+"""
+
+script git_diff_uncommitted = ```
+{
+  git diff --cached
+  git diff
+  git ls-files --others --exclude-standard | while IFS= read -r f; do
+    [ -z "$f" ] && continue
+    git diff --no-index -- /dev/null "$f" || true
+  done
+}
+```
+
+script git_diff_range = `git diff "$1"`
+
+script worktree_fingerprint = `git status --porcelain | sort | cksum`
+
+workflow review_diff(diff_text) {
+  const result = prompt """
+    <role>
+    ${reviewer_role}
+    </role>
+    <task>
+    Review the following code changes for security vulnerabilities. You have
+    read access to the full repository — read surrounding source files
+    whenever needed to confirm whether a finding is actually exploitable;
+    do not judge from the diff alone.
+
+    Write a full markdown report to ${report_file} (overwrite if present)
+    with one section per finding: title, severity (HIGH/MEDIUM/LOW),
+    confidence (0.7-1.0; discard anything below 0.7), file and line,
+    a concrete exploit scenario, and a specific remediation. If there are
+    no findings, write a short report stating what was reviewed and that
+    nothing was found.
+
+    Do not modify any file in the repository other than ${report_file}.
+
+    Respond with JSON fields:
+    - verdict: the string "fail" if there is at least one HIGH finding,
+      otherwise the string "pass".
+    - highs, mediums, lows: finding counts by severity.
+    - summary: 1-3 sentences describing the overall result.
+
+    Code changes under review:
+    ${diff_text}
+    </task>
+  """
+  returns "{ verdict: string, highs: number, mediums: number, lows: number, summary: string }"
+
+  log "Security review: ${result.summary}"
+  log "Findings: high=${result.highs} medium=${result.mediums} low=${result.lows} (report: ${report_file})"
+  return result.verdict
+}
+
+workflow default(scope) {
+  run common.mkdir_p_simple(".jaiph/tmp")
+  const fingerprint_before = run worktree_fingerprint()
+
+  const diff_text = match scope {
+    "" => run git_diff_uncommitted()
+    _ => run git_diff_range(scope)
+  }
+  if diff_text == "" {
+    log "Security review: no changes to review."
+    return ""
+  }
+
+  const verdict = run review_diff(diff_text)
+
+  # The reviewer must be read-only apart from the (gitignored) report file.
+  const fingerprint_after = run worktree_fingerprint()
+  run common.str_equals(fingerprint_before, fingerprint_after) catch (err) {
+    fail "Security review must not modify the worktree, but git status changed during review. Inspect git status before trusting this run."
+  }
+
+  run artifacts.save(report_file)
+
+  run common.str_equals(verdict, "pass") catch (err) {
+    fail """
+      Security review found HIGH severity issues.
+      See ${report_file} (also published to the run artifacts directory).
+    """
+  }
+  log "Security review passed."
+}
