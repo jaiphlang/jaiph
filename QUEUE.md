@@ -14,18 +14,6 @@ Process rules:
 
 ***
 
-## Allow `catch` / `recover` on inline-script `run` steps #dev-ready
-
-**Context.** Named-ref calls support failure handling (`run deploy() catch (err) { … }`, `run deploy() recover (err) { … }`), but inline scripts do not: `` run `test -z "$(git status --porcelain)"`() catch (err) { … } `` fails with `E_PARSE unexpected content after anonymous inline script: 'catch (err) {'`. Authors are forced to declare a named `script` solely to attach failure handling to a one-liner. The grammar EBNF in `docs/grammar.md` shows `run_catch_stmt = "run" call_ref "catch" …` (call_ref only); the inline-script parse path rejects any trailing tokens after the closing `)`.
-
-**Change.** Extend the inline-script `run` parse path (single-backtick and fenced forms) to accept the same optional `catch (name) <body>` / `recover (name) <body>` suffixes as named-ref `run`, with identical semantics (catch = once, recover = retry loop honoring `run.recover_limit`, mutually exclusive). Runtime: inline scripts already execute through the same managed-subprocess path as named scripts, so the catch/recover machinery should be reusable. Keep the existing restriction that `run async` does not combine with inline scripts.
-
-**Acceptance criteria.**
-- txtar `valid.txt` cases: inline script + `catch` block, inline script + `recover` block, in both workflow and rule bodies.
-- Runtime e2e: a failing inline script's `catch` body runs once with the merged output bound; a failing inline script under `recover` retries until a counter-file-based repair makes it pass.
-- `recover` + `catch` together on one inline step is rejected (same error as named refs) — txtar case.
-- `docs/grammar.md` EBNF (`run_catch_stmt` / `run_recover_stmt` / `inline_script`) and the Inline Scripts restriction list updated; `docs/jaiph-skill.md` inline-script section updated (remove the "no catch/recover on inline scripts" caveat).
-
 ## Allow dot-notation subjects in `if` and `match` #dev-ready
 
 **Context.** Typed prompt captures expose fields via dot notation (`${r.verdict}`) in strings, but `if` and `match` subjects must be plain identifiers: `if r.verdict == "reject" { … }` fails with `E_PARSE invalid if syntax; expected: if <identifier> <op> <operand> …`. The workaround (`const verdict = "${r.verdict}"` then `if verdict == …`) is boilerplate on the most common typed-prompt pattern: ask for a verdict, branch on it.

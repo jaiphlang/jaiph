@@ -399,6 +399,50 @@ function tryParseEnsure(c: BlockCtx): BlockResult | null {
   );
 }
 
+/**
+ * After `run \`body\`(args)` / `run \`\`\`...\`\`\`(args)`, optionally parse an
+ * attached `catch (...) { ... }` or `recover(...) { ... }` clause. Same
+ * semantics and bindings as named-ref `run`. `recover` and `catch` are
+ * mutually exclusive — when both appear on the same step the leftover
+ * keyword falls through and is rejected with the existing "unexpected
+ * content after anonymous inline script" error.
+ */
+function parseInlineScriptTail(
+  c: BlockCtx,
+  result: { closingLineIdx: number; trailing: string; nextLineIdx: number },
+  body: Expr,
+  stepLoc: { line: number; col: number },
+): BlockResult {
+  const trimmed = result.trailing.trimStart();
+  if (trimmed === "") {
+    return { step: execStep(body, stepLoc), nextIdx: result.nextLineIdx };
+  }
+  const recoverMatch = trimmed.match(/^recover([\s(].*)$/s);
+  const catchMatch = trimmed.match(/^catch(\s.*)$/s);
+  const attached =
+    recoverMatch !== null
+      ? { keyword: "recover" as const, after: recoverMatch[1] }
+      : catchMatch !== null
+        ? { keyword: "catch" as const, after: catchMatch[1] }
+        : null;
+  if (!attached) {
+    fail(
+      c.filePath,
+      `unexpected content after anonymous inline script: '${trimmed}'`,
+      result.closingLineIdx + 1,
+      c.innerRaw.indexOf("run") + 1,
+    );
+  }
+  const closingRaw = c.lines[result.closingLineIdx]!;
+  const closingNo = result.closingLineIdx + 1;
+  const block = parseAttachedBlock(
+    c.filePath, c.lines, result.closingLineIdx, closingNo, closingRaw,
+    attached.keyword, attached.after, c.trivia,
+  );
+  const extras = attached.keyword === "catch" ? { catch: block.body } : { recover: block.body };
+  return { step: execStep(body, stepLoc, extras), nextIdx: block.nextIdx };
+}
+
 function tryParseRun(c: BlockCtx): BlockResult | null {
   if (!c.inner.startsWith("run ")) return null;
   const runCol = c.innerRaw.indexOf("run") + 1;
@@ -413,14 +457,15 @@ function tryParseRun(c: BlockCtx): BlockResult | null {
   }
   const runBody = c.inner.slice("run ".length).trim();
   if (runBody.startsWith("`")) {
-    const result = parseAnonymousInlineScript(c.filePath, c.lines, c.idx, runBody, c.innerNo, runCol);
-    return {
-      step: execStep(
-        { kind: "inline_script", body: result.body, ...(result.lang ? { lang: result.lang } : {}), args: result.args },
-        { line: c.innerNo, col: runCol },
-      ),
-      nextIdx: result.nextLineIdx,
+    const result = parseAnonymousInlineScript(c.filePath, c.lines, c.idx, runBody, c.innerNo, runCol, true);
+    const body: Expr = {
+      kind: "inline_script",
+      body: result.body,
+      ...(result.lang ? { lang: result.lang } : {}),
+      args: result.args,
     };
+    const stepLoc = { line: c.innerNo, col: runCol };
+    return parseInlineScriptTail(c, result, body, stepLoc);
   }
   if (runBody.startsWith("script(") || runBody.startsWith("script (")) {
     fail(c.filePath, 'inline script syntax has changed: use run `body`(args) instead of run script(args) "body"', c.innerNo);

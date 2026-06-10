@@ -1986,5 +1986,12 @@
     "col": 5,
     "code": "E_PARSE",
     "message": "\"else if\" chaining is not supported; nest an \"if\" inside the \"else\" block, or use \"match\" for multi-way branching"
+  },
+  "inline script recover and catch on same step rejected": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "unexpected content after log string: '} catch (e) { log \"c\"'"
   }
 }

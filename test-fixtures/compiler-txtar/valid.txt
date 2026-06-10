@@ -1213,3 +1213,74 @@ workflow default(mode) {
     }
   }
 }
+
+=== inline script catch in workflow
+# @expect ok
+--- input.jh
+workflow default() {
+  run `false`() catch (err) {
+    log "caught: ${err}"
+  }
+}
+
+=== inline script recover in workflow
+# @expect ok
+--- input.jh
+workflow default() {
+  run `test -f .gate`() recover(err) {
+    run `touch .gate`()
+  }
+}
+
+=== inline script catch in rule
+# @expect ok
+--- input.jh
+script noop = `true`
+rule check() {
+  run `false`() catch (err) {
+    run noop()
+  }
+}
+workflow default() {
+  ensure check()
+}
+
+=== inline script recover in rule
+# @expect ok
+--- input.jh
+script noop = `true`
+rule check() {
+  run `test -f .gate`() recover(err) {
+    run noop()
+  }
+}
+workflow default() {
+  ensure check()
+}
+
+=== fenced inline script catch in workflow
+# @expect ok
+--- input.jh
+workflow default() {
+  run ```
+exit 1
+```() catch (err) {
+    log "fenced caught: ${err}"
+  }
+}
+
+=== inline script with args and catch
+# @expect ok
+--- input.jh
+workflow default() {
+  run `false $1`("x") catch (err) {
+    log "caught: ${err}"
+  }
+}
+
+=== inline script catch single-statement body
+# @expect ok
+--- input.jh
+workflow default() {
+  run `false`() catch (err) log "recovered: ${err}"
+}
