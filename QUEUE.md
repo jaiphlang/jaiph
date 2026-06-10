@@ -14,19 +14,6 @@ Process rules:
 
 ***
 
-## `jaiph test` discovery with zero tests should not fail #dev-ready
-
-**Context.** `jaiph test` (no args) and `jaiph test <dir>` exit **1** with `jaiph test: no *.test.jh files found` when discovery matches nothing (`src/cli/commands/test.ts:25,43`). This forces every CI pipeline and agent loop to guard the call ("run jaiph test only if test files exist"), and the bootstrap skill doc has to carry a warning about it.
-
-**Change.** In **discovery mode** (no path, or a directory path), zero matches prints `jaiph test: no *.test.jh files found (nothing to do)` to stderr and exits **0**. Passing an explicit **file** path that does not exist or is not a `*.test.jh` file remains an error (exit 1) — a named target must exist.
-
-**Acceptance criteria.**
-- Test: `jaiph test` in a workspace without any `*.test.jh` exits 0 and prints the notice.
-- Test: `jaiph test <dir>` where the dir exists but has no test files exits 0.
-- Test: `jaiph test missing.test.jh` (nonexistent file) exits 1.
-- Existing behavior for found-and-failing tests unchanged (exit non-zero).
-- `docs/cli.md` and `docs/testing.md` updated; remove the "skip jaiph test if there are no test files" caveat from `docs/jaiph-skill.md` ("Your authoring loop" and the final commands block).
-
 ## Reject mixing `mock prompt { … }` with queued `mock prompt "…"` #dev-ready
 
 **Context.** In a `*.test.jh` test block, when a pattern-dispatch `mock prompt { … }` block is present, all queue-style `mock prompt "…"` / `mock prompt <const>` lines in the same block are **silently ignored** (`docs/testing.md` "Limitations" documents this). Silently ignoring authored mocks makes tests pass for the wrong reason.

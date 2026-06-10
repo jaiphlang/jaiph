@@ -10,25 +10,65 @@ e2e::prepare_test_env "test_discovery_errors"
 TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 
 # ==========================================================================
-# Section 1: jaiph test on empty directory — no .test.jh files found
+# Section 1: jaiph test on empty directory — exits 0 with notice (discovery)
 # ==========================================================================
 
 e2e::section "jaiph test: empty directory"
 
 mkdir -p "${TEST_DIR}/empty_dir"
 
+empty_err="$(mktemp)"
+if ! jaiph test "${TEST_DIR}/empty_dir" >/dev/null 2>"${empty_err}"; then
+  cat "${empty_err}" >&2
+  rm -f "${empty_err}"
+  e2e::fail "jaiph test on empty directory should exit 0 in discovery mode"
+fi
+empty_out="$(cat "${empty_err}")"
+rm -f "${empty_err}"
+
+e2e::assert_equals "${empty_out}" \
+  "jaiph test: no *.test.jh files found (nothing to do)" \
+  "empty directory prints discovery notice on stderr"
+
+# ==========================================================================
+# Section 1a: jaiph test (no args) in a workspace without test files
+# ==========================================================================
+
+e2e::section "jaiph test: no args in empty workspace"
+
+mkdir -p "${TEST_DIR}/empty_workspace"
+
+noargs_err="$(mktemp)"
+if ! (cd "${TEST_DIR}/empty_workspace" && jaiph test >/dev/null 2>"${noargs_err}"); then
+  cat "${noargs_err}" >&2
+  rm -f "${noargs_err}"
+  e2e::fail "jaiph test with no args in empty workspace should exit 0"
+fi
+noargs_out="$(cat "${noargs_err}")"
+rm -f "${noargs_err}"
+
+e2e::assert_equals "${noargs_out}" \
+  "jaiph test: no *.test.jh files found (nothing to do)" \
+  "no args in empty workspace prints discovery notice"
+
+# ==========================================================================
+# Section 1b: jaiph test on nonexistent file — exits non-zero
+# ==========================================================================
+
+e2e::section "jaiph test: nonexistent file rejected"
+
 set +e
-empty_out="$(jaiph test "${TEST_DIR}/empty_dir" 2>&1)"
-empty_exit=$?
+missing_out="$(jaiph test "${TEST_DIR}/does_not_exist.test.jh" 2>&1)"
+missing_exit=$?
 set -e
 
-if [[ ${empty_exit} -eq 0 ]]; then
-  printf "%s\n" "${empty_out}" >&2
-  e2e::fail "jaiph test on empty directory should exit non-zero"
+if [[ ${missing_exit} -eq 0 ]]; then
+  printf "%s\n" "${missing_out}" >&2
+  e2e::fail "jaiph test on nonexistent file should exit non-zero"
 fi
-# assert_contains: error message includes varying directory path
-e2e::assert_contains "${empty_out}" "no *.test.jh files" \
-  "empty directory produces discovery error"
+# assert_contains: ENOENT message includes absolute path which varies per machine
+e2e::assert_contains "${missing_out}" "does_not_exist.test.jh" \
+  "nonexistent file is reported as error"
 
 # ==========================================================================
 # Section 2: jaiph test on a plain .jh file (not .test.jh)
