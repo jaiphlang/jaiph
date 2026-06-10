@@ -76,6 +76,7 @@ type WorkflowContext = {
   workflowName: string;
   routes: Map<string, string[]>;
   queue: InboxMsg[];
+  workflowMeta?: WorkflowMetadata;
 };
 
 export class NodeWorkflowRuntime {
@@ -351,6 +352,7 @@ export class NodeWorkflowRuntime {
         workflowName,
         routes: new Map(),
         queue: [],
+        workflowMeta: resolved.workflow.metadata,
       };
       // Build route map from channel-level route declarations in the module.
       // Only register on the entry workflow (not nested calls) so that sends from
@@ -1415,6 +1417,10 @@ export class NodeWorkflowRuntime {
   }
 
   private resolveRecoverLimit(filePath: string): number {
+    const activeWorkflowMeta = this.workflowCtxStack[this.workflowCtxStack.length - 1]?.workflowMeta;
+    if (activeWorkflowMeta?.run?.recoverLimit !== undefined) {
+      return activeWorkflowMeta.run.recoverLimit;
+    }
     const moduleMeta = this.graph.modules.get(filePath)?.ast.metadata;
     return moduleMeta?.run?.recoverLimit ?? 10;
   }

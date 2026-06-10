@@ -457,7 +457,7 @@ run deploy(env) recover(err) {
 3. If it fails, bind merged stdout+stderr to the binding (e.g. `err`), execute the repair body, then go to step 1.
 4. If the retry limit is reached and the target still fails, the step fails with the last error.
 
-**Retry limit:** Default is **10**. Override per-module with `run.recover_limit`:
+**Retry limit:** Default is **10**. Override with `run.recover_limit` at either module-level or workflow-level config (workflow-level takes precedence):
 
 ```jaiph
 config {

@@ -14,17 +14,6 @@ Process rules:
 
 ***
 
-## Honor workflow-level `run.recover_limit` #dev-ready
-
-**Context.** A workflow body may open with a `config { … }` block that overrides `agent.*` and `run.*` keys. But `resolveRecoverLimit` (`src/runtime/kernel/node-workflow-runtime.ts:1387`) reads only `moduleMeta?.run?.recoverLimit ?? 10` — a workflow-level `run.recover_limit = 3` parses fine and is silently ignored. `docs/configuration.md` documents this exception, which is a trap: config that validates but does nothing.
-
-**Change.** Make `run … recover` resolve its limit through the same precedence as other run keys: **workflow-level config > module-level config > default 10**. Update `resolveRecoverLimit` to consult the active workflow's metadata scope before falling back to module metadata. Then delete the exception text from `docs/configuration.md` (three places: "Three ways to configure", "Run keys" table row, "Workflow-level config" rules) and from `docs/grammar.md` / `docs/jaiph-skill.md` if mentioned.
-
-**Acceptance criteria.**
-- Test: a workflow with `config { run.recover_limit = 2 }` and a `run failing_script() recover (e) { … }` step retries exactly 2 times then fails (count attempts via a counter file written by the script).
-- Test: a sibling workflow in the same module without its own config still uses the module-level value.
-- Docs updated as described; `grep -rn "workflow-level run.recover_limit" docs/` returns nothing stale.
-
 ## Add `else` branch to `if` #dev-ready
 
 **Context.** `if var == "value" { … }` exists in workflows and rules, but there is no `else`. The documented workaround is `match`, which forces a wildcard arm and value-shaped bodies, or abusing `catch` blocks. This is the single biggest ergonomic gap agents hit when authoring workflows. Parser entry: `src/parse/` (the `if` handler in the `STATEMENT` dispatch table in `src/parse/workflow-brace.ts`); step validation: `src/transpile/validate-step.ts`; runtime: the `if` case in `src/runtime/kernel/node-workflow-runtime.ts`; formatter: `src/format/emit.ts`.

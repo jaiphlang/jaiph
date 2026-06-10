@@ -113,6 +113,105 @@ test("recover: retry limit exhaustion fails the workflow", () => {
   }
 });
 
+test("recover: workflow-level run.recover_limit overrides module-level", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-recover-workflow-cfg-"));
+  try {
+    writeFileSync(join(root, ".counter"), "0");
+    writeFileSync(
+      join(root, "main.jh"),
+      [
+        "config {",
+        "  run.recover_limit = 50",
+        "}",
+        "",
+        "script bump_and_fail = ```",
+        "count=$(cat .counter)",
+        "echo $(( count + 1 )) > .counter",
+        "exit 1",
+        "```",
+        "workflow failing() {",
+        "  run bump_and_fail()",
+        "}",
+        "workflow default() {",
+        "  config {",
+        "    run.recover_limit = 2",
+        "  }",
+        '  run failing() recover(err) {',
+        '    log "repair attempt"',
+        '  }',
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const cliPath = join(process.cwd(), "dist/src/cli.js");
+    const r = spawnSync("node", [cliPath, "run", join(root, "main.jh")], {
+      encoding: "utf8",
+      cwd: root,
+      env: { ...process.env, JAIPH_DOCKER_ENABLED: "false" },
+    });
+    assert.notEqual(r.status, 0, "should fail after retry limit exhausted");
+    const combined = r.stdout + r.stderr;
+    assert.match(combined, /FAIL/);
+    const counter = require("node:fs").readFileSync(join(root, ".counter"), "utf8").trim();
+    // limit=2 means 1 initial attempt + 2 retries = 3 invocations of the failing script.
+    assert.equal(counter, "3", `expected 3 attempts, got ${counter}`);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("recover: sibling workflow without own config uses module-level run.recover_limit", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-recover-sibling-cfg-"));
+  try {
+    writeFileSync(join(root, ".counter"), "0");
+    writeFileSync(
+      join(root, "main.jh"),
+      [
+        "config {",
+        "  run.recover_limit = 2",
+        "}",
+        "",
+        "script bump_and_fail = ```",
+        "count=$(cat .counter)",
+        "echo $(( count + 1 )) > .counter",
+        "exit 1",
+        "```",
+        "workflow failing() {",
+        "  run bump_and_fail()",
+        "}",
+        "workflow other_default() {",
+        "  config {",
+        "    run.recover_limit = 50",
+        "  }",
+        '  run failing() recover(err) {',
+        '    log "ignored"',
+        '  }',
+        "}",
+        "workflow default() {",
+        '  run failing() recover(err) {',
+        '    log "repair attempt"',
+        '  }',
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const cliPath = join(process.cwd(), "dist/src/cli.js");
+    const r = spawnSync("node", [cliPath, "run", join(root, "main.jh")], {
+      encoding: "utf8",
+      cwd: root,
+      env: { ...process.env, JAIPH_DOCKER_ENABLED: "false" },
+    });
+    assert.notEqual(r.status, 0, "should fail after retry limit exhausted");
+    const combined = r.stdout + r.stderr;
+    assert.match(combined, /FAIL/);
+    const counter = require("node:fs").readFileSync(join(root, ".counter"), "utf8").trim();
+    // Module-level limit=2 → 1 initial + 2 retries = 3 attempts in `default` (no own config).
+    assert.equal(counter, "3", `expected 3 attempts, got ${counter}`);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("recover: retry limit configurable via config", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-recover-limit-"));
   try {
