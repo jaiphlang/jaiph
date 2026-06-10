@@ -1965,5 +1965,26 @@
     "col": 13,
     "code": "E_PARSE",
     "message": "const ... = run async must target a valid reference"
+  },
+  "if/else on its own line without preceding closing brace": {
+    "file": "input.jh",
+    "line": 5,
+    "col": 3,
+    "code": "E_PARSE",
+    "message": "\"else\" must appear on the same line as the closing \"}\" of an \"if\" block (e.g., \"} else {\")"
+  },
+  "if/else without preceding if": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 3,
+    "code": "E_PARSE",
+    "message": "\"else\" must appear on the same line as the closing \"}\" of an \"if\" block (e.g., \"} else {\")"
+  },
+  "if/else if chaining not supported": {
+    "file": "input.jh",
+    "line": 4,
+    "col": 5,
+    "code": "E_PARSE",
+    "message": "\"else if\" chaining is not supported; nest an \"if\" inside the \"else\" block, or use \"match\" for multi-way branching"
   }
 }

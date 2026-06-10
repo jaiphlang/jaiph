@@ -663,6 +663,10 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string, tri
       : `/${step.operand.source}/`;
     lines.push(`${ci}if ${step.subject} ${step.operator} ${operandStr} {`);
     lines.push(...emitSteps(step.body, pad, ci + pad, trivia));
+    if (step.elseBody) {
+      lines.push(`${ci}} else {`);
+      lines.push(...emitSteps(step.elseBody, pad, ci + pad, trivia));
+    }
     lines.push(`${ci}}`);
     return lines;
   }

@@ -1,0 +1,47 @@
+{
+  "channels": [],
+  "exports": [],
+  "imports": [],
+  "rules": [],
+  "scripts": [],
+  "workflows": [
+    {
+      "comments": [],
+      "name": "default",
+      "params": [
+        "status"
+      ],
+      "steps": [
+        {
+          "body": [
+            {
+              "level": "log",
+              "message": {
+                "kind": "literal",
+                "raw": "healthy"
+              },
+              "type": "say"
+            }
+          ],
+          "elseBody": [
+            {
+              "level": "logerr",
+              "message": {
+                "kind": "literal",
+                "raw": "unhealthy: ${status}"
+              },
+              "type": "say"
+            }
+          ],
+          "operand": {
+            "kind": "string_literal",
+            "value": "ok"
+          },
+          "operator": "==",
+          "subject": "status",
+          "type": "if"
+        }
+      ]
+    }
+  ]
+}

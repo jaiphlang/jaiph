@@ -14,31 +14,6 @@ Process rules:
 
 ***
 
-## Add `else` branch to `if` #dev-ready
-
-**Context.** `if var == "value" { … }` exists in workflows and rules, but there is no `else`. The documented workaround is `match`, which forces a wildcard arm and value-shaped bodies, or abusing `catch` blocks. This is the single biggest ergonomic gap agents hit when authoring workflows. Parser entry: `src/parse/` (the `if` handler in the `STATEMENT` dispatch table in `src/parse/workflow-brace.ts`); step validation: `src/transpile/validate-step.ts`; runtime: the `if` case in `src/runtime/kernel/node-workflow-runtime.ts`; formatter: `src/format/emit.ts`.
-
-**Change.** Support:
-
-```jaiph
-if status == "ok" {
-  log "healthy"
-} else {
-  logerr "unhealthy: ${status}"
-}
-```
-
-Rules: `else` must appear on the same line as the closing `}` of the `if` block (`} else {`), takes a brace block of the same step forms allowed in the surrounding body (workflow vs rule constraints apply identically), no `else if` chaining in this task (a bare `else` containing a nested `if` is fine). `if`/`else` remains a statement (no value production).
-
-**Acceptance criteria.**
-- txtar fixtures in `test-fixtures/compiler-txtar/valid.txt`: `if/else` in a workflow and in a rule compile.
-- txtar fixtures in `parse-errors.txt`: `else` on its own line without `}`, `else` without a preceding `if`, and `else if (`chaining`)` each produce `E_PARSE` with a fix hint.
-- Golden AST fixture + expected JSON for an `if/else` statement (`test-fixtures/golden-ast/`).
-- Runtime e2e test: both branches execute correctly (true → then-block only, false → else-block only), in a workflow and in a rule.
-- Rule-scope validation still rejects forbidden steps (e.g. `prompt`) inside an `else` block in a rule — covered by a txtar case.
-- `jaiph format` is idempotent on `if/else` (formatter test), emitting canonical `} else {`.
-- `docs/grammar.md` (`if` section + EBNF), `docs/language.md`, and `docs/jaiph-skill.md` updated (remove "no else" claims).
-
 ## Allow `catch` / `recover` on inline-script `run` steps #dev-ready
 
 **Context.** Named-ref calls support failure handling (`run deploy() catch (err) { … }`, `run deploy() recover (err) { … }`), but inline scripts do not: `` run `test -z "$(git status --porcelain)"`() catch (err) { … } `` fails with `E_PARSE unexpected content after anonymous inline script: 'catch (err) {'`. Authors are forced to declare a named `script` solely to attach failure handling to a one-liner. The grammar EBNF in `docs/grammar.md` shows `run_catch_stmt = "run" call_ref "catch" …` (call_ref only); the inline-script parse path rejects any trailing tokens after the closing `)`.

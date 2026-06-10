@@ -919,3 +919,17 @@ workflow default() {
   c <- $(d <- "x")
 }
 
+=== prompt inside else block in rule
+# @expect error E_VALIDATE "const ... = prompt is not allowed in rules" @5:5
+--- input.jh
+rule check(value) {
+  if value == "" {
+    fail "value required"
+  } else {
+    const answer = prompt "what next?"
+  }
+}
+workflow default(value) {
+  ensure check(value)
+}
+

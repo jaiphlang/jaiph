@@ -2524,3 +2524,37 @@ workflow default() {
   const x = run async 123bad()
 }
 
+=== if/else on its own line without preceding closing brace
+# @expect error E_PARSE "must appear on the same line as the closing" @5:3
+--- input.jh
+workflow default(x) {
+  if x == "y" {
+    log "yes"
+  }
+  else {
+    log "no"
+  }
+}
+
+=== if/else without preceding if
+# @expect error E_PARSE "must appear on the same line as the closing" @2:3
+--- input.jh
+workflow default() {
+  else {
+    log "no"
+  }
+}
+
+=== if/else if chaining not supported
+# @expect error E_PARSE "chaining is not supported" @4:5
+--- input.jh
+workflow default(x) {
+  if x == "a" {
+    log "a"
+  } else if x == "b" {
+    log "b"
+  } else {
+    log "c"
+  }
+}
+

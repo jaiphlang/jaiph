@@ -627,11 +627,13 @@ Aborts the workflow or rule with a message on stderr and non-zero exit. Accepts 
 
 ### `if` — conditional block
 
-Runs a nested block when a string variable compares equal (or not equal) to a literal, or matches (or does not match) a regex.
+Runs a nested block when a string variable compares equal (or not equal) to a literal, or matches (or does not match) a regex. An optional `else` branch runs when the condition is false.
 
 ```jaiph
 if status == "ok" {
   log "healthy"
+} else {
+  logerr "unhealthy: ${status}"
 }
 
 if message =~ /ERROR/ {
@@ -641,8 +643,9 @@ if message =~ /ERROR/ {
 
 - **Subject:** bare identifier naming an in-scope variable (`const`, capture, or parameter). If the value is an async **handle**, it is resolved before the test (same resolution rules as other reads).
 - **Operators:** `==` and `!=` take a **double-quoted string** operand; `=~` and `!~` take a **`/regex/`** operand. Mixing operator and operand kinds is a parse error.
+- **`else`** (optional): must appear on the **same line** as the closing `}` of the `if` block (`} else {`). The else body uses a brace block with the same step forms allowed in the surrounding workflow / rule body. `else if` chaining is not supported — nest an `if` inside the `else` block, or use `match` for multi-way branching. `if` / `else` is a statement (no value production); for value branching use `match`.
 
-Allowed in workflows and rules. Nested steps inside the block follow the same constraints as the surrounding workflow or rule body.
+Allowed in workflows and rules. Nested steps inside the block (and the `else` block) follow the same constraints as the surrounding workflow or rule body.
 
 ### `for … in …` — iterate lines of a string
 
@@ -1019,7 +1022,8 @@ return_value    = double_quoted_string | triple_quoted_block | "$" IDENT | "${" 
 match_stmt      = "match" IDENT "{" { match_arm } "}" ;
 match_expr      = "match" IDENT "{" { match_arm } "}" ;
 
-if_stmt         = "if" IDENT if_op if_operand "{" { workflow_step } "}" ;
+if_stmt         = "if" IDENT if_op if_operand "{" { workflow_step } "}" [ else_clause ] ;
+else_clause     = "else" "{" { workflow_step } "}" ;  (* `} else {` must be on one line; `else if` chaining is not supported *)
 if_op           = "==" | "!=" | "=~" | "!~" ;
 if_operand      = double_quoted_string | "/" regex_source "/" ;
 match_arm       = match_pattern "=>" arm_body NEWLINE ;

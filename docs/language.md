@@ -652,11 +652,17 @@ The outer `return` in `return match x { … }` applies to the whole match expres
 
 ### `if` — Conditional Guard
 
-Simple conditional that executes a block when a string comparison holds. No `else` branch — use `match` for exhaustive value branching.
+Simple conditional that executes a block when a string comparison holds. An optional `else` branch runs when the condition is false; for exhaustive value branching use `match`.
 
 ```jaiph
 if param == "" {
   fail "param was not provided"
+}
+
+if status == "ok" {
+  log "healthy"
+} else {
+  logerr "unhealthy: ${status}"
 }
 
 if mode =~ /^debug/ {
@@ -673,7 +679,7 @@ The subject is a bare identifier (no `$` or `${}`). Operators:
 | `=~` | regex match | `/pattern/` |
 | `!~` | regex non-match | `/pattern/` |
 
-The body is a brace block containing any valid workflow/rule steps. `if` is a statement — it does not produce a value, so it cannot be used with `const` or `return`.
+The body is a brace block containing any valid workflow/rule steps. `if` is a statement — it does not produce a value, so it cannot be used with `const` or `return`. An optional `else { … }` block must appear on the **same line** as the closing `}` of the `if` body (`} else {`); `else if` chaining is not supported (nest an `if` inside the `else` block, or use `match`).
 
 ```jaiph
 workflow default(env) {

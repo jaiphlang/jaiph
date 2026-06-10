@@ -132,6 +132,9 @@ function walkStepTree(
 
       if (s.type === "if") {
         descend(s.body, bindings, recoverBindings, false);
+        if (s.elseBody) {
+          descend(s.elseBody, bindings, recoverBindings, false);
+        }
         continue;
       }
 
