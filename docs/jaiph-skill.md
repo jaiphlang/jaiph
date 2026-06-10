@@ -275,7 +275,7 @@ for path in paths {                       # iterates LINES of the string `paths`
 ```
 
 - Subjects are **bare identifiers** (`if status == …`, `match status {`, `for x in lines`) — `$status` / `${status}` as subject is a parse error, and so is a dot-notation field (`if r.verdict == …`). Rebind first: `const verdict = "${r.verdict}"`.
-- `if` has **no `else`** — use `match` for branching, or a `catch` body as the failure branch.
+- `if` supports an optional `else` branch — `} else {` must be on **the same line** as the closing `}` of the `if` body. **No `else if` chaining**: nest an `if` inside the `else` block, or use `match` for multi-way branching.
 - `match`: arms are newline-separated (no commas), first match wins, exactly one `_` arm required. Arm bodies: string, `"""…"""`, in-scope identifier, `${var}`, `fail "…"`, `run ref()`, `ensure ref()`. **Not** allowed in arms: `return` (write `return match x { … }`), `log`/`logerr`, inline scripts — capture the match result into a `const` and act on it after.
 - `for` splits the source string on newlines (a trailing final newline does not produce an empty iteration). There is no numeric/while loop — iterate lines, use `recover`, or use recursive workflows (depth limit 256).
 

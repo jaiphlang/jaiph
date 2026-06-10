@@ -89,6 +89,7 @@ TEST_SCRIPTS=(
   "e2e/tests/133_return_bare_identifier.sh"
   "e2e/tests/134_script_imports.sh"
   "e2e/tests/135_for_string_lines.sh"
+  "e2e/tests/136_if_else_branch.sh"
 )
 
 PASS_COUNT=0

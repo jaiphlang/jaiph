@@ -1172,3 +1172,44 @@ workflow default() {
 workflow default(name) {
   return name
 }
+
+=== if/else in workflow
+# @expect ok
+--- input.jh
+workflow default(status) {
+  if status == "ok" {
+    log "healthy"
+  } else {
+    logerr "unhealthy: ${status}"
+  }
+}
+
+=== if/else in rule
+# @expect ok
+--- input.jh
+rule check(value) {
+  if value == "" {
+    fail "value required"
+  } else {
+    log "value: ${value}"
+  }
+}
+
+workflow default(value) {
+  ensure check(value)
+}
+
+=== if/else nested if in else block
+# @expect ok
+--- input.jh
+workflow default(mode) {
+  if mode == "fast" {
+    log "fast path"
+  } else {
+    if mode == "slow" {
+      log "slow path"
+    } else {
+      log "default path"
+    }
+  }
+}

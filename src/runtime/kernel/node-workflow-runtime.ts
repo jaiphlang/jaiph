@@ -910,8 +910,9 @@ export class NodeWorkflowRuntime {
         } else if (step.operator === "!~" && step.operand.kind === "regex") {
           condMet = !new RegExp(step.operand.source).test(subjectVal);
         }
-        if (condMet) {
-          const bodyResult = await this.executeSteps(scope, step.body, io);
+        const branch = condMet ? step.body : step.elseBody;
+        if (branch) {
+          const bodyResult = await this.executeSteps(scope, branch, io);
           if (bodyResult.status !== 0 || bodyResult.returnValue !== undefined) {
             return this.mergeStepResult(accOut, accErr, bodyResult);
           }

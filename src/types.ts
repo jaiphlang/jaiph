@@ -193,6 +193,8 @@ export type WorkflowStepDef =
       operator: "==" | "!=" | "=~" | "!~";
       operand: { kind: "string_literal"; value: string } | { kind: "regex"; source: string };
       body: WorkflowStepDef[];
+      /** Optional `else { ... }` branch on `} else {`. */
+      elseBody?: WorkflowStepDef[];
       loc: SourceLoc;
     }
   | {

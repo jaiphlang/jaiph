@@ -800,6 +800,15 @@
       "message": "command substitution cannot contain channel send (<-); use a workflow send step instead"
     }
   ],
+  "validate-errors.txt > prompt inside else block in rule": [
+    {
+      "file": "input.jh",
+      "line": 5,
+      "col": 5,
+      "code": "E_VALIDATE",
+      "message": "const ... = prompt is not allowed in rules"
+    }
+  ],
   "validate-errors-multi-module.txt > duplicate import alias": [
     {
       "file": "main.jh",

@@ -569,4 +569,34 @@ describe("emitModule", () => {
     ].join("\n");
     assert.equal(roundTrip(source), source);
   });
+
+  it("formats if/else with canonical `} else {` on one line", () => {
+    const source = [
+      "workflow default(status) {",
+      '  if status == "ok" {',
+      '    log "healthy"',
+      "  } else {",
+      '    logerr "unhealthy: ${status}"',
+      "  }",
+      "}",
+      "",
+    ].join("\n");
+    assert.equal(roundTrip(source), source);
+  });
+
+  it("if/else is idempotent across two format passes", () => {
+    const source = [
+      "workflow default(status) {",
+      '  if status == "ok" {',
+      '    log "healthy"',
+      "  } else {",
+      '    logerr "unhealthy: ${status}"',
+      "  }",
+      "}",
+      "",
+    ].join("\n");
+    const once = roundTrip(source);
+    const twice = roundTrip(once);
+    assert.equal(twice, once);
+  });
 });

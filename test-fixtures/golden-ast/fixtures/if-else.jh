@@ -1,0 +1,7 @@
+workflow default(status) {
+  if status == "ok" {
+    log "healthy"
+  } else {
+    logerr "unhealthy: ${status}"
+  }
+}

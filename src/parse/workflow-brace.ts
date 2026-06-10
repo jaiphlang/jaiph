@@ -30,6 +30,12 @@ export type BlockParseOpts = {
    * reject specific keys (workflows reject `runtime.*` and `module.*`).
    */
   onConfigBlock?: (metadata: WorkflowMetadata, lineNo: number) => void;
+  /**
+   * When set (used for `if` bodies), also close the block on a `} else {`
+   * line and signal it via `closedWithElse` in the return value. Without
+   * this flag, `} else {` is parsed as a normal statement line (and errors).
+   */
+  allowElseTerminator?: boolean;
 };
 
 /** Parse statements until a closing `}` at the current block level. */
@@ -40,7 +46,7 @@ export function parseBraceBlockBody(
   openerLineNo: number,
   trivia: Trivia = createTrivia(),
   opts?: BlockParseOpts,
-): { steps: WorkflowStepDef[]; nextIdx: number } {
+): { steps: WorkflowStepDef[]; nextIdx: number; closedWithElse?: boolean } {
   const steps: WorkflowStepDef[] = [];
   let idx = startIdx;
   let hadNonCommentStep = false;
@@ -67,6 +73,25 @@ export function parseBraceBlockBody(
       });
       idx += 1;
       continue;
+    }
+    if (opts?.allowElseTerminator && /^}\s*else\b/.test(inner)) {
+      if (/^}\s*else\s+if\b/.test(inner)) {
+        fail(
+          filePath,
+          '"else if" chaining is not supported; nest an "if" inside the "else" block, or use "match" for multi-way branching',
+          innerNo,
+          innerRaw.indexOf("else") + 1,
+        );
+      }
+      if (/^}\s*else\s*\{\s*$/.test(inner)) {
+        return { steps, nextIdx: idx + 1, closedWithElse: true };
+      }
+      fail(
+        filePath,
+        '"else" must appear on the same line as the closing "}" of the "if" block, followed by "{" (e.g., "} else {")',
+        innerNo,
+        innerRaw.indexOf("else") + 1,
+      );
     }
     if (inner === "}") {
       return { steps, nextIdx: idx + 1 };
@@ -272,8 +297,31 @@ function tryParseIf(c: BlockCtx): BlockResult | null {
   if ((operator === "=~" || operator === "!~") && operand.kind === "string_literal") {
     fail(c.filePath, `operator "${operator}" requires a regex operand (/pattern/), not a string`, c.innerNo, ifLoc.col);
   }
-  const { steps: body, nextIdx } = parseBraceBlockBody(c.filePath, c.lines, c.idx + 1, c.innerNo, c.trivia);
-  return { step: { type: "if", subject, operator, operand, body, loc: ifLoc }, nextIdx };
+  const thenResult = parseBraceBlockBody(
+    c.filePath, c.lines, c.idx + 1, c.innerNo, c.trivia, { allowElseTerminator: true },
+  );
+  if (!thenResult.closedWithElse) {
+    return {
+      step: { type: "if", subject, operator, operand, body: thenResult.steps, loc: ifLoc },
+      nextIdx: thenResult.nextIdx,
+    };
+  }
+  const elseLineNo = thenResult.nextIdx; // line number of `} else {` is nextIdx - 1 (0-indexed: thenResult.nextIdx - 1)
+  const elseResult = parseBraceBlockBody(
+    c.filePath, c.lines, thenResult.nextIdx, elseLineNo, c.trivia,
+  );
+  return {
+    step: {
+      type: "if",
+      subject,
+      operator,
+      operand,
+      body: thenResult.steps,
+      elseBody: elseResult.steps,
+      loc: ifLoc,
+    },
+    nextIdx: elseResult.nextIdx,
+  };
 }
 
 function tryParseFor(c: BlockCtx): BlockResult | null {
@@ -532,6 +580,24 @@ function tryParseReturn(c: BlockCtx): BlockResult | null {
   return null;
 }
 
+function tryParseElseError(c: BlockCtx): BlockResult | null {
+  const elseCol = c.innerRaw.indexOf("else") + 1;
+  if (/^else\s+if\b/.test(c.inner)) {
+    fail(
+      c.filePath,
+      '"else if" chaining is not supported; nest an "if" inside the "else" block, or use "match" for multi-way branching',
+      c.innerNo,
+      elseCol,
+    );
+  }
+  fail(
+    c.filePath,
+    '"else" must appear on the same line as the closing "}" of an "if" block (e.g., "} else {")',
+    c.innerNo,
+    elseCol,
+  );
+}
+
 function tryParseStandaloneMatch(c: BlockCtx): BlockResult | null {
   const m = c.inner.match(/^match\s+(.+?)\s*\{\s*$/);
   if (!m) return null;
@@ -553,6 +619,7 @@ function tryParseStandaloneMatch(c: BlockCtx): BlockResult | null {
  */
 export const STATEMENT: Record<string, BlockHandler> = {
   if: tryParseIf,
+  else: tryParseElseError,
   for: tryParseFor,
   const: tryParseConst,
   fail: tryParseFail,
