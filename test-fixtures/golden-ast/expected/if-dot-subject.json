@@ -1,0 +1,54 @@
+{
+  "channels": [],
+  "exports": [],
+  "imports": [],
+  "rules": [],
+  "scripts": [],
+  "workflows": [
+    {
+      "comments": [],
+      "name": "default",
+      "params": [],
+      "steps": [
+        {
+          "name": "r",
+          "type": "const",
+          "value": {
+            "kind": "prompt",
+            "raw": "\"Classify\"",
+            "returns": "{ verdict: string }"
+          }
+        },
+        {
+          "body": [
+            {
+              "level": "log",
+              "message": {
+                "kind": "literal",
+                "raw": "approved"
+              },
+              "type": "say"
+            }
+          ],
+          "elseBody": [
+            {
+              "level": "log",
+              "message": {
+                "kind": "literal",
+                "raw": "rejected"
+              },
+              "type": "say"
+            }
+          ],
+          "operand": {
+            "kind": "string_literal",
+            "value": "ok"
+          },
+          "operator": "==",
+          "subject": "r.verdict",
+          "type": "if"
+        }
+      ]
+    }
+  ]
+}

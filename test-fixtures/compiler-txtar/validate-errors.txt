@@ -933,3 +933,47 @@ workflow default(value) {
   ensure check(value)
 }
 
+=== if dot subject where var is not a typed prompt capture
+# @expect error E_VALIDATE "not a typed prompt capture" @3:3
+--- input.jh
+workflow default() {
+  const r = "plain"
+  if r.verdict == "ok" {
+    log "ok"
+  }
+}
+
+=== if dot subject with unknown field
+# @expect error E_VALIDATE "is not defined in the returns schema" @3:3
+--- input.jh
+workflow default() {
+  const r = prompt "Classify" returns "{ verdict: string }"
+  if r.bogus == "ok" {
+    log "ok"
+  }
+}
+
+=== match dot subject where var is not a typed prompt capture
+# @expect error E_VALIDATE "not a typed prompt capture"
+--- input.jh
+workflow default() {
+  const r = "plain"
+  const x = match r.verdict {
+    "ok" => "approved"
+    _ => "rejected"
+  }
+  log "${x}"
+}
+
+=== match dot subject with unknown field
+# @expect error E_VALIDATE "is not defined in the returns schema"
+--- input.jh
+workflow default() {
+  const r = prompt "Classify" returns "{ verdict: string }"
+  const x = match r.bogus {
+    "ok" => "approved"
+    _ => "rejected"
+  }
+  log "${x}"
+}
+

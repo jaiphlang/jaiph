@@ -4,15 +4,18 @@ import { splitStatementsOnSemicolons } from "./statement-split";
 import { tripleQuoteBodyToRaw, trimAdjacentBlankLines } from "./triple-quote";
 
 const IDENT_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const DOT_IDENT_RE = /^[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*$/;
 
 /**
- * Validate that a match subject is a bare identifier (no `$` or `${}`).
+ * Validate that a match subject is a bare identifier or `IDENT.IDENT`
+ * (typed prompt capture field). Dot-field resolution and schema enforcement
+ * happen in the validator, mirroring `${var.field}` interpolation.
  */
 export function validateMatchSubject(filePath: string, subject: string, lineNo: number): void {
   if (subject.startsWith("${") || subject.startsWith("$")) {
     fail(filePath, `match subject should be a bare identifier: match varName { ... }`, lineNo);
   }
-  if (!IDENT_RE.test(subject)) {
+  if (!IDENT_RE.test(subject) && !DOT_IDENT_RE.test(subject)) {
     fail(filePath, `match subject must be a valid identifier, got: ${subject}`, lineNo);
   }
 }

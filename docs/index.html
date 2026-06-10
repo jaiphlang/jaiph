@@ -676,7 +676,9 @@ Jaiph: Running async.jh<span class="run-banner-meta"> (Docker sandbox, fusefs)</
 
                     <dt><code>match var { "lit" =&gt; … ⏎ /re/ =&gt; … ⏎ _ =&gt; … }</code></dt>
                     <dd>Pattern match on a string value. The subject is a bare identifier (no
-                        <code>$</code> or <code>${}</code>). Arms are tested top-to-bottom; first match wins.
+                        <code>$</code> or <code>${}</code>), or <code>IDENT.IDENT</code> reading a field from a
+                        typed prompt capture (<code>match r.verdict { … }</code>). <code>if</code> accepts the
+                        same dot-subject form. Arms are tested top-to-bottom; first match wins.
                         Patterns: string literal (exact), regex, or <code>_</code> wildcard.
                         Arms are newline-delimited — commas between or after arms are rejected.
                         Usable as a statement, expression (<code>const x = match var { … }</code>),

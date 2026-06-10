@@ -1,0 +1,8 @@
+workflow default() {
+  const r = prompt "Classify" returns "{ verdict: string }"
+  if r.verdict == "ok" {
+    log "approved"
+  } else {
+    log "rejected"
+  }
+}

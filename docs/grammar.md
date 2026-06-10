@@ -654,7 +654,7 @@ if message =~ /ERROR/ {
 }
 ```
 
-- **Subject:** bare identifier naming an in-scope variable (`const`, capture, or parameter). If the value is an async **handle**, it is resolved before the test (same resolution rules as other reads).
+- **Subject:** bare identifier naming an in-scope variable (`const`, capture, or parameter), or `IDENT.IDENT` to read a field from a typed prompt capture (`if r.verdict == "ok" { … }` — the base must be a `const result = prompt … returns "{ field: type, … }"` capture and the field must appear in the `returns` schema; unknown bases or fields produce the same `E_VALIDATE` errors as `${var.field}` interpolation). If the value is an async **handle**, it is resolved before the test (same resolution rules as other reads).
 - **Operators:** `==` and `!=` take a **double-quoted string** operand; `=~` and `!~` take a **`/regex/`** operand. Mixing operator and operand kinds is a parse error.
 - **`else`** (optional): must appear on the **same line** as the closing `}` of the `if` block (`} else {`). The else body uses a brace block with the same step forms allowed in the surrounding workflow / rule body. `else if` chaining is not supported — nest an `if` inside the `else` block, or use `match` for multi-way branching. `if` / `else` is a statement (no value production); for value branching use `match`.
 
@@ -728,7 +728,7 @@ match status {
 }
 ```
 
-Pattern match on a string value. The subject is always a **bare identifier** (variable name without `$` or `${}`). Arms are tested top-to-bottom; the first match wins. Patterns can be:
+Pattern match on a string value. The subject is a **bare identifier** (`status`) or `IDENT.IDENT` to read a field from a typed prompt capture (`match r.verdict { … }` — the base must be a `const result = prompt … returns "{ field: type, … }"` capture and the field must appear in the `returns` schema; unknown bases or fields produce the same `E_VALIDATE` errors as `${var.field}` interpolation). The subject never starts with `$` or `${}`. Arms are tested top-to-bottom; the first match wins. Patterns can be:
 
 - **String literal** (`"ok"`) — exact equality against the subject
 - **Regex** (`/err/`) — tested against the subject
@@ -1032,10 +1032,11 @@ return_value    = double_quoted_string | triple_quoted_block | "$" IDENT | "${" 
                 | "run" ( call_ref | inline_script ) | "ensure" call_ref
                 | "match" IDENT "{" { match_arm } "}" ;
 
-match_stmt      = "match" IDENT "{" { match_arm } "}" ;
-match_expr      = "match" IDENT "{" { match_arm } "}" ;
+match_stmt      = "match" subject_ref "{" { match_arm } "}" ;
+match_expr      = "match" subject_ref "{" { match_arm } "}" ;
+subject_ref     = IDENT | IDENT "." IDENT ;  (* dot form requires the base to be a typed prompt capture with the field in its `returns` schema *)
 
-if_stmt         = "if" IDENT if_op if_operand "{" { workflow_step } "}" [ else_clause ] ;
+if_stmt         = "if" subject_ref if_op if_operand "{" { workflow_step } "}" [ else_clause ] ;
 else_clause     = "else" "{" { workflow_step } "}" ;  (* `} else {` must be on one line; `else if` chaining is not supported *)
 if_op           = "==" | "!=" | "=~" | "!~" ;
 if_operand      = double_quoted_string | "/" regex_source "/" ;

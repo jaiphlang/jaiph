@@ -14,19 +14,6 @@ Process rules:
 
 ***
 
-## Allow dot-notation subjects in `if` and `match` #dev-ready
-
-**Context.** Typed prompt captures expose fields via dot notation (`${r.verdict}`) in strings, but `if` and `match` subjects must be plain identifiers: `if r.verdict == "reject" { … }` fails with `E_PARSE invalid if syntax; expected: if <identifier> <op> <operand> …`. The workaround (`const verdict = "${r.verdict}"` then `if verdict == …`) is boilerplate on the most common typed-prompt pattern: ask for a verdict, branch on it.
-
-**Change.** Accept `IDENT.IDENT` as the subject of `if` and `match` statements/expressions when the base identifier is a typed prompt capture and the field exists in its `returns` schema — the same compile-time validation already implemented for `${var.field}` interpolation (see dot-notation validation in `src/transpile/`). Runtime resolves the field value exactly as interpolation does. Plain unknown `a.b` subjects (not a typed capture, or unknown field) get the existing dot-notation `E_VALIDATE` errors, not a parse error.
-
-**Acceptance criteria.**
-- txtar `valid.txt`: `if r.verdict == "ok" { … }` and `const x = match r.verdict { … }` compile when `r` is a typed prompt capture with a `verdict` field.
-- txtar `validate-errors.txt`: dot subject on a non-typed-capture variable and on an unknown field produce the same `E_VALIDATE` messages as the interpolation path.
-- Runtime e2e (with `mock prompt` JSON): both `if` branches and `match` arms select correctly based on the field value.
-- Golden AST fixture for an `if` with a dot-notation subject.
-- `docs/grammar.md` (`if`, `match`, EBNF subject productions) and `docs/jaiph-skill.md` (control-flow bullet about rebinding dot fields) updated.
-
 ## Per-subcommand `-h` / `--help` #dev-ready
 
 **Context.** Only `jaiph compile -h` prints command usage; `jaiph run --help`, `jaiph test --help`, `jaiph format --help`, `jaiph install --help` are parsed as file paths or ignored tokens and produce confusing errors (`src/cli/index.ts` recognizes `-h`/`--help` only as the first token after `jaiph`). `docs/cli.md` ("Global options") documents this limitation instead of fixing it.

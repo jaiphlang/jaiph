@@ -809,6 +809,42 @@
       "message": "const ... = prompt is not allowed in rules"
     }
   ],
+  "validate-errors.txt > if dot subject where var is not a typed prompt capture": [
+    {
+      "file": "input.jh",
+      "line": 3,
+      "col": 3,
+      "code": "E_VALIDATE",
+      "message": "${r.verdict}: \"r\" is not a typed prompt capture; dot notation requires a prompt with \"returns\" schema"
+    }
+  ],
+  "validate-errors.txt > if dot subject with unknown field": [
+    {
+      "file": "input.jh",
+      "line": 3,
+      "col": 3,
+      "code": "E_VALIDATE",
+      "message": "${r.bogus}: field \"bogus\" is not defined in the returns schema for \"r\"; available fields: verdict"
+    }
+  ],
+  "validate-errors.txt > match dot subject where var is not a typed prompt capture": [
+    {
+      "file": "input.jh",
+      "line": 3,
+      "col": 13,
+      "code": "E_VALIDATE",
+      "message": "${r.verdict}: \"r\" is not a typed prompt capture; dot notation requires a prompt with \"returns\" schema"
+    }
+  ],
+  "validate-errors.txt > match dot subject with unknown field": [
+    {
+      "file": "input.jh",
+      "line": 3,
+      "col": 13,
+      "code": "E_VALIDATE",
+      "message": "${r.bogus}: field \"bogus\" is not defined in the returns schema for \"r\"; available fields: verdict"
+    }
+  ],
   "validate-errors-multi-module.txt > duplicate import alias": [
     {
       "file": "main.jh",

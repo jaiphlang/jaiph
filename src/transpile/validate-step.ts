@@ -265,6 +265,7 @@ function validateIfStep(s: WorkflowStepDef, ctx: ValidatorCtx): void {
       );
     }
   }
+  validateDotSubject(s.subject, s.loc, ctx);
 }
 
 function validateForLinesStep(s: WorkflowStepDef, ctx: ValidatorCtx): void {
@@ -303,6 +304,7 @@ function validateExpr(
   }
   if (expr.kind === "match") {
     validateMatchExpr(ctx.diag, ctx.ast.filePath, expr.match, ctx.knownVars);
+    validateDotSubject(expr.match.subject, expr.match.loc, ctx);
     return;
   }
   if (expr.kind === "prompt") {
@@ -728,25 +730,54 @@ function validateDotFieldRefs(
   ctx: ValidatorCtx,
 ): void {
   for (const ref of extractDotFieldRefs(content)) {
-    const fields = ctx.promptSchemas.get(ref.varName);
-    if (!fields) {
-      ctx.diag.error(
-        ctx.ast.filePath,
-        loc.line,
-        loc.col,
-        "E_VALIDATE",
-        `\${${ref.varName}.${ref.fieldName}}: "${ref.varName}" is not a typed prompt capture; dot notation requires a prompt with "returns" schema`,
-      );
-    }
-    if (!fields.includes(ref.fieldName)) {
-      ctx.diag.error(
-        ctx.ast.filePath,
-        loc.line,
-        loc.col,
-        "E_VALIDATE",
-        `\${${ref.varName}.${ref.fieldName}}: field "${ref.fieldName}" is not defined in the returns schema for "${ref.varName}"; available fields: ${fields.join(", ")}`,
-      );
-    }
+    validateDotFieldRef(ref.varName, ref.fieldName, loc, ctx);
+  }
+}
+
+/**
+ * Validate a dot-notation `if` / `match` subject like `r.verdict`. Emits the
+ * same `E_VALIDATE` diagnostics as `${var.field}` interpolation when the base
+ * is not a typed prompt capture or the field is not in its `returns` schema.
+ * Non-dot subjects (single identifier) are accepted without further checks
+ * to preserve prior behavior.
+ */
+function validateDotSubject(
+  subject: string,
+  loc: { line: number; col: number },
+  ctx: ValidatorCtx,
+): void {
+  const dotIdx = subject.indexOf(".");
+  if (dotIdx === -1) return;
+  const varName = subject.slice(0, dotIdx);
+  const fieldName = subject.slice(dotIdx + 1);
+  validateDotFieldRef(varName, fieldName, loc, ctx);
+}
+
+function validateDotFieldRef(
+  varName: string,
+  fieldName: string,
+  loc: { line: number; col: number },
+  ctx: ValidatorCtx,
+): void {
+  const fields = ctx.promptSchemas.get(varName);
+  if (!fields) {
+    ctx.diag.error(
+      ctx.ast.filePath,
+      loc.line,
+      loc.col,
+      "E_VALIDATE",
+      `\${${varName}.${fieldName}}: "${varName}" is not a typed prompt capture; dot notation requires a prompt with "returns" schema`,
+    );
+    return;
+  }
+  if (!fields.includes(fieldName)) {
+    ctx.diag.error(
+      ctx.ast.filePath,
+      loc.line,
+      loc.col,
+      "E_VALIDATE",
+      `\${${varName}.${fieldName}}: field "${fieldName}" is not defined in the returns schema for "${varName}"; available fields: ${fields.join(", ")}`,
+    );
   }
 }
 

@@ -271,7 +271,7 @@ export type BlockHandler = (c: BlockCtx) => BlockResult | null;
 function tryParseIf(c: BlockCtx): BlockResult | null {
   const ifLoc = { line: c.innerNo, col: c.innerRaw.indexOf("if") + 1 };
   const m = c.inner.match(
-    /^if\s+([A-Za-z_][A-Za-z0-9_]*)\s+(==|!=|=~|!~)\s+("(?:[^"\\]|\\.)*"|\/(?:[^/\\]|\\.)*\/)\s*\{\s*$/,
+    /^if\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)\s+(==|!=|=~|!~)\s+("(?:[^"\\]|\\.)*"|\/(?:[^/\\]|\\.)*\/)\s*\{\s*$/,
   );
   if (!m) {
     if (/^if[\s(]/.test(c.inner)) {

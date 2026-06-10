@@ -139,6 +139,37 @@ export class NodeWorkflowRuntime {
     return result;
   }
 
+  /**
+   * Resolve an `if` / `match` subject to its value. Accepts plain identifiers
+   * (`status`) and `IDENT.IDENT` dot subjects (`r.verdict`) — the latter
+   * parses JSON from the base variable and extracts the field, mirroring
+   * `${var.field}` interpolation semantics.
+   */
+  private async resolveSubjectValue(
+    scope: Scope,
+    subject: string,
+  ): Promise<{ ok: true; value: string } | { ok: false; result: StepResult }> {
+    const dotIdx = subject.indexOf(".");
+    const base = dotIdx === -1 ? subject : subject.slice(0, dotIdx);
+    const rawBase = scope.vars.get(base);
+    if (rawBase && this.isHandle(rawBase)) {
+      const hr = await this.resolveHandleVar(scope, base);
+      if (hr.status !== 0) return { ok: false, result: hr };
+    }
+    const baseVal = scope.vars.get(base) ?? scope.env?.[base] ?? "";
+    if (dotIdx === -1) return { ok: true, value: baseVal };
+    const field = subject.slice(dotIdx + 1);
+    try {
+      const obj = JSON.parse(baseVal);
+      if (obj != null && typeof obj === "object" && field in obj) {
+        return { ok: true, value: String((obj as Record<string, unknown>)[field]) };
+      }
+    } catch {
+      // fall through to empty
+    }
+    return { ok: true, value: "" };
+  }
+
   /** Scan input for ${var} references and resolve any that are handles. */
   private async resolveHandlesInInput(scope: Scope, input: string): Promise<StepResult | null> {
     const re = /\$\{([a-zA-Z_][a-zA-Z0-9_]*)/g;
@@ -462,14 +493,9 @@ export class NodeWorkflowRuntime {
     scope: Scope,
     expr: MatchExprDef,
   ): Promise<{ ok: true; value: string } | { ok: false; result: StepResult }> {
-    // Resolve handle if the subject variable is a handle.
-    const rawSubject = scope.vars.get(expr.subject);
-    if (rawSubject && this.isHandle(rawSubject)) {
-      const hr = await this.resolveHandleVar(scope, expr.subject);
-      if (hr.status !== 0) return { ok: false, result: hr };
-    }
-    // Subject is a bare identifier — resolve against scope variables
-    const subject = scope.vars.get(expr.subject) ?? scope.env?.[expr.subject] ?? "";
+    const resolved = await this.resolveSubjectValue(scope, expr.subject);
+    if (!resolved.ok) return { ok: false, result: resolved.result };
+    const subject = resolved.value;
     for (const arm of expr.arms) {
       let matched = false;
       if (arm.pattern.kind === "wildcard") {
@@ -921,13 +947,9 @@ export class NodeWorkflowRuntime {
         });
       }
       if (step.type === "if") {
-        // Resolve handle if the subject variable is a handle.
-        const rawSubject = scope.vars.get(step.subject);
-        if (rawSubject && this.isHandle(rawSubject)) {
-          const hr = await this.resolveHandleVar(scope, step.subject);
-          if (hr.status !== 0) return this.mergeStepResult(accOut, accErr, hr);
-        }
-        const subjectVal = scope.vars.get(step.subject) ?? scope.env?.[step.subject] ?? "";
+        const resolved = await this.resolveSubjectValue(scope, step.subject);
+        if (!resolved.ok) return this.mergeStepResult(accOut, accErr, resolved.result);
+        const subjectVal = resolved.value;
         let condMet = false;
         if (step.operator === "==" && step.operand.kind === "string_literal") {
           condMet = subjectVal === step.operand.value;

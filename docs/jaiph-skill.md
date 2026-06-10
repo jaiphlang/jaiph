@@ -219,9 +219,8 @@ ${plan}
 ```jaiph
 const r = prompt "Assess this change" returns "{ verdict: string, risk: string }"
 log "verdict=${r.verdict} risk=${r.risk}"
-# if/match subjects must be plain identifiers — rebind a dot field first
-const verdict = "${r.verdict}"
-if verdict == "reject" {
+# if/match accept dot subjects on typed prompt captures — no rebind needed
+if r.verdict == "reject" {
   fail "rejected: ${r.risk}"
 }
 ```
@@ -274,7 +273,7 @@ for path in paths {                       # iterates LINES of the string `paths`
 }
 ```
 
-- Subjects are **bare identifiers** (`if status == …`, `match status {`, `for x in lines`) — `$status` / `${status}` as subject is a parse error, and so is a dot-notation field (`if r.verdict == …`). Rebind first: `const verdict = "${r.verdict}"`.
+- Subjects for `if` and `match` are bare identifiers (`if status == …`, `match status {`) or `IDENT.IDENT` reading a field from a typed prompt capture (`if r.verdict == "ok"`, `match r.verdict { … }`). `$status` / `${status}` as subject is still a parse error. Dot subjects on a non-typed-capture variable, or a field not in the prompt's `returns` schema, get the same `E_VALIDATE` errors as `${var.field}` interpolation. `for` iterators stay bare identifiers (`for x in lines`).
 - `if` supports an optional `else` branch — `} else {` must be on **the same line** as the closing `}` of the `if` body. **No `else if` chaining**: nest an `if` inside the `else` block, or use `match` for multi-way branching.
 - `match`: arms are newline-separated (no commas), first match wins, exactly one `_` arm required. Arm bodies: string, `"""…"""`, in-scope identifier, `${var}`, `fail "…"`, `run ref()`, `ensure ref()`. **Not** allowed in arms: `return` (write `return match x { … }`), `log`/`logerr`, inline scripts — capture the match result into a `const` and act on it after.
 - `for` splits the source string on newlines (a trailing final newline does not produce an empty iteration). There is no numeric/while loop — iterate lines, use `recover`, or use recursive workflows (depth limit 256).
@@ -415,8 +414,7 @@ workflow default() {
 ```jaiph
 workflow triage(item) {
   const r = prompt "Is this ready to implement? Item: ${item}" returns "{ verdict: string, reason: string }"
-  const verdict = "${r.verdict}"
-  const outcome = match verdict {
+  const outcome = match r.verdict {
     "ready" => run implement(item)
     _ => "skipped: ${r.reason}"
   }
