@@ -2,11 +2,6 @@
 
 import "./lib_common.jh" as common
 
-# NOTE: this module-level config only applies when this file is run directly
-# (jaiph run .jaiph/ensure_ci_passes.jh). When ensure_ci_passes is called
-# cross-module (engineer.jh, qa.jh, simplifier.jh), the caller's config wins —
-# see the "Cross-module run ignores the callee module's config" task in QUEUE.md.
-
 config {
   agent.backend = "cursor"
   agent.cursor_flags = "--force"

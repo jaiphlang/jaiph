@@ -305,13 +305,19 @@ export class NodeWorkflowRuntime {
     const crossModuleNested = callerModulePath !== calleeModulePath;
     return this.executeManagedStep("workflow", `${workflowName}`, args, async (io) => {
       // Root entry (`runDefault`, inheritCallerMetadataScope=false): apply entry module + workflow metadata.
-      // Nested cross-module (`run` / inbox to another module): caller env (locks + effective scope)
-      // is authoritative — do not layer callee module or callee workflow metadata.
-      // Same-module nested `run` (inheritCallerMetadataScope=true, !crossModuleNested): apply callee
-      // workflow-level config on top of caller env (workflow boundaries still apply within one module).
+      // Nested cross-module `run`: layer callee module + workflow metadata on top of the caller's
+      // effective env (same mechanics as root entry, respecting `${NAME}_LOCKED`).  A module's
+      // config describes how that module's workflows run, regardless of who called them; this
+      // also matches cross-module `ensure` (see `executeRule`).
+      // Same-module nested `run`: apply only the callee workflow-level metadata (workflow boundaries
+      // still apply within one module; module config is already in the caller's effective env).
       let workflowEnv: NodeJS.ProcessEnv;
       if (inheritCallerMetadataScope && crossModuleNested) {
-        workflowEnv = { ...scope.env };
+        workflowEnv = this.applyMetadataScope(
+          scope.env,
+          this.graph.modules.get(resolved.filePath)?.ast.metadata,
+          resolved.workflow.metadata,
+        );
       } else if (inheritCallerMetadataScope) {
         workflowEnv = this.applyMetadataScope(scope.env, undefined, resolved.workflow.metadata);
       } else {
