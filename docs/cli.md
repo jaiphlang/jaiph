@@ -261,7 +261,7 @@ The test runner uses the same Node workflow runtime as `jaiph run`. For each tes
 - `jaiph test <dir>` — run all `*.test.jh` files recursively under the given directory. Workspace root for script compilation is detected by walking up from **that directory** (resolved), not necessarily from your shell cwd.
 - `jaiph test <file.test.jh>` — run a single test file; workspace root is detected from the test file’s directory.
 
-With no arguments, or with a directory that contains no test files, the command exits with status **1** and prints an error.
+**Discovery with zero matches is a no-op.** With no arguments, or with a directory that contains no `*.test.jh` files, the command writes `jaiph test: no *.test.jh files found (nothing to do)` to stderr and exits **0** — CI pipelines and agent loops can call `jaiph test` unconditionally. Passing an explicit file path that does not exist or is not a `*.test.jh` file remains an error (exit **1**) — a named target must exist.
 
 Passing a plain workflow file (e.g. `say_hello.jh`) is not supported; the test file imports the workflow and declares mocks. Extra arguments after the path are accepted but ignored. See [Testing](testing.md) for test block syntax and assertions.
 

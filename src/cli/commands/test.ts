@@ -35,8 +35,8 @@ export async function runTest(rest: string[]): Promise<number> {
     const workspaceRoot = detectWorkspaceRoot(process.cwd());
     const testFiles = walkTestFiles(workspaceRoot);
     if (testFiles.length === 0) {
-      process.stderr.write("jaiph test: no *.test.jh files found\n");
-      return 1;
+      process.stderr.write("jaiph test: no *.test.jh files found (nothing to do)\n");
+      return 0;
     }
     let exitCode = 0;
     for (const testFile of testFiles) {
@@ -53,8 +53,8 @@ export async function runTest(rest: string[]): Promise<number> {
   if (inputStat.isDirectory()) {
     const testFiles = walkTestFiles(inputAbs);
     if (testFiles.length === 0) {
-      process.stderr.write(`jaiph test: no *.test.jh files in ${input}\n`);
-      return 1;
+      process.stderr.write("jaiph test: no *.test.jh files found (nothing to do)\n");
+      return 0;
     }
     const workspaceRoot = detectWorkspaceRoot(inputAbs);
     let exitCode = 0;

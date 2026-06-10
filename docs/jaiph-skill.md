@@ -58,7 +58,7 @@ Follow this sequence every time you create or edit `.jh` files. Do not skip the 
 1. **Write** the `.jh` files (syntax below).
 2. **Format:** `jaiph format <files…>` — canonical whitespace and top-level ordering.
 3. **Compile:** `jaiph compile <file-or-dir>` — parses and validates the whole import closure without running anything. Reports **all** errors at once as `path:line:col CODE message`. Use `--json` for machine-readable output. Directory arguments skip `*.test.jh`; pass test files explicitly.
-4. **Test:** `jaiph test` (only if `*.test.jh` files exist — discovery with zero matches exits 1).
+4. **Test:** `jaiph test` — runs every `*.test.jh` it finds; zero matches in discovery mode exit 0 with a notice, so this call is always safe to make.
 5. **Run:** `jaiph run <file.jh> [args…]` for the end-to-end check.
 
 CLI quick reference:
@@ -438,7 +438,7 @@ Keep workflows short; put expensive checks after cheap ones; pass data explicitl
 ```bash
 jaiph format .jaiph/*.jh
 jaiph compile .jaiph
-jaiph test                       # only if *.test.jh files exist
+jaiph test                       # safe even when no *.test.jh exists yet
 jaiph run .jaiph/main.jh "implement feature X"
 ```
 

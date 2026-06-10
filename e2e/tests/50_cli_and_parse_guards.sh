@@ -66,17 +66,18 @@ EOF
 
 # When
 empty_err="$(mktemp)"
-if jaiph test "${TEST_DIR}/empty_tests" 2>"${empty_err}"; then
+if ! jaiph test "${TEST_DIR}/empty_tests" >/dev/null 2>"${empty_err}"; then
   cat "${empty_err}" >&2
   rm -f "${empty_err}"
-  e2e::fail "jaiph test should fail when directory has no test files"
+  e2e::fail "jaiph test on empty directory should exit 0 in discovery mode"
 fi
 empty_out="$(cat "${empty_err}")"
 rm -f "${empty_err}"
 
 # Then
-# assert_contains: error message includes absolute directory path which varies per machine
-e2e::assert_contains "${empty_out}" "no *.test.jh files" "jaiph test reports no tests in directory"
+e2e::assert_equals "${empty_out}" \
+  "jaiph test: no *.test.jh files found (nothing to do)" \
+  "jaiph test reports discovery notice for empty directory"
 
 e2e::section "jaiph run requires workflow default"
 
