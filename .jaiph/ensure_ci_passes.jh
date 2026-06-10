@@ -1,17 +1,18 @@
 #!/usr/bin/env jaiph
 
+import "./lib_common.jh" as common
+
+# NOTE: this module-level config only applies when this file is run directly
+# (jaiph run .jaiph/ensure_ci_passes.jh). When ensure_ci_passes is called
+# cross-module (engineer.jh, qa.jh, simplifier.jh), the caller's config wins —
+# see the "Cross-module run ignores the callee module's config" task in QUEUE.md.
+
 config {
   agent.backend = "cursor"
   agent.cursor_flags = "--force"
 }
 
-rule ci_passes() {
-  run npm_run_test_ci()
-}
-
 script npm_run_test_ci = `npm run test:ci`
-
-script save_string_to_file = `echo "$1" > "$2"`
 
 script assert_nonempty_file_or_fail = ```
 test -s "$1" || {
@@ -23,41 +24,36 @@ test -s "$1" || {
 workflow ensure_ci_passes() {
   const ci_log_dir = ".jaiph/tmp"
   const ci_log_file = "${ci_log_dir}/ensure_ci_passes.last.log"
-  run mkdir_p_simple(ci_log_dir)
+  run common.mkdir_p_simple(ci_log_dir)
 
-  ensure ci_passes() catch (failure) {
-    run save_string_to_file(failure, ci_log_file)
+  # recover = repair-and-retry loop: run the CI script, on failure save the
+  # log and prompt for a fix, then retry — bounded by run.recover_limit
+  # (default 10) instead of unbounded workflow recursion.
+  run npm_run_test_ci() recover (failure) {
+    run common.save_string_to_file(ci_log_file, failure)
     run assert_nonempty_file_or_fail(ci_log_file)
-
     prompt """
       <role>
         You are a software engineer fixing a failing CI build.
       </role>
       <task>
-        Fix failing CI so npm run test:ci passes. Failure output was saved to: 
-        ${ci_log_file}. Start by inspecting the tail of the log (for example: 
-        tail -n 200 '${ci_log_file}') and then apply the smallest safe fix. 
-        Constraints: - e2e/tests/* and acceptance JS tests are behavior 
+        Fix failing CI so npm run test:ci passes. Failure output was saved to:
+        ${ci_log_file}. Start by inspecting the tail of the log (for example:
+        tail -n 200 '${ci_log_file}') and then apply the smallest safe fix.
+        Constraints: - e2e/tests/* and acceptance JS tests are behavior
         contracts.
-        - Default approach: change production code to satisfy existing tests, 
+        - Default approach: change production code to satisfy existing tests,
           not vice versa.
-        - Modify tests only for intentional behavior changes, incorrect 
+        - Modify tests only for intentional behavior changes, incorrect
           expectations, or removal of obsolete features.
         - Any test change must be minimal with a clear rationale.
         - Do NOT add speculative fixes. Fix only what the log shows is broken.
       </task>
     """
-
-    # recursively call this workflow to keep trying until the CI passes
-    run ensure_ci_passes()
   }
 
-  run rm_file_simple(ci_log_file)
+  run common.rm_file_simple(ci_log_file)
 }
-
-script mkdir_p_simple = `mkdir -p "$1"`
-
-script rm_file_simple = `rm -f "$1"`
 
 workflow default() {
   run ensure_ci_passes()
