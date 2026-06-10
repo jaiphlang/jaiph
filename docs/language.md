@@ -605,7 +605,7 @@ Combining capture and send (`name = channel <- …`) is a parse error.
 
 ### `match` — Pattern Matching
 
-Pattern match on a string variable. The subject is a bare identifier (no `$` or `${}`). Arms are tested top-to-bottom; first match wins.
+Pattern match on a string variable. The subject is a bare identifier (no `$` or `${}`), or `IDENT.IDENT` to read a field from a typed prompt capture (`match r.verdict { … }` — the base must be a `const result = prompt … returns "{ field: type, … }"` capture and the field must appear in the `returns` schema; unknown bases or fields produce the same `E_VALIDATE` errors as `${var.field}` interpolation). Arms are tested top-to-bottom; first match wins.
 
 ```jaiph
 match status {
@@ -670,7 +670,7 @@ if mode =~ /^debug/ {
 }
 ```
 
-The subject is a bare identifier (no `$` or `${}`). Operators:
+The subject is a bare identifier (no `$` or `${}`), or `IDENT.IDENT` to read a field from a typed prompt capture (`if r.verdict == "ok" { … }` — the base must be a `const result = prompt … returns "{ field: type, … }"` capture and the field must appear in the `returns` schema; unknown bases or fields produce the same `E_VALIDATE` errors as `${var.field}` interpolation). Operators:
 
 | Operator | Meaning | Operand type |
 |---|---|---|

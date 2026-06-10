@@ -91,6 +91,7 @@ TEST_SCRIPTS=(
   "e2e/tests/135_for_string_lines.sh"
   "e2e/tests/136_if_else_branch.sh"
   "e2e/tests/137_inline_script_catch_recover.sh"
+  "e2e/tests/138_if_match_dot_subject.sh"
 )
 
 PASS_COUNT=0

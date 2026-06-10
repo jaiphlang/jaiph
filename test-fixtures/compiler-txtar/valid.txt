@@ -1284,3 +1284,25 @@ workflow default() {
 workflow default() {
   run `false`() catch (err) log "recovered: ${err}"
 }
+
+=== if with dot-notation subject on typed prompt capture
+# @expect ok
+--- input.jh
+workflow default() {
+  const r = prompt "Classify" returns "{ verdict: string }"
+  if r.verdict == "ok" {
+    log "approved"
+  }
+}
+
+=== match with dot-notation subject on typed prompt capture
+# @expect ok
+--- input.jh
+workflow default() {
+  const r = prompt "Classify" returns "{ verdict: string }"
+  const x = match r.verdict {
+    "ok" => "approved"
+    _ => "rejected"
+  }
+  log "${x}"
+}
