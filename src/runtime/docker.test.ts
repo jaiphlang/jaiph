@@ -17,10 +17,13 @@ import {
   allocateSandboxWorkspaceDir,
   pullImageIfNeeded,
   resolveDefaultDockerImageTag,
+  cleanupDocker,
+  withDockerExitGuard,
   _dockerExec,
   _uidDetect,
   type DockerRunConfig,
   type DockerSpawnOptions,
+  type DockerSpawnResult,
 } from "./docker";
 import { mkdtempSync, writeFileSync, mkdirSync, existsSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -1060,5 +1063,88 @@ test("pullImageIfNeeded: semicolon image passed verbatim to docker pull on inspe
   } finally {
     _dockerExec.run = original;
   }
+});
+
+// ---------------------------------------------------------------------------
+// cleanupDocker: idempotency + withDockerExitGuard: leak-free pairing
+// ---------------------------------------------------------------------------
+
+function makeStubDockerResult(overrides?: Partial<DockerSpawnResult>): DockerSpawnResult {
+  return {
+    child: {} as DockerSpawnResult["child"],
+    sandboxRunDir: "/tmp/none",
+    sandboxMode: "copy",
+    keepSandboxWorkspace: false,
+    ...overrides,
+  } as DockerSpawnResult;
+}
+
+test("cleanupDocker: second invocation on same result is a no-op", () => {
+  const overlayDir = mkdtempSync(join(tmpdir(), "jaiph-cleanup-overlay-"));
+  const sandboxDir = mkdtempSync(join(tmpdir(), "jaiph-cleanup-sandbox-"));
+  let timerFired = 0;
+  const timer = setTimeout(() => { timerFired += 1; }, 60_000);
+  const result = makeStubDockerResult({
+    overlayScriptDir: overlayDir,
+    sandboxWorkspaceDir: sandboxDir,
+    timeoutTimer: timer,
+  });
+
+  cleanupDocker(result);
+  assert.equal(result.cleaned, true, "result is marked cleaned after first call");
+  assert.equal(existsSync(overlayDir), false, "overlay tempdir removed");
+  assert.equal(existsSync(sandboxDir), false, "sandbox tempdir removed");
+
+  // Recreate paths to detect a buggy second-pass rmSync; idempotent guard
+  // must prevent any further filesystem work.
+  mkdirSync(overlayDir, { recursive: true });
+  mkdirSync(sandboxDir, { recursive: true });
+  writeFileSync(join(overlayDir, "sentinel"), "keep", "utf8");
+  writeFileSync(join(sandboxDir, "sentinel"), "keep", "utf8");
+
+  assert.doesNotThrow(() => cleanupDocker(result), "second call is silent");
+  assert.equal(existsSync(join(overlayDir, "sentinel")), true, "second call did not re-delete overlay");
+  assert.equal(existsSync(join(sandboxDir, "sentinel")), true, "second call did not re-delete sandbox");
+  assert.equal(timerFired, 0, "timer never fires (cleared on first cleanup)");
+
+  rmSync(overlayDir, { recursive: true, force: true });
+  rmSync(sandboxDir, { recursive: true, force: true });
+});
+
+test("withDockerExitGuard: removes exit listener after successful body", async () => {
+  const result = makeStubDockerResult();
+  const before = process.listenerCount("exit");
+  const beforeListeners = process.listeners("exit").slice();
+  await withDockerExitGuard(result, async () => "ok");
+  const after = process.listeners("exit");
+  assert.equal(after.length, before, "exit listener count returns to pre-run value");
+  // The cleanup guard registered during the helper must not survive in the list.
+  for (const fn of after) {
+    assert.ok(beforeListeners.includes(fn), "no new exit listener remains after helper returns");
+  }
+  assert.equal(result.cleaned, true, "cleanupDocker ran exactly once in finally");
+});
+
+test("withDockerExitGuard: removes exit listener when body throws", async () => {
+  const result = makeStubDockerResult();
+  const before = process.listenerCount("exit");
+  const beforeListeners = process.listeners("exit").slice();
+  await assert.rejects(
+    () => withDockerExitGuard(result, async () => { throw new Error("E_TEST_BODY_FAILED"); }),
+    /E_TEST_BODY_FAILED/,
+  );
+  const after = process.listeners("exit");
+  assert.equal(after.length, before, "exit listener count returns to pre-run value after throw");
+  for (const fn of after) {
+    assert.ok(beforeListeners.includes(fn), "no new exit listener remains after throw");
+  }
+  assert.equal(result.cleaned, true, "cleanupDocker ran exactly once in finally even when body threw");
+});
+
+test("withDockerExitGuard: does not register any exit listener when dockerResult is undefined", async () => {
+  const before = process.listenerCount("exit");
+  const value = await withDockerExitGuard(undefined, async () => 42);
+  assert.equal(value, 42);
+  assert.equal(process.listenerCount("exit"), before, "no listener registered without a dockerResult");
 });
 

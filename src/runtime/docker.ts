@@ -790,6 +790,8 @@ export function spawnDockerProcess(opts: DockerSpawnOptions): DockerSpawnResult 
 /**
  * Clean up Docker resources after execution.
  *
+ * Idempotent: subsequent calls on the same `result` short-circuit on
+ * `result.cleaned` — exit-guard + finally-path pairing relies on this.
  * Removes the overlay script tempdir (overlay mode) and the cloned workspace
  * (copy mode), unless `JAIPH_DOCKER_KEEP_SANDBOX=1` was set.
  */
@@ -812,6 +814,31 @@ export function cleanupDocker(result: DockerSpawnResult): void {
     } catch {
       // Best-effort cleanup
     }
+  }
+}
+
+/**
+ * Run `body` with an abnormal-exit cleanup guard registered on `process.on("exit")`.
+ *
+ * Registration and removal are paired via try/finally: on both normal return
+ * and on throw, the listener is removed and `cleanupDocker(dockerResult)` is
+ * called exactly once. The guard only fires when the process exits before the
+ * finally runs (e.g. crash, unhandled exception in the host) — that's its
+ * purpose. When `dockerResult` is undefined (non-Docker run), no listener is
+ * registered.
+ */
+export async function withDockerExitGuard<T>(
+  dockerResult: DockerSpawnResult | undefined,
+  body: () => Promise<T>,
+): Promise<T> {
+  if (!dockerResult) return body();
+  const guard = (): void => { cleanupDocker(dockerResult); };
+  process.on("exit", guard);
+  try {
+    return await body();
+  } finally {
+    cleanupDocker(dockerResult);
+    process.removeListener("exit", guard);
   }
 }
 
