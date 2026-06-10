@@ -2558,3 +2558,10 @@ workflow default(x) {
   }
 }
 
+
+=== inline script recover and catch on same step rejected
+# @expect error E_PARSE "unexpected content after log string"
+--- input.jh
+workflow default() {
+  run `false`() recover(e) { log "r" } catch (e) { log "c" }
+}

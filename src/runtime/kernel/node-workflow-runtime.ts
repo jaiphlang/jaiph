@@ -844,11 +844,39 @@ export class NodeWorkflowRuntime {
         }
         if (body.kind === "inline_script") {
           const shebang = body.lang ? `#!/usr/bin/env ${body.lang}` : undefined;
-          const result = await this.executeInlineScript(scope, body.body, shebang, argsToRuntimeString(body.args));
-          if (step.captureName && result.status === 0) {
-            scope.vars.set(step.captureName, result.returnValue ?? result.output.trim());
+          const argsRaw = argsToRuntimeString(body.args);
+          const runOnce = (): Promise<StepResult> =>
+            this.executeInlineScript(scope, body.body, shebang, argsRaw);
+          if (step.recover) {
+            const limit = this.resolveRecoverLimit(scope.filePath);
+            let lastResult = await runOnce();
+            let attempt = 1;
+            while (lastResult.status !== 0 && attempt <= limit) {
+              const rr = await this.runRecoverBody(scope, step.recover, `${lastResult.output}${lastResult.error}`);
+              if (rr.status !== 0 || rr.returnValue !== undefined) return this.mergeStepResult(accOut, accErr, rr);
+              lastResult = await runOnce();
+              attempt += 1;
+            }
+            if (lastResult.status === 0) {
+              if (step.captureName) {
+                scope.vars.set(step.captureName, lastResult.returnValue ?? lastResult.output.trim());
+              }
+            } else {
+              return this.mergeStepResult(accOut, accErr, lastResult);
+            }
+            continue;
           }
-          if (result.status !== 0) return this.mergeStepResult(accOut, accErr, result);
+          const result = await runOnce();
+          if (result.status === 0) {
+            if (step.captureName) {
+              scope.vars.set(step.captureName, result.returnValue ?? result.output.trim());
+            }
+          } else if (step.catch) {
+            const rr = await this.runRecoverBody(scope, step.catch, `${result.output}${result.error}`);
+            if (rr.status !== 0 || rr.returnValue !== undefined) return this.mergeStepResult(accOut, accErr, rr);
+          } else {
+            return this.mergeStepResult(accOut, accErr, result);
+          }
           continue;
         }
         if (body.kind === "prompt") {

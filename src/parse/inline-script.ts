@@ -7,7 +7,12 @@ export interface InlineScriptParsed {
   body: string;
   lang?: string;
   args?: Arg[];
+  /** Next line to resume parsing at — the line just after the inline script. */
   nextLineIdx: number;
+  /** Source line index containing the closing `)`. */
+  closingLineIdx: number;
+  /** Trailing text after the closing `)` on the closing line (verbatim). */
+  trailing: string;
 }
 
 /**
@@ -17,6 +22,10 @@ export interface InlineScriptParsed {
  * Two forms:
  *   1. Single backtick: run `body`(args)
  *   2. Fenced block:    run ```lang\n...\n```(args)
+ *
+ * When `allowTrailing` is true the caller is responsible for handling any
+ * non-empty `trailing` text (e.g. `catch (...) { ... }`). When false (default)
+ * non-empty trailing content is rejected with the existing parse error.
  */
 export function parseAnonymousInlineScript(
   filePath: string,
@@ -25,6 +34,7 @@ export function parseAnonymousInlineScript(
   afterRun: string,
   lineNo: number,
   col: number,
+  allowTrailing = false,
 ): InlineScriptParsed {
   const t = afterRun.trimStart();
 
@@ -42,7 +52,7 @@ export function parseAnonymousInlineScript(
         col,
       );
     }
-    if (argsResult.rest.trim()) {
+    if (!allowTrailing && argsResult.rest.trim()) {
       fail(
         filePath,
         `unexpected content after anonymous inline script: '${argsResult.rest.trim()}'`,
@@ -63,6 +73,8 @@ export function parseAnonymousInlineScript(
       ...(lang ? { lang } : {}),
       args: argsResult.args,
       nextLineIdx: nextIdx,
+      closingLineIdx: nextIdx - 1,
+      trailing: argsResult.rest,
     };
   }
 
@@ -78,7 +90,7 @@ export function parseAnonymousInlineScript(
         col,
       );
     }
-    if (argsResult.rest.trim()) {
+    if (!allowTrailing && argsResult.rest.trim()) {
       fail(
         filePath,
         `unexpected content after anonymous inline script: '${argsResult.rest.trim()}'`,
@@ -93,6 +105,8 @@ export function parseAnonymousInlineScript(
       body,
       args: argsResult.args,
       nextLineIdx: lineIdx + 1,
+      closingLineIdx: lineIdx,
+      trailing: argsResult.rest,
     };
   }
 

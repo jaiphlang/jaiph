@@ -161,7 +161,7 @@ import sys; print(len(sys.argv[1]))
 ```(input_text)
 ```
 
-Inline scripts work in `run`, `const … = run`, `return run`, and `log run` positions. They cannot be used with `run async`, and they do **not** accept `catch`/`recover` suffixes — if you need failure handling, define a named `script` and attach `catch`/`recover` to that call.
+Inline scripts work in `run`, `const … = run`, `return run`, and `log run` positions. They cannot be used with `run async`. A `run` step whose body is an inline script accepts the same optional `catch (name) <body>` / `recover (name) <body>` suffix as a named-ref `run` step (same semantics — `catch` runs once, `recover` retries up to `run.recover_limit`, mutually exclusive). The other inline-script positions (`const … = run`, `return run`, `log run`) do not take those suffixes — wrap in a standalone `run` step.
 
 ### Workflow steps
 

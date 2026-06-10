@@ -90,6 +90,7 @@ TEST_SCRIPTS=(
   "e2e/tests/134_script_imports.sh"
   "e2e/tests/135_for_string_lines.sh"
   "e2e/tests/136_if_else_branch.sh"
+  "e2e/tests/137_inline_script_catch_recover.sh"
 )
 
 PASS_COUNT=0

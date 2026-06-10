@@ -732,6 +732,21 @@ print(f"args: {sys.argv[1:]}")
 
 Inline scripts use the same emission layout (`scripts/__inline_<hash>`) and the same **`NodeWorkflowRuntime` spawn contract** as named scripts (full scope env, cwd from `JAIPH_WORKSPACE` / module path — see [Script isolation](#script-isolation)). `run async` with inline scripts is not supported.
 
+**`catch` / `recover` on inline scripts.** A `run` step whose body is an inline script accepts the same optional `catch (name) <body>` / `recover (name) <body>` suffix as a [named-ref `run` step](#catch--failure-recovery), with identical semantics — `catch` runs the body once on failure, `recover` retries the inline script up to `run.recover_limit` (default 10), and the two are mutually exclusive on the same step. Allowed in both workflow and rule bodies.
+
+```jaiph
+workflow default() {
+  run `false`() catch (err) {
+    log "caught: ${err}"
+  }
+  run `test -f .gate`() recover(err) {
+    run `touch .gate`()
+  }
+}
+```
+
+The other inline-script positions — `const … = run \`…\`()`, `return run \`…\`()`, and `log run \`…\`()` / `logerr run \`…\`()` — do **not** accept `catch` / `recover` suffixes. Wrap in a standalone `run` step if you need failure handling.
+
 ## String Interpolation
 
 Jaiph orchestration strings support `${identifier}` interpolation. Every identifier must reference a binding in scope (`const`, capture, or named parameter). Unknown names are rejected at compile time.

@@ -330,6 +330,19 @@ date +%s
 - **Backtick** (single-line) inline scripts: Jaiph interpolation (`${...}`) is forbidden — use `$1`, `$2` positional arguments instead.
 - **Fenced block** (triple-backtick) inline scripts: `${...}` is passed through to the shell as standard shell parameter expansion.
 
+**`catch` / `recover` on inline scripts.** A `run` step whose body is an inline script accepts the same optional `catch (name) <body>` / `recover (name) <body>` suffix as a named-ref `run` step, with identical semantics: `catch` runs the body once on failure, `recover` retries the inline script up to `run.recover_limit` times (default 10). The two are mutually exclusive on a single step. Inline-script forms in `log` / `logerr` / `return` / `const` RHS do not accept these suffixes — wrap in a standalone `run` step.
+
+```jaiph
+workflow default() {
+  run `test -f .gate`() recover(err) {
+    run `touch .gate`()
+  }
+  run `false`() catch (err) {
+    log "caught: ${err}"
+  }
+}
+```
+
 ### `run async` — Concurrent Execution with Handles
 
 `run async ref(args)` starts a workflow or script concurrently and returns a **`Handle<T>`** immediately. `T` is the same return type the function would have under a synchronous `run`. The handle resolves to the eventual return value on first non-passthrough read.
@@ -1044,8 +1057,8 @@ log_stmt        = "log" ( double_quoted_string | triple_quoted_block | IDENT | "
 logerr_stmt     = "logerr" ( double_quoted_string | triple_quoted_block | IDENT | "run" inline_script ) ;
 
 ensure_stmt     = "ensure" call_ref [ "catch" catch_bindings catch_body ] ;
-run_catch_stmt  = "run" call_ref "catch" catch_bindings catch_body ;
-run_recover_stmt = "run" call_ref "recover" recover_bindings recover_body ;
+run_catch_stmt  = "run" ( call_ref | inline_script ) "catch" catch_bindings catch_body ;
+run_recover_stmt = "run" ( call_ref | inline_script ) "recover" recover_bindings recover_body ;
 run_stmt        = "run" ( call_ref | inline_script ) ;
 call_ref        = REF "(" [ call_args ] ")" ;  (* parentheses always required *)
 call_arg        = double_quoted_string | IDENT | "${" IDENT "}"
@@ -1053,6 +1066,11 @@ call_arg        = double_quoted_string | IDENT | "${" IDENT "}"
                 | "ensure" call_ref ;                      (* explicit nested ensure *)
 call_args       = call_arg { "," call_arg } ;
 inline_script   = backtick_script_body "(" [ call_args ] ")" | fenced_script_block "(" [ call_args ] ")" ;
+  (* Used as a managed body in run_stmt / run_catch_stmt / run_recover_stmt /
+     log_stmt / logerr_stmt / return_stmt and as a const RHS. The optional
+     catch / recover suffix is permitted only via run_catch_stmt /
+     run_recover_stmt — log / logerr / return / const consume just the bare
+     inline_script. `run async` does not accept inline_script. *)
 prompt_body     = double_quoted_string | IDENT | triple_quoted_block ;
 triple_quoted_block = "\"\"\"" newline { body_line newline } "\"\"\"" ;
 prompt_stmt     = "prompt" prompt_body [ returns_schema ] ;
