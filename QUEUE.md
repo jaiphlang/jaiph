@@ -14,18 +14,6 @@ Process rules:
 
 ***
 
-## Fix exit-listener leak on the Docker run path #dev-ready
-
-**Context.** In `src/cli/commands/run.ts` (`runWorkflow`), when `spawnExec` returns a `dockerResult`, an `exitGuard` callback is registered with `process.on("exit", exitGuard)` (~line 165). The matching `process.removeListener("exit", exitGuard)` (~line 194) only runs inside the `if (dockerResult)` block after `await waitForRunExit(...)` completes normally. If anything between registration and removal throws (stream wiring, the awaited exit, buffer draining), the listener stays registered for the rest of the process and `cleanupDocker` runs again at process exit on an already-cleaned container.
-
-**Change.** Restructure so registration and removal are paired in a `try { … } finally { … }`: register the guard, run the spawn-to-exit section inside `try`, and in `finally` call `cleanupDocker(dockerResult)` exactly once (make `cleanupDocker` idempotent if it is not already) and `process.removeListener("exit", exitGuard)`. The exit guard itself must stay registered for the abnormal-exit case (that is its purpose) — only the normal path must deterministically remove it.
-
-**Acceptance criteria.**
-- A unit test (or integration test under `integration/`) asserts that after a successful Docker-path run completes, `process.listeners("exit")` does not contain the guard (count of exit listeners returns to its pre-run value).
-- A test asserts the same when the awaited child exit rejects/throws (simulate with a stubbed `execResult`).
-- `cleanupDocker` invoked twice on the same `dockerResult` is a no-op the second time, covered by a test.
-- Existing run/E2E tests still pass.
-
 ## Imported-channel sends never dispatch: normalize channel keys #dev-ready
 
 **Context.** Channel routes are registered in `NodeWorkflowRuntime` keyed by the **bare** channel name from `channel <name> -> …` lines. The send step matches a context by `this.workflowCtxStack[i].routes.has(step.channel)` (`src/runtime/kernel/node-workflow-runtime.ts:672`), where `step.channel` is the **verbatim token** left of `<-`. So a validated cross-module send `lib.topic <- "msg"` never matches the route registered as `topic` — the message is enqueued unrouted and silently dropped. `docs/inbox.md` ("Module scope" section) currently documents this as a known footgun.

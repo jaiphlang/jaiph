@@ -36,6 +36,7 @@ import {
   prepareImage,
   spawnDockerProcess,
   cleanupDocker,
+  withDockerExitGuard,
   resolveDockerHostRunsRoot,
   selectSandboxMode,
   type SandboxMode,
@@ -159,40 +160,36 @@ export async function runWorkflow(rest: string[]): Promise<number> {
       forceKillAfterMs: 1500,
       onSignalCleanup,
     });
-    const exitGuard = dockerResult
-      ? (): void => { cleanupDocker(dockerResult); }
-      : undefined;
-    if (exitGuard) process.on("exit", exitGuard);
-
-    if (isTTY) {
-      ttyCtx.runningInterval = setInterval(() => {
-        const elapsedSec = (Date.now() - startedAt) / 1000;
-        process.stdout.write("\r" + formatRunningBottomLine("default", elapsedSec) + "\u001b[K");
-      }, 1000);
-    } else {
-      const hbMs = nonTTYHeartbeatTickMs();
-      ttyCtx.nonTTYHeartbeatInterval = setInterval(() => {
-        tickNonTTYHeartbeat(ttyCtx);
-      }, hbMs);
-    }
-
-    const onLine = createStderrParser(emitter);
-    const buf: StreamBuffers = { stdout: "", stderr: "" };
-
-    wireStreams(execResult, onLine, buf, ttyCtx);
-    const childExit = await waitForRunExit(execResult, () => signalHandlers.remove());
-    drainBuffers(onLine, buf, ttyCtx);
-
-    if (dockerResult) {
-      const timedOut = dockerResult.timeoutTimer === undefined && activeDockerConfig.timeoutSeconds > 0
-        ? false
-        : (Date.now() - startedAt) >= activeDockerConfig.timeoutSeconds * 1000;
-      if (timedOut && childExit.status !== 0) {
-        runState.capturedStderr += "E_TIMEOUT container execution exceeded timeout\n";
+    const childExit = await withDockerExitGuard(dockerResult, async () => {
+      if (isTTY) {
+        ttyCtx.runningInterval = setInterval(() => {
+          const elapsedSec = (Date.now() - startedAt) / 1000;
+          process.stdout.write("\r" + formatRunningBottomLine("default", elapsedSec) + "\u001b[K");
+        }, 1000);
+      } else {
+        const hbMs = nonTTYHeartbeatTickMs();
+        ttyCtx.nonTTYHeartbeatInterval = setInterval(() => {
+          tickNonTTYHeartbeat(ttyCtx);
+        }, hbMs);
       }
-      cleanupDocker(dockerResult);
-      if (exitGuard) process.removeListener("exit", exitGuard);
-    }
+
+      const onLine = createStderrParser(emitter);
+      const buf: StreamBuffers = { stdout: "", stderr: "" };
+
+      wireStreams(execResult, onLine, buf, ttyCtx);
+      const exit = await waitForRunExit(execResult, () => signalHandlers.remove());
+      drainBuffers(onLine, buf, ttyCtx);
+
+      if (dockerResult) {
+        const timedOut = dockerResult.timeoutTimer === undefined && activeDockerConfig.timeoutSeconds > 0
+          ? false
+          : (Date.now() - startedAt) >= activeDockerConfig.timeoutSeconds * 1000;
+        if (timedOut && exit.status !== 0) {
+          runState.capturedStderr += "E_TIMEOUT container execution exceeded timeout\n";
+        }
+      }
+      return exit;
+    });
 
     if (childExit.signal && runState.capturedStderr.trim().length === 0) {
       runState.capturedStderr = `Process terminated by signal ${childExit.signal}`;
