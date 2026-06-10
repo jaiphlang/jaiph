@@ -98,9 +98,9 @@ The channel reference is always on the left side of the `<-` operator. Valid
 channel forms:
 
 - local channel: `findings`
-- imported channel: `shared.findings` — checked against the import at compile time; **dispatch** still matches **`routes.has()`** with the **literal** token (see [Module scope](#who-registers-routes-and-who-drains))
+- imported channel: `shared.findings` — checked against the import at compile time; the runtime strips the **`alias.`** prefix before consulting **`routes.has()`**, so `shared.findings <-` and a bare `findings <-` resolve to the same route key (see [Module scope](#who-registers-routes-and-who-drains))
 
-The send step resolves the **string** payload from the **RHS**, bumps **`inboxSeq`**, and appends an **`InboxMsg`** to the queue on the workflow context selected by walking **from the sender outward** until **`ctx.routes.has(sendChannel)`** — **`sendChannel`** is the exact text left of **`<-`**. If nothing matches, enqueue on the sender’s context (**`routed === false`**; no **`inbox/*.txt`** row). If a match exists (**`routed === true`**), create **`inbox/`** when needed and write **`NNN-<sendChannel>.txt`** sharing the same **`inbox_seq`** as JSONL.
+The send step resolves the **string** payload from the **RHS**, bumps **`inboxSeq`**, and appends an **`InboxMsg`** to the queue on the workflow context selected by walking **from the sender outward** until **`ctx.routes.has(sendChannel)`** — **`sendChannel`** is the **bare** channel name (the validator has already confirmed any `alias.` prefix refers to an existing imported channel, and the runtime strips the prefix before the lookup). If nothing matches, enqueue on the sender’s context (**`routed === false`**; no **`inbox/*.txt`** row). If a match exists (**`routed === true`**), create **`inbox/`** when needed and write **`NNN-<sendChannel>.txt`** sharing the same **`inbox_seq`** as JSONL.
 
 **`INBOX_ENQUEUE`** is always written (`channel`, **`sender`**, **`inbox_seq`**, **`ts`**, **`run_id`**, **`event_version`**) and **does not** embed the payload body (`node-workflow-runtime.ts`).
 
@@ -229,10 +229,10 @@ the interpreter passes **`inheritCallerMetadataScope === false`** for **`jaiph r
 **`test_run_workflow`**), and for any other path that starts a workflow the same
 way — so **`routes`** mirror **that callee module’s** top-level **`channel ->`** lines,
 not modules you only **`import`**. Each nested **`run child()`** passes **`inheritCallerMetadataScope === true`**, which keeps **`routes`** as an **empty** **`Map`**
-(see **`node-workflow-runtime.ts`** — routes register only when **not** inheriting the caller metadata scope), so **`send`** walks **up the workflow stack** until **`routes.has(step.channel)`** succeeds (**`step.channel`** is the exact AST token left of **`<-`**).
+(see **`node-workflow-runtime.ts`** — routes register only when **not** inheriting the caller metadata scope), so **`send`** walks **up the workflow stack** until **`routes.has(channelKey)`** succeeds (**`channelKey`** is **`step.channel`** with any leading **`alias.`** prefix stripped, so imported sends collapse to the same bare key as their declaration).
 After **each** workflow body finishes (implicit **`run async` join included), **`drainWorkflowQueue`** runs for **that** frame’s queue and route table **before** the frame pops — nested exits are usually no-ops, while the **`jaiph run`** root drains work that nested sends enqueued onto it.
 
-**Module scope.** `ctx.routes` **keys** are bare names from **`channel <name>`** in the callee module (**`parseChannelLine`**). Imports allow **`lib.topic <-`** (validator proves **`topic`** exists inside **`lib`**) yet **`routes.has("lib.topic")`** is still **false** for default layouts, because registered keys omit the **`alias.`** prefix (**`step.channel`** is compared verbatim). Prefer **`topic <-`** next to **`channel topic -> …`** in the **entry module** (the workflow started by **`jaiph run`** or **`runNamedWorkflow`**), or **`jaiph run lib.jh`** when **`lib.jh`'s **`channel`** lines should supply the **`->`** bindings.
+**Module scope.** `ctx.routes` **keys** are bare names from **`channel <name>`** in the callee module (**`parseChannelLine`**). Sends written as **`lib.topic <-`** match the same route key as a bare **`topic <-`**: after **`validateChannelRef`** proves the imported channel exists, the runtime strips the **`alias.`** prefix before consulting **`routes.has(...)`**, so **`routes.has("topic")`** resolves the route regardless of how the send was spelled. **`INBOX_ENQUEUE`** records the bare **`channel`** (e.g. **`"topic"`**), and the audit copy is written to **`inbox/NNN-topic.txt`**.
 
 ### Dispatch loop
 

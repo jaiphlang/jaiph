@@ -14,17 +14,6 @@ Process rules:
 
 ***
 
-## Imported-channel sends never dispatch: normalize channel keys #dev-ready
-
-**Context.** Channel routes are registered in `NodeWorkflowRuntime` keyed by the **bare** channel name from `channel <name> -> …` lines. The send step matches a context by `this.workflowCtxStack[i].routes.has(step.channel)` (`src/runtime/kernel/node-workflow-runtime.ts:672`), where `step.channel` is the **verbatim token** left of `<-`. So a validated cross-module send `lib.topic <- "msg"` never matches the route registered as `topic` — the message is enqueued unrouted and silently dropped. `docs/inbox.md` ("Module scope" section) currently documents this as a known footgun.
-
-**Change.** At send time (or when registering routes — pick one canonical normalization point), strip the `alias.` prefix from the channel token after the validator has confirmed the alias/channel pair exists, so `lib.topic` and `topic` resolve to the same route key. The validator in `src/transpile/validate.ts` already proves the imported channel exists, so the runtime can safely compare bare names. Inbox audit files (`inbox/NNN-<channel>.txt`) and `INBOX_ENQUEUE` events should record the bare channel name.
-
-**Acceptance criteria.**
-- Write the failing-today scenario as a test first, then make it pass: the **entry** module declares `channel topic -> handler` and imports `lib`; `lib` declares `channel topic`; the entry workflow sends `lib.topic <- "x"`. Today the send enqueues under the literal key `lib.topic`, never matches the route registered as `topic`, and is silently dropped. After the fix, assert `handler` is invoked with payload `"x"`.
-- `INBOX_ENQUEUE` in `run_summary.jsonl` and the `inbox/NNN-*.txt` filename use the bare channel name; covered by assertions in the same test.
-- `docs/inbox.md` "Module scope" paragraph is rewritten to describe the normalized behavior.
-
 ## Add an inbox dispatch iteration cap #dev-ready
 
 **Context.** `drainWorkflowQueue` in `src/runtime/kernel/node-workflow-runtime.ts` processes the in-memory channel queue with `while (cursor < queue.length)`; dispatched targets may send again, appending to the same queue. There is no iteration cap, so circular sends (A routes to B, B sends back to A's channel) loop until OOM. `docs/inbox.md` explicitly warns "Avoid unbounded circular sends" instead of the runtime enforcing a bound.
