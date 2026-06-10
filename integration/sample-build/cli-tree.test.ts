@@ -36,7 +36,7 @@ test("jaiph init creates workspace structure and guidance", () => {
     assert.doesNotMatch(bootstrap, /\$1/);
     assert.equal(statSync(join(root, ".jaiph/bootstrap.jh")).mode & 0o777, 0o755);
     const localSkill = readFileSync(join(root, ".jaiph/SKILL.md"), "utf8");
-    assert.match(localSkill, /Jaiph Bootstrap Skill/);
+    assert.match(localSkill, /Jaiph Skill \(for Agents\)/);
     assert.equal(existsSync(join(root, ".gitignore")), false);
     assert.equal(readFileSync(join(root, ".jaiph", ".gitignore"), "utf8"), "runs\ntmp\n");
     assert.match(initResult.stdout, /Jaiph init/);

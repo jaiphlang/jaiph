@@ -14,29 +14,6 @@ Process rules:
 
 ***
 
-
-## Ensure we use skill for docs generation #dev-ready
-
-**Context.** All documentation generation in this repo runs through the three prompts in `.jaiph/docs_parity.jh` (`update_from_task`, `docs_page`, `docs_overview`), each of which inlines the same ad-hoc `role` const ("You are an expert technical writer…"). The `documentation-writer` skill from `github/awesome-copilot` (<https://www.skills.sh/github/awesome-copilot/documentation-writer>, source repo <https://github.com/github/awesome-copilot>) is a maintained SKILL.md for exactly this job: it applies the **Diátaxis framework** (tutorials / how-to guides / reference / explanation), a clarify → outline → write workflow, and four core principles (clarity, accuracy, user-centricity, consistency). We want docs prompts to use that skill instead of relying only on the home-grown role text.
-
-**Change.**
-1. Vendor the skill into the repo at `.jaiph/skills/documentation-writer/SKILL.md` (fetch the SKILL.md content from the awesome-copilot repo; add a short header comment with the source URL and the commit/date it was copied at, so it can be re-synced). Vendoring — not `npx skills add` at runtime — keeps runs offline-safe and reproducible. Do not gitignore it; it must be committed.
-2. Update the three prompts in `.jaiph/docs_parity.jh` to instruct the agent to **read and follow `.jaiph/skills/documentation-writer/SKILL.md` first** (reference the path explicitly in the prompt text — both Claude and Cursor backends can read a file by path; do not rely on agent-specific skill auto-discovery dirs like `.claude/skills/`).
-3. Slim the inline `role` const to only what the skill does not cover (project-specific items: TypeScript/Bash fluency, source-code-as-truth over stale docs, the Jekyll-navigation and `docs/architecture.md` constraints). Remove sentences that duplicate the skill's principles.
-4. `jaiph compile .jaiph` and `jaiph format --check .jaiph/docs_parity.jh` must stay green.
-
-**Acceptance criteria.**
-- `.jaiph/skills/documentation-writer/SKILL.md` exists, is committed, and contains the upstream skill content plus a source-URL/version header.
-- All three prompts in `.jaiph/docs_parity.jh` reference the skill file path; verified by `grep -c "skills/documentation-writer" .jaiph/docs_parity.jh` ≥ 3.
-- The `role` const no longer duplicates principles covered by the skill (reviewer check: no clarity/accuracy/consistency boilerplate that restates the skill).
-- `jaiph compile .jaiph` exits 0.
-- A dry-run note in the PR/commit message: run `jaiph run .jaiph/docs_parity.jh` once on a clean worktree and confirm the agent actually reads the skill file (its transcript/output references it) and the `only_expected_docs_changed_after_prompt` guard still passes.
-
-
-
-moving window fot throttling
-
-
 ## Cross-module `run` must apply the callee module's config #dev-ready
 
 **Context.** Config scoping is inconsistent across call types in `NodeWorkflowRuntime` (`src/runtime/kernel/node-workflow-runtime.ts`, metadata layering via `applyMetadataScope`; documented in `docs/configuration.md` → "Scoping across nested calls"):
@@ -59,7 +36,6 @@ This is a bug in practice: `.jaiph/ensure_ci_passes.jh` declares `config { agent
 - `docs/configuration.md` "Scoping across nested calls" table updated; the cross-module row no longer says the callee's config is ignored. Remove the now-stale NOTE comment at the top of `.jaiph/ensure_ci_passes.jh` referencing this task.
 - Existing config-scoping tests updated where they asserted the old (ignore) behavior — each change paired with a short rationale in the commit.
 
-
 ## Fix exit-listener leak on the Docker run path #dev-ready
 
 **Context.** In `src/cli/commands/run.ts` (`runWorkflow`), when `spawnExec` returns a `dockerResult`, an `exitGuard` callback is registered with `process.on("exit", exitGuard)` (~line 165). The matching `process.removeListener("exit", exitGuard)` (~line 194) only runs inside the `if (dockerResult)` block after `await waitForRunExit(...)` completes normally. If anything between registration and removal throws (stream wiring, the awaited exit, buffer draining), the listener stays registered for the rest of the process and `cleanupDocker` runs again at process exit on an already-cleaned container.
@@ -72,7 +48,6 @@ This is a bug in practice: `.jaiph/ensure_ci_passes.jh` declares `config { agent
 - `cleanupDocker` invoked twice on the same `dockerResult` is a no-op the second time, covered by a test.
 - Existing run/E2E tests still pass.
 
-
 ## Imported-channel sends never dispatch: normalize channel keys #dev-ready
 
 **Context.** Channel routes are registered in `NodeWorkflowRuntime` keyed by the **bare** channel name from `channel <name> -> …` lines. The send step matches a context by `this.workflowCtxStack[i].routes.has(step.channel)` (`src/runtime/kernel/node-workflow-runtime.ts:672`), where `step.channel` is the **verbatim token** left of `<-`. So a validated cross-module send `lib.topic <- "msg"` never matches the route registered as `topic` — the message is enqueued unrouted and silently dropped. `docs/inbox.md` ("Module scope" section) currently documents this as a known footgun.
@@ -83,7 +58,6 @@ This is a bug in practice: `.jaiph/ensure_ci_passes.jh` declares `config { agent
 - Write the failing-today scenario as a test first, then make it pass: the **entry** module declares `channel topic -> handler` and imports `lib`; `lib` declares `channel topic`; the entry workflow sends `lib.topic <- "x"`. Today the send enqueues under the literal key `lib.topic`, never matches the route registered as `topic`, and is silently dropped. After the fix, assert `handler` is invoked with payload `"x"`.
 - `INBOX_ENQUEUE` in `run_summary.jsonl` and the `inbox/NNN-*.txt` filename use the bare channel name; covered by assertions in the same test.
 - `docs/inbox.md` "Module scope" paragraph is rewritten to describe the normalized behavior.
-
 
 ## Add an inbox dispatch iteration cap #dev-ready
 
@@ -97,7 +71,6 @@ This is a bug in practice: `.jaiph/ensure_ci_passes.jh` declares `config { agent
 - Normal multi-message fan-out below the cap is unaffected (existing inbox tests pass).
 - `docs/inbox.md` ("Error semantics" and the circular-sends bullet) and `docs/cli.md` (env var list) document the cap and env override.
 
-
 ## Honor workflow-level `run.recover_limit` #dev-ready
 
 **Context.** A workflow body may open with a `config { … }` block that overrides `agent.*` and `run.*` keys. But `resolveRecoverLimit` (`src/runtime/kernel/node-workflow-runtime.ts:1387`) reads only `moduleMeta?.run?.recoverLimit ?? 10` — a workflow-level `run.recover_limit = 3` parses fine and is silently ignored. `docs/configuration.md` documents this exception, which is a trap: config that validates but does nothing.
@@ -108,7 +81,6 @@ This is a bug in practice: `.jaiph/ensure_ci_passes.jh` declares `config { agent
 - Test: a workflow with `config { run.recover_limit = 2 }` and a `run failing_script() recover (e) { … }` step retries exactly 2 times then fails (count attempts via a counter file written by the script).
 - Test: a sibling workflow in the same module without its own config still uses the module-level value.
 - Docs updated as described; `grep -rn "workflow-level run.recover_limit" docs/` returns nothing stale.
-
 
 ## Add `else` branch to `if` #dev-ready
 
@@ -135,7 +107,6 @@ Rules: `else` must appear on the same line as the closing `}` of the `if` block 
 - `jaiph format` is idempotent on `if/else` (formatter test), emitting canonical `} else {`.
 - `docs/grammar.md` (`if` section + EBNF), `docs/language.md`, and `docs/jaiph-skill.md` updated (remove "no else" claims).
 
-
 ## Allow `catch` / `recover` on inline-script `run` steps #dev-ready
 
 **Context.** Named-ref calls support failure handling (`run deploy() catch (err) { … }`, `run deploy() recover (err) { … }`), but inline scripts do not: `` run `test -z "$(git status --porcelain)"`() catch (err) { … } `` fails with `E_PARSE unexpected content after anonymous inline script: 'catch (err) {'`. Authors are forced to declare a named `script` solely to attach failure handling to a one-liner. The grammar EBNF in `docs/grammar.md` shows `run_catch_stmt = "run" call_ref "catch" …` (call_ref only); the inline-script parse path rejects any trailing tokens after the closing `)`.
@@ -147,7 +118,6 @@ Rules: `else` must appear on the same line as the closing `}` of the `if` block 
 - Runtime e2e: a failing inline script's `catch` body runs once with the merged output bound; a failing inline script under `recover` retries until a counter-file-based repair makes it pass.
 - `recover` + `catch` together on one inline step is rejected (same error as named refs) — txtar case.
 - `docs/grammar.md` EBNF (`run_catch_stmt` / `run_recover_stmt` / `inline_script`) and the Inline Scripts restriction list updated; `docs/jaiph-skill.md` inline-script section updated (remove the "no catch/recover on inline scripts" caveat).
-
 
 ## Allow dot-notation subjects in `if` and `match` #dev-ready
 
@@ -162,7 +132,6 @@ Rules: `else` must appear on the same line as the closing `}` of the `if` block 
 - Golden AST fixture for an `if` with a dot-notation subject.
 - `docs/grammar.md` (`if`, `match`, EBNF subject productions) and `docs/jaiph-skill.md` (control-flow bullet about rebinding dot fields) updated.
 
-
 ## Per-subcommand `-h` / `--help` #dev-ready
 
 **Context.** Only `jaiph compile -h` prints command usage; `jaiph run --help`, `jaiph test --help`, `jaiph format --help`, `jaiph install --help` are parsed as file paths or ignored tokens and produce confusing errors (`src/cli/index.ts` recognizes `-h`/`--help` only as the first token after `jaiph`). `docs/cli.md` ("Global options") documents this limitation instead of fixing it.
@@ -174,7 +143,6 @@ Rules: `else` must appear on the same line as the closing `}` of the `if` block 
 - `jaiph run --help` no longer attempts to resolve `--help` as a file.
 - `jaiph --help` and bare `jaiph` behavior unchanged (existing tests).
 - `docs/cli.md` "Global options" paragraph rewritten to state per-command help exists.
-
 
 ## `jaiph test` discovery with zero tests should not fail #dev-ready
 
@@ -189,7 +157,6 @@ Rules: `else` must appear on the same line as the closing `}` of the `if` block 
 - Existing behavior for found-and-failing tests unchanged (exit non-zero).
 - `docs/cli.md` and `docs/testing.md` updated; remove the "skip jaiph test if there are no test files" caveat from `docs/jaiph-skill.md` ("Your authoring loop" and the final commands block).
 
-
 ## Reject mixing `mock prompt { … }` with queued `mock prompt "…"` #dev-ready
 
 **Context.** In a `*.test.jh` test block, when a pattern-dispatch `mock prompt { … }` block is present, all queue-style `mock prompt "…"` / `mock prompt <const>` lines in the same block are **silently ignored** (`docs/testing.md` "Limitations" documents this). Silently ignoring authored mocks makes tests pass for the wrong reason.
@@ -200,7 +167,6 @@ Rules: `else` must appear on the same line as the closing `}` of the `if` block 
 - txtar fixture (or parser unit test) with a `.test.jh` file mixing both styles in one block fails with the new message; the same styles in **separate** test blocks of one file still pass.
 - `jaiph compile path/to/file.test.jh` surfaces the error (test files are validated when passed explicitly).
 - `docs/testing.md`: replace the "Do not combine…ignored" limitation bullets with the new error behavior.
-
 
 ## Formatter must not strip quotes from top-level `const` string values #dev-ready
 
@@ -214,7 +180,6 @@ Rules: `else` must appear on the same line as the closing `}` of the `if` block 
 - `jaiph compile` accepts the formatted output and `${q}` interpolation yields the same value as before formatting (runtime or kernel test).
 - Golden AST fixtures regenerated only if the AST shape changed, with the diff reviewed and explained in the commit message.
 - Existing `.jh` files in the repo reformatted with the fixed formatter (`jaiph format` over `.jaiph/*.jh`, `examples/`, `e2e/` fixtures that are format-clean today) — committed alongside, so `--check` stays green.
-
 
 ## Error-message quality pass: async handles, Docker timeout, empty stderr #dev-ready
 
@@ -232,7 +197,6 @@ Rules: `else` must appear on the same line as the closing `}` of the `if` block 
 - Unit tests assert each new message shape (handle id present; timeout seconds value present; exit code and run dir present).
 - No existing e2e expectation matches the old strings (`grep -rn "invalid handle" e2e/ src/` shows only the new form; update any expectations that asserted the old text).
 
-
 ## Lazy-load the Docker overlay script with an actionable error #dev-ready
 
 **Context.** `src/runtime/docker.ts:287` reads `overlay-run.sh` with `readFileSync` at **module load time**. Importing the docker module — which happens for every CLI invocation that might touch Docker — crashes with a raw ENOENT stack trace if the file is missing from the installation, even for commands that never use Docker.
@@ -244,7 +208,6 @@ Rules: `else` must appear on the same line as the closing `}` of the `if` block 
 - Non-Docker commands (`jaiph compile`, `jaiph format`) work even when `overlay-run.sh` is absent — covered by a test or e2e case.
 - Docker e2e flow unchanged when the file exists.
 
-
 ## Remove dead `formatDiagnosticLine` indirection in the stderr parser #dev-ready
 
 **Context.** `src/cli/run/stderr-handler.ts` threads a `formatDiagnosticLine: (line: string) => string` parameter through `handleLine` (line 49) and defines it as the identity function `(ln) => ln` (line 86) at the only call-site builder (`createStderrParser`, line 90). It never formats anything — pure dead indirection.
@@ -254,7 +217,6 @@ Rules: `else` must appear on the same line as the closing `}` of the `if` block 
 **Acceptance criteria.**
 - `grep -rn "formatDiagnosticLine" src/` returns nothing.
 - `npm test` passes; stderr passthrough behavior in run output is unchanged (existing integration tests cover this).
-
 
 ## Document the Docker env-var allowlist in sandboxing docs #dev-ready
 
