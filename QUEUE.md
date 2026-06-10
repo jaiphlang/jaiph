@@ -14,18 +14,6 @@ Process rules:
 
 ***
 
-## Per-subcommand `-h` / `--help` #dev-ready
-
-**Context.** Only `jaiph compile -h` prints command usage; `jaiph run --help`, `jaiph test --help`, `jaiph format --help`, `jaiph install --help` are parsed as file paths or ignored tokens and produce confusing errors (`src/cli/index.ts` recognizes `-h`/`--help` only as the first token after `jaiph`). `docs/cli.md` ("Global options") documents this limitation instead of fixing it.
-
-**Change.** Every subcommand (`run`, `test`, `compile`, `format`, `init`, `install`, `use`) recognizes `-h` / `--help` anywhere in its argument list **before positional processing**, prints its own usage block (flags + one example) to stdout, and exits 0. Keep `jaiph --help` as the overview. Put each usage string next to its command implementation in `src/cli/commands/*.ts` so it stays in sync.
-
-**Acceptance criteria.**
-- Integration test iterating all seven subcommands: `jaiph <cmd> --help` and `jaiph <cmd> -h` exit 0 and stdout contains the subcommand name and the word `Usage`.
-- `jaiph run --help` no longer attempts to resolve `--help` as a file.
-- `jaiph --help` and bare `jaiph` behavior unchanged (existing tests).
-- `docs/cli.md` "Global options" paragraph rewritten to state per-command help exists.
-
 ## `jaiph test` discovery with zero tests should not fail #dev-ready
 
 **Context.** `jaiph test` (no args) and `jaiph test <dir>` exit **1** with `jaiph test: no *.test.jh files found` when discovery matches nothing (`src/cli/commands/test.ts:25,43`). This forces every CI pipeline and agent loop to guard the call ("run jaiph test only if test files exist"), and the bootstrap skill doc has to carry a warning about it.

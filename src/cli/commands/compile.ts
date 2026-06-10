@@ -27,16 +27,20 @@ function toCompileDiagnostic(d: JaiphDiagnostic): CompileDiagnostic {
   return { file: d.file, line: d.line, col: d.col, code: d.code, message: d.message };
 }
 
-function printUsage(): void {
-  process.stderr.write(
-    "Usage: jaiph compile [--json] [--workspace <dir>] <file.jh | directory> ...\n\n" +
-      "Parse import closures and run validateReferences only (same compile-time checks as before jaiph run).\n" +
-      "Does not emit scripts/, does not run buildRuntimeGraph, does not spawn the workflow runner.\n" +
-      "With a directory, all non-test *.jh files are used as entrypoints; each file's import closure is validated.\n" +
-      "Pass *.test.jh explicitly to validate a test module.\n\n" +
-      "  --json       Print one JSON array of diagnostics to stdout (empty on success).\n" +
-      "  --workspace  Override workspace root for import resolution for all paths.\n",
-  );
+const COMPILE_USAGE =
+  "Usage: jaiph compile [--json] [--workspace <dir>] <file.jh | directory> ...\n\n" +
+  "Parse import closures and run validateReferences only (same compile-time checks as before jaiph run).\n" +
+  "Does not emit scripts/, does not run buildRuntimeGraph, does not spawn the workflow runner.\n" +
+  "With a directory, all non-test *.jh files are used as entrypoints; each file's import closure is validated.\n" +
+  "Pass *.test.jh explicitly to validate a test module.\n\n" +
+  "  --json             print one JSON array of diagnostics to stdout (empty on success)\n" +
+  "  --workspace <dir>  workspace root for import resolution (default: auto-detect per file)\n" +
+  "  -h, --help         show this help\n\n" +
+  "Example:\n" +
+  "  jaiph compile flow.jh\n";
+
+function printUsageError(): void {
+  process.stderr.write(COMPILE_USAGE);
 }
 
 function writeDiagnostics(json: boolean, diags: CompileDiagnostic[]): void {
@@ -62,7 +66,7 @@ export function runCompile(args: string[]): number {
     if (args[i] === "--workspace") {
       const w = args[i + 1];
       if (!w) {
-        printUsage();
+        printUsageError();
         return 1;
       }
       workspaceFlag = resolve(w);
@@ -70,14 +74,14 @@ export function runCompile(args: string[]): number {
       continue;
     }
     if (args[i] === "--help" || args[i] === "-h") {
-      printUsage();
+      process.stdout.write(COMPILE_USAGE);
       return 0;
     }
     paths.push(args[i]);
   }
 
   if (paths.length === 0) {
-    printUsage();
+    printUsageError();
     return 1;
   }
 

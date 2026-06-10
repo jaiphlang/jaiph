@@ -24,7 +24,17 @@ import {
   remapContainerPath,
 } from "../shared/errors";
 import { detectWorkspaceRoot } from "../shared/paths";
-import { parseArgs } from "../shared/usage";
+import { hasHelpFlag, parseArgs } from "../shared/usage";
+
+const RUN_USAGE =
+  "Usage: jaiph run [--target <dir>] [--raw] <file.jh> [--] [args...]\n\n" +
+  "Parse, validate, and run a Jaiph workflow file. Requires a `workflow default` entrypoint.\n\n" +
+  "  --target <dir>  keep emitted scripts and run metadata under <dir>\n" +
+  "  --raw           skip banner, progress tree, hooks, and failure footer; inherited stdio\n" +
+  "  --              end of jaiph flags; remaining args go to workflow default\n" +
+  "  -h, --help      show this help\n\n" +
+  "Example:\n" +
+  "  jaiph run ./flows/review.jh \"review this diff\"\n";
 import {
   spawnRunProcess,
   setupRunSignalHandlers,
@@ -61,6 +71,10 @@ import {
 } from "../run/stderr-handler";
 
 export async function runWorkflow(rest: string[]): Promise<number> {
+  if (hasHelpFlag(rest)) {
+    process.stdout.write(RUN_USAGE);
+    return 0;
+  }
   const { target, raw, positional } = parseArgs(rest);
   const input = positional[0];
   const runArgs = positional.slice(1);
