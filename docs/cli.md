@@ -449,6 +449,7 @@ These variables apply to `jaiph run` and workflow execution. Variables marked **
 
 - `JAIPH_DEBUG` — set to `true` for debug tracing.
 - `JAIPH_RECURSION_DEPTH_LIMIT` — maximum recursion depth for workflows and rules (default: **256**). Exceeding this limit produces a runtime error.
+- `JAIPH_INBOX_MAX_DISPATCH` — maximum number of inbox messages a single workflow frame may drain before aborting (default: **1000**). Positive integer; non-numeric or non-positive values fall back to the default. Exceeding the cap fails the owning workflow with `E_INBOX_DISPATCH_LIMIT: drained <N> messages without quiescing — likely a circular send (channel "<name>"); raise JAIPH_INBOX_MAX_DISPATCH if intentional` (see [Inbox & Dispatch — Error semantics](inbox.md#error-semantics)).
 - `NO_COLOR` — disables colored output.
 
 **Non-TTY heartbeat:**
