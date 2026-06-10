@@ -37,7 +37,7 @@ For **`runtime.*` (image, network, timeout)**, the host CLI merges them when it 
 
 Each `*.jh` file may have **at most one** module-level `config { ... }` block. It is optional. Settings apply to all workflows in **that** file, unless a workflow has its own block.
 
-**`jaiph run`:** the CLI reads **only the entry file’s** module `config` when it builds the initial process environment via `resolveRuntimeEnv` (before spawning the workflow runner or Docker). Imported modules’ module-level `config` is not merged into that first env snapshot — but the runtime still applies per-module and workflow `config` from the [import graph](architecture.md#summary) when you enter a workflow, run a nested `run` in the same module, or `ensure` a rule (see [Scoping across nested calls](#scoping-across-nested-calls)). **Cross-module** `run` and **same-module** `ensure` are special cases, explained there.
+**`jaiph run`:** the CLI reads **only the entry file’s** module `config` when it builds the initial process environment via `resolveRuntimeEnv` (before spawning the workflow runner or Docker). Imported modules’ module-level `config` is not merged into that first env snapshot — but the runtime still applies per-module and workflow `config` from the [import graph](architecture.md#summary) when you enter a workflow, run a nested `run` (same- or cross-module), or `ensure` a rule (see [Scoping across nested calls](#scoping-across-nested-calls)). **Same-module** `ensure` is the one case where the caller's scope is reused verbatim.
 
 ```jh
 config {
@@ -207,7 +207,7 @@ When workflows call into other workflows, the config scope depends on the call t
 |-----------|-------------|
 | **Root entry** (`jaiph run file.jh`) | Full module + workflow metadata is applied (normal precedence). |
 | **Same-module `run`** | Callee's workflow-level `config` is layered on top of the caller's effective env. Module-level config is not re-applied. |
-| **Cross-module `run`** (e.g. `run alias.default`) | Caller's effective env carries as-is. Callee's module and workflow config are ignored. The caller's scope wins. |
+| **Cross-module `run`** (e.g. `run alias.default`) | Callee's module-level `config` is layered on top of the caller's effective env, then the callee's workflow-level `config` (if any) is layered on top of that — same precedence as the root-entry path, respecting `${NAME}_LOCKED` env flags. Caller's scope is restored exactly when the call returns. |
 
 After any nested call returns, the caller's scope is restored exactly as before.
 

@@ -14,28 +14,6 @@ Process rules:
 
 ***
 
-## Cross-module `run` must apply the callee module's config #dev-ready
-
-**Context.** Config scoping is inconsistent across call types in `NodeWorkflowRuntime` (`src/runtime/kernel/node-workflow-runtime.ts`, metadata layering via `applyMetadataScope`; documented in `docs/configuration.md` → "Scoping across nested calls"):
-
-| Call type | Today |
-|---|---|
-| Root entry (`jaiph run file.jh`) | module + workflow config applied |
-| Same-module `run` | callee workflow-level config layered |
-| **Cross-module `run`** (`run alias.workflow()`) | **callee's module AND workflow config silently ignored — caller's env carries as-is** |
-| Cross-module `ensure` | callee module-level config IS merged |
-
-This is a bug in practice: `.jaiph/ensure_ci_passes.jh` declares `config { agent.backend = "cursor" }`, but when `engineer.jh` (backend `claude`) calls `run ci.ensure_ci_passes()`, CI-fix prompts silently run on claude. A module's config should describe how that module's workflows run, regardless of who calls them.
-
-**Change.** When a cross-module `run` enters the callee workflow, layer (in order) the **callee module-level** config, then the **callee workflow-level** config block (if any), on top of the caller's effective env — same mechanics as the root-entry path, respecting `${NAME}_LOCKED` env flags (environment always wins). Restore the caller's scope exactly when the call returns (sibling isolation must hold). This makes cross-module `run` consistent with root entry and with cross-module `ensure`.
-
-**Acceptance criteria.**
-- Kernel or e2e test: module A (`agent.default_model = "model-a"`) runs `run b.show()` where module B sets `agent.default_model = "model-b"` and `show` logs `${JAIPH_AGENT_MODEL}` — the log shows `model-b` during the callee, and a subsequent step in A's workflow shows `model-a` again (scope restored).
-- Test: callee **workflow-level** config wins over callee module-level config on the cross-module path.
-- Test: with `JAIPH_AGENT_MODEL` exported in the environment (locked), the callee's config does NOT override it.
-- `docs/configuration.md` "Scoping across nested calls" table updated; the cross-module row no longer says the callee's config is ignored. Remove the now-stale NOTE comment at the top of `.jaiph/ensure_ci_passes.jh` referencing this task.
-- Existing config-scoping tests updated where they asserted the old (ignore) behavior — each change paired with a short rationale in the commit.
-
 ## Fix exit-listener leak on the Docker run path #dev-ready
 
 **Context.** In `src/cli/commands/run.ts` (`runWorkflow`), when `spawnExec` returns a `dockerResult`, an `exitGuard` callback is registered with `process.on("exit", exitGuard)` (~line 165). The matching `process.removeListener("exit", exitGuard)` (~line 194) only runs inside the `if (dockerResult)` block after `await waitForRunExit(...)` completes normally. If anything between registration and removal throws (stream wiring, the awaited exit, buffer draining), the listener stays registered for the rest of the process and `cleanupDocker` runs again at process exit on an already-cleaned container.

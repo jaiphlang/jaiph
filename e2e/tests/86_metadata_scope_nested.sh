@@ -43,11 +43,14 @@ unset JAIPH_AGENT_BACKEND 2>/dev/null || true
 jaiph run "${TEST_DIR}/parent.jh" >/dev/null
 
 # Then
+# Cross-module `run` applies the callee module's config on top of the caller's
+# effective env (respecting `_LOCKED` env flags) and restores the caller's
+# scope when the call returns.
 actual="$(cat "${META_FILE}")"
 expected="$(printf '%s\n' \
   'parent_before:cursor' \
-  'child:cursor' \
+  'child:claude' \
   'parent_after:cursor')"
 
-e2e::assert_equals "${actual}" "${expected}" "nested workflow inherits caller config and preserves parent state"
+e2e::assert_equals "${actual}" "${expected}" "cross-module run sees callee module config; caller scope restored"
 e2e::expect_out_files "parent.jh" 5

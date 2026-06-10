@@ -103,9 +103,10 @@ e2e::assert_equals "${actual}" "${expected}" \
   "rule inside overriding workflow sees workflow model; rule in non-overriding sees module model"
 
 # ---------------------------------------------------------------------------
-# Section 3: Interaction — nested run with workflow config precedence
+# Section 3: Interaction — nested cross-module run applies callee module
+# config and restores caller scope after
 # ---------------------------------------------------------------------------
-e2e::section "workflow config + nested run interaction"
+e2e::section "cross-module run applies callee module config; caller scope restored"
 
 NESTED_LOG="${TEST_DIR}/nested.log"
 export JAIPH_NESTED_LOG="${NESTED_LOG}"
@@ -151,10 +152,10 @@ jaiph run "${TEST_DIR}/parent_nested.jh" >/dev/null
 actual="$(cat "${NESTED_LOG}")"
 expected="$(printf '%s\n' \
   'parent_before:claude' \
-  'child_backend:claude' \
+  'child_backend:cursor' \
   'parent_after:claude')"
 e2e::assert_equals "${actual}" "${expected}" \
-  "workflow-level config locks backend for nested cross-module call and restores after"
+  "cross-module call sees callee module backend; caller workflow-level backend restored after"
 
 # ---------------------------------------------------------------------------
 # Section 4: Env variable still wins over workflow config
