@@ -4,15 +4,32 @@ import { spawn } from "node:child_process";
 import { colorPalette } from "../shared/errors";
 import { detectWorkspaceRoot } from "../shared/paths";
 import { hasHelpFlag } from "../shared/usage";
+import {
+  DEFAULT_REGISTRY_URL,
+  isRegistryNameArg,
+  loadRegistryIndex,
+  parseNameArg,
+  registrySource,
+  type RegistryIndex,
+} from "./registry";
 
 const INSTALL_USAGE =
-  "Usage: jaiph install [--force] [<repo-url[@version]> ...]\n\n" +
-  "With one or more URLs, shallow-clone each repo into .jaiph/libs/<name>/ and\n" +
-  "update .jaiph/libs.lock. With no args, restore every library listed in the\n" +
-  "lockfile.\n\n" +
+  "Usage: jaiph install [--force] [<name[@version]> | <repo-url[@version]> ...]\n\n" +
+  "Names are resolved via the registry (JAIPH_REGISTRY env var, else " +
+  `${DEFAULT_REGISTRY_URL}).\n` +
+  "Names match /^[A-Za-z0-9_-]+(@<version>)?$/; anything containing '/' or ':' is\n" +
+  "treated as a git clone URL. Each lib lands in .jaiph/libs/<name>/ and is\n" +
+  "recorded in .jaiph/libs.lock. With no args, restore every library listed in\n" +
+  "the lockfile (the registry is never read on restore).\n\n" +
   "  --force         delete existing clone and re-clone\n" +
   "  -h, --help      show this help\n\n" +
-  "Example:\n" +
+  "Environment:\n" +
+  "  JAIPH_REGISTRY  path or URL of the registry index (default: " +
+  `${DEFAULT_REGISTRY_URL}).\n` +
+  "                  Values without '://' (or with file://) are read from disk.\n\n" +
+  "Examples:\n" +
+  "  jaiph install jaiphlang\n" +
+  "  jaiph install mylib@v1.2\n" +
   "  jaiph install https://github.com/you/queue-lib.git@v1.0\n";
 
 interface LockEntry {
@@ -133,6 +150,38 @@ async function runWithConcurrency<T, R>(items: T[], limit: number, fn: (item: T)
   return results;
 }
 
+/**
+ * Map raw arg strings to install specs. Args that look like bare registry
+ * names (no `/`, no `:`) are resolved through the registry — loaded at most
+ * once, only when at least one bare-name arg is present. Everything else is
+ * treated as a git clone URL with optional `@version`, matching prior behavior.
+ */
+async function resolveInstallSpecs(args: string[], libsDir: string): Promise<InstallSpec[]> {
+  const hasName = args.some(isRegistryNameArg);
+  let index: RegistryIndex | undefined;
+  let source: string | undefined;
+  if (hasName) {
+    source = registrySource();
+    index = await loadRegistryIndex(source);
+  }
+  const specs: InstallSpec[] = [];
+  for (const arg of args) {
+    if (isRegistryNameArg(arg)) {
+      const { name, version } = parseNameArg(arg);
+      const entry = index!.libs[name];
+      if (!entry) {
+        throw new Error(`lib "${name}" not found in registry ${source}`);
+      }
+      specs.push({ name, url: entry.url, version, libDir: join(libsDir, name) });
+    } else {
+      const { url, version } = parseUrlAndVersion(arg);
+      const name = deriveLibName(url);
+      specs.push({ name, url, version, libDir: join(libsDir, name) });
+    }
+  }
+  return specs;
+}
+
 export async function runInstall(rest: string[], opts: RunInstallOptions = {}): Promise<number> {
   if (hasHelpFlag(rest)) {
     process.stdout.write(INSTALL_USAGE);
@@ -170,11 +219,12 @@ export async function runInstall(rest: string[], opts: RunInstallOptions = {}): 
   } else {
     process.stdout.write("\n");
     lock = readLockFile(lockPath);
-    specs = args.map((a) => {
-      const { url, version } = parseUrlAndVersion(a);
-      const name = deriveLibName(url);
-      return { name, url, version, libDir: join(libsDir, name) };
-    });
+    try {
+      specs = await resolveInstallSpecs(args, libsDir);
+    } catch (err) {
+      process.stderr.write(`${(err as Error).message}\n`);
+      return 1;
+    }
   }
 
   // Plan phase: skip warm-path libs without invoking the cloner; queue the rest.

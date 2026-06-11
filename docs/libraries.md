@@ -43,21 +43,29 @@ Walk-up rules (`.jaiph` / `.git` markers, temp-directory guards) match [CLI — 
 ## Installing third-party libraries
 
 ```bash
-# Clone into .jaiph/libs/<name>/ (shallow git clone) and update the lockfile
+# Install by registry name (uses JAIPH_REGISTRY env var, else https://jaiph.org/registry)
+jaiph install jaiphlang
+
+# Pin a registry name to a version
+jaiph install mylib@v1.2
+
+# Clone a git URL directly (no registry lookup) into .jaiph/libs/<name>/
 jaiph install https://github.com/you/queue-lib.git
 
-# Pin a branch or tag (common shape: …/.git@ref — passed to git clone --branch)
+# Pin a branch or tag (URL form: …/.git@ref — passed to git clone --branch)
 jaiph install https://github.com/you/queue-lib.git@v1.0
 
 # Restore all libraries from the lockfile (e.g. after git clone or in CI)
 jaiph install
 ```
 
-`jaiph install` writes **`.jaiph/libs.lock`** under the workspace root. Commit the lockfile; add **`.jaiph/libs/`** to `.gitignore` if you do not want vendored clones in version control. If **`.jaiph/libs/<name>/`** already exists, the clone is skipped without invoking `git` unless you pass **`--force`** (URL / `@ref` parsing: [CLI — `jaiph install`](cli.md#jaiph-install)).
+**Argument shape decides the path.** A positional arg matching `/^[A-Za-z0-9_-]+(@[A-Za-z0-9._+/-]+)?$/` with **no `/` and no `:`** is treated as a **registry name** and resolved through the registry index (`JAIPH_REGISTRY`, default `https://jaiph.org/registry`); everything else is parsed as a **git URL** with optional trailing `@ref`. See [CLI — `jaiph install`](cli.md#jaiph-install) for the index format, source resolution, and error messages.
 
-Missing libraries are cloned **concurrently** (default 4 in flight), so restoring or installing several repositories at once does not pay full network/process latency one repo at a time. Failed clones still exit the command non-zero and do not produce a lock entry. Restore-from-lock (`jaiph install` with no args) does not invent new lock entries. See [CLI — `jaiph install`](cli.md#jaiph-install) for the full contract.
+`jaiph install` writes **`.jaiph/libs.lock`** under the workspace root. Commit the lockfile; add **`.jaiph/libs/`** to `.gitignore` if you do not want vendored clones in version control. If **`.jaiph/libs/<name>/`** already exists, the clone is skipped without invoking `git` unless you pass **`--force`**.
 
-The clone directory name is **`deriveLibName(url)`** (last path segment, **`.git`** stripped), so imports use that segment as **`lib-name`**.
+Missing libraries are cloned **concurrently** (default 4 in flight), so restoring or installing several repositories at once does not pay full network/process latency one repo at a time. Failed clones still exit the command non-zero and do not produce a lock entry. Restore-from-lock (`jaiph install` with no args) does not invent new lock entries and **never reads the registry** — the lock entry already carries the resolved clone URL. See [CLI — `jaiph install`](cli.md#jaiph-install) for the full contract.
+
+The clone directory name **is the import prefix**. For **registry-name** installs it is the registry key itself, regardless of the repo's URL — so an entry like `{ "mylib": { "url": "https://example.com/some-other-repo-name.git", … } }` installs into `.jaiph/libs/mylib/` and is imported as `import "mylib/…"`. For **git-URL** installs the name is **`deriveLibName(url)`** (last path segment, **`.git`** stripped) — so the URL's last segment **must** match the import prefix the lib uses.
 
 ## Example: `import` from a clone under `.jaiph/libs/`
 

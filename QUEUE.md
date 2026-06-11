@@ -14,29 +14,6 @@ Process rules:
 
 ***
 
-## Registry name resolution: `jaiph install <name>[@version]` #dev-ready
-
-**Context.** `jaiph install` (`src/cli/commands/install.ts`) only accepts git clone URLs. The lib directory name is derived from the URL's last path segment (`deriveLibName`, line 51), and the import resolver (`src/transpile/resolve.ts:25-52`) maps `import "jaiphlang/artifacts"` to `.jaiph/libs/jaiphlang/artifacts.jh` — so a lib's **directory name is its import prefix**, which today silently requires the git repo to be named exactly like the import prefix. There is no name → URL indirection and no way to write `jaiph install jaiphlang`.
-
-**Change.**
-1. Define the registry index format — a single JSON document:
-   ```json
-   { "libs": { "<name>": { "url": "<git clone url>", "description": "<one line>" } } }
-   ```
-   Names must match `/^[A-Za-z0-9_-]+$/` (single path segment — the name becomes the `.jaiph/libs/<name>` directory and the import prefix).
-2. In `runInstall`, treat an argument matching `/^[A-Za-z0-9_-]+(@[A-Za-z0-9._+/-]+)?$/` (no `/`, no `:`) as a registry name with optional `@version`. Everything else takes the existing URL path unchanged.
-3. For registry names, load the index from the `JAIPH_REGISTRY` env var if set, else from a new constant `DEFAULT_REGISTRY_URL = "https://jaiph.org/registry"`. If the source has no `://` prefix or uses `file://`, read it from disk (enables unit tests and air-gapped use); otherwise fetch it with global `fetch`. Load the index at most once per `runInstall` call, and only when at least one bare-name arg is present. Export the loading/validation function (e.g. `loadRegistryIndex(source)`) so other tooling (the registry sync script, tests) reuses the exact same code path.
-4. The **registry key** (not `deriveLibName(url)`) is the lib name: it names the `.jaiph/libs/<name>` directory and the lock entry. The lock entry stores the resolved clone URL exactly as today, so restore-from-lock (`jaiph install` with no args) never contacts the registry.
-5. Actionable errors, all exiting non-zero: unknown name → `lib "<name>" not found in registry <registry-source>`; fetch/read/parse failure → message containing the registry source and the underlying cause.
-6. Update `INSTALL_USAGE` to show the name form and `JAIPH_REGISTRY`.
-
-**Acceptance criteria.**
-- Unit test: installing `mylib` via a path-based `JAIPH_REGISTRY` whose entry points at a repo whose last URL segment is *different* from `mylib` installs into `.jaiph/libs/mylib/` and writes lock entry name `mylib`.
-- Unit test: `mylib@v1.2` passes `v1.2` as the version to the clone runner and records it in the lock entry.
-- Unit tests assert the unknown-name and unreadable/invalid-registry error message shapes.
-- URL-based installs behave exactly as before — existing install tests pass unmodified.
-- Unit test: restore-from-lock succeeds with `JAIPH_REGISTRY` pointing at a nonexistent path (proves restore never reads the registry).
-
 ## Lockfile commit pinning and clone hygiene in `jaiph install` #dev-ready
 
 **Context.** `gitCloneRunner` (`src/cli/commands/install.ts:95`) shallow-clones libs into `.jaiph/libs/<name>/` and leaves the `.git` directory behind, so installed libs appear as nested git repos inside consumer projects. The lockfile (`.jaiph/libs.lock`) records only `{name, url, version}` — and `version` is a git ref that can be moved, so "restore from lockfile" is not actually reproducible. Nothing validates that a cloned repo is a jaiph library at all.
