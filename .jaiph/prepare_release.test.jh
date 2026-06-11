@@ -1,0 +1,86 @@
+#!/usr/bin/env jaiph
+
+import "./prepare_release.jh" as pr
+
+# resolve_version handles the empty-arg / explicit-arg branches and the
+# X.Y.Z format check; tests use mock script to pin the package.json version.
+
+test "resolve_version: empty arg returns next patch from package.json" {
+  mock script pr.read_pkg_version() {
+    echo "1.2.3"
+  }
+  const out = run pr.resolve_version("")
+  expect_equal out "1.2.4"
+}
+
+test "resolve_version: explicit X.Y.Z arg is accepted verbatim" {
+  mock script pr.read_pkg_version() {
+    echo "0.0.0"
+  }
+  const out = run pr.resolve_version("9.8.7")
+  expect_equal out "9.8.7"
+}
+
+test "resolve_version: non-X.Y.Z arg fails with offending value" {
+  mock script pr.read_pkg_version() {
+    echo "0.0.0"
+  }
+  const out = run pr.resolve_version("not-a-version") allow_failure
+  expect_contain out "version must match X.Y.Z"
+  expect_contain out "not-a-version"
+}
+
+test "resolve_version: extra-segment arg fails with offending value" {
+  mock script pr.read_pkg_version() {
+    echo "0.0.0"
+  }
+  const out = run pr.resolve_version("1.2.3.4") allow_failure
+  expect_contain out "version must match X.Y.Z"
+  expect_contain out "1.2.3.4"
+}
+
+# check_displayed_version: builds the CLI and compares its --version output
+# against the expected literal. On mismatch the script must print both the
+# expected and actual strings before the workflow fails.
+
+test "check_displayed_version: mismatch fails with both values in output" {
+  mock script pr.run_npm_build() {
+    :
+  }
+  mock script pr.assert_built_cli_version_equals() {
+    expected="jaiph $1"
+    actual="jaiph 0.0.0"
+    printf 'displayed --version mismatch\nexpected: %s\nactual:   %s\n' "${expected}" "${actual}" >&2
+    exit 1
+  }
+  const out = run pr.check_displayed_version("9.9.9") allow_failure
+  expect_contain out "expected: jaiph 9.9.9"
+  expect_contain out "actual:   jaiph 0.0.0"
+}
+
+# preflight: refuses to start if the working tree is dirty so the workflow's
+# own edits are the only diff a reviewer sees.
+
+test "preflight: dirty git tree fails before any side effects" {
+  mock script pr.assert_git_tree_clean() {
+    echo "git tree is dirty; commit or stash before running prepare_release" >&2
+    exit 1
+  }
+  mock script pr.assert_tag_does_not_exist() {
+    :
+  }
+  const out = run pr.preflight("9.9.9") allow_failure
+  expect_contain out "git tree is dirty"
+}
+
+test "preflight: existing tag v<version> fails" {
+  mock script pr.assert_git_tree_clean() {
+    :
+  }
+  mock script pr.assert_tag_does_not_exist() {
+    printf 'tag v%s already exists\n' "$1" >&2
+    exit 1
+  }
+  const out = run pr.preflight("9.9.9") allow_failure
+  expect_contain out "tag v9.9.9 already exists"
+}

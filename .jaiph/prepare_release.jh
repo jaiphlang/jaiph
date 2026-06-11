@@ -1,0 +1,139 @@
+#!/usr/bin/env jaiph
+
+#
+# Release-prep workflow. Single-sources the CLI version: bumps package.json,
+# refreshes the installer's hardcoded ref, rebuilds the CLI, verifies that
+# `jaiph --version` matches package.json, and regenerates docs/registry.
+#
+# Run as:
+#   jaiph run .jaiph/prepare_release.jh -- 0.9.5     # explicit version
+#   jaiph run .jaiph/prepare_release.jh              # next patch version
+#
+# The workflow never creates a commit or git tag — it stages edits for the
+# operator to review, commit, tag, and push manually.
+#
+
+script read_pkg_version = `node -p "require('./package.json').version"`
+
+script assert_version_format = ```
+  v="$1"
+  case "${v}" in
+    *[!0-9.]*) printf 'version must match X.Y.Z (digits only); got: %s\n' "${v}" >&2; exit 1 ;;
+  esac
+  printf '%s' "${v}" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || {
+    printf 'version must match X.Y.Z (digits only); got: %s\n' "${v}" >&2
+    exit 1
+  }
+```
+
+script compute_next_patch = ```python3
+import sys
+v = sys.argv[1]
+parts = v.split('.')
+if len(parts) != 3 or not all(p.isdigit() for p in parts):
+    sys.stderr.write(f"invalid current version in package.json: {v}\n")
+    sys.exit(1)
+parts[-1] = str(int(parts[-1]) + 1)
+print('.'.join(parts))
+```
+
+script assert_git_tree_clean = ```
+  if [ -n "$(git status --porcelain)" ]; then
+    echo "git tree is dirty; commit or stash before running prepare_release" >&2
+    git status --short >&2
+    exit 1
+  fi
+```
+
+script assert_tag_does_not_exist = ```
+  v="$1"
+  if git rev-parse -q --verify "refs/tags/v${v}" >/dev/null 2>&1; then
+    printf 'tag v%s already exists\n' "${v}" >&2
+    exit 1
+  fi
+```
+
+script npm_version_no_tag = `npm version "$1" --no-git-tag-version --allow-same-version >/dev/null`
+
+script update_install_release_ref = ```python3
+import sys
+old, new = sys.argv[1], sys.argv[2]
+path = "docs/install"
+with open(path, "r", encoding="utf-8") as f:
+    src = f.read()
+needle = f"v{old}"
+count = src.count(needle)
+if count == 0:
+    sys.stderr.write(f"docs/install: hardcoded ref v{old} not found\n")
+    sys.exit(1)
+new_src = src.replace(needle, f"v{new}")
+with open(path, "w", encoding="utf-8") as f:
+    f.write(new_src)
+print(count)
+```
+
+script run_npm_build = `npm run build >&2`
+
+script assert_built_cli_version_equals = ```
+  v="$1"
+  expected="jaiph ${v}"
+  actual="$(node dist/src/cli.js --version)"
+  if [ "${expected}" != "${actual}" ]; then
+    printf 'displayed --version mismatch\nexpected: %s\nactual:   %s\n' "${expected}" "${actual}" >&2
+    exit 1
+  fi
+```
+
+script run_registry_build = `npm run registry:build >&2`
+
+workflow resolve_version(arg) {
+  const pkg_version = run read_pkg_version()
+  const resolved = match arg {
+    "" => run compute_next_patch(pkg_version)
+    _ => arg
+  }
+  run assert_version_format(resolved)
+  return resolved
+}
+
+workflow preflight(version) {
+  run assert_git_tree_clean()
+  run assert_tag_does_not_exist(version)
+}
+
+workflow apply_version_change(old_version, new_version) {
+  run npm_version_no_tag(new_version)
+  run update_install_release_ref(old_version, new_version)
+}
+
+workflow check_displayed_version(version) {
+  run run_npm_build()
+  run assert_built_cli_version_equals(version)
+}
+
+workflow default(arg) {
+  const version = run resolve_version(arg)
+  const old_version = run read_pkg_version()
+  log "Preparing release v${version} (current: v${old_version})"
+
+  run preflight(version)
+  run apply_version_change(old_version, version)
+  run check_displayed_version(version)
+  run run_registry_build()
+
+  log """
+    prepare_release: staged release v${version}
+      - package.json + package-lock.json (npm version ${version})
+      - docs/install (release ref v${old_version} -> v${version})
+      - docs/registry (regenerated)
+      - dist/ (rebuilt; jaiph --version == jaiph ${version})
+
+    Remaining manual steps:
+      1. Review the diff (git diff)
+      2. Commit the staged changes
+      3. Tag: git tag v${version}
+      4. Push branch + tag (tag push triggers docker-publish and release.yml)
+      5. Smoke check: jaiph use ${version}
+  """
+  return version
+}

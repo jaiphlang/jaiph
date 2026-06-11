@@ -1,8 +1,22 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { main } from "./index";
 import { WORKFLOW_RUNNER_ARG } from "../runtime/kernel/node-workflow-runner";
 import { printUsage } from "./shared/usage";
+import { VERSION } from "../version";
+
+function findRepoRoot(): string {
+  let cur = __dirname;
+  while (cur !== dirname(cur)) {
+    if (existsSync(join(cur, "package.json")) && existsSync(join(cur, "tsconfig.json"))) {
+      return cur;
+    }
+    cur = dirname(cur);
+  }
+  throw new Error("could not locate repo root for version test");
+}
 
 interface StreamCapture {
   text: string;
@@ -60,4 +74,34 @@ test("--help output never mentions the internal __workflow-runner marker", async
   }
   assert.equal(code, 0);
   assert.doesNotMatch(out.text, /__workflow-runner/);
+});
+
+test("--version prints 'jaiph <version>' where <version> equals package.json", async () => {
+  const repoRoot = findRepoRoot();
+  const pkg = JSON.parse(readFileSync(join(repoRoot, "package.json"), "utf8"));
+  assert.equal(typeof pkg.version, "string");
+  assert.equal(VERSION, pkg.version, "src/version.ts VERSION drifted from package.json — rerun `npm run build` (or `npm run embed-assets`)");
+  const out = captureStream(process.stdout);
+  let code: number;
+  try {
+    code = await main(["node", "cli.js", "--version"]);
+  } finally {
+    out.restore();
+  }
+  assert.equal(code, 0);
+  assert.equal(out.text, `jaiph ${pkg.version}\n`);
+});
+
+test("-v prints the same single-sourced version as --version", async () => {
+  const repoRoot = findRepoRoot();
+  const pkg = JSON.parse(readFileSync(join(repoRoot, "package.json"), "utf8"));
+  const out = captureStream(process.stdout);
+  let code: number;
+  try {
+    code = await main(["node", "cli.js", "-v"]);
+  } finally {
+    out.restore();
+  }
+  assert.equal(code, 0);
+  assert.equal(out.text, `jaiph ${pkg.version}\n`);
 });
