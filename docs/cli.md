@@ -350,42 +350,100 @@ Creates:
 Install project-scoped libraries. Libraries are git repos cloned into `.jaiph/libs/<name>/` under the **workspace root**. The workspace is determined from the **current working directory** (`detectWorkspaceRoot(process.cwd())` — walk upward until `.jaiph` or `.git`, with the same temp-directory guards as `jaiph run`). A lockfile (`.jaiph/libs.lock`) under that root tracks installed libraries for reproducible setups.
 
 ```bash
-jaiph install [--force] <repo-url[@version]> ...
+jaiph install [--force] [<name[@version]> | <repo-url[@version]> ...]
 jaiph install [--force]
 ```
 
-**With arguments** — clone each repo into `.jaiph/libs/<name>/` (shallow: `--depth 1`) and upsert the entry in `.jaiph/libs.lock`. The library name is derived from the URL: last path segment, stripped of `.git` suffix (e.g. `github.com/you/queue-lib.git` → `queue-lib`). Version pinning is usually written as **`https://…/name.git@<tag-or-branch>`**; other URL shapes with a trailing **`@ref`** are also accepted when the parser can split URL and version unambiguously.
+**Argument dispatch.** Each positional arg is classified by shape:
 
-**Without arguments** — restore all libraries from `.jaiph/libs.lock`. Useful after cloning a project or in CI. If the lockfile exists but lists **no** libraries, the command prints `No libs in lockfile.` and exits **0**. Restore mode does **not** invent new lock entries — the lockfile is read but not rewritten.
+- **Registry name** — matches `/^[A-Za-z0-9_-]+(@[A-Za-z0-9._+/-]+)?$/` **and** contains no `/` and no `:`. Resolved through the registry (see below). Examples: `jaiphlang`, `mylib@v1.2`.
+- **Git URL** — anything else, parsed exactly as before with optional trailing `@<version>`. Examples: `https://github.com/you/queue-lib.git`, `git@github.com:org/repo.git@main`.
+
+**With arguments** — clone each repo into `.jaiph/libs/<name>/` (shallow: `--depth 1`) and upsert the entry in `.jaiph/libs.lock`.
+
+- For a **registry name**, `<name>` is the registry key itself, regardless of the URL's last path segment. The lock entry stores the resolved clone URL.
+- For a **git URL**, the library name is derived from the URL: last path segment, stripped of `.git` suffix (e.g. `github.com/you/queue-lib.git` → `queue-lib`). Version pinning is usually written as **`https://…/name.git@<tag-or-branch>`**; other URL shapes with a trailing **`@ref`** are also accepted when the parser can split URL and version unambiguously.
+
+Either way, the directory name **is** the import prefix (resolution under `<workspace>/.jaiph/libs/<name>/…`; see [Grammar — Imports and Exports](grammar.md#imports-and-exports) and [Libraries](libraries.md#how-imports-resolve)).
+
+**Without arguments** — restore all libraries from `.jaiph/libs.lock`. Useful after cloning a project or in CI. If the lockfile exists but lists **no** libraries, the command prints `No libs in lockfile.` and exits **0**. Restore mode does **not** invent new lock entries — the lockfile is read but not rewritten, and **the registry is never contacted** (lock entries already carry the resolved clone URL).
 
 If `.jaiph/libs/<name>/` already exists, the library is skipped without invoking `git` (warm path) — both for explicit arguments and for restore-from-lock. Use **`--force`** (anywhere in the argument list) to delete and re-clone.
 
 **Parallel clones.** Missing libraries are cloned concurrently with a small bounded-concurrency executor (default **4 in flight**); the warm-path skip runs in a pre-pass before any clone work starts. Independent network/process latency therefore overlaps when several libraries are missing. Failures from individual clones still propagate: any non-zero clone exits the command non-zero, and failed libraries are **not** added to `.jaiph/libs.lock`. Successful and warm-skipped libraries are upserted as before.
 
-**Lockfile format** (`.jaiph/libs.lock`):
+### Registry
+
+When at least one argument is a bare registry name, `runInstall` loads the **registry index** once per invocation from the source given by **`JAIPH_REGISTRY`** (or the default **`https://jaiph.org/registry`** when the env var is unset or empty). All-URL invocations and restore-from-lock never read the registry.
+
+**Index format** — a single JSON document:
+
+```json
+{
+  "libs": {
+    "jaiphlang": {
+      "url": "https://github.com/jaiphlang/jaiphlang.git",
+      "description": "First-party helper modules"
+    },
+    "mylib": {
+      "url": "https://example.com/some-other-repo-name.git",
+      "description": "Demo library"
+    }
+  }
+}
+```
+
+Each key must match `/^[A-Za-z0-9_-]+$/` (single path segment — the name becomes the `.jaiph/libs/<name>` directory and the import prefix). Each entry requires a string `url` and a string `description`. Unknown keys on entries are accepted (and ignored) so future fields can be added without a flag day.
+
+**Source resolution** — the value of `JAIPH_REGISTRY` (or the default) decides how the index is read:
+
+- Values **without** a `://` scheme (e.g. `./registry.json`, `/etc/jaiph/registry.json`) are read **from disk**. Useful for unit tests and air-gapped setups.
+- Values starting with **`file://`** are read from disk after URL decoding.
+- Everything else is fetched with global **`fetch`** (HTTP/HTTPS).
+
+**Errors** — all failure paths exit non-zero and write to stderr:
+
+- Unknown name → `lib "<name>" not found in registry <registry-source>`
+- Read/fetch/parse failure → message containing both the registry source and the underlying cause (`failed to read registry <source>: <cause>`, `failed to fetch registry <source>: HTTP <status>`, `failed to parse registry <source>: <cause>`, `failed to parse registry <source>: invalid name "<name>"`, etc.)
+
+### Lockfile
+
+`.jaiph/libs.lock` records every installed library by its resolved clone URL and the (optional) requested version:
 
 ```json
 {
   "libs": [
+    { "name": "jaiphlang", "url": "https://github.com/jaiphlang/jaiphlang.git" },
     { "name": "queue-lib", "url": "https://github.com/you/queue-lib.git", "version": "v1.0" }
   ]
 }
 ```
 
+Because the lock entry stores the **resolved** URL, restore-from-lock (`jaiph install` with no args) works even when the registry source is unreachable or the index has changed.
+
 **Examples:**
 
 ```bash
-# Install a library
+# Install a library by registry name (uses JAIPH_REGISTRY or the default)
+jaiph install jaiphlang
+
+# Install a registry name at a specific version
+jaiph install mylib@v1.2
+
+# Install a library by git URL (no registry lookup)
 jaiph install https://github.com/you/queue-lib.git
 
-# Install at a specific version
+# Install at a specific version (URL form)
 jaiph install https://github.com/you/queue-lib.git@v1.0
 
 # Re-clone an existing library
-jaiph install --force https://github.com/you/queue-lib.git
+jaiph install --force jaiphlang
 
-# Restore all libraries from lockfile
+# Restore all libraries from lockfile (registry not contacted)
 jaiph install
+
+# Use a local registry index for tests / air-gapped setups
+JAIPH_REGISTRY=./registry.json jaiph install mylib
 ```
 
 After installation, import library modules using the `<lib-name>/<path>` convention:
@@ -484,6 +542,7 @@ For overlay vs copy workspace mode, mounts, and stderr wiring, see [Sandboxing](
 - `JAIPH_BIN_DIR` — target bin directory (default: `$HOME/.local/bin`).
 - `JAIPH_RELEASE_BASE_URL` — override the GitHub Release base URL the installer downloads from (default: `https://github.com/jaiphlang/jaiph/releases/download/<ref>`). Useful for mirrors, offline bundles, or `file://` paths in tests.
 - `JAIPH_INSTALL_COMMAND` — command run by `jaiph use` to reinstall (default: `curl -fsSL https://jaiph.org/install | bash`).
+- `JAIPH_REGISTRY` — path or URL of the **lib registry index** used by `jaiph install <name>` (default: `https://jaiph.org/registry`). Values without a `://` scheme (or starting with `file://`) are read from disk; everything else is fetched via global `fetch`. The registry is only loaded when at least one positional arg is a bare name; URL-form installs and restore-from-lock never read it. See [`jaiph install`](#jaiph-install) for the index shape and error messages.
 
 ### `jaiph init`
 

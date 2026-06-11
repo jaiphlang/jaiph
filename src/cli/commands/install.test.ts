@@ -6,6 +6,47 @@ import { execSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { parseUrlAndVersion, runInstall, type CloneRunner, type CloneOutcome, type InstallSpec } from "./install";
 
+/**
+ * Run a body with JAIPH_REGISTRY set to `value`. Restore the prior value
+ * (including absent) on exit. Wraps each registry-dependent test so they can
+ * share the global env without leaking between cases.
+ */
+async function withRegistry<T>(value: string, body: () => Promise<T>): Promise<T> {
+  const prev = process.env.JAIPH_REGISTRY;
+  process.env.JAIPH_REGISTRY = value;
+  try {
+    return await body();
+  } finally {
+    if (prev === undefined) {
+      delete process.env.JAIPH_REGISTRY;
+    } else {
+      process.env.JAIPH_REGISTRY = prev;
+    }
+  }
+}
+
+function writeRegistryFile(dir: string, libs: Record<string, { url: string; description: string }>): string {
+  const path = join(dir, "registry.json");
+  writeFileSync(path, JSON.stringify({ libs }), "utf8");
+  return path;
+}
+
+/** Capture process.stderr writes during `body`. Restores the prior writer on exit. */
+async function captureStderr<T>(body: () => Promise<T>): Promise<{ result: T; stderr: string }> {
+  const chunks: string[] = [];
+  const orig = process.stderr.write;
+  process.stderr.write = ((chunk: string | Uint8Array) => {
+    chunks.push(String(chunk));
+    return true;
+  }) as typeof process.stderr.write;
+  try {
+    const result = await body();
+    return { result, stderr: chunks.join("") };
+  } finally {
+    process.stderr.write = orig;
+  }
+}
+
 const CLI_PATH = join(__dirname, "../../../src/cli.js");
 
 test("parseUrlAndVersion: https repo.git@ref (tag or branch)", () => {
@@ -230,6 +271,168 @@ test("install: unknown ref failure exits non-zero and does not lock the failed l
     assert.ok(existsSync(lockPath));
     const lock = JSON.parse(readFileSync(lockPath, "utf8")) as { libs: { name: string }[] };
     assert.equal(lock.libs.length, 0, "unknown-ref clone must not produce a lock entry");
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test("install: bare registry name installs into .jaiph/libs/<name>/ regardless of url last segment", async () => {
+  const dir = makeTempProject();
+  try {
+    const registryPath = writeRegistryFile(dir, {
+      mylib: { url: "https://example.com/some-other-repo-name.git", description: "demo" },
+    });
+
+    const seen: InstallSpec[] = [];
+    const cloneRunner: CloneRunner = async (spec) => {
+      seen.push(spec);
+      mkdirSync(spec.libDir, { recursive: true });
+      return { spec, ok: true };
+    };
+
+    const code = await withRegistry(registryPath, () =>
+      runInstall(["mylib"], { cwd: dir, cloneRunner }),
+    );
+
+    assert.equal(code, 0);
+    assert.equal(seen.length, 1);
+    assert.equal(seen[0]!.name, "mylib");
+    assert.equal(seen[0]!.url, "https://example.com/some-other-repo-name.git");
+    assert.equal(seen[0]!.libDir, join(dir, ".jaiph", "libs", "mylib"));
+
+    assert.ok(existsSync(join(dir, ".jaiph", "libs", "mylib")), "lib dir uses registry name, not url segment");
+    const lock = JSON.parse(readFileSync(join(dir, ".jaiph", "libs.lock"), "utf8")) as {
+      libs: { name: string; url: string }[];
+    };
+    assert.equal(lock.libs.length, 1);
+    assert.equal(lock.libs[0]!.name, "mylib");
+    assert.equal(lock.libs[0]!.url, "https://example.com/some-other-repo-name.git");
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test("install: name@version forwards version to clone runner and records it in lock", async () => {
+  const dir = makeTempProject();
+  try {
+    const registryPath = writeRegistryFile(dir, {
+      mylib: { url: "https://example.com/mylib.git", description: "demo" },
+    });
+
+    let observed: InstallSpec | undefined;
+    const cloneRunner: CloneRunner = async (spec) => {
+      observed = spec;
+      mkdirSync(spec.libDir, { recursive: true });
+      return { spec, ok: true };
+    };
+
+    const code = await withRegistry(registryPath, () =>
+      runInstall(["mylib@v1.2"], { cwd: dir, cloneRunner }),
+    );
+
+    assert.equal(code, 0);
+    assert.equal(observed?.version, "v1.2");
+    const lock = JSON.parse(readFileSync(join(dir, ".jaiph", "libs.lock"), "utf8")) as {
+      libs: { name: string; version?: string }[];
+    };
+    assert.equal(lock.libs[0]!.version, "v1.2");
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test("install: unknown registry name fails with actionable message naming the source", async () => {
+  const dir = makeTempProject();
+  try {
+    const registryPath = writeRegistryFile(dir, {
+      other: { url: "https://example.com/other.git", description: "demo" },
+    });
+
+    const { result: code, stderr } = await captureStderr(() =>
+      withRegistry(registryPath, () => runInstall(["missing"], { cwd: dir })),
+    );
+
+    assert.notEqual(code, 0);
+    assert.ok(
+      stderr.includes(`lib "missing" not found in registry ${registryPath}`),
+      `expected unknown-name error naming the source; got: ${stderr}`,
+    );
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test("install: unreadable registry source fails with message naming source and cause", async () => {
+  const dir = makeTempProject();
+  try {
+    const missingPath = join(dir, "no-such-registry.json");
+
+    const { result: code, stderr } = await captureStderr(() =>
+      withRegistry(missingPath, () => runInstall(["mylib"], { cwd: dir })),
+    );
+
+    assert.notEqual(code, 0);
+    assert.ok(stderr.includes(missingPath), `expected error naming registry source; got: ${stderr}`);
+    assert.ok(stderr.includes("failed to read registry"), `expected read-failure message; got: ${stderr}`);
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test("install: invalid registry JSON fails with message naming source and cause", async () => {
+  const dir = makeTempProject();
+  try {
+    const registryPath = join(dir, "registry.json");
+    writeFileSync(registryPath, "{ not valid json", "utf8");
+
+    const { result: code, stderr } = await captureStderr(() =>
+      withRegistry(registryPath, () => runInstall(["mylib"], { cwd: dir })),
+    );
+
+    assert.notEqual(code, 0);
+    assert.ok(stderr.includes(registryPath), `expected error naming registry source; got: ${stderr}`);
+    assert.ok(stderr.includes("failed to parse registry"), `expected parse-failure message; got: ${stderr}`);
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test("install: restore-from-lock never reads the registry", async () => {
+  const dir = makeTempProject();
+  try {
+    const lockPath = join(dir, ".jaiph", "libs.lock");
+    mkdirSync(join(dir, ".jaiph"), { recursive: true });
+    writeFileSync(
+      lockPath,
+      JSON.stringify({
+        libs: [
+          { name: "alpha", url: "https://example.com/alpha.git" },
+          { name: "beta", url: "https://example.com/beta.git", version: "v2" },
+        ],
+      }) + "\n",
+      "utf8",
+    );
+
+    const seen: InstallSpec[] = [];
+    const cloneRunner: CloneRunner = async (spec) => {
+      seen.push(spec);
+      mkdirSync(spec.libDir, { recursive: true });
+      return { spec, ok: true };
+    };
+
+    // Point JAIPH_REGISTRY at a path that does not exist. If restore touched
+    // the registry, the load would fail. Restore must succeed regardless.
+    const bogusRegistry = join(dir, "nope-no-registry-here.json");
+    const code = await withRegistry(bogusRegistry, () =>
+      runInstall([], { cwd: dir, cloneRunner }),
+    );
+
+    assert.equal(code, 0, "restore-from-lock must succeed without contacting the registry");
+    assert.equal(seen.length, 2);
+    assert.deepEqual(
+      seen.map((s) => s.name).sort(),
+      ["alpha", "beta"],
+    );
   } finally {
     cleanup(dir);
   }

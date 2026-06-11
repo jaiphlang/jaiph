@@ -70,7 +70,7 @@ CLI quick reference:
 | `jaiph compile [--json] <paths…>` | Validate only — no execution, no side effects |
 | `jaiph format [--check] <file.jh …>` | Reformat (or verify formatting in CI) |
 | `jaiph init [workspace]` | Scaffold `.jaiph/` (bootstrap workflow + this skill file) |
-| `jaiph install [<url[@version]>…]` | Install git-hosted libraries into `.jaiph/libs/` |
+| `jaiph install [<name[@version]> \| <url[@version]>…]` | Install libraries into `.jaiph/libs/` (bare names resolve via `JAIPH_REGISTRY`, else `https://jaiph.org/registry`; URL form is unchanged) |
 
 Shorthand: `jaiph ./file.jh` routes by extension (`*.test.jh` → test, other `.jh` → run). A `#!/usr/bin/env jaiph` shebang makes a `.jh` file directly executable.
 
