@@ -19,8 +19,8 @@ Goals you should leave with:
 
 ### Prerequisites
 
-- **Node.js** — required to run `jaiph` (the curl installer runs `npm install` and `npm run build` in a checkout).
-- **Shell tooling** — the CLI and workflow runtime are Node-based; **emitted `script` steps** run by spawning the script path so the interpreter comes from each file’s **shebang** (often `#!/usr/bin/env bash` or another interpreter on your `PATH`). **Shell lines inside workflows** (after Jaiph interpolation) run via **`sh -c`**, so a POSIX **`sh`** must exist. See [Architecture — Distribution](architecture.md#distribution-node-vs-bun-standalone).
+- **`curl`** and **`shasum`** / **`sha256sum`** — the only host requirements for the curl installer. It downloads a pre-built standalone binary from the matching GitHub Release and verifies the checksum before installing. **Node and npm are not required to run `jaiph`** (the binary is self-contained — see [Architecture — Distribution](architecture.md#distribution-node-vs-bun-standalone)). Contributors building from source need Bun and npm instead — see [Contributing — Installing from source](contributing.md#installing-from-source).
+- **Shell tooling** — **emitted `script` steps** run by spawning the script path so the interpreter comes from each file’s **shebang** (often `#!/usr/bin/env bash` or another interpreter on your `PATH`). **Shell lines inside workflows** (after Jaiph interpolation) run via **`sh -c`**, so a POSIX **`sh`** must exist.
 
 ## Install
 
@@ -28,13 +28,13 @@ Goals you should leave with:
 curl -fsSL https://jaiph.org/install | bash
 ```
 
-This installs a small wrapper **`jaiph`** under `~/.local/bin` plus a **`~/.local/bin/.jaiph/`** tree: `src/` (compiled CLI), `package.json`, and **`jaiph-skill.md`** (copied from the repo for `jaiph init`). Alternatively:
+This downloads the per-platform standalone binary for your host (`jaiph-{darwin|linux}-{arm64|x64}`) plus `SHA256SUMS` from the matching GitHub Release, **verifies the checksum**, and installs the binary to `~/.local/bin/jaiph`. The binary is fully self-contained — no `LIB_DIR` tree, no node shim. Override the install location with `JAIPH_BIN_DIR` and the release ref with the first positional argument or `JAIPH_REPO_REF` (default: the current stable tag; `nightly` resolves to the rolling prerelease). Alternatively:
 
 ```bash
 npm install -g jaiph
 ```
 
-`jaiph init` always writes `.jaiph/SKILL.md`. The CLI prefers a disk copy (`JAIPH_SKILL_PATH`, install-relative `jaiph-skill.md`, or `docs/jaiph-skill.md` under the current working directory), and falls back to an **embedded copy baked into the build** so even an npm install without a sibling `docs/` and the bun-compiled standalone binary still produce a `SKILL.md`. Override it with **`JAIPH_SKILL_PATH`** when you want a custom skill (for example the repo’s `docs/jaiph-skill.md`, or download the canonical raw skill: `https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md`).
+`jaiph init` always writes `.jaiph/SKILL.md`. The CLI prefers a disk copy (`JAIPH_SKILL_PATH`, or `docs/jaiph-skill.md` under the current working directory), and falls back to an **embedded copy baked into the binary** so a curl-installed jaiph (no sibling `docs/` on disk) still produces a `SKILL.md`. Override it with **`JAIPH_SKILL_PATH`** when you want a custom skill (for example the repo’s `docs/jaiph-skill.md`, or download the canonical raw skill: `https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md`).
 
 Verify:
 
@@ -44,14 +44,14 @@ jaiph --version
 
 If the command is not found, ensure `~/.local/bin` (installer) or the npm global bin directory is on your **`PATH`** (the **`docs/run`** helper prepends `$HOME/.local/bin` automatically after installing).
 
-Switch versions anytime: **`jaiph use`** runs your install command via **`bash -c`** (default: `curl -fsSL https://jaiph.org/install | bash`) with **`JAIPH_REPO_REF`** set to **`nightly`** or to **`v`** plus the version (for example **`0.9.4`** → **`v0.9.4`**).
+Switch versions anytime: **`jaiph use`** runs your install command via **`bash -c`** (default: `curl -fsSL https://jaiph.org/install | bash`) with **`JAIPH_REPO_REF`** set to **`nightly`** or to **`v`** plus the version (for example **`0.9.4`** → **`v0.9.4`**). The installer re-downloads the corresponding release binary and replaces the one at `~/.local/bin/jaiph`.
 
 ```bash
 jaiph use nightly
-jaiph use 0.9.4    # reinstalls tag v0.9.4
+jaiph use 0.9.4    # reinstalls the v0.9.4 release binary
 ```
 
-Default install invocation is `curl -fsSL https://jaiph.org/install | bash`; override **`JAIPH_INSTALL_COMMAND`** when you need a fork, offline bundle, or local script (**`docs/install-from-local.sh`** wraps `docs/install` with a repo path).
+Default install invocation is `curl -fsSL https://jaiph.org/install | bash`; override **`JAIPH_INSTALL_COMMAND`** when you need a fork, offline bundle, or local script (**`docs/install-from-local.sh`** wraps `docs/install` with a repo path and builds the binary locally with Bun — see [Contributing](contributing.md#installing-from-source)).
 
 ## Quick try
 
@@ -122,7 +122,7 @@ This creates **`.jaiph/`** under the chosen root with:
 
 - **`.jaiph/.gitignore`** — ignores ephemeral **`runs/`** and **`tmp/`** under **`.jaiph/`** (workflows and libraries stay tracked).
 - **`.jaiph/bootstrap.jh`** — executable **`workflow default`** whose template uses a triple-quoted multiline **prompt**; it tells the agent to read **`.jaiph/SKILL.md`**, scaffold workflows under **`.jaiph/`**, and end with **WHAT CHANGED** and **WHY**; the workflow **`log`**s the result.
-- **`.jaiph/SKILL.md`** — copied when **`jaiph init`** can resolve a skill markdown file: if **`JAIPH_SKILL_PATH`** is set **and** that path exists, it wins; otherwise the CLI tries install-relative paths (`jaiph-skill.md` beside the packaged tree — curl install: **`~/.local/bin/.jaiph/jaiph-skill.md`** next to **`src/`** — then **`docs/jaiph-skill.md`** beside the package when present), then **`docs/jaiph-skill.md`** under the current working directory. Resolution lives in **`resolveInstalledSkillPath()`** (`src/cli/shared/paths.ts`). If nothing resolves, the skill file is skipped and a message tells you to set **`JAIPH_SKILL_PATH`** and run **`jaiph init`** again. Same rules as [CLI — `jaiph init`](cli.md#jaiph-init).
+- **`.jaiph/SKILL.md`** — always written. If **`JAIPH_SKILL_PATH`** is set **and** that path exists, it wins; otherwise the CLI tries **`docs/jaiph-skill.md`** under the current working directory and finally falls back to the copy **embedded in the binary**. Resolution lives in **`loadInstalledSkillContent()`** / **`resolveInstalledSkillPath()`** (`src/cli/shared/paths.ts`). Same rules as [CLI — `jaiph init`](cli.md#jaiph-init).
 
 Run the bootstrap workflow:
 
@@ -136,4 +136,4 @@ By convention, keep Jaiph workflow files under **`<project_root>/.jaiph/`** so w
 
 ### Building from source
 
-Contributors typically clone the repo, run **`npm install`** and **`npm run build`**, and invoke **`node dist/src/cli.js`** (or build the standalone Bun binary per [Contributing](contributing.md)). That path is separate from the curl/npm end-user install above.
+Contributors typically clone the repo, run **`npm install`** and **`npm run build`**, and invoke **`node dist/src/cli.js`**; to produce the same single-file binary the curl installer fetches from a Release, run **`npm run build:standalone`** (requires Bun) — or call **`./docs/install-from-local.sh`** to install that binary directly. See [Contributing — Installing from source](contributing.md#installing-from-source).

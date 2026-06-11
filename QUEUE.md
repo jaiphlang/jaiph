@@ -14,23 +14,6 @@ Process rules:
 
 ***
 
-## Binary installer: rewrite `docs/install` to download release assets; update `install-from-local.sh` #dev-ready
-
-**Context.** `docs/install` (served at `https://jaiph.org/install`, run via `curl | bash`) currently clones the repo at a tag, runs `npm install` + `npm run build` on the user's machine, and installs a node shim — requiring git, node 20, and npm on every user machine. Release CI (separate queue task — implement it first) publishes per-platform standalone binaries on `v*` tags and a rolling `nightly` prerelease under the asset contract `jaiph-{darwin|linux}-{arm64|x64}` + `SHA256SUMS`. The binary embeds `jaiph-skill.md` and `overlay-run.sh`, so the binary is the entire installation. `docs/install-from-local.sh` and the `JAIPH_FROM_LOCAL` branch of `docs/install` install from a local checkout (used by developers and the e2e install tests); `jaiph use <version|nightly>` re-runs the install command with `JAIPH_REPO_REF` set.
-
-**Change.**
-1. Rewrite `docs/install`: detect platform (`uname -s` / `uname -m`, mapping `x86_64`→`x64`, `aarch64`→`arm64`); resolve the ref (first arg or `JAIPH_REPO_REF`, default the current release tag; `nightly` → the rolling prerelease); download `https://github.com/jaiphlang/jaiph/releases/download/<ref>/jaiph-<os>-<arch>` and `SHA256SUMS`; **verify the checksum** (fail hard on mismatch); install to `${JAIPH_BIN_DIR:-$HOME/.local/bin}/jaiph` with mode 755. Prerequisites shrink to `curl` + `shasum`/`sha256sum`. Unsupported platform → non-zero exit naming the detected platform and pointing at the from-source instructions in `docs/contributing.md`.
-2. Keep the local-install path working without releases: when `JAIPH_REPO_URL`/arg is a local directory (the `JAIPH_FROM_LOCAL` branch), build the binary from that source (`npm install` + `npm run build:standalone`, requires bun) and install `dist/jaiph`. Update `docs/install-from-local.sh` accordingly. This is the path the e2e install tests exercise — they must not depend on GitHub Releases. **Parity requirement:** both paths must produce an identical installation — a single self-contained executable at `${JAIPH_BIN_DIR:-$HOME/.local/bin}/jaiph`, no node shim, no `LIB_DIR` tree; only the origin of the binary differs (downloaded vs. locally compiled).
-3. Remove the now-dead `LIB_DIR` runtime tree and node shim logic; the PATH-hint UX at the end stays.
-4. Update docs: `docs/contributing.md` (prerequisites for users vs. developers — bun becomes a dev prerequisite; from-source install instructions preserved here), `docs/getting-started.md` / `docs/setup.md` install snippets, and the `jaiph use` section of `docs/cli.md` if its wording references building from source.
-
-**Acceptance criteria.**
-- e2e install tests pass using the local-build path on macOS and in the WSL/Linux CI job (`npm run test:e2e`).
-- Installer unit/e2e checks: checksum mismatch → non-zero exit, nothing installed; unsupported platform string → non-zero exit with the documented message; successful install → `jaiph --version` works with node/npm absent from `PATH`.
-- Parity check after a local install (`install-from-local.sh`): the install dir contains a single executable `jaiph` (no shim script, no `LIB_DIR`/runtime tree), and `jaiph --version` + `jaiph run` of a deterministic sample work with node/npm absent from `PATH` — same assertions as the release-asset path.
-- `bash -n docs/install` and `shellcheck` (if available in CI) pass.
-- `grep -n "npm run build" docs/install` matches only the local-source branch.
-
 ## Registry name resolution: `jaiph install <name>[@version]` #dev-ready
 
 **Context.** `jaiph install` (`src/cli/commands/install.ts`) only accepts git clone URLs. The lib directory name is derived from the URL's last path segment (`deriveLibName`, line 51), and the import resolver (`src/transpile/resolve.ts:25-52`) maps `import "jaiphlang/artifacts"` to `.jaiph/libs/jaiphlang/artifacts.jh` — so a lib's **directory name is its import prefix**, which today silently requires the git repo to be named exactly like the import prefix. There is no name → URL indirection and no way to write `jaiph install jaiphlang`.

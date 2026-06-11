@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
-# Install Jaiph from a local clone (no network clone). Uses the same logic as
-# docs/install with JAIPH_REPO_URL set to the local repo root.
+# Install Jaiph from a local clone (no network download). Builds the
+# standalone binary from the repo with `npm install` + `npm run build:standalone`
+# (requires bun) and installs it to ${JAIPH_BIN_DIR:-$HOME/.local/bin}/jaiph.
+# Same single-binary artifact as the release-asset path in docs/install; only
+# the origin of the binary differs (compiled locally vs. downloaded).
 #
 # Usage:
 #   ./docs/install-from-local.sh           # install from repo containing this script

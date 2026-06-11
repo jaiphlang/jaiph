@@ -8,6 +8,14 @@ trap e2e::cleanup EXIT
 
 e2e::prepare_test_env "jaiph_use_pinned"
 
+# docs/install now builds the standalone binary from local sources via
+# `npm run build:standalone`, which requires bun. Match the precedent in
+# 210_standalone_binary.sh: skip rather than fail on CI hosts without bun.
+if ! command -v bun >/dev/null 2>&1; then
+  e2e::skip "bun not installed — skipping jaiph use local-source install check"
+  exit 0
+fi
+
 VERSION="$(node -p "require('${E2E_REPO_ROOT}/package.json').version")"
 USE_BIN="${JAIPH_E2E_TEST_DIR}/use_bin"
 mkdir -p "${USE_BIN}"

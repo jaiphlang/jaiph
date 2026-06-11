@@ -18,109 +18,150 @@ else
   NC='\033[0m'
 fi
 
-print_step() {
-  echo -e "${DIM}▸ ${1}${NC}"
-}
-
-print_success() {
-  echo -e "${GREEN}✓ ${1}${NC}"
-}
-
-print_warning() {
-  echo -e "${YELLOW}! ${1}${NC}"
-}
-
-print_error() {
-  echo -e "${RED}✗ ${1}${NC}"
-}
+print_step()    { echo -e "${DIM}▸ ${1}${NC}"; }
+print_success() { echo -e "${GREEN}✓ ${1}${NC}"; }
+print_warning() { echo -e "${YELLOW}! ${1}${NC}"; }
+print_error()   { echo -e "${RED}✗ ${1}${NC}"; }
 
 require_cmd() {
-  local cmd="$1"
-  if ! command -v "$cmd" >/dev/null 2>&1; then
-    print_error "Missing required command: $cmd"
+  if ! command -v "$1" >/dev/null 2>&1; then
+    print_error "Missing required command: $1"
     exit 1
   fi
 }
 
-# When installing from a local path, use it (from env JAIPH_REPO_URL or from first arg) and copy instead of clone.
+# Local-source mode: JAIPH_REPO_URL env or first arg is a local directory
+# containing a package.json. Both env and arg are accepted so callers can
+# supply the repo path either way (docs/install-from-local.sh uses both).
 JAIPH_FROM_LOCAL=
 if [ -n "${JAIPH_REPO_URL+x}" ] && [ -d "${JAIPH_REPO_URL}" ] && [ -f "${JAIPH_REPO_URL}/package.json" ]; then
   JAIPH_FROM_LOCAL=1
   JAIPH_REPO_URL="$(cd "${JAIPH_REPO_URL}" && pwd)"
-  REPO_URL="${JAIPH_REPO_URL}"
 elif [ -n "${1+x}" ] && [ -d "${1}" ] && [ -f "${1}/package.json" ]; then
-  # First argument is a local repo path (e.g. from install-from-local.sh)
   JAIPH_FROM_LOCAL=1
-  REPO_URL="$(cd "${1}" && pwd)"
-  JAIPH_REPO_URL="${REPO_URL}"
+  JAIPH_REPO_URL="$(cd "${1}" && pwd)"
 fi
-REPO_URL="${REPO_URL:-${JAIPH_REPO_URL:-https://github.com/jaiphlang/jaiph.git}}"
-# Version/ref: first argument only when not a local path, or JAIPH_REPO_REF env, or default tag v0.9.4.
-if [ -n "${JAIPH_FROM_LOCAL}" ]; then
-  REPO_REF="${JAIPH_REPO_REF:-v0.9.4}"
-else
-  REPO_REF="${1:-${JAIPH_REPO_REF:-v0.9.4}}"
-fi
+
 BIN_DIR="${JAIPH_BIN_DIR:-$HOME/.local/bin}"
-LIB_DIR="${JAIPH_LIB_DIR:-${BIN_DIR}/.jaiph}"
 TARGET="${BIN_DIR}/jaiph"
-SKILL_TARGET="${LIB_DIR}/jaiph-skill.md"
 
 echo ""
 echo -e "${BOLD}Jaiph installer${NC}"
 echo ""
 
-if [ -z "${JAIPH_FROM_LOCAL}" ]; then
-  require_cmd git
-fi
-require_cmd node
-require_cmd npm
-
-print_step "Creating bin directory at ${BIN_DIR}..."
-mkdir -p "${BIN_DIR}"
-
-tmp_dir="$(mktemp -d)"
-cleanup() {
-  rm -rf "${tmp_dir}"
-}
-trap cleanup EXIT
-
 if [ -n "${JAIPH_FROM_LOCAL}" ]; then
-  print_step "Using local source at ${REPO_URL}"
+  # Build the standalone binary from the local checkout. Parity with the
+  # release-asset path: a single self-contained executable, no shim, no
+  # LIB_DIR runtime tree.
+  require_cmd npm
+  require_cmd bun
+
+  print_step "Using local source at ${JAIPH_REPO_URL}"
+
+  tmp_dir="$(mktemp -d)"
+  trap 'rm -rf "${tmp_dir}"' EXIT
+
   print_step "Copying (includes uncommitted changes)..."
-  cp -R "${REPO_URL}" "${tmp_dir}/src"
-  rm -rf "${tmp_dir}/src/.git"
-  rm -rf "${tmp_dir}/src/node_modules"
+  cp -R "${JAIPH_REPO_URL}" "${tmp_dir}/src"
+  rm -rf "${tmp_dir}/src/.git" "${tmp_dir}/src/node_modules"
+
+  print_step "Installing dependencies..."
+  (cd "${tmp_dir}/src" && npm install >/dev/null 2>&1)
+
+  print_step "Building standalone binary..."
+  (cd "${tmp_dir}/src" && npm run build:standalone >/dev/null 2>&1)
+
+  if [ ! -f "${tmp_dir}/src/dist/jaiph" ]; then
+    print_error "Build did not produce dist/jaiph"
+    exit 1
+  fi
+
+  print_step "Installing binary to ${TARGET}..."
+  mkdir -p "${BIN_DIR}"
+  cp "${tmp_dir}/src/dist/jaiph" "${TARGET}"
+  chmod 755 "${TARGET}"
+
+  JAIPH_VERSION="$("${TARGET}" --version 2>/dev/null || echo "jaiph (local)")"
+  echo ""
+  print_success "Installed ${JAIPH_VERSION} to ${TARGET}"
 else
-  print_step "Cloning ${REPO_URL} (${REPO_REF})..."
-  git clone --depth 1 --branch "${REPO_REF}" "${REPO_URL}" "${tmp_dir}/src" >/dev/null 2>&1
+  # Download a pre-built per-platform binary from the GitHub Release for the
+  # resolved ref. Asset names are fixed by docs/contributing.md → "Release
+  # asset naming contract".
+  require_cmd curl
+
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256_check() { sha256sum "$1" | awk '{print $1}'; }
+  elif command -v shasum >/dev/null 2>&1; then
+    sha256_check() { shasum -a 256 "$1" | awk '{print $1}'; }
+  else
+    print_error "Missing required command: sha256sum or shasum"
+    exit 1
+  fi
+
+  uname_s="$(uname -s)"
+  uname_m="$(uname -m)"
+  case "${uname_s}" in
+    Darwin) os="darwin" ;;
+    Linux)  os="linux" ;;
+    *)
+      print_error "Unsupported platform: ${uname_s} ${uname_m}"
+      echo "Build from source per https://jaiph.org/contributing#installing-from-source"
+      exit 1
+      ;;
+  esac
+  case "${uname_m}" in
+    arm64|aarch64) arch="arm64" ;;
+    x86_64|x64)    arch="x64" ;;
+    *)
+      print_error "Unsupported platform: ${uname_s} ${uname_m}"
+      echo "Build from source per https://jaiph.org/contributing#installing-from-source"
+      exit 1
+      ;;
+  esac
+
+  REPO_REF="${1:-${JAIPH_REPO_REF:-v0.9.4}}"
+  BIN_NAME="jaiph-${os}-${arch}"
+  BASE_URL="${JAIPH_RELEASE_BASE_URL:-https://github.com/jaiphlang/jaiph/releases/download/${REPO_REF}}"
+
+  tmp_dir="$(mktemp -d)"
+  trap 'rm -rf "${tmp_dir}"' EXIT
+
+  print_step "Downloading ${BIN_NAME} (${REPO_REF})..."
+  if ! curl -fsSL -o "${tmp_dir}/${BIN_NAME}" "${BASE_URL}/${BIN_NAME}"; then
+    print_error "Failed to download ${BASE_URL}/${BIN_NAME}"
+    exit 1
+  fi
+
+  print_step "Downloading SHA256SUMS..."
+  if ! curl -fsSL -o "${tmp_dir}/SHA256SUMS" "${BASE_URL}/SHA256SUMS"; then
+    print_error "Failed to download ${BASE_URL}/SHA256SUMS"
+    exit 1
+  fi
+
+  print_step "Verifying checksum..."
+  expected_sum="$(awk -v name="${BIN_NAME}" '$2 == name || $2 == "*"name { print $1 }' "${tmp_dir}/SHA256SUMS")"
+  if [ -z "${expected_sum}" ]; then
+    print_error "No checksum entry for ${BIN_NAME} in SHA256SUMS"
+    exit 1
+  fi
+  actual_sum="$(sha256_check "${tmp_dir}/${BIN_NAME}")"
+  if [ "${expected_sum}" != "${actual_sum}" ]; then
+    print_error "Checksum mismatch for ${BIN_NAME}"
+    echo "  expected: ${expected_sum}"
+    echo "  got:      ${actual_sum}"
+    exit 1
+  fi
+
+  print_step "Installing binary to ${TARGET}..."
+  mkdir -p "${BIN_DIR}"
+  cp "${tmp_dir}/${BIN_NAME}" "${TARGET}"
+  chmod 755 "${TARGET}"
+
+  JAIPH_VERSION="$("${TARGET}" --version 2>/dev/null || echo "jaiph (${REPO_REF})")"
+  echo ""
+  print_success "Installed ${JAIPH_VERSION} to ${TARGET}"
 fi
-
-JAIPH_VERSION="$(node -p "require(process.argv[1]).version" "${tmp_dir}/src/package.json")"
-
-print_step "Installing dependencies..."
-npm --prefix "${tmp_dir}/src" install >/dev/null 2>&1
-
-print_step "Building CLI..."
-npm --prefix "${tmp_dir}/src" run build >/dev/null 2>&1
-
-print_step "Installing runtime to ${LIB_DIR}..."
-rm -rf "${LIB_DIR}"
-mkdir -p "${LIB_DIR}"
-cp -R "${tmp_dir}/src/dist/src" "${LIB_DIR}/src"
-cp "${tmp_dir}/src/package.json" "${LIB_DIR}/package.json"
-cp "${tmp_dir}/src/docs/jaiph-skill.md" "${SKILL_TARGET}"
-
-print_step "Installing binary to ${TARGET}..."
-cat > "${TARGET}" <<EOF
-#!/usr/bin/env bash
-set -euo pipefail
-exec node "${LIB_DIR}/src/cli.js" "\$@"
-EOF
-chmod 755 "${TARGET}"
-
-echo ""
-print_success "Installed jaiph ${JAIPH_VERSION} to ${TARGET}"
 
 if [[ ":${PATH}:" == *":${BIN_DIR}:"* ]]; then
   print_success "${BIN_DIR} is already on PATH"
