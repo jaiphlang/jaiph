@@ -1,0 +1,8 @@
+{
+  "libs": {
+    "jaiphlang": {
+      "url": "https://github.com/jaiphlang/jaiphlang.git",
+      "description": "Jaiph standard library: artifacts, git, queue"
+    }
+  }
+}

@@ -69,6 +69,56 @@ Missing libraries are cloned **concurrently** (default 4 in flight), so restorin
 
 The clone directory name **is the import prefix**. For **registry-name** installs it is the registry key itself, regardless of the repo's URL — so an entry like `{ "mylib": { "url": "https://example.com/some-other-repo-name.git", … } }` installs into `.jaiph/libs/mylib/` and is imported as `import "mylib/…"`. For **git-URL** installs the name is **`deriveLibName(url)`** (last path segment, **`.git`** stripped) — so the URL's last segment **must** match the import prefix the lib uses.
 
+## Publishing a library
+
+A **Jaiph library is a public git repository**. There is no build step, no package registry upload — to publish a library you push a git repo, tag a release, and (optionally) open a PR adding an entry to the index.
+
+**Repo layout.** A library is a directory of top-level **`.jh`** modules plus any companion files the modules need to execute. Importers reach a module as **`<lib-name>/<module>`** (the **`.jh`** is appended automatically; see [How imports resolve](#how-imports-resolve)). Two common patterns:
+
+- A single-file lib — e.g. `repo-root/queue.jh` — imported as **`import "queue-lib/queue"`**.
+- A multi-module lib — several `.jh` files at the repo root, imported individually under the same lib prefix.
+
+**Export visibility.** Each module decides its public surface with **`export`**. With zero `export` lines every top-level **`workflow`**, **`rule`**, and **`script`** in that module is reachable through the importer's alias; with one or more `export` lines only the exported names are reachable ([Architecture — Core components](architecture.md#core-components)). Prefer explicit `export` on published libraries so the surface stays stable across releases.
+
+**Companion scripts.** Library `.jh` modules typically wrap small helper scripts that ship in the same repo — for example **`.jaiph/libs/jaiphlang/queue.jh`** imports a sibling **`queue.py`** that holds the markdown-parsing logic. Imported **`script`** paths are resolved **relative to the importing `.jh` file** with no workspace fallback (see the **Limitation** note above), so place companion scripts next to the modules that use them and reference them with relative paths (`script ./queue.py …` or `import script "./queue.py"`).
+
+**Versioning is git-native.** Tag releases with **`git tag v0.1.0 && git push --tags`**. Consumers pin to a tag, branch, or commit through the `jaiph install` `@ref` suffix — for example **`jaiph install jaiphlang@v0.1.0`** (registry name) or **`jaiph install https://github.com/you/queue-lib.git@v0.1.0`** (URL). The ref is passed straight to `git clone --branch`, and the resolved 40-char commit is recorded in `.jaiph/libs.lock` so restore is reproducible even when the tag later moves (see [CLI — `jaiph install`](cli.md#jaiph-install)).
+
+**Publishing flow.** To list a library on **`jaiph.org/registry`** so consumers can install it by bare name:
+
+1. Push the lib to a **public** git repo with at least one `.jh` module at the root.
+2. Tag a release (`git tag v0.1.0 && git push --tags`) so consumers have something stable to pin.
+3. Open a PR against **[`jaiphlang/registry`](https://github.com/jaiphlang/registry)** adding an entry to **`registry.json`** under a unique key matching `/^[A-Za-z0-9_-]+$/`:
+   ```json
+   {
+     "libs": {
+       "<your-name>": {
+         "url": "https://github.com/<you>/<repo>.git",
+         "description": "<one line>"
+       }
+     }
+   }
+   ```
+   The key is the import prefix — pick it carefully; consumers will write `import "<your-name>/…"`.
+4. Once a maintainer of this repo merges the registry PR and runs **`npm run registry:build`**, the regenerated `docs/registry` is committed and GitHub Pages redeploys jaiph.org. The new entry is live at the latest with the next release.
+
+For the index format, error messages, and the `JAIPH_REGISTRY` source-resolution rules, see [CLI — `jaiph install` — Registry](cli.md#registry).
+
+## Lockfile semantics
+
+`jaiph install` writes **`.jaiph/libs.lock`** under the workspace root. Each entry records the resolved clone **`url`**, the optional requested **`version`** (tag / branch / ref), and the optional 40-char **`commit`** captured immediately after clone (before `.git` is stripped). Commit the lockfile; **restore-from-lock** (`jaiph install` with no args) re-clones at `version` and **fails** if the cloned HEAD does not match the recorded `commit` — so a tag that moves underneath you produces a deterministic error instead of a silent upgrade. Lock entries written by older CLIs without the `commit` field still restore — the verification simply skips when the field is absent. See [CLI — `jaiph install` — Lockfile](cli.md#lockfile) for the file shape, the commit-mismatch error, and the backward-compatibility contract.
+
+## Overriding the registry source
+
+The default registry source is **`https://jaiph.org/registry`**. Set **`JAIPH_REGISTRY`** to a file path, a `file://` URL, or any other URL to override it — useful for unit tests, air-gapped setups, mirrors, or staging a registry PR locally:
+
+```bash
+JAIPH_REGISTRY=./registry.json jaiph install mylib
+JAIPH_REGISTRY=https://internal.example.com/registry jaiph install mylib
+```
+
+The registry is only contacted when at least one positional arg is a bare name; URL-form installs and restore-from-lock never read it ([CLI — `jaiph install` — Registry](cli.md#registry)).
+
 ## Example: `import` from a clone under `.jaiph/libs/`
 
 After `jaiph install`, paths like **`queue-lib/queue`** resolve like any other library layout. Below assumes **`.jaiph/libs/jaiphlang/`** exists (copy from this repo or install a repo whose root name is **`jaiphlang`**).
