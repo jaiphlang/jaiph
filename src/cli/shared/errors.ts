@@ -15,7 +15,11 @@ export function colorPalette(): { green: string; red: string; dim: string; reset
   };
 }
 
-export function summarizeError(stderr: string, fallback?: string): string {
+export function summarizeError(
+  stderr: string,
+  fallback?: string,
+  opts?: { code?: number; runDir?: string },
+): string {
   const lines = stderr
     .split(/\r?\n/)
     .map((line) => line.trim())
@@ -23,7 +27,20 @@ export function summarizeError(stderr: string, fallback?: string): string {
   if (lines.length > 0) {
     return lines[lines.length - 1];
   }
+  const code = opts?.code;
+  const runDir = opts?.runDir;
+  if (code !== undefined || runDir) {
+    const codePart = code !== undefined ? ` (exit ${code})` : "";
+    const dirPart = runDir
+      ? `; inspect run_summary.jsonl and step artifacts under ${runDir}`
+      : "";
+    return `Workflow execution failed${codePart} with no error output${dirPart}`;
+  }
   return fallback ?? "Workflow execution failed.";
+}
+
+export function formatDockerTimeoutMessage(timeoutSeconds: number): string {
+  return `E_TIMEOUT container execution exceeded ${timeoutSeconds}s — increase runtime.docker_timeout_seconds or JAIPH_DOCKER_TIMEOUT`;
 }
 
 export type FailureDetails = {
@@ -36,8 +53,12 @@ export type FailureDetails = {
  * Resolve canonical failure details for CLI rendering.
  * Prefer detailed failed step output when available; summary is fallback-only.
  */
-export function resolveFailureDetails(stderr: string, summaryPath?: string): FailureDetails {
-  const summary = summarizeError(stderr, "Workflow execution failed.");
+export function resolveFailureDetails(
+  stderr: string,
+  summaryPath?: string,
+  opts?: { code?: number; runDir?: string },
+): FailureDetails {
+  const summary = summarizeError(stderr, "Workflow execution failed.", opts);
   const failedStepOutput = summaryPath ? readFailedStepOutput(summaryPath) : null;
   return {
     summary,

@@ -12,6 +12,7 @@ import {
   readFailedStepOutput,
   failedStepArtifactPaths,
   discoverDockerRunDir,
+  formatDockerTimeoutMessage,
 } from "./errors";
 
 // === summarizeError ===
@@ -38,6 +39,38 @@ test("summarizeError: returns fallback when stderr is only whitespace", () => {
 
 test("summarizeError: handles \\r\\n line endings", () => {
   assert.equal(summarizeError("first\r\nsecond\r\nthird"), "third");
+});
+
+test("summarizeError: empty stderr with code + runDir mentions both", () => {
+  const msg = summarizeError("", undefined, { code: 1, runDir: "/tmp/runs/2026-06-11/00-00-00-x" });
+  assert.match(msg, /\(exit 1\)/);
+  assert.match(msg, /under \/tmp\/runs\/2026-06-11\/00-00-00-x/);
+  assert.match(msg, /run_summary\.jsonl/);
+});
+
+test("summarizeError: empty stderr with code only omits runDir clause", () => {
+  const msg = summarizeError("", undefined, { code: 137 });
+  assert.match(msg, /\(exit 137\) with no error output$/);
+});
+
+test("summarizeError: empty stderr with runDir only omits exit clause", () => {
+  const msg = summarizeError("", undefined, { runDir: "/runs/x" });
+  assert.match(msg, /^Workflow execution failed with no error output;/);
+  assert.match(msg, /under \/runs\/x$/);
+});
+
+test("summarizeError: non-empty stderr ignores code/runDir opts", () => {
+  const msg = summarizeError("real error line", undefined, { code: 1, runDir: "/r" });
+  assert.equal(msg, "real error line");
+});
+
+// === formatDockerTimeoutMessage ===
+
+test("formatDockerTimeoutMessage: includes configured seconds and remedy", () => {
+  const msg = formatDockerTimeoutMessage(42);
+  assert.match(msg, /^E_TIMEOUT container execution exceeded 42s/);
+  assert.match(msg, /runtime\.docker_timeout_seconds/);
+  assert.match(msg, /JAIPH_DOCKER_TIMEOUT/);
 });
 
 // === hasFatalRuntimeStderr ===

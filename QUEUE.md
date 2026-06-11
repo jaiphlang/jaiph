@@ -14,22 +14,6 @@ Process rules:
 
 ***
 
-## Error-message quality pass: async handles, Docker timeout, empty stderr #dev-ready
-
-**Context.** Three runtime errors give users nothing to act on:
-1. `src/runtime/kernel/node-workflow-runtime.ts:110` — unknown async handle returns `error: "invalid handle"` with no handle id or hint.
-2. `src/cli/commands/run.ts` (~line 190) — Docker timeout appends literally `E_TIMEOUT container execution exceeded timeout` with no duration or remedy.
-3. `src/cli/shared/errors.ts:26` — `summarizeError()` falls back to `"Workflow execution failed."` when stderr is empty, hiding where to look next.
-
-**Change.**
-1. → `invalid async handle "${handleId}" — the handle was never created or was already consumed`.
-2. → `` `E_TIMEOUT container execution exceeded ${activeDockerConfig.timeoutSeconds}s — increase runtime.docker_timeout_seconds or JAIPH_DOCKER_TIMEOUT` `` (use the actual configured value).
-3. → when stderr is empty and an exit code is known, `` `Workflow execution failed (exit ${code}) with no error output; inspect run_summary.jsonl and step artifacts under ${runDir}` `` (fall back to the old text only when neither code nor run dir is known).
-
-**Acceptance criteria.**
-- Unit tests assert each new message shape (handle id present; timeout seconds value present; exit code and run dir present).
-- No existing e2e expectation matches the old strings (`grep -rn "invalid handle" e2e/ src/` shows only the new form; update any expectations that asserted the old text).
-
 ## Lazy-load the Docker overlay script with an actionable error #dev-ready
 
 **Context.** `src/runtime/docker.ts:287` reads `overlay-run.sh` with `readFileSync` at **module load time**. Importing the docker module — which happens for every CLI invocation that might touch Docker — crashes with a raw ENOENT stack trace if the file is missing from the installation, even for commands that never use Docker.

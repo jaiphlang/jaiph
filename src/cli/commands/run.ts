@@ -22,6 +22,7 @@ import {
   failedStepArtifactPaths,
   discoverDockerRunDir,
   remapContainerPath,
+  formatDockerTimeoutMessage,
 } from "../shared/errors";
 import { detectWorkspaceRoot } from "../shared/paths";
 import { hasHelpFlag, parseArgs } from "../shared/usage";
@@ -199,7 +200,7 @@ export async function runWorkflow(rest: string[]): Promise<number> {
           ? false
           : (Date.now() - startedAt) >= activeDockerConfig.timeoutSeconds * 1000;
         if (timedOut && exit.status !== 0) {
-          runState.capturedStderr += "E_TIMEOUT container execution exceeded timeout\n";
+          runState.capturedStderr += `${formatDockerTimeoutMessage(activeDockerConfig.timeoutSeconds)}\n`;
         }
       }
       return exit;
@@ -478,7 +479,10 @@ function reportResult(
     return 0;
   }
 
-  const failureDetails = resolveFailureDetails(capturedStderr, summaryFile);
+  const failureDetails = resolveFailureDetails(capturedStderr, summaryFile, {
+    code: exitStatus,
+    runDir,
+  });
   process.stderr.write("\n");
   process.stderr.write(
     `${palette.red}\u2717 FAIL${palette.reset} workflow default ${palette.dim}(${elapsedLabel})${palette.reset}\n`,

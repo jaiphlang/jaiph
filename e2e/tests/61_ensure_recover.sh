@@ -130,7 +130,8 @@ set -e
 
 # Then
 e2e::assert_equals "${exit_fail}" "1" "jaiph run exits 1 when ensure fails without recover"
-e2e::assert_contains "${out_fail}" "Workflow execution failed." "stderr reports workflow failure"
+e2e::assert_contains "${out_fail}" "Workflow execution failed (exit 1) with no error output" "stderr reports workflow failure with exit code"
+e2e::assert_contains "${out_fail}" "inspect run_summary.jsonl and step artifacts under" "stderr points at run artifacts"
 e2e::pass "ensure without recover: exit 1 on failure"
 
 e2e::section "ensure ... catch { multiline prompt with param } parses and runs"
