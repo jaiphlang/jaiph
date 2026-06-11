@@ -11,6 +11,8 @@ import {
   verifyImageHasJaiph,
   prepareImage,
   isEnvAllowed,
+  ENV_ALLOW_PREFIXES,
+  ENV_ALLOW_EXCLUDE_PREFIX,
   GHCR_IMAGE_REPO,
   selectSandboxMode,
   cloneWorkspaceForSandbox,
@@ -681,6 +683,37 @@ test("isEnvAllowed: rejects arbitrary vars", () => {
   assert.equal(isEnvAllowed("PATH"), false);
   assert.equal(isEnvAllowed("GH_TOKEN"), false);
   assert.equal(isEnvAllowed("CARGO_REGISTRY_TOKEN"), false);
+});
+
+// ---------------------------------------------------------------------------
+// docs/sandboxing.md parity: env forwarding section must match source constants
+// ---------------------------------------------------------------------------
+
+const REPO_ROOT = resolve(__dirname, "..", "..", "..");
+
+test("docs/sandboxing.md env-forwarding section lists ENV_ALLOW_PREFIXES verbatim", () => {
+  const doc = readFileSync(join(REPO_ROOT, "docs", "sandboxing.md"), "utf8");
+  const headingIdx = doc.indexOf("### Environment variable forwarding");
+  assert.notEqual(headingIdx, -1, "env-forwarding section heading not found");
+  const nextHeadingIdx = doc.indexOf("\n### ", headingIdx + 1);
+  const section = nextHeadingIdx === -1 ? doc.slice(headingIdx) : doc.slice(headingIdx, nextHeadingIdx);
+  for (const prefix of ENV_ALLOW_PREFIXES) {
+    const bullet = `\`${prefix}*\``;
+    assert.ok(section.includes(bullet), `env-forwarding section missing bullet for ${bullet}`);
+  }
+  const excludeBullet = `\`${ENV_ALLOW_EXCLUDE_PREFIX}*\``;
+  assert.ok(
+    section.includes(excludeBullet),
+    `env-forwarding section missing exclusion mention for ${excludeBullet}`,
+  );
+});
+
+test("docs cross-link to sandboxing env-forwarding section from configuration.md and cli.md", () => {
+  const linkRe = /sandboxing\.md#environment-variable-forwarding/;
+  for (const rel of ["docs/configuration.md", "docs/cli.md"]) {
+    const content = readFileSync(join(REPO_ROOT, rel), "utf8");
+    assert.match(content, linkRe, `${rel} missing cross-link to env-forwarding section`);
+  }
 });
 
 test("buildDockerArgs: only forwards env vars matching allowlist", () => {

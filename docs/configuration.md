@@ -353,6 +353,8 @@ The runtime also sets `JAIPH_ARTIFACTS_DIR` — the absolute path to the writabl
 
 `JAIPH_DOCKER_*` variables are **not** populated from in-file `runtime.*` inside the workflow runner process. Docker is configured when the CLI spawns the runner (or container). If you need Docker-related variables inside a `script` step, export them yourself or inherit them from the parent shell.
 
+When Docker sandboxing is on, the host CLI only forwards a fixed allowlist of environment variables into the container — most host variables (including cloud credentials, SSH agent sockets, and registry tokens) are silently dropped. If your workflow expects a custom host variable inside the container and finds it missing, see [Sandboxing — Environment variable forwarding](sandboxing.md#environment-variable-forwarding) for the exact allow prefixes and the supported workarounds.
+
 ## Created by `jaiph init`
 
 `jaiph init` creates `.jaiph/bootstrap.jh`, writes `.jaiph/SKILL.md` from the skill file bundled with your installation (see `JAIPH_SKILL_PATH` in the [CLI](cli.md) reference), and ensures `.jaiph/.gitignore` matches the canonical template (lists `runs` and `tmp` under `.jaiph/`). It does not add a separate config file — use `config { ... }` in your workflow sources.

@@ -241,6 +241,21 @@ Environment variable forwarding uses an explicit allowlist; everything else is d
 
 This allowlist is enforced in `buildDockerArgs` and cannot be overridden. Any variable not matching the allowlist -- including cloud credentials (`AWS_*`, `GCP_*`, etc.), authentication sockets (`SSH_*`), registry tokens (`NPM_TOKEN`, `GITHUB_TOKEN`, `PYPI_*`, `CARGO_*`), and all other host environment -- is silently dropped. If a workflow needs external credentials inside the container, pass them explicitly through `JAIPH_*`-prefixed variables or use a credential proxy.
 
+**Workarounds for variables outside the allowlist.** When a script needs a host variable that the allowlist drops, two options work:
+
+1. **Export inside a `script` body.** Define the value in the script itself so it lives entirely inside the container — the host process never has to forward it. This keeps secrets out of the parent shell and is the right choice for static configuration:
+
+   ```jh
+   script run_with_token = ```
+     export MY_TOOL_TOKEN="value-baked-into-the-workflow"
+     my-tool --use-token
+   ```
+   ```
+
+2. **Bake the value into the image.** Extend the runtime image (see [Extending the official image](#extending-the-official-image)) with an `ENV` directive or a `RUN` step that writes the value into a config file. This is appropriate for tokens and settings that should travel with the image rather than the workflow source. The container then sees them in `process.env` regardless of host environment.
+
+For variables that **must** come from the host on each run, rename them with a `JAIPH_` prefix (e.g. set `JAIPH_MY_TOOL_TOKEN` instead of `MY_TOOL_TOKEN`) so the allowlist forwards them. Treat anything forwarded as fully disclosed to workflow code — see [What Docker does NOT protect against](#threat-model).
+
 ### Example
 
 A workflow with a custom Docker timeout (Docker is on by default):
