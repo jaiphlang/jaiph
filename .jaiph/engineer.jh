@@ -4,12 +4,12 @@
 # Picks the first pending task from QUEUE.md, implements it, verifies CI,
 # updates docs, removes from queue, and publishes a workspace patch artifact.
 #
-import "jaiphlang/queue" as queue
 import "jaiphlang/artifacts" as artifacts
+import "jaiphlang/git" as git
+import "jaiphlang/queue" as queue
 import "./docs_parity.jh" as docs
 import "./ensure_ci_passes.jh" as ci
 import "./lib_common.jh" as common
-import "jaiphlang/git" as git
 
 config {
   # agent.backend = "cursor"
