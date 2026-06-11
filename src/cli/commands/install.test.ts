@@ -134,7 +134,9 @@ test("install: missing libraries clone concurrently", async () => {
       active += 1;
       maxActive = Math.max(maxActive, active);
       // Mimic git clone side effect so the lib directory is materialized.
+      // Post-clone hygiene requires at least one .jh file in the tree.
       mkdirSync(spec.libDir, { recursive: true });
+      writeFileSync(join(spec.libDir, "lib.jh"), "", "utf8");
       await new Promise((resolve) => setTimeout(resolve, 30));
       active -= 1;
       return { spec, ok: true };
@@ -287,6 +289,7 @@ test("install: bare registry name installs into .jaiph/libs/<name>/ regardless o
     const cloneRunner: CloneRunner = async (spec) => {
       seen.push(spec);
       mkdirSync(spec.libDir, { recursive: true });
+      writeFileSync(join(spec.libDir, "lib.jh"), "", "utf8");
       return { spec, ok: true };
     };
 
@@ -323,6 +326,7 @@ test("install: name@version forwards version to clone runner and records it in l
     const cloneRunner: CloneRunner = async (spec) => {
       observed = spec;
       mkdirSync(spec.libDir, { recursive: true });
+      writeFileSync(join(spec.libDir, "lib.jh"), "", "utf8");
       return { spec, ok: true };
     };
 
@@ -417,6 +421,7 @@ test("install: restore-from-lock never reads the registry", async () => {
     const cloneRunner: CloneRunner = async (spec) => {
       seen.push(spec);
       mkdirSync(spec.libDir, { recursive: true });
+      writeFileSync(join(spec.libDir, "lib.jh"), "", "utf8");
       return { spec, ok: true };
     };
 
@@ -438,6 +443,162 @@ test("install: restore-from-lock never reads the registry", async () => {
   }
 });
 
+/**
+ * Build a local git repo at <parent>/<name> usable as a clone source for
+ * tests. `withJh` controls whether the seed commit includes a `*.jh` file
+ * (set false to exercise the "not a jaiph library" path). `tag` optionally
+ * tags the seed commit so the test can `clone --branch <tag>`.
+ */
+function makeFixtureRepo(
+  parent: string,
+  name: string,
+  opts: { withJh?: boolean; tag?: string } = {},
+): string {
+  const repoDir = join(parent, name);
+  mkdirSync(repoDir, { recursive: true });
+  execSync("git init", { cwd: repoDir, stdio: "pipe" });
+  execSync("git config user.email test@example.com", { cwd: repoDir, stdio: "pipe" });
+  execSync("git config user.name test", { cwd: repoDir, stdio: "pipe" });
+  if (opts.withJh !== false) {
+    writeFileSync(join(repoDir, "main.jh"), "workflow default { log \"hi\" }\n", "utf8");
+  } else {
+    writeFileSync(join(repoDir, "README"), "no jh here\n", "utf8");
+  }
+  execSync("git add -A", { cwd: repoDir, stdio: "pipe" });
+  execSync("git commit -m init", { cwd: repoDir, stdio: "pipe" });
+  if (opts.tag) execSync(`git tag ${opts.tag}`, { cwd: repoDir, stdio: "pipe" });
+  return repoDir;
+}
+
+function gitHead(dir: string): string {
+  return execSync("git rev-parse HEAD", { cwd: dir, stdio: ["ignore", "pipe", "pipe"] })
+    .toString()
+    .trim();
+}
+
+test("install: strips .git after clone and records 40-char commit in lockfile", async () => {
+  const dir = makeTempProject();
+  try {
+    const remote = makeFixtureRepo(dir, "remote-alpha");
+    const expectedSha = gitHead(remote);
+
+    const code = await runInstall([remote], { cwd: dir });
+
+    assert.equal(code, 0, "install must succeed");
+    const libDir = join(dir, ".jaiph", "libs", "remote-alpha");
+    assert.ok(existsSync(libDir), "lib dir should exist");
+    assert.ok(
+      !existsSync(join(libDir, ".git")),
+      ".git directory must be removed from installed lib",
+    );
+
+    const lock = JSON.parse(
+      readFileSync(join(dir, ".jaiph", "libs.lock"), "utf8"),
+    ) as { libs: { name: string; commit?: string }[] };
+    assert.equal(lock.libs.length, 1);
+    assert.equal(lock.libs[0]!.name, "remote-alpha");
+    assert.match(
+      lock.libs[0]!.commit ?? "",
+      /^[0-9a-f]{40}$/,
+      "lock entry must record a 40-char commit",
+    );
+    assert.equal(lock.libs[0]!.commit, expectedSha);
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test("install: restore detects moved tag and fails with both SHAs", async () => {
+  const dir = makeTempProject();
+  try {
+    const remote = makeFixtureRepo(dir, "remote-beta", { tag: "v1" });
+    const firstSha = gitHead(remote);
+
+    const firstCode = await runInstall([`${remote}@v1`], { cwd: dir });
+    assert.equal(firstCode, 0, "initial install must succeed");
+
+    const lockPath = join(dir, ".jaiph", "libs.lock");
+    const lockAfterFirst = JSON.parse(readFileSync(lockPath, "utf8")) as {
+      libs: { name: string; commit?: string; version?: string }[];
+    };
+    assert.equal(lockAfterFirst.libs[0]!.commit, firstSha);
+
+    // Move the tag to a new commit in the source repo.
+    writeFileSync(join(remote, "second.jh"), "workflow default { log \"two\" }\n", "utf8");
+    execSync("git add -A", { cwd: remote, stdio: "pipe" });
+    execSync("git commit -m second", { cwd: remote, stdio: "pipe" });
+    execSync("git tag -d v1", { cwd: remote, stdio: "pipe" });
+    execSync("git tag v1", { cwd: remote, stdio: "pipe" });
+    const secondSha = gitHead(remote);
+    assert.notEqual(firstSha, secondSha);
+
+    // Remove the installed copy so restore must re-clone.
+    const libDir = join(dir, ".jaiph", "libs", "remote-beta");
+    rmSync(libDir, { recursive: true, force: true });
+
+    const { result: restoreCode, stderr } = await captureStderr(() =>
+      runInstall([], { cwd: dir }),
+    );
+
+    assert.notEqual(restoreCode, 0, "restore must exit non-zero on commit mismatch");
+    assert.ok(stderr.includes(firstSha), `expected locked SHA in stderr; got: ${stderr}`);
+    assert.ok(stderr.includes(secondSha), `expected cloned SHA in stderr; got: ${stderr}`);
+    assert.ok(!existsSync(libDir), "lib dir must be removed after mismatch");
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test("install: fixture repo with no .jh modules fails and leaves no lib dir or lock entry", async () => {
+  const dir = makeTempProject();
+  try {
+    const remote = makeFixtureRepo(dir, "remote-empty", { withJh: false });
+
+    const { result: code, stderr } = await captureStderr(() =>
+      runInstall([remote], { cwd: dir }),
+    );
+
+    assert.notEqual(code, 0, "install must exit non-zero when no .jh modules are present");
+    assert.ok(
+      stderr.includes('lib "remote-empty" contains no .jh modules — not a jaiph library?'),
+      `expected no-modules error; got: ${stderr}`,
+    );
+    assert.ok(
+      !existsSync(join(dir, ".jaiph", "libs", "remote-empty")),
+      "lib dir must be removed on no-jh failure",
+    );
+    const lockPath = join(dir, ".jaiph", "libs.lock");
+    assert.ok(existsSync(lockPath));
+    const lock = JSON.parse(readFileSync(lockPath, "utf8")) as { libs: { name: string }[] };
+    assert.equal(lock.libs.length, 0, "no lock entry must be written for no-jh failure");
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test("install: legacy lockfile without commit field still restores", async () => {
+  const dir = makeTempProject();
+  try {
+    const remote = makeFixtureRepo(dir, "remote-gamma");
+
+    mkdirSync(join(dir, ".jaiph"), { recursive: true });
+    writeFileSync(
+      join(dir, ".jaiph", "libs.lock"),
+      JSON.stringify({ libs: [{ name: "remote-gamma", url: remote }] }) + "\n",
+      "utf8",
+    );
+
+    const code = await runInstall([], { cwd: dir });
+
+    assert.equal(code, 0, "restore from legacy lockfile (no commit) must succeed");
+    const libDir = join(dir, ".jaiph", "libs", "remote-gamma");
+    assert.ok(existsSync(libDir), "lib dir should be present after restore");
+    assert.ok(!existsSync(join(libDir, ".git")), ".git directory must still be stripped on restore");
+  } finally {
+    cleanup(dir);
+  }
+});
+
 test("install: mixed success and failure locks only the successful libs", async () => {
   const dir = makeTempProject();
   try {
@@ -446,6 +607,7 @@ test("install: mixed success and failure locks only the successful libs", async 
         return { spec, ok: false, message: "simulated failure" };
       }
       mkdirSync(spec.libDir, { recursive: true });
+      writeFileSync(join(spec.libDir, "lib.jh"), "", "utf8");
       return { spec, ok: true };
     };
 

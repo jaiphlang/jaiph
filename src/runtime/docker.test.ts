@@ -493,36 +493,29 @@ test("loadOverlayScript: import does not read overlay-run.sh; writeOverlayScript
   const dockerDir = dirname(dockerPath);
   const distOverlay = join(dockerDir, "overlay-run.sh");
   const repoOverlay = resolve(dockerDir, "..", "..", "..", "runtime", "overlay-run.sh");
+  // Hide on-disk overlay candidates via existsSync patching — do not rename
+  // repo-root runtime/overlay-run.sh; parallel tests (embedded-assets) read it.
   const script = `
     const fs = require("node:fs");
     const dist = ${JSON.stringify(distOverlay)};
     const repo = ${JSON.stringify(repoOverlay)};
-    const distBak = dist + ".bak-test";
-    const repoBak = repo + ".bak-test";
-    const distExists = fs.existsSync(dist);
-    const repoExists = fs.existsSync(repo);
-    if (distExists) fs.renameSync(dist, distBak);
-    if (repoExists) fs.renameSync(repo, repoBak);
-    try {
-      const mod = require(${JSON.stringify(dockerPath)});
-      // Mirrors what jaiph compile/format pull from the docker module (only
-      // constants/types, never the overlay path).
-      if (mod.CONTAINER_RUN_DIR !== "/jaiph/run") {
-        console.error("FAIL: CONTAINER_RUN_DIR unexpected: " + mod.CONTAINER_RUN_DIR);
-        process.exit(5);
-      }
-      const tmpPath = mod.writeOverlayScript();
-      const body = fs.readFileSync(tmpPath, "utf8");
-      if (!body.startsWith("#!/usr/bin/env bash")) {
-        console.error("FAIL: embedded overlay body did not start with bash shebang: " + body.slice(0, 60));
-        process.exit(2);
-      }
-      fs.rmSync(require("node:path").dirname(tmpPath), { recursive: true, force: true });
-      console.log("OK");
-    } finally {
-      if (distExists) fs.renameSync(distBak, dist);
-      if (repoExists) fs.renameSync(repoBak, repo);
+    const origExists = fs.existsSync;
+    fs.existsSync = (p) => (p === dist || p === repo ? false : origExists(p));
+    const mod = require(${JSON.stringify(dockerPath)});
+    // Mirrors what jaiph compile/format pull from the docker module (only
+    // constants/types, never the overlay path).
+    if (mod.CONTAINER_RUN_DIR !== "/jaiph/run") {
+      console.error("FAIL: CONTAINER_RUN_DIR unexpected: " + mod.CONTAINER_RUN_DIR);
+      process.exit(5);
     }
+    const tmpPath = mod.writeOverlayScript();
+    const body = fs.readFileSync(tmpPath, "utf8");
+    if (!body.startsWith("#!/usr/bin/env bash")) {
+      console.error("FAIL: embedded overlay body did not start with bash shebang: " + body.slice(0, 60));
+      process.exit(2);
+    }
+    fs.rmSync(require("node:path").dirname(tmpPath), { recursive: true, force: true });
+    console.log("OK");
   `;
   const r = spawnSync(process.execPath, ["-e", script], { encoding: "utf8" });
   assert.equal(r.status, 0, `subprocess failed (status=${r.status}); stdout=${r.stdout}; stderr=${r.stderr}`);

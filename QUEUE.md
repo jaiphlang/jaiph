@@ -14,22 +14,6 @@ Process rules:
 
 ***
 
-## Lockfile commit pinning and clone hygiene in `jaiph install` #dev-ready
-
-**Context.** `gitCloneRunner` (`src/cli/commands/install.ts:95`) shallow-clones libs into `.jaiph/libs/<name>/` and leaves the `.git` directory behind, so installed libs appear as nested git repos inside consumer projects. The lockfile (`.jaiph/libs.lock`) records only `{name, url, version}` — and `version` is a git ref that can be moved, so "restore from lockfile" is not actually reproducible. Nothing validates that a cloned repo is a jaiph library at all.
-
-**Change.**
-1. After a successful clone, run `git -C <libDir> rev-parse HEAD` and store the result as `commit` in the lock entry, then delete `<libDir>/.git` recursively. Installed libs are plain files; the lockfile is the source of truth for restore.
-2. On restore-from-lock, when an entry has `commit`: after cloning at the recorded `version`, compare `rev-parse HEAD` against it. On mismatch, remove the lib dir and fail with a message naming the lib, both SHAs, and the remedy (the ref may have moved; re-run `jaiph install <name-or-url>@<version>` explicitly to accept the new commit). Entries without `commit` (older lockfiles) restore without the check.
-3. Validate that the cloned tree contains at least one `*.jh` file (recursively). If not, remove the dir and fail with `lib "<name>" contains no .jh modules — not a jaiph library?`; do not write a lock entry for it.
-
-**Acceptance criteria.**
-- Tests use local fixture repos (`git init` + commit in a temp dir; `git clone` accepts local paths) — no network.
-- After install: no `.git` directory inside `.jaiph/libs/<name>/`; lock entry contains a 40-char `commit`.
-- Tag-moved scenario (retag the fixture repo after locking, then restore) fails with both SHAs in the message and a non-zero exit, and the lib dir is removed.
-- A fixture repo with no `.jh` files fails install with the message above, leaves no `.jaiph/libs/<name>/` dir, and adds no lock entry.
-- Lock entries without `commit` still restore successfully (backward-compat test).
-
 ## Registry build command: regenerate docs/registry from jaiphlang/registry #dev-ready
 
 **Context.** `docs/` is published via GitHub Pages at `jaiph.org` (`docs/CNAME`); extensionless static files there are served as-is (see `docs/install`, `docs/init`, `docs/run`). The **source of truth** for the package index is `registry.json` in the separate repo `https://github.com/jaiphlang/registry` (created manually by the maintainer; package publishing PRs go there, not here). `jaiph install` resolves bare lib names against a JSON index `{ "libs": { "<name>": { "url": "<git clone url>", "description": "<one line>" } } }` loaded from `https://jaiph.org/registry` by default (overridable via `JAIPH_REGISTRY`), via an exported `loadRegistryIndex(source)` in `src/cli/commands/install.ts` that accepts URLs and file paths. So `docs/registry` in this repo must be a generated copy of the upstream index — never hand-edited. Build conventions are in `package.json` scripts (tsc → `dist/`).

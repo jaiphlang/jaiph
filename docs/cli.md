@@ -366,7 +366,15 @@ jaiph install [--force]
 
 Either way, the directory name **is** the import prefix (resolution under `<workspace>/.jaiph/libs/<name>/…`; see [Grammar — Imports and Exports](grammar.md#imports-and-exports) and [Libraries](libraries.md#how-imports-resolve)).
 
+**Post-clone hygiene.** After each successful clone the CLI runs three checks before the lib counts as installed:
+
+1. **`.jh` module check** — the cloned tree must contain at least one `*.jh` file (recursive, `.git` skipped). If not, the lib directory is removed and the command fails with `lib "<name>" contains no .jh modules — not a jaiph library?`. No lock entry is written for the lib.
+2. **Commit capture** — `git -C <libDir> rev-parse HEAD` is recorded as the 40-char `commit` field on the lock entry, so restore can verify the same commit later (see below).
+3. **`.git` strip** — `<libDir>/.git` is deleted recursively. Installed libs are plain files on disk; the lockfile is the source of truth for what was cloned. This avoids nesting git repos inside consumer projects and the surprises (submodule-like prompts, accidental commits, IDE tooling confusion) that come with them.
+
 **Without arguments** — restore all libraries from `.jaiph/libs.lock`. Useful after cloning a project or in CI. If the lockfile exists but lists **no** libraries, the command prints `No libs in lockfile.` and exits **0**. Restore mode does **not** invent new lock entries — the lockfile is read but not rewritten, and **the registry is never contacted** (lock entries already carry the resolved clone URL).
+
+**Commit verification on restore.** When a lock entry carries a `commit`, restore re-clones at the recorded `version` and then compares the cloned tree's HEAD SHA against `commit`. On mismatch the lib directory is removed and the command fails non-zero with a message naming the lib, both SHAs, and the remedy — for example: `lib "queue-lib" commit mismatch: locked <40-char SHA>, cloned <40-char SHA> — the ref may have moved; re-run `jaiph install queue-lib@v1.0` explicitly to accept the new commit`. Lock entries without `commit` (older lockfiles) restore without the check — see [Lockfile](#lockfile) for the backward-compatibility contract.
 
 If `.jaiph/libs/<name>/` already exists, the library is skipped without invoking `git` (warm path) — both for explicit arguments and for restore-from-lock. Use **`--force`** (anywhere in the argument list) to delete and re-clone.
 
@@ -407,19 +415,31 @@ Each key must match `/^[A-Za-z0-9_-]+$/` (single path segment — the name becom
 - Read/fetch/parse failure → message containing both the registry source and the underlying cause (`failed to read registry <source>: <cause>`, `failed to fetch registry <source>: HTTP <status>`, `failed to parse registry <source>: <cause>`, `failed to parse registry <source>: invalid name "<name>"`, etc.)
 
 ### Lockfile
+{: #lockfile}
 
-`.jaiph/libs.lock` records every installed library by its resolved clone URL and the (optional) requested version:
+`.jaiph/libs.lock` records every installed library by its resolved clone URL, the (optional) requested version, and the (optional) 40-char `commit` captured at clone time:
 
 ```json
 {
   "libs": [
-    { "name": "jaiphlang", "url": "https://github.com/jaiphlang/jaiphlang.git" },
-    { "name": "queue-lib", "url": "https://github.com/you/queue-lib.git", "version": "v1.0" }
+    {
+      "name": "jaiphlang",
+      "url": "https://github.com/jaiphlang/jaiphlang.git",
+      "commit": "1a2b3c4d5e6f7890abcdef1234567890abcdef12"
+    },
+    {
+      "name": "queue-lib",
+      "url": "https://github.com/you/queue-lib.git",
+      "version": "v1.0",
+      "commit": "fedcba9876543210fedcba9876543210fedcba98"
+    }
   ]
 }
 ```
 
 Because the lock entry stores the **resolved** URL, restore-from-lock (`jaiph install` with no args) works even when the registry source is unreachable or the index has changed.
+
+**`commit` field.** Written automatically after each successful clone (40 hex chars). On restore, if the field is present the cloned commit must match — see [Commit verification on restore](#jaiph-install). When the field is missing (older lockfiles created before commit pinning), restore re-clones and skips the comparison, so existing lockfiles keep working as-is.
 
 **Examples:**
 
