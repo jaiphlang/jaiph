@@ -46,7 +46,6 @@ function handleLine(
   line: string,
   state: StderrParserState,
   emitter: RunEmitter,
-  formatDiagnosticLine: (line: string) => string,
 ): void {
   const logEvent = parseLogEvent(line);
   if (logEvent) {
@@ -75,7 +74,7 @@ function handleLine(
   }
 
   if (line.length > 0) {
-    emitter.emit("stderr_line", { line: formatDiagnosticLine(line) });
+    emitter.emit("stderr_line", { line });
   }
 }
 
@@ -83,11 +82,10 @@ function handleLine(
  * Create a line handler that parses stderr lines and emits events through the emitter.
  */
 export function createStderrParser(emitter: RunEmitter): (line: string) => void {
-  const formatDiagnosticLine = (ln: string) => ln;
   const state: StderrParserState = {
     runtimeStack: [], legacyStack: [], legacyCounter: 0, rootStepId: null,
   };
-  return (line: string) => handleLine(line, state, emitter, formatDiagnosticLine);
+  return (line: string) => handleLine(line, state, emitter);
 }
 
 // ── Run state (shared output read by runWorkflow after exit) ──

@@ -14,16 +14,6 @@ Process rules:
 
 ***
 
-## Remove dead `formatDiagnosticLine` indirection in the stderr parser #dev-ready
-
-**Context.** `src/cli/run/stderr-handler.ts` threads a `formatDiagnosticLine: (line: string) => string` parameter through `handleLine` (line 49) and defines it as the identity function `(ln) => ln` (line 86) at the only call-site builder (`createStderrParser`, line 90). It never formats anything — pure dead indirection.
-
-**Change.** Delete the parameter from `handleLine` and the identity function from `createStderrParser`; use `line` directly in the `emitter.emit("stderr_line", …)` call (line 78). Update all `handleLine` call sites and any tests that pass the parameter.
-
-**Acceptance criteria.**
-- `grep -rn "formatDiagnosticLine" src/` returns nothing.
-- `npm test` passes; stderr passthrough behavior in run output is unchanged (existing integration tests cover this).
-
 ## Document the Docker env-var allowlist in sandboxing docs #dev-ready
 
 **Context.** `isEnvAllowed()` (`src/runtime/docker.ts:479`) forwards only environment variables matching `ENV_ALLOW_PREFIXES` (see the constant near that function — e.g. `JAIPH_`, agent/LLM-related prefixes) into the container, excluding `JAIPH_DOCKER_*`. `docs/sandboxing.md` does not mention this filtering, so users cannot tell why their custom env vars vanish inside sandboxed runs.
