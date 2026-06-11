@@ -37,13 +37,15 @@ jaiph --version
 jaiph --help
 ```
 
-The script installs from local source (including uncommitted changes) and places the CLI in `~/.local/bin` by default (or `JAIPH_BIN_DIR` if set).
+The script builds the self-contained standalone binary from local source (`npm install` + `npm run build:standalone`, including uncommitted changes) and installs `dist/jaiph` to `~/.local/bin` by default (or `JAIPH_BIN_DIR` if set). The result is the same single-file artifact that `docs/install` downloads from a GitHub Release; only the origin of the binary differs.
+
+**From-source prerequisites:** **`npm`** and **[Bun](https://bun.sh)** (`bun build --compile` produces the standalone binary). Node is not required to *run* the result, but `npm install` still pulls dev dependencies; on most Linux/macOS hosts the system `npm` ships with Node 20+.
 
 ## Developing in the repository
 
 For day-to-day work on the compiler and CLI you usually stay inside the clone: install dev dependencies once, then build and run tests from npm scripts.
 
-**Prerequisites:** Node.js **20.x** and npm (same **`setup-node`** version as `.github/workflows/ci.yml`). The installers also expect `git` and `bash`. End-to-end tests are written in bash and are run by `e2e/test_all.sh`.
+**Prerequisites:** Node.js **20.x**, **`npm`**, and **[Bun](https://bun.sh)** (same versions as `.github/workflows/ci.yml`; bun is required by `npm run build:standalone` and `./docs/install-from-local.sh`). End-user installs from `docs/install` need only `curl` and `shasum` / `sha256sum`. The installers also expect `bash`. End-to-end tests are written in bash and are run by `e2e/test_all.sh`.
 
 **Typical commands** (from the repo root):
 

@@ -404,8 +404,10 @@ Reinstall Jaiph globally with the selected channel or version.
 jaiph use <version|nightly>
 ```
 
-- `nightly` — installs from the `nightly` ref.
-- `<version>` — installs tag `v<version>`.
+- `nightly` — reinstalls from the rolling `nightly` prerelease.
+- `<version>` — reinstalls the release binary for tag `v<version>`.
+
+Under the hood, `jaiph use` re-invokes `JAIPH_INSTALL_COMMAND` (default `curl -fsSL https://jaiph.org/install | bash`) with `JAIPH_REPO_REF` set to `nightly` or `v<version>`. The installer downloads the matching per-platform binary and `SHA256SUMS` from the GitHub Release, verifies the checksum, and replaces `~/.local/bin/jaiph` (or `JAIPH_BIN_DIR`). No build step runs on the user’s machine.
 
 **Examples:**
 
@@ -477,10 +479,10 @@ For overlay vs copy workspace mode, mounts, and stderr wiring, see [Sandboxing](
 
 ### Install and `jaiph use`
 
-- `JAIPH_REPO_URL` — Git repo URL or local path for install script.
-- `JAIPH_REPO_REF` — ref used when installing; `jaiph use <version>` sets this to `v<version>` or `nightly` for nightly.
+- `JAIPH_REPO_URL` — local repo path (a directory containing `package.json`) for the from-source installer branch (used by `docs/install-from-local.sh`); ignored on the binary-download path.
+- `JAIPH_REPO_REF` — release ref (e.g. `v0.9.4`, `nightly`) downloaded by `docs/install`; `jaiph use <version>` sets this to `v<version>` or `nightly` for nightly.
 - `JAIPH_BIN_DIR` — target bin directory (default: `$HOME/.local/bin`).
-- `JAIPH_LIB_DIR` — target lib directory (default: `$JAIPH_BIN_DIR/.jaiph`).
+- `JAIPH_RELEASE_BASE_URL` — override the GitHub Release base URL the installer downloads from (default: `https://github.com/jaiphlang/jaiph/releases/download/<ref>`). Useful for mirrors, offline bundles, or `file://` paths in tests.
 - `JAIPH_INSTALL_COMMAND` — command run by `jaiph use` to reinstall (default: `curl -fsSL https://jaiph.org/install | bash`).
 
 ### `jaiph init`
