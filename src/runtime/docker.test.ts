@@ -26,8 +26,9 @@ import {
   type DockerSpawnResult,
 } from "./docker";
 import { mkdtempSync, writeFileSync, mkdirSync, existsSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
-import { join, dirname } from "node:path";
+import { join, dirname, resolve } from "node:path";
 
 /** Shared temp workspace for buildDockerArgs tests. */
 const TEST_WS = mkdtempSync(join(tmpdir(), "jaiph-test-ws-"));
@@ -473,6 +474,53 @@ test("writeOverlayScript: contains no in-container rsync/cp fallback (host handl
   } finally {
     rmSync(dirname(scriptPath), { recursive: true, force: true });
   }
+});
+
+// Importing the docker module must not read overlay-run.sh — non-Docker CLI
+// paths (jaiph compile/format) load this module transitively via shared imports
+// (e.g. CONTAINER_RUN_DIR in src/cli/shared/errors.ts) and must not crash with a
+// raw ENOENT when the installation is incomplete.
+test("loadOverlayScript: import does not read overlay-run.sh; writeOverlayScript throws E_CLI_SETUP when missing", () => {
+  const dockerPath = require.resolve("./docker");
+  const dockerDir = dirname(dockerPath);
+  const distOverlay = join(dockerDir, "overlay-run.sh");
+  const repoOverlay = resolve(dockerDir, "..", "..", "..", "runtime", "overlay-run.sh");
+  const script = `
+    const fs = require("node:fs");
+    const dist = ${JSON.stringify(distOverlay)};
+    const repo = ${JSON.stringify(repoOverlay)};
+    const distBak = dist + ".bak-test";
+    const repoBak = repo + ".bak-test";
+    const distExists = fs.existsSync(dist);
+    const repoExists = fs.existsSync(repo);
+    if (distExists) fs.renameSync(dist, distBak);
+    if (repoExists) fs.renameSync(repo, repoBak);
+    try {
+      const mod = require(${JSON.stringify(dockerPath)});
+      // Mirrors what jaiph compile/format pull from the docker module (only
+      // constants/types, never the overlay path).
+      if (mod.CONTAINER_RUN_DIR !== "/jaiph/run") {
+        console.error("FAIL: CONTAINER_RUN_DIR unexpected: " + mod.CONTAINER_RUN_DIR);
+        process.exit(5);
+      }
+      try {
+        mod.writeOverlayScript();
+        console.error("FAIL: expected throw");
+        process.exit(2);
+      } catch (e) {
+        const msg = String(e && e.message || e);
+        if (!msg.startsWith("E_CLI_SETUP")) { console.error("FAIL bad code: " + msg); process.exit(3); }
+        if (!msg.includes(dist) && !msg.includes(repo)) { console.error("FAIL missing path: " + msg); process.exit(4); }
+        console.log("OK");
+      }
+    } finally {
+      if (distExists) fs.renameSync(distBak, dist);
+      if (repoExists) fs.renameSync(repoBak, repo);
+    }
+  `;
+  const r = spawnSync(process.execPath, ["-e", script], { encoding: "utf8" });
+  assert.equal(r.status, 0, `subprocess failed (status=${r.status}); stdout=${r.stdout}; stderr=${r.stderr}`);
+  assert.match(r.stdout, /OK/);
 });
 
 

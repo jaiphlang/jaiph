@@ -172,7 +172,7 @@ If `/dev/fuse` is missing on the host, the CLI uses **copy mode**: before launch
 
 ### Failure modes
 
-The table below lists Docker run failures and the codes emitted in logs or error output. Most are `E_DOCKER_*`; **`E_TIMEOUT`** and **`E_VALIDATE_MOUNT`** appear here because they surface during container runs or mount validation, not inside the interpreter.
+The table below lists Docker run failures and the codes emitted in logs or error output. Most are `E_DOCKER_*`; **`E_TIMEOUT`**, **`E_VALIDATE_MOUNT`**, and **`E_CLI_SETUP`** appear here because they surface during container runs, mount validation, or overlay-script load — not inside the interpreter.
 
 | Error code | Trigger | Behavior |
 |------------|---------|----------|
@@ -184,6 +184,7 @@ The table below lists Docker run failures and the codes emitted in logs or error
 | `E_DOCKER_TIMEOUT` | `JAIPH_DOCKER_TIMEOUT` is empty, non-numeric, negative, or has trailing junk; or `runtime.docker_timeout_seconds` is negative in the parsed module | Run exits before container launch. A valid value is a non-negative integer; `0` disables the timeout. |
 | `E_DOCKER_UID` | Linux host UID/GID detection failed (`process.getuid` and `id -u` both unavailable) | Run exits before container launch. Ensures the container never silently runs as root. Applies to both copy and overlay modes. |
 | `E_DOCKER_SANDBOX_COPY` | Copy mode failed to clone the host workspace (`cp` returned non-zero) | Run exits before container launch. Inspect the path printed in the error. |
+| `E_CLI_SETUP` | Overlay mode needs `runtime/overlay-run.sh` but the file is missing from the installation (read lazily on first overlay-mode launch by `loadOverlayScript` in `src/runtime/docker.ts`) | Run exits before container launch. The error names the resolved candidate path and tells the user to reinstall with `jaiph use <version>`. Non-Docker commands (`jaiph compile`, `jaiph format`) are unaffected because the read no longer happens at module-import time. |
 | `E_VALIDATE_MOUNT` | Mount targets a denied host path (`/`, `/proc`, docker socket, etc.) | Run exits before container launch. |
 | `E_TIMEOUT` | Container runs longer than the effective Docker timeout seconds (`JAIPH_DOCKER_TIMEOUT` or `runtime.docker_timeout_seconds` after merge; see [Configuration keys](#configuration-keys)) | Container receives SIGTERM, then SIGKILL after 5s grace period. |
 
@@ -211,7 +212,7 @@ The default `runtime.docker_image` is `ghcr.io/jaiphlang/jaiph-runtime:<version>
 
 After the image is pulled or found locally, Jaiph verifies that `jaiph` is available inside the container. If the check fails, the run exits with `E_DOCKER_NO_JAIPH`.
 
-`overlay-run.sh` is shipped as `runtime/overlay-run.sh` in the npm package; the host CLI writes it to a temp file and mounts it into the container at runtime.
+`overlay-run.sh` is shipped as `runtime/overlay-run.sh` in the npm package; the host CLI writes it to a temp file and mounts it into the container at runtime. The script is read **lazily** the first time an overlay-mode container is launched (the `loadOverlayScript()` helper in `src/runtime/docker.ts`, called from `writeOverlayScript()`), and the result is cached in-process — importing the docker module does not touch the filesystem, so non-Docker subcommands like `jaiph compile` and `jaiph format` (which import shared symbols from this module transitively) keep working even if the script is missing from the install. If the script is missing when overlay mode actually needs it, the read throws `E_CLI_SETUP: runtime/overlay-run.sh not found at <path> — the Jaiph installation is incomplete; reinstall with "jaiph use <version>"`. Copy mode does not need the script and is unaffected.
 
 ### Extending the official image
 

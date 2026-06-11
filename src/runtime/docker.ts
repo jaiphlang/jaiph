@@ -282,14 +282,26 @@ export function resolveImage(config: DockerRunConfig): string {
  * Container-side fuse-overlayfs setup loaded from runtime/overlay-run.sh.
  *
  * Resolves the file relative to package root — works from both source and dist
- * layouts, mirroring `resolveDefaultDockerImageTag` (package.json hops).
+ * layouts, mirroring `resolveDefaultDockerImageTag` (package.json hops). Read
+ * lazily so importing the docker module from non-Docker code paths does not
+ * crash when the installation is incomplete.
  */
-const OVERLAY_SCRIPT = readFileSync(
-  existsSync(resolve(__dirname, "overlay-run.sh"))
+let overlayScriptCache: string | undefined;
+
+export function loadOverlayScript(): string {
+  if (overlayScriptCache !== undefined) return overlayScriptCache;
+  const scriptPath = existsSync(resolve(__dirname, "overlay-run.sh"))
     ? resolve(__dirname, "overlay-run.sh")
-    : resolve(__dirname, "..", "..", "..", "runtime", "overlay-run.sh"),
-  "utf8",
-);
+    : resolve(__dirname, "..", "..", "..", "runtime", "overlay-run.sh");
+  try {
+    overlayScriptCache = readFileSync(scriptPath, "utf8");
+    return overlayScriptCache;
+  } catch {
+    throw new Error(
+      `E_CLI_SETUP: runtime/overlay-run.sh not found at ${scriptPath} — the Jaiph installation is incomplete; reinstall with "jaiph use <version>"`,
+    );
+  }
+}
 
 /**
  * Write overlay-run.sh to a temp file and return its path.
@@ -298,7 +310,7 @@ const OVERLAY_SCRIPT = readFileSync(
 export function writeOverlayScript(): string {
   const dir = mkdtempSync(join(tmpdir(), "jaiph-overlay-"));
   const scriptPath = join(dir, "overlay-run.sh");
-  writeFileSync(scriptPath, OVERLAY_SCRIPT, { mode: 0o755 });
+  writeFileSync(scriptPath, loadOverlayScript(), { mode: 0o755 });
   return scriptPath;
 }
 

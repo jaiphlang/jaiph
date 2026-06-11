@@ -14,17 +14,6 @@ Process rules:
 
 ***
 
-## Lazy-load the Docker overlay script with an actionable error #dev-ready
-
-**Context.** `src/runtime/docker.ts:287` reads `overlay-run.sh` with `readFileSync` at **module load time**. Importing the docker module — which happens for every CLI invocation that might touch Docker — crashes with a raw ENOENT stack trace if the file is missing from the installation, even for commands that never use Docker.
-
-**Change.** Move the read into a function (`loadOverlayScript()`) called only where the script is written out (~line 301, `writeFileSync(scriptPath, OVERLAY_SCRIPT, …)`). Wrap the read in try/catch and rethrow as `E_CLI_SETUP: runtime/overlay-run.sh not found at <path> — the Jaiph installation is incomplete; reinstall with "jaiph use <version>"`. Cache the content after first successful read.
-
-**Acceptance criteria.**
-- Unit test: importing the docker module does not read `overlay-run.sh` (e.g. temporarily rename the file in a sandboxed copy, import succeeds, calling the overlay path throws the `E_CLI_SETUP` message containing the path).
-- Non-Docker commands (`jaiph compile`, `jaiph format`) work even when `overlay-run.sh` is absent — covered by a test or e2e case.
-- Docker e2e flow unchanged when the file exists.
-
 ## Remove dead `formatDiagnosticLine` indirection in the stderr parser #dev-ready
 
 **Context.** `src/cli/run/stderr-handler.ts` threads a `formatDiagnosticLine: (line: string) => string` parameter through `handleLine` (line 49) and defines it as the identity function `(ln) => ln` (line 86) at the only call-site builder (`createStderrParser`, line 90). It never formats anything — pure dead indirection.
