@@ -14,21 +14,6 @@ Process rules:
 
 ***
 
-## Release workflow: build and publish per-platform binaries on `v*` tags #dev-ready
-
-**Context.** CI lives in `.github/workflows/ci.yml` (push CI; its docker-publish job already triggers on `v*` tags) and `nightly-engineer.yml`. There is no release pipeline: nothing builds or publishes the standalone binary (`npm run build:standalone`, bun-compiled). The installer rewrite (separate queue task) will download release assets named by a fixed contract.
-
-**Change.**
-1. Add `.github/workflows/release.yml` triggered by `v*` tag pushes (plus `workflow_dispatch` for re-runs). Using `oven-sh/setup-bun`, cross-compile the standalone binary for: `bun-darwin-arm64`, `bun-darwin-x64`, `bun-linux-x64`, `bun-linux-arm64` (`bun build --compile --target=…`). **Asset naming contract:** `jaiph-darwin-arm64`, `jaiph-darwin-x64`, `jaiph-linux-x64`, `jaiph-linux-arm64`, plus a `SHA256SUMS` file covering all four.
-2. Create (or update) the GitHub Release for the tag with `gh release create/upload`, attaching all assets. The job should require the main CI checks to have passed for the same ref before publishing (job-level `needs` if merged into `ci.yml`, or an explicit gate step otherwise).
-3. Nightly channel: on push to the `nightly` branch, build the same matrix and upload to a **rolling prerelease** tagged `nightly` (`gh release upload nightly --clobber`), so `jaiph use nightly` keeps working under the binary installer.
-4. Sanity gate inside the workflow: before upload, run the produced linux-x64 binary on the runner (`./jaiph-linux-x64 --version`) and assert the output version matches the tag.
-
-**Acceptance criteria.**
-- Workflow file exists with the tag + nightly + dispatch triggers, the four targets, checksum generation, the version sanity gate, and release upload steps (reviewer check; full verification happens on the first real tag).
-- The asset naming contract above is written down in `docs/contributing.md` (release section) — the installer task depends on it verbatim.
-- A `workflow_dispatch` dry run on a test tag (maintainer-executed) produces a release with 5 assets and a correct `SHA256SUMS`.
-
 ## Binary installer: rewrite `docs/install` to download release assets; update `install-from-local.sh` #dev-ready
 
 **Context.** `docs/install` (served at `https://jaiph.org/install`, run via `curl | bash`) currently clones the repo at a tag, runs `npm install` + `npm run build` on the user's machine, and installs a node shim — requiring git, node 20, and npm on every user machine. Release CI (separate queue task — implement it first) publishes per-platform standalone binaries on `v*` tags and a rolling `nightly` prerelease under the asset contract `jaiph-{darwin|linux}-{arm64|x64}` + `SHA256SUMS`. The binary embeds `jaiph-skill.md` and `overlay-run.sh`, so the binary is the entire installation. `docs/install-from-local.sh` and the `JAIPH_FROM_LOCAL` branch of `docs/install` install from a local checkout (used by developers and the e2e install tests); `jaiph use <version|nightly>` re-runs the install command with `JAIPH_REPO_REF` set.

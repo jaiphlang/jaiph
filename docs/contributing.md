@@ -187,11 +187,30 @@ The project uses GitHub Actions (`.github/workflows/ci.yml`). The workflow defin
 | **E2E install and CLI workflow (windows-latest + wsl)** | `windows-latest` | Provisions or selects a WSL distro, installs Node inside it, and runs `npm run test:e2e` under WSL with **`JAIPH_UNSAFE=true`**. |
 | **Publish Docker runtime image** | `ubuntu-latest` | *Conditional (see above).* Multi-arch push to GHCR. |
 
-### Version tags and npm
+### Version tags, releases, and npm
 
-Pushing a **`v*`** ref does **not** run any npm publish step from this repository: the automation checked in under **`.github/workflows/`** is **`ci.yml`** (push CI) and **`nightly-engineer.yml`** (optional manual engineer run) — **neither publishes to npm**. The same tag pattern **does** satisfy the `if:` on the **`docker-publish`** job in **`ci.yml`**, which pushes `ghcr.io/jaiphlang/jaiph-runtime` after the other CI jobs succeed.
+Pushing a **`v*`** tag triggers two things in this repo:
 
-If you are preparing a release that includes the **npm** package, coordinate version bumps, registry publish, and smoke checks with the maintainers — that flow is intentionally outside this repo’s workflows.
+1. **Docker image publish** — the `docker-publish` job in `ci.yml` pushes `ghcr.io/jaiphlang/jaiph-runtime:<version>` and `:latest` after the other CI jobs succeed.
+2. **Standalone-binary release** — `.github/workflows/release.yml` cross-compiles the Bun-compiled standalone binary for four targets via `oven-sh/setup-bun` and `bun build --compile --target=…`, generates a `SHA256SUMS` file, runs a Linux x64 sanity gate (`./jaiph-linux-x64 --version` must equal `jaiph <tag-without-v>`), and uploads all five assets to the GitHub Release for the tag (creating it if needed). The release job waits for the `CI` workflow on the same SHA to succeed before publishing. Re-runs are available via `workflow_dispatch`.
+
+Pushes to the **`nightly`** branch follow the same matrix and upload to a **rolling prerelease** tagged `nightly` (`gh release upload nightly --clobber`), so `jaiph use nightly` keeps working under the binary installer.
+
+Pushing a **`v*`** ref does **not** run any npm publish step from this repository — `.github/workflows/` contains `ci.yml` (push CI), `release.yml` (standalone binaries; see above), and `nightly-engineer.yml` (optional manual engineer run), and **none publishes to npm**. If you are preparing a release that includes the **npm** package, coordinate version bumps, registry publish, and smoke checks with the maintainers — that flow is intentionally outside this repo's workflows.
+
+#### Release asset naming contract
+
+The installer (`docs/install`) downloads these exact filenames from the release for the resolved ref. The contract is fixed; do not rename or add architecture variants without updating the installer:
+
+| Bun target (`bun build --compile --target=…`) | Asset name |
+|----------------------------------------------|------------|
+| `bun-darwin-arm64` | `jaiph-darwin-arm64` |
+| `bun-darwin-x64`   | `jaiph-darwin-x64` |
+| `bun-linux-x64`    | `jaiph-linux-x64` |
+| `bun-linux-arm64`  | `jaiph-linux-arm64` |
+| —                  | `SHA256SUMS` (covers all four binaries) |
+
+Every release (stable `v*` and rolling `nightly`) ships exactly these five assets.
 
 ### Local docs site (Jekyll)
 

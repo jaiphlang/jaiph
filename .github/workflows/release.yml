@@ -1,0 +1,204 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+    branches:
+      - nightly
+  workflow_dispatch:
+
+jobs:
+  ci-gate:
+    name: Wait for CI to pass on this ref
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Wait for CI workflow conclusion on ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          # Poll up to 60 minutes for the matching CI run on this SHA.
+          for i in $(seq 1 120); do
+            json="$(gh run list --workflow CI --commit "${GITHUB_SHA}" --limit 1 --json status,conclusion 2>/dev/null || echo '[]')"
+            count="$(echo "${json}" | jq 'length')"
+            if [ "${count}" -eq 0 ]; then
+              echo "[${i}/120] No CI run yet for ${GITHUB_SHA}"
+              sleep 30
+              continue
+            fi
+            status="$(echo "${json}" | jq -r '.[0].status')"
+            conclusion="$(echo "${json}" | jq -r '.[0].conclusion')"
+            if [ "${status}" = "completed" ]; then
+              if [ "${conclusion}" = "success" ]; then
+                echo "CI succeeded for ${GITHUB_SHA}."
+                exit 0
+              fi
+              echo "CI for ${GITHUB_SHA} completed with conclusion: ${conclusion}"
+              exit 1
+            fi
+            echo "[${i}/120] CI status=${status}"
+            sleep 30
+          done
+          echo "Timed out waiting for CI on ${GITHUB_SHA}."
+          exit 1
+
+  build:
+    name: Build ${{ matrix.os }}-${{ matrix.arch }}
+    needs: ci-gate
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - target: bun-darwin-arm64
+            os: darwin
+            arch: arm64
+          - target: bun-darwin-x64
+            os: darwin
+            arch: x64
+          - target: bun-linux-x64
+            os: linux
+            arch: x64
+          - target: bun-linux-arm64
+            os: linux
+            arch: arm64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build TypeScript + embed assets
+        run: npm run build
+
+      - name: Cross-compile standalone binary for ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+          bun build --compile --target=${{ matrix.target }} ./src/cli.ts --outfile "jaiph-${{ matrix.os }}-${{ matrix.arch }}"
+          ls -la "jaiph-${{ matrix.os }}-${{ matrix.arch }}"
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: jaiph-${{ matrix.os }}-${{ matrix.arch }}
+          path: jaiph-${{ matrix.os }}-${{ matrix.arch }}
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    name: Publish release assets
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve tag and channel
+        id: meta
+        run: |
+          set -euo pipefail
+          case "${GITHUB_REF}" in
+            refs/tags/v*)
+              tag="${GITHUB_REF_NAME}"; channel="stable" ;;
+            refs/heads/nightly|refs/tags/nightly)
+              tag="nightly"; channel="nightly" ;;
+            *)
+              echo "Unsupported ref for release: ${GITHUB_REF}" >&2; exit 1 ;;
+          esac
+          echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
+          echo "channel=${channel}" >> "${GITHUB_OUTPUT}"
+
+      - name: Download binary artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Generate SHA256SUMS
+        working-directory: release-assets
+        run: |
+          set -euo pipefail
+          ls -la
+          rm -f SHA256SUMS
+          sha256sum jaiph-darwin-arm64 jaiph-darwin-x64 jaiph-linux-x64 jaiph-linux-arm64 > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Sanity gate (linux-x64 --version)
+        working-directory: release-assets
+        run: |
+          set -euo pipefail
+          chmod +x jaiph-linux-x64
+          got="$(./jaiph-linux-x64 --version)"
+          echo "got: ${got}"
+          if [ "${{ steps.meta.outputs.channel }}" = "stable" ]; then
+            tag="${{ steps.meta.outputs.tag }}"
+            expected="jaiph ${tag#v}"
+            if [ "${got}" != "${expected}" ]; then
+              echo "Version sanity check failed: expected '${expected}', got '${got}'" >&2
+              exit 1
+            fi
+          else
+            if ! printf '%s\n' "${got}" | grep -Eq '^jaiph [0-9]+\.[0-9]+\.[0-9]+'; then
+              echo "Version sanity check failed: '${got}' does not look like a jaiph version" >&2
+              exit 1
+            fi
+          fi
+
+      - name: Publish stable release ${{ steps.meta.outputs.tag }}
+        if: steps.meta.outputs.channel == 'stable'
+        working-directory: release-assets
+        run: |
+          set -euo pipefail
+          tag="${{ steps.meta.outputs.tag }}"
+          if gh release view "${tag}" >/dev/null 2>&1; then
+            gh release upload "${tag}" --clobber \
+              jaiph-darwin-arm64 jaiph-darwin-x64 \
+              jaiph-linux-x64 jaiph-linux-arm64 \
+              SHA256SUMS
+          else
+            gh release create "${tag}" \
+              --title "${tag}" \
+              --notes "Jaiph ${tag} — standalone binaries (darwin/linux × arm64/x64) plus SHA256SUMS." \
+              jaiph-darwin-arm64 jaiph-darwin-x64 \
+              jaiph-linux-x64 jaiph-linux-arm64 \
+              SHA256SUMS
+          fi
+
+      - name: Publish nightly prerelease
+        if: steps.meta.outputs.channel == 'nightly'
+        working-directory: release-assets
+        run: |
+          set -euo pipefail
+          if gh release view nightly >/dev/null 2>&1; then
+            gh release upload nightly --clobber \
+              jaiph-darwin-arm64 jaiph-darwin-x64 \
+              jaiph-linux-x64 jaiph-linux-arm64 \
+              SHA256SUMS
+          else
+            gh release create nightly \
+              --title "Nightly" \
+              --notes "Rolling nightly prerelease — standalone binaries built from the latest \`nightly\` branch." \
+              --prerelease \
+              --target "${GITHUB_SHA}" \
+              jaiph-darwin-arm64 jaiph-darwin-x64 \
+              jaiph-linux-x64 jaiph-linux-arm64 \
+              SHA256SUMS
+          fi
