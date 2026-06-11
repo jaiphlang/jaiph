@@ -1,6 +1,6 @@
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { colorPalette } from "../shared/errors";
 import { detectWorkspaceRoot } from "../shared/paths";
 import { hasHelpFlag } from "../shared/usage";
@@ -36,6 +36,7 @@ interface LockEntry {
   name: string;
   url: string;
   version?: string;
+  commit?: string;
 }
 
 interface LockFile {
@@ -47,6 +48,7 @@ export interface InstallSpec {
   url: string;
   version?: string;
   libDir: string;
+  expectedCommit?: string;
 }
 
 export interface CloneOutcome {
@@ -104,8 +106,90 @@ function upsertLockEntry(lock: LockFile, entry: LockEntry): void {
   }
 }
 
-function specToLockEntry(spec: InstallSpec): LockEntry {
-  return { name: spec.name, url: spec.url, ...(spec.version ? { version: spec.version } : {}) };
+function specToLockEntry(spec: InstallSpec, commit?: string): LockEntry {
+  return {
+    name: spec.name,
+    url: spec.url,
+    ...(spec.version ? { version: spec.version } : {}),
+    ...(commit ? { commit } : {}),
+  };
+}
+
+/** True if `dir` contains at least one `*.jh` file (recursive, skipping `.git`). */
+function hasJhFileRecursive(dir: string): boolean {
+  const stack: string[] = [dir];
+  while (stack.length > 0) {
+    const d = stack.pop()!;
+    let entries;
+    try {
+      entries = readdirSync(d, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const ent of entries) {
+      if (ent.name === ".git") continue;
+      if (ent.isDirectory()) {
+        stack.push(join(d, ent.name));
+      } else if (ent.isFile() && ent.name.endsWith(".jh")) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+/** Returns the 40-char HEAD SHA of `libDir`, or undefined when git is unavailable or there is no `.git`. */
+function revParseHead(libDir: string): string | undefined {
+  try {
+    const out = execFileSync("git", ["-C", libDir, "rev-parse", "HEAD"], {
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    const sha = out.toString().trim();
+    return /^[0-9a-f]{40}$/.test(sha) ? sha : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+interface PostCloneResult {
+  ok: boolean;
+  commit?: string;
+  message?: string;
+}
+
+/**
+ * Post-clone hygiene: assert the tree contains at least one `.jh` module,
+ * capture the HEAD SHA, strip `.git` so the installed lib is plain files,
+ * and (when a locked commit was passed in via `spec.expectedCommit`) fail
+ * if the cloned commit differs from the recorded one. On any failure the
+ * lib directory is removed so callers never write a lock entry for it.
+ */
+function postCloneHygiene(spec: InstallSpec): PostCloneResult {
+  if (!hasJhFileRecursive(spec.libDir)) {
+    rmSync(spec.libDir, { recursive: true, force: true });
+    return {
+      ok: false,
+      message: `lib "${spec.name}" contains no .jh modules — not a jaiph library?`,
+    };
+  }
+  const gitDir = join(spec.libDir, ".git");
+  let commit: string | undefined;
+  if (existsSync(gitDir)) {
+    commit = revParseHead(spec.libDir);
+    rmSync(gitDir, { recursive: true, force: true });
+  }
+  if (spec.expectedCommit && commit && commit !== spec.expectedCommit) {
+    const versionLabel = spec.version ?? "<ref>";
+    rmSync(spec.libDir, { recursive: true, force: true });
+    return {
+      ok: false,
+      message:
+        `lib "${spec.name}" commit mismatch: locked ${spec.expectedCommit}, cloned ${commit} — ` +
+        `the ref may have moved; re-run \`jaiph install ${spec.name}@${versionLabel}\` ` +
+        `explicitly to accept the new commit`,
+    };
+  }
+  return { ok: true, commit };
 }
 
 /** Default clone runner: `git clone --depth 1 [--branch <ref>] <url> <libDir>` via spawn. */
@@ -215,6 +299,7 @@ export async function runInstall(rest: string[], opts: RunInstallOptions = {}): 
       url: e.url,
       version: e.version,
       libDir: join(libsDir, e.name),
+      expectedCommit: e.commit,
     }));
   } else {
     process.stdout.write("\n");
@@ -244,7 +329,18 @@ export async function runInstall(rest: string[], opts: RunInstallOptions = {}): 
     }
   }
 
-  const outcomes = await runWithConcurrency(jobs, concurrency, cloneRunner);
+  const commits = new Map<string, string>();
+  const wrappedRunner: CloneRunner = async (spec) => {
+    const out = await cloneRunner(spec);
+    if (!out.ok) return out;
+    const post = postCloneHygiene(spec);
+    if (!post.ok) {
+      return { spec, ok: false, message: post.message };
+    }
+    if (post.commit) commits.set(spec.name, post.commit);
+    return out;
+  };
+  const outcomes = await runWithConcurrency(jobs, concurrency, wrappedRunner);
 
   let allOk = true;
   for (const outcome of outcomes) {
@@ -259,11 +355,12 @@ export async function runInstall(rest: string[], opts: RunInstallOptions = {}): 
 
   if (!isRestoreFromLock) {
     for (const spec of skipped) {
-      upsertLockEntry(lock, specToLockEntry(spec));
+      const existing = lock.libs.find((e) => e.name === spec.name);
+      upsertLockEntry(lock, specToLockEntry(spec, existing?.commit));
     }
     for (const outcome of outcomes) {
       if (outcome.ok) {
-        upsertLockEntry(lock, specToLockEntry(outcome.spec));
+        upsertLockEntry(lock, specToLockEntry(outcome.spec, commits.get(outcome.spec.name)));
       }
     }
     writeLockFile(lockPath, lock);
