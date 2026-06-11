@@ -60,7 +60,10 @@ EOF
 
 e2e::section "jaiph --version"
 version_out="$(cd "${WORK_DIR}" && env -i PATH="${CLEAN_PATH}" HOME="${WORK_DIR}" "${JAIPH_BIN}" --version)"
-e2e::assert_equals "${version_out}" "jaiph 0.9.4" "version output"
+# Read from package.json so the test does not need an update on every version bump
+# (single source of truth — see .jaiph/prepare_release.jh).
+pkg_version="$(node -p "require('${ROOT_DIR}/package.json').version")"
+e2e::assert_equals "${version_out}" "jaiph ${pkg_version}" "version output"
 
 e2e::section "jaiph init writes SKILL.md from embedded asset"
 (cd "${WORK_DIR}" && env -i PATH="${CLEAN_PATH}" HOME="${WORK_DIR}" "${JAIPH_BIN}" init >/dev/null)

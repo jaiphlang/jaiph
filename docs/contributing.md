@@ -52,8 +52,8 @@ For day-to-day work on the compiler and CLI you usually stay inside the clone: i
 | Command | What it runs |
 |---------|----------------|
 | `npm install` | Installs TypeScript and types (dev dependencies). |
-| `npm run build` | Runs **`npm run embed-assets`** (regenerates **`src/runtime/embedded-assets.ts`** from `runtime/overlay-run.sh` and `docs/jaiph-skill.md`), then `tsc`, then copies **`src/runtime`** → **`dist/src/runtime`** (kernel JS for the compiled CLI) and **`runtime/overlay-run.sh`** → **`dist/src/runtime/overlay-run.sh`** (Docker overlay entrypoint). |
-| `npm run embed-assets` | Runs `tools/embed-assets.js` to regenerate **`src/runtime/embedded-assets.ts`** from `runtime/overlay-run.sh` and `docs/jaiph-skill.md`. Invoked automatically by `npm run build`; run it standalone after editing either source file if you want to refresh the embedded copy without a full rebuild. |
+| `npm run build` | Runs **`npm run embed-assets`** (regenerates **`src/runtime/embedded-assets.ts`** from `runtime/overlay-run.sh` and `docs/jaiph-skill.md`, and **`src/version.ts`** from `package.json`'s `version` field), then `tsc`, then copies **`src/runtime`** → **`dist/src/runtime`** (kernel JS for the compiled CLI) and **`runtime/overlay-run.sh`** → **`dist/src/runtime/overlay-run.sh`** (Docker overlay entrypoint). |
+| `npm run embed-assets` | Runs `tools/embed-assets.js` to regenerate **`src/runtime/embedded-assets.ts`** from `runtime/overlay-run.sh` and `docs/jaiph-skill.md`, and **`src/version.ts`** from `package.json`'s `version` field (consumed by `jaiph --version` so the displayed string and the package version are single-sourced in both the `tsc` and `bun build --compile` builds). Invoked automatically by `npm run build` and by `npm install` (via the `prepare` lifecycle script, so `src/version.ts` exists on a fresh checkout); run it standalone after editing either embedded source file if you want to refresh the generated copies without a full rebuild. |
 | `npm run build:standalone` | `npm run build`, then copies **`dist/src/runtime`** → **`dist/runtime`** and runs **`bun build --compile ./src/cli.ts --outfile ./dist/jaiph`**. Requires [Bun](https://bun.sh). The resulting **`dist/jaiph`** is **fully self-contained** — `overlay-run.sh` and `jaiph-skill.md` are baked into the binary, and workflow launch self-spawns via the internal `__workflow-runner` argv marker, so the binary needs no sibling `runtime/` or `docs/` files and no `node` / `npm` on the host. The `dist/runtime` copy is kept for parity with the npm layout ([Architecture — Distribution](architecture.md#distribution-node-vs-bun-standalone)). |
 | `npm test` | **`npm run clean`**, then **`npm run build`**, then the Node.js test runner with **`JAIPH_UNSAFE=true`**, **`NODE_OPTIONS`** including **`--enable-source-maps`** and a large heap limit, on every file under `dist/integration/` matching `*.test.js`, every file under `dist/src/` matching `*.test.js` or `*.acceptance.test.js` (via `find`), `dist/test-infra/compiler-test-runner.js` (txtar compiler tests), and `dist/test-infra/golden-ast-runner.js` (golden AST tests). |
 | `npm run test:compiler` | **`npm run build`**, then **`node --test`** on `dist/test-infra/compiler-test-runner.js` — runs txtar-based compiler test fixtures from `test-fixtures/compiler-txtar/`. |
@@ -190,6 +190,15 @@ The project uses GitHub Actions (`.github/workflows/ci.yml`). The workflow defin
 | **Publish Docker runtime image** | `ubuntu-latest` | *Conditional (see above).* Multi-arch push to GHCR. |
 
 ### Version tags, releases, and npm
+
+The supported release-prep path is the **`.jaiph/prepare_release.jh`** workflow. Run it as:
+
+```bash
+jaiph run .jaiph/prepare_release.jh -- 0.9.5    # explicit X.Y.Z
+jaiph run .jaiph/prepare_release.jh             # next patch from package.json
+```
+
+The workflow refuses to start when the git tree is dirty or when `v<version>` already exists, then bumps `package.json` + `package-lock.json` via `npm version <v> --no-git-tag-version`, refreshes the hardcoded release ref in `docs/install`, rebuilds the CLI and asserts that `jaiph --version` matches the new version, and regenerates `docs/registry`. It creates **no commits and no tags** — review the staged diff, commit, then `git tag v<version>` and push branch + tag yourself. The CLI version is single-sourced from `package.json`'s `version` field (codegen'd into `src/version.ts` by `npm run embed-assets`), so the workflow never edits `src/`.
 
 Pushing a **`v*`** tag triggers two things in this repo:
 

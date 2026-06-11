@@ -9,6 +9,7 @@ import { runFormat } from "./commands/format";
 import { runInstall } from "./commands/install";
 import { runCompile } from "./commands/compile";
 import { runWorkflowRunner, WORKFLOW_RUNNER_ARG } from "../runtime/kernel/node-workflow-runner";
+import { VERSION } from "../version";
 
 export async function main(argv: string[]): Promise<number> {
   const [, , cmd, ...rest] = argv;
@@ -30,7 +31,7 @@ export async function main(argv: string[]): Promise<number> {
     return 0;
   }
   if (cmd === "--version" || cmd === "-v") {
-    process.stdout.write("jaiph 0.9.4\n");
+    process.stdout.write(`jaiph ${VERSION}\n`);
     return 0;
   }
   try {
