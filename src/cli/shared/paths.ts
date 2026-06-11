@@ -3,6 +3,7 @@ import { basename, dirname, join, resolve, sep } from "node:path";
 import { parsejaiph } from "../../parser";
 import { resolveImportPath } from "../../transpiler";
 import { jaiphModule } from "../../types";
+import { JAIPH_SKILL_MD_BASE64, decodeEmbeddedAsset } from "../../runtime/embedded-assets";
 
 /**
  * When TMPDIR (or other tooling) places temp projects under `<repo>/.jaiph/tmp/...`,
@@ -110,6 +111,19 @@ export function resolveInstalledSkillPath(): string | undefined {
     join(process.cwd(), "docs", "jaiph-skill.md"),
   ];
   return candidates.find((path) => existsSync(path));
+}
+
+/**
+ * Resolve the SKILL.md body that `jaiph init` should write.
+ *
+ * Disk lookup wins (so a contributor overriding `JAIPH_SKILL_PATH` or running
+ * from a checkout still gets the live source), and the embedded copy is the
+ * fallback for the bun-compiled standalone binary, which has no sibling files.
+ */
+export function loadInstalledSkillContent(): string {
+  const path = resolveInstalledSkillPath();
+  if (path) return readFileSync(path, "utf8");
+  return decodeEmbeddedAsset(JAIPH_SKILL_MD_BASE64);
 }
 
 export function loadImportedModules(mainMod: jaiphModule, workspaceRoot?: string): Map<string, jaiphModule> {

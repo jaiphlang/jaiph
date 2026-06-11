@@ -1,5 +1,17 @@
 import { spawn, ChildProcess } from "node:child_process";
 import { join } from "node:path";
+import { WORKFLOW_RUNNER_ARG } from "./node-workflow-runner";
+
+/**
+ * True when the running process is the bun --compile standalone binary.
+ *
+ * In that mode `process.execPath` points at the jaiph binary itself, so a
+ * spawn must use `[jaiph, __workflow-runner, ...]` argv. Under node it points
+ * at the node interpreter and the spawn needs `[node, cli.js, __workflow-runner, ...]`.
+ */
+function isBunCompiledStandalone(): boolean {
+  return typeof (globalThis as { Bun?: unknown }).Bun !== "undefined";
+}
 
 /**
  * Build argv/env for executing a workflow via the Node runtime.
@@ -17,11 +29,15 @@ export function buildRunModuleLaunch(
   if (!sourceAbs) {
     throw new Error("JAIPH_SOURCE_ABS is required for workflow launch");
   }
-  const runnerPath = join(__dirname, "node-workflow-runner.js");
+  const runnerArgv = [WORKFLOW_RUNNER_ARG, metaFile, sourceAbs, builtScript, "default", ...runArgs];
+  const launchEnv = { ...env, JAIPH_META_FILE: metaFile };
+  if (isBunCompiledStandalone()) {
+    return { command: process.execPath, args: runnerArgv, env: launchEnv };
+  }
   return {
     command: process.execPath,
-    args: [runnerPath, metaFile, sourceAbs, builtScript, "default", ...runArgs],
-    env: { ...env, JAIPH_META_FILE: metaFile },
+    args: [join(__dirname, "..", "..", "cli.js"), ...runnerArgv],
+    env: launchEnv,
   };
 }
 

@@ -4,6 +4,7 @@ import { randomBytes } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join, resolve, dirname, relative } from "node:path";
 import type { RuntimeConfig } from "../types";
+import { OVERLAY_RUN_SH_BASE64, decodeEmbeddedAsset } from "./embedded-assets";
 
 /** Resolved Docker runtime config with defaults applied and env overrides merged. */
 export interface DockerRunConfig {
@@ -281,26 +282,30 @@ export function resolveImage(config: DockerRunConfig): string {
 /**
  * Container-side fuse-overlayfs setup loaded from runtime/overlay-run.sh.
  *
- * Resolves the file relative to package root — works from both source and dist
- * layouts, mirroring `resolveDefaultDockerImageTag` (package.json hops). Read
- * lazily so importing the docker module from non-Docker code paths does not
- * crash when the installation is incomplete.
+ * Resolves the script in this order, so the npm/disk install and the
+ * bun-compiled standalone binary both work:
+ *   1. Sibling `overlay-run.sh` next to this module (npm `dist/src/runtime/`).
+ *   2. Repo-root `runtime/overlay-run.sh` three hops up (dev `src/runtime/`).
+ *   3. Embedded base64 baked into the executable (bun --compile binary).
+ * Lazy so importing the docker module from non-Docker code paths never
+ * touches the asset.
  */
 let overlayScriptCache: string | undefined;
 
 export function loadOverlayScript(): string {
   if (overlayScriptCache !== undefined) return overlayScriptCache;
-  const scriptPath = existsSync(resolve(__dirname, "overlay-run.sh"))
-    ? resolve(__dirname, "overlay-run.sh")
-    : resolve(__dirname, "..", "..", "..", "runtime", "overlay-run.sh");
-  try {
-    overlayScriptCache = readFileSync(scriptPath, "utf8");
-    return overlayScriptCache;
-  } catch {
-    throw new Error(
-      `E_CLI_SETUP: runtime/overlay-run.sh not found at ${scriptPath} — the Jaiph installation is incomplete; reinstall with "jaiph use <version>"`,
-    );
+  const diskCandidates = [
+    resolve(__dirname, "overlay-run.sh"),
+    resolve(__dirname, "..", "..", "..", "runtime", "overlay-run.sh"),
+  ];
+  for (const scriptPath of diskCandidates) {
+    if (existsSync(scriptPath)) {
+      overlayScriptCache = readFileSync(scriptPath, "utf8");
+      return overlayScriptCache;
+    }
   }
+  overlayScriptCache = decodeEmbeddedAsset(OVERLAY_RUN_SH_BASE64);
+  return overlayScriptCache;
 }
 
 /**
