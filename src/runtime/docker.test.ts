@@ -482,7 +482,13 @@ test("writeOverlayScript: contains no in-container rsync/cp fallback (host handl
 // paths (jaiph compile/format) load this module transitively via shared imports
 // (e.g. CONTAINER_RUN_DIR in src/cli/shared/errors.ts) and must not crash with a
 // raw ENOENT when the installation is incomplete.
-test("loadOverlayScript: import does not read overlay-run.sh; writeOverlayScript throws E_CLI_SETUP when missing", () => {
+//
+// `writeOverlayScript` now falls back to the embedded base64 copy when both
+// on-disk candidates are absent, so the bun-compiled standalone binary works
+// without any sibling files. The "import does no I/O" property is still
+// asserted; the "throws when missing" half was removed when the embedded
+// fallback shipped.
+test("loadOverlayScript: import does not read overlay-run.sh; writeOverlayScript falls back to embedded copy", () => {
   const dockerPath = require.resolve("./docker");
   const dockerDir = dirname(dockerPath);
   const distOverlay = join(dockerDir, "overlay-run.sh");
@@ -505,16 +511,14 @@ test("loadOverlayScript: import does not read overlay-run.sh; writeOverlayScript
         console.error("FAIL: CONTAINER_RUN_DIR unexpected: " + mod.CONTAINER_RUN_DIR);
         process.exit(5);
       }
-      try {
-        mod.writeOverlayScript();
-        console.error("FAIL: expected throw");
+      const tmpPath = mod.writeOverlayScript();
+      const body = fs.readFileSync(tmpPath, "utf8");
+      if (!body.startsWith("#!/usr/bin/env bash")) {
+        console.error("FAIL: embedded overlay body did not start with bash shebang: " + body.slice(0, 60));
         process.exit(2);
-      } catch (e) {
-        const msg = String(e && e.message || e);
-        if (!msg.startsWith("E_CLI_SETUP")) { console.error("FAIL bad code: " + msg); process.exit(3); }
-        if (!msg.includes(dist) && !msg.includes(repo)) { console.error("FAIL missing path: " + msg); process.exit(4); }
-        console.log("OK");
       }
+      fs.rmSync(require("node:path").dirname(tmpPath), { recursive: true, force: true });
+      console.log("OK");
     } finally {
       if (distExists) fs.renameSync(distBak, dist);
       if (repoExists) fs.renameSync(repoBak, repo);

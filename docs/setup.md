@@ -34,7 +34,7 @@ This installs a small wrapper **`jaiph`** under `~/.local/bin` plus a **`~/.loca
 npm install -g jaiph
 ```
 
-The published npm package may **not** include `docs/jaiph-skill.md` next to the CLI the way the curl layout does — if **`jaiph init`** does not write `.jaiph/SKILL.md`, point **`JAIPH_SKILL_PATH`** at a skill file (for example the repo’s `docs/jaiph-skill.md`, or download the canonical raw skill: `https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md`).
+`jaiph init` always writes `.jaiph/SKILL.md`. The CLI prefers a disk copy (`JAIPH_SKILL_PATH`, install-relative `jaiph-skill.md`, or `docs/jaiph-skill.md` under the current working directory), and falls back to an **embedded copy baked into the build** so even an npm install without a sibling `docs/` and the bun-compiled standalone binary still produce a `SKILL.md`. Override it with **`JAIPH_SKILL_PATH`** when you want a custom skill (for example the repo’s `docs/jaiph-skill.md`, or download the canonical raw skill: `https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md`).
 
 Verify:
 

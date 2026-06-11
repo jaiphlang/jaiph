@@ -14,23 +14,6 @@ Process rules:
 
 ***
 
-## Make the standalone binary fully self-contained (self-spawn + embedded assets) #dev-ready
-
-**Context.** `npm run build:standalone` (`bun build --compile ./src/cli.ts --outfile ./dist/jaiph`) produces a single-file executable, but it is shipped nowhere and `jaiph run` is broken in it for two reasons:
-1. **Self-spawn.** `src/runtime/kernel/workflow-launch.ts:20-23` launches the workflow leader as `spawn(process.execPath, [join(__dirname, "node-workflow-runner.js"), …])`. Under node, `execPath` is the node binary and this executes the runner script. In a bun-compiled executable, `process.execPath` is the **jaiph binary itself**, which always runs its embedded entrypoint — the runner path is interpreted as CLI argv and the workflow leader never starts.
-2. **Disk-relative assets.** The CLI reads files relative to its installation at runtime: `runtime/overlay-run.sh` (`src/runtime/docker.ts`, used by Docker sandboxing) and `docs/jaiph-skill.md` (resolved by `jaiph init`, see `src/cli/commands/init.ts` and the install-relative lookup described in `docs/cli.md` ~line 344). A bare binary has no such siblings.
-
-**Change.**
-1. Add an internal argv dispatch: a reserved first argument (e.g. `__workflow-runner`) handled at the top of `main` (`src/cli/index.ts`) that runs the workflow-runner entrypoint with the remaining args. `workflow-launch.ts` spawns `process.execPath` with that argv form in a way that works identically for the tsc build (node + `cli.js __workflow-runner …`) and the compiled binary (`jaiph __workflow-runner …`). The reserved argument must be excluded from help/usage and rejected paths.
-2. Embed the assets: make `overlay-run.sh` and `jaiph-skill.md` available **inside** the executable — e.g. a build step that generates TS modules from the files (works for both tsc and bun builds), or bun file embedding with a disk fallback for the node build. Keep behavior identical for the tsc build. (Compose with the earlier queue task "Lazy-load the Docker overlay script": the `E_CLI_SETUP` error path remains for the node build when the file is genuinely missing; the binary never hits it.)
-3. The binary must work from any directory with no repo checkout and no node/npm/git on PATH (git is only needed at runtime by workflows that call git, not by the CLI itself).
-
-**Acceptance criteria.**
-- A CI-runnable check (script or e2e case) builds `dist/jaiph` and, in a clean temp dir with `PATH` stripped of node/npm, runs at minimum: `jaiph --version`, `jaiph init`, `jaiph compile` of a sample, and `jaiph run` of a deterministic sample workflow to completion.
-- `jaiph init` in that environment writes `SKILL.md` from the embedded copy.
-- The existing e2e suite passes unchanged for the tsc build (`npm run test:e2e`).
-- Unit test for the argv dispatch: `__workflow-runner` routes to the runner in both build forms (assert on the tsc build; binary covered by the e2e check above) and does not appear in `--help` output.
-
 ## Release workflow: build and publish per-platform binaries on `v*` tags #dev-ready
 
 **Context.** CI lives in `.github/workflows/ci.yml` (push CI; its docker-publish job already triggers on `v*` tags) and `nightly-engineer.yml`. There is no release pipeline: nothing builds or publishes the standalone binary (`npm run build:standalone`, bun-compiled). The installer rewrite (separate queue task) will download release assets named by a fixed contract.

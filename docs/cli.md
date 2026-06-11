@@ -343,7 +343,7 @@ Creates:
 
 - `.jaiph/.gitignore` — lists `runs` and `tmp`. If the file already exists and does not match this exact list, `jaiph init` exits with a non-zero status.
 - `.jaiph/bootstrap.jh` — canonical bootstrap workflow; made executable. The template uses a triple-quoted multiline prompt body (`prompt """ ... """`) so the generated file parses and compiles as valid Jaiph. It asks the agent to scaffold workflows under `.jaiph/` and ends by logging a summary (`WHAT CHANGED` + `WHY`). Docker sandboxing uses the default `ghcr.io/jaiphlang/jaiph-runtime` image unless you set `runtime.docker_image` or `JAIPH_DOCKER_IMAGE`.
-- `.jaiph/SKILL.md` — copied when the CLI can resolve a skill markdown file: if **`JAIPH_SKILL_PATH`** is set **and** that path exists, it wins; otherwise the CLI tries install-relative paths (`jaiph-skill.md` beside the packaged tree, then `docs/jaiph-skill.md` beside the package), then **`docs/jaiph-skill.md` under the current working directory**. If none of these exist, `SKILL.md` is not written and a note is printed.
+- `.jaiph/SKILL.md` — copied from the skill markdown shipped with this jaiph build. Resolution order: if **`JAIPH_SKILL_PATH`** is set **and** that path exists, it wins; otherwise the CLI tries install-relative paths (`jaiph-skill.md` beside the packaged tree, then `docs/jaiph-skill.md` beside the package), then **`docs/jaiph-skill.md` under the current working directory**, and finally an **embedded copy baked into the binary** (used by the bun-compiled standalone). So `jaiph init` always writes `SKILL.md`; there is no "skip and warn" path.
 
 ## `jaiph install`
 
@@ -485,4 +485,4 @@ For overlay vs copy workspace mode, mounts, and stderr wiring, see [Sandboxing](
 
 ### `jaiph init`
 
-- `JAIPH_SKILL_PATH` — path to the skill markdown copied to `.jaiph/SKILL.md` when running `jaiph init`. The file **must exist** at this path; otherwise the variable is ignored and the CLI falls back to the same install-relative and `docs/jaiph-skill.md` (cwd) search described under [`jaiph init`](#jaiph-init).
+- `JAIPH_SKILL_PATH` — path to the skill markdown copied to `.jaiph/SKILL.md` when running `jaiph init`. The file **must exist** at this path; otherwise the variable is ignored and the CLI falls back to the same install-relative, `docs/jaiph-skill.md` (cwd), and embedded-copy search described under [`jaiph init`](#jaiph-init).

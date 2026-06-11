@@ -1,7 +1,7 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { colorPalette } from "../shared/errors";
-import { resolveInstalledSkillPath } from "../shared/paths";
+import { loadInstalledSkillContent } from "../shared/paths";
 import { hasHelpFlag } from "../shared/usage";
 
 const INIT_USAGE =
@@ -95,12 +95,7 @@ export function runInit(rest: string[]): number {
   }
   chmodSync(bootstrapPath, 0o755);
 
-  const installedSkillPath = resolveInstalledSkillPath();
-  let wroteSkill = false;
-  if (installedSkillPath) {
-    writeFileSync(skillPath, readFileSync(installedSkillPath, "utf8"), "utf8");
-    wroteSkill = true;
-  }
+  writeFileSync(skillPath, loadInstalledSkillContent(), "utf8");
 
   process.stdout.write(`${palette.green}✓ Initialized ${join(".jaiph", "bootstrap.jh")}${palette.reset}\n`);
   if (createdGitignore) {
@@ -113,13 +108,7 @@ export function runInit(rest: string[]): number {
   if (!createdBootstrap) {
     process.stdout.write(`${palette.dim}▸ Note: bootstrap file already existed; left unchanged.${palette.reset}\n`);
   }
-  if (wroteSkill) {
-    process.stdout.write(`${palette.green}✓ Wrote ${join(".jaiph", "SKILL.md")} from installation${palette.reset}\n`);
-  } else {
-    process.stdout.write(
-      `${palette.dim}▸ Note: skill file not found in installation (${join(".jaiph", "SKILL.md")} not written). Set JAIPH_SKILL_PATH and run again.${palette.reset}\n`,
-    );
-  }
+  process.stdout.write(`${palette.green}✓ Wrote ${join(".jaiph", "SKILL.md")} from installation${palette.reset}\n`);
   process.stdout.write("\n");
   process.stdout.write("Try:\n");
   process.stdout.write("  ./.jaiph/bootstrap.jh\n");

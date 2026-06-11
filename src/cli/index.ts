@@ -8,9 +8,23 @@ import { runUse } from "./commands/use";
 import { runFormat } from "./commands/format";
 import { runInstall } from "./commands/install";
 import { runCompile } from "./commands/compile";
+import { runWorkflowRunner, WORKFLOW_RUNNER_ARG } from "../runtime/kernel/node-workflow-runner";
 
 export async function main(argv: string[]): Promise<number> {
   const [, , cmd, ...rest] = argv;
+  // Internal self-spawn dispatch: the bun-compiled binary spawns itself with
+  // `__workflow-runner` to enter the workflow leader. Must run before help,
+  // version, or file-shorthand checks so the reserved marker never leaks into
+  // user-visible paths. Excluded from `printUsage` for the same reason.
+  if (cmd === WORKFLOW_RUNNER_ARG) {
+    try {
+      return await runWorkflowRunner(rest);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      process.stderr.write(`jaiph node runner: ${message}\n`);
+      return 1;
+    }
+  }
   if (!cmd || cmd === "--help" || cmd === "-h") {
     printUsage();
     return 0;
