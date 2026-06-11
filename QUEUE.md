@@ -14,17 +14,6 @@ Process rules:
 
 ***
 
-## Document the Docker env-var allowlist in sandboxing docs #dev-ready
-
-**Context.** `isEnvAllowed()` (`src/runtime/docker.ts:479`) forwards only environment variables matching `ENV_ALLOW_PREFIXES` (see the constant near that function — e.g. `JAIPH_`, agent/LLM-related prefixes) into the container, excluding `JAIPH_DOCKER_*`. `docs/sandboxing.md` does not mention this filtering, so users cannot tell why their custom env vars vanish inside sandboxed runs.
-
-**Change.** Add a "Environment forwarding" section to `docs/sandboxing.md`: list the exact allow prefixes and the `JAIPH_DOCKER_*` exclusion (read them from the constants in `src/runtime/docker.ts` — do not guess), state that all other host variables are **not** forwarded, and show the workaround (export inside a `script` body, or bake values into the image). Cross-link from `docs/configuration.md` ("Inspecting effective config at runtime") and `docs/cli.md` (Docker env var section).
-
-**Acceptance criteria.**
-- `docs/sandboxing.md` contains the new section with the prefix list matching the source constants verbatim (reviewer check: diff the doc list against `ENV_ALLOW_PREFIXES` / `ENV_ALLOW_EXCLUDE_PREFIX` in `src/runtime/docker.ts`).
-- The docs-parity workflow (`.jaiph/docs_parity.jh`), if run, raises no contradiction between the section and the implementation.
-- Cross-links added in the two referenced docs.
-
 ## Make the standalone binary fully self-contained (self-spawn + embedded assets) #dev-ready
 
 **Context.** `npm run build:standalone` (`bun build --compile ./src/cli.ts --outfile ./dist/jaiph`) produces a single-file executable, but it is shipped nowhere and `jaiph run` is broken in it for two reasons:

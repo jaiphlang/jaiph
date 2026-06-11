@@ -471,6 +471,8 @@ These variables apply to `jaiph run` and workflow execution. Variables marked **
 
 In-file `runtime.docker_enabled` is **not** supported (parse error); use the variables above instead.
 
+Only environment variables matching a fixed allow-prefix list (`JAIPH_*` except `JAIPH_DOCKER_*`, plus `ANTHROPIC_*`, `CURSOR_*`, `CLAUDE_*`) cross into the container — everything else is dropped before the run starts. See [Sandboxing — Environment variable forwarding](sandboxing.md#environment-variable-forwarding) for the full list and supported workarounds.
+
 For overlay vs copy workspace mode, mounts, and stderr wiring, see [Sandboxing](sandboxing.md).
 
 ### Install and `jaiph use`
