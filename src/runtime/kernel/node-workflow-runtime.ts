@@ -35,6 +35,10 @@ export type { MockBodyDef } from "./runtime-mock";
 
 const HANDLE_PREFIX = "__JAIPH_HANDLE__";
 
+export function formatInvalidAsyncHandleError(handleId: string): string {
+  return `invalid async handle "${handleId}" — the handle was never created or was already consumed`;
+}
+
 const DEFAULT_INBOX_DISPATCH_LIMIT = 1000;
 
 function resolveInboxDispatchLimit(env: NodeJS.ProcessEnv): number {
@@ -119,7 +123,9 @@ export class NodeWorkflowRuntime {
   /** Resolve a handle to its StepResult. Caches the result for subsequent reads. */
   private async resolveHandleResult(handleId: string): Promise<StepResult> {
     const handle = this.handleRegistry.get(handleId);
-    if (!handle) return { status: 1, output: "", error: "invalid handle" };
+    if (!handle) {
+      return { status: 1, output: "", error: formatInvalidAsyncHandleError(handleId) };
+    }
     if (handle.resolved) return handle.resolved;
     const result = await handle.promise;
     handle.resolved = result;
