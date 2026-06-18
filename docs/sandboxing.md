@@ -70,6 +70,8 @@ Docker is **on by default** for both local development and CI. To run on the hos
 
 > **Credential warning:** Docker sandboxing **does not isolate agent credentials**. `ANTHROPIC_*`, `CLAUDE_*`, and `CURSOR_*` env vars are forwarded into the container and the default network allows outbound access. A malicious script can read these from its environment and exfiltrate them. Set `runtime.docker_network = "none"` for workflows that should not make external calls.
 
+> **Credential pre-flight.** Because interactive CLI logins (e.g. `cursor-agent login`, `claude` interactive auth) do **not** cross the container boundary — the container has a fresh `$HOME` and no Keychain — Jaiph runs a host-side [credential pre-flight](configuration.md#credential-pre-flight) before launching the container. Missing credentials for the backend(s) the entry file declares are a **hard error** (`E_AGENT_CREDENTIALS`, non-zero exit, no container spawned) in any Docker mode including `inplace`. The check evaluates the **post-forwarding** environment via `isEnvAllowed`, so a credential present on the host but stripped by the allowlist (e.g. a non-`JAIPH_`/`ANTHROPIC_`/`CLAUDE_`/`CURSOR_`-prefixed name) is treated as missing.
+
 **Precedence (two rows, env only):**
 
 | Check | Result |
