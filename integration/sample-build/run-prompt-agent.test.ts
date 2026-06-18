@@ -305,6 +305,10 @@ test("jaiph run agent.backend = claude without claude in PATH fails with clear e
       ...process.env,
       JAIPH_DOCKER_ENABLED: "false",
       PATH: `${nodeOnlyBin}:/nonexistent`,
+      // Disable prompt-retry backoff for this single-attempt failure assertion;
+      // otherwise the default schedule (15s → 1m → 10m → 30m → 2h) would
+      // re-run the missing-claude pre-flight five more times.
+      JAIPH_PROMPT_RETRY: "0",
     };
     delete runEnv.JAIPH_AGENT_BACKEND;
     const runResult = spawnSync("node", [cliPath, "run", filePath], {

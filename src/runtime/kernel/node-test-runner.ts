@@ -152,6 +152,14 @@ async function runTestBlock(
           JAIPH_RUNS_DIR: join(tmpDir, ".jaiph", "runs"),
           JAIPH_SCRIPTS: scriptsDir,
         };
+        // `jaiph test` is meant to be deterministic and fast: a prompt that
+        // returns non-zero (e.g. no matching mock arm) should fail the test
+        // immediately rather than wait through the production retry schedule
+        // (~2h41m). Tests that intentionally exercise the retry behaviour can
+        // override this by setting JAIPH_PROMPT_RETRY explicitly.
+        if (env.JAIPH_PROMPT_RETRY === undefined) {
+          env.JAIPH_PROMPT_RETRY = "0";
+        }
         if (mockArmsJson) {
           env.JAIPH_MOCK_PROMPT_ARMS_JSON = mockArmsJson;
           delete env.JAIPH_MOCK_RESPONSES_JSON;
