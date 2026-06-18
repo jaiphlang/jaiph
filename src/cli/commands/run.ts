@@ -66,6 +66,7 @@ import {
 } from "../run/progress";
 import { loadMergedHooks, registerHooksSubscriber } from "../run/hooks";
 import { resolveRuntimeEnv, applySandboxFlags } from "../run/env";
+import { preflightAgentCredentials } from "../run/preflight-credentials";
 import { colorize, formatJaiphRunningBannerLines } from "../run/display";
 import { createRunEmitter } from "../run/emitter";
 import {
@@ -144,6 +145,21 @@ export async function runWorkflow(rest: string[]): Promise<number> {
       return 1;
     }
     const dockerConfigForBanner = resolveDockerConfig(mod.metadata?.runtime, runtimeEnv);
+    const credPreflight = preflightAgentCredentials({
+      mod,
+      inputAbs,
+      runtimeEnv,
+      dockerEnabled: dockerConfigForBanner.enabled,
+    });
+    for (const w of credPreflight.warnings) {
+      process.stderr.write(`${w}\n`);
+    }
+    if (credPreflight.errors.length > 0) {
+      for (const e of credPreflight.errors) {
+        process.stderr.write(`${e}\n`);
+      }
+      return 1;
+    }
     if (dockerConfigForBanner.enabled) {
       checkDockerAvailable();
       prepareImage(dockerConfigForBanner);

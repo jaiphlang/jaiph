@@ -62,6 +62,8 @@ The boolean sandbox flags (`--inplace`, `--unsafe`, `--yes`) **set the correspon
 
 **Asymmetry with `jaiph test`.** These flags only affect `jaiph run`. `jaiph test` does not parse them. The underlying env vars (`JAIPH_INPLACE`, `JAIPH_UNSAFE`, `JAIPH_INPLACE_YES`) still apply to all entry points if you set them in the environment — the flags are an ergonomic surface for `run`, not a global override.
 
+**Credential pre-flight.** After the module graph, effective config, and Docker mode are resolved but **before** the workflow runner (or container) is launched, the host CLI runs a credential pre-flight keyed to the backend(s) the entry `.jh` file declares (module-level and per-workflow `config`) plus the effective default. Missing credentials produce either a hard error (`E_AGENT_CREDENTIALS`, non-zero exit, nothing spawned) or a warning — depending on backend and Docker mode. Every message names the backend, the model when `agent.default_model` is set, the entry `.jh` file, and the config scope that selected the backend. `jaiph run --raw` (the embedded inner path) does not run the pre-flight. See [Configuration — Credential pre-flight](configuration.md#credential-pre-flight).
+
 **Examples:**
 
 ```bash
@@ -530,13 +532,15 @@ These variables apply to `jaiph run` and workflow execution. Variables marked **
 
 **Agent and prompt configuration:**
 
-- `JAIPH_AGENT_BACKEND` — prompt backend: `cursor` (default), `claude`, or `codex`. Overrides in-file `agent.backend`. When set to `claude`, the Anthropic Claude CLI must be on PATH. When set to `codex`, `OPENAI_API_KEY` must be set. See [Configuration](configuration.md).
+- `JAIPH_AGENT_BACKEND` — prompt backend: `cursor` (default), `claude`, or `codex`. Overrides in-file `agent.backend`. When set to `claude`, the Anthropic Claude CLI must be on PATH. Before launch, the host CLI runs a [credential pre-flight](configuration.md#credential-pre-flight) for the entry file's declared backend(s) plus this effective default; missing credentials hard-fail with `E_AGENT_CREDENTIALS` under Docker (and for `codex` on host) or warn-only for `claude` / `cursor` on host. See [Configuration](configuration.md).
 - `JAIPH_AGENT_MODEL` — default model for `prompt` steps (overrides in-file `agent.default_model`).
 - `JAIPH_AGENT_COMMAND` — command for the Cursor backend (e.g. `cursor-agent`; overrides in-file `agent.command`).
 - `JAIPH_AGENT_TRUSTED_WORKSPACE` — trusted workspace directory for Cursor backend `--trust`. Defaults to project root.
 - `JAIPH_AGENT_CURSOR_FLAGS` — extra flags for Cursor backend (string, split on whitespace).
 - `JAIPH_AGENT_CLAUDE_FLAGS` — extra flags for Claude backend (string, split on whitespace).
-- `OPENAI_API_KEY` — API key for the codex backend. Required when `agent.backend` is `"codex"`.
+- `OPENAI_API_KEY` — API key for the codex backend. Required when `agent.backend` is `"codex"` (the host pre-flight hard-fails with `E_AGENT_CREDENTIALS` on both host and Docker when the key is missing). See [Configuration — Credential pre-flight](configuration.md#credential-pre-flight).
+- `ANTHROPIC_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN` — credentials for the **claude** backend (either one is sufficient; the latter is produced by `claude setup-token`). On host runs a missing credential is a warning (a stored Claude CLI login may still work); under Docker it is a hard error (`E_AGENT_CREDENTIALS`) because the CLI login cannot cross the container boundary. See [Configuration — Credential pre-flight](configuration.md#credential-pre-flight).
+- `CURSOR_API_KEY` — credential for the **cursor** backend. On host runs a missing key is a warning (a stored `cursor-agent login` may still work); under Docker it is a hard error (`E_AGENT_CREDENTIALS`). See [Configuration — Credential pre-flight](configuration.md#credential-pre-flight).
 - `JAIPH_CODEX_API_URL` — endpoint URL for the codex backend (default: `https://api.openai.com/v1/chat/completions`). Use this to point at a compatible proxy or self-hosted endpoint.
 - `JAIPH_PROMPT_RETRY` — set to `0` to **disable** the prompt-retry backoff (one attempt, fail on transport failure). When unset, the runtime retries transport failures (spawn failure, non-zero backend exit, codex HTTP error) on the default schedule `15s → 1m → 10m → 30m → 2h` (six total attempts, ~2h41m wall-clock). Deterministic post-processing failures (invalid JSON, schema validation) are never retried. `jaiph test` defaults this to `0` so mock failures fail fast. See [Configuration — Prompt retry on transport failure](configuration.md#prompt-retry-on-transport-failure).
 - `JAIPH_PROMPT_RETRY_DELAYS` — override the prompt-retry delay schedule with a comma-separated list of non-negative integer milliseconds (e.g. `"500,1000,5000"` → three retries totalling 6.5s). Invalid entries (non-numeric, negative, empty list) abort the prompt with a clear error rather than silently falling back to the default. Resolved once per run; the same validated schedule applies to every `prompt` step.

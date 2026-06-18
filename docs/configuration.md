@@ -219,11 +219,31 @@ When you `ensure` a rule from **another** module, the runtime merges that module
 
 `prompt` steps use one of three backends:
 
-- **cursor** (default) — runs `agent.command` (default `cursor-agent`) with stream-json output.
-- **claude** — runs `claude` on `PATH`. If the executable is missing, Jaiph reports an error and exits.
-- **codex** — calls the OpenAI Chat Completions API directly via HTTP. Requires `OPENAI_API_KEY` in the environment. If the key is missing, Jaiph reports an actionable error and exits.
+- **cursor** (default) — runs `agent.command` (default `cursor-agent`) with stream-json output. Authenticates with `CURSOR_API_KEY`, or — on **host** runs only — an interactive `cursor-agent login` stored on disk.
+- **claude** — runs `claude` on `PATH`. If the executable is missing, Jaiph reports an error and exits. Authenticates with `ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN` (obtained via `claude setup-token`); on **host** runs an interactive `claude` login (`~/.claude` / macOS Keychain) also works.
+- **codex** — calls the OpenAI Chat Completions API directly via HTTP. Requires `OPENAI_API_KEY` in the environment. There is no CLI-login fallback.
 
 Backend-specific flags come from `agent.cursor_flags` / `agent.claude_flags` (or the matching env vars). The codex backend has no CLI flags; configure it with `OPENAI_API_KEY` and optionally `JAIPH_CODEX_API_URL` (defaults to `https://api.openai.com/v1/chat/completions`). There is no per-`prompt` backend override; the effective backend is whatever the config stack resolves to when the step runs.
+
+### Credential pre-flight
+
+Before `jaiph run` spawns the workflow runner (or the Docker container), the host CLI runs a **credential pre-flight** keyed to the backend(s) the entry file selects. The goal is to fail fast with a message that names the **backend**, the **model** (when `agent.default_model` is set), and **which `.jh` file and config scope** picked the backend — instead of letting the workflow start and only blow up at the first `prompt` step.
+
+**What gets checked.** The pre-flight collects the distinct backend(s) declared in the entry file's **module-level** `config` block and each of its **workflow-level** `config` blocks, plus the effective default (`JAIPH_AGENT_BACKEND` env, or `cursor` when unset). Deeper per-import-module overrides resolved at runtime are **not** followed — entry-file scan is the contract. If the entry file neither declares an explicit backend nor uses any `prompt` step, the pre-flight is skipped entirely (so a workflow with no agent work does not get a false-positive warning for an unused default backend).
+
+**Per-backend rule.** The check looks at the env that will actually reach the agent (`runtimeEnv` on host, or the **forwarded allowlisted** env when Docker is on — a credential present on the host but not on the [allowlist](sandboxing.md#environment-variable-forwarding) is treated as missing):
+
+| Backend | Required credential | Host run (no Docker) | Docker run (any mode incl. `inplace`) |
+|---------|---------------------|----------------------|---------------------------------------|
+| `codex` | `OPENAI_API_KEY` | **hard error** (no login path) | **hard error** |
+| `claude` | `ANTHROPIC_API_KEY` **or** `CLAUDE_CODE_OAUTH_TOKEN` | **warn** (a stored CLI login may still work) | **hard error** (CLI login does not cross the container boundary) |
+| `cursor` | `CURSOR_API_KEY` | **warn** (a stored `cursor-agent login` may still work) | **hard error** |
+
+Hard errors use the stable code **`E_AGENT_CREDENTIALS`**, exit non-zero, and **no runner or container is launched**. Warnings go to stderr and the run proceeds.
+
+**Message content.** Every error and warning names: the backend; the model when `agent.default_model` is set; the entry `.jh` file path; the config scope that selected the backend (`module config`, `workflow <name>`, `JAIPH_AGENT_BACKEND env`, or `default`); and the concrete remedy — e.g. `Run \`claude setup-token\` and export CLAUDE_CODE_OAUTH_TOKEN, or set ANTHROPIC_API_KEY.` For Docker runs the message also notes the var must be set on the **host** so it gets forwarded into the container.
+
+**Defense in depth.** The codex backend keeps its own runtime guard inside `runCodexBackend`, but the pre-flight catches the missing-key case first with the better message. The `--raw` path on the host (used by `jaiph run --raw` and by the in-container inner process under Docker) does **not** run the pre-flight — that path is the embedded inner runner, not a user-facing CLI launch.
 
 ### Custom agent commands
 
@@ -282,7 +302,7 @@ export OPENAI_API_KEY="sk-..."
 jaiph run main.jh
 ```
 
-The codex backend streams responses from the OpenAI API and supports structured `returns` schemas like the other backends. The default model is `gpt-4o` when `agent.default_model` is not set. To use a custom-compatible endpoint, set `JAIPH_CODEX_API_URL`.
+`OPENAI_API_KEY` is required on both host and Docker runs — the [credential pre-flight](#credential-pre-flight) hard-fails the launch with `E_AGENT_CREDENTIALS` before any runner or container starts when the key is missing. The codex backend streams responses from the OpenAI API and supports structured `returns` schemas like the other backends. The default model is `gpt-4o` when `agent.default_model` is not set. To use a custom-compatible endpoint, set `JAIPH_CODEX_API_URL`.
 
 ### Model resolution
 
