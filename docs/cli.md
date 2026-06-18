@@ -538,6 +538,8 @@ These variables apply to `jaiph run` and workflow execution. Variables marked **
 - `JAIPH_AGENT_CLAUDE_FLAGS` — extra flags for Claude backend (string, split on whitespace).
 - `OPENAI_API_KEY` — API key for the codex backend. Required when `agent.backend` is `"codex"`.
 - `JAIPH_CODEX_API_URL` — endpoint URL for the codex backend (default: `https://api.openai.com/v1/chat/completions`). Use this to point at a compatible proxy or self-hosted endpoint.
+- `JAIPH_PROMPT_RETRY` — set to `0` to **disable** the prompt-retry backoff (one attempt, fail on transport failure). When unset, the runtime retries transport failures (spawn failure, non-zero backend exit, codex HTTP error) on the default schedule `15s → 1m → 10m → 30m → 2h` (six total attempts, ~2h41m wall-clock). Deterministic post-processing failures (invalid JSON, schema validation) are never retried. `jaiph test` defaults this to `0` so mock failures fail fast. See [Configuration — Prompt retry on transport failure](configuration.md#prompt-retry-on-transport-failure).
+- `JAIPH_PROMPT_RETRY_DELAYS` — override the prompt-retry delay schedule with a comma-separated list of non-negative integer milliseconds (e.g. `"500,1000,5000"` → three retries totalling 6.5s). Invalid entries (non-numeric, negative, empty list) abort the prompt with a clear error rather than silently falling back to the default. Resolved once per run; the same validated schedule applies to every `prompt` step.
 
 **Execution behavior:**
 

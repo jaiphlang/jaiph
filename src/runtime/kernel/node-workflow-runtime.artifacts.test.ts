@@ -194,6 +194,10 @@ test("NodeWorkflowRuntime: failed prompt preserves backend stderr in artifacts a
       JAIPH_AGENT_COMMAND: fakeAgent,
       JAIPH_AGENT_MODEL: "gpt-5.4",
       JAIPH_WORKSPACE: root,
+      // This test exercises single-attempt stderr capture; the prompt-retry
+      // backoff schedule (default 15s → 1m → 10m → 30m → 2h) is orthogonal
+      // and is covered by node-workflow-runtime.prompt-retry.test.ts.
+      JAIPH_PROMPT_RETRY: "0",
     };
     const runtime = new NodeWorkflowRuntime(graph, { env, cwd: root, suppressLiveEvents: true });
     const prevSummaryEnv = process.env.JAIPH_RUN_SUMMARY_FILE;

@@ -304,6 +304,40 @@ When a `prompt` step runs, Jaiph resolves the effective model using this order:
 
 **No-model troubleshooting.** If the backend rejects the auto-selected default, set **`agent.default_model`** (all backends). For **cursor** and **claude** you can also pass **`--model <name>`** in **`agent.cursor_flags`** / **`agent.claude_flags`**; **codex** has no flag channel — use **`agent.default_model`** or env **`JAIPH_AGENT_MODEL`** only.
 
+### Prompt retry on transport failure
+
+When a `prompt` step's backend invocation fails as **transport** — non-zero exit from the cursor/claude/codex process (spawn failure, backend non-zero exit, codex HTTP error) — `NodeWorkflowRuntime` retries the same prompt on an **escalating backoff schedule** before giving up. The retry happens **below** any `recover` / `catch` clause: backoff is exhausted first, then the failure propagates to the enclosing recover loop or, if there is none, aborts the step as today.
+
+**Default schedule.** Five retry delays (six total attempts):
+
+| Attempt | Delay before this attempt |
+|---------|---------------------------|
+| 1 | _(none — initial call)_ |
+| 2 | 15s |
+| 3 | 1m |
+| 4 | 10m |
+| 5 | 30m |
+| 6 | 2h |
+
+Total wall-clock for a full failure run is **~2h41m**. Under Docker sandboxing, the container timeout (`runtime.docker_timeout_seconds`, default `14400` = 4h) caps this; raise it via `JAIPH_DOCKER_TIMEOUT` or the in-file key when a workflow needs the full retry budget inside a container.
+
+**What is and is not retried.** Only transport failure is retried. Deterministic post-processing failures in the same prompt — **invalid JSON** (`prompt returned invalid JSON`) and **schema validation** (`prompt response failed schema validation`) — fail on the first attempt and return `{ ok: false }` immediately. Retrying them would just repeat the same parse with the same captured output.
+
+**Each attempt is a fresh call.** The runtime emits its own `PROMPT_START` / `PROMPT_END` (and surrounding `STEP_START` / `STEP_END`) pair for every attempt — they appear in `run_summary.jsonl` and on the live `__JAIPH_EVENT__` stream. The captured value, `out_content`, and step output reflect the **successful** attempt; output from earlier failed attempts is recorded in their own step artifacts.
+
+**Logging.** Every failed attempt and the final termination emit a `LOGERR` line through the same facility as `logerr` (the live stderr event plus a durable `run_summary.jsonl` record). Retry messages name the attempt number (`attempt N/total`), the backend, a single-line error summary, and — for a retry — the human delay before the next attempt (`retrying in 15s` / `retrying in 2h`). Termination messages note that retries are exhausted before the step fails. Logging happens regardless of whether the step is wrapped in `recover` / `catch`.
+
+**Cancellation.** The backoff sleep is interruptible: a workflow abort cancels the pending wait and exits the retry loop immediately without further backend calls. SIGINT / SIGTERM at the CLI propagates through normal Node termination.
+
+**Configuration.** Both knobs are environment-only — there is no in-file key — and resolve once per run (the first prompt validates the value; later prompts reuse the cached schedule):
+
+| Variable | Effect |
+|----------|--------|
+| `JAIPH_PROMPT_RETRY=0` | Disable retry entirely: one attempt, fail on transport failure exactly as before this feature. The sleep function is never called. |
+| `JAIPH_PROMPT_RETRY_DELAYS` | Override the default schedule with a comma-separated list of non-negative integer milliseconds (e.g. `"500,1000,5000"`). Invalid entries (non-numeric, negative, empty list) abort the prompt with a clear error rather than silently falling back to the default. |
+
+`jaiph test` sets `JAIPH_PROMPT_RETRY=0` by default so failed mock prompts surface immediately instead of waiting through the production backoff. Tests that intentionally exercise retry behavior can set the variable explicitly. See [Testing — Environment variables](testing.md#environment-variables).
+
 ## Testing with `jaiph test`
 
 `jaiph test` never calls `resolveRuntimeEnv`. For a `test_run_workflow` step, the test runner builds a child `env` by **spreading `process.env`**, then sets `JAIPH_TEST_MODE`, `JAIPH_WORKSPACE`, `JAIPH_RUNS_DIR` (an ephemeral test path), `JAIPH_SCRIPTS`, and mock fields (`JAIPH_MOCK_RESPONSES_FILE` and/or `JAIPH_MOCK_DISPATCH_SCRIPT`) as needed. There is no CLI pass that pre-merges in-file `config` into that env; **`JAIPH_*_LOCKED` flags are not set** unless you export them in the parent environment yourself.
@@ -332,12 +366,14 @@ Quick reference for all in-file keys and their environment variable equivalents:
 | `module.version` | _(no env override)_ |
 | `module.description` | _(no env override)_ |
 
-There is **no in-file key** for the Codex HTTP endpoint or API key. Use environment only:
+There is **no in-file key** for the Codex HTTP endpoint or API key, or for prompt-retry behavior. Use environment only:
 
 | Purpose | Environment variable |
 |---------|----------------------|
 | OpenAI-compatible API key (required for **codex**) | `OPENAI_API_KEY` |
 | OpenAI-compatible chat-completions URL override | `JAIPH_CODEX_API_URL` |
+| Disable prompt-retry backoff (`0` → one attempt, fail on transport failure) | `JAIPH_PROMPT_RETRY` |
+| Override the prompt-retry delay schedule (comma-separated ms) | `JAIPH_PROMPT_RETRY_DELAYS` |
 
 ## Inspecting effective config at runtime
 

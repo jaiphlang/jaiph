@@ -30,6 +30,13 @@ import {
 import { RuntimeEventEmitter, type Frame } from "./runtime-event-emitter";
 import { executeMockBodyDef, type MockBodyDef, type StepResult } from "./runtime-mock";
 import { linesOfDelimitedString } from "../string-lines";
+import {
+  defaultPromptSleep,
+  formatRetryDelay,
+  isPromptRetryAbortError,
+  resolvePromptRetryDelays,
+  summarizeError,
+} from "./prompt-retry";
 
 export type { MockBodyDef } from "./runtime-mock";
 
@@ -100,6 +107,17 @@ export class NodeWorkflowRuntime {
   private readonly mockBodies: Map<string, MockBodyDef>;
   private handleRegistry = new Map<string, AsyncHandle>();
   private handleIdCounter = 0;
+  private readonly abortController = new AbortController();
+  private readonly sleep: (ms: number, signal: AbortSignal) => Promise<void>;
+  /**
+   * Retry schedule for transport-failure backoff in `runPromptStep`. Resolved
+   * lazily from constructor opt or env on first prompt; cached thereafter so
+   * the same workflow run uses a single (validated) schedule and a parse
+   * failure does not get re-thrown per attempt.
+   */
+  private cachedPromptRetryDelays: number[] | undefined;
+  private cachedPromptRetryError: Error | undefined;
+  private readonly promptRetryDelaysOverride: readonly number[] | undefined;
 
   private getFrameStack(): Frame[] {
     return this.asyncFrameStack.getStore() ?? this.stack;
@@ -204,12 +222,27 @@ export class NodeWorkflowRuntime {
        * with `node --test` reporter output.
        */
       suppressLiveEvents?: boolean;
+      /**
+       * Injectable backoff sleep. Tests pass a stub to record requested delays
+       * and resolve immediately; production uses `defaultPromptSleep` which
+       * races setTimeout against the runtime's AbortSignal.
+       */
+      sleep?: (ms: number, signal: AbortSignal) => Promise<void>;
+      /**
+       * Override the prompt-retry delay schedule. When set, takes precedence
+       * over `JAIPH_PROMPT_RETRY` / `JAIPH_PROMPT_RETRY_DELAYS`. Empty array
+       * disables retries (1 attempt total). Used by tests to assert the full
+       * sequence with zero real wall-clock wait.
+       */
+      promptRetryDelays?: readonly number[];
     },
   ) {
     this.graph = graph;
     this.env = opts.env ?? process.env;
     this.cwd = opts.cwd ?? process.cwd();
     this.mockBodies = opts.mockBodies ?? new Map();
+    this.sleep = opts.sleep ?? defaultPromptSleep;
+    this.promptRetryDelaysOverride = opts.promptRetryDelays;
     this.runId = this.env.JAIPH_RUN_ID || randomUUID();
     const source = this.env.JAIPH_SOURCE_FILE ?? basename(graph.entryFile);
     const date = new Date();
@@ -235,6 +268,45 @@ export class NodeWorkflowRuntime {
       suppressLiveEvents: opts.suppressLiveEvents,
     });
     this.startHeartbeat();
+  }
+
+  /**
+   * Signal cooperative cancellation. Aborts any in-flight prompt-retry sleep
+   * so the retry loop exits without further `executePrompt` calls. Exposed
+   * for in-process hosts and tests; the runner process itself terminates on
+   * SIGINT/SIGTERM by Node default, which is sufficient for the CLI path.
+   */
+  abort(): void {
+    this.abortController.abort();
+  }
+
+  isAborted(): boolean {
+    return this.abortController.signal.aborted;
+  }
+
+  /**
+   * Resolve and cache the prompt-retry delay schedule (constructor override
+   * wins over env). On invalid env parse the error is cached and re-returned
+   * so every prompt in the same run surfaces the same misconfiguration.
+   */
+  private getPromptRetryDelays(): { ok: true; delays: number[] } | { ok: false; error: string } {
+    if (this.cachedPromptRetryError) {
+      return { ok: false, error: this.cachedPromptRetryError.message };
+    }
+    if (this.cachedPromptRetryDelays !== undefined) {
+      return { ok: true, delays: this.cachedPromptRetryDelays };
+    }
+    if (this.promptRetryDelaysOverride !== undefined) {
+      this.cachedPromptRetryDelays = [...this.promptRetryDelaysOverride];
+      return { ok: true, delays: this.cachedPromptRetryDelays };
+    }
+    try {
+      this.cachedPromptRetryDelays = resolvePromptRetryDelays(this.env);
+      return { ok: true, delays: this.cachedPromptRetryDelays };
+    } catch (err) {
+      this.cachedPromptRetryError = err instanceof Error ? err : new Error(String(err));
+      return { ok: false, error: this.cachedPromptRetryError.message };
+    }
   }
 
   getRunDir(): string {
@@ -1200,6 +1272,16 @@ export class NodeWorkflowRuntime {
    * Execute a prompt step, stream output to artifacts, and bind the captured
    * value (and per-field exports when a returns schema is set) into `scope`.
    * Returns the chunk of stdout to add to the caller's accumulator.
+   *
+   * Transport-failure backoff: a non-zero exit from `executePrompt` (spawn
+   * failure, backend non-zero exit, codex HTTP error) is retried on the
+   * configured delay schedule (default: 15s → 1m → 10m → 30m → 2h, 6 attempts
+   * total). Each attempt is a fresh `executePrompt` call with its own
+   * PROMPT_START/PROMPT_END and STEP_START/STEP_END events. Backoff composes
+   * *below* `recover`/`catch`: retries are exhausted before the failure
+   * reaches the enclosing recover loop. Deterministic post-processing
+   * failures (invalid JSON, schema validation) are not retried — they fail
+   * identically on re-run.
    */
   private async runPromptStep(
     scope: Scope,
@@ -1215,13 +1297,6 @@ export class NodeWorkflowRuntime {
     const backend = promptConfig.backend || "cursor";
     const stepName = resolvePromptStepName(promptConfig);
     const modelRes = resolveModel(promptConfig);
-    const promptStep = this.emitter.emitPromptStepStart(stepName, scope.vars, raw);
-    this.emitter.emitPromptEvent("PROMPT_START", {
-      backend,
-      model: modelRes.model || undefined,
-      model_reason: modelRes.reason,
-      preview: promptText.slice(0, 120),
-    });
     let schemaFields: PromptSchemaField[] | undefined;
     if (returns !== undefined) {
       schemaFields = parsePromptSchema(returns);
@@ -1230,49 +1305,117 @@ export class NodeWorkflowRuntime {
         "\n\nRespond with exactly one line of valid JSON (no markdown, no explanation) matching this schema: " +
         JSON.stringify(schemaObject);
     }
-    const out = new PassThrough();
-    const chunks: string[] = [];
-    const err = new PassThrough();
-    const errChunks: string[] = [];
-    out.on("data", (d) => {
-      const chunk = String(d);
-      chunks.push(chunk);
-      appendFileSync(promptStep.outFile, chunk);
-      io?.appendOut(chunk);
-    });
-    err.on("data", (d) => {
-      const chunk = String(d);
-      errChunks.push(chunk);
-      io?.appendErr(chunk);
-    });
-    const result = await executePrompt(promptText, promptConfig, out, scope.env, err);
-    const promptErr = errChunks.join("");
-    this.emitter.emitPromptStepEnd(promptStep, result.status, chunks.join(""), promptErr);
-    this.emitter.emitPromptEvent("PROMPT_END", {
-      backend,
-      model: modelRes.model || undefined,
-      model_reason: modelRes.reason,
-      status: result.status,
-    });
-    const output = chunks.join("");
-    if (result.status !== 0) {
-      return {
-        ok: false,
-        result: { status: result.status, output: "", error: promptErr.trim() || "prompt failed" },
-        output,
-      };
+    const delaysRes = this.getPromptRetryDelays();
+    if (!delaysRes.ok) {
+      this.emitter.emitLog("LOGERR", `prompt retry config invalid: ${delaysRes.error}`);
+      return { ok: false, result: { status: 1, output: "", error: delaysRes.error }, output: "" };
     }
+    const delays = delaysRes.delays;
+    const totalAttempts = delays.length + 1;
+
+    let lastOutput = "";
+    let lastResult: StepResult = { status: 1, output: "", error: "prompt failed" };
+    let lastFinal = "";
+
+    for (let attempt = 1; attempt <= totalAttempts; attempt += 1) {
+      if (this.abortController.signal.aborted) {
+        this.emitter.emitLog(
+          "LOGERR",
+          `prompt aborted before attempt ${attempt}/${totalAttempts} (${backend}); retries halted`,
+        );
+        return {
+          ok: false,
+          result: { status: lastResult.status || 1, output: "", error: "prompt retry aborted" },
+          output: lastOutput,
+        };
+      }
+      const promptStep = this.emitter.emitPromptStepStart(stepName, scope.vars, raw);
+      this.emitter.emitPromptEvent("PROMPT_START", {
+        backend,
+        model: modelRes.model || undefined,
+        model_reason: modelRes.reason,
+        preview: promptText.slice(0, 120),
+      });
+      const out = new PassThrough();
+      const chunks: string[] = [];
+      const err = new PassThrough();
+      const errChunks: string[] = [];
+      out.on("data", (d) => {
+        const chunk = String(d);
+        chunks.push(chunk);
+        appendFileSync(promptStep.outFile, chunk);
+        io?.appendOut(chunk);
+      });
+      err.on("data", (d) => {
+        const chunk = String(d);
+        errChunks.push(chunk);
+        io?.appendErr(chunk);
+      });
+      const result = await executePrompt(promptText, promptConfig, out, scope.env, err);
+      const promptErr = errChunks.join("");
+      this.emitter.emitPromptStepEnd(promptStep, result.status, chunks.join(""), promptErr);
+      this.emitter.emitPromptEvent("PROMPT_END", {
+        backend,
+        model: modelRes.model || undefined,
+        model_reason: modelRes.reason,
+        status: result.status,
+      });
+      lastOutput = chunks.join("");
+      lastFinal = result.final;
+      lastResult = {
+        status: result.status,
+        output: "",
+        error: promptErr.trim() || "prompt failed",
+      };
+      if (result.status === 0) break;
+      // Transport failure path: log + (sleep + retry) or terminate.
+      const errSummary = summarizeError(lastResult.error ?? "");
+      if (attempt >= totalAttempts) {
+        this.emitter.emitLog(
+          "LOGERR",
+          `prompt attempt ${attempt}/${totalAttempts} failed (${backend}): ${errSummary}; retries exhausted, failing step`,
+        );
+        return { ok: false, result: lastResult, output: lastOutput };
+      }
+      const nextDelayMs = delays[attempt - 1]!;
+      const nextDelayLabel = formatRetryDelay(nextDelayMs);
+      this.emitter.emitLog(
+        "LOGERR",
+        `prompt attempt ${attempt}/${totalAttempts} failed (${backend}): ${errSummary}; retrying in ${nextDelayLabel}`,
+      );
+      try {
+        await this.sleep(nextDelayMs, this.abortController.signal);
+      } catch (sleepErr) {
+        if (isPromptRetryAbortError(sleepErr) || this.abortController.signal.aborted) {
+          this.emitter.emitLog(
+            "LOGERR",
+            `prompt retry aborted during backoff after attempt ${attempt}/${totalAttempts} (${backend}); retries halted`,
+          );
+          return {
+            ok: false,
+            result: { status: lastResult.status || 1, output: "", error: "prompt retry aborted" },
+            output: lastOutput,
+          };
+        }
+        throw sleepErr;
+      }
+    }
+
     if (schemaFields) {
-      const extracted = extractJson(result.final);
+      const extracted = extractJson(lastFinal);
       if (!extracted) {
-        return { ok: false, result: { status: 1, output: "", error: "prompt returned invalid JSON" }, output };
+        return {
+          ok: false,
+          result: { status: 1, output: "", error: "prompt returned invalid JSON" },
+          output: lastOutput,
+        };
       }
       const validation = validateFields(extracted.obj, schemaFields);
       if (validation !== 0) {
         return {
           ok: false,
           result: { status: validation, output: "", error: "prompt response failed schema validation" },
-          output,
+          output: lastOutput,
         };
       }
       if (captureName) {
@@ -1282,9 +1425,9 @@ export class NodeWorkflowRuntime {
         }
       }
     } else if (captureName) {
-      scope.vars.set(captureName, result.final);
+      scope.vars.set(captureName, lastFinal);
     }
-    return { ok: true, output };
+    return { ok: true, output: lastOutput };
   }
 
   /** Run a recover/catch body with `failure` bound to the failed step's payload. */
