@@ -1,6 +1,48 @@
 import { basename, resolve } from "node:path";
 import type { JaiphConfig } from "../../config";
 
+/**
+ * Boolean sandbox flags from `jaiph run`'s CLI surface. These are an ergonomic
+ * front-end for the corresponding env vars: each flag turns the env var ON for
+ * this run only. Both enabling paths (flag or env) agree, so the env layer
+ * stays the single source of truth that `resolveDockerConfig` / `selectSandboxMode`
+ * consume — no parameter threading through the docker layer.
+ */
+export interface SandboxFlags {
+  inplace?: boolean;
+  unsafe?: boolean;
+  yes?: boolean;
+}
+
+/**
+ * Apply sandbox flags to a runtime env map by mutating it in place.
+ *
+ * Mutate the local `env` only — never `process.env`, which would leak flag
+ * choices into every child process globally. `resolveRuntimeEnv` always
+ * returns a fresh spread of `process.env`, so callers can safely mutate it.
+ *
+ * Fails fast with `E_FLAG_CONFLICT` when `--inplace` / `JAIPH_INPLACE` and
+ * `--unsafe` / `JAIPH_UNSAFE` are both truthy: one keeps the sandbox on,
+ * the other turns it off.
+ */
+export function applySandboxFlags(
+  env: Record<string, string | undefined>,
+  flags: SandboxFlags,
+): void {
+  if (flags.inplace) env.JAIPH_INPLACE = "1";
+  if (flags.unsafe) env.JAIPH_UNSAFE = "true";
+  if (flags.yes) env.JAIPH_INPLACE_YES = "1";
+
+  const inplaceOn = env.JAIPH_INPLACE === "1" || env.JAIPH_INPLACE === "true";
+  const unsafeOn = env.JAIPH_UNSAFE === "true";
+  if (inplaceOn && unsafeOn) {
+    throw new Error(
+      "E_FLAG_CONFLICT --inplace / JAIPH_INPLACE and --unsafe / JAIPH_UNSAFE are mutually exclusive: " +
+        "in-place mode keeps the sandbox on with the host workspace bind-mounted rw, while unsafe disables the sandbox entirely.",
+    );
+  }
+}
+
 const LOCKED_ENV_KEYS = [
   "JAIPH_AGENT_MODEL",
   "JAIPH_AGENT_COMMAND",

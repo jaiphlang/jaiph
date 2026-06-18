@@ -14,63 +14,6 @@ Process rules:
 
 ***
 
-## Add `jaiph run` flags: `--workspace`, `--inplace`, `--unsafe`, `--yes` (CLI front-ends for sandbox env switches) #dev-ready
-
-### Context
-
-`jaiph run` (and the bare `jaiph <file.jh>` form, which routes to the same code) parses its own flags in `parseArgs` (`src/cli/shared/usage.ts`, lines ~87-112): today it understands `--target <dir>`, `--raw`, and `--` (end-of-jaiph-flags terminator; everything after `--` is workflow args). The workflow file + workflow args come back as `positional`; `run.ts` does `runArgs = positional.slice(1)` (line ~81).
-
-The sandbox/runtime currently has **no CLI surface** — it is configured purely by env vars read in `src/runtime/docker.ts`:
-- `JAIPH_UNSAFE=true` → sandbox off entirely (`resolveDockerConfig` → `enabled=false`).
-- `JAIPH_INPLACE=1` → live-host-edit sandbox mode (read in `selectSandboxMode`).
-- `JAIPH_INPLACE_YES=1` → auto-confirm the in-place warning prompt.
-
-Workspace root is auto-detected only: `run.ts` line ~87 calls `detectWorkspaceRoot(dirname(inputAbs))` with no override. The sibling `jaiph compile` command already exposes `--workspace <dir>` (`src/cli/commands/compile.ts` lines ~66-72, 101-104; `workspaceFlag ?? detectWorkspaceRoot(...)`) — mirror that exactly.
-
-This task adds first-class CLI flags so users don't have to set env vars, while keeping env vars working. **The env layer stays the single source of truth:** flags are normalized into the runtime env map (and the resolved workspace path) *before* `resolveDockerConfig`/`selectSandboxMode` are called. Do not thread new parameters through `spawnDockerProcess`/`buildDockerArgs`; do not duplicate the mode-selection logic.
-
-> Note: this task assumes `JAIPH_INPLACE` / `JAIPH_INPLACE_YES` / the `inplace` mode exist (added by the in-place sandbox task above). `JAIPH_UNSAFE` already exists today.
-
-### Scope / required changes
-
-1. **Flag parsing** (`src/cli/shared/usage.ts`, `parseArgs`)
-   - Add to the return type and parse, stopping at `--` exactly like the existing flags:
-     - `--workspace <dir>` → `workspace?: string` (requires a value; error `--workspace requires a directory path`, matching the `--target` style).
-     - `--inplace` → `inplace?: boolean`.
-     - `--unsafe` → `unsafe?: boolean`.
-     - `--yes` / `-y` → `yes?: boolean` (auto-confirm).
-   - Update `printUsage()` with the new `jaiph run` options and at least one example (`jaiph run --inplace --workspace ./app ./flows/fix.jh`).
-
-2. **Wiring** (`src/cli/commands/run.ts`)
-   - Resolve workspace: `const workspaceRoot = workspaceFlag ? resolve(workspaceFlag) : detectWorkspaceRoot(dirname(inputAbs))`. The explicit path must win. (Validate it exists / is a directory with a clear error.)
-   - Normalize the boolean flags into the runtime env map that the docker layer reads, treating flag-or-env as ON (flag does not need to override a conflicting env — both enabling paths agree):
-     - `--inplace` → ensure `JAIPH_INPLACE=1` in the env passed to `resolveDockerConfig`/`selectSandboxMode`.
-     - `--unsafe` → ensure `JAIPH_UNSAFE=true`.
-     - `--yes` → ensure `JAIPH_INPLACE_YES=1`.
-   - This normalization happens before `resolveDockerConfig`/`selectSandboxMode` consume the env, i.e. applied to the `runtimeEnv` object right after `resolveRuntimeEnv` builds it (it returns a fresh spread of `process.env`). **Mutate that local object only — never `process.env`** (otherwise flags would leak into every child process globally).
-   - Note (intentional asymmetry, document in code/usage): these flags only affect `jaiph run`, while the corresponding env vars also influence other entry points such as `jaiph test`. This is expected; the flags are an ergonomic front-end for `run`, not a global override.
-
-3. **Conflicts**
-   - `--inplace` together with `--unsafe` is contradictory (one keeps the sandbox on, the other turns it off). Fail fast with a clear `E_FLAG_CONFLICT` error. Same if the resolved env ends up with both `JAIPH_INPLACE` and `JAIPH_UNSAFE` truthy via mixed flag/env.
-
-### Out of scope
-
-- A `--workspace` *env* equivalent (the name `JAIPH_WORKSPACE` is already taken as the remap **output** in `remapDockerEnv`; do not repurpose it as an input).
-- Any change to mode mechanics, mounts, or the confirm prompt itself (owned by the in-place sandbox task).
-
-### Acceptance criteria (each verified by a test that fails when violated)
-
-- `parseArgs` returns the new fields and still routes post-`--` tokens to `positional` unchanged (e.g. `run --inplace -- --inplace` → `inplace:true` and `positional` contains the literal `--inplace` as a workflow arg). Existing `--target`/`--raw`/`--` behavior is unchanged (regression test).
-- `--workspace <dir>` makes `run` use that resolved path as `workspaceRoot` instead of `detectWorkspaceRoot`; a missing value errors; a non-existent dir errors.
-- `--inplace` causes `selectSandboxMode` to resolve to `inplace` with no `JAIPH_INPLACE` env set (i.e. the flag alone is sufficient).
-- `--unsafe` causes `resolveDockerConfig().enabled === false` with no `JAIPH_UNSAFE` env set.
-- `--yes` causes the in-place confirm prompt to be skipped (prompt function never called) with no `JAIPH_INPLACE_YES` env set.
-- Flag and env agree: setting only the env var still works (regression), and setting both flag and env is not an error.
-- `--inplace --unsafe` (or the mixed flag/env equivalent) fails with `E_FLAG_CONFLICT` and launches no container.
-- `printUsage()` output lists `--workspace`, `--inplace`, `--unsafe`, `--yes` under `jaiph run`.
-
-***
-
 ## Retry agent prompts on transient failure with escalating backoff #dev-ready
 
 ### Context

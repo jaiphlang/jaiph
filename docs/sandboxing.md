@@ -66,6 +66,8 @@ In all modes, run artifacts are written to a separate rw mount at `/jaiph/run` (
 
 Docker is **on by default** for both local development and CI. To run on the host without a sandbox, set `JAIPH_UNSAFE=true`. To control Docker enablement explicitly, set `JAIPH_DOCKER_ENABLED`.
 
+> **CLI front-end for `jaiph run`.** As an ergonomic alternative to setting env vars, `jaiph run` accepts `--unsafe`, `--inplace`, and `-y` / `--yes` flags. Each one normalizes into the corresponding env var (`JAIPH_UNSAFE=true`, `JAIPH_INPLACE=1`, `JAIPH_INPLACE_YES=1`) for the duration of one run only — mode selection logic is unchanged because the env layer remains the single source of truth. The flags do not export to `process.env` or leak into child processes. They only affect `jaiph run`; other entry points (e.g. `jaiph test`) still read the env vars directly. See [CLI — `jaiph run`](cli.md#jaiph-run).
+
 > **Credential warning:** Docker sandboxing **does not isolate agent credentials**. `ANTHROPIC_*`, `CLAUDE_*`, and `CURSOR_*` env vars are forwarded into the container and the default network allows outbound access. A malicious script can read these from its environment and exfiltrate them. Set `runtime.docker_network = "none"` for workflows that should not make external calls.
 
 **Precedence (two rows, env only):**
@@ -90,7 +92,9 @@ Typical use case: an agent-driven dev loop where you want the model's edits to l
 
 **Enabling:**
 
-- Set `JAIPH_INPLACE=1` (or `JAIPH_INPLACE=true`) before `jaiph run`. This opt-in **takes precedence over** both `JAIPH_DOCKER_NO_OVERLAY` and the `/dev/fuse` heuristic — overlay/copy selection is bypassed entirely. Without the variable, mode selection is unchanged (existing overlay/copy behavior is byte-for-byte the same).
+- Set `JAIPH_INPLACE=1` (or `JAIPH_INPLACE=true`) before `jaiph run`, **or** pass the `--inplace` flag on the command line (e.g. `jaiph run --inplace ./flow.jh`). The flag is a CLI front-end that normalizes into `JAIPH_INPLACE=1` for one run only — see [CLI — `jaiph run`](cli.md#jaiph-run). Both forms agree: setting only the env still works, and setting both flag and env is not an error.
+- This opt-in **takes precedence over** both `JAIPH_DOCKER_NO_OVERLAY` and the `/dev/fuse` heuristic — overlay/copy selection is bypassed entirely. Without the variable, mode selection is unchanged (existing overlay/copy behavior is byte-for-byte the same).
+- Combining `--inplace` / `JAIPH_INPLACE` with `--unsafe` / `JAIPH_UNSAFE=true` is contradictory (one keeps the sandbox on, the other turns it off) and fails fast with `E_FLAG_CONFLICT` before any container is launched.
 - `JAIPH_INPLACE` does **not** affect `JAIPH_DOCKER_ENABLED` / `JAIPH_UNSAFE`. If Docker is off (either by `JAIPH_UNSAFE=true` or `JAIPH_DOCKER_ENABLED=false`), `JAIPH_INPLACE` has no effect — the run executes on the host as usual.
 
 **What happens at launch:**
@@ -107,7 +111,7 @@ Typical use case: an agent-driven dev loop where you want the model's edits to l
 
 In all three cases the warning ends with `Continue? [y/N]`. The default answer on empty input or EOF is **no**, and a "no" answer aborts the run cleanly (non-zero exit, no container launched) — not a crash.
 
-**Skipping the prompt for automation/CI.** Set `JAIPH_INPLACE_YES=1` (or `JAIPH_INPLACE_YES=true`) to auto-confirm. The CLI never displays the warning in that case.
+**Skipping the prompt for automation/CI.** Set `JAIPH_INPLACE_YES=1` (or `JAIPH_INPLACE_YES=true`) to auto-confirm — or pass `-y` / `--yes` on the `jaiph run` command line (front-end for the same env var, one run only). The CLI never displays the warning in that case.
 
 **Non-TTY behavior.** When stdin is not a TTY (CI logs, redirected pipes), there is no way to prompt. The CLI requires `JAIPH_INPLACE_YES=1` in that case; if it is missing, the run aborts before launching the container with `E_DOCKER_INPLACE_NO_CONFIRM` and instructs you to set the flag. Inplace mode never silently proceeds unconfirmed.
 
@@ -239,7 +243,8 @@ The table below lists Docker run failures and the codes emitted in logs or error
 | `E_DOCKER_TIMEOUT` | `JAIPH_DOCKER_TIMEOUT` is empty, non-numeric, negative, or has trailing junk; or `runtime.docker_timeout_seconds` is negative in the parsed module | Run exits before container launch. A valid value is a non-negative integer; `0` disables the timeout. |
 | `E_DOCKER_UID` | Linux host UID/GID detection failed (`process.getuid` and `id -u` both unavailable) | Run exits before container launch. Ensures the container never silently runs as root. Applies to overlay, copy, and inplace modes. |
 | `E_DOCKER_SANDBOX_COPY` | Copy mode failed to clone the host workspace (`cp` returned non-zero) | Run exits before container launch. Inspect the path printed in the error. |
-| `E_DOCKER_INPLACE_NO_CONFIRM` | `JAIPH_INPLACE` is set but stdin is not a TTY and `JAIPH_INPLACE_YES` is not set, so the destructive-edit confirmation cannot be obtained | Run exits before container launch. Set `JAIPH_INPLACE_YES=1` to auto-confirm in CI / pipes. See [Inplace mode](#inplace-mode-trusted-workspace-untrusted-machine). |
+| `E_DOCKER_INPLACE_NO_CONFIRM` | `JAIPH_INPLACE` is set but stdin is not a TTY and `JAIPH_INPLACE_YES` is not set, so the destructive-edit confirmation cannot be obtained | Run exits before container launch. Set `JAIPH_INPLACE_YES=1` to auto-confirm in CI / pipes (or pass `-y` / `--yes` to `jaiph run`). See [Inplace mode](#inplace-mode-trusted-workspace-untrusted-machine). |
+| `E_FLAG_CONFLICT` | `--inplace` (or `JAIPH_INPLACE`) and `--unsafe` (or `JAIPH_UNSAFE=true`) are both set | Run exits before container launch. The two options are contradictory: in-place mode keeps the sandbox on with the host workspace bind-mounted rw; unsafe disables the sandbox entirely. Pick one. |
 | `E_CLI_SETUP` | Overlay mode needs `runtime/overlay-run.sh` but the file is missing from the installation (read lazily on first overlay-mode launch by `loadOverlayScript` in `src/runtime/docker.ts`) | Run exits before container launch. The error names the resolved candidate path and tells the user to reinstall with `jaiph use <version>`. Non-Docker commands (`jaiph compile`, `jaiph format`) are unaffected because the read no longer happens at module-import time. |
 | `E_VALIDATE_MOUNT` | Mount targets a denied host path (`/`, `/proc`, docker socket, etc.) | Run exits before container launch. |
 | `E_TIMEOUT` | Container runs longer than the effective Docker timeout seconds (`JAIPH_DOCKER_TIMEOUT` or `runtime.docker_timeout_seconds` after merge; see [Configuration keys](#configuration-keys)) | Container receives SIGTERM, then SIGKILL after 5s grace period. |
