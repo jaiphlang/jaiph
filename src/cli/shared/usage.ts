@@ -111,45 +111,52 @@ export function parseArgs(args: string[]): ParsedArgs {
   let yes: boolean | undefined;
   const positional: string[] = [];
   for (let i = 0; i < args.length; i += 1) {
-    if (args[i] === "--target") {
-      const val = args[i + 1];
-      if (!val) {
-        throw new Error("--target requires a directory path");
-      }
-      target = val;
-      i += 1;
-      continue;
-    }
-    if (args[i] === "--workspace") {
-      const val = args[i + 1];
-      if (!val) {
-        throw new Error("--workspace requires a directory path");
-      }
-      workspace = val;
-      i += 1;
-      continue;
-    }
-    if (args[i] === "--raw") {
-      raw = true;
-      continue;
-    }
-    if (args[i] === "--inplace") {
-      inplace = true;
-      continue;
-    }
-    if (args[i] === "--unsafe") {
-      unsafe = true;
-      continue;
-    }
-    if (args[i] === "--yes" || args[i] === "-y") {
-      yes = true;
-      continue;
-    }
-    if (args[i] === "--") {
+    const arg = args[i];
+    if (arg === "--") {
       positional.push(...args.slice(i + 1));
       break;
     }
-    positional.push(args[i]);
+
+    // Accept both `--flag value` and `--flag=value` for long options. Split on
+    // the first `=` only, so values may themselves contain `=`.
+    let name = arg;
+    let inlineValue: string | undefined;
+    if (arg.startsWith("--") && arg.includes("=")) {
+      const eq = arg.indexOf("=");
+      name = arg.slice(0, eq);
+      inlineValue = arg.slice(eq + 1);
+    }
+
+    // Value-taking flags: value comes from `=` or the next token.
+    if (name === "--target" || name === "--workspace") {
+      let val: string | undefined;
+      if (inlineValue !== undefined) {
+        val = inlineValue;
+      } else {
+        val = args[i + 1];
+        i += 1;
+      }
+      if (!val) {
+        throw new Error(`${name} requires a directory path`);
+      }
+      if (name === "--target") target = val;
+      else workspace = val;
+      continue;
+    }
+
+    // Boolean flags: do not accept an `=value` form.
+    if (name === "--raw" || name === "--inplace" || name === "--unsafe" || name === "--yes" || arg === "-y") {
+      if (inlineValue !== undefined) {
+        throw new Error(`${name} does not take a value`);
+      }
+      if (name === "--raw") raw = true;
+      else if (name === "--inplace") inplace = true;
+      else if (name === "--unsafe") unsafe = true;
+      else yes = true;
+      continue;
+    }
+
+    positional.push(arg);
   }
   return { target, raw, workspace, inplace, unsafe, yes, positional };
 }
