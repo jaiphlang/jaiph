@@ -5,7 +5,7 @@ export function printUsage(): void {
       "  jaiph [--help | --version]",
       "  jaiph <file.jh> [args...]                # run workflow (same as jaiph run <file> [args...])",
       "  jaiph <file.test.jh> [args...]           # run tests (same as jaiph test <file>; extra args ignored)",
-      "  jaiph run [--target <dir>] [--raw] <file.jh> [--] [args...]",
+      "  jaiph run [--target <dir>] [--raw] [--workspace <dir>] [--inplace] [--unsafe] [--yes|-y] <file.jh> [--] [args...]",
       "  jaiph test [path]                        # workspace root, directory (recursive), or one *.test.jh file",
       "  jaiph init [workspace-path]",
       "  jaiph install [--force] [<name[@version]> | <repo-url[@version]> ...]",
@@ -18,9 +18,15 @@ export function printUsage(): void {
       "  -v, --version  show version",
       "",
       "jaiph run:",
-      "  --target <dir>  keep emitted script files and run metadata under <dir> (default: temp dir, cleaned up)",
-      "  --raw           skip banner, progress tree, hooks, and failure footer; inherited stdio for embedding / Docker inner run",
-      "  --              end of jaiph flags; remaining args are passed to workflow default",
+      "  --target <dir>     keep emitted script files and run metadata under <dir> (default: temp dir, cleaned up)",
+      "  --raw              skip banner, progress tree, hooks, and failure footer; inherited stdio for embedding / Docker inner run",
+      "  --workspace <dir>  workspace root for import resolution (default: auto-detect from the .jh file)",
+      "  --inplace          bind-mount the host workspace rw so edits land live (sets JAIPH_INPLACE=1 for this run)",
+      "  --unsafe           run on the host with no sandbox (sets JAIPH_UNSAFE=true for this run)",
+      "  -y, --yes          skip the in-place confirmation prompt (sets JAIPH_INPLACE_YES=1 for this run)",
+      "  --                 end of jaiph flags; remaining args are passed to workflow default",
+      "  Note: these flags only affect `jaiph run`; the corresponding env vars (JAIPH_INPLACE,",
+      "  JAIPH_UNSAFE, JAIPH_INPLACE_YES) also apply to other entry points (e.g. `jaiph test`).",
       "",
       "jaiph test:",
       "  With no path, discovers *.test.jh under the workspace root. Extra arguments after an optional",
@@ -52,6 +58,8 @@ export function printUsage(): void {
       "  jaiph run ./flows/review.jh 'review this diff'",
       "  jaiph run --raw ./flows/review.jh",
       "  jaiph run --target /tmp/jaiph-out ./flows/review.jh",
+      "  jaiph run --inplace --workspace ./app ./flows/fix.jh",
+      "  jaiph run --unsafe ./flows/quick.jh",
       "  jaiph test",
       "  jaiph test ./e2e",
       "  jaiph test e2e/say_hello.test.jh",
@@ -84,9 +92,23 @@ export function hasHelpFlag(args: string[]): boolean {
   return false;
 }
 
-export function parseArgs(args: string[]): { target?: string; raw?: boolean; positional: string[] } {
+export interface ParsedArgs {
+  target?: string;
+  raw?: boolean;
+  workspace?: string;
+  inplace?: boolean;
+  unsafe?: boolean;
+  yes?: boolean;
+  positional: string[];
+}
+
+export function parseArgs(args: string[]): ParsedArgs {
   let target: string | undefined;
   let raw: boolean | undefined;
+  let workspace: string | undefined;
+  let inplace: boolean | undefined;
+  let unsafe: boolean | undefined;
+  let yes: boolean | undefined;
   const positional: string[] = [];
   for (let i = 0; i < args.length; i += 1) {
     if (args[i] === "--target") {
@@ -98,8 +120,29 @@ export function parseArgs(args: string[]): { target?: string; raw?: boolean; pos
       i += 1;
       continue;
     }
+    if (args[i] === "--workspace") {
+      const val = args[i + 1];
+      if (!val) {
+        throw new Error("--workspace requires a directory path");
+      }
+      workspace = val;
+      i += 1;
+      continue;
+    }
     if (args[i] === "--raw") {
       raw = true;
+      continue;
+    }
+    if (args[i] === "--inplace") {
+      inplace = true;
+      continue;
+    }
+    if (args[i] === "--unsafe") {
+      unsafe = true;
+      continue;
+    }
+    if (args[i] === "--yes" || args[i] === "-y") {
+      yes = true;
       continue;
     }
     if (args[i] === "--") {
@@ -108,5 +151,5 @@ export function parseArgs(args: string[]): { target?: string; raw?: boolean; pos
     }
     positional.push(args[i]);
   }
-  return { target, raw, positional };
+  return { target, raw, workspace, inplace, unsafe, yes, positional };
 }

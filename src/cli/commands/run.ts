@@ -28,14 +28,20 @@ import { detectWorkspaceRoot } from "../shared/paths";
 import { hasHelpFlag, parseArgs } from "../shared/usage";
 
 const RUN_USAGE =
-  "Usage: jaiph run [--target <dir>] [--raw] <file.jh> [--] [args...]\n\n" +
+  "Usage: jaiph run [--target <dir>] [--raw] [--workspace <dir>] [--inplace] [--unsafe] [--yes|-y] <file.jh> [--] [args...]\n\n" +
   "Parse, validate, and run a Jaiph workflow file. Requires a `workflow default` entrypoint.\n\n" +
-  "  --target <dir>  keep emitted scripts and run metadata under <dir>\n" +
-  "  --raw           skip banner, progress tree, hooks, and failure footer; inherited stdio\n" +
-  "  --              end of jaiph flags; remaining args go to workflow default\n" +
-  "  -h, --help      show this help\n\n" +
-  "Example:\n" +
-  "  jaiph run ./flows/review.jh \"review this diff\"\n";
+  "  --target <dir>     keep emitted scripts and run metadata under <dir>\n" +
+  "  --raw              skip banner, progress tree, hooks, and failure footer; inherited stdio\n" +
+  "  --workspace <dir>  workspace root for import resolution (default: auto-detect from the .jh file)\n" +
+  "  --inplace          bind-mount the host workspace rw so edits land live (sets JAIPH_INPLACE=1 for this run)\n" +
+  "  --unsafe           run on the host with no sandbox (sets JAIPH_UNSAFE=true for this run)\n" +
+  "  -y, --yes          skip the in-place confirmation prompt (sets JAIPH_INPLACE_YES=1 for this run)\n" +
+  "  --                 end of jaiph flags; remaining args go to workflow default\n" +
+  "  -h, --help         show this help\n\n" +
+  "Note: these flags only affect `jaiph run`; the corresponding env vars also apply to other entry points.\n\n" +
+  "Examples:\n" +
+  "  jaiph run ./flows/review.jh \"review this diff\"\n" +
+  "  jaiph run --inplace --workspace ./app ./flows/fix.jh\n";
 import {
   spawnRunProcess,
   setupRunSignalHandlers,
@@ -59,7 +65,7 @@ import {
   formatRunningBottomLine,
 } from "../run/progress";
 import { loadMergedHooks, registerHooksSubscriber } from "../run/hooks";
-import { resolveRuntimeEnv } from "../run/env";
+import { resolveRuntimeEnv, applySandboxFlags } from "../run/env";
 import { colorize, formatJaiphRunningBannerLines } from "../run/display";
 import { createRunEmitter } from "../run/emitter";
 import {
@@ -77,7 +83,14 @@ export async function runWorkflow(rest: string[]): Promise<number> {
     process.stdout.write(RUN_USAGE);
     return 0;
   }
-  const { target, raw, positional } = parseArgs(rest);
+  let parsed: ReturnType<typeof parseArgs>;
+  try {
+    parsed = parseArgs(rest);
+  } catch (err) {
+    process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`);
+    return 1;
+  }
+  const { target, raw, workspace, inplace, unsafe, yes, positional } = parsed;
   const input = positional[0];
   const runArgs = positional.slice(1);
   if (!input) {
@@ -85,7 +98,17 @@ export async function runWorkflow(rest: string[]): Promise<number> {
     return 1;
   }
   const inputAbs = resolve(input);
-  const workspaceRoot = detectWorkspaceRoot(dirname(inputAbs));
+  const workspaceRoot = workspace ? resolve(workspace) : detectWorkspaceRoot(dirname(inputAbs));
+  if (workspace) {
+    if (!existsSync(workspaceRoot)) {
+      process.stderr.write(`--workspace path does not exist: ${workspaceRoot}\n`);
+      return 1;
+    }
+    if (!statSync(workspaceRoot).isDirectory()) {
+      process.stderr.write(`--workspace path is not a directory: ${workspaceRoot}\n`);
+      return 1;
+    }
+  }
   const inputStat = statSync(inputAbs);
   const ext = extname(inputAbs);
   if (!inputStat.isFile() || ext !== ".jh") {
@@ -93,8 +116,9 @@ export async function runWorkflow(rest: string[]): Promise<number> {
     return 1;
   }
 
+  const sandboxFlags = { inplace, unsafe, yes };
   if (raw) {
-    return runWorkflowRaw(inputAbs, workspaceRoot, target, runArgs);
+    return runWorkflowRaw(inputAbs, workspaceRoot, target, runArgs, sandboxFlags);
   }
 
   const hooksConfig = loadMergedHooks(workspaceRoot);
@@ -113,6 +137,12 @@ export async function runWorkflow(rest: string[]): Promise<number> {
     runtimeEnv.JAIPH_SOURCE_ABS = inputAbs;
     const runId = randomUUID();
     runtimeEnv.JAIPH_RUN_ID = runId;
+    try {
+      applySandboxFlags(runtimeEnv, sandboxFlags);
+    } catch (err) {
+      process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`);
+      return 1;
+    }
     const dockerConfigForBanner = resolveDockerConfig(mod.metadata?.runtime, runtimeEnv);
     if (dockerConfigForBanner.enabled) {
       checkDockerAvailable();
@@ -251,6 +281,7 @@ async function runWorkflowRaw(
   workspaceRoot: string,
   target: string | undefined,
   runArgs: string[],
+  sandboxFlags: { inplace?: boolean; unsafe?: boolean; yes?: boolean },
 ): Promise<number> {
   const mod = parsejaiph(readFileSync(inputAbs, "utf8"), inputAbs);
   const effectiveConfig = metadataToConfig(mod.metadata);
@@ -259,6 +290,12 @@ async function runWorkflowRaw(
   try {
     const runtimeEnv = resolveRuntimeEnv(effectiveConfig, workspaceRoot, inputAbs);
     runtimeEnv.JAIPH_SOURCE_ABS = inputAbs;
+    try {
+      applySandboxFlags(runtimeEnv, sandboxFlags);
+    } catch (err) {
+      process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`);
+      return 1;
+    }
     const { scriptsDir } = buildScripts(inputAbs, outDir, workspaceRoot);
     runtimeEnv.JAIPH_SCRIPTS = scriptsDir;
     const metaFile = join(outDir, `.jaiph-run-meta-${Date.now()}-${process.pid}.txt`);

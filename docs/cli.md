@@ -41,24 +41,34 @@ jaiph ./e2e/say_hello.test.jh
 Parse, validate, and run a Jaiph workflow file. Requires a `workflow default` entrypoint.
 
 ```bash
-jaiph run [--target <dir>] [--raw] <file.jh> [--] [args...]
+jaiph run [--target <dir>] [--raw] [--workspace <dir>] [--inplace] [--unsafe] [--yes|-y] <file.jh> [--] [args...]
 ```
 
 Any path ending in `.jh` is accepted (including `*.test.jh`, since the extension is still `.jh`). For files that only contain test blocks, use `jaiph test` instead.
 
-**Sandboxing:** whether the workflow runs in a **Docker container** or **directly on the host** is decided from environment variables and the workflow’s `runtime` metadata — there is no `jaiph run --docker` flag. Defaults and mounts are documented in [Sandboxing](sandboxing.md).
+**Sandboxing:** whether the workflow runs in a **Docker container** or **directly on the host** is decided from environment variables and the workflow’s `runtime` metadata — there is no `jaiph run --docker` flag. The `--inplace`, `--unsafe`, and `--yes` flags below are **CLI front-ends for the corresponding env vars** (`JAIPH_INPLACE`, `JAIPH_UNSAFE`, `JAIPH_INPLACE_YES`) and normalize into the runtime env before mode selection. Defaults and mounts are documented in [Sandboxing](sandboxing.md).
 
 **Flags:**
 
 - **`--target <dir>`** — keep emitted script files and run metadata under `<dir>` instead of a temp directory (useful for debugging).
 - **`--raw`** — skip the banner, live progress tree, hooks, and CLI failure footer. The workflow runner child uses **inherited stdio** so `__JAIPH_EVENT__` JSON lines go to **stderr** unchanged. When **Docker sandboxing** is used, the **host** runs interactive `jaiph run` and the **container** runs `jaiph run --raw …` so the host can parse events from the container’s stderr ([Architecture](architecture.md), [Sandboxing](sandboxing.md)). **Important:** if you invoke `jaiph run --raw` yourself on the host, the CLI takes a separate code path that **never starts Docker** — workflow execution runs locally in that process even when `JAIPH_DOCKER_ENABLED=true`. Use `--raw` for embedding or piping; use interactive `jaiph run` (no `--raw`) when you want the CLI to apply sandbox env rules. There is no PASS/FAIL line, **`return_value.txt` is not printed to stdout**, and the process exit code alone reflects success or failure. See [Sandboxing — Runtime behavior](sandboxing.md#runtime-behavior).
+- **`--workspace <dir>`** — explicit workspace root for library import resolution (`<workspace>/.jaiph/libs/`, etc.) and for the workspace mount when Docker is on. Overrides the default auto-detection (`detectWorkspaceRoot` starting from the entry `.jh` file's directory). The path must exist and be a directory — a missing value errors with `--workspace requires a directory path`, a missing path errors with `--workspace path does not exist: <path>`, and a non-directory errors with `--workspace path is not a directory: <path>`. There is **no `JAIPH_WORKSPACE` env equivalent** for this input (`JAIPH_WORKSPACE` is reserved as the in-container remap output — see [Environment variables](#environment-variables)). Mirrors the `--workspace` flag on [`jaiph compile`](#jaiph-compile).
+- **`--inplace`** — front-end for `JAIPH_INPLACE=1`. Opt into **inplace** sandbox mode (host workspace bind-mounted read-write so the run's edits land live on the host). See [Sandboxing — Inplace mode](sandboxing.md#inplace-mode-trusted-workspace-untrusted-machine).
+- **`--unsafe`** — front-end for `JAIPH_UNSAFE=true`. Disable the Docker sandbox entirely and run on the host. Cannot be combined with `--inplace` — both forms together fail fast with `E_FLAG_CONFLICT` before any container is launched (inplace keeps the sandbox on; unsafe turns it off).
+- **`-y`, `--yes`** — front-end for `JAIPH_INPLACE_YES=1`. Auto-confirm the in-place confirmation prompt (no interactive prompt is displayed). Required when running `--inplace` non-interactively (e.g. CI, piped stdin) — without it, `--inplace` aborts with `E_DOCKER_INPLACE_NO_CONFIRM`. See [Sandboxing — Inplace mode](sandboxing.md#inplace-mode-trusted-workspace-untrusted-machine).
 - **`--`** — end of Jaiph flags; remaining args are passed to `workflow default` (e.g. `jaiph run file.jh -- --verbose`).
+
+The boolean sandbox flags (`--inplace`, `--unsafe`, `--yes`) **set the corresponding env var on for this run only** by mutating the runtime env that `resolveDockerConfig` / `selectSandboxMode` consume — they do not export to `process.env` and do not leak to child processes outside this run. Setting only the env var still works (the flag is purely additive); setting both the flag and the env var is not an error.
+
+**Asymmetry with `jaiph test`.** These flags only affect `jaiph run`. `jaiph test` does not parse them. The underlying env vars (`JAIPH_INPLACE`, `JAIPH_UNSAFE`, `JAIPH_INPLACE_YES`) still apply to all entry points if you set them in the environment — the flags are an ergonomic surface for `run`, not a global override.
 
 **Examples:**
 
 ```bash
 jaiph run ./.jaiph/bootstrap.jh
 jaiph run ./flows/review.jh "review this diff"
+jaiph run --inplace --workspace ./app ./flows/fix.jh
+jaiph run --unsafe ./flows/quick.jh
 ```
 
 ### Argument passing
@@ -543,13 +553,13 @@ These variables apply to `jaiph run` and workflow execution. Variables marked **
 
 **Docker sandbox** (`jaiph run` only — see [Sandboxing](sandboxing.md)):
 
-- **`JAIPH_UNSAFE`** — set to `true` to **disable** Docker when `JAIPH_DOCKER_ENABLED` is **unset** (run on the host). This is the supported “no container” escape hatch.
+- **`JAIPH_UNSAFE`** — set to `true` to **disable** Docker when `JAIPH_DOCKER_ENABLED` is **unset** (run on the host). This is the supported “no container” escape hatch. `jaiph run` also exposes this via the `--unsafe` flag (front-end only; equivalent to `JAIPH_UNSAFE=true` for the duration of one run). Combining `--unsafe` with `--inplace` (or with `JAIPH_INPLACE` on) fails with `E_FLAG_CONFLICT`.
 - **`JAIPH_DOCKER_ENABLED`** — when set, must be exactly `true` to force Docker on, or any other value to force Docker **off**. When **unset**, Docker follows the unsafe rule above (on by default unless `JAIPH_UNSAFE=true`). `CI=true` does **not** change this default.
 - **`JAIPH_DOCKER_IMAGE`** — Docker image (overrides in-file `runtime.docker_image`). The image must already contain a `jaiph` binary; otherwise the run fails with `E_DOCKER_NO_JAIPH`. Defaults to the official GHCR runtime image (`ghcr.io/jaiphlang/jaiph-runtime:<version>`).
 - **`JAIPH_DOCKER_NETWORK`** — Docker network mode (overrides in-file `runtime.docker_network`).
 - **`JAIPH_DOCKER_TIMEOUT`** — execution timeout in seconds (overrides in-file `runtime.docker_timeout_seconds`).
-- **`JAIPH_INPLACE`** — set to `1` or `true` to opt into **inplace** sandbox mode: the container stays on (machine isolated, caps dropped, env allowlist enforced) but the host workspace is bind-mounted read-write so the run's edits land live on the host. This is a different axis from `JAIPH_UNSAFE` (which turns the sandbox off entirely). With the variable set, mode selection **bypasses** `JAIPH_DOCKER_NO_OVERLAY` and the `/dev/fuse` heuristic. The CLI prompts for interactive confirmation before launch (see `JAIPH_INPLACE_YES`). See [Sandboxing — Inplace mode](sandboxing.md#inplace-mode-trusted-workspace-untrusted-machine).
-- **`JAIPH_INPLACE_YES`** — set to `1` or `true` to auto-confirm the inplace-mode warning prompt (CI / non-TTY path). Required when `JAIPH_INPLACE` is set and stdin is not a TTY; otherwise the run aborts with `E_DOCKER_INPLACE_NO_CONFIRM` before launching the container.
+- **`JAIPH_INPLACE`** — set to `1` or `true` to opt into **inplace** sandbox mode: the container stays on (machine isolated, caps dropped, env allowlist enforced) but the host workspace is bind-mounted read-write so the run's edits land live on the host. This is a different axis from `JAIPH_UNSAFE` (which turns the sandbox off entirely). With the variable set, mode selection **bypasses** `JAIPH_DOCKER_NO_OVERLAY` and the `/dev/fuse` heuristic. The CLI prompts for interactive confirmation before launch (see `JAIPH_INPLACE_YES`). `jaiph run` also exposes this via the `--inplace` flag (front-end only; equivalent to `JAIPH_INPLACE=1` for one run). See [Sandboxing — Inplace mode](sandboxing.md#inplace-mode-trusted-workspace-untrusted-machine).
+- **`JAIPH_INPLACE_YES`** — set to `1` or `true` to auto-confirm the inplace-mode warning prompt (CI / non-TTY path). Required when `JAIPH_INPLACE` is set and stdin is not a TTY; otherwise the run aborts with `E_DOCKER_INPLACE_NO_CONFIRM` before launching the container. `jaiph run` also exposes this via the `-y` / `--yes` flag (front-end only; equivalent to `JAIPH_INPLACE_YES=1` for one run).
 
 Neither `JAIPH_INPLACE` nor `JAIPH_INPLACE_YES` is forwarded into the container (they would otherwise pass the `JAIPH_*` allowlist; both names are explicitly excluded).
 
