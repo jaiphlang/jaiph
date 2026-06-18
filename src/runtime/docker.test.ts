@@ -76,7 +76,7 @@ test("resolveDockerConfig: defaults when no in-file and no env — Docker on", (
   assert.equal(cfg.enabled, true);
   assert.ok(cfg.image.startsWith(GHCR_IMAGE_REPO + ":"), `default image should be GHCR: ${cfg.image}`);
   assert.equal(cfg.network, "default");
-  assert.equal(cfg.timeoutSeconds, 3600);
+  assert.equal(cfg.timeoutSeconds, 14400);
 });
 
 test("resolveDefaultDockerImageTag: curl-installer layout (package.json beside src/)", () => {
@@ -961,6 +961,239 @@ test("selectSandboxMode: JAIPH_DOCKER_NO_OVERLAY=1 forces copy", () => {
 test("selectSandboxMode: returns overlay iff /dev/fuse exists on host (platform-correlated)", () => {
   const expected = existsSync("/dev/fuse") ? "overlay" : "copy";
   assert.equal(selectSandboxMode({}), expected);
+});
+
+// ---------------------------------------------------------------------------
+// selectSandboxMode + inplace
+// ---------------------------------------------------------------------------
+
+test("selectSandboxMode: JAIPH_INPLACE=1 forces inplace", () => {
+  assert.equal(selectSandboxMode({ JAIPH_INPLACE: "1" }), "inplace");
+  assert.equal(selectSandboxMode({ JAIPH_INPLACE: "true" }), "inplace");
+});
+
+test("selectSandboxMode: JAIPH_INPLACE wins over JAIPH_DOCKER_NO_OVERLAY", () => {
+  assert.equal(
+    selectSandboxMode({ JAIPH_INPLACE: "1", JAIPH_DOCKER_NO_OVERLAY: "1" }),
+    "inplace",
+  );
+});
+
+test("selectSandboxMode: JAIPH_INPLACE=other-value does not switch mode (only 1/true)", () => {
+  const expected = existsSync("/dev/fuse") ? "overlay" : "copy";
+  assert.equal(selectSandboxMode({ JAIPH_INPLACE: "yes" }), expected);
+  assert.equal(selectSandboxMode({ JAIPH_INPLACE: "0" }), expected);
+  assert.equal(selectSandboxMode({ JAIPH_INPLACE: "" }), expected);
+});
+
+test("selectSandboxMode: existing overlay/copy behavior unchanged when JAIPH_INPLACE unset (regression)", () => {
+  // Without JAIPH_INPLACE, the function returns exactly what /dev/fuse +
+  // JAIPH_DOCKER_NO_OVERLAY would have returned before this change.
+  assert.equal(selectSandboxMode({ JAIPH_DOCKER_NO_OVERLAY: "1" }), "copy");
+  assert.equal(selectSandboxMode({ JAIPH_DOCKER_NO_OVERLAY: "true" }), "copy");
+  const expected = existsSync("/dev/fuse") ? "overlay" : "copy";
+  assert.equal(selectSandboxMode({}), expected);
+});
+
+// ---------------------------------------------------------------------------
+// buildDockerArgs: inplace mode
+// ---------------------------------------------------------------------------
+
+function inplaceOpts(overrides?: Partial<DockerSpawnOptions>): DockerSpawnOptions {
+  return defaultOpts({ sandboxMode: "inplace", sandboxWorkspaceDir: undefined, ...overrides });
+}
+
+test("buildDockerArgs: inplace binds real workspaceRoot rw at /jaiph/workspace", () => {
+  const args = buildDockerArgs(inplaceOpts());
+  const vFlags = args.filter((_, i) => i > 0 && args[i - 1] === "-v");
+  const wsMount = vFlags.find((v) => v.endsWith(":/jaiph/workspace:rw"));
+  assert.ok(wsMount, "workspace bound rw at /jaiph/workspace");
+  assert.ok(wsMount!.startsWith(`${resolve(TEST_WS)}:`), "host side is the real workspaceRoot");
+});
+
+test("buildDockerArgs: inplace has no :ro workspace mount, no fuse, no overlay script, no overlay caps", () => {
+  const args = buildDockerArgs(inplaceOpts());
+  const vFlags = args.filter((_, i) => i > 0 && args[i - 1] === "-v");
+  assert.ok(!vFlags.some((v) => v.includes("/jaiph/workspace-ro")), "no overlay lower-layer mount");
+  assert.ok(!vFlags.some((v) => v.includes("/jaiph/overlay-run.sh")), "no overlay script mount");
+  assert.ok(!vFlags.some((v) => v.endsWith(":ro") && v.includes("/jaiph/workspace")), "no :ro workspace mount");
+  assert.ok(!args.includes("/dev/fuse"), "no fuse device");
+  assert.ok(!args.includes("--device"), "no --device flag at all");
+  const capAddValues = args
+    .map((v, i) => (v === "--cap-add" ? args[i + 1] : null))
+    .filter((v): v is string => v !== null);
+  assert.deepStrictEqual(capAddValues, [], "no overlay-only --cap-add flags");
+  const secOptValues = args
+    .map((v, i) => (v === "--security-opt" ? args[i + 1] : null))
+    .filter((v): v is string => v !== null);
+  assert.ok(!secOptValues.includes("apparmor=unconfined"), "no apparmor=unconfined");
+  assert.ok(!args.includes("/jaiph/overlay-run.sh"), "container command does not invoke overlay-run.sh");
+});
+
+test("buildDockerArgs: inplace still includes --cap-drop ALL, no-new-privileges, and runs mount", () => {
+  const args = buildDockerArgs(inplaceOpts());
+  const capDropIdx = args.indexOf("--cap-drop");
+  assert.ok(capDropIdx >= 0);
+  assert.equal(args[capDropIdx + 1], "ALL");
+  const secOptIdx = args.indexOf("--security-opt");
+  assert.ok(secOptIdx >= 0);
+  assert.equal(args[secOptIdx + 1], "no-new-privileges");
+  const vFlags = args.filter((_, i) => i > 0 && args[i - 1] === "-v");
+  const runMount = vFlags.find((v) => v.endsWith(":/jaiph/run:rw"));
+  assert.ok(runMount, "run dir bound rw at /jaiph/run");
+});
+
+test("buildDockerArgs: inplace requires neither overlayScriptPath nor sandboxWorkspaceDir", () => {
+  assert.doesNotThrow(() => buildDockerArgs(inplaceOpts()));
+});
+
+test("buildDockerArgs: inplace on Linux runs as --user host_uid:host_gid", () => {
+  if (process.platform !== "linux") return;
+  const args = buildDockerArgs(inplaceOpts());
+  const userIdx = args.indexOf("--user");
+  assert.ok(userIdx >= 0, "--user flag present");
+  assert.notEqual(args[userIdx + 1], "0:0");
+  assert.match(args[userIdx + 1], /^\d+:\d+$/, "inplace --user is uid:gid");
+});
+
+test("buildDockerArgs: inplace command tail is direct `jaiph run --raw <file>` (no overlay-run.sh wrapper)", () => {
+  const args = buildDockerArgs(inplaceOpts());
+  const idxImage = args.indexOf("ubuntu:24.04");
+  const tail = args.slice(idxImage + 1);
+  assert.equal(tail[0], "jaiph");
+  assert.equal(tail[1], "run");
+  assert.equal(tail[2], "--raw");
+  assert.equal(tail[3], "/jaiph/workspace/main.jh");
+});
+
+test("buildDockerArgs: inplace does not forward JAIPH_INPLACE / JAIPH_INPLACE_YES into the container", () => {
+  const args = buildDockerArgs(inplaceOpts({
+    env: { JAIPH_INPLACE: "1", JAIPH_INPLACE_YES: "1", JAIPH_DEBUG: "true" },
+  }));
+  const envFlags = args
+    .map((v, i) => (v === "-e" ? args[i + 1] : null))
+    .filter((v): v is string => v !== null);
+  assert.ok(envFlags.some((v) => v.startsWith("JAIPH_DEBUG=")), "regular JAIPH_ var still forwarded");
+  assert.ok(!envFlags.some((v) => v.startsWith("JAIPH_INPLACE=")), "JAIPH_INPLACE not forwarded");
+  assert.ok(!envFlags.some((v) => v.startsWith("JAIPH_INPLACE_YES=")), "JAIPH_INPLACE_YES not forwarded");
+});
+
+test("isEnvAllowed: rejects JAIPH_INPLACE and JAIPH_INPLACE_YES (would otherwise leak via JAIPH_ prefix)", () => {
+  assert.equal(isEnvAllowed("JAIPH_INPLACE"), false);
+  assert.equal(isEnvAllowed("JAIPH_INPLACE_YES"), false);
+});
+
+test("buildDockerArgs: write to inplace workspace bind appears at the host workspace; copy does not", () => {
+  // Filesystem-level assertion. We do not run docker — we identify the
+  // host path that the mount spec exposes to the container's /jaiph/workspace
+  // and write to it directly. That path is the real workspaceRoot in inplace
+  // mode, and a separate clone dir in copy mode.
+  const hostWs = mkdtempSync(join(tmpdir(), "jaiph-inplace-host-"));
+  const cloneDir = mkdtempSync(join(tmpdir(), "jaiph-inplace-clone-"));
+  const runDir = mkdtempSync(join(tmpdir(), "jaiph-inplace-run-"));
+  try {
+    writeFileSync(join(hostWs, "main.jh"), "");
+    const findHostBindFor = (args: string[], containerPath: string): string => {
+      for (let i = 0; i < args.length - 1; i++) {
+        if (args[i] !== "-v") continue;
+        const spec = args[i + 1];
+        const m = spec.match(/^(.*):([^:]+):(ro|rw)$/);
+        if (m && m[2] === containerPath) return m[1];
+      }
+      throw new Error(`mount for ${containerPath} not found`);
+    };
+    const inplaceArgs = buildDockerArgs(
+      defaultOpts({ sandboxMode: "inplace", workspaceRoot: hostWs, sandboxWorkspaceDir: undefined, sourceAbs: join(hostWs, "main.jh") }),
+    );
+    const copyArgs = buildDockerArgs(
+      defaultOpts({ sandboxMode: "copy", workspaceRoot: hostWs, sandboxWorkspaceDir: cloneDir, sourceAbs: join(hostWs, "main.jh") }),
+    );
+    const inplaceHostPath = findHostBindFor(inplaceArgs, "/jaiph/workspace");
+    const copyHostPath = findHostBindFor(copyArgs, "/jaiph/workspace");
+    assert.equal(inplaceHostPath, resolve(hostWs), "inplace points at real workspace");
+    assert.notEqual(copyHostPath, resolve(hostWs), "copy points at clone, not workspace");
+    // Simulate the container writing a file through the bind.
+    writeFileSync(join(inplaceHostPath, "wrote_from_container.txt"), "x");
+    writeFileSync(join(copyHostPath, "wrote_from_container.txt"), "x");
+    assert.ok(
+      existsSync(join(hostWs, "wrote_from_container.txt")),
+      "inplace bind: container write lands on host workspace",
+    );
+    // Re-check after copy write — host workspace must only have the inplace file
+    // (already present); the copy write went to cloneDir, not hostWs.
+    const cloneWrite = join(cloneDir, "wrote_from_container.txt");
+    assert.ok(existsSync(cloneWrite), "copy bind: write landed in clone");
+    // Remove the inplace marker, then prove that subsequent copy writes don't leak.
+    rmSync(join(hostWs, "wrote_from_container.txt"));
+    writeFileSync(join(cloneDir, "second_write.txt"), "x");
+    assert.ok(
+      !existsSync(join(hostWs, "second_write.txt")),
+      "copy bind: writes do not leak to host workspace",
+    );
+    void runDir;
+  } finally {
+    rmSync(hostWs, { recursive: true, force: true });
+    rmSync(cloneDir, { recursive: true, force: true });
+    rmSync(runDir, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// spawnDockerProcess: inplace mode skips cloneWorkspaceForSandbox path
+// ---------------------------------------------------------------------------
+
+test("spawnDockerProcess: inplace mode does not clone or allocate sandbox workspace dir", () => {
+  const runsRoot = mkdtempSync(join(tmpdir(), "jaiph-inplace-runs-"));
+  const srcWs = mkdtempSync(join(tmpdir(), "jaiph-inplace-ws-"));
+  const { _dockerSpawn, spawnDockerProcess } = require("./docker");
+  const origExec = _dockerExec.run;
+  const origSpawn = _dockerSpawn.run;
+  let capturedArgs: string[] | undefined;
+  _dockerExec.run = () => {}; // pretend docker info / etc. succeed
+  // Stub the long-running docker run with a no-op child that won't outlive the test.
+  _dockerSpawn.run = (args: string[], _opts: object) => {
+    capturedArgs = args;
+    // Minimal ChildProcess stand-in: only the fields the helper exposes via DockerSpawnResult.
+    return { kill: () => true, pid: 0, stdout: null, stderr: null } as unknown as DockerSpawnResult["child"];
+  };
+  try {
+    writeFileSync(join(srcWs, "main.jh"), "");
+    writeFileSync(join(srcWs, "marker.txt"), "live");
+    const result: DockerSpawnResult = spawnDockerProcess({
+      config: {
+        enabled: true,
+        image: "ubuntu:24.04",
+        imageExplicit: false,
+        network: "default",
+        timeoutSeconds: 0,
+      },
+      sourceAbs: join(srcWs, "main.jh"),
+      workspaceRoot: srcWs,
+      sandboxRunDir: runsRoot,
+      runArgs: [],
+      env: { JAIPH_INPLACE: "1" },
+      isTTY: false,
+      sandboxMode: "inplace",
+    });
+    assert.equal(result.sandboxMode, "inplace");
+    assert.equal(result.sandboxWorkspaceDir, undefined, "no sandbox clone dir tracked");
+    assert.equal(result.overlayScriptDir, undefined, "no overlay script dir tracked");
+    // No .sandbox-* entry was created under the runs root.
+    const entries = readdirSync(runsRoot);
+    assert.ok(
+      !entries.some((e) => e.startsWith(".sandbox-")),
+      `inplace must not allocate .sandbox-* dirs (found: ${entries.join(",")})`,
+    );
+    // The host workspace is untouched (no clone copied files elsewhere).
+    assert.equal(readFileSync(join(srcWs, "marker.txt"), "utf8"), "live");
+    // The args still bind-mount the host workspace at /jaiph/workspace:rw.
+    assert.ok(capturedArgs && capturedArgs.some((a) => a.endsWith(":/jaiph/workspace:rw")), "host workspace mounted rw");
+  } finally {
+    _dockerExec.run = origExec;
+    _dockerSpawn.run = origSpawn;
+    rmSync(runsRoot, { recursive: true, force: true });
+    rmSync(srcWs, { recursive: true, force: true });
+  }
 });
 
 // ---------------------------------------------------------------------------

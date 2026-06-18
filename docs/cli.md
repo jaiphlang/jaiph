@@ -548,12 +548,16 @@ These variables apply to `jaiph run` and workflow execution. Variables marked **
 - **`JAIPH_DOCKER_IMAGE`** — Docker image (overrides in-file `runtime.docker_image`). The image must already contain a `jaiph` binary; otherwise the run fails with `E_DOCKER_NO_JAIPH`. Defaults to the official GHCR runtime image (`ghcr.io/jaiphlang/jaiph-runtime:<version>`).
 - **`JAIPH_DOCKER_NETWORK`** — Docker network mode (overrides in-file `runtime.docker_network`).
 - **`JAIPH_DOCKER_TIMEOUT`** — execution timeout in seconds (overrides in-file `runtime.docker_timeout_seconds`).
+- **`JAIPH_INPLACE`** — set to `1` or `true` to opt into **inplace** sandbox mode: the container stays on (machine isolated, caps dropped, env allowlist enforced) but the host workspace is bind-mounted read-write so the run's edits land live on the host. This is a different axis from `JAIPH_UNSAFE` (which turns the sandbox off entirely). With the variable set, mode selection **bypasses** `JAIPH_DOCKER_NO_OVERLAY` and the `/dev/fuse` heuristic. The CLI prompts for interactive confirmation before launch (see `JAIPH_INPLACE_YES`). See [Sandboxing — Inplace mode](sandboxing.md#inplace-mode-trusted-workspace-untrusted-machine).
+- **`JAIPH_INPLACE_YES`** — set to `1` or `true` to auto-confirm the inplace-mode warning prompt (CI / non-TTY path). Required when `JAIPH_INPLACE` is set and stdin is not a TTY; otherwise the run aborts with `E_DOCKER_INPLACE_NO_CONFIRM` before launching the container.
+
+Neither `JAIPH_INPLACE` nor `JAIPH_INPLACE_YES` is forwarded into the container (they would otherwise pass the `JAIPH_*` allowlist; both names are explicitly excluded).
 
 In-file `runtime.docker_enabled` is **not** supported (parse error); use the variables above instead.
 
-Only environment variables matching a fixed allow-prefix list (`JAIPH_*` except `JAIPH_DOCKER_*`, plus `ANTHROPIC_*`, `CURSOR_*`, `CLAUDE_*`) cross into the container — everything else is dropped before the run starts. See [Sandboxing — Environment variable forwarding](sandboxing.md#environment-variable-forwarding) for the full list and supported workarounds.
+Only environment variables matching a fixed allow-prefix list (`JAIPH_*` except `JAIPH_DOCKER_*` and except `JAIPH_INPLACE` / `JAIPH_INPLACE_YES`, plus `ANTHROPIC_*`, `CURSOR_*`, `CLAUDE_*`) cross into the container — everything else is dropped before the run starts. See [Sandboxing — Environment variable forwarding](sandboxing.md#environment-variable-forwarding) for the full list and supported workarounds.
 
-For overlay vs copy workspace mode, mounts, and stderr wiring, see [Sandboxing](sandboxing.md).
+For overlay vs copy vs inplace workspace mode, mounts, and stderr wiring, see [Sandboxing](sandboxing.md). The `jaiph run` banner names the active mode in parentheses: `Docker sandbox, fusefs` (overlay), `Docker sandbox, tmp workspace` (copy), or `Docker sandbox, in-place (live host edits)` (inplace); `no sandbox` is shown when Docker is disabled.
 
 ### Install and `jaiph use`
 

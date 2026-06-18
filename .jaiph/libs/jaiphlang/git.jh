@@ -37,9 +37,11 @@ rule is_clean() {
 
 workflow commit(task) {
   config {
-    agent.backend = "cursor"
-    agent.cursor_flags = "--force"
-    agent.default_model = "auto"
+    # agent.backend = "cursor"
+    # agent.default_model = "composer-2"
+    # agent.cursor_flags = "--force"
+    agent.backend = "claude"
+    agent.claude_flags = "--permission-mode bypassPermissions"
   }
 
   ensure in_git_repo()
