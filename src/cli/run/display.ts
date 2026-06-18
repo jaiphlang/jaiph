@@ -18,8 +18,12 @@ export function formatJaiphRunningBannerLines(
   let parenInner: string;
   if (!dockerEnabled) {
     parenInner = "no sandbox";
+  } else if (sandboxMode === "overlay") {
+    parenInner = "Docker sandbox, fusefs";
+  } else if (sandboxMode === "inplace") {
+    parenInner = "Docker sandbox, in-place (live host edits)";
   } else {
-    parenInner = sandboxMode === "overlay" ? "Docker sandbox, fusefs" : "Docker sandbox, tmp workspace";
+    parenInner = "Docker sandbox, tmp workspace";
   }
   const dimParen = colorize(` (${parenInner})`, "dim", colorEnabled);
   return `\nJaiph: Running ${fileBasename}${dimParen}\n\n`;

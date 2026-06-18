@@ -52,6 +52,7 @@ import {
   selectSandboxMode,
   type SandboxMode,
 } from "../../runtime/docker";
+import { confirmInplaceRun } from "../../runtime/docker-inplace";
 import {
   styleKeywordLabel,
   formatElapsedDuration,
@@ -118,6 +119,13 @@ export async function runWorkflow(rest: string[]): Promise<number> {
       prepareImage(dockerConfigForBanner);
     }
     const sandboxModeForBanner = dockerConfigForBanner.enabled ? selectSandboxMode(runtimeEnv) : null;
+    if (sandboxModeForBanner === "inplace") {
+      const proceed = await confirmInplaceRun(workspaceRoot, runtimeEnv, isTTY);
+      if (!proceed) {
+        process.stderr.write("jaiph in-place mode: aborted by user.\n");
+        return 1;
+      }
+    }
 
     writeBanner(
       mod,
