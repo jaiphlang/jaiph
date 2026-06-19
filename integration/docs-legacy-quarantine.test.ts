@@ -11,6 +11,10 @@ const LEGACY_DIR = join(DOCS_DIR, "_legacy");
 const NAV_LAYOUT = join(DOCS_DIR, "_layouts", "docs.html");
 
 const LIVE_PAGES = ["architecture.md", "jaiph-skill.md"];
+// Quarantined-only pages: still live exclusively under _legacy/ because their
+// Diátaxis replacement hasn't landed yet. Once a page is recreated greenfield
+// (e.g. inbox.md in task 3), it leaves this list — the legacy copy stays as a
+// reconciliation reference, but a live page now occupies the original path.
 const QUARANTINED_PAGES = [
   "artifacts.md",
   "cli.md",
@@ -19,13 +23,17 @@ const QUARANTINED_PAGES = [
   "getting-started.md",
   "grammar.md",
   "hooks.md",
-  "inbox.md",
   "language.md",
   "libraries.md",
-  "sandboxing.md",
   "setup.md",
-  "spec-async-handles.md",
   "testing.md",
+];
+// Recreated-with-legacy-reference: a live docs/<page>.md exists AND the
+// pre-redesign body is preserved under docs/_legacy/<page>.md for reconciliation.
+const RECREATED_WITH_LEGACY = [
+  "inbox.md",
+  "sandboxing.md",
+  "spec-async-handles.md",
 ];
 
 test("docs: live pages remain at original paths", () => {
@@ -44,6 +52,16 @@ test("docs: quarantined pages moved into _legacy/ and removed from original path
     const legacy = join(LEGACY_DIR, page);
     assert.ok(!existsSync(original), `${page} must no longer live at docs/${page}`);
     assert.ok(existsSync(legacy), `${page} must live at docs/_legacy/${page}`);
+  }
+});
+
+test("docs: recreated pages exist live alongside their _legacy/ reference copy", () => {
+  assert.ok(existsSync(LEGACY_DIR), `expected ${LEGACY_DIR} to exist`);
+  for (const page of RECREATED_WITH_LEGACY) {
+    const live = join(DOCS_DIR, page);
+    const legacy = join(LEGACY_DIR, page);
+    assert.ok(existsSync(live), `${page} must live at docs/${page} (greenfield rewrite)`);
+    assert.ok(existsSync(legacy), `${page} legacy copy must remain at docs/_legacy/${page}`);
   }
 });
 
@@ -117,27 +135,38 @@ test("docs site: jekyll build excludes docs/_legacy/", { timeout: 120_000 }, (t)
       !existsSync(join(destination, "_legacy")),
       "_site/_legacy/ must not exist — _legacy is excluded from publishing",
     );
-    // A quarantined permalink (sandboxing was /sandboxing) must not publish the
-    // original page body. The docs redesign keeps historical permalinks live as
-    // redirect stubs (jekyll-redirect-from) so external links don't 404, but
-    // only the small meta-refresh stub is allowed — never the quarantined prose.
-    const sandboxingProbes = [
-      join(destination, "sandboxing.html"),
-      join(destination, "sandboxing", "index.html"),
+    // A still-quarantined slug must not publish its original page body.
+    // The docs redesign keeps historical permalinks live as redirect stubs
+    // (jekyll-redirect-from) so external links don't 404, but only the small
+    // meta-refresh stub is allowed — never the quarantined prose.
+    //
+    // /sandboxing, /inbox, and /spec-async-handles have been recreated as
+    // live greenfield explanation pages (task 3), so they are no longer
+    // quarantined and must NOT publish as redirect stubs. /hooks remains
+    // quarantined and is the canonical probe here.
+    const hooksProbes = [
+      join(destination, "hooks.html"),
+      join(destination, "hooks", "index.html"),
     ];
-    for (const probe of sandboxingProbes) {
+    let sawHooks = false;
+    for (const probe of hooksProbes) {
       if (!existsSync(probe)) continue;
+      sawHooks = true;
       const html = readFileSync(probe, "utf8");
       assert.match(
         html,
         /<meta\s+http-equiv="refresh"/i,
-        `${probe}: quarantined slug /sandboxing must publish only a redirect stub, not page content`,
+        `${probe}: quarantined slug /hooks must publish only a redirect stub, not page content`,
       );
       assert.ok(
-        !/Docker container isolation|sandbox\s+mount/i.test(html),
-        `${probe}: quarantined sandboxing.md content leaked into _site`,
+        !/hook payload schema|HookConfig/i.test(html),
+        `${probe}: quarantined hooks.md content leaked into _site`,
       );
     }
+    assert.ok(
+      sawHooks,
+      "expected a redirect stub at /hooks (jekyll-redirect-from for the quarantined slug)",
+    );
     // Sanity: a live page is still built.
     assert.ok(
       existsSync(join(destination, "architecture", "index.html")) ||
