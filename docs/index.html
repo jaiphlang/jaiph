@@ -344,7 +344,7 @@ this file; it exists only to satisfy tooling or documentation that expects
 - Artifacts: none
 - Next steps: replace with a real report when you add automated reporting</code></pre>
                     <p>For one-shot failure handling without retry, use <code>catch</code> instead. See
-                        <a href="/language#recover--repair-and-retry-loop">Language — recover</a>.
+                        <a href="/reference/language#catch-and-recover">Language — catch and recover</a>.
                     </p>
                 </div>
 
@@ -575,7 +575,7 @@ Jaiph: Running async.jh<span class="run-banner-meta"> (Docker sandbox, fusefs)</
                         raw shell lines are rejected; use <code>script</code> and <code>run</code> for bash.
                         <code>workflow</code> mixes managed steps with optional <strong>inline shell</strong> lines when
                         they do not parse as Jaiph keywords (prefer <code>script</code> + <code>run</code> for
-                        non-trivial shell). See <a href="grammar#language-concepts">Grammar — Language concepts</a>.
+                        non-trivial shell). See <a href="grammar#workflow-body-statements">Grammar — Workflow body statements</a>.
                         <code>script</code> holds bash (or any
                         language via a fence lang tag like <code>```node</code>, <code>```python3</code>, or a custom
                         shebang) invoked with <code>run</code>. Rules and workflows <strong>require parentheses</strong>
@@ -637,7 +637,7 @@ Jaiph: Running async.jh<span class="run-banner-meta"> (Docker sandbox, fusefs)</
                         <code>const x = run helper(arg)</code>,
                         not
                         <code>const x = helper(arg)</code> (compile error with a correction hint). See
-                        <a href="grammar#immutable-bindings">Immutable bindings</a> and
+                        <a href="language#const-bind-a-value">Language — const</a> and
                         <a href="grammar#step-output-contract">Step output contract</a>.
                     </dd>
 
@@ -671,7 +671,7 @@ Jaiph: Running async.jh<span class="run-banner-meta"> (Docker sandbox, fusefs)</
                         is retried automatically. Stops on success or when the retry limit is exhausted
                         (default 10, configurable via <code>run.recover_limit</code>). <code>recover</code>
                         requires explicit bindings. Workflows only. See
-                        <a href="language#recover--repair-and-retry-loop">Language</a>.
+                        <a href="language#catch-and-recover">Language — catch and recover</a>.
                     </dd>
 
                     <dt><code>match var { "lit" =&gt; … ⏎ /re/ =&gt; … ⏎ _ =&gt; … }</code></dt>
