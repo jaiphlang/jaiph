@@ -117,13 +117,27 @@ test("docs site: jekyll build excludes docs/_legacy/", { timeout: 120_000 }, (t)
       !existsSync(join(destination, "_legacy")),
       "_site/_legacy/ must not exist — _legacy is excluded from publishing",
     );
-    // A quarantined permalink (sandboxing was /sandboxing) must not be generated.
-    assert.ok(
-      !existsSync(join(destination, "sandboxing")) &&
-        !existsSync(join(destination, "sandboxing.html")) &&
-        !existsSync(join(destination, "sandboxing", "index.html")),
-      "quarantined page /sandboxing must not appear in built _site",
-    );
+    // A quarantined permalink (sandboxing was /sandboxing) must not publish the
+    // original page body. The docs redesign keeps historical permalinks live as
+    // redirect stubs (jekyll-redirect-from) so external links don't 404, but
+    // only the small meta-refresh stub is allowed — never the quarantined prose.
+    const sandboxingProbes = [
+      join(destination, "sandboxing.html"),
+      join(destination, "sandboxing", "index.html"),
+    ];
+    for (const probe of sandboxingProbes) {
+      if (!existsSync(probe)) continue;
+      const html = readFileSync(probe, "utf8");
+      assert.match(
+        html,
+        /<meta\s+http-equiv="refresh"/i,
+        `${probe}: quarantined slug /sandboxing must publish only a redirect stub, not page content`,
+      );
+      assert.ok(
+        !/Docker container isolation|sandbox\s+mount/i.test(html),
+        `${probe}: quarantined sandboxing.md content leaked into _site`,
+      );
+    }
     // Sanity: a live page is still built.
     assert.ok(
       existsSync(join(destination, "architecture", "index.html")) ||

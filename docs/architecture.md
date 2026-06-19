@@ -1,8 +1,25 @@
 ---
 title: Architecture
 permalink: /architecture
+diataxis: explanation
 redirect_from:
   - /architecture.md
+  - /getting-started
+  - /setup
+  - /libraries
+  - /artifacts
+  - /language
+  - /grammar
+  - /cli
+  - /configuration
+  - /testing
+  - /spec-async-handles
+  - /spec-async-isolated
+  - /target-design
+  - /inbox
+  - /hooks
+  - /sandboxing
+  - /reporting
 ---
 
 # Architecture

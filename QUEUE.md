@@ -14,30 +14,6 @@ Process rules:
 
 ***
 
-## Docs redesign 2/8 — Diátaxis foundation: front-matter convention + verification harness #dev-ready
-
-### Shared context (repeated verbatim in every "Docs redesign" task so each is standalone)
-
-The `docs/` site (originally 17 flat Markdown pages) mixed all four Diátaxis document types per page and is being restructured per the vendored **documentation-writer** skill at `.jaiph/skills/documentation-writer/SKILL.md` (Diátaxis: **Tutorials** = learning, **How-to** = task recipes, **Reference** = lookup, **Explanation** = understanding). Author each page through that skill's workflow (settle *type / audience / goal / scope*, outline, then write). **Source of truth = the TypeScript/Bash source + `docs/architecture.md`; verify against code, do not trust existing prose.** `_site/` is generated — never hand-edit. Nav is hand-maintained in `docs/_layouts/docs.html`. Keep existing permalinks where a page stays one quadrant (redirect only on rename/removal); keep contributor docs grouped separately.
-
-**Anti-bias protocol:** the pre-redesign pages are quarantined in `docs/_legacy/` (git-tracked, excluded from the Jekyll build) — except `architecture.md` and `jaiph-skill.md`, which stay live. Write every new page **greenfield from source + `architecture.md` first**, then reconcile against the matching `docs/_legacy/<page>.md`. Never edit a legacy copy in place.
-
-**Target information architecture:** Tutorials (*first-workflow*, *first-agent-run*); How-to (install, sandbox-run, agent-auth, configure-backend, hooks, libraries, artifacts, testing); Reference (`cli`, `configuration`, `grammar`, `language`, env-vars); Explanation (`architecture`, sandboxing, `inbox`, `spec-async-handles`, *why-jaiph*); Contributor (`contributing`, `jaiph-skill`).
-
-### This task
-
-Establish the machine-checkable backbone the later tasks are graded against.
-- Define a `diataxis:` front-matter key valued `tutorial | how-to | reference | explanation | contributor`, and apply it to the **currently live** pages (`architecture.md` → `explanation`, `jaiph-skill.md` → `contributor`).
-- Add a docs-lint test (Node `--test`, e.g. under `test-infra/` or `docs/docs-structure.test.ts`) that fails when: any **published** `docs/*.md` lacks a valid `diataxis:` value (pages under `docs/_legacy/` are exempt); any nav entry in `docs/_layouts/docs.html` has no corresponding published page or vice-versa (every published page linked exactly once); any internal Markdown link / `permalink` / `redirect_from` points at a missing page or anchor.
-- Add a **redirect-coverage** check: any permalink present in git history's nav that no longer resolves must have a `redirect_from`.
-
-### Acceptance criteria (each verified by a test that fails when violated)
-- The docs-lint test is wired into `npm test`; removing `diataxis:` from a published page, or adding a nav entry with no page (or a published page with no nav entry), makes it fail.
-- The internal-link checker fails when an intra-docs link target is deleted; the redirect-coverage check fails when a historical permalink resolves to nothing and has no `redirect_from`.
-- Pages under `docs/_legacy/` are exempt from all the above; `npm test` is green.
-
-***
-
 ## Docs redesign 3/8 — Explanation pass: concentrate understanding-oriented pages #dev-ready
 
 ### Shared context (repeated verbatim in every "Docs redesign" task so each is standalone)

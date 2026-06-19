@@ -44,8 +44,7 @@
             <ul class="docs-nav-list">
                 <li><a href="{{ '/' | relative_url }}">jaiph.org</a></li>
                 <li><a href="{{ '/architecture' | relative_url }}"{% if page.permalink == '/architecture' %} class="docs-nav-active" aria-current="page"{% endif %}>Architecture</a></li>
-                <li><a href="https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md"
-                        target="_blank" rel="noopener noreferrer">Agent Skill</a></li>
+                <li><a href="{{ '/jaiph-skill' | relative_url }}"{% if page.permalink == '/jaiph-skill' %} class="docs-nav-active" aria-current="page"{% endif %}>Agent Skill</a></li>
             </ul>
         </div>
     </nav>
