@@ -5,6 +5,7 @@ diataxis: contributor
 redirect_from:
   - /jaiph-skill.md
   - /contributing
+  - /contributing.md
 ---
 
 # Jaiph Skill (for Agents)

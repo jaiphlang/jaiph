@@ -4,7 +4,6 @@ permalink: /architecture
 diataxis: explanation
 redirect_from:
   - /architecture.md
-  - /getting-started
   - /spec-async-isolated
   - /target-design
   - /reporting
