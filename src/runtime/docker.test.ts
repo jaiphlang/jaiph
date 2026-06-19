@@ -683,13 +683,15 @@ test("isEnvAllowed: rejects arbitrary vars", () => {
 });
 
 // ---------------------------------------------------------------------------
-// docs/sandboxing.md parity: env forwarding section must match source constants
+// docs/_legacy/sandboxing.md parity: env forwarding section must match source constants
+// (Sandboxing/configuration/cli pages are quarantined under docs/_legacy/ until the
+// redesign rebuilds them; the parity check still points at the live legacy text.)
 // ---------------------------------------------------------------------------
 
 const REPO_ROOT = resolve(__dirname, "..", "..", "..");
 
-test("docs/sandboxing.md env-forwarding section lists ENV_ALLOW_PREFIXES verbatim", () => {
-  const doc = readFileSync(join(REPO_ROOT, "docs", "sandboxing.md"), "utf8");
+test("docs/_legacy/sandboxing.md env-forwarding section lists ENV_ALLOW_PREFIXES verbatim", () => {
+  const doc = readFileSync(join(REPO_ROOT, "docs", "_legacy", "sandboxing.md"), "utf8");
   const headingIdx = doc.indexOf("### Environment variable forwarding");
   assert.notEqual(headingIdx, -1, "env-forwarding section heading not found");
   const nextHeadingIdx = doc.indexOf("\n### ", headingIdx + 1);
@@ -707,7 +709,7 @@ test("docs/sandboxing.md env-forwarding section lists ENV_ALLOW_PREFIXES verbati
 
 test("docs cross-link to sandboxing env-forwarding section from configuration.md and cli.md", () => {
   const linkRe = /sandboxing\.md#environment-variable-forwarding/;
-  for (const rel of ["docs/configuration.md", "docs/cli.md"]) {
+  for (const rel of ["docs/_legacy/configuration.md", "docs/_legacy/cli.md"]) {
     const content = readFileSync(join(REPO_ROOT, rel), "utf8");
     assert.match(content, linkRe, `${rel} missing cross-link to env-forwarding section`);
   }
