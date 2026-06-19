@@ -43,12 +43,10 @@
         <div id="docs-nav-panel" class="docs-nav-panel" role="region" aria-labelledby="docs-nav-toggle" hidden>
             <ul class="docs-nav-list">
                 <li><a href="{{ '/' | relative_url }}">jaiph.org</a></li>
-                <li><a href="{{ '/why-jaiph' | relative_url }}"{% if page.permalink == '/why-jaiph' %} class="docs-nav-active" aria-current="page"{% endif %}>Why Jaiph</a></li>
-                <li><a href="{{ '/architecture' | relative_url }}"{% if page.permalink == '/architecture' %} class="docs-nav-active" aria-current="page"{% endif %}>Architecture</a></li>
-                <li><a href="{{ '/sandboxing' | relative_url }}"{% if page.permalink == '/sandboxing' %} class="docs-nav-active" aria-current="page"{% endif %}>Sandboxing</a></li>
-                <li><a href="{{ '/inbox' | relative_url }}"{% if page.permalink == '/inbox' %} class="docs-nav-active" aria-current="page"{% endif %}>Inbox &amp; Dispatch</a></li>
-                <li><a href="{{ '/spec-async-handles' | relative_url }}"{% if page.permalink == '/spec-async-handles' %} class="docs-nav-active" aria-current="page"{% endif %}>Async Handles</a></li>
-                <li class="docs-nav-group">How-to</li>
+                <li class="docs-nav-group">Tutorials</li>
+                <li><a href="{{ '/tutorials/first-workflow' | relative_url }}"{% if page.permalink == '/tutorials/first-workflow' %} class="docs-nav-active" aria-current="page"{% endif %}>Your first workflow</a></li>
+                <li><a href="{{ '/tutorials/first-agent-run' | relative_url }}"{% if page.permalink == '/tutorials/first-agent-run' %} class="docs-nav-active" aria-current="page"{% endif %}>Your first agent + sandboxed run</a></li>
+                <li class="docs-nav-group">How-to guides</li>
                 <li><a href="{{ '/how-to/install' | relative_url }}"{% if page.permalink == '/how-to/install' %} class="docs-nav-active" aria-current="page"{% endif %}>Install &amp; switch versions</a></li>
                 <li><a href="{{ '/how-to/sandbox-run' | relative_url }}"{% if page.permalink == '/how-to/sandbox-run' %} class="docs-nav-active" aria-current="page"{% endif %}>Run in a Docker sandbox</a></li>
                 <li><a href="{{ '/how-to/agent-auth' | relative_url }}"{% if page.permalink == '/how-to/agent-auth' %} class="docs-nav-active" aria-current="page"{% endif %}>Authenticate agent backends</a></li>
@@ -63,6 +61,13 @@
                 <li><a href="{{ '/reference/grammar' | relative_url }}"{% if page.permalink == '/reference/grammar' %} class="docs-nav-active" aria-current="page"{% endif %}>Grammar</a></li>
                 <li><a href="{{ '/reference/language' | relative_url }}"{% if page.permalink == '/reference/language' %} class="docs-nav-active" aria-current="page"{% endif %}>Language</a></li>
                 <li><a href="{{ '/reference/env-vars' | relative_url }}"{% if page.permalink == '/reference/env-vars' %} class="docs-nav-active" aria-current="page"{% endif %}>Environment variables</a></li>
+                <li class="docs-nav-group">Explanation</li>
+                <li><a href="{{ '/architecture' | relative_url }}"{% if page.permalink == '/architecture' %} class="docs-nav-active" aria-current="page"{% endif %}>Architecture</a></li>
+                <li><a href="{{ '/sandboxing' | relative_url }}"{% if page.permalink == '/sandboxing' %} class="docs-nav-active" aria-current="page"{% endif %}>Sandboxing</a></li>
+                <li><a href="{{ '/inbox' | relative_url }}"{% if page.permalink == '/inbox' %} class="docs-nav-active" aria-current="page"{% endif %}>Inbox &amp; Dispatch</a></li>
+                <li><a href="{{ '/spec-async-handles' | relative_url }}"{% if page.permalink == '/spec-async-handles' %} class="docs-nav-active" aria-current="page"{% endif %}>Async Handles</a></li>
+                <li><a href="{{ '/why-jaiph' | relative_url }}"{% if page.permalink == '/why-jaiph' %} class="docs-nav-active" aria-current="page"{% endif %}>Why Jaiph</a></li>
+                <li class="docs-nav-group">Contributing</li>
                 <li><a href="{{ '/jaiph-skill' | relative_url }}"{% if page.permalink == '/jaiph-skill' %} class="docs-nav-active" aria-current="page"{% endif %}>Agent Skill</a></li>
             </ul>
         </div>
