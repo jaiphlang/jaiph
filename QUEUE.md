@@ -193,7 +193,9 @@ Wire the finished structure together.
 
 ***
 
-## Docs redesign 8/8 — Pass `docs_parity.jh` + retire the legacy quarantine #dev-ready
+## Docs redesign 8/8 — Pass `docs_parity.jh` + retire the legacy quarantine
+
+> **Not `#dev-ready`:** this task requires a standalone `jaiph run .jaiph/docs_parity.jh` invocation (the `jaiph` CLI executing a `.jaiph/*.jh` workflow on a clean worktree), not just file edits. Run it manually / out-of-band after tasks 1–7 land; do not auto-pick it.
 
 ### Shared context (repeated verbatim in every "Docs redesign" task so each is standalone)
 
