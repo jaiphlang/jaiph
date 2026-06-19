@@ -2,7 +2,7 @@
 
 [jaiph.org](https://jaiph.org) · [Why Jaiph](docs/why-jaiph.md) · [Architecture](docs/architecture.md) · [Sandboxing](docs/sandboxing.md) · [Inbox & Dispatch](docs/inbox.md) · [Async Handles](docs/spec-async-handles.md) · [Agent Skill](https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md)
 
-> **Docs note:** The Jaiph documentation site is being rewritten under the [Diátaxis](https://diataxis.fr/) framework. The Explanation quadrant has landed — [Why Jaiph](docs/why-jaiph.md), [Architecture](docs/architecture.md), [Sandboxing](docs/sandboxing.md), [Inbox & Dispatch](docs/inbox.md), and [Async Handles](docs/spec-async-handles.md) are live on `jaiph.org`. The remaining pre-redesign pages stay quarantined under [`docs/_legacy/`](docs/_legacy/) (in git, not published) until their How-to / Reference replacements land. Legacy index: [Getting Started](docs/_legacy/getting-started.md) · [Setup](docs/_legacy/setup.md) · [Libraries](docs/_legacy/libraries.md) · [Language](docs/_legacy/language.md) · [Grammar](docs/_legacy/grammar.md) · [CLI](docs/_legacy/cli.md) · [Configuration](docs/_legacy/configuration.md) · [Testing](docs/_legacy/testing.md) · [Hooks](docs/_legacy/hooks.md) · [Runtime artifacts](docs/_legacy/artifacts.md) · [Contributing](docs/_legacy/contributing.md).
+> **Docs note:** The Jaiph documentation site is being rewritten under the [Diátaxis](https://diataxis.fr/) framework. The Explanation and How-to quadrants have landed. Explanation: [Why Jaiph](docs/why-jaiph.md), [Architecture](docs/architecture.md), [Sandboxing](docs/sandboxing.md), [Inbox & Dispatch](docs/inbox.md), [Async Handles](docs/spec-async-handles.md). How-to: [Install & switch versions](docs/setup.md), [Run in a Docker sandbox](docs/sandbox-run.md), [Authenticate agent backends](docs/agent-auth.md), [Configure backend & model](docs/configure-backend.md), [Add a hook](docs/hooks.md), [Use & publish a library](docs/libraries.md), [Save artifacts](docs/artifacts.md), [Write & run tests](docs/testing.md). The remaining pre-redesign pages stay quarantined under [`docs/_legacy/`](docs/_legacy/) (in git, not published) until their Reference / Tutorial / Contributor replacements land. Legacy index: [Getting Started](docs/_legacy/getting-started.md) · [Language](docs/_legacy/language.md) · [Grammar](docs/_legacy/grammar.md) · [CLI](docs/_legacy/cli.md) · [Configuration](docs/_legacy/configuration.md) · [Contributing](docs/_legacy/contributing.md).
 
 ---
 
@@ -23,9 +23,9 @@
 - **Workflows** — Compose `prompt`, `run`, `ensure`, channel sends, conditionals, `run async` with implicit join, `catch`, and repair-and-retry `recover`.
 - **Rules and scripts** — Rules stay structured (no raw shell lines); **`script`** steps run bash or polyglot code as subprocesses.
 - **Agents** — Backends include Cursor, Claude, Codex (HTTP), or a custom `agent.command`.
-- **Testing** — `*.test.jh` files run in-process (`jaiph test`) with mocks and `expect_*` assertions ([Testing](docs/_legacy/testing.md)).
-- **Safety and inspectability** — Docker-backed sandbox for **`jaiph run`** (env-controlled; see [Sandboxing](docs/sandboxing.md)); live **`__JAIPH_EVENT__`** on stderr and durable **`.jaiph/runs/`** artifacts ([Architecture](docs/architecture.md)).
-- **Tooling** — `jaiph compile`, `jaiph format`, `jaiph install` / `.jaiph/libs/`, and optional `hooks.json` ([CLI](docs/_legacy/cli.md), [Hooks](docs/_legacy/hooks.md)).
+- **Testing** — `*.test.jh` files run in-process (`jaiph test`) with mocks and `expect_*` assertions ([Write & run tests](docs/testing.md)).
+- **Safety and inspectability** — Docker-backed sandbox for **`jaiph run`** (env-controlled; see [Sandboxing](docs/sandboxing.md) and [Run in a Docker sandbox](docs/sandbox-run.md)); live **`__JAIPH_EVENT__`** on stderr and durable **`.jaiph/runs/`** artifacts ([Architecture](docs/architecture.md)).
+- **Tooling** — `jaiph compile`, `jaiph format`, `jaiph install` / `.jaiph/libs/` ([Use & publish a library](docs/libraries.md)), and optional `hooks.json` ([CLI](docs/_legacy/cli.md), [Add a hook](docs/hooks.md)).
 
 ## Core components
 
@@ -66,7 +66,7 @@ npm install -g jaiph
 
 Verify: `jaiph --version`. Switch versions: `jaiph use nightly` or `jaiph use 0.9.4`.
 
-Initialize a project (optional): `jaiph init` writes `.jaiph/` with bootstrap workflow, gitignore entries for runs/tmp, and **`SKILL.md`**. The CLI resolves the skill body in this order — `JAIPH_SKILL_PATH`, install-relative `jaiph-skill.md`, `docs/jaiph-skill.md` under cwd, then an **embedded copy baked into the binary** as the final fallback — so `jaiph init` always writes `SKILL.md` (see [Setup](docs/_legacy/setup.md)). Canonical skill text for agents: `https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md`.
+Initialize a project (optional): `jaiph init` writes `.jaiph/` with bootstrap workflow, gitignore entries for runs/tmp, and **`SKILL.md`**. The CLI resolves the skill body in this order — `JAIPH_SKILL_PATH`, install-relative `jaiph-skill.md`, `docs/jaiph-skill.md` under cwd, then an **embedded copy baked into the binary** as the final fallback — so `jaiph init` always writes `SKILL.md` (see [Install & switch versions](docs/setup.md)). Canonical skill text for agents: `https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md`.
 
 ## Usage
 
@@ -104,7 +104,7 @@ workflow default(task) {
 ./main.jh "add user authentication"
 ```
 
-For the full language reference, see [Grammar](docs/_legacy/grammar.md). For install, workspace layout, libraries, CLI commands, configuration, testing, sandboxing, hooks, inbox dispatch, and on-disk run output, see [Getting Started](docs/_legacy/getting-started.md) (map), [Setup](docs/_legacy/setup.md), and [Runtime artifacts](docs/_legacy/artifacts.md), or visit [jaiph.org](https://jaiph.org).
+For the full language reference, see [Grammar](docs/_legacy/grammar.md). For install, libraries, sandboxing, hooks, testing, and artifacts, see the How-to quadrant: [Install & switch versions](docs/setup.md), [Use & publish a library](docs/libraries.md), [Run in a Docker sandbox](docs/sandbox-run.md), [Add a hook](docs/hooks.md), [Write & run tests](docs/testing.md), [Save artifacts](docs/artifacts.md). For the workspace-layout overview, see [Getting Started](docs/_legacy/getting-started.md) (map) — replacement tutorials land next. Or visit [jaiph.org](https://jaiph.org).
 
 ## Start here
 

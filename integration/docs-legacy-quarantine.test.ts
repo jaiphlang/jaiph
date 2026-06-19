@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -16,24 +16,24 @@ const LIVE_PAGES = ["architecture.md", "jaiph-skill.md"];
 // (e.g. inbox.md in task 3), it leaves this list — the legacy copy stays as a
 // reconciliation reference, but a live page now occupies the original path.
 const QUARANTINED_PAGES = [
-  "artifacts.md",
   "cli.md",
   "configuration.md",
   "contributing.md",
   "getting-started.md",
   "grammar.md",
-  "hooks.md",
   "language.md",
-  "libraries.md",
-  "setup.md",
-  "testing.md",
 ];
 // Recreated-with-legacy-reference: a live docs/<page>.md exists AND the
 // pre-redesign body is preserved under docs/_legacy/<page>.md for reconciliation.
 const RECREATED_WITH_LEGACY = [
+  "artifacts.md",
+  "hooks.md",
   "inbox.md",
+  "libraries.md",
   "sandboxing.md",
+  "setup.md",
   "spec-async-handles.md",
+  "testing.md",
 ];
 
 test("docs: live pages remain at original paths", () => {
@@ -76,24 +76,38 @@ test("docs nav: every internal link resolves to a live (non-quarantined) page", 
   }
   assert.ok(permalinks.size > 0, "nav should contain at least one internal link");
 
-  const quarantinedSlugs = new Set(QUARANTINED_PAGES.map((p) => "/" + p.replace(/\.md$/, "")));
+  // Collect each docs/*.md front-matter `permalink:` so nav entries with
+  // custom permalinks (e.g. how-to pages at docs/<name>.md → /how-to/<slug>)
+  // resolve by declared permalink rather than by URL-to-path heuristic.
+  const liveDocsFiles = readdirSync(DOCS_DIR).filter((e: string) =>
+    e.endsWith(".md"),
+  );
+  const livePermalinks = new Set<string>();
+  for (const entry of liveDocsFiles) {
+    const src = readFileSync(join(DOCS_DIR, entry), "utf8");
+    const fm = src.match(/^---\n([\s\S]*?)\n---/);
+    if (!fm) continue;
+    const pl = fm[1].split("\n").find((l) => /^permalink\s*:/.test(l));
+    if (!pl) continue;
+    const value = pl
+      .replace(/^permalink\s*:\s*/, "")
+      .trim()
+      .replace(/^['"]|['"]$/g, "");
+    if (value) livePermalinks.add(value);
+  }
+
+  const quarantinedSlugs = new Set(
+    QUARANTINED_PAGES.map((p) => "/" + p.replace(/\.md$/, "")),
+  );
   for (const link of permalinks) {
     if (link === "/" || link === "") continue;
     assert.ok(
       !quarantinedSlugs.has(link),
       `nav points at quarantined page ${link} — remove it from docs/_layouts/docs.html`,
     );
-    // Resolve to an on-disk source page that still lives under docs/ (not _legacy).
-    const slug = link.replace(/^\//, "");
-    const candidates = [
-      join(DOCS_DIR, `${slug}.md`),
-      join(DOCS_DIR, `${slug}.html`),
-      join(DOCS_DIR, slug, "index.md"),
-      join(DOCS_DIR, slug, "index.html"),
-    ];
     assert.ok(
-      candidates.some((p) => existsSync(p)),
-      `nav link ${link} has no live source page in docs/ (tried ${candidates.join(", ")})`,
+      livePermalinks.has(link),
+      `nav link ${link} has no live docs/*.md whose front-matter declares 'permalink: ${link}'`,
     );
   }
 });
@@ -140,32 +154,34 @@ test("docs site: jekyll build excludes docs/_legacy/", { timeout: 120_000 }, (t)
     // (jekyll-redirect-from) so external links don't 404, but only the small
     // meta-refresh stub is allowed — never the quarantined prose.
     //
-    // /sandboxing, /inbox, and /spec-async-handles have been recreated as
-    // live greenfield explanation pages (task 3), so they are no longer
-    // quarantined and must NOT publish as redirect stubs. /hooks remains
-    // quarantined and is the canonical probe here.
-    const hooksProbes = [
-      join(destination, "hooks.html"),
-      join(destination, "hooks", "index.html"),
+    // /hooks, /artifacts, /libraries, /setup, /testing have been recreated as
+    // live greenfield how-to pages (task 4), so they are no longer quarantined
+    // — their redirect_from still emits a stub, but it points at the new live
+    // page rather than masking quarantined prose. /getting-started remains
+    // quarantined (its replacement tutorial lands in task 6) and is the
+    // canonical probe here.
+    const gsProbes = [
+      join(destination, "getting-started.html"),
+      join(destination, "getting-started", "index.html"),
     ];
-    let sawHooks = false;
-    for (const probe of hooksProbes) {
+    let sawGs = false;
+    for (const probe of gsProbes) {
       if (!existsSync(probe)) continue;
-      sawHooks = true;
+      sawGs = true;
       const html = readFileSync(probe, "utf8");
       assert.match(
         html,
         /<meta\s+http-equiv="refresh"/i,
-        `${probe}: quarantined slug /hooks must publish only a redirect stub, not page content`,
+        `${probe}: quarantined slug /getting-started must publish only a redirect stub, not page content`,
       );
       assert.ok(
-        !/hook payload schema|HookConfig/i.test(html),
-        `${probe}: quarantined hooks.md content leaked into _site`,
+        !/VS Code extension/i.test(html),
+        `${probe}: quarantined getting-started.md content leaked into _site`,
       );
     }
     assert.ok(
-      sawHooks,
-      "expected a redirect stub at /hooks (jekyll-redirect-from for the quarantined slug)",
+      sawGs,
+      "expected a redirect stub at /getting-started (jekyll-redirect-from for the quarantined slug)",
     );
     // Sanity: a live page is still built.
     assert.ok(
