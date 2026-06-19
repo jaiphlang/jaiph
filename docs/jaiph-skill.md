@@ -1,8 +1,10 @@
 ---
 title: Agent Skill
 permalink: /jaiph-skill
+diataxis: contributor
 redirect_from:
   - /jaiph-skill.md
+  - /contributing
 ---
 
 # Jaiph Skill (for Agents)
