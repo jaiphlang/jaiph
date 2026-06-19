@@ -99,6 +99,34 @@ test("claude on host with no creds → warning, no error (CLI login may work)", 
 });
 
 // ---------------------------------------------------------------------------
+// Unsafe mode: the credential pre-flight is skipped entirely
+// ---------------------------------------------------------------------------
+
+test("unsafe mode (JAIPH_UNSAFE=true): claude with no creds → no warning, no error", () => {
+  const mod = emptyModule(ENTRY, { agent: { backend: "claude" } });
+  const r = preflightAgentCredentials({
+    mod,
+    inputAbs: ENTRY,
+    runtimeEnv: envFor("claude", { JAIPH_UNSAFE: "true" }),
+    dockerEnabled: false,
+  });
+  assert.equal(r.errors.length, 0);
+  assert.equal(r.warnings.length, 0);
+});
+
+test("unsafe mode (JAIPH_UNSAFE=true): codex with no OPENAI_API_KEY → no hard error", () => {
+  const mod = emptyModule(ENTRY, { agent: { backend: "codex" } });
+  const r = preflightAgentCredentials({
+    mod,
+    inputAbs: ENTRY,
+    runtimeEnv: envFor("codex", { JAIPH_UNSAFE: "true" }),
+    dockerEnabled: false,
+  });
+  assert.equal(r.errors.length, 0);
+  assert.equal(r.warnings.length, 0);
+});
+
+// ---------------------------------------------------------------------------
 // AC3: cursor host/Docker split + codex always-hard
 // ---------------------------------------------------------------------------
 
