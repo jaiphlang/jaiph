@@ -14,30 +14,6 @@ Process rules:
 
 ***
 
-## Docs redesign 5/8 — Reference pass: pure lookup pages, code-verified #dev-ready
-
-### Shared context (repeated verbatim in every "Docs redesign" task so each is standalone)
-
-The `docs/` site mixed all four Diátaxis types per page and is being restructured per `.jaiph/skills/documentation-writer/SKILL.md` (Tutorials = learning, How-to = recipes, Reference = lookup, Explanation = understanding). Author through the skill's workflow. **Source of truth = the TypeScript/Bash source + `docs/architecture.md`; verify against code.** `_site/` generated — never hand-edit. Nav in `docs/_layouts/docs.html`. Keep permalinks unless renamed; contributor docs grouped separately. Uses the `diataxis:` convention + harness from task 2.
-
-**Anti-bias protocol:** pre-redesign pages are quarantined in `docs/_legacy/` (build-excluded) — except `architecture.md` and `jaiph-skill.md` (live). Write each reference page **greenfield from source first** (the code literally defines the flags / keys / grammar), then reconcile against `docs/_legacy/<page>.md`. Never edit a legacy copy in place; treat legacy tables as unverified hints.
-
-**Target information architecture:** Tutorials (*first-workflow*, *first-agent-run*); How-to (install, sandbox-run, agent-auth, configure-backend, hooks, libraries, artifacts, testing); Reference (`cli`, `configuration`, `grammar`, `language`, env-vars); Explanation (`architecture`, sandboxing, `inbox`, `spec-async-handles`, *why-jaiph*); Contributor (`contributing`, `jaiph-skill`).
-
-### This task
-
-Build the Reference quadrant (after tasks 3–4 so what remains is genuinely reference). Each page is information-oriented: exhaustive, neutral, table-driven, no tutorials/recipes/opinion.
-- Recreate `cli` (every command, flag, exit code), `configuration` (every config key, type, default, env equivalent, precedence), `grammar` (authoritative grammar), `language` (step types/expressions reference — any "why"/walkthrough prose goes to explanation).
-- Create a consolidated **env-var reference** (`/reference/env-vars`) aggregating every `JAIPH_*` / `ANTHROPIC_*` / `CURSOR_*` / `CLAUDE_*` / `OPENAI_*` variable from source; other pages link here instead of re-listing. Absorb the sandboxing config/failure-mode tables excluded in task 3.
-- Each page `diataxis: reference`; nav under a **Reference** group (finalized task 7).
-
-### Acceptance criteria (each verified by a test that fails when violated)
-- A source-parity test for the env-var reference: every `JAIPH_*` name read in `src/` (greppable `env\.JAIPH_[A-Z_]+` / `process.env.JAIPH_*`) appears in the table, and the page lists no variable absent from source — fails on drift in either direction.
-- The reference pages contain no second-person tutorial prose / numbered walkthroughs (grep heuristic test).
-- docs-lint + internal-link + redirect-coverage checks (task 2) all green.
-
-***
-
 ## Docs redesign 6/8 — Tutorials: guided first-success paths #dev-ready
 
 ### Shared context (repeated verbatim in every "Docs redesign" task so each is standalone)

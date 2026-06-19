@@ -1,8 +1,8 @@
 # ![Jaiph](docs/logo.png)
 
-[jaiph.org](https://jaiph.org) · [Why Jaiph](docs/why-jaiph.md) · [Architecture](docs/architecture.md) · [Sandboxing](docs/sandboxing.md) · [Inbox & Dispatch](docs/inbox.md) · [Async Handles](docs/spec-async-handles.md) · [Agent Skill](https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md)
+[jaiph.org](https://jaiph.org) · [Why Jaiph](docs/why-jaiph.md) · [Architecture](docs/architecture.md) · [Sandboxing](docs/sandboxing.md) · [Inbox & Dispatch](docs/inbox.md) · [Async Handles](docs/spec-async-handles.md) · [CLI](docs/cli.md) · [Configuration](docs/configuration.md) · [Grammar](docs/grammar.md) · [Language](docs/language.md) · [Environment variables](docs/env-vars.md) · [Agent Skill](https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md)
 
-> **Docs note:** The Jaiph documentation site is being rewritten under the [Diátaxis](https://diataxis.fr/) framework. The Explanation and How-to quadrants have landed. Explanation: [Why Jaiph](docs/why-jaiph.md), [Architecture](docs/architecture.md), [Sandboxing](docs/sandboxing.md), [Inbox & Dispatch](docs/inbox.md), [Async Handles](docs/spec-async-handles.md). How-to: [Install & switch versions](docs/setup.md), [Run in a Docker sandbox](docs/sandbox-run.md), [Authenticate agent backends](docs/agent-auth.md), [Configure backend & model](docs/configure-backend.md), [Add a hook](docs/hooks.md), [Use & publish a library](docs/libraries.md), [Save artifacts](docs/artifacts.md), [Write & run tests](docs/testing.md). The remaining pre-redesign pages stay quarantined under [`docs/_legacy/`](docs/_legacy/) (in git, not published) until their Reference / Tutorial / Contributor replacements land. Legacy index: [Getting Started](docs/_legacy/getting-started.md) · [Language](docs/_legacy/language.md) · [Grammar](docs/_legacy/grammar.md) · [CLI](docs/_legacy/cli.md) · [Configuration](docs/_legacy/configuration.md) · [Contributing](docs/_legacy/contributing.md).
+> **Docs note:** The Jaiph documentation site is being rewritten under the [Diátaxis](https://diataxis.fr/) framework. The Explanation, How-to, and Reference quadrants have landed. Explanation: [Why Jaiph](docs/why-jaiph.md), [Architecture](docs/architecture.md), [Sandboxing](docs/sandboxing.md), [Inbox & Dispatch](docs/inbox.md), [Async Handles](docs/spec-async-handles.md). How-to: [Install & switch versions](docs/setup.md), [Run in a Docker sandbox](docs/sandbox-run.md), [Authenticate agent backends](docs/agent-auth.md), [Configure backend & model](docs/configure-backend.md), [Add a hook](docs/hooks.md), [Use & publish a library](docs/libraries.md), [Save artifacts](docs/artifacts.md), [Write & run tests](docs/testing.md). Reference: [CLI](docs/cli.md), [Configuration](docs/configuration.md), [Grammar](docs/grammar.md), [Language](docs/language.md), [Environment variables](docs/env-vars.md). The remaining pre-redesign pages stay quarantined under [`docs/_legacy/`](docs/_legacy/) (in git, not published) until their Tutorial / Contributor replacements land. Legacy index: [Getting Started](docs/_legacy/getting-started.md) · [Contributing](docs/_legacy/contributing.md).
 
 ---
 
@@ -25,7 +25,7 @@
 - **Agents** — Backends include Cursor, Claude, Codex (HTTP), or a custom `agent.command`.
 - **Testing** — `*.test.jh` files run in-process (`jaiph test`) with mocks and `expect_*` assertions ([Write & run tests](docs/testing.md)).
 - **Safety and inspectability** — Docker-backed sandbox for **`jaiph run`** (env-controlled; see [Sandboxing](docs/sandboxing.md) and [Run in a Docker sandbox](docs/sandbox-run.md)); live **`__JAIPH_EVENT__`** on stderr and durable **`.jaiph/runs/`** artifacts ([Architecture](docs/architecture.md)).
-- **Tooling** — `jaiph compile`, `jaiph format`, `jaiph install` / `.jaiph/libs/` ([Use & publish a library](docs/libraries.md)), and optional `hooks.json` ([CLI](docs/_legacy/cli.md), [Add a hook](docs/hooks.md)).
+- **Tooling** — `jaiph compile`, `jaiph format`, `jaiph install` / `.jaiph/libs/` ([Use & publish a library](docs/libraries.md)), and optional `hooks.json` ([CLI](docs/cli.md), [Add a hook](docs/hooks.md)).
 
 ## Core components
 
@@ -75,7 +75,7 @@ Initialize a project (optional): `jaiph init` writes `.jaiph/` with bootstrap wo
 - Validate without executing: `jaiph compile …` (same `validateReferences` checks as before `jaiph run`; no `scripts/` emission — see [Architecture](docs/architecture.md)).
 - Format sources: `jaiph format …` / `jaiph format --check …`.
 
-Full flags and environment variables: [CLI reference](docs/_legacy/cli.md). Doc map: [Getting Started](docs/_legacy/getting-started.md).
+Full flags and environment variables: [CLI](docs/cli.md), [Environment variables](docs/env-vars.md). Doc map: [Getting Started](docs/_legacy/getting-started.md).
 
 ## Example
 
@@ -104,7 +104,7 @@ workflow default(task) {
 ./main.jh "add user authentication"
 ```
 
-For the full language reference, see [Grammar](docs/_legacy/grammar.md). For install, libraries, sandboxing, hooks, testing, and artifacts, see the How-to quadrant: [Install & switch versions](docs/setup.md), [Use & publish a library](docs/libraries.md), [Run in a Docker sandbox](docs/sandbox-run.md), [Add a hook](docs/hooks.md), [Write & run tests](docs/testing.md), [Save artifacts](docs/artifacts.md). For the workspace-layout overview, see [Getting Started](docs/_legacy/getting-started.md) (map) — replacement tutorials land next. Or visit [jaiph.org](https://jaiph.org).
+For the full language reference, see [Grammar](docs/grammar.md) and [Language](docs/language.md). For install, libraries, sandboxing, hooks, testing, and artifacts, see the How-to quadrant: [Install & switch versions](docs/setup.md), [Use & publish a library](docs/libraries.md), [Run in a Docker sandbox](docs/sandbox-run.md), [Add a hook](docs/hooks.md), [Write & run tests](docs/testing.md), [Save artifacts](docs/artifacts.md). For the workspace-layout overview, see [Getting Started](docs/_legacy/getting-started.md) (map) — replacement tutorials land next. Or visit [jaiph.org](https://jaiph.org).
 
 ## Start here
 

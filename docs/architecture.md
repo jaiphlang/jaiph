@@ -5,10 +5,6 @@ diataxis: explanation
 redirect_from:
   - /architecture.md
   - /getting-started
-  - /language
-  - /grammar
-  - /cli
-  - /configuration
   - /spec-async-isolated
   - /target-design
   - /reporting
