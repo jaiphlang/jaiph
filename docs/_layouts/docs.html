@@ -43,7 +43,11 @@
         <div id="docs-nav-panel" class="docs-nav-panel" role="region" aria-labelledby="docs-nav-toggle" hidden>
             <ul class="docs-nav-list">
                 <li><a href="{{ '/' | relative_url }}">jaiph.org</a></li>
+                <li><a href="{{ '/why-jaiph' | relative_url }}"{% if page.permalink == '/why-jaiph' %} class="docs-nav-active" aria-current="page"{% endif %}>Why Jaiph</a></li>
                 <li><a href="{{ '/architecture' | relative_url }}"{% if page.permalink == '/architecture' %} class="docs-nav-active" aria-current="page"{% endif %}>Architecture</a></li>
+                <li><a href="{{ '/sandboxing' | relative_url }}"{% if page.permalink == '/sandboxing' %} class="docs-nav-active" aria-current="page"{% endif %}>Sandboxing</a></li>
+                <li><a href="{{ '/inbox' | relative_url }}"{% if page.permalink == '/inbox' %} class="docs-nav-active" aria-current="page"{% endif %}>Inbox &amp; Dispatch</a></li>
+                <li><a href="{{ '/spec-async-handles' | relative_url }}"{% if page.permalink == '/spec-async-handles' %} class="docs-nav-active" aria-current="page"{% endif %}>Async Handles</a></li>
                 <li><a href="{{ '/jaiph-skill' | relative_url }}"{% if page.permalink == '/jaiph-skill' %} class="docs-nav-active" aria-current="page"{% endif %}>Agent Skill</a></li>
             </ul>
         </div>

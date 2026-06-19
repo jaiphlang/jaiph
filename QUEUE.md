@@ -14,31 +14,6 @@ Process rules:
 
 ***
 
-## Docs redesign 3/8 — Explanation pass: concentrate understanding-oriented pages #dev-ready
-
-### Shared context (repeated verbatim in every "Docs redesign" task so each is standalone)
-
-The `docs/` site mixed all four Diátaxis types per page and is being restructured per `.jaiph/skills/documentation-writer/SKILL.md` (Diátaxis: Tutorials = learning, How-to = recipes, Reference = lookup, Explanation = understanding). Author through the skill's workflow. **Source of truth = the TypeScript/Bash source + `docs/architecture.md`; verify against code, do not trust prose.** `_site/` is generated — never hand-edit. Nav in `docs/_layouts/docs.html`. Keep permalinks unless renamed; contributor docs grouped separately. Uses the `diataxis:` front-matter convention + docs-lint harness from task 2 (add if absent).
-
-**Anti-bias protocol:** the pre-redesign pages are quarantined in `docs/_legacy/` (git-tracked, build-excluded) — except `architecture.md` and `jaiph-skill.md`, which stay live. Write every new page **greenfield from source + `architecture.md` first**, then reconcile against `docs/_legacy/<page>.md`. Never edit a legacy copy in place; never paraphrase without re-verifying against code.
-
-**Target information architecture:** Tutorials (*first-workflow*, *first-agent-run*); How-to (install, sandbox-run, agent-auth, configure-backend, hooks, libraries, artifacts, testing); Reference (`cli`, `configuration`, `grammar`, `language`, env-vars); Explanation (`architecture`, sandboxing, `inbox`, `spec-async-handles`, *why-jaiph*); Contributor (`contributing`, `jaiph-skill`).
-
-### This task
-
-Build the Explanation quadrant first so extracted concepts have a home before How-to/Reference are written.
-- Recreate `inbox` and `spec-async-handles` as live explanation pages, written greenfield from source and reconciled against their `docs/_legacy/` copies — understanding-only (no step-by-step recipes, no exhaustive key tables; those belong to how-to/reference).
-- Create a **sandboxing** explanation page (the sandboxing model, the three modes, threat model, "what Docker does / does not protect against") from `_legacy/sandboxing.md` + source. The enabling steps and config/failure-mode tables are explicitly **out** — they become a how-to (task 4) and reference (task 5).
-- `architecture.md` stays live; tighten only if it carries recipe/reference bleed (otherwise leave — it is a source of truth).
-- Create *why-jaiph* (short design/philosophy page) from the landing page + `_legacy/getting-started.md` framing.
-- Each page gets `diataxis: explanation` and a nav entry (full nav regrouping is finalized in task 7; here just place pages).
-
-### Acceptance criteria (each verified by a test that fails when violated)
-- The sandboxing explanation page contains no numbered "enabling" procedure and no config-key reference table (a test greps for the moved section headings / `| key |`-style tables and fails if present); threat-model content is present.
-- `why-jaiph`, `inbox`, `spec-async-handles` exist as published pages with `diataxis: explanation`, reachable from the nav; the docs-lint + internal-link checks (task 2) stay green.
-
-***
-
 ## Docs redesign 4/8 — How-to guides: task-oriented recipes #dev-ready
 
 ### Shared context (repeated verbatim in every "Docs redesign" task so each is standalone)

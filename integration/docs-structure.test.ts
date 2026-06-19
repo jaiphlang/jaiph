@@ -335,12 +335,16 @@ test("docs-lint: pages under docs/_legacy/ are exempt from publish-side checks",
   assert.ok(legacy.length > 0, "expected quarantined pages under docs/_legacy/");
 
   // loadPages() reads docs/ immediate children only, so _legacy entries
-  // are never subjected to the diataxis / nav / link checks above.
-  const live = new Set(loadPages().map((p) => p.name));
+  // are never subjected to the diataxis / nav / link checks above. As
+  // pages are recreated greenfield (task 3+), the same filename may appear
+  // in BOTH docs/ (the live rewrite) AND docs/_legacy/ (the original kept
+  // as a reconciliation reference). The docs-legacy-quarantine harness
+  // pins that "live + legacy reference" invariant explicitly, so this
+  // test only needs to confirm _legacy entries exist on disk.
   for (const entry of legacy) {
     assert.ok(
-      !live.has(entry),
-      `${entry} must live only under docs/_legacy/ — not docs/${entry}`,
+      entry.endsWith(".md"),
+      `unexpected non-markdown entry under docs/_legacy/: ${entry}`,
     );
   }
 });

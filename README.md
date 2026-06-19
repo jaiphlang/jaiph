@@ -1,8 +1,8 @@
 # ![Jaiph](docs/logo.png)
 
-[jaiph.org](https://jaiph.org) · [Architecture](docs/architecture.md) · [Agent Skill](https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md)
+[jaiph.org](https://jaiph.org) · [Why Jaiph](docs/why-jaiph.md) · [Architecture](docs/architecture.md) · [Sandboxing](docs/sandboxing.md) · [Inbox & Dispatch](docs/inbox.md) · [Async Handles](docs/spec-async-handles.md) · [Agent Skill](https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md)
 
-> **Docs note:** The Jaiph documentation site is being rewritten under the [Diátaxis](https://diataxis.fr/) framework. The pre-redesign pages have been quarantined under [`docs/_legacy/`](docs/_legacy/) — they remain in git and link from this README, but are no longer published to `jaiph.org`. Legacy index: [Getting Started](docs/_legacy/getting-started.md) · [Setup](docs/_legacy/setup.md) · [Libraries](docs/_legacy/libraries.md) · [Language](docs/_legacy/language.md) · [Grammar](docs/_legacy/grammar.md) · [CLI](docs/_legacy/cli.md) · [Configuration](docs/_legacy/configuration.md) · [Testing](docs/_legacy/testing.md) · [Hooks](docs/_legacy/hooks.md) · [Inbox & Dispatch](docs/_legacy/inbox.md) · [Sandboxing](docs/_legacy/sandboxing.md) · [Runtime artifacts](docs/_legacy/artifacts.md) · [Async Handles](docs/_legacy/spec-async-handles.md) · [Contributing](docs/_legacy/contributing.md).
+> **Docs note:** The Jaiph documentation site is being rewritten under the [Diátaxis](https://diataxis.fr/) framework. The Explanation quadrant has landed — [Why Jaiph](docs/why-jaiph.md), [Architecture](docs/architecture.md), [Sandboxing](docs/sandboxing.md), [Inbox & Dispatch](docs/inbox.md), and [Async Handles](docs/spec-async-handles.md) are live on `jaiph.org`. The remaining pre-redesign pages stay quarantined under [`docs/_legacy/`](docs/_legacy/) (in git, not published) until their How-to / Reference replacements land. Legacy index: [Getting Started](docs/_legacy/getting-started.md) · [Setup](docs/_legacy/setup.md) · [Libraries](docs/_legacy/libraries.md) · [Language](docs/_legacy/language.md) · [Grammar](docs/_legacy/grammar.md) · [CLI](docs/_legacy/cli.md) · [Configuration](docs/_legacy/configuration.md) · [Testing](docs/_legacy/testing.md) · [Hooks](docs/_legacy/hooks.md) · [Runtime artifacts](docs/_legacy/artifacts.md) · [Contributing](docs/_legacy/contributing.md).
 
 ---
 
@@ -24,7 +24,7 @@
 - **Rules and scripts** — Rules stay structured (no raw shell lines); **`script`** steps run bash or polyglot code as subprocesses.
 - **Agents** — Backends include Cursor, Claude, Codex (HTTP), or a custom `agent.command`.
 - **Testing** — `*.test.jh` files run in-process (`jaiph test`) with mocks and `expect_*` assertions ([Testing](docs/_legacy/testing.md)).
-- **Safety and inspectability** — Docker-backed sandbox for **`jaiph run`** (env-controlled; see [Sandboxing](docs/_legacy/sandboxing.md)); live **`__JAIPH_EVENT__`** on stderr and durable **`.jaiph/runs/`** artifacts ([Architecture](docs/architecture.md)).
+- **Safety and inspectability** — Docker-backed sandbox for **`jaiph run`** (env-controlled; see [Sandboxing](docs/sandboxing.md)); live **`__JAIPH_EVENT__`** on stderr and durable **`.jaiph/runs/`** artifacts ([Architecture](docs/architecture.md)).
 - **Tooling** — `jaiph compile`, `jaiph format`, `jaiph install` / `.jaiph/libs/`, and optional `hooks.json` ([CLI](docs/_legacy/cli.md), [Hooks](docs/_legacy/hooks.md)).
 
 ## Core components

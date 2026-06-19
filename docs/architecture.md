@@ -13,12 +13,9 @@ redirect_from:
   - /cli
   - /configuration
   - /testing
-  - /spec-async-handles
   - /spec-async-isolated
   - /target-design
-  - /inbox
   - /hooks
-  - /sandboxing
   - /reporting
 ---
 
@@ -41,7 +38,7 @@ Workflow authors write `.jh` / `.test.jh` modules. The toolchain turns those fil
 3. **CLI** (`dist/src/cli.js` via npm, or a **Bun-compiled** `dist/jaiph` binary) prepares script executables (scripts-only), then spawns a **detached child** that loads **`node-workflow-runner.js`**. That child calls `buildRuntimeGraph()` and runs **`NodeWorkflowRuntime`**. The child’s interpreter is **`process.execPath`** of the CLI process (Node when you run `node dist/src/cli.js`, the standalone Bun binary when you run `dist/jaiph`). Script steps execute as managed subprocesses; prompt, inbox I/O, and event/summary emission are handled by the kernel under `src/runtime/kernel/`.
 4. Stream live events to the CLI and persist durable run artifacts.
 
-Interactive **`jaiph run`** parses **`__JAIPH_EVENT__`** lines from the runner’s stderr, renders the progress tree, and runs hooks. **`jaiph run --raw`** skips that shell: the child uses inherited stdio so events still land on stderr unchanged — used when embedding Jaiph or when the host wraps a container (see [CLI — `jaiph run`](cli.md#jaiph-run) and [Sandboxing — Docker container isolation](sandboxing.md#docker-container-isolation)).
+Interactive **`jaiph run`** parses **`__JAIPH_EVENT__`** lines from the runner’s stderr, renders the progress tree, and runs hooks. **`jaiph run --raw`** skips that shell: the child uses inherited stdio so events still land on stderr unchanged — used when embedding Jaiph or when the host wraps a container (see [CLI — `jaiph run`](cli.md#jaiph-run) and [Sandboxing](sandboxing.md)).
 
 All orchestration — local `jaiph run`, `jaiph test`, and **Docker `jaiph run`** — uses the **Node workflow runtime** (AST interpreter). Docker containers run the same `node-workflow-runner` process with the compiled JS source tree and scripts mounted read-only.
 
@@ -294,7 +291,7 @@ sequenceDiagram
     CLI-->>User: PASS/FAIL
 ```
 
-**Docker:** the inner container command is **`jaiph run --raw …`** (see [Sandboxing](sandboxing.md#docker-container-isolation)): no banner or progress UI inside the container; **`__JAIPH_EVENT__`** lines still appear on stderr for the host CLI to parse.
+**Docker:** the inner container command is **`jaiph run --raw …`** (see [Sandboxing](sandboxing.md)): no banner or progress UI inside the container; **`__JAIPH_EVENT__`** lines still appear on stderr for the host CLI to parse.
 
 ## Sequence diagram: `jaiph test` flow
 
