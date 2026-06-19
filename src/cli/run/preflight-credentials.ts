@@ -215,9 +215,17 @@ function entryFileHasExplicitBackend(mod: jaiphModule): boolean {
  * Skip entirely when the entry file neither declares an explicit backend nor
  * uses any `prompt` step — there is nothing the runtime would credential against,
  * so a warning would be a false positive.
+ *
+ * Also skip entirely in unsafe mode (`JAIPH_UNSAFE` / `--unsafe`): that is the
+ * explicit "run on the host, trust my environment" escape hatch, so neither the
+ * host warnings nor the codex hard error should fire — a logged-in agent CLI
+ * works, and the runtime backend guards remain as a backstop.
  */
 export function preflightAgentCredentials(args: PreflightArgs): PreflightResult {
   const out: PreflightResult = { errors: [], warnings: [] };
+  if (args.runtimeEnv.JAIPH_UNSAFE === "true") {
+    return out;
+  }
   if (!entryFileHasExplicitBackend(args.mod) && !entryFileUsesPrompt(args.mod)) {
     return out;
   }
