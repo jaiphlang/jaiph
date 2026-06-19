@@ -14,36 +14,6 @@ Process rules:
 
 ***
 
-## Docs redesign 1/8 — Quarantine legacy docs to break agent anchoring #dev-ready
-
-### Shared context (repeated verbatim in every "Docs redesign" task so each is standalone)
-
-The `docs/` site (17 flat Markdown pages, ~6,000 lines) mixes all four Diátaxis document types per page. We are restructuring it per the vendored **documentation-writer** skill at `.jaiph/skills/documentation-writer/SKILL.md` (Diátaxis: **Tutorials** = learning, **How-to** = task recipes, **Reference** = lookup, **Explanation** = understanding). Author each page through that skill's workflow (settle *type / audience / goal / scope*, outline, then write). **Source of truth = the TypeScript/Bash source + `docs/architecture.md`; verify claims against code, do not trust existing prose.** `_site/` is generated — never hand-edit. Nav is hand-maintained in `docs/_layouts/docs.html`. Decisions already made: keep existing permalinks where a page stays a single quadrant (add `redirect_from` only on true rename/removal); keep contributor docs in the same site, grouped separately.
-
-**Anti-bias protocol (applies to tasks 3–8):** the pre-redesign pages are quarantined in `docs/_legacy/` (git-tracked, excluded from the Jekyll build) by this task — **except** `architecture.md` and `jaiph-skill.md`, which stay live. Write every new page **greenfield from the source code + `architecture.md` first**, *then* reconcile against the matching `docs/_legacy/<page>.md` to recover any detail you missed. Never edit a legacy copy in place; never paraphrase one without re-verifying against code.
-
-**Target information architecture** (referenced by tasks 3–8):
-- **Tutorials:** *first-workflow* (rebuild from `_legacy/getting-started.md`), *first-agent-run* (new).
-- **How-to:** install/switch versions (`setup`), sandbox a run incl. `inplace`, authenticate agent backends (new), configure backend/model, hooks, libraries (use + publish), artifacts, testing.
-- **Reference:** `cli`, `configuration`, `grammar`, `language`, consolidated env-var reference.
-- **Explanation:** `architecture` (stays live), sandboxing & threat model, `inbox`, async handles (`spec-async-handles`), *why-jaiph* (new).
-- **Contributor:** `contributing`, `jaiph-skill` (stays live, served raw to agents — do not restructure its body).
-
-### This task
-
-Quarantine the existing pages so the redesign is written greenfield and the old prose cannot be silently edited-in-place or paraphrased.
-- Create `docs/_legacy/` and **move** every current `docs/*.md` page into it **except** `docs/architecture.md` and `docs/jaiph-skill.md` (both stay live — `architecture.md` is a declared source of truth read by `.jaiph/docs_parity.jh`, and `jaiph-skill.md` is fetched raw by agents via the nav's GitHub URL). The landing `docs/index.html` stays.
-- Add `_legacy` to the Jekyll `exclude:` list in `docs/_config.yml` so quarantined pages are kept in git but **not published**.
-- Trim the nav in `docs/_layouts/docs.html` to only the still-live pages (landing, Architecture, the raw jaiph-skill link) so the built site has no dangling nav entries. The site is intentionally minimal until tasks 3–7 rebuild it.
-- Do **not** rewrite any content in this task; it is purely the move + exclude + nav trim.
-
-### Acceptance criteria (each verified by a test that fails when violated)
-- `docs/_legacy/` contains the moved pages; `docs/architecture.md` and `docs/jaiph-skill.md` remain at their original paths (a test asserts both live paths exist and that e.g. `docs/sandboxing.md` no longer does, having moved to `docs/_legacy/sandboxing.md`).
-- `bundle exec jekyll build` (per `docs/Gemfile`) exits 0 and the built `_site/` contains **no** page generated from `docs/_legacy/` (assert no `_site/_legacy/**` and that a quarantined permalink is absent).
-- The trimmed nav in `docs/_layouts/docs.html` links only to pages that still resolve (no nav entry points at a quarantined page).
-
-***
-
 ## Docs redesign 2/8 — Diátaxis foundation: front-matter convention + verification harness #dev-ready
 
 ### Shared context (repeated verbatim in every "Docs redesign" task so each is standalone)

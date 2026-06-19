@@ -1,6 +1,8 @@
 # ![Jaiph](docs/logo.png)
 
-[jaiph.org](https://jaiph.org) · [Getting Started](docs/getting-started.md) ([jaiph.org/getting-started](https://jaiph.org/getting-started)) · [Setup](docs/setup.md) · [Libraries](docs/libraries.md) · [Language](docs/language.md) · [Grammar](docs/grammar.md) · [CLI](docs/cli.md) · [Configuration](docs/configuration.md) · [Testing](docs/testing.md) · [Hooks](docs/hooks.md) · [Inbox & Dispatch](docs/inbox.md) · [Sandboxing](docs/sandboxing.md) · [Runtime artifacts](docs/artifacts.md) · [Async Handles](docs/spec-async-handles.md) · [Architecture](docs/architecture.md) · [Contributing](docs/contributing.md)
+[jaiph.org](https://jaiph.org) · [Architecture](docs/architecture.md) · [Agent Skill](https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md)
+
+> **Docs note:** The Jaiph documentation site is being rewritten under the [Diátaxis](https://diataxis.fr/) framework. The pre-redesign pages have been quarantined under [`docs/_legacy/`](docs/_legacy/) — they remain in git and link from this README, but are no longer published to `jaiph.org`. Legacy index: [Getting Started](docs/_legacy/getting-started.md) · [Setup](docs/_legacy/setup.md) · [Libraries](docs/_legacy/libraries.md) · [Language](docs/_legacy/language.md) · [Grammar](docs/_legacy/grammar.md) · [CLI](docs/_legacy/cli.md) · [Configuration](docs/_legacy/configuration.md) · [Testing](docs/_legacy/testing.md) · [Hooks](docs/_legacy/hooks.md) · [Inbox & Dispatch](docs/_legacy/inbox.md) · [Sandboxing](docs/_legacy/sandboxing.md) · [Runtime artifacts](docs/_legacy/artifacts.md) · [Async Handles](docs/_legacy/spec-async-handles.md) · [Contributing](docs/_legacy/contributing.md).
 
 ---
 
@@ -21,9 +23,9 @@
 - **Workflows** — Compose `prompt`, `run`, `ensure`, channel sends, conditionals, `run async` with implicit join, `catch`, and repair-and-retry `recover`.
 - **Rules and scripts** — Rules stay structured (no raw shell lines); **`script`** steps run bash or polyglot code as subprocesses.
 - **Agents** — Backends include Cursor, Claude, Codex (HTTP), or a custom `agent.command`.
-- **Testing** — `*.test.jh` files run in-process (`jaiph test`) with mocks and `expect_*` assertions ([Testing](docs/testing.md)).
-- **Safety and inspectability** — Docker-backed sandbox for **`jaiph run`** (env-controlled; see [Sandboxing](docs/sandboxing.md)); live **`__JAIPH_EVENT__`** on stderr and durable **`.jaiph/runs/`** artifacts ([Architecture](docs/architecture.md)).
-- **Tooling** — `jaiph compile`, `jaiph format`, `jaiph install` / `.jaiph/libs/`, and optional `hooks.json` ([CLI](docs/cli.md), [Hooks](docs/hooks.md)).
+- **Testing** — `*.test.jh` files run in-process (`jaiph test`) with mocks and `expect_*` assertions ([Testing](docs/_legacy/testing.md)).
+- **Safety and inspectability** — Docker-backed sandbox for **`jaiph run`** (env-controlled; see [Sandboxing](docs/_legacy/sandboxing.md)); live **`__JAIPH_EVENT__`** on stderr and durable **`.jaiph/runs/`** artifacts ([Architecture](docs/architecture.md)).
+- **Tooling** — `jaiph compile`, `jaiph format`, `jaiph install` / `.jaiph/libs/`, and optional `hooks.json` ([CLI](docs/_legacy/cli.md), [Hooks](docs/_legacy/hooks.md)).
 
 ## Core components
 
@@ -34,7 +36,7 @@
 - **Node workflow runtime** (`src/runtime/kernel/node-workflow-runtime.ts`, `graph.ts`) — interprets the AST; `buildRuntimeGraph(graph)` consumes the `ModuleGraph` produced by `loadModuleGraph` (no filesystem reads).
 - **Node test runner** (`src/runtime/kernel/node-test-runner.ts`) — `*.test.jh` blocks with mocks.
 - **JS kernel** (`src/runtime/kernel/`) — prompts, managed scripts, `__JAIPH_EVENT__`, inbox, mocks.
-Diagrams, runtime contracts, on-disk artifact layout, and distribution: **[Architecture](docs/architecture.md)**. Test layers and E2E policy: **[Contributing](docs/contributing.md)**.
+Diagrams, runtime contracts, on-disk artifact layout, and distribution: **[Architecture](docs/architecture.md)**. Test layers and E2E policy: **[Contributing](docs/_legacy/contributing.md)**.
 
 ## Quick try
 
@@ -64,7 +66,7 @@ npm install -g jaiph
 
 Verify: `jaiph --version`. Switch versions: `jaiph use nightly` or `jaiph use 0.9.4`.
 
-Initialize a project (optional): `jaiph init` writes `.jaiph/` with bootstrap workflow, gitignore entries for runs/tmp, and **`SKILL.md`**. The CLI resolves the skill body in this order — `JAIPH_SKILL_PATH`, install-relative `jaiph-skill.md`, `docs/jaiph-skill.md` under cwd, then an **embedded copy baked into the binary** as the final fallback — so `jaiph init` always writes `SKILL.md` (see [Setup](docs/setup.md)). Canonical skill text for agents: `https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md`.
+Initialize a project (optional): `jaiph init` writes `.jaiph/` with bootstrap workflow, gitignore entries for runs/tmp, and **`SKILL.md`**. The CLI resolves the skill body in this order — `JAIPH_SKILL_PATH`, install-relative `jaiph-skill.md`, `docs/jaiph-skill.md` under cwd, then an **embedded copy baked into the binary** as the final fallback — so `jaiph init` always writes `SKILL.md` (see [Setup](docs/_legacy/setup.md)). Canonical skill text for agents: `https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md`.
 
 ## Usage
 
@@ -73,7 +75,7 @@ Initialize a project (optional): `jaiph init` writes `.jaiph/` with bootstrap wo
 - Validate without executing: `jaiph compile …` (same `validateReferences` checks as before `jaiph run`; no `scripts/` emission — see [Architecture](docs/architecture.md)).
 - Format sources: `jaiph format …` / `jaiph format --check …`.
 
-Full flags and environment variables: [CLI reference](docs/cli.md). Doc map: [Getting Started](docs/getting-started.md).
+Full flags and environment variables: [CLI reference](docs/_legacy/cli.md). Doc map: [Getting Started](docs/_legacy/getting-started.md).
 
 ## Example
 
@@ -102,17 +104,17 @@ workflow default(task) {
 ./main.jh "add user authentication"
 ```
 
-For the full language reference, see [Grammar](docs/grammar.md). For install, workspace layout, libraries, CLI commands, configuration, testing, sandboxing, hooks, inbox dispatch, and on-disk run output, see [Getting Started](docs/getting-started.md) (map), [Setup](docs/setup.md), and [Runtime artifacts](docs/artifacts.md), or visit [jaiph.org](https://jaiph.org).
+For the full language reference, see [Grammar](docs/_legacy/grammar.md). For install, workspace layout, libraries, CLI commands, configuration, testing, sandboxing, hooks, inbox dispatch, and on-disk run output, see [Getting Started](docs/_legacy/getting-started.md) (map), [Setup](docs/_legacy/setup.md), and [Runtime artifacts](docs/_legacy/artifacts.md), or visit [jaiph.org](https://jaiph.org).
 
 ## Start here
 
 - **AI agent** who wants to work in a predictable, structured way? Read the [Agent Skill](https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md) — it teaches you how to author Jaiph workflows and makes your behavior verifiable and auditable.
-- **Human** who manages agents and wants reliable, repeatable automation? See the [Samples](https://github.com/jaiphlang/jaiph/tree/main/examples) and [Getting Started](docs/getting-started.md).
-- **Contributor** who wants to improve Jaiph itself? See [Contributing](docs/contributing.md).
+- **Human** who manages agents and wants reliable, repeatable automation? See the [Samples](https://github.com/jaiphlang/jaiph/tree/main/examples) and [Getting Started](docs/_legacy/getting-started.md).
+- **Contributor** who wants to improve Jaiph itself? See [Contributing](docs/_legacy/contributing.md).
 
 ## Contributing
 
-See [Contributing](docs/contributing.md) for branch strategy, pull requests, the test layers, and code style. Use [GitHub Issues](https://github.com/jaiphlang/jaiph/issues) for bugs and feature discussion.
+See [Contributing](docs/_legacy/contributing.md) for branch strategy, pull requests, the test layers, and code style. Use [GitHub Issues](https://github.com/jaiphlang/jaiph/issues) for bugs and feature discussion.
 
 ## License
 

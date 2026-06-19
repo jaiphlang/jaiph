@@ -30,3 +30,5 @@ exclude:
   # Keep install-from-local.sh out of the site (developer-only).
   - install-from-local.sh
   - CNAME
+  # Quarantined pre-redesign pages: kept in git, not published.
+  - _legacy
