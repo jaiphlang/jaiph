@@ -14,33 +14,6 @@ Process rules:
 
 ***
 
-## Docs redesign 4/8 — How-to guides: task-oriented recipes #dev-ready
-
-### Shared context (repeated verbatim in every "Docs redesign" task so each is standalone)
-
-The `docs/` site mixed all four Diátaxis types per page and is being restructured per `.jaiph/skills/documentation-writer/SKILL.md` (Tutorials = learning, How-to = recipes, Reference = lookup, Explanation = understanding). Author through the skill's workflow. **Source of truth = the TypeScript/Bash source + `docs/architecture.md`; verify against code.** `_site/` generated — never hand-edit. Nav in `docs/_layouts/docs.html`. Keep permalinks unless renamed; contributor docs grouped separately. Uses the `diataxis:` convention + harness from task 2.
-
-**Anti-bias protocol:** pre-redesign pages are quarantined in `docs/_legacy/` (build-excluded) — except `architecture.md` and `jaiph-skill.md` (live). Write each new page **greenfield from source + `architecture.md` first**, then reconcile against `docs/_legacy/<page>.md`. Never edit a legacy copy in place.
-
-**Target information architecture:** Tutorials (*first-workflow*, *first-agent-run*); How-to (install, sandbox-run, agent-auth, configure-backend, hooks, libraries, artifacts, testing); Reference (`cli`, `configuration`, `grammar`, `language`, env-vars); Explanation (`architecture`, sandboxing, `inbox`, `spec-async-handles`, *why-jaiph*); Contributor (`contributing`, `jaiph-skill`).
-
-### This task
-
-Create the How-to quadrant as discrete, problem-oriented recipes (each: goal → numbered steps → verification → links to reference/explanation; no conceptual digressions). Derive each from source, reconcile against the relevant `docs/_legacy/` page.
-- **Install & switch versions** — from `_legacy/setup.md` (permalink `/setup`).
-- **Run a workflow in a Docker sandbox** (overlay/copy/`inplace`, the confirm prompt, `JAIPH_INPLACE_YES`) — the enabling steps that were excluded from the task-3 sandboxing explanation.
-- **Authenticate agent backends** (NEW) — claude (`ANTHROPIC_API_KEY` / `CLAUDE_CODE_OAUTH_TOKEN` via `claude setup-token`), cursor (`CURSOR_API_KEY` / login), codex (`OPENAI_API_KEY`); host vs Docker; the credential pre-flight, `E_AGENT_CREDENTIALS`, and the unsafe-mode skip. Verify against `src/cli/run/preflight-credentials.ts`.
-- **Configure backend/model** — how-to slice of `_legacy/configuration.md`.
-- **Add a hook** (`_legacy/hooks.md`); **Use & publish a library** (`_legacy/libraries.md`); **Save artifacts** (`_legacy/artifacts.md`); **Write & run tests** — how-to slice of `_legacy/testing.md`.
-- Each recipe gets `diataxis: how-to`, a `/how-to/...` permalink, a `redirect_from` for any retired permalink (e.g. `/hooks`, `/libraries`, `/artifacts`), and a nav entry under a **How-to** group (finalized task 7).
-
-### Acceptance criteria (each verified by a test that fails when violated)
-- Each how-to page exists with `diataxis: how-to`, reachable from the nav; docs-lint (task 2) green.
-- The agent-auth how-to names all three backends with their exact credentials and the error code — assert a content test greps for `ANTHROPIC_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`, `CURSOR_API_KEY`, `OPENAI_API_KEY`, `E_AGENT_CREDENTIALS`.
-- Every retired permalink (`/hooks`, `/libraries`, `/artifacts`, …) resolves via `redirect_from` (redirect-coverage check from task 2 fails otherwise); internal-link checker green.
-
-***
-
 ## Docs redesign 5/8 — Reference pass: pure lookup pages, code-verified #dev-ready
 
 ### Shared context (repeated verbatim in every "Docs redesign" task so each is standalone)
