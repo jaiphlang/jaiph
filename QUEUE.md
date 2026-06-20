@@ -14,11 +14,9 @@ Process rules:
 
 ***
 
-## Docs redesign 8/8 — Post-parity cleanup: retire the legacy quarantine
+## Docs redesign 8/8 — Post-parity cleanup: retire the legacy quarantine #dev-ready
 
-> **Not `#dev-ready` — has a human precondition.** Before this task, the maintainer runs the redesign-aware parity workflow **by hand** on a clean worktree:
-> `jaiph run .jaiph/docs_parity_redesign.jh`
-> (a redesign-aware copy of `docs_parity.jh`: it lists docs recursively, excludes `docs/_legacy/`, and VERIFIES the Diátaxis structure against source instead of re-consolidating it — the stock `docs_parity.jh` would fight the new layout). The maintainer reviews and commits any doc edits it produces. **This queue task is the agent-doable cleanup that runs *after* that parity pass is green** — do not auto-pick it until the maintainer signals parity is done.
+> **Precondition (assumed satisfied — that is why this is now `#dev-ready`):** the maintainer has already run the redesign-aware parity workflow **by hand** on a clean worktree — `jaiph run .jaiph/docs_parity_redesign.jh` (a redesign-aware copy of `docs_parity.jh`: lists docs recursively, excludes `docs/_legacy/`, and VERIFIES the Diátaxis structure against source instead of re-consolidating it) — and committed any doc edits it produced. This task is the agent-doable cleanup that follows. If the spot-check in the first step shows the reference pages still drift from source, the parity pass was **not** actually run/committed: stop and report rather than hand-patching.
 
 ### Shared context
 
