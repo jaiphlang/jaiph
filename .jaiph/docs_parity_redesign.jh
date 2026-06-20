@@ -1,0 +1,180 @@
+#!/usr/bin/env jaiph
+
+# Redesign-aware variant of docs_parity.jh, meant to be run BY HAND after the
+# Diátaxis docs redesign (QUEUE.md "Docs redesign" tasks 1-7) has landed.
+#
+# Differences from docs_parity.jh:
+#   - Lists docs recursively and EXCLUDES docs/_legacy/ (the build-excluded
+#     quarantine of the pre-redesign pages). The stock workflow globs only the
+#     flat docs/*.md and would both miss nested pages and risk touching legacy.
+#   - The overview pass VERIFIES and tightens the new Diátaxis structure against
+#     the source code; it does NOT merge / split / move / re-quadrant pages the
+#     way the stock docs_overview does (that would undo the redesign).
+#   - Docs-only: it never edits src/ or usage.ts.
+#
+# Run on a clean worktree:  jaiph run .jaiph/docs_parity_redesign.jh
+
+const role = """
+  Project-specific context for documenting Jaiph:
+  - You read TypeScript and Bash fluently so you can verify documentation
+    against the implementation.
+  - Source code and docs/architecture.md are the single source of truth.
+    Do not trust existing documentation blindly; verify claims against the
+    code before reproducing them.
+  - Navigation links between docs pages are provided by the Jekyll template
+    (docs/_layouts/docs.html). Do not add manual navigation blocks (e.g.
+    "More Documentation" sections) to individual markdown pages — inline
+    contextual links to other docs are fine.
+  - docs/_legacy/ is a build-excluded quarantine of the OLD documentation.
+    Never read it as a source, never edit it, never resurrect its pages.
+"""
+
+script assert_worktree_clean_for_docs = ```
+  local current_changed_files
+  current_changed_files="$(
+    {
+      git diff --name-only --cached
+      git diff --name-only
+      git ls-files --others --exclude-standard
+    } | sort -u
+  )"
+  if [ -n "$current_changed_files" ]; then
+    echo "Refusing to run docs parity workflow on a dirty worktree." >&2
+    echo "Please commit, stash, or discard these files first:" >&2
+    echo "$current_changed_files" >&2
+    return 1
+  fi
+```
+
+rule worktree_is_clean() {
+  run assert_worktree_clean_for_docs()
+}
+
+script assert_newline_paths_are_files = ```
+  while IFS= read -r f; do
+    f="${f#"${f%%[![:space:]]*}"}"
+    f="${f%"${f##*[![:space:]]}"}"
+    [ -z "$f" ] && continue
+    test -f "$f" || return 1
+  done <<< "$1"
+```
+
+rule docs_files_present(list) {
+  run assert_newline_paths_are_files(list)
+}
+
+script assert_only_allowed_changed = ```
+  local allowed="$1"
+  local after_changed_files
+  after_changed_files="$(
+    {
+      git diff --name-only --cached
+      git diff --name-only
+      git ls-files --others --exclude-standard
+    } | sort -u
+  )"
+  while IFS= read -r changed_file; do
+    [ -z "$changed_file" ] && continue
+    if [[ $'\n'"$allowed"$'\n' == *$'\n'"$changed_file"$'\n'* ]]; then
+      continue
+    fi
+    echo "Unexpected file changed by docs prompt: $changed_file" >&2
+    return 1
+  done <<< "$after_changed_files"
+```
+
+rule only_expected_docs_changed_after_prompt(allowed) {
+  run assert_only_allowed_changed(allowed)
+}
+
+# Recursive list of published docs pages, excluding the quarantine.
+script list_docs_md_paths = ```
+  find docs -type f -name '*.md' -not -path 'docs/_legacy/*' | sort
+```
+
+# Files the parity prompts are permitted to change (docs only — never src).
+script build_allowed_paths_block = ```
+  {
+    printf '%s\n' README.md CHANGELOG.md docs/index.html docs/_layouts/docs.html docs/_config.yml
+    find docs -type f -name '*.md' -not -path 'docs/_legacy/*'
+  } | sort -u
+```
+
+workflow docs_page(path) {
+  prompt """
+    Before doing anything else, read and follow the documentation skill at
+    .jaiph/skills/documentation-writer/SKILL.md. It defines the Diátaxis
+    framework, the four document types, the clarify -> outline -> write
+    workflow, and the four guiding principles (clarity, accuracy,
+    user-centricity, consistency) you must apply to this task.
+    <role>
+    ${role}
+    </role>
+    <task>
+    Verify ${path} against the Jaiph source code (the single source of truth)
+    and docs/architecture.md.
+    0. This page belongs to a fixed Diátaxis quadrant declared in its
+       `diataxis:` front matter (tutorial / how-to / reference / explanation /
+       contributor). KEEP that type. Do NOT move content to or from other pages,
+       do NOT change the permalink, do NOT merge or split the page.
+    1. Verify every factual claim, example, flag, config key, env var, and error
+       code against the source. Fix drift in the page to match the code.
+    2. Repair cross-type bleed WITHIN the page only (e.g. delete a tutorial-style
+       walkthrough that crept into a reference page) — relocating it is out of
+       scope for this pass.
+    3. Keep examples executable and aligned with current behavior. Keep prose
+       approachable, concise, and free of AI-like filler and excess emojis.
+    4. Inline contextual links to other docs are fine; do NOT add manual
+       navigation blocks. Never touch docs/_legacy/.
+    </task>
+  """
+}
+
+workflow docs_redesign_overview(docPaths) {
+  prompt """
+    Before doing anything else, read and follow the documentation skill at
+    .jaiph/skills/documentation-writer/SKILL.md (Diátaxis: tutorials, how-to,
+    reference, explanation).
+    <role>
+    ${role}
+    </role>
+    <task>
+    The docs were DELIBERATELY restructured into Diátaxis quadrants. Your job is
+    to VERIFY and tighten that structure — NOT to reorganize it. Read all
+    ${docPaths} (these already exclude docs/_legacy/). Treat docs/architecture.md
+    as the architecture source of truth.
+
+    PRESERVE the structure. Do NOT merge, split, move, rename, or re-quadrant
+    pages; do NOT change permalinks; do NOT restructure the nav in
+    docs/_layouts/docs.html beyond fixing an outright error. Specifically:
+    1. Cross-page consistency: terminology, tone, and overlapping facts agree
+       across pages, and every page is consistent with docs/architecture.md
+       (runtime vs CLI responsibilities, __JAIPH_EVENT__ vs run artifacts,
+       channels/hooks, the jaiph test lane).
+    2. Each page stays within its `diataxis:` type; flag (do not relocate)
+       any remaining cross-type bleed.
+    3. Reference pages (cli, configuration, grammar, language, env-vars) match
+       the source exactly — every flag, key, env var, error code. Fix the docs.
+    4. README.md and docs/index.html lead with the tutorials / how-to entry
+       points and link to getting-started (or the first tutorial) and the agent
+       skill URL, hardcoded as
+       https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md.
+       Markdown-to-markdown links end with .md; index.html links do not.
+    5. Do NOT edit src/, tests, or docs/_legacy/. Documentation files only.
+    </task>
+  """
+}
+
+workflow default() {
+  ensure worktree_is_clean()
+  const allowed_list = run build_allowed_paths_block()
+  ensure docs_files_present(allowed_list)
+  const docs_md_list = run list_docs_md_paths()
+  for path in docs_md_list {
+    if path != "" {
+      run docs_page(path)
+    }
+  }
+  run docs_redesign_overview(docs_md_list)
+  ensure only_expected_docs_changed_after_prompt(allowed_list)
+}

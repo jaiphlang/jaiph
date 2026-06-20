@@ -14,24 +14,25 @@ Process rules:
 
 ***
 
-## Docs redesign 8/8 — Pass `docs_parity.jh` + retire the legacy quarantine
+## Docs redesign 8/8 — Post-parity cleanup: retire the legacy quarantine
 
-> **Not `#dev-ready`:** this task requires a standalone `jaiph run .jaiph/docs_parity.jh` invocation (the `jaiph` CLI executing a `.jaiph/*.jh` workflow on a clean worktree), not just file edits. Run it manually / out-of-band after tasks 1–7 land; do not auto-pick it.
+> **Not `#dev-ready` — has a human precondition.** Before this task, the maintainer runs the redesign-aware parity workflow **by hand** on a clean worktree:
+> `jaiph run .jaiph/docs_parity_redesign.jh`
+> (a redesign-aware copy of `docs_parity.jh`: it lists docs recursively, excludes `docs/_legacy/`, and VERIFIES the Diátaxis structure against source instead of re-consolidating it — the stock `docs_parity.jh` would fight the new layout). The maintainer reviews and commits any doc edits it produces. **This queue task is the agent-doable cleanup that runs *after* that parity pass is green** — do not auto-pick it until the maintainer signals parity is done.
 
-### Shared context (repeated verbatim in every "Docs redesign" task so each is standalone)
+### Shared context
 
-The `docs/` redesign (tasks 1–7) reorganized the site into Diátaxis quadrants per `.jaiph/skills/documentation-writer/SKILL.md`, writing pages greenfield from source while the originals sat quarantined in `docs/_legacy/` (build-excluded). **Source of truth = the TypeScript/Bash source + `docs/architecture.md`.** The repo has a `.jaiph/docs_parity.jh` workflow that verifies docs against the implementation; it **refuses to run on a dirty worktree** and restricts which files may change.
+The `docs/` redesign (tasks 1–7, now landed) reorganized the site into Diátaxis quadrants per `.jaiph/skills/documentation-writer/SKILL.md`, writing pages greenfield from source while the originals sat quarantined in `docs/_legacy/` (build-excluded). **Source of truth = the TypeScript/Bash source + `docs/architecture.md`.** Parity against the implementation is verified out-of-band by the maintainer via `.jaiph/docs_parity_redesign.jh` (refuses to run on a dirty worktree; docs-only file allowlist).
 
-### This task
+### This task (runs after the maintainer's parity pass is green)
 
-Make `.jaiph/docs_parity.jh` pass over the redesigned docs, then remove the quarantine.
-- Commit the redesign (tasks 1–7) so the worktree is clean before running parity.
-- Run `jaiph run .jaiph/docs_parity.jh` (host/unsafe is fine). Resolve every gap it reports by fixing the **docs** to match the code (code is source of truth) — unless it surfaces an actual code bug, in which case stop and report rather than papering over it in docs.
-- Confirm run-dir naming, env-var lists, flag tables, config keys, and error codes in the reference pages match source exactly.
-- **Delete `docs/_legacy/`** once parity is green — its content has been fully superseded and is recoverable from git history. (Confirm no live page links into `_legacy/`.)
+- Confirm the parity pass landed: the reference pages (`cli`, `configuration`, `grammar`, `language`, env-vars) match source exactly — run-dir naming, env-var lists, flag tables, config keys, error codes. Spot-check against source; if drift remains, the parity workflow was not actually run/committed — stop and report rather than hand-patching.
+- **Delete `docs/_legacy/`** — its content has been fully superseded by the greenfield pages and is recoverable from git history. First confirm no published page (or `index.html`, nav, README) links into `docs/_legacy/`.
+- Remove the now-unneeded `_legacy` entry from the Jekyll `exclude:` list in `docs/_config.yml`.
+- Run the full check suite and a clean site build.
 
 ### Acceptance criteria (each verified by a test that fails when violated)
-- `jaiph run .jaiph/docs_parity.jh` completes with exit 0 on a clean worktree (the workflow is the failing-on-violation test).
+- `docs/_legacy/` no longer exists and no published page / nav / README / `index.html` references it (grep test fails if any `_legacy` reference remains).
 - The docs-lint, internal-link, redirect-coverage, env-var source-parity, and nav-structure tests from tasks 2–7 are all green in `npm test`.
-- `docs/_legacy/` no longer exists and no published page references it (grep test); `bundle exec jekyll build` exits 0.
-- No code behavior was changed solely to satisfy docs (any code change is called out separately with justification).
+- `bundle exec jekyll build` exits 0 with no missing-link / front-matter warnings.
+- No code behavior was changed in this task (cleanup + docs only).
