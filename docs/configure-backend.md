@@ -8,7 +8,7 @@ diataxis: how-to
 
 This recipe picks which agent backend `prompt` steps use (`cursor`, `claude`, or `codex`) and which model to ask for. Configuration can live in the workflow file (`config { … }`) or in the environment. Environment wins over in-file when both are set.
 
-For the full key/default/precedence reference, see [Configuration](/configuration) (once the Reference quadrant lands). For credential setup per backend, see [Authenticate agent backends](/how-to/agent-auth).
+For the full key/default/precedence reference, see [Configuration](/reference/configuration). For credential setup per backend, see [Authenticate agent backends](/how-to/agent-auth).
 
 ## Prerequisites
 
@@ -47,7 +47,7 @@ workflow fast_check() {
 }
 ```
 
-Only `agent.*` and `run.*` keys are allowed at workflow scope. `runtime.*` keys are module-only.
+Only `agent.*` and `run.*` keys are allowed at workflow scope. `runtime.*` and `module.*` keys are module-only.
 
 ## 3. Override from the environment
 
@@ -57,7 +57,7 @@ export JAIPH_AGENT_MODEL="sonnet-4"
 jaiph run ./flow.jh
 ```
 
-When set, the environment value wins over both the workflow-level and module-level `config` blocks. The CLI marks the variable as locked (`JAIPH_AGENT_BACKEND_LOCKED=1`) for the lifetime of that run so in-file overrides never silently take effect.
+When set, the environment value wins over both the workflow-level and module-level `config` blocks. The CLI marks each inherited agent/run env var as locked (`JAIPH_AGENT_BACKEND_LOCKED=1`, `JAIPH_AGENT_MODEL_LOCKED=1`, …) for the lifetime of that run so in-file overrides never silently take effect.
 
 ## 4. (Codex) Override the API URL
 
@@ -69,16 +69,16 @@ export JAIPH_CODEX_API_URL="https://api.example.com/v1/chat/completions"
 
 ## Verification
 
-Each `prompt` step records the resolved backend and model in `run_summary.jsonl`. After the run, grep for the first `PROMPT_START`:
+Each `prompt` step records the resolved backend and model in `run_summary.jsonl`. After the run, inspect the first `PROMPT_START` line:
 
 ```bash
 jq -c 'select(.type=="PROMPT_START")' .jaiph/runs/<date>/<time>-<entry>/run_summary.jsonl | head -1
 ```
 
-The line includes `"backend":"<backend>"` and (when a model resolved) `"model":"<model>"` along with `model_reason` (`explicit`, `flags`, or `backend-default`).
+The line includes `"backend":"<backend>"`, `"model"` (the resolved string, or `null` when the backend auto-selects), and `model_reason` (`explicit`, `flags`, or `backend-default`). When `model_reason` is `backend-default`, codex still calls the API with `gpt-4o` even though `"model"` is `null` in the summary.
 
 ## Related
 
 - [Authenticate agent backends](/how-to/agent-auth) — the credentials each backend needs.
-- [Architecture — Runtime vs CLI responsibilities](architecture.md#runtime-vs-cli-responsibilities) — where in-file `config` is merged into the runtime environment.
-- [Configuration](/configuration) (Reference) — the full set of config keys, defaults, and env equivalents.
+- [Configuration — Precedence](/reference/configuration#precedence) — env vs module vs workflow layering, lock flags, and nested-call scoping.
+- [Configuration](/reference/configuration) — the full set of config keys, defaults, and env equivalents.

@@ -11,12 +11,13 @@ redirect_from:
 
 This recipe installs the `jaiph` CLI onto your `PATH`, verifies it, and switches between releases (stable, nightly, or a specific version).
 
-The installer downloads a per-platform standalone binary from the matching GitHub Release. Node and npm are **not** required to run `jaiph`; the binary self-contains the runtime and the agent skill.
+The curl installer downloads a per-platform standalone binary from the current stable GitHub Release. Node and npm are **not** required to run that binary; it self-contains the runtime and the agent skill.
 
 ## Prerequisites
 
-- `curl` and either `shasum` or `sha256sum` on `PATH`.
 - A POSIX `sh` (the runtime uses `sh -c` for inline shell lines inside workflows; emitted `script` steps follow their own shebang).
+- For the curl installer (step 1): `curl` and either `shasum` or `sha256sum` on `PATH`.
+- For the npm alternative (step 1): Node.js and npm on the host.
 
 ## 1. Install the binary
 
@@ -34,7 +35,7 @@ This downloads `jaiph-{darwin|linux}-{arm64|x64}` and `SHA256SUMS` from the curr
 npm install -g jaiph
 ```
 
-The npm package ships `node dist/src/cli.js` as the `jaiph` binary plus the runtime tree alongside it.
+The npm package exposes `dist/src/cli.js` as the `jaiph` command (Node executes it) plus the compiled runtime tree under `dist/src/`.
 
 ## 2. Add jaiph to PATH (if needed)
 
@@ -44,16 +45,16 @@ If `jaiph --version` reports `command not found`, add the install directory to `
 export PATH="$HOME/.local/bin:$PATH"   # curl installer
 ```
 
-or use the npm global bin directory (`npm bin -g`).
+or prepend npm's global bin directory: `export PATH="$(npm prefix -g)/bin:$PATH"`.
 
 ## 3. (Optional) Switch versions
 
 ```bash
 jaiph use nightly      # rolling nightly prerelease
-jaiph use 0.9.4        # reinstalls the v0.9.4 release binary
+jaiph use 0.10.0       # reinstalls the v0.10.0 release binary
 ```
 
-`jaiph use` runs the configured installer (`curl -fsSL https://jaiph.org/install | bash` by default) with `JAIPH_REPO_REF` set to the requested ref. Override the installer command via `JAIPH_INSTALL_COMMAND` for forks, offline bundles, or local scripts.
+`jaiph use` re-invokes the step-1 installer (`JAIPH_INSTALL_COMMAND`, default `curl -fsSL https://jaiph.org/install | bash`) with `JAIPH_REPO_REF` set to `nightly` or `v<version>`, then replaces `~/.local/bin/jaiph` (or `JAIPH_BIN_DIR`). Override `JAIPH_INSTALL_COMMAND` for forks, offline bundles, or local scripts.
 
 ## Verification
 
@@ -61,7 +62,7 @@ jaiph use 0.9.4        # reinstalls the v0.9.4 release binary
 jaiph --version
 ```
 
-This prints the version string baked into the binary at build time. After `jaiph use <ref>`, re-run `jaiph --version` and confirm the value matches the requested ref.
+This prints `jaiph <version>` (sourced from the installed release at build time). After `jaiph use <version>`, re-run `jaiph --version` and confirm the printed version matches (for example `jaiph 0.10.0` after `jaiph use 0.10.0`).
 
 ## Related
 

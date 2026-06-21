@@ -11,7 +11,7 @@ redirect_from:
 
 This recipe authors a `*.test.jh` file with mocked prompts and stubbed dependencies, then runs it through `jaiph test`. Test blocks execute the workflow under test in-process through `NodeWorkflowRuntime` — the same interpreter `jaiph run` uses — and assert on captured output.
 
-`jaiph test` never uses Docker, never calls real models, and ignores hooks. Its job is to fix inputs and check outputs so refactors and CI catch regressions deterministically.
+`jaiph test` runs on the host in-process — no Docker sandbox, no credential pre-flight, and no hooks. Mock every `prompt` step (and stub external workflows, rules, or scripts when needed): when no mocks are configured, or when a queued `mock prompt "…"` list is exhausted, the runtime falls through to the real agent backend the same way `jaiph run` would. Pattern-based `mock prompt { … }` blocks do not fall through — an unmatched prompt fails the test unless a `_` default arm catches it. The goal is fixed inputs and checkable outputs so refactors and CI catch regressions deterministically.
 
 ## Prerequisites
 
@@ -23,12 +23,12 @@ This recipe authors a `*.test.jh` file with mocked prompts and stubbed dependenc
 Test files end in `.test.jh`. Convention: keep them next to the module under test or under a top-level `tests/` / `e2e/` directory.
 
 ```jh
-import "./workflow_greeting.jh" as w
+import "workflow_greeting.jh" as w
 
 test "runs happy path and prints PASS" {
-  mock prompt "hello from mock"
+  mock prompt "e2e-greeting-mock"
   const response = run w.default()
-  expect_contain response "hello from mock"
+  expect_contain response "e2e-greeting-mock"
   expect_contain response "done"
 }
 ```
@@ -42,14 +42,14 @@ mock prompt "first response"
 mock prompt "second response"
 ```
 
-Multiple `mock prompt` lines queue in order — one is consumed per `prompt` call. Strings must use **double quotes** (with `\"`, `\n`, `\\` escapes). A bare identifier refers to a test-block `const`:
+Multiple `mock prompt` lines queue in order — one is consumed per `prompt` call. Strings must use **double quotes** (with `\"`, `\n`, `\\` escapes). A bare identifier refers to a test-block `const` declared earlier as a double-quoted string:
 
 ```jh
 const greeting = "hi"
 mock prompt greeting
 ```
 
-For content-based dispatch, use the pattern form (mutually exclusive with the queue form in the same test block):
+For content-based dispatch, use the pattern form. Do not mix queued `mock prompt "…"` / `mock prompt <const>` lines with a `mock prompt { … }` block in one test — the compiler rejects that (`E_VALIDATE`). Separate tests in the same file may use different styles:
 
 ```jh
 mock prompt {
@@ -58,6 +58,8 @@ mock prompt {
   _ => "default response"
 }
 ```
+
+Arms are evaluated top-to-bottom; the first match wins. Without a `_` wildcard arm, an unmatched prompt fails the test.
 
 ## 3. (Optional) Stub workflows, rules, or scripts
 
@@ -104,8 +106,8 @@ The second argument is either a double-quoted literal or a test-block `const` na
 ```bash
 jaiph test                            # discover *.test.jh under the workspace
 jaiph test ./e2e                      # restrict to a directory
-jaiph test ./e2e/flow.test.jh         # single file
-jaiph ./e2e/flow.test.jh              # shorthand: a *.test.jh path is treated as jaiph test
+jaiph test ./e2e/workflow_greeting.test.jh  # single file
+jaiph ./e2e/workflow_greeting.test.jh       # shorthand: a *.test.jh path is treated as jaiph test
 ```
 
 The runner discovers `*.test.jh` files recursively. Zero matches in discovery mode print `jaiph test: no *.test.jh files found (nothing to do)` and exit **0** — safe to call unconditionally from CI.
@@ -118,7 +120,6 @@ A passing run prints one block per case followed by `✓ N test(s) passed` and e
 testing workflow_greeting.test.jh
   ▸ runs happy path and prints PASS
   ✓ 0s
-
 ✓ 1 test(s) passed
 ```
 
@@ -136,4 +137,4 @@ A failure prints the failing assertion and exits non-zero:
 
 - [Architecture — Test runner integration](architecture.md#test-runner-integration-testjh-in-the-kernel) — how `runTestFile` reuses the same module graph and runtime as `jaiph run`.
 - [Configure backend & model](/how-to/configure-backend) — workflows under test still read `config { … }`; pin agent settings in env when CI must be deterministic.
-- [Authenticate agent backends](/how-to/agent-auth) — mocked prompts mean the test runner never needs real credentials.
+- [Authenticate agent backends](/how-to/agent-auth) — only needed when a test reaches a live `prompt`; fully mocked suites skip agent credentials and the `jaiph run` pre-flight.

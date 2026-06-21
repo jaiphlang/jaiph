@@ -15,14 +15,14 @@ This tutorial deliberately uses **only `script` steps** — no agent backend, no
 
 ## What you will build
 
-A workflow that runs one script step which prints a greeting, and a `return` step that propagates the script's output as the workflow's return value. The whole file is six lines.
+A workflow that runs one script step which prints a greeting, and a `return` step that propagates the script's output as the workflow's return value. The whole file is five lines.
 
 ## Prerequisites
 
 - A POSIX shell (`sh`, `bash`, `zsh`) with `curl` and either `shasum` or `sha256sum` available.
 - About five minutes.
 
-Node, Docker, and API keys are **not** required for this tutorial.
+Node, Docker, and API keys are **not** required for this tutorial. Runs use `jaiph run --unsafe` so execution stays on the host (Docker is on by default for `jaiph run`).
 
 ## 1. Install the CLI
 
@@ -60,17 +60,17 @@ workflow default(who) {
 
 Three things are happening:
 
-- `` script greet = `…` `` declares a managed script with a single-line bash body. For multi-line bodies, use a fenced block (`` script greet = ```bash … ```) — the fence tag selects the interpreter (`node`, `python3`, etc.); see [Language — `script`](/reference/language). `${1}` reads the first positional argument the script is called with.
+- `` script greet = `…` `` declares a managed script with a single-line bash body. For multi-line bodies, use a fenced block (`` script greet = ```bash … ```) — the fence tag selects the interpreter (`node`, `python3`, etc.); see [Grammar — Script RHS](/reference/grammar#definitions). Script bodies use shell positional args (`$1`, `$2`, …), not Jaiph `${name}` interpolation; `${1:-world}` is bash default expansion when `run greet(...)` passes no value.
 - `workflow default(who)` is the entry workflow. Every `.jh` file invoked with `jaiph run` enters at `workflow default`. The `who` parameter is bound positionally from CLI arguments after the file path.
 - `return run greet(who)` calls the script with `who` as `${1}`, captures its stdout as the step value, and returns it as the workflow's return value.
 
 ## 3. Run it
 
 ```bash
-jaiph run ./hello.jh "Adam"
+jaiph run --unsafe ./hello.jh "Adam"
 ```
 
-Two notes on what happens before any step runs:
+`--unsafe` sets `JAIPH_UNSAFE=true` for this run only and skips the Docker sandbox. Two notes on what happens before any step runs:
 
 - The CLI loads the entry file plus its import closure into a `ModuleGraph` once (this file has no imports, so the closure is one module).
 - The CLI validates the graph and emits each `script` body as an executable file under a temp `scripts/` directory referenced by `$JAIPH_SCRIPTS`. Workflow steps stay as interpreted AST — there is no transpiled `default.sh`.
@@ -89,9 +89,9 @@ workflow default (who="Adam")
 Hello, Adam!
 ```
 
-Lines 1–6 are the live progress tree (`▸` = step started, `✓` = step completed; the `(0s)` suffix is per-step elapsed time). The blank line and the `Hello, Adam!` line after `PASS` are the workflow's **return value** — `jaiph run` prints it to stdout after the PASS line for successful runs.
+The first line is the sandbox banner. The `workflow default` row and the indented `▸` / `✓` rows are the live progress tree (`▸` = step started, `✓` = step completed; `(0s)` is per-step elapsed time). The root workflow row is static; only nested steps emit `▸` / `✓` lines. The blank line and `Hello, Adam!` after `PASS` are the workflow **return value** — `jaiph run` prints it on stdout after a successful run.
 
-The `(no sandbox)` banner appears because [Docker is on by default but disabled in this tutorial](/how-to/sandbox-run) via `JAIPH_UNSAFE=true` (set in CI/test paths) or because Docker is not installed on this host. With Docker on, the banner reads `(Docker sandbox, fusefs)` or `(Docker sandbox, tmp workspace)`.
+The `(no sandbox)` banner reflects `--unsafe`: the workflow runs on the host with no container. Omit `--unsafe` and `jaiph run` uses the [Docker sandbox by default](/how-to/sandbox-run); the banner then reads `(Docker sandbox, fusefs)` or `(Docker sandbox, tmp workspace)` depending on the host. If Docker is enabled but the daemon is unavailable, the CLI exits with `E_DOCKER_NOT_FOUND` rather than falling back to the host.
 
 ## 4. Inspect the run artifacts
 
@@ -116,7 +116,7 @@ cat .jaiph/runs/*/*/000002-script__greet.out
 cat .jaiph/runs/*/*/return_value.txt
 ```
 
-Both should match the line printed after `PASS`. The full artifact layout is pinned in [Architecture — Durable artifact layout](architecture.md#durable-artifact-layout); the event types in `run_summary.jsonl` are documented in [CLI Reference — Run artifacts](/reference/cli).
+Both should match the line printed after `PASS`. The full artifact layout is pinned in [Architecture — Durable artifact layout](architecture.md#durable-artifact-layout); the event types in `run_summary.jsonl` are documented in [CLI Reference — Run artifacts](/reference/cli#run-artifacts).
 
 ## 5. Make it fail (and observe the failure footer)
 
@@ -133,10 +133,10 @@ workflow default(who) {
 Re-run with the same arguments:
 
 ```bash
-jaiph run ./hello.jh "Adam"
+jaiph run --unsafe ./hello.jh "Adam"
 ```
 
-The CLI prints a `✗ FAIL` line, a `Logs:` / `Summary:` / `out:` / `err:` block pointing to the run directory, and an `Output of failed step:` excerpt. The process exits non-zero. `return_value.txt` is **not** written on failure — only success.
+The CLI prints a `✗ FAIL` line on stderr, a `Logs:` / `Summary:` / `out:` / `err:` block pointing to the run directory, and an `Output of failed step:` excerpt. The process exits non-zero. `return_value.txt` is **not** written on failure — only success.
 
 ## Where to go next
 

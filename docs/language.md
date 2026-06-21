@@ -61,13 +61,13 @@ Every value position (`const` RHS, `return`, `send` RHS, `log` / `logerr` / `fai
 
 | Kind | Source form | Runtime behaviour |
 |---|---|---|
-| `literal` | `"…"`, `"""…"""`, `${var}`, `$var` (in `return` only), post-dedent triple-quoted body | Interpolated against the current scope; `${run …}` / `${ensure …}` perform inline managed calls. |
+| `literal` | `"…"`, `"""…"""`, `${var}`, post-dedent triple-quoted body | Interpolated against the current scope; `${run …}` / `${ensure …}` perform inline managed calls. |
 | `call` | `run ref(args)`, `run async ref(args)` | Managed workflow/script call. `async: true` on the `run async` capture position. |
 | `ensure_call` | `ensure ref(args)` | Managed rule call. |
 | `inline_script` | `` `body`(args) `` / `` ```lang...body...```(args) `` | Inline script body emitted as `scripts/__inline_<hash>`. |
 | `prompt` | `prompt body [returns "<schema>"]` | Sends body to the agent backend; JSON-quoted in transport. |
 | `match` | `match <subject> { … }` | Walks arms top-to-bottom; first match wins. |
-| `shell` | Free-form text on the `send` RHS only | Used as a managed substitution on the send RHS. |
+| `shell` | Free-form workflow body line; send RHS parse fallback | Workflow: unparsed line becomes an inline-shell `exec` step (rules forbid). Send: non-literal RHS fallback — usually `E_VALIDATE`. |
 | `bare_ref` | A bare symbol on a `send` RHS | Always rejected by the validator; preserved so the error can name the symbol. |
 
 ## `run` — execute a workflow or script
@@ -124,8 +124,8 @@ workflow default() {
 
 | Aspect | Behaviour |
 |---|---|
-| Resolution trigger | First non-passthrough read — string interpolation, argument to `run` / `ensure`, comparison in `if` / `match`, prompt body referencing `${h}`, channel `send` payload referencing `${h}`. |
-| Passthrough | Initial capture (`const h = run async foo()`), re-assignment (`const copy = h` desugars to `"${h}"`, which **does** resolve). |
+| Resolution trigger | First non-passthrough read — string interpolation, argument to `run` / `ensure`, comparison in `if` / `match`, prompt body referencing `${h}`, channel `send` payload referencing `${h}`, or `const copy = h` (bare-identifier RHS desugars to `"${h}"`). |
+| Passthrough | Initial capture (`const h = run async foo()`), bare `run async` with no capture name. |
 | Implicit join | When the enclosing `executeSteps` scope exits, all remaining unresolved handles created there are joined. Failures aggregate like a synchronous step. |
 | `recover` / `catch` | Both work with `run async`. `recover` uses the same retry-limit semantics as non-async `recover` (`run.recover_limit`). |
 | Inline scripts | Not supported with `run async`. |
@@ -257,7 +257,7 @@ alerts <- """
 | RHS required | Bare `channel <-` is `E_PARSE`. |
 | Allowed RHS | Double-quoted string, triple-quoted block, `${ident}` / `${…}`, `run ref(args)` (with parens). |
 | Bare ref RHS | A bare workflow / rule / script name is `E_VALIDATE`. |
-| Combined capture | `name = channel <- …` is `E_PARSE`. |
+| Combined capture | `name = channel <- …` is `E_VALIDATE` (`invalid send: channel must be a single name or …`). |
 | Allowed in | Workflows only. Rules forbid `send`. |
 | Dispatch | `send` enqueues on the active workflow context. After that workflow's steps complete successfully, the runtime drains the queue sequentially and runs each route target. Sends from nested workflows bubble to the nearest ancestor context that declares routes for the channel. See [Inbox & Dispatch](inbox.md). |
 
@@ -276,7 +276,7 @@ fail "Missing configuration"
 
 | Statement | Effect |
 |---|---|
-| `log` | Writes to the run's stdout stream. Backslash escapes are interpreted (`\n` → newline). |
+| `log` | Writes to the run's stdout stream. Double-quoted messages store backslash sequences literally; use triple-quoted `log """…"""` for multiline text. |
 | `logerr` | Writes to stderr. Displayed with `!` marker in the progress tree. |
 | `fail` | Aborts the workflow or rule with a stderr message and non-zero exit. |
 
@@ -321,7 +321,7 @@ match status {
 | Patterns | String literal (exact equality), `/regex/`, or `_` (wildcard — exactly one required). |
 | Arm delimiter | Newlines. Commas between arms are `E_PARSE`. |
 | Arm bodies | String literal, triple-quoted block, bare in-scope identifier, `$var` / `${var}`, `fail "…"`, `run ref(…)`, `ensure ref(…)`. |
-| Disallowed in arms | `return` (use `return match … { … }` outside), inline scripts, unknown bare identifiers (`E_VALIDATE: unknown identifier "…" in match arm body`). |
+| Disallowed in arms | `return` (use `return match … { … }` outside), inline scripts, unknown bare identifiers (`E_VALIDATE: unknown identifier "…" in match arm body; declare it with "const", use a capture, or add a parameter`). |
 | Expression form | Usable with `const x = match …` or `return match …`. |
 
 When a `const x = match …` step contains arms with `run` / `ensure`, the progress tree surfaces the called targets as child steps of the `const` row.
@@ -359,7 +359,7 @@ for path in paths {
 | `${var:-fallback}`, `${var%%…}`, `${var//…}`, `${#var}` | `E_PARSE` in orchestration strings and backtick scripts; passes through in fenced scripts. | — |
 | `$(…)` | `E_PARSE` in orchestration strings. | — |
 
-If an inline capture fails, the enclosing step fails. Nested inline captures (`${run foo(${run bar()})}`) are `E_VALIDATE` — extract the inner call to a `const`.
+If an inline capture fails, the enclosing step fails. Nested inline captures (`${run foo(${run bar()})}`) are `E_PARSE` — extract the inner call to a `const`.
 
 ## Rule scope restrictions
 
@@ -400,7 +400,7 @@ Module `const` values are **not** automatically exported into script environment
 
 ## Recursion limit
 
-The runtime enforces a hard recursion depth limit of `JAIPH_RECURSION_DEPTH_LIMIT` (default `256`). Exceeding the limit produces a runtime error. The depth is the active workflow / rule call chain (not script subprocesses).
+The runtime enforces a hard recursion depth limit of `256` (`MAX_RECURSION_DEPTH` in `src/runtime/kernel/runtime-arg-parser.ts`). Exceeding the limit produces a runtime error. The depth is the active workflow / rule call chain (not script subprocesses). There is no environment variable override.
 
 ## Related
 

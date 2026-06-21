@@ -9,7 +9,7 @@ redirect_from:
 
 # Save artifacts
 
-This recipe publishes files from inside a workflow into the run's `artifacts/` directory so they persist on the host after a container exits.
+This recipe publishes files from a workflow into the run's `artifacts/` directory under the run logs root (`.jaiph/runs/` by default). That is the supported export path when Docker sandboxing is on — in the default overlay and copy modes, workspace edits are discarded at container exit, but anything copied into `artifacts/` remains on the host.
 
 The runtime always creates an `artifacts/` directory under the run log directory and exposes its absolute path as `JAIPH_ARTIFACTS_DIR`. The `jaiphlang/artifacts` library is the canonical way to copy files into that directory; you can also write there directly from a `script` step.
 
@@ -38,7 +38,7 @@ workflow default() {
 
 ## 3. Save several files at once
 
-`save` accepts a **newline-separated** list of paths. Blank lines are ignored:
+`save` accepts a **newline-separated** list of paths. Blank or whitespace-only lines are ignored:
 
 ```jh
 workflow default() {
@@ -68,22 +68,22 @@ workflow default() {
 }
 ```
 
-The runtime also sets `JAIPH_RUN_DIR`, `JAIPH_RUN_SUMMARY_FILE`, and `JAIPH_RUN_ID` if you need to write alongside the timeline.
+The runtime also sets `JAIPH_RUN_DIR`, `JAIPH_RUN_SUMMARY_FILE`, and `JAIPH_RUN_ID` on script steps if you need those paths.
 
 ## Verification
 
 After the run, list the artifacts directory:
 
 ```bash
-ls .jaiph/runs/<date>/<time>-<entry>/artifacts/
+ls <runs_root>/<YYYY-MM-DD>/<HH-MM-SS>-<source>/artifacts/
 ```
 
-You should see the files your workflow saved. Under Docker sandboxing the path is the same — the artifacts mount (`/jaiph/run`) is bound to the host runs root, so files land on the host even though the run executed inside the container.
+Replace `<runs_root>` with `.jaiph/runs` when `JAIPH_RUNS_DIR` is unset, or with your configured runs directory otherwise. Date and time segments are UTC; `<source>` is the entry-file basename (or `JAIPH_SOURCE_FILE` when set). You should see the files your workflow saved. Under Docker sandboxing the host path is the same — the run mount at `/jaiph/run` inside the container is bound to the host runs root, so artifacts land on the host even though the run executed inside the container.
 
-`artifacts.save(...)` exits with a failure when the input list is empty after trimming, when any source path is missing, or when `JAIPH_ARTIFACTS_DIR` is unset — wrap the call in `recover` / `catch` if you want the workflow to tolerate that.
+`artifacts.save(...)` exits with a failure when the input list is empty after trimming, when any listed path is missing or not a regular file, or when `JAIPH_ARTIFACTS_DIR` is unset — wrap the call in `recover` / `catch` if you want the workflow to tolerate that.
 
 ## Related
 
 - [Architecture — Durable artifact layout](architecture.md#durable-artifact-layout) — the full run directory tree, including where `artifacts/` sits.
 - [Use & publish a library](/how-to/libraries) — installing `jaiphlang/artifacts` and writing your own libraries.
-- [Sandboxing](sandboxing.md) — why workspace edits are discarded but `artifacts/` persists.
+- [Sandboxing — The three sandbox modes](sandboxing.md#the-three-sandbox-modes) — overlay and copy discard workspace edits; artifacts persist on the host in every mode.

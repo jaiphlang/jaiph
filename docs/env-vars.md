@@ -41,18 +41,18 @@ The table below covers every `JAIPH_*` name read from `process.env` / `env` in `
 | `JAIPH_AGENT_TRUSTED_WORKSPACE_LOCKED` | internal | bool | — | — | Lock flag for `JAIPH_AGENT_TRUSTED_WORKSPACE`. |
 | `JAIPH_ARTIFACTS_DIR` | runtime | path | `<run_dir>/artifacts` | — | Absolute path to the writable artifacts directory for the current run. Set by the runtime; read by `jaiphlang/artifacts` and user scripts. |
 | `JAIPH_CODEX_API_URL` | runtime | string | `https://api.openai.com/v1/chat/completions` | — | Chat-completions endpoint for the `codex` backend. |
-| `JAIPH_DEBUG` | host, runtime | bool | `false` | `run.debug` | Enable debug tracing for the run. |
+| `JAIPH_DEBUG` | host, runtime | bool (exact `"true"`) | `false` | `run.debug` | Enable debug tracing for the run. |
 | `JAIPH_DEBUG_LOCKED` | internal | bool | — | — | Lock flag for `JAIPH_DEBUG`. |
 | `JAIPH_DOCKER_ENABLED` | host | bool (exact `true`) | — | — | Force Docker on (`true`) or off (any other value). When unset, Docker is on unless `JAIPH_UNSAFE=true`. |
 | `JAIPH_DOCKER_IMAGE` | host | string | `ghcr.io/jaiphlang/jaiph-runtime:<version>` | `runtime.docker_image` | Container image. Must already contain `jaiph`. |
-| `JAIPH_DOCKER_KEEP_SANDBOX` | host | bool | `false` | — | Copy mode only — when `1` / `true`, leave the host-side `.sandbox-<id>/` clone on disk after exit for debugging. |
+| `JAIPH_DOCKER_KEEP_SANDBOX` | host | bool (`1` / `true`) | `false` | — | Copy mode only — when enabled, leave the host-side `.sandbox-<id>/` clone on disk after exit for debugging. |
 | `JAIPH_DOCKER_NETWORK` | host | string (`default`, `none`, or named network) | `default` | `runtime.docker_network` | `docker run --network` value. `none` disables egress. |
-| `JAIPH_DOCKER_NO_OVERLAY` | host | bool | `false` | — | Force copy mode even when `/dev/fuse` is available. |
+| `JAIPH_DOCKER_NO_OVERLAY` | host | bool (`1` / `true`) | `false` | — | Force copy mode even when `/dev/fuse` is available. |
 | `JAIPH_DOCKER_TIMEOUT` | host | int (seconds) | `14400` (4h) | `runtime.docker_timeout_seconds` | Container execution timeout. `0` disables. Invalid values produce `E_DOCKER_TIMEOUT`. |
 | `JAIPH_INBOX_MAX_DISPATCH` | runtime | int | `1000` | — | Maximum inbox messages a single workflow frame may drain before aborting with `E_INBOX_DISPATCH_LIMIT`. |
-| `JAIPH_INBOX_PARALLEL` | runtime | bool | `false` | — | Test/diagnostic switch — drain channel routes concurrently inside one frame. Off by default; production runs use sequential dispatch. |
-| `JAIPH_INPLACE` | host | bool | `false` | — | Opt into inplace sandbox mode (host workspace bind-mounted read-write). Not forwarded into the container. |
-| `JAIPH_INPLACE_YES` | host | bool | `false` | — | Auto-confirm the inplace destructive-edit prompt. Required when `JAIPH_INPLACE` is set and stdin is not a TTY. Not forwarded into the container. |
+| `JAIPH_INBOX_PARALLEL` | — | — | — | — | Unused — the runtime does not read this variable (tests assert setting it has no effect on inbox dispatch order). |
+| `JAIPH_INPLACE` | host | bool (`1` / `true`) | `false` | — | Opt into inplace sandbox mode (host workspace bind-mounted read-write). Not forwarded into the container. |
+| `JAIPH_INPLACE_YES` | host | bool (`1` / `true`) | `false` | — | Auto-confirm the inplace destructive-edit prompt. Required when `JAIPH_INPLACE` is set and stdin is not a TTY. Not forwarded into the container. |
 | `JAIPH_INSTALL_COMMAND` | host | string | `curl -fsSL https://jaiph.org/install \| bash` | — | Command `jaiph use` re-invokes to reinstall. |
 | `JAIPH_LIB` | host | path | — | — | Removed from the product. The CLI strips it from the launched env before each run. |
 | `JAIPH_META_FILE` | internal | path | — | — | Absolute path to the run-metadata file. Set on the detached workflow runner child; stripped from the parent env before launch. |
@@ -62,21 +62,21 @@ The table below covers every `JAIPH_*` name read from `process.env` / `env` in `
 | `JAIPH_NON_TTY_HEARTBEAT_FIRST_SEC` | host | int (seconds) | `60` | — | Seconds before the first non-TTY heartbeat line. |
 | `JAIPH_NON_TTY_HEARTBEAT_INTERVAL_MS` | host | int (ms; floor `250`) | `30000` | — | Minimum interval between subsequent non-TTY heartbeat lines. |
 | `JAIPH_PRECEDING_FILES` | host | string | — | — | Removed from the product. Stripped from the launched env. |
-| `JAIPH_PROMPT_FINAL_FILE` | runtime | path | — | — | Internal — path the prompt backend writes the final assistant message to. Set by `runPromptStep`. |
+| `JAIPH_PROMPT_FINAL_FILE` | runtime | path | — | — | Optional path; when set, `executePrompt` writes the final assistant message there. Jaiph does not set this automatically. |
 | `JAIPH_PROMPT_RETRY` | runtime | bool (`0` disables) | enabled | — | Set to `0` to skip the prompt retry backoff. `jaiph test` defaults to `0` so mock failures fail fast. |
 | `JAIPH_PROMPT_RETRY_DELAYS` | runtime | int-list (ms) | `15000,60000,600000,1800000,7200000` | — | Override the prompt retry delay schedule. Invalid entries abort the prompt. |
 | `JAIPH_REGISTRY` | host | path or URL | `https://jaiph.org/registry` | — | Source of the lib registry index used by `jaiph install <name>`. Disk paths (no scheme or `file://`) are read locally; everything else is fetched. |
 | `JAIPH_RUN_DIR` | internal | path | — | — | Absolute path to the active run directory. Set by the runtime inside the runner. |
-| `JAIPH_RUN_ID` | internal | string (UUID) | host-generated | — | Stable run identifier. Generated by the host once per `jaiph run` invocation and forwarded into the runner / container. |
+| `JAIPH_RUN_ID` | internal | string (UUID) | runner-generated | — | Stable run identifier. Set by the host CLI on the default (non-`--raw`) `jaiph run` path; otherwise the runner generates one at startup. Forwarded into Docker when set. |
 | `JAIPH_RUN_SUMMARY_FILE` | internal | path | `<run_dir>/run_summary.jsonl` | — | Absolute path the runtime writes durable summary events to. |
 | `JAIPH_RUNS_DIR` | host, runtime | path | `.jaiph/runs` under the workspace | `run.logs_dir` | Root directory for run logs. Inside Docker the host CLI overrides this to `/jaiph/run`. |
 | `JAIPH_RUNS_DIR_LOCKED` | internal | bool | — | — | Lock flag for `JAIPH_RUNS_DIR`. |
 | `JAIPH_SCRIPTS` | internal | path | — | — | Directory of emitted `script` files for this run. Set after `buildScripts()`. Any parent-shell value is cleared before launch. |
-| `JAIPH_SKILL_PATH` | host | path | — | — | When set and the path exists, `jaiph init` copies that file to `.jaiph/SKILL.md`. Otherwise the CLI walks an install-relative search. |
+| `JAIPH_SKILL_PATH` | host | path | — | — | When set and the path exists, `jaiph init` writes `.jaiph/SKILL.md` from that file. Otherwise the CLI walks an install-relative search. |
 | `JAIPH_SOURCE_ABS` | internal | path | — | — | Absolute path to the entry `.jh` file. Set by the CLI before spawning the runner. |
 | `JAIPH_SOURCE_FILE` | internal | string (basename) | entry-file basename | — | Used to name run directories. |
 | `JAIPH_STDLIB` | host | path | — | — | Removed from the product. Stripped from the launched env. |
-| `JAIPH_TEST_MODE` | runtime | bool | `false` | — | Set by `jaiph test` so the runtime skips production-only branches (e.g. file-mode normalization). |
+| `JAIPH_TEST_MODE` | runtime | bool (exact `"1"`) | `false` | — | Set by `jaiph test` so the runtime skips production-only branches (e.g. file-mode normalization). |
 | `JAIPH_UNSAFE` | host | bool (`true` only) | `false` | — | Disable Docker for this run; execute on the host. `--unsafe` is the `jaiph run` flag form. |
 | `JAIPH_WORKSPACE` | host, runtime | path | autodetected | — | Workspace root. Inside Docker the host CLI overrides this to `/jaiph/workspace`. |
 
@@ -84,16 +84,16 @@ The table below covers every `JAIPH_*` name read from `process.env` / `env` in `
 
 ## Agent credentials
 
-The host CLI checks these before spawning the runner or container. See [Authenticate agent backends](/how-to/agent-auth) for the per-backend rules and [Sandboxing](sandboxing.md) for which of them cross the container boundary.
+The host CLI checks these before spawning the runner or container when [credential pre-flight](configuration.md#credential-pre-flight) applies. Pre-flight is skipped when the entry file declares no explicit backend and uses no `prompt` step, on `jaiph run --raw`, and when `JAIPH_UNSAFE=true`. See [Authenticate agent backends](/how-to/agent-auth) for per-backend rules and [Sandboxing](sandboxing.md) for which credentials cross the container boundary.
 
 | Variable | Backend | Host behaviour | Docker behaviour | Notes |
 |---|---|---|---|---|
 | `ANTHROPIC_API_KEY` | `claude` | warning if absent | hard error (`E_AGENT_CREDENTIALS`) | Either this **or** `CLAUDE_CODE_OAUTH_TOKEN` satisfies Claude. |
 | `CLAUDE_CODE_OAUTH_TOKEN` | `claude` | warning if absent | hard error (`E_AGENT_CREDENTIALS`) | Long-lived OAuth token from `claude setup-token`. |
 | `CURSOR_API_KEY` | `cursor` | warning if absent | hard error (`E_AGENT_CREDENTIALS`) | A stored `cursor-agent login` may still work on host runs. |
-| `OPENAI_API_KEY` | `codex` | hard error (`E_AGENT_CREDENTIALS`) | hard error (`E_AGENT_CREDENTIALS`) | No CLI-login fallback exists for `codex`. |
+| `OPENAI_API_KEY` | `codex` | hard error (`E_AGENT_CREDENTIALS`) | hard error (`E_AGENT_CREDENTIALS`) | No CLI-login fallback. `OPENAI_*` is outside the Docker forwarding allowlist, so sandboxed runs fail preflight even when the key is set on the host. |
 
-Forwarding allowlist prefixes into the Docker container: `JAIPH_*` (except `JAIPH_DOCKER_*`, `JAIPH_INPLACE`, and `JAIPH_INPLACE_YES`), `ANTHROPIC_*`, `CLAUDE_*`, `CURSOR_*`. Everything else is silently dropped — see [Sandboxing](sandboxing.md).
+Forwarding allowlist prefixes into the Docker container: `JAIPH_*` (except `JAIPH_DOCKER_*`, `JAIPH_INPLACE`, and `JAIPH_INPLACE_YES`), `ANTHROPIC_*`, `CLAUDE_*`, `CURSOR_*`. Everything else — including `OPENAI_*` — is silently dropped — see [Sandboxing](sandboxing.md).
 
 ## Installer and `jaiph use`
 
@@ -101,14 +101,14 @@ These variables are consumed by `docs/install` (the installer shell script) and 
 
 | Variable | Type | Default | Role |
 |---|---|---|---|
-| `JAIPH_REPO_REF` | string | latest release tag | Release ref the installer downloads (`v0.9.4`, `nightly`). `jaiph use <version>` sets this to `v<version>` or `nightly`. |
+| `JAIPH_REPO_REF` | string | `v0.10.0` (installer default when unset) | Release ref the installer downloads (`v0.10.0`, `nightly`, …). `jaiph use <version>` sets this to `v<version>` or `nightly`. |
 | `JAIPH_BIN_DIR` | path | `$HOME/.local/bin` | Target bin directory for the installed `jaiph` binary. |
 | `JAIPH_RELEASE_BASE_URL` | string | `https://github.com/jaiphlang/jaiph/releases/download/<ref>` | Override the GitHub Release base URL the installer downloads from. |
 | `JAIPH_REPO_URL` | path | — | Local repo path (directory containing `package.json`) for the from-source installer branch (`docs/install-from-local.sh`). Ignored on the binary-download path. |
 
 ## Docker sandbox failure modes
 
-These error codes surface during Docker-backed `jaiph run` invocations. They are emitted to stderr (and to the failure footer) and produce non-zero exit codes. Most are `E_DOCKER_*`; `E_TIMEOUT`, `E_VALIDATE_MOUNT`, `E_CLI_SETUP`, and `E_FLAG_CONFLICT` appear in Docker contexts but are not strictly Docker-scoped.
+These error codes surface during Docker-backed `jaiph run` invocations. They are emitted to stderr (and to the failure footer) and produce non-zero exit codes. Most are `E_DOCKER_*`; `E_TIMEOUT`, `E_VALIDATE_MOUNT`, and `E_FLAG_CONFLICT` appear in Docker contexts but are not strictly Docker-scoped.
 
 | Code | Trigger | Behaviour |
 |---|---|---|
@@ -122,7 +122,6 @@ These error codes surface during Docker-backed `jaiph run` invocations. They are
 | `E_DOCKER_SANDBOX_COPY` | Copy mode failed to clone the host workspace. | Run exits before launch. |
 | `E_DOCKER_INPLACE_NO_CONFIRM` | `JAIPH_INPLACE` is set but stdin is not a TTY and `JAIPH_INPLACE_YES` is not set. | Run exits before launch. |
 | `E_FLAG_CONFLICT` | `--inplace` / `JAIPH_INPLACE` and `--unsafe` / `JAIPH_UNSAFE=true` are both set. | Run exits before launch. |
-| `E_CLI_SETUP` | Overlay mode needs `runtime/overlay-run.sh` but the file is missing from the installation. | Run exits before launch. |
 | `E_VALIDATE_MOUNT` | Mount targets a denied host path (`/`, `/proc`, docker socket, etc.). | Run exits before launch. |
 | `E_TIMEOUT` | Container runs longer than the effective Docker timeout. | Container receives SIGTERM, then SIGKILL after 5s grace. |
 | `E_AGENT_CREDENTIALS` | Credential pre-flight detected a missing agent credential. | Run exits before launch. |

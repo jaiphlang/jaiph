@@ -14,7 +14,7 @@ A two-step workflow: one `ensure` step that validates a name with a `rule`, and 
 
 ## Prerequisites — credentials
 
-`prompt` steps call an agent backend. Each backend needs a credential **before** the run starts, because the CLI runs a [credential pre-flight](/how-to/agent-auth) and aborts with `E_AGENT_CREDENTIALS` if the required env var is missing. The pre-flight is hard-failing under Docker — host-side stored CLI logins (`~/.claude`, macOS Keychain, `cursor-agent login`) do **not** cross the container boundary.
+`prompt` steps call an agent backend. Before spawning the runner or Docker container, the CLI runs a [credential pre-flight](/how-to/agent-auth). Under Docker, missing credentials are a hard error (`E_AGENT_CREDENTIALS`) — host-side stored CLI logins (`~/.claude`, macOS Keychain, `cursor-agent login`) do **not** cross the container boundary. On host-only runs, `claude` and `cursor` may warn instead of aborting when a stored CLI login might still work.
 
 Pick one backend and set its env var on the host:
 
@@ -94,13 +94,13 @@ Save the file as `greet.jh`.
 jaiph run ./greet.jh "Adam"
 ```
 
-The CLI does a few things before any step runs:
+The CLI does a few things before any workflow step runs:
 
-1. **Loads and validates the module graph** (one file in this tutorial).
-2. **Resolves Docker mode**: picks `fusefs` if `/dev/fuse` is present, `tmp workspace` otherwise.
-3. **Pulls the runtime image** (`ghcr.io/jaiphlang/jaiph-runtime`) if it is not already local. Status lines stream on stderr.
-4. **Runs the credential pre-flight** for the selected backend. Missing env vars abort with `E_AGENT_CREDENTIALS` — no container is launched.
-5. **Spawns the container**, mounts the workspace read-only (overlay) or as a disposable clone (copy), and mounts `.jaiph/runs/` read-write for artifacts.
+1. **Loads the module graph** (parses the entry file — one file in this tutorial).
+2. **Resolves Docker mode**: picks overlay (`fusefs` banner) when `/dev/fuse` is present, copy (`tmp workspace`) otherwise.
+3. **Runs the credential pre-flight** for the selected backend. Under Docker, missing env vars abort with `E_AGENT_CREDENTIALS` — no container is launched.
+4. **Pulls the runtime image** (`ghcr.io/jaiphlang/jaiph-runtime:<version>`) if it is not already local. Status lines stream on stderr before the banner.
+5. **Validates the module, emits scripts, prints the banner**, then **spawns the container** — workspace mounted read-only (overlay) or as a disposable clone (copy), and `.jaiph/runs/` read-write for artifacts.
 
 You should see (timings, model output, and exact step name will differ):
 

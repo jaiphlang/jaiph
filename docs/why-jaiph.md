@@ -24,22 +24,22 @@ Jaiph treats orchestration as the language. The structure that an ad-hoc bash sc
 
 A `.jh` file declares four primitives, and the orchestration is what they compose into:
 
-- **`rule`** — a non-mutating check. Calls other rules via `ensure`, calls scripts via `run`. Cannot send on channels, cannot prompt an agent, cannot fan out concurrently. The compiler enforces this; rules are the place to put assumptions the rest of the workflow gets to rely on.
-- **`script`** — real shell (or Python, Node, anything with a shebang). The only place where shell code lives. Scripts are isolated from module-scoped variables; arguments are passed positionally.
+- **`rule`** — a non-mutating check. Calls other rules via `ensure`, calls scripts via `run`. The compiler rejects `send`, `prompt`, inline shell, and `run async` in rule bodies; rules are the place to put assumptions the rest of the workflow gets to rely on.
+- **`script`** — a named executable block (shell, Python, Node, anything with a shebang). Workflow bodies can also run inline shell or `` run `body`(args) `` steps, but reusable shell lives in `script` definitions. Scripts do not inherit module-scoped `const` bindings; pass values as positional arguments.
 - **`prompt`** — a task delegated to an AI agent. The body is interpolated, the agent's stdout is captured, and structured output (`returns "{ field: type }"`) is parsed and validated against a schema.
 - **`workflow`** — the orchestration unit. Composes the other three, plus `run async` for concurrency, channels for message passing, `if` / `match` / `for_lines` for flow control, and `recover` / `catch` for failure handling.
 
-Everything is a string, every step is logged, every run leaves durable artifacts under `.jaiph/runs/` (per-step `.out` and `.err` captures, plus an append-only `run_summary.jsonl`). That is the payoff over hand-rolled shell: repeatable, inspectable, testable automation.
+Orchestration values are strings, every step is logged, and every run leaves durable artifacts under `.jaiph/runs/` (per-step `.out` and `.err` captures, plus an append-only `run_summary.jsonl`). That is the payoff over hand-rolled shell: repeatable, inspectable, testable automation.
 
 ## Three commitments
 
 The design rests on three commitments that decide a lot of smaller questions:
 
-1. **Strict structure around AI steps.** Agent responses are non-deterministic, so the language gives you the surrounding pieces that *are* deterministic. `rule` and `ensure` let you assert preconditions and postconditions in the same pipeline as the prompt. `prompt … returns "{ … }"` constrains the agent's output to a JSON shape; if it fails, the step fails. `recover` lets you ask an agent to repair its own output without giving up control of the loop.
+1. **Strict structure around AI steps.** Agent responses are non-deterministic, so the language gives you the surrounding pieces that *are* deterministic. `rule` and `ensure` let you assert preconditions and postconditions in the same pipeline as the prompt. `prompt … returns "{ … }"` constrains the agent's output to a JSON shape; if it fails, the step fails. `recover` retries a failed `run` after a repair body executes, up to `run.recover_limit` — a common pattern when an agent's output needs correction before the pipeline continues.
 
-2. **Sandbox by default.** `jaiph run` runs inside a Docker container with capabilities dropped, mounts allowlisted, and host environment variables stripped down to an explicit prefix list. The sandbox can be turned off (`JAIPH_UNSAFE=true`), but only by the host — a workflow file cannot disable it from inside. The point is not to claim Docker is impenetrable (the [Sandboxing](sandboxing.md) page is explicit about what it does and does not protect); the point is to make the safe path the path of least resistance, particularly for workflows pulled from elsewhere. The [Sandboxing](sandboxing.md) page covers the model in detail.
+2. **Sandbox by default.** `jaiph run` runs inside a Docker container with capabilities dropped, mounts allowlisted, and host environment variables stripped down to an explicit prefix list. The sandbox can be turned off (`JAIPH_UNSAFE=true` or `jaiph run --unsafe`), but only by the host — a workflow file cannot disable it from inside. The point is not to claim Docker is impenetrable; the [Sandboxing](sandboxing.md) page is explicit about what it does and does not protect, and about making the safe path the path of least resistance for workflows pulled from elsewhere.
 
-3. **No vendor lock-in.** Backends are pluggable via `agent.command`: any executable that reads a prompt from stdin and writes a response to stdout works. The default backends are Cursor, Claude, and Codex CLIs, but a shell script that calls a local model or a self-hosted endpoint is equally valid. There is no proprietary JSON protocol to implement.
+3. **No vendor lock-in.** Choose a backend with `agent.backend` (`cursor`, `claude`, or `codex`). Cursor and Claude invoke their respective CLIs; Codex uses an HTTP chat-completions path. On the **cursor** backend, `agent.command` can name any stdin→stdout executable — a wrapper around a local model or self-hosted endpoint works without implementing Jaiph's stream-json framing. Workflow authors do not need a proprietary agent protocol.
 
 ## What Jaiph is not
 

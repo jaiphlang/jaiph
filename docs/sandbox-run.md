@@ -25,7 +25,7 @@ jaiph run ./flow.jh
 Docker is **on by default**. The CLI picks the workspace-presentation mode automatically:
 
 - **Overlay mode** when `/dev/fuse` exists on the host (typically Linux). Reads come from the read-only host workspace; writes land in a `fuse-overlayfs` upper layer and are discarded at container exit.
-- **Copy mode** when `/dev/fuse` is missing (typically macOS Docker Desktop), or when `JAIPH_DOCKER_NO_OVERLAY=1` is set. The CLI clones the workspace into `<runs-root>/.sandbox-<id>/` and mounts the clone read-write.
+- **Copy mode** when `/dev/fuse` is missing (typically macOS Docker Desktop), or when `JAIPH_DOCKER_NO_OVERLAY=1` or `JAIPH_DOCKER_NO_OVERLAY=true` is set. The CLI clones the workspace into `.jaiph/runs/.sandbox-<id>/` (or `<runs-root>/.sandbox-<id>/` when `JAIPH_RUNS_DIR` overrides the default) and mounts the clone read-write.
 
 In both modes the host checkout is unmodified after the run. Run artifacts always land under host `.jaiph/runs/` via a separate read-write mount.
 
@@ -37,19 +37,19 @@ When you want the run's edits to land **live on the host** (typical for an agent
 jaiph run --inplace ./flow.jh
 ```
 
-or set the environment variable:
+or set the environment variable (`1` or `true`):
 
 ```bash
 JAIPH_INPLACE=1 jaiph run ./flow.jh
 ```
 
-The flag normalizes into `JAIPH_INPLACE=1` for one run only. The container's other protections (`--cap-drop ALL`, `--security-opt no-new-privileges`, env allowlist, mount allowlist) are unchanged — only the workspace-isolation half is removed.
+The `--inplace` flag normalizes into `JAIPH_INPLACE=1` for one run only. The container's other protections (`--cap-drop ALL`, `--security-opt no-new-privileges`, env allowlist, mount allowlist) are unchanged — only the workspace-isolation half is removed.
 
 Before launch the CLI prints a warning tailored to your git state (clean tree → `git restore .` recovers; dirty tree → commit/stash first; no repo → no safety net) and waits for `y`. The default answer on empty input or EOF is **no**.
 
-## 3. Skip the confirmation prompt in CI
+## 3. Skip the inplace confirmation prompt in CI
 
-When stdin is not a TTY (CI logs, redirected pipes), the prompt cannot ask. Pass `-y` / `--yes`, or set `JAIPH_INPLACE_YES=1`:
+When stdout is not a TTY (typical in CI), the inplace prompt cannot run interactively. Pass `-y` / `--yes` with `--inplace`, or set `JAIPH_INPLACE_YES=1` or `JAIPH_INPLACE_YES=true`:
 
 ```bash
 jaiph run --inplace --yes ./flow.jh
@@ -82,7 +82,7 @@ The CLI banner reports the sandbox mode it picked:
 - `Docker sandbox, fusefs` — overlay mode.
 - `Docker sandbox, tmp workspace` — copy mode.
 - `Docker sandbox, in-place (live host edits)` — inplace mode.
-- No `Docker sandbox` line — `--unsafe` / `JAIPH_UNSAFE=true` is active.
+- `no sandbox` — `--unsafe` / `JAIPH_UNSAFE=true` is active (Docker disabled).
 
 Run artifacts always land under host `.jaiph/runs/<date>/<time>-<entry>/` regardless of mode. Open `run_summary.jsonl` there to inspect the live `__JAIPH_EVENT__` timeline the CLI also rendered.
 
