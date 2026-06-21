@@ -171,7 +171,6 @@ Tests that span multiple modules, require subprocess/PTY harnesses, exercise pro
 | `integration/docs-reference-task5.test.ts` | Integration | Reference quadrant — permalinks, nav placement, `env-vars.md` source parity against `src/`, anti-tutorial shape guards |
 | `integration/docs-tutorials-task6.test.ts` | Integration | Tutorial quadrant — permalinks, `/getting-started` redirect absorption, runnable `first-workflow` snippet with documented output |
 | `integration/docs-nav-structure-task7.test.ts` | Integration | Nav spine — five Diátaxis section headings in documented order; every published page under its quadrant exactly once |
-| `integration/docs-legacy-quarantine.test.ts` | Integration | Legacy quarantine — `docs/_legacy/` build exclusion, recreated live pages alongside reference copies, nav links never target quarantined paths |
 | `integration/sample-build/build.test.ts` | Integration | Build/transpile behavior — `buildScripts`, script extraction |
 | `integration/sample-build/cli-tree.test.ts` | Integration | CLI tree output rendering for sample workflows |
 | `integration/sample-build/run-core.test.ts` | Integration | Core runtime execution — workflow runs, step sequencing, artifacts |

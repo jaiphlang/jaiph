@@ -683,36 +683,22 @@ test("isEnvAllowed: rejects arbitrary vars", () => {
 });
 
 // ---------------------------------------------------------------------------
-// docs/_legacy/sandboxing.md parity: env forwarding section must match source constants
-// (Sandboxing/configuration/cli pages are quarantined under docs/_legacy/ until the
-// redesign rebuilds them; the parity check still points at the live legacy text.)
+// docs/env-vars.md parity: forwarding allowlist must mirror source constants.
 // ---------------------------------------------------------------------------
 
 const REPO_ROOT = resolve(__dirname, "..", "..", "..");
 
-test("docs/_legacy/sandboxing.md env-forwarding section lists ENV_ALLOW_PREFIXES verbatim", () => {
-  const doc = readFileSync(join(REPO_ROOT, "docs", "_legacy", "sandboxing.md"), "utf8");
-  const headingIdx = doc.indexOf("### Environment variable forwarding");
-  assert.notEqual(headingIdx, -1, "env-forwarding section heading not found");
-  const nextHeadingIdx = doc.indexOf("\n### ", headingIdx + 1);
-  const section = nextHeadingIdx === -1 ? doc.slice(headingIdx) : doc.slice(headingIdx, nextHeadingIdx);
+test("docs/env-vars.md lists ENV_ALLOW_PREFIXES and the exclude prefix verbatim", () => {
+  const doc = readFileSync(join(REPO_ROOT, "docs", "env-vars.md"), "utf8");
   for (const prefix of ENV_ALLOW_PREFIXES) {
-    const bullet = `\`${prefix}*\``;
-    assert.ok(section.includes(bullet), `env-forwarding section missing bullet for ${bullet}`);
+    const token = `\`${prefix}*\``;
+    assert.ok(doc.includes(token), `env-vars.md missing forwarding prefix ${token}`);
   }
-  const excludeBullet = `\`${ENV_ALLOW_EXCLUDE_PREFIX}*\``;
+  const excludeToken = `\`${ENV_ALLOW_EXCLUDE_PREFIX}*\``;
   assert.ok(
-    section.includes(excludeBullet),
-    `env-forwarding section missing exclusion mention for ${excludeBullet}`,
+    doc.includes(excludeToken),
+    `env-vars.md missing forwarding exclusion ${excludeToken}`,
   );
-});
-
-test("docs cross-link to sandboxing env-forwarding section from configuration.md and cli.md", () => {
-  const linkRe = /sandboxing\.md#environment-variable-forwarding/;
-  for (const rel of ["docs/_legacy/configuration.md", "docs/_legacy/cli.md"]) {
-    const content = readFileSync(join(REPO_ROOT, rel), "utf8");
-    assert.match(content, linkRe, `${rel} missing cross-link to env-forwarding section`);
-  }
 });
 
 test("buildDockerArgs: only forwards env vars matching allowlist", () => {

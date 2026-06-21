@@ -1,12 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const REPO_ROOT = process.cwd();
 const DOCS_DIR = join(REPO_ROOT, "docs");
-const LEGACY_DIR = join(DOCS_DIR, "_legacy");
 const NAV_LAYOUT = join(DOCS_DIR, "_layouts", "docs.html");
 
 const VALID_DIATAXIS = new Set([
@@ -340,22 +339,10 @@ test("docs-lint: every historical nav permalink still resolves (via page or redi
   }
 });
 
-test("docs-lint: pages under docs/_legacy/ are exempt from publish-side checks", () => {
-  if (!existsSync(LEGACY_DIR)) return;
-  const legacy = readdirSync(LEGACY_DIR).filter((e) => e.endsWith(".md"));
-  assert.ok(legacy.length > 0, "expected quarantined pages under docs/_legacy/");
-
-  // loadPages() reads docs/ immediate children only, so _legacy entries
-  // are never subjected to the diataxis / nav / link checks above. As
-  // pages are recreated greenfield (task 3+), the same filename may appear
-  // in BOTH docs/ (the live rewrite) AND docs/_legacy/ (the original kept
-  // as a reconciliation reference). The docs-legacy-quarantine harness
-  // pins that "live + legacy reference" invariant explicitly, so this
-  // test only needs to confirm _legacy entries exist on disk.
-  for (const entry of legacy) {
-    assert.ok(
-      entry.endsWith(".md"),
-      `unexpected non-markdown entry under docs/_legacy/: ${entry}`,
-    );
-  }
+test("docs-lint: docs/_legacy/ no longer exists (post-redesign cleanup)", () => {
+  const legacy = join(DOCS_DIR, "_legacy");
+  assert.ok(
+    !readdirSync(DOCS_DIR).includes("_legacy"),
+    `docs/_legacy/ must be removed after the Diátaxis redesign; found ${legacy}`,
+  );
 });
