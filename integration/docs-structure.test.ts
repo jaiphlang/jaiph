@@ -245,6 +245,7 @@ test("docs-lint: every internal markdown link / permalink / redirect_from resolv
   const pages = loadPages();
   const routes = allKnownRoutes(pages);
   const byPermalink = pageByPermalink(pages);
+  const byName = new Map(pages.map((p) => [p.name, p]));
 
   // [label](href) but not images (![label](href))
   const mdLinkRe = /(?<!!)\[([^\]]+)\]\(([^)\s]+)\)/g;
@@ -276,7 +277,17 @@ test("docs-lint: every internal markdown link / permalink / redirect_from resolv
       if (path.startsWith("/")) {
         route = path.replace(/\/$/, "") || "/";
       } else if (path.endsWith(".md")) {
-        route = "/" + path.slice(0, -3);
+        // Relative file link. jekyll-relative-links rewrites it to the target
+        // page's permalink, so resolve by the target FILE's declared permalink
+        // (basename -> page -> permalink), not a naive "/basename" — pages may
+        // live at nested permalinks (e.g. /tutorials/first-workflow).
+        const targetName = path.split("/").pop()!;
+        const target = byName.get(targetName);
+        assert.ok(
+          target && target.permalink,
+          `${p.name}: link [${label}](${href}) — no published page file '${targetName}'`,
+        );
+        route = target!.permalink!;
       } else {
         route = "/" + path.replace(/\/$/, "");
       }

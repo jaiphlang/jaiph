@@ -23,7 +23,7 @@ Channels give workflows a publish/subscribe surface without leaving the process.
 
 ## Drain-driven, not file-watched
 
-The most important property of the inbox model is that **delivery is drain-driven**. Sends do not "fire" routes the moment the `<-` line executes. Instead, every workflow context holds an in-memory queue; the sender appends to it, and the runtime drains that queue **after the workflow's step list finishes** — including the implicit join of any `run async` handles ([Spec: Async Handles](spec-async-handles.md)). Only then does the runtime invoke each route target, sequentially, in declaration order.
+The most important property of the inbox model is that **delivery is drain-driven**. Sends do not "fire" routes the moment the `<-` line executes. Instead, each workflow frame owns an in-memory queue; a `send` enqueues on the nearest stack frame that declares routes for the channel (or on the sender's frame when none do — see [Routed vs unrouted sends](#routed-vs-unrouted-sends)). The runtime drains **that frame's** queue only **after that frame's step list finishes** — including the implicit join of any `run async` handles created in that step list ([Spec: Async Handles](spec-async-handles.md)). Only then does the runtime invoke each route target, sequentially, in declaration order.
 
 This is intentional:
 
@@ -44,9 +44,11 @@ channel findings -> analyst, reviewer
 Routes are top-level static data on `ChannelDef`, not statements inside a workflow body. The design choice has two consequences worth understanding:
 
 1. **One canonical subscription list per channel.** The compiler can validate every target up front: targets must be workflows (rules and scripts are rejected), they must declare exactly three parameters, and unknown names fail with `E_VALIDATE` at compile time, not at dispatch time.
-2. **Routes are visible at the module boundary.** A reader can see "who listens on `findings`" without scanning every workflow body for `subscribe` calls. Routing intent lives next to the channel it describes.
+2. **Routes are visible at the module boundary.** A reader can see "who listens on `findings`" without scanning workflow bodies for ad-hoc wiring. Routing intent lives next to the channel it describes.
 
-A `channel <name>` line without `->` still defines the name for `send` validation but never registers a route — sends on a bare channel are still queued (and `INBOX_ENQUEUE` is still recorded for the timeline), they just have no consumer.
+The runtime registers routes only on the **entry** workflow frame when that workflow starts: it reads `channel … ->` declarations from that workflow's module. Nested `run` frames always keep an empty map, so sends from callees walk the workflow stack outward to the orchestrator frame that registered the channel.
+
+A `channel <name>` line without `->` still defines the name for `send` validation but never enters the route map — sends on a bare channel are still queued (and `INBOX_ENQUEUE` is still recorded for the timeline), they just have no consumer.
 
 ## Sequential dispatch is the only mode
 
@@ -55,17 +57,19 @@ For each queued message, route targets run **strictly in declaration order, one 
 The reason is failure semantics. With sequential dispatch:
 
 - A target's failure is the failure of that delivery. Subsequent targets for the same message are skipped (fail-fast).
-- Cascading sends from inside a target end up on the same queue, drained in turn, so a chain of sends produces a deterministic timeline.
+- Cascading sends from inside a route target enqueue on the orchestrator frame's queue and are drained in the same pass, so a chain of sends produces a deterministic timeline.
 - There is no need for users to reason about which side effects of two parallel handlers happened first.
+
+A single frame's drain pass is bounded (default **1000** messages; override with `JAIPH_INBOX_MAX_DISPATCH`) so circular send loops abort with `E_INBOX_DISPATCH_LIMIT` instead of running forever.
 
 When concurrency matters, the right tool is `run async` inside a target body, not parallel dispatch across targets.
 
 ## Routed vs unrouted sends
 
-The same `<-` operator behaves slightly differently depending on whether a route exists for the channel:
+The same `<-` operator behaves slightly differently depending on whether any frame on the workflow stack has the channel in its route map:
 
-- **Routed** — at least one route target matches. The runtime walks the workflow stack outward until a frame's route map contains the bare channel name (any imported `alias.` prefix has already been stripped). The payload is enqueued on that frame; the runtime also writes `inbox/NNN-<channel>.txt` so routed messages are inspectable from the run directory after the fact.
-- **Unrouted** — no frame on the stack registered the channel. The message is still queued on the sender's own frame, and `INBOX_ENQUEUE` is still appended to `run_summary.jsonl`, but no audit file is written and the drain step has nothing to dispatch.
+- **Routed** — some frame on the workflow stack has the bare channel name in its route map (an imported `alias.` prefix is stripped before lookup). The runtime walks outward from the sender until it finds that frame, enqueues the payload on **its** queue, and writes `inbox/NNN-<channel>.txt` under the run directory as an audit copy.
+- **Unrouted** — no frame on the stack has the channel in its route map. The message is still queued on the sender's own frame, and `INBOX_ENQUEUE` is still appended to `run_summary.jsonl`, but no audit file is written and the sender's drain pass skips it (no targets to `run`).
 
 Unrouted sends are intentionally a silent drop, not an error. This lets optional subscribers be just that: a workflow can publish on `metrics` even if no one is listening today, and tomorrow a subscriber can be wired up without touching the producer. If a missing handler should be a hard failure, the right place to assert it is in a test or a `rule` check, not in the channel runtime.
 
@@ -83,7 +87,7 @@ The receiver picks its own parameter names. That is the entire contract: no envi
 
 ## Why this design, in one paragraph
 
-Channels are a deliberately small idea in Jaiph. They are an in-process, drain-driven, sequentially-dispatched, late-binding handoff between workflows — described once at the top of the module, validated at compile time, and made visible in `run_summary.jsonl` and `inbox/` for after-the-fact inspection. Anything more powerful (concurrency, brokers, retries, dead-letter queues) is intentionally out of scope: those problems belong to other tools, and Jaiph keeps channels small enough to reason about without leaving the runtime.
+Channels are a deliberately small idea in Jaiph. They are an in-process, drain-driven, sequentially-dispatched, late-binding handoff between workflows — described once at the top of the module, validated at compile time, and recorded in `run_summary.jsonl` (every send) plus `inbox/` audit files (routed sends only) for after-the-fact inspection. Anything more powerful (concurrency, brokers, retries, dead-letter queues) is intentionally out of scope: those problems belong to other tools, and Jaiph keeps channels small enough to reason about without leaving the runtime.
 
 ## Related
 

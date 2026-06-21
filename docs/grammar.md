@@ -11,7 +11,7 @@ redirect_from:
 
 This page is the authoritative syntactic reference for Jaiph: lexical rules, statement shapes, EBNF, and the validator's error catalog. For step semantics see [Language](language.md). For the system around the grammar see [Architecture](architecture.md).
 
-**Scope.** Normal modules (`.jh`) and test modules (`*.test.jh`). The compile pipeline is `loadModuleGraph` → `validateReferences(graph)` (or `collectDiagnostics(graph)` for `jaiph compile`) → `emit(graph, outDir)`. `parsejaiph(source, filePath)` is I/O-pure. The runtime's `buildRuntimeGraph` parses an already-loaded graph and never re-runs `validateReferences`.
+**Scope.** Normal modules (`.jh`) and test modules (`*.test.jh`). For `jaiph run` / `jaiph test`, the compile path is `loadModuleGraph` → `buildScriptsFromGraph(graph, outDir)` (per-module `validateModule` + script emit via `emitScriptsForModuleFromGraph`). `jaiph compile` walks the same import closure through `collectDiagnostics(graph)` and emits no scripts. `parsejaiph(source, filePath)` is I/O-pure. `buildRuntimeGraph` consumes an already-loaded graph and never re-runs validation or re-reads `.jh` sources.
 
 ## Lexical rules
 
@@ -20,11 +20,11 @@ This page is the authoritative syntactic reference for Jaiph: lexical rules, sta
 | Identifier | `[A-Za-z_][A-Za-z0-9_]*`. |
 | Reference | `IDENT` (local) or `IDENT.IDENT` (module-qualified). |
 | Comment | Full-line `#` comment. Trailing `#` on a step line is not a comment. |
-| Blank line | Preserved between top-level constructs and between steps inside a body. `jaiph format` collapses multiple consecutive blanks to one and trims trailing blanks before `}`. |
+| Blank line | Preserved between steps inside workflow and rule bodies (as `blank_line` trivia). `jaiph format` collapses multiple consecutive body blanks to one and trims trailing blanks before `}`. Top-level blank lines are not preserved — the formatter emits one blank line between emitted sections. |
 | Shebang | A `#!` first line of the file is ignored by the parser. |
 | Single-line string | Double-quoted `"…"`. Single-quoted strings are `E_PARSE`. Use `\"`, `\\`, `\n`, `\t`. |
 | Multiline string | Triple-quoted `"""…"""`. The opening `"""` must end the line; the closing `"""` must be on its own line. |
-| Script body (single-line) | Backtick `` `…` ``. `${…}` interpolation forbidden. |
+| Script body (single-line) | Backtick `` `…` ``. Jaiph `${identifier}` / `${identifier.field}` interpolation is `E_PARSE`; bash parameter expansion (for example `${var:-default}`) passes through. |
 | Script body (fenced) | Triple-backtick `` ``` ``…`` ``` ``. Optional lang tag `` ```<tag> ``. `${…}` passes through to the shell. |
 | Required parentheses | All `run` / `ensure` call sites require parentheses, including zero-argument calls. Bare `run setup` is `E_PARSE`. |
 
@@ -74,7 +74,7 @@ import_script_stmt = "import" "script" string "as" IDENT ;
 | Library fallback | When relative resolution finds no file and the path contains `/`, the path is split as `<lib-name>/<sub-path>` and resolved to `<workspace>/.jaiph/libs/<lib-name>/<sub-path>.jh`. |
 | Script import path | Quoted string. Relative-only (no library fallback). The path refers to a raw script file (no `.jh` appended). |
 | Missing target | `E_IMPORT_NOT_FOUND` at compile time. |
-| Alias collision | Aliases share the unified namespace with channels, rules, workflows, scripts, and top-level `const`. Duplicates are `E_PARSE`. |
+| Alias collision | Aliases share the unified namespace with channels, rules, workflows, scripts, and top-level `const`. Duplicates are `E_VALIDATE`. |
 | `export` | Marks a top-level `rule` / `workflow` / `script` as public. If at least one `export` exists, only exported names are reachable through the alias (`E_VALIDATE: "<name>" is not exported from module "<alias>"`). Modules with zero `export` declarations have implicit-public semantics. |
 
 ## Channels
@@ -90,7 +90,7 @@ One channel per line. A `->` route declaration inside a workflow body is `E_PARS
 ```ebnf
 config_block = "config" "{" { config_line } "}" ;
 config_line  = config_key "=" config_value ;
-config_value = string | "true" | "false" | integer | string_array ;
+config_value = string | "true" | "false" | integer ;
 ```
 
 Allowed keys: `agent.default_model`, `agent.command`, `agent.backend`, `agent.trusted_workspace`, `agent.cursor_flags`, `agent.claude_flags`, `run.logs_dir`, `run.debug`, `run.recover_limit`, `runtime.docker_image`, `runtime.docker_network`, `runtime.docker_timeout_seconds`, `module.name`, `module.version`, `module.description`. See [Configuration](configuration.md). Workflow-level `config` permits only `agent.*` and `run.*` (`runtime.*` / `module.*` are `E_PARSE`).
@@ -163,11 +163,10 @@ inline_script = backtick_script_body "(" [ call_args ] ")"
 
 | Position | Rule |
 |---|---|
-| Bare identifier argument | Must reference an in-scope binding (`const`, capture, parameter). `name` is equivalent to `"${name}"`. Unknown names are `E_VALIDATE`. Jaiph keywords are rejected. |
-| Quoted-only single interpolation | `"${name}"` is rejected when the argument is exactly one bare-eligible variable; use the bare form. Quoted strings with extra text (e.g. `"prefix_${name}"`) are allowed. |
+| Bare identifier argument | Must reference an in-scope binding (`const`, capture, parameter). `name` and `"${name}"` are both accepted when the variable is in scope. Unknown names are `E_VALIDATE`. Jaiph keywords are rejected. |
 | Nested managed calls | The `run` / `ensure` keyword is required. `run foo(bar())` / `run foo(rule_bar())` / `run foo(\`echo aaa\`())` are `E_VALIDATE`. Valid: `run foo(run bar())`, `run foo(ensure rule_bar())`, `run foo(run \`echo aaa\`())`. Capture-then-pass is always valid. |
-| Arity | When the callee declares named parameters, the argument count must match (`E_VALIDATE`). Calls to callees without declared parameters accept any argument count. |
-| Shell redirection / pipes | `>`, `|`, `&` after `run` / `ensure` are `E_VALIDATE`. Use a `script`. |
+| Arity | Workflows and rules: argument count must match the declared parameter list (`E_VALIDATE`), including `()` callees (zero arguments required). Scripts accept any argument count (no parameter list to check). |
+| Shell redirection / pipes | Trailing `>`, `>>`, `|`, or `&` after a `run` / `ensure` call is `E_PARSE`. The same operators inside unquoted portions of call arguments are `E_VALIDATE`. Use a `script` for shell I/O. |
 
 ## Workflow body statements
 
@@ -209,13 +208,10 @@ Targets a rule. Succeeds when the rule's exit code is `0`. `recover` is not supp
 ### `catch` / `recover`
 
 ```ebnf
-catch_bindings       = "(" IDENT ")" ;
-catch_body           = single_workflow_stmt | "{" { workflow_step } "}" ;
-recover_bindings     = "(" IDENT ")" ;
-recover_body         = single_workflow_stmt | "{" { workflow_step } "}" ;
-single_workflow_stmt = ensure_stmt | run_stmt | run_catch_stmt | run_recover_stmt
-                     | prompt_stmt | const_decl_step
-                     | return_stmt | fail_stmt | log_stmt | logerr_stmt | send_stmt ;
+catch_bindings   = "(" IDENT ")" ;
+catch_body       = workflow_step | "{" { workflow_step } "}" ;
+recover_bindings = "(" IDENT ")" ;
+recover_body     = workflow_step | "{" { workflow_step } "}" ;
 ```
 
 | Rule | Behaviour |
@@ -271,19 +267,21 @@ return_value = double_quoted_string | triple_quoted_block | "$" IDENT | "${" IDE
              | "match" IDENT "{" { match_arm } "}" ;
 ```
 
-`return run helper` (no `()`) becomes a shell `return` step — required to write `return run helper()` / `return ensure check()` for the managed form. Bare identifiers desugar to `return "${ident}"`. Inline-script form requires the `run` keyword (`return run \`echo $1\`("arg")`). `return "…"` is not allowed in script bodies.
+`return run helper` (no `()`) becomes a shell `return` step — required to write `return run helper()` / `return ensure check()` for the managed form. Bare identifiers desugar to `return "${ident}"`. Inline-script form requires the `run` keyword (`return run \`echo $1\`("arg")`). Numeric exit codes (`return 0`, `return $?`) are rejected in workflow/rule bodies; use them only in opaque `script` definition bodies.
 
 ### `send`
 
 ```ebnf
 send_stmt = IDENT "<-" send_rhs ;
 send_rhs  = double_quoted_string | triple_quoted_block | "$" IDENT | "${" … "}"
-          | "run" call_ref ;
+          | "run" call_ref
+          | shell_fragment ;
 ```
 
 | Rule | Behaviour |
 |---|---|
 | RHS required | Bare `channel <-` is `E_PARSE`. |
+| Shell fragment RHS | A raw shell expression (for example `findings <- echo "$payload"`) parses as a managed shell payload; allowed only on `send` (`E_VALIDATE` elsewhere). |
 | Bare ref RHS | A bare `ref`-shaped word that names a workflow / rule / script is `E_VALIDATE`. Use `run ref()` or a string. |
 | `run` without `()` | Does not parse as a managed send RHS. |
 | Capture-and-send | `const name = channel <- …` is `E_PARSE`. |
@@ -296,7 +294,7 @@ log_stmt    = "log" ( double_quoted_string | triple_quoted_block | IDENT | "run"
 logerr_stmt = "logerr" ( double_quoted_string | triple_quoted_block | IDENT | "run" inline_script ) ;
 ```
 
-Bare identifier form expands to `"${ident}"`. `log run \`…\`(args)` and `logerr run \`…\`(args)` execute the inline script and log its stdout — the `run` keyword is required (bare inline scripts in `log` / `logerr` are `E_PARSE`). At runtime, backslash escapes in the final string are interpreted (`echo -e` semantics).
+Bare identifier form expands to `"${ident}"`. `log run \`…\`(args)` and `logerr run \`…\`(args)` execute the inline script and log its stdout — the `run` keyword is required (bare inline scripts in `log` / `logerr` are `E_PARSE`).
 
 ### `fail`
 
@@ -370,8 +368,8 @@ inline_script = backtick_script_body "(" [ call_args ] ")"
 |---|---|
 | Allowed positions | `run_stmt` / `run_catch_stmt` / `run_recover_stmt` / `log_stmt` / `logerr_stmt` / `return_stmt`, and `const` RHS. |
 | `run async` | Not supported with inline scripts. |
-| Backtick interpolation | `${…}` Jaiph interpolation is `E_PARSE`. Use `$1`, `$2`, … positional arguments. |
-| Fenced interpolation | `${…}` passes through to the shell (standard parameter expansion). |
+| Backtick interpolation | Jaiph `${identifier}` / `${identifier.field}` forms are `E_PARSE`. Bash parameter expansion passes through. Use `$1`, `$2`, … for positional arguments. |
+| Fenced interpolation | All `${…}` passes through to the shell (standard parameter expansion). |
 | `catch` / `recover` suffix | Allowed only on standalone `run` steps with inline-script body. Forbidden in `log` / `logerr` / `return` / `const` RHS positions. |
 | Emitted name | `scripts/__inline_<hash>` where `<hash>` is the first 12 hex digits of `sha256(shebang + "\n" + body)` (or `sha256(body)` if no shebang). Deterministic across runs. |
 
@@ -387,7 +385,7 @@ inline_script = backtick_script_body "(" [ call_args ] ")"
 | `${ensure ref(args)}` | Inline capture — executes the rule, inlines result. | All orchestration strings. |
 | `$varName` (no braces) | `E_PARSE` in orchestration strings. | — |
 | `$1`, `$2` | Positional args | `script` bodies only. |
-| `${var:-fallback}` / `${var%%…}` / `${var//…}` / `${#var}` | `E_PARSE` in orchestration strings and backtick scripts; passes through in fenced blocks. | — |
+| `${var:-fallback}` / `${var%%…}` / `${var//…}` / `${#var}` | `E_PARSE` in orchestration strings; passes through in script bodies (backtick and fenced). | — |
 | `$(…)` | `E_PARSE` in orchestration strings. | — |
 
 If an inline capture fails, the enclosing step fails. Nested inline captures (`${run foo(${run bar()})}`) are rejected — extract the inner call to a `const`.
@@ -414,9 +412,9 @@ Validator entry points (`src/transpile/validate.ts` for the outer layer; `src/tr
 
 | Code | Triggers |
 |---|---|
-| `E_PARSE` | Duplicate config; invalid keys/values; `$(…)`, `${var:-fallback}`, or `${…}` interpolation in single-line backtick script bodies; `prompt … returns` without `const` capture; `name = prompt …` / non-`const` capture; bare `ref(args)` on `const` RHS (use `run` / `ensure` / `prompt`); `local` at top level; unrecognised workflow line; invalid send RHS; arguments after `catch` / `recover`; bare `catch` / `recover` without binding; nested inline captures; shell redirection after `run` / `ensure`; invalid parameter names; missing `{` on definition line. |
+| `E_PARSE` | Duplicate config; duplicate top-level names in the unified namespace; invalid keys/values; `$(…)` in orchestration strings; Jaiph `${identifier}` interpolation in single-line backtick script bodies; `prompt … returns` without `const` capture; `name = prompt …` / non-`const` capture; bare `ref(args)` on `const` RHS (use `run` / `ensure` / `prompt`); top-level `local`; invalid send RHS; trailing shell redirection after `run` / `ensure`; arguments after `catch` / `recover`; bare `catch` / `recover` without binding; nested inline captures; removed `wait` keyword; invalid parameter names; missing `{` on definition line. |
 | `E_SCHEMA` | Invalid `returns` schema — empty, non-flat, unsupported type. |
-| `E_VALIDATE` | Unknown rule / workflow / script; duplicate alias; `ensure` on non-rule; `run` on rule; `run` to workflow inside rule; `run async` in rule; forbidden Jaiph usage inside `$(…)`; dot notation on non-prompt variable or invalid field name; bare identifier argument referencing an unknown variable; `${ident}` referencing an unknown variable; standalone `"${ident}"` as argument (use bare form); arity mismatch; bare nested managed calls; bare nested inline-script calls; type crossings (`prompt` on a script, `run` on a string, `const x = scriptName`, `${scriptName}`). |
+| `E_VALIDATE` | Unknown rule / workflow / script; duplicate import alias; inline shell in rules; `ensure` on non-rule; `run` to workflow inside rule; `run async` in rule; forbidden Jaiph usage inside `$(…)`; dot notation on non-prompt variable or invalid field name; bare identifier argument referencing an unknown variable; `${ident}` referencing an unknown variable in orchestration strings; arity mismatch; shell redirection (`>`, `>>`, `|`, `&`) inside unquoted call-argument text; bare nested managed calls; bare nested inline-script calls; type crossings (`prompt` on a script, `run` on a string, `const x = scriptName`, `${scriptName}`). |
 | `E_IMPORT_NOT_FOUND` | Import target does not exist (module or script). |
 
 ### Validation rules
@@ -424,11 +422,11 @@ Validator entry points (`src/transpile/validate.ts` for the outer layer; `src/tr
 1. At most one `config` block per file and per workflow. Workflow `config` must precede steps. Workflow `config` allows only `agent.*` / `run.*`.
 2. Config values are type-checked. `agent.backend` must be `cursor`, `claude`, or `codex`.
 3. Import aliases must be unique. Import targets must exist.
-4. Unified per-module namespace: channels, rules, workflows, scripts, script-import aliases, and top-level `const` share one namespace.
+4. Unified per-module namespace: channels, rules, workflows, scripts, script-import aliases, and top-level `const` share one namespace. Duplicate top-level names fail at parse time (`E_PARSE`); duplicate import aliases fail in validation (`E_VALIDATE`).
 5. `ensure` targets a rule. `run` in a workflow targets a workflow or script; `run` in a rule targets a script only. Same rules apply to `return run` and `return ensure`.
 6. Channel references in `send` must resolve to declared channels. Route targets must be workflows with exactly three parameters. Inline routes in workflow bodies are `E_PARSE`.
 7. `catch` / `recover` argument ordering — all call args appear before `catch` / `recover`.
-8. Shell redirection (`>`, `|`, `&`) after `run` / `ensure` is rejected.
+8. Shell redirection (`>`, `>>`, `|`, `&`) on `run` / `ensure` is rejected — trailing operators are `E_PARSE`; operators in unquoted call-argument text are `E_VALIDATE`.
 9. Type crossings produce specific `E_VALIDATE` messages (see [Types](#types)).
 10. Nested managed calls require explicit `run` / `ensure` keywords. Bare nested forms are `E_VALIDATE`.
 11. `for iter in source` — `source` must name an in-scope variable.

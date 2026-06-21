@@ -20,7 +20,7 @@ The published `jaiph` bin is `node dist/src/cli.js` (npm) or the standalone `dis
 | `jaiph` | Print the overview and exit `0`. |
 | `jaiph --help` / `-h` | Print the overview and exit `0`. |
 | `jaiph --version` / `-v` | Print the CLI version and exit `0`. |
-| `jaiph <subcommand> [-h \| --help]` | Print the subcommand's usage (flags + one example) and exit `0`. Recognised anywhere in the arg list before positional processing. |
+| `jaiph <subcommand> [-h \| --help]` | Print the subcommand's usage (flags + one example) and exit `0`. Recognised anywhere in the arg list before `--` (except `compile`: help flags must precede path arguments). |
 | `jaiph <path>` | File shorthand. Paths ending in `*.test.jh` route to `jaiph test`; other `*.jh` paths route to `jaiph run`. Non-existent paths fall through to normal command parsing. |
 | `jaiph <unknown>` | Print `Unknown command: <name>`, repeat the overview, exit `1`. |
 
@@ -73,7 +73,7 @@ After module-graph load and Docker-mode resolution, before the runner / containe
 | `✓` | Step completed successfully (with elapsed time). |
 | `✗` | Step failed (with elapsed time). |
 | `ℹ` | `log` message (dim/gray, no marker timing). |
-| `!` | `logerr` message (red; writes to stderr). |
+| `!` | `logerr` message (red; rendered on stdout with the progress tree). |
 | `·` | Continuation marker (heartbeat lines in non-TTY mode). |
 | ` ₁`, ` ₂`, … | Subscript prefix for `run async` branch numbering. |
 
@@ -97,7 +97,7 @@ Step `.out` files are written incrementally; consumers may `tail -f` them. `.out
 
 ### Failure footer
 
-On non-zero exit, the CLI emits a stderr footer with `Logs:`, `Summary:`, `out:` / `err:` paths, and an `Output of failed step:` excerpt. The fields are resolved from the last `STEP_END` object with non-zero `status` in `run_summary.jsonl`; `out_content` / `err_content` are preferred over `out_file` / `err_file`. In Docker mode, container-internal `/jaiph/run/*` paths are remapped to host paths.
+Interactive `jaiph run` only (`--raw` omits this block). On non-zero exit, the CLI emits a stderr footer with `Logs:`, `Summary:`, `out:` / `err:` paths, and an `Output of failed step:` excerpt. The fields are resolved from the last `STEP_END` object with non-zero `status` in `run_summary.jsonl`; `out_content` / `err_content` are preferred over `out_file` / `err_file`. In Docker mode, container-internal `/jaiph/run/*` paths are remapped to host paths.
 
 ### Hook events
 
@@ -126,13 +126,13 @@ Assertions: `expect_contain`, `expect_equal`, `expect_not_contain` — see [Writ
 ## `jaiph compile`
 {: #jaiph-compile}
 
-Parse modules and run the same compile-time validation as `jaiph run` **without** writing `scripts/`, **without** calling `buildRuntimeGraph()`, and **without** spawning the workflow runner.
+Parse modules and run `collectDiagnostics(graph)` — the same per-module validator as `jaiph run`, but collecting every recoverable error instead of stopping at the first — **without** writing `scripts/`, **without** calling `buildRuntimeGraph()`, and **without** spawning the workflow runner.
 
 ```text
 jaiph compile [--json] [--workspace <dir>] <file.jh | directory> ...
 ```
 
-At least one path is required.
+At least one path is required. `-h` / `--help` must appear before the first path (they are not scanned after a path token, unlike other subcommands).
 
 | Argument shape | Behaviour |
 |---|---|
@@ -144,7 +144,7 @@ At least one path is required.
 | `--json` | On success, print `[]` to stdout. On failure, print one JSON array of `{ file, line, col, code, message }` diagnostics to stdout and exit `1`. |
 | `--workspace <dir>` | Override library resolution root for all reached modules. Without it, the workspace is auto-detected per path. |
 
-Diagnostics are sorted by `(file, line, col)`. Without `--json`, the same set is written to stderr as `path:line:col CODE message` lines. Any non-empty diagnostic set exits `1`. Parser/loader failures abort the affected entry's closure with a single diagnostic for that entry; siblings continue.
+Within each entry's import closure, diagnostics are sorted by `(file, line, col)`; when multiple entry points are supplied, those batches are appended in discovery order (not re-sorted globally). Without `--json`, the same set is written to stderr as `path:line:col CODE message` lines. Any non-empty diagnostic set exits `1`. Parser/loader failures abort the affected entry's closure with a single diagnostic for that entry; siblings continue.
 
 ## `jaiph format`
 
@@ -264,7 +264,7 @@ jaiph use <version|nightly>
 | Argument | Effect |
 |---|---|
 | `nightly` | Reinstalls from the rolling `nightly` prerelease. |
-| `<version>` (e.g. `0.9.4`) | Reinstalls the release binary for tag `v<version>`. |
+| `<version>` (e.g. `0.10.0`) | Reinstalls the release binary for tag `v<version>`. |
 
 Implementation: re-invokes `JAIPH_INSTALL_COMMAND` (default `curl -fsSL https://jaiph.org/install | bash`) with `JAIPH_REPO_REF` set to `nightly` or `v<version>`. The installer downloads the matching per-platform binary plus `SHA256SUMS`, verifies the checksum, and replaces `~/.local/bin/jaiph` (or `JAIPH_BIN_DIR`).
 

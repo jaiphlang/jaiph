@@ -4,8 +4,6 @@ permalink: /jaiph-skill
 diataxis: contributor
 redirect_from:
   - /jaiph-skill.md
-  - /contributing
-  - /contributing.md
 ---
 
 # Jaiph Skill (for Agents)
@@ -26,7 +24,7 @@ Jaiph is a small workflow language. A `.jh` file declares:
 
 Everything is **strings**. Every step is logged. Every run leaves durable artifacts under `.jaiph/runs/` (per-step `.out`/`.err` files and an append-only `run_summary.jsonl`). That is the payoff over ad-hoc shell: repeatable, inspectable, testable automation.
 
-**Source of truth:** when this document and the compiler disagree, the compiler wins. Full references: [Grammar](https://jaiph.org/grammar), [CLI](https://jaiph.org/cli), [Configuration](https://jaiph.org/configuration), [Testing](https://jaiph.org/testing), [Inbox & Dispatch](https://jaiph.org/inbox), [Sandboxing](https://jaiph.org/sandboxing).
+**Source of truth:** when this document and the compiler disagree, the compiler wins. Full references: [Grammar](grammar.md), [CLI](cli.md), [Configuration](configuration.md), [Write & run tests](testing.md), [Inbox & dispatch](inbox.md), [Sandboxing](sandboxing.md).
 
 ## Smallest working example
 
@@ -60,7 +58,7 @@ Follow this sequence every time you create or edit `.jh` files. Do not skip the 
 
 1. **Write** the `.jh` files (syntax below).
 2. **Format:** `jaiph format <files…>` — canonical whitespace and top-level ordering.
-3. **Compile:** `jaiph compile <file-or-dir>` — parses and validates the whole import closure without running anything. Reports **all** errors at once as `path:line:col CODE message`. Use `--json` for machine-readable output. Directory arguments skip `*.test.jh`; pass test files explicitly.
+3. **Compile:** `jaiph compile [--json] [--workspace <dir>] <file-or-dir>` — parses and validates the whole import closure without running anything. Reports **all** errors at once as `path:line:col CODE message`. Use `--json` for machine-readable output. Directory arguments skip `*.test.jh`; pass test files explicitly. `--workspace` sets the library root for `jaiph install` paths when auto-detect is wrong.
 4. **Test:** `jaiph test` — runs every `*.test.jh` it finds; zero matches in discovery mode exit 0 with a notice, so this call is always safe to make.
 5. **Run:** `jaiph run <file.jh> [args…]` for the end-to-end check.
 
@@ -70,14 +68,14 @@ CLI quick reference:
 |---|---|
 | `jaiph run [--target <dir>] [--raw] <file.jh> [--] [args…]` | Execute `workflow default`; args bind to its named parameters |
 | `jaiph test [path]` | Run `*.test.jh` files (workspace, dir, or single file) |
-| `jaiph compile [--json] <paths…>` | Validate only — no execution, no side effects |
+| `jaiph compile [--json] [--workspace <dir>] <paths…>` | Validate only — no execution, no side effects |
 | `jaiph format [--check] <file.jh …>` | Reformat (or verify formatting in CI) |
 | `jaiph init [workspace]` | Scaffold `.jaiph/` (bootstrap workflow + this skill file) |
 | `jaiph install [<name[@version]> \| <url[@version]>…]` | Install libraries into `.jaiph/libs/` (bare names resolve via `JAIPH_REGISTRY`, else `https://jaiph.org/registry`; URL form is unchanged) |
 
 Shorthand: `jaiph ./file.jh` routes by extension (`*.test.jh` → test, other `.jh` → run). A `#!/usr/bin/env jaiph` shebang makes a `.jh` file directly executable.
 
-**Sandboxing:** by default, interactive `jaiph run` executes the workflow inside a Docker container (`ghcr.io/jaiphlang/jaiph-runtime`). Set `JAIPH_UNSAFE=true` to run directly on the host, or `JAIPH_DOCKER_ENABLED=true/false` to force either mode. `jaiph test` always runs on the host.
+**Sandboxing:** by default, interactive `jaiph run` executes the workflow inside a Docker container (`ghcr.io/jaiphlang/jaiph-runtime`). Set `JAIPH_UNSAFE=true` or pass `--unsafe` to run directly on the host, or set `JAIPH_DOCKER_ENABLED=true/false` to force either mode. `jaiph test` always runs on the host (no Docker).
 
 ## Core rules you must internalize
 
@@ -94,7 +92,7 @@ These six rules prevent 90% of compile errors:
 
 ### File layout
 
-Top-level forms, in conventional order (the formatter hoists the first three):
+Top-level forms, in conventional order (`jaiph format` hoists `import`, `config`, and `channel` to the top):
 
 ```jaiph
 import "helpers.jh" as helpers          # module import (relative; .jh appended if omitted)
@@ -107,7 +105,7 @@ rule tests_pass() { run run_tests() }   # checks
 workflow default() { … }                # orchestration; default = the entrypoint
 ```
 
-Channels, rules, workflows, scripts, script-import aliases, and module `const` share **one namespace per module** — name collisions are `E_PARSE`. Comments are full-line `#` only.
+Channels, rules, workflows, scripts, script-import aliases, and module `const` share **one namespace per module** — duplicate top-level names are `E_PARSE`; duplicate import aliases are `E_VALIDATE`. Comments are full-line `#` only.
 
 **Imports:** paths resolve relative to the importing file; if not found and the path contains `/`, it falls back to `<workspace>/.jaiph/libs/<lib>/<path>.jh` (installed via `jaiph install`). Reference imported symbols as `alias.name`. If a module uses `export` on any declaration, only exported names are visible to importers; with zero `export`s, everything is public.
 
@@ -128,11 +126,11 @@ Inside any orchestration string:
 
 ### Scripts — the shell layer
 
-```jaiph
-# single-line: backticks. NO ${…} here — pass data as $1, $2 arguments.
+````jaiph
+# single-line: backticks. NO Jaiph ${name} here — pass data as $1, $2 arguments.
 script count_lines = `wc -l < "$1"`
 
-# multi-line: fenced block. ${…} passes through to the shell untouched.
+# multi-line: fenced block. Bash ${…} passes through to the shell untouched.
 script deploy = ```
 set -euo pipefail
 echo "deploying ${TARGET_ENV:-staging}"
@@ -144,7 +142,7 @@ script parse_json = ```python3
 import json, sys
 print(json.load(open(sys.argv[1]))["version"])
 ```
-```
+````
 
 Script semantics:
 
@@ -156,13 +154,13 @@ Script semantics:
 
 **Inline scripts** for one-off commands — body before the parens, args inside:
 
-```jaiph
+````jaiph
 run `mkdir -p "$1"`("out/reports")
 const now = run `date +%s`()
 const stats = run ```python3
 import sys; print(len(sys.argv[1]))
 ```(input_text)
-```
+````
 
 Inline scripts work in `run`, `const … = run`, `return run`, and `log run` positions. They cannot be used with `run async`. A `run` step whose body is an inline script accepts the same optional `catch (name) <body>` / `recover (name) <body>` suffix as a named-ref `run` step (same semantics — `catch` runs once, `recover` retries up to `run.recover_limit`, mutually exclusive). The other inline-script positions (`const … = run`, `return run`, `log run`) do not take those suffixes — wrap in a standalone `run` step.
 
@@ -180,7 +178,7 @@ workflow release(version) {
 }
 ```
 
-- **Call arguments:** quoted literals (`"main"`), bare identifiers for in-scope variables (`version` — preferred over `"${version}"`, which is rejected when it is the whole argument), or explicit nested calls (`run outer(run inner())`, `run outer(ensure check())`). Bare call shapes like `run outer(inner())` are rejected. Strings mixing text and interpolation (`"v${version}"`) are fine.
+- **Call arguments:** quoted literals (`"main"`), bare identifiers for in-scope variables (`version` — preferred style), quoted interpolation when the whole argument is one variable (`"${version}"` — also accepted when `version` is in scope), or explicit nested calls (`run outer(run inner())`, `run outer(ensure check())`). Bare call shapes like `run outer(inner())` are rejected. Strings mixing text and interpolation (`"v${version}"`) are fine.
 - **Arity is checked** when the callee declares parameters: `run greet("a","b")` against `workflow greet(name)` is `E_VALIDATE`.
 - **`fail "reason"`** aborts with a non-zero exit. **`return`** accepts `"string"`, `"""…"""`, a bare identifier, `run ref()` / `ensure ref()`, an inline script, or a `match` expression.
 - **`log` / `logerr`** accept `"string"`, `"""…"""`, a bare identifier (`log status` ≡ `log "${status}"`), or `log run \`cmd\`()`.
@@ -233,7 +231,7 @@ if r.verdict == "reject" {
 - For a `"""` prompt, `returns "…"` goes on the closing-`"""` line or the line immediately after.
 - Triple **backticks** inside prompt context are rejected — they are script delimiters. Use indentation or quotes for code in prompt text.
 
-Backend is configured, not per-prompt: `agent.backend` = `cursor` (default) | `claude` | `codex`, plus `agent.default_model`, via `config { … }` or `JAIPH_AGENT_*` env vars (env wins). Any executable that reads a prompt on stdin and answers on stdout can be a backend via `agent.command`.
+Backend is configured, not per-prompt: `agent.backend` = `cursor` (default) | `claude` | `codex`, plus `agent.default_model`, via `config { … }` or `JAIPH_AGENT_*` env vars (env wins). On the **cursor** backend only, `agent.command` can point at a custom executable (prompt on stdin, answer on stdout); `claude` and `codex` ignore `agent.command`.
 
 **Write prompts like task briefs:** state the goal, the constraints, the acceptance criteria, and what to output. Interpolate concrete context (`${task}`, `${diff}`, captured file contents) rather than asking the agent to go find it.
 
@@ -309,10 +307,10 @@ workflow default() {
   const b = run async unit_tests()
   log "lint: ${a}"                       # first real read blocks + resolves
   log "tests: ${b}"
-}                                        # unread handles are joined at workflow exit
+}                                        # unread handles are joined when this step list finishes
 ```
 
-Workflows only (rejected in rules); not combinable with inline scripts. `catch`/`recover` compose with `run async`. For concurrent *shell*, use `&` + `wait` inside one script body instead.
+Workflows only (rejected in rules); not combinable with inline scripts. `catch`/`recover` compose with `run async`. Unread handles are joined at the end of the **current step list** (the workflow body, an `if`/`else` branch, or a `catch`/`recover` body) before control continues — channel drains run only after the entry workflow's top-level list finishes. For concurrent *shell*, use `&` + `wait` inside one script body instead.
 
 ### Config
 
@@ -339,8 +337,8 @@ Precedence: **environment > workflow-level config > module-level config > defaul
 | `E_VALIDATE` inline shell forbidden in rules | Wrap the shell in a `script` (named or inline) and `run` it |
 | `E_PARSE` `${…}` in single-backtick script | Use `$1`/`$2` args, or switch to a fenced ``` block |
 | `E_VALIDATE` unknown identifier / unknown `${name}` | Declare it (`const`/param) before use; check spelling |
-| `E_VALIDATE` standalone `"${x}"` argument | Pass the bare identifier: `run f(x)` |
 | `E_VALIDATE` nested call must be explicit | `run f(run g())`, not `run f(g())` |
+| `E_VALIDATE` duplicate import alias | Use a unique `as` name for each `import` |
 | `E_VALIDATE` arity mismatch | Match the callee's declared parameter count |
 | `E_PARSE` redirection after managed call | Move pipes/redirects into a script body |
 | `E_VALIDATE` scripts are not values/promptable | Scripts aren't strings: don't `const x = scriptName`, `${scriptName}`, or `prompt scriptName` |

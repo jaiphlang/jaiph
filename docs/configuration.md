@@ -28,8 +28,8 @@ Docker enablement uses a separate, env-only resolution; see [Docker enablement](
 | Workflow-level | At most one nested `config { … }` per workflow body. Must be the first non-comment construct in the body. |
 | Allowed module keys | `agent.*`, `run.*`, `runtime.*`, `module.*`. |
 | Allowed workflow keys | `agent.*`, `run.*` only. `runtime.*` and `module.*` are `E_PARSE`. |
-| Duplicate block | `E_PARSE: duplicate config block (only one allowed per file)` / `... per workflow`. |
-| Unknown key | `E_PARSE` listing the allowed keys. |
+| Duplicate block | `E_PARSE duplicate config block (only one allowed per file)` / `E_PARSE duplicate config block inside workflow (only one allowed per workflow)`. |
+| Unknown key | `E_PARSE unknown config key: <key>. Allowed: …` (lists every allowed key). |
 | Wrong value type | `E_PARSE`. |
 
 ### Value syntax
@@ -47,7 +47,7 @@ Docker enablement uses a separate, env-only resolution; see [Docker enablement](
 | `agent.default_model` | string | — | `JAIPH_AGENT_MODEL` | Default model for `prompt` steps. Applies to all backends. |
 | `agent.command` | string | `cursor-agent` | `JAIPH_AGENT_COMMAND` | Cursor backend command. Basename other than `cursor-agent` enables custom-command mode (stdin → command → stdout). |
 | `agent.backend` | string (`cursor` \| `claude` \| `codex`) | `cursor` | `JAIPH_AGENT_BACKEND` | Backend selector. |
-| `agent.trusted_workspace` | string (path) | workspace root | `JAIPH_AGENT_TRUSTED_WORKSPACE` | Directory passed to Cursor as `--trust`. Relative paths resolve against the workspace root. |
+| `agent.trusted_workspace` | string (path) | workspace root | `JAIPH_AGENT_TRUSTED_WORKSPACE` | Directory passed to Cursor as `--trust`. When unset, defaults to `JAIPH_WORKSPACE`. In-file values are assigned to the env var as authored (relative paths are not normalized to absolute paths). |
 | `agent.cursor_flags` | string | — | `JAIPH_AGENT_CURSOR_FLAGS` | Extra flags appended to Cursor invocations (whitespace-split). |
 | `agent.claude_flags` | string | — | `JAIPH_AGENT_CLAUDE_FLAGS` | Extra flags appended to Claude invocations (whitespace-split). |
 
@@ -177,7 +177,7 @@ Before `jaiph run` spawns the workflow runner or Docker container, the host CLI 
 | `claude` | `ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN` | warn (CLI login may still work) | hard error (`E_AGENT_CREDENTIALS`) |
 | `cursor` | `CURSOR_API_KEY` | warn (CLI login may still work) | hard error (`E_AGENT_CREDENTIALS`) |
 
-Hard errors exit non-zero with no runner or container launched. Warnings go to stderr and the run proceeds. The skip cases: entry file declares no explicit backend and uses no `prompt` step → no pre-flight; `jaiph run --raw` → no pre-flight.
+Hard errors exit non-zero with no runner or container launched. Warnings go to stderr and the run proceeds. Skip cases: entry file declares no explicit backend and uses no `prompt` step → no pre-flight; `jaiph run --raw` → no pre-flight; `JAIPH_UNSAFE=true` / `--unsafe` → no pre-flight (host escape hatch — runtime backend guards remain).
 
 Every error and warning names: the backend; the model when `agent.default_model` is set; the entry `.jh` file; the config scope (`module config`, `workflow <name>`, `JAIPH_AGENT_BACKEND env`, or `default`); and the concrete remedy. Docker-mode messages also note that the variable must be set on the host so it gets forwarded.
 

@@ -16,12 +16,12 @@ const LIVE_PAGES = ["architecture.md", "jaiph-skill.md"];
 // (e.g. inbox.md in task 3), it leaves this list — the legacy copy stays as a
 // reconciliation reference, but a live page now occupies the original path.
 const QUARANTINED_PAGES = [
-  "contributing.md",
   "getting-started.md",
 ];
 // Recreated-with-legacy-reference: a live docs/<page>.md exists AND the
 // pre-redesign body is preserved under docs/_legacy/<page>.md for reconciliation.
 const RECREATED_WITH_LEGACY = [
+  "contributing.md",
   "artifacts.md",
   "cli.md",
   "configuration.md",

@@ -1,8 +1,8 @@
 # ![Jaiph](docs/logo.png)
 
-[jaiph.org](https://jaiph.org) · [Your first workflow](docs/first-workflow.md) · [Your first agent + sandboxed run](docs/first-agent-run.md) · [Why Jaiph](docs/why-jaiph.md) · [Architecture](docs/architecture.md) · [Sandboxing](docs/sandboxing.md) · [Inbox & Dispatch](docs/inbox.md) · [Async Handles](docs/spec-async-handles.md) · [CLI](docs/cli.md) · [Configuration](docs/configuration.md) · [Grammar](docs/grammar.md) · [Language](docs/language.md) · [Environment variables](docs/env-vars.md) · [Agent Skill](https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md)
+[jaiph.org](https://jaiph.org) · [Your first workflow](docs/first-workflow.md) · [Your first agent + sandboxed run](docs/first-agent-run.md) · [Install & switch versions](docs/setup.md) · [Agent Skill](https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md) · [Architecture](docs/architecture.md) · [CLI](docs/cli.md) · [Contributing](docs/contributing.md)
 
-> **Docs note:** The Jaiph documentation site is being rewritten under the [Diátaxis](https://diataxis.fr/) framework. The Tutorials, Explanation, How-to, and Reference quadrants have landed. Tutorials: [Your first workflow](docs/first-workflow.md), [Your first agent + sandboxed run](docs/first-agent-run.md). Explanation: [Why Jaiph](docs/why-jaiph.md), [Architecture](docs/architecture.md), [Sandboxing](docs/sandboxing.md), [Inbox & Dispatch](docs/inbox.md), [Async Handles](docs/spec-async-handles.md). How-to: [Install & switch versions](docs/setup.md), [Run in a Docker sandbox](docs/sandbox-run.md), [Authenticate agent backends](docs/agent-auth.md), [Configure backend & model](docs/configure-backend.md), [Add a hook](docs/hooks.md), [Use & publish a library](docs/libraries.md), [Save artifacts](docs/artifacts.md), [Write & run tests](docs/testing.md). Reference: [CLI](docs/cli.md), [Configuration](docs/configuration.md), [Grammar](docs/grammar.md), [Language](docs/language.md), [Environment variables](docs/env-vars.md). The remaining pre-redesign pages stay quarantined under [`docs/_legacy/`](docs/_legacy/) (in git, not published) until their Contributor replacements land. Legacy index: [Contributing](docs/_legacy/contributing.md).
+> **Docs note:** The Jaiph documentation site follows the [Diátaxis](https://diataxis.fr/) framework. Tutorials: [Your first workflow](docs/first-workflow.md), [Your first agent + sandboxed run](docs/first-agent-run.md). How-to: [Install & switch versions](docs/setup.md), [Run in a Docker sandbox](docs/sandbox-run.md), [Authenticate agent backends](docs/agent-auth.md), [Configure backend & model](docs/configure-backend.md), [Add a hook](docs/hooks.md), [Use & publish a library](docs/libraries.md), [Save artifacts](docs/artifacts.md), [Write & run tests](docs/testing.md). Reference: [CLI](docs/cli.md), [Configuration](docs/configuration.md), [Grammar](docs/grammar.md), [Language](docs/language.md), [Environment variables](docs/env-vars.md). Explanation: [Why Jaiph](docs/why-jaiph.md), [Architecture](docs/architecture.md), [Sandboxing](docs/sandboxing.md), [Inbox & Dispatch](docs/inbox.md), [Async Handles](docs/spec-async-handles.md). Contributor: [Contributing](docs/contributing.md), [Agent Skill](https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md). Pre-redesign pages that have not been recreated yet stay quarantined under [`docs/_legacy/`](docs/_legacy/) (in git, not published).
 
 ---
 
@@ -36,7 +36,7 @@
 - **Node workflow runtime** (`src/runtime/kernel/node-workflow-runtime.ts`, `graph.ts`) — interprets the AST; `buildRuntimeGraph(graph)` consumes the `ModuleGraph` produced by `loadModuleGraph` (no filesystem reads).
 - **Node test runner** (`src/runtime/kernel/node-test-runner.ts`) — `*.test.jh` blocks with mocks.
 - **JS kernel** (`src/runtime/kernel/`) — prompts, managed scripts, `__JAIPH_EVENT__`, inbox, mocks.
-Diagrams, runtime contracts, on-disk artifact layout, and distribution: **[Architecture](docs/architecture.md)**. Test layers and E2E policy: **[Contributing](docs/_legacy/contributing.md)**.
+Diagrams, runtime contracts, on-disk artifact layout, and distribution: **[Architecture](docs/architecture.md)**. Test layers and E2E policy: **[Contributing](docs/contributing.md)**.
 
 ## Quick try
 
@@ -64,7 +64,7 @@ Or install from npm:
 npm install -g jaiph
 ```
 
-Verify: `jaiph --version`. Switch versions: `jaiph use nightly` or `jaiph use 0.9.4`.
+Verify: `jaiph --version`. Switch versions: `jaiph use nightly` or `jaiph use 0.10.0`.
 
 Initialize a project (optional): `jaiph init` writes `.jaiph/` with bootstrap workflow, gitignore entries for runs/tmp, and **`SKILL.md`**. The CLI resolves the skill body in this order — `JAIPH_SKILL_PATH`, install-relative `jaiph-skill.md`, `docs/jaiph-skill.md` under cwd, then an **embedded copy baked into the binary** as the final fallback — so `jaiph init` always writes `SKILL.md` (see [Install & switch versions](docs/setup.md)). Canonical skill text for agents: `https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md`.
 
@@ -110,11 +110,11 @@ For the full language reference, see [Grammar](docs/grammar.md) and [Language](d
 
 - **AI agent** who wants to work in a predictable, structured way? Read the [Agent Skill](https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md) — it teaches you how to author Jaiph workflows and makes your behavior verifiable and auditable.
 - **Human** who manages agents and wants reliable, repeatable automation? See the [Samples](https://github.com/jaiphlang/jaiph/tree/main/examples) and [Your first workflow](docs/first-workflow.md).
-- **Contributor** who wants to improve Jaiph itself? See [Contributing](docs/_legacy/contributing.md).
+- **Contributor** who wants to improve Jaiph itself? See [Contributing](docs/contributing.md).
 
 ## Contributing
 
-See [Contributing](docs/_legacy/contributing.md) for branch strategy, pull requests, the test layers, and code style. Use [GitHub Issues](https://github.com/jaiphlang/jaiph/issues) for bugs and feature discussion.
+See [Contributing](docs/contributing.md) for branch strategy, pull requests, the test layers, and code style. Use [GitHub Issues](https://github.com/jaiphlang/jaiph/issues) for bugs and feature discussion.
 
 ## License
 
