@@ -63,8 +63,11 @@ rule docs_files_present(list) {
   run assert_newline_paths_are_files(list)
 }
 
+# Pattern-based allowlist (not a frozen snapshot): permit the doc entry points
+# and ANY docs/**/*.md page — so pages the prompt legitimately CREATES still
+# pass — while rejecting source, tests, .jaiph/, scratch files, and the
+# quarantine / vendored / generated trees.
 script assert_only_allowed_changed = ```
-  local allowed="$1"
   local after_changed_files
   after_changed_files="$(
     {
@@ -75,7 +78,12 @@ script assert_only_allowed_changed = ```
   )"
   while IFS= read -r changed_file; do
     [ -z "$changed_file" ] && continue
-    if [[ $'\n'"$allowed"$'\n' == *$'\n'"$changed_file"$'\n'* ]]; then
+    case "$changed_file" in
+      README.md|CHANGELOG.md|docs/index.html|docs/_layouts/docs.html|docs/_config.yml)
+        continue ;;
+    esac
+    if printf '%s\n' "$changed_file" | grep -qE '^docs/.*\.md$' \
+       && ! printf '%s\n' "$changed_file" | grep -qE '(^|/)docs/(_legacy|vendor|_site)/'; then
       continue
     fi
     echo "Unexpected file changed by docs prompt: $changed_file" >&2
@@ -83,20 +91,26 @@ script assert_only_allowed_changed = ```
   done <<< "$after_changed_files"
 ```
 
-rule only_expected_docs_changed_after_prompt(allowed) {
-  run assert_only_allowed_changed(allowed)
+rule only_expected_docs_changed_after_prompt() {
+  run assert_only_allowed_changed()
 }
 
-# Recursive list of published docs pages, excluding the quarantine.
+# Recursive list of published docs pages, excluding quarantine, Jekyll output,
+# and Bundler's docs/vendor/ tree. BSD/macOS find treats * in -path as not
+# crossing '/', so prune -path 'docs/vendor/*' misses nested gem READMEs; use
+# grep instead of case (POSIX case patterns do not let * match '/' either).
 script list_docs_md_paths = ```
-  find docs -type f -name '*.md' -not -path 'docs/_legacy/*' | sort
+  find docs -type f -name '*.md' -print \
+    | grep -vE '(^|/)docs/(_legacy|vendor|_site)/' \
+    | sort
 ```
 
 # Files the parity prompts are permitted to change (docs only — never src).
 script build_allowed_paths_block = ```
   {
     printf '%s\n' README.md CHANGELOG.md docs/index.html docs/_layouts/docs.html docs/_config.yml
-    find docs -type f -name '*.md' -not -path 'docs/_legacy/*'
+    find docs -type f -name '*.md' -print \
+      | grep -vE '(^|/)docs/(_legacy|vendor|_site)/'
   } | sort -u
 ```
 
@@ -126,6 +140,10 @@ workflow docs_page(path) {
        approachable, concise, and free of AI-like filler and excess emojis.
     4. Inline contextual links to other docs are fine; do NOT add manual
        navigation blocks. Never touch docs/_legacy/.
+    5. Edit ONLY this documentation page. Never edit source, tests
+       (*.test.ts), config, or anything under .jaiph/, and never create helper
+       or scratch scripts (e.g. *.mjs, *.sh) — make every change directly in
+       the documentation file.
     </task>
   """
 }
@@ -160,7 +178,11 @@ workflow docs_redesign_overview(docPaths) {
        skill URL, hardcoded as
        https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md.
        Markdown-to-markdown links end with .md; index.html links do not.
-    5. Do NOT edit src/, tests, or docs/_legacy/. Documentation files only.
+    5. Edit documentation files ONLY (docs/**/*.md, README.md, CHANGELOG.md,
+       docs/index.html, docs/_layouts/docs.html, docs/_config.yml). Never edit
+       src/, tests (*.test.ts), or anything under .jaiph/, and never create
+       helper or scratch scripts (e.g. *.mjs, *.sh) — make every change
+       directly in the documentation files. Never touch docs/_legacy/.
     </task>
   """
 }
@@ -176,5 +198,5 @@ workflow default() {
     }
   }
   run docs_redesign_overview(docs_md_list)
-  ensure only_expected_docs_changed_after_prompt(allowed_list)
+  ensure only_expected_docs_changed_after_prompt()
 }
