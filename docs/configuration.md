@@ -223,6 +223,21 @@ Each attempt emits its own `PROMPT_START` / `PROMPT_END` and `STEP_START` / `STE
 
 `jaiph test` defaults `JAIPH_PROMPT_RETRY=0`. Backoff sleep is interruptible: workflow abort, SIGINT, or SIGTERM cancels the pending wait without further backend calls.
 
+## Prompt watchdog timeouts
+{: #prompt-watchdog-timeouts}
+
+The retry backoff above handles a backend that *fails*. A separate set of watchdogs handles a backend that *hangs* — it never exits, so without them the runtime would block on the subprocess indefinitely (no commit, no queue progress, no retry). Each prompt invocation installs three independent layers over the spawned backend process:
+
+| Layer | Variable | Default | Trigger | Outcome |
+|---|---|---|---|---|
+| Completion grace | `JAIPH_PROMPT_COMPLETION_GRACE_SECONDS` | `30` | The backend emitted its terminal `result` event (work is done) but the process has not exited within the grace window. | Terminate the process, return **success** with the captured answer. |
+| Idle timeout | `JAIPH_PROMPT_IDLE_TIMEOUT_SECONDS` | `900` (15m) | No stdout/stderr for the whole window — the backend is stuck mid-work. | Terminate the process, return **failure** → feeds the [retry backoff](#prompt-retry-on-transport-failure). |
+| Absolute cap | `JAIPH_PROMPT_MAX_SECONDS` | `7200` (2h) | Total wall-clock for the single invocation exceeds the cap, regardless of activity. | Terminate the process, return **failure** → feeds the retry backoff. |
+
+Set any variable to `0` to disable that layer. The idle timer resets on every chunk of backend output, so a slow-but-active run is bounded only by the absolute cap.
+
+The completion-grace layer specifically addresses the known `claude -p` failure mode where the CLI streams its final answer (and the terminal `result` event) but the process never exits — often because a descendant it spawned is still holding the output pipe open. When a watchdog fires it sends `SIGTERM`, escalating to `SIGKILL` after 5s, and tears down the runtime's handles on the child's stdio so a lingering descendant cannot keep the run alive. Under Docker, `runtime.docker_timeout_seconds` remains the outer backstop for the whole container.
+
 ## Custom agent commands
 
 `agent.command` is consumed by the **cursor** backend only. For `claude` and `codex`, Jaiph always invokes the Claude CLI or the codex HTTP path, regardless of `agent.command`.

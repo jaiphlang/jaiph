@@ -62,7 +62,10 @@ The table below covers every `JAIPH_*` name read from `process.env` / `env` in `
 | `JAIPH_NON_TTY_HEARTBEAT_FIRST_SEC` | host | int (seconds) | `60` | — | Seconds before the first non-TTY heartbeat line. |
 | `JAIPH_NON_TTY_HEARTBEAT_INTERVAL_MS` | host | int (ms; floor `250`) | `30000` | — | Minimum interval between subsequent non-TTY heartbeat lines. |
 | `JAIPH_PRECEDING_FILES` | host | string | — | — | Removed from the product. Stripped from the launched env. |
+| `JAIPH_PROMPT_COMPLETION_GRACE_SECONDS` | runtime | int (seconds) | `30` | — | Prompt watchdog — once the backend emits its terminal `result` event, the grace period it may take to exit before Jaiph terminates it and returns success. Guards the case where `claude -p` finishes the work but never exits. `0` disables. |
 | `JAIPH_PROMPT_FINAL_FILE` | runtime | path | — | — | Optional path; when set, `executePrompt` writes the final assistant message there. Jaiph does not set this automatically. |
+| `JAIPH_PROMPT_IDLE_TIMEOUT_SECONDS` | runtime | int (seconds) | `900` (15m) | — | Prompt watchdog — terminate the backend and fail the prompt (feeding the retry backoff) when it produces no stdout/stderr for this long. `0` disables. |
+| `JAIPH_PROMPT_MAX_SECONDS` | runtime | int (seconds) | `7200` (2h) | — | Prompt watchdog — absolute wall-clock cap on a single prompt invocation regardless of activity; on expiry the backend is terminated and the prompt fails into the retry backoff. `0` disables. |
 | `JAIPH_PROMPT_RETRY` | runtime | bool (`0` disables) | enabled | — | Set to `0` to skip the prompt retry backoff. `jaiph test` defaults to `0` so mock failures fail fast. |
 | `JAIPH_PROMPT_RETRY_DELAYS` | runtime | int-list (ms) | `15000,60000,600000,1800000,7200000` | — | Override the prompt retry delay schedule. Invalid entries abort the prompt. |
 | `JAIPH_REGISTRY` | host | path or URL | `https://jaiph.org/registry` | — | Source of the lib registry index used by `jaiph install <name>`. Disk paths (no scheme or `file://`) are read locally; everything else is fetched. |

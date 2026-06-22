@@ -3,10 +3,13 @@ import * as assert from "node:assert/strict";
 import { chmodSync, existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
+import type { ChildProcess } from "node:child_process";
 import {
   buildBackendArgs,
   executePrompt,
+  installPromptWatchdog,
   prepareClaudeEnv,
   resolveConfig,
   resolveModel,
@@ -230,6 +233,202 @@ describe("executePrompt", () => {
     }
   });
 });
+
+/** Minimal ChildProcess stand-in: an EventEmitter with a recording `kill`. */
+function makeFakeChild(): { child: ChildProcess; killSignals: string[] } {
+  const emitter = new EventEmitter() as EventEmitter & { pid: number; kill: (s?: string) => boolean };
+  const killSignals: string[] = [];
+  emitter.pid = 4242;
+  emitter.kill = (signal?: string) => {
+    killSignals.push(signal ?? "SIGTERM");
+    return true;
+  };
+  return { child: emitter as unknown as ChildProcess, killSignals };
+}
+
+describe("installPromptWatchdog", () => {
+  it("layer 2: terminates and fails when output stalls past the idle timeout", async () => {
+    const { child, killSignals } = makeFakeChild();
+    const events: Array<{ status: number; reason: string; final: string }> = [];
+    const stderr = new PassThrough();
+    const wd = installPromptWatchdog(
+      child,
+      makeConfig({ idleTimeoutMs: 40, maxDurationMs: 0, completionGraceMs: 0 }),
+      "claude",
+      stderr,
+      (status, reason, final) => events.push({ status, reason, final }),
+    );
+    await delay(120);
+    wd.clear();
+    assert.equal(events.length, 1);
+    assert.equal(events[0].status, 1);
+    assert.match(events[0].reason, /no output/);
+    assert.ok(killSignals.includes("SIGTERM"));
+  });
+
+  it("layer 2: bump() resets the idle timer so active runs are not killed", async () => {
+    const { child } = makeFakeChild();
+    const events: number[] = [];
+    const wd = installPromptWatchdog(
+      child,
+      makeConfig({ idleTimeoutMs: 80, maxDurationMs: 0, completionGraceMs: 0 }),
+      "claude",
+      new PassThrough(),
+      (status) => events.push(status),
+    );
+    // Keep bumping inside the idle window for longer than the timeout itself.
+    for (let i = 0; i < 4; i += 1) {
+      await delay(40);
+      wd.bump();
+    }
+    assert.equal(events.length, 0, "should not have expired while active");
+    wd.clear();
+  });
+
+  it("layer 3: terminates and fails past the absolute maximum duration", async () => {
+    const { child, killSignals } = makeFakeChild();
+    const events: Array<{ status: number; reason: string }> = [];
+    const wd = installPromptWatchdog(
+      child,
+      makeConfig({ idleTimeoutMs: 0, maxDurationMs: 40, completionGraceMs: 0 }),
+      "claude",
+      new PassThrough(),
+      (status, reason) => events.push({ status, reason }),
+    );
+    // bump() must NOT save it from the absolute cap.
+    await delay(20);
+    wd.bump();
+    await delay(60);
+    wd.clear();
+    assert.equal(events.length, 1);
+    assert.equal(events[0].status, 1);
+    assert.match(events[0].reason, /maximum duration/);
+    assert.ok(killSignals.includes("SIGTERM"));
+  });
+
+  it("layer 1: after completion, terminates and SUCCEEDS if the process never exits", async () => {
+    const { child, killSignals } = makeFakeChild();
+    const events: Array<{ status: number; reason: string; final: string }> = [];
+    const wd = installPromptWatchdog(
+      child,
+      makeConfig({ idleTimeoutMs: 0, maxDurationMs: 0, completionGraceMs: 40 }),
+      "claude",
+      new PassThrough(),
+      (status, reason, final) => events.push({ status, reason, final }),
+    );
+    wd.markComplete("the answer");
+    await delay(120);
+    wd.clear();
+    assert.equal(events.length, 1);
+    assert.equal(events[0].status, 0, "completion grace must settle with success");
+    assert.equal(events[0].final, "the answer");
+    assert.match(events[0].reason, /did not exit/);
+    assert.ok(killSignals.includes("SIGTERM"));
+  });
+
+  it("clear() before any timer fires prevents termination", async () => {
+    const { child, killSignals } = makeFakeChild();
+    const events: number[] = [];
+    const wd = installPromptWatchdog(
+      child,
+      makeConfig({ idleTimeoutMs: 40, maxDurationMs: 40, completionGraceMs: 40 }),
+      "claude",
+      new PassThrough(),
+      (status) => events.push(status),
+    );
+    wd.clear();
+    await delay(120);
+    assert.equal(events.length, 0);
+    assert.equal(killSignals.length, 0);
+  });
+
+  it("fires onExpire at most once even when multiple layers would trip", async () => {
+    const { child } = makeFakeChild();
+    const events: number[] = [];
+    const wd = installPromptWatchdog(
+      child,
+      makeConfig({ idleTimeoutMs: 30, maxDurationMs: 35, completionGraceMs: 0 }),
+      "claude",
+      new PassThrough(),
+      (status) => events.push(status),
+    );
+    await delay(120);
+    wd.clear();
+    assert.equal(events.length, 1);
+  });
+});
+
+describe("executePrompt — prompt watchdog (end to end)", () => {
+  it("recovers (success) when the agent finishes but the process never exits", async () => {
+    const root = mkdtempSync(join(tmpdir(), "jaiph-prompt-grace-"));
+    try {
+      // Fake cursor-agent: emit a terminal `result` event, then hang forever.
+      const fakeAgent = join(root, "cursor-agent");
+      writeFileSync(
+        fakeAgent,
+        [
+          "#!/usr/bin/env bash",
+          `printf '%s\\n' '{"type":"result","result":"done-but-stuck"}'`,
+          // `exec` so SIGTERM hits sleep directly — no orphaned grandchild.
+          "exec sleep 600",
+          "",
+        ].join("\n"),
+      );
+      chmodSync(fakeAgent, 0o755);
+      const stdout = new PassThrough();
+      stdout.on("data", () => {});
+      const result = await executePrompt(
+        "ignored",
+        makeConfig({
+          agentCommand: fakeAgent,
+          workspaceRoot: root,
+          trustedWorkspace: root,
+          completionGraceMs: 150,
+          idleTimeoutMs: 0,
+          maxDurationMs: 0,
+        }),
+        stdout,
+      );
+      assert.equal(result.status, 0);
+      assert.equal(result.final, "done-but-stuck");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("recovers (failure) when the agent hangs with no output", async () => {
+    const root = mkdtempSync(join(tmpdir(), "jaiph-prompt-idle-"));
+    try {
+      const fakeAgent = join(root, "cursor-agent");
+      writeFileSync(
+        fakeAgent,
+        ["#!/usr/bin/env bash", "exec sleep 600", ""].join("\n"),
+      );
+      chmodSync(fakeAgent, 0o755);
+      const stdout = new PassThrough();
+      stdout.on("data", () => {});
+      const result = await executePrompt(
+        "ignored",
+        makeConfig({
+          agentCommand: fakeAgent,
+          workspaceRoot: root,
+          trustedWorkspace: root,
+          completionGraceMs: 0,
+          idleTimeoutMs: 150,
+          maxDurationMs: 0,
+        }),
+        stdout,
+      );
+      assert.equal(result.status, 1);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 describe("prepareClaudeEnv", () => {
   it("keeps existing env when configured claude dir is writable", () => {
