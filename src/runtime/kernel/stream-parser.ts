@@ -14,6 +14,8 @@ export type StreamState = {
   sawFinalStreamDelta: boolean;
   sawFinalMessage: boolean;
   sawVisibleFinalText: boolean;
+  /** Set once the backend emits its terminal `result` event (work complete). */
+  sawResult: boolean;
 };
 
 export function createStreamState(): StreamState {
@@ -27,6 +29,7 @@ export function createStreamState(): StreamState {
     sawFinalStreamDelta: false,
     sawFinalMessage: false,
     sawVisibleFinalText: false,
+    sawResult: false,
   };
 }
 
@@ -185,7 +188,12 @@ export function processStreamLine(
         return;
       }
 
-      // Result object
+      // Result object — the backend's terminal event; marks the run complete
+      // even when the final text already arrived via deltas or an assistant
+      // message (in which case `result` may be empty).
+      if (obj.type === "result") {
+        state.sawResult = true;
+      }
       if (obj.type === "result" && typeof obj.result === "string" && obj.result.length > 0) {
         if (!state.sawFinalStreamDelta && !state.sawFinalMessage) {
           const normalized = normalizeInitialFinalText(obj.result, state);
@@ -225,13 +233,26 @@ export function effectiveFinal(state: StreamState): string {
 export function parseStream(
   input: Readable,
   writer: StreamWriter,
+  opts?: {
+    /**
+     * Fired exactly once when the backend emits its terminal `result` event,
+     * with the final answer accumulated so far. Lets callers detect that the
+     * agent has finished even if the underlying process has not yet exited.
+     */
+    onComplete?: (finalSoFar: string) => void;
+  },
 ): Promise<string> {
   return new Promise((resolve) => {
     const state = createStreamState();
     const rl: Interface = createInterface({ input, crlfDelay: Infinity });
+    let firedComplete = false;
 
     rl.on("line", (line: string) => {
       processStreamLine(line, state, writer);
+      if (state.sawResult && !firedComplete) {
+        firedComplete = true;
+        opts?.onComplete?.(effectiveFinal(state));
+      }
     });
 
     rl.on("close", () => {

@@ -1,6 +1,6 @@
 // Prompt execution: spawn the configured agent backend and stream its output.
 
-import { spawn as nodeSpawn } from "node:child_process";
+import { spawn as nodeSpawn, type ChildProcess } from "node:child_process";
 import { writeFileSync, readFileSync, existsSync, accessSync, mkdirSync, cpSync, constants as fsConstants } from "node:fs";
 import { basename, delimiter, join } from "node:path";
 import { parseStream, type StreamWriter } from "./stream-parser";
@@ -17,7 +17,43 @@ export type PromptConfig = {
   codexApiKey: string;
   codexApiUrl: string;
   promptFinalFile: string;
+  /**
+   * Watchdog timeouts for the subprocess backends (claude / cursor / custom).
+   * All in milliseconds; `0` disables that watchdog. Optional so existing
+   * callers/tests that build a config literal keep working — `runBackend`
+   * falls back to the DEFAULT_* constants when a field is omitted.
+   */
+  completionGraceMs?: number;
+  idleTimeoutMs?: number;
+  maxDurationMs?: number;
 };
+
+/**
+ * Layer 1 — completion grace: once the backend emits its terminal `result`
+ * event the answer is complete. We give the process this long to exit on its
+ * own before terminating it and returning success. Guards the known failure
+ * mode where `claude -p` finishes the work but never exits.
+ */
+export const DEFAULT_PROMPT_COMPLETION_GRACE_MS = 30_000;
+/**
+ * Layer 2 — idle timeout: if the backend produces no stdout/stderr for this
+ * long it is considered hung mid-work. We terminate it and return a non-zero
+ * status so the runtime's retry/backoff loop takes over.
+ */
+export const DEFAULT_PROMPT_IDLE_TIMEOUT_MS = 900_000; // 15m
+/**
+ * Layer 3 — absolute cap: a single prompt may never run longer than this,
+ * regardless of activity. Backstop against slow-but-not-idle hangs.
+ */
+export const DEFAULT_PROMPT_MAX_DURATION_MS = 7_200_000; // 2h
+
+/** Parse a "seconds" env value into milliseconds; empty/invalid → default. `0` is honored (disables). */
+function parseSecondsMs(raw: string | undefined, defaultMs: number): number {
+  if (raw === undefined || raw.trim() === "") return defaultMs;
+  const seconds = Number(raw);
+  if (!Number.isFinite(seconds) || seconds < 0) return defaultMs;
+  return Math.floor(seconds * 1000);
+}
 
 export type ModelResolution = {
   model: string;
@@ -63,6 +99,15 @@ export function resolveConfig(env: NodeJS.ProcessEnv = process.env): PromptConfi
     codexApiKey: env.OPENAI_API_KEY || "",
     codexApiUrl: env.JAIPH_CODEX_API_URL || "https://api.openai.com/v1/chat/completions",
     promptFinalFile: env.JAIPH_PROMPT_FINAL_FILE || "",
+    completionGraceMs: parseSecondsMs(
+      env.JAIPH_PROMPT_COMPLETION_GRACE_SECONDS,
+      DEFAULT_PROMPT_COMPLETION_GRACE_MS,
+    ),
+    idleTimeoutMs: parseSecondsMs(
+      env.JAIPH_PROMPT_IDLE_TIMEOUT_SECONDS,
+      DEFAULT_PROMPT_IDLE_TIMEOUT_MS,
+    ),
+    maxDurationMs: parseSecondsMs(env.JAIPH_PROMPT_MAX_SECONDS, DEFAULT_PROMPT_MAX_DURATION_MS),
   };
 }
 
@@ -356,6 +401,119 @@ function runCodexBackend(
   });
 }
 
+type PromptWatchdog = {
+  /** Record backend activity (an stdout/stderr chunk); resets the idle timer. */
+  bump: () => void;
+  /** Record that the backend emitted its terminal result event (Layer 1). */
+  markComplete: (finalSoFar: string) => void;
+  /** Stop all timers; call once the prompt has settled. */
+  clear: () => void;
+};
+
+/**
+ * Install the three watchdog layers over a spawned backend child process:
+ *
+ *  1. Completion grace — once the backend signals completion (`markComplete`),
+ *     give it `completionGraceMs` to exit on its own, then terminate it and
+ *     settle with success. Fixes the case where `claude -p` finishes the work
+ *     but the process never exits (so the output stream never closes).
+ *  2. Idle timeout — if no output arrives for `idleTimeoutMs`, treat the run
+ *     as hung mid-work, terminate it, and settle with failure (status 1) so the
+ *     runtime's retry/backoff loop takes over.
+ *  3. Absolute cap — terminate and fail past `maxDurationMs` regardless of
+ *     activity, as a backstop against slow-but-not-idle hangs.
+ *
+ * `onExpire(status, reason, finalSoFar)` fires at most once. By the time it
+ * runs the child has already been sent SIGTERM (escalating to SIGKILL after a
+ * short delay), so the caller only needs to settle its promise.
+ */
+export function installPromptWatchdog(
+  child: ChildProcess,
+  config: PromptConfig,
+  backend: string,
+  stderr: NodeJS.WritableStream,
+  onExpire: (status: number, reason: string, finalSoFar: string) => void,
+): PromptWatchdog {
+  const completionGraceMs = config.completionGraceMs ?? DEFAULT_PROMPT_COMPLETION_GRACE_MS;
+  const idleTimeoutMs = config.idleTimeoutMs ?? DEFAULT_PROMPT_IDLE_TIMEOUT_MS;
+  const maxDurationMs = config.maxDurationMs ?? DEFAULT_PROMPT_MAX_DURATION_MS;
+
+  let fired = false;
+  let idleTimer: NodeJS.Timeout | undefined;
+  let maxTimer: NodeJS.Timeout | undefined;
+  let graceTimer: NodeJS.Timeout | undefined;
+  let lastFinal = "";
+
+  const clear = (): void => {
+    if (idleTimer) clearTimeout(idleTimer);
+    if (maxTimer) clearTimeout(maxTimer);
+    if (graceTimer) clearTimeout(graceTimer);
+    idleTimer = maxTimer = graceTimer = undefined;
+  };
+
+  const killChild = (): void => {
+    try {
+      child.kill("SIGTERM");
+    } catch {
+      // no-op
+    }
+    const escalate = setTimeout(() => {
+      try {
+        child.kill("SIGKILL");
+      } catch {
+        // no-op
+      }
+    }, 5000);
+    escalate.unref?.();
+  };
+
+  const expire = (status: number, reason: string): void => {
+    if (fired) return;
+    fired = true;
+    clear();
+    stderr.write(`jaiph: ${reason}; terminating ${backend} backend.\n`);
+    killChild();
+    onExpire(status, reason, lastFinal);
+  };
+
+  const armIdle = (): void => {
+    if (idleTimeoutMs <= 0) return;
+    if (idleTimer) clearTimeout(idleTimer);
+    idleTimer = setTimeout(
+      () => expire(1, `prompt produced no output for ${Math.round(idleTimeoutMs / 1000)}s`),
+      idleTimeoutMs,
+    );
+    idleTimer.unref?.();
+  };
+
+  if (maxDurationMs > 0) {
+    maxTimer = setTimeout(
+      () => expire(1, `prompt exceeded the ${Math.round(maxDurationMs / 1000)}s maximum duration`),
+      maxDurationMs,
+    );
+    maxTimer.unref?.();
+  }
+  armIdle();
+
+  return {
+    bump: () => armIdle(),
+    markComplete: (finalSoFar: string) => {
+      lastFinal = finalSoFar;
+      if (completionGraceMs <= 0 || fired || graceTimer) return;
+      graceTimer = setTimeout(
+        () =>
+          expire(
+            0,
+            `prompt completed but ${backend} did not exit within ${Math.round(completionGraceMs / 1000)}s`,
+          ),
+        completionGraceMs,
+      );
+      graceTimer.unref?.();
+    },
+    clear,
+  };
+}
+
 /** Run the backend process and parse its streaming output. */
 function runBackend(
   config: PromptConfig,
@@ -403,9 +561,48 @@ function runBackend(
       env: childEnv,
     });
 
+    // Single-settle guard shared by the normal-exit path and every watchdog.
+    let settled = false;
+    let exitCode: number | null = null;
+    // Extra stream to tear down on settle (the claude `merged` PassThrough).
+    let extraStream: { destroy: () => void } | undefined;
+    const settle = (final: string, status: number): void => {
+      if (settled) return;
+      settled = true;
+      watchdog.clear();
+      // Release Node's handles on the child's pipes. Without this, a descendant
+      // that outlives the child while holding the stdout write end (the classic
+      // `claude -p` hang) keeps these streams — and the event loop — alive even
+      // after we've terminated the child and resolved. Destroying here lets the
+      // runtime move on (and ultimately exit) regardless.
+      try {
+        child.stdin?.destroy();
+        child.stdout?.destroy();
+        child.stderr?.destroy();
+        extraStream?.destroy();
+      } catch {
+        // best-effort cleanup
+      }
+      resolve({ final, status });
+    };
+
+    // Watchdog layers (completion grace / idle / absolute cap). For custom
+    // commands only layers 2 and 3 apply — there is no result event to trigger
+    // layer 1, so markComplete is simply never called.
+    const watchdog = installPromptWatchdog(
+      child,
+      config,
+      isCustom ? command : config.backend,
+      stderr,
+      (status, _reason, finalSoFar) => settle(finalSoFar, status),
+    );
+
     child.on("error", (err) => {
       stderr.write(`jaiph: failed to start ${command}: ${err.message}\n`);
-      resolve({ final: "", status: 1 });
+      settle("", 1);
+    });
+    child.on("exit", (code) => {
+      exitCode = code;
     });
 
     if (useStdin && child.stdin) {
@@ -418,7 +615,9 @@ function runBackend(
       let final = "";
       let wroteHeader = false;
       child.stderr?.pipe(stderr);
+      child.stderr?.on("data", () => watchdog.bump());
       child.stdout?.on("data", (chunk: Buffer) => {
+        watchdog.bump();
         const text = chunk.toString();
         if (!wroteHeader) {
           writer.writeFinal("Final answer:\n");
@@ -428,7 +627,7 @@ function runBackend(
         final += text;
       });
       child.on("close", (code) => {
-        resolve({ final, status: code ?? 0 });
+        settle(final, code ?? exitCode ?? 0);
       });
       return;
     }
@@ -442,20 +641,31 @@ function runBackend(
       child.stderr?.pipe(merged);
       child.on("close", () => merged.end());
       parseInput = merged;
+      extraStream = merged;
     } else {
       // Cursor: parse only stdout; pipe stderr through to process stderr
       parseInput = child.stdout!;
       child.stderr?.pipe(stderr);
     }
 
-    parseStream(parseInput, writer).then((final) => {
-      child.on("close", (code) => {
-        resolve({ final, status: code ?? 0 });
-      });
-      if (child.exitCode !== null) {
-        resolve({ final, status: child.exitCode });
+    parseStream(parseInput, writer, {
+      onComplete: (finalSoFar) => watchdog.markComplete(finalSoFar),
+    }).then((final) => {
+      // Stream ended — process closed, or the watchdog already killed it and
+      // settled (in which case `settle` here is a no-op).
+      const close = (code: number | null): void => settle(final, code ?? exitCode ?? 0);
+      if (child.exitCode !== null || exitCode !== null) {
+        close(child.exitCode ?? exitCode);
+      } else {
+        child.on("close", (code) => close(code));
       }
     });
+
+    // Reset the idle watchdog on every chunk. Attached after parseStream so the
+    // cursor backend (whose stdout IS the parse input) does not drop the first
+    // chunk to a premature switch into flowing mode.
+    child.stdout?.on("data", () => watchdog.bump());
+    child.stderr?.on("data", () => watchdog.bump());
   });
 }
 
