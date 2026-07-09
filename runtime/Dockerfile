@@ -4,6 +4,11 @@ WORKDIR /src
 COPY package.json package-lock.json tsconfig.json ./
 COPY src ./src
 COPY runtime/overlay-run.sh ./runtime/overlay-run.sh
+# npm ci / npm pack run the `prepare` script (tools/embed-assets.js), which
+# reads runtime/overlay-run.sh and docs/jaiph-skill.md to regenerate the
+# embedded assets — those sources must be in the build context.
+COPY tools ./tools
+COPY docs/jaiph-skill.md ./docs/jaiph-skill.md
 RUN npm ci && npm run build && npm pack --pack-destination /tmp >/dev/null && mv /tmp/jaiph-*.tgz /tmp/jaiph.tgz
 
 FROM ubuntu:24.04
