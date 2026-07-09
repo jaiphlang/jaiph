@@ -110,6 +110,11 @@ jobs:
           node-version: "20"
           cache: npm
 
+      # The "Try it out" Playwright test runs docs/install in local-source
+      # mode, which builds the standalone binary via `bun build --compile`.
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
       - name: Build runtime image for docs sample Docker runs
         run: |
           docker build -t jaiph-ci-runtime:local -f runtime/Dockerfile .
