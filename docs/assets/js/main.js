@@ -754,9 +754,28 @@
     }
 
     /**
+     * True when any node is an element or non-whitespace text. Whitespace-only
+     * text nodes (e.g. the newline between an h1 and the first h2) must not
+     * count as content, or pages without an intro paragraph render an empty card.
+     */
+    function hasVisibleContent(nodes) {
+        for (var i = 0; i < nodes.length; i++) {
+            var node = nodes[i];
+            if (node.nodeType === 1) {
+                return true;
+            }
+            if (node.nodeType === 3 && node.textContent.trim() !== "") {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * Restructures doc-sections content so that:
      * - h1 stays unwrapped; any content below it until the first h2 is wrapped in a .card.
      * - Each h2 sits outside a .card, with its section content inside.
+     * Cards with no visible content are dropped entirely.
      */
     function restructureDocSections() {
         var container = document.querySelector(".doc-sections");
@@ -776,7 +795,7 @@
 
             if (child.nodeType === 1 && child.tagName === "H2") {
                 inHero = false;
-                if (currentCard) {
+                if (currentCard && hasVisibleContent(currentCard.childNodes)) {
                     fragment.appendChild(currentCard);
                 }
                 fragment.appendChild(child);
@@ -793,7 +812,7 @@
             }
         }
 
-        if (currentCard) {
+        if (currentCard && hasVisibleContent(currentCard.childNodes)) {
             fragment.appendChild(currentCard);
         }
 
@@ -815,7 +834,7 @@
                     rest.push(heroNodes[r]);
                 }
             }
-            if (rest.length > 0) {
+            if (hasVisibleContent(rest)) {
                 var heroCard = document.createElement("div");
                 heroCard.className = "card";
                 for (var j = 0; j < rest.length; j++) {
