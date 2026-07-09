@@ -628,7 +628,9 @@
             }
             if (block.matches(".jaiph-run")) {
                 block.dataset.copySource = block.textContent;
-                const html = block.innerHTML;
+                // Markdown/Rouge end the block with a newline; rendering it
+                // would add an ugly empty final row.
+                const html = block.innerHTML.replace(/\n+$/, "");
                 block.innerHTML = html
                     .split("\n")
                     .map(function (line) {
@@ -637,8 +639,10 @@
                     .join("");
                 return;
             }
-            const raw = block.textContent;
-            block.dataset.copySource = raw;
+            // Keep the trailing newline in copySource (nicer for pasting) but
+            // drop it for rendering so listings don't end with an empty row.
+            block.dataset.copySource = block.textContent;
+            const raw = block.textContent.replace(/\n+$/, "");
             const isJaiphBlock = block.matches(".language-ralph, .language-jaiph, .language-jh");
             const isBashBlock = block.matches(".language-bash");
             const rendered = isJaiphBlock
