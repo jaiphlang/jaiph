@@ -40,6 +40,10 @@ jobs:
           node-version: "20"
           cache: npm
 
+      # install-from-local.sh builds the standalone binary via `bun build --compile`.
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
       - name: Install Jaiph from local source
         shell: bash
         run: bash ./docs/install-from-local.sh
