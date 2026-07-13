@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve as resolvePath } from "node:path";
 import { PassThrough } from "node:stream";
 import { randomUUID } from "node:crypto";
@@ -27,6 +27,7 @@ import {
   stripOuterQuotes,
   type PromptSchemaField,
 } from "./runtime-arg-parser";
+import { resolveInterpreterFromShebang } from "../../parse/script-bash";
 import { RuntimeEventEmitter, type Frame } from "./runtime-event-emitter";
 import { executeMockBodyDef, type MockBodyDef, type StepResult } from "./runtime-mock";
 import { linesOfDelimitedString } from "../string-lines";
@@ -41,6 +42,13 @@ import {
 export type { MockBodyDef } from "./runtime-mock";
 
 const HANDLE_PREFIX = "__JAIPH_HANDLE__";
+
+/**
+ * Test seam for the script/shell subprocess spawn. Swapped out in unit tests so
+ * the resolved interpreter + argv can be asserted on the spawn call itself
+ * without side effects (mirrors `_portability.spawn` in `portability.ts`).
+ */
+export const _scriptSpawn = { spawn };
 
 export function formatInvalidAsyncHandleError(handleId: string): string {
   return `invalid async handle "${handleId}" — the handle was never created or was already consumed`;
@@ -1479,16 +1487,22 @@ export class NodeWorkflowRuntime {
     return { status: 0, output: res.output, error: "" };
   }
 
-  /** Spawn a child process, stream stdout/stderr into io and collect them into the StepResult. */
+  /**
+   * Spawn a child process, stream stdout/stderr into io and collect them into
+   * the StepResult. When `interpreter` is set, a spawn ENOENT (the interpreter
+   * binary is missing on PATH) is turned into a diagnosable Jaiph error naming
+   * the interpreter instead of a raw `spawn <name> ENOENT`.
+   */
   private spawnAndCapture(
     command: string,
     args: string[],
     env: NodeJS.ProcessEnv,
     cwd: string,
     io: StepIO | undefined,
+    interpreter?: string,
   ): Promise<StepResult> {
     return new Promise((resolve) => {
-      const child = spawn(command, args, { cwd, env, stdio: ["ignore", "pipe", "pipe"] });
+      const child = _scriptSpawn.spawn(command, args, { cwd, env, stdio: ["ignore", "pipe", "pipe"] });
       let output = "";
       let error = "";
       child.stdout?.setEncoding("utf8");
@@ -1502,7 +1516,10 @@ export class NodeWorkflowRuntime {
         io?.appendErr(chunk);
       });
       child.on("error", (err) => {
-        const msg = err instanceof Error ? err.message : String(err);
+        const code = (err as NodeJS.ErrnoException).code;
+        const msg = code === "ENOENT" && interpreter
+          ? `script interpreter "${interpreter}" not found — install it or fix the script shebang`
+          : err instanceof Error ? err.message : String(err);
         error += msg;
         io?.appendErr(msg);
         resolve({ status: 1, output, error });
@@ -1536,7 +1553,43 @@ export class NodeWorkflowRuntime {
     if (!scriptsDir) {
       return { status: 1, output: "", error: "JAIPH_SCRIPTS not set for script execution" };
     }
-    return this.spawnAndCapture(join(scriptsDir, scriptName), args, env, this.scriptCwd(env, filePath), io);
+    const scriptPath = join(scriptsDir, scriptName);
+    const interp = this.resolveScriptInterpreter(scriptPath);
+    if (!interp.ok) return { status: 1, output: "", error: interp.error };
+    // Spawn `<interpreter> <scriptPath> <args...>` explicitly. This does not
+    // depend on the OS honoring the shebang line (Windows) or on the file's
+    // exec bit (stripped bit / `noexec` mounts); the shebang is still written
+    // into the file so it stays directly executable by hand on POSIX.
+    return this.spawnAndCapture(
+      interp.command,
+      [...interp.prefixArgs, scriptPath, ...args],
+      env,
+      this.scriptCwd(env, filePath),
+      io,
+      interp.command,
+    );
+  }
+
+  /**
+   * Resolve the interpreter to spawn for an emitted script from its shebang
+   * line. Emitted scripts always carry a shebang (`buildScriptFiles`); a script
+   * without one falls back to bash (Jaiph's default script language) rather
+   * than depending on the OS exec bit.
+   */
+  private resolveScriptInterpreter(
+    scriptPath: string,
+  ): { ok: true; command: string; prefixArgs: string[] } | { ok: false; error: string } {
+    let firstLine: string;
+    try {
+      const content = readFileSync(scriptPath, "utf8");
+      const nl = content.indexOf("\n");
+      firstLine = nl === -1 ? content : content.slice(0, nl);
+    } catch {
+      return { ok: false, error: `script file not found or unreadable: ${scriptPath}` };
+    }
+    const interp = resolveInterpreterFromShebang(firstLine);
+    if (!interp) return { ok: true, command: "bash", prefixArgs: [] };
+    return { ok: true, command: interp.command, prefixArgs: interp.prefixArgs };
   }
 
   /**
