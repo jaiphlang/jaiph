@@ -3,6 +3,7 @@
 import { spawn as nodeSpawn, type ChildProcess } from "node:child_process";
 import { writeFileSync, readFileSync, existsSync, accessSync, mkdirSync, cpSync, constants as fsConstants } from "node:fs";
 import { basename, delimiter, join } from "node:path";
+import { homedir } from "node:os";
 import { parseStream, type StreamWriter } from "./stream-parser";
 import { consumeNextMockResponse, dispatchMockArms, type MockPromptArm } from "./mock";
 import { killProcessTree } from "./portability";
@@ -229,7 +230,9 @@ type ClaudeEnvPreparation = {
  * Falls back to workspace-local `.jaiph/claude-config` when home config is not writable.
  */
 export function prepareClaudeEnv(execEnv: NodeJS.ProcessEnv, workspaceRoot: string): ClaudeEnvPreparation {
-  const home = execEnv.HOME || process.env.HOME || "";
+  // Final fallback to os.homedir() so USERPROFILE-only environments (Windows)
+  // resolve; an explicit HOME in execEnv still wins.
+  const home = execEnv.HOME || process.env.HOME || homedir() || "";
   const defaultConfigDir = home ? join(home, ".claude") : "";
   const configuredDir = execEnv.CLAUDE_CONFIG_DIR || defaultConfigDir;
 

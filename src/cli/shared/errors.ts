@@ -1,9 +1,10 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { CONTAINER_RUN_DIR } from "../../runtime/docker";
+import { canUseAnsi } from "../../runtime/kernel/portability";
 
 export function colorPalette(): { green: string; red: string; dim: string; reset: string } {
-  const enabled = process.stdout.isTTY && process.env.NO_COLOR === undefined;
+  const enabled = canUseAnsi();
   if (!enabled) {
     return { green: "", red: "", dim: "", reset: "" };
   }

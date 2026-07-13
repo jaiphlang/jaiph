@@ -1,6 +1,7 @@
 import { resolve } from "node:path";
 import { jaiphModule, type Expr, type WorkflowStepDef } from "../../types";
 import { workflowSymbolForFile } from "../../transpiler";
+import { canUseAnsi } from "../../runtime/kernel/portability";
 
 export type TreeRow = {
   rawLabel: string;
@@ -282,7 +283,7 @@ export function parseLabel(rawLabel: string): { kind: string; name: string } {
 
 export function styleKeywordLabel(rawLabel: string): string {
   const { kind, name } = parseLabel(rawLabel);
-  const enabled = process.stdout.isTTY && process.env.NO_COLOR === undefined;
+  const enabled = canUseAnsi();
   if (!enabled) {
     return `${kind} ${name}`;
   }
@@ -290,7 +291,7 @@ export function styleKeywordLabel(rawLabel: string): string {
 }
 
 export function styleDim(text: string): string {
-  const enabled = process.stdout.isTTY && process.env.NO_COLOR === undefined;
+  const enabled = canUseAnsi();
   if (!enabled) {
     return text;
   }
@@ -298,7 +299,7 @@ export function styleDim(text: string): string {
 }
 
 export function styleYellow(text: string): string {
-  const enabled = process.stdout.isTTY && process.env.NO_COLOR === undefined;
+  const enabled = canUseAnsi();
   if (!enabled) {
     return text;
   }
@@ -306,7 +307,7 @@ export function styleYellow(text: string): string {
 }
 
 export function styleBold(text: string): string {
-  const enabled = process.stdout.isTTY && process.env.NO_COLOR === undefined;
+  const enabled = canUseAnsi();
   if (!enabled) {
     return text;
   }

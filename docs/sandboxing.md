@@ -75,6 +75,10 @@ A second, equally deliberate choice: **enablement lives entirely in environment 
 
 The escape hatch — `JAIPH_UNSAFE=true` or `jaiph run --unsafe` — exists because some environments genuinely cannot run Docker (a sandboxed CI without nested virtualization, a developer iterating on the runtime itself). The choice to take that hatch should be visible and ergonomic, which is why it is a single explicit host-side switch rather than an in-file `config` knob.
 
+## Windows runs host-only
+
+On Windows (`win32`) the Docker sandbox is out of scope: the sandbox modes rely on POSIX socket paths and Linux/macOS-specific workspace presentation, so Jaiph does not attempt them there. `jaiph run` on Windows resolves to **host-only mode automatically** — the same posture as an explicit `JAIPH_UNSAFE=true` — and prints a one-line notice that the run is host-only. The CLI never probes for `docker` and never fails just because a Docker daemon is absent, and `JAIPH_DOCKER_ENABLED=true` cannot force the sandbox back on. Windows workflows therefore run with no OS sandbox; keep the [not-protected-against](#what-docker-does-not-protect-against) list in mind, or run under WSL, where the Linux path (and the full sandbox) applies.
+
 ## Why `jaiph test` does not use Docker
 
 The test runner runs in-process on the host. This is intentional: tests are a development feedback loop, they typically mock prompts and replace external calls, and Docker spawn overhead would harm the iteration cycle. Tests already get isolation from the things they care about (prompts, network) through the runtime's mock infrastructure. The Docker boundary is for `jaiph run`, where the workflow is executing real scripts against real resources.

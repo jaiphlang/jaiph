@@ -467,6 +467,52 @@ describe("prepareClaudeEnv", () => {
     }
   });
 
+  it("resolves the config dir from os.homedir() when HOME is unset", () => {
+    // The named `import { homedir }` in prompt.ts reads node:os's raw (mutable)
+    // require object at call time, so stubbing homedir on that same cached
+    // object changes what prepareClaudeEnv sees. Also clear process.env.HOME so
+    // the os.homedir() fallback (not the ambient HOME) is what resolves.
+    const osRaw = require("node:os") as { homedir: () => string };
+    const root = mkdtempSync(join(tmpdir(), "jaiph-claude-env-homedir-"));
+    const origHomedir = osRaw.homedir;
+    const savedHome = process.env.HOME;
+    delete process.env.HOME;
+    osRaw.homedir = () => root;
+    try {
+      const prepared = prepareClaudeEnv({}, join(root, "workspace"));
+      assert.equal(prepared.error, undefined);
+      assert.equal(prepared.warning, undefined);
+      // A writable <homedir>/.claude means execEnv is returned unchanged and
+      // session-env is created there — proving os.homedir() was the source.
+      assert.equal(prepared.env.CLAUDE_CONFIG_DIR, undefined);
+      assert.ok(existsSync(join(root, ".claude", "session-env")));
+    } finally {
+      osRaw.homedir = origHomedir;
+      if (savedHome === undefined) delete process.env.HOME;
+      else process.env.HOME = savedHome;
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("prefers execEnv.HOME over os.homedir()", () => {
+    const osRaw = require("node:os") as { homedir: () => string };
+    const homeRoot = mkdtempSync(join(tmpdir(), "jaiph-claude-env-home-wins-"));
+    const homedirRoot = mkdtempSync(join(tmpdir(), "jaiph-claude-env-homedir-unused-"));
+    const origHomedir = osRaw.homedir;
+    osRaw.homedir = () => homedirRoot;
+    try {
+      const prepared = prepareClaudeEnv({ HOME: homeRoot }, join(homeRoot, "workspace"));
+      assert.equal(prepared.error, undefined);
+      // Config resolves under execEnv.HOME, not the os.homedir() stub.
+      assert.ok(existsSync(join(homeRoot, ".claude", "session-env")));
+      assert.ok(!existsSync(join(homedirRoot, ".claude")));
+    } finally {
+      osRaw.homedir = origHomedir;
+      rmSync(homeRoot, { recursive: true, force: true });
+      rmSync(homedirRoot, { recursive: true, force: true });
+    }
+  });
+
   it("falls back to workspace-local claude config when default is not writable", () => {
     const root = mkdtempSync(join(tmpdir(), "jaiph-claude-env-fallback-"));
     try {

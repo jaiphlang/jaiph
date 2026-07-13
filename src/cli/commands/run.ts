@@ -12,6 +12,7 @@ import { basename } from "node:path";
 import { parsejaiph } from "../../parser";
 import { buildScripts, buildScriptsFromGraph } from "../../transpiler";
 import { loadModuleGraph, writeModuleGraph } from "../../transpile/module-graph";
+import { canUseAnsi } from "../../runtime/kernel/portability";
 import { metadataToConfig } from "../../config";
 import { buildStepDisplayParamPairs, formatNamedParamsForDisplay } from "./format-params.js";
 import {
@@ -130,7 +131,7 @@ export async function runWorkflow(rest: string[]): Promise<number> {
   const outDir = target ? resolve(target) : mkdtempSync(join(tmpdir(), "jaiph-run-"));
   const shouldCleanup = !target;
   try {
-    const colorEnabled = process.stdout.isTTY && process.env.NO_COLOR === undefined;
+    const colorEnabled = canUseAnsi();
     const isTTY = !!process.stdout.isTTY;
     const startedAt = Date.now();
 

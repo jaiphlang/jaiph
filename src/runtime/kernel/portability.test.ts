@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import { readFileSync, readdirSync } from "node:fs";
 import { resolve, join } from "node:path";
-import { killProcessTree, resolveShell, _portability } from "./portability";
+import { killProcessTree, resolveShell, canUseAnsi, _portability } from "./portability";
 
 // Precedent for platform stubbing: src/runtime/docker.test.ts.
 function withPlatform(platform: string, fn: () => void): void {
@@ -278,6 +278,67 @@ test("resolveShell memoizes: fileExists is not consulted on the second call", ()
       },
     );
   });
+});
+
+// ---------------------------------------------------------------------------
+// canUseAnsi(): single ANSI color/erase policy for the CLI.
+// ---------------------------------------------------------------------------
+
+/** Run `fn` with NO_COLOR forced to a given presence. */
+function withNoColor(value: string | undefined, fn: () => void): void {
+  const saved = process.env.NO_COLOR;
+  if (value === undefined) delete process.env.NO_COLOR;
+  else process.env.NO_COLOR = value;
+  try {
+    fn();
+  } finally {
+    if (saved === undefined) delete process.env.NO_COLOR;
+    else process.env.NO_COLOR = saved;
+  }
+}
+
+test("canUseAnsi: true only when isTTY and NO_COLOR is unset", () => {
+  withNoColor(undefined, () => {
+    assert.equal(canUseAnsi({ isTTY: true }), true);
+  });
+});
+
+test("canUseAnsi: false when isTTY is false", () => {
+  withNoColor(undefined, () => {
+    assert.equal(canUseAnsi({ isTTY: false }), false);
+    assert.equal(canUseAnsi({}), false);
+  });
+});
+
+test("canUseAnsi: false when NO_COLOR is set, even on a TTY", () => {
+  withNoColor("1", () => {
+    assert.equal(canUseAnsi({ isTTY: true }), false);
+  });
+  // NO_COLOR honored even when empty (https://no-color.org: any value).
+  withNoColor("", () => {
+    assert.equal(canUseAnsi({ isTTY: true }), false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Lint contract: the `isTTY && NO_COLOR` policy lives only in portability.ts.
+// ---------------------------------------------------------------------------
+
+test("no production source outside portability.ts gates directly on isTTY && NO_COLOR", () => {
+  // Match either ordering of the combined gate on a single line.
+  const combinedGate = /(isTTY[^\n]*NO_COLOR)|(NO_COLOR[^\n]*isTTY)/;
+  const offenders: string[] = [];
+  for (const file of walkProductionTsFiles(SRC_ROOT)) {
+    const rel = file.slice(REPO_ROOT.length + 1);
+    if (rel === join("src", "runtime", "kernel", "portability.ts")) continue;
+    const content = readFileSync(file, "utf8");
+    if (combinedGate.test(content)) offenders.push(rel);
+  }
+  assert.deepEqual(
+    offenders,
+    [],
+    `ANSI gating must route through canUseAnsi(); offenders: ${offenders.join(", ")}`,
+  );
 });
 
 // ---------------------------------------------------------------------------

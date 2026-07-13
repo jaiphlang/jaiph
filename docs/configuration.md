@@ -83,14 +83,17 @@ In-file `runtime.docker_enabled` is not supported (`E_PARSE`); use the env-only 
 
 ## Docker enablement
 
+Checks are applied top to bottom; the first match wins.
+
 | Check | Result |
 |---|---|
+| Platform is Windows (`win32`) | Docker off (host-only mode, with a one-line notice). Overrides everything below, including `JAIPH_DOCKER_ENABLED=true`. |
 | `JAIPH_DOCKER_ENABLED` is set to exact `true` | Docker on. |
 | `JAIPH_DOCKER_ENABLED` is set to any other value | Docker off. |
 | `JAIPH_DOCKER_ENABLED` is unset and `JAIPH_UNSAFE=true` | Docker off. |
 | Default (no env) | Docker on. |
 
-`CI=true` does not change this default. Host `jaiph run --raw` never consults this branch — the workflow runner is local in that path. See [Sandboxing](sandboxing.md) for the full model.
+`CI=true` does not change this default. Host `jaiph run --raw` never consults this branch — the workflow runner is local in that path. On Windows the Docker sandbox is out of scope, so `jaiph run` resolves to host-only mode automatically without probing `docker` or failing on a missing daemon — see [Sandboxing — Windows runs host-only](sandboxing.md#windows-runs-host-only) for the full model.
 
 ## Precedence
 {: #precedence}
