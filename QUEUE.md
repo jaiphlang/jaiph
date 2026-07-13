@@ -14,21 +14,6 @@ Process rules:
 
 ***
 
-## Distro: build and release `jaiph-windows-x64.exe` #dev-ready
-
-The release workflow (`.github/workflows/release.yml`) cross-compiles four assets (`jaiph-{darwin,linux}-{arm64,x64}`) via `bun build --compile` and publishes them with `SHA256SUMS`. Add Windows:
-
-* New matrix entry: `--target=bun-windows-x64`, asset name `jaiph-windows-x64.exe` (Bun has no Windows arm64 target — do not add one).
-* Include the `.exe` in `SHA256SUMS` generation and in both the stable and nightly `gh release` upload lists.
-* Add a Windows sanity gate alongside the existing linux-x64 one: run `jaiph-windows-x64.exe --version` on a `windows-latest` job and, for stable releases, assert the output matches the tag.
-* Update the "Release asset naming contract" in `docs/contributing.md` to include the new asset name.
-
-Acceptance:
-
-* A nightly release run publishes five binaries + `SHA256SUMS`, and the `.exe` checksum entry verifies against the downloaded asset.
-* The Windows sanity gate fails the release when `--version` output mismatches the tag (verified by test or a deliberate dry-run with a wrong version).
-* `docs/contributing.md` naming contract lists `jaiph-windows-x64.exe`; the e2e installer test's asset-name mapping and the contract stay in sync (grep/parity check).
-
 ## Distro: PowerShell installer at `jaiph.org/install.ps1` #dev-ready
 
 The bash installer (`docs/install`) downloads a per-platform binary from the GitHub Release for a pinned ref and verifies it against `SHA256SUMS`. Windows users need a native equivalent — the bash script must keep rejecting Windows and point at the PowerShell one.
