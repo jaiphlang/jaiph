@@ -123,7 +123,7 @@ User-visible contracts (banner, hooks, run artifacts, `run_summary.jsonl`, `retu
 ### CLI responsibilities
 
 - Parse, validate, and launch workflows/tests.
-- Own **process spawn** for `jaiph run` (detached workflow runner process group for signal propagation).
+- Own **process spawn** for `jaiph run` (detached workflow runner process group for signal propagation). Terminating a run means terminating the whole tree — the detached leader plus the agent backends and script children it spawned — routed through **`killProcessTree(pid, signal)`** (`src/runtime/kernel/portability.ts`), the single sanctioned home for group kills. On POSIX it signals the leader's process group with **`process.kill(-pid, signal)`**, falling back to a per-process kill if the group no longer exists (`ESRCH`). On **`win32`** a negative-PID group kill throws and a per-process kill would orphan the children, so it force-kills the tree with **`taskkill /pid <pid> /T /F`** (spawned, not shelled), degrading to a per-process kill if `taskkill` cannot be launched. Because `taskkill /F` is already forceful, a follow-up `SIGKILL` escalation after a `SIGTERM`/`SIGINT` is a **documented no-op** on `win32`. All group-kill call sites route through this helper: run teardown (`src/cli/run/lifecycle.ts`), the prompt watchdog (`src/runtime/kernel/prompt.ts`), and the Docker run-timeout kill (`src/runtime/docker.ts`).
 - Parse live runtime events; render terminal progress; trigger hooks — skipped in **`jaiph run --raw`** (child stdio inherited; see [CLI](cli.md#jaiph-run)).
 
 ## Contracts

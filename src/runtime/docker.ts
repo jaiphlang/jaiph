@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join, resolve, dirname, relative } from "node:path";
 import type { RuntimeConfig } from "../types";
 import { OVERLAY_RUN_SH_BASE64, decodeEmbeddedAsset } from "./embedded-assets";
+import { killProcessTree } from "./kernel/portability";
 
 /** Resolved Docker runtime config with defaults applied and env overrides merged. */
 export interface DockerRunConfig {
@@ -812,17 +813,16 @@ export function spawnDockerProcess(opts: DockerSpawnOptions): DockerSpawnResult 
   let timeoutTimer: NodeJS.Timeout | undefined;
   if (opts.config.timeoutSeconds > 0) {
     timeoutTimer = setTimeout(() => {
-      try {
-        child.kill("SIGTERM");
-      } catch {
-        // no-op
+      const pid = child.pid;
+      if (!pid) {
+        return;
       }
+      // Terminate the `docker run` child and its descendants. On win32 the
+      // taskkill /T force-kills the tree, so the SIGKILL escalation below is a
+      // documented no-op there (see killProcessTree).
+      killProcessTree(pid, "SIGTERM");
       setTimeout(() => {
-        try {
-          child.kill("SIGKILL");
-        } catch {
-          // no-op
-        }
+        killProcessTree(pid, "SIGKILL");
       }, 5000);
     }, opts.config.timeoutSeconds * 1000);
   }

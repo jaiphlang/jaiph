@@ -5,6 +5,7 @@ import { writeFileSync, readFileSync, existsSync, accessSync, mkdirSync, cpSync,
 import { basename, delimiter, join } from "node:path";
 import { parseStream, type StreamWriter } from "./stream-parser";
 import { consumeNextMockResponse, dispatchMockArms, type MockPromptArm } from "./mock";
+import { killProcessTree } from "./portability";
 
 export type PromptConfig = {
   backend: string;
@@ -452,17 +453,16 @@ export function installPromptWatchdog(
   };
 
   const killChild = (): void => {
-    try {
-      child.kill("SIGTERM");
-    } catch {
-      // no-op
+    const pid = child.pid;
+    if (!pid) {
+      return;
     }
+    // Terminate the backend and any descendants it spawned. On win32 this
+    // taskkill /T already force-kills the tree, so the SIGKILL escalation
+    // below is a documented no-op there (see killProcessTree).
+    killProcessTree(pid, "SIGTERM");
     const escalate = setTimeout(() => {
-      try {
-        child.kill("SIGKILL");
-      } catch {
-        // no-op
-      }
+      killProcessTree(pid, "SIGKILL");
     }, 5000);
     escalate.unref?.();
   };

@@ -236,7 +236,7 @@ The retry backoff above handles a backend that *fails*. A separate set of watchd
 
 Set any variable to `0` to disable that layer. The idle timer resets on every chunk of backend output, so a slow-but-active run is bounded only by the absolute cap.
 
-The completion-grace layer specifically addresses the known `claude -p` failure mode where the CLI streams its final answer (and the terminal `result` event) but the process never exits — often because a descendant it spawned is still holding the output pipe open. When a watchdog fires it sends `SIGTERM`, escalating to `SIGKILL` after 5s, and tears down the runtime's handles on the child's stdio so a lingering descendant cannot keep the run alive. Under Docker, `runtime.docker_timeout_seconds` remains the outer backstop for the whole container.
+The completion-grace layer specifically addresses the known `claude -p` failure mode where the CLI streams its final answer (and the terminal `result` event) but the process never exits — often because a descendant it spawned is still holding the output pipe open. When a watchdog fires it terminates the backend's whole process tree (via `killProcessTree`; see [Architecture](architecture.md)) with `SIGTERM`, escalating to `SIGKILL` after 5s, and tears down the runtime's handles on the child's stdio so a lingering descendant cannot keep the run alive. On Windows the tree is force-killed with `taskkill /T` on the first signal, so the `SIGKILL` escalation is a no-op. Under Docker, `runtime.docker_timeout_seconds` remains the outer backstop for the whole container.
 
 ## Custom agent commands
 
