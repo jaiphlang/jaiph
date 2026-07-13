@@ -14,24 +14,6 @@ Process rules:
 
 ***
 
-## Portability: single `resolveShell()` seam for inline shell lines and hooks #dev-ready
-
-Inline workflow shell lines run via hardcoded `spawn("sh", ["-c", ...])` (`executeShLine` in `src/runtime/kernel/node-workflow-runtime.ts`) and hooks do the same (`src/cli/run/hooks.ts`). Jaiph's language semantics require POSIX `sh` on all platforms — inline lines must NOT be translated to cmd/PowerShell, or workflows stop being portable.
-
-Add `resolveShell(): string` to the portability module:
-
-* On POSIX: `sh`.
-* On `win32`: locate `sh.exe` on `PATH`, then in the standard Git for Windows locations (`<Git>/bin/sh.exe`, `<Git>/usr/bin/sh.exe`). If none found, throw a Jaiph error with a stable code (e.g. `E_NO_POSIX_SHELL`) telling the user to install Git for Windows.
-* Resolution is memoized per process.
-
-Both call sites go through `resolveShell()`. No other `spawn("sh", ...)` remains in `src/`.
-
-Acceptance:
-
-* Unit tests stub `process.platform` and `PATH` lookup: POSIX returns `sh`; win32 returns a discovered `sh.exe` path; win32 with no shell available throws `E_NO_POSIX_SHELL` and the message names Git for Windows.
-* A grep-style test asserts no literal `spawn("sh"` / `spawn('sh'` call sites exist in `src/` outside the portability module.
-* Inline shell-line semantics on POSIX are unchanged (existing e2e passes).
-
 ## Portability: home directory, Docker gating, and ANSI on win32 #dev-ready
 
 Remaining small POSIX assumptions for a host-only Windows runtime:
