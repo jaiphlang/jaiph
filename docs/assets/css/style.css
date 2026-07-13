@@ -175,16 +175,8 @@ body {
     margin-bottom: -6.2rem;
 }
 
-.top-nav-logo .jaiph-logo-dark {
-    display: none;
-}
-
-[data-theme="dark"] .top-nav-logo .jaiph-logo-light {
-    display: none;
-}
-
-[data-theme="dark"] .top-nav-logo .jaiph-logo-dark {
-    display: inline;
+[data-theme="dark"] .top-nav-logo img {
+    filter: brightness(0.85) contrast(1.15) grayscale(0.3);
 }
 
 /* Landing logo hangs below sticky nav; keep in-page targets out from under it */
