@@ -1,6 +1,7 @@
 import { ChildProcess } from "node:child_process";
 
 import { spawnJaiphWorkflowProcess } from "../../runtime/kernel/workflow-launch";
+import { killProcessTree } from "../../runtime/kernel/portability";
 
 export function spawnRunProcess(
   args: string[],
@@ -17,15 +18,7 @@ export function terminateRunProcessGroup(
   if (!pid) {
     return;
   }
-  try {
-    process.kill(-pid, signal);
-  } catch {
-    try {
-      child.kill(signal);
-    } catch {
-      // no-op
-    }
-  }
+  killProcessTree(pid, signal);
 }
 
 export function setupRunSignalHandlers(

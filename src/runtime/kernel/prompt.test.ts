@@ -1,4 +1,4 @@
-import { describe, it } from "node:test";
+import { describe, it, afterEach } from "node:test";
 import * as assert from "node:assert/strict";
 import { chmodSync, existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -235,18 +235,40 @@ describe("executePrompt", () => {
 });
 
 /** Minimal ChildProcess stand-in: an EventEmitter with a recording `kill`. */
+const FAKE_CHILD_PID = 4242;
+let origProcessKill: typeof process.kill | undefined;
+
+// The watchdog terminates via killProcessTree(pid, signal) (portability.ts),
+// which on POSIX calls process.kill(-pid|pid, signal). Spy on process.kill and
+// record the signals aimed at the fake child's pid (either sign). Restored per
+// test by the afterEach below so the spy never leaks into other suites.
 function makeFakeChild(): { child: ChildProcess; killSignals: string[] } {
   const emitter = new EventEmitter() as EventEmitter & { pid: number; kill: (s?: string) => boolean };
   const killSignals: string[] = [];
-  emitter.pid = 4242;
+  emitter.pid = FAKE_CHILD_PID;
   emitter.kill = (signal?: string) => {
     killSignals.push(signal ?? "SIGTERM");
     return true;
   };
+  origProcessKill = process.kill;
+  (process as { kill: typeof process.kill }).kill = ((pid: number, signal?: NodeJS.Signals) => {
+    if (Math.abs(pid) === FAKE_CHILD_PID) {
+      killSignals.push(signal ?? "SIGTERM");
+      return true;
+    }
+    return origProcessKill!(pid, signal);
+  }) as typeof process.kill;
   return { child: emitter as unknown as ChildProcess, killSignals };
 }
 
 describe("installPromptWatchdog", () => {
+  afterEach(() => {
+    if (origProcessKill) {
+      (process as { kill: typeof process.kill }).kill = origProcessKill;
+      origProcessKill = undefined;
+    }
+  });
+
   it("layer 2: terminates and fails when output stalls past the idle timeout", async () => {
     const { child, killSignals } = makeFakeChild();
     const events: Array<{ status: number; reason: string; final: string }> = [];
