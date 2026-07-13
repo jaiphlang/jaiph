@@ -58,18 +58,20 @@ script npm_version_no_tag = `npm version "$1" --no-git-tag-version --allow-same-
 script update_install_release_ref = ```python3
 import sys
 old, new = sys.argv[1], sys.argv[2]
-path = "docs/install"
-with open(path, "r", encoding="utf-8") as f:
-    src = f.read()
 needle = f"v{old}"
-count = src.count(needle)
-if count == 0:
-    sys.stderr.write(f"docs/install: hardcoded ref v{old} not found\n")
-    sys.exit(1)
-new_src = src.replace(needle, f"v{new}")
-with open(path, "w", encoding="utf-8") as f:
-    f.write(new_src)
-print(count)
+total = 0
+# Both installers pin the same hardcoded ref; keep them in lockstep.
+for path in ("docs/install", "docs/install.ps1"):
+    with open(path, "r", encoding="utf-8") as f:
+        src = f.read()
+    count = src.count(needle)
+    if count == 0:
+        sys.stderr.write(f"{path}: hardcoded ref v{old} not found\n")
+        sys.exit(1)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(src.replace(needle, f"v{new}"))
+    total += count
+print(total)
 ```
 
 script run_npm_build = `npm run build >&2`
@@ -124,7 +126,7 @@ workflow default(arg) {
   log """
     prepare_release: staged release v${version}
       - package.json + package-lock.json (npm version ${version})
-      - docs/install (release ref v${old_version} -> v${version})
+      - docs/install + docs/install.ps1 (release ref v${old_version} -> v${version})
       - docs/registry (regenerated)
       - dist/ (rebuilt; jaiph --version == jaiph ${version})
 

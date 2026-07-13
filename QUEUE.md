@@ -14,24 +14,6 @@ Process rules:
 
 ***
 
-## Distro: PowerShell installer at `jaiph.org/install.ps1` #dev-ready
-
-The bash installer (`docs/install`) downloads a per-platform binary from the GitHub Release for a pinned ref and verifies it against `SHA256SUMS`. Windows users need a native equivalent — the bash script must keep rejecting Windows and point at the PowerShell one.
-
-Add `docs/install.ps1` (served as `https://jaiph.org/install.ps1`, `irm https://jaiph.org/install.ps1 | iex`):
-
-* Downloads `jaiph-windows-x64.exe` and `SHA256SUMS` from the pinned release ref (default: current stable tag; overridable via `JAIPH_REPO_REF` / first argument, mirroring the bash installer).
-* Verifies the SHA-256 (`Get-FileHash`) against `SHA256SUMS`; mismatch aborts and installs nothing.
-* Installs to `%LOCALAPPDATA%\jaiph\bin\jaiph.exe` (overridable via `JAIPH_BIN_DIR`), adds the directory to the user `PATH` if absent, and prints the same try-it hints as the bash installer.
-* Non-x64 / ARM Windows: exit with a documented unsupported-platform message.
-* Update `docs/install`'s unsupported-platform message to mention the PowerShell installer for Windows, and document the Windows install path in `docs/setup.md` and the main page install tabs.
-
-Acceptance:
-
-* Pester (or equivalent) tests run on `windows-latest` in CI, pointing the installer at a `file://`-style local release directory (same technique as `e2e/tests/07_installer_binary.sh`): happy path installs and `jaiph --version` works; checksum mismatch exits non-zero and leaves no binary; unsupported arch exits with the documented message.
-* The installed binary runs from a shell with no Node/npm/Bun on `PATH`.
-* `docs/setup.md` and the main page reference the PowerShell one-liner (docs parity check passes).
-
 ## Distro: main-page install tabs — Windows variant with platform auto-detect #dev-ready
 
 The main page (`docs/index.html`) hero has three install tabs (run sample / init project / just install), all showing bash `curl … | bash` one-liners. Tab switching in `docs/assets/js/main.js` is click-only; there is no platform detection. Windows visitors currently see commands that cannot run natively.

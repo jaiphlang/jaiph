@@ -58,6 +58,12 @@ Requires `node` and `curl`. The script installs Jaiph automatically if needed.
 curl -fsSL https://jaiph.org/install | bash
 ```
 
+On Windows, install with PowerShell instead (installs `jaiph-windows-x64.exe` to `%LOCALAPPDATA%\jaiph\bin`):
+
+```powershell
+irm https://jaiph.org/install.ps1 | iex
+```
+
 Or install from npm:
 
 ```bash
