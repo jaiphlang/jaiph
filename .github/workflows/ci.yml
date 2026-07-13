@@ -312,9 +312,49 @@ jobs:
           $env:JAIPH_TEST_WINDOWS_EXE = Join-Path $env:GITHUB_WORKSPACE "jaiph-windows-x64.exe"
           ./e2e/tests/installer_powershell.ps1
 
+  windows-native-smoke:
+    name: Native Windows smoke (windows-latest, no WSL)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build TypeScript + embed assets
+        run: npm run build
+
+      # Same build as release.yml's windows-x64 leg / the installer-powershell
+      # job, so the smoke test runs the real self-contained binary we ship.
+      - name: Cross-compile windows-x64 standalone binary
+        shell: bash
+        run: |
+          set -euo pipefail
+          bun build --compile --target=bun-windows-x64 ./src/cli.ts --outfile jaiph-windows-x64.exe
+          ls -la jaiph-windows-x64.exe
+
+      # Native run only — no `wsl`. Git for Windows' sh.exe (preinstalled on the
+      # runner) is the POSIX shell for inline lines; the harness shadows `wsl` so
+      # any accidental invocation fails the job.
+      - name: Run native Windows smoke (e2e/tests/windows_native_smoke.ps1)
+        shell: pwsh
+        run: |
+          $env:JAIPH_TEST_WINDOWS_EXE = Join-Path $env:GITHUB_WORKSPACE "jaiph-windows-x64.exe"
+          ./e2e/tests/windows_native_smoke.ps1
+
   docker-publish:
     name: Publish Docker runtime image
-    needs: [test, e2e, docs-local, e2e-wsl, installer-powershell]
+    needs: [test, e2e, docs-local, e2e-wsl, installer-powershell, windows-native-smoke]
     if: github.ref == 'refs/heads/nightly' || startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
