@@ -109,7 +109,11 @@ test.describe.serial('docs landing page', () => {
 
       await page.goto('/');
 
-      const codeEl = page.locator('section.try-it-out [data-panel="try-run-sample"] pre code');
+      // Scope to the active platform variant: the run-sample panel now holds a
+      // POSIX (bash) and a Windows variant. On CI (Linux) the POSIX one is active.
+      const codeEl = page.locator(
+        'section.try-it-out [data-panel="try-run-sample"] .os-variant.is-active pre code',
+      );
       await expect(codeEl).toBeVisible();
       let script = (await codeEl.innerText()).trim();
       script = script.replace(/https:\/\/jaiph\.org/g, LOCAL_DOCS_SITE);
@@ -143,6 +147,114 @@ test.describe.serial('docs landing page', () => {
       console.log('actual', actual);
       console.log('expected', expected);
       expect(actual, combined.slice(-4000)).toBe(expected);
+    });
+  });
+
+  test.describe('install tabs — platform variants', () => {
+    const PS_INSTALL = 'irm https://jaiph.org/install.ps1 | iex';
+
+    /** Override the platform Jaiph auto-detects, before any page script runs. */
+    async function emulatePlatform(page: import('@playwright/test').Page, platform: string) {
+      await page.addInitScript((p) => {
+        Object.defineProperty(navigator, 'platform', { configurable: true, get: () => p });
+        Object.defineProperty(navigator, 'userAgentData', {
+          configurable: true,
+          get: () => ({ platform: /win/i.test(p) ? 'Windows' : 'Linux' }),
+        });
+      }, platform);
+    }
+
+    const activeRunSampleVariant = (page: import('@playwright/test').Page) =>
+      page.locator('section.try-it-out [data-panel="try-run-sample"] .os-variant.is-active');
+
+    test('Windows visitor defaults to the PowerShell install command', async ({ page }) => {
+      await emulatePlatform(page, 'Win32');
+      await page.goto('/');
+
+      const active = activeRunSampleVariant(page);
+      await expect(active).toHaveAttribute('data-os', 'windows');
+      await expect(active.locator('pre code').first()).toHaveText(PS_INSTALL);
+    });
+
+    test('macOS/Linux visitor keeps the bash default unchanged', async ({ page }) => {
+      await emulatePlatform(page, 'MacIntel');
+      await page.goto('/');
+
+      const active = activeRunSampleVariant(page);
+      await expect(active).toHaveAttribute('data-os', 'posix');
+      await expect(active.locator('pre code')).toContainText('curl -fsSL https://jaiph.org/run | bash');
+    });
+
+    test('manual platform + tab switching works in both directions', async ({ page }) => {
+      await emulatePlatform(page, 'MacIntel');
+      await page.goto('/');
+
+      // Starts on POSIX; manual switch to Windows reveals the PowerShell command.
+      await expect(activeRunSampleVariant(page)).toHaveAttribute('data-os', 'posix');
+      await page.locator('section.try-it-out .os-switch-button[data-os="windows"]').click();
+      await expect(activeRunSampleVariant(page)).toHaveAttribute('data-os', 'windows');
+
+      // Tab switch keeps the chosen platform: the install tab shows PowerShell.
+      await page.locator('[data-target="try-install-only"]').click();
+      const installActive = page.locator(
+        'section.try-it-out [data-panel="try-install-only"] .os-variant.is-active',
+      );
+      await expect(installActive).toHaveAttribute('data-os', 'windows');
+      await expect(installActive.locator('pre code').first()).toHaveText(PS_INSTALL);
+
+      // Switch back to POSIX; the install tab shows the bash one-liner.
+      await page.locator('section.try-it-out .os-switch-button[data-os="posix"]').click();
+      await expect(installActive).toHaveAttribute('data-os', 'posix');
+      await expect(installActive.locator('pre code').first()).toHaveText(
+        'curl -fsSL https://jaiph.org/install | bash',
+      );
+    });
+
+    test('copy button on the Windows install variant copies the exact irm line', async ({ page }) => {
+      await page.addInitScript(() => {
+        (window as unknown as { __copied: string[] }).__copied = [];
+        Object.defineProperty(navigator, 'clipboard', {
+          configurable: true,
+          value: {
+            writeText: (t: string) => {
+              (window as unknown as { __copied: string[] }).__copied.push(t);
+              return Promise.resolve();
+            },
+          },
+        });
+      });
+      await page.goto('/');
+
+      await page.locator('section.try-it-out .os-switch-button[data-os="windows"]').click();
+      await page.locator('[data-target="try-install-only"]').click();
+
+      const winInstall = page.locator(
+        'section.try-it-out [data-panel="try-install-only"] .os-variant[data-os="windows"]',
+      );
+      await winInstall.locator('.copy-code-button').first().click();
+
+      const copied = await page.evaluate(() => (window as unknown as { __copied: string[] }).__copied);
+      expect(copied).toContain(PS_INSTALL);
+    });
+
+    test('with JS disabled, bash commands render and no panel is blank', async ({ browser }) => {
+      const context = await browser.newContext({ javaScriptEnabled: false });
+      const page = await context.newPage();
+      try {
+        await page.goto('/');
+        const card = page.locator('section.try-it-out .card');
+        // All three bash one-liners are statically present (not JS-injected).
+        await expect(card).toContainText('curl -fsSL https://jaiph.org/run | bash');
+        await expect(card).toContainText('curl -fsSL https://jaiph.org/init | bash');
+        await expect(card).toContainText('curl -fsSL https://jaiph.org/install | bash');
+        // The Windows variant is reachable via static tab markup.
+        await expect(card).toContainText(PS_INSTALL);
+        // The active panel renders its bash command (not blank).
+        const activePanel = page.locator('section.try-it-out .code-tab-panel.is-active');
+        await expect(activePanel).toContainText('curl -fsSL https://jaiph.org/run | bash');
+      } finally {
+        await context.close();
+      }
     });
   });
 

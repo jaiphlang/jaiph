@@ -704,6 +704,41 @@ pre code .code-line::before {
     display: block;
 }
 
+.os-switch {
+    display: flex;
+    gap: 0.4rem;
+    margin-bottom: 0.75rem;
+}
+
+.os-switch-button {
+    border: 1px solid var(--tab-border);
+    border-radius: 8px;
+    background: var(--tab-bg);
+    color: var(--muted);
+    font-size: 0.8rem;
+    font-weight: 600;
+    font-family: "Fira Code", monospace;
+    padding: 0.3rem 0.7rem;
+    cursor: pointer;
+}
+
+.os-switch-button.is-active {
+    background: var(--tab-active-bg);
+    border-color: var(--tab-active-border);
+    color: var(--tab-active-color);
+}
+
+/* Platform variants: static markup shows the POSIX (bash) variant; JS reveals
+   the Windows variant on demand (and by default for Windows visitors). Without
+   JS the POSIX variant stays visible and the Windows one remains in the markup. */
+.os-variant {
+    display: none;
+}
+
+.os-variant.is-active {
+    display: block;
+}
+
 .primitive-list {
     margin: 0.5rem 0 0;
 }

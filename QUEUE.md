@@ -14,24 +14,6 @@ Process rules:
 
 ***
 
-## Distro: main-page install tabs — Windows variant with platform auto-detect #dev-ready
-
-The main page (`docs/index.html`) hero has three install tabs (run sample / init project / just install), all showing bash `curl … | bash` one-liners. Tab switching in `docs/assets/js/main.js` is click-only; there is no platform detection. Windows visitors currently see commands that cannot run natively.
-
-Given a published PowerShell installer at `https://jaiph.org/install.ps1` (`irm https://jaiph.org/install.ps1 | iex`):
-
-* Add a Windows variant to the install section: at minimum the "Just install" panel must offer the PowerShell one-liner alongside the curl one (separate tab, sub-toggle, or swapped command — implementer's choice, but the PowerShell command must be copy-able via the existing copy button).
-* Auto-detect the visitor's platform on load (`navigator.userAgentData?.platform` with `navigator.platform` fallback) and default to the Windows variant for Windows visitors; macOS/Linux visitors see exactly today's default. Manual switching always remains possible; no layout shift for non-Windows users.
-* Tabs whose commands have no PowerShell equivalent (run sample / init project) must not show a bash-only command as the Windows default — show the install one-liner plus a short "then run:" `jaiph` command instead, or an equivalent honest fallback.
-* Keep the static-render constraint: the page must remain correct with JS disabled (bash commands shown, Windows variant reachable via tab markup).
-
-Acceptance:
-
-* Playwright docs tests (same suite as the "Try it out" test) assert: with a Windows platform emulated, the page defaults to the PowerShell command; with macOS/Linux emulated, the default is unchanged from today; manual tab switching works in both.
-* The copy button on the Windows variant copies the exact `irm … | iex` line (asserted via clipboard stub).
-* With JS disabled, all bash commands render and no panel is blank.
-* Docs parity check (`.jaiph/docs_parity.jh`) passes with the new content.
-
 ## Distro: native Windows smoke job in CI #dev-ready
 
 CI's only Windows coverage runs the e2e suite inside WSL (`e2e-wsl` in `.github/workflows/ci.yml`), which exercises the Linux binary. Developing Jaiph on Windows is out of scope — this job proves *running* Jaiph natively works.
