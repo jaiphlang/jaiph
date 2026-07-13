@@ -34,6 +34,22 @@ export const _portability = {
   },
 };
 
+/**
+ * Whether ANSI SGR colors and cursor/erase sequences may be emitted.
+ *
+ * Single policy for the whole CLI: ANSI is on only when writing to a TTY and
+ * `NO_COLOR` is unset (https://no-color.org). Live status rendering, the
+ * progress tree, and error formatting route their `isTTY && NO_COLOR` gate
+ * through here so the rule lives in one place rather than being re-derived at
+ * each emission site.
+ *
+ * On Windows 10+ Node enables VT processing on the console automatically, so
+ * `isTTY` is a sufficient proxy for ANSI support — no extra win32 branch.
+ */
+export function canUseAnsi(stream: { isTTY?: boolean } = process.stdout): boolean {
+  return Boolean(stream.isTTY) && process.env.NO_COLOR === undefined;
+}
+
 let cachedShell: string | undefined;
 
 /**

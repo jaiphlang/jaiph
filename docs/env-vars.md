@@ -43,7 +43,7 @@ The table below covers every `JAIPH_*` name read from `process.env` / `env` in `
 | `JAIPH_CODEX_API_URL` | runtime | string | `https://api.openai.com/v1/chat/completions` | — | Chat-completions endpoint for the `codex` backend. |
 | `JAIPH_DEBUG` | host, runtime | bool (exact `"true"`) | `false` | `run.debug` | Enable debug tracing for the run. |
 | `JAIPH_DEBUG_LOCKED` | internal | bool | — | — | Lock flag for `JAIPH_DEBUG`. |
-| `JAIPH_DOCKER_ENABLED` | host | bool (exact `true`) | — | — | Force Docker on (`true`) or off (any other value). When unset, Docker is on unless `JAIPH_UNSAFE=true`. |
+| `JAIPH_DOCKER_ENABLED` | host | bool (exact `true`) | — | — | Force Docker on (`true`) or off (any other value). When unset, Docker is on unless `JAIPH_UNSAFE=true`. Ignored on Windows (`win32`), where the sandbox is out of scope and runs are always host-only. |
 | `JAIPH_DOCKER_IMAGE` | host | string | `ghcr.io/jaiphlang/jaiph-runtime:<version>` | `runtime.docker_image` | Container image. Must already contain `jaiph`. |
 | `JAIPH_DOCKER_KEEP_SANDBOX` | host | bool (`1` / `true`) | `false` | — | Copy mode only — when enabled, leave the host-side `.sandbox-<id>/` clone on disk after exit for debugging. |
 | `JAIPH_DOCKER_NETWORK` | host | string (`default`, `none`, or named network) | `default` | `runtime.docker_network` | `docker run --network` value. `none` disables egress. |
@@ -115,7 +115,7 @@ These error codes surface during Docker-backed `jaiph run` invocations. They are
 
 | Code | Trigger | Behaviour |
 |---|---|---|
-| `E_DOCKER_NOT_FOUND` | `docker info` fails (Docker not installed or daemon not running). | Run exits before launch. No fallback to local execution. |
+| `E_DOCKER_NOT_FOUND` | `docker info` fails (Docker not installed or daemon not running). | Run exits before launch. No fallback to local execution. Not reachable on Windows, where the CLI resolves to host-only mode without probing `docker`. |
 | `E_DOCKER_PULL` | `docker pull` fails (network error, image not found, auth failure). | Run exits before launch. |
 | `E_DOCKER_NO_JAIPH` | Selected image does not contain a `jaiph` CLI. | Run exits before launch. |
 | `E_DOCKER_RUNS_DIR` | Absolute `JAIPH_RUNS_DIR` points outside the workspace. | Run exits before launch. |

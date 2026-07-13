@@ -22,7 +22,9 @@ import {
   cleanupDocker,
   withDockerExitGuard,
   _dockerExec,
+  _dockerSpawn,
   _uidDetect,
+  _win32Notice,
   type DockerRunConfig,
   type DockerSpawnOptions,
   type DockerSpawnResult,
@@ -218,6 +220,42 @@ test("resolveDockerConfig: in-file dockerEnabled is ignored (field removed from 
   // the enabled flag is derived from env only.
   const cfg = resolveDockerConfig({} as any, { JAIPH_UNSAFE: "true" });
   assert.equal(cfg.enabled, false, "JAIPH_UNSAFE disables Docker regardless of in-file");
+});
+
+test("resolveDockerConfig: win32 forces host-only mode, notice once, zero docker invocations", () => {
+  const origPlatform = Object.getOwnPropertyDescriptor(process, "platform");
+  Object.defineProperty(process, "platform", { value: "win32", configurable: true });
+  // Spy every docker entry point so we can assert win32 never probes.
+  const origExec = _dockerExec.run;
+  const origSpawn = _dockerSpawn.run;
+  const origWrite = _win32Notice.write;
+  const origEmitted = _win32Notice.emitted;
+  let execCalls = 0;
+  let spawnCalls = 0;
+  const notices: string[] = [];
+  _dockerExec.run = () => { execCalls += 1; };
+  _dockerSpawn.run = () => { spawnCalls += 1; return {} as any; };
+  _win32Notice.write = (msg) => { notices.push(msg); };
+  _win32Notice.emitted = false;
+  try {
+    // Even an explicit JAIPH_DOCKER_ENABLED=true cannot re-enable Docker on win32.
+    const first = resolveDockerConfig(undefined, { JAIPH_DOCKER_ENABLED: "true" });
+    const second = resolveDockerConfig(undefined, {});
+    assert.equal(first.enabled, false, "win32 resolves to host-only mode");
+    assert.equal(second.enabled, false, "win32 resolves to host-only mode on every call");
+    assert.equal(notices.length, 1, "notice is emitted exactly once across calls");
+    assert.match(notices[0], /Windows/, "notice mentions Windows");
+    assert.match(notices[0], /host-only|no sandbox/, "notice describes host-only mode");
+    assert.equal(execCalls, 0, "no docker exec probing on win32");
+    assert.equal(spawnCalls, 0, "no docker spawn on win32");
+  } finally {
+    _dockerExec.run = origExec;
+    _dockerSpawn.run = origSpawn;
+    _win32Notice.write = origWrite;
+    _win32Notice.emitted = origEmitted;
+    if (origPlatform) Object.defineProperty(process, "platform", origPlatform);
+    else Object.defineProperty(process, "platform", { value: process.platform, configurable: true });
+  }
 });
 
 test("checkDockerAvailable: E_DOCKER_NOT_FOUND message mentions JAIPH_UNSAFE", () => {

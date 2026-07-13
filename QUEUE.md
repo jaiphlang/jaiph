@@ -14,20 +14,6 @@ Process rules:
 
 ***
 
-## Portability: home directory, Docker gating, and ANSI on win32 #dev-ready
-
-Remaining small POSIX assumptions for a host-only Windows runtime:
-
-1. `prepareClaudeEnv` (`src/runtime/kernel/prompt.ts`) reads `execEnv.HOME || process.env.HOME`. Use `os.homedir()` as the final fallback so `USERPROFILE`-only environments resolve; an explicit `HOME` in `execEnv` still wins.
-2. Docker sandboxing (`src/runtime/docker.ts`) hardcodes POSIX socket paths and Linux/macOS workspace-presentation branches. On `win32`, the Docker sandbox is out of scope: `resolveDockerConfig` must resolve to host-only mode with a one-line notice (same UX as an explicit `JAIPH_UNSAFE=true`), never attempt `docker` probing, and never hard-fail because Docker is missing.
-3. Live status rendering already gates SGR colors on `isTTY` + `NO_COLOR` and uses a single erase/cursor-up sequence (`src/cli/run/stderr-handler.ts`). Node enables VT processing on Windows 10+; no rendering change required. Add a `canUseAnsi()` helper to the portability module and route the existing gates through it so the policy lives in one place.
-
-Acceptance:
-
-* Unit test: with `HOME` unset and `os.homedir()` stubbed, `prepareClaudeEnv` resolves the config dir from `os.homedir()`; with `execEnv.HOME` set, it wins.
-* Unit test: with `process.platform` stubbed to `win32`, Docker resolution returns host-only mode, emits the notice once, and performs zero `docker` invocations (spawn spied).
-* Unit test: `canUseAnsi()` is false when `isTTY` is false or `NO_COLOR` is set; all color/erase emission sites consume it (grep test: no direct `isTTY && NO_COLOR` gating outside the portability module).
-
 ## Distro: build and release `jaiph-windows-x64.exe` #dev-ready
 
 The release workflow (`.github/workflows/release.yml`) cross-compiles four assets (`jaiph-{darwin,linux}-{arm64,x64}`) via `bun build --compile` and publishes them with `SHA256SUMS`. Add Windows:

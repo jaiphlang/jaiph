@@ -90,8 +90,33 @@ const DEFAULTS: DockerRunConfig = {
 };
 
 /**
+ * Test seam for the one-time win32 host-only notice. Tests reset `emitted`
+ * between runs and can spy `write` to assert the notice fires exactly once.
+ */
+export const _win32Notice = {
+  emitted: false,
+  write(message: string): void {
+    process.stderr.write(message);
+  },
+};
+
+/** Emit the win32 host-only notice at most once per process. */
+function emitWin32HostOnlyNotice(): void {
+  if (_win32Notice.emitted) return;
+  _win32Notice.emitted = true;
+  _win32Notice.write(
+    "jaiph: Docker sandbox is not supported on Windows; running host-only (no sandbox).\n",
+  );
+}
+
+/**
  * Resolve effective Docker config.
- * Precedence: env vars (`JAIPH_DOCKER_*`) > unsafe default rule.
+ * Precedence: platform > env vars (`JAIPH_DOCKER_*`) > unsafe default rule.
+ *
+ * On win32 the Docker sandbox is out of scope: resolution is forced to
+ * host-only mode (same UX as an explicit `JAIPH_UNSAFE=true`) with a one-line
+ * notice, so the CLI never probes `docker` and never hard-fails on a missing
+ * daemon. `JAIPH_DOCKER_ENABLED=true` cannot override this.
  *
  * Default rule (when no explicit `JAIPH_DOCKER_ENABLED` is set):
  *  - `JAIPH_UNSAFE=true` → Docker off (explicit "run on host" escape hatch)
@@ -101,9 +126,12 @@ export function resolveDockerConfig(
   inFile: RuntimeConfig | undefined,
   env: Record<string, string | undefined>,
 ): DockerRunConfig {
-  // enabled: env JAIPH_DOCKER_ENABLED > unsafe default rule
+  // enabled: win32 host-only override > env JAIPH_DOCKER_ENABLED > unsafe default rule
   let enabled: boolean;
-  if (env.JAIPH_DOCKER_ENABLED !== undefined) {
+  if (process.platform === "win32") {
+    emitWin32HostOnlyNotice();
+    enabled = false;
+  } else if (env.JAIPH_DOCKER_ENABLED !== undefined) {
     enabled = env.JAIPH_DOCKER_ENABLED === "true";
   } else {
     // Default: Docker on unless the user explicitly opts out via JAIPH_UNSAFE.
