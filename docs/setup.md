@@ -17,6 +17,7 @@ The curl installer downloads a per-platform standalone binary from the current s
 
 - A POSIX `sh` (the runtime uses `sh -c` for inline shell lines inside workflows). Each emitted `script` step runs under the interpreter named by its shebang (`bash` by default), so that interpreter must be on `PATH`; the runtime spawns it explicitly and does not rely on the file's exec bit, so scripts also work under `noexec` mounts.
 - For the curl installer (step 1): `curl` and either `shasum` or `sha256sum` on `PATH`.
+- For the PowerShell installer (step 1, Windows): PowerShell (`irm`/`Invoke-WebRequest` and `Get-FileHash` are built in).
 - For the npm alternative (step 1): Node.js and npm on the host.
 
 ## 1. Install the binary
@@ -28,6 +29,14 @@ curl -fsSL https://jaiph.org/install | bash
 ```
 
 This downloads `jaiph-{darwin|linux}-{arm64|x64}` and `SHA256SUMS` from the current stable Release, verifies the checksum, and installs the binary to `~/.local/bin/jaiph`. Override the install location with `JAIPH_BIN_DIR`.
+
+**Windows (PowerShell):** the curl installer rejects Windows and points you here. Use the PowerShell one-liner instead:
+
+```powershell
+irm https://jaiph.org/install.ps1 | iex
+```
+
+This downloads `jaiph-windows-x64.exe` and `SHA256SUMS` from the current stable Release, verifies the checksum with `Get-FileHash`, installs the binary to `%LOCALAPPDATA%\jaiph\bin\jaiph.exe`, and adds that directory to your user `PATH` (open a new terminal to pick it up). Override the ref with `JAIPH_REPO_REF` (or the first argument) and the install location with `JAIPH_BIN_DIR`. Windows ships an x64 binary only — Bun has no Windows arm64 target, so ARM Windows exits with an unsupported-platform message.
 
 (Alternative) Install via npm when you already have Node on the host and want package-manager-tracked installs:
 

@@ -104,6 +104,13 @@ else
   case "${uname_s}" in
     Darwin) os="darwin" ;;
     Linux)  os="linux" ;;
+    MINGW*|MSYS*|CYGWIN*|Windows_NT)
+      print_error "Unsupported platform: ${uname_s} ${uname_m}"
+      echo "On Windows, install with PowerShell instead:"
+      echo "  irm https://jaiph.org/install.ps1 | iex"
+      echo "Or build from source per https://jaiph.org/contributing#installing-from-source"
+      exit 1
+      ;;
     *)
       print_error "Unsupported platform: ${uname_s} ${uname_m}"
       echo "Build from source per https://jaiph.org/contributing#installing-from-source"
