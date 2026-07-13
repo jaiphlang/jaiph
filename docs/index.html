@@ -74,36 +74,68 @@ layout: null
                     <button type="button" class="code-tab-button" data-target="try-install-only">Just install</button>
                 </div>
 
+                <div class="os-switch" role="group" aria-label="Choose your platform">
+                    <button type="button" class="os-switch-button is-active" data-os="posix">macOS / Linux</button>
+                    <button type="button" class="os-switch-button" data-os="windows">Windows</button>
+                </div>
+
                 <div class="code-tab-panel is-active" data-panel="try-run-sample">
-                    <pre><code class="language-bash static-highlight"><span class="code-line">curl -fsSL https://jaiph.org/run | bash -s '</span><span class="code-line"><span class="ralph-keyword">workflow</span> <span class="ralph-definition">default</span>() {</span><span class="code-line">  <span class="ralph-keyword">const</span> <span class="ralph-variable">response</span> <span class="ralph-operator">=</span> <span class="ralph-keyword">prompt</span> <span class="ralph-string">"Say: Hello, I am [model name]!"</span></span><span class="code-line">  <span class="ralph-keyword">log</span> response</span><span class="code-line">}'</span></code></pre>
-                    <p class="small">Installs Jaiph <strong>v0.10.0</strong> to <strong>~/.local/bin</strong> (if not
-                        already
-                        installed), and runs the sample workflow with <a href="https://cursor.com/docs/cli/installation"
-                            target="_blank" rel="noopener noreferrer">Cursor CLI</a> agent backend (the default one).
-                        See <a href="#samples">more samples</a>!</p>
-                    <p class="small warning">Jaiph is under heavy development. Core features and workflow syntax are
-                        stable since v0.8.0, but you may expect breaking changes before v1.0.0.</p>
+                    <div class="os-variant is-active" data-os="posix">
+                        <pre><code class="language-bash static-highlight"><span class="code-line">curl -fsSL https://jaiph.org/run | bash -s '</span><span class="code-line"><span class="ralph-keyword">workflow</span> <span class="ralph-definition">default</span>() {</span><span class="code-line">  <span class="ralph-keyword">const</span> <span class="ralph-variable">response</span> <span class="ralph-operator">=</span> <span class="ralph-keyword">prompt</span> <span class="ralph-string">"Say: Hello, I am [model name]!"</span></span><span class="code-line">  <span class="ralph-keyword">log</span> response</span><span class="code-line">}'</span></code></pre>
+                        <p class="small">Installs Jaiph <strong>v0.10.0</strong> to <strong>~/.local/bin</strong> (if not
+                            already
+                            installed), and runs the sample workflow with <a href="https://cursor.com/docs/cli/installation"
+                                target="_blank" rel="noopener noreferrer">Cursor CLI</a> agent backend (the default one).
+                            See <a href="#samples">more samples</a>!</p>
+                        <p class="small warning">Jaiph is under heavy development. Core features and workflow syntax are
+                            stable since v0.8.0, but you may expect breaking changes before v1.0.0.</p>
+                    </div>
+                    <div class="os-variant" data-os="windows">
+                        <p class="small">On Windows, install with PowerShell:</p>
+                        <pre><code class="language-powershell">irm https://jaiph.org/install.ps1 | iex</code></pre>
+                        <p class="small">then run a sample workflow:</p>
+                        <pre><code class="language-bash">jaiph run say_hello.jh Adam</code></pre>
+                        <p class="small">Installs Jaiph <strong>v0.10.0</strong> to <strong>%LOCALAPPDATA%\jaiph\bin</strong>.
+                            Grab <code>say_hello.jh</code> from the <a href="#samples">samples</a> below, then run it. See
+                            <a href="#samples">more samples</a>!</p>
+                        <p class="small warning">Jaiph is under heavy development. Core features and workflow syntax are
+                            stable since v0.8.0, but you may expect breaking changes before v1.0.0.</p>
+                    </div>
                 </div>
 
                 <div class="code-tab-panel" data-panel="try-init-project">
-                    <p class="small">Run the script below from the project directory:</p>
-                    <pre><code class="language-bash">curl -fsSL https://jaiph.org/init | bash</code></pre>
-                    <p class="small">Installs Jaiph <strong>v0.10.0</strong> to <strong>~/.local/bin</strong> (if not
-                        already installed), and runs <code>jaiph init</code> to initialize the Jaiph workspace in the
-                        current directory.</p>
+                    <div class="os-variant is-active" data-os="posix">
+                        <p class="small">Run the script below from the project directory:</p>
+                        <pre><code class="language-bash">curl -fsSL https://jaiph.org/init | bash</code></pre>
+                        <p class="small">Installs Jaiph <strong>v0.10.0</strong> to <strong>~/.local/bin</strong> (if not
+                            already installed), and runs <code>jaiph init</code> to initialize the Jaiph workspace in the
+                            current directory.</p>
+                    </div>
+                    <div class="os-variant" data-os="windows">
+                        <p class="small">On Windows, install with PowerShell:</p>
+                        <pre><code class="language-powershell">irm https://jaiph.org/install.ps1 | iex</code></pre>
+                        <p class="small">then initialize the Jaiph workspace in the current directory:</p>
+                        <pre><code class="language-bash">jaiph init</code></pre>
+                        <p class="small">Installs Jaiph <strong>v0.10.0</strong> to <strong>%LOCALAPPDATA%\jaiph\bin</strong>
+                            (if not already installed).</p>
+                    </div>
                 </div>
 
                 <div class="code-tab-panel" data-panel="try-install-only">
-                    <pre><code class="language-bash">curl -fsSL https://jaiph.org/install | bash</code></pre>
-                    <p class="small">The installer will install the version <strong>0.10.0</strong> of Jaiph to
-                        <strong>~/.local/bin</strong>. To switch versions, use <code>jaiph use nightly</code>
-                        or <code>jaiph use &lt;version&gt;</code> to switch.
-                    </p>
-                    <p class="small">On Windows, install with PowerShell instead:</p>
-                    <pre><code class="language-powershell">irm https://jaiph.org/install.ps1 | iex</code></pre>
-                    <p class="small">This installs <strong>jaiph-windows-x64.exe</strong> to
-                        <strong>%LOCALAPPDATA%\jaiph\bin</strong> and adds it to your user <code>PATH</code>.</p>
-                    <p class="small">Or install from npm: <code>npm install -g jaiph</code></p>
+                    <div class="os-variant is-active" data-os="posix">
+                        <pre><code class="language-bash">curl -fsSL https://jaiph.org/install | bash</code></pre>
+                        <p class="small">The installer will install the version <strong>0.10.0</strong> of Jaiph to
+                            <strong>~/.local/bin</strong>. To switch versions, use <code>jaiph use nightly</code>
+                            or <code>jaiph use &lt;version&gt;</code> to switch.
+                        </p>
+                        <p class="small">Or install from npm: <code>npm install -g jaiph</code></p>
+                    </div>
+                    <div class="os-variant" data-os="windows">
+                        <pre><code class="language-powershell">irm https://jaiph.org/install.ps1 | iex</code></pre>
+                        <p class="small">This installs <strong>jaiph-windows-x64.exe</strong> to
+                            <strong>%LOCALAPPDATA%\jaiph\bin</strong> and adds it to your user <code>PATH</code>.</p>
+                        <p class="small">Or install from npm: <code>npm install -g jaiph</code></p>
+                    </div>
                 </div>
             </div>
         </section>

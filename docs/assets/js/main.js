@@ -732,6 +732,51 @@
         });
     }
 
+    /**
+     * True when the visitor is on Windows. Prefers the modern
+     * navigator.userAgentData.platform, falling back to navigator.platform.
+     */
+    function isWindowsPlatform() {
+        var platform = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || "";
+        return /win/i.test(platform);
+    }
+
+    /**
+     * Toggles the visible platform variant (posix / windows) across every
+     * panel in the install card, and reflects the choice on the switch buttons.
+     */
+    function setOsVariant(root, os) {
+        root.querySelectorAll(".os-switch-button").forEach(function (button) {
+            button.classList.toggle("is-active", button.getAttribute("data-os") === os);
+        });
+        root.querySelectorAll(".os-variant").forEach(function (variant) {
+            variant.classList.toggle("is-active", variant.getAttribute("data-os") === os);
+        });
+    }
+
+    /**
+     * Wires the platform sub-toggle in the install card and auto-selects the
+     * Windows variant for Windows visitors. Manual switching stays available;
+     * non-Windows visitors keep the static (POSIX) default with no layout shift.
+     */
+    function attachOsSwitch() {
+        var root = document.querySelector("section.try-it-out .card");
+        if (!root || root.querySelectorAll(".os-variant").length === 0) {
+            return;
+        }
+        root.querySelectorAll(".os-switch-button").forEach(function (button) {
+            button.addEventListener("click", function () {
+                var os = button.getAttribute("data-os");
+                if (os) {
+                    setOsVariant(root, os);
+                }
+            });
+        });
+        if (isWindowsPlatform()) {
+            setOsVariant(root, "windows");
+        }
+    }
+
     function attachCodeTabs() {
         const buttons = document.querySelectorAll(".code-tab-button");
         buttons.forEach(function (button) {
@@ -979,6 +1024,7 @@
             highlightAll();
             attachCopyButtons();
             attachCodeTabs();
+            attachOsSwitch();
             attachDocsNavToggle();
             attachThemeToggle();
         });
@@ -989,6 +1035,7 @@
         highlightAll();
         attachCopyButtons();
         attachCodeTabs();
+        attachOsSwitch();
         attachDocsNavToggle();
         attachThemeToggle();
     }
