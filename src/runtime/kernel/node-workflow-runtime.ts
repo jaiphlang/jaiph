@@ -28,6 +28,7 @@ import {
   type PromptSchemaField,
 } from "./runtime-arg-parser";
 import { resolveInterpreterFromShebang } from "../../parse/script-bash";
+import { resolveShell } from "./portability";
 import { RuntimeEventEmitter, type Frame } from "./runtime-event-emitter";
 import { executeMockBodyDef, type MockBodyDef, type StepResult } from "./runtime-mock";
 import { linesOfDelimitedString } from "../string-lines";
@@ -1597,7 +1598,7 @@ export class NodeWorkflowRuntime {
    * the workspace, matching script cwd semantics.
    */
   private executeShLine(scope: Scope, command: string, io: StepIO): Promise<StepResult> {
-    return this.spawnAndCapture("sh", ["-c", command], scope.env, this.scriptCwd(scope.env, scope.filePath), io);
+    return this.spawnAndCapture(resolveShell(), ["-c", command], scope.env, this.scriptCwd(scope.env, scope.filePath), io);
   }
 
   private async executeInlineScript(

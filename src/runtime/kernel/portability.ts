@@ -13,16 +13,75 @@
 // `killProcessTree` hides that difference behind one call site.
 
 import { spawn, type ChildProcess } from "node:child_process";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 
 /**
- * Test seam for the `taskkill` spawn. Swapped out in unit tests so the win32
- * branch can be exercised on any host without a real `taskkill` binary.
+ * Test seams. Swapped out in unit tests so the win32 branches can be exercised
+ * on any host without a real `taskkill` binary or a real `sh.exe` on disk.
  */
 export const _portability = {
   spawn(command: string, args: string[]): ChildProcess {
     return spawn(command, args, { stdio: "ignore" });
   },
+  /** Existence probe for `resolveShell` PATH / Git-for-Windows lookups. */
+  fileExists(path: string): boolean {
+    return existsSync(path);
+  },
+  /** Reset the memoized shell so a test can re-run resolution under a new platform. */
+  resetShellCache(): void {
+    cachedShell = undefined;
+  },
 };
+
+let cachedShell: string | undefined;
+
+/**
+ * Resolve the POSIX shell used to run inline workflow shell lines and hooks.
+ *
+ * Jaiph's language semantics require POSIX `sh` on every platform — inline
+ * lines are never translated to cmd/PowerShell, or workflows stop being
+ * portable. On POSIX the answer is simply `sh`. On win32 there is no `sh` on
+ * the default PATH, so we locate Git for Windows' bundled `sh.exe`, first on
+ * PATH and then in the standard install locations. The result is memoized for
+ * the lifetime of the process.
+ */
+export function resolveShell(): string {
+  if (cachedShell !== undefined) return cachedShell;
+  cachedShell = process.platform === "win32" ? resolveWindowsPosixShell() : "sh";
+  return cachedShell;
+}
+
+function resolveWindowsPosixShell(): string {
+  // PATH first: honor an sh.exe the user already put on their PATH.
+  const path = process.env.PATH ?? "";
+  for (const dir of path.split(";")) {
+    if (!dir) continue;
+    const candidate = join(dir, "sh.exe");
+    if (_portability.fileExists(candidate)) return candidate;
+  }
+  // Then the standard Git for Windows layouts under each known install root.
+  const roots = [
+    process.env.ProgramFiles,
+    process.env["ProgramFiles(x86)"],
+    process.env.ProgramW6432,
+    "C:\\Program Files",
+    "C:\\Program Files (x86)",
+  ];
+  for (const root of roots) {
+    if (!root) continue;
+    for (const rel of [join("Git", "bin", "sh.exe"), join("Git", "usr", "bin", "sh.exe")]) {
+      const candidate = join(root, rel);
+      if (_portability.fileExists(candidate)) return candidate;
+    }
+  }
+  throw new Error(
+    "E_NO_POSIX_SHELL Jaiph requires a POSIX `sh` to run inline shell lines and hooks, " +
+      "but `sh.exe` was not found on PATH or in the standard Git for Windows install " +
+      "locations. Install Git for Windows (https://git-scm.com/download/win), which " +
+      "bundles `sh.exe`.",
+  );
+}
 
 /**
  * Terminate `pid` and its descendants with `signal`, portably.

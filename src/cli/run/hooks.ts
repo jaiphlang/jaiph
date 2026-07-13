@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
+import { resolveShell } from "../../runtime/kernel/portability";
 import type { HookConfig, HookEventName, HookPayload } from "../../types";
 import type { RunEmitter } from "./emitter";
 
@@ -133,7 +134,7 @@ export function runHooksForEvent(
 
   for (const cmd of commands) {
     try {
-      const child = spawn("sh", ["-c", cmd], {
+      const child = spawn(resolveShell(), ["-c", cmd], {
         stdio: ["pipe", "ignore", "pipe"],
         env: { ...process.env },
       });
