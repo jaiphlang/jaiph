@@ -57,15 +57,24 @@ jobs:
           - target: bun-darwin-arm64
             os: darwin
             arch: arm64
+            ext: ""
           - target: bun-darwin-x64
             os: darwin
             arch: x64
+            ext: ""
           - target: bun-linux-x64
             os: linux
             arch: x64
+            ext: ""
           - target: bun-linux-arm64
             os: linux
             arch: arm64
+            ext: ""
+          # Bun has no bun-windows-arm64 target; windows ships x64 only.
+          - target: bun-windows-x64
+            os: windows
+            arch: x64
+            ext: ".exe"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -88,20 +97,61 @@ jobs:
       - name: Cross-compile standalone binary for ${{ matrix.target }}
         run: |
           set -euo pipefail
-          bun build --compile --target=${{ matrix.target }} ./src/cli.ts --outfile "jaiph-${{ matrix.os }}-${{ matrix.arch }}"
-          ls -la "jaiph-${{ matrix.os }}-${{ matrix.arch }}"
+          out="jaiph-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}"
+          bun build --compile --target=${{ matrix.target }} ./src/cli.ts --outfile "${out}"
+          ls -la "${out}"
 
       - name: Upload binary artifact
         uses: actions/upload-artifact@v4
         with:
-          name: jaiph-${{ matrix.os }}-${{ matrix.arch }}
-          path: jaiph-${{ matrix.os }}-${{ matrix.arch }}
+          name: jaiph-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}
+          path: jaiph-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}
           if-no-files-found: error
           retention-days: 7
 
+  sanity-windows:
+    name: Sanity gate (windows-x64 --version)
+    needs: build
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve tag and channel
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "${GITHUB_REF}" in
+            refs/tags/v*)
+              tag="${GITHUB_REF_NAME}"; channel="stable" ;;
+            refs/heads/nightly|refs/tags/nightly)
+              tag="nightly"; channel="nightly" ;;
+            *)
+              echo "Unsupported ref for release: ${GITHUB_REF}" >&2; exit 1 ;;
+          esac
+          echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
+          echo "channel=${channel}" >> "${GITHUB_OUTPUT}"
+
+      - name: Download windows binary artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: jaiph-windows-x64.exe
+          path: release-assets
+
+      - name: Sanity gate (windows-x64 --version)
+        working-directory: release-assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          got="$(./jaiph-windows-x64.exe --version)"
+          echo "got: ${got}"
+          bash ../scripts/release-version-check.sh \
+            "${{ steps.meta.outputs.channel }}" "${{ steps.meta.outputs.tag }}" "${got}"
+
   release:
     name: Publish release assets
-    needs: build
+    needs: [build, sanity-windows]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -138,7 +188,7 @@ jobs:
           set -euo pipefail
           ls -la
           rm -f SHA256SUMS
-          sha256sum jaiph-darwin-arm64 jaiph-darwin-x64 jaiph-linux-x64 jaiph-linux-arm64 > SHA256SUMS
+          sha256sum jaiph-darwin-arm64 jaiph-darwin-x64 jaiph-linux-x64 jaiph-linux-arm64 jaiph-windows-x64.exe > SHA256SUMS
           cat SHA256SUMS
 
       - name: Sanity gate (linux-x64 --version)
@@ -148,19 +198,8 @@ jobs:
           chmod +x jaiph-linux-x64
           got="$(./jaiph-linux-x64 --version)"
           echo "got: ${got}"
-          if [ "${{ steps.meta.outputs.channel }}" = "stable" ]; then
-            tag="${{ steps.meta.outputs.tag }}"
-            expected="jaiph ${tag#v}"
-            if [ "${got}" != "${expected}" ]; then
-              echo "Version sanity check failed: expected '${expected}', got '${got}'" >&2
-              exit 1
-            fi
-          else
-            if ! printf '%s\n' "${got}" | grep -Eq '^jaiph [0-9]+\.[0-9]+\.[0-9]+'; then
-              echo "Version sanity check failed: '${got}' does not look like a jaiph version" >&2
-              exit 1
-            fi
-          fi
+          bash ../scripts/release-version-check.sh \
+            "${{ steps.meta.outputs.channel }}" "${{ steps.meta.outputs.tag }}" "${got}"
 
       - name: Publish stable release ${{ steps.meta.outputs.tag }}
         if: steps.meta.outputs.channel == 'stable'
@@ -172,13 +211,15 @@ jobs:
             gh release upload "${tag}" --clobber \
               jaiph-darwin-arm64 jaiph-darwin-x64 \
               jaiph-linux-x64 jaiph-linux-arm64 \
+              jaiph-windows-x64.exe \
               SHA256SUMS
           else
             gh release create "${tag}" \
               --title "${tag}" \
-              --notes "Jaiph ${tag} — standalone binaries (darwin/linux × arm64/x64) plus SHA256SUMS." \
+              --notes "Jaiph ${tag} — standalone binaries (darwin/linux × arm64/x64, windows x64) plus SHA256SUMS." \
               jaiph-darwin-arm64 jaiph-darwin-x64 \
               jaiph-linux-x64 jaiph-linux-arm64 \
+              jaiph-windows-x64.exe \
               SHA256SUMS
           fi
 
@@ -191,6 +232,7 @@ jobs:
             gh release upload nightly --clobber \
               jaiph-darwin-arm64 jaiph-darwin-x64 \
               jaiph-linux-x64 jaiph-linux-arm64 \
+              jaiph-windows-x64.exe \
               SHA256SUMS
           else
             gh release create nightly \
@@ -200,5 +242,6 @@ jobs:
               --target "${GITHUB_SHA}" \
               jaiph-darwin-arm64 jaiph-darwin-x64 \
               jaiph-linux-x64 jaiph-linux-arm64 \
+              jaiph-windows-x64.exe \
               SHA256SUMS
           fi

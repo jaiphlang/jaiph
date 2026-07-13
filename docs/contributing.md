@@ -212,7 +212,7 @@ The workflow refuses to start when the git tree is dirty or when `v<version>` al
 Pushing a **`v*`** tag triggers two things in this repo:
 
 1. **Docker image publish** — the `docker-publish` job in `ci.yml` pushes `ghcr.io/jaiphlang/jaiph-runtime:<version>` and `:latest` after the other CI jobs succeed.
-2. **Standalone-binary release** — `.github/workflows/release.yml` cross-compiles the Bun-compiled standalone binary for four targets via `oven-sh/setup-bun` and `bun build --compile --target=…`, generates a `SHA256SUMS` file, runs a Linux x64 sanity gate (`./jaiph-linux-x64 --version` must equal `jaiph <tag-without-v>`), and uploads all five assets to the GitHub Release for the tag (creating it if needed). The release job waits for the `CI` workflow on the same SHA to succeed before publishing. Re-runs are available via `workflow_dispatch`.
+2. **Standalone-binary release** — `.github/workflows/release.yml` cross-compiles the Bun-compiled standalone binary for five targets via `oven-sh/setup-bun` and `bun build --compile --target=…`, generates a `SHA256SUMS` file, runs a Linux x64 sanity gate and a `windows-latest` Windows x64 sanity gate (`--version` must equal `jaiph <tag-without-v>` for stable tags — both delegate to `scripts/release-version-check.sh`), and uploads all six assets to the GitHub Release for the tag (creating it if needed). The Windows gate is a required dependency of the publish job, so a version mismatch there fails the whole release. The release job waits for the `CI` workflow on the same SHA to succeed before publishing. Re-runs are available via `workflow_dispatch`.
 
 Pushes to the **`nightly`** branch follow the same matrix and upload to a **rolling prerelease** tagged `nightly` (`gh release upload nightly --clobber`), so `jaiph use nightly` keeps working under the binary installer.
 
@@ -228,9 +228,10 @@ The installer (`docs/install`) downloads these exact filenames from the release 
 | `bun-darwin-x64`   | `jaiph-darwin-x64` |
 | `bun-linux-x64`    | `jaiph-linux-x64` |
 | `bun-linux-arm64`  | `jaiph-linux-arm64` |
-| —                  | `SHA256SUMS` (covers all four binaries) |
+| `bun-windows-x64`  | `jaiph-windows-x64.exe` |
+| —                  | `SHA256SUMS` (covers all five binaries) |
 
-Every release (stable `v*` and rolling `nightly`) ships exactly these five assets.
+Bun has no `bun-windows-arm64` target, so Windows ships x64 only. Every release (stable `v*` and rolling `nightly`) ships exactly these six assets.
 
 ### Local docs site (Jekyll)
 
