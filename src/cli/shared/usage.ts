@@ -5,14 +5,14 @@ export function printUsage(): void {
       "  jaiph [--help | --version]",
       "  jaiph <file.jh> [args...]                # run workflow (same as jaiph run <file> [args...])",
       "  jaiph <file.test.jh> [args...]           # run tests (same as jaiph test <file>; extra args ignored)",
-      "  jaiph run [--target <dir>] [--raw] [--workspace <dir>] [--inplace] [--unsafe] [--yes|-y] <file.jh> [--] [args...]",
+      "  jaiph run [--target <dir>] [--raw] [--workspace <dir>] [--inplace] [--unsafe] [--yes|-y] [--env KEY[=VALUE]]... <file.jh> [--] [args...]",
       "  jaiph test [path]                        # workspace root, directory (recursive), or one *.test.jh file",
       "  jaiph init [workspace-path]",
       "  jaiph install [--force] [<name[@version]> | <repo-url[@version]> ...]",
       "  jaiph use <version|nightly>",
       "  jaiph format [--check] [--indent <n>] <file.jh ...>",
       "  jaiph compile [--json] [--workspace <dir>] <file.jh | directory> ...",
-      "  jaiph mcp [--workspace <dir>] <file.jh>  # serve the file's workflows as MCP tools over stdio (alias: jaiph --mcp)",
+      "  jaiph mcp [--workspace <dir>] [--env KEY[=VALUE]]... <file.jh>  # serve the file's workflows as MCP tools over stdio (alias: jaiph --mcp)",
       "",
       "Global options:",
       "  -h, --help     show this usage (jaiph --help) — each subcommand also accepts -h / --help",
@@ -25,6 +25,8 @@ export function printUsage(): void {
       "  --inplace          bind-mount the host workspace rw so edits land live (sets JAIPH_INPLACE=1 for this run)",
       "  --unsafe           run on the host with no sandbox (sets JAIPH_UNSAFE=true for this run)",
       "  -y, --yes          skip the in-place confirmation prompt (sets JAIPH_INPLACE_YES=1 for this run)",
+      "  --env KEY=VALUE    define KEY=VALUE in the workflow env (repeatable); --env KEY forwards the host value.",
+      "                     In a Docker sandbox this is the per-key consent that crosses the env allowlist verbatim.",
       "  --                 end of jaiph flags; remaining args are passed to workflow default",
       "  Note: these flags only affect `jaiph run`; the corresponding env vars (JAIPH_INPLACE,",
       "  JAIPH_UNSAFE, JAIPH_INPLACE_YES) also apply to other entry points (e.g. `jaiph test`).",
@@ -57,6 +59,7 @@ export function printUsage(): void {
       "  exposed only when it is the only workflow, named after the file's basename. Tool descriptions",
       "  come from `#` comments directly above each workflow. Calls run on the host (like jaiph run --raw).",
       "  --workspace <dir>  workspace root for import resolution (default: auto-detect).",
+      "  --env KEY=VALUE    define KEY in every tool call's env (repeatable); --env KEY forwards the host value.",
       "",
       "Examples:",
       "  jaiph --help",
@@ -68,6 +71,7 @@ export function printUsage(): void {
       "  jaiph run --target /tmp/jaiph-out ./flows/review.jh",
       "  jaiph run --inplace --workspace ./app ./flows/fix.jh",
       "  jaiph run --unsafe ./flows/quick.jh",
+      "  jaiph run --env GITHUB_TOKEN --env API_URL=https://x.test ./flows/deploy.jh",
       "  jaiph test",
       "  jaiph test ./e2e",
       "  jaiph test e2e/say_hello.test.jh",
@@ -83,6 +87,7 @@ export function printUsage(): void {
       "  jaiph compile flow.jh",
       "  jaiph compile --json .",
       "  jaiph mcp ./tools.jh",
+      "  jaiph mcp --env GITHUB_TOKEN ./tools.jh",
       "",
     ].join("\n"),
   );
@@ -101,6 +106,74 @@ export function hasHelpFlag(args: string[]): boolean {
   return false;
 }
 
+/**
+ * One `--env` passthrough entry, collected in flag order.
+ *  - `value` set        → `--env KEY=VALUE`: define KEY with that exact value.
+ *  - `value` undefined  → `--env KEY`: forward the host's current value at
+ *    spawn time (resolved by `resolveEnvPairs`, aborting with `E_ENV_MISSING`
+ *    if KEY is unset on the host).
+ */
+export interface EnvSpec {
+  key: string;
+  value?: string;
+}
+
+/** `KEY` must be a POSIX-shell-style environment variable name. */
+const ENV_KEY_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+/**
+ * Keys `--env` refuses to set (both `KEY` and `KEY=VALUE` forms, all modes):
+ *  - sandbox-control keys the flags `--inplace` / `--unsafe` and the
+ *    `JAIPH_DOCKER_*` family own — forwarding them would leak or re-trigger
+ *    host control flags;
+ *  - runtime-managed keys that `resolveRuntimeEnv` / `remapDockerEnv` compute
+ *    and (in Docker) path-remap — `--env` passes values verbatim, so allowing
+ *    these would collide with the managed value.
+ * Use the sandbox flags or real env vars for control keys instead.
+ */
+const RESERVED_ENV_KEYS = new Set<string>([
+  "JAIPH_UNSAFE",
+  "JAIPH_INPLACE",
+  "JAIPH_INPLACE_YES",
+  "JAIPH_WORKSPACE",
+  "JAIPH_RUNS_DIR",
+  "JAIPH_RUN_ID",
+  "JAIPH_SCRIPTS",
+  "JAIPH_MODULE_GRAPH_FILE",
+  "JAIPH_SOURCE_ABS",
+  "JAIPH_META_FILE",
+  "JAIPH_AGENT_TRUSTED_WORKSPACE",
+]);
+
+/** True if `--env` must reject `key` (`E_ENV_RESERVED`). */
+export function isReservedEnvKey(key: string): boolean {
+  if (key.startsWith("JAIPH_DOCKER_")) return true;
+  return RESERVED_ENV_KEYS.has(key);
+}
+
+/**
+ * Parse one `--env` argument into an `EnvSpec`. Splits on the first `=` only,
+ * so values may contain `=` and an empty value (`KEY=`) is allowed. Bare `KEY`
+ * (no `=`) defers the host lookup to spawn time. Rejects invalid names
+ * (`E_ENV_INVALID`) and reserved keys (`E_ENV_RESERVED`).
+ */
+function parseEnvSpec(raw: string): EnvSpec {
+  const eq = raw.indexOf("=");
+  const key = eq === -1 ? raw : raw.slice(0, eq);
+  const value = eq === -1 ? undefined : raw.slice(eq + 1);
+  if (!ENV_KEY_RE.test(key)) {
+    throw new Error(
+      `E_ENV_INVALID --env key "${key}" is not a valid environment variable name (must match [A-Za-z_][A-Za-z0-9_]*)`,
+    );
+  }
+  if (isReservedEnvKey(key)) {
+    throw new Error(
+      `E_ENV_RESERVED --env cannot set reserved key "${key}"; use the sandbox flags (--inplace/--unsafe) or real env vars for control keys`,
+    );
+  }
+  return value === undefined ? { key } : { key, value };
+}
+
 export interface ParsedArgs {
   target?: string;
   raw?: boolean;
@@ -108,6 +181,8 @@ export interface ParsedArgs {
   inplace?: boolean;
   unsafe?: boolean;
   yes?: boolean;
+  /** Repeatable `--env` passthrough entries, in flag order. */
+  env: EnvSpec[];
   positional: string[];
 }
 
@@ -118,6 +193,7 @@ export function parseArgs(args: string[]): ParsedArgs {
   let inplace: boolean | undefined;
   let unsafe: boolean | undefined;
   let yes: boolean | undefined;
+  const env: EnvSpec[] = [];
   const positional: string[] = [];
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i];
@@ -153,6 +229,24 @@ export function parseArgs(args: string[]): ParsedArgs {
       continue;
     }
 
+    // Repeatable `--env KEY` / `--env KEY=VALUE`. Value comes from `=` or the
+    // next token; validation (name shape, reserved keys) happens now, but a
+    // bare `KEY`'s host lookup is deferred to spawn time (resolveEnvPairs).
+    if (name === "--env") {
+      let val: string | undefined;
+      if (inlineValue !== undefined) {
+        val = inlineValue;
+      } else {
+        val = args[i + 1];
+        i += 1;
+      }
+      if (val === undefined) {
+        throw new Error(`--env requires a KEY or KEY=VALUE argument`);
+      }
+      env.push(parseEnvSpec(val));
+      continue;
+    }
+
     // Boolean flags: do not accept an `=value` form.
     if (name === "--raw" || name === "--inplace" || name === "--unsafe" || name === "--yes" || arg === "-y") {
       if (inlineValue !== undefined) {
@@ -167,5 +261,5 @@ export function parseArgs(args: string[]): ParsedArgs {
 
     positional.push(arg);
   }
-  return { target, raw, workspace, inplace, unsafe, yes, positional };
+  return { target, raw, workspace, inplace, unsafe, yes, env, positional };
 }

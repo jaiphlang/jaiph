@@ -350,6 +350,57 @@ test("buildDockerArgs: overrides JAIPH_WORKSPACE and JAIPH_RUNS_DIR", () => {
 });
 
 // ---------------------------------------------------------------------------
+// buildDockerArgs: --env passthrough (extraEnv) bypasses the allowlist
+// ---------------------------------------------------------------------------
+
+/** Collect the values of every `-e KEY=…` arg for a given key. */
+function envArgsFor(args: string[], key: string): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < args.length; i += 1) {
+    if (args[i] === "-e" && typeof args[i + 1] === "string" && args[i + 1].startsWith(`${key}=`)) {
+      out.push(args[i + 1]);
+    }
+  }
+  return out;
+}
+
+test("buildDockerArgs: a non-allowlisted key is dropped without extraEnv (fail-closed default)", () => {
+  const args = buildDockerArgs(defaultOpts({ env: { MY_TOKEN: "s3cret" } }), TEST_OVERLAY);
+  assert.deepEqual(envArgsFor(args, "MY_TOKEN"), [], "MY_TOKEN must not cross the boundary by default");
+});
+
+test("buildDockerArgs: extraEnv forwards a non-allowlisted key as -e KEY=VALUE", () => {
+  const args = buildDockerArgs(
+    defaultOpts({ env: { MY_TOKEN: "ignored-host" }, extraEnv: { MY_TOKEN: "s3cret" } }),
+    TEST_OVERLAY,
+  );
+  assert.deepEqual(envArgsFor(args, "MY_TOKEN"), ["MY_TOKEN=s3cret"]);
+});
+
+test("buildDockerArgs: extraEnv value passes verbatim (no path remapping, '=' preserved)", () => {
+  const args = buildDockerArgs(
+    defaultOpts({ extraEnv: { API_URL: "https://x.test/a=b" } }),
+    TEST_OVERLAY,
+  );
+  assert.deepEqual(envArgsFor(args, "API_URL"), ["API_URL=https://x.test/a=b"]);
+});
+
+test("buildDockerArgs: a key both allowlist-forwarded and in extraEnv appears once with the extraEnv value", () => {
+  const args = buildDockerArgs(
+    defaultOpts({
+      env: { ANTHROPIC_API_KEY: "from-host" },
+      extraEnv: { ANTHROPIC_API_KEY: "from-flag" },
+    }),
+    TEST_OVERLAY,
+  );
+  assert.deepEqual(
+    envArgsFor(args, "ANTHROPIC_API_KEY"),
+    ["ANTHROPIC_API_KEY=from-flag"],
+    "the --env value must win and appear exactly once",
+  );
+});
+
+// ---------------------------------------------------------------------------
 // buildDockerArgs: agent env var forwarding
 // ---------------------------------------------------------------------------
 

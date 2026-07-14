@@ -66,7 +66,7 @@ import {
   formatRunningBottomLine,
 } from "../run/progress";
 import { loadMergedHooks, registerHooksSubscriber } from "../run/hooks";
-import { resolveRuntimeEnv, applySandboxFlags } from "../run/env";
+import { resolveRuntimeEnv, applySandboxFlags, resolveEnvPairs } from "../run/env";
 import { preflightAgentCredentials } from "../run/preflight-credentials";
 import { colorize, formatJaiphRunningBannerLines } from "../run/display";
 import { createRunEmitter } from "../run/emitter";
@@ -92,11 +92,18 @@ export async function runWorkflow(rest: string[]): Promise<number> {
     process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`);
     return 1;
   }
-  const { target, raw, workspace, inplace, unsafe, yes, positional } = parsed;
+  const { target, raw, workspace, inplace, unsafe, yes, env, positional } = parsed;
   const input = positional[0];
   const runArgs = positional.slice(1);
   if (!input) {
     process.stderr.write("jaiph run requires a .jh file path\n");
+    return 1;
+  }
+  let extraEnv: Record<string, string>;
+  try {
+    extraEnv = resolveEnvPairs(env, process.env);
+  } catch (err) {
+    process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`);
     return 1;
   }
   const inputAbs = resolve(input);
@@ -120,7 +127,7 @@ export async function runWorkflow(rest: string[]): Promise<number> {
 
   const sandboxFlags = { inplace, unsafe, yes };
   if (raw) {
-    return runWorkflowRaw(inputAbs, workspaceRoot, target, runArgs, sandboxFlags);
+    return runWorkflowRaw(inputAbs, workspaceRoot, target, runArgs, sandboxFlags, extraEnv);
   }
 
   const hooksConfig = loadMergedHooks(workspaceRoot);
@@ -147,6 +154,13 @@ export async function runWorkflow(rest: string[]): Promise<number> {
       return 1;
     }
     const dockerConfigForBanner = resolveDockerConfig(resolvedModuleMetadata?.runtime, runtimeEnv);
+    // Host modes: `--env` defines the workflow process's env directly,
+    // overriding inherited values. Docker: the pairs cross the boundary as
+    // explicit `-e` container args instead (threaded through `extraEnv`), so
+    // they must not be pre-merged here (the allowlist would drop them).
+    if (!dockerConfigForBanner.enabled) {
+      Object.assign(runtimeEnv, extraEnv);
+    }
     const credPreflight = preflightAgentCredentials({
       mod,
       inputAbs,
@@ -223,7 +237,7 @@ export async function runWorkflow(rest: string[]): Promise<number> {
     });
 
     const { execResult, dockerResult, dockerConfig: activeDockerConfig } = spawnExec(
-      mod, runtimeEnv, outDir, workspaceRoot, metaFile, "default", runArgs, isTTY,
+      mod, runtimeEnv, outDir, workspaceRoot, metaFile, "default", runArgs, isTTY, extraEnv,
     );
 
     const onSignalCleanup = dockerResult ? () => cleanupDocker(dockerResult) : undefined;
@@ -300,6 +314,7 @@ async function runWorkflowRaw(
   target: string | undefined,
   runArgs: string[],
   sandboxFlags: { inplace?: boolean; unsafe?: boolean; yes?: boolean },
+  extraEnv: Record<string, string>,
 ): Promise<number> {
   const mod = parsejaiph(readFileSync(inputAbs, "utf8"), inputAbs);
   const resolvedModuleMetadata = resolveModuleMetadata(mod, process.env);
@@ -315,6 +330,9 @@ async function runWorkflowRaw(
       process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`);
       return 1;
     }
+    // Raw mode runs host-only (used for embedding and the Docker inner run);
+    // `--env` defines the workflow process's env directly.
+    Object.assign(runtimeEnv, extraEnv);
     const { scriptsDir } = buildScripts(inputAbs, outDir, workspaceRoot);
     runtimeEnv.JAIPH_SCRIPTS = scriptsDir;
     const metaFile = join(outDir, `.jaiph-run-meta-${Date.now()}-${process.pid}.txt`);
@@ -374,6 +392,7 @@ function spawnExec(
   workflowSymbol: string,
   runArgs: string[],
   isTTY: boolean,
+  extraEnv: Record<string, string>,
 ): { execResult: ReturnType<typeof spawnRunProcess>; dockerResult: ReturnType<typeof spawnDockerProcess> | undefined; dockerConfig: ReturnType<typeof resolveDockerConfig> } {
   const resolvedMetadata = resolveModuleMetadata(mod, runtimeEnv);
   const dockerConfig = resolveDockerConfig(resolvedMetadata?.runtime, runtimeEnv);
@@ -389,6 +408,7 @@ function spawnExec(
       sandboxRunDir,
       runArgs,
       env: runtimeEnv,
+      extraEnv,
       isTTY,
     });
     execResult = dockerResult.child;

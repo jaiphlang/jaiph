@@ -9,7 +9,7 @@ import { resolveModuleMetadata, metadataToConfig } from "../../config";
 import { resolveDockerConfig } from "../../runtime/docker";
 import { detectWorkspaceRoot } from "../shared/paths";
 import { hasHelpFlag, parseArgs } from "../shared/usage";
-import { resolveRuntimeEnv } from "../run/env";
+import { resolveRuntimeEnv, resolveEnvPairs } from "../run/env";
 import { preflightAgentCredentials } from "../run/preflight-credentials";
 import { deriveTools, type McpToolSpec } from "../mcp/tools";
 import { McpServer } from "../mcp/server";
@@ -50,6 +50,7 @@ function loadState(
   workspaceRoot: string,
   tempRoot: string,
   generation: number,
+  extraEnv: Record<string, string>,
   log: (line: string) => void,
 ): { state?: McpState; failures: string[] } {
   const graph = loadModuleGraph(inputAbs, workspaceRoot);
@@ -77,7 +78,7 @@ function loadState(
     state: {
       graph,
       tools,
-      callEnv: { inputAbs, workspaceRoot, effectiveConfig, scriptsDir, graphFile, outDir },
+      callEnv: { inputAbs, workspaceRoot, effectiveConfig, scriptsDir, graphFile, outDir, extraEnv },
     },
     failures: [],
   };
@@ -95,10 +96,19 @@ export async function runMcp(rest: string[]): Promise<number> {
     process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`);
     return 1;
   }
-  const { workspace, positional } = parsed;
+  const { workspace, env, positional } = parsed;
   const input = positional[0];
   if (!input) {
     process.stderr.write("jaiph mcp requires a .jh file path\n");
+    return 1;
+  }
+  // `--env` pairs apply to every tool call for the server's lifetime; resolve
+  // (and bare-form host lookup / E_ENV_MISSING) once before the server starts.
+  let extraEnv: Record<string, string>;
+  try {
+    extraEnv = resolveEnvPairs(env, process.env);
+  } catch (err) {
+    process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`);
     return 1;
   }
   const inputAbs = resolve(input);
@@ -121,7 +131,7 @@ export async function runMcp(rest: string[]): Promise<number> {
   let generation = 0;
   let state: McpState;
   try {
-    const loaded = loadState(inputAbs, workspaceRoot, tempRoot, generation, log);
+    const loaded = loadState(inputAbs, workspaceRoot, tempRoot, generation, extraEnv, log);
     if (!loaded.state) {
       for (const f of loaded.failures) log(f);
       rmSync(tempRoot, { recursive: true, force: true });
@@ -181,7 +191,7 @@ export async function runMcp(rest: string[]): Promise<number> {
     reloading = true;
     try {
       generation += 1;
-      const loaded = loadState(inputAbs, workspaceRoot, tempRoot, generation, log);
+      const loaded = loadState(inputAbs, workspaceRoot, tempRoot, generation, extraEnv, log);
       if (!loaded.state) {
         log("jaiph mcp: reload failed; keeping the previous tool set:");
         for (const f of loaded.failures) log(`  ${f}`);

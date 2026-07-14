@@ -46,7 +46,7 @@ The reserved internal marker `__workflow-runner` is excluded from `--help`/usage
 Compile and execute a workflow's `default` entrypoint.
 
 ```text
-jaiph run [--target <dir>] [--raw] [--workspace <dir>] [--inplace] [--unsafe] [--yes|-y] <file.jh> [--] [args...]
+jaiph run [--target <dir>] [--raw] [--workspace <dir>] [--inplace] [--unsafe] [--yes|-y] [--env KEY[=VALUE]]... <file.jh> [--] [args...]
 ```
 
 Sandbox selection is environment-driven; there is no `--docker` flag. The boolean sandbox flags (`--inplace`, `--unsafe`, `--yes`) are CLI front-ends that mutate the launched runtime env for one run only — see [Configuration — Precedence](configuration.md#precedence) and [Environment variables](env-vars.md).
@@ -61,6 +61,7 @@ Sandbox selection is environment-driven; there is no `--docker` flag. The boolea
 | `--inplace` | — | Front-end for `JAIPH_INPLACE=1`. |
 | `--unsafe` | — | Front-end for `JAIPH_UNSAFE=true`. Cannot be combined with `--inplace` (`E_FLAG_CONFLICT`). |
 | `-y`, `--yes` | — | Front-end for `JAIPH_INPLACE_YES=1`. Required to use `--inplace` non-interactively. |
+| `--env` | `KEY=VALUE` or `KEY` | Repeatable per-key environment passthrough into the workflow process. `--env KEY=VALUE` defines `KEY` with that exact value (first `=` splits; the value may contain `=`; empty is allowed). `--env KEY` forwards the host's current value, aborting with `E_ENV_MISSING` before spawning if `KEY` is unset on the host. `KEY` must match `[A-Za-z_][A-Za-z0-9_]*` (else `E_ENV_INVALID`). Reserved sandbox-control keys (`JAIPH_UNSAFE`, `JAIPH_INPLACE`, `JAIPH_INPLACE_YES`, any `JAIPH_DOCKER_*`) and runtime-managed keys (`JAIPH_WORKSPACE`, `JAIPH_RUNS_DIR`, `JAIPH_RUN_ID`, `JAIPH_SCRIPTS`, `JAIPH_MODULE_GRAPH_FILE`, `JAIPH_SOURCE_ABS`, `JAIPH_META_FILE`, `JAIPH_AGENT_TRUSTED_WORKSPACE`) are rejected with `E_ENV_RESERVED` — use the sandbox flags or real env vars for those. **In a Docker sandbox `--env` is the per-key consent that crosses the fail-closed env allowlist verbatim** (added as explicit `-e KEY=VALUE` container args, winning over any allowlist-forwarded value); see [Sandboxing — Environment exposure](sandboxing.md#env-exposure). Values are never path-remapped. |
 | `--` | — | End of Jaiph flags; remaining tokens are forwarded to `workflow default`. |
 
 ### Pre-flight
@@ -276,7 +277,7 @@ Implementation: re-invokes `JAIPH_INSTALL_COMMAND` (default `curl -fsSL https://
 Serve a file's workflows as [MCP](https://modelcontextprotocol.io/) tools over stdio. See [Serve workflows as MCP tools](/how-to/mcp) for the recipe and client-registration steps.
 
 ```text
-jaiph mcp [--workspace <dir>] <file.jh>
+jaiph mcp [--workspace <dir>] [--env KEY[=VALUE]]... <file.jh>
 ```
 
 `jaiph --mcp <file.jh>` is an equivalent alias, dispatched after `compile` in `src/cli/index.ts`.
@@ -284,6 +285,7 @@ jaiph mcp [--workspace <dir>] <file.jh>
 | Flag | Argument | Effect |
 |---|---|---|
 | `--workspace` | `<dir>` | Workspace root for import resolution (default: auto-detected from the file's directory). A missing value or non-directory path aborts with a specific message. |
+| `--env` | `KEY=VALUE` or `KEY` | Same per-key passthrough as `jaiph run --env` (same forms, validation, and reserved-key rejection), resolved once at startup and applied to **every** tool call's runner env for the server's lifetime. A bare `--env KEY` unset on the host aborts server startup with `E_ENV_MISSING`. MCP calls run on the host today; once Docker-backed calls exist the pairs flow through the same container passthrough. |
 | `-h`, `--help` | — | Print the subcommand usage and exit `0`. |
 
 ### Startup and exit behaviour
