@@ -157,13 +157,43 @@ test("parseConfigBlock: fails on line without = separator", () => {
 test("parseConfigBlock: fails on bare unquoted string value", () => {
   const lines = [
     "config {",
-    "  agent.default_model = gpt4",
+    "  agent.default_model = gpt-4",
     "}",
   ];
   assert.throws(
     () => parseConfigBlock("test.jh", lines, 0),
-    /config value must be a quoted string or true\/false/,
+    /config value must be a quoted string, bare identifier, or true\/false/,
   );
+});
+
+test("parseConfigBlock: bare identifier is sugar for interpolated string", () => {
+  const lines = [
+    "config {",
+    "  agent.default_model = model",
+    "}",
+  ];
+  const { metadata } = parseConfigBlock("test.jh", lines, 0);
+  assert.equal(metadata.agent?.defaultModel, "${model}");
+});
+
+test("parseConfigBlock: quoted string with interpolation is stored literally", () => {
+  const lines = [
+    "config {",
+    '  agent.default_model = "prefix-${model}-suffix"',
+    "}",
+  ];
+  const { metadata } = parseConfigBlock("test.jh", lines, 0);
+  assert.equal(metadata.agent?.defaultModel, "prefix-${model}-suffix");
+});
+
+test("parseConfigBlock: interpolated agent.backend is accepted at parse time", () => {
+  const lines = [
+    "config {",
+    "  agent.backend = backend",
+    "}",
+  ];
+  const { metadata } = parseConfigBlock("test.jh", lines, 0);
+  assert.equal(metadata.agent?.backend, "${backend}");
 });
 
 test("parseConfigBlock: handles escape sequences in string values", () => {

@@ -13,7 +13,7 @@ import { parsejaiph } from "../../parser";
 import { buildScripts, buildScriptsFromGraph } from "../../transpiler";
 import { loadModuleGraph, writeModuleGraph } from "../../transpile/module-graph";
 import { canUseAnsi } from "../../runtime/kernel/portability";
-import { metadataToConfig } from "../../config";
+import { resolveModuleMetadata, metadataToConfig } from "../../config";
 import { buildStepDisplayParamPairs, formatNamedParamsForDisplay } from "./format-params.js";
 import {
   colorPalette,
@@ -126,7 +126,8 @@ export async function runWorkflow(rest: string[]): Promise<number> {
   const hooksConfig = loadMergedHooks(workspaceRoot);
   const graph = loadModuleGraph(inputAbs, workspaceRoot);
   const mod = graph.modules.get(inputAbs)!.ast;
-  const effectiveConfig = metadataToConfig(mod.metadata);
+  const resolvedModuleMetadata = resolveModuleMetadata(mod, process.env);
+  const effectiveConfig = metadataToConfig(resolvedModuleMetadata);
 
   const outDir = target ? resolve(target) : mkdtempSync(join(tmpdir(), "jaiph-run-"));
   const shouldCleanup = !target;
@@ -145,7 +146,7 @@ export async function runWorkflow(rest: string[]): Promise<number> {
       process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`);
       return 1;
     }
-    const dockerConfigForBanner = resolveDockerConfig(mod.metadata?.runtime, runtimeEnv);
+    const dockerConfigForBanner = resolveDockerConfig(resolvedModuleMetadata?.runtime, runtimeEnv);
     const credPreflight = preflightAgentCredentials({
       mod,
       inputAbs,
@@ -301,7 +302,8 @@ async function runWorkflowRaw(
   sandboxFlags: { inplace?: boolean; unsafe?: boolean; yes?: boolean },
 ): Promise<number> {
   const mod = parsejaiph(readFileSync(inputAbs, "utf8"), inputAbs);
-  const effectiveConfig = metadataToConfig(mod.metadata);
+  const resolvedModuleMetadata = resolveModuleMetadata(mod, process.env);
+  const effectiveConfig = metadataToConfig(resolvedModuleMetadata);
   const outDir = target ? resolve(target) : mkdtempSync(join(tmpdir(), "jaiph-run-"));
   const shouldCleanup = !target;
   try {
@@ -373,7 +375,8 @@ function spawnExec(
   runArgs: string[],
   isTTY: boolean,
 ): { execResult: ReturnType<typeof spawnRunProcess>; dockerResult: ReturnType<typeof spawnDockerProcess> | undefined; dockerConfig: ReturnType<typeof resolveDockerConfig> } {
-  const dockerConfig = resolveDockerConfig(mod.metadata?.runtime, runtimeEnv);
+  const resolvedMetadata = resolveModuleMetadata(mod, runtimeEnv);
+  const dockerConfig = resolveDockerConfig(resolvedMetadata?.runtime, runtimeEnv);
   let dockerResult: ReturnType<typeof spawnDockerProcess> | undefined;
   let execResult;
 

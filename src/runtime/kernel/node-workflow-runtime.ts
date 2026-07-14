@@ -12,6 +12,7 @@ import { appendRunSummaryLine } from "./emit";
 import { buildStepDisplayParamPairs } from "../../cli/commands/format-params.js";
 import { resolveRuleRef, resolveScriptRef, resolveWorkflowRef, type RuntimeGraph } from "./graph";
 import type { WorkflowMetadata } from "../../types";
+import { interpolateWorkflowMetadata } from "../../config";
 import { extractJson, validateFields } from "./schema";
 import { canonicalizeTripleQuotedString } from "../../parse/triple-quote";
 import {
@@ -434,6 +435,10 @@ export class NodeWorkflowRuntime {
     const calleeModulePath = resolvePath(resolved.filePath);
     const crossModuleNested = callerModulePath !== calleeModulePath;
     return this.executeManagedStep("workflow", `${workflowName}`, args, async (io) => {
+      const metadataVars = this.newScopeVars(resolved.filePath, scope.vars, scope.env);
+      resolved.workflow.params.forEach((name, i) => {
+        if (i < args.length) metadataVars.set(name, args[i]);
+      });
       // Root entry (`runDefault`, inheritCallerMetadataScope=false): apply entry module + workflow metadata.
       // Nested cross-module `run`: layer callee module + workflow metadata on top of the caller's
       // effective env (same mechanics as root entry, respecting `${NAME}_LOCKED`).  A module's
@@ -447,25 +452,24 @@ export class NodeWorkflowRuntime {
           scope.env,
           this.graph.modules.get(resolved.filePath)?.ast.metadata,
           resolved.workflow.metadata,
+          metadataVars,
         );
       } else if (inheritCallerMetadataScope) {
-        workflowEnv = this.applyMetadataScope(scope.env, undefined, resolved.workflow.metadata);
+        workflowEnv = this.applyMetadataScope(scope.env, undefined, resolved.workflow.metadata, metadataVars);
       } else {
         workflowEnv = this.applyMetadataScope(
           scope.env,
           this.graph.modules.get(resolved.filePath)?.ast.metadata,
           resolved.workflow.metadata,
+          metadataVars,
         );
       }
       const childScope: Scope = {
         filePath: resolved.filePath,
-        vars: this.newScopeVars(resolved.filePath, scope.vars, workflowEnv),
+        vars: metadataVars,
         env: workflowEnv,
         declaredParamNames: resolved.workflow.params,
       };
-      resolved.workflow.params.forEach((name, i) => {
-        if (i < args.length) childScope.vars.set(name, args[i]);
-      });
       const ctx: WorkflowContext = {
         workflowName,
         routes: new Map(),
@@ -513,8 +517,9 @@ export class NodeWorkflowRuntime {
       // for cross-module rule references so we don't overwrite workflow-level overrides.
       const sameModule = resolvePath(scope.filePath) === resolvePath(resolved.filePath);
       const moduleMeta = sameModule ? undefined : this.graph.modules.get(resolved.filePath)?.ast.metadata;
-      const ruleEnv = this.applyMetadataScope(scope.env, moduleMeta);
-      const ruleVars = new Map(scope.vars);
+      const metadataVars = this.newScopeVars(resolved.filePath, scope.vars, scope.env);
+      const ruleEnv = this.applyMetadataScope(scope.env, moduleMeta, undefined, metadataVars);
+      const ruleVars = new Map(metadataVars);
       resolved.rule.params.forEach((name, i) => {
         if (i < args.length) ruleVars.set(name, args[i]);
       });
@@ -1633,36 +1638,38 @@ export class NodeWorkflowRuntime {
     parentEnv: NodeJS.ProcessEnv,
     moduleMeta?: WorkflowMetadata,
     workflowMeta?: WorkflowMetadata,
+    vars?: Map<string, string>,
   ): NodeJS.ProcessEnv {
     const nextEnv: NodeJS.ProcessEnv = { ...parentEnv };
     const apply = (meta?: WorkflowMetadata): void => {
       if (!meta) return;
-      if (parentEnv.JAIPH_AGENT_MODEL_LOCKED !== "1" && meta.agent?.defaultModel !== undefined) {
-        nextEnv.JAIPH_AGENT_MODEL = meta.agent.defaultModel;
+      const resolved = vars ? interpolateWorkflowMetadata(meta, vars, parentEnv) : meta;
+      if (parentEnv.JAIPH_AGENT_MODEL_LOCKED !== "1" && resolved.agent?.defaultModel !== undefined) {
+        nextEnv.JAIPH_AGENT_MODEL = resolved.agent.defaultModel;
       }
-      if (parentEnv.JAIPH_AGENT_COMMAND_LOCKED !== "1" && meta.agent?.command !== undefined) {
-        nextEnv.JAIPH_AGENT_COMMAND = meta.agent.command;
+      if (parentEnv.JAIPH_AGENT_COMMAND_LOCKED !== "1" && resolved.agent?.command !== undefined) {
+        nextEnv.JAIPH_AGENT_COMMAND = resolved.agent.command;
       }
-      if (parentEnv.JAIPH_AGENT_BACKEND_LOCKED !== "1" && meta.agent?.backend !== undefined) {
-        nextEnv.JAIPH_AGENT_BACKEND = meta.agent.backend;
+      if (parentEnv.JAIPH_AGENT_BACKEND_LOCKED !== "1" && resolved.agent?.backend !== undefined) {
+        nextEnv.JAIPH_AGENT_BACKEND = resolved.agent.backend;
       }
       if (
         parentEnv.JAIPH_AGENT_TRUSTED_WORKSPACE_LOCKED !== "1" &&
-        meta.agent?.trustedWorkspace !== undefined
+        resolved.agent?.trustedWorkspace !== undefined
       ) {
-        nextEnv.JAIPH_AGENT_TRUSTED_WORKSPACE = meta.agent.trustedWorkspace;
+        nextEnv.JAIPH_AGENT_TRUSTED_WORKSPACE = resolved.agent.trustedWorkspace;
       }
-      if (parentEnv.JAIPH_AGENT_CURSOR_FLAGS_LOCKED !== "1" && meta.agent?.cursorFlags !== undefined) {
-        nextEnv.JAIPH_AGENT_CURSOR_FLAGS = meta.agent.cursorFlags;
+      if (parentEnv.JAIPH_AGENT_CURSOR_FLAGS_LOCKED !== "1" && resolved.agent?.cursorFlags !== undefined) {
+        nextEnv.JAIPH_AGENT_CURSOR_FLAGS = resolved.agent.cursorFlags;
       }
-      if (parentEnv.JAIPH_AGENT_CLAUDE_FLAGS_LOCKED !== "1" && meta.agent?.claudeFlags !== undefined) {
-        nextEnv.JAIPH_AGENT_CLAUDE_FLAGS = meta.agent.claudeFlags;
+      if (parentEnv.JAIPH_AGENT_CLAUDE_FLAGS_LOCKED !== "1" && resolved.agent?.claudeFlags !== undefined) {
+        nextEnv.JAIPH_AGENT_CLAUDE_FLAGS = resolved.agent.claudeFlags;
       }
-      if (parentEnv.JAIPH_RUNS_DIR_LOCKED !== "1" && meta.run?.logsDir !== undefined) {
-        nextEnv.JAIPH_RUNS_DIR = meta.run.logsDir;
+      if (parentEnv.JAIPH_RUNS_DIR_LOCKED !== "1" && resolved.run?.logsDir !== undefined) {
+        nextEnv.JAIPH_RUNS_DIR = resolved.run.logsDir;
       }
-      if (parentEnv.JAIPH_DEBUG_LOCKED !== "1" && meta.run?.debug !== undefined) {
-        nextEnv.JAIPH_DEBUG = meta.run.debug ? "true" : "false";
+      if (parentEnv.JAIPH_DEBUG_LOCKED !== "1" && resolved.run?.debug !== undefined) {
+        nextEnv.JAIPH_DEBUG = resolved.run.debug ? "true" : "false";
       }
     };
     apply(moduleMeta);

@@ -223,7 +223,7 @@ test("parser: unknown config key throws E_PARSE with file location", () => {
 test("parser: invalid config value throws E_PARSE", () => {
   const source = [
     "config {",
-    "  run.debug = yes",
+    "  agent.default_model = gpt-4",
     "}",
     "workflow default() {",
     "  log \"ok\"",
@@ -231,7 +231,7 @@ test("parser: invalid config value throws E_PARSE", () => {
   ].join("\n");
   assert.throws(
     () => parsejaiph(source, "/fake/entry.jh"),
-    /\/fake\/entry\.jh:2:.* E_PARSE.*config value must be a quoted string or true\/false/,
+    /\/fake\/entry\.jh:2:.* E_PARSE.*config value must be a quoted string, bare identifier, or true\/false/,
   );
 });
 

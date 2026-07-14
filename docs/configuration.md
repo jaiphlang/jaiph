@@ -36,9 +36,21 @@ Docker enablement uses a separate, env-only resolution; see [Docker enablement](
 
 | Type | Format | Example |
 |---|---|---|
-| String | Double-quoted; supports `\\`, `\n`, `\t`, `\"` | `"gpt-4"` |
+| String | Double-quoted; supports `\\`, `\n`, `\t`, `\"`, and `${name}` interpolation | `"gpt-4"`, `"${model}"` |
+| String (interpolation sugar) | Bare identifier — stored as `${name}` and resolved at runtime | `model` |
 | Boolean | Bare `true` / `false` | `true` |
 | Integer | Unsigned decimal digits | `300` |
+
+String config values support the same `${identifier}` interpolation as orchestration strings (`log`, `prompt`, `return`, etc.). A bare identifier on the RHS is sugar for a single `${identifier}` reference (for example `agent.default_model = model` is equivalent to `agent.default_model = "${model}"`).
+
+**Interpolation scope:**
+
+| Config level | Available identifiers |
+|---|---|
+| Module-level | Module `const` values and environment variables |
+| Workflow-level | Module `const` values, environment variables, and that workflow's parameters |
+
+Interpolation runs when the config scope is applied (workflow entry for workflow-level keys; CLI startup for module-level keys). Environment variables still win over in-file config when locked.
 
 ## Agent keys
 

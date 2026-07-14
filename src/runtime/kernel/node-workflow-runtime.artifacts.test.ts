@@ -654,6 +654,63 @@ test("NodeWorkflowRuntime: sibling workflows do not inherit each other's metadat
   }
 });
 
+test("NodeWorkflowRuntime: workflow config interpolates workflow parameters", async () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-node-meta-param-"));
+  try {
+    const jh = join(root, "param_config.jh");
+    const metaFile = join(root, "param_scope.log");
+    writeFileSync(
+      jh,
+      [
+        'script log_model = `printf \'model:%s\\n\' "$JAIPH_AGENT_MODEL" >> "$JAIPH_PARAM_LOG"`',
+        "",
+        "workflow implement(model) {",
+        "  config {",
+        "    agent.default_model = model",
+        "  }",
+        '  run log_model()',
+        "}",
+        "",
+        "workflow default() {",
+        '  run implement("workflow-model")',
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const scriptsDir = join(root, "scripts");
+    mkdirSync(scriptsDir, { recursive: true });
+    writeFileSync(
+      join(scriptsDir, "log_model"),
+      [
+        "#!/usr/bin/env bash",
+        'printf \'model:%s\n\' "$JAIPH_AGENT_MODEL" >> "$JAIPH_PARAM_LOG"',
+        "",
+      ].join("\n"),
+      { mode: 0o755 },
+    );
+
+    const graph = buildRuntimeGraph(jh);
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      JAIPH_TEST_MODE: "1",
+      JAIPH_RUNS_DIR: join(root, ".jaiph", "runs"),
+      JAIPH_SCRIPTS: scriptsDir,
+      JAIPH_PARAM_LOG: metaFile,
+    };
+    delete env.JAIPH_AGENT_MODEL;
+    delete env.JAIPH_AGENT_MODEL_LOCKED;
+
+    const runtime = new NodeWorkflowRuntime(graph, { env, cwd: root, suppressLiveEvents: true });
+    const status = await runtime.runDefault([]);
+    assert.equal(status, 0);
+
+    const actual = readFileSync(metaFile, "utf8");
+    assert.equal(actual, "model:workflow-model\n");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("NodeWorkflowRuntime: prompt STEP_START params include named vars referenced in prompt text", async () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-node-prompt-params-"));
   try {
