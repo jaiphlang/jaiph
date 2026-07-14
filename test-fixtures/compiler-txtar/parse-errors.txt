@@ -215,10 +215,10 @@ workflow default() {
 }
 
 === invalid config value not quoted
-# @expect error E_PARSE "config value must be a quoted string or true/false" @2:3
+# @expect error E_PARSE "config value must be a quoted string, bare identifier, or true/false" @2:3
 --- input.jh
 config {
-  run.debug = yes
+  agent.default_model = gpt-4
 }
 workflow default() {
   log "ok"

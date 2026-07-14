@@ -1,6 +1,14 @@
 import type { WorkflowMetadata } from "../types";
 import type { Trivia, ConfigBodyPart } from "./trivia";
-import { colFromRaw, fail } from "./core";
+import { colFromRaw, fail, isBareIdentifier } from "./core";
+import { validateJaiphStringContent } from "../transpile/validate-string";
+
+const CONFIG_INTERPOLATION_RE = /\$\{[a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)?\}/;
+
+/** True when a config string value contains `${name}` or `${name.field}` interpolation. */
+export function configValueHasInterpolation(value: string): boolean {
+  return CONFIG_INTERPOLATION_RE.test(value);
+}
 
 const ALLOWED_KEYS = new Set([
   "agent.default_model",
@@ -57,10 +65,22 @@ function parseMetadataValue(filePath: string, rawLine: string, valuePart: string
     return fail(filePath, 'single-quoted strings are not supported; use double quotes ("...") instead', lineNo, colFromRaw(rawLine));
   }
   if (trimmed.startsWith(`"`) && trimmed.endsWith(`"`)) {
-    return trimmed.slice(1, -1).replace(/\\n/g, "\n").replace(/\\t/g, "\t").replace(/\\"/g, `"`).replace(/\\\\/g, `\\`);
+    const content = trimmed.slice(1, -1).replace(/\\n/g, "\n").replace(/\\t/g, "\t").replace(/\\"/g, `"`).replace(/\\\\/g, `\\`);
+    if (configValueHasInterpolation(content)) {
+      validateJaiphStringContent(content, filePath, lineNo, colFromRaw(rawLine), "config");
+    }
+    return content;
+  }
+  if (isBareIdentifier(trimmed)) {
+    return `\${${trimmed}}`;
   }
   const col = rawLine.indexOf(valuePart) >= 0 ? colFromRaw(rawLine) : 1;
-  return fail(filePath, `config value must be a quoted string or true/false: ${trimmed}`, lineNo, col);
+  return fail(
+    filePath,
+    `config value must be a quoted string, bare identifier, or true/false: ${trimmed}`,
+    lineNo,
+    col,
+  );
 }
 
 function validateKeyType(
@@ -164,10 +184,16 @@ function assignConfigKey(
 ): void {
   validateKeyType(filePath, key, value, lineNo, raw);
   if (key === "agent.backend") {
-    if (value !== "cursor" && value !== "claude" && value !== "codex") {
+    if (
+      typeof value === "string" &&
+      !configValueHasInterpolation(value) &&
+      value !== "cursor" &&
+      value !== "claude" &&
+      value !== "codex"
+    ) {
       fail(filePath, 'agent.backend must be "cursor", "claude", or "codex"', lineNo, colFromRaw(raw));
     }
-    (out.agent ??= {}).backend = value;
+    (out.agent ??= {}).backend = value as "cursor" | "claude" | "codex";
     return;
   }
   KEY_SETTERS[key]?.(out, value);

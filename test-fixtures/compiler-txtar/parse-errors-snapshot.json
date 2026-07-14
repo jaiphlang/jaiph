@@ -221,7 +221,7 @@
     "line": 2,
     "col": 3,
     "code": "E_PARSE",
-    "message": "config value must be a quoted string or true/false: yes"
+    "message": "config value must be a quoted string, bare identifier, or true/false: gpt-4"
   },
   "config integer key rejects string value": {
     "file": "input.jh",

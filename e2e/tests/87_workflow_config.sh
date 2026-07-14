@@ -229,3 +229,33 @@ actual="$(cat "${SIBLING_LOG}")"
 expected="$(printf '%s\n' 'alpha:model=alpha-model,backend=claude' 'beta:model=beta-model,backend=cursor')"
 e2e::assert_equals "${actual}" "${expected}" \
   "alpha sees its own model+backend; beta sees its own model and module default backend"
+
+# ---------------------------------------------------------------------------
+# Section 6: Workflow config interpolation from workflow parameters
+# ---------------------------------------------------------------------------
+e2e::section "workflow config interpolates workflow parameters"
+
+PARAM_LOG="${TEST_DIR}/param.log"
+export JAIPH_PARAM_LOG="${PARAM_LOG}"
+
+e2e::file "param_config.jh" <<'EOF'
+script log_model = `printf 'model:%s\n' "$JAIPH_AGENT_MODEL" >> "$JAIPH_PARAM_LOG"`
+
+workflow implement(model) {
+  config {
+    agent.default_model = model
+  }
+  run log_model()
+}
+
+workflow default() {
+  run implement("param-model")
+}
+EOF
+
+unset JAIPH_AGENT_MODEL 2>/dev/null || true
+jaiph run "${TEST_DIR}/param_config.jh" >/dev/null
+
+actual="$(cat "${PARAM_LOG}")"
+e2e::assert_equals "${actual}" "model:param-model" \
+  "workflow config resolves agent.default_model from workflow parameter"

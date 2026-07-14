@@ -141,32 +141,39 @@ export function emitModule(
   return sections.join("\n\n") + "\n";
 }
 
+/** Emit a config string RHS, preserving bare-identifier sugar for a single `${name}` reference. */
+function emitConfigStringRhs(value: string): string {
+  const singleRef = value.match(/^\$\{([A-Za-z_][A-Za-z0-9_]*)\}$/);
+  if (singleRef) return singleRef[1]!;
+  return JSON.stringify(value);
+}
+
 function emitConfigKeyLines(meta: WorkflowMetadata, key: string, pad: string): string[] {
   switch (key) {
     case "agent.default_model":
       if (meta.agent?.defaultModel === undefined) return [];
-      return [`${pad}agent.default_model = "${meta.agent.defaultModel}"`];
+      return [`${pad}agent.default_model = ${emitConfigStringRhs(meta.agent.defaultModel)}`];
     case "agent.command":
       if (meta.agent?.command === undefined) return [];
-      return [`${pad}agent.command = "${meta.agent.command}"`];
+      return [`${pad}agent.command = ${emitConfigStringRhs(meta.agent.command)}`];
     case "agent.backend":
       if (meta.agent?.backend === undefined) return [];
-      return [`${pad}agent.backend = "${meta.agent.backend}"`];
+      return [`${pad}agent.backend = ${emitConfigStringRhs(meta.agent.backend)}`];
     case "agent.trusted_workspace":
       if (meta.agent?.trustedWorkspace === undefined) return [];
-      return [`${pad}agent.trusted_workspace = "${meta.agent.trustedWorkspace}"`];
+      return [`${pad}agent.trusted_workspace = ${emitConfigStringRhs(meta.agent.trustedWorkspace)}`];
     case "agent.cursor_flags":
       if (meta.agent?.cursorFlags === undefined) return [];
-      return [`${pad}agent.cursor_flags = "${meta.agent.cursorFlags}"`];
+      return [`${pad}agent.cursor_flags = ${emitConfigStringRhs(meta.agent.cursorFlags)}`];
     case "agent.claude_flags":
       if (meta.agent?.claudeFlags === undefined) return [];
-      return [`${pad}agent.claude_flags = "${meta.agent.claudeFlags}"`];
+      return [`${pad}agent.claude_flags = ${emitConfigStringRhs(meta.agent.claudeFlags)}`];
     case "run.debug":
       if (meta.run?.debug === undefined) return [];
       return [`${pad}run.debug = ${meta.run.debug}`];
     case "run.logs_dir":
       if (meta.run?.logsDir === undefined) return [];
-      return [`${pad}run.logs_dir = "${meta.run.logsDir}"`];
+      return [`${pad}run.logs_dir = ${emitConfigStringRhs(meta.run.logsDir)}`];
     case "run.recover_limit":
       if (meta.run?.recoverLimit === undefined) return [];
       return [`${pad}run.recover_limit = ${meta.run.recoverLimit}`];
@@ -174,22 +181,22 @@ function emitConfigKeyLines(meta: WorkflowMetadata, key: string, pad: string): s
       return [];
     case "runtime.docker_image":
       if (meta.runtime?.dockerImage === undefined) return [];
-      return [`${pad}runtime.docker_image = "${meta.runtime.dockerImage}"`];
+      return [`${pad}runtime.docker_image = ${emitConfigStringRhs(meta.runtime.dockerImage)}`];
     case "runtime.docker_network":
       if (meta.runtime?.dockerNetwork === undefined) return [];
-      return [`${pad}runtime.docker_network = "${meta.runtime.dockerNetwork}"`];
+      return [`${pad}runtime.docker_network = ${emitConfigStringRhs(meta.runtime.dockerNetwork)}`];
     case "runtime.docker_timeout_seconds":
       if (meta.runtime?.dockerTimeoutSeconds === undefined) return [];
       return [`${pad}runtime.docker_timeout_seconds = ${meta.runtime.dockerTimeoutSeconds}`];
     case "module.name":
       if (meta.module?.name === undefined) return [];
-      return [`${pad}module.name = "${meta.module.name}"`];
+      return [`${pad}module.name = ${emitConfigStringRhs(meta.module.name)}`];
     case "module.version":
       if (meta.module?.version === undefined) return [];
-      return [`${pad}module.version = "${meta.module.version}"`];
+      return [`${pad}module.version = ${emitConfigStringRhs(meta.module.version)}`];
     case "module.description":
       if (meta.module?.description === undefined) return [];
-      return [`${pad}module.description = "${meta.module.description}"`];
+      return [`${pad}module.description = ${emitConfigStringRhs(meta.module.description)}`];
     default:
       return [];
   }
@@ -210,29 +217,29 @@ function emitConfig(meta: WorkflowMetadata, pad: string, trivia: Trivia): string
     return lines.join("\n");
   }
   if (meta.agent) {
-    if (meta.agent.defaultModel !== undefined) lines.push(`${pad}agent.default_model = "${meta.agent.defaultModel}"`);
-    if (meta.agent.command !== undefined) lines.push(`${pad}agent.command = "${meta.agent.command}"`);
-    if (meta.agent.backend !== undefined) lines.push(`${pad}agent.backend = "${meta.agent.backend}"`);
-    if (meta.agent.trustedWorkspace !== undefined) lines.push(`${pad}agent.trusted_workspace = "${meta.agent.trustedWorkspace}"`);
-    if (meta.agent.cursorFlags !== undefined) lines.push(`${pad}agent.cursor_flags = "${meta.agent.cursorFlags}"`);
-    if (meta.agent.claudeFlags !== undefined) lines.push(`${pad}agent.claude_flags = "${meta.agent.claudeFlags}"`);
+    if (meta.agent.defaultModel !== undefined) lines.push(`${pad}agent.default_model = ${emitConfigStringRhs(meta.agent.defaultModel)}`);
+    if (meta.agent.command !== undefined) lines.push(`${pad}agent.command = ${emitConfigStringRhs(meta.agent.command)}`);
+    if (meta.agent.backend !== undefined) lines.push(`${pad}agent.backend = ${emitConfigStringRhs(meta.agent.backend)}`);
+    if (meta.agent.trustedWorkspace !== undefined) lines.push(`${pad}agent.trusted_workspace = ${emitConfigStringRhs(meta.agent.trustedWorkspace)}`);
+    if (meta.agent.cursorFlags !== undefined) lines.push(`${pad}agent.cursor_flags = ${emitConfigStringRhs(meta.agent.cursorFlags)}`);
+    if (meta.agent.claudeFlags !== undefined) lines.push(`${pad}agent.claude_flags = ${emitConfigStringRhs(meta.agent.claudeFlags)}`);
   }
   if (meta.run) {
     if (meta.run.debug !== undefined) lines.push(`${pad}run.debug = ${meta.run.debug}`);
-    if (meta.run.logsDir !== undefined) lines.push(`${pad}run.logs_dir = "${meta.run.logsDir}"`);
+    if (meta.run.logsDir !== undefined) lines.push(`${pad}run.logs_dir = ${emitConfigStringRhs(meta.run.logsDir)}`);
     if (meta.run.recoverLimit !== undefined) lines.push(`${pad}run.recover_limit = ${meta.run.recoverLimit}`);
   }
   if (meta.runtime) {
-    if (meta.runtime.dockerImage !== undefined) lines.push(`${pad}runtime.docker_image = "${meta.runtime.dockerImage}"`);
-    if (meta.runtime.dockerNetwork !== undefined) lines.push(`${pad}runtime.docker_network = "${meta.runtime.dockerNetwork}"`);
+    if (meta.runtime.dockerImage !== undefined) lines.push(`${pad}runtime.docker_image = ${emitConfigStringRhs(meta.runtime.dockerImage)}`);
+    if (meta.runtime.dockerNetwork !== undefined) lines.push(`${pad}runtime.docker_network = ${emitConfigStringRhs(meta.runtime.dockerNetwork)}`);
     if (meta.runtime.dockerTimeoutSeconds !== undefined) {
       lines.push(`${pad}runtime.docker_timeout_seconds = ${meta.runtime.dockerTimeoutSeconds}`);
     }
   }
   if (meta.module) {
-    if (meta.module.name !== undefined) lines.push(`${pad}module.name = "${meta.module.name}"`);
-    if (meta.module.version !== undefined) lines.push(`${pad}module.version = "${meta.module.version}"`);
-    if (meta.module.description !== undefined) lines.push(`${pad}module.description = "${meta.module.description}"`);
+    if (meta.module.name !== undefined) lines.push(`${pad}module.name = ${emitConfigStringRhs(meta.module.name)}`);
+    if (meta.module.version !== undefined) lines.push(`${pad}module.version = ${emitConfigStringRhs(meta.module.version)}`);
+    if (meta.module.description !== undefined) lines.push(`${pad}module.description = ${emitConfigStringRhs(meta.module.description)}`);
   }
   lines.push("}");
   return lines.join("\n");

@@ -13,6 +13,7 @@ import {
   WORKFLOW_SCOPE,
   type ValidatorCtx,
 } from "./validate-step";
+import { validateConfigInto } from "./validate-config";
 
 /**
  * One step entry in the flat list built by the single workflow walk.
@@ -290,6 +291,8 @@ export function validateModuleInto(
     importsByAlias,
     importedAstCache,
   } as const;
+
+  validateConfigInto(ast, diag);
 
   for (const rule of ast.rules) {
     let ruleWalk: StepTreeWalk | undefined;
