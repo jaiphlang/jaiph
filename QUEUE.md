@@ -14,23 +14,6 @@ Process rules:
 
 ***
 
-## MCP 5/8 — Docs: serving workflows over MCP #dev-ready
-
-Design: `design/2026-07-14-mcp-server.md` → "Documentation" (and the rest of the doc for the contracts being documented). Documents the `jaiph mcp` subcommand as it exists in the tree.
-
-Work:
-
-- `docs/mcp.md` — Diátaxis how-to: serving a file; exposure rules (`export workflow` narrowing, route-target exclusion, `default`-only rename to file slug); writing tool descriptions as `#` comments above workflows; client config examples (`claude mcp add mytools -- jaiph mcp ./tools.jh`, Claude Desktop/Cursor JSON); safety posture (host execution like `jaiph run --raw`, Docker sandbox not launched yet, an exposed workflow is arbitrary shell reachable by the connected agent); hot reload; run artifacts under `.jaiph/runs/`; concurrency caveat (two calls mutating one workspace can race).
-- `docs/cli.md` — `jaiph mcp` reference section in the subcommand summary table + its own section: every flag the command accepts in the tree at execution time (at minimum `--workspace`; include `--env` if present), exit behaviour, protocol subset table, stdout-is-protocol invariant, `--mcp` alias.
-- README — feature bullet under Features and a docs-note link, following the existing style.
-- Front-matter (`title`, `permalink`, `diataxis`) consistent with sibling docs pages.
-
-Acceptance:
-
-- `docs/mcp.md` exists with the sections above; `docs/cli.md` documents every flag and the alias; README links resolve.
-- Every documented behaviour matches an assertion in the `jaiph mcp` test suite (no documented flag or rule without a covering test — cross-check exposure rules, naming, stdout invariant).
-- Docs build/link checks used by the repo (if any run in CI) pass.
-
 ## MCP 6/8 — e2e: `jaiph mcp` scripted session + `jaiph run` regression #dev-ready
 
 Design: `design/2026-07-14-mcp-server.md` → "Testing". The unit/acceptance tests for `jaiph mcp` run the command in-repo; this task adds black-box e2e coverage through the real binary entrypoint alongside the existing `e2e/` suite (`npm run test:e2e`).

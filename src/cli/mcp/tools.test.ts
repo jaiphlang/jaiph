@@ -16,6 +16,11 @@ test("toolNameFromFile: strips .jh and sanitizes to [A-Za-z0-9_-]", () => {
   assert.equal(toolNameFromFile("/ws/my flow!.jh"), "my_flow_");
 });
 
+test("toolNameFromFile: truncates the slug to 128 characters", () => {
+  const long = `/ws/${"a".repeat(200)}.jh`;
+  assert.equal(toolNameFromFile(long).length, 128);
+});
+
 // === deriveTools: exposure rules ===
 
 test("deriveTools: exposes all top-level workflows when nothing is exported", () => {

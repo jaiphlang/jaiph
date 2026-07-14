@@ -187,6 +187,14 @@ test("invalid JSON produces a parse error with null id", async () => {
   assert.equal(res.error.code, -32700);
 });
 
+test("a non-object JSON message is an invalid request with null id", async () => {
+  const { server, written } = makeServer();
+  await server.handleLine("[1, 2, 3]");
+  const res = written[0] as { id: null; error: { code: number } };
+  assert.equal(res.id, null);
+  assert.equal(res.error.code, -32600);
+});
+
 test("unknown request method is method-not-found", async () => {
   const { server, written } = makeServer();
   await server.handleLine(JSON.stringify({ jsonrpc: "2.0", id: 10, method: "resources/list" }));

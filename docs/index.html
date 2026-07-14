@@ -560,6 +560,10 @@ Jaiph: Running async.jh<span class="run-banner-meta"> (Docker sandbox, fusefs)</
                 <p><strong>Formatting.</strong> <code>jaiph format</code> rewrites <code>.jh</code> files to a canonical
                     style &mdash; consistent whitespace and indentation. See <a href="cli#jaiph-format">CLI
                         reference</a>.</p>
+                <p><strong>MCP server.</strong> <code>jaiph mcp ./tools.jh</code> serves a file's workflows as
+                    <a href="https://modelcontextprotocol.io/" target="_blank" rel="noopener noreferrer">MCP</a> tools
+                    over stdio, so any MCP client (Claude Code, Claude Desktop, Cursor) can call tested Jaiph workflows
+                    as tools. See <a href="/how-to/mcp">Serve workflows as MCP tools</a>.</p>
 
                 <h3>Samples</h3>
                 <p>Jaiph source code is built mostly with real Jaiph workflows. The
