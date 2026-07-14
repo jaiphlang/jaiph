@@ -22,6 +22,7 @@ The published `jaiph` bin is `node dist/src/cli.js` (npm) or the standalone `dis
 | `jaiph --version` / `-v` | Print the CLI version and exit `0`. |
 | `jaiph <subcommand> [-h \| --help]` | Print the subcommand's usage (flags + one example) and exit `0`. Recognised anywhere in the arg list before `--` (except `compile`: help flags must precede path arguments). |
 | `jaiph <path>` | File shorthand. Paths ending in `*.test.jh` route to `jaiph test`; other `*.jh` paths route to `jaiph run`. Non-existent paths fall through to normal command parsing. |
+| `jaiph --mcp <file.jh>` | Alias for `jaiph mcp <file.jh>`, dispatched alongside the subcommand. |
 | `jaiph <unknown>` | Print `Unknown command: <name>`, repeat the overview, exit `1`. |
 
 The reserved internal marker `__workflow-runner` is excluded from `--help`/usage and from the file-shorthand path; it is used by `process.execPath` self-spawn (see [Architecture — Distribution: Node vs Bun standalone](architecture.md#distribution-node-vs-bun-standalone)).
@@ -37,6 +38,7 @@ The reserved internal marker `__workflow-runner` is excluded from `--help`/usage
 | `init` | Initialize `.jaiph/` directory layout in a workspace. |
 | `install` | Install project-scoped libraries from the registry or git URLs. |
 | `use` | Reinstall `jaiph` globally with a selected version or channel. |
+| `mcp` | Serve a file's workflows as MCP tools over stdio (newline-delimited JSON-RPC). |
 
 ## `jaiph run`
 {: #jaiph-run}
@@ -268,6 +270,75 @@ jaiph use <version|nightly>
 
 Implementation: re-invokes `JAIPH_INSTALL_COMMAND` (default `curl -fsSL https://jaiph.org/install | bash`) with `JAIPH_REPO_REF` set to `nightly` or `v<version>`. The installer downloads the matching per-platform binary plus `SHA256SUMS`, verifies the checksum, and replaces `~/.local/bin/jaiph` (or `JAIPH_BIN_DIR`).
 
+## `jaiph mcp`
+{: #jaiph-mcp}
+
+Serve a file's workflows as [MCP](https://modelcontextprotocol.io/) tools over stdio. See [Serve workflows as MCP tools](/how-to/mcp) for the recipe and client-registration steps.
+
+```text
+jaiph mcp [--workspace <dir>] <file.jh>
+```
+
+`jaiph --mcp <file.jh>` is an equivalent alias, dispatched after `compile` in `src/cli/index.ts`.
+
+| Flag | Argument | Effect |
+|---|---|---|
+| `--workspace` | `<dir>` | Workspace root for import resolution (default: auto-detected from the file's directory). A missing value or non-directory path aborts with a specific message. |
+| `-h`, `--help` | — | Print the subcommand usage and exit `0`. |
+
+### Startup and exit behaviour
+
+- Loads the module graph and runs `collectDiagnostics` (the same compile-time pass as `jaiph compile`). Any diagnostic prints `file:line:col CODE message` lines to **stderr** and exits `1`.
+- A missing path, a non-`.jh` path, or a path that is not a file exits `1` with a message on stderr.
+- On success the server runs until stdin closes or it receives `SIGINT` / `SIGTERM`, then drains in-flight calls and exits `0`.
+
+### stdout invariant
+
+From the moment the server starts, **stdout carries only newline-delimited JSON-RPC**. Every banner, warning, workflow-exclusion notice, reload message, Docker notice, and credential-pre-flight warning goes to **stderr**. Each outbound protocol message is a single atomic write of `JSON.stringify(msg) + "\n"`.
+
+### Protocol subset
+
+Newline-delimited JSON-RPC 2.0. Requests are handled concurrently (a long `tools/call` never stalls `ping` or further calls).
+
+| Method | Behaviour |
+|---|---|
+| `initialize` | Replies with `protocolVersion`, `capabilities: {tools: {listChanged: true}}`, and `serverInfo: {name: "jaiph", title: "Jaiph workflows", version}`. Echoes the client's `protocolVersion` if it is one of `2024-11-05`, `2025-03-26`, `2025-06-18`; otherwise replies with the newest of that set. |
+| `ping` | Empty result. |
+| `tools/list` | `{tools: [{name, description, inputSchema}]}` from the current tool set (re-read per request, so hot reload needs no cache invalidation). |
+| `tools/call` | Runs the workflow on the host. Result: `{content: [{type: "text", text}], isError}`. |
+| notifications | Ignored (`notifications/initialized`, `notifications/cancelled`, …); no response. |
+| unknown request | JSON-RPC error `-32601`. |
+
+The server emits `notifications/tools/list_changed` after a successful hot reload (only once `initialize` has happened).
+
+### Error mapping
+
+| Condition | Code |
+|---|---|
+| Invalid JSON | `-32700` (with `id: null`) |
+| Non-object message | `-32600` |
+| Unknown method | `-32601` |
+| Unknown tool, missing/non-string required argument, or unexpected argument key | `-32602` (the call never starts) |
+| Infrastructure crash while running a call | `-32603` (also logged to stderr) |
+| **Workflow failure** | *not* a protocol error — a normal result with `isError: true` and a `run dir:` pointer |
+
+### Exposure and naming
+
+The tool surface is derived from the **entry file only** (imports are never exposed):
+
+| Rule | Behaviour |
+|---|---|
+| `export workflow …` present | Exactly the exported workflows are exposed. |
+| No exports | Every top-level workflow except channel route targets (skipped with a warning). |
+| `default` | Exposed only when it is the sole candidate, named after the sanitized file basename (`.jh` stripped, non-`[A-Za-z0-9_-]` → `_`, truncated to 128); otherwise skipped. |
+
+Tool descriptions come from the `#` comment lines directly above each workflow (shebang lines dropped, `#` prefix stripped); the fallback is `Run the "<name>" workflow from <basename>.` Every parameter is a required string in the input schema.
+
+### Execution and hot reload
+
+- Calls spawn the workflow runner on the host, like `jaiph run --raw`; the Docker sandbox is **not** launched. Run artifacts land under `.jaiph/runs/` exactly as for `jaiph run`.
+- Source files in the module graph are watched (polling, ~750 ms). A valid edit re-derives tools and emits `notifications/tools/list_changed`; an edit that fails to compile keeps the previous tool set serving and logs diagnostics to stderr.
+
 ## Environment variables
 
 See [Environment variables](env-vars.md) for the complete inventory. The variables most relevant to CLI behaviour:
@@ -296,3 +367,4 @@ See [Environment variables](env-vars.md) for the complete inventory. The variabl
 - [Grammar](grammar.md) — syntax and validation catalog.
 - [Language](language.md) — step semantics and step-output contract.
 - [Environment variables](env-vars.md) — every variable Jaiph reads.
+- [Serve workflows as MCP tools](/how-to/mcp) — exposing a file's workflows to MCP clients via `jaiph mcp`.

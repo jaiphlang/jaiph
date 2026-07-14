@@ -14,58 +14,6 @@ Process rules:
 
 ***
 
-## MCP 1–4/8 — Land the spiked `jaiph mcp` MVP: verify what exists, close the test gaps, run the full suite #dev-ready
-
-Design: `design/2026-07-14-mcp-server.md` — the whole doc; it records the contracts as verified during the spike.
-
-**State: largely implemented, partially verified.** A working MVP was spiked on 2026-07-14 and left **uncommitted in the working tree on `nightly`**. If that diff is present when you pick this up, the job is verification and gap-closing; if it is absent (discarded or already landed differently), implement from scratch per the design doc. The acceptance list below is the contract either way and is deliberately state-independent.
-
-### What exists and how far each piece is verified
-
-- **Runtime root generalization** — `src/runtime/kernel/node-workflow-runtime.ts`: `runDefault(args)` generalized to `runRoot(workflowName, args)` (emits `WORKFLOW_START`/`WORKFLOW_END` with the symbol, binds args to params by position, persists `return_value.txt` on success; `runDefault` delegates; unknown non-default symbol → `jaiph run: unknown workflow '<name>' in the input file`, status 1). *Implemented; exercised only indirectly through the live MCP session; **no dedicated unit tests**.*
-- **Runner symbol dispatch** — `src/runtime/kernel/node-workflow-runner.ts` calls `runtime.runRoot(workflowName, runArgs)` (previously non-`default` symbols short-circuited to status 1). *Implemented; no dedicated test.*
-- **Launch-path bug fix** — `src/runtime/kernel/workflow-launch.ts` `buildRunModuleLaunch` now passes `workflowSymbol || "default"` into the runner argv; it previously destructured the symbol and **hardcoded `"default"`**, so every spawned run executed `default` regardless of the requested symbol. *Implemented; verified in the MCP direction (non-default symbols run correctly). **The `jaiph run` direction was NOT re-verified after this edit** (the manual regression check was interrupted) and there is **no unit test pinning the argv**. This edit touches every `jaiph run` — treat it as unverified until tested.*
-- **Tool derivation** — `src/cli/mcp/tools.ts` (`deriveTools`, `toolNameFromFile`) + `src/cli/mcp/tools.test.ts`. *Implemented; **10 unit tests passing** (exports narrowing, route-target exclusion, lone-`default` rename, skip-with-warning, comment descriptions with shebang dropped, fallback, schemas, name sanitization).*
-- **Protocol server** — `src/cli/mcp/server.ts` (`McpServer`, injected `{serverVersion, getTools, callTool, write, log}`) + `src/cli/mcp/server.test.ts`. *Implemented; **16 unit tests passing** (initialize version negotiation known/unknown, tools/list shape, call arg mapping, failure-as-`isError`, `-32602` variants, `-32603` + log, ping, notifications ignored, `-32700` id-null, `-32601`, blank lines, `list_changed` gating).*
-- **Per-call execution** — `src/cli/mcp/call.ts` (`callWorkflow`: per-call runner spawn, `__JAIPH_EVENT__` stderr parsing, meta-file → `return_value.txt`, success/failure text composition). *Implemented; verified via a live stdio session (return values round-trip, failure text carries the run-dir pointer, concurrent calls interleave correctly); **no automated test**.*
-- **Command + wiring** — `src/cli/commands/mcp.ts` (`runMcp`: arg parsing, diagnostics-to-stderr, generation temp dirs, concurrent in-flight tracking, shutdown on stdin close/SIGINT/SIGTERM), dispatch of `mcp` + `--mcp` alias in `src/cli/index.ts`, `printUsage` additions in `src/cli/shared/usage.ts`. *Implemented; happy path verified via the live session. **The hot-reload path (`fs.watchFile` → new generation → `notifications/tools/list_changed`) was written but never exercised — not even manually.** The diagnostics-exit path, help output, and alias dispatch have no tests.*
-
-Overall verification done during the spike: `tsc --noEmit` clean; `npm run build` clean; `node --test dist/src/cli/mcp/*.test.js` → **26/26 pass**; live scripted stdio session (initialize → tools/list with comment-derived descriptions → tools/call returning workflow `return` values → missing-arg `-32602` → failure leg with `isError: true`). **The full `npm test` suite has NOT been run since these changes.**
-
-Manual probe (useful while working):
-
-```bash
-printf '%s\n' \
- '{"jsonrpc":"2.0","id":0,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"probe","version":"1"}}}' \
- '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
- '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' \
- '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"<tool>","arguments":{...}}}' \
- | node dist/src/cli.js mcp <fixture.jh>
-```
-
-### Work
-
-1. If the diff is absent, implement per the design doc (module layout above).
-2. Add the missing tests: launch argv pin, `runRoot` unit tests, scripted stdio session, diagnostics/help/alias, hot reload, `jaiph run` regression.
-3. Run the **full** `npm test` suite (and `npm run test:e2e` if touched paths warrant) and fix fallout — the launch-path edit is shared with `jaiph run`.
-
-### Acceptance
-
-Existing (keep passing — they fail if the contract regresses):
-
-- The 10 tool-derivation tests and 16 protocol-server tests described above.
-
-New (each must fail when its contract is violated):
-
-- Unit test: `buildRunModuleLaunch(["meta", "built.sh", "mywf", "arg1"], env)` produces an argv containing `mywf` (pins the fixed hardcoded-`default` bug).
-- Unit tests on the runtime: a non-`default` workflow runs as root via `runRoot` with params bound positionally and `return_value.txt` written on success; `runRoot("missing", [])` returns 1 and writes no `return_value.txt`; `runDefault` behaviour unchanged.
-- Scripted stdio session against a fixture `.jh` (two workflows, one with a param and a `return`): initialize → tools/list shows both tools with comment-derived descriptions → tools/call returns the workflow's return value as text → missing-arg call → `-32602` → failing workflow → `isError: true` with a run-dir pointer. Every stdout line parses as JSON-RPC (no banner/progress leakage).
-- Compile diagnostics go to stderr with exit 1 and nothing on stdout.
-- `jaiph --help` output includes `jaiph mcp`; `jaiph --mcp <file>` dispatches to the same command.
-- Hot reload: edit the fixture to add a workflow → `notifications/tools/list_changed` is emitted and a subsequent `tools/list` shows the new tool; break the fixture → the previous tool set still serves and diagnostics appear on stderr.
-- `jaiph run` regression: a `default` workflow exits 0 and prints its return value (pins the shared launch path in the `run` direction).
-- The full `npm test` suite passes.
-
 ## ENV — `--env` passthrough into the workflow env and across the Docker sandbox boundary (`jaiph run` + `jaiph mcp`) #dev-ready
 
 The Docker sandbox forwards environment fail-closed: only the `ENV_ALLOW_PREFIXES` allowlist (`JAIPH_`, `ANTHROPIC_`, `CURSOR_`, `CLAUDE_`; see `src/runtime/docker.ts` — `isEnvAllowed`, consumed in the `buildDockerArgs` env loop) crosses into the container. There is no per-key escape hatch, so a workflow that needs e.g. `GITHUB_TOKEN` or `MY_API_URL` cannot receive it in a sandboxed run. Add an explicit, user-consented passthrough.

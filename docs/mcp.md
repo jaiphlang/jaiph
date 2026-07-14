@@ -1,0 +1,127 @@
+---
+title: Serve workflows as MCP tools
+permalink: /how-to/mcp
+diataxis: how-to
+---
+
+# Serve workflows as MCP tools
+
+This recipe turns a `.jh` file into an [MCP](https://modelcontextprotocol.io/) server so that any MCP client (Claude Code, Claude Desktop, Cursor) can call the file's workflows as tools. A workflow encodes a tested, multi-step, repair-capable procedure (`ensure`, `catch`, `recover`, artifacts) — exposing it as a tool lets an agent invoke that procedure instead of improvising shell commands.
+
+No SDK project and no build step are involved: `jaiph mcp ./tools.jh` reuses the same compile-time validation, runner, and `.jaiph/runs/` artifacts as [`jaiph run`](cli.md#jaiph-run).
+
+## Prerequisites
+
+- A `.jh` file with at least one workflow.
+- Agent credentials on the host if any exposed workflow uses `prompt` — see [Authenticate agent backends](/how-to/agent-auth). Calls run on the host, so credentials are read from the host environment, not a container.
+
+## 1. Serve a file over stdio
+
+```bash
+jaiph mcp ./tools.jh
+```
+
+The server speaks newline-delimited [JSON-RPC 2.0](https://www.jsonrpc.org/specification) over stdio (the MCP stdio transport) and runs until stdin closes or it receives `SIGINT` / `SIGTERM`. `jaiph --mcp ./tools.jh` is an equivalent alias.
+
+Add `--workspace <dir>` to set the import-resolution root explicitly (default: auto-detected from the file's directory, exactly as in `jaiph run`).
+
+> **stdout carries only protocol JSON.** From the moment the server starts, stdout is the JSON-RPC channel. Every banner, warning, reload notice, and compile diagnostic goes to **stderr**. If the file has compile errors, the server prints `file:line:col CODE message` lines to stderr and exits `1` with nothing on stdout.
+
+## 2. Register the server with a client
+
+For Claude Code:
+
+```bash
+claude mcp add mytools -- jaiph mcp ./tools.jh
+```
+
+Any client that launches a command and speaks the MCP stdio transport works the same way — point it at `jaiph mcp <file.jh>`. The client sends `initialize`, then `tools/list`, then `tools/call`; the server needs no other configuration.
+
+## 3. Choose which workflows are exposed
+
+Not every workflow in the file becomes a tool. `deriveTools` applies these rules to the **entry file only** (imported modules are never exposed):
+
+1. **If the file declares `export workflow …`, exactly those are exposed.** `export` is the module's public-API marker; use it to publish a deliberate tool surface and hide helpers.
+2. **Otherwise every top-level workflow is exposed**, except **channel route targets** (workflows wired as inbox handlers via `channel name -> handler`) — those are message handlers, not tools, and are skipped with a warning.
+3. **`default` is special.** It is exposed only when it is the *only* candidate, under a tool name derived from the file's basename (`deploy.jh` → `deploy`). When other workflows exist, `default` is skipped (it stays the `jaiph run` entrypoint, not a public tool). It is also skipped if its file-slug name collides with a named workflow.
+
+The tool name for a named workflow is the workflow name itself. For a lone `default`, the file basename is sanitized to the MCP tool-name charset: the `.jh` suffix is stripped and any character outside `[A-Za-z0-9_-]` becomes `_`, truncated to 128 characters.
+
+Skips and exclusions are logged as warnings on **stderr** at load time — they never appear on stdout.
+
+## 4. Write tool descriptions as comments
+
+The description an agent reads when deciding whether to call a tool comes from the **`#` comment lines directly above the workflow**. Shebang lines (`#!…`) are dropped; the leading `#` is stripped from each remaining line; the lines are joined with newlines. Descriptions are the primary signal a client uses to pick a tool, so write them for the calling agent.
+
+```jaiph
+# Deploy the application to the named environment.
+# Runs the test suite first and aborts the deploy if it fails.
+export workflow deploy(environment) {
+  ensure tests_pass()
+  run `./deploy.sh ${environment}`()
+  return "deployed to ${environment}"
+}
+```
+
+If a workflow has no leading comment, the description falls back to `Run the "<name>" workflow from <basename>.`
+
+## 5. Understand the input schema
+
+Every Jaiph parameter is a string, so each tool's input schema is a flat object of string properties with **all parameters required** and no additional properties allowed. The `deploy` workflow above produces:
+
+```json
+{
+  "type": "object",
+  "properties": { "environment": { "type": "string" } },
+  "required": ["environment"],
+  "additionalProperties": false
+}
+```
+
+A workflow with no parameters produces the same shape with an empty `properties` and no `required` key.
+
+## 6. Call a tool and read the result
+
+On `tools/call`, the server maps the arguments object to positional workflow arguments in declared order and spawns the workflow runner — the same host-execution path as `jaiph run --raw`. The result is a text content block:
+
+- **On success**, the text is the workflow's `return` value (persisted as `return_value.txt`); if the workflow returns nothing, it falls back to the workflow's `log` output, then to a `workflow <name> completed` note.
+- **On failure**, the result carries `isError: true` and text describing the failing step, its captured output, and a `run dir: <path>` pointer so the client can inspect the full run.
+
+A **workflow failure is not a protocol error** — it comes back as a normal result with `isError: true`. Protocol-level errors (JSON-RPC `-32602`) are reserved for calls that never start: an unknown tool name, a missing or non-string required argument, or an unexpected argument key.
+
+Every call is a durable, inspectable run under `.jaiph/runs/` in the workspace, exactly as for `jaiph run`. Concurrent calls are isolated by per-call run ids and run directories, so a slow call never stalls other calls or a `ping`. Two calls that mutate the *same* files in the workspace can still race — that is inherent to running against a live workspace.
+
+## 7. Edit the file while the server runs (hot reload)
+
+The server watches every source file in the module graph (polling, ~750 ms). When you edit and save:
+
+- The graph is reloaded and re-validated, tools are re-derived, and the server emits `notifications/tools/list_changed`. A subsequent `tools/list` reflects the new tool set.
+- If the edit introduces a **compile error**, the server keeps serving the previous, valid tool set and logs the diagnostics to stderr — clients are never left with a broken tool list.
+
+## Safety posture
+
+An MCP-exposed workflow is **arbitrary shell reachable by the connected agent** — that is the point of the feature. Treat every exposed workflow as code the client may run at will, and scope the exposed surface with `export` accordingly.
+
+In this MVP, calls run **on the host**, like `jaiph run --raw`; the Docker sandbox is not launched, even when Docker would be enabled for `jaiph run`. When the environment would have enabled Docker, the server prints a one-line notice on stderr at startup. Agent-credential pre-flight runs once at startup, but in MCP mode its findings are demoted to warnings (the server can outlive a credential fix, and per-call failures still surface to the client).
+
+## Verification
+
+With the server running, a scripted stdio session drives the full handshake. Every stdout line is a JSON-RPC message:
+
+```bash
+printf '%s\n' \
+ '{"jsonrpc":"2.0","id":0,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"probe","version":"1"}}}' \
+ '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
+ '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' \
+ '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"deploy","arguments":{"environment":"staging"}}}' \
+ | jaiph mcp ./tools.jh
+```
+
+You should see three responses on stdout — the `initialize` result, the `tools/list` array with your comment-derived descriptions, and the `tools/call` result carrying the workflow's return value — and startup/warning lines only on stderr.
+
+## Related
+
+- [CLI — `jaiph mcp`](cli.md#jaiph-mcp) — the flag, exit behaviour, and error-code reference.
+- [Authenticate agent backends](/how-to/agent-auth) — host credentials for workflows that use `prompt`.
+- [Grammar — Imports and exports](grammar.md#imports-and-exports) — how `export` marks the public surface.
+- [Save artifacts](/how-to/artifacts) — the `.jaiph/runs/` layout every call writes to.
