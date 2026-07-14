@@ -35,6 +35,19 @@ For Claude Code:
 claude mcp add mytools -- jaiph mcp ./tools.jh
 ```
 
+Clients that configure MCP servers with JSON (Claude Desktop's `claude_desktop_config.json`, Cursor's `.cursor/mcp.json`) use the same command and arguments:
+
+```json
+{
+  "mcpServers": {
+    "mytools": {
+      "command": "jaiph",
+      "args": ["mcp", "./tools.jh"]
+    }
+  }
+}
+```
+
 Any client that launches a command and speaks the MCP stdio transport works the same way — point it at `jaiph mcp <file.jh>`. The client sends `initialize`, then `tools/list`, then `tools/call`; the server needs no other configuration.
 
 ## 3. Choose which workflows are exposed
@@ -43,7 +56,7 @@ Not every workflow in the file becomes a tool. `deriveTools` applies these rules
 
 1. **If the file declares `export workflow …`, exactly those are exposed.** `export` is the module's public-API marker; use it to publish a deliberate tool surface and hide helpers.
 2. **Otherwise every top-level workflow is exposed**, except **channel route targets** (workflows wired as inbox handlers via `channel name -> handler`) — those are message handlers, not tools, and are skipped with a warning.
-3. **`default` is special.** It is exposed only when it is the *only* candidate, under a tool name derived from the file's basename (`deploy.jh` → `deploy`). When other workflows exist, `default` is skipped (it stays the `jaiph run` entrypoint, not a public tool). It is also skipped if its file-slug name collides with a named workflow.
+3. **`default` is special.** It is exposed only when it is the *only* candidate, under a tool name derived from the file's basename (`deploy.jh` → `deploy`). When other workflows exist, `default` is skipped (it stays the `jaiph run` entrypoint, not a public tool).
 
 The tool name for a named workflow is the workflow name itself. For a lone `default`, the file basename is sanitized to the MCP tool-name charset: the `.jh` suffix is stripped and any character outside `[A-Za-z0-9_-]` becomes `_`, truncated to 128 characters.
 
