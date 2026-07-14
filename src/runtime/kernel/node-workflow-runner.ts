@@ -50,7 +50,7 @@ export async function runWorkflowRunner(positional: string[]): Promise<number> {
   const moduleGraph = graphFile ? readModuleGraph(graphFile) : loadModuleGraph(sourceFile, workspaceRoot);
   const graph = buildRuntimeGraph(moduleGraph);
   const runtime = new NodeWorkflowRuntime(graph, { env: process.env, cwd: process.cwd() });
-  const status = workflowName === "default" ? await runtime.runDefault(runArgs) : 1;
+  const status = await runtime.runRoot(workflowName, runArgs);
   writeFileSync(
     metaFile,
     `status=${status}\nrun_dir=${runtime.getRunDir()}\nsummary_file=${runtime.getSummaryFile()}\n`,

@@ -349,19 +349,33 @@ export class NodeWorkflowRuntime {
   }
 
   async runDefault(args: string[]): Promise<number> {
-    this.emitter.emitWorkflow("WORKFLOW_START", "default");
+    return this.runRoot("default", args);
+  }
+
+  /**
+   * Run a workflow from the entry module as the root of a run (same contract
+   * as `runDefault`, with the entry symbol parameterized): emits
+   * WORKFLOW_START/END and persists `return_value.txt`. Used by `jaiph run`
+   * (`default`) and by `jaiph mcp` tool calls (any exposed workflow).
+   */
+  async runRoot(workflowName: string, args: string[]): Promise<number> {
+    this.emitter.emitWorkflow("WORKFLOW_START", workflowName);
     const rootScope: Scope = {
       filePath: this.graph.entryFile,
       vars: this.newScopeVars(this.graph.entryFile, undefined, this.env),
       env: { ...this.env },
     };
     const resolved = resolveWorkflowRef(this.graph, this.graph.entryFile, {
-      value: "default",
+      value: workflowName,
       loc: { line: 1, col: 1 },
     });
     if (!resolved) {
-      process.stderr.write("jaiph run requires workflow 'default' in the input file\n");
-      this.emitter.emitWorkflow("WORKFLOW_END", "default");
+      process.stderr.write(
+        workflowName === "default"
+          ? "jaiph run requires workflow 'default' in the input file\n"
+          : `jaiph run: unknown workflow '${workflowName}' in the input file\n`,
+      );
+      this.emitter.emitWorkflow("WORKFLOW_END", workflowName);
       this.stopHeartbeat();
       return 1;
     }
@@ -380,7 +394,7 @@ export class NodeWorkflowRuntime {
         // Best-effort capture; the run succeeded regardless.
       }
     }
-    this.emitter.emitWorkflow("WORKFLOW_END", "default");
+    this.emitter.emitWorkflow("WORKFLOW_END", workflowName);
     this.stopHeartbeat();
     return result.status;
   }
