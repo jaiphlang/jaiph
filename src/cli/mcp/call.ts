@@ -22,6 +22,13 @@ export interface McpCallEnvironment {
   graphFile: string;
   /** Generation dir for per-call meta files. */
   outDir: string;
+  /**
+   * Resolved `--env` passthrough applied to every tool call's runner env for
+   * the server's lifetime (host execution). Once Docker-backed MCP calls
+   * exist, these must flow through `DockerSpawnOptions.extraEnv` — this is the
+   * single choke point.
+   */
+  extraEnv: Record<string, string>;
 }
 
 /**
@@ -43,6 +50,9 @@ export async function callWorkflow(
   runtimeEnv.JAIPH_RUN_ID = runId;
   runtimeEnv.JAIPH_SCRIPTS = env.scriptsDir;
   runtimeEnv.JAIPH_MODULE_GRAPH_FILE = env.graphFile;
+  // `--env` passthrough defines the workflow process's env, overriding
+  // inherited values, on every call.
+  Object.assign(runtimeEnv, env.extraEnv);
 
   const metaFile = join(env.outDir, `.jaiph-run-meta-${runId}.txt`);
   const dummyBuiltPath = join(env.outDir, "entry.sh");

@@ -98,6 +98,8 @@ The host CLI checks these before spawning the runner or container when [credenti
 
 Forwarding allowlist prefixes into the Docker container: `JAIPH_*` (except `JAIPH_DOCKER_*`, `JAIPH_INPLACE`, and `JAIPH_INPLACE_YES`), `ANTHROPIC_*`, `CLAUDE_*`, `CURSOR_*`. Everything else — including `OPENAI_*` — is silently dropped — see [Sandboxing](sandboxing.md).
 
+To forward a variable outside the allowlist (for example `GITHUB_TOKEN` or `OPENAI_API_KEY`) into a specific run, use the per-key **`--env`** flag on `jaiph run` / `jaiph mcp`: `--env KEY=VALUE` sets an exact value and `--env KEY` forwards the host's current value. In host mode `--env` defines the variable on the workflow process directly; in a Docker sandbox it crosses the boundary verbatim as an explicit `-e KEY=VALUE` container arg **bypassing the allowlist above** (the flag is the per-key consent), winning over any allowlist-forwarded value for the same key. A bare `--env KEY` unset on the host aborts with `E_ENV_MISSING` before anything is spawned; invalid names give `E_ENV_INVALID`; and the sandbox-control / runtime-managed keys the CLI owns (`JAIPH_UNSAFE`, `JAIPH_INPLACE`, `JAIPH_INPLACE_YES`, any `JAIPH_DOCKER_*`, `JAIPH_WORKSPACE`, `JAIPH_RUNS_DIR`, `JAIPH_RUN_ID`, `JAIPH_SCRIPTS`, `JAIPH_MODULE_GRAPH_FILE`, `JAIPH_SOURCE_ABS`, `JAIPH_META_FILE`, `JAIPH_AGENT_TRUSTED_WORKSPACE`) are rejected with `E_ENV_RESERVED` — use the sandbox flags or real env vars for those. Values are never path-remapped. See [CLI — `jaiph run` flags](cli.md#jaiph-run).
+
 ## Installer and `jaiph use`
 
 These variables are consumed by `docs/install` (the installer shell script) and by `jaiph use` when it re-invokes the installer. They are **not** read from inside the Jaiph TypeScript source.

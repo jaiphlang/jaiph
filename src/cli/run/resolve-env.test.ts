@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { resolveRuntimeEnv } from "./env";
+import { resolveRuntimeEnv, resolveEnvPairs } from "./env";
 import type { JaiphConfig } from "../../config";
 
 test("resolveRuntimeEnv: sets JAIPH_WORKSPACE from workspaceRoot", () => {
@@ -109,6 +109,44 @@ test("resolveRuntimeEnv: defaults JAIPH_AGENT_TRUSTED_WORKSPACE to workspaceRoot
   } finally {
     if (saved !== undefined) process.env.JAIPH_AGENT_TRUSTED_WORKSPACE = saved;
   }
+});
+
+// ---------------------------------------------------------------------------
+// resolveEnvPairs (--env passthrough resolution)
+// ---------------------------------------------------------------------------
+
+test("resolveEnvPairs: KEY=VALUE form uses the explicit value verbatim", () => {
+  const pairs = resolveEnvPairs([{ key: "GREETING", value: "hi" }], {});
+  assert.deepEqual(pairs, { GREETING: "hi" });
+});
+
+test("resolveEnvPairs: empty explicit value is preserved (not treated as unset)", () => {
+  const pairs = resolveEnvPairs([{ key: "EMPTY", value: "" }], {});
+  assert.deepEqual(pairs, { EMPTY: "" });
+});
+
+test("resolveEnvPairs: bare KEY forwards the host's current value", () => {
+  const pairs = resolveEnvPairs([{ key: "TOKEN" }], { TOKEN: "from-host" });
+  assert.deepEqual(pairs, { TOKEN: "from-host" });
+});
+
+test("resolveEnvPairs: bare KEY unset on the host aborts with E_ENV_MISSING", () => {
+  assert.throws(
+    () => resolveEnvPairs([{ key: "TOKEN" }], {}),
+    /E_ENV_MISSING.*TOKEN/,
+  );
+});
+
+test("resolveEnvPairs: later duplicate wins (flag order)", () => {
+  const pairs = resolveEnvPairs(
+    [{ key: "K", value: "first" }, { key: "K", value: "second" }],
+    {},
+  );
+  assert.deepEqual(pairs, { K: "second" });
+});
+
+test("resolveEnvPairs: empty spec list yields an empty record", () => {
+  assert.deepEqual(resolveEnvPairs([], { ANYTHING: "x" }), {});
 });
 
 test("resolveRuntimeEnv: sets debug from config", () => {

@@ -507,6 +507,14 @@ export interface DockerSpawnOptions {
   sandboxRunDir: string;
   runArgs: string[];
   env: Record<string, string | undefined>;
+  /**
+   * Explicit per-key env passthrough from `--env` (see `resolveEnvPairs`).
+   * Appended as `-e KEY=VALUE` container args **bypassing `isEnvAllowed`** —
+   * the flag is the per-key user consent. Values are passed verbatim (no path
+   * remapping). Each key appears once: an `extraEnv` entry wins over the same
+   * key forwarded through the allowlist. Reserved keys are rejected upstream.
+   */
+  extraEnv?: Record<string, string>;
   isTTY: boolean;
   /**
    * How to make the workspace appear writable inside the container.
@@ -730,10 +738,19 @@ export function buildDockerArgs(opts: DockerSpawnOptions, overlayScriptPath?: st
     args.push("-v", `${overlayScriptPath}:/jaiph/overlay-run.sh:ro`);
   }
 
+  const extraEnv = opts.extraEnv ?? {};
   const containerEnv = remapDockerEnv(opts.env, opts.workspaceRoot);
   for (const [key, value] of Object.entries(containerEnv)) {
     if (value === undefined) continue;
     if (!isEnvAllowed(key)) continue;
+    // `--env` supplies this key explicitly below; skip the allowlist copy so it
+    // appears once, with the `--env` value winning.
+    if (key in extraEnv) continue;
+    args.push("-e", `${key}=${value}`);
+  }
+  // Explicit `--env` passthrough: crosses the boundary verbatim regardless of
+  // isEnvAllowed — the flag is the per-key consent.
+  for (const [key, value] of Object.entries(extraEnv)) {
     args.push("-e", `${key}=${value}`);
   }
   if (mode === "overlay" && hostUid && hostGid) {

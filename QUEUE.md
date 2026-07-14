@@ -14,34 +14,6 @@ Process rules:
 
 ***
 
-## ENV — `--env` passthrough into the workflow env and across the Docker sandbox boundary (`jaiph run` + `jaiph mcp`) #dev-ready
-
-The Docker sandbox forwards environment fail-closed: only the `ENV_ALLOW_PREFIXES` allowlist (`JAIPH_`, `ANTHROPIC_`, `CURSOR_`, `CLAUDE_`; see `src/runtime/docker.ts` — `isEnvAllowed`, consumed in the `buildDockerArgs` env loop) crosses into the container. There is no per-key escape hatch, so a workflow that needs e.g. `GITHUB_TOKEN` or `MY_API_URL` cannot receive it in a sandboxed run. Add an explicit, user-consented passthrough.
-
-Contract:
-
-- New repeatable flag on **`jaiph run`** and **`jaiph mcp`** (parsed in `parseArgs`, `src/cli/shared/usage.ts`):
-  - `--env KEY=VALUE` — define `KEY` with that exact value (first `=` splits; value may contain `=`; empty value allowed).
-  - `--env KEY` — forward the host's current value; if `KEY` is unset on the host, abort before spawning with a specific error (`E_ENV_MISSING`), never silently drop.
-  - `KEY` must match `[A-Za-z_][A-Za-z0-9_]*`; anything else aborts with `E_ENV_INVALID`.
-- **Semantics: `--env` defines the workflow process's env var in every execution mode.**
-  - Host (non-Docker, including `jaiph run --raw`-style spawns and `jaiph mcp` tool calls): applied to the runner env after `resolveRuntimeEnv`/`applySandboxFlags`, overriding inherited values.
-  - Docker: appended as explicit `-e KEY=VALUE` container args **bypassing `isEnvAllowed`** — the flag is the per-key consent. Thread the pairs through `DockerSpawnOptions` (new field, e.g. `extraEnv: Record<string, string>`) into `buildDockerArgs`; ensure a key appears once, with the `--env` value winning over an allowlist-forwarded host value.
-- **Reserved keys are rejected** (`E_ENV_RESERVED`, both flag forms, all modes): sandbox-control keys (`JAIPH_UNSAFE`, `JAIPH_INPLACE`, `JAIPH_INPLACE_YES`, anything `JAIPH_DOCKER_*`) and runtime-managed keys that `resolveRuntimeEnv`/`remapDockerEnv` own (`JAIPH_WORKSPACE`, `JAIPH_RUNS_DIR`, `JAIPH_RUN_ID`, `JAIPH_SCRIPTS`, `JAIPH_MODULE_GRAPH_FILE`, `JAIPH_SOURCE_ABS`, `JAIPH_META_FILE`, `JAIPH_AGENT_TRUSTED_WORKSPACE`). Use the sandbox flags (`--inplace`/`--unsafe`) or real env vars for control keys instead.
-- `jaiph mcp --env …` applies the pairs to **every** tool call's runner env for the server's lifetime (and, once Docker-backed MCP calls exist, they must flow through the same `extraEnv` container path — the field is the single choke point).
-- No remapping of `--env` values: they are passed verbatim (path remapping stays confined to the runtime-managed keys, which are rejected above).
-- Update `printUsage` (`src/cli/shared/usage.ts`) and per-command usage strings; document the flag and its sandbox-boundary meaning in `docs/cli.md`, `docs/env-vars.md`, and the env-exposure paragraph of `docs/sandboxing.md`.
-
-Acceptance:
-
-- `parseArgs` unit tests: repeatable `--env` collected in order, `KEY=VALUE` vs bare `KEY` forms, `=` inside value preserved, empty value, invalid name rejected, missing value for bare form deferred to spawn-time host lookup.
-- Unit test on `buildDockerArgs`: a key that fails `isEnvAllowed` (e.g. `MY_TOKEN`) appears as `-e MY_TOKEN=…` when supplied via `extraEnv`, and does NOT appear without it (fails if the allowlist bypass or the fail-closed default regresses). A key both allowlist-forwarded and in `extraEnv` appears exactly once with the `extraEnv` value.
-- Reserved-key rejection test per category (control key, runtime-managed key), both flag forms.
-- `--env KEY` with `KEY` unset on the host aborts with `E_ENV_MISSING` before any process is spawned.
-- Integration (host mode): `jaiph run --env GREETING=hi file.jh` where the workflow shells out `echo $GREETING` — output contains `hi`. Same via bare-forward form with the var exported on the host.
-- Integration (MCP): `jaiph mcp --env GREETING=hi tools.jh` — a `tools/call` whose workflow returns the env var yields `hi` in the result text on every call.
-- Docker integration leg (where CI allows Docker): a sandboxed `jaiph run --env MY_TOKEN=s3cret` workflow reads the var inside the container; without `--env` the same workflow sees it unset.
-
 ## MCP 5/8 — Docs: serving workflows over MCP #dev-ready
 
 Design: `design/2026-07-14-mcp-server.md` → "Documentation" (and the rest of the doc for the contracts being documented). Documents the `jaiph mcp` subcommand as it exists in the tree.

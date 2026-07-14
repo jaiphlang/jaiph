@@ -21,8 +21,8 @@ interface McpClient {
   close(): Promise<void>;
 }
 
-function startMcp(fixture: string, cwd: string, env: NodeJS.ProcessEnv, alias = false): McpClient {
-  const argv = alias ? ["--mcp", fixture] : ["mcp", fixture];
+function startMcp(fixture: string, cwd: string, env: NodeJS.ProcessEnv, alias = false, extraArgv: string[] = []): McpClient {
+  const argv = alias ? ["--mcp", fixture] : ["mcp", ...extraArgv, fixture];
   const child: ChildProcessWithoutNullStreams = spawn("node", [CLI_PATH, ...argv], {
     cwd,
     env,
@@ -276,6 +276,102 @@ test("jaiph --mcp dispatches to the same command as jaiph mcp", async () => {
     assert.deepEqual(names, ["boom", "greet"]);
   } finally {
     await client.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+const ENV_ECHO_FIXTURE = [
+  'script echo_impl = `printf %s "$GREETING"`',
+  "# Returns the GREETING env var the workflow process sees.",
+  "workflow show() {",
+  "  const g = run echo_impl()",
+  '  return "${g}"',
+  "}",
+  "",
+].join("\n");
+
+test("jaiph mcp --env GREETING=hi: every tools/call sees the var in the result text", async () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-mcp-env-"));
+  const jh = join(root, "tools.jh");
+  writeFileSync(jh, ENV_ECHO_FIXTURE);
+  // Drop any inherited GREETING so the value can only come from --env.
+  const env = mcpEnv(join(root, ".jaiph/runs"));
+  delete env.GREETING;
+  const client = startMcp(jh, root, env, false, ["--env", "GREETING=hi"]);
+  try {
+    await initialize(client);
+
+    // Two calls: the pairs apply to every call for the server's lifetime.
+    for (const id of [1, 2]) {
+      client.send({ jsonrpc: "2.0", id, method: "tools/call", params: { name: "show", arguments: {} } });
+      const res = await client.waitFor((m) => m.id === id, `show call ${id}`);
+      const result = res.result as { content: Array<{ type: string; text: string }>; isError: boolean };
+      assert.equal(result.isError, false, `call ${id} should succeed`);
+      assert.deepEqual(result.content, [{ type: "text", text: "hi" }], `call ${id} sees GREETING=hi`);
+    }
+  } finally {
+    await client.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("jaiph mcp --env GREETING (bare) forwards the host value to every call", async () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-mcp-env-bare-"));
+  const jh = join(root, "tools.jh");
+  writeFileSync(jh, ENV_ECHO_FIXTURE);
+  const env = mcpEnv(join(root, ".jaiph/runs"));
+  env.GREETING = "from-host";
+  const client = startMcp(jh, root, env, false, ["--env", "GREETING"]);
+  try {
+    await initialize(client);
+    client.send({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "show", arguments: {} } });
+    const res = await client.waitFor((m) => m.id === 1, "show call");
+    const result = res.result as { content: Array<{ type: string; text: string }>; isError: boolean };
+    assert.equal(result.isError, false);
+    assert.deepEqual(result.content, [{ type: "text", text: "from-host" }]);
+  } finally {
+    await client.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("jaiph mcp --env KEY (bare) with KEY unset on the host aborts with E_ENV_MISSING before serving", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-mcp-env-missing-"));
+  try {
+    const jh = join(root, "tools.jh");
+    writeFileSync(jh, ENV_ECHO_FIXTURE);
+    const env = mcpEnv(join(root, ".jaiph/runs"));
+    delete env.NOPE_TOKEN;
+    const result = spawnSync("node", [CLI_PATH, "mcp", "--env", "NOPE_TOKEN", jh], {
+      encoding: "utf8",
+      cwd: root,
+      env,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    assert.equal(result.status, 1, `expected exit 1, got ${result.status}`);
+    assert.equal(result.stdout, "", "no protocol output before the abort");
+    assert.match(result.stderr, /E_ENV_MISSING/);
+    assert.match(result.stderr, /NOPE_TOKEN/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("jaiph mcp --env with a reserved key aborts with E_ENV_RESERVED", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-mcp-env-reserved-"));
+  try {
+    const jh = join(root, "tools.jh");
+    writeFileSync(jh, ENV_ECHO_FIXTURE);
+    const result = spawnSync("node", [CLI_PATH, "mcp", "--env", "JAIPH_WORKSPACE=/x", jh], {
+      encoding: "utf8",
+      cwd: root,
+      env: mcpEnv(join(root, ".jaiph/runs")),
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    assert.equal(result.status, 1, `expected exit 1, got ${result.status}`);
+    assert.equal(result.stdout, "");
+    assert.match(result.stderr, /E_ENV_RESERVED/);
+  } finally {
     rmSync(root, { recursive: true, force: true });
   }
 });

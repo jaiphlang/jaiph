@@ -147,6 +147,84 @@ test("parseArgs: --flag=value after -- is left untouched in positional", () => {
 });
 
 // ---------------------------------------------------------------------------
+// parseArgs: --env passthrough
+// ---------------------------------------------------------------------------
+
+test("parseArgs: repeatable --env collected in flag order", () => {
+  const r = parseArgs(["--env", "A=1", "--env", "B=2", "--env", "C=3", "flow.jh"]);
+  assert.deepEqual(r.env, [
+    { key: "A", value: "1" },
+    { key: "B", value: "2" },
+    { key: "C", value: "3" },
+  ]);
+  assert.deepEqual(r.positional, ["flow.jh"]);
+});
+
+test("parseArgs: --env KEY=VALUE captures the explicit value", () => {
+  const r = parseArgs(["--env", "GREETING=hi", "flow.jh"]);
+  assert.deepEqual(r.env, [{ key: "GREETING", value: "hi" }]);
+});
+
+test("parseArgs: bare --env KEY defers to a spawn-time host lookup (no value recorded)", () => {
+  const r = parseArgs(["--env", "GITHUB_TOKEN", "flow.jh"]);
+  assert.deepEqual(r.env, [{ key: "GITHUB_TOKEN" }]);
+  assert.equal(r.env[0].value, undefined);
+});
+
+test("parseArgs: --env value preserves '=' after the first split", () => {
+  const r = parseArgs(["--env", "URL=https://x.test/a=b&c=d", "flow.jh"]);
+  assert.deepEqual(r.env, [{ key: "URL", value: "https://x.test/a=b&c=d" }]);
+});
+
+test("parseArgs: --env KEY= allows an empty value", () => {
+  const r = parseArgs(["--env", "EMPTY=", "flow.jh"]);
+  assert.deepEqual(r.env, [{ key: "EMPTY", value: "" }]);
+});
+
+test("parseArgs: --env=KEY=VALUE inline form is equivalent to the spaced form", () => {
+  const inline = parseArgs(["--env=GREETING=hi", "flow.jh"]);
+  const spaced = parseArgs(["--env", "GREETING=hi", "flow.jh"]);
+  assert.deepEqual(inline.env, spaced.env);
+});
+
+test("parseArgs: --env with an invalid name is rejected (E_ENV_INVALID)", () => {
+  assert.throws(() => parseArgs(["--env", "1BAD=x", "flow.jh"]), /E_ENV_INVALID/);
+  assert.throws(() => parseArgs(["--env", "has-dash=x", "flow.jh"]), /E_ENV_INVALID/);
+});
+
+test("parseArgs: --env with no argument at all throws", () => {
+  assert.throws(() => parseArgs(["flow.jh", "--env"]), /--env requires a KEY or KEY=VALUE argument/);
+});
+
+test("parseArgs: --env after -- is not parsed (lands in positional)", () => {
+  const r = parseArgs(["flow.jh", "--", "--env", "A=1"]);
+  assert.deepEqual(r.env, []);
+  assert.deepEqual(r.positional, ["flow.jh", "--env", "A=1"]);
+});
+
+// Reserved-key rejection (E_ENV_RESERVED), per category and both flag forms.
+
+test("parseArgs: --env rejects a control key (E_ENV_RESERVED), KEY=VALUE form", () => {
+  assert.throws(() => parseArgs(["--env", "JAIPH_UNSAFE=true", "flow.jh"]), /E_ENV_RESERVED/);
+});
+
+test("parseArgs: --env rejects a control key (E_ENV_RESERVED), bare KEY form", () => {
+  assert.throws(() => parseArgs(["--env", "JAIPH_INPLACE", "flow.jh"]), /E_ENV_RESERVED/);
+});
+
+test("parseArgs: --env rejects the JAIPH_DOCKER_* control family", () => {
+  assert.throws(() => parseArgs(["--env", "JAIPH_DOCKER_IMAGE=x", "flow.jh"]), /E_ENV_RESERVED/);
+});
+
+test("parseArgs: --env rejects a runtime-managed key (E_ENV_RESERVED), KEY=VALUE form", () => {
+  assert.throws(() => parseArgs(["--env", "JAIPH_WORKSPACE=/x", "flow.jh"]), /E_ENV_RESERVED/);
+});
+
+test("parseArgs: --env rejects a runtime-managed key (E_ENV_RESERVED), bare KEY form", () => {
+  assert.throws(() => parseArgs(["--env", "JAIPH_RUNS_DIR", "flow.jh"]), /E_ENV_RESERVED/);
+});
+
+// ---------------------------------------------------------------------------
 // printUsage: lists the new flags under `jaiph run`
 // ---------------------------------------------------------------------------
 
@@ -163,6 +241,19 @@ test("printUsage: lists --workspace, --inplace, --unsafe, --yes under jaiph run"
   assert.ok(runSection.includes("--inplace"), "jaiph run section mentions --inplace");
   assert.ok(runSection.includes("--unsafe"), "jaiph run section mentions --unsafe");
   assert.ok(runSection.includes("--yes"), "jaiph run section mentions --yes");
+  assert.ok(runSection.includes("--env"), "jaiph run section mentions --env");
+});
+
+test("printUsage: documents --env under jaiph mcp too", () => {
+  const cap = captureStdout();
+  try {
+    printUsage();
+  } finally {
+    cap.restore();
+  }
+  const text = cap.text();
+  const mcpSection = text.slice(text.indexOf("jaiph mcp:"));
+  assert.ok(mcpSection.includes("--env"), "jaiph mcp section mentions --env");
 });
 
 test("printUsage: example shows --inplace + --workspace combo", () => {

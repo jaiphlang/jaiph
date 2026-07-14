@@ -1,5 +1,35 @@
 import { basename, resolve } from "node:path";
 import type { JaiphConfig } from "../../config";
+import type { EnvSpec } from "../shared/usage";
+
+/**
+ * Resolve `--env` specs into a flat `KEY -> value` record, ready to apply to a
+ * runner env (host modes) or thread through `DockerSpawnOptions.extraEnv`
+ * (Docker). Must run **before** any process is spawned so a bare `--env KEY`
+ * whose value is unset on the host aborts with `E_ENV_MISSING` rather than
+ * silently dropping. Later duplicates win (flag order). Name-shape and
+ * reserved-key rejection already happened at parse time (`parseArgs`).
+ */
+export function resolveEnvPairs(
+  specs: EnvSpec[],
+  hostEnv: Record<string, string | undefined>,
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const spec of specs) {
+    if (spec.value !== undefined) {
+      out[spec.key] = spec.value;
+    } else {
+      const hostValue = hostEnv[spec.key];
+      if (hostValue === undefined) {
+        throw new Error(
+          `E_ENV_MISSING --env ${spec.key}: no value given and ${spec.key} is not set on the host`,
+        );
+      }
+      out[spec.key] = hostValue;
+    }
+  }
+  return out;
+}
 
 /**
  * Boolean sandbox flags from `jaiph run`'s CLI surface. These are an ergonomic
