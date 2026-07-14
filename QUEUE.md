@@ -14,21 +14,6 @@ Process rules:
 
 ***
 
-## MCP 6/8 — e2e: `jaiph mcp` scripted session + `jaiph run` regression #dev-ready
-
-Design: `design/2026-07-14-mcp-server.md` → "Testing". The unit/acceptance tests for `jaiph mcp` run the command in-repo; this task adds black-box e2e coverage through the real binary entrypoint alongside the existing `e2e/` suite (`npm run test:e2e`).
-
-Work:
-
-- An e2e script that starts `jaiph mcp <fixture.jh>` as a child process, performs `initialize` / `tools/list` / `tools/call` (param round-trip through a workflow `return`) / a failing call, and closes stdin.
-- A regression leg asserting `jaiph run <fixture-with-default>` still passes and prints the return value — the launch path (`workflow-launch.ts`) is shared between `run` and `mcp`, and it previously hardcoded the `default` symbol; this leg pins both directions.
-
-Acceptance:
-
-- e2e asserts: every stdout line is valid JSON-RPC (no banner/progress leakage), the tool result text equals the workflow return value, a failing workflow yields `isError: true` and exit-0 server shutdown on stdin close.
-- e2e asserts `jaiph run` on a `default` workflow exits 0 and prints the return value (fails if the shared launch path regresses).
-- Wired into `npm run test:e2e` so CI executes it.
-
 ## MCP 7/8 — Docker sandbox parity for `jaiph mcp` (inplace by default) #dev-ready
 
 Design: `design/2026-07-14-mcp-server.md` → "Safety posture". Today `jaiph mcp` runs tool calls on the host like `jaiph run --raw` and prints a stderr notice when the env would have enabled Docker. This task makes MCP tool calls honor the same env-driven sandbox selection as `jaiph run` (`resolveDockerConfig`, `selectSandboxMode`, `spawnDockerProcess`, image prepare/availability checks), with two deliberate MCP-specific rules:
