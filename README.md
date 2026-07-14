@@ -2,7 +2,7 @@
 
 [jaiph.org](https://jaiph.org) · [Your first workflow](docs/first-workflow.md) · [Your first agent + sandboxed run](docs/first-agent-run.md) · [Install & switch versions](docs/setup.md) · [Agent Skill](https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md) · [Architecture](docs/architecture.md) · [CLI](docs/cli.md) · [Contributing](docs/contributing.md)
 
-> **Docs note:** The Jaiph documentation site follows the [Diátaxis](https://diataxis.fr/) framework. Tutorials: [Your first workflow](docs/first-workflow.md), [Your first agent + sandboxed run](docs/first-agent-run.md). How-to: [Install & switch versions](docs/setup.md), [Run in a Docker sandbox](docs/sandbox-run.md), [Authenticate agent backends](docs/agent-auth.md), [Configure backend & model](docs/configure-backend.md), [Add a hook](docs/hooks.md), [Use & publish a library](docs/libraries.md), [Save artifacts](docs/artifacts.md), [Write & run tests](docs/testing.md). Reference: [CLI](docs/cli.md), [Configuration](docs/configuration.md), [Grammar](docs/grammar.md), [Language](docs/language.md), [Environment variables](docs/env-vars.md). Explanation: [Why Jaiph](docs/why-jaiph.md), [Architecture](docs/architecture.md), [Sandboxing](docs/sandboxing.md), [Inbox & Dispatch](docs/inbox.md), [Async Handles](docs/spec-async-handles.md). Contributor: [Contributing](docs/contributing.md), [Agent Skill](https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md).
+> **Docs note:** The Jaiph documentation site follows the [Diátaxis](https://diataxis.fr/) framework. Tutorials: [Your first workflow](docs/first-workflow.md), [Your first agent + sandboxed run](docs/first-agent-run.md). How-to: [Install & switch versions](docs/setup.md), [Run in a Docker sandbox](docs/sandbox-run.md), [Authenticate agent backends](docs/agent-auth.md), [Configure backend & model](docs/configure-backend.md), [Add a hook](docs/hooks.md), [Use & publish a library](docs/libraries.md), [Save artifacts](docs/artifacts.md), [Write & run tests](docs/testing.md), [Serve workflows as MCP tools](docs/mcp.md). Reference: [CLI](docs/cli.md), [Configuration](docs/configuration.md), [Grammar](docs/grammar.md), [Language](docs/language.md), [Environment variables](docs/env-vars.md). Explanation: [Why Jaiph](docs/why-jaiph.md), [Architecture](docs/architecture.md), [Sandboxing](docs/sandboxing.md), [Inbox & Dispatch](docs/inbox.md), [Async Handles](docs/spec-async-handles.md). Contributor: [Contributing](docs/contributing.md), [Agent Skill](https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md).
 
 ---
 
@@ -26,10 +26,11 @@
 - **Testing** — `*.test.jh` files run in-process (`jaiph test`) with mocks and `expect_*` assertions ([Write & run tests](docs/testing.md)).
 - **Safety and inspectability** — Docker-backed sandbox for **`jaiph run`** (env-controlled; see [Sandboxing](docs/sandboxing.md) and [Run in a Docker sandbox](docs/sandbox-run.md)); live **`__JAIPH_EVENT__`** on stderr and durable **`.jaiph/runs/`** artifacts ([Architecture](docs/architecture.md)).
 - **Tooling** — `jaiph compile`, `jaiph format`, `jaiph install` / `.jaiph/libs/` ([Use & publish a library](docs/libraries.md)), and optional `hooks.json` ([CLI](docs/cli.md), [Add a hook](docs/hooks.md)).
+- **MCP server** — `jaiph mcp ./tools.jh` serves a file's workflows as [MCP](https://modelcontextprotocol.io/) tools over stdio, so any MCP client (Claude Code, Cursor) can call tested Jaiph workflows as tools ([Serve workflows as MCP tools](docs/mcp.md)).
 
 ## Core components
 
-- **CLI** (`src/cli`) — `jaiph run` / `test` / `compile` / `format` / `init` / `install` / `use`; prepares scripts, spawns the workflow runner (or in-process test runner), parses `__JAIPH_EVENT__` on stderr, runs hooks on `jaiph run` only.
+- **CLI** (`src/cli`) — `jaiph run` / `test` / `compile` / `format` / `init` / `install` / `use` / `mcp`; prepares scripts, spawns the workflow runner (or in-process test runner), parses `__JAIPH_EVENT__` on stderr, runs hooks on `jaiph run` only.
 - **Parser** (`src/parser.ts`, `src/parse/*`) — `.jh` / `.test.jh` → AST.
 - **Validator** (`src/transpile/validate.ts`) — imports and symbol references at compile time.
 - **Transpiler** (`src/transpile/*`) — emits atomic `script` files under `scripts/` only (no workflow-level shell).
