@@ -14,6 +14,54 @@ Process rules:
 
 ***
 
+## Fix: unquoted `${ref}` string sugar everywhere Jaiph accepts strings #dev-ready
+
+**Global rule:** Every Jaiph string position — not only `config { }` — must accept the same three equivalent forms: **bare identifier** (`model`), **double-quoted string** (`"${model}"` or `"prefix-${model}"`), and **bare unquoted interpolation ref** (`${model}` or `${model.field}`). No string RHS site may accept two of these but reject the third. Audit the full parser surface; do not stop at config.
+
+**Bug (first reported):** In `config { }`, `agent.model = "${model}"` and `agent.model = model` compile, but `agent.model = ${model}` is `E_PARSE` (`config value must be a quoted string, bare identifier, or true/false: ${model}`).
+
+**Root cause:** String RHS parsers inconsistently implement sugar. `parseMetadataValue` (`src/parse/metadata.ts`) and siblings only recognize quoted strings and bare identifiers; a RHS that already starts with `${` falls through to a parse error. The same asymmetry may exist on other sites that already accept bare `name` and `"${name}"` but not bare `${name}`.
+
+**Required behavior (uniform sugar, all string sites):**
+
+| Author writes | Stored / AST form | Resolves at runtime |
+|---|---|---|
+| `model` | `${model}` | yes |
+| `"${model}"` | `${model}` (string content) | yes |
+| `${model}` | `${model}` | yes |
+| `"prefix-${model}"` | literal with embedded ref | yes |
+| `${model.field}` | `${model.field}` | yes |
+
+**All string usage sites to audit and align** (exhaustive pass — every parser that accepts a Jaiph orchestration string, not a raw shell fragment):
+
+1. **Module/workflow `config { }` string keys** — `parseMetadataValue` (`src/parse/metadata.ts`).
+2. **`log` / `logerr` / `fail` message RHS** — `parseLogMessageRhs` and siblings (`src/parse/core.ts`, `workflow-brace.ts`).
+3. **`const x = …` string literal RHS** — `parseConstRhs` (`src/parse/const-rhs.ts`).
+4. **`return` value sugar** — `workflow-return-dotted.ts` / return parsing in `workflow-brace.ts`.
+5. **`prompt` body** — identifier and quoted forms (`src/parse/prompt.ts`): `prompt model`, `prompt "${model}"`, and `prompt ${model}` must be equivalent where a single-ref prompt is intended.
+6. **`send` RHS** — `parseSendRhs` (`src/parse/send-rhs.ts`) already accepts `${var}`; ensure parity with bare-identifier sugar where applicable.
+7. **`match` arms, `if` string operands, call literal args, channel payloads** — any other `src/parse/*.ts` path that accepts `"…"` or bare identifiers for interpolation; grep for `isBareIdentifier`, `bareIdentifier`, and string-RHS parse errors to find gaps.
+8. **Formatter round-trip** — `emitConfigStringRhs` and any other emit paths (`src/format/emit.ts`): `jaiph format` preserves author intent (bare id preferred when equivalent).
+
+Explicitly **out of scope:** script bodies (backtick/fenced shell), `*.test.jh` mock literals where documented as quote-only, and shell expansions (`${var:-default}`, `${#var}`, etc.) — keep `validateJaiphStringContent` / `validateConstBashExpr` guards.
+
+**Implementation sketch:**
+
+- Add one shared helper (e.g. `isJaiphInterpolationRef` in `src/parse/core.ts`): `^\$\{[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?\}$`.
+- Route every string RHS parser through the same normalization (bare id → `${name}`, unquoted `${name}` → stored as-is, quoted forms unchanged).
+- Extend compile-time validation (`src/transpile/validate-config.ts` and any string-ref validators) so all three forms resolve identically.
+
+Acceptance:
+
+* **Config:** `jaiph compile` accepts `config { agent.model = ${model} }` at module and workflow scope; stored metadata equals `${model}`; runtime resolves at prompt time (`e2e/tests/87_workflow_config.sh` or `node-workflow-runtime.artifacts.test.ts`).
+* **Parser unit tests:** `parse-metadata.test.ts` — unquoted `${model}`, `${model.field}`; reject unclosed `${model` and shell `${model:-x}`. `parse-const-rhs.test.ts`, `parse-definitions.test.ts`, `parse-prompt.test.ts`, `parse-send-rhs.test.ts` (as applicable) — each covered site accepts bare id, quoted, and unquoted `${ref}` with identical AST/normalization.
+* **Cross-site lint or inventory test:** a test that fails if any `src/parse/*.ts` string-RHS parser duplicates the bare-id / quoted pattern without calling the shared helper (prevents future drift).
+* `compiler-golden.test.ts` / txtar snapshot updated for the new accepted form.
+* `docs/configuration.md`, `docs/grammar.md`, and `docs/language.md` string-interpolation sections state the global three-form rule for **all** Jaiph string positions.
+* `npm test` passes.
+
+***
+
 ## Release: bump version to 0.11.0 #dev-ready
 
 Cut release **v0.11.0** from the current `# Unreleased` changelog block. The supported mechanical path is `.jaiph/prepare_release.jh`; the operator still reviews the diff, stamps the changelog, commits, tags, and pushes.
