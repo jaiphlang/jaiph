@@ -16,13 +16,13 @@ test("validateConfig: rejects unknown identifier in workflow config", () => {
       [
         "workflow implement(model) {",
         "  config {",
-        "    agent.default_model = model",
+        "    agent.model = model",
         "  }",
         "}",
         "",
         "workflow other() {",
         "  config {",
-        "    agent.default_model = missing",
+        "    agent.model = missing",
         "  }",
         "}",
         "",
@@ -49,7 +49,7 @@ test("validateConfig: accepts workflow parameter in workflow config", () => {
       [
         "workflow implement(model) {",
         "  config {",
-        "    agent.default_model = model",
+        "    agent.model = model",
         "  }",
         "}",
         "",
@@ -76,7 +76,7 @@ test("validateConfig: accepts module const in module config", () => {
         'const DEFAULT_MODEL = "claude-sonnet-5"',
         "",
         "config {",
-        "  agent.default_model = DEFAULT_MODEL",
+        "  agent.model = DEFAULT_MODEL",
         "}",
         "",
         "workflow default() {",
@@ -95,18 +95,18 @@ test("validateConfig: accepts module const in module config", () => {
 
 test("interpolateWorkflowMetadata: resolves workflow parameter", () => {
   const vars = new Map([["model", "claude-sonnet-5"]]);
-  const resolved = interpolateWorkflowMetadata({ agent: { defaultModel: "${model}" } }, vars);
-  assert.equal(resolved.agent?.defaultModel, "claude-sonnet-5");
+  const resolved = interpolateWorkflowMetadata({ agent: { model: "${model}" } }, vars);
+  assert.equal(resolved.agent?.model, "claude-sonnet-5");
 });
 
 test("buildConstVars: resolves module const chain for module config", () => {
   const ast = parsejaiph(
-    ['const DEFAULT_MODEL = "claude-sonnet-5"', "", "config {", "  agent.default_model = DEFAULT_MODEL", "}"].join(
+    ['const DEFAULT_MODEL = "claude-sonnet-5"', "", "config {", "  agent.model = DEFAULT_MODEL", "}"].join(
       "\n",
     ),
     "test.jh",
   );
   const vars = buildConstVars(ast.envDecls);
   const resolved = interpolateWorkflowMetadata(ast.metadata!, vars);
-  assert.equal(resolved.agent?.defaultModel, "claude-sonnet-5");
+  assert.equal(resolved.agent?.model, "claude-sonnet-5");
 });

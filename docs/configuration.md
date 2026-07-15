@@ -41,7 +41,7 @@ Docker enablement uses a separate, env-only resolution; see [Docker enablement](
 | Boolean | Bare `true` / `false` | `true` |
 | Integer | Unsigned decimal digits | `300` |
 
-String config values support the same `${identifier}` interpolation as orchestration strings (`log`, `prompt`, `return`, etc.). A bare identifier on the RHS is sugar for a single `${identifier}` reference (for example `agent.default_model = model` is equivalent to `agent.default_model = "${model}"`).
+String config values support the same `${identifier}` interpolation as orchestration strings (`log`, `prompt`, `return`, etc.). A bare identifier on the RHS is sugar for a single `${identifier}` reference (for example `agent.model = model` is equivalent to `agent.model = "${model}"`).
 
 **Interpolation scope:**
 
@@ -56,7 +56,7 @@ Interpolation runs when the config scope is applied (workflow entry for workflow
 
 | Key | Type | Default | Env equivalent | Notes |
 |---|---|---|---|---|
-| `agent.default_model` | string | — | `JAIPH_AGENT_MODEL` | Default model for `prompt` steps. Applies to all backends. |
+| `agent.model` | string | — | `JAIPH_AGENT_MODEL` (env only) | Model for `prompt` steps in this scope. Resolved at each `prompt` invocation and passed as a per-call `--model` flag — it does **not** set `JAIPH_AGENT_MODEL` in the workflow environment, so scripts and other steps do not see it. Set `JAIPH_AGENT_MODEL` in the shell to override all prompts in a run. |
 | `agent.command` | string | `cursor-agent` | `JAIPH_AGENT_COMMAND` | Cursor backend command. Basename other than `cursor-agent` enables custom-command mode (stdin → command → stdout). |
 | `agent.backend` | string (`cursor` \| `claude` \| `codex`) | `cursor` | `JAIPH_AGENT_BACKEND` | Backend selector. |
 | `agent.trusted_workspace` | string (path) | workspace root | `JAIPH_AGENT_TRUSTED_WORKSPACE` | Directory passed to Cursor as `--trust`. When unset, defaults to `JAIPH_WORKSPACE`. In-file values are assigned to the env var as authored (relative paths are not normalized to absolute paths). |
@@ -152,7 +152,7 @@ Locked names: `JAIPH_AGENT_BACKEND`, `JAIPH_AGENT_MODEL`, `JAIPH_AGENT_COMMAND`,
 
 | In-file key | Environment variable |
 |---|---|
-| `agent.default_model` | `JAIPH_AGENT_MODEL` |
+| `agent.model` | _(prompt-scoped only — does not set `JAIPH_AGENT_MODEL`)_ |
 | `agent.command` | `JAIPH_AGENT_COMMAND` |
 | `agent.backend` | `JAIPH_AGENT_BACKEND` |
 | `agent.trusted_workspace` | `JAIPH_AGENT_TRUSTED_WORKSPACE` |
@@ -194,7 +194,7 @@ Before `jaiph run` spawns the workflow runner or Docker container, the host CLI 
 
 Hard errors exit non-zero with no runner or container launched. Warnings go to stderr and the run proceeds. Skip cases: entry file declares no explicit backend and uses no `prompt` step → no pre-flight; `jaiph run --raw` → no pre-flight; `JAIPH_UNSAFE=true` / `--unsafe` → no pre-flight (host escape hatch — runtime backend guards remain).
 
-Every error and warning names: the backend; the model when `agent.default_model` is set; the entry `.jh` file; the config scope (`module config`, `workflow <name>`, `JAIPH_AGENT_BACKEND env`, or `default`); and the concrete remedy. Docker-mode messages also note that the variable must be set on the host so it gets forwarded.
+Every error and warning names: the backend; the model when `agent.model` is set; the entry `.jh` file; the config scope (`module config`, `workflow <name>`, `JAIPH_AGENT_BACKEND env`, or `default`); and the concrete remedy. Docker-mode messages also note that the variable must be set on the host so it gets forwarded.
 
 ## Model resolution
 {: #model-resolution}
@@ -203,11 +203,12 @@ Resolution order for a `prompt` step:
 
 | Step | Source | Notes |
 |---|---|---|
-| 1 | Explicit model — `agent.default_model` / `JAIPH_AGENT_MODEL` non-empty. | `model_reason: explicit`. |
-| 2 | Flags model — `--model <name>` inside `agent.cursor_flags` / `agent.claude_flags`. | `model_reason: flags`. Codex has no flag channel; this step does not apply. |
-| 3 | Backend default — Cursor/Claude binaries pick their own. Codex defaults to `gpt-4o` in code. | `model_reason: backend-default`. |
+| 1 | User env — `JAIPH_AGENT_MODEL` non-empty. | `model_reason: explicit`. Applies to every `prompt` in the run. |
+| 2 | In-file config — `agent.model` from workflow-level then module-level metadata (interpolated at prompt time). | `model_reason: explicit`. Applies to that `prompt` invocation only; passed as `--model` to the backend CLI without writing `JAIPH_AGENT_MODEL`. |
+| 3 | Flags model — `--model <name>` inside `agent.cursor_flags` / `agent.claude_flags`. | `model_reason: flags`. Codex has no flag channel; this step does not apply. |
+| 4 | Backend default — Cursor/Claude binaries pick their own. Codex defaults to `gpt-4o` in code. | `model_reason: backend-default`. |
 
-For the Claude backend, when `agent.default_model` is set and `agent.claude_flags` does not already contain `--model`, Jaiph passes `--model <value>` to the Claude CLI automatically. If both are set, the value in `agent.claude_flags` wins (appended last).
+For the Claude backend, when `agent.model` is set and `agent.claude_flags` does not already contain `--model`, Jaiph passes `--model <value>` to the Claude CLI automatically. If both are set, the value in `agent.claude_flags` wins (appended last).
 
 `PROMPT_START` / `PROMPT_END` records in `run_summary.jsonl` carry `model` (resolved string, or null when backend auto-selects) and `model_reason`.
 

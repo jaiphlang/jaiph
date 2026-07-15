@@ -231,7 +231,7 @@ if r.verdict == "reject" {
 - For a `"""` prompt, `returns "…"` goes on the closing-`"""` line or the line immediately after.
 - Triple **backticks** inside prompt context are rejected — they are script delimiters. Use indentation or quotes for code in prompt text.
 
-Backend is configured, not per-prompt: `agent.backend` = `cursor` (default) | `claude` | `codex`, plus `agent.default_model`, via `config { … }` or `JAIPH_AGENT_*` env vars (env wins). On the **cursor** backend only, `agent.command` can point at a custom executable (prompt on stdin, answer on stdout); `claude` and `codex` ignore `agent.command`.
+Backend is run-scoped: `agent.backend` = `cursor` (default) | `claude` | `codex` via `config { … }` or `JAIPH_AGENT_*` env vars (env wins for mapped keys). Model is **per-prompt**: in-file `agent.model` is resolved at each `prompt` step and passed as `--model` — it does **not** set `JAIPH_AGENT_MODEL` in the workflow environment. Set `JAIPH_AGENT_MODEL` in the shell to override the model for every prompt in a run. On the **cursor** backend only, `agent.command` can point at a custom executable (prompt on stdin, answer on stdout); `claude` and `codex` ignore `agent.command`.
 
 **Write prompts like task briefs:** state the goal, the constraints, the acceptance criteria, and what to output. Interpolate concrete context (`${task}`, `${diff}`, captured file contents) rather than asking the agent to go find it.
 
@@ -317,7 +317,7 @@ Workflows only (rejected in rules); not combinable with inline scripts. `catch`/
 ```jaiph
 config {
   agent.backend = "claude"               # cursor | claude | codex
-  agent.default_model = "claude-sonnet-4-6"
+  agent.model = "claude-sonnet-4-6"
   run.recover_limit = 5                  # workflow-level config also honored
   run.logs_dir = ".jaiph/runs"
 }

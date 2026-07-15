@@ -150,9 +150,9 @@ function emitConfigStringRhs(value: string): string {
 
 function emitConfigKeyLines(meta: WorkflowMetadata, key: string, pad: string): string[] {
   switch (key) {
-    case "agent.default_model":
-      if (meta.agent?.defaultModel === undefined) return [];
-      return [`${pad}agent.default_model = ${emitConfigStringRhs(meta.agent.defaultModel)}`];
+    case "agent.model":
+      if (meta.agent?.model === undefined) return [];
+      return [`${pad}agent.model = ${emitConfigStringRhs(meta.agent.model)}`];
     case "agent.command":
       if (meta.agent?.command === undefined) return [];
       return [`${pad}agent.command = ${emitConfigStringRhs(meta.agent.command)}`];
@@ -217,7 +217,7 @@ function emitConfig(meta: WorkflowMetadata, pad: string, trivia: Trivia): string
     return lines.join("\n");
   }
   if (meta.agent) {
-    if (meta.agent.defaultModel !== undefined) lines.push(`${pad}agent.default_model = ${emitConfigStringRhs(meta.agent.defaultModel)}`);
+    if (meta.agent.model !== undefined) lines.push(`${pad}agent.model = ${emitConfigStringRhs(meta.agent.model)}`);
     if (meta.agent.command !== undefined) lines.push(`${pad}agent.command = ${emitConfigStringRhs(meta.agent.command)}`);
     if (meta.agent.backend !== undefined) lines.push(`${pad}agent.backend = ${emitConfigStringRhs(meta.agent.backend)}`);
     if (meta.agent.trustedWorkspace !== undefined) lines.push(`${pad}agent.trusted_workspace = ${emitConfigStringRhs(meta.agent.trustedWorkspace)}`);

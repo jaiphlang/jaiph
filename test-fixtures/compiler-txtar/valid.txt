@@ -132,7 +132,7 @@ workflow default() {
 workflow default() {
   # a comment
   config {
-    agent.default_model = "gpt-4"
+    agent.model = "gpt-4"
   }
   log "done"
 }
@@ -360,7 +360,7 @@ workflow default() {
 # @expect ok
 --- input.jh
 config {
-  agent.default_model = "gpt-4"
+  agent.model = "gpt-4"
   run.logs_dir = ".jaiph/runs"
 }
 workflow default() {

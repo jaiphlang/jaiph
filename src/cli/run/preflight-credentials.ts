@@ -44,7 +44,7 @@ function collectBackendUsages(
 ): BackendUsage[] {
   const seen = new Map<Backend, BackendUsage>();
   const moduleBackend = mod.metadata?.agent?.backend;
-  const moduleModel = mod.metadata?.agent?.defaultModel;
+  const moduleModel = mod.metadata?.agent?.model;
   if (moduleBackend) {
     seen.set(moduleBackend, {
       backend: moduleBackend,
@@ -55,7 +55,7 @@ function collectBackendUsages(
   for (const wf of mod.workflows) {
     const wfBackend = wf.metadata?.agent?.backend;
     if (!wfBackend || seen.has(wfBackend)) continue;
-    const wfModel = wf.metadata?.agent?.defaultModel ?? moduleModel;
+    const wfModel = wf.metadata?.agent?.model ?? moduleModel;
     seen.set(wfBackend, {
       backend: wfBackend,
       scope: `workflow ${wf.name}`,

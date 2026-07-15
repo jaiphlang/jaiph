@@ -23,7 +23,7 @@ e2e::section "claude under Docker without credentials fails before launch"
 e2e::file "claude_docker.jh" <<'EOF'
 config {
   agent.backend = "claude"
-  agent.default_model = "sonnet-test"
+  agent.model = "sonnet-test"
 }
 
 workflow default() {

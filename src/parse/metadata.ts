@@ -11,7 +11,7 @@ export function configValueHasInterpolation(value: string): boolean {
 }
 
 const ALLOWED_KEYS = new Set([
-  "agent.default_model",
+  "agent.model",
   "agent.command",
   "agent.backend",
   "agent.trusted_workspace",
@@ -30,7 +30,7 @@ const ALLOWED_KEYS = new Set([
 
 /** Expected value type for each key that needs type validation. */
 const KEY_TYPES: Record<string, "string" | "boolean" | "number" | "string[]"> = {
-  "agent.default_model": "string",
+  "agent.model": "string",
   "agent.command": "string",
   "agent.backend": "string",
   "agent.trusted_workspace": "string",
@@ -158,7 +158,7 @@ function parseArrayValue(
 type ConfigValue = string | boolean | number | string[];
 
 const KEY_SETTERS: Record<string, (out: WorkflowMetadata, value: ConfigValue) => void> = {
-  "agent.default_model": (m, v) => ((m.agent ??= {}).defaultModel = v as string),
+  "agent.model": (m, v) => ((m.agent ??= {}).model = v as string),
   "agent.command": (m, v) => ((m.agent ??= {}).command = v as string),
   "agent.trusted_workspace": (m, v) => ((m.agent ??= {}).trustedWorkspace = v as string),
   "agent.cursor_flags": (m, v) => ((m.agent ??= {}).cursorFlags = v as string),

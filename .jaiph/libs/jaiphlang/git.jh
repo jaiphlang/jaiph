@@ -38,7 +38,7 @@ rule is_clean() {
 workflow commit(task) {
   config {
     # agent.backend = "cursor"
-    # agent.default_model = "composer-2"
+    # agent.model = "composer-2"
     # agent.cursor_flags = "--force"
     agent.backend = "claude"
     agent.claude_flags = "--permission-mode bypassPermissions"

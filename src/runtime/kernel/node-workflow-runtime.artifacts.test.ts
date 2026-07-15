@@ -308,7 +308,7 @@ test("NodeWorkflowRuntime: nested cross-module run applies callee module config 
       childJh,
       [
         'config {',
-        '  agent.default_model = "model-b"',
+        '  agent.model = "model-b"',
         "}",
         'script log_model = `printf \'%s:%s\\n\' "$1" "$JAIPH_AGENT_MODEL" >> "$JAIPH_META_SCOPE_FILE"`',
         "workflow show() {",
@@ -323,7 +323,7 @@ test("NodeWorkflowRuntime: nested cross-module run applies callee module config 
         'import "child.jh" as child',
         "",
         'config {',
-        '  agent.default_model = "model-a"',
+        '  agent.model = "model-a"',
         "}",
         'script log_model = `printf \'%s:%s\\n\' "$1" "$JAIPH_AGENT_MODEL" >> "$JAIPH_META_SCOPE_FILE"`',
         "workflow default() {",
@@ -362,8 +362,87 @@ test("NodeWorkflowRuntime: nested cross-module run applies callee module config 
     assert.equal(status, 0);
 
     const actual = readFileSync(metaFile, "utf8");
-    const expected = "parent_before:model-a\nchild:model-b\nparent_after:model-a\n";
+    const expected = "parent_before:\nchild:\nparent_after:\n";
     assert.equal(actual, expected);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("NodeWorkflowRuntime: config agent.model applies to prompt only via PROMPT_START, not JAIPH_AGENT_MODEL env", async () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-node-meta-prompt-model-"));
+  try {
+    const jh = join(root, "prompt_model.jh");
+    const metaFile = join(root, "scope.log");
+    writeFileSync(
+      jh,
+      [
+        'config {',
+        '  agent.model = "module-model"',
+        "}",
+        'script log_model = `printf \'script:%s\\n\' "$JAIPH_AGENT_MODEL" >> "$JAIPH_SCOPE_LOG"`',
+        "",
+        "workflow with_prompt(model) {",
+        "  config {",
+        "    agent.model = model",
+        "  }",
+        '  run log_model()',
+        '  const answer = prompt "hello"',
+        "}",
+        "",
+        "workflow default() {",
+        '  run with_prompt("workflow-model")',
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const scriptsDir = join(root, "scripts");
+    mkdirSync(scriptsDir, { recursive: true });
+    writeFileSync(
+      join(scriptsDir, "log_model"),
+      [
+        "#!/usr/bin/env bash",
+        'printf \'script:%s\n\' "$JAIPH_AGENT_MODEL" >> "$JAIPH_SCOPE_LOG"',
+        "",
+      ].join("\n"),
+      { mode: 0o755 },
+    );
+
+    const runsDir = join(root, ".jaiph", "runs");
+    const graph = buildRuntimeGraph(jh);
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      JAIPH_TEST_MODE: "1",
+      JAIPH_MOCK_RESPONSES_JSON: JSON.stringify(["ok"]),
+      JAIPH_RUNS_DIR: runsDir,
+      JAIPH_SCRIPTS: scriptsDir,
+      JAIPH_SCOPE_LOG: metaFile,
+    };
+    delete env.JAIPH_AGENT_MODEL;
+    delete env.JAIPH_AGENT_MODEL_LOCKED;
+
+    const runtime = new NodeWorkflowRuntime(graph, { env, cwd: root, suppressLiveEvents: true });
+    const prevSummaryEnv = process.env.JAIPH_RUN_SUMMARY_FILE;
+    process.env.JAIPH_RUN_SUMMARY_FILE = runtime.getSummaryFile();
+    try {
+      const status = await runtime.runDefault([]);
+      assert.equal(status, 0);
+    } finally {
+      if (prevSummaryEnv === undefined) delete process.env.JAIPH_RUN_SUMMARY_FILE;
+      else process.env.JAIPH_RUN_SUMMARY_FILE = prevSummaryEnv;
+    }
+
+    assert.equal(readFileSync(metaFile, "utf8"), "script:\n");
+
+    const summaryLines = readFileSync(join(runtime.getRunDir(), "run_summary.jsonl"), "utf8")
+      .trim()
+      .split("\n")
+      .filter((l) => l.length > 0);
+    const events = summaryLines.map((l) => JSON.parse(l));
+    const promptStart = events.find((e: Record<string, unknown>) => e.type === "PROMPT_START");
+    assert.ok(promptStart);
+    assert.equal(promptStart.model, "workflow-model");
+    assert.equal(promptStart.model_reason, "explicit");
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -379,12 +458,12 @@ test("NodeWorkflowRuntime: nested cross-module run applies callee workflow-level
       childJh,
       [
         'config {',
-        '  agent.default_model = "child-module-model"',
+        '  agent.model = "child-module-model"',
         "}",
         'script log_model = `printf \'%s:%s\\n\' "$1" "$JAIPH_AGENT_MODEL" >> "$JAIPH_META_SCOPE_FILE"`',
         "workflow show() {",
         '  config {',
-        '    agent.default_model = "child-workflow-model"',
+        '    agent.model = "child-workflow-model"',
         "  }",
         '  run log_model("child")',
         "}",
@@ -397,7 +476,7 @@ test("NodeWorkflowRuntime: nested cross-module run applies callee workflow-level
         'import "child.jh" as child',
         "",
         'config {',
-        '  agent.default_model = "model-a"',
+        '  agent.model = "model-a"',
         "}",
         "workflow default() {",
         "  run child.show()",
@@ -433,7 +512,7 @@ test("NodeWorkflowRuntime: nested cross-module run applies callee workflow-level
     assert.equal(status, 0);
 
     const actual = readFileSync(metaFile, "utf8");
-    assert.equal(actual, "child:child-workflow-model\n");
+    assert.equal(actual, "child:\n");
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -449,12 +528,12 @@ test("NodeWorkflowRuntime: nested cross-module run honors locked JAIPH_AGENT_MOD
       childJh,
       [
         'config {',
-        '  agent.default_model = "model-b"',
+        '  agent.model = "model-b"',
         "}",
         'script log_model = `printf \'%s:%s\\n\' "$1" "$JAIPH_AGENT_MODEL" >> "$JAIPH_META_SCOPE_FILE"`',
         "workflow show() {",
         '  config {',
-        '    agent.default_model = "child-workflow-model"',
+        '    agent.model = "child-workflow-model"',
         "  }",
         '  run log_model("child")',
         "}",
@@ -467,7 +546,7 @@ test("NodeWorkflowRuntime: nested cross-module run honors locked JAIPH_AGENT_MOD
         'import "child.jh" as child',
         "",
         'config {',
-        '  agent.default_model = "model-a"',
+        '  agent.model = "model-a"',
         "}",
         "workflow default() {",
         "  run child.show()",
@@ -589,7 +668,7 @@ test("NodeWorkflowRuntime: sibling workflows do not inherit each other's metadat
       jh,
       [
         "config {",
-        '  agent.default_model = "module-model"',
+        '  agent.model = "module-model"',
         '  agent.backend = "cursor"',
         "}",
         "",
@@ -597,7 +676,7 @@ test("NodeWorkflowRuntime: sibling workflows do not inherit each other's metadat
         "",
         "workflow alpha() {",
         "  config {",
-        '    agent.default_model = "alpha-model"',
+        '    agent.model = "alpha-model"',
         '    agent.backend = "claude"',
         "  }",
         '  run log_env("alpha")',
@@ -605,7 +684,7 @@ test("NodeWorkflowRuntime: sibling workflows do not inherit each other's metadat
         "",
         "workflow beta() {",
         "  config {",
-        '    agent.default_model = "beta-model"',
+        '    agent.model = "beta-model"',
         "  }",
         '  run log_env("beta")',
         "}",
@@ -647,28 +726,25 @@ test("NodeWorkflowRuntime: sibling workflows do not inherit each other's metadat
     assert.equal(status, 0);
 
     const actual = readFileSync(metaFile, "utf8");
-    const expected = "alpha:model=alpha-model,backend=claude\nbeta:model=beta-model,backend=cursor\n";
+    const expected = "alpha:model=,backend=claude\nbeta:model=,backend=cursor\n";
     assert.equal(actual, expected);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
 });
 
-test("NodeWorkflowRuntime: workflow config interpolates workflow parameters", async () => {
+test("NodeWorkflowRuntime: workflow config interpolates workflow parameters into prompt model", async () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-node-meta-param-"));
   try {
     const jh = join(root, "param_config.jh");
-    const metaFile = join(root, "param_scope.log");
     writeFileSync(
       jh,
       [
-        'script log_model = `printf \'model:%s\\n\' "$JAIPH_AGENT_MODEL" >> "$JAIPH_PARAM_LOG"`',
-        "",
         "workflow implement(model) {",
         "  config {",
-        "    agent.default_model = model",
+        "    agent.model = model",
         "  }",
-        '  run log_model()',
+        '  const answer = prompt "hello"',
         "}",
         "",
         "workflow default() {",
@@ -677,35 +753,37 @@ test("NodeWorkflowRuntime: workflow config interpolates workflow parameters", as
         "",
       ].join("\n"),
     );
-    const scriptsDir = join(root, "scripts");
-    mkdirSync(scriptsDir, { recursive: true });
-    writeFileSync(
-      join(scriptsDir, "log_model"),
-      [
-        "#!/usr/bin/env bash",
-        'printf \'model:%s\n\' "$JAIPH_AGENT_MODEL" >> "$JAIPH_PARAM_LOG"',
-        "",
-      ].join("\n"),
-      { mode: 0o755 },
-    );
 
+    const runsDir = join(root, ".jaiph", "runs");
     const graph = buildRuntimeGraph(jh);
     const env: NodeJS.ProcessEnv = {
       ...process.env,
       JAIPH_TEST_MODE: "1",
-      JAIPH_RUNS_DIR: join(root, ".jaiph", "runs"),
-      JAIPH_SCRIPTS: scriptsDir,
-      JAIPH_PARAM_LOG: metaFile,
+      JAIPH_MOCK_RESPONSES_JSON: JSON.stringify(["ok"]),
+      JAIPH_RUNS_DIR: runsDir,
     };
     delete env.JAIPH_AGENT_MODEL;
     delete env.JAIPH_AGENT_MODEL_LOCKED;
 
     const runtime = new NodeWorkflowRuntime(graph, { env, cwd: root, suppressLiveEvents: true });
-    const status = await runtime.runDefault([]);
-    assert.equal(status, 0);
+    const prevSummaryEnv = process.env.JAIPH_RUN_SUMMARY_FILE;
+    process.env.JAIPH_RUN_SUMMARY_FILE = runtime.getSummaryFile();
+    try {
+      const status = await runtime.runDefault([]);
+      assert.equal(status, 0);
+    } finally {
+      if (prevSummaryEnv === undefined) delete process.env.JAIPH_RUN_SUMMARY_FILE;
+      else process.env.JAIPH_RUN_SUMMARY_FILE = prevSummaryEnv;
+    }
 
-    const actual = readFileSync(metaFile, "utf8");
-    assert.equal(actual, "model:workflow-model\n");
+    const summaryLines = readFileSync(join(runtime.getRunDir(), "run_summary.jsonl"), "utf8")
+      .trim()
+      .split("\n")
+      .filter((l) => l.length > 0);
+    const events = summaryLines.map((l) => JSON.parse(l));
+    const promptStart = events.find((e: Record<string, unknown>) => e.type === "PROMPT_START");
+    assert.ok(promptStart);
+    assert.equal(promptStart.model, "workflow-model");
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

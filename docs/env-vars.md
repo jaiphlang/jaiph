@@ -35,7 +35,7 @@ The table below covers every `JAIPH_*` name read from `process.env` / `env` in `
 | `JAIPH_AGENT_COMMAND_LOCKED` | internal | bool | — | — | Lock flag for `JAIPH_AGENT_COMMAND`. |
 | `JAIPH_AGENT_CURSOR_FLAGS` | host, runtime | string (whitespace-split) | — | `agent.cursor_flags` | Extra flags appended to the Cursor backend invocation. |
 | `JAIPH_AGENT_CURSOR_FLAGS_LOCKED` | internal | bool | — | — | Lock flag for `JAIPH_AGENT_CURSOR_FLAGS`. |
-| `JAIPH_AGENT_MODEL` | host, runtime | string | — | `agent.default_model` | Default model for `prompt` steps. |
+| `JAIPH_AGENT_MODEL` | host, runtime | string | — | _(no in-file key — set in shell to override all prompts)_ | Optional run-wide model override for every `prompt` step. In-file `agent.model` does not populate this variable. |
 | `JAIPH_AGENT_MODEL_LOCKED` | internal | bool | — | — | Lock flag for `JAIPH_AGENT_MODEL`. |
 | `JAIPH_AGENT_TRUSTED_WORKSPACE` | host, runtime | path | workspace root | `agent.trusted_workspace` | Directory passed to Cursor as `--trust`. Rewritten to `/jaiph/workspace`-relative on Docker forwarding when inside the workspace. |
 | `JAIPH_AGENT_TRUSTED_WORKSPACE_LOCKED` | internal | bool | — | — | Lock flag for `JAIPH_AGENT_TRUSTED_WORKSPACE`. |

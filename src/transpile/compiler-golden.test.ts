@@ -125,7 +125,7 @@ test("parser: assignment capture parses for ensure, run, and const run capture",
 test("parser: config block parses and populates mod.metadata", () => {
   const source = [
     "config {",
-    '  agent.default_model = "gpt-4"',
+    '  agent.model = "gpt-4"',
     '  run.logs_dir = ".jaiph/runs"',
     "}",
     "workflow default() {",
@@ -134,7 +134,7 @@ test("parser: config block parses and populates mod.metadata", () => {
   ].join("\n");
   const mod = parsejaiph(source, "/fake/entry.jh");
   assert.ok(mod.metadata);
-  assert.equal(mod.metadata!.agent?.defaultModel, "gpt-4");
+  assert.equal(mod.metadata!.agent?.model, "gpt-4");
   assert.equal(mod.metadata!.run?.logsDir, ".jaiph/runs");
 });
 
@@ -223,7 +223,7 @@ test("parser: unknown config key throws E_PARSE with file location", () => {
 test("parser: invalid config value throws E_PARSE", () => {
   const source = [
     "config {",
-    "  agent.default_model = gpt-4",
+    "  agent.model = gpt-4",
     "}",
     "workflow default() {",
     "  log \"ok\"",

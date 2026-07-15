@@ -5,7 +5,7 @@ import "./lib_common.jh" as common
 
 config {
   agent.backend = "cursor"
-  agent.default_model = "composer-2"
+  agent.model = "composer-2"
   agent.cursor_flags = "--force"
   # agent.backend = "claude"
   # agent.claude_flags = "--permission-mode bypassPermissions"

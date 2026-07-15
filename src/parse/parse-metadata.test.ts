@@ -7,11 +7,11 @@ import { createTrivia } from "./trivia";
 test("parseConfigBlock: parses minimal config with one key", () => {
   const lines = [
     "config {",
-    '  agent.default_model = "gpt-4"',
+    '  agent.model = "gpt-4"',
     "}",
   ];
   const { metadata, nextIndex } = parseConfigBlock("test.jh", lines, 0);
-  assert.equal(metadata.agent?.defaultModel, "gpt-4");
+  assert.equal(metadata.agent?.model, "gpt-4");
   assert.equal(nextIndex, 3);
 });
 
@@ -116,7 +116,7 @@ test("parseConfigBlock: accepts codex as backend", () => {
 test("parseConfigBlock: fails on unclosed config block", () => {
   const lines = [
     "config {",
-    '  agent.default_model = "gpt-4"',
+    '  agent.model = "gpt-4"',
   ];
   assert.throws(
     () => parseConfigBlock("test.jh", lines, 0),
@@ -145,7 +145,7 @@ test("parseConfigBlock: skips empty lines and comments", () => {
 test("parseConfigBlock: fails on line without = separator", () => {
   const lines = [
     "config {",
-    "  agent.default_model",
+    "  agent.model",
     "}",
   ];
   assert.throws(
@@ -157,7 +157,7 @@ test("parseConfigBlock: fails on line without = separator", () => {
 test("parseConfigBlock: fails on bare unquoted string value", () => {
   const lines = [
     "config {",
-    "  agent.default_model = gpt-4",
+    "  agent.model = gpt-4",
     "}",
   ];
   assert.throws(
@@ -169,21 +169,21 @@ test("parseConfigBlock: fails on bare unquoted string value", () => {
 test("parseConfigBlock: bare identifier is sugar for interpolated string", () => {
   const lines = [
     "config {",
-    "  agent.default_model = model",
+    "  agent.model = model",
     "}",
   ];
   const { metadata } = parseConfigBlock("test.jh", lines, 0);
-  assert.equal(metadata.agent?.defaultModel, "${model}");
+  assert.equal(metadata.agent?.model, "${model}");
 });
 
 test("parseConfigBlock: quoted string with interpolation is stored literally", () => {
   const lines = [
     "config {",
-    '  agent.default_model = "prefix-${model}-suffix"',
+    '  agent.model = "prefix-${model}-suffix"',
     "}",
   ];
   const { metadata } = parseConfigBlock("test.jh", lines, 0);
-  assert.equal(metadata.agent?.defaultModel, "prefix-${model}-suffix");
+  assert.equal(metadata.agent?.model, "prefix-${model}-suffix");
 });
 
 test("parseConfigBlock: interpolated agent.backend is accepted at parse time", () => {
@@ -310,13 +310,13 @@ test("workflow config: allows comments before config", () => {
     "workflow default() {",
     "  # a comment",
     "  config {",
-    '    agent.default_model = "gpt-4"',
+    '    agent.model = "gpt-4"',
     "  }",
     '  log "done"',
     "}",
   ].join("\n");
   const mod = parsejaiph(src, "test.jh");
-  assert.equal(mod.workflows[0].metadata?.agent?.defaultModel, "gpt-4");
+  assert.equal(mod.workflows[0].metadata?.agent?.model, "gpt-4");
 });
 
 test("workflow config: rejects duplicate config in same workflow", () => {

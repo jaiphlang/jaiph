@@ -9,7 +9,7 @@ type StringField = {
 };
 
 const STRING_FIELDS: StringField[] = [
-  { key: "agent.default_model", read: (m) => m.agent?.defaultModel },
+  { key: "agent.model", read: (m) => m.agent?.model },
   { key: "agent.command", read: (m) => m.agent?.command },
   { key: "agent.backend", read: (m) => m.agent?.backend },
   { key: "agent.trusted_workspace", read: (m) => m.agent?.trustedWorkspace },

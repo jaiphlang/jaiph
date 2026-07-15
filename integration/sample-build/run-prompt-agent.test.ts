@@ -130,7 +130,7 @@ test("jaiph run applies model from in-file metadata", () => {
       filePath,
       [
         "config {",
-        '  agent.default_model = "auto"',
+        '  agent.model = "auto"',
         '  agent.cursor_flags = "--force --sandbox enabled"',
         "}",
         "workflow default() {",

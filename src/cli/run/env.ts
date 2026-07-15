@@ -104,9 +104,6 @@ export function resolveRuntimeEnv(
   }
 
   // Apply config defaults where env is not already set.
-  if (env.JAIPH_AGENT_MODEL === undefined && effectiveConfig.agent?.defaultModel) {
-    env.JAIPH_AGENT_MODEL = effectiveConfig.agent.defaultModel;
-  }
   if (env.JAIPH_AGENT_COMMAND === undefined && effectiveConfig.agent?.command) {
     env.JAIPH_AGENT_COMMAND = effectiveConfig.agent.command;
   }
