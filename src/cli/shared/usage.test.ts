@@ -224,6 +224,10 @@ test("parseArgs: --env rejects a runtime-managed key (E_ENV_RESERVED), bare KEY 
   assert.throws(() => parseArgs(["--env", "JAIPH_RUNS_DIR", "flow.jh"]), /E_ENV_RESERVED/);
 });
 
+test("parseArgs: --env rejects JAIPH_RUN_WORKFLOW (managed via Docker MCP spawn wiring)", () => {
+  assert.throws(() => parseArgs(["--env", "JAIPH_RUN_WORKFLOW=greet", "flow.jh"]), /E_ENV_RESERVED/);
+});
+
 // ---------------------------------------------------------------------------
 // printUsage: lists the new flags under `jaiph run`
 // ---------------------------------------------------------------------------

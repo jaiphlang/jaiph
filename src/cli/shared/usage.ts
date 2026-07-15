@@ -143,6 +143,9 @@ const RESERVED_ENV_KEYS = new Set<string>([
   "JAIPH_SOURCE_ABS",
   "JAIPH_META_FILE",
   "JAIPH_AGENT_TRUSTED_WORKSPACE",
+  // Selects the inner run's root symbol in a Docker MCP call; managed via the
+  // container spawn wiring, not user env.
+  "JAIPH_RUN_WORKFLOW",
 ]);
 
 /** True if `--env` must reject `key` (`E_ENV_RESERVED`). */

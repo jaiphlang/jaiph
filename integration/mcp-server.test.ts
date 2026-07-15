@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -376,6 +376,65 @@ test("jaiph mcp --env with a reserved key aborts with E_ENV_RESERVED", () => {
   }
 });
 
+test("jaiph mcp with JAIPH_UNSAFE=true runs tool calls host-only (no sandbox)", async () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-mcp-unsafe-"));
+  const jh = join(root, "tools.jh");
+  writeFileSync(jh, TWO_WORKFLOW_FIXTURE);
+  // Drop JAIPH_DOCKER_ENABLED and rely on JAIPH_UNSAFE to force host-only —
+  // this pins the unsafe host-fallback branch of the Docker-parity path.
+  const env = mcpEnv(join(root, ".jaiph/runs"));
+  delete env.JAIPH_DOCKER_ENABLED;
+  env.JAIPH_UNSAFE = "true";
+  const client = startMcp(jh, root, env);
+  try {
+    await initialize(client);
+    client.send({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "tools/call",
+      params: { name: "greet", arguments: { name: "world" } },
+    });
+    const call = await client.waitFor((m) => m.id === 1, "greet call (unsafe host mode)");
+    const result = call.result as { content: Array<{ type: string; text: string }>; isError: boolean };
+    assert.equal(result.isError, false);
+    assert.deepEqual(result.content, [{ type: "text", text: "hello world" }]);
+  } finally {
+    await client.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("jaiph run --raw honors JAIPH_RUN_WORKFLOW (the symbol carried into the Docker inner run)", () => {
+  // The Docker MCP path carries the tool's workflow symbol into the container's
+  // `jaiph run --raw` via JAIPH_RUN_WORKFLOW. This pins that raw-mode honors it
+  // (host-only, so it runs everywhere): selecting `boom` must fail, proving the
+  // inner run does NOT hardcode `default` (which would succeed).
+  const root = mkdtempSync(join(tmpdir(), "jaiph-raw-symbol-"));
+  try {
+    const jh = join(root, "tools.jh");
+    writeFileSync(jh, ["workflow default() {", '  return "ok"', "}", "", "workflow boom() {", '  fail "boom-failed"', "}", ""].join("\n"));
+
+    const okResult = spawnSync("node", [CLI_PATH, "run", "--raw", jh], {
+      encoding: "utf8",
+      cwd: root,
+      env: mcpEnv(join(root, ".jaiph/runs")),
+    });
+    assert.equal(okResult.status, 0, `default should exit 0, got ${okResult.status}\n${okResult.stderr}`);
+
+    const boomEnv = mcpEnv(join(root, ".jaiph/runs"));
+    boomEnv.JAIPH_RUN_WORKFLOW = "boom";
+    const boomResult = spawnSync("node", [CLI_PATH, "run", "--raw", jh], {
+      encoding: "utf8",
+      cwd: root,
+      env: boomEnv,
+    });
+    assert.equal(boomResult.status, 1, `boom should exit 1 (not run default), got ${boomResult.status}`);
+    assert.match(boomResult.stderr, /boom-failed/, "boom's failure must surface, proving boom ran");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("jaiph run regression: a default workflow exits 0 and prints its return value", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-run-regression-"));
   try {
@@ -392,6 +451,139 @@ test("jaiph run regression: a default workflow exits 0 and prints its return val
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+// Two script steps → four STEP_START/STEP_END events, enough to observe a
+// monotonic progress stream.
+const MULTI_STEP_FIXTURE = [
+  "script step_impl = `true`",
+  "# Runs two steps so progress notifications can be observed.",
+  "workflow steps() {",
+  "  run step_impl()",
+  "  run step_impl()",
+  '  return "done"',
+  "}",
+  "",
+].join("\n");
+
+test("jaiph mcp: a progressToken streams monotonic progress before the response and none after", async () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-mcp-progress-"));
+  const jh = join(root, "tools.jh");
+  writeFileSync(jh, MULTI_STEP_FIXTURE);
+  const client = startMcp(jh, root, mcpEnv(join(root, ".jaiph/runs")));
+  try {
+    await initialize(client);
+    client.send({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "tools/call",
+      params: { name: "steps", arguments: {}, _meta: { progressToken: "p1" } },
+    });
+    const res = await client.waitFor((m) => m.id === 1, "steps call response");
+    assert.equal((res.result as { isError: boolean }).isError, false);
+
+    // Reconstruct the exact stdout order to prove ordering relative to the response.
+    const lines = client.stdoutLines().map((l) => JSON.parse(l) as Record<string, unknown>);
+    const responseIdx = lines.findIndex((m) => m.id === 1 && "result" in m);
+    assert.ok(responseIdx >= 0, "the call response is present");
+    const progress = lines
+      .map((m, i) => ({ m, i }))
+      .filter((e) => e.m.method === "notifications/progress");
+
+    assert.ok(progress.length >= 1, "at least one progress notification is emitted");
+    for (const e of progress) {
+      const p = e.m.params as { progressToken: unknown; progress: number; message: unknown };
+      assert.equal(p.progressToken, "p1", "progress carries the request's token");
+      assert.equal(typeof p.message, "string");
+      assert.ok(e.i < responseIdx, "progress must precede the response — none after it");
+    }
+    const values = progress.map((e) => (e.m.params as { progress: number }).progress);
+    for (let k = 1; k < values.length; k += 1) {
+      assert.ok(values[k] > values[k - 1], `progress increases monotonically: ${values[k - 1]} -> ${values[k]}`);
+    }
+  } finally {
+    await client.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("jaiph mcp: a call without a progressToken emits no progress notifications", async () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-mcp-noprogress-"));
+  const jh = join(root, "tools.jh");
+  writeFileSync(jh, MULTI_STEP_FIXTURE);
+  const client = startMcp(jh, root, mcpEnv(join(root, ".jaiph/runs")));
+  try {
+    await initialize(client);
+    client.send({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "steps", arguments: {} } });
+    const res = await client.waitFor((m) => m.id === 1, "steps call response");
+    assert.equal((res.result as { isError: boolean }).isError, false);
+    const progress = client
+      .stdoutLines()
+      .map((l) => JSON.parse(l) as Record<string, unknown>)
+      .filter((m) => m.method === "notifications/progress");
+    assert.equal(progress.length, 0, "no progressToken → no progress notifications");
+  } finally {
+    await client.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// A step that sleeps, then writes a completion marker. Cancelling mid-sleep
+// kills the run before the `&&` chain reaches the marker.
+const CANCEL_FIXTURE = [
+  'script slow_impl = `sleep 3 && printf done > "$JAIPH_WORKSPACE/done.txt"`',
+  "# Sleeps, then writes a completion marker (skipped when cancelled).",
+  "workflow slow() {",
+  "  run slow_impl()",
+  '  return "woke"',
+  "}",
+  "",
+].join("\n");
+
+test("jaiph mcp: notifications/cancelled kills the in-flight run, sends no response, and keeps serving", async () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-mcp-cancel-"));
+  const jh = join(root, "tools.jh");
+  writeFileSync(jh, CANCEL_FIXTURE);
+  const client = startMcp(jh, root, mcpEnv(join(root, ".jaiph/runs")));
+  try {
+    await initialize(client);
+    // A progressToken lets us detect the run is in-flight (the sleeping step's
+    // STEP_START arrives as progress before the 3s sleep elapses).
+    client.send({
+      jsonrpc: "2.0",
+      id: 5,
+      method: "tools/call",
+      params: { name: "slow", arguments: {}, _meta: { progressToken: "c1" } },
+    });
+    await client.waitFor(
+      (m) => m.method === "notifications/progress" && (m.params as { progressToken?: unknown }).progressToken === "c1",
+      "progress before cancel (run is in-flight)",
+    );
+
+    client.send({ jsonrpc: "2.0", method: "notifications/cancelled", params: { requestId: 5 } });
+
+    // The server still answers other requests.
+    client.send({ jsonrpc: "2.0", id: 6, method: "ping" });
+    const pong = await client.waitFor((m) => m.id === 6, "ping after cancel");
+    assert.deepEqual(pong.result, {});
+
+    // Past the sleep window: the marker is absent only if the run was killed
+    // mid-sleep — this is the observable proof the child was terminated.
+    await delay(5_000);
+    assert.equal(existsSync(join(root, "done.txt")), false, "cancelled run must not complete its sleep");
+    const responseForCancelled = client
+      .stdoutLines()
+      .map((l) => JSON.parse(l) as Record<string, unknown>)
+      .find((m) => m.id === 5);
+    assert.equal(responseForCancelled, undefined, "a cancelled call must produce no response");
+  } finally {
+    await client.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 function pollUntil(predicate: () => boolean, timeoutMs: number, label: string): Promise<void> {
   return new Promise((resolve, reject) => {

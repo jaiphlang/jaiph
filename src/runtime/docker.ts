@@ -383,6 +383,29 @@ export function selectSandboxMode(env: Record<string, string | undefined>): Sand
   return existsSync("/dev/fuse") ? "overlay" : "copy";
 }
 
+/**
+ * Choose the sandbox mode for a `jaiph mcp` tool call.
+ *
+ * MCP inverts the `jaiph run` default: the calling agent operates on the real
+ * workspace and expects tool effects to land live, and starting the server on a
+ * workspace *is* the consent act (stdin is the protocol channel, so no
+ * interactive in-place prompt is possible). So **inplace is the default** —
+ * unless the caller explicitly opts back into isolation via env:
+ *  - `JAIPH_INPLACE` truthy → inplace (same as `selectSandboxMode`).
+ *  - `JAIPH_INPLACE` present but falsy (e.g. `0`), or `JAIPH_DOCKER_NO_OVERLAY`
+ *    set → explicit isolation request: defer to `selectSandboxMode`, which
+ *    returns overlay/copy (never inplace here, since JAIPH_INPLACE is not
+ *    truthy) so the workspace is sandboxed again.
+ *  - Nothing set → inplace (the MCP default).
+ */
+export function selectMcpSandboxMode(env: Record<string, string | undefined>): SandboxMode {
+  const inplaceRaw = env.JAIPH_INPLACE;
+  if (inplaceRaw === "1" || inplaceRaw === "true") return "inplace";
+  const isolationRequested = inplaceRaw !== undefined || env.JAIPH_DOCKER_NO_OVERLAY !== undefined;
+  if (isolationRequested) return selectSandboxMode(env);
+  return "inplace";
+}
+
 /** Run `cp` with the given flags. Returns true on success. */
 function tryCp(flags: string[], src: string, dst: string): { ok: boolean; stderr: string } {
   const r = spawnSync("cp", [...flags, src, dst], { stdio: ["ignore", "ignore", "pipe"] });
@@ -517,6 +540,14 @@ export interface DockerSpawnOptions {
   extraEnv?: Record<string, string>;
   isTTY: boolean;
   /**
+   * Workflow symbol the inner `jaiph run --raw` should execute as its root.
+   * Carried into the container as `-e JAIPH_RUN_WORKFLOW=<symbol>` (read by
+   * `runWorkflowRaw`) so a non-`default` root — e.g. an MCP tool call — runs
+   * correctly. Omitted / `"default"` leaves the inner run on its `default`
+   * entrypoint (the `jaiph run` contract), so no env var is emitted.
+   */
+  workflowSymbol?: string;
+  /**
    * How to make the workspace appear writable inside the container.
    *  - "overlay": bind workspace ro, set up fuse-overlayfs in-container.
    *  - "copy":    pre-clone workspace on host, bind the clone rw.
@@ -543,6 +574,14 @@ export const ENV_ALLOW_PREFIXES = ["JAIPH_", "ANTHROPIC_", "CURSOR_", "CLAUDE_"]
 export const ENV_ALLOW_EXCLUDE_PREFIX = "JAIPH_DOCKER_";
 
 /**
+ * Container env var naming the workflow symbol the inner `jaiph run --raw`
+ * should execute. Emitted explicitly from `DockerSpawnOptions.workflowSymbol`
+ * (see `buildDockerArgs`), never auto-forwarded from the host env — so it is
+ * excluded from the allowlist below and reserved against `--env`.
+ */
+export const RUN_WORKFLOW_ENV = "JAIPH_RUN_WORKFLOW";
+
+/**
  * Explicit exclusions that would otherwise pass the JAIPH_ allowlist.
  * Forwarding these would leak host control flags into the container (and let a
  * nested run re-trigger the same mode).
@@ -550,6 +589,9 @@ export const ENV_ALLOW_EXCLUDE_PREFIX = "JAIPH_DOCKER_";
 export const ENV_ALLOW_EXCLUDE_NAMES = new Set<string>([
   "JAIPH_INPLACE",
   "JAIPH_INPLACE_YES",
+  // Never inherit a stale symbol from the host env: the inner run's root is
+  // set only through the explicit `workflowSymbol` wiring below.
+  RUN_WORKFLOW_ENV,
 ]);
 
 /** Returns true if `key` is on the explicit allowlist for container forwarding. */
@@ -752,6 +794,11 @@ export function buildDockerArgs(opts: DockerSpawnOptions, overlayScriptPath?: st
   // isEnvAllowed — the flag is the per-key consent.
   for (const [key, value] of Object.entries(extraEnv)) {
     args.push("-e", `${key}=${value}`);
+  }
+  // Carry the inner run's root symbol. `jaiph run --raw` defaults to `default`,
+  // so only a non-default root needs the explicit selector.
+  if (opts.workflowSymbol && opts.workflowSymbol !== "default") {
+    args.push("-e", `${RUN_WORKFLOW_ENV}=${opts.workflowSymbol}`);
   }
   if (mode === "overlay" && hostUid && hostGid) {
     args.push("-e", `JAIPH_HOST_UID=${hostUid}`);

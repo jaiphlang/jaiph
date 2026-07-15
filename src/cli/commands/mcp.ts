@@ -6,7 +6,12 @@ import { loadModuleGraph, writeModuleGraph, type ModuleGraph } from "../../trans
 import { collectDiagnostics } from "../../transpile/validate";
 import { buildScriptsFromGraph } from "../../transpiler";
 import { resolveModuleMetadata, metadataToConfig } from "../../config";
-import { resolveDockerConfig } from "../../runtime/docker";
+import {
+  resolveDockerConfig,
+  checkDockerAvailable,
+  prepareImage,
+  selectMcpSandboxMode,
+} from "../../runtime/docker";
 import { detectWorkspaceRoot } from "../shared/paths";
 import { hasHelpFlag, parseArgs } from "../shared/usage";
 import { resolveRuntimeEnv, resolveEnvPairs } from "../run/env";
@@ -24,7 +29,10 @@ const MCP_USAGE =
   "only workflow, under a tool name derived from the file's basename.\n" +
   "Tool descriptions come from the `#` comment lines directly above each workflow.\n" +
   "Sources are re-validated on change and clients get notifications/tools/list_changed.\n\n" +
-  "Calls run on the host (like `jaiph run --raw`); the Docker sandbox is not launched.\n\n" +
+  "Tool calls honor the same env-driven Docker sandbox as `jaiph run`, defaulting\n" +
+  "to in-place (effects land live on the workspace; starting the server is the\n" +
+  "consent). Set JAIPH_INPLACE=0 or JAIPH_DOCKER_NO_OVERLAY=1 to restore isolation,\n" +
+  "or JAIPH_UNSAFE=true to run on the host with no sandbox.\n\n" +
   "  --workspace <dir>  workspace root for import resolution (default: auto-detect)\n" +
   "  -h, --help         show this help\n\n" +
   "Example:\n" +
@@ -144,32 +152,55 @@ export async function runMcp(rest: string[]): Promise<number> {
     return 1;
   }
 
-  // Credential pre-flight once at startup (warnings only in MCP mode: the
-  // server may outlive a credential fix, and per-call failures still surface).
+  // Resolve the sandbox posture once at startup. Tool calls honor the same
+  // env-driven Docker selection as `jaiph run`, with two MCP-specific rules:
+  // inplace is the default mode (the agent operates on the real workspace and
+  // expects effects to land live), and starting the server is the in-place
+  // consent act — stdin is the protocol channel, so no prompt is possible.
   const mod = state.graph.modules.get(inputAbs)!.ast;
   const startupEnv = resolveRuntimeEnv(state.callEnv.effectiveConfig, workspaceRoot, inputAbs);
   const dockerConfig = resolveDockerConfig(resolveModuleMetadata(mod, process.env)?.runtime, startupEnv);
   if (dockerConfig.enabled) {
-    log(
-      "jaiph mcp: the Docker sandbox is not launched for MCP tool calls yet; workflows run on the host (like `jaiph run --raw`).",
-    );
+    // Prepare the image once here rather than per call (a cold pull is slow).
+    try {
+      checkDockerAvailable();
+      prepareImage(dockerConfig);
+    } catch (err) {
+      log(err instanceof Error ? err.message : String(err));
+      rmSync(tempRoot, { recursive: true, force: true });
+      return 1;
+    }
+    const mode = selectMcpSandboxMode(startupEnv);
+    if (mode === "inplace") {
+      log(
+        `jaiph mcp: tool calls run in a Docker sandbox in-place on ${workspaceRoot} ` +
+          "(effects land live; starting the server is the in-place consent). " +
+          "Set JAIPH_INPLACE=0 (or JAIPH_DOCKER_NO_OVERLAY=1) to restore workspace isolation.",
+      );
+    } else {
+      log(`jaiph mcp: tool calls run in a Docker sandbox (${mode} mode; workspace isolated).`);
+    }
   }
+  // Credential pre-flight once at startup (warnings only in MCP mode: the
+  // server may outlive a credential fix, and per-call failures still surface).
   const credPreflight = preflightAgentCredentials({
     mod,
     inputAbs,
     runtimeEnv: startupEnv,
-    dockerEnabled: false,
+    dockerEnabled: dockerConfig.enabled,
   });
   for (const w of [...credPreflight.warnings, ...credPreflight.errors]) log(w);
 
   const server = new McpServer({
     serverVersion: VERSION,
     getTools: () => state.tools,
-    callTool: (spec, args) =>
+    callTool: (spec, args, ctx) =>
       callWorkflow(
         state.callEnv,
+        dockerConfig,
         spec.workflow,
         spec.params.map((p) => args[p] ?? ""),
+        ctx,
       ),
     write: (message) => {
       process.stdout.write(`${JSON.stringify(message)}\n`);
