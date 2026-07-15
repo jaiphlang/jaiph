@@ -40,6 +40,9 @@ test("ACCEPTANCE: non-TTY long step emits gray heartbeat before completion", () 
         encoding: "utf8",
         env: {
           ...process.env,
+          // Host-only via explicit config so the run does not trip the unsafe
+          // host-only confirmation prompt; this test is about non-TTY output.
+          JAIPH_DOCKER_ENABLED: "false",
           JAIPH_NON_TTY_HEARTBEAT_FIRST_SEC: "1",
           JAIPH_NON_TTY_HEARTBEAT_INTERVAL_MS: "500",
         },

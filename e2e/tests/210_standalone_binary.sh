@@ -80,7 +80,8 @@ e2e::section "jaiph compile sample.jh"
 e2e::pass "compile sample.jh exits 0"
 
 e2e::section "jaiph run sample.jh"
-run_out="$(cd "${WORK_DIR}" && env -i PATH="${CLEAN_PATH}" HOME="${WORK_DIR}" JAIPH_UNSAFE=true "${JAIPH_BIN}" run sample.jh)"
+# Unsafe host-only runs now require consent; JAIPH_INPLACE_YES auto-confirms non-interactively.
+run_out="$(cd "${WORK_DIR}" && env -i PATH="${CLEAN_PATH}" HOME="${WORK_DIR}" JAIPH_UNSAFE=true JAIPH_INPLACE_YES=1 "${JAIPH_BIN}" run sample.jh)"
 case "${run_out}" in
   *"hello-standalone"*) e2e::pass "run sample.jh prints captured echo" ;;
   *) printf "%s\n" "${run_out}" >&2; e2e::fail "run sample.jh did not produce expected output" ;;

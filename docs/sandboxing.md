@@ -42,6 +42,19 @@ When Docker is enabled, the CLI picks one of three sandbox primitives at launch.
 
 Overlay and copy are interchangeable from the user's point of view — both produce the property that **the host workspace is unmodified after a Docker run**. Inplace explicitly opts out of that property in exchange for a tighter dev loop, and on `jaiph run` the CLI gates it behind a destructive-edit confirmation prompt before launch. `jaiph mcp` inverts the default — inplace is the default sandbox mode there, and starting the server (rather than a prompt) is the consent act, since stdin is the protocol channel; see [Serve workflows as MCP tools — Safety posture](mcp.md#safety-posture).
 
+## Confirmation prompts and access scope
+
+Both destructive opt-outs are gated behind an interactive `Continue? [y/N]` prompt (default **no**) on `jaiph run`. The two prompts state their **access scope** in plain language up front, because that is what determines the blast radius:
+
+| Mode | Sandbox | Filesystem reach | Network / env |
+|---|---|---|---|
+| **`--inplace`** | Docker **on** (container boundary, dropped caps, env allowlist) | **This workspace directory only** — bind-mounted `:rw` at `/jaiph/workspace`; scripts and agents cannot read or write host paths outside it | Egress on by default (`JAIPH_DOCKER_NETWORK=none` to disable); only allowlisted env vars cross unless `--env` |
+| **`--unsafe`** | Docker **off** — the workflow runs as the host `jaiph` process | **Your entire host filesystem** (and host `$HOME`, SSH agent, Keychain, etc.) — no mount restriction | Full host environment visible to scripts and agent backends |
+
+- **Inplace prompt** leads with *"Filesystem access: this workspace directory only (`<path>`). The rest of your machine stays inside the Docker sandbox."*, then the git-tree recovery posture (clean → `git restore .`; dirty → commit/stash first; no repo → irreversible), then a reminder that everything outside the directory stays sandboxed. Non-TTY without consent aborts with `E_DOCKER_INPLACE_NO_CONFIRM`.
+- **Unsafe prompt** is deliberately stronger — unsafe is strictly *more* exposure than inplace, not a lighter variant. It states host-only / **no sandbox**, that filesystem access is your **entire machine**, and that scripts and agent backends can read secrets from your environment and reach paths outside the project. It fires only when the unsafe opt-in is what turns Docker off (Docker would otherwise be on); it does **not** fire when Docker is off for another reason — an explicit `JAIPH_DOCKER_ENABLED=false`, or the [Windows host-only override](#windows-runs-host-only), which prints its own one-line notice. Non-TTY without consent aborts with `E_UNSAFE_NO_CONFIRM`.
+- **Auto-confirm.** `--yes` / `-y` (env form `JAIPH_INPLACE_YES=1`) skips **both** prompts — the single, consistent consent switch, required for non-interactive (non-TTY) use of either mode. `jaiph run --raw` skips both prompts unconditionally (it is the embedding / Docker-inner entrypoint; consent is expressed by the wrapping context).
+
 In every mode, run artifacts are written to a separate read-write mount at `/jaiph/run` (outside the workspace sandbox) so the artifact tree under `.jaiph/runs/` persists on the host regardless of what happened inside the container.
 
 ## Interrupting a Docker run
@@ -86,7 +99,7 @@ The default-on choice — Docker on unless the host sets `JAIPH_UNSAFE=true` or 
 
 A second, equally deliberate choice: **enablement lives entirely in environment variables, not in in-file `config`**. Module-level `runtime.docker_*` keys can tune image, network, and timeout, but nothing in a `.jh` file can turn Docker off — `runtime.docker_enabled` is rejected at parse time. That keeps the "host is in charge of sandbox enablement" property: pulling a workflow file from a less-trusted source cannot ship an off-switch with it.
 
-The escape hatch — `JAIPH_UNSAFE=true` or `jaiph run --unsafe` — exists because some environments genuinely cannot run Docker (a sandboxed CI without nested virtualization, a developer iterating on the runtime itself). The choice to take that hatch should be visible and ergonomic, which is why it is a single explicit host-side switch rather than an in-file `config` knob.
+The escape hatch — `JAIPH_UNSAFE=true` or `jaiph run --unsafe` — exists because some environments genuinely cannot run Docker (a sandboxed CI without nested virtualization, a developer iterating on the runtime itself). The choice to take that hatch should be visible and ergonomic, which is why it is a single explicit host-side switch rather than an in-file `config` knob — and, on `jaiph run`, why it is gated behind the [unsafe confirmation prompt](#confirmation-prompts-and-access-scope) (or an explicit `--yes` / `JAIPH_INPLACE_YES` for non-interactive use) so opting out of the sandbox is a conscious act, not a silent default.
 
 ## Windows runs host-only
 

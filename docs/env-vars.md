@@ -52,7 +52,7 @@ The table below covers every `JAIPH_*` name read from `process.env` / `env` in `
 | `JAIPH_INBOX_MAX_DISPATCH` | runtime | int | `1000` | — | Maximum inbox messages a single workflow frame may drain before aborting with `E_INBOX_DISPATCH_LIMIT`. |
 | `JAIPH_INBOX_PARALLEL` | — | — | — | — | Unused — the runtime does not read this variable (tests assert setting it has no effect on inbox dispatch order). |
 | `JAIPH_INPLACE` | host | bool (`1` / `true`) | `false` | — | Opt into inplace sandbox mode (host workspace bind-mounted read-write). Not forwarded into the container. |
-| `JAIPH_INPLACE_YES` | host | bool (`1` / `true`) | `false` | — | Auto-confirm the inplace destructive-edit prompt. Required when `JAIPH_INPLACE` is set and stdin is not a TTY. Not forwarded into the container. |
+| `JAIPH_INPLACE_YES` | host | bool (`1` / `true`) | `false` | — | Auto-confirm the destructive-edit prompt for **both** inplace and unsafe modes (`--yes` / `-y` is the flag form). Required when `JAIPH_INPLACE` **or** the unsafe host-only path (see `JAIPH_UNSAFE`) is active and stdin is not a TTY. Not forwarded into the container. |
 | `JAIPH_INSTALL_COMMAND` | host | string | `curl -fsSL https://jaiph.org/install \| bash` | — | Command `jaiph use` re-invokes to reinstall. |
 | `JAIPH_LIB` | host | path | — | — | Removed from the product. The CLI strips it from the launched env before each run. |
 | `JAIPH_META_FILE` | internal | path | — | — | Absolute path to the run-metadata file. Set on the detached workflow runner child; stripped from the parent env before launch. |
@@ -80,7 +80,7 @@ The table below covers every `JAIPH_*` name read from `process.env` / `env` in `
 | `JAIPH_SOURCE_FILE` | internal | string (basename) | entry-file basename | — | Used to name run directories. |
 | `JAIPH_STDLIB` | host | path | — | — | Removed from the product. Stripped from the launched env. |
 | `JAIPH_TEST_MODE` | runtime | bool (exact `"1"`) | `false` | — | Set by `jaiph test` so the runtime skips production-only branches (e.g. file-mode normalization). |
-| `JAIPH_UNSAFE` | host | bool (`true` only) | `false` | — | Disable Docker for this run; execute on the host. `--unsafe` is the `jaiph run` flag form. |
+| `JAIPH_UNSAFE` | host | bool (`true` only) | `false` | — | Disable Docker for this run; execute on the host with **no sandbox** (entire filesystem and host environment visible to scripts and agent backends). `--unsafe` is the `jaiph run` flag form. When this turns Docker off while it would otherwise be on, `jaiph run` requires consent: a TTY warning + `Continue? [y/N]` (default no), or `JAIPH_INPLACE_YES` / `--yes` non-interactively (else `E_UNSAFE_NO_CONFIRM`). No prompt when Docker is off for another reason (explicit `JAIPH_DOCKER_ENABLED=false`, Windows host-only override) or on `jaiph run --raw`. |
 | `JAIPH_WORKSPACE` | host, runtime | path | autodetected | — | Workspace root. Inside Docker the host CLI overrides this to `/jaiph/workspace`. |
 
 <!-- end: src-parity -->
@@ -126,6 +126,7 @@ These error codes surface during Docker-backed `jaiph run` invocations. They are
 | `E_DOCKER_UID` | Linux host UID/GID detection failed. | Run exits before launch. |
 | `E_DOCKER_SANDBOX_COPY` | Copy mode failed to clone the host workspace. | Run exits before launch. |
 | `E_DOCKER_INPLACE_NO_CONFIRM` | `JAIPH_INPLACE` is set but stdin is not a TTY and `JAIPH_INPLACE_YES` is not set. | Run exits before launch. |
+| `E_UNSAFE_NO_CONFIRM` | Unsafe host-only run (`JAIPH_UNSAFE=true` / `--unsafe`, Docker otherwise on) but stdin is not a TTY and `JAIPH_INPLACE_YES` is not set. | Run exits before launch. |
 | `E_FLAG_CONFLICT` | `--inplace` / `JAIPH_INPLACE` and `--unsafe` / `JAIPH_UNSAFE=true` are both set. | Run exits before launch. |
 | `E_VALIDATE_MOUNT` | Mount targets a denied host path (`/`, `/proc`, docker socket, etc.). | Run exits before launch. |
 | `E_TIMEOUT` | Container runs longer than the effective Docker timeout. | The container is force-removed by name (`docker rm -f`) so it cannot outlive its client, then the host `docker` process tree receives SIGTERM, then SIGKILL after 5s grace. |

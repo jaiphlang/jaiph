@@ -94,6 +94,62 @@ test("runWorkflow: --inplace + env JAIPH_UNSAFE=true also fails with E_FLAG_CONF
 });
 
 // ---------------------------------------------------------------------------
+// --unsafe host-only confirmation: non-TTY without --yes must abort before any
+// process spawn; with --yes (auto-confirm) the run proceeds to completion.
+//
+// `npm test` runs with JAIPH_UNSAFE=true and no TTY, so Docker is off due to
+// the unsafe opt-in — exactly the case that now requires consent.
+// ---------------------------------------------------------------------------
+
+test("runWorkflow: --unsafe on non-TTY without --yes aborts with E_UNSAFE_NO_CONFIRM before spawning", async () => {
+  const ws = mkdtempSync(join(tmpdir(), "jaiph-run-unsafe-ws-"));
+  writeFileSync(join(ws, "flow.jh"), MIN_WORKFLOW);
+  const fence = fenceDockerCalls();
+  const cap = captureStreams();
+  // Guard against a stray JAIPH_INPLACE_YES in the ambient env auto-confirming.
+  const savedYes = process.env.JAIPH_INPLACE_YES;
+  const savedDocker = process.env.JAIPH_DOCKER_ENABLED;
+  delete process.env.JAIPH_INPLACE_YES;
+  delete process.env.JAIPH_DOCKER_ENABLED;
+  try {
+    await assert.rejects(
+      () => runWorkflow(["--unsafe", join(ws, "flow.jh")]),
+      /E_UNSAFE_NO_CONFIRM/,
+    );
+  } finally {
+    if (savedYes === undefined) delete process.env.JAIPH_INPLACE_YES;
+    else process.env.JAIPH_INPLACE_YES = savedYes;
+    if (savedDocker === undefined) delete process.env.JAIPH_DOCKER_ENABLED;
+    else process.env.JAIPH_DOCKER_ENABLED = savedDocker;
+    cap.restore();
+    fence.restore();
+    rmSync(ws, { recursive: true, force: true });
+  }
+  // Docker is never touched on the unsafe host-only path, and the throw fires
+  // before any host runner spawn — nothing ran.
+  assert.deepEqual(fence.calls(), [], "no docker exec/spawn on the unsafe host path");
+});
+
+test("runWorkflow: --unsafe --yes on non-TTY skips confirmation and runs host-only to completion", async () => {
+  const ws = mkdtempSync(join(tmpdir(), "jaiph-run-unsafe-yes-ws-"));
+  writeFileSync(join(ws, "flow.jh"), MIN_WORKFLOW);
+  const cap = captureStreams();
+  const savedDocker = process.env.JAIPH_DOCKER_ENABLED;
+  delete process.env.JAIPH_DOCKER_ENABLED;
+  let code: number;
+  try {
+    code = await runWorkflow(["--unsafe", "--yes", join(ws, "flow.jh")]);
+  } finally {
+    if (savedDocker === undefined) delete process.env.JAIPH_DOCKER_ENABLED;
+    else process.env.JAIPH_DOCKER_ENABLED = savedDocker;
+    cap.restore();
+    rmSync(ws, { recursive: true, force: true });
+  }
+  assert.equal(code, 0, `--unsafe --yes should proceed and pass; stderr:\n${cap.stderr()}`);
+  assert.ok(!cap.stderr().includes("E_UNSAFE_NO_CONFIRM"), "must not abort on confirmation");
+});
+
+// ---------------------------------------------------------------------------
 // --workspace validation: missing value, non-existent dir, file (not dir)
 // ---------------------------------------------------------------------------
 

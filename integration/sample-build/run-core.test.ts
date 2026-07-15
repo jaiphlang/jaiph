@@ -97,6 +97,9 @@ test("executable .jh invokes jaiph run semantics", () => {
     const runResult = spawnSync("node", [cliPath, filePath, "hello-exec"], {
       encoding: "utf8",
       cwd: root,
+      // Host-only via explicit config (matching the other run spawns in this
+      // file) so the run does not trip the unsafe host-only confirmation prompt.
+      env: { ...process.env, JAIPH_DOCKER_ENABLED: "false" },
     });
 
     assert.equal(runResult.status, 0, runResult.stderr);

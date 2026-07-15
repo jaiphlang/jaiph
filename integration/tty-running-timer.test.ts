@@ -55,7 +55,10 @@ sys.exit(proc.returncode if proc.returncode is not None else 1)
   const result = spawnSync(
     "python3",
     ["-c", ptyRunner, process.execPath, cliPath, "run", workflowPath],
-    { encoding: "utf8", timeout: timeoutMs },
+    // The suite runs with JAIPH_UNSAFE=true (host-only), which now prompts for
+    // consent on a TTY. This is a PTY, so auto-confirm to avoid blocking on the
+    // interactive prompt; the test is about the running timer, not consent.
+    { encoding: "utf8", timeout: timeoutMs, env: { ...process.env, JAIPH_INPLACE_YES: "1" } },
   );
   return { status: result.status, output: result.stdout ?? "" };
 }
