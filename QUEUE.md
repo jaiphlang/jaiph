@@ -14,35 +14,6 @@ Process rules:
 
 ***
 
-## Run tree: show model on prompt step lines (`prompt backend model "…"`) #dev-ready
-
-The live run tree and non-TTY step labels currently render prompt steps as `▸ prompt claude "Say hello…"` / `✓ prompt claude (5s)` — backend only, no model. Model is already resolved at prompt time (`resolveModel` in `src/runtime/kernel/prompt.ts`) and recorded on `PROMPT_START` / `PROMPT_END` in `run_summary.jsonl`, but it never reaches the `STEP_START`/`STEP_END` display path (`formatStartLine` / `formatCompletedLine` in `src/cli/run/display.ts`, fed by `resolvePromptStepName` in `src/runtime/kernel/prompt.ts` via `stderr-handler.ts`).
-
-Change the **display contract** so prompt step lines include the effective model when one is known:
-
-* **Start (TTY + non-TTY):** `▸ prompt <backend> <model> "…preview…"` — e.g. `▸ prompt claude sonnet "Classify this task…"`.
-* **End:** `✓ prompt <backend> <model> (<time>)` — e.g. `✓ prompt claude sonnet (5s)`.
-* **Model source:** the same value already passed to the backend for that invocation (explicit `agent.model` / `JAIPH_AGENT_MODEL` / flag-derived / backend default — whatever `resolveModel` returns with a non-empty `model` string).
-* **Omit model token** when `resolveModel` yields no model (empty / unknown) — fall back to today's two-token form `prompt <backend> "…"`.
-* **Custom `agent.command`:** keep showing the command basename as today; append model after it when known (`prompt my-agent sonnet "…"`).
-* **Do not change** the `.jh` language — this is CLI/run-tree presentation only. `config { agent.model = … }` remains the authoring surface.
-
-Implementation sketch:
-
-1. Extend prompt step metadata on `STEP_START`/`STEP_END` (or the event `params`/`name` assembly in `node-workflow-runtime.ts` / `runtime-event-emitter.ts`) so the display layer receives backend + model without re-resolving.
-2. Update `formatStartLine` and `formatCompletedLine` (and heartbeat if it shows prompt name) to render the three-part label.
-3. Keep truncation rules: existing preview (24 chars) and 96-char line cap unchanged; model is a bare token between backend and quoted preview.
-
-Acceptance:
-
-* Unit tests in `src/cli/run/display.test.ts` cover start/end lines with backend+model, backend-only (no model), and custom-command basename + model.
-* `src/runtime/kernel/node-workflow-runtime.artifacts.test.ts` (or a focused new test) asserts `STEP_START` for a prompt includes enough fields for the display layer to render model without reading `PROMPT_START`.
-* E2E `e2e/tests/20_rule_and_prompt.sh` (or a new small e2e) updated so stdout expectations match `prompt cursor <model> "…"` when model is configured or defaulted — test fails if model is dropped from the line.
-* `docs/first-agent-run.md` and `docs/cli.md` run-tree examples updated to show the three-part prompt label.
-* `npm test` passes.
-
-***
-
 ## Fix: Ctrl+C on Docker `jaiph run` must stop the container #dev-ready
 
 **Bug (reported):** Interrupting a long Docker-backed `jaiph run` (Ctrl+C / SIGINT on the host CLI) exits the terminal session, but the **`docker run` container keeps running** — `docker ps` still lists it minutes later. The orphaned container continues executing workflow/agent work (e.g. Claude running `npm test`) against the sandbox workspace with no attached host CLI.

@@ -3,6 +3,8 @@ export type StepEvent = {
   func: string;
   kind: string;
   name: string;
+  /** Effective prompt model (empty for non-prompt steps or when the backend auto-selects). */
+  model: string;
   ts: string;
   status: number | null;
   elapsed_ms: number | null;
@@ -95,6 +97,7 @@ export function parseStepEvent(line: string): StepEvent | undefined {
       func: parsed.func,
       kind: parsed.kind,
       name: parsed.name,
+      model: typeof parsed.model === "string" ? parsed.model : "",
       ts: typeof parsed.ts === "string" ? parsed.ts : "",
       status: typeof parsed.status === "number" ? parsed.status : null,
       elapsed_ms: typeof parsed.elapsed_ms === "number" ? parsed.elapsed_ms : null,

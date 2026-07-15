@@ -1361,7 +1361,7 @@ export class NodeWorkflowRuntime {
           output: lastOutput,
         };
       }
-      const promptStep = this.emitter.emitPromptStepStart(stepName, scope.vars, raw);
+      const promptStep = this.emitter.emitPromptStepStart(stepName, modelRes.model, scope.vars, raw);
       this.emitter.emitPromptEvent("PROMPT_START", {
         backend,
         model: modelRes.model || undefined,

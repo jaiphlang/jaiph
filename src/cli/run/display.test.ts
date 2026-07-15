@@ -115,6 +115,26 @@ test("formatCompletedLine: success with prompt kind and name (no color)", () => 
   assert.equal(result, "✓ prompt prompt (5s)");
 });
 
+test("formatCompletedLine: prompt with backend and model shows three-part label (no color)", () => {
+  const result = formatCompletedLine("  ", 0, 5, false, "prompt", "claude", "sonnet");
+  assert.equal(result, "✓ prompt claude sonnet (5s)");
+});
+
+test("formatCompletedLine: prompt omits model token when model empty (no color)", () => {
+  const result = formatCompletedLine("  ", 0, 5, false, "prompt", "cursor", "");
+  assert.equal(result, "✓ prompt cursor (5s)");
+});
+
+test("formatCompletedLine: prompt omits model token when model undefined (no color)", () => {
+  const result = formatCompletedLine("  ", 0, 5, false, "prompt", "cursor");
+  assert.equal(result, "✓ prompt cursor (5s)");
+});
+
+test("formatCompletedLine: custom command basename plus model (no color)", () => {
+  const result = formatCompletedLine("  ", 0, 2, false, "prompt", "my-agent", "sonnet");
+  assert.equal(result, "✓ prompt my-agent sonnet (2s)");
+});
+
 test("formatCompletedLine: failure with workflow kind and name (no color)", () => {
   const result = formatCompletedLine("  ", 1, 2, false, "workflow", "reviewer");
   assert.equal(result, "✗ workflow reviewer (2s)");
@@ -177,6 +197,47 @@ test("formatStartLine: shows backend name in prompt label when name differs from
   const result = formatStartLine("  ", "prompt", "cursor", false, params);
   assert.ok(result.includes("prompt cursor"));
   assert.ok(result.includes('"Summarize the changes"'));
+});
+
+test("formatStartLine: shows backend and model in prompt label when model known", () => {
+  const params: Array<[string, string]> = [
+    ["prompt_text", "Classify this task"],
+  ];
+  const result = formatStartLine("  ", "prompt", "claude", false, params, "sonnet");
+  assert.equal(result, '▸ prompt claude sonnet "Classify this task"');
+});
+
+test("formatStartLine: omits model token when model empty (backend-only)", () => {
+  const params: Array<[string, string]> = [
+    ["prompt_text", "Classify this task"],
+  ];
+  const result = formatStartLine("  ", "prompt", "cursor", false, params, "");
+  assert.equal(result, '▸ prompt cursor "Classify this task"');
+});
+
+test("formatStartLine: omits model token when model undefined (backend-only)", () => {
+  const params: Array<[string, string]> = [
+    ["prompt_text", "Classify this task"],
+  ];
+  const result = formatStartLine("  ", "prompt", "cursor", false, params);
+  assert.equal(result, '▸ prompt cursor "Classify this task"');
+});
+
+test("formatStartLine: custom command basename plus model in prompt label", () => {
+  const params: Array<[string, string]> = [
+    ["prompt_text", "Classify this task"],
+  ];
+  const result = formatStartLine("  ", "prompt", "my-agent", false, params, "sonnet");
+  assert.equal(result, '▸ prompt my-agent sonnet "Classify this task"');
+});
+
+test("formatStartLine: model token comes between backend and quoted preview (truncation unchanged)", () => {
+  const longText = "A".repeat(30);
+  const params: Array<[string, string]> = [
+    ["prompt_text", longText],
+  ];
+  const result = formatStartLine("  ", "prompt", "claude", false, params, "opus");
+  assert.equal(result, `▸ prompt claude opus "${"A".repeat(24)}..."`);
 });
 
 test("formatStartLine: omits backend in prompt label when name equals kind", () => {
@@ -262,6 +323,16 @@ test("sanitizeMultilineLogForTerminal: normalizes bare CR to newline", () => {
 test("formatHeartbeatLine: formats kind name and running time (no dim)", () => {
   const result = formatHeartbeatLine("    ", "script", "build", 45, false);
   assert.equal(result, "  · script build (running 45s)");
+});
+
+test("formatHeartbeatLine: prompt shows model token between name and running time", () => {
+  const result = formatHeartbeatLine("    ", "prompt", "claude", 45, false, "sonnet");
+  assert.equal(result, "  · prompt claude sonnet (running 45s)");
+});
+
+test("formatHeartbeatLine: omits model token when model empty", () => {
+  const result = formatHeartbeatLine("    ", "prompt", "cursor", 45, false, "");
+  assert.equal(result, "  · prompt cursor (running 45s)");
 });
 
 test("formatHeartbeatLine: wraps in dim ANSI when dimEnabled", () => {

@@ -110,8 +110,8 @@ Jaiph: Running greet.jh (Docker sandbox, fusefs)
 workflow default (name_arg="Adam")
   ▸ rule valid_name (name_arg="Adam")
   ✓ rule valid_name (0s)
-  ▸ prompt claude "Say hello to ${name} and..." (name="Adam")
-  ✓ prompt claude (5s)
+  ▸ prompt claude sonnet-4 "Say hello to ${name} and..." (name="Adam")
+  ✓ prompt claude sonnet-4 (5s)
 
 ✓ PASS workflow default (5.1s)
 
@@ -121,7 +121,7 @@ Hello, Adam — Adam Smith, the 18th-century Scottish economist, is often called
 Three things to notice:
 
 - The `(Docker sandbox, fusefs)` / `(Docker sandbox, tmp workspace)` banner confirms isolation is on.
-- The `prompt` step line names the backend (`claude` here) and a truncated preview of the prompt body. The full body is in `run_summary.jsonl`.
+- The `prompt` step line names the backend (`claude` here), the effective model (`sonnet-4` — omitted when the backend auto-selects), and a truncated preview of the prompt body. The full body is in `run_summary.jsonl`.
 - The line printed after `PASS` is `workflow default`'s return value (`return response`).
 
 ## 3. Make the rule reject a bad name
