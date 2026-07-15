@@ -8,6 +8,7 @@ import { resolveRuntimeEnv } from "../run/env";
 import { parseLogEvent, parseStepEvent } from "../run/events";
 import {
   spawnDockerProcess,
+  stopDockerContainer,
   withDockerExitGuard,
   resolveDockerHostRunsRoot,
   selectMcpSandboxMode,
@@ -137,7 +138,12 @@ async function callWorkflowDocker(
     sandboxMode,
     workflowSymbol,
   });
-  ctx?.onCancelHandle?.(() => cancelRunProcess(dockerResult.child));
+  // Cancel must also stop+remove the container: a `docker run --rm` container
+  // can outlive its killed client, orphaning the sandboxed work.
+  ctx?.onCancelHandle?.(() => {
+    stopDockerContainer(dockerResult.containerName);
+    cancelRunProcess(dockerResult.child);
+  });
   const collector = attachOutputCollector(dockerResult.child, ctx?.onStep);
   return withDockerExitGuard(dockerResult, async () => {
     const exit = await waitForRunExit(dockerResult.child);

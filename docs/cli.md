@@ -308,7 +308,7 @@ Newline-delimited JSON-RPC 2.0. Requests are handled concurrently (a long `tools
 | `ping` | Empty result. |
 | `tools/list` | `{tools: [{name, description, inputSchema}]}` from the current tool set (re-read per request, so hot reload needs no cache invalidation). |
 | `tools/call` | Runs the workflow (Docker sandbox or host, per the env — see Execution below). Result: `{content: [{type: "text", text}], isError}`. When `params._meta.progressToken` is present, the run's `STEP_START` / `STEP_END` events stream as `notifications/progress` until the response is sent (see below). |
-| `notifications/cancelled` | Cancels the matching in-flight `tools/call` (`params.requestId`): terminates the run's child process tree (SIGINT, then SIGKILL after a grace period), sends **no response** for that id, and keeps the server serving. A cancellation for an unknown or already-finished id is a no-op. |
+| `notifications/cancelled` | Cancels the matching in-flight `tools/call` (`params.requestId`): terminates the run's child process tree (SIGINT, then SIGKILL after a grace period) and, in Docker mode, force-removes the call's container (`docker rm -f`) so it cannot orphan; sends **no response** for that id, and keeps the server serving. A cancellation for an unknown or already-finished id is a no-op. |
 | other notifications | Ignored (`notifications/initialized`, …); no response. |
 | unknown request | JSON-RPC error `-32601`. |
 

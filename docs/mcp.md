@@ -137,7 +137,7 @@ To abandon a running call, send a `notifications/cancelled` naming its request i
 {"jsonrpc":"2.0","method":"notifications/cancelled","params":{"requestId":1}}
 ```
 
-The server terminates that call's run — the whole child process tree, `SIGINT` first and then `SIGKILL` after a short grace period, the same escalation `jaiph run` applies on Ctrl-C. Per the MCP spec, a cancelled call sends **no response** for that id; the run's `.jaiph/runs/` directory is left as-is for inspection. The server keeps serving — other in-flight calls are untouched and a subsequent `ping` or `tools/call` answers normally. A cancellation that arrives before the run's child has even spawned is honored as soon as it starts.
+The server terminates that call's run — the whole child process tree, `SIGINT` first and then `SIGKILL` after a short grace period, the same escalation `jaiph run` applies on Ctrl-C. In Docker mode the call's container is also force-removed by name (`docker rm -f`) so it cannot keep running after cancellation — the same no-orphaned-container contract `jaiph run` gives on interrupt (see [Sandboxing — interrupting a Docker run](sandboxing.md#interrupting-a-docker-run)). Per the MCP spec, a cancelled call sends **no response** for that id; the run's `.jaiph/runs/` directory is left as-is for inspection. The server keeps serving — other in-flight calls are untouched and a subsequent `ping` or `tools/call` answers normally. A cancellation that arrives before the run's child has even spawned is honored as soon as it starts.
 
 ## 8. Edit the file while the server runs (hot reload)
 

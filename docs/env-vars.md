@@ -128,7 +128,7 @@ These error codes surface during Docker-backed `jaiph run` invocations. They are
 | `E_DOCKER_INPLACE_NO_CONFIRM` | `JAIPH_INPLACE` is set but stdin is not a TTY and `JAIPH_INPLACE_YES` is not set. | Run exits before launch. |
 | `E_FLAG_CONFLICT` | `--inplace` / `JAIPH_INPLACE` and `--unsafe` / `JAIPH_UNSAFE=true` are both set. | Run exits before launch. |
 | `E_VALIDATE_MOUNT` | Mount targets a denied host path (`/`, `/proc`, docker socket, etc.). | Run exits before launch. |
-| `E_TIMEOUT` | Container runs longer than the effective Docker timeout. | Container receives SIGTERM, then SIGKILL after 5s grace. |
+| `E_TIMEOUT` | Container runs longer than the effective Docker timeout. | The container is force-removed by name (`docker rm -f`) so it cannot outlive its client, then the host `docker` process tree receives SIGTERM, then SIGKILL after 5s grace. |
 | `E_AGENT_CREDENTIALS` | Credential pre-flight detected a missing agent credential. | Run exits before launch. |
 
 ## Related

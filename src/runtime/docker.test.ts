@@ -22,6 +22,9 @@ import {
   pullImageIfNeeded,
   resolveDefaultDockerImageTag,
   cleanupDocker,
+  stopDockerContainer,
+  stopDockerRunOnSignal,
+  spawnDockerProcess,
   withDockerExitGuard,
   _dockerExec,
   _dockerSpawn,
@@ -1602,5 +1605,114 @@ test("withDockerExitGuard: does not register any exit listener when dockerResult
   const value = await withDockerExitGuard(undefined, async () => 42);
   assert.equal(value, 42);
   assert.equal(process.listenerCount("exit"), before, "no listener registered without a dockerResult");
+});
+
+// ---------------------------------------------------------------------------
+// Container stop on interrupt: --name wiring + docker rm -f
+// ---------------------------------------------------------------------------
+
+test("buildDockerArgs: emits --name right after `run --rm` when containerName is set", () => {
+  const args = buildDockerArgs(defaultOpts({ containerName: "jaiph-run-abc123" }), TEST_OVERLAY);
+  assert.deepEqual(args.slice(0, 4), ["run", "--rm", "--name", "jaiph-run-abc123"]);
+});
+
+test("buildDockerArgs: omits --name when containerName is not set", () => {
+  const args = buildDockerArgs(defaultOpts(), TEST_OVERLAY);
+  assert.equal(args.indexOf("--name"), -1, "no --name flag without a containerName");
+});
+
+test("stopDockerContainer: force-removes the named container via `docker rm -f`", () => {
+  const origExec = _dockerExec.run;
+  const calls: string[][] = [];
+  _dockerExec.run = (args: string[]) => { calls.push(args); };
+  try {
+    stopDockerContainer("jaiph-run-deadbeef");
+    assert.deepEqual(calls, [["rm", "-f", "jaiph-run-deadbeef"]]);
+  } finally {
+    _dockerExec.run = origExec;
+  }
+});
+
+test("stopDockerContainer: no-op (and no docker call) when containerName is undefined", () => {
+  const origExec = _dockerExec.run;
+  let calls = 0;
+  _dockerExec.run = () => { calls += 1; };
+  try {
+    stopDockerContainer(undefined);
+    assert.equal(calls, 0, "undefined name must not invoke docker");
+  } finally {
+    _dockerExec.run = origExec;
+  }
+});
+
+test("stopDockerContainer: swallows docker rm failures (best-effort)", () => {
+  const origExec = _dockerExec.run;
+  _dockerExec.run = () => { throw new Error("boom"); };
+  try {
+    assert.doesNotThrow(() => stopDockerContainer("jaiph-run-x"));
+  } finally {
+    _dockerExec.run = origExec;
+  }
+});
+
+test("stopDockerRunOnSignal: stops the container BEFORE removing the host sandbox clone", () => {
+  const sandboxDir = mkdtempSync(join(tmpdir(), "jaiph-sig-sandbox-"));
+  const origExec = _dockerExec.run;
+  const order: string[] = [];
+  _dockerExec.run = (args: string[]) => {
+    if (args[0] === "rm" && args[1] === "-f") order.push("stop-container");
+  };
+  const result = makeStubDockerResult({
+    containerName: "jaiph-run-order",
+    sandboxWorkspaceDir: sandboxDir,
+  });
+  try {
+    stopDockerRunOnSignal(result);
+    if (!existsSync(sandboxDir)) order.push("cleanup-sandbox");
+    assert.deepEqual(
+      order,
+      ["stop-container", "cleanup-sandbox"],
+      "container must be stopped before the bind-mounted sandbox clone is deleted",
+    );
+    assert.equal(result.cleaned, true, "cleanupDocker ran");
+  } finally {
+    _dockerExec.run = origExec;
+    rmSync(sandboxDir, { recursive: true, force: true });
+  }
+});
+
+test("spawnDockerProcess: assigns a container name and passes it as --name to docker run", () => {
+  const runsRoot = mkdtempSync(join(tmpdir(), "jaiph-name-runs-"));
+  const srcWs = mkdtempSync(join(tmpdir(), "jaiph-name-ws-"));
+  const origExec = _dockerExec.run;
+  const origSpawn = _dockerSpawn.run;
+  let capturedArgs: string[] | undefined;
+  _dockerExec.run = () => {}; // docker info / etc. succeed
+  _dockerSpawn.run = (args: string[]) => {
+    capturedArgs = args;
+    return { kill: () => true, pid: 0, stdout: null, stderr: null } as unknown as DockerSpawnResult["child"];
+  };
+  try {
+    writeFileSync(join(srcWs, "main.jh"), "");
+    const result = spawnDockerProcess({
+      config: { enabled: true, image: "ubuntu:24.04", imageExplicit: false, network: "default", timeoutSeconds: 0 },
+      sourceAbs: join(srcWs, "main.jh"),
+      workspaceRoot: srcWs,
+      sandboxRunDir: runsRoot,
+      runArgs: [],
+      env: { JAIPH_INPLACE: "1" },
+      isTTY: false,
+      sandboxMode: "inplace",
+    });
+    assert.ok(result.containerName && result.containerName.startsWith("jaiph-run-"), "result carries a jaiph-run-* name");
+    const nameIdx = capturedArgs!.indexOf("--name");
+    assert.ok(nameIdx !== -1, "docker run args include --name");
+    assert.equal(capturedArgs![nameIdx + 1], result.containerName, "spawned --name matches result.containerName");
+  } finally {
+    _dockerExec.run = origExec;
+    _dockerSpawn.run = origSpawn;
+    rmSync(runsRoot, { recursive: true, force: true });
+    rmSync(srcWs, { recursive: true, force: true });
+  }
 });
 

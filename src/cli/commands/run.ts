@@ -53,7 +53,7 @@ import {
   checkDockerAvailable,
   prepareImage,
   spawnDockerProcess,
-  cleanupDocker,
+  stopDockerRunOnSignal,
   withDockerExitGuard,
   resolveDockerHostRunsRoot,
   selectSandboxMode,
@@ -241,7 +241,9 @@ export async function runWorkflow(rest: string[]): Promise<number> {
       mod, runtimeEnv, outDir, workspaceRoot, metaFile, "default", runArgs, isTTY, extraEnv,
     );
 
-    const onSignalCleanup = dockerResult ? () => cleanupDocker(dockerResult) : undefined;
+    // On interrupt, stop+remove the container (docker run --rm can outlive its
+    // killed client) before removing the host sandbox clone.
+    const onSignalCleanup = dockerResult ? () => stopDockerRunOnSignal(dockerResult) : undefined;
     const signalHandlers = setupRunSignalHandlers(execResult, {
       forceKillAfterMs: 1500,
       onSignalCleanup,

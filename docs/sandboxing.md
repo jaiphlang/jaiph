@@ -44,6 +44,18 @@ Overlay and copy are interchangeable from the user's point of view — both prod
 
 In every mode, run artifacts are written to a separate read-write mount at `/jaiph/run` (outside the workspace sandbox) so the artifact tree under `.jaiph/runs/` persists on the host regardless of what happened inside the container.
 
+## Interrupting a Docker run
+
+Pressing **Ctrl+C** (or sending SIGTERM to the host `jaiph` process) stops the whole run — including the container. This matters because a `docker run --rm` container can outlive its host `docker` client: on some setups (notably Docker Desktop) killing the client leaves the container running, so a naive "kill the CLI" would leave an orphaned container executing workflow and agent work against the sandbox with no attached CLI.
+
+Jaiph closes that gap. Every sandboxed container is launched with a deterministic name, and on interrupt the host CLI force-removes it by name — which both stops and removes the `--rm` container in one step — before it deletes the host-side sandbox clone. The observable contract is:
+
+- The container is **gone from `docker ps`** within a bounded window after the interrupt.
+- The host-side copy-mode `.sandbox-*` clone is removed as before (kept only when `JAIPH_DOCKER_KEEP_SANDBOX=1` is set — see [Environment variables](env-vars.md)), and never while the container is still live, since that clone is bind-mounted into it.
+- The behaviour is identical across **copy, overlay, and inplace** modes — the sandbox mode never changes the stop contract.
+
+The same teardown applies when a run hits its Docker timeout (`E_TIMEOUT`) and to per-call cancellation of a `jaiph mcp` server (see [Serve workflows as MCP tools — Cancel an in-flight call](mcp.md#cancel-an-in-flight-call)). The runtime wiring lives in [Architecture — Docker runtime helper](architecture.md#core-components).
+
 ## What Docker protects against
 
 The Docker sandbox is designed to contain damage from untrusted or semi-trusted workflow scripts. Its protections are:
