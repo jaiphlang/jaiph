@@ -129,6 +129,13 @@ export function resolveRuntimeEnv(
   if (env.JAIPH_DEBUG === undefined && effectiveConfig.run?.debug === true) {
     env.JAIPH_DEBUG = "true";
   }
+  // agent.model is prompt-scoped and no longer maps into JAIPH_AGENT_MODEL, which
+  // stays a shell-only run-wide override. Keep it defined (empty) so scripts that
+  // read $JAIPH_AGENT_MODEL under `set -u` see an empty value instead of tripping
+  // "unbound variable".
+  if (env.JAIPH_AGENT_MODEL === undefined) {
+    env.JAIPH_AGENT_MODEL = "";
+  }
   env.JAIPH_SOURCE_FILE = basename(inputAbs);
   // JAIPH_STDLIB is no longer used; clean it from inherited env.
   delete env.JAIPH_STDLIB;
