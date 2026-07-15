@@ -75,7 +75,7 @@ if ($rawArch.ToUpper() -ne "AMD64" -and $rawArch.ToUpper() -ne "X64") {
   exit 1
 }
 
-$RepoRef = if ($RepoRef) { $RepoRef } elseif ($env:JAIPH_REPO_REF) { $env:JAIPH_REPO_REF } else { "v0.10.0" }
+$RepoRef = if ($RepoRef) { $RepoRef } elseif ($env:JAIPH_REPO_REF) { $env:JAIPH_REPO_REF } else { "v0.11.0" }
 $BinName = "jaiph-windows-x64.exe"
 $BaseUrl = if ($env:JAIPH_RELEASE_BASE_URL) { $env:JAIPH_RELEASE_BASE_URL } else { "https://github.com/jaiphlang/jaiph/releases/download/$RepoRef" }
 $BinDir  = if ($env:JAIPH_BIN_DIR) { $env:JAIPH_BIN_DIR } else { Join-Path $env:LOCALAPPDATA "jaiph\bin" }

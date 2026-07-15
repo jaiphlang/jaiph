@@ -267,7 +267,7 @@ jaiph use <version|nightly>
 | Argument | Effect |
 |---|---|
 | `nightly` | Reinstalls from the rolling `nightly` prerelease. |
-| `<version>` (e.g. `0.10.0`) | Reinstalls the release binary for tag `v<version>`. |
+| `<version>` (e.g. `0.11.0`) | Reinstalls the release binary for tag `v<version>`. |
 
 Implementation: re-invokes `JAIPH_INSTALL_COMMAND` (default `curl -fsSL https://jaiph.org/install | bash`) with `JAIPH_REPO_REF` set to `nightly` or `v<version>`. The installer downloads the matching per-platform binary plus `SHA256SUMS`, verifies the checksum, and replaces `~/.local/bin/jaiph` (or `JAIPH_BIN_DIR`).
 

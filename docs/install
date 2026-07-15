@@ -127,7 +127,7 @@ else
       ;;
   esac
 
-  REPO_REF="${1:-${JAIPH_REPO_REF:-v0.10.0}}"
+  REPO_REF="${1:-${JAIPH_REPO_REF:-v0.11.0}}"
   BIN_NAME="jaiph-${os}-${arch}"
   BASE_URL="${JAIPH_RELEASE_BASE_URL:-https://github.com/jaiphlang/jaiph/releases/download/${REPO_REF}}"
 
