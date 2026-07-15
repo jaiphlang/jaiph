@@ -6,10 +6,10 @@
 
 ## Summary
 
-- **MCP server + Docker parity:** `jaiph mcp <file.jh>` (alias `jaiph --mcp`) serves a file's workflows as MCP tools over newline-delimited JSON-RPC 2.0 stdio, with streaming `notifications/progress`, mid-run cancellation, and the same env-driven Docker sandbox as `jaiph run` (in-place by default for MCP, with server-start as the consent act).
-- **`--env` per-key environment passthrough:** a repeatable `--env KEY=VALUE` / `--env KEY` flag on `jaiph run` and `jaiph mcp` lets a workflow receive a specific host variable through the fail-closed Docker allowlist, with reserved sandbox/runtime keys refused and uniform semantics across host, `--raw`, and Docker modes.
-- **Config interpolation + `agent.model` breaking changes:** `config { }` string values now support `${identifier}` and bare-identifier sugar resolved from `const`s, env, and workflow params. **Breaking:** `agent.default_model` is renamed to `agent.model` (no alias), and `agent.model` is prompt-scoped only — it no longer writes `JAIPH_AGENT_MODEL` and is passed per-invocation as `--model`.
-- **Windows portability + distro:** cross-platform process-tree termination, explicit-interpreter script execution, a single `resolveShell()` seam, and home-dir / Docker-gating / ANSI fixes make a host-only `win32` runtime work; a native `jaiph-windows-x64.exe`, a PowerShell installer (`jaiph.org/install.ps1`), Windows CI smoke jobs, and a platform-detecting landing-page install tab ship the distro.
+- **Use Jaiph from MCP clients:** run `jaiph mcp` to expose your workflows as tools in Claude Code, Cursor, and other MCP apps — with live progress and the ability to cancel long runs.
+- **Pass secrets into sandboxed runs:** `--env GITHUB_TOKEN` (and similar) forwards a host variable into Docker-backed runs when the default allowlist would block it.
+- **Smarter config, clearer model setting:** `config { }` values can reference variables and workflow parameters. **Breaking:** rename `agent.default_model` to `agent.model`; it applies per prompt step, not as a global env var.
+- **Jaiph on Windows:** install with PowerShell, run a native `.exe`, and get the same workflows without WSL or Docker on `win32`.
 
 ## All changes
 
