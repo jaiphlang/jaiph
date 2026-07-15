@@ -22,7 +22,7 @@ Add a module-level `config { … }` block at the top of your `.jh` file:
 ```jh
 config {
   agent.backend = "claude"
-  agent.default_model = "sonnet-4"
+  agent.model = "sonnet-4"
 }
 
 workflow default() {
@@ -41,7 +41,7 @@ To use a different backend for one workflow in the same file, add a workflow-lev
 workflow fast_check() {
   config {
     agent.backend = "cursor"
-    agent.default_model = "gpt-3.5"
+    agent.model = "gpt-3.5"
   }
   ensure some_rule()
 }
@@ -57,7 +57,7 @@ export JAIPH_AGENT_MODEL="sonnet-4"
 jaiph run ./flow.jh
 ```
 
-When set, the environment value wins over both the workflow-level and module-level `config` blocks. The CLI marks each inherited agent/run env var as locked (`JAIPH_AGENT_BACKEND_LOCKED=1`, `JAIPH_AGENT_MODEL_LOCKED=1`, …) for the lifetime of that run so in-file overrides never silently take effect.
+When set, `JAIPH_AGENT_BACKEND` (and other mapped agent/run env vars) win over in-file `config` for the lifetime of that run. The CLI marks inherited agent/run env vars as locked (`JAIPH_AGENT_BACKEND_LOCKED=1`, …) so in-file overrides never silently take effect. Model is different: in-file `agent.model` does not set `JAIPH_AGENT_MODEL` — it applies per `prompt` step only. Set `JAIPH_AGENT_MODEL` in the shell to override the model for every prompt in a run.
 
 ## 4. (Codex) Override the API URL
 

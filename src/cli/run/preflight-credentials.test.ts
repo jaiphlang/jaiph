@@ -187,7 +187,7 @@ test("codex under Docker with no OPENAI_API_KEY → hard error", () => {
 
 test("message contains backend, model, entry file path, and 'module config' scope", () => {
   const mod = emptyModule(ENTRY, {
-    agent: { backend: "claude", defaultModel: "sonnet-4" },
+    agent: { backend: "claude", model: "sonnet-4" },
   });
   const r = preflightAgentCredentials({
     mod,
@@ -206,7 +206,7 @@ test("message reports 'workflow <name>' scope when backend is set at workflow le
   const mod = emptyModule(ENTRY);
   mod.workflows = [
     workflow("review", {
-      agent: { backend: "claude", defaultModel: "opus-4" },
+      agent: { backend: "claude", model: "opus-4" },
     }),
   ];
   const r = preflightAgentCredentials({
@@ -226,7 +226,7 @@ test("message reports 'workflow <name>' scope when backend is set at workflow le
 
 test("warning message also names backend/model/file/scope", () => {
   const mod = emptyModule(ENTRY, {
-    agent: { backend: "claude", defaultModel: "haiku-4" },
+    agent: { backend: "claude", model: "haiku-4" },
   });
   const r = preflightAgentCredentials({
     mod,

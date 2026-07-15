@@ -67,7 +67,7 @@ To target an OpenAI-compatible endpoint instead of the default, set `JAIPH_CODEX
 jaiph run ./flow.jh
 ```
 
-The pre-flight runs before the banner. Hard failures print a stderr message naming the backend, the model (when `agent.default_model` is set), the entry `.jh` file, the config scope that picked the backend (`module config`, `workflow <name>`, `JAIPH_AGENT_BACKEND env`, or `default`), and the concrete remedy. The error code is `E_AGENT_CREDENTIALS`. Host-only warnings for `claude` and `cursor` use the same header fields with a `jaiph: warning:` prefix.
+The pre-flight runs before the banner. Hard failures print a stderr message naming the backend, the model (when `agent.model` is set), the entry `.jh` file, the config scope that picked the backend (`module config`, `workflow <name>`, `JAIPH_AGENT_BACKEND env`, or `default`), and the concrete remedy. The error code is `E_AGENT_CREDENTIALS`. Host-only warnings for `claude` and `cursor` use the same header fields with a `jaiph: warning:` prefix.
 
 ## Skip the pre-flight (escape hatch)
 

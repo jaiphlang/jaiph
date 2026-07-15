@@ -22,23 +22,23 @@ test("resolveRuntimeEnv: does not set JAIPH_STDLIB (removed)", () => {
   }
 });
 
-test("resolveRuntimeEnv: applies config defaults when env not set", () => {
+test("resolveRuntimeEnv: does not map agent.model from config into JAIPH_AGENT_MODEL", () => {
   const saved = process.env.JAIPH_AGENT_MODEL;
   delete process.env.JAIPH_AGENT_MODEL;
   try {
-    const config: JaiphConfig = { agent: { defaultModel: "sonnet" } };
+    const config: JaiphConfig = { agent: { model: "sonnet" } };
     const env = resolveRuntimeEnv(config, "/ws", "/ws/main.sh");
-    assert.equal(env.JAIPH_AGENT_MODEL, "sonnet");
+    assert.equal(env.JAIPH_AGENT_MODEL, undefined);
   } finally {
     if (saved !== undefined) process.env.JAIPH_AGENT_MODEL = saved;
   }
 });
 
-test("resolveRuntimeEnv: does not override env-provided values", () => {
+test("resolveRuntimeEnv: preserves user-provided JAIPH_AGENT_MODEL", () => {
   const saved = process.env.JAIPH_AGENT_MODEL;
   process.env.JAIPH_AGENT_MODEL = "opus";
   try {
-    const config: JaiphConfig = { agent: { defaultModel: "sonnet" } };
+    const config: JaiphConfig = { agent: { model: "sonnet" } };
     const env = resolveRuntimeEnv(config, "/ws", "/ws/main.sh");
     assert.equal(env.JAIPH_AGENT_MODEL, "opus");
   } finally {

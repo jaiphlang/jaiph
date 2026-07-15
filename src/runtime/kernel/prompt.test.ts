@@ -13,6 +13,7 @@ import {
   prepareClaudeEnv,
   resolveConfig,
   resolveModel,
+  resolvePromptConfig,
   type PromptConfig,
 } from "./prompt";
 
@@ -91,6 +92,21 @@ describe("buildBackendArgs", () => {
     assert.ok(args.includes("-p"));
     assert.ok(args.includes("--verbose"));
     assert.ok(args.includes("--max-tokens"));
+  });
+});
+
+describe("resolvePromptConfig", () => {
+  it("applies config model only when env model is unset", () => {
+    const cfg = resolvePromptConfig({ JAIPH_AGENT_BACKEND: "claude" }, "workflow-model");
+    assert.equal(cfg.model, "workflow-model");
+  });
+
+  it("env JAIPH_AGENT_MODEL wins over config model", () => {
+    const cfg = resolvePromptConfig(
+      { JAIPH_AGENT_BACKEND: "claude", JAIPH_AGENT_MODEL: "env-model" },
+      "workflow-model",
+    );
+    assert.equal(cfg.model, "env-model");
   });
 });
 

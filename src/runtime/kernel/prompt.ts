@@ -66,7 +66,7 @@ export type ModelResolution = {
  * Resolve the effective model for the current backend.
  *
  * Selection order:
- * 1. Explicit model (agent.default_model / JAIPH_AGENT_MODEL) → use it.
+ * 1. Explicit model (agent.model / JAIPH_AGENT_MODEL) → use it.
  * 2. Model embedded in backend flags (--model in claude_flags/cursor_flags) → use it.
  * 3. No model → backend auto-selects (both cursor-agent and claude CLI pick defaults).
  */
@@ -111,6 +111,18 @@ export function resolveConfig(env: NodeJS.ProcessEnv = process.env): PromptConfi
     ),
     maxDurationMs: parseSecondsMs(env.JAIPH_PROMPT_MAX_SECONDS, DEFAULT_PROMPT_MAX_DURATION_MS),
   };
+}
+
+/**
+ * Build prompt config for one invocation. `JAIPH_AGENT_MODEL` (user env) wins;
+ * otherwise `configModel` from in-file metadata applies for this prompt only.
+ */
+export function resolvePromptConfig(env: NodeJS.ProcessEnv, configModel?: string): PromptConfig {
+  const config = resolveConfig(env);
+  if (!config.model && configModel) {
+    config.model = configModel;
+  }
+  return config;
 }
 
 /** True when the cursor backend uses a custom command (not cursor-agent). */
@@ -162,7 +174,7 @@ export function buildBackendArgs(config: PromptConfig, promptText: string): { co
   }
   if (config.backend === "claude") {
     const args = ["-p", "--verbose", "--output-format", "stream-json", "--include-partial-messages"];
-    // Pass --model from agent.default_model when set and not already in claude_flags.
+    // Pass --model from agent.model when set and not already in claude_flags.
     if (config.model && !config.claudeFlags.includes("--model")) {
       args.push("--model", config.model);
     }

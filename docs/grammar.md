@@ -95,7 +95,7 @@ config_value = string | identifier | "true" | "false" | integer ;
 
 A bare `identifier` on the RHS is sugar for a quoted string containing a single `${identifier}` reference. String values may also embed `${identifier}` interpolation directly (same rules as orchestration strings). See [Configuration](configuration.md#value-syntax).
 
-Allowed keys: `agent.default_model`, `agent.command`, `agent.backend`, `agent.trusted_workspace`, `agent.cursor_flags`, `agent.claude_flags`, `run.logs_dir`, `run.debug`, `run.recover_limit`, `runtime.docker_image`, `runtime.docker_network`, `runtime.docker_timeout_seconds`, `module.name`, `module.version`, `module.description`. See [Configuration](configuration.md). Workflow-level `config` permits only `agent.*` and `run.*` (`runtime.*` / `module.*` are `E_PARSE`).
+Allowed keys: `agent.model`, `agent.command`, `agent.backend`, `agent.trusted_workspace`, `agent.cursor_flags`, `agent.claude_flags`, `run.logs_dir`, `run.debug`, `run.recover_limit`, `runtime.docker_image`, `runtime.docker_network`, `runtime.docker_timeout_seconds`, `module.name`, `module.version`, `module.description`. See [Configuration](configuration.md). Workflow-level `config` permits only `agent.*` and `run.*` (`runtime.*` / `module.*` are `E_PARSE`).
 
 The opening line is `config` followed by `{` with optional whitespace between them. Duplicate blocks are `E_PARSE` (`duplicate config block …`). Unknown keys are `E_PARSE` listing the allowed keys. Wrong value types are `E_PARSE`.
 

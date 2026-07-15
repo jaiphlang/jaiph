@@ -7,7 +7,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { inlineScriptName } from "../../inline-script-name";
 import { argsToRuntimeString } from "../../parse/core";
 import type { CatchBody, Expr, MatchExprDef, WorkflowStepDef } from "../../types";
-import { executePrompt, resolveConfig, resolveModel, resolvePromptStepName } from "./prompt";
+import { executePrompt, resolveConfig, resolveModel, resolvePromptConfig, resolvePromptStepName } from "./prompt";
 import { appendRunSummaryLine } from "./emit";
 import { buildStepDisplayParamPairs } from "../../cli/commands/format-params.js";
 import { resolveRuleRef, resolveScriptRef, resolveWorkflowRef, type RuntimeGraph } from "./graph";
@@ -1321,7 +1321,7 @@ export class NodeWorkflowRuntime {
     const promptIr = await this.interpolateWithCaptures(raw, scope);
     if (!promptIr.ok) return { ok: false, result: promptIr.result, output: "" };
     let promptText = promptIr.value;
-    const promptConfig = resolveConfig(scope.env);
+    const promptConfig = resolvePromptConfig(scope.env, this.resolveConfigAgentModel(scope, scope.filePath));
     const backend = promptConfig.backend || "cursor";
     const stepName = resolvePromptStepName(promptConfig);
     const modelRes = resolveModel(promptConfig);
@@ -1648,6 +1648,21 @@ export class NodeWorkflowRuntime {
     return vars;
   }
 
+  private resolveConfigAgentModel(scope: Scope, filePath: string): string | undefined {
+    const ctx = this.workflowCtxStack[this.workflowCtxStack.length - 1];
+    const moduleMeta = this.graph.modules.get(filePath)?.ast.metadata;
+    const workflowMeta = ctx?.workflowMeta;
+    const layered: WorkflowMetadata = {};
+    if (moduleMeta?.agent?.model !== undefined) {
+      layered.agent = { model: moduleMeta.agent.model };
+    }
+    if (workflowMeta?.agent?.model !== undefined) {
+      (layered.agent ??= {}).model = workflowMeta.agent.model;
+    }
+    if (layered.agent?.model === undefined) return undefined;
+    return interpolateWorkflowMetadata(layered, scope.vars, scope.env).agent?.model;
+  }
+
   private applyMetadataScope(
     parentEnv: NodeJS.ProcessEnv,
     moduleMeta?: WorkflowMetadata,
@@ -1658,9 +1673,6 @@ export class NodeWorkflowRuntime {
     const apply = (meta?: WorkflowMetadata): void => {
       if (!meta) return;
       const resolved = vars ? interpolateWorkflowMetadata(meta, vars, parentEnv) : meta;
-      if (parentEnv.JAIPH_AGENT_MODEL_LOCKED !== "1" && resolved.agent?.defaultModel !== undefined) {
-        nextEnv.JAIPH_AGENT_MODEL = resolved.agent.defaultModel;
-      }
       if (parentEnv.JAIPH_AGENT_COMMAND_LOCKED !== "1" && resolved.agent?.command !== undefined) {
         nextEnv.JAIPH_AGENT_COMMAND = resolved.agent.command;
       }

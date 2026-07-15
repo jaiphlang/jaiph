@@ -4,7 +4,7 @@ import { configValueHasInterpolation } from "./parse/metadata";
 
 export type JaiphConfig = {
   agent?: {
-    defaultModel?: string;
+    model?: string;
     command?: string;
     backend?: "cursor" | "claude" | "codex";
     trustedWorkspace?: string;
@@ -73,8 +73,8 @@ export function interpolateWorkflowMetadata(
   const out: WorkflowMetadata = {};
   if (metadata.agent) {
     out.agent = {};
-    if (metadata.agent.defaultModel !== undefined) {
-      out.agent.defaultModel = interpolateStringField(metadata.agent.defaultModel, vars, env);
+    if (metadata.agent.model !== undefined) {
+      out.agent.model = interpolateStringField(metadata.agent.model, vars, env);
     }
     if (metadata.agent.command !== undefined) {
       out.agent.command = interpolateStringField(metadata.agent.command, vars, env);

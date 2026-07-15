@@ -59,7 +59,7 @@ export JAIPH_OVERRIDE_LOG="${OVERRIDE_LOG}"
 
 e2e::file "override_test.jh" <<'EOF'
 config {
-  agent.default_model = "module-model"
+  agent.model = "module-model"
   agent.backend = "cursor"
 }
 
@@ -74,7 +74,7 @@ rule check_config() {
 
 workflow with_override() {
   config {
-    agent.default_model = "workflow-model"
+    agent.model = "workflow-model"
   }
   ensure check_config()
 }
@@ -95,12 +95,12 @@ jaiph run "${TEST_DIR}/override_test.jh" >/dev/null
 
 actual="$(cat "${OVERRIDE_LOG}")"
 expected="$(printf '%s\n' \
-  'rule_model:workflow-model' \
+  'rule_model:' \
   'rule_backend:cursor' \
-  'rule_model:module-model' \
+  'rule_model:' \
   'rule_backend:cursor')"
 e2e::assert_equals "${actual}" "${expected}" \
-  "rule inside overriding workflow sees workflow model; rule in non-overriding sees module model"
+  "config agent.model does not set JAIPH_AGENT_MODEL for rules/scripts; backend still scoped via env"
 
 # ---------------------------------------------------------------------------
 # Section 3: Interaction — nested cross-module run applies callee module
@@ -194,7 +194,7 @@ export JAIPH_SIBLING_LOG="${SIBLING_LOG}"
 
 e2e::file "sibling_isolation.jh" <<'EOF'
 config {
-  agent.default_model = "module-model"
+  agent.model = "module-model"
   agent.backend = "cursor"
 }
 
@@ -202,7 +202,7 @@ script log_sibling_env = `printf '%s:model=%s,backend=%s\n' "$1" "$JAIPH_AGENT_M
 
 workflow alpha() {
   config {
-    agent.default_model = "alpha-model"
+    agent.model = "alpha-model"
     agent.backend = "claude"
   }
   run log_sibling_env("alpha")
@@ -210,7 +210,7 @@ workflow alpha() {
 
 workflow beta() {
   config {
-    agent.default_model = "beta-model"
+    agent.model = "beta-model"
   }
   run log_sibling_env("beta")
 }
@@ -226,14 +226,14 @@ unset JAIPH_AGENT_BACKEND 2>/dev/null || true
 jaiph run "${TEST_DIR}/sibling_isolation.jh" >/dev/null
 
 actual="$(cat "${SIBLING_LOG}")"
-expected="$(printf '%s\n' 'alpha:model=alpha-model,backend=claude' 'beta:model=beta-model,backend=cursor')"
+expected="$(printf '%s\n' 'alpha:model=,backend=claude' 'beta:model=,backend=cursor')"
 e2e::assert_equals "${actual}" "${expected}" \
-  "alpha sees its own model+backend; beta sees its own model and module default backend"
+  "alpha sees its own backend; beta sees module default backend; config model stays out of JAIPH_AGENT_MODEL"
 
 # ---------------------------------------------------------------------------
 # Section 6: Workflow config interpolation from workflow parameters
 # ---------------------------------------------------------------------------
-e2e::section "workflow config interpolates workflow parameters"
+e2e::section "workflow config model stays prompt-scoped (not JAIPH_AGENT_MODEL env)"
 
 PARAM_LOG="${TEST_DIR}/param.log"
 export JAIPH_PARAM_LOG="${PARAM_LOG}"
@@ -243,7 +243,7 @@ script log_model = `printf 'model:%s\n' "$JAIPH_AGENT_MODEL" >> "$JAIPH_PARAM_LO
 
 workflow implement(model) {
   config {
-    agent.default_model = model
+    agent.model = model
   }
   run log_model()
 }
@@ -257,5 +257,5 @@ unset JAIPH_AGENT_MODEL 2>/dev/null || true
 jaiph run "${TEST_DIR}/param_config.jh" >/dev/null
 
 actual="$(cat "${PARAM_LOG}")"
-e2e::assert_equals "${actual}" "model:param-model" \
-  "workflow config resolves agent.default_model from workflow parameter"
+e2e::assert_equals "${actual}" "model:" \
+  "workflow config agent.model does not populate JAIPH_AGENT_MODEL for scripts"

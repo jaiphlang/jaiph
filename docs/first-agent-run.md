@@ -57,7 +57,7 @@ The full file you build in this tutorial is:
 ```jh
 config {
   agent.backend = "claude"
-  agent.default_model = "sonnet-4"
+  agent.model = "sonnet-4"
 }
 
 rule valid_name(name_arg) {

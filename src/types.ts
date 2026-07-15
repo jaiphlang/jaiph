@@ -258,7 +258,7 @@ export interface RuntimeConfig {
 /** In-file workflow metadata (replaces config file for V1). */
 export interface WorkflowMetadata {
   agent?: {
-    defaultModel?: string;
+    model?: string;
     command?: string;
     backend?: "cursor" | "claude" | "codex";
     trustedWorkspace?: string;
