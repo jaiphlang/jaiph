@@ -120,6 +120,63 @@ test("NodeWorkflowRuntime: prompt step preview preserves authored ${var} placeho
   }
 });
 
+test("NodeWorkflowRuntime: prompt STEP_START/STEP_END carry the effective model for the display layer", async () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-prompt-step-model-"));
+  try {
+    const jh = join(root, "prompt_model_step.jh");
+    writeFileSync(
+      jh,
+      [
+        "config {",
+        '  agent.model = "sonnet"',
+        "}",
+        "workflow default() {",
+        '  prompt "Classify this task"',
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const mockJson = JSON.stringify(["ok"]);
+
+    const graph = buildRuntimeGraph(jh);
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      JAIPH_TEST_MODE: "1",
+      JAIPH_MOCK_RESPONSES_JSON: mockJson,
+      JAIPH_RUNS_DIR: join(root, ".jaiph", "runs"),
+    };
+    delete env.JAIPH_AGENT_MODEL;
+    delete env.JAIPH_AGENT_MODEL_LOCKED;
+    const runtime = new NodeWorkflowRuntime(graph, { env, cwd: root, suppressLiveEvents: true });
+    const prevSummaryEnv = process.env.JAIPH_RUN_SUMMARY_FILE;
+    process.env.JAIPH_RUN_SUMMARY_FILE = runtime.getSummaryFile();
+    try {
+      const status = await runtime.runDefault([]);
+      assert.equal(status, 0);
+    } finally {
+      if (prevSummaryEnv === undefined) delete process.env.JAIPH_RUN_SUMMARY_FILE;
+      else process.env.JAIPH_RUN_SUMMARY_FILE = prevSummaryEnv;
+    }
+
+    const events = readFileSync(runtime.getSummaryFile(), "utf8")
+      .split("\n")
+      .filter(Boolean)
+      .map((l) => JSON.parse(l) as Record<string, unknown>);
+    // STEP_START/STEP_END must carry model directly so the CLI renders
+    // `prompt <backend> <model>` without reading PROMPT_START.
+    const promptStart = events.find((e) => e.type === "STEP_START" && e.kind === "prompt");
+    assert.ok(promptStart, "expected a prompt STEP_START in run summary");
+    assert.equal(typeof promptStart!.name, "string");
+    assert.ok((promptStart!.name as string).length > 0, "STEP_START should carry the backend name");
+    assert.equal(promptStart!.model, "sonnet");
+    const promptEnd = events.find((e) => e.type === "STEP_END" && e.kind === "prompt");
+    assert.ok(promptEnd, "expected a prompt STEP_END in run summary");
+    assert.equal(promptEnd!.model, "sonnet");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("NodeWorkflowRuntime: workflow step .out accumulates Command:/Prompt: and log (mocked prompt)", async () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-node-wf-artifacts-"));
   try {

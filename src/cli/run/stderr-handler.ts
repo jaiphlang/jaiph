@@ -145,6 +145,7 @@ export type NonTTYHeartbeatStep = {
   eventId: string;
   kind: string;
   name: string;
+  model: string;
   indent: string;
   startedAt: number;
   lastHeartbeatAt: number;
@@ -193,7 +194,7 @@ export function tickNonTTYHeartbeat(ctx: TTYContext): void {
   step.lastHeartbeatAt = now;
   step.lastPrintedElapsedSec = elapsedSec;
   const dimEnabled = process.env.NO_COLOR === undefined;
-  const line = formatHeartbeatLine(step.indent, step.kind, step.name, elapsedSec, dimEnabled);
+  const line = formatHeartbeatLine(step.indent, step.kind, step.name, elapsedSec, dimEnabled, step.model);
   process.stdout.write(`${line}\n`);
 }
 
@@ -230,13 +231,14 @@ export function registerTTYSubscriber(emitter: RunEmitter, ctx: TTYContext): voi
     if (data.isRoot) return;
     const asyncIndices = data.event.async_indices ?? [];
     const indent = buildAsyncIndent(data.depth, asyncIndices);
-    const label = formatStartLine(indent, data.event.kind, data.event.name, ctx.colorEnabled, data.event.params);
+    const label = formatStartLine(indent, data.event.kind, data.event.name, ctx.colorEnabled, data.event.params, data.event.model);
     stepIndentById.set(data.eventId, indent);
     if (!ctx.isTTY) {
       nonTTYStack.push({
         eventId: data.eventId,
         kind: data.event.kind,
         name: data.event.name,
+        model: data.event.model,
         indent,
         startedAt: Date.now(),
         lastHeartbeatAt: 0,
@@ -253,7 +255,7 @@ export function registerTTYSubscriber(emitter: RunEmitter, ctx: TTYContext): voi
     const fallbackDepth = Math.max(1, data.event.depth ?? 1);
     const fallbackIndices = data.event.async_indices ?? [];
     const indent = stepIndentById.get(data.eventId) ?? buildAsyncIndent(fallbackDepth, fallbackIndices);
-    const completedLine = formatCompletedLine(indent, data.event.status ?? 1, elapsedSec, ctx.colorEnabled, data.event.kind, data.event.name);
+    const completedLine = formatCompletedLine(indent, data.event.status ?? 1, elapsedSec, ctx.colorEnabled, data.event.kind, data.event.name, data.event.model);
     writeTTYLine(completedLine, ctx);
     stepIndentById.delete(data.eventId);
     if (!ctx.isTTY) {

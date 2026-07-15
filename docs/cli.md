@@ -86,7 +86,7 @@ Non-TTY heartbeat cadence is controlled by `JAIPH_NON_TTY_HEARTBEAT_FIRST_SEC` (
 
 ### Step display
 
-Step lines include the kind (`workflow`, `prompt`, `script`, `rule`) and name. Parameterised invocations append `key="value"` pairs in parentheses (positional params use `1=…` / `2=…`); whitespace is collapsed; values are truncated to 32 characters. Prompt step lines additionally show the backend name (or custom command basename) and the first 24 characters of the prompt body in quotes (full line capped at 96 characters).
+Step lines include the kind (`workflow`, `prompt`, `script`, `rule`) and name. Parameterised invocations append `key="value"` pairs in parentheses (positional params use `1=…` / `2=…`); whitespace is collapsed; values are truncated to 32 characters. Prompt step lines additionally show the backend name (or custom command basename), the effective model, and the first 24 characters of the prompt body in quotes (full line capped at 96 characters): `▸ prompt claude sonnet "Classify this task…"` on start and `✓ prompt claude sonnet (5s)` on completion. The model is the value passed to the backend (`agent.model` / `JAIPH_AGENT_MODEL` / a `--model` flag); it is a bare token between the backend and the quoted preview, and is omitted when the backend auto-selects (`▸ prompt cursor "…"`).
 
 ### Return values
 

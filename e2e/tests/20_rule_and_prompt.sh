@@ -165,6 +165,32 @@ e2e::assert_contains "${prompt_flow_out}" "Prompt:" "prompt_flow default .out co
 # assert_contains: prompt transcript includes dynamic agent command output and timestamps
 e2e::assert_contains "${prompt_flow_out}" "Final answer:" "prompt_flow default .out contains prompt final section"
 
+# Prompt step line shows the effective model when config sets agent.model.
+# Fails if the model token is dropped from `prompt <backend> <model> "…"`.
+e2e::file "prompt_model.jh" <<'EOF'
+#!/usr/bin/env jaiph
+config {
+  agent.model = "sonnet"
+}
+workflow default() {
+  prompt "e2e-prompt-with-model"
+}
+EOF
+
+# Ensure no ambient JAIPH_AGENT_MODEL overrides the config-supplied model.
+unset JAIPH_AGENT_MODEL 2>/dev/null || true
+prompt_model_out="$(e2e::run "prompt_model.jh")"
+
+e2e::expect_stdout "${prompt_model_out}" <<'EOF'
+
+Jaiph: Running prompt_model.jh
+
+workflow default
+  ▸ prompt cursor sonnet "e2e-prompt-with-model"
+  ✓ prompt cursor sonnet (<time>)
+✓ PASS workflow default (<time>)
+EOF
+
 # Prompt with variable references shows named params in tree (not positional args)
 e2e::file "prompt_with_vars.jh" <<'EOF'
 #!/usr/bin/env jaiph

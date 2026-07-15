@@ -28,6 +28,7 @@ test("registerTTYSubscriber: STEP_END fallback indent uses event depth", () => {
       func: "jaiph::prompt",
       kind: "prompt",
       name: "prompt",
+      model: "",
       ts: "2026-01-01T00:00:00Z",
       status: 0,
       elapsed_ms: 1000,

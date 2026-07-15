@@ -22,6 +22,8 @@ export type PromptStepHandle = {
   outFile: string;
   errFile: string;
   backend: string;
+  /** Effective model for this invocation (empty when the backend auto-selects). */
+  model: string;
   startedAtMs: number;
 };
 
@@ -112,6 +114,7 @@ export class RuntimeEventEmitter {
 
   emitPromptStepStart(
     backend: string,
+    model: string,
     scopeVars: Map<string, string>,
     rawPromptSource: string,
   ): PromptStepHandle {
@@ -146,6 +149,9 @@ export class RuntimeEventEmitter {
       func: "prompt",
       kind: "prompt",
       name: backend,
+      // Effective model so the display layer can render `prompt <backend> <model>`
+      // without re-reading PROMPT_START; empty when the backend auto-selects.
+      model,
       ts: nowIso(),
       status: null,
       elapsed_ms: null,
@@ -158,7 +164,7 @@ export class RuntimeEventEmitter {
       run_id: this.runId,
       params,
     });
-    return { id, seq, outFile, errFile, backend, startedAtMs: Date.now() };
+    return { id, seq, outFile, errFile, backend, model, startedAtMs: Date.now() };
   }
 
   emitPromptStepEnd(prompt: PromptStepHandle, status: number, outContent: string, errContent: string): void {
@@ -172,6 +178,7 @@ export class RuntimeEventEmitter {
       func: "prompt",
       kind: "prompt",
       name: prompt.backend,
+      model: prompt.model,
       ts: nowIso(),
       status,
       elapsed_ms: Date.now() - prompt.startedAtMs,

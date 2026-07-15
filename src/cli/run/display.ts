@@ -60,6 +60,8 @@ export function formatStartLine(
   name: string,
   colorEnabled: boolean,
   params?: Array<[string, string]>,
+  /** Effective prompt model, rendered as a bare token after the backend when known. */
+  model?: string,
 ): string {
   const prefix = indent.slice(0, -2);
   const marker = colorize("▸", "dim", colorEnabled);
@@ -77,7 +79,9 @@ export function formatStartLine(
         : oneLine;
     const escaped = previewDisplay.replace(/\\/g, "\\\\");
     const backendPart = name !== kind ? ` ${name}` : "";
-    namePart = previewDisplay.length > 0 ? `${kindLabel}${backendPart} "${escaped}"` : `${kindLabel}${backendPart}`;
+    const modelPart = model != null && model.length > 0 ? ` ${model}` : "";
+    const label = `${kindLabel}${backendPart}${modelPart}`;
+    namePart = previewDisplay.length > 0 ? `${label} "${escaped}"` : label;
     const restParams = params.filter(([, v]) => !isInternalParamValue(v));
     const skipFirst = restParams.length > 0 && restParams[0][1] === previewValue ? 1 : 0;
     const restForSuffix = restParams.slice(skipFirst);
@@ -109,9 +113,12 @@ export function formatHeartbeatLine(
   name: string,
   runningSec: number,
   dimEnabled: boolean,
+  /** Effective prompt model, rendered as a bare token after the name when known. */
+  model?: string,
 ): string {
   const prefix = indent.slice(0, -2);
-  const body = `${prefix}\u00b7 ${kind} ${name} (running ${runningSec}s)`;
+  const modelPart = model != null && model.length > 0 ? ` ${model}` : "";
+  const body = `${prefix}\u00b7 ${kind} ${name}${modelPart} (running ${runningSec}s)`;
   return colorize(body, "dim", dimEnabled);
 }
 
@@ -122,10 +129,13 @@ export function formatCompletedLine(
   colorEnabled: boolean,
   kind?: string,
   name?: string,
+  /** Effective prompt model, rendered as a bare token after the name when known. */
+  model?: string,
 ): string {
   const prefix = indent.slice(0, -2);
   const dimPrefix = colorize(prefix, "dim", colorEnabled);
-  const label = kind != null && name != null ? `${kind} ${name} ` : "";
+  const modelPart = model != null && model.length > 0 ? ` ${model}` : "";
+  const label = kind != null && name != null ? `${kind} ${name}${modelPart} ` : "";
   if (status === 0) {
     const ok = colorize("✓", "green", colorEnabled);
     const elapsed = colorize(`${label}(${elapsedSec}s)`, "dim", colorEnabled);
