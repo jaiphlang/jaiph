@@ -13,7 +13,7 @@ No SDK project and no build step are involved: `jaiph mcp ./tools.jh` reuses the
 ## Prerequisites
 
 - A `.jh` file with at least one workflow.
-- Agent credentials on the host if any exposed workflow uses `prompt` — see [Authenticate agent backends](/how-to/agent-auth). Calls run on the host, so credentials are read from the host environment, not a container.
+- Agent credentials for any exposed workflow that uses `prompt` — see [Authenticate agent backends](/how-to/agent-auth). Set them on the **host** environment: in Docker mode they are forwarded into the container through the env allowlist (`ANTHROPIC_*`, `CURSOR_*`, `CLAUDE_*`), and in host mode they are read directly.
 
 ## 1. Serve a file over stdio
 
@@ -95,7 +95,7 @@ A workflow with no parameters produces the same shape with an empty `properties`
 
 ## 6. Call a tool and read the result
 
-On `tools/call`, the server maps the arguments object to positional workflow arguments in declared order and spawns the workflow runner — the same host-execution path as `jaiph run --raw`. The result is a text content block:
+On `tools/call`, the server maps the arguments object to positional workflow arguments in declared order and runs the workflow — in a Docker sandbox or on the host, per the same env-driven selection as `jaiph run` (see [Safety posture](#safety-posture)). The result is a text content block:
 
 - **On success**, the text is the workflow's `return` value (persisted as `return_value.txt`); if the workflow returns nothing, it falls back to the workflow's `log` output, then to a `workflow <name> completed` note.
 - **On failure**, the result carries `isError: true` and text describing the failing step, its captured output, and a `run dir: <path>` pointer so the client can inspect the full run.
@@ -104,7 +104,42 @@ A **workflow failure is not a protocol error** — it comes back as a normal res
 
 Every call is a durable, inspectable run under `.jaiph/runs/` in the workspace, exactly as for `jaiph run`. Concurrent calls are isolated by per-call run ids and run directories, so a slow call never stalls other calls or a `ping`. Two calls that mutate the *same* files in the workspace can still race — that is inherent to running against a live workspace.
 
-## 7. Edit the file while the server runs (hot reload)
+## 7. Stream progress and cancel a long call
+
+A multi-step workflow can take a while. The server streams step-level progress to clients that ask for it, and lets a client cancel a call it no longer needs.
+
+### Receive progress notifications
+
+Include a `progressToken` (a string or number of your choosing) in the call's `params._meta`:
+
+```json
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"deploy","arguments":{"environment":"staging"},"_meta":{"progressToken":"deploy-1"}}}
+```
+
+As the workflow runs, each step boundary — a step starting and a step finishing — emits a `notifications/progress` back to the client carrying your token:
+
+```json
+{"jsonrpc":"2.0","method":"notifications/progress","params":{"progressToken":"deploy-1","progress":1,"message":"workflow deploy"}}
+{"jsonrpc":"2.0","method":"notifications/progress","params":{"progressToken":"deploy-1","progress":2,"message":"script deploy_sh"}}
+{"jsonrpc":"2.0","method":"notifications/progress","params":{"progressToken":"deploy-1","progress":3,"message":"script deploy_sh"}}
+```
+
+- `progress` is a **monotonically increasing counter** — a running count of step events observed, not a fraction of a known total (there is no `total`, because a workflow's step count is not known up front). Both the **start and the end** of a step notify, so the counter advances by two per step and a `message` repeats across the start/end pair (above, the `deploy_sh` script step).
+- `message` is the step's kind and name — `workflow <name>`, `script <name>`, or `rule <name>` — from the same step events surfaced on `jaiph run`'s stderr. The tool's own workflow is the first step (`workflow deploy` above), followed by its nested steps.
+- Notifications **stop the moment the call's response is sent.** No progress notification ever follows the result for that call.
+- A call **without** a `progressToken` receives no progress notifications at all — behaviour is identical to before you opted in.
+
+### Cancel an in-flight call
+
+To abandon a running call, send a `notifications/cancelled` naming its request id:
+
+```json
+{"jsonrpc":"2.0","method":"notifications/cancelled","params":{"requestId":1}}
+```
+
+The server terminates that call's run — the whole child process tree, `SIGINT` first and then `SIGKILL` after a short grace period, the same escalation `jaiph run` applies on Ctrl-C. Per the MCP spec, a cancelled call sends **no response** for that id; the run's `.jaiph/runs/` directory is left as-is for inspection. The server keeps serving — other in-flight calls are untouched and a subsequent `ping` or `tools/call` answers normally. A cancellation that arrives before the run's child has even spawned is honored as soon as it starts.
+
+## 8. Edit the file while the server runs (hot reload)
 
 The server watches every source file in the module graph (polling, ~750 ms). When you edit and save:
 
@@ -115,7 +150,17 @@ The server watches every source file in the module graph (polling, ~750 ms). Whe
 
 An MCP-exposed workflow is **arbitrary shell reachable by the connected agent** — that is the point of the feature. Treat every exposed workflow as code the client may run at will, and scope the exposed surface with `export` accordingly.
 
-In this MVP, calls run **on the host**, like `jaiph run --raw`; the Docker sandbox is not launched, even when Docker would be enabled for `jaiph run`. When the environment would have enabled Docker, the server prints a one-line notice on stderr at startup. Agent-credential pre-flight runs once at startup, but in MCP mode its findings are demoted to warnings (the server can outlive a credential fix, and per-call failures still surface to the client).
+Tool calls honor the **same env-driven Docker sandbox as `jaiph run`** ([Sandboxing](sandboxing.md)): Docker is on by default on macOS/Linux and off under `JAIPH_UNSAFE=true` or on Windows (host-only). The image is prepared once when the server starts, not per call.
+
+**In-place is the default sandbox mode for `jaiph mcp`.** Unlike `jaiph run` (which isolates the workspace by default), an MCP server binds the **real workspace read-write** into each tool call's container, so effects land live — the calling agent is operating on your workspace and expects its edits to persist. Because stdin is the protocol channel, there is no interactive in-place confirmation prompt: **starting `jaiph mcp` on a workspace is the consent act** (no `--yes` flag). Concurrent calls each get their own run id and run directory, but two calls that mutate the *same* files in the workspace can still race.
+
+To **restore workspace isolation**, start the server with either:
+
+- `JAIPH_INPLACE=0` — sandbox the workspace with the default isolation primitive (fuse-overlay where available, otherwise a disposable copy); edits are discarded when each call's container exits.
+- `JAIPH_DOCKER_NO_OVERLAY=1` — force the disposable-copy primitive.
+- `JAIPH_UNSAFE=true` — run on the host with no sandbox at all.
+
+Agent-credential pre-flight runs once at startup. In MCP mode its findings are demoted to warnings even in Docker mode (the server can outlive a credential fix, and per-call failures still surface to the client); set credentials on the host so the allowlist forwards them into the container.
 
 ## Verification
 

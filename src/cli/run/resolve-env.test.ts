@@ -69,8 +69,10 @@ test("resolveRuntimeEnv: marks env-provided keys as locked", () => {
 test("resolveRuntimeEnv: cleans transient keys", () => {
   const saved = process.env.JAIPH_RUN_DIR;
   const savedMeta = process.env.JAIPH_META_FILE;
+  const savedGraph = process.env.JAIPH_MODULE_GRAPH_FILE;
   process.env.JAIPH_RUN_DIR = "/old/run";
   process.env.JAIPH_META_FILE = "/stale/meta.txt";
+  process.env.JAIPH_MODULE_GRAPH_FILE = "/stale/graph.json";
   try {
     const config: JaiphConfig = {};
     const env = resolveRuntimeEnv(config, "/ws", "/ws/main.sh");
@@ -79,6 +81,7 @@ test("resolveRuntimeEnv: cleans transient keys", () => {
     assert.equal(env.BASH_ENV, undefined);
     assert.equal(env.JAIPH_PRECEDING_FILES, undefined);
     assert.equal(env.JAIPH_RUN_SUMMARY_FILE, undefined);
+    assert.equal(env.JAIPH_MODULE_GRAPH_FILE, undefined);
   } finally {
     if (saved !== undefined) {
       process.env.JAIPH_RUN_DIR = saved;
@@ -89,6 +92,11 @@ test("resolveRuntimeEnv: cleans transient keys", () => {
       process.env.JAIPH_META_FILE = savedMeta;
     } else {
       delete process.env.JAIPH_META_FILE;
+    }
+    if (savedGraph !== undefined) {
+      process.env.JAIPH_MODULE_GRAPH_FILE = savedGraph;
+    } else {
+      delete process.env.JAIPH_MODULE_GRAPH_FILE;
     }
   }
 });

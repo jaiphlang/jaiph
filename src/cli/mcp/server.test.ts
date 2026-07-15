@@ -1,7 +1,16 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { McpServer, type McpCallResult } from "./server";
+import { McpServer, type McpCallResult, type McpCallContext } from "./server";
 import type { McpToolSpec } from "./tools";
+
+/** A promise plus its resolver, so a fake `callTool` can settle on command. */
+function deferred(): { promise: Promise<McpCallResult>; resolve: (r: McpCallResult) => void } {
+  let resolve!: (r: McpCallResult) => void;
+  const promise = new Promise<McpCallResult>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
 
 const BUILD_TOOL: McpToolSpec = {
   name: "build",
@@ -17,7 +26,7 @@ const BUILD_TOOL: McpToolSpec = {
 };
 
 function makeServer(overrides?: {
-  callTool?: (spec: McpToolSpec, args: Record<string, string>) => Promise<McpCallResult>;
+  callTool?: (spec: McpToolSpec, args: Record<string, string>, ctx: McpCallContext) => Promise<McpCallResult>;
   tools?: McpToolSpec[];
 }) {
   const written: Array<Record<string, unknown>> = [];
@@ -162,6 +171,129 @@ test("tools/call: a crashing callTool becomes an internal JSON-RPC error", async
   const res = written[1] as { error: { code: number } };
   assert.equal(res.error.code, -32603);
   assert.equal(logged.length, 1);
+});
+
+// === progress notifications & cancellation ===
+
+test("tools/call with progressToken: monotonic progress before the response, none after", async () => {
+  let captured: McpCallContext | undefined;
+  const call = deferred();
+  const { server, written } = makeServer({
+    callTool: async (_spec, _args, ctx) => {
+      captured = ctx;
+      return call.promise;
+    },
+  });
+  await initialize(server);
+  const callP = server.handleLine(
+    JSON.stringify({
+      jsonrpc: "2.0",
+      id: 20,
+      method: "tools/call",
+      params: { name: "build", arguments: { target: "app" }, _meta: { progressToken: "tok" } },
+    }),
+  );
+  // Two step events arrive while the run is in flight.
+  captured!.onStep!("run", "compile");
+  captured!.onStep!("run", "link");
+  // The run finishes and its response is sent.
+  call.resolve({ text: "built", isError: false });
+  await callP;
+  // A late step event (after the response) must NOT produce a notification.
+  captured!.onStep!("run", "late");
+
+  const progress = written.filter((m) => m.method === "notifications/progress");
+  assert.equal(progress.length, 2, "exactly the two in-flight step events notify");
+  assert.deepEqual(progress[0].params, { progressToken: "tok", progress: 1, message: "run compile" });
+  assert.deepEqual(progress[1].params, { progressToken: "tok", progress: 2, message: "run link" });
+
+  // The response for id 20 exists and follows both progress notifications.
+  const responseIdx = written.findIndex((m) => m.id === 20);
+  const lastProgressIdx = written.map((m) => m.method).lastIndexOf("notifications/progress");
+  assert.ok(responseIdx > lastProgressIdx, "progress must precede the response");
+});
+
+test("tools/call without progressToken: no onStep and no progress notifications", async () => {
+  let captured: McpCallContext | undefined;
+  const { server, written } = makeServer({
+    callTool: async (_spec, _args, ctx) => {
+      captured = ctx;
+      return { text: "ok", isError: false };
+    },
+  });
+  await initialize(server);
+  await server.handleLine(
+    JSON.stringify({ jsonrpc: "2.0", id: 21, method: "tools/call", params: { name: "build", arguments: { target: "x" } } }),
+  );
+  assert.equal(captured!.onStep, undefined, "no progressToken means no step forwarding");
+  assert.equal(written.filter((m) => m.method === "notifications/progress").length, 0);
+});
+
+test("notifications/cancelled: kills the in-flight call, sends no response, keeps serving", async () => {
+  let cancelled = false;
+  const call = deferred();
+  const { server, written } = makeServer({
+    callTool: async (_spec, _args, ctx) => {
+      // The executor registers its terminator; cancellation resolves the run.
+      ctx.onCancelHandle?.(() => {
+        cancelled = true;
+        call.resolve({ text: "terminated by signal SIGINT", isError: true });
+      });
+      return call.promise;
+    },
+  });
+  await initialize(server);
+  const callP = server.handleLine(
+    JSON.stringify({ jsonrpc: "2.0", id: 22, method: "tools/call", params: { name: "build", arguments: { target: "x" } } }),
+  );
+  await server.handleLine(
+    JSON.stringify({ jsonrpc: "2.0", method: "notifications/cancelled", params: { requestId: 22 } }),
+  );
+  await callP;
+
+  assert.equal(cancelled, true, "the child terminator ran");
+  assert.equal(written.find((m) => m.id === 22), undefined, "a cancelled call sends no response");
+
+  // The server still answers subsequent requests.
+  await server.handleLine(JSON.stringify({ jsonrpc: "2.0", id: 23, method: "ping" }));
+  assert.deepEqual(written.find((m) => m.id === 23), { jsonrpc: "2.0", id: 23, result: {} });
+});
+
+test("notifications/cancelled arriving before the child spawns cancels once registered", async () => {
+  let cancelled = false;
+  let registerCancel: (() => void) | undefined;
+  const call = deferred();
+  const { server } = makeServer({
+    callTool: async (_spec, _args, ctx) => {
+      // Defer registering the terminator until after the cancel notification.
+      registerCancel = () => ctx.onCancelHandle?.(() => {
+        cancelled = true;
+        call.resolve({ text: "terminated", isError: true });
+      });
+      return call.promise;
+    },
+  });
+  await initialize(server);
+  const callP = server.handleLine(
+    JSON.stringify({ jsonrpc: "2.0", id: 24, method: "tools/call", params: { name: "build", arguments: { target: "x" } } }),
+  );
+  await server.handleLine(
+    JSON.stringify({ jsonrpc: "2.0", method: "notifications/cancelled", params: { requestId: 24 } }),
+  );
+  // The executor only now spawns the child and registers its terminator.
+  registerCancel!();
+  await callP;
+  assert.equal(cancelled, true, "a cancel that predates the child still terminates it");
+});
+
+test("notifications/cancelled for an unknown request id is a harmless no-op", async () => {
+  const { server, written } = makeServer();
+  await initialize(server);
+  await server.handleLine(
+    JSON.stringify({ jsonrpc: "2.0", method: "notifications/cancelled", params: { requestId: 999 } }),
+  );
+  // Only the initialize response was written; the notification did nothing.
+  assert.equal(written.length, 1);
 });
 
 // === protocol plumbing ===

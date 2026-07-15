@@ -147,6 +147,10 @@ export function resolveRuntimeEnv(
   // `jaiph run` always builds scripts under that run's output dir; inherited JAIPH_SCRIPTS would shadow
   // the per-module default in the emitted `export JAIPH_SCRIPTS="${JAIPH_SCRIPTS:-$(cd ...)}"`.
   delete env.JAIPH_SCRIPTS;
+  // Same for the serialized module graph: each run must load/build the graph for its own entry file.
+  // Inherited JAIPH_MODULE_GRAPH_FILE (e.g. from `npm test` after a prior jaiph run) would make
+  // `jaiph run --raw` execute the wrong workflows.
+  delete env.JAIPH_MODULE_GRAPH_FILE;
   // Strip stale JAIPH_LIB from a parent shell (removed from the product; scripts use JAIPH_WORKSPACE).
   delete env.JAIPH_LIB;
 

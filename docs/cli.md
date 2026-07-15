@@ -285,7 +285,7 @@ jaiph mcp [--workspace <dir>] [--env KEY[=VALUE]]... <file.jh>
 | Flag | Argument | Effect |
 |---|---|---|
 | `--workspace` | `<dir>` | Workspace root for import resolution (default: auto-detected from the file's directory). A missing value or non-directory path aborts with a specific message. |
-| `--env` | `KEY=VALUE` or `KEY` | Same per-key passthrough as `jaiph run --env` (same forms, validation, and reserved-key rejection), resolved once at startup and applied to **every** tool call's runner env for the server's lifetime. A bare `--env KEY` unset on the host aborts server startup with `E_ENV_MISSING`. MCP calls run on the host today; once Docker-backed calls exist the pairs flow through the same container passthrough. |
+| `--env` | `KEY=VALUE` or `KEY` | Same per-key passthrough as `jaiph run --env` (same forms, validation, and reserved-key rejection), resolved once at startup and applied to **every** tool call for the server's lifetime. A bare `--env KEY` unset on the host aborts server startup with `E_ENV_MISSING`. In Docker mode the pairs cross the container boundary as explicit `-e` args bypassing the allowlist, exactly as for `jaiph run --env`. |
 | `-h`, `--help` | — | Print the subcommand usage and exit `0`. |
 
 ### Startup and exit behaviour
@@ -307,11 +307,14 @@ Newline-delimited JSON-RPC 2.0. Requests are handled concurrently (a long `tools
 | `initialize` | Replies with `protocolVersion`, `capabilities: {tools: {listChanged: true}}`, and `serverInfo: {name: "jaiph", title: "Jaiph workflows", version}`. Echoes the client's `protocolVersion` if it is one of `2024-11-05`, `2025-03-26`, `2025-06-18`; otherwise replies with the newest of that set. |
 | `ping` | Empty result. |
 | `tools/list` | `{tools: [{name, description, inputSchema}]}` from the current tool set (re-read per request, so hot reload needs no cache invalidation). |
-| `tools/call` | Runs the workflow on the host. Result: `{content: [{type: "text", text}], isError}`. |
-| notifications | Ignored (`notifications/initialized`, `notifications/cancelled`, …); no response. |
+| `tools/call` | Runs the workflow (Docker sandbox or host, per the env — see Execution below). Result: `{content: [{type: "text", text}], isError}`. When `params._meta.progressToken` is present, the run's `STEP_START` / `STEP_END` events stream as `notifications/progress` until the response is sent (see below). |
+| `notifications/cancelled` | Cancels the matching in-flight `tools/call` (`params.requestId`): terminates the run's child process tree (SIGINT, then SIGKILL after a grace period), sends **no response** for that id, and keeps the server serving. A cancellation for an unknown or already-finished id is a no-op. |
+| other notifications | Ignored (`notifications/initialized`, …); no response. |
 | unknown request | JSON-RPC error `-32601`. |
 
 The server emits `notifications/tools/list_changed` after a successful hot reload (only once `initialize` has happened).
+
+When a `tools/call` carries a `progressToken`, the server also emits `notifications/progress` (`{progressToken, progress, message}`) for that call — one per step event, with a monotonically increasing `progress` counter and a `message` of `"<kind> <name>"` (no `total`, since a workflow's step count is not known up front). Notifications stop the instant the call's response is sent; a call without a `progressToken` emits none. See [Serve workflows as MCP tools — Stream progress and cancel a long call](mcp.md#stream-progress-and-cancel-a-long-call).
 
 ### Error mapping
 
@@ -338,7 +341,8 @@ Tool descriptions come from the `#` comment lines directly above each workflow (
 
 ### Execution and hot reload
 
-- Calls spawn the workflow runner on the host, like `jaiph run --raw`; the Docker sandbox is **not** launched. Run artifacts land under `.jaiph/runs/` exactly as for `jaiph run`.
+- Tool calls honor the same env-driven sandbox selection as `jaiph run` (`resolveDockerConfig`): Docker on macOS/Linux by default, host-only under `JAIPH_UNSAFE=true` or on Windows. The image is prepared once at startup (`checkDockerAvailable` + `prepareImage`), not per call. Run artifacts land under `.jaiph/runs/` exactly as for `jaiph run`.
+- **Inplace is the default sandbox mode** for `jaiph mcp`: the container binds the real workspace read-write so tool effects land live, matching what the calling agent expects. Because stdin is the protocol channel there is no interactive in-place prompt — **starting the server is the consent act** (no `--yes` needed). Set `JAIPH_INPLACE=0` (or `JAIPH_DOCKER_NO_OVERLAY=1`) to restore workspace isolation (overlay/copy), or `JAIPH_UNSAFE=true` to run on the host with no sandbox.
 - Source files in the module graph are watched (polling, ~750 ms). A valid edit re-derives tools and emits `notifications/tools/list_changed`; an edit that fails to compile keeps the previous tool set serving and logs diagnostics to stderr.
 
 ## Environment variables

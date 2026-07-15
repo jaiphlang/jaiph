@@ -57,6 +57,7 @@ import {
   withDockerExitGuard,
   resolveDockerHostRunsRoot,
   selectSandboxMode,
+  RUN_WORKFLOW_ENV,
   type SandboxMode,
 } from "../../runtime/docker";
 import { confirmInplaceRun } from "../../runtime/docker-inplace";
@@ -338,8 +339,12 @@ async function runWorkflowRaw(
     const metaFile = join(outDir, `.jaiph-run-meta-${Date.now()}-${process.pid}.txt`);
 
     const dummyBuiltPath = join(outDir, "entry.sh");
+    // Raw mode is the Docker container's inner entrypoint. It runs `default`
+    // unless a non-default root symbol is carried in via JAIPH_RUN_WORKFLOW
+    // (set by the Docker MCP call path through DockerSpawnOptions.workflowSymbol).
+    const workflowSymbol = process.env[RUN_WORKFLOW_ENV] || "default";
     const execResult = spawnRunProcess(
-      [metaFile, dummyBuiltPath, "default", ...runArgs],
+      [metaFile, dummyBuiltPath, workflowSymbol, ...runArgs],
       { cwd: workspaceRoot, env: runtimeEnv, stdio: "inherit" },
     );
 

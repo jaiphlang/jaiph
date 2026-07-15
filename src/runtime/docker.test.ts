@@ -15,6 +15,8 @@ import {
   ENV_ALLOW_EXCLUDE_PREFIX,
   GHCR_IMAGE_REPO,
   selectSandboxMode,
+  selectMcpSandboxMode,
+  RUN_WORKFLOW_ENV,
   cloneWorkspaceForSandbox,
   allocateSandboxWorkspaceDir,
   pullImageIfNeeded,
@@ -1070,6 +1072,71 @@ test("selectSandboxMode: existing overlay/copy behavior unchanged when JAIPH_INP
   assert.equal(selectSandboxMode({ JAIPH_DOCKER_NO_OVERLAY: "true" }), "copy");
   const expected = existsSync("/dev/fuse") ? "overlay" : "copy";
   assert.equal(selectSandboxMode({}), expected);
+});
+
+// ---------------------------------------------------------------------------
+// selectMcpSandboxMode — MCP defaults to inplace; explicit env restores isolation
+// ---------------------------------------------------------------------------
+
+test("selectMcpSandboxMode: defaults to inplace when no sandbox mode env is set", () => {
+  assert.equal(selectMcpSandboxMode({}), "inplace");
+});
+
+test("selectMcpSandboxMode: JAIPH_INPLACE truthy still selects inplace", () => {
+  assert.equal(selectMcpSandboxMode({ JAIPH_INPLACE: "1" }), "inplace");
+  assert.equal(selectMcpSandboxMode({ JAIPH_INPLACE: "true" }), "inplace");
+});
+
+test("selectMcpSandboxMode: JAIPH_INPLACE=0 restores isolation (overlay/copy per host)", () => {
+  const expected = existsSync("/dev/fuse") ? "overlay" : "copy";
+  assert.equal(selectMcpSandboxMode({ JAIPH_INPLACE: "0" }), expected);
+  assert.equal(selectMcpSandboxMode({ JAIPH_INPLACE: "false" }), expected);
+});
+
+test("selectMcpSandboxMode: JAIPH_DOCKER_NO_OVERLAY=1 restores isolation as copy", () => {
+  assert.equal(selectMcpSandboxMode({ JAIPH_DOCKER_NO_OVERLAY: "1" }), "copy");
+});
+
+// ---------------------------------------------------------------------------
+// buildDockerArgs: workflow symbol carried into the container
+// ---------------------------------------------------------------------------
+
+test("buildDockerArgs: workflowSymbol is carried in as -e JAIPH_RUN_WORKFLOW", () => {
+  const args = buildDockerArgs(defaultOpts({ workflowSymbol: "greet" }), TEST_OVERLAY);
+  const envFlags = args.filter((_, i) => i > 0 && args[i - 1] === "-e");
+  assert.ok(
+    envFlags.includes(`${RUN_WORKFLOW_ENV}=greet`),
+    `expected -e ${RUN_WORKFLOW_ENV}=greet, got: ${envFlags.join(", ")}`,
+  );
+});
+
+test("buildDockerArgs: default (or absent) workflowSymbol emits no JAIPH_RUN_WORKFLOW", () => {
+  for (const opts of [defaultOpts(), defaultOpts({ workflowSymbol: "default" })]) {
+    const args = buildDockerArgs(opts, TEST_OVERLAY);
+    const envFlags = args.filter((_, i) => i > 0 && args[i - 1] === "-e");
+    assert.ok(
+      !envFlags.some((v) => v.startsWith(`${RUN_WORKFLOW_ENV}=`)),
+      `default root must not set ${RUN_WORKFLOW_ENV}`,
+    );
+  }
+});
+
+test("buildDockerArgs: a stale JAIPH_RUN_WORKFLOW in the host env is not auto-forwarded", () => {
+  // The symbol is set only through the explicit workflowSymbol wiring, so a
+  // value inherited from the host env must be dropped by the allowlist.
+  const args = buildDockerArgs(
+    defaultOpts({ env: { [RUN_WORKFLOW_ENV]: "stale" } }),
+    TEST_OVERLAY,
+  );
+  const envFlags = args.filter((_, i) => i > 0 && args[i - 1] === "-e");
+  assert.ok(
+    !envFlags.some((v) => v === `${RUN_WORKFLOW_ENV}=stale`),
+    "inherited JAIPH_RUN_WORKFLOW must not leak into the container",
+  );
+});
+
+test("isEnvAllowed: rejects JAIPH_RUN_WORKFLOW (set only via explicit spawn wiring)", () => {
+  assert.equal(isEnvAllowed(RUN_WORKFLOW_ENV), false);
 });
 
 // ---------------------------------------------------------------------------

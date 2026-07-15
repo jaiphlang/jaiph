@@ -21,6 +21,26 @@ export function terminateRunProcessGroup(
   killProcessTree(pid, signal);
 }
 
+/**
+ * Terminate a run child on demand (not via a process signal): SIGINT the whole
+ * process tree, then force-kill with SIGKILL if it has not exited after a grace
+ * period — the same escalation `setupRunSignalHandlers` applies to CLI signals.
+ * The force-kill timer is unref'd (never keeps the parent alive) and cleared
+ * once the child exits. Used to cancel an in-flight `jaiph mcp` tool call.
+ */
+export function cancelRunProcess(
+  child: ChildProcess,
+  opts?: { forceKillAfterMs?: number },
+): void {
+  const forceKillAfterMs = opts?.forceKillAfterMs ?? 1500;
+  terminateRunProcessGroup(child, "SIGINT");
+  const forceKillTimer = setTimeout(() => {
+    terminateRunProcessGroup(child, "SIGKILL");
+  }, forceKillAfterMs);
+  forceKillTimer.unref?.();
+  child.once("exit", () => clearTimeout(forceKillTimer));
+}
+
 export function setupRunSignalHandlers(
   child: ChildProcess,
   opts?: { forceKillAfterMs?: number; onSignalCleanup?: () => void },
