@@ -5,6 +5,7 @@ import {
   fail,
   hasUnescapedClosingQuote,
   indexOfClosingDoubleQuote,
+  isJaiphInterpolationRef,
   matchSendOperator,
   parseCallRef,
   parseLogMessageRhs,
@@ -368,6 +369,10 @@ function tryParseFail(c: BlockCtx): BlockResult | null {
     const message: Expr = { kind: "literal", raw };
     c.trivia.setNode(message, { tripleQuoted: true, rawBody: body });
     return { step: { type: "say", level: "fail", message, loc: stepLoc }, nextIdx };
+  }
+  if (isJaiphInterpolationRef(arg.trim())) {
+    const message: Expr = { kind: "literal", raw: arg.trim() };
+    return { step: { type: "say", level: "fail", message, loc: stepLoc }, nextIdx: c.idx + 1 };
   }
   if (!arg.startsWith('"')) {
     fail(c.filePath, 'fail must match: fail "<reason>" or fail """..."""', c.innerNo, failCol);

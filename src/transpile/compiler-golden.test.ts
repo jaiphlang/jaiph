@@ -220,6 +220,32 @@ test("parser: unknown config key throws E_PARSE with file location", () => {
   );
 });
 
+test("parser: unquoted ${name} in config is accepted as interpolation ref", () => {
+  const source = [
+    "config {",
+    "  agent.model = ${model}",
+    "}",
+    "workflow default(model) {",
+    "  log \"ok\"",
+    "}",
+  ].join("\n");
+  const mod = parsejaiph(source, "/fake/entry.jh");
+  assert.equal(mod.metadata?.agent?.model, "${model}");
+});
+
+test("parser: unquoted ${name.field} in config is accepted as interpolation ref", () => {
+  const source = [
+    "config {",
+    "  agent.model = ${cfg.model}",
+    "}",
+    "workflow default() {",
+    "  log \"ok\"",
+    "}",
+  ].join("\n");
+  const mod = parsejaiph(source, "/fake/entry.jh");
+  assert.equal(mod.metadata?.agent?.model, "${cfg.model}");
+});
+
 test("parser: invalid config value throws E_PARSE", () => {
   const source = [
     "config {",
