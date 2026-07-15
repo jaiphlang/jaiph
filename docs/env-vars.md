@@ -106,7 +106,7 @@ These variables are consumed by `docs/install` (the installer shell script) and 
 
 | Variable | Type | Default | Role |
 |---|---|---|---|
-| `JAIPH_REPO_REF` | string | `v0.10.0` (installer default when unset) | Release ref the installer downloads (`v0.10.0`, `nightly`, …). `jaiph use <version>` sets this to `v<version>` or `nightly`. |
+| `JAIPH_REPO_REF` | string | `v0.11.0` (installer default when unset) | Release ref the installer downloads (`v0.11.0`, `nightly`, …). `jaiph use <version>` sets this to `v<version>` or `nightly`. |
 | `JAIPH_BIN_DIR` | path | `$HOME/.local/bin` | Target bin directory for the installed `jaiph` binary. |
 | `JAIPH_RELEASE_BASE_URL` | string | `https://github.com/jaiphlang/jaiph/releases/download/<ref>` | Override the GitHub Release base URL the installer downloads from. |
 | `JAIPH_REPO_URL` | path | — | Local repo path (directory containing `package.json`) for the from-source installer branch (`docs/install-from-local.sh`). Ignored on the binary-download path. |

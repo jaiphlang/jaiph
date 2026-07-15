@@ -60,7 +60,7 @@ or prepend npm's global bin directory: `export PATH="$(npm prefix -g)/bin:$PATH"
 
 ```bash
 jaiph use nightly      # rolling nightly prerelease
-jaiph use 0.10.0       # reinstalls the v0.10.0 release binary
+jaiph use 0.11.0       # reinstalls the v0.11.0 release binary
 ```
 
 `jaiph use` re-invokes the step-1 installer (`JAIPH_INSTALL_COMMAND`, default `curl -fsSL https://jaiph.org/install | bash`) with `JAIPH_REPO_REF` set to `nightly` or `v<version>`, then replaces `~/.local/bin/jaiph` (or `JAIPH_BIN_DIR`). Override `JAIPH_INSTALL_COMMAND` for forks, offline bundles, or local scripts.
@@ -71,7 +71,7 @@ jaiph use 0.10.0       # reinstalls the v0.10.0 release binary
 jaiph --version
 ```
 
-This prints `jaiph <version>` (sourced from the installed release at build time). After `jaiph use <version>`, re-run `jaiph --version` and confirm the printed version matches (for example `jaiph 0.10.0` after `jaiph use 0.10.0`).
+This prints `jaiph <version>` (sourced from the installed release at build time). After `jaiph use <version>`, re-run `jaiph --version` and confirm the printed version matches (for example `jaiph 0.11.0` after `jaiph use 0.11.0`).
 
 ## Related
 
