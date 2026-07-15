@@ -14,41 +14,6 @@ Process rules:
 
 ***
 
-## Fix: Ctrl+C on Docker `jaiph run` must stop the container #dev-ready
-
-**Bug (reported):** Interrupting a long Docker-backed `jaiph run` (Ctrl+C / SIGINT on the host CLI) exits the terminal session, but the **`docker run` container keeps running** — `docker ps` still lists it minutes later. The orphaned container continues executing workflow/agent work (e.g. Claude running `npm test`) against the sandbox workspace with no attached host CLI.
-
-**Current coverage gap:** `e2e/tests/74b_docker_signal_cleanup.sh` sends SIGINT to a background `jaiph run` and asserts **no `.sandbox-*` dirs remain** under the runs root. It does **not** assert that the container exited — so a regression where the host CLI dies but the container lives would pass CI.
-
-**Expected contract:** When the user interrupts a Docker-backed run (SIGINT or SIGTERM on the host `jaiph` process):
-
-1. The **`docker run` child** spawned by `spawnDockerProcess` (`src/runtime/docker.ts`) is terminated (same escalation as `setupRunSignalHandlers` in `src/cli/run/lifecycle.ts`: SIGINT → grace → SIGKILL).
-2. The **container is gone** from `docker ps` within a bounded window (because `docker run --rm` is used, stopping the client should remove the container).
-3. **Host cleanup still runs:** `cleanupDocker` removes copy-mode `.sandbox-*` clones (unless `JAIPH_DOCKER_KEEP_SANDBOX=1`); no new orphans under `.jaiph/runs/.sandbox-*`.
-4. Applies to **copy, overlay, and inplace** modes — mode must not change the stop contract.
-
-**Likely failure modes to investigate:**
-
-* `onSignalCleanup` in `run.ts` calls `cleanupDocker` (rm sandbox dir) but nothing ensures the **container process** has stopped — cleanup and container lifecycle are decoupled.
-* SIGINT kills the host `docker` CLI client while the container keeps running (Docker Desktop / detached behavior).
-* Nested agent subprocesses (`claude`, long `npm test`) inside the container outlive the forwarded signal when the host `docker run` is interrupted.
-
-**Implementation sketch:**
-
-1. On interrupt, after `terminateRunProcessGroup(execResult.child)`, **await container exit** (or call explicit stop — e.g. kill the `docker run` child reliably, or `docker stop` the container ID captured from spawn if needed).
-2. Ensure `cleanupDocker` runs **after** the container has stopped (or make cleanup idempotent and safe if the container is still winding down).
-3. Wire the same behavior for MCP per-call Docker sandbox if it shares the gap (`src/cli/mcp/call.ts` uses `withDockerExitGuard` + `cancelRunProcess` — verify parity).
-
-Acceptance:
-
-* **New or extended e2e** (prefer extending `e2e/tests/74b_docker_signal_cleanup.sh` or sibling `74c`-style script): start a Docker-backed workflow that sleeps long enough to inspect (`sleep 60` script step, same fixture pattern as today); record `docker ps -q --filter ancestor=<test image>` or the container name/id while running; send SIGINT to the host `jaiph` PID; **`docker ps` must not list that container within 15s**; assert `.sandbox-*` cleanup still passes (existing assertion retained).
-* **Regression e2e variant (optional but valuable):** reproduce with a workflow that spawns a **nested long-lived shell** (closer to agent behavior) — e.g. `script hang = \`sleep 60\`` inside `ensure` — and assert the same container-stop contract.
-* Unit test in `src/cli/run/lifecycle.test.ts` or `src/runtime/docker.test.ts`: SIGINT handler invokes termination on the docker child (mock/spy `killProcessTree` or `_dockerSpawn`).
-* Manual repro steps documented in test header comment: `jaiph run …` → Ctrl+C → `docker ps` empty.
-* `npm test` and `npm run test:e2e` pass.
-
-***
-
 ## UX: confirmation prompts for `--inplace` and `--unsafe` with explicit access scope #dev-ready
 
 **Gap:** `--inplace` already gates launch behind an interactive warning + `Continue? [y/N]` (`confirmInplaceRun` in `src/runtime/docker-inplace.ts`, wired from `runWorkflow` in `src/cli/commands/run.ts`). **`--unsafe` / `JAIPH_UNSAFE=true` has no equivalent** — the run starts immediately on the host with no sandbox and no consent prompt. Users can opt into host-only mode without seeing how broad the blast radius is.

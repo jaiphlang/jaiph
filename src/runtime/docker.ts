@@ -561,6 +561,13 @@ export interface DockerSpawnOptions {
    * workspace to bind at `/jaiph/workspace`. Caller owns its lifecycle.
    */
   sandboxWorkspaceDir?: string;
+  /**
+   * Deterministic `--name` for the spawned container. Set by
+   * `spawnDockerProcess` so an interrupt (or timeout) can force-remove the
+   * container by name even if the host `docker` client was killed without
+   * tearing it down. Omitted callers of `buildDockerArgs` skip `--name`.
+   */
+  containerName?: string;
 }
 
 export const CONTAINER_WORKSPACE = "/jaiph/workspace";
@@ -701,6 +708,11 @@ export function buildDockerArgs(opts: DockerSpawnOptions, overlayScriptPath?: st
   }
 
   const args: string[] = ["run", "--rm"];
+  // Deterministic name so an interrupt / timeout can force-remove this exact
+  // container even if the host `docker` client is killed without tearing it down.
+  if (opts.containerName) {
+    args.push("--name", opts.containerName);
+  }
 
   args.push("--cap-drop", "ALL");
   if (mode === "overlay") {
@@ -835,6 +847,8 @@ export function buildDockerArgs(opts: DockerSpawnOptions, overlayScriptPath?: st
 
 export interface DockerSpawnResult {
   child: ChildProcess;
+  /** `--name` of the spawned container — used to force-remove it on interrupt/timeout. */
+  containerName?: string;
   /** Host directory mounted at /jaiph/run — scan for artifacts after exit. */
   sandboxRunDir: string;
   /** Selected sandbox primitive for this run. */
@@ -895,7 +909,10 @@ export function spawnDockerProcess(opts: DockerSpawnOptions): DockerSpawnResult 
   // inplace: no overlay script, no workspace clone — the host workspace is
   // bind-mounted rw directly. The runs mount is still created above.
 
-  opts = { ...opts, sandboxMode: mode, sandboxWorkspaceDir };
+  // Deterministic container name so an interrupt or timeout can force-remove
+  // this exact container by name, regardless of the host `docker` client's fate.
+  const containerName = `jaiph-run-${randomBytes(6).toString("hex")}`;
+  opts = { ...opts, sandboxMode: mode, sandboxWorkspaceDir, containerName };
   const dockerArgs = buildDockerArgs(opts, overlayScriptPath);
 
   const child = _dockerSpawn.run(dockerArgs, {
@@ -907,11 +924,15 @@ export function spawnDockerProcess(opts: DockerSpawnOptions): DockerSpawnResult 
   let timeoutTimer: NodeJS.Timeout | undefined;
   if (opts.config.timeoutSeconds > 0) {
     timeoutTimer = setTimeout(() => {
+      // Force-remove the container by name first: a `docker run --rm` container
+      // can outlive its client (Docker Desktop / detached), so killing the
+      // client's process tree alone is not enough to stop the container.
+      stopDockerContainer(containerName);
       const pid = child.pid;
       if (!pid) {
         return;
       }
-      // Terminate the `docker run` child and its descendants. On win32 the
+      // Terminate the `docker run` client and its descendants. On win32 the
       // taskkill /T force-kills the tree, so the SIGKILL escalation below is a
       // documented no-op there (see killProcessTree).
       killProcessTree(pid, "SIGTERM");
@@ -923,6 +944,7 @@ export function spawnDockerProcess(opts: DockerSpawnOptions): DockerSpawnResult 
 
   return {
     child,
+    containerName,
     sandboxRunDir: opts.sandboxRunDir,
     sandboxMode: mode,
     overlayScriptDir,
@@ -930,6 +952,35 @@ export function spawnDockerProcess(opts: DockerSpawnOptions): DockerSpawnResult 
     keepSandboxWorkspace,
     timeoutTimer,
   };
+}
+
+/**
+ * Force-stop and remove the named container. Best-effort and bounded so it is
+ * safe to call inside a SIGINT/SIGTERM handler.
+ *
+ * Because Docker containers are spawned with `docker run --rm`, a `docker rm -f`
+ * both kills and removes the container, guaranteeing it disappears from
+ * `docker ps` even when the host `docker` client was interrupted without cleanly
+ * tearing the container down (the reported orphaned-container failure mode).
+ */
+export function stopDockerContainer(containerName: string | undefined): void {
+  if (!containerName) return;
+  try {
+    _dockerExec.run(["rm", "-f", containerName], { stdio: "ignore", timeout: 10_000 });
+  } catch {
+    // Best-effort: the container may already be gone, or docker unavailable.
+  }
+}
+
+/**
+ * SIGINT/SIGTERM cleanup for a Docker-backed run: stop and remove the container
+ * first, then remove the host sandbox clone. Order matters — the sandbox dir is
+ * bind-mounted into the container, so it must not be deleted while the container
+ * is still running.
+ */
+export function stopDockerRunOnSignal(result: DockerSpawnResult): void {
+  stopDockerContainer(result.containerName);
+  cleanupDocker(result);
 }
 
 /**
