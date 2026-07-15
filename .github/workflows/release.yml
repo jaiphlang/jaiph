@@ -125,7 +125,7 @@ jobs:
           case "${GITHUB_REF}" in
             refs/tags/v*)
               tag="${GITHUB_REF_NAME}"; channel="stable" ;;
-            refs/heads/nightly|refs/tags/nightly)
+            refs/heads/nightly)
               tag="nightly"; channel="nightly" ;;
             *)
               echo "Unsupported ref for release: ${GITHUB_REF}" >&2; exit 1 ;;
@@ -168,7 +168,7 @@ jobs:
           case "${GITHUB_REF}" in
             refs/tags/v*)
               tag="${GITHUB_REF_NAME}"; channel="stable" ;;
-            refs/heads/nightly|refs/tags/nightly)
+            refs/heads/nightly)
               tag="nightly"; channel="nightly" ;;
             *)
               echo "Unsupported ref for release: ${GITHUB_REF}" >&2; exit 1 ;;
