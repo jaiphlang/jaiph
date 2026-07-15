@@ -203,6 +203,10 @@ printf '%s\n' "$line"
 ```
 
 workflow classify_role(task) {
+  config {
+    agent.model = "sonnet"
+  }
+
   const result = prompt """
     ${classification_prompt}
 

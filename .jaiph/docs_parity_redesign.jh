@@ -1,5 +1,11 @@
 #!/usr/bin/env jaiph
 
+config {
+  agent.backend = "claude"
+  agent.model = "opus"
+  agent.claude_flags = "--permission-mode bypassPermissions"
+}
+
 # Redesign-aware variant of docs_parity.jh, meant to be run BY HAND after the
 # Diátaxis docs redesign (QUEUE.md "Docs redesign" tasks 1-7) has landed.
 #

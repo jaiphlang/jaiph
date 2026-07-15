@@ -3,8 +3,8 @@
 import "./lib_common.jh" as common
 
 config {
-  agent.backend = "cursor"
-  agent.cursor_flags = "--force"
+  agent.backend = "claude"
+  agent.claude_flags = "--permission-mode bypassPermissions"
 }
 
 script npm_run_test_ci = `npm run test:ci`

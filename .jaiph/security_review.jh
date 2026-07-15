@@ -17,6 +17,7 @@ import "jaiphlang/artifacts" as artifacts
 
 config {
   agent.backend = "claude"
+  agent.model = "fable"
   agent.claude_flags = "--permission-mode bypassPermissions"
 }
 

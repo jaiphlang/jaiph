@@ -38,9 +38,11 @@ jaiph --version
 jaiph --help
 ```
 
-The script builds the self-contained standalone binary from local source (`npm install` + `npm run build:standalone`, including uncommitted changes) and installs `dist/jaiph` to `~/.local/bin` by default (or `JAIPH_BIN_DIR` if set). The result is the same single-file artifact that `docs/install` downloads from a GitHub Release; only the origin of the binary differs.
+The script builds the self-contained standalone binary via `docs/install` (`npm install` + `npm run build:standalone`, including uncommitted changes) and installs `dist/jaiph` to `~/.local/bin` by default (or `JAIPH_BIN_DIR` if set). It then builds `runtime/Dockerfile` from the same checkout and **retags it as the default sandbox image** — `ghcr.io/jaiphlang/jaiph-runtime:<version>` plus `:nightly` — so Docker runs use your local build without setting `JAIPH_DOCKER_IMAGE`. The image build is **required** (the script exits if Docker is missing, the daemon is down, or the build fails).
 
-**From-source prerequisites:** **`npm`** and **[Bun](https://bun.sh)** (`bun build --compile` produces the standalone binary). Node is not required to *run* the result, but `npm install` still pulls dev dependencies; on most Linux/macOS hosts the system `npm` ships with Node 20+.
+Set **`JAIPH_SKIP_DOCKER_BUILD=1`** only to skip the image build (installer acceptance tests).
+
+**From-source prerequisites:** **`npm`**, **[Bun](https://bun.sh)**, and a running **Docker** daemon (`docker info` must succeed).
 
 ## Developing in the repository
 
