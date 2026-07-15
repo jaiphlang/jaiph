@@ -4,11 +4,9 @@ import "jaiphlang/queue" as queue
 import "./lib_common.jh" as common
 
 config {
-  agent.backend = "cursor"
-  agent.model = "composer-2"
-  agent.cursor_flags = "--force"
-  # agent.backend = "claude"
-  # agent.claude_flags = "--permission-mode bypassPermissions"
+  agent.backend = "claude"
+  agent.model = "opus"
+  agent.claude_flags = "--permission-mode bypassPermissions"
 }
 
 script jaiph_review_body_file = `printf '%s\n' "$JAIPH_WORKSPACE/.jaiph/tmp/architect_review_body.txt"`

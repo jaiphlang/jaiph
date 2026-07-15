@@ -131,6 +131,7 @@ mkdir -p "${PARITY_BIN_DIR}"
 # install-from-local.sh execs docs/install with the repo path. Cap the bin dir
 # to a test-owned directory so we never touch ~/.local/bin.
 JAIPH_BIN_DIR="${PARITY_BIN_DIR}" \
+  JAIPH_SKIP_DOCKER_BUILD=1 \
   bash "${ROOT_DIR}/docs/install-from-local.sh" "${ROOT_DIR}" >/dev/null
 
 [ -x "${PARITY_BIN_DIR}/jaiph" ] || e2e::fail "install-from-local.sh did not produce ${PARITY_BIN_DIR}/jaiph"

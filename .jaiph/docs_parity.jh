@@ -1,5 +1,11 @@
 #!/usr/bin/env jaiph
 
+config {
+  agent.backend = "claude"
+  agent.model = "opus"
+  agent.claude_flags = "--permission-mode bypassPermissions"
+}
+
 const role = """
   Project-specific context for documenting Jaiph:
   - You read TypeScript and Bash fluently so you can verify documentation

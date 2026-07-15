@@ -31,6 +31,7 @@ import {
   type DockerSpawnOptions,
   type DockerSpawnResult,
 } from "./docker";
+import { VERSION } from "../version";
 import { mkdtempSync, writeFileSync, mkdirSync, existsSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
@@ -99,11 +100,11 @@ test("resolveDefaultDockerImageTag: npm / dist/src/runtime layout", () => {
   assert.equal(resolveDefaultDockerImageTag(runtimeDir), "1.2.3");
 });
 
-test("resolveDefaultDockerImageTag: falls back to nightly when no package.json", () => {
+test("resolveDefaultDockerImageTag: falls back to embedded VERSION when no package.json", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-no-pkg-"));
   const runtimeDir = join(root, "dist", "src", "runtime");
   mkdirSync(runtimeDir, { recursive: true });
-  assert.equal(resolveDefaultDockerImageTag(runtimeDir), "nightly");
+  assert.equal(resolveDefaultDockerImageTag(runtimeDir), VERSION);
 });
 
 test("resolveDockerConfig: in-file image/timeout overrides defaults (dockerEnabled removed)", () => {

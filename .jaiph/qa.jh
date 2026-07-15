@@ -145,6 +145,10 @@ const analyze_gaps_prompt = """
 """
 
 workflow analyze_gaps() {
+  config {
+    agent.model = "fable"
+  }
+
   const report_path = run new_qa_gap_report_path()
   const contributing_docs = run read_contributing_docs()
   const txtar_format = run read_txtar_format_spec()

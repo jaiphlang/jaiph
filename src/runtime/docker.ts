@@ -4,6 +4,7 @@ import { randomBytes } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join, resolve, dirname, relative } from "node:path";
 import type { RuntimeConfig } from "../types";
+import { VERSION } from "../version";
 import { OVERLAY_RUN_SH_BASE64, decodeEmbeddedAsset } from "./embedded-assets";
 import { killProcessTree } from "./kernel/portability";
 
@@ -60,6 +61,7 @@ export function validateMountHostPath(hostAbsPath: string): void {
  * Tries two relative layouts:
  * - Installer (`docs/install`): `…/libDir/package.json` next to `libDir/src/runtime/` (two hops up).
  * - npm / repo build: `…/pkg/package.json` from `pkg/dist/src/runtime/` (three hops up).
+ * - Standalone binary (no package.json on disk): embedded `VERSION` from `src/version.ts`.
  */
 export function resolveDefaultDockerImageTag(moduleDir: string = __dirname): string {
   const candidates = [
@@ -76,7 +78,7 @@ export function resolveDefaultDockerImageTag(moduleDir: string = __dirname): str
       // Try next candidate.
     }
   }
-  return "nightly";
+  return VERSION;
 }
 
 export const GHCR_IMAGE_REPO = "ghcr.io/jaiphlang/jaiph-runtime";

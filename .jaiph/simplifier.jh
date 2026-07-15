@@ -5,6 +5,7 @@ import "jaiphlang/git" as git
 
 config {
   agent.backend = "claude"
+  agent.model = "opus"
   agent.claude_flags = "--permission-mode bypassPermissions"
 }
 
