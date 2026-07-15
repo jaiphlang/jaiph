@@ -101,9 +101,14 @@ export function isBareIdentifier(token: string): boolean {
   return /^[A-Za-z_][A-Za-z0-9_]*$/.test(token) && !JAIPH_KEYWORDS.has(token);
 }
 
+/** True when a token is a bare Jaiph interpolation ref: `${name}` or `${name.field}`. */
+export function isJaiphInterpolationRef(token: string): boolean {
+  return /^\$\{[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?\}$/.test(token);
+}
+
 /**
- * Parse `log` / `logerr` RHS: either a double-quoted string or a single bare identifier
- * (stored as `${name}` for downstream interpolation).
+ * Parse `log` / `logerr` RHS: either a double-quoted string, a single bare identifier,
+ * or a bare `${name}` / `${name.field}` interpolation ref (stored as-is).
  */
 export function parseLogMessageRhs(
   filePath: string,
@@ -126,6 +131,9 @@ export function parseLogMessageRhs(
   }
   if (isBareIdentifier(trimmed) && trimmed === logArg.trim()) {
     return `\${${trimmed}}`;
+  }
+  if (isJaiphInterpolationRef(trimmed)) {
+    return trimmed;
   }
   fail(
     filePath,

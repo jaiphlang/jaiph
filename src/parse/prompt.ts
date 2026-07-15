@@ -1,6 +1,6 @@
 import type { Expr, WorkflowStepDef } from "../types";
 import { createTrivia, type Trivia } from "./trivia";
-import { fail, hasUnescapedClosingQuote, indexOfClosingDoubleQuote } from "./core";
+import { fail, hasUnescapedClosingQuote, indexOfClosingDoubleQuote, isJaiphInterpolationRef } from "./core";
 import { dedentTripleQuotedBody, parseTripleQuoteBlock, tripleQuoteBodyToRaw } from "./triple-quote";
 
 /**
@@ -281,6 +281,26 @@ export function parsePromptStep(
       ...(returnsSchema !== undefined ? { returns: returnsSchema } : {}),
     };
     return buildStep(expr, { bodyKind: "string" }, nextIndex - 1);
+  }
+
+  // --- Case 2b: Bare ${name} or ${name.field} interpolation ref ---
+  if (promptArg.startsWith("${")) {
+    const closeIdx = promptArg.indexOf("}");
+    if (closeIdx !== -1) {
+      const refToken = promptArg.slice(0, closeIdx + 1);
+      if (isJaiphInterpolationRef(refToken)) {
+        const afterRef = promptArg.slice(closeIdx + 1);
+        const { returns: returnsSchema, nextIndex } = parseReturnsClause(filePath, lineNo, afterRef, lines, lineIdx);
+        const raw = `"${refToken}"`;
+        const expr: Expr = {
+          kind: "prompt",
+          raw,
+          loc: stepLoc,
+          ...(returnsSchema !== undefined ? { returns: returnsSchema } : {}),
+        };
+        return buildStep(expr, { bodyKind: "string" }, nextIndex - 1);
+      }
+    }
   }
 
   // --- Case 3: Bare identifier ---

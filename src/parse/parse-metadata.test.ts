@@ -196,6 +196,50 @@ test("parseConfigBlock: interpolated agent.backend is accepted at parse time", (
   assert.equal(metadata.agent?.backend, "${backend}");
 });
 
+test("parseConfigBlock: unquoted ${name} is sugar for interpolated string", () => {
+  const lines = [
+    "config {",
+    "  agent.model = ${model}",
+    "}",
+  ];
+  const { metadata } = parseConfigBlock("test.jh", lines, 0);
+  assert.equal(metadata.agent?.model, "${model}");
+});
+
+test("parseConfigBlock: unquoted ${name.field} is sugar for interpolated string", () => {
+  const lines = [
+    "config {",
+    "  agent.model = ${config.model}",
+    "}",
+  ];
+  const { metadata } = parseConfigBlock("test.jh", lines, 0);
+  assert.equal(metadata.agent?.model, "${config.model}");
+});
+
+test("parseConfigBlock: rejects unclosed ${name interpolation ref", () => {
+  const lines = [
+    "config {",
+    "  agent.model = ${model",
+    "}",
+  ];
+  assert.throws(
+    () => parseConfigBlock("test.jh", lines, 0),
+    /config value must be a quoted string, bare identifier, or true\/false/,
+  );
+});
+
+test("parseConfigBlock: rejects shell fallback ${model:-x} in bare ref", () => {
+  const lines = [
+    "config {",
+    "  agent.model = ${model:-x}",
+    "}",
+  ];
+  assert.throws(
+    () => parseConfigBlock("test.jh", lines, 0),
+    /config value must be a quoted string, bare identifier, or true\/false/,
+  );
+});
+
 test("parseConfigBlock: handles escape sequences in string values", () => {
   const lines = [
     "config {",

@@ -34,14 +34,25 @@ Docker enablement uses a separate, env-only resolution; see [Docker enablement](
 
 ### Value syntax
 
+**Global rule:** Every Jaiph string position accepts three equivalent forms:
+
+| Form | Example | Stored as |
+|---|---|---|
+| Bare identifier | `model` | `${model}` |
+| Double-quoted string | `"${model}"` or `"prefix-${model}"` | string content as-is |
+| Bare interpolation ref | `${model}` or `${model.field}` | `${model}` / `${model.field}` |
+
+All three resolve identically at runtime. Shell expansion forms (`${var:-default}`, `${var//…}`, `${#var}`) are `E_PARSE` in all string positions.
+
 | Type | Format | Example |
 |---|---|---|
 | String | Double-quoted; supports `\\`, `\n`, `\t`, `\"`, and `${name}` interpolation | `"gpt-4"`, `"${model}"` |
-| String (interpolation sugar) | Bare identifier — stored as `${name}` and resolved at runtime | `model` |
+| String (bare identifier sugar) | Bare identifier — stored as `${name}` and resolved at runtime | `model` |
+| String (bare ref sugar) | Bare `${name}` or `${name.field}` — stored as-is and resolved at runtime | `${model}`, `${model.field}` |
 | Boolean | Bare `true` / `false` | `true` |
 | Integer | Unsigned decimal digits | `300` |
 
-String config values support the same `${identifier}` interpolation as orchestration strings (`log`, `prompt`, `return`, etc.). A bare identifier on the RHS is sugar for a single `${identifier}` reference (for example `agent.model = model` is equivalent to `agent.model = "${model}"`).
+String config values support the same `${identifier}` interpolation as orchestration strings (`log`, `prompt`, `return`, etc.). A bare identifier or bare `${name}` on the RHS is sugar for a single `${identifier}` reference (for example `agent.model = model`, `agent.model = ${model}`, and `agent.model = "${model}"` are all equivalent).
 
 **Interpolation scope:**
 

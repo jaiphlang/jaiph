@@ -90,10 +90,11 @@ One channel per line. A `->` route declaration inside a workflow body is `E_PARS
 ```ebnf
 config_block = "config" "{" { config_line } "}" ;
 config_line  = config_key "=" config_value ;
-config_value = string | identifier | "true" | "false" | integer ;
+config_value = string | identifier | interp_ref | "true" | "false" | integer ;
+interp_ref   = "${" IDENT [ "." IDENT ] "}" ;
 ```
 
-A bare `identifier` on the RHS is sugar for a quoted string containing a single `${identifier}` reference. String values may also embed `${identifier}` interpolation directly (same rules as orchestration strings). See [Configuration](configuration.md#value-syntax).
+All three string forms are equivalent: a bare `identifier`, a bare `${name}` interpolation ref, and a double-quoted string `"${name}"` all store and resolve identically. Shell expansion forms (`${var:-default}`, `${#var}`, etc.) are `E_PARSE`. See [Configuration](configuration.md#value-syntax).
 
 Allowed keys: `agent.model`, `agent.command`, `agent.backend`, `agent.trusted_workspace`, `agent.cursor_flags`, `agent.claude_flags`, `run.logs_dir`, `run.debug`, `run.recover_limit`, `runtime.docker_image`, `runtime.docker_network`, `runtime.docker_timeout_seconds`, `module.name`, `module.version`, `module.description`. See [Configuration](configuration.md). Workflow-level `config` permits only `agent.*` and `run.*` (`runtime.*` / `module.*` are `E_PARSE`).
 

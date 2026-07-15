@@ -7,7 +7,12 @@ config {
   agent.claude_flags = "--permission-mode bypassPermissions"
 }
 
-script npm_run_test_ci = `npm run test:ci`
+script npm_run_test_ci = ```
+while IFS= read -r _v; do
+  unset "$_v" 2>/dev/null || true
+done < <(compgen -e | grep '^JAIPH_' || true)
+exec npm run test:ci
+```
 
 script assert_nonempty_file_or_fail = ```
 test -s "$1" || {

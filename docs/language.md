@@ -181,6 +181,7 @@ Sends text to the configured agent backend. Three body forms:
 |---|---|
 | Single-line literal | `prompt "Review the code"` |
 | Identifier | `prompt my_text` (`my_text` must be in scope) |
+| Bare ref | `prompt ${my_text}` or `prompt ${result.field}` — equivalent to identifier form |
 | Triple-quoted | `prompt """\nMultiline body with ${vars}\n"""` |
 
 | Aspect | Rule |
@@ -267,11 +268,13 @@ alerts <- """
 log "Processing ${message}"
 logerr "Warning: ${name} not found"
 log status                       # bare identifier — same as log "${status}"
+log ${status}                    # bare ref — same as log "${status}"
 log run `date +%s`()             # inline-script form (run keyword required)
 log """
   Build started at ${timestamp}
 """
 fail "Missing configuration"
+fail ${error_msg}                # bare ref — same as fail "${error_msg}"
 ```
 
 | Statement | Effect |
@@ -347,6 +350,18 @@ for path in paths {
 | Allowed in | Workflows and rules. |
 
 ## String interpolation
+
+**Global three-form rule:** Every Jaiph string position — `config`, `log`, `logerr`, `fail`, `prompt`, `const`, `return`, `send`, and any other orchestration string — accepts three equivalent forms for a single variable reference:
+
+| Author writes | Stored / AST form | Resolves at runtime |
+|---|---|---|
+| `model` (bare identifier) | `${model}` | yes |
+| `"${model}"` (quoted) | `${model}` (string content) | yes |
+| `${model}` (bare ref) | `${model}` | yes |
+| `"prefix-${model}"` (quoted with prefix) | literal with embedded ref | yes |
+| `${model.field}` (bare dotted ref) | `${model.field}` | yes |
+
+No string-RHS site accepts two of these but rejects the third.
 
 | Form | Status | Where |
 |---|---|---|

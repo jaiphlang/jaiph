@@ -1,6 +1,6 @@
 import type { WorkflowMetadata } from "../types";
 import type { Trivia, ConfigBodyPart } from "./trivia";
-import { colFromRaw, fail, isBareIdentifier } from "./core";
+import { colFromRaw, fail, isBareIdentifier, isJaiphInterpolationRef } from "./core";
 import { validateJaiphStringContent } from "../transpile/validate-string";
 
 const CONFIG_INTERPOLATION_RE = /\$\{[a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)?\}/;
@@ -73,6 +73,10 @@ function parseMetadataValue(filePath: string, rawLine: string, valuePart: string
   }
   if (isBareIdentifier(trimmed)) {
     return `\${${trimmed}}`;
+  }
+  if (isJaiphInterpolationRef(trimmed)) {
+    validateJaiphStringContent(trimmed, filePath, lineNo, colFromRaw(rawLine), "config");
+    return trimmed;
   }
   const col = rawLine.indexOf(valuePart) >= 0 ? colFromRaw(rawLine) : 1;
   return fail(

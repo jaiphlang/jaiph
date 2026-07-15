@@ -10,6 +10,7 @@ import {
   fail,
   parseCallRef,
   isBareIdentifier,
+  isJaiphInterpolationRef,
 } from "./core";
 
 // === stripQuotes ===
@@ -280,4 +281,34 @@ test("parseCallRef: bare identifier followed by { with content returns null", ()
 test("parseCallRef: bare identifier starting with digit returns null", () => {
   const result = parseCallRef("123bad");
   assert.equal(result, null);
+});
+
+// === isJaiphInterpolationRef ===
+
+test("isJaiphInterpolationRef: accepts ${name}", () => {
+  assert.equal(isJaiphInterpolationRef("${model}"), true);
+});
+
+test("isJaiphInterpolationRef: accepts ${name.field}", () => {
+  assert.equal(isJaiphInterpolationRef("${model.field}"), true);
+});
+
+test("isJaiphInterpolationRef: rejects unclosed ${model", () => {
+  assert.equal(isJaiphInterpolationRef("${model"), false);
+});
+
+test("isJaiphInterpolationRef: rejects shell fallback ${model:-x}", () => {
+  assert.equal(isJaiphInterpolationRef("${model:-x}"), false);
+});
+
+test("isJaiphInterpolationRef: rejects bare identifier (no braces)", () => {
+  assert.equal(isJaiphInterpolationRef("model"), false);
+});
+
+test("isJaiphInterpolationRef: rejects ${#var} length form", () => {
+  assert.equal(isJaiphInterpolationRef("${#model}"), false);
+});
+
+test("isJaiphInterpolationRef: rejects ${var//} substitution form", () => {
+  assert.equal(isJaiphInterpolationRef("${model//old/new}"), false);
 });

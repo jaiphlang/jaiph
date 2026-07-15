@@ -215,3 +215,36 @@ test("parsePromptStep: returns with double-quoted schema", () => {
   const body = unwrapPrompt(result.step);
   assert.equal(body.returns, "{ type: string }");
 });
+
+// === parsePromptStep: bare ${name} interpolation ref ===
+
+test("parsePromptStep: parses bare ${name} interpolation ref", () => {
+  const lines = ["  prompt ${myVar}"];
+  const result = parsePromptStep("test.jh", lines, 0, "${myVar}", 3, undefined, trivia);
+  const body = unwrapPrompt(result.step);
+  assert.equal(body.raw, '"${myVar}"');
+  assert.equal(trivia.getNode(body)?.bodyKind, "string");
+});
+
+test("parsePromptStep: parses bare ${name.field} interpolation ref", () => {
+  const lines = ["  prompt ${result.text}"];
+  const result = parsePromptStep("test.jh", lines, 0, "${result.text}", 3, undefined, trivia);
+  const body = unwrapPrompt(result.step);
+  assert.equal(body.raw, '"${result.text}"');
+});
+
+test("parsePromptStep: parses ${name} with returns schema", () => {
+  const lines = ['  prompt ${myVar} returns "{ type: string }"'];
+  const result = parsePromptStep("test.jh", lines, 0, '${myVar} returns "{ type: string }"', 3, undefined, trivia);
+  const body = unwrapPrompt(result.step);
+  assert.equal(body.raw, '"${myVar}"');
+  assert.equal(body.returns, "{ type: string }");
+});
+
+test("parsePromptStep: rejects unclosed ${model interpolation ref", () => {
+  const lines = ["  prompt ${model"];
+  assert.throws(
+    () => parsePromptStep("test.jh", lines, 0, "${model", 3, undefined, trivia),
+    /prompt body must be/,
+  );
+});
