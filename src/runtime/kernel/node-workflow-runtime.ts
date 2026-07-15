@@ -32,6 +32,7 @@ import { resolveInterpreterFromShebang } from "../../parse/script-bash";
 import { resolveShell } from "./portability";
 import { RuntimeEventEmitter, type Frame } from "./runtime-event-emitter";
 import { executeMockBodyDef, type MockBodyDef, type StepResult } from "./runtime-mock";
+import { resetMockResponses } from "./mock";
 import { linesOfDelimitedString } from "../string-lines";
 import {
   defaultPromptSleep,
@@ -248,6 +249,9 @@ export class NodeWorkflowRuntime {
     },
   ) {
     this.graph = graph;
+    // Fresh mock queue per run: identical JAIPH_MOCK_RESPONSES_JSON across two
+    // runs must not share one exhausted queue (see resetMockResponses).
+    resetMockResponses();
     this.env = opts.env ?? process.env;
     this.cwd = opts.cwd ?? process.cwd();
     this.mockBodies = opts.mockBodies ?? new Map();

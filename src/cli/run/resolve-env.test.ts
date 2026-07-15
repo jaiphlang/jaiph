@@ -28,7 +28,10 @@ test("resolveRuntimeEnv: does not map agent.model from config into JAIPH_AGENT_M
   try {
     const config: JaiphConfig = { agent: { model: "sonnet" } };
     const env = resolveRuntimeEnv(config, "/ws", "/ws/main.sh");
-    assert.equal(env.JAIPH_AGENT_MODEL, undefined);
+    // Config agent.model must not leak into the env var; it stays defined-empty
+    // so scripts reading $JAIPH_AGENT_MODEL under `set -u` don't hit "unbound
+    // variable".
+    assert.equal(env.JAIPH_AGENT_MODEL, "");
   } finally {
     if (saved !== undefined) process.env.JAIPH_AGENT_MODEL = saved;
   }

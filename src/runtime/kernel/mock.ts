@@ -8,6 +8,19 @@
 let cachedResponsesJson = "";
 let responsesQueue: string[] = [];
 
+/**
+ * Reset the process-local response queue so the next `consumeNextMockResponse`
+ * re-seeds from the env var even when the JSON string is unchanged. Called at
+ * each run boundary so two runs sharing identical `JAIPH_MOCK_RESPONSES_JSON`
+ * do not share (and exhaust) a single queue — an exhausted queue silently falls
+ * through to the real backend, whose transport-failure backoff then hangs the
+ * run for hours.
+ */
+export function resetMockResponses(): void {
+  cachedResponsesJson = "";
+  responsesQueue = [];
+}
+
 /** Take the next sequential mock response. Returns null when the queue is empty. */
 export function consumeNextMockResponse(json: string): string | null {
   if (json !== cachedResponsesJson) {
