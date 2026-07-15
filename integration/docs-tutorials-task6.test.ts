@@ -190,6 +190,9 @@ test("task-6: first-workflow tutorial's `.jh` snippet runs end-to-end and matche
       PATH: process.env.PATH ?? "/usr/bin:/bin",
       HOME: tmp,
       JAIPH_UNSAFE: "true",
+      // Unsafe host-only runs now require consent; auto-confirm for this
+      // non-interactive snippet.
+      JAIPH_INPLACE_YES: "1",
       TERM: "dumb",
       NO_COLOR: "1",
     };

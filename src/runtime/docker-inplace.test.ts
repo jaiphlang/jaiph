@@ -6,8 +6,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   confirmInplaceRun,
+  confirmUnsafeRun,
   detectGitTreeState,
   formatInplaceWarning,
+  formatUnsafeWarning,
   _inplacePrompt,
 } from "./docker-inplace";
 
@@ -98,6 +100,19 @@ test("formatInplaceWarning: clean variant names directory and points at git rest
     msg.includes("Everything outside this directory stays sandboxed"),
     "still reminds the user the machine boundary holds",
   );
+});
+
+test("formatInplaceWarning: leads with workspace-only access scope after the header", () => {
+  const msg = formatInplaceWarning("/tmp/example", "clean");
+  // The first line after the header must state the access scope in plain language.
+  const lines = msg.split("\n");
+  assert.ok(lines[1].includes("Filesystem access:"), "second line states filesystem access scope");
+  assert.ok(lines[1].includes("this workspace directory only"), "scope is workspace-only");
+  assert.ok(lines[1].includes("/tmp/example"), "scope names the directory");
+  assert.ok(lines[1].includes("Docker sandbox"), "scope says the rest stays in the Docker sandbox");
+  // Typo guard: the tail must read "the rest", never "therest".
+  assert.ok(msg.includes("the rest of your machine"), "tail reads 'the rest of your machine'");
+  assert.ok(!msg.includes("therest"), "no 'therest' typo");
 });
 
 test("formatInplaceWarning: dirty variant warns about mixed-in changes and not-cleanly-undoable", () => {
@@ -284,6 +299,132 @@ test("confirmInplaceRun: warning text uses dirty variant for dirty git tree", as
       spy.restore();
     }
   } finally {
+    rmSync(ws, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// formatUnsafeWarning: stronger than inplace — whole machine, no sandbox, secrets
+// ---------------------------------------------------------------------------
+
+test("formatUnsafeWarning: states host-only / no sandbox and whole-machine filesystem reach", () => {
+  const msg = formatUnsafeWarning("/tmp/example", "clean");
+  assert.ok(msg.includes("unsafe mode"), "labels the mode");
+  assert.ok(msg.includes("NO sandbox"), "states no sandbox");
+  assert.ok(msg.includes("host"), "states host-only");
+  assert.ok(msg.includes("ENTIRE machine"), "states whole-filesystem reach");
+  assert.ok(msg.includes("secrets"), "warns scripts/agents can read env secrets");
+  assert.ok(
+    msg.includes("outside this project"),
+    "warns scripts/agents can reach paths outside the project",
+  );
+  assert.ok(
+    msg.includes("more exposure than --inplace"),
+    "frames unsafe as strictly more exposure than inplace, not a lighter variant",
+  );
+});
+
+test("formatUnsafeWarning: carries the three git-state variants (dirty especially dangerous)", () => {
+  const clean = formatUnsafeWarning("/tmp/example", "clean");
+  assert.ok(clean.includes("git restore") || clean.includes("git reset"), "clean names recovery command");
+  const dirty = formatUnsafeWarning("/tmp/example", "dirty");
+  assert.ok(dirty.includes("uncommitted"), "dirty calls out uncommitted changes");
+  const noRepo = formatUnsafeWarning("/tmp/example", "no-repo");
+  assert.ok(noRepo.includes("No git repository"), "no-repo calls out the missing repo");
+  assert.ok(noRepo.includes("irreversible"), "no-repo states irreversibility");
+});
+
+// ---------------------------------------------------------------------------
+// confirmUnsafeRun: gate behavior (mirrors confirmInplaceRun)
+// ---------------------------------------------------------------------------
+
+test("confirmUnsafeRun: JAIPH_INPLACE_YES=1 auto-confirms without calling the prompt", async () => {
+  const ws = makeWs();
+  const spy = stubPrompt([]);
+  const cap = captureStderr();
+  try {
+    const ok = await confirmUnsafeRun(ws, { JAIPH_INPLACE_YES: "1" }, true);
+    assert.equal(ok, true);
+    assert.equal(spy.callCount(), 0, "prompt must not be invoked when auto-confirmed");
+    assert.equal(cap.data(), "", "no warning printed on auto-confirm");
+  } finally {
+    cap.restore();
+    spy.restore();
+    rmSync(ws, { recursive: true, force: true });
+  }
+});
+
+test("confirmUnsafeRun: TTY + user answers yes → returns true (proceeds host-only)", async () => {
+  const ws = makeWs();
+  const spy = stubPrompt(["y"]);
+  const cap = captureStderr();
+  try {
+    const ok = await confirmUnsafeRun(ws, {}, true);
+    assert.equal(ok, true);
+    assert.equal(spy.callCount(), 1, "prompt invoked exactly once");
+    assert.ok(cap.data().includes("unsafe mode"), "unsafe warning printed before prompt");
+    assert.ok(cap.data().includes("NO sandbox"), "warning states no sandbox");
+  } finally {
+    cap.restore();
+    spy.restore();
+    rmSync(ws, { recursive: true, force: true });
+  }
+});
+
+test("confirmUnsafeRun: TTY + user answers no → returns false (aborts cleanly)", async () => {
+  const ws = makeWs();
+  const spy = stubPrompt(["n"]);
+  const cap = captureStderr();
+  try {
+    const ok = await confirmUnsafeRun(ws, {}, true);
+    assert.equal(ok, false);
+    assert.equal(spy.callCount(), 1);
+    assert.ok(cap.data().includes("unsafe mode"));
+  } finally {
+    cap.restore();
+    spy.restore();
+    rmSync(ws, { recursive: true, force: true });
+  }
+});
+
+test("confirmUnsafeRun: TTY + empty answer defaults to no", async () => {
+  const ws = makeWs();
+  const spy = stubPrompt([""]);
+  const cap = captureStderr();
+  try {
+    const ok = await confirmUnsafeRun(ws, {}, true);
+    assert.equal(ok, false);
+  } finally {
+    cap.restore();
+    spy.restore();
+    rmSync(ws, { recursive: true, force: true });
+  }
+});
+
+test("confirmUnsafeRun: non-TTY without JAIPH_INPLACE_YES throws E_UNSAFE_NO_CONFIRM", async () => {
+  const ws = makeWs();
+  const spy = stubPrompt([]);
+  try {
+    await assert.rejects(
+      () => confirmUnsafeRun(ws, {}, false),
+      /E_UNSAFE_NO_CONFIRM/,
+    );
+    assert.equal(spy.callCount(), 0, "prompt is never invoked in non-TTY path");
+  } finally {
+    spy.restore();
+    rmSync(ws, { recursive: true, force: true });
+  }
+});
+
+test("confirmUnsafeRun: non-TTY + JAIPH_INPLACE_YES=1 still proceeds", async () => {
+  const ws = makeWs();
+  const spy = stubPrompt([]);
+  try {
+    const ok = await confirmUnsafeRun(ws, { JAIPH_INPLACE_YES: "1" }, false);
+    assert.equal(ok, true);
+    assert.equal(spy.callCount(), 0);
+  } finally {
+    spy.restore();
     rmSync(ws, { recursive: true, force: true });
   }
 });

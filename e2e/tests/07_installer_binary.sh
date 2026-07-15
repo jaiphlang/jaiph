@@ -176,7 +176,8 @@ else
   e2e::assert_contains "${version_out}" "jaiph " "jaiph --version prints a version banner"
 fi
 
-run_out="$(cd "${WORK_DIR}" && env -i PATH="${CLEAN_PATH}" HOME="${WORK_DIR}" JAIPH_UNSAFE=true "${PARITY_BIN_DIR}/jaiph" run sample.jh)"
+# Unsafe host-only runs now require consent; JAIPH_INPLACE_YES auto-confirms non-interactively.
+run_out="$(cd "${WORK_DIR}" && env -i PATH="${CLEAN_PATH}" HOME="${WORK_DIR}" JAIPH_UNSAFE=true JAIPH_INPLACE_YES=1 "${PARITY_BIN_DIR}/jaiph" run sample.jh)"
 case "${run_out}" in
   *"hello-from-local"*) e2e::pass "locally-built binary runs a workflow without node/npm/bun" ;;
   *) printf "%s\n" "${run_out}" >&2; e2e::fail "locally-built jaiph did not run sample.jh as expected" ;;

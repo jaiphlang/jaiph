@@ -60,7 +60,7 @@ import {
   RUN_WORKFLOW_ENV,
   type SandboxMode,
 } from "../../runtime/docker";
-import { confirmInplaceRun } from "../../runtime/docker-inplace";
+import { confirmInplaceRun, confirmUnsafeRun } from "../../runtime/docker-inplace";
 import {
   styleKeywordLabel,
   formatElapsedDuration,
@@ -188,6 +188,17 @@ export async function runWorkflow(rest: string[]): Promise<number> {
         process.stderr.write("jaiph in-place mode: aborted by user.\n");
         return 1;
       }
+    } else if (isUnsafeHostOnly(dockerConfigForBanner.enabled, runtimeEnv)) {
+      // Docker is off *because* the user opted into unsafe (JAIPH_UNSAFE=true /
+      // --unsafe) while Docker would otherwise be on — require the same consent
+      // as in-place before running host-only with no sandbox. Not triggered when
+      // Docker is off for another reason (win32 host-only override, which already
+      // prints its own notice, or an explicit JAIPH_DOCKER_ENABLED=false).
+      const proceed = await confirmUnsafeRun(workspaceRoot, runtimeEnv, isTTY);
+      if (!proceed) {
+        process.stderr.write("jaiph unsafe mode: aborted by user.\n");
+        return 1;
+      }
     }
 
     writeBanner(
@@ -303,6 +314,27 @@ export async function runWorkflow(rest: string[]): Promise<number> {
       rmSync(outDir, { recursive: true, force: true });
     }
   }
+}
+
+/**
+ * True when Docker is off specifically because the user opted into unsafe mode
+ * (`JAIPH_UNSAFE=true` / `--unsafe`) while Docker would otherwise be on.
+ *
+ * "Would otherwise be on" is the key gate: it excludes win32 (forced host-only
+ * with its own notice) and an explicit `JAIPH_DOCKER_ENABLED=false` (Docker
+ * disabled by config, not by the unsafe opt-in). Only the unsafe-driven case
+ * gets the extra host-only confirmation.
+ */
+function isUnsafeHostOnly(
+  dockerEnabled: boolean,
+  env: Record<string, string | undefined>,
+): boolean {
+  return (
+    !dockerEnabled &&
+    process.platform !== "win32" &&
+    env.JAIPH_DOCKER_ENABLED === undefined &&
+    env.JAIPH_UNSAFE === "true"
+  );
 }
 
 /**
