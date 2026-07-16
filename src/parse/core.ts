@@ -90,7 +90,7 @@ export function braceDepthDelta(line: string): number {
 
 /** Jaiph keywords that cannot be used as bare identifier arguments. */
 const JAIPH_KEYWORDS = new Set([
-  "run", "ensure", "prompt", "return", "fail", "log", "logerr",
+  "run", "ensure", "prompt", "return", "fail", "log", "logerr", "logwarn",
   "if", "else", "not", "const", "match", "import", "export",
   "workflow", "rule", "script", "channel", "config", "catch", "async",
   "returns", "send", "true", "false", "for", "in",
@@ -115,7 +115,7 @@ export function isJaiphInterpolationRef(token: string): boolean {
 }
 
 /**
- * Parse `log` / `logerr` RHS: either a double-quoted string, a single bare identifier,
+ * Parse `log` / `logerr` / `logwarn` RHS: either a double-quoted string, a single bare identifier,
  * or a bare `${name}` / `${name.field}` interpolation ref (stored as-is).
  */
 export function parseLogMessageRhs(
@@ -123,7 +123,7 @@ export function parseLogMessageRhs(
   lineNo: number,
   keywordCol: number,
   logArg: string,
-  keyword: "log" | "logerr",
+  keyword: "log" | "logerr" | "logwarn",
 ): string {
   const trimmed = logArg.trim();
   if (trimmed.startsWith('"')) {

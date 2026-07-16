@@ -186,7 +186,7 @@ function looksLikeJaiphStep(stmt: string): boolean {
   const t = stmt.trim();
   if (!t) return false;
   if (
-    /^(run|ensure|prompt|const|fail|wait|log|logerr|return|match|if|export|channel|config)\b/.test(
+    /^(run|ensure|prompt|const|fail|wait|log|logerr|logwarn|return|match|if|export|channel|config)\b/.test(
       t,
     )
   ) {

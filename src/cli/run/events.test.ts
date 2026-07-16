@@ -12,7 +12,7 @@ test("parseLogEvent: returns undefined for invalid JSON after prefix", () => {
   assert.equal(parseLogEvent("__JAIPH_EVENT__ not-json"), undefined);
 });
 
-test("parseLogEvent: returns undefined for non-LOG/LOGERR type", () => {
+test("parseLogEvent: returns undefined for non-LOG/LOGERR/LOGWARN type", () => {
   const line = '__JAIPH_EVENT__ {"type":"STEP_START","message":"hi","depth":0}';
   assert.equal(parseLogEvent(line), undefined);
 });
@@ -27,6 +27,12 @@ test("parseLogEvent: parses valid LOGERR event", () => {
   const line = '__JAIPH_EVENT__ {"type":"LOGERR","message":"error occurred","depth":1}';
   const result = parseLogEvent(line);
   assert.deepEqual(result, { type: "LOGERR", message: "error occurred", depth: 1, async_indices: [] });
+});
+
+test("parseLogEvent: parses valid LOGWARN event", () => {
+  const line = '__JAIPH_EVENT__ {"type":"LOGWARN","message":"slow step","depth":1}';
+  const result = parseLogEvent(line);
+  assert.deepEqual(result, { type: "LOGWARN", message: "slow step", depth: 1, async_indices: [] });
 });
 
 test("parseLogEvent: defaults message to empty string when not a string", () => {

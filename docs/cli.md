@@ -77,6 +77,7 @@ After module-graph load and Docker-mode resolution, before the runner / containe
 | `✗` | Step failed (with elapsed time). |
 | `ℹ` | `log` message (dim/gray, no marker timing). |
 | `!` | `logerr` message (red; rendered on stdout with the progress tree). |
+| `⚠` | `logwarn` message (yellow; rendered on stdout with the progress tree). |
 | `·` | Continuation marker (heartbeat lines in non-TTY mode). |
 | ` ₁`, ` ₂`, … | Subscript prefix for `run async` branch numbering. |
 
@@ -361,7 +362,7 @@ See [Environment variables](env-vars.md) for the complete inventory. The variabl
 - **Live contract** (runtime → CLI): `__JAIPH_EVENT__` JSON lines on **stderr** only. Hooks and the interactive progress tree consume this stream. Stdout carries plain script output forwarded as-is.
 - **Durable contract**: `.jaiph/runs/...` + `run_summary.jsonl` + `.out` / `.err` step artifacts + optional `return_value.txt`. See [Architecture — Durable artifact layout](architecture.md#durable-artifact-layout).
 
-`run_summary.jsonl` event types: `WORKFLOW_START`, `WORKFLOW_END`, `STEP_START`, `STEP_END`, `LOG`, `LOGERR`, `INBOX_ENQUEUE`, `INBOX_DISPATCH_START`, `INBOX_DISPATCH_COMPLETE`, `PROMPT_START`, `PROMPT_END`. Every object carries `type`, `ts` (UTC), `run_id`, and `event_version` (currently `1`). Step events also carry `id`, `parent_id`, `seq`, `depth`. See [Architecture — Contracts](architecture.md#contracts).
+`run_summary.jsonl` event types: `WORKFLOW_START`, `WORKFLOW_END`, `STEP_START`, `STEP_END`, `LOG`, `LOGERR`, `LOGWARN`, `INBOX_ENQUEUE`, `INBOX_DISPATCH_START`, `INBOX_DISPATCH_COMPLETE`, `PROMPT_START`, `PROMPT_END`. Every object carries `type`, `ts` (UTC), `run_id`, and `event_version` (currently `1`). Step events also carry `id`, `parent_id`, `seq`, `depth`. See [Architecture — Contracts](architecture.md#contracts).
 
 ## File extension
 

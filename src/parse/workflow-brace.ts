@@ -490,7 +490,7 @@ function tryParsePrompt(c: BlockCtx): BlockResult | null {
 
 function parseSayBody(
   c: BlockCtx,
-  level: "log" | "logerr",
+  level: "log" | "logerr" | "logwarn",
 ): BlockResult {
   const arg = c.inner.slice(level.length).trimStart();
   const col = c.innerRaw.indexOf(level) + 1;
@@ -534,6 +534,11 @@ function tryParseLog(c: BlockCtx): BlockResult | null {
 function tryParseLogerr(c: BlockCtx): BlockResult | null {
   if (!c.inner.startsWith("logerr ") && c.inner !== "logerr") return null;
   return parseSayBody(c, "logerr");
+}
+
+function tryParseLogwarn(c: BlockCtx): BlockResult | null {
+  if (!c.inner.startsWith("logwarn ") && c.inner !== "logwarn") return null;
+  return parseSayBody(c, "logwarn");
 }
 
 function tryParseReturn(c: BlockCtx): BlockResult | null {
@@ -679,6 +684,7 @@ export const STATEMENT: Record<string, BlockHandler> = {
   prompt: tryParsePrompt,
   log: tryParseLog,
   logerr: tryParseLogerr,
+  logwarn: tryParseLogwarn,
   return: tryParseReturn,
   match: tryParseStandaloneMatch,
 };

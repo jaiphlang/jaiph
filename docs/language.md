@@ -50,7 +50,7 @@ There are eight `WorkflowStepDef` variants. Every body line that does not match 
 | `const` | `const NAME = <expr>` | Bind a value expression to a name. |
 | `return` | `return <expr>` | Set the managed return value. |
 | `send` | `channel <- <expr>` | Enqueue a payload on a channel for the current workflow context. |
-| `say` | `log` / `logerr` / `fail` | `level: "log"` / `"logerr"` / `"fail"`. `level: "fail"` aborts with the message. |
+| `say` | `log` / `logerr` / `logwarn` / `fail` | `level: "log"` / `"logerr"` / `"logwarn"` / `"fail"`. `level: "fail"` aborts with the message. |
 | `if` | `if <subject> <op> <operand> { … } [ else { … } ]` | Conditional block. |
 | `for_lines` | `for <iter> in <source> { … }` | Iterate lines of a string variable. |
 | `trivia` | comments, blank lines | Formatter-only. Skipped by the runtime and validator. |
@@ -262,11 +262,12 @@ alerts <- """
 | Allowed in | Workflows only. Rules forbid `send`. |
 | Dispatch | `send` enqueues on the active workflow context. After that workflow's steps complete successfully, the runtime drains the queue sequentially and runs each route target. Sends from nested workflows bubble to the nearest ancestor context that declares routes for the channel. See [Inbox & Dispatch](inbox.md). |
 
-## `log` / `logerr` / `fail`
+## `log` / `logerr` / `logwarn` / `fail`
 
 ```jaiph
 log "Processing ${message}"
-logerr "Warning: ${name} not found"
+logerr "Error: ${name} not found"
+logwarn "Slow response from ${name}"
 log status                       # bare identifier — same as log "${status}"
 log ${status}                    # bare ref — same as log "${status}"
 log run `date +%s`()             # inline-script form (run keyword required)
@@ -281,9 +282,10 @@ fail ${error_msg}                # bare ref — same as fail "${error_msg}"
 |---|---|
 | `log` | Writes to the run's stdout stream. Double-quoted messages store backslash sequences literally; use triple-quoted `log """…"""` for multiline text. |
 | `logerr` | Writes to stderr. Displayed with `!` marker in the progress tree. |
+| `logwarn` | Writes to stderr. Displayed with `⚠` marker in the progress tree. |
 | `fail` | Aborts the workflow or rule with a stderr message and non-zero exit. |
 
-Bare inline scripts in `log` / `logerr` (`log \`…\`()`) are `E_PARSE` — use `log run \`…\`(args)`.
+Bare inline scripts in `log` / `logerr` / `logwarn` (`log \`…\`()`) are `E_PARSE` — use `log run \`…\`(args)`.
 
 ## `if` — conditional guard
 
@@ -408,7 +410,7 @@ Module `const` values are **not** automatically exported into script environment
 | `run script` (named) | script exit code | trimmed stdout | script `.out` / `.err` |
 | `` run `…`() `` (inline) | script exit code | trimmed stdout | script `.out` / `.err` |
 | `prompt` | prompt exit code | final assistant answer | transcript artifacts |
-| `log` / `logerr` | always 0 | empty | event stream + stdout/stderr |
+| `log` / `logerr` / `logwarn` | always 0 | empty | event stream + stdout/stderr |
 | `fail` | non-zero (abort) | empty | stderr |
 | `run async` | aggregated | `Handle<T>` resolving on read | async step artifacts |
 | `const` | same as RHS step | empty (binds local) | n/a |

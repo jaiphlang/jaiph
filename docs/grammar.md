@@ -292,14 +292,15 @@ send_rhs  = double_quoted_string | triple_quoted_block | "$" IDENT | "${" … "}
 | Capture-and-send | `const name = channel <- …` is `E_PARSE`. |
 | Allowed in | Workflows only. Rules forbid `send`. |
 
-### `log` / `logerr`
+### `log` / `logerr` / `logwarn`
 
 ```ebnf
-log_stmt    = "log" ( double_quoted_string | triple_quoted_block | IDENT | "run" inline_script ) ;
-logerr_stmt = "logerr" ( double_quoted_string | triple_quoted_block | IDENT | "run" inline_script ) ;
+log_stmt     = "log" ( double_quoted_string | triple_quoted_block | IDENT | "run" inline_script ) ;
+logerr_stmt  = "logerr" ( double_quoted_string | triple_quoted_block | IDENT | "run" inline_script ) ;
+logwarn_stmt = "logwarn" ( double_quoted_string | triple_quoted_block | IDENT | "run" inline_script ) ;
 ```
 
-Bare identifier form expands to `"${ident}"`. `log run \`…\`(args)` and `logerr run \`…\`(args)` execute the inline script and log its stdout — the `run` keyword is required (bare inline scripts in `log` / `logerr` are `E_PARSE`).
+Bare identifier form expands to `"${ident}"`. `log run \`…\`(args)`, `logerr run \`…\`(args)`, and `logwarn run \`…\`(args)` execute the inline script and log its stdout — the `run` keyword is required (bare inline scripts in `log` / `logerr` / `logwarn` are `E_PARSE`).
 
 ### `fail`
 

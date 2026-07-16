@@ -148,7 +148,7 @@ function validateSendStep(s: WorkflowStepDef, ctx: ValidatorCtx): void {
 
 function validateSayStep(s: WorkflowStepDef, ctx: ValidatorCtx): void {
   if (s.type !== "say") return;
-  if (s.level === "log" || s.level === "logerr") {
+  if (s.level === "log" || s.level === "logerr" || s.level === "logwarn") {
     if (s.message.kind === "inline_script") return;
     if (s.message.kind === "literal") {
       validateLogString(s.message.raw, ctx.ast.filePath, s.loc.line, s.loc.col, s.level);
