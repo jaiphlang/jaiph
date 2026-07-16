@@ -1,0 +1,39 @@
+#!/usr/bin/env jaiph
+
+#
+# GitHub Actions helpers for Jaiph orchestration workflows.
+# Requires: gh, jq, git, and GH_TOKEN or GITHUB_TOKEN in the environment.
+#
+# CLI usage:
+#   jaiph .jaiph/libs/jaiphlang/gh_actions.jh check
+#   jaiph .jaiph/libs/jaiphlang/gh_actions.jh wait my-branch
+#   jaiph .jaiph/libs/jaiphlang/gh_actions.jh pull "" abc123 .jaiph/tmp/ci.log
+#
+import script "./gh_actions.sh" as gh
+
+export rule token_set() {
+  run gh("require-token")
+}
+
+export workflow check_ci(branch, commit, workflow_name, log_file) {
+  return run gh("check-ci", branch, commit, workflow_name, log_file)
+}
+
+export workflow wait_for_ci(branch, commit, workflow_name) {
+  return run gh("wait-run", branch, commit, workflow_name)
+}
+
+export workflow pull_logs(branch, commit, workflow_name, out_file, failed_only) {
+  return run gh("pull-logs", branch, commit, workflow_name, out_file, failed_only)
+}
+
+workflow default(cmd, branch, commit, workflow_name, out_file) {
+  const result = match cmd {
+    "" => run gh("check-ci", branch, commit, workflow_name)
+    "check" => run gh("check-ci", branch, commit, workflow_name)
+    "wait" => run gh("wait-run", branch, commit, workflow_name)
+    "pull" => run gh("pull-logs", branch, commit, workflow_name, out_file, "1")
+    _ => fail "Unknown command: ${cmd}. Use: check | wait | pull"
+  }
+  log result
+}
