@@ -1,7 +1,7 @@
 import type { ScriptDef } from "../types";
 import { createTrivia, type Trivia } from "./trivia";
 import { fail, parseSingleBacktickBody } from "./core";
-import { parseFencedBlock } from "./fence";
+import { parseFencedScriptBlock } from "./fence";
 
 /**
  * Convert a fence language tag to a shebang line.
@@ -87,7 +87,7 @@ export function parseScriptBlock(
   if (rhs.startsWith("```")) {
     const fenceLines = [...lines];
     fenceLines[startIndex] = rhs;
-    const { body, lang, nextIdx, afterClose } = parseFencedBlock(filePath, fenceLines, startIndex);
+    const { body, lang, nextIdx, afterClose } = parseFencedScriptBlock(filePath, fenceLines, startIndex);
 
     if (afterClose.trim()) {
       fail(filePath, `unexpected content after closing fence: '${afterClose.trim()}'`, lineNo);
