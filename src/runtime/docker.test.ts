@@ -1616,7 +1616,7 @@ test("withDockerExitGuard: does not register any exit listener when dockerResult
 });
 
 // ---------------------------------------------------------------------------
-// Container stop on interrupt: --name wiring + docker rm -f
+// Container stop on interrupt: --name wiring + docker kill + docker rm -f
 // ---------------------------------------------------------------------------
 
 test("buildDockerArgs: emits --name right after `run --rm` when containerName is set", () => {
@@ -1629,13 +1629,17 @@ test("buildDockerArgs: omits --name when containerName is not set", () => {
   assert.equal(args.indexOf("--name"), -1, "no --name flag without a containerName");
 });
 
-test("stopDockerContainer: force-removes the named container via `docker rm -f`", () => {
+test("stopDockerContainer: kills then removes the named container", () => {
   const origExec = _dockerExec.run;
   const calls: string[][] = [];
   _dockerExec.run = (args: string[]) => { calls.push(args); };
   try {
     stopDockerContainer("jaiph-run-deadbeef");
-    assert.deepEqual(calls, [["rm", "-f", "jaiph-run-deadbeef"]]);
+    // kill first (SIGKILL, fast), then rm -f on the already-stopped container.
+    assert.deepEqual(calls, [
+      ["kill", "jaiph-run-deadbeef"],
+      ["rm", "-f", "jaiph-run-deadbeef"],
+    ]);
   } finally {
     _dockerExec.run = origExec;
   }

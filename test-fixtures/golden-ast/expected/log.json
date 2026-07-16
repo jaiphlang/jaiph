@@ -33,6 +33,14 @@
             "raw": "something went wrong"
           },
           "type": "say"
+        },
+        {
+          "level": "logwarn",
+          "message": {
+            "kind": "literal",
+            "raw": "heads up"
+          },
+          "type": "say"
         }
       ]
     }
