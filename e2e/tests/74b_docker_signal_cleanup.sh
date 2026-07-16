@@ -86,7 +86,7 @@ run_signal_scenario() {
       break
     fi
     sleep 1
-    (( waited++ ))
+    (( ++waited ))
   done
 
   # Wait for jaiph to exit (bounded so the test can't hang).
