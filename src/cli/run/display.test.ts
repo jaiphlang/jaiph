@@ -16,6 +16,11 @@ test("formatJaiphRunningBannerLines: no Docker shows no sandbox (no color)", () 
   assert.equal(s, "\nJaiph: Running say_hello.jh (no sandbox)\n\n");
 });
 
+test("formatJaiphRunningBannerLines: unsafe opt-in shows Docker sandbox, unsafe (no color)", () => {
+  const s = formatJaiphRunningBannerLines("engineer.jh", false, null, false, true);
+  assert.equal(s, "\nJaiph: Running engineer.jh (Docker sandbox, unsafe)\n\n");
+});
+
 test("formatJaiphRunningBannerLines: Docker overlay shows fusefs (no color)", () => {
   const s = formatJaiphRunningBannerLines("say_hello.jh", true, "overlay", false);
   assert.equal(s, "\nJaiph: Running say_hello.jh (Docker sandbox, fusefs)\n\n");

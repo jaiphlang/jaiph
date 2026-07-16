@@ -58,9 +58,8 @@ import {
   resolveDockerHostRunsRoot,
   selectSandboxMode,
   RUN_WORKFLOW_ENV,
-  type SandboxMode,
 } from "../../runtime/docker";
-import { confirmInplaceRun, confirmUnsafeRun } from "../../runtime/docker-inplace";
+import { confirmInplaceRun, confirmUnsafeRun, UNSAFE_RUN_LOGWARN_MESSAGE } from "../../runtime/docker-inplace";
 import {
   styleKeywordLabel,
   formatElapsedDuration,
@@ -182,13 +181,14 @@ export async function runWorkflow(rest: string[]): Promise<number> {
       prepareImage(dockerConfigForBanner);
     }
     const sandboxModeForBanner = dockerConfigForBanner.enabled ? selectSandboxMode(runtimeEnv) : null;
+    const unsafeHostOnly = isUnsafeHostOnly(dockerConfigForBanner.enabled, runtimeEnv);
     if (sandboxModeForBanner === "inplace") {
       const proceed = await confirmInplaceRun(workspaceRoot, runtimeEnv, isTTY);
       if (!proceed) {
         process.stderr.write("jaiph in-place mode: aborted by user.\n");
         return 1;
       }
-    } else if (isUnsafeHostOnly(dockerConfigForBanner.enabled, runtimeEnv)) {
+    } else if (unsafeHostOnly) {
       // Docker is off *because* the user opted into unsafe (JAIPH_UNSAFE=true /
       // --unsafe) while Docker would otherwise be on — require the same consent
       // as in-place before running host-only with no sandbox. Not triggered when
@@ -201,16 +201,16 @@ export async function runWorkflow(rest: string[]): Promise<number> {
       }
     }
 
-    writeBanner(
-      mod,
-      inputAbs,
-      runArgs,
-      colorEnabled,
-      isTTY,
-      startedAt,
-      dockerConfigForBanner.enabled,
-      sandboxModeForBanner,
+    process.stdout.write(
+      formatJaiphRunningBannerLines(
+        basename(inputAbs),
+        dockerConfigForBanner.enabled,
+        sandboxModeForBanner,
+        colorEnabled,
+        unsafeHostOnly,
+      ),
     );
+
     const { scriptsDir } = buildScriptsFromGraph(graph, outDir);
     runtimeEnv.JAIPH_SCRIPTS = scriptsDir;
     // Serialized module graph consumed by the spawned runner so the runtime
@@ -239,6 +239,17 @@ export async function runWorkflow(rest: string[]): Promise<number> {
     registerStateSubscriber(emitter, runState);
     registerTTYSubscriber(emitter, ttyCtx);
     registerHooksSubscriber(emitter, hooksConfig, inputAbs, workspaceRoot);
+
+    if (unsafeHostOnly) {
+      emitter.emit("log", {
+        type: "LOGWARN",
+        message: UNSAFE_RUN_LOGWARN_MESSAGE,
+        depth: 1,
+        async_indices: [],
+      });
+    }
+
+    writeWorkflowRootLabel(mod, runArgs, colorEnabled, isTTY, startedAt);
 
     emitter.emit("workflow_start", {
       event: "workflow_start",
@@ -391,20 +402,14 @@ async function runWorkflowRaw(
   }
 }
 
-function writeBanner(
+function writeWorkflowRootLabel(
   mod: ReturnType<typeof parsejaiph>,
-  inputAbs: string,
   runArgs: string[],
   colorEnabled: boolean,
   isTTY: boolean,
   startedAt: number,
-  dockerEnabled: boolean,
-  sandboxMode: SandboxMode | null,
 ): void {
   const rootLabel = "workflow default";
-  process.stdout.write(
-    formatJaiphRunningBannerLines(basename(inputAbs), dockerEnabled, sandboxMode, colorEnabled),
-  );
   const defaultWf = mod.workflows.find((w) => w.name === "default");
   const rootParamsSuffix =
     runArgs.length > 0
