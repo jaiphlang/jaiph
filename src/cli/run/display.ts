@@ -21,7 +21,7 @@ export function formatJaiphRunningBannerLines(
   } else if (sandboxMode === "overlay") {
     parenInner = "Docker sandbox, fusefs";
   } else if (sandboxMode === "inplace") {
-    parenInner = "Docker sandbox, in-place (live host edits)";
+    parenInner = "Docker sandbox, in-place";
   } else {
     parenInner = "Docker sandbox, tmp workspace";
   }

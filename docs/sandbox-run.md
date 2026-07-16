@@ -81,7 +81,7 @@ The CLI banner reports the sandbox mode it picked:
 
 - `Docker sandbox, fusefs` — overlay mode.
 - `Docker sandbox, tmp workspace` — copy mode.
-- `Docker sandbox, in-place (live host edits)` — inplace mode.
+- `Docker sandbox, in-place` — inplace mode.
 - `no sandbox` — `--unsafe` / `JAIPH_UNSAFE=true` is active (Docker disabled).
 
 Run artifacts always land under host `.jaiph/runs/<date>/<time>-<entry>/` regardless of mode. Open `run_summary.jsonl` there to inspect the live `__JAIPH_EVENT__` timeline the CLI also rendered.
