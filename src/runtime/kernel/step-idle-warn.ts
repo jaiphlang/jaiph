@@ -29,8 +29,8 @@ export type StepIdleOutputWarnOpts = {
 };
 
 /**
- * Warn once per idle period when a leaf step stops emitting stdout/stderr.
- * Resets the warn latch on the next output chunk so a second stall can warn again.
+ * Emit a `LOGWARN` every `JAIPH_STEP_IDLE_WARN_SEC` while a leaf step stays silent
+ * (180s, 360s, 540s, …). Resets the cadence on the next stdout/stderr chunk.
  */
 export function createStepIdleOutputWarn(
   emitter: RuntimeEventEmitter,
@@ -43,13 +43,13 @@ export function createStepIdleOutputWarn(
   if (idleWarnSec <= 0) return null;
 
   let lastOutputAt = Date.now();
-  let idleWarned = false;
+  let nextWarnAtSec = idleWarnSec;
   const tickMs = checkIntervalMs(env, opts?.checkIntervalMs);
   const timer = setInterval(() => {
     const idleSec = Math.floor((Date.now() - lastOutputAt) / 1000);
-    if (idleSec >= idleWarnSec && !idleWarned) {
-      idleWarned = true;
-      emitter.emitLog("LOGWARN", `${kind} ${name}: no output for ${idleSec}s`);
+    if (idleSec >= nextWarnAtSec) {
+      emitter.emitLog("LOGWARN", `${kind} ${name}: no new output for ${idleSec}s`);
+      nextWarnAtSec += idleWarnSec;
     }
   }, tickMs);
   timer.unref?.();
@@ -57,7 +57,7 @@ export function createStepIdleOutputWarn(
   return {
     bump() {
       lastOutputAt = Date.now();
-      idleWarned = false;
+      nextWarnAtSec = idleWarnSec;
     },
     stop() {
       clearInterval(timer);
