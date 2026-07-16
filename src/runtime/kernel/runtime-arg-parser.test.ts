@@ -74,6 +74,10 @@ describe("commaArgsToInterpolated", () => {
     assert.equal(commaArgsToInterpolated("a, b, c"), "${a} ${b} ${c}");
   });
 
+  it("wraps bare dotted identifiers in ${...}", () => {
+    assert.equal(commaArgsToInterpolated("result.role, x"), "${result.role} ${x}");
+  });
+
   it("leaves quoted/literal tokens intact", () => {
     assert.equal(commaArgsToInterpolated('"hello", x, 42'), '"hello" ${x} 42');
   });

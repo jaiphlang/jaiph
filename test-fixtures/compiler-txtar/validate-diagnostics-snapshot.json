@@ -845,6 +845,42 @@
       "message": "${r.bogus}: field \"bogus\" is not defined in the returns schema for \"r\"; available fields: verdict"
     }
   ],
+  "validate-errors.txt > bare dotted call arg where var is not a typed prompt capture": [
+    {
+      "file": "input.jh",
+      "line": 4,
+      "col": 3,
+      "code": "E_VALIDATE",
+      "message": "${result.role}: \"result\" is not a typed prompt capture; dot notation requires a prompt with \"returns\" schema"
+    }
+  ],
+  "validate-errors.txt > bare dotted call arg with unknown field": [
+    {
+      "file": "input.jh",
+      "line": 4,
+      "col": 3,
+      "code": "E_VALIDATE",
+      "message": "${result.bogus}: field \"bogus\" is not defined in the returns schema for \"result\"; available fields: role"
+    }
+  ],
+  "validate-errors.txt > unquoted ${var.field} call arg is rejected": [
+    {
+      "file": "input.jh",
+      "line": 4,
+      "col": 3,
+      "code": "E_VALIDATE",
+      "message": "call arguments cannot use unquoted interpolation ${result.role}; use bare field access: ...(result.role)"
+    }
+  ],
+  "validate-errors.txt > unquoted ${var} call arg is rejected": [
+    {
+      "file": "input.jh",
+      "line": 4,
+      "col": 3,
+      "code": "E_VALIDATE",
+      "message": "call arguments cannot use unquoted interpolation ${name}; use bare identifier: ...(name)"
+    }
+  ],
   "validate-errors.txt > test block: mix mock prompt block with queued mock prompt (block first)": [
     {
       "file": "input.test.jh",

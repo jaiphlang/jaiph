@@ -10,7 +10,9 @@ import {
   fail,
   parseCallRef,
   isBareIdentifier,
+  isBareDottedIdentifier,
   isJaiphInterpolationRef,
+  argsToRuntimeString,
 } from "./core";
 
 // === stripQuotes ===
@@ -247,6 +249,30 @@ test("parseCallRef: ${var} interpolation arg is stored as literal", () => {
   assert.ok(result);
   assert.equal(result.ref, "foo");
   assert.deepEqual(result.args, [{ kind: "literal", raw: "${task}" }]);
+});
+
+test("parseCallRef: bare dotted IDENT.IDENT becomes var arg", () => {
+  const result = parseCallRef("foo(result.role)");
+  assert.ok(result);
+  assert.equal(result.ref, "foo");
+  assert.deepEqual(result.args, [{ kind: "var", name: "result.role" }]);
+});
+
+test("parseCallRef: ${var.field} interpolation arg is stored as literal", () => {
+  const result = parseCallRef("foo(${result.role})");
+  assert.ok(result);
+  assert.equal(result.ref, "foo");
+  assert.deepEqual(result.args, [{ kind: "literal", raw: "${result.role}" }]);
+});
+
+test("argsToRuntimeString: dotted var becomes ${base.field}", () => {
+  assert.equal(argsToRuntimeString([{ kind: "var", name: "result.role" }]), "${result.role}");
+});
+
+test("isBareDottedIdentifier: accepts base.field", () => {
+  assert.equal(isBareDottedIdentifier("result.role"), true);
+  assert.equal(isBareDottedIdentifier("result"), false);
+  assert.equal(isBareDottedIdentifier("a.b.c"), false);
 });
 
 test("parseCallRef: no args returns undefined args", () => {

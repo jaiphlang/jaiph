@@ -178,7 +178,7 @@ workflow release(version) {
 }
 ```
 
-- **Call arguments:** quoted literals (`"main"`), bare identifiers for in-scope variables (`version` — preferred style), quoted interpolation when the whole argument is one variable (`"${version}"` — also accepted when `version` is in scope), or explicit nested calls (`run outer(run inner())`, `run outer(ensure check())`). Bare call shapes like `run outer(inner())` are rejected. Strings mixing text and interpolation (`"v${version}"`) are fine.
+- **Call arguments:** quoted literals (`"main"`), bare identifiers for in-scope variables (`version` — preferred style), bare `IDENT.IDENT` for typed-prompt fields (`result.role`), quoted strings that embed interpolation (`"${version}"`, `"v${version}"`), or explicit nested calls (`run outer(run inner())`, `run outer(ensure check())`). Unquoted `${…}` outside a string (`run greet(${name})`, `run to_lower(${result.role})`) is `E_VALIDATE` — use the bare form instead. Bare call shapes like `run outer(inner())` are rejected.
 - **Arity is checked** when the callee declares parameters: `run greet("a","b")` against `workflow greet(name)` is `E_VALIDATE`.
 - **`fail "reason"`** aborts with a non-zero exit. **`return`** accepts `"string"`, `"""…"""`, a bare identifier, `run ref()` / `ensure ref()`, an inline script, or a `match` expression.
 - **`log` / `logerr`** accept `"string"`, `"""…"""`, a bare identifier (`log status` ≡ `log "${status}"`), or `log run \`cmd\`()`.

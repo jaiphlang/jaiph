@@ -157,7 +157,7 @@ call_ref      = REF "(" [ call_args ] ")" ;
 call_args     = call_arg { "," call_arg } ;
 call_arg      = double_quoted_string
               | IDENT                            (* bare identifier: in-scope variable *)
-              | "${" IDENT "}"
+              | IDENT "." IDENT                  (* typed-prompt field access *)
               | "run" ( call_ref | inline_script )   (* explicit nested managed call *)
               | "ensure" call_ref ;
 inline_script = backtick_script_body "(" [ call_args ] ")"
@@ -166,7 +166,9 @@ inline_script = backtick_script_body "(" [ call_args ] ")"
 
 | Position | Rule |
 |---|---|
-| Bare identifier argument | Must reference an in-scope binding (`const`, capture, parameter). `name` and `"${name}"` are both accepted when the variable is in scope. Unknown names are `E_VALIDATE`. Jaiph keywords are rejected. |
+| Bare identifier argument | Must reference an in-scope binding (`const`, capture, parameter). `name` and `"${name}"` (quoted string) are both accepted when the variable is in scope. Unknown names are `E_VALIDATE`. Jaiph keywords are rejected. |
+| Bare dotted argument | `IDENT.IDENT` is typed-prompt field access (same as in `return` / `if` / `match`). The base must be a typed prompt capture and the field must appear in its `returns` schema (`E_VALIDATE` otherwise). |
+| Unquoted interpolation | Unquoted `${ident}` / `${base.field}` in call-argument position is `E_VALIDATE` — interpolation belongs inside strings. Use the bare form (`name`, `result.role`) or a quoted string (`"${name}"`). |
 | Nested managed calls | The `run` / `ensure` keyword is required. `run foo(bar())` / `run foo(rule_bar())` / `run foo(\`echo aaa\`())` are `E_VALIDATE`. Valid: `run foo(run bar())`, `run foo(ensure rule_bar())`, `run foo(run \`echo aaa\`())`. Capture-then-pass is always valid. |
 | Arity | Workflows and rules: argument count must match the declared parameter list (`E_VALIDATE`), including `()` callees (zero arguments required). Scripts accept any argument count (no parameter list to check). |
 | Shell redirection / pipes | Trailing `>`, `>>`, `|`, or `&` after a `run` / `ensure` call is `E_PARSE`. The same operators inside unquoted portions of call arguments are `E_VALIDATE`. Use a `script` for shell I/O. |
@@ -417,7 +419,7 @@ Validator entry points (`src/transpile/validate.ts` for the outer layer; `src/tr
 |---|---|
 | `E_PARSE` | Duplicate config; duplicate top-level names in the unified namespace; invalid keys/values; `$(…)` in orchestration strings; Jaiph `${identifier}` interpolation in single-line backtick script bodies; `prompt … returns` without `const` capture; `name = prompt …` / non-`const` capture; bare `ref(args)` on `const` RHS (use `run` / `ensure` / `prompt`); top-level `local`; invalid send RHS; trailing shell redirection after `run` / `ensure`; arguments after `catch` / `recover`; bare `catch` / `recover` without binding; nested inline captures; removed `wait` keyword; invalid parameter names; missing `{` on definition line. |
 | `E_SCHEMA` | Invalid `returns` schema — empty, non-flat, unsupported type. |
-| `E_VALIDATE` | Unknown rule / workflow / script; duplicate import alias; inline shell in rules; `ensure` on non-rule; `run` to workflow inside rule; `run async` in rule; forbidden Jaiph usage inside `$(…)`; dot notation on non-prompt variable or invalid field name; bare identifier argument referencing an unknown variable; `${ident}` referencing an unknown variable in orchestration strings; arity mismatch; shell redirection (`>`, `>>`, `|`, `&`) inside unquoted call-argument text; bare nested managed calls; bare nested inline-script calls; type crossings (`prompt` on a script, `run` on a string, `const x = scriptName`, `${scriptName}`). |
+| `E_VALIDATE` | Unknown rule / workflow / script; duplicate import alias; inline shell in rules; `ensure` on non-rule; `run` to workflow inside rule; `run async` in rule; forbidden Jaiph usage inside `$(…)`; dot notation on non-prompt variable or invalid field name; bare identifier argument referencing an unknown variable; unquoted `${…}` in call-argument position; `${ident}` referencing an unknown variable in orchestration strings; arity mismatch; shell redirection (`>`, `>>`, `|`, `&`) inside unquoted call-argument text; bare nested managed calls; bare nested inline-script calls; type crossings (`prompt` on a script, `run` on a string, `const x = scriptName`, `${scriptName}`). |
 | `E_IMPORT_NOT_FOUND` | Import target does not exist (module or script). |
 
 ### Validation rules

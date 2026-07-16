@@ -1307,6 +1307,16 @@ workflow default() {
   log "${x}"
 }
 
+=== bare dotted call arg on typed prompt capture
+# @expect ok
+--- input.jh
+script to_lower = `printf '%s' "$1" | tr '[:upper:]' '[:lower:]'`
+workflow default() {
+  const result = prompt "Classify" returns "{ role: string }"
+  const role_lc = run to_lower(result.role)
+  return "${role_lc}"
+}
+
 === test file: mock prompt block and queued mock prompt in separate test blocks
 # @expect ok
 --- input.test.jh

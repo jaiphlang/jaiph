@@ -189,7 +189,7 @@ Sends text to the configured agent backend. Three body forms:
 | Capture | `const name = prompt …`. `name = prompt …` is `E_PARSE`. |
 | Typed `returns` | Flat `{ field: type, … }` with `string` / `number` / `boolean`. Stored verbatim as text per-field. |
 | Capture required when `returns` | `prompt … returns "…"` without `const` is `E_PARSE`. |
-| Dot notation | `${result.field}` requires that the base is a typed-prompt capture and the field appears in the schema. |
+| Dot notation | Bare `result.field` (in `return`, `if` / `match` subjects, and call arguments) and `${result.field}` **inside strings** require that the base is a typed-prompt capture and the field appears in the schema. Unquoted `${result.field}` in call-argument position is `E_VALIDATE`. |
 | Rule scope | Forbidden — `prompt` and `const … = prompt` are `E_VALIDATE` inside rules. |
 | Transport retry | Transport failures retry on a backoff schedule; deterministic post-processing failures do not. See [Configuration — Prompt retry on transport failure](configuration.md#prompt-retry-on-transport-failure). |
 
