@@ -101,6 +101,14 @@ export function isBareIdentifier(token: string): boolean {
   return /^[A-Za-z_][A-Za-z0-9_]*$/.test(token) && !JAIPH_KEYWORDS.has(token);
 }
 
+/**
+ * Bare `IDENT.IDENT` (typed-prompt field access sugar).
+ * Same shape as return / if / match subjects — not a module-qualified call ref.
+ */
+export function isBareDottedIdentifier(token: string): boolean {
+  return /^[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*$/.test(token);
+}
+
 /** True when a token is a bare Jaiph interpolation ref: `${name}` or `${name.field}`. */
 export function isJaiphInterpolationRef(token: string): boolean {
   return /^\$\{[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?\}$/.test(token);
@@ -175,6 +183,8 @@ export function parseParamList(filePath: string, content: string, lineNo: number
  *
  * Each top-level comma-separated segment is classified:
  * - bare identifier (and not a Jaiph keyword): `{ kind: "var", name }`
+ * - bare `IDENT.IDENT` (typed-prompt field access): `{ kind: "var", name: "base.field" }`
+ *   — sugar for `${base.field}`; runtime expands via the same JSON field path
  * - anything else (quoted string, ${…}, nested `run …` / `ensure …` call, inline-script
  *   form, etc.): `{ kind: "literal", raw }`, stored as authored.
  *
@@ -204,12 +214,17 @@ export function commaArgsToArgList(content: string): Arg[] {
 function pushArg(out: Arg[], segment: string): void {
   const trimmed = segment.trim();
   if (!trimmed) return;
-  out.push(isBareIdentifier(trimmed) ? { kind: "var", name: trimmed } : { kind: "literal", raw: trimmed });
+  if (isBareIdentifier(trimmed) || isBareDottedIdentifier(trimmed)) {
+    out.push({ kind: "var", name: trimmed });
+    return;
+  }
+  out.push({ kind: "literal", raw: trimmed });
 }
 
 /**
  * Convert `Arg[]` back to the space-separated string the runtime consumes:
- * - `var` → `${name}` (so runtime interpolation expands it against in-scope vars)
+ * - `var` → `${name}` (so runtime interpolation expands it against in-scope vars;
+ *   dotted names become `${base.field}` and resolve via JSON field access)
  * - `literal` → raw as authored
  *
  * Empty / undefined → empty string.

@@ -50,10 +50,14 @@ export interface MatchExprDef {
 /**
  * Single call argument, classified at parse time.
  *
- * - `var`: a bare identifier reference (e.g. `foo(task)` → `{ kind: "var", name: "task" }`).
- *   The validator checks `name` against in-scope bindings; the runtime sees `${name}`.
- * - `literal`: any other form (quoted string, `${…}` interpolation, nested `run …` /
- *   `ensure …` / inline-script call). Stored verbatim as authored, between the surrounding commas.
+ * - `var`: a bare identifier or bare `IDENT.IDENT` reference
+ *   (e.g. `foo(task)` → `{ kind: "var", name: "task" }`;
+ *   `foo(result.role)` → `{ kind: "var", name: "result.role" }`).
+ *   The validator checks `name` against in-scope bindings (or, for dotted names,
+ *   against typed-prompt schemas); the runtime sees `${name}`.
+ * - `literal`: any other form (quoted string, nested `run …` /
+ *   `ensure …` / inline-script call, or illicit unquoted `${…}` which the
+ *   validator rejects). Stored verbatim as authored, between the surrounding commas.
  */
 export type Arg =
   | { kind: "literal"; raw: string }

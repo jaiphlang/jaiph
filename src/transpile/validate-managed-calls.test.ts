@@ -67,6 +67,120 @@ test("buildScripts accepts return base.field as sugar for quoted ${base.field}",
   }
 });
 
+test("bare dotted call arg: result.role resolves as typed-prompt field", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-val-dotted-arg-ok-"));
+  const out = join(root, "out");
+  try {
+    writeFileSync(
+      join(root, "m.jh"),
+      [
+        'script to_lower = `printf \'%s\' "$1" | tr \'[:upper:]\' \'[:lower:]\'`',
+        "workflow default() {",
+        '  const result = prompt "x" returns "{ role: string }"',
+        "  const role_lc = run to_lower(result.role)",
+        '  return "${role_lc}"',
+        "}",
+        "",
+      ].join("\n"),
+    );
+    buildScripts(join(root, "m.jh"), out);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("bare dotted call arg: unknown field fails E_VALIDATE", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-val-dotted-arg-field-"));
+  try {
+    writeFileSync(
+      join(root, "m.jh"),
+      [
+        'script to_lower = `printf \'%s\' "$1" | tr \'[:upper:]\' \'[:lower:]\'`',
+        "workflow default() {",
+        '  const result = prompt "x" returns "{ role: string }"',
+        "  run to_lower(result.bogus)",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    assert.throws(
+      () => buildScripts(join(root, "m.jh"), join(root, "out")),
+      /field "bogus" is not defined in the returns schema/,
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("bare dotted call arg: non-prompt base fails E_VALIDATE", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-val-dotted-arg-base-"));
+  try {
+    writeFileSync(
+      join(root, "m.jh"),
+      [
+        'script to_lower = `printf \'%s\' "$1" | tr \'[:upper:]\' \'[:lower:]\'`',
+        "workflow default() {",
+        '  const result = "not-a-prompt"',
+        "  run to_lower(result.role)",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    assert.throws(
+      () => buildScripts(join(root, "m.jh"), join(root, "out")),
+      /not a typed prompt capture/,
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("${var.field} call arg: unquoted interpolation is E_VALIDATE", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-val-interp-arg-"));
+  try {
+    writeFileSync(
+      join(root, "m.jh"),
+      [
+        'script to_lower = `printf \'%s\' "$1" | tr \'[:upper:]\' \'[:lower:]\'`',
+        "workflow default() {",
+        '  const result = prompt "x" returns "{ role: string }"',
+        "  run to_lower(${result.role})",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    assert.throws(
+      () => buildScripts(join(root, "m.jh"), join(root, "out")),
+      /call arguments cannot use unquoted interpolation \$\{result\.role\}/,
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("${var} call arg: unquoted interpolation is E_VALIDATE", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-val-interp-bare-arg-"));
+  try {
+    writeFileSync(
+      join(root, "m.jh"),
+      [
+        'script greet = `echo "hello $1"`',
+        "workflow default() {",
+        '  const name = "world"',
+        "  run greet(${name})",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    assert.throws(
+      () => buildScripts(join(root, "m.jh"), join(root, "out")),
+      /call arguments cannot use unquoted interpolation \$\{name\}.*bare identifier/,
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("buildScripts extracts script for run with capture workflow", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-val-run-fn-"));
   const out = join(root, "out");

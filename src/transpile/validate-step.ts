@@ -6,7 +6,7 @@
  * is scope-aware via the `ValidatorCtx`.
  */
 import { Diagnostics } from "../diagnostics";
-import { matchSendOperator } from "../parse/core";
+import { matchSendOperator, isJaiphInterpolationRef } from "../parse/core";
 import type { Arg, Expr, jaiphModule, MatchExprDef, WorkflowStepDef } from "../types";
 import { canonicalizeTripleQuotedString } from "../parse/triple-quote";
 import {
@@ -508,7 +508,7 @@ function validateCallable(expr: Expr, ctx: ValidatorCtx): void {
       expect: ctx.scope.runRefExpect,
     });
     validateArity(ctx.diag, ctx.ast.filePath, loc, expr.callee.value, expr.args, "workflow", ctx.ast, ctx.refCtx);
-    validateArgVarRefs(ctx.diag, ctx.ast.filePath, loc, expr.args, ctx.knownVars, ctx.recoverBindings);
+    validateArgVarRefs(ctx.diag, ctx.ast.filePath, loc, expr.args, ctx.knownVars, ctx.recoverBindings, ctx);
     return;
   }
   if (expr.kind === "ensure_call") {
@@ -517,7 +517,7 @@ function validateCallable(expr: Expr, ctx: ValidatorCtx): void {
     validateNestedManagedCallArgs(ctx.diag, ctx.ast.filePath, loc, expr.args);
     validateRef(expr.callee, ctx.ast, ctx.refCtx, { mode: "expect", expect: RULE_REF_EXPECT });
     validateArity(ctx.diag, ctx.ast.filePath, loc, expr.callee.value, expr.args, "rule", ctx.ast, ctx.refCtx);
-    validateArgVarRefs(ctx.diag, ctx.ast.filePath, loc, expr.args, ctx.knownVars, ctx.recoverBindings);
+    validateArgVarRefs(ctx.diag, ctx.ast.filePath, loc, expr.args, ctx.knownVars, ctx.recoverBindings, ctx);
   }
 }
 
@@ -898,11 +898,35 @@ function validateArgVarRefs(
   loc: { line: number; col: number },
   args: Arg[] | undefined,
   knownVars: Set<string>,
-  recoverBindings?: Set<string>,
+  recoverBindings: Set<string> | undefined,
+  ctx: ValidatorCtx,
 ): void {
   if (!args) return;
   for (const a of args) {
-    if (a.kind !== "var") continue;
+    if (a.kind === "literal") {
+      // Unquoted `${…}` is only valid inside strings. Call args must use bare
+      // identifiers / bare IDENT.IDENT (or a quoted string that embeds ${…}).
+      if (isJaiphInterpolationRef(a.raw)) {
+        const bare = a.raw.slice(2, -1); // strip ${ }
+        diag.error(
+          filePath,
+          loc.line,
+          loc.col,
+          "E_VALIDATE",
+          `call arguments cannot use unquoted interpolation ${a.raw}; use bare ${bare.includes(".") ? "field access" : "identifier"}: ...(${bare})`,
+        );
+        continue;
+      }
+      // Quoted strings may embed `${var.field}` — validate those fields.
+      validateDotFieldRefs(a.raw, loc, ctx);
+      continue;
+    }
+    const dotIdx = a.name.indexOf(".");
+    if (dotIdx >= 0) {
+      // Bare IDENT.IDENT — typed-prompt field access; runtime expands via ${base.field}.
+      validateDotFieldRef(a.name.slice(0, dotIdx), a.name.slice(dotIdx + 1), loc, ctx);
+      continue;
+    }
     if (recoverBindings?.has(a.name)) continue;
     if (knownVars.has(a.name)) continue;
     diag.error(

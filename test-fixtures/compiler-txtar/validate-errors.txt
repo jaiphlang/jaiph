@@ -977,6 +977,42 @@ workflow default() {
   log "${x}"
 }
 
+=== bare dotted call arg where var is not a typed prompt capture
+# @expect error E_VALIDATE "not a typed prompt capture" @4:3
+--- input.jh
+script to_lower = `printf '%s' "$1" | tr '[:upper:]' '[:lower:]'`
+workflow default() {
+  const result = "plain"
+  run to_lower(result.role)
+}
+
+=== bare dotted call arg with unknown field
+# @expect error E_VALIDATE "is not defined in the returns schema" @4:3
+--- input.jh
+script to_lower = `printf '%s' "$1" | tr '[:upper:]' '[:lower:]'`
+workflow default() {
+  const result = prompt "Classify" returns "{ role: string }"
+  run to_lower(result.bogus)
+}
+
+=== unquoted ${var.field} call arg is rejected
+# @expect error E_VALIDATE "call arguments cannot use unquoted interpolation" @4:3
+--- input.jh
+script to_lower = `printf '%s' "$1" | tr '[:upper:]' '[:lower:]'`
+workflow default() {
+  const result = prompt "Classify" returns "{ role: string }"
+  run to_lower(${result.role})
+}
+
+=== unquoted ${var} call arg is rejected
+# @expect error E_VALIDATE "call arguments cannot use unquoted interpolation" @4:3
+--- input.jh
+script greet = `echo "hello $1"`
+workflow default() {
+  const name = "world"
+  run greet(${name})
+}
+
 === test block: mix mock prompt block with queued mock prompt (block first)
 # @expect error E_VALIDATE "cannot mix "mock prompt { … }" with queued "mock prompt …" in one test block; choose one style"
 --- input.test.jh

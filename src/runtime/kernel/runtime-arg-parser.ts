@@ -9,6 +9,7 @@ import { argsToRuntimeString, parseCallRef } from "../../parse/core";
 import { formatUtcTimestamp } from "./emit";
 
 export const BARE_IDENT_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
+export const BARE_DOTTED_IDENT_RE = /^[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*$/;
 export const MAX_EMBED = 1024 * 1024;
 export const MAX_RECURSION_DEPTH = 256;
 
@@ -61,7 +62,8 @@ export function commaArgsToInterpolated(raw: string): string {
   if (!raw.trim()) return "";
   return raw.split(",").map((seg) => {
     const t = seg.trim();
-    return BARE_IDENT_RE.test(t) ? `\${${t}}` : t;
+    if (BARE_IDENT_RE.test(t) || BARE_DOTTED_IDENT_RE.test(t)) return `\${${t}}`;
+    return t;
   }).join(" ");
 }
 

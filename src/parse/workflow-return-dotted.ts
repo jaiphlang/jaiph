@@ -2,11 +2,12 @@
  * Bare `name` or `name.field` in `return <expr>` is sugar for `return "${expr}"`
  * (same interpolation as in double-quoted strings).
  */
-const BARE_DOTTED_RE = /^[a-zA-Z_][a-zA-Z0-9_]*\.[a-zA-Z_][a-zA-Z0-9_]*$/;
+import { isBareDottedIdentifier } from "./core";
+
 const BARE_RE = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
 
 export function isBareDottedIdentifierReturn(expr: string): boolean {
-  return BARE_DOTTED_RE.test(expr.trim());
+  return isBareDottedIdentifier(expr.trim());
 }
 
 export function isBareIdentifierReturn(expr: string): boolean {
