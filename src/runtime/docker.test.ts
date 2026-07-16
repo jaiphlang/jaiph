@@ -410,6 +410,14 @@ test("buildDockerArgs: a key both allowlist-forwarded and in extraEnv appears on
 // buildDockerArgs: agent env var forwarding
 // ---------------------------------------------------------------------------
 
+test("buildDockerArgs: forwards OPENAI_* env vars", () => {
+  const args = buildDockerArgs(defaultOpts({
+    env: { OPENAI_API_KEY: "sk-openai-test", OPENAI_ORG_ID: "org-123" },
+  }), TEST_OVERLAY);
+  assert.ok(args.includes("OPENAI_API_KEY=sk-openai-test"));
+  assert.ok(args.includes("OPENAI_ORG_ID=org-123"));
+});
+
 test("buildDockerArgs: forwards ANTHROPIC_* env vars", () => {
   const args = buildDockerArgs(defaultOpts({
     env: { ANTHROPIC_API_KEY: "sk-ant-test-key", ANTHROPIC_BASE_URL: "https://api.example.test" },

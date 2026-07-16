@@ -382,9 +382,7 @@ test("explicit backend in config but no prompt step → still checks (user commi
 // AC7: Pre-flight checks post-forwarding env (non-allowlisted vars treated as missing)
 // ---------------------------------------------------------------------------
 
-test("codex under Docker: OPENAI_API_KEY present on host but not allowlisted → treated as missing", () => {
-  // OPENAI_API_KEY is not on the ENV_ALLOW_PREFIXES list, so isEnvAllowed
-  // strips it before forwarding. The pre-flight must mirror that.
+test("codex under Docker: OPENAI_API_KEY on host is forwarded via allowlist → silent", () => {
   const mod = emptyModule(ENTRY, { agent: { backend: "codex" } });
   const r = preflightAgentCredentials({
     mod,
@@ -392,8 +390,8 @@ test("codex under Docker: OPENAI_API_KEY present on host but not allowlisted →
     runtimeEnv: envFor("codex", { OPENAI_API_KEY: "sk-set-on-host" }),
     dockerEnabled: true,
   });
-  assert.equal(r.errors.length, 1);
-  assert.ok(r.errors[0].includes("OPENAI_API_KEY"));
+  assert.equal(r.errors.length, 0);
+  assert.equal(r.warnings.length, 0);
 });
 
 test("codex on host: OPENAI_API_KEY present → silent (no allowlist filter outside Docker)", () => {

@@ -577,7 +577,7 @@ export const CONTAINER_RUN_DIR = "/jaiph/run";
  * Explicit allowlist of environment variable prefixes forwarded into the
  * container. Everything else is dropped — fail-closed by design.
  */
-export const ENV_ALLOW_PREFIXES = ["JAIPH_", "ANTHROPIC_", "CURSOR_", "CLAUDE_"] as const;
+export const ENV_ALLOW_PREFIXES = ["JAIPH_", "ANTHROPIC_", "CURSOR_", "CLAUDE_", "OPENAI_"] as const;
 
 /** Prefix excluded from the allowlist even though it starts with JAIPH_. */
 export const ENV_ALLOW_EXCLUDE_PREFIX = "JAIPH_DOCKER_";

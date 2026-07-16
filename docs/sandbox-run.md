@@ -89,5 +89,6 @@ Run artifacts always land under host `.jaiph/runs/<date>/<time>-<entry>/` regard
 ## Related
 
 - [Sandboxing](sandboxing.md) — the model: what each mode protects, what it does not.
+- [Sandboxing — Runtime image toolchain](sandboxing.md#runtime-image-toolchain) — preinstalled CLI tools inside the default image.
 - [Authenticate agent backends](/how-to/agent-auth) — getting credentials into the container.
 - [Architecture — Docker runtime helper](architecture.md#core-components) — how the host CLI builds the `docker run` invocation.

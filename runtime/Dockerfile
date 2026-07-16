@@ -14,8 +14,8 @@ RUN npm ci && npm run build && npm pack --pack-destination /tmp >/dev/null && mv
 FROM ubuntu:24.04
 
 # Broad workflow toolchain + fuse-overlayfs for CoW sandbox.
-# This image is intended to execute diverse custom scripts, so we include
-# common build, scripting, archive, and network diagnostics tooling.
+# Curated for generic engineering: VCS, shell, JS/Python, Go, Java, Rust,
+# GitHub CLI, and common build utilities — not full CI-VM parity.
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
       bash \
@@ -40,15 +40,127 @@ RUN apt-get update && \
       util-linux \
       make \
       g++ \
+      pkg-config \
+      libssl-dev \
+      file \
+      sqlite3 \
+      shellcheck \
+      openjdk-21-jdk-headless \
+      cmake \
+      git-lfs \
+      pipx \
+      maven \
+      gradle \
+      protobuf-compiler \
+      just \
       fuse-overlayfs \
       fuse3 \
       rsync && \
+    rm -rf /var/lib/apt/lists/*
+
+# JAVA_HOME must work on both amd64 and arm64 publish targets.
+RUN ARCH="$(dpkg --print-architecture)" && \
+    ln -sfn "/usr/lib/jvm/java-21-openjdk-${ARCH}" /usr/lib/jvm/java-21-openjdk-jaiph
+ENV JAVA_HOME=/usr/lib/jvm/java-21-openjdk-jaiph
+
+# GitHub CLI — PR/CI automation (e.g. jaiphlang/gh_actions).
+RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+      -o /usr/share/keyrings/githubcli-archive-keyring.gpg && \
+    chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg && \
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+      > /etc/apt/sources.list.d/github-cli.list && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends gh && \
     rm -rf /var/lib/apt/lists/*
 
 # Node.js for running jaiph
 RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
     apt-get install -y --no-install-recommends nodejs && \
     rm -rf /var/lib/apt/lists/*
+
+# JS package managers (pnpm is not on GitHub-hosted runners either — workflows
+# install it explicitly; we preinstall the common trio for sandbox scripts).
+RUN npm install -g pnpm yarn && corepack enable
+
+# Fast Python env/deps (common alternative to raw pip in modern repos).
+RUN curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/bin sh
+
+# Go — single stable release; matches go.dev "current stable" at image build time.
+ARG GO_VERSION=1.26.5
+RUN set -eux; \
+    arch="$(dpkg --print-architecture)"; \
+    case "${arch}" in \
+      amd64) goarch=amd64 ;; \
+      arm64) goarch=arm64 ;; \
+      *) echo "unsupported arch: ${arch}" >&2; exit 1 ;; \
+    esac; \
+    curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-${goarch}.tar.gz" | tar -C /usr/local -xz
+ENV PATH="/usr/local/go/bin:${PATH}"
+
+# Rust — minimal stable toolchain (rustc + cargo + std); enough for most crates.
+ENV RUSTUP_HOME=/usr/local/rustup
+ENV CARGO_HOME=/usr/local/cargo
+ENV PATH="/usr/local/cargo/bin:${PATH}"
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
+    sh -s -- -y --default-toolchain stable --profile minimal --no-modify-path && \
+    chmod -R a+rx /usr/local/rustup /usr/local/cargo
+
+# YAML CLI (mikefarah/yq — distinct from the Python yq package).
+ARG YQ_VERSION=4.45.4
+RUN set -eux; \
+    arch="$(dpkg --print-architecture)"; \
+    case "${arch}" in \
+      amd64) yqarch=amd64 ;; \
+      arm64) yqarch=arm64 ;; \
+      *) echo "unsupported arch: ${arch}" >&2; exit 1 ;; \
+    esac; \
+    curl -fsSL "https://github.com/mikefarah/yq/releases/download/v${YQ_VERSION}/yq_linux_${yqarch}" \
+      -o /usr/local/bin/yq && \
+    chmod +x /usr/local/bin/yq
+
+# Bun — fast JS runtime used by many modern repos (and Jaiph's own build).
+ENV BUN_INSTALL=/usr/local/bun
+RUN curl -fsSL https://bun.sh/install | env BUN_INSTALL="${BUN_INSTALL}" bash
+ENV PATH="${BUN_INSTALL}/bin:${PATH}"
+
+# kubectl — Kubernetes cluster automation.
+ARG KUBECTL_VERSION=1.36.2
+RUN set -eux; \
+    arch="$(dpkg --print-architecture)"; \
+    case "${arch}" in \
+      amd64) karch=amd64 ;; \
+      arm64) karch=arm64 ;; \
+      *) echo "unsupported arch: ${arch}" >&2; exit 1 ;; \
+    esac; \
+    curl -fsSL "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/${karch}/kubectl" \
+      -o /usr/local/bin/kubectl && \
+    chmod +x /usr/local/bin/kubectl
+
+# AWS CLI v2 — cloud automation scripts.
+RUN set -eux; \
+    arch="$(uname -m)"; \
+    case "${arch}" in \
+      x86_64) awsarch=x86_64 ;; \
+      aarch64) awsarch=aarch64 ;; \
+      *) echo "unsupported arch: ${arch}" >&2; exit 1 ;; \
+    esac; \
+    curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-${awsarch}.zip" -o /tmp/awscliv2.zip && \
+    unzip -q /tmp/awscliv2.zip -d /tmp && \
+    /tmp/aws/install && \
+    rm -rf /tmp/aws /tmp/awscliv2.zip
+
+# Task (go-task) — Makefile-style task runner used in many repos.
+ARG TASK_VERSION=3.44.1
+RUN set -eux; \
+    arch="$(dpkg --print-architecture)"; \
+    case "${arch}" in \
+      amd64) taskarch=amd64 ;; \
+      arm64) taskarch=arm64 ;; \
+      *) echo "unsupported arch: ${arch}" >&2; exit 1 ;; \
+    esac; \
+    curl -fsSL "https://github.com/go-task/task/releases/download/v${TASK_VERSION}/task_linux_${taskarch}.tar.gz" \
+      | tar -xz -C /usr/local/bin task && \
+    chmod +x /usr/local/bin/task
 
 # Non-root user for agent CLIs and default shell behavior. /jaiph/workspace is
 # root-owned because Linux overlay mode mounts there as --user 0:0.
@@ -67,7 +179,7 @@ RUN npm install -g /tmp/jaiph.tgz && rm -f /tmp/jaiph.tgz
 
 USER jaiph
 ENV HOME=/home/jaiph
-ENV PATH="/home/jaiph/.local/bin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+ENV PATH="/home/jaiph/.local/bin:/usr/local/bun/bin:/usr/local/cargo/bin:/usr/local/go/bin:${JAVA_HOME}/bin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
 # cursor-agent (Cursor) — install as the runtime user so the binary is
 # reachable after switching away from root. The installer currently places
