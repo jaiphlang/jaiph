@@ -38,6 +38,7 @@ import {
 import { resolveInterpreterFromShebang } from "../../parse/script-bash";
 import { resolveShell } from "./portability";
 import { RuntimeEventEmitter, type Frame } from "./runtime-event-emitter";
+import { createStepIdleOutputWarn } from "./step-idle-warn";
 import { executeMockBodyDef, type MockBodyDef, type StepResult } from "./runtime-mock";
 import { resetMockResponses } from "./mock";
 import { linesOfDelimitedString } from "../string-lines";
@@ -1383,64 +1384,71 @@ export class NodeWorkflowRuntime {
       const chunks: string[] = [];
       const err = new PassThrough();
       const errChunks: string[] = [];
-      out.on("data", (d) => {
-        const chunk = String(d);
-        chunks.push(chunk);
-        appendFileSync(promptStep.outFile, chunk);
-        io?.appendOut(chunk);
-      });
-      err.on("data", (d) => {
-        const chunk = String(d);
-        errChunks.push(chunk);
-        io?.appendErr(chunk);
-      });
-      const result = await executePrompt(promptText, promptConfig, out, scope.env, err);
-      const promptErr = errChunks.join("");
-      this.emitter.emitPromptStepEnd(promptStep, result.status, chunks.join(""), promptErr);
-      this.emitter.emitPromptEvent("PROMPT_END", {
-        backend,
-        model: modelRes.model || undefined,
-        model_reason: modelRes.reason,
-        status: result.status,
-      });
-      lastOutput = chunks.join("");
-      lastFinal = result.final;
-      lastResult = {
-        status: result.status,
-        output: "",
-        error: promptErr.trim() || "prompt failed",
-      };
-      if (result.status === 0) break;
-      // Transport failure path: log + (sleep + retry) or terminate.
-      const errSummary = summarizeError(lastResult.error ?? "");
-      if (attempt >= totalAttempts) {
-        this.emitter.emitLog(
-          "LOGERR",
-          `prompt attempt ${attempt}/${totalAttempts} failed (${backend}): ${errSummary}; retries exhausted, failing step`,
-        );
-        return { ok: false, result: lastResult, output: lastOutput };
-      }
-      const nextDelayMs = delays[attempt - 1]!;
-      const nextDelayLabel = formatRetryDelay(nextDelayMs);
-      this.emitter.emitLog(
-        "LOGERR",
-        `prompt attempt ${attempt}/${totalAttempts} failed (${backend}): ${errSummary}; retrying in ${nextDelayLabel}`,
-      );
+      const idleWarn = createStepIdleOutputWarn(this.emitter, "prompt", stepName, scope.env);
       try {
-        await this.sleep(nextDelayMs, this.abortController.signal);
-      } catch (sleepErr) {
-        if (isPromptRetryAbortError(sleepErr) || this.abortController.signal.aborted) {
+        out.on("data", (d) => {
+          const chunk = String(d);
+          chunks.push(chunk);
+          appendFileSync(promptStep.outFile, chunk);
+          io?.appendOut(chunk);
+          if (chunk.length > 0) idleWarn?.bump();
+        });
+        err.on("data", (d) => {
+          const chunk = String(d);
+          errChunks.push(chunk);
+          io?.appendErr(chunk);
+          if (chunk.length > 0) idleWarn?.bump();
+        });
+        const result = await executePrompt(promptText, promptConfig, out, scope.env, err);
+        const promptErr = errChunks.join("");
+        this.emitter.emitPromptStepEnd(promptStep, result.status, chunks.join(""), promptErr);
+        this.emitter.emitPromptEvent("PROMPT_END", {
+          backend,
+          model: modelRes.model || undefined,
+          model_reason: modelRes.reason,
+          status: result.status,
+        });
+        lastOutput = chunks.join("");
+        lastFinal = result.final;
+        lastResult = {
+          status: result.status,
+          output: "",
+          error: promptErr.trim() || "prompt failed",
+        };
+        if (result.status === 0) break;
+        // Transport failure path: log + (sleep + retry) or terminate.
+        const errSummary = summarizeError(lastResult.error ?? "");
+        if (attempt >= totalAttempts) {
           this.emitter.emitLog(
             "LOGERR",
-            `prompt retry aborted during backoff after attempt ${attempt}/${totalAttempts} (${backend}); retries halted`,
+            `prompt attempt ${attempt}/${totalAttempts} failed (${backend}): ${errSummary}; retries exhausted, failing step`,
           );
-          return {
-            ok: false,
-            result: { status: lastResult.status || 1, output: "", error: "prompt retry aborted" },
-            output: lastOutput,
-          };
+          return { ok: false, result: lastResult, output: lastOutput };
         }
-        throw sleepErr;
+        const nextDelayMs = delays[attempt - 1]!;
+        const nextDelayLabel = formatRetryDelay(nextDelayMs);
+        this.emitter.emitLog(
+          "LOGERR",
+          `prompt attempt ${attempt}/${totalAttempts} failed (${backend}): ${errSummary}; retrying in ${nextDelayLabel}`,
+        );
+        try {
+          await this.sleep(nextDelayMs, this.abortController.signal);
+        } catch (sleepErr) {
+          if (isPromptRetryAbortError(sleepErr) || this.abortController.signal.aborted) {
+            this.emitter.emitLog(
+              "LOGERR",
+              `prompt retry aborted during backoff after attempt ${attempt}/${totalAttempts} (${backend}); retries halted`,
+            );
+            return {
+              ok: false,
+              result: { status: lastResult.status || 1, output: "", error: "prompt retry aborted" },
+              output: lastOutput,
+            };
+          }
+          throw sleepErr;
+        }
+      } finally {
+        idleWarn?.stop();
       }
     }
 
@@ -1757,6 +1765,19 @@ export class NodeWorkflowRuntime {
         if (chunk.length > 0) appendFileSync(errFile, chunk);
       },
     };
+    const idleWarn = kind === "script" ? createStepIdleOutputWarn(this.emitter, kind, name, this.env) : null;
+    const stepIo: StepIO = idleWarn
+      ? {
+          appendOut: (chunk: string) => {
+            io.appendOut(chunk);
+            if (chunk.length > 0) idleWarn.bump();
+          },
+          appendErr: (chunk: string) => {
+            io.appendErr(chunk);
+            if (chunk.length > 0) idleWarn.bump();
+          },
+        }
+      : io;
     this.emitter.emitStep({
       type: "STEP_START",
       func: name,
@@ -1775,7 +1796,12 @@ export class NodeWorkflowRuntime {
       params: buildStepDisplayParamPairs(args, declaredParamNames, { positionalStyle: "argN" }),
     });
     const started = Date.now();
-    const result = await fn(io);
+    let result: StepResult;
+    try {
+      result = await fn(stepIo);
+    } finally {
+      idleWarn?.stop();
+    }
     const elapsed = Date.now() - started;
     writeFileSync(outFile, result.output ?? "");
     writeFileSync(errFile, result.error ?? "");

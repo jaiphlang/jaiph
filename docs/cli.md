@@ -77,13 +77,13 @@ After module-graph load and Docker-mode resolution, before the runner / containe
 | `✗` | Step failed (with elapsed time). |
 | `ℹ` | `log` message (dim/gray, no marker timing). |
 | `!` | `logerr` message (red; rendered on stdout with the progress tree). |
-| `⚠` | `logwarn` message (yellow; rendered on stdout with the progress tree). |
+| `⚠` | `logwarn` message and automatic leaf-step idle warnings (yellow; rendered on stdout with the progress tree). |
 | `·` | Continuation marker (heartbeat lines in non-TTY mode). |
 | ` ₁`, ` ₂`, … | Subscript prefix for `run async` branch numbering. |
 
 PASS line: `✓ PASS workflow default (0.2s)`. TTY runs append a transient `▸ RUNNING workflow <name> (X.Xs)` line that is replaced by the PASS/FAIL line on exit. `--raw` and non-TTY modes skip both. Disable color globally with `NO_COLOR=1`.
 
-Non-TTY heartbeat cadence is controlled by `JAIPH_NON_TTY_HEARTBEAT_FIRST_SEC` (default `60`) and `JAIPH_NON_TTY_HEARTBEAT_INTERVAL_MS` (default `30000`, floor `250`).
+Non-TTY heartbeat cadence is controlled by `JAIPH_NON_TTY_HEARTBEAT_FIRST_SEC` (default `60`) and `JAIPH_NON_TTY_HEARTBEAT_INTERVAL_MS` (default `30000`, floor `250`). Leaf script and prompt steps emit a yellow `⚠` idle warning when they produce no stdout/stderr for `JAIPH_STEP_IDLE_WARN_SEC` (default `180`; `0` disables).
 
 ### Step display
 
