@@ -62,6 +62,16 @@ export type ModelResolution = {
   reason: "explicit" | "flags" | "backend-default";
 };
 
+/** Run-tree label when the backend CLI auto-selects a model (not passed to `--model`). */
+export const BACKEND_DEFAULT_MODEL_LABEL = "default";
+
+/** Model token for STEP_START/STEP_END; does not affect backend CLI args. */
+export function modelForStepEvent(res: ModelResolution): string {
+  if (res.model.length > 0) return res.model;
+  if (res.reason === "backend-default") return BACKEND_DEFAULT_MODEL_LABEL;
+  return "";
+}
+
 /**
  * Resolve the effective model for the current backend.
  *

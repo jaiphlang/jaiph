@@ -177,6 +177,47 @@ test("NodeWorkflowRuntime: prompt STEP_START/STEP_END carry the effective model 
   }
 });
 
+test("NodeWorkflowRuntime: prompt STEP_START uses default label when backend auto-selects", async () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-prompt-step-model-default-"));
+  try {
+    const jh = join(root, "prompt_default_step.jh");
+    writeFileSync(
+      jh,
+      ['workflow default() {', '  prompt "hello"', "}", ""].join("\n"),
+    );
+    const mockJson = JSON.stringify(["ok"]);
+
+    const graph = buildRuntimeGraph(jh);
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      JAIPH_TEST_MODE: "1",
+      JAIPH_MOCK_RESPONSES_JSON: mockJson,
+      JAIPH_RUNS_DIR: join(root, ".jaiph", "runs"),
+    };
+    delete env.JAIPH_AGENT_MODEL;
+    const runtime = new NodeWorkflowRuntime(graph, { env, cwd: root, suppressLiveEvents: true });
+    const prevSummaryEnv = process.env.JAIPH_RUN_SUMMARY_FILE;
+    process.env.JAIPH_RUN_SUMMARY_FILE = runtime.getSummaryFile();
+    try {
+      const status = await runtime.runDefault([]);
+      assert.equal(status, 0);
+    } finally {
+      if (prevSummaryEnv === undefined) delete process.env.JAIPH_RUN_SUMMARY_FILE;
+      else process.env.JAIPH_RUN_SUMMARY_FILE = prevSummaryEnv;
+    }
+
+    const events = readFileSync(runtime.getSummaryFile(), "utf8")
+      .split("\n")
+      .filter(Boolean)
+      .map((l) => JSON.parse(l) as Record<string, unknown>);
+    const promptStart = events.find((e) => e.type === "STEP_START" && e.kind === "prompt");
+    assert.ok(promptStart, "expected a prompt STEP_START in run summary");
+    assert.equal(promptStart!.model, "default");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("NodeWorkflowRuntime: workflow step .out accumulates Command:/Prompt: and log (mocked prompt)", async () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-node-wf-artifacts-"));
   try {

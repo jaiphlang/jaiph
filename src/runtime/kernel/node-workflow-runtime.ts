@@ -7,7 +7,14 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { inlineScriptName } from "../../inline-script-name";
 import { argsToRuntimeString } from "../../parse/core";
 import type { CatchBody, Expr, MatchExprDef, WorkflowStepDef } from "../../types";
-import { executePrompt, resolveConfig, resolveModel, resolvePromptConfig, resolvePromptStepName } from "./prompt";
+import {
+  executePrompt,
+  modelForStepEvent,
+  resolveConfig,
+  resolveModel,
+  resolvePromptConfig,
+  resolvePromptStepName,
+} from "./prompt";
 import { appendRunSummaryLine } from "./emit";
 import { buildStepDisplayParamPairs } from "../../cli/commands/format-params.js";
 import { resolveRuleRef, resolveScriptRef, resolveWorkflowRef, type RuntimeGraph } from "./graph";
@@ -1361,7 +1368,8 @@ export class NodeWorkflowRuntime {
           output: lastOutput,
         };
       }
-      const promptStep = this.emitter.emitPromptStepStart(stepName, modelRes.model, scope.vars, raw);
+      const stepModel = modelForStepEvent(modelRes);
+      const promptStep = this.emitter.emitPromptStepStart(stepName, stepModel, scope.vars, raw);
       this.emitter.emitPromptEvent("PROMPT_START", {
         backend,
         model: modelRes.model || undefined,
