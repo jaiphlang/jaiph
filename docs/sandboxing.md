@@ -76,7 +76,7 @@ The Docker sandbox is designed to contain damage from untrusted or semi-trusted 
 - **Filesystem reach** — scripts inside the container cannot read or write arbitrary host paths outside the workspace mount and the run-artifacts mount. The rest of the host is invisible to the container. Overlay and copy modes additionally make the workspace itself non-persistent.
 - **Process isolation** — container processes cannot see or signal host processes. Every sandboxed container runs with `--cap-drop ALL` and `--security-opt no-new-privileges`. Overlay mode adds back a small set of capabilities required to mount `fuse-overlayfs` and then drop privileges; copy and inplace modes do not add any back.
 - **Mount safety** — the host root filesystem, the Docker daemon socket, and OS-internal paths (`/proc`, `/sys`, `/dev`) cannot be mounted into the container. Attempting to do so produces a validation error before launch.
-- **Environment exposure** — host environment variables do not cross the boundary by default. Only an explicit prefix allowlist (`JAIPH_*`, `ANTHROPIC_*`, `CLAUDE_*`, `CURSOR_*`, with `JAIPH_DOCKER_*` and the inplace-control flags excluded) is forwarded. Every other variable is dropped, including unrelated cloud credentials, SSH agents, and registry tokens. The per-key escape hatch is **`--env`** (`jaiph run` / `jaiph mcp`): `--env KEY=VALUE` or `--env KEY` (forward the host value) crosses that variable into the workflow verbatim as an explicit `-e KEY=VALUE` container arg **bypassing the allowlist** — the flag *is* the consent — and wins over any allowlist-forwarded value for the same key. Sandbox-control and runtime-managed keys are rejected (`E_ENV_RESERVED`); values are never path-remapped. See [CLI — `jaiph run` flags](cli.md#jaiph-run).
+- **Environment exposure** — host environment variables do not cross the boundary by default. Only an explicit prefix allowlist (`JAIPH_*`, `ANTHROPIC_*`, `CLAUDE_*`, `CURSOR_*`, `OPENAI_*`, with `JAIPH_DOCKER_*` and the inplace-control flags excluded) is forwarded. Every other variable is dropped, including unrelated cloud credentials, SSH agents, and registry tokens. The per-key escape hatch is **`--env`** (`jaiph run` / `jaiph mcp`): `--env KEY=VALUE` or `--env KEY` (forward the host value) crosses that variable into the workflow verbatim as an explicit `-e KEY=VALUE` container arg **bypassing the allowlist** — the flag *is* the consent — and wins over any allowlist-forwarded value for the same key. Sandbox-control and runtime-managed keys are rejected (`E_ENV_RESERVED`); values are never path-remapped. See [CLI — `jaiph run` flags](cli.md#jaiph-run).
 {: #env-exposure}
 - **Shell injection safety** — every `docker` invocation passes an explicit argv array (`execFileSync` or `spawn`), never `/bin/sh`. Image names and other parameters are passed as literal arguments, so values containing shell metacharacters are never expanded.
 
@@ -85,7 +85,7 @@ The Docker sandbox is designed to contain damage from untrusted or semi-trusted 
 Equally important is the list of things Docker is deliberately *not* claiming to defend:
 
 - **Network egress is on by default.** The sandbox only passes `--network none` when configuration sets the Docker network mode to `none` (`JAIPH_DOCKER_NETWORK` or module `runtime.docker_network`; see [Configuration — Runtime (Docker) keys](configuration.md#runtime-docker-keys)). When the mode is the default (`default`), no `--network` flag is passed and the container uses Docker's bridge with outbound access. A script can reach external services and exfiltrate data over the network.
-- **Agent credentials cross the boundary.** `ANTHROPIC_*`, `CLAUDE_*`, and `CURSOR_*` variables are forwarded so agent-backed workflows can function. Combined with default network egress, treat them as **fully disclosed** to anything that runs inside the container.
+- **Agent credentials cross the boundary.** `ANTHROPIC_*`, `CLAUDE_*`, `CURSOR_*`, and `OPENAI_*` variables are forwarded so agent-backed workflows can function (including the `codex` HTTP backend). Combined with default network egress, treat them as **fully disclosed** to anything that runs inside the container.
 - **Hooks run on the host.** Hook commands from `.jaiph/hooks.json` (merged with `~/.jaiph/hooks.json`) execute on the host CLI process, not inside the container, and have full host access. Hook config is trusted.
 - **Image supply chain is the user's responsibility.** Jaiph verifies that the selected image contains a working `jaiph` binary, but does not verify image signatures or provenance. Use trusted registries and pin digests for anything that matters.
 - **Container escapes are not guaranteed-impossible.** Docker is not equivalent to a VM or hardware isolation. It raises the bar against script-level mischief, but a kernel exploit can in principle break out.
@@ -114,6 +114,83 @@ The test runner runs in-process on the host. This is intentional: tests are a de
 The Docker sandbox does not change workflow semantics. The runtime inside the container is the same **`NodeWorkflowRuntime`** AST interpreter that runs locally — the container runs **`jaiph run --raw`**, which spawns the internal **`__workflow-runner`** child the same way as host **`--raw`** execution (see [Architecture — Docker runtime helper](architecture.md#core-components)), same **`__JAIPH_EVENT__`** stream on stderr, same **`run_summary.jsonl`** written under **`.jaiph/runs/`**. The only differences are *where* processes execute and *what host resources they can reach*.
 
 That property is the point of the design: a workflow is the same workflow whether it runs sandboxed or not. The sandbox is a deployment decision, not a programming model.
+
+## Runtime image toolchain
+
+The default sandbox image (`ghcr.io/jaiphlang/jaiph-runtime`, built from `runtime/Dockerfile`) ships a curated engineering toolchain so `script` steps and agent backends can run common build/test/lint commands without ad-hoc installs. It is **not** a full GitHub Actions VM clone — one stable version per language, no browser/Android SDK matrix, no nested Docker daemon. The published image is currently **~3.2 GB** on disk (linux/amd64); first `docker pull` downloads that footprint once, then layers are cached locally.
+
+### Jaiph and agent backends
+
+| Backend | Mechanism | In image? |
+|---|---|---|
+| `jaiph` | Workflow runner inside the container | yes |
+| `claude` (`@anthropic-ai/claude-code`) | Anthropic CLI subprocess | yes — global npm install |
+| `cursor-agent` | Cursor CLI subprocess | yes — user install under `/home/jaiph` |
+| `codex` | OpenAI Chat Completions HTTP API (built into `jaiph`; no separate CLI) | yes — uses bundled `node` + `jaiph`; needs `OPENAI_API_KEY` on the host (forwarded as `OPENAI_*`) |
+
+Configure with `agent.backend = "cursor" | "claude" | "codex"`. Credential rules: [Authenticate agent backends](/how-to/agent-auth).
+
+### Version control and shell
+
+| Tool | Role |
+|---|---|
+| `git`, `git-lfs` | Clone, commit, LFS assets |
+| `bash`, `curl`, `wget`, `openssh-client` | Shell automation and downloads |
+| `jq`, `yq`, `ripgrep` | JSON/YAML/text search |
+| `rsync`, `zip`, `unzip`, `xz-utils` | File sync and archives |
+| `file`, `sqlite3` | File typing and local DB inspection |
+| `shellcheck` | Bash script linting |
+| `dnsutils`, `netcat-openbsd`, `iproute2` | Network diagnostics |
+
+### JavaScript / TypeScript
+
+| Tool | Role |
+|---|---|
+| `node`, `npm`, `corepack` | Node runtime and package management |
+| `pnpm`, `yarn` | Alternate JS package managers |
+| `bun` | Bun-first JS/TS repos |
+
+### Python
+
+| Tool | Role |
+|---|---|
+| `python3`, `pip`, `python-is-python3` | Python runtime |
+| `uv` | Fast env/deps (modern alternative to raw `pip`) |
+| `pipx` | Isolated Python CLI tools |
+
+### Go, Java, Rust
+
+| Tool | Role |
+|---|---|
+| `go` | Go toolchain (single stable release) |
+| `java`, `javac`, `JAVA_HOME` | OpenJDK 21 LTS |
+| `mvn`, `gradle` | JVM build systems |
+| `rustc`, `cargo` | Rust stable minimal profile |
+
+### Build, codegen, and task runners
+
+| Tool | Role |
+|---|---|
+| `make`, `g++`, `pkg-config`, `libssl-dev` | Native C/C++ builds and cgo |
+| `cmake` | Cross-language native builds |
+| `protoc` (`protobuf-compiler`) | Protobuf / gRPC codegen |
+| `just`, `task` | Modern task runners |
+
+### Platform and cloud CLIs
+
+| Tool | Role |
+|---|---|
+| `gh` | GitHub PR/CI/releases API |
+| `kubectl` | Kubernetes cluster operations |
+| `aws` | AWS CLI v2 |
+
+### Sandbox plumbing
+
+| Tool | Role |
+|---|---|
+| `fuse-overlayfs`, `fuse3` | Overlay workspace mode (CoW sandbox) |
+
+Custom images are supported via `JAIPH_DOCKER_IMAGE` / `runtime.docker_image`; the selected image must already contain `jaiph` (`E_DOCKER_NO_JAIPH` otherwise). Project-specific extras (multiple language versions, DB servers, cloud CLIs beyond the defaults) belong in a workspace override image, not the published default.
 
 ## Related
 

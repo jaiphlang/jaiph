@@ -20,9 +20,9 @@ This recipe sets the credentials each agent backend needs so the CLI's credentia
 |---|---|---|---|
 | `claude` | `ANTHROPIC_API_KEY` **or** `CLAUDE_CODE_OAUTH_TOKEN` | warn only (a stored Claude CLI login may still work) | hard error `E_AGENT_CREDENTIALS` |
 | `cursor` | `CURSOR_API_KEY` | warn only (a stored `cursor-agent login` may still work) | hard error `E_AGENT_CREDENTIALS` |
-| `codex`  | `OPENAI_API_KEY` | hard error `E_AGENT_CREDENTIALS` (no CLI-login fallback) | hard error `E_AGENT_CREDENTIALS` — `OPENAI_*` is **not** on the Docker env allowlist, so a host-only key is treated as missing |
+| `codex`  | `OPENAI_API_KEY` | hard error `E_AGENT_CREDENTIALS` (no CLI-login fallback) | hard error `E_AGENT_CREDENTIALS` when `OPENAI_API_KEY` is unset on the host (`OPENAI_*` is forwarded into the container) |
 
-Under Docker sandboxing the host-side stored logins (Keychain entries, `~/.claude`, `cursor-agent login`) do **not** cross the container boundary. Only allowlisted host env vars are forwarded (`JAIPH_*`, `ANTHROPIC_*`, `CLAUDE_*`, `CURSOR_*`; see [Sandboxing](sandboxing.md#what-docker-protects-against)). Set credentials on the **host** so the allowlist can forward them into the container.
+Under Docker sandboxing the host-side stored logins (Keychain entries, `~/.claude`, `cursor-agent login`) do **not** cross the container boundary. Allowlisted host env vars are forwarded (`JAIPH_*`, `ANTHROPIC_*`, `CLAUDE_*`, `CURSOR_*`, `OPENAI_*`; see [Sandboxing](sandboxing.md#what-docker-protects-against)). Set credentials on the **host** so the allowlist can forward them into the container.
 
 ## 1. Authenticate Claude
 
@@ -55,9 +55,7 @@ For host runs only, an interactive `cursor-agent login` (stored on disk) also sa
 export OPENAI_API_KEY="sk-..."
 ```
 
-`OPENAI_API_KEY` is required on **both** host and Docker runs. The `codex` backend has no CLI-login fallback — there is no warning path.
-
-Under Docker, `OPENAI_*` is outside the forwarding allowlist, so preflight treats a host-only `OPENAI_API_KEY` as missing even when you export it. Codex workflows need `jaiph run --unsafe` (host execution) or a different backend inside the sandbox.
+`OPENAI_API_KEY` is required on **both** host and Docker runs. The `codex` backend has no CLI-login fallback — there is no warning path. Under Docker, export the key on the host; `OPENAI_*` crosses the container boundary via the env allowlist (same as `ANTHROPIC_*` / `CURSOR_*`).
 
 To target an OpenAI-compatible endpoint instead of the default, set `JAIPH_CODEX_API_URL` to the chat-completions URL (`JAIPH_*` is forwarded under Docker).
 
