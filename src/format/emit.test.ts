@@ -52,7 +52,46 @@ describe("emitModule", () => {
       "```",
       "",
     ].join("\n");
-    assert.equal(roundTrip(source), source);
+    const expected = [
+      "script my_script = ```",
+      "  #!/usr/bin/env python3",
+      '  print("hello")',
+      "```",
+      "",
+    ].join("\n");
+    assert.equal(roundTrip(source), expected);
+  });
+
+  it("dedents indented fenced script bodies and re-indents on format", () => {
+    const source = [
+      "script heredoc_demo = ```",
+      "  cat <<'EOF'",
+      "  line one",
+      "  EOF",
+      "```",
+      "",
+      "workflow default() {",
+      "  run ```bash",
+      "  echo inline",
+      "  ```()",
+      "}",
+      "",
+    ].join("\n");
+    const expected = [
+      "script heredoc_demo = ```",
+      "  cat <<'EOF'",
+      "  line one",
+      "  EOF",
+      "```",
+      "",
+      "workflow default() {",
+      "  run ```bash",
+      "    echo inline",
+      "  ```()",
+      "}",
+      "",
+    ].join("\n");
+    assert.equal(roundTrip(source), expected);
   });
 
   it("formats const with different RHS types", () => {

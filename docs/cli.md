@@ -157,7 +157,7 @@ Reformat `.jh` / `.test.jh` files into canonical style.
 jaiph format [--check] [--indent <n>] <path.jh ...>
 ```
 
-Paths must end with `.jh`. Formatting is idempotent. Comments and shebangs are preserved. Triple-quoted bodies, prompt blocks, and fenced script blocks emit verbatim — inner lines are not re-indented relative to the surrounding scope.
+Paths must end with `.jh`. Formatting is idempotent. Comments and shebangs are preserved. Triple-quoted bodies and prompt blocks emit verbatim (author margin preserved via trivia). Fenced script bodies are stored dedented in the AST; the formatter re-indents inner lines by one level relative to the surrounding scope.
 
 | Flag | Argument | Default | Effect |
 |---|---|---|---|

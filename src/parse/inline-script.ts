@@ -1,5 +1,5 @@
 import { fail, parseParenArgs, parseSingleBacktickBody } from "./core";
-import { parseFencedBlock } from "./fence";
+import { parseFencedScriptBlock } from "./fence";
 import { validateScriptBodyNoInterpolation } from "./scripts";
 import type { Arg } from "../types";
 
@@ -42,7 +42,7 @@ export function parseAnonymousInlineScript(
   if (t.startsWith("```")) {
     const fenceLines = [...lines];
     fenceLines[lineIdx] = t;
-    const { body, lang, afterClose, nextIdx } = parseFencedBlock(filePath, fenceLines, lineIdx);
+    const { body, lang, afterClose, nextIdx } = parseFencedScriptBlock(filePath, fenceLines, lineIdx);
     const argsResult = parseParenArgs(afterClose);
     if (!argsResult) {
       fail(

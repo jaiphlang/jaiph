@@ -291,7 +291,7 @@ function emitRule(rule: RuleDef, pad: string, exported: boolean, trivia: Trivia)
   return lines.join("\n");
 }
 
-function emitScript(script: ScriptDef, _pad: string, exported: boolean, trivia: Trivia): string {
+function emitScript(script: ScriptDef, pad: string, exported: boolean, trivia: Trivia): string {
   const lines: string[] = [];
   lines.push(...emitComments(script.comments));
   const prefix = exported ? "export " : "";
@@ -299,9 +299,7 @@ function emitScript(script: ScriptDef, _pad: string, exported: boolean, trivia: 
   if (bodyKind === "fenced" || script.lang || script.body.includes("\n")) {
     const langTag = script.lang ?? "";
     lines.push(`${prefix}script ${script.name} = \`\`\`${langTag}`);
-    for (const bl of script.body.split("\n")) {
-      lines.push(bl);
-    }
+    lines.push(...emitFencedScriptBodyLines(script.body, pad));
     lines.push("```");
   } else {
     lines.push(`${prefix}script ${script.name} = \`${script.body}\``);
@@ -367,21 +365,25 @@ function formatArgs(args: Arg[] | undefined): string {
   return args.map((a) => (a.kind === "var" ? a.name : a.raw)).join(", ");
 }
 
+/** Re-indent a dedented fenced script body for readable `.jh` output. */
+function emitFencedScriptBodyLines(body: string, lineIndent: string): string[] {
+  return body.split("\n").map((line) => (line.length === 0 ? "" : `${lineIndent}${line}`));
+}
+
 function emitInlineScriptLines(
   prefix: string,
   body: string,
   lang: string | undefined,
   args: Arg[] | undefined,
-  ci?: string,
+  closeIndent: string,
+  bodyIndent: string,
 ): string[] {
   const argsStr = formatArgs(args);
   if (lang || body.includes("\n")) {
     const langTag = lang ?? "";
     const result = [`${prefix} \`\`\`${langTag}`];
-    for (const bl of body.split("\n")) {
-      result.push(bl);
-    }
-    result.push(`${ci ?? ""}\`\`\`(${argsStr})`);
+    result.push(...emitFencedScriptBodyLines(body, bodyIndent));
+    result.push(`${closeIndent}\`\`\`(${argsStr})`);
     return result;
   }
   return [`${prefix} \`${body}\`(${argsStr})`];
@@ -447,8 +449,8 @@ function emitExprFirstLine(
   if (expr.kind === "inline_script") {
     if (expr.lang || expr.body.includes("\n")) {
       const langTag = expr.lang ?? "";
-      const tail: string[] = [];
-      for (const bl of expr.body.split("\n")) tail.push(bl);
+      const bodyIndent = `${ci}${pad}`;
+      const tail = emitFencedScriptBodyLines(expr.body, bodyIndent);
       tail.push(`${ci}\`\`\`(${formatArgs(expr.args)})`);
       return { head: `run \`\`\`${langTag}`, tail };
     }
@@ -520,7 +522,9 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string, tri
     }
     const verb = step.level;
     if (message.kind === "inline_script") {
-      lines.push(...emitInlineScriptLines(`${ci}${verb} run`, message.body, message.lang, message.args, ci));
+      lines.push(
+        ...emitInlineScriptLines(`${ci}${verb} run`, message.body, message.lang, message.args, ci, `${ci}${pad}`),
+      );
       return lines;
     }
     if (message.kind === "literal") {
@@ -610,15 +614,9 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string, tri
       return lines;
     }
     if (body.kind === "inline_script") {
-      const argsStr = formatArgs(body.args);
-      if (body.lang || body.body.includes("\n")) {
-        const langTag = body.lang ?? "";
-        lines.push(`${ci}${capture}run \`\`\`${langTag}`);
-        for (const bl of body.body.split("\n")) lines.push(bl);
-        lines.push(`${ci}\`\`\`(${argsStr})`);
-      } else {
-        lines.push(`${ci}${capture}run \`${body.body}\`(${argsStr})`);
-      }
+      lines.push(
+        ...emitInlineScriptLines(`${ci}${capture}run`, body.body, body.lang, body.args, ci, `${ci}${pad}`),
+      );
       return lines;
     }
     if (body.kind === "prompt") {

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parseFencedBlock } from "./fence";
+import { parseFencedBlock, parseFencedScriptBlock } from "./fence";
 
 test("fence: basic body extraction", () => {
   const lines = ["```", "line one", "line two", "```"];
@@ -46,10 +46,31 @@ test("fence: fenceLineIdx not at start", () => {
   assert.equal(result.nextIdx, 4);
 });
 
-test("fence: preserves script body indentation (no margin strip)", () => {
+test("fence: raw body extraction keeps source indentation", () => {
   const lines = ["```", "  indented", "    more", "```"];
   const result = parseFencedBlock("test.jh", lines, 0);
   assert.equal(result.body, "  indented\n    more");
+});
+
+test("fenced script block: dedents common leading whitespace", () => {
+  const lines = [
+    "```",
+    "  line1",
+    "    line2",
+    "  cat <<'EOF'",
+    "  content",
+    "  EOF",
+    "```",
+  ];
+  const result = parseFencedScriptBlock("test.jh", lines, 0);
+  assert.equal(result.body, "line1\n  line2\ncat <<'EOF'\ncontent\nEOF");
+});
+
+test("fenced script block: python3 lang tag with uniform margin", () => {
+  const lines = ["```python3", "  import sys", "  print(sys.argv[1])", "```"];
+  const result = parseFencedScriptBlock("test.jh", lines, 0);
+  assert.equal(result.body, "import sys\nprint(sys.argv[1])");
+  assert.equal(result.lang, "python3");
 });
 
 test("fence: error on unterminated fence", () => {

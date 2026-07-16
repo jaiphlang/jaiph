@@ -1,3 +1,4 @@
+import { dedentCommonLeadingWhitespace } from "./dedent";
 import { fail } from "./core";
 
 /**
@@ -44,4 +45,22 @@ export function parseFencedBlock(
   }
 
   fail(filePath, "unterminated fenced block: no closing ``` before end of file", lineNo);
+}
+
+/** Remove the block's common leading margin so indented `.jh` script bodies run correctly. */
+export function dedentFencedScriptBody(body: string): string {
+  return dedentCommonLeadingWhitespace(body);
+}
+
+/**
+ * Parse a fenced script / inline-script block and return a dedented body suitable
+ * for emission and execution (heredoc delimiters, Python module indent, etc.).
+ */
+export function parseFencedScriptBlock(
+  filePath: string,
+  lines: string[],
+  fenceLineIdx: number,
+): { body: string; lang?: string; afterClose: string; nextIdx: number } {
+  const parsed = parseFencedBlock(filePath, lines, fenceLineIdx);
+  return { ...parsed, body: dedentFencedScriptBody(parsed.body) };
 }

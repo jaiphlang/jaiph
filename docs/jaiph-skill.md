@@ -146,7 +146,7 @@ print(json.load(open(sys.argv[1]))["version"])
 
 Script semantics:
 
-- Bodies are **opaque** to the compiler — full shell/Python/whatever, heredocs included. The one check: do not call Jaiph symbols (`run`, `ensure`, workflow names) from inside a script body or `$(…)`.
+- Bodies are **opaque** to Jaiph orchestration — full shell/Python/whatever, heredocs included. The compiler strips the block's common leading whitespace at parse time (same idea as triple-quoted prompts); `jaiph format` re-adds one indent level for readability. The one check: do not call Jaiph symbols (`run`, `ensure`, workflow names) from inside a script body or `$(…)`.
 - **Capture = stdout.** `const v = run parse_json("pkg.json")` binds the script's stdout. Use `echo`/`printf` to return data; use exit codes (`return N` / `exit N`) for pass/fail.
 - **Arguments arrive as `$1`, `$2`, …** Module `const` values and workflow bindings are *not* exported into the subprocess environment — pass them explicitly as arguments.
 - Alternatively a manual `#!` shebang as the first body line selects the interpreter (mutually exclusive with a fence tag).
