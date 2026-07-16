@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runWorkflow } from "./run";
 import { _dockerExec, _dockerSpawn } from "../../runtime/docker";
+import { UNSAFE_RUN_LOGWARN_MESSAGE } from "../../runtime/docker-inplace";
 
 const MIN_WORKFLOW = `workflow default() {\n  log "hi"\n}\n`;
 
@@ -147,6 +148,8 @@ test("runWorkflow: --unsafe --yes on non-TTY skips confirmation and runs host-on
   }
   assert.equal(code, 0, `--unsafe --yes should proceed and pass; stderr:\n${cap.stderr()}`);
   assert.ok(!cap.stderr().includes("E_UNSAFE_NO_CONFIRM"), "must not abort on confirmation");
+  assert.ok(cap.stdout().includes("Docker sandbox, unsafe"), "unsafe banner names the mode");
+  assert.ok(cap.stdout().includes(UNSAFE_RUN_LOGWARN_MESSAGE), "unsafe run emits startup logwarn");
 });
 
 // ---------------------------------------------------------------------------

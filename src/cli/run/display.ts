@@ -14,10 +14,12 @@ export function formatJaiphRunningBannerLines(
   dockerEnabled: boolean,
   sandboxMode: SandboxMode | null,
   colorEnabled: boolean,
+  /** True when the user opted into `--unsafe` / `JAIPH_UNSAFE=true` (not win32 / explicit Docker off). */
+  unsafeMode = false,
 ): string {
   let parenInner: string;
   if (!dockerEnabled) {
-    parenInner = "no sandbox";
+    parenInner = unsafeMode ? "Docker sandbox, unsafe" : "no sandbox";
   } else if (sandboxMode === "overlay") {
     parenInner = "Docker sandbox, fusefs";
   } else if (sandboxMode === "inplace") {
