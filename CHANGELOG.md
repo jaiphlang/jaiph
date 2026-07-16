@@ -3,8 +3,11 @@
 ## Summary
 
 - **`log` / `logerr` / `logwarn`:** three say-level keywords for run-tree output — `log` writes to stdout with a dim `ℹ`, `logerr` writes to stderr with a red `!`, and the new `logwarn` writes to stderr with a yellow `⚠`. All three emit matching live events (`LOG`, `LOGERR`, `LOGWARN`) and land in `run_summary.jsonl`.
+- **Idle leaf-step output warnings:** running script and prompt steps emit a yellow `⚠` `LOGWARN` when they stop producing stdout/stderr for three minutes (configurable; distinct from wall-clock heartbeats and prompt kill timeouts).
 
 ## All changes
+
+- **Feat — Leaf script/prompt idle output warnings:** When a leaf script or prompt step produces no stdout/stderr for `JAIPH_STEP_IDLE_WARN_SEC` (default `180`; `0` disables), the runtime emits a `LOGWARN` with text like `script quiet: no output for 180s` — meaning the step has gone silent after any initial output, not that it is waiting to start. Detection lives in the runtime (`createStepIdleOutputWarn` in `src/runtime/kernel/step-idle-warn.ts`) because only leaf executors see streaming chunks; workflow container steps are excluded. Hooks: `executeManagedStep` when `kind === "script"` (named scripts, inline scripts, and shell lines) and `runPromptStep` per backend attempt. Poll cadence defaults to 5s (`JAIPH_STEP_IDLE_WARN_CHECK_MS`). The CLI renders these as yellow `⚠` lines via the `LOGWARN` path added for `logwarn`. Tests: `src/runtime/kernel/step-idle-warn.test.ts`, `e2e/tests/143_step_idle_warn.sh`. Docs: `docs/cli.md`, `docs/env-vars.md`.
 
 - **Feat — `logwarn` keyword:** A new `logwarn` say-level keyword mirrors `log` / `logerr` end-to-end — parser (`tryParseLogwarn` / `STATEMENT.logwarn` in `src/parse/workflow-brace.ts`), validator (same string rules as `logerr`), formatter/emitter, runtime (`say` with `level: "logwarn"` writes stderr + `.err` artifacts and emits `LOGWARN` via `RuntimeEventEmitter.emitLog`), and CLI display (yellow `⚠` prefix in `stderr-handler.ts`). Bare-identifier and triple-quoted forms work the same as `log` / `logerr`. Tests: `e2e/tests/142_logwarn.sh`, unit updates in `events.test.ts` / `progress.test.ts`, golden AST fixture `log.jh`. Docs: `docs/language.md`, `docs/grammar.md`, `docs/cli.md` (`LOGWARN` event type and tree marker table).
 

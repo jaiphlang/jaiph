@@ -61,6 +61,8 @@ The table below covers every `JAIPH_*` name read from `process.env` / `env` in `
 | `JAIPH_MODULE_GRAPH_FILE` | internal | path | — | — | Absolute path to the serialized `ModuleGraph` JSON. Set by the CLI only on the default local (non-Docker, non-`--raw`) `jaiph run` path. |
 | `JAIPH_NON_TTY_HEARTBEAT_FIRST_SEC` | host | int (seconds) | `60` | — | Seconds before the first non-TTY heartbeat line. |
 | `JAIPH_NON_TTY_HEARTBEAT_INTERVAL_MS` | host | int (ms; floor `250`) | `30000` | — | Minimum interval between subsequent non-TTY heartbeat lines. |
+| `JAIPH_STEP_IDLE_WARN_SEC` | runtime | int (seconds) | `180` | — | Seconds without stdout/stderr from a leaf script or prompt step before emitting a `LOGWARN` idle warning (`0` disables). |
+| `JAIPH_STEP_IDLE_WARN_CHECK_MS` | runtime | int (ms; floor `250`) | `5000` | — | Poll interval for leaf-step idle warnings. |
 | `JAIPH_PRECEDING_FILES` | host | string | — | — | Removed from the product. Stripped from the launched env. |
 | `JAIPH_PROMPT_COMPLETION_GRACE_SECONDS` | runtime | int (seconds) | `30` | — | Prompt watchdog — once the backend emits its terminal `result` event, the grace period it may take to exit before Jaiph terminates it and returns success. Guards the case where `claude -p` finishes the work but never exits. `0` disables. |
 | `JAIPH_PROMPT_FINAL_FILE` | runtime | path | — | — | Optional path; when set, `executePrompt` writes the final assistant message there. Jaiph does not set this automatically. |
