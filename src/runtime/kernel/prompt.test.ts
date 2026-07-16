@@ -12,6 +12,8 @@ import {
   installPromptWatchdog,
   prepareClaudeEnv,
   resolveConfig,
+  modelForStepEvent,
+  BACKEND_DEFAULT_MODEL_LABEL,
   resolveModel,
   resolvePromptConfig,
   type PromptConfig,
@@ -145,6 +147,20 @@ describe("resolveModel", () => {
     const res = resolveModel(makeConfig({ model: "explicit-model", cursorFlags: ["--model", "flags-model"] }));
     assert.equal(res.model, "explicit-model");
     assert.equal(res.reason, "explicit");
+  });
+});
+
+describe("modelForStepEvent", () => {
+  it("returns explicit and flags models unchanged", () => {
+    assert.equal(modelForStepEvent({ model: "sonnet", reason: "explicit" }), "sonnet");
+    assert.equal(modelForStepEvent({ model: "gpt-3.5", reason: "flags" }), "gpt-3.5");
+  });
+
+  it("returns default label when backend auto-selects", () => {
+    assert.equal(
+      modelForStepEvent({ model: "", reason: "backend-default" }),
+      BACKEND_DEFAULT_MODEL_LABEL,
+    );
   });
 });
 

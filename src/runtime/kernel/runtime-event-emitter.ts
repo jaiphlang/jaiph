@@ -22,7 +22,7 @@ export type PromptStepHandle = {
   outFile: string;
   errFile: string;
   backend: string;
-  /** Effective model for this invocation (empty when the backend auto-selects). */
+  /** Run-tree model label (`default` when the backend auto-selects; empty for non-prompt steps). */
   model: string;
   startedAtMs: number;
 };
@@ -149,8 +149,7 @@ export class RuntimeEventEmitter {
       func: "prompt",
       kind: "prompt",
       name: backend,
-      // Effective model so the display layer can render `prompt <backend> <model>`
-      // without re-reading PROMPT_START; empty when the backend auto-selects.
+      // Run-tree model label (`default` when the backend auto-selects; see modelForStepEvent).
       model,
       ts: nowIso(),
       status: null,

@@ -138,8 +138,8 @@ test.describe.serial('docs landing page', () => {
       const expected = normalizeTryItOutForAssert(
         [
           'workflow default',
-          '  ▸ prompt cursor "Say: Hello, I am [model ..."',
-          '  ✓ prompt cursor (<time>)',
+          '  ▸ prompt cursor default "Say: Hello, I am [model ..."',
+          '  ✓ prompt cursor default (<time>)',
           '  ℹ Hello, I am Composer!',
           '✓ PASS workflow default (<time>)',
         ].join('\n'),
