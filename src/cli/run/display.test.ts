@@ -26,11 +26,11 @@ test("formatJaiphRunningBannerLines: Docker copy shows tmp workspace (no color)"
   assert.equal(s, "\nJaiph: Running say_hello.jh (Docker sandbox, tmp workspace)\n\n");
 });
 
-test("formatJaiphRunningBannerLines: Docker inplace shows live host edits, distinct from overlay/copy", () => {
+test("formatJaiphRunningBannerLines: Docker inplace shows in-place, distinct from overlay/copy", () => {
   const sInplace = formatJaiphRunningBannerLines("say_hello.jh", true, "inplace", false);
   const sOverlay = formatJaiphRunningBannerLines("say_hello.jh", true, "overlay", false);
   const sCopy = formatJaiphRunningBannerLines("say_hello.jh", true, "copy", false);
-  assert.equal(sInplace, "\nJaiph: Running say_hello.jh (Docker sandbox, in-place (live host edits))\n\n");
+  assert.equal(sInplace, "\nJaiph: Running say_hello.jh (Docker sandbox, in-place)\n\n");
   assert.notEqual(sInplace, sOverlay);
   assert.notEqual(sInplace, sCopy);
 });
