@@ -31,7 +31,7 @@ export function formatJaiphRunningBannerLines(
 
 export function colorize(
   text: string,
-  code: "dim" | "bold" | "green" | "red",
+  code: "dim" | "bold" | "green" | "red" | "yellow",
   colorEnabled: boolean,
 ): string {
   if (!colorEnabled) return text;
@@ -39,12 +39,13 @@ export function colorize(
     code === "dim" ? "\u001b[2m"
     : code === "bold" ? "\u001b[1m"
     : code === "green" ? "\u001b[32m"
+    : code === "yellow" ? "\u001b[33m"
     : "\u001b[31m";
   return `${prefix}${text}\u001b[0m`;
 }
 
 /**
- * Normalize log/logerr message text before printing to a real terminal.
+ * Normalize log/logerr/logwarn message text before printing to a real terminal.
  * Agent and CLI output often contains `\r` and embedded SGR sequences; raw `\r`
  * moves the cursor and can erase the progress tree prefix, leaving fragments like `ℹ "`.
  */

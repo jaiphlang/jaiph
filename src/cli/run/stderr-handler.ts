@@ -223,7 +223,9 @@ export function registerTTYSubscriber(emitter: RunEmitter, ctx: TTYContext): voi
     const safeMessage = sanitizeMultilineLogForTerminal(logEvent.message);
     const logLabel = logEvent.type === "LOGERR"
       ? `${dimPrefix}${colorize(`! ${safeMessage}`, "red", ctx.colorEnabled)}`
-      : `${dimPrefix}${colorize("ℹ", "dim", ctx.colorEnabled)} ${safeMessage}`;
+      : logEvent.type === "LOGWARN"
+        ? `${dimPrefix}${colorize(`\u26a0 ${safeMessage}`, "yellow", ctx.colorEnabled)}`
+        : `${dimPrefix}${colorize("ℹ", "dim", ctx.colorEnabled)} ${safeMessage}`;
     writeTTYLine(logLabel, ctx);
   });
 

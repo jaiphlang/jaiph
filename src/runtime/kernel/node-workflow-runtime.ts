@@ -754,7 +754,7 @@ export class NodeWorkflowRuntime {
         } else if (step.message.kind === "literal") {
           const ir = await this.interpolateWithCaptures(step.message.raw, scope);
           if (!ir.ok) return this.mergeStepResult(accOut, accErr, ir.result);
-          message = step.level === "fail" || step.level === "logerr"
+          message = step.level === "fail" || step.level === "logerr" || step.level === "logwarn"
             ? stripOuterQuotes(ir.value)
             : ir.value;
         } else {
@@ -767,7 +767,10 @@ export class NodeWorkflowRuntime {
         if (step.level === "fail") {
           return this.mergeStepResult(accOut, accErr, { status: 1, output: "", error: message });
         }
-        const eventLevel = step.level === "log" ? "LOG" : "LOGERR";
+        const eventLevel =
+          step.level === "log" ? "LOG"
+          : step.level === "logwarn" ? "LOGWARN"
+          : "LOGERR";
         this.emitter.emitLog(eventLevel, message);
         const chunk = `${message}\n`;
         if (step.level === "log") {

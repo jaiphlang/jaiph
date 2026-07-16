@@ -336,7 +336,7 @@ function emitChannel(ch: ChannelDef): string {
   return `channel ${ch.name}`;
 }
 
-/** Bare-identifier form for `log <ident>` / `logerr <ident>`. */
+/** Bare-identifier form for `log <ident>` / `logerr <ident>` / `logwarn <ident>`. */
 function emitLogLiteralRhs(message: string): string {
   if (
     message.length >= 3 &&

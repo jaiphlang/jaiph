@@ -124,17 +124,19 @@ test("collectWorkflowChildren: collects prompt step with preview", () => {
   assert.equal(items[0].label, 'prompt "Pick one"');
 });
 
-test("collectWorkflowChildren: collects log / logerr / fail (say) rows", () => {
+test("collectWorkflowChildren: collects log / logerr / logwarn / fail (say) rows", () => {
   const mod = modFor([
     "workflow default() {",
     '  log "ok"',
     '  logerr "err"',
+    '  logwarn "warn"',
     '  fail "boom"',
     "}",
   ].join("\n"));
   const items = collectWorkflowChildren(mod, "default");
   assert.ok(items.some((i) => i.label.startsWith("ℹ ")));
   assert.ok(items.some((i) => i.label.startsWith("! ")));
+  assert.ok(items.some((i) => i.label.startsWith("\u26a0 ")));
   assert.ok(items.some((i) => i.label.startsWith("fail ")));
 });
 

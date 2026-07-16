@@ -137,6 +137,7 @@ export function collectWorkflowChildren(
       const msg = exprLabel(s.message);
       if (s.level === "log") return [{ label: `ℹ ${msg}` }];
       if (s.level === "logerr") return [{ label: `! ${msg}` }];
+      if (s.level === "logwarn") return [{ label: `\u26a0 ${msg}` }];
       return [{ label: `fail ${msg}` }];
     }
     if (s.type === "send") {

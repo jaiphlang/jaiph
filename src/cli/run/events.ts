@@ -30,7 +30,7 @@ export type StepEvent = {
 };
 
 export type LogEvent = {
-  type: "LOG" | "LOGERR";
+  type: "LOG" | "LOGERR" | "LOGWARN";
   message: string;
   depth: number;
   /** Chain of 1-based async branch indices (one per nested `run async` level). */
@@ -56,11 +56,11 @@ export function parseLogEvent(line: string): LogEvent | undefined {
   }
   try {
     const parsed = JSON.parse(line.slice(markerIndex + PREFIX.length)) as Record<string, unknown>;
-    if (!parsed || (parsed.type !== "LOG" && parsed.type !== "LOGERR")) {
+    if (!parsed || (parsed.type !== "LOG" && parsed.type !== "LOGERR" && parsed.type !== "LOGWARN")) {
       return undefined;
     }
     return {
-      type: parsed.type as "LOG" | "LOGERR",
+      type: parsed.type as "LOG" | "LOGERR" | "LOGWARN",
       message: typeof parsed.message === "string" ? parsed.message.replace(/^(?:\r?\n)+/, "") : "",
       depth: typeof parsed.depth === "number" ? parsed.depth : 0,
       async_indices: parseAsyncIndices(parsed),

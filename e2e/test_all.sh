@@ -43,6 +43,7 @@ TEST_SCRIPTS=(
   "e2e/tests/91_top_level_local.sh"
   "e2e/tests/92_custom_shebang_polyglot.sh"
   "e2e/tests/92_log_logerr.sh"
+  "e2e/tests/142_logwarn.sh"
   "e2e/tests/93_ensure_recover_payload.sh"
   "e2e/tests/93_inbox_stress.sh"
   "e2e/tests/94_parallel_shell_steps.sh"

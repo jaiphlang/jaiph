@@ -187,7 +187,7 @@ export type WorkflowStepDef =
     }
   | {
       type: "say";
-      level: "log" | "logerr" | "fail";
+      level: "log" | "logerr" | "logwarn" | "fail";
       message: Expr;
       loc: SourceLoc;
     }

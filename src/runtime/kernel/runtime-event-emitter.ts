@@ -194,7 +194,7 @@ export class RuntimeEventEmitter {
     });
   }
 
-  emitLog(type: "LOG" | "LOGERR", message: string): void {
+  emitLog(type: "LOG" | "LOGERR" | "LOGWARN", message: string): void {
     const depth = this.getFrameStack().length;
     const indices = this.getAsyncIndices();
     const liveBase: Record<string, unknown> = { type, message, depth };
