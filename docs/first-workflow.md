@@ -78,10 +78,9 @@ jaiph run --unsafe ./hello.jh "Adam"
 You should see this (timings will differ):
 
 ```text
-Jaiph: Running hello.jh (unsafe)
+Jaiph: Running hello.jh (Docker sandbox, unsafe)
 
-⚠ You are running the Jaiph workflow in the unsafe mode with no sandboxing. It has full access to your machine.
-
+  ⚠ You are running the Jaiph workflow in the unsafe mode with no sandboxing. It has full access to your machine.
 workflow default (who="Adam")
   ▸ script greet (1="Adam")
   ✓ script greet (0s)

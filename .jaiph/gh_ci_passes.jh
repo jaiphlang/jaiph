@@ -1,0 +1,98 @@
+#!/usr/bin/env jaiph
+
+#
+# Wait for GitHub Actions CI on the current branch, pull failure logs, and
+# loop with an agent until CI is green (or run.recover_limit is hit).
+#
+# Run as:
+#   jaiph run --unsafe --env GITHUB_TOKEN .jaiph/gh_ci_passes.jh
+#   jaiph run --unsafe --env GITHUB_TOKEN .jaiph/gh_ci_passes.jh -- my-feature-branch
+#
+# Requires: GH_TOKEN or GITHUB_TOKEN (via --env), jq, git, network access.
+# Each retry waits on HEAD after commit+push — do not pin an old commit here.
+#
+import "jaiphlang/gh_actions" as gh
+import "jaiphlang/git" as git
+import "./lib_common.jh" as common
+
+config {
+  agent.backend = "claude"
+  agent.claude_flags = "--permission-mode bypassPermissions"
+}
+
+script assert_nonempty_file_or_fail = ```
+  test -s "$1" || {
+    echo "jaiph: ci failure log is empty at $1" >&2
+    exit 1
+  }
+```
+
+workflow ensure_gh_ci_passes(branch, workflow_name) {
+  const ci_log_dir = ".jaiph/tmp"
+  const ci_log_file = "${ci_log_dir}/gh_ci_passes.last.log"
+  run common.mkdir_p_simple(ci_log_dir)
+
+  # Empty commit => always resolve HEAD, so each recover retry tracks the new
+  # push instead of re-checking a stale SHA.
+  const commit = ""
+
+  ensure gh.token_set()
+
+  run gh.check_ci(branch, commit, workflow_name, ci_log_file) recover (failure) {
+    run assert_nonempty_file_or_fail(ci_log_file)
+    log "CI failure summary: ${failure}"
+    prompt """
+      <role>
+        You are a software engineer fixing a failing GitHub Actions CI build.
+      </role>
+      <task>
+        Fix the code so the remote ${workflow_name} workflow passes on the
+        current branch. Failure output was saved to:
+        ${ci_log_file}
+
+        Start by reading the log file (for example:
+        tail -n 100 '${ci_log_file}') and then apply the smallest safe fix.
+
+        Constraints:
+        - e2e/tests/* and acceptance JS tests are behavior contracts.
+        - Default approach: change production code to satisfy existing tests,
+          not vice versa.
+        - Modify tests only for intentional behavior changes, incorrect
+          expectations, or removal of obsolete features.
+        - Any test change must be minimal with a clear rationale.
+        - Do NOT add speculative fixes. Fix only what the log shows is broken.
+        - Do NOT invoke Jaiph orchestration workflows from .jaiph/.
+      </task>
+    """
+    ensure git.in_git_repo()
+    prompt """
+      Commit and push the CI fix so GitHub Actions can re-run.
+
+      Requirements:
+      1. Review git status and git diff --stat.
+      2. Stage only relevant changes.
+      3. Create exactly one commit with a clear imperative message.
+      4. Push with: git push -u origin HEAD
+      5. Do not push unrelated changes or amend commits already on the remote.
+    """
+  }
+
+  run common.rm_file_simple(ci_log_file)
+}
+
+workflow pull_latest_logs(branch, workflow_name) {
+  const ci_log_dir = ".jaiph/tmp"
+  const ci_log_file = "${ci_log_dir}/gh_ci.latest.log"
+  run common.mkdir_p_simple(ci_log_dir)
+  run gh.pull_logs(branch, "", workflow_name, ci_log_file, "1")
+  run assert_nonempty_file_or_fail(ci_log_file)
+  return ci_log_file
+}
+
+workflow default(branch, workflow_name) {
+  const wf = match workflow_name {
+    "" => "CI"
+    _ => workflow_name
+  }
+  run ensure_gh_ci_passes(branch, wf)
+}
