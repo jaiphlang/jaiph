@@ -26,13 +26,15 @@ JAIPH_RUNS_DIR="${TEST_DIR}/runs_idle" \
   jaiph run "${TEST_DIR}/idle_warn.jh" >/tmp/jaiph-idle-out.txt 2>/tmp/jaiph-idle-err.txt
 
 out_content="$(< /tmp/jaiph-idle-out.txt)"
-e2e::assert_contains "${out_content}" "no output for" "idle warning mentions stalled output"
+e2e::assert_contains "${out_content}" "no new output for" "idle warning mentions stalled output"
 e2e::assert_contains "${out_content}" "script quiet" "idle warning names the leaf script step"
+warn_count="$(printf '%s' "${out_content}" | grep -c 'no new output for' || true)"
+[[ "${warn_count}" -ge 2 ]] || e2e::fail "expected incremental idle warnings during 3s silence (got ${warn_count})"
 
 run_dir="$(e2e::run_dir_at "${TEST_DIR}/runs_idle" "idle_warn.jh")"
 summary_file="${run_dir}run_summary.jsonl"
 summary_content="$(<"${summary_file}")"
 e2e::assert_contains "${summary_content}" "\"type\":\"LOGWARN\"" "summary includes idle LOGWARN event"
-e2e::assert_contains "${summary_content}" "no output for" "summary captures idle warning text"
+e2e::assert_contains "${summary_content}" "no new output for" "summary captures idle warning text"
 
 e2e::pass "leaf script idle output warning"
