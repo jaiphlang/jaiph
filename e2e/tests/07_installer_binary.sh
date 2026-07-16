@@ -182,3 +182,76 @@ case "${run_out}" in
   *"hello-from-local"*) e2e::pass "locally-built binary runs a workflow without node/npm/bun" ;;
   *) printf "%s\n" "${run_out}" >&2; e2e::fail "locally-built jaiph did not run sample.jh as expected" ;;
 esac
+
+# ── Reinstall over an in-use binary (macOS inode overwrite regression) ────────
+
+e2e::section "reinstall over existing jaiph while a child holds the old mapping"
+
+REINSTALL_BIN_DIR="${TEST_DIR}/bin-reinstall"
+mkdir -p "${REINSTALL_BIN_DIR}"
+
+JAIPH_BIN_DIR="${REINSTALL_BIN_DIR}" \
+  JAIPH_SKIP_DOCKER_BUILD=1 \
+  bash "${ROOT_DIR}/docs/install-from-local.sh" "${ROOT_DIR}" >/dev/null
+
+[ -x "${REINSTALL_BIN_DIR}/jaiph" ] || e2e::fail "initial install did not produce ${REINSTALL_BIN_DIR}/jaiph"
+
+# Hold the old binary mapped while we reinstall on top of the same path.
+"${REINSTALL_BIN_DIR}/jaiph" --version >/dev/null &
+held_pid=$!
+sleep 0.2
+
+JAIPH_BIN_DIR="${REINSTALL_BIN_DIR}" \
+  JAIPH_SKIP_DOCKER_BUILD=1 \
+  bash "${ROOT_DIR}/docs/install-from-local.sh" "${ROOT_DIR}" >/dev/null
+
+wait "${held_pid}" 2>/dev/null || true
+
+reinstall_version="$("${REINSTALL_BIN_DIR}/jaiph" --version 2>&1)" || reinstall_status=$?
+reinstall_status="${reinstall_status:-0}"
+if [ "${reinstall_status}" -ne 0 ]; then
+  printf 'reinstall left jaiph unexecutable (exit %s): %s\n' "${reinstall_status}" "${reinstall_version}" >&2
+  e2e::fail "reinstall over in-use jaiph must leave a runnable binary at the same path"
+fi
+e2e::pass "reinstall over in-use jaiph leaves a runnable binary"
+
+# ── Install path guards ───────────────────────────────────────────────────────
+
+if ! command -v bun >/dev/null 2>&1; then
+  e2e::skip "bun not installed — skipping install path guard checks"
+else
+
+e2e::section "installer refuses system bin directories"
+
+system_status=0
+system_output="$(
+  JAIPH_BIN_DIR="/usr/bin" \
+  JAIPH_SKIP_DOCKER_BUILD=1 \
+  bash "${ROOT_DIR}/docs/install-from-local.sh" "${ROOT_DIR}" 2>&1
+)" || system_status=$?
+e2e::assert_equals "${system_status}" "1" "system bin dir exits non-zero"
+e2e::assert_contains "${system_output}" "Refusing to install into system directory /usr/bin" \
+  "reports blocked system directory"
+if [ -e "/usr/bin/jaiph" ]; then
+  e2e::fail "installer must not create /usr/bin/jaiph"
+fi
+e2e::pass "system bin directory is rejected"
+
+e2e::section "installer refuses when target path is a directory"
+
+DIR_TARGET_BIN="${TEST_DIR}/bin-dir-target"
+mkdir -p "${DIR_TARGET_BIN}/jaiph"
+
+dir_status=0
+dir_output="$(
+  JAIPH_BIN_DIR="${DIR_TARGET_BIN}" \
+  JAIPH_SKIP_DOCKER_BUILD=1 \
+  bash "${ROOT_DIR}/docs/install-from-local.sh" "${ROOT_DIR}" 2>&1
+)" || dir_status=$?
+e2e::assert_equals "${dir_status}" "1" "directory target exits non-zero"
+e2e::assert_contains "${dir_output}" "Refusing to replace directory" \
+  "reports blocked directory target"
+[ -d "${DIR_TARGET_BIN}/jaiph" ] || e2e::fail "directory target must remain a directory"
+e2e::pass "directory target is not removed"
+
+fi

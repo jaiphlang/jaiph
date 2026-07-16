@@ -85,6 +85,17 @@ test("bash installer rejects Windows and points at the PowerShell installer", ()
   assert.match(BASH_INSTALLER, /Unsupported platform: \$\{uname_s\} \$\{uname_m\}/);
 });
 
+test("bash installer verifies the staging binary and replaces the target atomically", () => {
+  assert.match(BASH_INSTALLER, /install_jaiph_binary/, "uses atomic install helper");
+  assert.match(BASH_INSTALLER, /assert_safe_install_target/, "validates install paths before rm");
+  assert.match(BASH_INSTALLER, /assert_install_paths/, "validates JAIPH_BIN_DIR before build");
+  assert.match(BASH_INSTALLER, /Refusing to install into system directory/, "blocks system bin dirs");
+  assert.match(BASH_INSTALLER, /Refusing to replace directory/, "blocks replacing a directory target");
+  assert.match(BASH_INSTALLER, /rm -f "\$\{TARGET\}"/, "removes the old install path before mv");
+  assert.match(BASH_INSTALLER, /Binary verification failed/, "hard-fails when staging --version fails");
+  assert.doesNotMatch(BASH_INSTALLER, /2>\/dev\/null \|\| echo "jaiph \(local\)"/, "does not swallow --version failure");
+});
+
 test("both installers pin the same release ref", () => {
   const bashRef = BASH_INSTALLER.match(/JAIPH_REPO_REF:-(v\d+\.\d+\.\d+)/);
   const psRef = PS_INSTALLER.match(/else\s*\{\s*"(v\d+\.\d+\.\d+)"\s*\}/);

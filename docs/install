@@ -30,6 +30,90 @@ require_cmd() {
   fi
 }
 
+canonical_dir() {
+  local dir="$1"
+  mkdir -p "${dir}"
+  (cd "${dir}" && pwd)
+}
+
+# Refuse install/remove unless the target is exactly ${BIN_DIR}/jaiph (canonical).
+assert_install_paths() {
+  local bin_dir_canon target_canon
+
+  if [ -z "${BIN_DIR}" ]; then
+    print_error "JAIPH_BIN_DIR is empty"
+    exit 1
+  fi
+  if [[ "${BIN_DIR}" == *$'\n'* || "${BIN_DIR}" == *$'\r'* ]]; then
+    print_error "JAIPH_BIN_DIR must not contain newline characters"
+    exit 1
+  fi
+  if [ "$(basename "${TARGET}")" != "jaiph" ]; then
+    print_error "Install target basename must be jaiph (got $(basename "${TARGET}"))"
+    exit 1
+  fi
+
+  bin_dir_canon="$(canonical_dir "${BIN_DIR}")"
+  target_canon="${bin_dir_canon}/jaiph"
+
+  case "${bin_dir_canon}" in
+    /|/bin|/sbin|/usr/bin|/usr/sbin)
+      print_error "Refusing to install into system directory ${bin_dir_canon}"
+      echo "Set JAIPH_BIN_DIR to a user-owned directory (for example \$HOME/.local/bin)." >&2
+      exit 1
+      ;;
+  esac
+
+  BIN_DIR="${bin_dir_canon}"
+  TARGET="${target_canon}"
+
+  if [ -e "${TARGET}" ]; then
+    if [ -d "${TARGET}" ]; then
+      print_error "Refusing to replace directory at ${TARGET}"
+      exit 1
+    fi
+    if [ ! -f "${TARGET}" ]; then
+      print_error "Refusing to replace non-regular file at ${TARGET}"
+      exit 1
+    fi
+  fi
+}
+
+assert_safe_install_target() {
+  local source_path="$1"
+  assert_install_paths
+  if [ ! -f "${source_path}" ]; then
+    print_error "Install source is not a regular file: ${source_path}"
+    exit 1
+  fi
+}
+
+# Promote a built/downloaded binary to TARGET without overwriting in place.
+# cp onto an existing path reuses the inode; on macOS a running jaiph can leave
+# the new bytes at that path unexecutable (SIGKILL on --version). Verify in a
+# staging file, remove the old install path, then mv into place (fresh inode).
+install_jaiph_binary() {
+  local source_path="$1"
+  assert_safe_install_target "${source_path}"
+
+  local stage
+  stage="$(mktemp "${BIN_DIR}/.jaiph.install.XXXXXX")"
+  cp "${source_path}" "${stage}"
+  chmod 755 "${stage}"
+
+  local version_out=""
+  if ! version_out="$("${stage}" --version 2>&1)"; then
+    rm -f "${stage}"
+    print_error "Binary verification failed (${stage} --version)"
+    echo "${version_out}" >&2
+    exit 1
+  fi
+
+  rm -f "${TARGET}"
+  mv "${stage}" "${TARGET}"
+  printf '%s\n' "${version_out}"
+}
+
 # Local-source mode: JAIPH_REPO_URL env or first arg is a local directory
 # containing a package.json. Both env and arg are accepted so callers can
 # supply the repo path either way (docs/install-from-local.sh uses both).
@@ -44,6 +128,7 @@ fi
 
 BIN_DIR="${JAIPH_BIN_DIR:-$HOME/.local/bin}"
 TARGET="${BIN_DIR}/jaiph"
+assert_install_paths
 
 echo ""
 echo -e "${BOLD}Jaiph installer${NC}"
@@ -77,11 +162,7 @@ if [ -n "${JAIPH_FROM_LOCAL}" ]; then
   fi
 
   print_step "Installing binary to ${TARGET}..."
-  mkdir -p "${BIN_DIR}"
-  cp "${tmp_dir}/src/dist/jaiph" "${TARGET}"
-  chmod 755 "${TARGET}"
-
-  JAIPH_VERSION="$("${TARGET}" --version 2>/dev/null || echo "jaiph (local)")"
+  JAIPH_VERSION="$(install_jaiph_binary "${tmp_dir}/src/dist/jaiph")"
   echo ""
   print_success "Installed ${JAIPH_VERSION} to ${TARGET}"
 else
@@ -161,11 +242,7 @@ else
   fi
 
   print_step "Installing binary to ${TARGET}..."
-  mkdir -p "${BIN_DIR}"
-  cp "${tmp_dir}/${BIN_NAME}" "${TARGET}"
-  chmod 755 "${TARGET}"
-
-  JAIPH_VERSION="$("${TARGET}" --version 2>/dev/null || echo "jaiph (${REPO_REF})")"
+  JAIPH_VERSION="$(install_jaiph_binary "${tmp_dir}/${BIN_NAME}")"
   echo ""
   print_success "Installed ${JAIPH_VERSION} to ${TARGET}"
 fi
