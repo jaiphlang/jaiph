@@ -958,13 +958,25 @@ export function spawnDockerProcess(opts: DockerSpawnOptions): DockerSpawnResult 
  * Force-stop and remove the named container. Best-effort and bounded so it is
  * safe to call inside a SIGINT/SIGTERM handler.
  *
- * Because Docker containers are spawned with `docker run --rm`, a `docker rm -f`
- * both kills and removes the container, guaranteeing it disappears from
- * `docker ps` even when the host `docker` client was interrupted without cleanly
- * tearing the container down (the reported orphaned-container failure mode).
+ * Two-step: `docker kill` first (sends SIGKILL, returns quickly once the signal
+ * is delivered — container disappears from `docker ps` within a second), then
+ * `docker rm -f` on the now-stopped container (fast because no process teardown
+ * is needed). Splitting kill from rm avoids the macOS Docker Desktop lock
+ * contention that can cause a single `docker rm -f` on a running container to
+ * block for the full 10-second execFileSync timeout when the host `docker run`
+ * client is also in the middle of its own SIGINT-triggered stop sequence.
  */
 export function stopDockerContainer(containerName: string | undefined): void {
   if (!containerName) return;
+  // Kill the container first — SIGKILL via daemon, returns as soon as the
+  // signal is queued. Container exits within milliseconds.
+  try {
+    _dockerExec.run(["kill", containerName], { stdio: "ignore", timeout: 5_000 });
+  } catch {
+    // Best-effort: the container may already be stopped or gone.
+  }
+  // Remove the (now-stopped) container record. Fast path: no live process to
+  // tear down, so this completes quickly even on macOS Docker Desktop.
   try {
     _dockerExec.run(["rm", "-f", containerName], { stdio: "ignore", timeout: 10_000 });
   } catch {

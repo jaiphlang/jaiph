@@ -59,7 +59,7 @@ function parseSecondsMs(raw: string | undefined, defaultMs: number): number {
 
 export type ModelResolution = {
   model: string;
-  reason: "explicit" | "flags" | "backend-default";
+  reason: "explicit" | "flags" | "backend-default" | "none";
 };
 
 /** Run-tree label when the backend CLI auto-selects a model (not passed to `--model`). */
@@ -87,6 +87,10 @@ export function resolveModel(config: PromptConfig): ModelResolution {
   // Codex has no CLI flags; model comes from explicit config or backend default only.
   if (config.backend === "codex") {
     return { model: "", reason: "backend-default" };
+  }
+  // Custom agent commands don't have a model concept — suppress the label.
+  if (isCustomCommand(config)) {
+    return { model: "", reason: "none" };
   }
   // Check if --model is embedded in backend-specific flags.
   const flags = config.backend === "claude" ? config.claudeFlags : config.cursorFlags;
