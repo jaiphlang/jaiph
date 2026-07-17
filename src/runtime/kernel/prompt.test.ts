@@ -1,6 +1,6 @@
 import { describe, it, afterEach } from "node:test";
 import * as assert from "node:assert/strict";
-import { chmodSync, existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { EventEmitter } from "node:events";
@@ -545,16 +545,21 @@ describe("prepareClaudeEnv", () => {
     }
   });
 
-  it("falls back to workspace-local claude config when default is not writable", () => {
+  it("falls back to ephemeral claude config under the run dir when default is not writable", () => {
     const root = mkdtempSync(join(tmpdir(), "jaiph-claude-env-fallback-"));
+    const runDir = join(root, "run");
+    mkdirSync(runDir, { recursive: true });
     try {
       const blockedPath = join(root, "blocked-config-path");
       writeFileSync(blockedPath, "not-a-directory");
-      const prepared = prepareClaudeEnv({ CLAUDE_CONFIG_DIR: blockedPath }, root);
+      const prepared = prepareClaudeEnv(
+        { CLAUDE_CONFIG_DIR: blockedPath, JAIPH_RUN_DIR: runDir },
+        join(root, "workspace"),
+      );
       assert.equal(prepared.error, undefined);
       assert.ok(prepared.warning);
-      assert.equal(prepared.env.CLAUDE_CONFIG_DIR, join(root, ".jaiph", "claude-config"));
-      assert.ok(existsSync(join(root, ".jaiph", "claude-config", "session-env")));
+      assert.equal(prepared.env.CLAUDE_CONFIG_DIR, join(runDir, "claude-config"));
+      assert.ok(existsSync(join(runDir, "claude-config", "session-env")));
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
