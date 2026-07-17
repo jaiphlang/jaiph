@@ -1099,10 +1099,9 @@ test("selectMcpSandboxMode: JAIPH_INPLACE truthy still selects inplace", () => {
   assert.equal(selectMcpSandboxMode({ JAIPH_INPLACE: "true" }), "inplace");
 });
 
-test("selectMcpSandboxMode: JAIPH_INPLACE=0 restores isolation (overlay/copy per host)", () => {
-  const expected = existsSync("/dev/fuse") ? "overlay" : "copy";
-  assert.equal(selectMcpSandboxMode({ JAIPH_INPLACE: "0" }), expected);
-  assert.equal(selectMcpSandboxMode({ JAIPH_INPLACE: "false" }), expected);
+test("selectMcpSandboxMode: JAIPH_INPLACE=0 restores isolation as copy (fuse skipped)", () => {
+  assert.equal(selectMcpSandboxMode({ JAIPH_INPLACE: "0" }), "copy");
+  assert.equal(selectMcpSandboxMode({ JAIPH_INPLACE: "false" }), "copy");
 });
 
 test("selectMcpSandboxMode: JAIPH_DOCKER_NO_OVERLAY=1 restores isolation as copy", () => {
