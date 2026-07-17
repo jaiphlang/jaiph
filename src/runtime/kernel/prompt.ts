@@ -3,7 +3,7 @@
 import { spawn as nodeSpawn, type ChildProcess } from "node:child_process";
 import { writeFileSync, readFileSync, existsSync, accessSync, mkdirSync, cpSync, constants as fsConstants } from "node:fs";
 import { basename, delimiter, join } from "node:path";
-import { homedir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { parseStream, type StreamWriter } from "./stream-parser";
 import { consumeNextMockResponse, dispatchMockArms, type MockPromptArm } from "./mock";
 import { killProcessTree } from "./portability";
@@ -253,7 +253,19 @@ type ClaudeEnvPreparation = {
 
 /**
  * Ensure Claude CLI has a writable config/session directory.
- * Falls back to workspace-local `.jaiph/claude-config` when home config is not writable.
+ * Falls back to the ephemeral run directory (or system temp) when home config is not writable.
+ */
+export function resolveClaudeFallbackConfigDir(execEnv: NodeJS.ProcessEnv): string {
+  const runDir = execEnv.JAIPH_RUN_DIR;
+  if (runDir) {
+    return join(runDir, "claude-config");
+  }
+  return join(tmpdir(), `jaiph-claude-${process.pid}`);
+}
+
+/**
+ * Ensure Claude CLI has a writable config/session directory.
+ * Falls back to an ephemeral directory when home config is not writable.
  */
 export function prepareClaudeEnv(execEnv: NodeJS.ProcessEnv, workspaceRoot: string): ClaudeEnvPreparation {
   // Final fallback to os.homedir() so USERPROFILE-only environments (Windows)
@@ -269,11 +281,11 @@ export function prepareClaudeEnv(execEnv: NodeJS.ProcessEnv, workspaceRoot: stri
         return { env: execEnv };
       }
     } catch {
-      // Fallback to workspace-local config.
+      // Fallback to ephemeral config under the run dir or system temp.
     }
   }
 
-  const fallbackConfigDir = join(workspaceRoot, ".jaiph", "claude-config");
+  const fallbackConfigDir = resolveClaudeFallbackConfigDir(execEnv);
   try {
     mkdirSync(fallbackConfigDir, { recursive: true });
     // Seed the fallback with the user's existing config (auth, settings) so the
@@ -304,7 +316,7 @@ export function prepareClaudeEnv(execEnv: NodeJS.ProcessEnv, workspaceRoot: stri
       env: { ...execEnv, CLAUDE_CONFIG_DIR: fallbackConfigDir },
       warning:
         `jaiph: Claude config dir '${configuredDir || "<unset>"}' is not writable; ` +
-        `using workspace fallback '${fallbackConfigDir}'.`,
+        `using ephemeral fallback '${fallbackConfigDir}'.`,
     };
   } catch {
     return {
