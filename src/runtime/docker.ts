@@ -395,16 +395,18 @@ export function selectSandboxMode(env: Record<string, string | undefined>): Sand
  * unless the caller explicitly opts back into isolation via env:
  *  - `JAIPH_INPLACE` truthy → inplace (same as `selectSandboxMode`).
  *  - `JAIPH_INPLACE` present but falsy (e.g. `0`), or `JAIPH_DOCKER_NO_OVERLAY`
- *    set → explicit isolation request: defer to `selectSandboxMode`, which
- *    returns overlay/copy (never inplace here, since JAIPH_INPLACE is not
- *    truthy) so the workspace is sandboxed again.
+ *    set → explicit isolation request: always "copy". Overlay mode is skipped
+ *    here even when `/dev/fuse` is present on the host — fuse-overlayfs inside
+ *    a container is not reliably available in all Docker environments (e.g.
+ *    GitHub Actions Ubuntu runners), and the isolation guarantee is the same
+ *    with a workspace clone. Copy mode is the safe portable default.
  *  - Nothing set → inplace (the MCP default).
  */
 export function selectMcpSandboxMode(env: Record<string, string | undefined>): SandboxMode {
   const inplaceRaw = env.JAIPH_INPLACE;
   if (inplaceRaw === "1" || inplaceRaw === "true") return "inplace";
   const isolationRequested = inplaceRaw !== undefined || env.JAIPH_DOCKER_NO_OVERLAY !== undefined;
-  if (isolationRequested) return selectSandboxMode(env);
+  if (isolationRequested) return "copy";
   return "inplace";
 }
 
