@@ -52,6 +52,8 @@ jobs:
       # Host/safe split applies on Ubuntu only. macOS runners do not ship Docker the same way — keep host-only there.
       # "docker": unset JAIPH_UNSAFE so resolveDockerConfig enables the sandbox (pulls ghcr.io/jaiphlang/jaiph-runtime).
       # "host": explicit opt-out, same as a fast local `JAIPH_UNSAFE=true npm run test:e2e`.
+      # fuse-overlayfs inside nested Docker on GHA Ubuntu is unreliable — force copy for all sandbox runs.
+      JAIPH_DOCKER_NO_OVERLAY: ${{ matrix.label == 'docker' && '1' || '' }}
       JAIPH_UNSAFE: ${{ matrix.jaiph_unsafe }}
     strategy:
       fail-fast: false
@@ -90,6 +92,7 @@ jobs:
     name: Getting started (local)
     runs-on: ubuntu-latest
     env:
+      JAIPH_DOCKER_NO_OVERLAY: "1"
       CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
       CURSOR_TOKEN: ${{ secrets.CURSOR_TOKEN }}
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
