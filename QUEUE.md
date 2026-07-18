@@ -14,37 +14,6 @@ Process rules:
 
 ***
 
-## Feat: `else if` chaining sugar for workflow `if` statements #dev-ready
-
-**Problem:** Multi-way branching today requires nested `if` inside `else` or switching to `match`. The parser explicitly rejects `} else if cond {` with `E_PARSE` (`"else if" chaining is not supported"`). This is the main ergonomic gap for imperative two-or-more-way branches that should stay statements (not value-producing `match`).
-
-**Required behavior:**
-
-* Accept `} else if <subject> <op> <operand> { … }` chains after an `if` body, with the same condition grammar as a top-level `if` (`==`, `!=`, `=~`, `!~`; string or regex operand; bare `IDENT` or `IDENT.IDENT` subject).
-* Allow arbitrary depth: `if … { } else if … { } else if … { } else { }`.
-* `} else {` same-line rule unchanged; only the `else if` token sequence is new sugar.
-* Desugar to nested `if`/`else` at parse time (no new runtime step type). AST shape should match what a human-written nested tree would produce so existing runtime paths keep working.
-* `else if` remains **statement-only** — no value production; `const x = if …` stays invalid.
-* Invalid forms stay `E_PARSE`: `else if` without preceding `if`, `else if` on its own line (if that violates the existing `} else {` same-line invariant — document the chosen rule), empty `else if` body.
-
-**Implementation sketch:**
-
-* `src/parse/workflow-brace.ts` — replace the `else if` rejection in `parseBlockSteps` / `tryParseIf` with a loop or recursive descent that consumes `else if` arms then optional final `else`.
-* `src/format/emit.ts` — emit `else if` when the nested AST matches the sugar shape (round-trip test).
-* `docs/grammar.md` and `docs/language.md` — document `else if` chains; remove “not supported” wording.
-
-Acceptance:
-
-* `jaiph compile` accepts a workflow with `if a == "x" { … } else if a == "y" { … } else { … }` and a rule with the same shape.
-* **E2E** `e2e/tests/NNN_if_else_if_chain.sh`: three-arm chain executes exactly one branch; full stdout tree via `e2e::expect_stdout`.
-* **Parser unit test** in `src/parse/parse-steps.test.ts` (or sibling): `else if` chain AST equals manually nested `if`/`else` equivalent.
-* **Negative parse test:** `} \n else if` or malformed `else if` without condition still yields `E_PARSE`.
-* **Golden AST** fixture `test-fixtures/golden-ast/fixtures/if-else-if.jh` + expected JSON updated.
-* `jaiph format` round-trips an `else if` chain without rewriting it into nested form (or documents intentional normalization — prefer preserving `else if` when author wrote it).
-* `npm test` and `npm run test:e2e` pass.
-
-***
-
 ## Feat: match pattern alternation (`"a" | "b" => …`) #dev-ready
 
 **Problem:** CLI dispatch and enum-style branching duplicate `match` arms (`"" => …` and `"check" => …` running the same body). The grammar allows only one pattern per arm: string literal, regex, or `_`.

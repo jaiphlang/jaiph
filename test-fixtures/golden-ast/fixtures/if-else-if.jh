@@ -1,0 +1,21 @@
+rule classify(kind) {
+  if kind == "a" {
+    log "a"
+  } else if kind == "b" {
+    log "b"
+  } else {
+    log "other"
+  }
+}
+
+workflow default(status) {
+  if status == "ok" {
+    log "healthy"
+  } else if status == "warn" {
+    logwarn "degraded"
+  } else if status == "down" {
+    logerr "unhealthy"
+  } else {
+    log "unknown: ${status}"
+  }
+}

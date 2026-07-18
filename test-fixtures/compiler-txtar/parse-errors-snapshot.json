@@ -1980,12 +1980,26 @@
     "code": "E_PARSE",
     "message": "\"else\" must appear on the same line as the closing \"}\" of an \"if\" block (e.g., \"} else {\")"
   },
-  "if/else if chaining not supported": {
+  "else if on its own line without preceding closing brace": {
+    "file": "input.jh",
+    "line": 5,
+    "col": 3,
+    "code": "E_PARSE",
+    "message": "\"else if\" must appear on the same line as the closing \"}\" of the preceding \"if\" block (e.g., \"} else if ...\")"
+  },
+  "else if with empty body is E_PARSE": {
     "file": "input.jh",
     "line": 4,
-    "col": 5,
+    "col": 10,
     "code": "E_PARSE",
-    "message": "\"else if\" chaining is not supported; nest an \"if\" inside the \"else\" block, or use \"match\" for multi-way branching"
+    "message": "\"else if\" body cannot be empty"
+  },
+  "else if without a condition is E_PARSE": {
+    "file": "input.jh",
+    "line": 4,
+    "col": 10,
+    "code": "E_PARSE",
+    "message": "invalid if syntax; expected: if <identifier> <op> <operand> { ... } where op is ==, !=, =~, or !~ and operand is \"string\" or /regex/"
   },
   "inline script recover and catch on same step rejected": {
     "file": "input.jh",

@@ -2545,16 +2545,38 @@ workflow default() {
   }
 }
 
-=== if/else if chaining not supported
-# @expect error E_PARSE "chaining is not supported" @4:5
+=== else if on its own line without preceding closing brace
+# @expect error E_PARSE "must appear on the same line as the closing" @5:3
+--- input.jh
+workflow default(x) {
+  if x == "a" {
+    log "a"
+  }
+  else if x == "b" {
+    log "b"
+  }
+}
+
+=== else if with empty body is E_PARSE
+# @expect error E_PARSE "body cannot be empty" @4:10
 --- input.jh
 workflow default(x) {
   if x == "a" {
     log "a"
   } else if x == "b" {
-    log "b"
   } else {
     log "c"
+  }
+}
+
+=== else if without a condition is E_PARSE
+# @expect error E_PARSE "invalid if syntax" @4:10
+--- input.jh
+workflow default(x) {
+  if x == "a" {
+    log "a"
+  } else if {
+    log "b"
   }
 }
 

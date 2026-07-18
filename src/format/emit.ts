@@ -488,6 +488,14 @@ function emitExprFirstLine(
   return { head: expr.ref.value, tail: [] };
 }
 
+/** Render the `<subject> <op> <operand>` head shared by `if` and `else if`. */
+function ifHead(step: Extract<WorkflowStepDef, { type: "if" }>): string {
+  const operandStr = step.operand.kind === "string_literal"
+    ? `"${step.operand.value}"`
+    : `/${step.operand.source}/`;
+  return `${step.subject} ${step.operator} ${operandStr}`;
+}
+
 function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string, trivia: Trivia): string[] {
   const lines: string[] = [];
   const ci = currentIndent;
@@ -672,14 +680,21 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string, tri
   }
 
   if (step.type === "if") {
-    const operandStr = step.operand.kind === "string_literal"
-      ? `"${step.operand.value}"`
-      : `/${step.operand.source}/`;
-    lines.push(`${ci}if ${step.subject} ${step.operator} ${operandStr} {`);
+    // Emit an `if` and any `else if` / `else` arms. A single-`if` `elseBody` is
+    // the desugared shape of an `else if` arm, so collapse it back to `} else if`
+    // rather than a nested `} else { if … }` block (round-trips author sugar).
+    lines.push(`${ci}if ${ifHead(step)} {`);
     lines.push(...emitSteps(step.body, pad, ci + pad, trivia));
-    if (step.elseBody) {
+    let cur = step;
+    while (cur.elseBody && cur.elseBody.length === 1 && cur.elseBody[0].type === "if") {
+      const arm = cur.elseBody[0];
+      lines.push(`${ci}} else if ${ifHead(arm)} {`);
+      lines.push(...emitSteps(arm.body, pad, ci + pad, trivia));
+      cur = arm;
+    }
+    if (cur.elseBody) {
       lines.push(`${ci}} else {`);
-      lines.push(...emitSteps(step.elseBody, pad, ci + pad, trivia));
+      lines.push(...emitSteps(cur.elseBody, pad, ci + pad, trivia));
     }
     lines.push(`${ci}}`);
     return lines;
