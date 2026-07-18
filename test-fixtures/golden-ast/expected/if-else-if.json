@@ -1,0 +1,149 @@
+{
+  "channels": [],
+  "exports": [],
+  "imports": [],
+  "rules": [
+    {
+      "comments": [],
+      "name": "classify",
+      "params": [
+        "kind"
+      ],
+      "steps": [
+        {
+          "body": [
+            {
+              "level": "log",
+              "message": {
+                "kind": "literal",
+                "raw": "a"
+              },
+              "type": "say"
+            }
+          ],
+          "elseBody": [
+            {
+              "body": [
+                {
+                  "level": "log",
+                  "message": {
+                    "kind": "literal",
+                    "raw": "b"
+                  },
+                  "type": "say"
+                }
+              ],
+              "elseBody": [
+                {
+                  "level": "log",
+                  "message": {
+                    "kind": "literal",
+                    "raw": "other"
+                  },
+                  "type": "say"
+                }
+              ],
+              "operand": {
+                "kind": "string_literal",
+                "value": "b"
+              },
+              "operator": "==",
+              "subject": "kind",
+              "type": "if"
+            }
+          ],
+          "operand": {
+            "kind": "string_literal",
+            "value": "a"
+          },
+          "operator": "==",
+          "subject": "kind",
+          "type": "if"
+        }
+      ]
+    }
+  ],
+  "scripts": [],
+  "workflows": [
+    {
+      "comments": [],
+      "name": "default",
+      "params": [
+        "status"
+      ],
+      "steps": [
+        {
+          "body": [
+            {
+              "level": "log",
+              "message": {
+                "kind": "literal",
+                "raw": "healthy"
+              },
+              "type": "say"
+            }
+          ],
+          "elseBody": [
+            {
+              "body": [
+                {
+                  "level": "logwarn",
+                  "message": {
+                    "kind": "literal",
+                    "raw": "degraded"
+                  },
+                  "type": "say"
+                }
+              ],
+              "elseBody": [
+                {
+                  "body": [
+                    {
+                      "level": "logerr",
+                      "message": {
+                        "kind": "literal",
+                        "raw": "unhealthy"
+                      },
+                      "type": "say"
+                    }
+                  ],
+                  "elseBody": [
+                    {
+                      "level": "log",
+                      "message": {
+                        "kind": "literal",
+                        "raw": "unknown: ${status}"
+                      },
+                      "type": "say"
+                    }
+                  ],
+                  "operand": {
+                    "kind": "string_literal",
+                    "value": "down"
+                  },
+                  "operator": "==",
+                  "subject": "status",
+                  "type": "if"
+                }
+              ],
+              "operand": {
+                "kind": "string_literal",
+                "value": "warn"
+              },
+              "operator": "==",
+              "subject": "status",
+              "type": "if"
+            }
+          ],
+          "operand": {
+            "kind": "string_literal",
+            "value": "ok"
+          },
+          "operator": "==",
+          "subject": "status",
+          "type": "if"
+        }
+      ]
+    }
+  ]
+}

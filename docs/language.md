@@ -51,7 +51,7 @@ There are eight `WorkflowStepDef` variants. Every body line that does not match 
 | `return` | `return <expr>` | Set the managed return value. |
 | `send` | `channel <- <expr>` | Enqueue a payload on a channel for the current workflow context. |
 | `say` | `log` / `logerr` / `logwarn` / `fail` | `level: "log"` / `"logerr"` / `"logwarn"` / `"fail"`. `level: "fail"` aborts with the message. |
-| `if` | `if <subject> <op> <operand> { … } [ else { … } ]` | Conditional block. |
+| `if` | `if <subject> <op> <operand> { … } [ else if … { … } ]* [ else { … } ]` | Conditional block. |
 | `for_lines` | `for <iter> in <source> { … }` | Iterate lines of a string variable. |
 | `trivia` | comments, blank lines | Formatter-only. Skipped by the runtime and validator. |
 
@@ -299,13 +299,21 @@ if status == "ok" {
 if message =~ /ERROR/ {
   logerr "matched error pattern"
 }
+
+if status == "ok" {
+  log "healthy"
+} else if status == "warn" {
+  logwarn "degraded"
+} else {
+  logerr "unhealthy: ${status}"
+}
 ```
 
 | Aspect | Rule |
 |---|---|
 | Subject | Bare identifier or `IDENT.IDENT` (typed-prompt field access). |
 | Operators | `==`, `!=` with double-quoted strings; `=~`, `!~` with `/regex/`. Mixing kinds is `E_PARSE`. |
-| `else` | Optional. `} else {` must be on a single line. `else if` chaining is not supported — nest `if` inside the `else` block or use `match`. |
+| `else` / `else if` | Optional. `} else {` and each `} else if <cond> {` must be on a single line (the closing `}` of the previous arm and the keyword share the line). An `else if` chain of any depth is sugar that desugars to nested `if`/`else`; each `else if` uses the same condition grammar as `if`. An empty `else if` body, an `else if` without a condition, or an `else if` split onto its own line is `E_PARSE`. |
 | Value production | `if` is a statement. For value branching use `match`. |
 | Async handles | Resolved before the comparison. |
 | Allowed in | Workflows and rules. |

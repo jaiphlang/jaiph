@@ -47,7 +47,7 @@ export function parseBraceBlockBody(
   openerLineNo: number,
   trivia: Trivia = createTrivia(),
   opts?: BlockParseOpts,
-): { steps: WorkflowStepDef[]; nextIdx: number; closedWithElse?: boolean } {
+): { steps: WorkflowStepDef[]; nextIdx: number; closedWithElse?: boolean; closedWithElseIf?: boolean } {
   const steps: WorkflowStepDef[] = [];
   let idx = startIdx;
   let hadNonCommentStep = false;
@@ -77,12 +77,9 @@ export function parseBraceBlockBody(
     }
     if (opts?.allowElseTerminator && /^}\s*else\b/.test(inner)) {
       if (/^}\s*else\s+if\b/.test(inner)) {
-        fail(
-          filePath,
-          '"else if" chaining is not supported; nest an "if" inside the "else" block, or use "match" for multi-way branching',
-          innerNo,
-          innerRaw.indexOf("else") + 1,
-        );
+        // `} else if ...` closes this body; the caller (tryParseIf) re-reads
+        // this same line to parse the next arm, so nextIdx points at `idx`.
+        return { steps, nextIdx: idx, closedWithElseIf: true };
       }
       if (/^}\s*else\s*\{\s*$/.test(inner)) {
         return { steps, nextIdx: idx + 1, closedWithElse: true };
@@ -269,60 +266,83 @@ export type BlockCtx = {
 export type BlockResult = { step: WorkflowStepDef; nextIdx: number };
 export type BlockHandler = (c: BlockCtx) => BlockResult | null;
 
-function tryParseIf(c: BlockCtx): BlockResult | null {
-  const ifLoc = { line: c.innerNo, col: c.innerRaw.indexOf("if") + 1 };
-  const m = c.inner.match(
-    /^if\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)\s+(==|!=|=~|!~)\s+("(?:[^"\\]|\\.)*"|\/(?:[^/\\]|\\.)*\/)\s*\{\s*$/,
-  );
+/**
+ * Condition grammar shared by a top-level `if` and each `else if` arm. The
+ * optional leading `else` lets the same regex validate an `else if` head after
+ * its `} else ` prefix has been stripped.
+ */
+const IF_CONDITION_RE =
+  /^(?:else\s+)?if\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)\s+(==|!=|=~|!~)\s+("(?:[^"\\]|\\.)*"|\/(?:[^/\\]|\\.)*\/)\s*\{\s*$/;
+
+/**
+ * Parse one `if` / `else if` arm and its body, recursing into `else if` chains.
+ * A chain desugars to nested `if`/`else`: each `else if` arm becomes the single
+ * `if` step inside the parent arm's `elseBody`, matching a human-written tree.
+ *
+ * `headIdx` is the 0-based index of the head line; when `isElseIf` is set the
+ * leading `} else ` is stripped so the same condition grammar applies.
+ */
+function parseIfArm(c: BlockCtx, headIdx: number, isElseIf: boolean): BlockResult {
+  const raw = c.lines[headIdx];
+  const trimmed = raw.trim();
+  const head = isElseIf ? trimmed.replace(/^}\s*else\s+/, "") : trimmed;
+  const ifCol = raw.indexOf("if", isElseIf ? raw.indexOf("else") : 0) + 1;
+  const ifLoc = { line: headIdx + 1, col: ifCol };
+  const m = head.match(IF_CONDITION_RE);
   if (!m) {
-    if (/^if[\s(]/.test(c.inner)) {
-      fail(
-        c.filePath,
-        'invalid if syntax; expected: if <identifier> <op> <operand> { ... } where op is ==, !=, =~, or !~ and operand is "string" or /regex/',
-        c.innerNo,
-        ifLoc.col,
-      );
-    }
-    return null;
+    fail(
+      c.filePath,
+      'invalid if syntax; expected: if <identifier> <op> <operand> { ... } where op is ==, !=, =~, or !~ and operand is "string" or /regex/',
+      headIdx + 1,
+      ifCol,
+    );
   }
-  const subject = m[1];
-  const operator = m[2] as "==" | "!=" | "=~" | "!~";
-  const rawOperand = m[3];
+  const subject = m![1];
+  const operator = m![2] as "==" | "!=" | "=~" | "!~";
+  const rawOperand = m![3];
   const operand: { kind: "string_literal"; value: string } | { kind: "regex"; source: string } =
     rawOperand.startsWith('"')
       ? { kind: "string_literal", value: rawOperand.slice(1, -1) }
       : { kind: "regex", source: rawOperand.slice(1, -1) };
   if ((operator === "==" || operator === "!=") && operand.kind === "regex") {
-    fail(c.filePath, `operator "${operator}" requires a string operand ("..."), not a regex`, c.innerNo, ifLoc.col);
+    fail(c.filePath, `operator "${operator}" requires a string operand ("..."), not a regex`, headIdx + 1, ifCol);
   }
   if ((operator === "=~" || operator === "!~") && operand.kind === "string_literal") {
-    fail(c.filePath, `operator "${operator}" requires a regex operand (/pattern/), not a string`, c.innerNo, ifLoc.col);
+    fail(c.filePath, `operator "${operator}" requires a regex operand (/pattern/), not a string`, headIdx + 1, ifCol);
   }
   const thenResult = parseBraceBlockBody(
-    c.filePath, c.lines, c.idx + 1, c.innerNo, c.trivia, { allowElseTerminator: true },
+    c.filePath, c.lines, headIdx + 1, headIdx + 1, c.trivia, { allowElseTerminator: true },
   );
-  if (!thenResult.closedWithElse) {
-    return {
-      step: { type: "if", subject, operator, operand, body: thenResult.steps, loc: ifLoc },
-      nextIdx: thenResult.nextIdx,
-    };
+  if (isElseIf && thenResult.steps.length === 0) {
+    fail(c.filePath, '"else if" body cannot be empty', headIdx + 1, ifCol);
   }
-  const elseLineNo = thenResult.nextIdx; // line number of `} else {` is nextIdx - 1 (0-indexed: thenResult.nextIdx - 1)
-  const elseResult = parseBraceBlockBody(
-    c.filePath, c.lines, thenResult.nextIdx, elseLineNo, c.trivia,
-  );
-  return {
-    step: {
-      type: "if",
-      subject,
-      operator,
-      operand,
-      body: thenResult.steps,
-      elseBody: elseResult.steps,
-      loc: ifLoc,
-    },
-    nextIdx: elseResult.nextIdx,
-  };
+  const base = { type: "if" as const, subject, operator, operand, body: thenResult.steps, loc: ifLoc };
+  if (thenResult.closedWithElseIf) {
+    const nested = parseIfArm(c, thenResult.nextIdx, true);
+    return { step: { ...base, elseBody: [nested.step] }, nextIdx: nested.nextIdx };
+  }
+  if (thenResult.closedWithElse) {
+    const elseResult = parseBraceBlockBody(
+      c.filePath, c.lines, thenResult.nextIdx, thenResult.nextIdx, c.trivia,
+    );
+    return { step: { ...base, elseBody: elseResult.steps }, nextIdx: elseResult.nextIdx };
+  }
+  return { step: base, nextIdx: thenResult.nextIdx };
+}
+
+function tryParseIf(c: BlockCtx): BlockResult | null {
+  if (!IF_CONDITION_RE.test(c.inner)) {
+    if (/^if[\s(]/.test(c.inner)) {
+      fail(
+        c.filePath,
+        'invalid if syntax; expected: if <identifier> <op> <operand> { ... } where op is ==, !=, =~, or !~ and operand is "string" or /regex/',
+        c.innerNo,
+        c.innerRaw.indexOf("if") + 1,
+      );
+    }
+    return null;
+  }
+  return parseIfArm(c, c.idx, false);
 }
 
 function tryParseFor(c: BlockCtx): BlockResult | null {
@@ -640,7 +660,7 @@ function tryParseElseError(c: BlockCtx): BlockResult | null {
   if (/^else\s+if\b/.test(c.inner)) {
     fail(
       c.filePath,
-      '"else if" chaining is not supported; nest an "if" inside the "else" block, or use "match" for multi-way branching',
+      '"else if" must appear on the same line as the closing "}" of the preceding "if" block (e.g., "} else if ...")',
       c.innerNo,
       elseCol,
     );

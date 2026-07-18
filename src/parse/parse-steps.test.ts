@@ -365,3 +365,121 @@ test("parsejaiph: workflow with run recover block", () => {
   assert.ok(step.recover);
   assert.equal(step.catch, undefined);
 });
+
+// === else if chaining (desugars to nested if/else) ===
+
+/** Strip `loc` recursively so structural comparisons ignore source positions. */
+function stripLoc(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(stripLoc);
+  if (value && typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      if (k === "loc") continue;
+      out[k] = stripLoc(v);
+    }
+    return out;
+  }
+  return value;
+}
+
+test("else if: chain desugars to the manually nested if/else equivalent", () => {
+  const sugar = [
+    "workflow w() {",
+    '  if a == "x" {',
+    '    log "x"',
+    '  } else if a == "y" {',
+    '    log "y"',
+    "  } else {",
+    '    log "other"',
+    "  }",
+    "}",
+    "",
+  ].join("\n");
+  const nested = [
+    "workflow w() {",
+    '  if a == "x" {',
+    '    log "x"',
+    "  } else {",
+    '    if a == "y" {',
+    '      log "y"',
+    "    } else {",
+    '      log "other"',
+    "    }",
+    "  }",
+    "}",
+    "",
+  ].join("\n");
+  const sugarSteps = parsejaiph(sugar, "fixture.jh").workflows[0].steps;
+  const nestedSteps = parsejaiph(nested, "fixture.jh").workflows[0].steps;
+  assert.deepEqual(stripLoc(sugarSteps), stripLoc(nestedSteps));
+});
+
+test("else if: arbitrary depth chains nest right", () => {
+  const step = parseOneWorkflowStep([
+    'if a == "x" {',
+    '  log "x"',
+    '} else if a == "y" {',
+    '  log "y"',
+    '} else if a == "z" {',
+    '  log "z"',
+    "} else {",
+    '  log "w"',
+    "}",
+  ]);
+  assert.equal(step.type, "if");
+  if (step.type !== "if") return;
+  // elseBody of each arm is a single nested `if` until the terminal `else`.
+  const arm2 = step.elseBody!;
+  assert.equal(arm2.length, 1);
+  assert.equal(arm2[0].type, "if");
+  const arm3 = (arm2[0] as Extract<WorkflowStepDef, { type: "if" }>).elseBody!;
+  assert.equal(arm3.length, 1);
+  assert.equal(arm3[0].type, "if");
+  const terminal = (arm3[0] as Extract<WorkflowStepDef, { type: "if" }>).elseBody!;
+  assert.equal(terminal.length, 1);
+  assert.equal(terminal[0].type, "say");
+});
+
+test("else if: empty else-if body is E_PARSE", () => {
+  assert.throws(
+    () =>
+      parseOneWorkflowStep([
+        'if a == "x" {',
+        '  log "x"',
+        '} else if a == "y" {',
+        "} else {",
+        '  log "z"',
+        "}",
+      ]),
+    /E_PARSE "else if" body cannot be empty/,
+  );
+});
+
+test("else if: malformed else if without a condition is E_PARSE", () => {
+  assert.throws(
+    () =>
+      parseOneWorkflowStep([
+        'if a == "x" {',
+        '  log "x"',
+        "} else if {",
+        '  log "y"',
+        "}",
+      ]),
+    /E_PARSE invalid if syntax/,
+  );
+});
+
+test("else if: else if on its own line (not attached to closing brace) is E_PARSE", () => {
+  assert.throws(
+    () =>
+      parseOneWorkflowStep([
+        'if a == "x" {',
+        '  log "x"',
+        "}",
+        'else if a == "y" {',
+        '  log "y"',
+        "}",
+      ]),
+    /E_PARSE "else if" must appear on the same line as the closing/,
+  );
+});

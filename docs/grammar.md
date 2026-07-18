@@ -313,18 +313,22 @@ Aborts the workflow or rule with a stderr message and non-zero exit.
 ### `if`
 
 ```ebnf
-if_stmt     = "if" subject_ref if_op if_operand "{" { workflow_step } "}" [ else_clause ] ;
-else_clause = "else" "{" { workflow_step } "}" ;
-subject_ref = IDENT | IDENT "." IDENT ;
-if_op       = "==" | "!=" | "=~" | "!~" ;
-if_operand  = double_quoted_string | "/" regex_source "/" ;
+if_stmt        = "if" subject_ref if_op if_operand "{" { workflow_step } "}"
+                 { else_if_clause } [ else_clause ] ;
+else_if_clause = "}" "else" "if" subject_ref if_op if_operand "{" { workflow_step } ;
+else_clause    = "else" "{" { workflow_step } "}" ;
+subject_ref    = IDENT | IDENT "." IDENT ;
+if_op          = "==" | "!=" | "=~" | "!~" ;
+if_operand     = double_quoted_string | "/" regex_source "/" ;
 ```
+
+`else if` is sugar: `if A { … } else if B { … } else { … }` desugars at parse time to `if A { … } else { if B { … } else { … } }`, so the AST and runtime paths are the nested `if`/`else` tree. Chains nest to any depth.
 
 | Rule | Behaviour |
 |---|---|
 | Subject | Bare identifier or `IDENT.IDENT` (typed-prompt field access). Async handles resolve before the test. |
 | Operator/operand pairing | `==` / `!=` require a double-quoted string. `=~` / `!~` require a `/regex/`. Mixing is `E_PARSE`. |
-| `else` placement | `} else {` must be on a single line. `else if` chaining is not supported — nest `if` inside the `else` block or use `match`. |
+| `else` / `else if` placement | `} else {` and each `} else if <cond> {` must be on a single line — the closing `}` and the keyword share the line. An `else if` split onto its own line, an `else if` without a condition, or an empty `else if` body is `E_PARSE`. |
 | Value production | `if` is a statement and does not produce a value. Use `match` for value branching. |
 | Allowed in | Workflows and rules. |
 

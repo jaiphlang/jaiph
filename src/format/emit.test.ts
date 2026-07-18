@@ -623,6 +623,24 @@ describe("emitModule", () => {
     assert.equal(roundTrip(source), source);
   });
 
+  it("preserves an `else if` chain instead of rewriting it as nested if/else", () => {
+    const source = [
+      "workflow default(status) {",
+      '  if status == "ok" {',
+      '    log "healthy"',
+      '  } else if status == "warn" {',
+      '    logwarn "degraded"',
+      "  } else {",
+      '    logerr "unhealthy"',
+      "  }",
+      "}",
+      "",
+    ].join("\n");
+    assert.equal(roundTrip(source), source);
+    // idempotent across a second pass
+    assert.equal(roundTrip(roundTrip(source)), source);
+  });
+
   it("if/else is idempotent across two format passes", () => {
     const source = [
       "workflow default(status) {",
