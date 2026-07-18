@@ -321,7 +321,8 @@ if status == "ok" {
 ## `match` — pattern match
 
 ```jaiph
-match status {
+match cmd {
+  "" | "check" => "verify"
   "ok" => "all good"
   /err/ => "something went wrong"
   _ => "unknown"
@@ -332,6 +333,7 @@ match status {
 |---|---|
 | Subject | Bare identifier or `IDENT.IDENT`. `$var` / `${var}` is `E_PARSE`. |
 | Patterns | String literal (exact equality), `/regex/`, or `_` (wildcard — exactly one required). |
+| Alternation | `"a" \| "b" \| /^c/ => body` — pipe-separated string literals and/or regexes share one arm, which matches if **any** alternand matches (OR). String and regex alternands may be mixed. Arm order still decides ties (first matching arm wins). `_` cannot participate (`_ \| "x"` / `"x" \| _` are `E_PARSE`); a trailing `\|` before `=>` is `E_PARSE`. |
 | Arm delimiter | Newlines. Commas between arms are `E_PARSE`. |
 | Arm bodies | String literal, triple-quoted block, bare in-scope identifier, `$var` / `${var}`, `fail "…"`, `run ref(…)`, `ensure ref(…)`. |
 | Disallowed in arms | `return` (use `return match … { … }` outside), inline scripts, unknown bare identifiers (`E_VALIDATE: unknown identifier "…" in match arm body; declare it with "const", use a capture, or add a parameter`). |

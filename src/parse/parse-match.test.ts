@@ -117,3 +117,102 @@ test("parseMatchArms: rejects comma-separated arms on one line", () => {
     /commas are not allowed in match arms; use one arm per line/,
   );
 });
+
+// === parseMatchArms: pattern alternation ("a" | "b" => ...) ===
+
+test("parseMatchArms: parses string-literal alternation pattern", () => {
+  const lines = [
+    "{",
+    '  "" | "check" => "verify"',
+    '  _ => "unknown"',
+    "}",
+  ];
+  const { arms } = parseMatchArms("test.jh", lines, 1, 1);
+  assert.deepEqual(arms[0].pattern, {
+    kind: "alternation",
+    patterns: [
+      { kind: "string_literal", value: "" },
+      { kind: "string_literal", value: "check" },
+    ],
+  });
+  assert.equal(arms[0].body, '"verify"');
+  assert.deepEqual(arms[1].pattern, { kind: "wildcard" });
+});
+
+test("parseMatchArms: parses three-way and regex alternation", () => {
+  const lines = [
+    "{",
+    '  "a" | "b" | "c" => "letters"',
+    '  /^x/ | /^y/ => "prefixes"',
+    '  _ => "other"',
+    "}",
+  ];
+  const { arms } = parseMatchArms("test.jh", lines, 1, 1);
+  assert.equal(arms[0].pattern.kind, "alternation");
+  if (arms[0].pattern.kind === "alternation") {
+    assert.equal(arms[0].pattern.patterns.length, 3);
+  }
+  assert.deepEqual(arms[1].pattern, {
+    kind: "alternation",
+    patterns: [
+      { kind: "regex", source: "^x" },
+      { kind: "regex", source: "^y" },
+    ],
+  });
+});
+
+test("parseMatchArms: allows mixed string and regex alternation", () => {
+  const lines = [
+    "{",
+    '  "exact" | /^pre/ => "hit"',
+    '  _ => "miss"',
+    "}",
+  ];
+  const { arms } = parseMatchArms("test.jh", lines, 1, 1);
+  assert.deepEqual(arms[0].pattern, {
+    kind: "alternation",
+    patterns: [
+      { kind: "string_literal", value: "exact" },
+      { kind: "regex", source: "^pre" },
+    ],
+  });
+});
+
+test("parseMatchArms: rejects wildcard as trailing alternand (\"a\" | _)", () => {
+  const lines = [
+    "{",
+    '  "a" | _ => "x"',
+    '  _ => "y"',
+    "}",
+  ];
+  assert.throws(
+    () => parseMatchArms("test.jh", lines, 1, 1),
+    /wildcard _ cannot participate in match alternation/,
+  );
+});
+
+test("parseMatchArms: rejects wildcard as leading alternand (_ | \"x\")", () => {
+  const lines = [
+    "{",
+    '  _ | "x" => "hit"',
+    '  _ => "y"',
+    "}",
+  ];
+  assert.throws(
+    () => parseMatchArms("test.jh", lines, 1, 1),
+    /wildcard _ cannot participate in match alternation/,
+  );
+});
+
+test("parseMatchArms: rejects trailing pipe before =>", () => {
+  const lines = [
+    "{",
+    '  "a" | => "x"',
+    '  _ => "y"',
+    "}",
+  ];
+  assert.throws(
+    () => parseMatchArms("test.jh", lines, 1, 1),
+    /trailing \| in match alternation/,
+  );
+});

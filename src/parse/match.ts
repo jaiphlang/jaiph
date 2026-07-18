@@ -71,6 +71,38 @@ function parsePattern(filePath: string, text: string, lineNo: number): { pattern
 }
 
 /**
+ * Parse a match arm pattern, including pipe-separated alternation
+ * (`"a" | "b" | /^c/`). A single pattern is returned as-is; two or more
+ * yield an `alternation` node. `_` cannot participate in alternation, and a
+ * trailing `|` (no pattern before `=>`) is `E_PARSE`. String and regex
+ * alternands may be mixed — the matcher dispatches on each alternand's kind.
+ */
+function parseArmPattern(filePath: string, text: string, lineNo: number): { pattern: MatchPatternDef; rest: string } {
+  const first = parsePattern(filePath, text, lineNo);
+  if (!first.rest.startsWith("|")) {
+    return first;
+  }
+  if (first.pattern.kind === "wildcard") {
+    fail(filePath, "wildcard _ cannot participate in match alternation", lineNo);
+  }
+  const patterns: MatchPatternDef[] = [first.pattern];
+  let rest = first.rest;
+  while (rest.startsWith("|")) {
+    const afterPipe = rest.slice(1).trimStart();
+    if (afterPipe.length === 0 || afterPipe.startsWith("=>")) {
+      fail(filePath, "trailing | in match alternation; expected a pattern after |", lineNo);
+    }
+    const next = parsePattern(filePath, afterPipe, lineNo);
+    if (next.pattern.kind === "wildcard") {
+      fail(filePath, "wildcard _ cannot participate in match alternation", lineNo);
+    }
+    patterns.push(next.pattern);
+    rest = next.rest;
+  }
+  return { pattern: { kind: "alternation", patterns }, rest };
+}
+
+/**
  * Parse the body (value expression) after `=>` in a match arm.
  * Returns the raw value string and any remaining text after the body.
  */
@@ -124,7 +156,7 @@ export function parseMatchArms(
       if (!segLine || segLine.startsWith("#")) {
         continue;
       }
-      const { pattern, rest: afterPattern } = parsePattern(filePath, segLine, lineNo);
+      const { pattern, rest: afterPattern } = parseArmPattern(filePath, segLine, lineNo);
       if (!afterPattern.startsWith("=>")) {
         fail(filePath, 'expected "=>" after match pattern', lineNo);
       }

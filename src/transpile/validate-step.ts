@@ -7,7 +7,7 @@
  */
 import { Diagnostics } from "../diagnostics";
 import { matchSendOperator, isJaiphInterpolationRef } from "../parse/core";
-import type { Arg, Expr, jaiphModule, MatchExprDef, WorkflowStepDef } from "../types";
+import type { Arg, Expr, jaiphModule, MatchExprDef, MatchPatternDef, WorkflowStepDef } from "../types";
 import { canonicalizeTripleQuotedString } from "../parse/triple-quote";
 import {
   BARE_SEND_REF_MSG,
@@ -523,6 +523,13 @@ function validateCallable(expr: Expr, ctx: ValidatorCtx): void {
 
 // -- Match expression -------------------------------------------------------
 
+/** All regex sources in a pattern, descending into alternation alternands. */
+function collectRegexSources(pattern: MatchPatternDef): string[] {
+  if (pattern.kind === "regex") return [pattern.source];
+  if (pattern.kind === "alternation") return pattern.patterns.flatMap(collectRegexSources);
+  return [];
+}
+
 export function validateMatchExpr(
   diag: Diagnostics,
   filePath: string,
@@ -535,16 +542,16 @@ export function validateMatchExpr(
   let wildcardCount = 0;
   for (const arm of expr.arms) {
     if (arm.pattern.kind === "wildcard") wildcardCount += 1;
-    if (arm.pattern.kind === "regex") {
+    for (const source of collectRegexSources(arm.pattern)) {
       try {
-        new RegExp(arm.pattern.source);
+        new RegExp(source);
       } catch {
         diag.error(
           filePath,
           expr.loc.line,
           expr.loc.col,
           "E_VALIDATE",
-          `invalid regex in match pattern: /${arm.pattern.source}/`,
+          `invalid regex in match pattern: /${source}/`,
         );
       }
     }

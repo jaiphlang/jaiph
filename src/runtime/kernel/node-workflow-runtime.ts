@@ -6,7 +6,7 @@ import { randomUUID } from "node:crypto";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { inlineScriptName } from "../../inline-script-name";
 import { argsToRuntimeString } from "../../parse/core";
-import type { CatchBody, Expr, MatchExprDef, WorkflowStepDef } from "../../types";
+import type { CatchBody, Expr, MatchExprDef, MatchPatternDef, WorkflowStepDef } from "../../types";
 import {
   executePrompt,
   modelForStepEvent,
@@ -74,6 +74,14 @@ function resolveInboxDispatchLimit(env: NodeJS.ProcessEnv): number {
   const n = Number.parseInt(raw, 10);
   if (!Number.isFinite(n) || n <= 0) return DEFAULT_INBOX_DISPATCH_LIMIT;
   return n;
+}
+
+/** Match-arm pattern predicate; alternation matches if any alternand matches (OR). */
+function patternMatches(pattern: MatchPatternDef, subject: string): boolean {
+  if (pattern.kind === "wildcard") return true;
+  if (pattern.kind === "string_literal") return subject === pattern.value;
+  if (pattern.kind === "regex") return new RegExp(pattern.source).test(subject);
+  return pattern.patterns.some((p) => patternMatches(p, subject));
 }
 
 type AsyncHandle = {
@@ -615,15 +623,7 @@ export class NodeWorkflowRuntime {
     if (!resolved.ok) return { ok: false, result: resolved.result };
     const subject = resolved.value;
     for (const arm of expr.arms) {
-      let matched = false;
-      if (arm.pattern.kind === "wildcard") {
-        matched = true;
-      } else if (arm.pattern.kind === "string_literal") {
-        matched = subject === arm.pattern.value;
-      } else if (arm.pattern.kind === "regex") {
-        matched = new RegExp(arm.pattern.source).test(subject);
-      }
-      if (matched) {
+      if (patternMatches(arm.pattern, subject)) {
         let body = arm.body.trimStart();
         if (arm.tripleQuotedBody) {
           body = canonicalizeTripleQuotedString(arm.body).trimStart();
