@@ -1,0 +1,83 @@
+{
+  "channels": [],
+  "exports": [],
+  "imports": [],
+  "rules": [],
+  "scripts": [],
+  "workflows": [
+    {
+      "comments": [],
+      "name": "default",
+      "params": [
+        "cmd"
+      ],
+      "steps": [
+        {
+          "type": "return",
+          "value": {
+            "kind": "match",
+            "match": {
+              "arms": [
+                {
+                  "body": "\"verify\"",
+                  "pattern": {
+                    "kind": "alternation",
+                    "patterns": [
+                      {
+                        "kind": "string_literal",
+                        "value": ""
+                      },
+                      {
+                        "kind": "string_literal",
+                        "value": "check"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "body": "\"go\"",
+                  "pattern": {
+                    "kind": "alternation",
+                    "patterns": [
+                      {
+                        "kind": "string_literal",
+                        "value": "run"
+                      },
+                      {
+                        "kind": "string_literal",
+                        "value": "start"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "body": "\"regex\"",
+                  "pattern": {
+                    "kind": "alternation",
+                    "patterns": [
+                      {
+                        "kind": "regex",
+                        "source": "^a"
+                      },
+                      {
+                        "kind": "regex",
+                        "source": "^b"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "body": "\"unknown\"",
+                  "pattern": {
+                    "kind": "wildcard"
+                  }
+                }
+              ],
+              "subject": "cmd"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

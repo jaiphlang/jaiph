@@ -32,7 +32,9 @@ export interface WorkflowRefDef {
 export type MatchPatternDef =
   | { kind: "string_literal"; value: string }
   | { kind: "regex"; source: string }
-  | { kind: "wildcard" };
+  | { kind: "wildcard" }
+  /** `"a" | "b" | /^c/` — matches if any alternand matches. Never contains `wildcard` or nested `alternation` (parser-enforced). */
+  | { kind: "alternation"; patterns: MatchPatternDef[] };
 
 export interface MatchArmDef {
   pattern: MatchPatternDef;

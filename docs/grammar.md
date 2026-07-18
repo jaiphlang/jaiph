@@ -335,9 +335,10 @@ if_operand     = double_quoted_string | "/" regex_source "/" ;
 ### `match`
 
 ```ebnf
-match_stmt    = "match" subject_ref "{" { match_arm } "}" ;
-match_arm     = match_pattern "=>" arm_body NEWLINE ;
-match_pattern = double_quoted_string | "/" regex_source "/" | "_" ;
+match_stmt      = "match" subject_ref "{" { match_arm } "}" ;
+match_arm       = match_pattern "=>" arm_body NEWLINE ;
+match_pattern   = match_alternand { "|" match_alternand } | "_" ;
+match_alternand = double_quoted_string | "/" regex_source "/" ;
 arm_body      = double_quoted_string | triple_quoted_block
               | IDENT
               | "$" IDENT | "${" IDENT "}"
@@ -350,6 +351,7 @@ arm_body      = double_quoted_string | triple_quoted_block
 |---|---|
 | Subject | Bare identifier or `IDENT.IDENT`. Subject starting with `$` / `${}` is `E_PARSE`. |
 | Default arm | Exactly one `_` wildcard arm is required. |
+| Alternation | `"a" \| "b" \| /^c/ => body` — pipe-separated string literals and/or regexes on one arm. The arm matches if **any** alternand matches (OR); arm order still decides ties. String and regex alternands may be mixed. `_` cannot participate (`_ \| "x"` / `"x" \| _` are `E_PARSE`); a trailing `\|` before `=>` is `E_PARSE`. |
 | Arm delimiter | Newlines. Commas between or after arms are `E_PARSE` (`commas are not allowed in match arms; use one arm per line`). |
 | Disallowed in arms | `return` (use `return match … { … }` at the outer level), inline scripts (use a named script with `run`), bare unknown identifiers (`E_VALIDATE: unknown identifier "…" in match arm body`). |
 | Expression form | Usable as `const x = match …` or `return match …`. |

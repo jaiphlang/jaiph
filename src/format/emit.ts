@@ -396,6 +396,7 @@ function emitRef(ref: { value: string }, args: Arg[] | undefined): string {
 function emitMatchPattern(p: import("../types").MatchPatternDef): string {
   if (p.kind === "string_literal") return `"${p.value}"`;
   if (p.kind === "regex") return `/${p.source}/`;
+  if (p.kind === "alternation") return p.patterns.map(emitMatchPattern).join(" | ");
   return "_";
 }
 

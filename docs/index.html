@@ -719,6 +719,8 @@ Jaiph: Running async.jh<span class="run-banner-meta"> (Docker sandbox, fusefs)</
                         typed prompt capture (<code>match r.verdict { … }</code>). <code>if</code> accepts the
                         same dot-subject form. Arms are tested top-to-bottom; first match wins.
                         Patterns: string literal (exact), regex, or <code>_</code> wildcard.
+                        Pipe-separated alternation shares one arm (<code>"" | "check" =&gt; …</code>), matching if any
+                        alternand matches; <code>_</code> cannot join an alternation.
                         Arms are newline-delimited — commas between or after arms are rejected.
                         Usable as a statement, expression (<code>const x = match var { … }</code>),
                         or with <code>return</code> (<code>return match var { … }</code>).

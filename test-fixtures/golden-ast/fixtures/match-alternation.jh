@@ -1,0 +1,8 @@
+workflow default(cmd) {
+  return match cmd {
+    "" | "check" => "verify"
+    "run" | "start" => "go"
+    /^a/ | /^b/ => "regex"
+    _ => "unknown"
+  }
+}
