@@ -76,6 +76,10 @@ jaiph run ./flow.jh               # imports must resolve at compile time
 
 A clone with no `.jh` files anywhere in the tree is rejected with `lib "<name>" contains no .jh modules — not a jaiph library?` and the directory is removed before any lock entry is written.
 
+### Execution-config trust boundary
+
+An imported library cannot silently redirect which binary runs your `prompt` steps. The execution-binary config keys — `agent.command` and `agent.backend` — are applied **only** from your entry module's `config {}` block; an imported module that sets either key is ignored for that key. All other config keys (`agent.model`, `agent.trusted_workspace`, `agent.*_flags`, `run.*`) follow the normal cross-module scoping rules. See [Configuration — Import trust boundary](configuration.md#import-trust-boundary) for the full contract and the advanced `JAIPH_AGENT_COMMAND_IMPORT_UNLOCK` / `JAIPH_AGENT_BACKEND_IMPORT_UNLOCK` opt-in.
+
 ## Part B — Publish a library
 
 Publishing is git-native — no package registry upload, no build step.

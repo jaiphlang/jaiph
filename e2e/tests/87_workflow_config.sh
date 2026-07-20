@@ -152,10 +152,10 @@ jaiph run "${TEST_DIR}/parent_nested.jh" >/dev/null
 actual="$(cat "${NESTED_LOG}")"
 expected="$(printf '%s\n' \
   'parent_before:claude' \
-  'child_backend:cursor' \
+  'child_backend:claude' \
   'parent_after:claude')"
 e2e::assert_equals "${actual}" "${expected}" \
-  "cross-module call sees callee module backend; caller workflow-level backend restored after"
+  "imported module cannot override agent.backend; child inherits caller env; caller scope restored after"
 
 # ---------------------------------------------------------------------------
 # Section 4: Env variable still wins over workflow config

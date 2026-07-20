@@ -68,8 +68,8 @@ Interpolation runs when the config scope is applied (workflow entry for workflow
 | Key | Type | Default | Env equivalent | Notes |
 |---|---|---|---|---|
 | `agent.model` | string | — | `JAIPH_AGENT_MODEL` (env only) | Model for `prompt` steps in this scope. Resolved at each `prompt` invocation and passed as a per-call `--model` flag — it does **not** set `JAIPH_AGENT_MODEL` in the workflow environment, so scripts and other steps do not see it. Set `JAIPH_AGENT_MODEL` in the shell to override all prompts in a run. |
-| `agent.command` | string | `cursor-agent` | `JAIPH_AGENT_COMMAND` | Cursor backend command. Basename other than `cursor-agent` enables custom-command mode (stdin → command → stdout). |
-| `agent.backend` | string (`cursor` \| `claude` \| `codex`) | `cursor` | `JAIPH_AGENT_BACKEND` | Backend selector. |
+| `agent.command` | string | `cursor-agent` | `JAIPH_AGENT_COMMAND` | Cursor backend command. Basename other than `cursor-agent` enables custom-command mode (stdin → command → stdout). **Entry module only** — imported modules cannot set this key by default (see [Import trust boundary](#import-trust-boundary)). |
+| `agent.backend` | string (`cursor` \| `claude` \| `codex`) | `cursor` | `JAIPH_AGENT_BACKEND` | Backend selector. **Entry module only** — imported modules cannot set this key by default (see [Import trust boundary](#import-trust-boundary)). |
 | `agent.trusted_workspace` | string (path) | workspace root | `JAIPH_AGENT_TRUSTED_WORKSPACE` | Directory passed to Cursor as `--trust`. When unset, defaults to `JAIPH_WORKSPACE`. In-file values are assigned to the env var as authored (relative paths are not normalized to absolute paths). |
 | `agent.cursor_flags` | string | — | `JAIPH_AGENT_CURSOR_FLAGS` | Extra flags appended to Cursor invocations (whitespace-split). |
 | `agent.claude_flags` | string | — | `JAIPH_AGENT_CLAUDE_FLAGS` | Extra flags appended to Claude invocations (whitespace-split). |
@@ -146,7 +146,7 @@ Workflow-level `config` cannot set `runtime.*` keys.
 |---|---|
 | Root entry (`jaiph run file.jh`) | Full module + workflow metadata applied with normal precedence. |
 | Same-module `run` | Callee's workflow-level `config` is layered on top of the caller's effective env. Module-level config is not re-applied. |
-| Cross-module `run` (e.g. `run alias.default()`) | Callee's module-level config is layered, then workflow-level on top — same as root-entry precedence, respecting `${NAME}_LOCKED`. |
+| Cross-module `run` (e.g. `run alias.default()`) | Callee's module-level config is layered, then workflow-level on top — same as root-entry precedence, respecting `${NAME}_LOCKED`. **`agent.command` and `agent.backend` are not applied from imported modules** (see [Import trust boundary](#import-trust-boundary)). |
 | Same-module `ensure` | Caller's scope is reused verbatim. |
 | Cross-module `ensure` | Callee module's `agent.*` / `run.*` are merged on top of the current env (respecting locks). Workflow-level config does not apply to rules. |
 
@@ -158,6 +158,22 @@ After any nested call returns, the caller's scope is restored exactly as before.
 When the host CLI builds the runner environment, any of these variables already present in `process.env` gets a matching `${NAME}_LOCKED=1` flag set on the child env. The runtime refuses to overwrite a locked value from later metadata merges.
 
 Locked names: `JAIPH_AGENT_BACKEND`, `JAIPH_AGENT_MODEL`, `JAIPH_AGENT_COMMAND`, `JAIPH_AGENT_TRUSTED_WORKSPACE`, `JAIPH_AGENT_CURSOR_FLAGS`, `JAIPH_AGENT_CLAUDE_FLAGS`, `JAIPH_RUNS_DIR`, `JAIPH_DEBUG`.
+
+## Import trust boundary
+{: #import-trust-boundary}
+
+`agent.command` and `agent.backend` are **execution-binary keys** — they determine which process runs `prompt` steps. To prevent a third-party `.jh` library from silently redirecting execution to a different binary, these two keys may only be set from the **entry module's** `config {}` block (module-level or workflow-level). Imported modules that declare `agent.command` or `agent.backend` in their `config {}` are silently ignored for these keys.
+
+All other config keys (`agent.model`, `agent.trusted_workspace`, `agent.cursor_flags`, `agent.claude_flags`, `run.logs_dir`, `run.debug`) are not restricted and follow the normal scoping rules for cross-module calls.
+
+**Advanced unlock (use with caution):** to allow an imported module to override these keys, set one or both of the following environment variables before the run:
+
+| Variable | Effect |
+|---|---|
+| `JAIPH_AGENT_COMMAND_IMPORT_UNLOCK=1` | Allow any imported module to set `agent.command`. |
+| `JAIPH_AGENT_BACKEND_IMPORT_UNLOCK=1` | Allow any imported module to set `agent.backend`. |
+
+The existing `JAIPH_AGENT_COMMAND_LOCKED=1` / `JAIPH_AGENT_BACKEND_LOCKED=1` flags still apply on top — a locked key cannot be changed regardless of the source.
 
 ## Config-to-env mapping
 
