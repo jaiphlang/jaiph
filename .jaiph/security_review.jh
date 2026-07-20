@@ -15,10 +15,11 @@
 #
 # Review methodology: OWASP Agentic Security Initiative (ASI) Top 10 via
 #   .jaiph/skills/agent-owasp-compliance/SKILL.md
-# Report writing follows .jaiph/skills/documentation-writer/SKILL.md.
+# Report writing follows .jaiph/kills/documentation-writer/SKILL.md.
 #
 import "./lib_common.jh" as common
 import "jaiphlang/artifacts" as artifacts
+import "jaiphlang/git" as git
 
 config {
   agent.backend = "claude"
@@ -143,16 +144,13 @@ workflow review_scope(mode, scope_detail, report_file) {
 }
 
 workflow review_codebase(report_file) {
-  return run review_scope(
-    "codebase",
-    """
+  const scope_detail = """
     Review the ENTIRE repository against OWASP ASI Top 10. Explore agent
     backends, prompt paths, script/shell execution, Docker sandbox,
     env/secrets handling, artifacts/run logs, installers, and skills.
     Do not limit yourself to a diff — this is a full codebase scan.
-    """,
-    report_file
-  )
+  """
+  return run review_scope("codebase", scope_detail, report_file)
 }
 
 workflow review_diff_text(mode, scope_label, diff_text, report_file) {
@@ -160,9 +158,7 @@ workflow review_diff_text(mode, scope_label, diff_text, report_file) {
     log "Security review: no changes to review (${scope_label})."
     return "skip"
   }
-  return run review_scope(
-    mode,
-    """
+  const scope_detail = """
     Review the following code changes (${scope_label}) against OWASP ASI
     Top 10. You have read access to the full repository — read surrounding
     source whenever needed to confirm exploitability; do not judge from
@@ -170,9 +166,8 @@ workflow review_diff_text(mode, scope_label, diff_text, report_file) {
 
     Code changes under review:
     ${diff_text}
-    """,
-    report_file
-  )
+  """
+  return run review_scope(mode, scope_detail, report_file)
 }
 
 workflow finish_review(verdict, report_file, fingerprint_before) {
@@ -214,6 +209,7 @@ workflow dispatch_review(mode, scope, report_file) {
 }
 
 workflow default(scope) {
+  ensure git.in_git_repo()
   run common.mkdir_p_simple(".jaiph/tmp")
   const report_file = run new_security_review_report_path()
   run write_security_review_pointer(report_file)
