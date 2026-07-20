@@ -43,14 +43,14 @@ unset JAIPH_AGENT_BACKEND 2>/dev/null || true
 jaiph run "${TEST_DIR}/parent.jh" >/dev/null
 
 # Then
-# Cross-module `run` applies the callee module's config on top of the caller's
-# effective env (respecting `_LOCKED` env flags) and restores the caller's
-# scope when the call returns.
+# Imported module's agent.backend is blocked by default (security trust boundary).
+# The child inherits the caller's effective env unchanged; the caller's scope is
+# restored when the call returns.
 actual="$(cat "${META_FILE}")"
 expected="$(printf '%s\n' \
   'parent_before:cursor' \
-  'child:claude' \
+  'child:cursor' \
   'parent_after:cursor')"
 
-e2e::assert_equals "${actual}" "${expected}" "cross-module run sees callee module config; caller scope restored"
+e2e::assert_equals "${actual}" "${expected}" "imported module cannot override agent.backend; caller scope restored"
 e2e::expect_out_files "parent.jh" 5

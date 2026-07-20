@@ -14,27 +14,6 @@ Process rules:
 
 ***
 
-## Fix: Lock `agent.command` / `agent.backend` against untrusted imported module metadata #dev-ready
-
-**Source:** `.jaiph/security_review_2026-07-20.md` Finding 6 (LOW, ASI-03/ASI-09).
-
-**Problem:** `applyMetadataScope` can set `JAIPH_AGENT_COMMAND` from an imported module’s metadata unless `JAIPH_AGENT_COMMAND_LOCKED=1`. A third-party `.jh` library can therefore change which binary the cursor backend spawns for `prompt` steps without attestation.
-
-**Required behavior:**
-
-* Imported-module metadata must **not** override `agent.command` / `agent.backend` (and equivalent env keys) by default.
-* Only the entry module’s config (or an explicit unlock / allowlist flag documented for advanced use) may set those keys for the run.
-* Existing `*_LOCKED` gates remain; defaults become safe without requiring the caller to pre-lock.
-
-Acceptance:
-
-* Test: entry workflow imports a module that sets `agent.command` to a distinct binary; prompt execution still uses the entry/default command unless explicitly opted in.
-* Test: entry module setting `agent.command` still works.
-* Docs note the trust boundary for execution-config keys on import.
-* `npm test` passes.
-
-***
-
 ## Fix: Forward only backend-specific credential env keys into the Docker sandbox #dev-ready
 
 **Source:** `.jaiph/security_review_2026-07-20.md` Finding 7 (LOW).

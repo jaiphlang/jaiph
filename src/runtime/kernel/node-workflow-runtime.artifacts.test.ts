@@ -1279,3 +1279,141 @@ test("NodeWorkflowRuntime: ANTHROPIC_API_KEY value in prompt text is redacted in
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("NodeWorkflowRuntime: imported module cannot override agent.command by default (IMPORT_UNLOCK opts in)", async () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-node-import-cmd-lock-"));
+  try {
+    const childJh = join(root, "child.jh");
+    const parentJh = join(root, "parent.jh");
+    const cmdFile = join(root, "cmd.log");
+    writeFileSync(
+      childJh,
+      [
+        "config {",
+        '  agent.command = "injected-agent"',
+        "}",
+        'script log_cmd = `printf \'%s:%s\\n\' "$1" "$JAIPH_AGENT_COMMAND" >> "$JAIPH_META_SCOPE_FILE"`',
+        "workflow default() {",
+        '  run log_cmd("child")',
+        "}",
+        "",
+      ].join("\n"),
+    );
+    writeFileSync(
+      parentJh,
+      [
+        'import "child.jh" as child',
+        "",
+        'script log_cmd = `printf \'%s:%s\\n\' "$1" "$JAIPH_AGENT_COMMAND" >> "$JAIPH_META_SCOPE_FILE"`',
+        "workflow default() {",
+        '  run log_cmd("parent")',
+        "  run child.default()",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const scriptsDir = join(root, "scripts");
+    mkdirSync(scriptsDir, { recursive: true });
+    writeFileSync(
+      join(scriptsDir, "log_cmd"),
+      [
+        "#!/usr/bin/env bash",
+        'printf \'%s:%s\n\' "$1" "$JAIPH_AGENT_COMMAND" >> "$JAIPH_META_SCOPE_FILE"',
+        "",
+      ].join("\n"),
+      { mode: 0o755 },
+    );
+
+    const graph = buildRuntimeGraph(parentJh);
+    // Run 1: no unlock — imported module's agent.command must not override
+    const env1: NodeJS.ProcessEnv = {
+      ...process.env,
+      JAIPH_TEST_MODE: "1",
+      JAIPH_RUNS_DIR: join(root, ".jaiph", "runs"),
+      JAIPH_SCRIPTS: scriptsDir,
+      JAIPH_META_SCOPE_FILE: cmdFile,
+    };
+    delete env1.JAIPH_AGENT_COMMAND;
+    delete env1.JAIPH_AGENT_COMMAND_LOCKED;
+    delete env1.JAIPH_AGENT_COMMAND_IMPORT_UNLOCK;
+
+    const runtime1 = new NodeWorkflowRuntime(graph, { env: env1, cwd: root, suppressLiveEvents: true });
+    assert.equal(await runtime1.runDefault([]), 0);
+
+    const actual1 = readFileSync(cmdFile, "utf8");
+    // child sees empty (not "injected-agent") because imported module's command is blocked
+    assert.equal(actual1, "parent:\nchild:\n");
+
+    // Run 2: with IMPORT_UNLOCK — imported module's agent.command IS applied
+    writeFileSync(cmdFile, "");
+    const env2: NodeJS.ProcessEnv = {
+      ...process.env,
+      JAIPH_TEST_MODE: "1",
+      JAIPH_RUNS_DIR: join(root, ".jaiph", "runs"),
+      JAIPH_SCRIPTS: scriptsDir,
+      JAIPH_META_SCOPE_FILE: cmdFile,
+      JAIPH_AGENT_COMMAND_IMPORT_UNLOCK: "1",
+    };
+    delete env2.JAIPH_AGENT_COMMAND;
+    delete env2.JAIPH_AGENT_COMMAND_LOCKED;
+
+    const runtime2 = new NodeWorkflowRuntime(graph, { env: env2, cwd: root, suppressLiveEvents: true });
+    assert.equal(await runtime2.runDefault([]), 0);
+
+    const actual2 = readFileSync(cmdFile, "utf8");
+    // child sees "injected-agent" because IMPORT_UNLOCK is set
+    assert.equal(actual2, "parent:\nchild:injected-agent\n");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("NodeWorkflowRuntime: entry module agent.command config is applied", async () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-node-entry-cmd-"));
+  try {
+    const jh = join(root, "entry.jh");
+    const cmdFile = join(root, "cmd.log");
+    writeFileSync(
+      jh,
+      [
+        "config {",
+        '  agent.command = "my-custom-agent"',
+        "}",
+        'script log_cmd = `printf \'cmd:%s\\n\' "$JAIPH_AGENT_COMMAND" >> "$JAIPH_CMD_LOG"`',
+        "workflow default() {",
+        "  run log_cmd()",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const scriptsDir = join(root, "scripts");
+    mkdirSync(scriptsDir, { recursive: true });
+    writeFileSync(
+      join(scriptsDir, "log_cmd"),
+      [
+        "#!/usr/bin/env bash",
+        'printf \'cmd:%s\n\' "$JAIPH_AGENT_COMMAND" >> "$JAIPH_CMD_LOG"',
+        "",
+      ].join("\n"),
+      { mode: 0o755 },
+    );
+
+    const graph = buildRuntimeGraph(jh);
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      JAIPH_TEST_MODE: "1",
+      JAIPH_RUNS_DIR: join(root, ".jaiph", "runs"),
+      JAIPH_SCRIPTS: scriptsDir,
+      JAIPH_CMD_LOG: cmdFile,
+    };
+    delete env.JAIPH_AGENT_COMMAND;
+    delete env.JAIPH_AGENT_COMMAND_LOCKED;
+
+    const runtime = new NodeWorkflowRuntime(graph, { env, cwd: root, suppressLiveEvents: true });
+    assert.equal(await runtime.runDefault([]), 0);
+
+    assert.equal(readFileSync(cmdFile, "utf8"), "cmd:my-custom-agent\n");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

@@ -28,10 +28,12 @@ The table below covers every `JAIPH_*` name read from `process.env` / `env` in `
 | Variable | Scope | Type | Default | Related config | Role |
 |---|---|---|---|---|---|
 | `JAIPH_AGENT_BACKEND` | host, runtime | string (`cursor`, `claude`, `codex`) | `cursor` | `agent.backend` | Selects the `prompt` backend. Locked once seen in the parent env. |
+| `JAIPH_AGENT_BACKEND_IMPORT_UNLOCK` | host | bool | — | — | Set to `1` to allow imported modules to set `agent.backend`. Disabled by default; see [Import trust boundary](configuration.md#import-trust-boundary). |
 | `JAIPH_AGENT_BACKEND_LOCKED` | internal | bool | — | — | Set to `1` by the CLI when `JAIPH_AGENT_BACKEND` was inherited; blocks lower-precedence layers from overriding. |
 | `JAIPH_AGENT_CLAUDE_FLAGS` | host, runtime | string (whitespace-split) | — | `agent.claude_flags` | Extra flags appended to the Claude CLI invocation. |
 | `JAIPH_AGENT_CLAUDE_FLAGS_LOCKED` | internal | bool | — | — | Lock flag for `JAIPH_AGENT_CLAUDE_FLAGS`. |
 | `JAIPH_AGENT_COMMAND` | host, runtime | string | `cursor-agent` | `agent.command` | Executable line for the Cursor backend. A basename other than `cursor-agent` selects custom-command mode (stdin → command → stdout). |
+| `JAIPH_AGENT_COMMAND_IMPORT_UNLOCK` | host | bool | — | — | Set to `1` to allow imported modules to set `agent.command`. Disabled by default; see [Import trust boundary](configuration.md#import-trust-boundary). |
 | `JAIPH_AGENT_COMMAND_LOCKED` | internal | bool | — | — | Lock flag for `JAIPH_AGENT_COMMAND`. |
 | `JAIPH_AGENT_CURSOR_FLAGS` | host, runtime | string (whitespace-split) | — | `agent.cursor_flags` | Extra flags appended to the Cursor backend invocation. |
 | `JAIPH_AGENT_CURSOR_FLAGS_LOCKED` | internal | bool | — | — | Lock flag for `JAIPH_AGENT_CURSOR_FLAGS`. |

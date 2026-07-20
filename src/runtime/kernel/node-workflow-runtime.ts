@@ -480,6 +480,11 @@ export class NodeWorkflowRuntime {
       // also matches cross-module `ensure` (see `executeRule`).
       // Same-module nested `run`: apply only the callee workflow-level metadata (workflow boundaries
       // still apply within one module; module config is already in the caller's effective env).
+      // Root call (`!inheritCallerMetadataScope`): the user explicitly invoked this workflow
+      // (via `jaiph run` or the test runner `run w.wf()`), so its module config is trusted.
+      // Nested cross-module calls: only the entry module is trusted for execution-binary keys.
+      const fromEntryModule = !inheritCallerMetadataScope
+        || calleeModulePath === resolvePath(this.graph.entryFile);
       let workflowEnv: NodeJS.ProcessEnv;
       if (inheritCallerMetadataScope && crossModuleNested) {
         workflowEnv = this.applyMetadataScope(
@@ -487,15 +492,17 @@ export class NodeWorkflowRuntime {
           this.graph.modules.get(resolved.filePath)?.ast.metadata,
           resolved.workflow.metadata,
           metadataVars,
+          fromEntryModule,
         );
       } else if (inheritCallerMetadataScope) {
-        workflowEnv = this.applyMetadataScope(scope.env, undefined, resolved.workflow.metadata, metadataVars);
+        workflowEnv = this.applyMetadataScope(scope.env, undefined, resolved.workflow.metadata, metadataVars, fromEntryModule);
       } else {
         workflowEnv = this.applyMetadataScope(
           scope.env,
           this.graph.modules.get(resolved.filePath)?.ast.metadata,
           resolved.workflow.metadata,
           metadataVars,
+          fromEntryModule,
         );
       }
       const childScope: Scope = {
@@ -552,7 +559,8 @@ export class NodeWorkflowRuntime {
       const sameModule = resolvePath(scope.filePath) === resolvePath(resolved.filePath);
       const moduleMeta = sameModule ? undefined : this.graph.modules.get(resolved.filePath)?.ast.metadata;
       const metadataVars = this.newScopeVars(resolved.filePath, scope.vars, scope.env);
-      const ruleEnv = this.applyMetadataScope(scope.env, moduleMeta, undefined, metadataVars);
+      const fromEntryModule = resolvePath(resolved.filePath) === resolvePath(this.graph.entryFile);
+      const ruleEnv = this.applyMetadataScope(scope.env, moduleMeta, undefined, metadataVars, fromEntryModule);
       const ruleVars = new Map(metadataVars);
       resolved.rule.params.forEach((name, i) => {
         if (i < args.length) ruleVars.set(name, args[i]);
@@ -1688,19 +1696,27 @@ export class NodeWorkflowRuntime {
 
   private applyMetadataScope(
     parentEnv: NodeJS.ProcessEnv,
-    moduleMeta?: WorkflowMetadata,
-    workflowMeta?: WorkflowMetadata,
-    vars?: Map<string, string>,
+    moduleMeta: WorkflowMetadata | undefined,
+    workflowMeta: WorkflowMetadata | undefined,
+    vars: Map<string, string> | undefined,
+    // Only the entry module's config may set execution-binary keys by default.
+    // Set JAIPH_AGENT_COMMAND_IMPORT_UNLOCK=1 / JAIPH_AGENT_BACKEND_IMPORT_UNLOCK=1
+    // to allow imported modules to override (advanced use).
+    fromEntryModule: boolean,
   ): NodeJS.ProcessEnv {
     const nextEnv: NodeJS.ProcessEnv = { ...parentEnv };
     const apply = (meta?: WorkflowMetadata): void => {
       if (!meta) return;
       const resolved = vars ? interpolateWorkflowMetadata(meta, vars, parentEnv) : meta;
       if (parentEnv.JAIPH_AGENT_COMMAND_LOCKED !== "1" && resolved.agent?.command !== undefined) {
-        nextEnv.JAIPH_AGENT_COMMAND = resolved.agent.command;
+        if (fromEntryModule || parentEnv.JAIPH_AGENT_COMMAND_IMPORT_UNLOCK === "1") {
+          nextEnv.JAIPH_AGENT_COMMAND = resolved.agent.command;
+        }
       }
       if (parentEnv.JAIPH_AGENT_BACKEND_LOCKED !== "1" && resolved.agent?.backend !== undefined) {
-        nextEnv.JAIPH_AGENT_BACKEND = resolved.agent.backend;
+        if (fromEntryModule || parentEnv.JAIPH_AGENT_BACKEND_IMPORT_UNLOCK === "1") {
+          nextEnv.JAIPH_AGENT_BACKEND = resolved.agent.backend;
+        }
       }
       if (
         parentEnv.JAIPH_AGENT_TRUSTED_WORKSPACE_LOCKED !== "1" &&
