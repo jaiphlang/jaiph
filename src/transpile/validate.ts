@@ -38,6 +38,8 @@ interface FlatStepEntry {
 interface StepTreeWalk {
   knownVars: Set<string>;
   promptSchemas: Map<string, string[]>;
+  /** All variables bound to a prompt result — typed and untyped, const or exec-capture. */
+  promptCaptures: Set<string>;
   flat: FlatStepEntry[];
 }
 
@@ -53,6 +55,7 @@ function walkStepTree(
 ): StepTreeWalk {
   const knownVars = new Set<string>();
   const promptSchemas = new Map<string, string[]>();
+  const promptCaptures = new Set<string>();
   const flat: FlatStepEntry[] = [];
 
   if (envDecls) {
@@ -105,8 +108,11 @@ function walkStepTree(
       if (s.type === "const") {
         knownVars.add(s.name);
         checkBinding(s.name, "const", s.loc, bindings);
-        if (options.withPromptSchemas && topLevel && s.value.kind === "prompt" && s.value.returns !== undefined) {
-          promptSchemas.set(s.name, parseSchemaFieldNames(s.value.returns));
+        if (s.value.kind === "prompt") {
+          promptCaptures.add(s.name);
+          if (options.withPromptSchemas && topLevel && s.value.returns !== undefined) {
+            promptSchemas.set(s.name, parseSchemaFieldNames(s.value.returns));
+          }
         }
         continue;
       }
@@ -116,8 +122,11 @@ function walkStepTree(
           knownVars.add(s.captureName);
           const captureLoc = execBodyLoc(s.body) ?? s.loc;
           checkBinding(s.captureName, "capture", captureLoc, bindings);
-          if (options.withPromptSchemas && topLevel && s.body.kind === "prompt" && s.body.returns !== undefined) {
-            promptSchemas.set(s.captureName, parseSchemaFieldNames(s.body.returns));
+          if (s.body.kind === "prompt") {
+            promptCaptures.add(s.captureName);
+            if (options.withPromptSchemas && topLevel && s.body.returns !== undefined) {
+              promptSchemas.set(s.captureName, parseSchemaFieldNames(s.body.returns));
+            }
           }
         }
         if (s.catch) {
@@ -159,7 +168,7 @@ function walkStepTree(
   };
 
   descend(steps, seedBindings, undefined, true);
-  return { knownVars, promptSchemas, flat };
+  return { knownVars, promptSchemas, promptCaptures, flat };
 }
 
 /** Best-effort location for an exec body — used to attribute capture-binding errors. */
@@ -314,6 +323,7 @@ export function validateModuleInto(
       scope: RULE_SCOPE,
       knownVars: ruleWalk.knownVars,
       promptSchemas: ruleWalk.promptSchemas,
+      promptCaptures: ruleWalk.promptCaptures,
       recoverBindings: undefined,
     };
     for (const entry of ruleWalk.flat) {
@@ -360,6 +370,7 @@ export function validateModuleInto(
       scope: WORKFLOW_SCOPE,
       knownVars: wfWalk.knownVars,
       promptSchemas: wfWalk.promptSchemas,
+      promptCaptures: wfWalk.promptCaptures,
       recoverBindings: undefined,
     };
     for (const entry of wfWalk.flat) {

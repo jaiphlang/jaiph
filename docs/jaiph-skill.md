@@ -84,7 +84,7 @@ These six rules prevent 90% of compile errors:
 1. **Parentheses everywhere.** Definitions and call sites both require `()`, even with zero arguments: `workflow default() { … }`, `run setup()`, `ensure check()`. Bare `run setup` is a parse error.
 2. **All captures use `const`, and all bindings are immutable.** `const x = run foo()` — never `x = run foo()`, never rebind `x` later, never shadow a parameter with a `const` of the same name.
 3. **Call keyword must match callee type.** `ensure` → rules only. `run` → workflows and scripts (inside a workflow); scripts **only** (inside a rule). Mixing them is `E_VALIDATE`.
-4. **Shell lives in scripts.** Rules reject raw shell lines entirely. Workflows technically allow inline shell lines, but you should not write them — use a named `script` or an inline script (`` run `cmd`() ``). Shell operators next to managed calls (`run foo() | grep x`, `run foo() > file`, `run foo() &`) are parse errors.
+4. **Shell lives in scripts.** Rules reject raw shell lines entirely. Workflows technically allow inline shell lines, but you should not write them — use a named `script` or an inline script (`` run `cmd`() ``). Shell operators next to managed calls (`run foo() | grep x`, `run foo() > file`, `run foo() &`) are parse errors. Interpolating a `prompt` capture into a shell line (`const x = prompt …` then `echo "${x}"`) is `W_PROMPT_IN_SHELL` and fails the build: the agent-controlled value would be spliced into `sh -c`. Pass it as a script argument (`run my_script(x)` → `$1`, argv, not shell-expanded) — see [Sandboxing](sandboxing.md#prompt-in-shell).
 5. **Interpolation is `${name}` only.** No `$name` in orchestration strings, no `$(…)`, no `${var:-default}`, no `${var//x/y}`. Those shell forms are valid *inside script bodies* only.
 6. **Arguments are not forwarded implicitly.** If `workflow default(task)` calls `run implement()`, the implement workflow does not see `task`. Pass it: `run implement(task)`.
 
@@ -335,6 +335,7 @@ Precedence: **environment > workflow-level config > module-level config > defaul
 | `E_VALIDATE` `ensure` on non-rule / `run` on rule | Match keyword to callee: rules→`ensure`, scripts/workflows→`run` |
 | `E_VALIDATE` `run` to workflow inside rule | Rules may `run` scripts only; restructure or move to a workflow |
 | `E_VALIDATE` inline shell forbidden in rules | Wrap the shell in a `script` (named or inline) and `run` it |
+| `W_PROMPT_IN_SHELL` prompt capture in a shell line | Pass it as a script argument (`run my_script(x)` → `$1`), not `echo "${x}"` |
 | `E_PARSE` `${…}` in single-backtick script | Use `$1`/`$2` args, or switch to a fenced ``` block |
 | `E_VALIDATE` unknown identifier / unknown `${name}` | Declare it (`const`/param) before use; check spelling |
 | `E_VALIDATE` nested call must be explicit | `run f(run g())`, not `run f(g())` |

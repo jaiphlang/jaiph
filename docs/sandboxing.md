@@ -93,6 +93,54 @@ Equally important is the list of things Docker is deliberately *not* claiming to
 
 This list exists because a sandbox that overclaims is worse than one that is honest about its scope. Jaiph treats the Docker boundary as a **blast-radius reducer for workflow scripts**, not as a credential vault or a network firewall.
 
+## Prompt captures in shell steps {#prompt-in-shell}
+
+A workflow can receive free-form text from an agent via a `prompt` step, then use that value in subsequent steps. The value is user-controlled by design — but how it reaches downstream steps affects the blast radius.
+
+**The hazard.** Workflow shell steps (free-form lines in a workflow body) are executed via `sh -c` after Jaiph interpolates `${varName}` references. If `varName` holds a prompt capture — text written by an agent or provided interactively — that text is spliced directly into the shell command string. A value like `` `id` `` or `; rm -rf .` can then be interpreted by the shell as commands rather than data:
+
+```jaiph
+workflow default() {
+  const msg = prompt "Enter a label:"
+  git commit -m "${msg}"   # W_PROMPT_IN_SHELL: msg is agent-controlled
+}
+```
+
+The compiler emits a `W_PROMPT_IN_SHELL` diagnostic for any shell step that interpolates a prompt capture. This diagnostic **fails the build**: `jaiph compile` exits non-zero and `jaiph run` refuses to start (the same recoverable-error channel every other `E_`/`W_` diagnostic uses — Jaiph has no separate non-fatal warning tier today). Inside the default Docker sandbox the blast radius is contained, but under `--unsafe` (host-only mode) or `--inplace`, the host is directly affected.
+
+**The safe pattern.** Pass prompt captures as named arguments to a `script` step. Scripts receive arguments through `$1 $2 …` (argv), not shell-expanded strings, so there is no interpolation step between the capture value and the script's argument.
+
+In your script body (`commit_with_label`), use positional parameters:
+
+```bash
+# commit_with_label — receives label as $1
+git commit -m "$1"
+```
+
+In the workflow, call it with the prompt capture as a bare argument:
+
+```jaiph
+workflow default() {
+  const msg = prompt "Enter a label:"
+  run commit_with_label(msg)   # no W_PROMPT_IN_SHELL: argv path is safe
+}
+```
+
+The compiler does **not** warn on `run script(promptCapture)` — that is the recommended form.
+
+**When the diagnostic fires and when it does not.**
+
+| Pattern | Diagnostic |
+|---|---|
+| `echo "${capture}"` in a workflow body (shell step) | `W_PROMPT_IN_SHELL` |
+| `run myscript(capture)` | none — argv is safe |
+| `log "${capture}"` / `logerr "${capture}"` | none — log interpolation is not a shell `sh -c` execution |
+| Non-prompt variable interpolated in a shell step | none |
+
+**Resolving the diagnostic.** There is no inline suppress comment and no non-fatal-warning mode: to compile and run, you must remove the prompt capture from the shell line. The intended fix is the argv path above — extract the shell line into a named (or inline) `script` that receives the value as `$1`, which is both the safe form and the one the compiler accepts. Rewriting the interpolation with your own shell quoting inside the same shell step does **not** clear the diagnostic; the check flags the data-flow (a prompt capture reaching a shell step), not the specific escaping.
+
+Under `--unsafe` or `--inplace`, the host filesystem is fully exposed, so the hazard is real even for a benign-looking shell step. The compile-time diagnostic is the primary defence signal; runtime quoting is a secondary layer that the named-script argv path provides automatically.
+
 ## Why opt-out, not opt-in
 
 The default-on choice — Docker on unless the host sets `JAIPH_UNSAFE=true` or sets `JAIPH_DOCKER_ENABLED` to any value other than exact `true` — is deliberate. Workflows orchestrate agent and script code that is often pulled from a repository, edited by a model, or contributed by a third party. Making the safer posture the path of least resistance means a careless workflow gets contained by default and only escapes the container when a human types out the override.

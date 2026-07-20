@@ -202,6 +202,7 @@ Sends text to the configured agent backend. Three body forms:
 | Typed `returns` | Flat `{ field: type, … }` with `string` / `number` / `boolean`. Stored verbatim as text per-field. |
 | Capture required when `returns` | `prompt … returns "…"` without `const` is `E_PARSE`. |
 | Dot notation | Bare `result.field` (in `return`, `if` / `match` subjects, and call arguments) and `${result.field}` **inside strings** require that the base is a typed-prompt capture and the field appears in the schema. Unquoted `${result.field}` in call-argument position is `E_VALIDATE`. |
+| Interpolation into shell steps | A prompt capture (`const x = prompt …`, typed or untyped) interpolated into a workflow shell step — e.g. `echo "${x}"` as a free-form body line — is `W_PROMPT_IN_SHELL`. Shell steps run via `sh -c` on the interpolated string, so the agent-controlled value is spliced into the command. Pass it as a script argument instead (`run my_script(x)` → `$1`, which is argv, not shell-expanded). Only shell steps are flagged; `run script(x)`, `log`, `logerr`, and non-prompt variables are not. See [Sandboxing — Prompt captures in shell steps](sandboxing.md#prompt-in-shell). |
 | Rule scope | Forbidden — `prompt` and `const … = prompt` are `E_VALIDATE` inside rules. |
 | Transport retry | Transport failures retry on a backoff schedule; deterministic post-processing failures do not. See [Configuration — Prompt retry on transport failure](configuration.md#prompt-retry-on-transport-failure). |
 

@@ -83,6 +83,8 @@ export interface ValidatorCtx {
   scope: Scope;
   knownVars: Set<string>;
   promptSchemas: Map<string, string[]>;
+  /** All variables bound via `const x = prompt …` or `exec` with a prompt body capture — typed and untyped. */
+  promptCaptures: Set<string>;
   recoverBindings: Set<string> | undefined;
   localChannels: Set<string>;
   localScripts: Set<string>;
@@ -619,10 +621,37 @@ export function validateMatchExpr(
 
 // -- Workflow shell exec (workflow-only body kind) --------------------------
 
+/** Emits W_PROMPT_IN_SHELL when a prompt capture is spliced directly into a shell line. */
+function warnPromptInShellLine(
+  body: Extract<Expr, { kind: "shell" }>,
+  ctx: ValidatorCtx,
+): void {
+  if (ctx.promptCaptures.size === 0) return;
+  const RE = /\$\{([A-Za-z_][A-Za-z0-9_]*)(?:\.[A-Za-z_][A-Za-z0-9_]*)?\}/g;
+  let m: RegExpExecArray | null;
+  while ((m = RE.exec(body.command)) !== null) {
+    const varName = m[1]!;
+    if (ctx.promptCaptures.has(varName)) {
+      ctx.diag.error(
+        ctx.ast.filePath,
+        body.loc.line,
+        body.loc.col,
+        "W_PROMPT_IN_SHELL",
+        `prompt capture "${varName}" is interpolated into a shell line without quoting or validation; ` +
+          `prefer passing it as a script argument: run my_script(${varName}) — ` +
+          `scripts receive arguments as $1 $2 … (argv), which bypasses shell word-splitting. ` +
+          `See: sandboxing.md#prompt-in-shell`,
+      );
+      return; // one diagnostic per shell step is enough
+    }
+  }
+}
+
 function validateWorkflowShellExec(
   body: Extract<Expr, { kind: "shell" }>,
   ctx: ValidatorCtx,
 ): void {
+  warnPromptInShellLine(body, ctx);
   if (hasUnquotedSendArrow(body.command) && matchSendOperator(body.command) === null) {
     ctx.diag.error(
       ctx.ast.filePath,
