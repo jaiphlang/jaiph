@@ -77,6 +77,7 @@ TEST_SCRIPTS=(
   "e2e/tests/118_import_not_found.sh"
   "e2e/tests/119_lib_import.sh"
   "e2e/tests/120_match_arm_execution.sh"
+  "e2e/tests/144_if_else_if_chain.sh"
   "e2e/tests/145_match_alternation.sh"
   "e2e/tests/121_export_visibility.sh"
   "e2e/tests/122_cli_error_guards.sh"
