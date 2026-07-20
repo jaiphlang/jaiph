@@ -7,8 +7,25 @@
  */
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { appendRunSummaryLine } from "./emit";
+import { appendRunSummaryLine, CHAIN_GENESIS, sha256hex } from "./emit";
 import { MAX_EMBED, nowIso, sanitizeName, stripOuterQuotes } from "./runtime-arg-parser";
+
+const CREDENTIAL_KEY_SUFFIXES = ["_API_KEY", "_TOKEN", "_SECRET", "_API_TOKEN"] as const;
+
+function isCredentialKey(key: string): boolean {
+  const upper = key.toUpperCase();
+  return CREDENTIAL_KEY_SUFFIXES.some((s) => upper.endsWith(s));
+}
+
+/** Replace each credential env value (≥8 chars) found in `text` with [REDACTED]. */
+function redactCredentials(text: string, env: NodeJS.ProcessEnv): string {
+  let result = text;
+  for (const [key, value] of Object.entries(env)) {
+    if (!value || value.length < 8 || !isCredentialKey(key)) continue;
+    result = result.split(value).join("[REDACTED]");
+  }
+  return result;
+}
 
 export type Frame = {
   id: string;
@@ -51,6 +68,7 @@ export class RuntimeEventEmitter {
   private readonly suppressLiveEvents: boolean;
   private stepSeq = 0;
   private promptSeq = 0;
+  private prevHash = CHAIN_GENESIS;
 
   constructor(deps: RuntimeEventEmitterDeps) {
     this.runId = deps.runId;
@@ -61,22 +79,26 @@ export class RuntimeEventEmitter {
     this.suppressLiveEvents = deps.suppressLiveEvents ?? false;
   }
 
+  private serializeAndAppend(obj: Record<string, unknown>): void {
+    const line = JSON.stringify({ ...obj, prev_hash: this.prevHash });
+    this.prevHash = sha256hex(line);
+    appendRunSummaryLine(line);
+  }
+
   allocStepSeq(): number {
     this.stepSeq += 1;
     return this.stepSeq;
   }
 
   emitWorkflow(type: "WORKFLOW_START" | "WORKFLOW_END", workflow: string): void {
-    appendRunSummaryLine(
-      JSON.stringify({
-        type,
-        workflow,
-        source: this.env.JAIPH_SOURCE_FILE ?? "",
-        ts: nowIso(),
-        run_id: this.runId,
-        event_version: 1,
-      }),
-    );
+    this.serializeAndAppend({
+      type,
+      workflow,
+      source: this.env.JAIPH_SOURCE_FILE ?? "",
+      ts: nowIso(),
+      run_id: this.runId,
+      event_version: 1,
+    });
   }
 
   emitStep(payload: Record<string, unknown>): void {
@@ -85,7 +107,15 @@ export class RuntimeEventEmitter {
     if (!this.suppressLiveEvents) {
       process.stderr.write(`__JAIPH_EVENT__ ${JSON.stringify(full)}\n`);
     }
-    appendRunSummaryLine(JSON.stringify({ ...full, event_version: 1 }));
+    // Redact credential values from captured step output before persisting durably.
+    const durableFull: Record<string, unknown> = { ...full, event_version: 1 };
+    if (typeof durableFull.out_content === "string") {
+      durableFull.out_content = redactCredentials(durableFull.out_content, this.env);
+    }
+    if (typeof durableFull.err_content === "string") {
+      durableFull.err_content = redactCredentials(durableFull.err_content, this.env);
+    }
+    this.serializeAndAppend(durableFull);
   }
 
   emitPromptEvent(
@@ -94,22 +124,20 @@ export class RuntimeEventEmitter {
   ): void {
     const stack = this.getFrameStack();
     const current = stack.length > 0 ? stack[stack.length - 1] : null;
-    appendRunSummaryLine(
-      JSON.stringify({
-        type,
-        ts: nowIso(),
-        run_id: this.runId,
-        depth: stack.length,
-        step_id: current?.id ?? null,
-        step_name: current?.name ?? null,
-        backend: payload.backend,
-        model: payload.model ?? null,
-        model_reason: payload.model_reason ?? null,
-        status: payload.status ?? null,
-        preview: payload.preview ?? null,
-        event_version: 1,
-      }),
-    );
+    this.serializeAndAppend({
+      type,
+      ts: nowIso(),
+      run_id: this.runId,
+      depth: stack.length,
+      step_id: current?.id ?? null,
+      step_name: current?.name ?? null,
+      backend: payload.backend,
+      model: payload.model ?? null,
+      model_reason: payload.model_reason ?? null,
+      status: payload.status ?? null,
+      preview: payload.preview != null ? redactCredentials(payload.preview, this.env) : null,
+      event_version: 1,
+    });
   }
 
   emitPromptStepStart(
@@ -130,7 +158,11 @@ export class RuntimeEventEmitter {
     writeFileSync(errFile, "");
     // Preview keeps the authored `${var}` placeholders rather than substituted values,
     // so the tree shows what the user wrote; concrete values live alongside in params.
-    const preview = stripOuterQuotes(rawPromptSource).replace(/\s+/g, " ").trim();
+    // Credential values are redacted before writing so secrets are not persisted.
+    const preview = redactCredentials(
+      stripOuterQuotes(rawPromptSource).replace(/\s+/g, " ").trim(),
+      this.env,
+    );
     const params: Array<[string, string]> = [["prompt_text", preview]];
     const seen = new Set<string>(["prompt_text"]);
     // Include named vars referenced in the prompt text.
@@ -140,7 +172,7 @@ export class RuntimeEventEmitter {
       const name = m[1];
       if (!seen.has(name)) {
         seen.add(name);
-        const val = scopeVars.get(name) ?? "";
+        const val = redactCredentials(scopeVars.get(name) ?? "", this.env);
         if (val.length > 0) params.push([name, val]);
       }
     }
@@ -208,6 +240,6 @@ export class RuntimeEventEmitter {
     if (!this.suppressLiveEvents) {
       process.stderr.write(`__JAIPH_EVENT__ ${JSON.stringify(liveBase)}\n`);
     }
-    appendRunSummaryLine(JSON.stringify(payload));
+    this.serializeAndAppend(payload);
   }
 }

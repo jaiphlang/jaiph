@@ -157,6 +157,31 @@ The runtime persists step captures and the event timeline under a UTC-dated hier
 
 Step sequence numbers are monotonic and unique per run: `RuntimeEventEmitter` allocates them in memory (`allocStepSeq`) when opening each step’s capture files (`%06d-<safe_name>.out|.err`). There is no `.seq` file in the run directory.
 
+#### Hash chain
+
+Every line written to `run_summary.jsonl` by `RuntimeEventEmitter` carries a `prev_hash` field: the SHA-256 (hex) of the previous raw JSON line, or `"000…000"` (64 zeroes, `CHAIN_GENESIS`) for the first line. Rewriting or truncating any line invalidates all subsequent hashes, making tampering detectable.
+
+To verify a run’s chain:
+
+```ts
+import { verifyRunSummaryChain } from "src/runtime/kernel/emit";
+const { ok, error } = verifyRunSummaryChain(".jaiph/runs/<date>/<run>/run_summary.jsonl");
+```
+
+`verifyRunSummaryChain` reads each line, checks that `prev_hash` matches `sha256hex(previousLine)`, and returns `{ ok: false, error }` at the first broken link. The chain is defined over the full raw JSON string as written (including the `prev_hash` field itself).
+
+#### Secret redaction
+
+Before `RuntimeEventEmitter` writes an event line to `run_summary.jsonl`, it redacts values of **credential environment variables** — keys whose name (case-insensitive) ends in `_API_KEY`, `_TOKEN`, `_SECRET`, or `_API_TOKEN`, and whose value is at least 8 characters. Each matching value is replaced with `[REDACTED]` wherever it appears in:
+
+- the reconstructed prompt body (`prompt_text`) and the resolved values of `${var}` references persisted alongside it (`emitPromptStepStart`),
+- the `preview` field of `PROMPT_START` / `PROMPT_END` events (`emitPromptEvent`),
+- the embedded stdout/stderr excerpts (`out_content` / `err_content`) of every `STEP_END` — script and prompt steps alike (`emitStep`).
+
+This covers backend API keys such as `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, and `CURSOR_API_KEY` (the same names on the [Docker env allowlist](sandboxing.md)).
+
+Redaction applies **only to the copies embedded in `run_summary.jsonl`**. The per-step raw capture files (`%06d-<name>.out` / `.err`) are streamed to disk verbatim and are not redacted — treat them, and the run directory as a whole, as sensitive.
+
 ## Channels and hooks in context
 
 Channels are validated at compile time (`validateReferences` / send RHS rules) and executed via in-memory queue and dispatch in the Node runtime; durable **`inbox/`** files under the run directory appear only for **routed** sends (audit — see [Inbox & Dispatch](inbox.md)). Hooks are CLI-only: they load from `hooks.json` and run as shell commands with JSON on stdin, driven by the same `__JAIPH_EVENT__` stream as the progress UI — see [Hooks](hooks.md).

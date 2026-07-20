@@ -82,8 +82,31 @@ Replace `<runs_root>` with `.jaiph/runs` when `JAIPH_RUNS_DIR` is unset, or with
 
 `artifacts.save(...)` exits with a failure when the input list is empty after trimming, when any listed path is missing or not a regular file, or when `JAIPH_ARTIFACTS_DIR` is unset — wrap the call in `recover` / `catch` if you want the workflow to tolerate that.
 
+## Verify a run's integrity chain
+
+Every line the runtime appends to `run_summary.jsonl` carries a `prev_hash` field — the SHA-256 of the previous raw line (or 64 zeroes for the first line). Rewriting or truncating any line breaks the hash of every line after it, so a verifier can detect tampering with a run's audit trail. See [Architecture — Hash chain](architecture.md#durable-artifact-layout) for the format.
+
+To check a run directory, run this self-contained Node script against its `run_summary.jsonl` (no jaiph build required — it recomputes the chain the same way the runtime does):
+
+```bash
+node -e '
+  const fs = require("fs"), crypto = require("crypto");
+  const lines = fs.readFileSync(process.argv[1], "utf8").split("\n").filter(l => l.trim());
+  let expected = "0".repeat(64);
+  for (let i = 0; i < lines.length; i++) {
+    if (JSON.parse(lines[i]).prev_hash !== expected) {
+      console.error(`line ${i + 1}: chain broken`); process.exit(1);
+    }
+    expected = crypto.createHash("sha256").update(lines[i], "utf8").digest("hex");
+  }
+  console.log(`chain intact (${lines.length} lines)`);
+' <runs_root>/<YYYY-MM-DD>/<HH-MM-SS>-<source>/run_summary.jsonl
+```
+
+A clean chain prints `chain intact (N lines)` and exits `0`; a rewritten or truncated file prints the first broken line number and exits `1`. Inside the repo you can call the exported `verifyRunSummaryChain(filePath)` helper (`src/runtime/kernel/emit.ts`) instead, which returns `{ ok, error }`.
+
 ## Related
 
-- [Architecture — Durable artifact layout](architecture.md#durable-artifact-layout) — the full run directory tree, including where `artifacts/` sits.
+- [Architecture — Durable artifact layout](architecture.md#durable-artifact-layout) — the full run directory tree, including where `artifacts/` sits, plus the hash chain and secret-redaction contracts for `run_summary.jsonl`.
 - [Use & publish a library](/how-to/libraries) — installing `jaiphlang/artifacts` and writing your own libraries.
 - [Sandboxing — The three sandbox modes](sandboxing.md#the-three-sandbox-modes) — overlay and copy discard workspace edits; artifacts persist on the host in every mode.

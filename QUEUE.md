@@ -14,28 +14,6 @@ Process rules:
 
 ***
 
-## Feat: Hash-chain `run_summary.jsonl` and redact secrets in run artifacts #dev-ready
-
-**Source:** `.jaiph/security_review_2026-07-20.md` Finding 4 (LOW, ASI-06).
-
-**Problem:** Structured run events are written under `.jaiph/runs` (mounted writable at `/jaiph/run` inside the sandbox). There is no hash chain, so a misbehaving agent can rewrite its own audit trail. Prompt/command artifacts persist interpolated secrets in cleartext.
-
-**Required behavior:**
-
-* Each `run_summary.jsonl` line includes a hash of the previous line’s payload (or a running chain field) so truncation/rewrite is detectable by a verifier.
-* Ship a small verify helper or `jaiph` subcommand/docs recipe that validates the chain for a run dir.
-* Redact values of known credential env keys (the Docker allowlist / backend credential names) from persisted prompt bodies and reconstructed command lines before write.
-* Document the chain format and redaction scope in architecture or artifacts docs.
-
-Acceptance:
-
-* Unit test: append two events, tamper with the first line on disk, verifier fails; untampered chain passes.
-* Unit test: artifact write path redacts a fixture `ANTHROPIC_API_KEY` (or equivalent) value present in prompt text.
-* Docs describe the chain field and how to verify.
-* `npm test` passes.
-
-***
-
 ## Feat: Sign release checksums and pin Dockerfile toolchain installers #dev-ready
 
 **Source:** `.jaiph/security_review_2026-07-20.md` Finding 5 (LOW, ASI-09).
