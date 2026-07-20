@@ -13,6 +13,7 @@ import {
   isEnvAllowed,
   ENV_ALLOW_PREFIXES,
   ENV_ALLOW_EXCLUDE_PREFIX,
+  BACKEND_CREDENTIAL_KEYS,
   GHCR_IMAGE_REPO,
   selectSandboxMode,
   selectMcpSandboxMode,
@@ -396,6 +397,7 @@ test("buildDockerArgs: a key both allowlist-forwarded and in extraEnv appears on
     defaultOpts({
       env: { ANTHROPIC_API_KEY: "from-host" },
       extraEnv: { ANTHROPIC_API_KEY: "from-flag" },
+      backends: ["claude"],
     }),
     TEST_OVERLAY,
   );
@@ -407,48 +409,90 @@ test("buildDockerArgs: a key both allowlist-forwarded and in extraEnv appears on
 });
 
 // ---------------------------------------------------------------------------
-// buildDockerArgs: agent env var forwarding
+// buildDockerArgs: per-backend credential forwarding
 // ---------------------------------------------------------------------------
 
-test("buildDockerArgs: forwards OPENAI_* env vars", () => {
-  const args = buildDockerArgs(defaultOpts({
-    env: { OPENAI_API_KEY: "sk-openai-test", OPENAI_ORG_ID: "org-123" },
-  }), TEST_OVERLAY);
-  assert.ok(args.includes("OPENAI_API_KEY=sk-openai-test"));
-  assert.ok(args.includes("OPENAI_ORG_ID=org-123"));
+/**
+ * Host env with every backend credential plus same-prefix bystanders. Used to
+ * lock the exact forwarded credential set per backend: anything not in
+ * BACKEND_CREDENTIAL_KEYS for the run's backends must stay on the host.
+ */
+const CREDENTIAL_PROBE_ENV = {
+  ANTHROPIC_API_KEY: "sk-ant-test-key",
+  ANTHROPIC_UNUSED: "unrelated-anthropic-secret",
+  ANTHROPIC_BASE_URL: "https://api.example.test",
+  CLAUDE_CODE_OAUTH_TOKEN: "oauth-token",
+  CLAUDE_CONFIG_DIR: "/host/.claude",
+  CURSOR_API_KEY: "cursor-key-123",
+  CURSOR_SESSION_ID: "sess-456",
+  OPENAI_API_KEY: "sk-openai-test",
+  OPENAI_ORG_ID: "org-123",
+  OTHER_VAR: "ignored",
+};
+
+/** The `-e KEY=…` keys of `args` restricted to CREDENTIAL_PROBE_ENV keys. */
+function forwardedProbeKeys(args: string[]): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < args.length; i += 1) {
+    if (args[i] !== "-e" || typeof args[i + 1] !== "string") continue;
+    const key = args[i + 1].split("=")[0];
+    if (key in CREDENTIAL_PROBE_ENV) out.push(key);
+  }
+  return out.sort();
+}
+
+test("buildDockerArgs: backend claude forwards exactly ANTHROPIC_API_KEY + CLAUDE_CODE_OAUTH_TOKEN", () => {
+  const args = buildDockerArgs(
+    defaultOpts({ env: { ...CREDENTIAL_PROBE_ENV }, backends: ["claude"] }),
+    TEST_OVERLAY,
+  );
+  assert.deepEqual(forwardedProbeKeys(args), ["ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN"]);
+  assert.ok(
+    !args.some((a) => a.includes("ANTHROPIC_UNUSED")),
+    "an unrelated ANTHROPIC_* host var must not reach the container",
+  );
 });
 
-test("buildDockerArgs: forwards ANTHROPIC_* env vars", () => {
-  const args = buildDockerArgs(defaultOpts({
-    env: { ANTHROPIC_API_KEY: "sk-ant-test-key", ANTHROPIC_BASE_URL: "https://api.example.test" },
-  }), TEST_OVERLAY);
-  assert.ok(args.includes("ANTHROPIC_API_KEY=sk-ant-test-key"));
-  assert.ok(args.includes("ANTHROPIC_BASE_URL=https://api.example.test"));
+test("buildDockerArgs: backend cursor forwards exactly CURSOR_API_KEY", () => {
+  const args = buildDockerArgs(
+    defaultOpts({ env: { ...CREDENTIAL_PROBE_ENV }, backends: ["cursor"] }),
+    TEST_OVERLAY,
+  );
+  assert.deepEqual(forwardedProbeKeys(args), ["CURSOR_API_KEY"]);
 });
 
-test("buildDockerArgs: forwards CURSOR_* env vars", () => {
-  const args = buildDockerArgs(defaultOpts({
-    env: { CURSOR_API_KEY: "cursor-key-123", CURSOR_SESSION_ID: "sess-456", OTHER_VAR: "ignored" },
-  }), TEST_OVERLAY);
-  assert.ok(args.includes("CURSOR_API_KEY=cursor-key-123"));
-  assert.ok(args.includes("CURSOR_SESSION_ID=sess-456"));
-  assert.ok(!args.some((a) => a.includes("OTHER_VAR")));
+test("buildDockerArgs: backend codex forwards exactly OPENAI_API_KEY", () => {
+  const args = buildDockerArgs(
+    defaultOpts({ env: { ...CREDENTIAL_PROBE_ENV }, backends: ["codex"] }),
+    TEST_OVERLAY,
+  );
+  assert.deepEqual(forwardedProbeKeys(args), ["OPENAI_API_KEY"]);
 });
 
-test("buildDockerArgs: forwards CLAUDE_* env vars", () => {
-  const args = buildDockerArgs(defaultOpts({
-    env: { CLAUDE_API_KEY: "claude-key-123", CLAUDE_AUTH_TOKEN: "token-456" },
-  }), TEST_OVERLAY);
-  assert.ok(args.includes("CLAUDE_API_KEY=claude-key-123"));
-  assert.ok(args.includes("CLAUDE_AUTH_TOKEN=token-456"));
+test("buildDockerArgs: multiple backends forward the union of their credential keys", () => {
+  const args = buildDockerArgs(
+    defaultOpts({ env: { ...CREDENTIAL_PROBE_ENV }, backends: ["claude", "cursor"] }),
+    TEST_OVERLAY,
+  );
+  assert.deepEqual(forwardedProbeKeys(args), [
+    "ANTHROPIC_API_KEY",
+    "CLAUDE_CODE_OAUTH_TOKEN",
+    "CURSOR_API_KEY",
+  ]);
+});
+
+test("buildDockerArgs: omitted backends forward no credential keys (fail-closed)", () => {
+  const args = buildDockerArgs(defaultOpts({ env: { ...CREDENTIAL_PROBE_ENV } }), TEST_OVERLAY);
+  assert.deepEqual(forwardedProbeKeys(args), []);
 });
 
 test("buildDockerArgs: does not forward undefined agent env vars", () => {
   const args = buildDockerArgs(defaultOpts({
-    env: { ANTHROPIC_API_KEY: undefined, CURSOR_TOKEN: undefined },
+    env: { ANTHROPIC_API_KEY: undefined, CURSOR_API_KEY: undefined },
+    backends: ["claude", "cursor"],
   }), TEST_OVERLAY);
   assert.ok(!args.some((a) => a.includes("ANTHROPIC_API_KEY")));
-  assert.ok(!args.some((a) => a.includes("CURSOR_TOKEN")));
+  assert.ok(!args.some((a) => a.includes("CURSOR_API_KEY")));
 });
 
 // ---------------------------------------------------------------------------
@@ -741,48 +785,66 @@ test("validateMountHostPath: rejects /run/docker.sock", () => {
 // isEnvAllowed: env allowlist
 // ---------------------------------------------------------------------------
 
-test("isEnvAllowed: allows JAIPH_ vars", () => {
-  assert.equal(isEnvAllowed("JAIPH_DEBUG"), true);
+test("isEnvAllowed: allows JAIPH_ vars regardless of backend", () => {
+  assert.equal(isEnvAllowed("JAIPH_DEBUG", []), true);
+  assert.equal(isEnvAllowed("JAIPH_DEBUG", ["claude"]), true);
 });
 
 test("isEnvAllowed: excludes JAIPH_DOCKER_ vars", () => {
-  assert.equal(isEnvAllowed("JAIPH_DOCKER_IMAGE"), false);
-  assert.equal(isEnvAllowed("JAIPH_DOCKER_ENABLED"), false);
+  assert.equal(isEnvAllowed("JAIPH_DOCKER_IMAGE", ["claude"]), false);
+  assert.equal(isEnvAllowed("JAIPH_DOCKER_ENABLED", ["claude"]), false);
 });
 
-test("isEnvAllowed: allows ANTHROPIC_ vars", () => {
-  assert.equal(isEnvAllowed("ANTHROPIC_API_KEY"), true);
+test("isEnvAllowed: claude credential keys pass only for backend claude", () => {
+  assert.equal(isEnvAllowed("ANTHROPIC_API_KEY", ["claude"]), true);
+  assert.equal(isEnvAllowed("CLAUDE_CODE_OAUTH_TOKEN", ["claude"]), true);
+  assert.equal(isEnvAllowed("ANTHROPIC_API_KEY", ["cursor"]), false);
+  assert.equal(isEnvAllowed("ANTHROPIC_API_KEY", []), false);
 });
 
-test("isEnvAllowed: allows CURSOR_ vars", () => {
-  assert.equal(isEnvAllowed("CURSOR_API_KEY"), true);
+test("isEnvAllowed: rejects non-credential ANTHROPIC_/CLAUDE_ keys even for backend claude", () => {
+  assert.equal(isEnvAllowed("ANTHROPIC_UNUSED", ["claude"]), false);
+  assert.equal(isEnvAllowed("ANTHROPIC_BASE_URL", ["claude"]), false);
+  assert.equal(isEnvAllowed("CLAUDE_CONFIG_DIR", ["claude"]), false);
 });
 
-test("isEnvAllowed: allows CLAUDE_ vars", () => {
-  assert.equal(isEnvAllowed("CLAUDE_AUTH_TOKEN"), true);
+test("isEnvAllowed: cursor credential key passes only for backend cursor", () => {
+  assert.equal(isEnvAllowed("CURSOR_API_KEY", ["cursor"]), true);
+  assert.equal(isEnvAllowed("CURSOR_API_KEY", ["claude", "codex"]), false);
+  assert.equal(isEnvAllowed("CURSOR_SESSION_ID", ["cursor"]), false);
+});
+
+test("isEnvAllowed: codex credential key passes only for backend codex", () => {
+  assert.equal(isEnvAllowed("OPENAI_API_KEY", ["codex"]), true);
+  assert.equal(isEnvAllowed("OPENAI_API_KEY", ["cursor"]), false);
+  assert.equal(isEnvAllowed("OPENAI_ORG_ID", ["codex"]), false);
+});
+
+test("isEnvAllowed: an unrecognized backend value forwards nothing", () => {
+  assert.equal(isEnvAllowed("ANTHROPIC_API_KEY", ["custom" as never]), false);
 });
 
 test("isEnvAllowed: rejects SSH_ vars", () => {
-  assert.equal(isEnvAllowed("SSH_AUTH_SOCK"), false);
+  assert.equal(isEnvAllowed("SSH_AUTH_SOCK", ["claude", "cursor", "codex"]), false);
 });
 
 test("isEnvAllowed: rejects AWS_ vars", () => {
-  assert.equal(isEnvAllowed("AWS_SECRET_ACCESS_KEY"), false);
+  assert.equal(isEnvAllowed("AWS_SECRET_ACCESS_KEY", ["claude", "cursor", "codex"]), false);
 });
 
 test("isEnvAllowed: rejects GITHUB_TOKEN", () => {
-  assert.equal(isEnvAllowed("GITHUB_TOKEN"), false);
+  assert.equal(isEnvAllowed("GITHUB_TOKEN", ["claude", "cursor", "codex"]), false);
 });
 
 test("isEnvAllowed: rejects PYPI_TOKEN", () => {
-  assert.equal(isEnvAllowed("PYPI_TOKEN"), false);
+  assert.equal(isEnvAllowed("PYPI_TOKEN", ["claude", "cursor", "codex"]), false);
 });
 
 test("isEnvAllowed: rejects arbitrary vars", () => {
-  assert.equal(isEnvAllowed("HOME"), false);
-  assert.equal(isEnvAllowed("PATH"), false);
-  assert.equal(isEnvAllowed("GH_TOKEN"), false);
-  assert.equal(isEnvAllowed("CARGO_REGISTRY_TOKEN"), false);
+  assert.equal(isEnvAllowed("HOME", []), false);
+  assert.equal(isEnvAllowed("PATH", []), false);
+  assert.equal(isEnvAllowed("GH_TOKEN", []), false);
+  assert.equal(isEnvAllowed("CARGO_REGISTRY_TOKEN", []), false);
 });
 
 // ---------------------------------------------------------------------------
@@ -802,6 +864,18 @@ test("docs/env-vars.md lists ENV_ALLOW_PREFIXES and the exclude prefix verbatim"
     doc.includes(excludeToken),
     `env-vars.md missing forwarding exclusion ${excludeToken}`,
   );
+});
+
+test("docs/env-vars.md lists every per-backend credential key on the forwarding allowlist", () => {
+  const doc = readFileSync(join(REPO_ROOT, "docs", "env-vars.md"), "utf8");
+  for (const [backend, keys] of Object.entries(BACKEND_CREDENTIAL_KEYS)) {
+    for (const key of keys) {
+      assert.ok(
+        doc.includes(`\`${key}\``),
+        `env-vars.md missing credential key \`${key}\` for backend ${backend}`,
+      );
+    }
+  }
 });
 
 test("buildDockerArgs: only forwards env vars matching allowlist", () => {
@@ -1173,7 +1247,7 @@ test("buildDockerArgs: a stale JAIPH_RUN_WORKFLOW in the host env is not auto-fo
 });
 
 test("isEnvAllowed: rejects JAIPH_RUN_WORKFLOW (set only via explicit spawn wiring)", () => {
-  assert.equal(isEnvAllowed(RUN_WORKFLOW_ENV), false);
+  assert.equal(isEnvAllowed(RUN_WORKFLOW_ENV, []), false);
 });
 
 // ---------------------------------------------------------------------------
@@ -1260,8 +1334,8 @@ test("buildDockerArgs: inplace does not forward JAIPH_INPLACE / JAIPH_INPLACE_YE
 });
 
 test("isEnvAllowed: rejects JAIPH_INPLACE and JAIPH_INPLACE_YES (would otherwise leak via JAIPH_ prefix)", () => {
-  assert.equal(isEnvAllowed("JAIPH_INPLACE"), false);
-  assert.equal(isEnvAllowed("JAIPH_INPLACE_YES"), false);
+  assert.equal(isEnvAllowed("JAIPH_INPLACE", []), false);
+  assert.equal(isEnvAllowed("JAIPH_INPLACE_YES", []), false);
 });
 
 test("buildDockerArgs: write to inplace workspace bind appears at the host workspace; copy does not", () => {

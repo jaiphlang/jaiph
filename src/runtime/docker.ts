@@ -529,6 +529,14 @@ export interface DockerSpawnOptions {
    * key forwarded through the allowlist. Reserved keys are rejected upstream.
    */
   extraEnv?: Record<string, string>;
+  /**
+   * Agent backends the entry file can select (module config, workflow config,
+   * and the `JAIPH_AGENT_BACKEND`/default fallback — see `collectEntryBackends`
+   * in `src/cli/run/preflight-credentials.ts`). Only the enumerated credential
+   * keys for these backends are forwarded (`BACKEND_CREDENTIAL_KEYS`).
+   * Omitted or empty → no backend credential keys cross (fail-closed).
+   */
+  backends?: readonly AgentBackend[];
   isTTY: boolean;
   /**
    * Workflow symbol the inner `jaiph run --raw` should execute as its root.
@@ -562,11 +570,32 @@ export interface DockerSpawnOptions {
 export const CONTAINER_WORKSPACE = "/jaiph/workspace";
 export const CONTAINER_RUN_DIR = "/jaiph/run";
 
+/** Agent backends the runtime can execute prompts against. */
+export type AgentBackend = "cursor" | "claude" | "codex";
+
 /**
- * Explicit allowlist of environment variable prefixes forwarded into the
- * container. Everything else is dropped — fail-closed by design.
+ * Enumerated credential keys forwarded into the container per agent backend.
+ * Only the keys for the run's resolved backends cross the boundary — the rest
+ * of the `ANTHROPIC_*` / `CLAUDE_*` / `CURSOR_*` / `OPENAI_*` families stay on
+ * the host. Anything else goes through the explicit `--env` escape hatch.
+ * Must stay in sync with the credential pre-flight
+ * (`src/cli/run/preflight-credentials.ts`) and docs/env-vars.md.
  */
-export const ENV_ALLOW_PREFIXES = ["JAIPH_", "ANTHROPIC_", "CURSOR_", "CLAUDE_", "OPENAI_"] as const;
+export const BACKEND_CREDENTIAL_KEYS: Record<AgentBackend, readonly string[]> = {
+  cursor: ["CURSOR_API_KEY"],
+  claude: ["ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN"],
+  codex: ["OPENAI_API_KEY"],
+};
+
+/**
+ * Environment variable prefixes forwarded into the container. Only `JAIPH_*`
+ * run-control keys are prefix-forwarded — the runtime inside the container
+ * consumes them (with `JAIPH_DOCKER_*` and the explicit name exclusions below
+ * carved out). Agent credentials are NOT prefix-forwarded: only the enumerated
+ * per-backend keys in `BACKEND_CREDENTIAL_KEYS` cross, and only for the run's
+ * resolved backends. Everything else is dropped — fail-closed by design.
+ */
+export const ENV_ALLOW_PREFIXES = ["JAIPH_"] as const;
 
 /** Prefix excluded from the allowlist even though it starts with JAIPH_. */
 export const ENV_ALLOW_EXCLUDE_PREFIX = "JAIPH_DOCKER_";
@@ -592,11 +621,20 @@ export const ENV_ALLOW_EXCLUDE_NAMES = new Set<string>([
   RUN_WORKFLOW_ENV,
 ]);
 
-/** Returns true if `key` is on the explicit allowlist for container forwarding. */
-export function isEnvAllowed(key: string): boolean {
+/**
+ * Returns true if `key` may be forwarded into the container for a run that
+ * resolved to `backends`. `JAIPH_*` run-control keys pass regardless of
+ * backend (minus the exclusions); credential keys pass only when one of the
+ * given backends needs them (`BACKEND_CREDENTIAL_KEYS`). An empty `backends`
+ * forwards no credentials — fail-closed.
+ */
+export function isEnvAllowed(key: string, backends: readonly AgentBackend[]): boolean {
   if (key.startsWith(ENV_ALLOW_EXCLUDE_PREFIX)) return false;
   if (ENV_ALLOW_EXCLUDE_NAMES.has(key)) return false;
-  return ENV_ALLOW_PREFIXES.some((prefix) => key.startsWith(prefix));
+  if (ENV_ALLOW_PREFIXES.some((prefix) => key.startsWith(prefix))) return true;
+  // Guard the lookup: `backends` may carry an unrecognized JAIPH_AGENT_BACKEND
+  // value at runtime, which forwards nothing rather than throwing.
+  return backends.some((backend) => BACKEND_CREDENTIAL_KEYS[backend]?.includes(key) ?? false);
 }
 
 /** Resolve the host run-artifacts root for Docker-backed runs. */
@@ -784,10 +822,11 @@ export function buildDockerArgs(opts: DockerSpawnOptions, overlayScriptPath?: st
   }
 
   const extraEnv = opts.extraEnv ?? {};
+  const backends = opts.backends ?? [];
   const containerEnv = remapDockerEnv(opts.env, opts.workspaceRoot);
   for (const [key, value] of Object.entries(containerEnv)) {
     if (value === undefined) continue;
-    if (!isEnvAllowed(key)) continue;
+    if (!isEnvAllowed(key, backends)) continue;
     // `--env` supplies this key explicitly below; skip the allowlist copy so it
     // appears once, with the `--env` value winning.
     if (key in extraEnv) continue;
