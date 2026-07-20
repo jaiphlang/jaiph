@@ -3,8 +3,10 @@ import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import type { ChildProcess } from "node:child_process";
 import type { JaiphConfig } from "../../config";
+import type { jaiphModule } from "../../types";
 import { spawnRunProcess, waitForRunExit, cancelRunProcess } from "../run/lifecycle";
 import { resolveRuntimeEnv } from "../run/env";
+import { collectEntryBackends } from "../run/preflight-credentials";
 import { parseLogEvent, parseStepEvent } from "../run/events";
 import {
   spawnDockerProcess,
@@ -25,6 +27,12 @@ import type { McpCallResult, McpCallContext } from "./server";
 export interface McpCallEnvironment {
   inputAbs: string;
   workspaceRoot: string;
+  /**
+   * Entry module AST for this generation. Docker calls scan it for the
+   * backends in play (`collectEntryBackends`) so the sandbox forwards only
+   * those backends' credential keys.
+   */
+  mod: jaiphModule;
   effectiveConfig: JaiphConfig;
   /** Emitted scripts dir for this generation (`buildScriptsFromGraph`). */
   scriptsDir: string;
@@ -133,6 +141,7 @@ async function callWorkflowDocker(
     runArgs: positionalArgs,
     env: runtimeEnv,
     extraEnv: env.extraEnv,
+    backends: collectEntryBackends(env.mod, runtimeEnv),
     isTTY: false,
     sandboxMode,
     workflowSymbol,

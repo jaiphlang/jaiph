@@ -14,27 +14,6 @@ Process rules:
 
 ***
 
-## Fix: Forward only backend-specific credential env keys into the Docker sandbox #dev-ready
-
-**Source:** `.jaiph/security_review_2026-07-20.md` Finding 7 (LOW).
-
-**Problem:** `ENV_ALLOW_PREFIXES` forwards entire `ANTHROPIC_*` / `CURSOR_*` / `CLAUDE_*` / `OPENAI_*` / `JAIPH_*` families into the container. Any host secret matching those prefixes is visible to sandboxed code and exfiltratable if prompt→shell injection lands inside the container.
-
-**Required behavior:**
-
-* Forward only the specific keys required by the resolved agent backend (document the allowlist per backend), not whole prefix families — except `JAIPH_*` run-control keys that the runtime itself needs (keep those as a tight enumerated or clearly justified prefix).
-* `--env` / explicit passthrough remains an intentional escape hatch and is documented as such.
-* Unit tests lock the forwarded key set for each backend.
-
-Acceptance:
-
-* With unrelated `ANTHROPIC_UNUSED=…` on the host and backend=claude, that key is **not** present in the container env in tests.
-* Required keys for the active backend still forward.
-* Docs list per-backend credential keys and the `--env` bypass.
-* `npm test` passes.
-
-***
-
 ## Fix: Prefer `copy` over elevated overlay defaults; document overlay capability posture #dev-ready
 
 **Source:** `.jaiph/security_review_2026-07-20.md` Finding 3 (LOW, ASI-03/ASI-05).

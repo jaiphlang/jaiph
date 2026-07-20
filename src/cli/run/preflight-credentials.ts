@@ -4,14 +4,12 @@ import type {
   jaiphModule,
   WorkflowStepDef,
 } from "../../types";
-import { isEnvAllowed } from "../../runtime/docker";
+import { isEnvAllowed, type AgentBackend } from "../../runtime/docker";
 
 export const E_AGENT_CREDENTIALS = "E_AGENT_CREDENTIALS";
 
-type Backend = "cursor" | "claude" | "codex";
-
 interface BackendUsage {
-  backend: Backend;
+  backend: AgentBackend;
   /** Human-readable scope: "module config" | "workflow <name>" | "default" | "JAIPH_AGENT_BACKEND env". */
   scope: string;
   /** Model from the same scope, falling back to module-level model. */
@@ -42,7 +40,7 @@ function collectBackendUsages(
   mod: jaiphModule,
   runtimeEnv: Record<string, string | undefined>,
 ): BackendUsage[] {
-  const seen = new Map<Backend, BackendUsage>();
+  const seen = new Map<AgentBackend, BackendUsage>();
   const moduleBackend = mod.metadata?.agent?.backend;
   const moduleModel = mod.metadata?.agent?.model;
   if (moduleBackend) {
@@ -63,7 +61,7 @@ function collectBackendUsages(
     });
   }
   const envBackendRaw = runtimeEnv.JAIPH_AGENT_BACKEND;
-  const defaultBackend = (envBackendRaw || "cursor") as Backend;
+  const defaultBackend = (envBackendRaw || "cursor") as AgentBackend;
   if (!seen.has(defaultBackend)) {
     const scope = envBackendRaw ? "JAIPH_AGENT_BACKEND env" : "default";
     seen.set(defaultBackend, { backend: defaultBackend, scope, model: moduleModel });
@@ -72,17 +70,32 @@ function collectBackendUsages(
 }
 
 /**
+ * Backends the entry file can select, in scan order — the same entry-file
+ * contract as the credential pre-flight above. Feeds
+ * `DockerSpawnOptions.backends` so the Docker sandbox forwards exactly the
+ * credential keys these backends need (`BACKEND_CREDENTIAL_KEYS`).
+ */
+export function collectEntryBackends(
+  mod: jaiphModule,
+  runtimeEnv: Record<string, string | undefined>,
+): AgentBackend[] {
+  return collectBackendUsages(mod, runtimeEnv).map((usage) => usage.backend);
+}
+
+/**
  * True when `key` is set to a non-empty value in the env that will actually
- * reach the agent. When Docker is on, the host-side allowlist (`isEnvAllowed`)
- * runs first — a credential present on the host but not on the allowlist is
- * treated as missing because the container will never see it.
+ * reach the agent. When Docker is on, the host-side allowlist (`isEnvAllowed`,
+ * scoped to the backend being checked) runs first — a credential present on
+ * the host but not forwarded for that backend is treated as missing because
+ * the container will never see it.
  */
 function hasCredential(
   env: Record<string, string | undefined>,
   key: string,
   dockerEnabled: boolean,
+  backend: AgentBackend,
 ): boolean {
-  if (dockerEnabled && !isEnvAllowed(key)) return false;
+  if (dockerEnabled && !isEnvAllowed(key, [backend])) return false;
   const v = env[key];
   return typeof v === "string" && v.length > 0;
 }
@@ -104,8 +117,8 @@ function checkClaude(
   out: PreflightResult,
 ): void {
   const ok =
-    hasCredential(args.runtimeEnv, "ANTHROPIC_API_KEY", args.dockerEnabled) ||
-    hasCredential(args.runtimeEnv, "CLAUDE_CODE_OAUTH_TOKEN", args.dockerEnabled);
+    hasCredential(args.runtimeEnv, "ANTHROPIC_API_KEY", args.dockerEnabled, usage.backend) ||
+    hasCredential(args.runtimeEnv, "CLAUDE_CODE_OAUTH_TOKEN", args.dockerEnabled, usage.backend);
   if (ok) return;
   const header = formatHeader(usage, args.inputAbs);
   const remedy =
@@ -126,7 +139,7 @@ function checkCursor(
   args: PreflightArgs,
   out: PreflightResult,
 ): void {
-  if (hasCredential(args.runtimeEnv, "CURSOR_API_KEY", args.dockerEnabled)) return;
+  if (hasCredential(args.runtimeEnv, "CURSOR_API_KEY", args.dockerEnabled, usage.backend)) return;
   const header = formatHeader(usage, args.inputAbs);
   const remedy =
     "Set CURSOR_API_KEY (or run `cursor-agent login` for host runs).";
@@ -146,7 +159,7 @@ function checkCodex(
   args: PreflightArgs,
   out: PreflightResult,
 ): void {
-  if (hasCredential(args.runtimeEnv, "OPENAI_API_KEY", args.dockerEnabled)) return;
+  if (hasCredential(args.runtimeEnv, "OPENAI_API_KEY", args.dockerEnabled, usage.backend)) return;
   const header = formatHeader(usage, args.inputAbs);
   const remedy = "Set OPENAI_API_KEY to your OpenAI API key.";
   out.errors.push(

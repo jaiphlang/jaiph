@@ -232,6 +232,10 @@ workflow classify_role(task) {
 }
 
 workflow implement(task, role_name) {
+  config {
+    agent.model = "fable"
+  }
+
   run task_text_has_header(task) catch (err) {
     fail "Provided task does not contain a '## [text]' header"
   }

@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   preflightAgentCredentials,
+  collectEntryBackends,
   E_AGENT_CREDENTIALS,
 } from "./preflight-credentials";
 import type {
@@ -449,4 +450,27 @@ test("module config matches the effective env default → no duplicate check", (
     dockerEnabled: true,
   });
   assert.equal(r.errors.length, 1, `expected exactly one error, got: ${r.errors.join("\n")}`);
+});
+
+// ---------------------------------------------------------------------------
+// collectEntryBackends: entry-file backend scan feeding the Docker env forward
+// ---------------------------------------------------------------------------
+
+test("collectEntryBackends: no config and no env → default cursor only", () => {
+  const mod = emptyModule(ENTRY);
+  assert.deepEqual(collectEntryBackends(mod, {}), ["cursor"]);
+});
+
+test("collectEntryBackends: module claude + workflow cursor → both, no duplicates", () => {
+  const mod = emptyModule(ENTRY, { agent: { backend: "claude" } });
+  mod.workflows = [workflow("legacy", { agent: { backend: "cursor" } })];
+  assert.deepEqual(collectEntryBackends(mod, envFor("claude")), ["claude", "cursor"]);
+});
+
+test("collectEntryBackends: JAIPH_AGENT_BACKEND env adds the effective default backend", () => {
+  const mod = emptyModule(ENTRY, { agent: { backend: "claude" } });
+  assert.deepEqual(
+    collectEntryBackends(mod, { JAIPH_AGENT_BACKEND: "codex" }),
+    ["claude", "codex"],
+  );
 });

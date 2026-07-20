@@ -13,7 +13,7 @@ No SDK project and no build step are involved: `jaiph mcp ./tools.jh` reuses the
 ## Prerequisites
 
 - A `.jh` file with at least one workflow.
-- Agent credentials for any exposed workflow that uses `prompt` — see [Authenticate agent backends](/how-to/agent-auth). Set them on the **host** environment: in Docker mode they are forwarded into the container through the env allowlist (`ANTHROPIC_*`, `CURSOR_*`, `CLAUDE_*`), and in host mode they are read directly.
+- Agent credentials for any exposed workflow that uses `prompt` — see [Authenticate agent backends](/how-to/agent-auth). Set them on the **host** environment: in Docker mode the credential keys for the backends the served file selects (`ANTHROPIC_API_KEY`/`CLAUDE_CODE_OAUTH_TOKEN`, `CURSOR_API_KEY`, `OPENAI_API_KEY`) are forwarded into the container through the env allowlist, and in host mode they are read directly.
 
 ## 1. Serve a file over stdio
 

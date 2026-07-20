@@ -87,7 +87,7 @@ function loadState(
     state: {
       graph,
       tools,
-      callEnv: { inputAbs, workspaceRoot, effectiveConfig, scriptsDir, graphFile, outDir, extraEnv },
+      callEnv: { inputAbs, workspaceRoot, mod, effectiveConfig, scriptsDir, graphFile, outDir, extraEnv },
     },
     failures: [],
   };

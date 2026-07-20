@@ -67,7 +67,7 @@ import {
 } from "../run/progress";
 import { loadMergedHooks, registerHooksSubscriber } from "../run/hooks";
 import { resolveRuntimeEnv, applySandboxFlags, resolveEnvPairs } from "../run/env";
-import { preflightAgentCredentials } from "../run/preflight-credentials";
+import { preflightAgentCredentials, collectEntryBackends } from "../run/preflight-credentials";
 import { colorize, formatJaiphRunningBannerLines } from "../run/display";
 import { createRunEmitter } from "../run/emitter";
 import {
@@ -453,6 +453,7 @@ function spawnExec(
       runArgs,
       env: runtimeEnv,
       extraEnv,
+      backends: collectEntryBackends(mod, runtimeEnv),
       isTTY,
     });
     execResult = dockerResult.child;
