@@ -49,7 +49,7 @@ The table below covers every `JAIPH_*` name read from `process.env` / `env` in `
 | `JAIPH_DOCKER_IMAGE` | host | string | `ghcr.io/jaiphlang/jaiph-runtime:<version>` | `runtime.docker_image` | Container image. Must already contain `jaiph`. |
 | `JAIPH_DOCKER_KEEP_SANDBOX` | host | bool (`1` / `true`) | `false` | — | Copy mode only — when enabled, leave the host-side `.sandbox-<id>/` clone on disk after exit for debugging. |
 | `JAIPH_DOCKER_NETWORK` | host | string (`default`, `none`, or named network) | `default` | `runtime.docker_network` | `docker run --network` value. `none` disables egress. |
-| `JAIPH_DOCKER_NO_OVERLAY` | host | bool (`1` / `true`) | `false` | — | Force copy mode even when `/dev/fuse` is available. |
+| `JAIPH_DOCKER_NO_OVERLAY` | host | bool (`1` / `true`) | `false` | — | Force copy mode even when `/dev/fuse` is available — picks the non-elevated posture (no added caps, no `apparmor=unconfined`) at the cost of a per-run workspace copy. See [Sandboxing](sandboxing.md#overlay-capability-posture). |
 | `JAIPH_DOCKER_TIMEOUT` | host | int (seconds) | `14400` (4h) | `runtime.docker_timeout_seconds` | Container execution timeout. `0` disables. Invalid values produce `E_DOCKER_TIMEOUT`. |
 | `JAIPH_INBOX_MAX_DISPATCH` | runtime | int | `1000` | — | Maximum inbox messages a single workflow frame may drain before aborting with `E_INBOX_DISPATCH_LIMIT`. |
 | `JAIPH_INBOX_PARALLEL` | — | — | — | — | Unused — the runtime does not read this variable (tests assert setting it has no effect on inbox dispatch order). |

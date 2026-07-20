@@ -374,6 +374,15 @@ export type SandboxMode = "overlay" | "copy" | "inplace";
  * fuse-overlayfs viability inside the container. Linux dev/CI hosts typically
  * have it; macOS Docker Desktop typically doesn't expose it. Override with
  * `JAIPH_DOCKER_NO_OVERLAY=1` to force the host-copy path.
+ *
+ * Overlay stays the fuse-host default deliberately: it starts in O(1)
+ * regardless of workspace size, where copy pays a full `cp -pR` of the
+ * checkout per run (Linux has no clonefile fallback). The cost is an elevated
+ * setup posture (root + SYS_ADMIN + apparmor=unconfined on Linux, dropped
+ * before workflow code runs) — documented in docs/sandboxing.md
+ * (#overlay-capability-posture) and locked by tests in docker.test.ts.
+ * Hosts that want the minimal-capability posture force copy via
+ * `JAIPH_DOCKER_NO_OVERLAY=1`.
  */
 export function selectSandboxMode(env: Record<string, string | undefined>): SandboxMode {
   if (env.JAIPH_INPLACE === "1" || env.JAIPH_INPLACE === "true") {
@@ -767,6 +776,15 @@ export function buildDockerArgs(opts: DockerSpawnOptions, overlayScriptPath?: st
     // this single container restores the documented fuse-overlayfs
     // behavior. Linux-only: macOS Docker Desktop has no AppArmor and
     // rejects unknown security-opts on some versions.
+    //
+    // TRACKED EXCEPTION (security review 2026-07-20, Finding 3): unconfined
+    // is broader than the fuse mount needs, but Docker can only reference
+    // AppArmor profiles already loaded on the host, and the unprivileged CLI
+    // cannot load one. A tailored profile (docker-default semantics plus fuse
+    // mounts) is a queued follow-up — QUEUE.md, "Ship a tailored AppArmor
+    // profile for overlay mode". Until then the posture is documented in
+    // docs/sandboxing.md (#overlay-capability-posture) and locked by the
+    // posture-lock tests in docker.test.ts so it cannot widen silently.
     if (process.platform === "linux") {
       args.push("--security-opt", "apparmor=unconfined");
     }

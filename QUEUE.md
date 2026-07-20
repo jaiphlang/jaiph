@@ -14,21 +14,22 @@ Process rules:
 
 ***
 
-## Fix: Prefer `copy` over elevated overlay defaults; document overlay capability posture #dev-ready
+## Fix: Ship a tailored AppArmor profile for overlay mode
 
-**Source:** `.jaiph/security_review_2026-07-20.md` Finding 3 (LOW, ASI-03/ASI-05).
+**Source:** `.jaiph/security_review_2026-07-20.md` Finding 3 (LOW, ASI-03/ASI-05) — the tracked exception left by "Prefer `copy` over elevated overlay defaults; document overlay capability posture" (overlay default kept; posture documented in `docs/sandboxing.md#overlay-capability-posture` and locked by tests in `src/runtime/docker.test.ts`).
 
-**Problem:** Overlay mode starts as root with `SYS_ADMIN` and (on Linux) `apparmor=unconfined` to mount fuse-overlayfs, then drops privileges. That is a larger kernel attack surface than `copy` for the same isolation guarantee.
+**Problem:** Overlay mode on Linux runs with `--security-opt apparmor=unconfined` because default host AppArmor profiles deny fuse mounts inside containers, and Docker can only reference profiles already loaded on the host — which the unprivileged CLI cannot do. Unconfined is broader than the fuse mount requires.
 
 **Required behavior:**
 
-* Re-evaluate default mode selection: prefer `copy` as the default when the isolation guarantee is equivalent, **or** keep overlay only where it is a clear win and document why — but do not leave AppArmor `unconfined` unexplained. If overlay remains default on fuse hosts, add a tailored AppArmor profile (or document tracked follow-up with a linked issue) and surface the elevated posture in sandbox docs.
-* Sandbox docs state clearly: overlay elevates during setup; `copy` does not; when to force `JAIPH_DOCKER_NO_OVERLAY=1`.
+* Ship a loadable AppArmor profile (docker-default semantics plus `mount fstype=fuse`) under `runtime/`, with a documented `apparmor_parser` install step for hosts that opt in.
+* When that profile is loaded on the host, `buildDockerArgs` prefers `--security-opt apparmor=<profile>` for overlay containers; when it is not loaded, fall back to `apparmor=unconfined` (current posture) so overlay keeps working out of the box.
+* Update the overlay posture section in `docs/sandboxing.md` and the posture-lock tests in `src/runtime/docker.test.ts` for both branches.
 
 Acceptance:
 
-* Docs accurately describe overlay caps / AppArmor / UID drop vs copy.
-* Either (a) default mode changes to `copy` with tests updated, or (b) overlay default remains but AppArmor is not blanket `unconfined` (profile or explicit tracked exception with test locking the chosen posture).
-* `npm test` / relevant e2e sandbox tests pass.
+* Overlay containers use the tailored profile when it is loaded and `unconfined` otherwise, with unit tests covering both branches (profile-detection injectable for tests).
+* Docs describe how to load the profile and exactly what it permits beyond docker-default.
+* `npm test` passes.
 
 ***

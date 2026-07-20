@@ -29,6 +29,8 @@ Docker is **on by default**. The CLI picks the workspace-presentation mode autom
 
 In both modes the host checkout is unmodified after the run. Run artifacts always land under host `.jaiph/runs/` via a separate read-write mount.
 
+The two modes differ in capability posture, not in the isolation guarantee. Overlay **elevates during setup**: the container starts as root with `SYS_ADMIN` (plus `SETUID`/`SETGID`/`CHOWN`/`DAC_READ_SEARCH`, and `apparmor=unconfined` on Linux) so it can mount `fuse-overlayfs`, then drops to your UID before the workflow starts. Copy mode never elevates — no added capabilities, no AppArmor exception. Force `JAIPH_DOCKER_NO_OVERLAY=1` on shared hosts, under security policy that forbids `SYS_ADMIN`/unconfined containers, or for untrusted workflows: you pay a per-run workspace copy and get the minimal posture. Details: [Sandboxing — Overlay elevates during setup](sandboxing.md#overlay-capability-posture).
+
 ## 2. Pick inplace mode for live edits
 
 When you want the run's edits to land **live on the host** (typical for an agent-driven dev loop), opt in to inplace mode:
