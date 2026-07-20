@@ -643,8 +643,12 @@ Jaiph: Running async.jh<span class="run-banner-meta"> (Docker sandbox, fusefs)</
                         (managed step &mdash; same value/log contract as <code>ensure</code>). Parentheses are
                         <strong>required</strong> on all call sites &mdash; even when passing zero arguments
                         (e.g. <code>run setup()</code>).
-                        Arguments can be quoted strings or <strong>bare identifiers</strong>:
+                        Arguments can be quoted strings, <strong>bare identifiers</strong>, or triple-quoted
+                        <code>"""…"""</code> multiline blocks:
                         <code>run greet(name)</code> is equivalent to <code>run greet("${name}")</code>.
+                        A call's parentheses may span multiple lines; a line that starts a managed call
+                        (<code>run</code> / <code>ensure</code> / <code>return run</code> / <code>return ensure</code>)
+                        but never closes its <code>(</code> is a compile error, <strong>never</strong> a silent shell line.
                         <code>run `body`(args)</code> embeds a one-off shell command directly
                         without a named <code>script</code> definition &mdash; supports arguments and capture.
                         Use triple backticks for multiline: <code>run ```...```(args)</code>.

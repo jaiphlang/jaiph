@@ -88,6 +88,18 @@ Capture rules:
 | Inline script | Trimmed stdout. |
 | Rule (`ensure`) | Explicit `return` value. |
 
+Call arguments:
+
+| Form | Description |
+|---|---|
+| `"…"` double-quoted string | Single-line; `${ident}` / `${ident.field}` interpolation allowed. |
+| `"""…"""` triple-quoted block | Opens `"""` as the first non-whitespace token on its own line. Body is dedented to the common leading margin. The formatter normalises the result to an inline double-quoted string (intentional — `Arg` nodes do not carry Trivia). |
+| Bare identifier | In-scope binding (`const`, capture, parameter). Unknown names are `E_VALIDATE`. |
+| Bare dotted `IDENT.IDENT` | Typed-prompt field access. Base must be a typed-prompt capture; field must appear in its `returns` schema (`E_VALIDATE` otherwise). |
+| `run ref(args)` / `ensure ref(args)` | Nested managed call. The `run` / `ensure` keyword is required. |
+
+**Hard error contract:** any line that begins with `run`, `ensure`, `return run`, or `return ensure` followed by a valid identifier and `(` is treated as a managed-call start. If the matching `)` is never found before end-of-block, the compiler emits `E_PARSE` — the line is **never** silently treated as a workflow shell step.
+
 ### Inline scripts
 
 Inline scripts embed a script body in a step without a separate `script` definition. Single backticks for one-liners, triple backticks for multiline or polyglot bodies.
