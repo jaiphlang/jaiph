@@ -1394,6 +1394,112 @@ test("buildDockerArgs: write to inplace workspace bind appears at the host works
 });
 
 // ---------------------------------------------------------------------------
+// Capability posture lock (security review 2026-07-20, Finding 3)
+// ---------------------------------------------------------------------------
+// Overlay's elevated setup posture (root + caps + apparmor=unconfined on
+// Linux, dropped via setpriv before workflow code runs) is a documented,
+// tracked exception — see docs/sandboxing.md#overlay-capability-posture and
+// the QUEUE.md follow-up "Ship a tailored AppArmor profile for overlay mode".
+// These tests pin the EXACT flag sets, not just inclusion: any widening (a
+// new cap-add, a new security-opt) fails here and must go through docs and
+// review, and copy/inplace must stay non-elevated.
+
+function capAddsOf(args: string[]): string[] {
+  return args
+    .map((v, i) => (v === "--cap-add" ? args[i + 1] : null))
+    .filter((v): v is string => v !== null);
+}
+
+function securityOptsOf(args: string[]): string[] {
+  return args
+    .map((v, i) => (v === "--security-opt" ? args[i + 1] : null))
+    .filter((v): v is string => v !== null);
+}
+
+test("posture lock: overlay adds exactly SYS_ADMIN, SETUID, SETGID, CHOWN, DAC_READ_SEARCH — nothing else", () => {
+  const args = buildDockerArgs(defaultOpts(), TEST_OVERLAY);
+  assert.deepStrictEqual(
+    capAddsOf(args),
+    ["SYS_ADMIN", "SETUID", "SETGID", "CHOWN", "DAC_READ_SEARCH"],
+    "overlay cap set widened or shrank — update docs/sandboxing.md#overlay-capability-posture with the review rationale first",
+  );
+});
+
+test("posture lock: overlay security-opts are exactly no-new-privileges plus apparmor=unconfined on Linux only", () => {
+  const args = buildDockerArgs(defaultOpts(), TEST_OVERLAY);
+  const expected =
+    process.platform === "linux"
+      ? ["no-new-privileges", "apparmor=unconfined"]
+      : ["no-new-privileges"];
+  assert.deepStrictEqual(
+    securityOptsOf(args),
+    expected,
+    "overlay security-opt posture changed — this is the tracked AppArmor exception; update docs and QUEUE.md follow-up first",
+  );
+});
+
+test("posture lock: copy and inplace add no caps and no security-opt beyond no-new-privileges", () => {
+  const cloneDir = mkdtempSync(join(tmpdir(), "jaiph-test-posture-"));
+  try {
+    const modes: Array<[string, string[]]> = [
+      ["copy", buildDockerArgs(copyOpts(cloneDir))],
+      ["inplace", buildDockerArgs(inplaceOpts())],
+    ];
+    for (const [mode, args] of modes) {
+      assert.deepStrictEqual(capAddsOf(args), [], `${mode} mode must never add capabilities back`);
+      assert.deepStrictEqual(
+        securityOptsOf(args),
+        ["no-new-privileges"],
+        `${mode} mode must never set an AppArmor exception or other security-opt`,
+      );
+      assert.ok(!args.includes("/dev/fuse"), `${mode} mode must not expose /dev/fuse`);
+    }
+  } finally {
+    rmSync(cloneDir, { recursive: true, force: true });
+  }
+});
+
+test("posture lock (Linux): overlay starts as root 0:0; copy and inplace start as the host uid:gid", () => {
+  if (process.platform !== "linux") return;
+  const cloneDir = mkdtempSync(join(tmpdir(), "jaiph-test-posture-uid-"));
+  try {
+    const userOf = (args: string[]): string => args[args.indexOf("--user") + 1];
+    assert.equal(userOf(buildDockerArgs(defaultOpts(), TEST_OVERLAY)), "0:0");
+    assert.match(userOf(buildDockerArgs(copyOpts(cloneDir))), /^\d+:\d+$/);
+    assert.notEqual(userOf(buildDockerArgs(copyOpts(cloneDir))), "0:0");
+    assert.match(userOf(buildDockerArgs(inplaceOpts())), /^\d+:\d+$/);
+    assert.notEqual(userOf(buildDockerArgs(inplaceOpts())), "0:0");
+  } finally {
+    rmSync(cloneDir, { recursive: true, force: true });
+  }
+});
+
+test("docs/sandboxing.md documents the overlay capability posture (caps, AppArmor, UID drop, opt-out)", () => {
+  const doc = readFileSync(join(REPO_ROOT, "docs", "sandboxing.md"), "utf8");
+  const tokens = [
+    "SYS_ADMIN",
+    "SETUID",
+    "SETGID",
+    "CHOWN",
+    "DAC_READ_SEARCH",
+    "apparmor=unconfined",
+    "setpriv",
+    "JAIPH_DOCKER_NO_OVERLAY",
+    "overlay-capability-posture",
+  ];
+  for (const token of tokens) {
+    assert.ok(doc.includes(token), `sandboxing.md missing overlay-posture token ${token}`);
+  }
+});
+
+test("docs/sandbox-run.md states that overlay elevates during setup, copy does not, and the opt-out", () => {
+  const doc = readFileSync(join(REPO_ROOT, "docs", "sandbox-run.md"), "utf8");
+  for (const token of ["elevates during setup", "apparmor=unconfined", "JAIPH_DOCKER_NO_OVERLAY", "never elevates"]) {
+    assert.ok(doc.includes(token), `sandbox-run.md missing overlay-posture token ${token}`);
+  }
+});
+
+// ---------------------------------------------------------------------------
 // spawnDockerProcess: inplace mode skips cloneWorkspaceForSandbox path
 // ---------------------------------------------------------------------------
 

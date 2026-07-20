@@ -34,13 +34,38 @@ Docker is about **blast radius**: it cannot stop a script from misbehaving, but 
 
 ## The three sandbox modes
 
-When Docker is enabled, the CLI picks one of three sandbox primitives at launch. The mode controls **how the workspace is presented to the container**; the env allowlist, mount allowlist, and `--security-opt no-new-privileges` posture is the same across all three. Every mode starts from `--cap-drop ALL`; overlay mode adds back a small cap set for `fuse-overlayfs` (see [What Docker protects against](#what-docker-protects-against)).
+When Docker is enabled, the CLI picks one of three sandbox primitives at launch. The mode controls **how the workspace is presented to the container**; the env allowlist, mount allowlist, and `--security-opt no-new-privileges` posture is the same across all three. Every mode starts from `--cap-drop ALL`; overlay mode adds back a small cap set for `fuse-overlayfs` (see [Overlay elevates during setup](#overlay-capability-posture)).
 
 - **Overlay mode** — the host workspace is bind-mounted read-only; `fuse-overlayfs` inside the container layers a writable scratch space on top, merged at `/jaiph/workspace`. Reads come from the real workspace, writes land in the overlay and are discarded when the container exits. The *idea* is copy-on-write isolation: the host checkout is the source of truth, the run can pretend to mutate it, and at exit there is no trace.
 - **Copy mode** — before launching, the CLI clones the workspace into a disposable sandbox directory and bind-mounts that clone read-write. Writes are real, but they are local to the clone, which is removed on exit. The *idea* is the same isolation contract as overlay, expressed without `fuse-overlayfs` (which is not available everywhere, notably on macOS Docker Desktop and on Linux hosts that block fuse mounts).
 - **Inplace mode** — the host workspace itself is bind-mounted read-write. The run's edits land **live** on the host. The *idea* is "trusted workspace, untrusted machine": the rest of the sandbox (caps, env allowlist, mount set) still applies, but the workspace-isolation half is removed on purpose so an agent-driven dev loop can iterate against the real checkout.
 
 Overlay and copy are interchangeable from the user's point of view — both produce the property that **the host workspace is unmodified after a Docker run**. Inplace explicitly opts out of that property in exchange for a tighter dev loop, and on `jaiph run` the CLI gates it behind a destructive-edit confirmation prompt before launch. `jaiph mcp` uses the same default (isolated workspace); set `JAIPH_INPLACE=1` to bind the live workspace read-write for MCP tool calls — see [Serve workflows as MCP tools — Safety posture](mcp.md#safety-posture).
+
+## Overlay elevates during setup; copy does not {#overlay-capability-posture}
+
+Overlay and copy deliver the same isolation guarantee, but they reach it with different capability postures, and the difference matters when you choose between them.
+
+**Overlay mode elevates during container setup.** Mounting `fuse-overlayfs` requires privileges, so on top of the shared `--cap-drop ALL` / `--security-opt no-new-privileges` baseline the overlay container:
+
+- adds back exactly five capabilities: `SYS_ADMIN` (the fuse mount itself), `SETUID` and `SETGID` (the privilege drop below), `CHOWN` (best-effort ownership fix of `/jaiph/run`), and `DAC_READ_SEARCH` (the root-owned fuse-overlayfs daemon must read lower-layer files with restrictive permissions to serve them through the merged view);
+- starts as **root** (`--user 0:0` on Linux) so the entrypoint can perform the mount, then drops to the host UID/GID via `setpriv` (`runtime/overlay-run.sh`) **before any workflow code runs**;
+- on Linux, runs with **`--security-opt apparmor=unconfined`**, because the default AppArmor profile on common hosts (Ubuntu 22.04+, GitHub Actions runners) denies fuse mounts inside containers even when `SYS_ADMIN` and `/dev/fuse` are granted.
+
+The workflow process itself is unprivileged — the UID drop happens before it starts, and `no-new-privileges` prevents re-escalation. What overlay adds is kernel attack surface: a kernel or FUSE vulnerability reachable from the container, or the root-owned setup window itself, is exposure that copy mode simply does not have.
+
+The `apparmor=unconfined` part is an **explicit, tracked exception**, not a tuned choice: Docker can only reference AppArmor profiles already loaded on the host, and the unprivileged CLI cannot load one, so a tailored profile (docker-default semantics plus fuse mounts) is queued as a follow-up in `QUEUE.md` ("Ship a tailored AppArmor profile for overlay mode", from `.jaiph/security_review_2026-07-20.md` Finding 3). The full posture above is locked by tests in `src/runtime/docker.test.ts` so it cannot widen silently.
+
+**Copy mode (and inplace mode) never elevate.** No capability is added back, no AppArmor exception is set, and on Linux the container runs as the host UID/GID from the first instruction.
+
+**Why overlay is still the default on fuse hosts.** Copy pays a full host-side clone of the workspace per run, and Linux has no APFS-style clonefile shortcut — on a large checkout (`.git` history, `node_modules`) that cost is real and recurs every run. Overlay starts in O(1) regardless of workspace size. On hosts that expose `/dev/fuse`, Jaiph treats that startup win as worth the documented, setup-scoped elevation.
+
+**When to force `JAIPH_DOCKER_NO_OVERLAY=1`.** Setting it (or `=true`) picks copy mode even where fuse is available, trading per-run startup time for the minimal capability posture. Do this when:
+
+- the host is shared or multi-tenant and you want the smallest per-run kernel attack surface;
+- host security policy forbids `apparmor=unconfined` or `SYS_ADMIN` containers;
+- you run untrusted or third-party workflows and want defense-in-depth beyond the UID drop;
+- fuse mounts misbehave on the host and you want the deterministic path.
 
 ## Confirmation prompts and access scope
 
@@ -74,7 +99,7 @@ The same teardown applies when a run hits its Docker timeout (`E_TIMEOUT`) and t
 The Docker sandbox is designed to contain damage from untrusted or semi-trusted workflow scripts. Its protections are:
 
 - **Filesystem reach** — scripts inside the container cannot read or write arbitrary host paths outside the workspace mount and the run-artifacts mount. The rest of the host is invisible to the container. Overlay and copy modes additionally make the workspace itself non-persistent.
-- **Process isolation** — container processes cannot see or signal host processes. Every sandboxed container runs with `--cap-drop ALL` and `--security-opt no-new-privileges`. Overlay mode adds back a small set of capabilities required to mount `fuse-overlayfs` and then drop privileges; copy and inplace modes do not add any back.
+- **Process isolation** — container processes cannot see or signal host processes. Every sandboxed container runs with `--cap-drop ALL` and `--security-opt no-new-privileges`. Overlay mode adds back a small set of capabilities required to mount `fuse-overlayfs` and then drop privileges; copy and inplace modes do not add any back — the exact cap set and AppArmor posture are in [Overlay elevates during setup](#overlay-capability-posture).
 - **Mount safety** — the host root filesystem, the Docker daemon socket, and OS-internal paths (`/proc`, `/sys`, `/dev`) cannot be mounted into the container. Attempting to do so produces a validation error before launch.
 - **Environment exposure** — host environment variables do not cross the boundary by default. Only an explicit allowlist is forwarded: `JAIPH_*` run-control keys (with `JAIPH_DOCKER_*` and the inplace-control flags excluded) plus the enumerated credential keys of the agent backends the entry file selects (`ANTHROPIC_API_KEY`/`CLAUDE_CODE_OAUTH_TOKEN` for `claude`, `CURSOR_API_KEY` for `cursor`, `OPENAI_API_KEY` for `codex`). Other variables in those prefix families (for example `ANTHROPIC_BASE_URL`, or any `ANTHROPIC_*`/`OPENAI_*` secret unrelated to the run's backend) stay on the host. Every other variable is dropped, including unrelated cloud credentials, SSH agents, and registry tokens. The per-key escape hatch is **`--env`** (`jaiph run` / `jaiph mcp`): `--env KEY=VALUE` or `--env KEY` (forward the host value) crosses that variable into the workflow verbatim as an explicit `-e KEY=VALUE` container arg **bypassing the allowlist** — the flag *is* the consent — and wins over any allowlist-forwarded value for the same key. Sandbox-control and runtime-managed keys are rejected (`E_ENV_RESERVED`); values are never path-remapped. See [CLI — `jaiph run` flags](cli.md#jaiph-run).
 {: #env-exposure}
