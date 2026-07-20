@@ -14,38 +14,6 @@ Process rules:
 
 ***
 
-## Fix: MCP sandbox parity with `jaiph run` — default Docker isolation, not inplace #dev-ready
-
-**Source:** `.jaiph/security_review_2026-07-20.md` Finding 2 (MEDIUM, ASI-03).
-
-**Problem:** `selectMcpSandboxMode` (`src/runtime/docker.ts`) defaults MCP tool calls to **`inplace`** (host workspace bind-mounted `:rw`) when nothing is set. `jaiph run` defaults to **`overlay`/`copy`** isolation and only enters inplace when `JAIPH_INPLACE` is truthy. MCP therefore inverts the CLI default: the same workflow is workspace-isolated under `jaiph run` but mutates the live tree under `jaiph mcp`. That violates **principle of least surprise** and widens blast radius when prompt output reaches shell/file writes (Finding 1).
-
-Current comments in `src/cli/commands/mcp.ts` and `selectMcpSandboxMode` intentionally document the inverted default; that decision is wrong for least surprise and must be reversed.
-
-**Required behavior:**
-
-* MCP sandbox **mode selection must match `jaiph run`**: reuse `selectSandboxMode` (or make `selectMcpSandboxMode` an alias/delegate with identical semantics). Default = Docker on + `overlay` when `/dev/fuse` is available else `copy`; **`inplace` only when `JAIPH_INPLACE=1|true`**.
-* Docker remains the default for MCP when Docker is available — same enablement rules as `jaiph run` (`JAIPH_UNSAFE` / `JAIPH_DOCKER_ENABLED`). No special-case “MCP defaults to live host writes.”
-* Startup banner / logs state the resolved mode accurately (isolated vs inplace path). Inplace must be clearly labeled as opt-in live writes.
-* Update `docs/mcp.md`, `docs/sandboxing.md` / `docs/sandbox-run.md` as needed, and remove “MCP inverts the jaiph run default” wording from code comments.
-* `JAIPH_DOCKER_NO_OVERLAY` continues to force `copy` for both `run` and `mcp`.
-
-**Implementation sketch:**
-
-* `src/runtime/docker.ts` — collapse MCP mode selection onto `selectSandboxMode`; delete or deprecate the inverted `selectMcpSandboxMode` body.
-* `src/cli/mcp/call.ts`, `src/cli/commands/mcp.ts` — call the shared selector; fix banner strings.
-* Tests: unit tests for mode selection env matrix; update `e2e/tests/141_mcp_docker_sandbox.sh` / `integration/mcp-server.test.ts` expectations that assumed inplace-by-default.
-
-Acceptance:
-
-* With no sandbox env set, `jaiph mcp` tool calls use `overlay` or `copy` (never `inplace`); workspace mutations in the container do not land on the host workspace.
-* `JAIPH_INPLACE=1 jaiph mcp …` uses inplace and logs that writes land live on the workspace path.
-* Mode-selection unit tests assert MCP and `jaiph run` share the same truth table for `JAIPH_INPLACE` / `JAIPH_DOCKER_NO_OVERLAY` / fuse presence.
-* Docs no longer claim MCP defaults to inplace.
-* `npm test` and `npm run test:e2e` pass.
-
-***
-
 ## Feat: Warn (and document) when prompt-derived values are interpolated into shell steps #dev-ready
 
 **Source:** `.jaiph/security_review_2026-07-20.md` Finding 1 (MEDIUM, ASI-01/ASI-02).

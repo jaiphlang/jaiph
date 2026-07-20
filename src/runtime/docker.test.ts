@@ -1087,25 +1087,51 @@ test("selectSandboxMode: existing overlay/copy behavior unchanged when JAIPH_INP
 });
 
 // ---------------------------------------------------------------------------
-// selectMcpSandboxMode — MCP defaults to inplace; explicit env restores isolation
+// selectMcpSandboxMode — must share the exact same truth table as selectSandboxMode
 // ---------------------------------------------------------------------------
 
-test("selectMcpSandboxMode: defaults to inplace when no sandbox mode env is set", () => {
-  assert.equal(selectMcpSandboxMode({}), "inplace");
+test("selectMcpSandboxMode: default matches selectSandboxMode (overlay or copy, never inplace)", () => {
+  const expected = selectSandboxMode({});
+  assert.notEqual(expected, "inplace", "selectSandboxMode default must never be inplace");
+  assert.equal(selectMcpSandboxMode({}), expected);
 });
 
-test("selectMcpSandboxMode: JAIPH_INPLACE truthy still selects inplace", () => {
+test("selectMcpSandboxMode: JAIPH_INPLACE=1 → inplace (same as selectSandboxMode)", () => {
   assert.equal(selectMcpSandboxMode({ JAIPH_INPLACE: "1" }), "inplace");
   assert.equal(selectMcpSandboxMode({ JAIPH_INPLACE: "true" }), "inplace");
 });
 
-test("selectMcpSandboxMode: JAIPH_INPLACE=0 restores isolation as copy (fuse skipped)", () => {
-  assert.equal(selectMcpSandboxMode({ JAIPH_INPLACE: "0" }), "copy");
-  assert.equal(selectMcpSandboxMode({ JAIPH_INPLACE: "false" }), "copy");
+test("selectMcpSandboxMode: JAIPH_DOCKER_NO_OVERLAY=1 → copy (same as selectSandboxMode)", () => {
+  assert.equal(selectMcpSandboxMode({ JAIPH_DOCKER_NO_OVERLAY: "1" }), "copy");
+  assert.equal(selectMcpSandboxMode({ JAIPH_DOCKER_NO_OVERLAY: "true" }), "copy");
 });
 
-test("selectMcpSandboxMode: JAIPH_DOCKER_NO_OVERLAY=1 restores isolation as copy", () => {
-  assert.equal(selectMcpSandboxMode({ JAIPH_DOCKER_NO_OVERLAY: "1" }), "copy");
+test("selectMcpSandboxMode: JAIPH_INPLACE wins over JAIPH_DOCKER_NO_OVERLAY (same as selectSandboxMode)", () => {
+  assert.equal(
+    selectMcpSandboxMode({ JAIPH_INPLACE: "1", JAIPH_DOCKER_NO_OVERLAY: "1" }),
+    "inplace",
+  );
+});
+
+test("selectMcpSandboxMode: full truth-table parity with selectSandboxMode", () => {
+  const envCases: Record<string, string | undefined>[] = [
+    {},
+    { JAIPH_INPLACE: "1" },
+    { JAIPH_INPLACE: "true" },
+    { JAIPH_INPLACE: "0" },
+    { JAIPH_INPLACE: "false" },
+    { JAIPH_INPLACE: "" },
+    { JAIPH_DOCKER_NO_OVERLAY: "1" },
+    { JAIPH_DOCKER_NO_OVERLAY: "true" },
+    { JAIPH_INPLACE: "1", JAIPH_DOCKER_NO_OVERLAY: "1" },
+  ];
+  for (const env of envCases) {
+    assert.equal(
+      selectMcpSandboxMode(env),
+      selectSandboxMode(env),
+      `mismatch for env ${JSON.stringify(env)}`,
+    );
+  }
 });
 
 // ---------------------------------------------------------------------------

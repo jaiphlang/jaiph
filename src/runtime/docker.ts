@@ -388,26 +388,13 @@ export function selectSandboxMode(env: Record<string, string | undefined>): Sand
 /**
  * Choose the sandbox mode for a `jaiph mcp` tool call.
  *
- * MCP inverts the `jaiph run` default: the calling agent operates on the real
- * workspace and expects tool effects to land live, and starting the server on a
- * workspace *is* the consent act (stdin is the protocol channel, so no
- * interactive in-place prompt is possible). So **inplace is the default** —
- * unless the caller explicitly opts back into isolation via env:
- *  - `JAIPH_INPLACE` truthy → inplace (same as `selectSandboxMode`).
- *  - `JAIPH_INPLACE` present but falsy (e.g. `0`), or `JAIPH_DOCKER_NO_OVERLAY`
- *    set → explicit isolation request: always "copy". Overlay mode is skipped
- *    here even when `/dev/fuse` is present on the host — fuse-overlayfs inside
- *    a container is not reliably available in all Docker environments (e.g.
- *    GitHub Actions Ubuntu runners), and the isolation guarantee is the same
- *    with a workspace clone. Copy mode is the safe portable default.
- *  - Nothing set → inplace (the MCP default).
+ * Delegates to `selectSandboxMode` so MCP and `jaiph run` share identical
+ * semantics: overlay or copy by default (workspace isolated), inplace only
+ * when `JAIPH_INPLACE=1|true`. `JAIPH_DOCKER_NO_OVERLAY` forces copy in both
+ * contexts. Kept as a named export so callers and tests import a stable symbol.
  */
 export function selectMcpSandboxMode(env: Record<string, string | undefined>): SandboxMode {
-  const inplaceRaw = env.JAIPH_INPLACE;
-  if (inplaceRaw === "1" || inplaceRaw === "true") return "inplace";
-  const isolationRequested = inplaceRaw !== undefined || env.JAIPH_DOCKER_NO_OVERLAY !== undefined;
-  if (isolationRequested) return "copy";
-  return "inplace";
+  return selectSandboxMode(env);
 }
 
 /** Run `cp` with the given flags. Returns true on success. */
