@@ -6,6 +6,12 @@
       "sourceType": "github",
       "skillPath": "skills/documentation-writer/SKILL.md",
       "computedHash": "ee53d65b163cd7eb953a930c95841cfe398cc2c0bd24c06508bbaa07c432be35"
+    },
+    "agent-owasp-compliance": {
+      "source": "github/awesome-copilot",
+      "sourceType": "github",
+      "skillPath": "skills/agent-owasp-compliance/SKILL.md",
+      "computedHash": "5c1f92c48888beb811d2435e58aa02b2619422a921d6f70e3cc15e5c5be8e7da"
     }
   }
 }

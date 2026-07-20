@@ -1,7 +1,6 @@
 #!/usr/bin/env jaiph
 
 import "bootstrap_project.jh" as bootstrap
-import "tools/security.jh" as security
 
 # Validates local build prerequisites.
 rule project_ready() {
@@ -34,7 +33,6 @@ workflow default(requirements) {
 """
   
   ensure build_passes()
-  ensure security.scan_passes()
 
   run update_docs()
 }

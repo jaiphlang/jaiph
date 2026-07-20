@@ -1,7 +1,6 @@
 set -euo pipefail
 export JAIPH_SCRIPTS="${JAIPH_SCRIPTS:-$(cd "$(dirname "${BASH_SOURCE[0]}")/scripts" && pwd)}"
 source "$(dirname "${BASH_SOURCE[0]}")/bootstrap_project.sh"
-source "$(dirname "${BASH_SOURCE[0]}")/tools/security.sh"
 
 # Validates local build prerequisites.
 main::project_ready::impl() {
@@ -34,7 +33,6 @@ main::default::impl() {
     Follow requirements: $1
   "
   main::build_passes
-  tools::security::scan_passes
   main::update_docs
 }
 

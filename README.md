@@ -89,8 +89,6 @@ Full flags and environment variables: [CLI](docs/cli.md), [Environment variables
 ```jaiph
 #!/usr/bin/env jaiph
 
-import "tools/security.jh" as security
-
 script check_deps = `test -f "package.json"`
 
 rule deps_exist() {
@@ -103,7 +101,6 @@ workflow default(task) {
   ensure deps_exist()
   const ts = run `date +%s`()
   prompt "Build the application: ${task}"
-  ensure security.scan_passes()
 }
 ```
 
