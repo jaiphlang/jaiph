@@ -14,27 +14,6 @@ Process rules:
 
 ***
 
-## Feat: Sign release checksums and pin Dockerfile toolchain installers #dev-ready
-
-**Source:** `.jaiph/security_review_2026-07-20.md` Finding 5 (LOW, ASI-09).
-
-**Problem:** `docs/install` verifies SHA-256 against `SHA256SUMS` from the same origin (TOFU, no detached signature). `runtime/Dockerfile` installs toolchains via unpinned `curl | sh`/`bash`.
-
-**Required behavior:**
-
-* Publish and verify a detached signature over `SHA256SUMS` (cosign or minisign — pick one and document) in the install scripts.
-* Pin toolchain installers in `runtime/Dockerfile` to known content hashes (or fixed version URLs + checksum verify) before execute; no raw pipe-to-shell without verification.
-* Document the trust model in contributing/release docs.
-
-Acceptance:
-
-* Installer fails closed when the signature is missing or invalid (tested with a fixture or mocked download in CI where feasible).
-* Dockerfile build path does not execute unverified remote install scripts (grep/test lock).
-* Docs describe how releases are signed and how users verify.
-* Relevant CI / `npm test` hooks pass.
-
-***
-
 ## Fix: Lock `agent.command` / `agent.backend` against untrusted imported module metadata #dev-ready
 
 **Source:** `.jaiph/security_review_2026-07-20.md` Finding 6 (LOW, ASI-03/ASI-09).
