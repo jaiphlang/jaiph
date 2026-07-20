@@ -14,27 +14,6 @@ Process rules:
 
 ***
 
-## Feat: Warn (and document) when prompt-derived values are interpolated into shell steps #dev-ready
-
-**Source:** `.jaiph/security_review_2026-07-20.md` Finding 1 (MEDIUM, ASI-01/ASI-02).
-
-**Problem:** Workflow shell fallthrough runs `sh -c` on an interpolated command string (`executeShLine` in `src/runtime/kernel/node-workflow-runtime.ts`). A `${var}` that originated from a `prompt` capture is spliced in with no quoting or validation. In the default Docker sandbox this is contained; under `--unsafe` / inplace it becomes host-impacting command injection. Authors today have no compile-time signal and little docs guidance to prefer argv-passing into `script` steps (already safe).
-
-**Required behavior:**
-
-* Document the hazard prominently (language + sandboxing / first-agent docs): prefer `run script(capture)` argv over embedding `${capture}` in shell lines; note that scripts spawn by argv.
-* Emit a compile-time **warning** (or `E_VALIDATE` if the project already has a warning channel — prefer non-fatal warning if available; otherwise a documented opt-in lint) when a shell step’s command interpolates a binding known to be a typed/untyped `prompt` capture in the same workflow scope.
-* Optional stretch (include if small): a shell-quoting interpolation form or helper so the safe path is easy — only if it fits existing string/interp design without a large grammar change; otherwise leave as a follow-up note in docs.
-
-Acceptance:
-
-* Docs describe the prompt→shell data-flow hazard and the argv-safe pattern with a minimal example.
-* A workflow that does `const x = prompt "…"` then a shell line containing `${x}` produces a visible compile diagnostic (warning or error — pick one, test it).
-* Equivalent workflow that passes `x` as a script argument does **not** produce that diagnostic.
-* `npm test` covers the diagnostic; e2e only if compile-path tests cannot assert it.
-
-***
-
 ## Feat: Hash-chain `run_summary.jsonl` and redact secrets in run artifacts #dev-ready
 
 **Source:** `.jaiph/security_review_2026-07-20.md` Finding 4 (LOW, ASI-06).
