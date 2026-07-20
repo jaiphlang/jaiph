@@ -1,19 +1,17 @@
 #!/usr/bin/env bash
 #
-# MCP 7/8 — `jaiph mcp` Docker sandbox parity (inplace by default)
-# ================================================================
-# Black-box coverage through the real `jaiph` entrypoint (design:
-# design/2026-07-14-mcp-server.md -> "Safety posture"). With Docker enabled,
-# `jaiph mcp` tool calls honor the same env-driven sandbox as `jaiph run`, with
-# two MCP-specific rules:
+# MCP 7/8 — `jaiph mcp` Docker sandbox parity with `jaiph run`
+# =============================================================
+# Black-box coverage through the real `jaiph` entrypoint. With Docker enabled,
+# `jaiph mcp` tool calls honor the same env-driven sandbox as `jaiph run`:
 #
-#   1. Inplace is the DEFAULT mode — a tool call runs in a container bound to the
-#      real workspace, so effects land live and a non-`default` tool symbol
-#      returns its value correctly (would fail if the inner run hardcoded
-#      `default`). A failing tool call composes an `isError` result with a
-#      host-side `run dir:` pointer discovered from the sandbox runs mount.
-#   2. Explicit isolation (JAIPH_INPLACE=0) is honored — the same call runs, but
-#      its workspace writes are discarded; the host workspace is untouched.
+#   1. Isolation is the DEFAULT — a tool call runs in a container with the
+#      workspace isolated (overlay or copy); host workspace is untouched, but
+#      a non-`default` tool symbol still returns its value correctly.
+#      A failing tool call composes an `isError` result with a host-side
+#      `run dir:` pointer discovered from the sandbox runs mount.
+#   2. Explicit inplace (JAIPH_INPLACE=1) is honored — the same call runs, but
+#      its workspace writes land live on the host.
 #
 # Plus: `--env` pairs cross into the per-call container (a non-allowlisted key
 # supplied via `--env` is readable inside the workflow).
@@ -120,25 +118,26 @@ export JAIPH_DOCKER_ENABLED=true
 export JAIPH_DOCKER_IMAGE="${E2E_DOCKER_TEST_IMAGE}"
 
 # ---------------------------------------------------------------------------
-# Leg 1: inplace default — a non-`default` tool runs in-container and its
-# workspace effect lands live on the host; its return value round-trips.
+# Leg 1: isolation default — a non-`default` tool runs in-container with the
+# workspace isolated; its return value round-trips but the host workspace is
+# untouched (no marker file lands on the host).
 # ---------------------------------------------------------------------------
-e2e::section "docker inplace default — non-default tool runs in-container, effect lands live"
+e2e::section "docker isolation default — non-default tool runs isolated; host workspace untouched"
 
-call_tool "${TEST_DIR}/inplace.txt" mark '{"token":"alpha"}'
-{ read -r mark_iserror; read -r mark_text; } <<< "$(mcp_field "${TEST_DIR}/inplace.txt" 2)"
-e2e::assert_equals "${mark_iserror}" "false" "docker inplace: mark tool call succeeds"
-e2e::assert_equals "${mark_text}" "alpha" "docker inplace: non-default symbol returns its value (not default)"
+call_tool "${TEST_DIR}/isolated.txt" mark '{"token":"alpha"}'
+{ read -r mark_iserror; read -r mark_text; } <<< "$(mcp_field "${TEST_DIR}/isolated.txt" 2)"
+e2e::assert_equals "${mark_iserror}" "false" "docker isolated: mark tool call succeeds"
+e2e::assert_equals "${mark_text}" "alpha" "docker isolated: non-default symbol returns its value (not default)"
 
 marker_present="no"
 [[ -f "${TEST_DIR}/marker_alpha.txt" ]] && marker_present="yes"
-e2e::assert_equals "${marker_present}" "yes" "docker inplace: workspace effect landed live on the host"
+e2e::assert_equals "${marker_present}" "no" "docker isolated: host workspace untouched (workspace isolated by default)"
 
 # ---------------------------------------------------------------------------
 # Leg 2: failure composition — a failing tool yields isError with a host-side
 # run-dir pointer discovered from the sandbox runs mount.
 # ---------------------------------------------------------------------------
-e2e::section "docker inplace — a failing tool composes an isError result with a run-dir pointer"
+e2e::section "docker isolated — a failing tool composes an isError result with a run-dir pointer"
 
 call_tool "${TEST_DIR}/boom.txt" boom '{}'
 { read -r boom_iserror; read -r boom_text; } <<< "$(mcp_field "${TEST_DIR}/boom.txt" 2)"
@@ -148,19 +147,19 @@ e2e::assert_equals "${boom_text}" "workflow boom failed (exit 1)" "docker: failu
 e2e::assert_contains "$(cat "${TEST_DIR}/boom.txt")" "run dir:" "docker: failure result carries a host-side run dir pointer"
 
 # ---------------------------------------------------------------------------
-# Leg 3: explicit isolation (JAIPH_INPLACE=0) — the call still runs, but its
-# workspace writes are discarded; the host workspace is untouched.
+# Leg 3: explicit inplace (JAIPH_INPLACE=1) — the call runs, and its
+# workspace writes land live on the host.
 # ---------------------------------------------------------------------------
-e2e::section "docker explicit isolation (JAIPH_INPLACE=0) — workspace untouched after the call"
+e2e::section "docker explicit inplace (JAIPH_INPLACE=1) — workspace effect lands live on the host"
 
-JAIPH_INPLACE=0 call_tool "${TEST_DIR}/iso.txt" mark '{"token":"beta"}'
-{ read -r iso_iserror; read -r iso_text; } <<< "$(mcp_field "${TEST_DIR}/iso.txt" 2)"
-e2e::assert_equals "${iso_iserror}" "false" "docker isolation: mark tool call still succeeds"
-e2e::assert_equals "${iso_text}" "beta" "docker isolation: tool returns its value"
+JAIPH_INPLACE=1 call_tool "${TEST_DIR}/inplace.txt" mark '{"token":"beta"}'
+{ read -r inplace_iserror; read -r inplace_text; } <<< "$(mcp_field "${TEST_DIR}/inplace.txt" 2)"
+e2e::assert_equals "${inplace_iserror}" "false" "docker inplace: mark tool call succeeds"
+e2e::assert_equals "${inplace_text}" "beta" "docker inplace: tool returns its value"
 
-iso_marker_present="no"
-[[ -f "${TEST_DIR}/marker_beta.txt" ]] && iso_marker_present="yes"
-e2e::assert_equals "${iso_marker_present}" "no" "docker isolation: workspace write was discarded (host untouched)"
+inplace_marker_present="no"
+[[ -f "${TEST_DIR}/marker_beta.txt" ]] && inplace_marker_present="yes"
+e2e::assert_equals "${inplace_marker_present}" "yes" "docker inplace: workspace write landed live on the host"
 
 # ---------------------------------------------------------------------------
 # Leg 4: --env crosses into the per-call container bypassing the allowlist.

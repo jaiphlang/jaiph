@@ -343,7 +343,7 @@ Tool descriptions come from the `#` comment lines directly above each workflow (
 ### Execution and hot reload
 
 - Tool calls honor the same env-driven sandbox selection as `jaiph run` (`resolveDockerConfig`): Docker on macOS/Linux by default, host-only under `JAIPH_UNSAFE=true` or on Windows. The image is prepared once at startup (`checkDockerAvailable` + `prepareImage`), not per call. Run artifacts land under `.jaiph/runs/` exactly as for `jaiph run`.
-- **Inplace is the default sandbox mode** for `jaiph mcp`: the container binds the real workspace read-write so tool effects land live, matching what the calling agent expects. Because stdin is the protocol channel there is no interactive in-place prompt — **starting the server is the consent act** (no `--yes` needed). Set `JAIPH_INPLACE=0` (or `JAIPH_DOCKER_NO_OVERLAY=1`) to restore workspace isolation (overlay/copy), or `JAIPH_UNSAFE=true` to run on the host with no sandbox.
+- **The workspace is isolated by default** for `jaiph mcp` — the same as `jaiph run`. Each tool call's container sees a read-only overlay (where fuse is available) or a disposable copy of the workspace, so edits are discarded on exit and the host tree is untouched. Set `JAIPH_INPLACE=1` to bind the real workspace read-write so tool effects land live (opt-in), `JAIPH_DOCKER_NO_OVERLAY=1` to force the copy primitive, or `JAIPH_UNSAFE=true` to run on the host with no sandbox.
 - Source files in the module graph are watched (polling, ~750 ms). A valid edit re-derives tools and emits `notifications/tools/list_changed`; an edit that fails to compile keeps the previous tool set serving and logs diagnostics to stderr.
 
 ## Environment variables

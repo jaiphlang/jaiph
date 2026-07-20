@@ -52,7 +52,7 @@ interface CollectedOutput {
 /**
  * Execute one workflow as an MCP tool call. Honors the same env-driven sandbox
  * selection as `jaiph run`: when `dockerConfig.enabled`, the call runs in a
- * per-call container (inplace by default — see `selectMcpSandboxMode`);
+ * per-call container (workspace isolated by default; inplace when JAIPH_INPLACE=1);
  * otherwise it runs on the host like `jaiph run --raw`.
  *
  * Success text, in order of preference: the workflow's return value
@@ -108,12 +108,11 @@ async function callWorkflowHost(
 }
 
 /**
- * Container execution — the same Docker path as `jaiph run`, with two
- * MCP-specific rules: inplace is the default sandbox mode (the agent operates
- * on the real workspace and expects effects to land live) and the workflow
+ * Container execution — the same Docker path as `jaiph run`. The workflow
  * symbol is carried into the container so a non-`default` tool runs correctly.
- * The container meta file is inaccessible from the host, so the run dir is
- * discovered from the sandbox runs mount.
+ * Sandbox mode matches `jaiph run` (isolated by default; inplace when
+ * JAIPH_INPLACE=1). The container meta file is inaccessible from the host, so
+ * the run dir is discovered from the sandbox runs mount.
  */
 async function callWorkflowDocker(
   env: McpCallEnvironment,

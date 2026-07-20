@@ -102,7 +102,7 @@ On `tools/call`, the server maps the arguments object to positional workflow arg
 
 A **workflow failure is not a protocol error** — it comes back as a normal result with `isError: true`. Protocol-level errors (JSON-RPC `-32602`) are reserved for calls that never start: an unknown tool name, a missing or non-string required argument, or an unexpected argument key.
 
-Every call is a durable, inspectable run under `.jaiph/runs/` in the workspace, exactly as for `jaiph run`. Concurrent calls are isolated by per-call run ids and run directories, so a slow call never stalls other calls or a `ping`. Two calls that mutate the *same* files in the workspace can still race — that is inherent to running against a live workspace.
+Every call is a durable, inspectable run under `.jaiph/runs/` in the workspace, exactly as for `jaiph run`. Concurrent calls are isolated by per-call run ids and run directories, so a slow call never stalls other calls or a `ping`. Under the default isolated sandbox each call also gets its own overlay/copy of the workspace, so calls do not race on workspace files; only in inplace mode (`JAIPH_INPLACE=1`) can two calls that mutate the *same* files race, since both write the live tree.
 
 ## 7. Stream progress and cancel a long call
 
@@ -152,12 +152,13 @@ An MCP-exposed workflow is **arbitrary shell reachable by the connected agent** 
 
 Tool calls honor the **same env-driven Docker sandbox as `jaiph run`** ([Sandboxing](sandboxing.md)): Docker is on by default on macOS/Linux and off under `JAIPH_UNSAFE=true` or on Windows (host-only). The image is prepared once when the server starts, not per call.
 
-**In-place is the default sandbox mode for `jaiph mcp`.** Unlike `jaiph run` (which isolates the workspace by default), an MCP server binds the **real workspace read-write** into each tool call's container, so effects land live — the calling agent is operating on your workspace and expects its edits to persist. Because stdin is the protocol channel, there is no interactive in-place confirmation prompt: **starting `jaiph mcp` on a workspace is the consent act** (no `--yes` flag). Concurrent calls each get their own run id and run directory, but two calls that mutate the *same* files in the workspace can still race.
+**The workspace is isolated by default** — the same as `jaiph run`. Each tool call's container sees a read-only overlay (where fuse is available) or a disposable copy of the workspace; edits are discarded when the container exits and the host workspace is untouched. Concurrent calls each get their own run id and run directory.
 
-To **restore workspace isolation**, start the server with either:
+To **opt into live writes**, set `JAIPH_INPLACE=1` before starting the server. In inplace mode the host workspace is bind-mounted read-write into each tool call's container, so effects land live — two calls that mutate the *same* files can still race.
 
-- `JAIPH_INPLACE=0` — sandbox the workspace with the default isolation primitive (fuse-overlay where available, otherwise a disposable copy); edits are discarded when each call's container exits.
-- `JAIPH_DOCKER_NO_OVERLAY=1` — force the disposable-copy primitive.
+Other sandbox controls:
+
+- `JAIPH_DOCKER_NO_OVERLAY=1` — force the disposable-copy primitive instead of fuse-overlay.
 - `JAIPH_UNSAFE=true` — run on the host with no sandbox at all.
 
 Agent-credential pre-flight runs once at startup. In MCP mode its findings are demoted to warnings even in Docker mode (the server can outlive a credential fix, and per-call failures still surface to the client); set credentials on the host so the allowlist forwards them into the container.
