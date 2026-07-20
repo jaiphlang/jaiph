@@ -1,16 +1,21 @@
 #!/usr/bin/env jaiph
 
 #
-# Security review of code changes. Reviews uncommitted changes by default,
-# or a git diff range passed as the first argument:
-#   jaiph run .jaiph/security_review.jh              # staged + unstaged + untracked
-#   jaiph run .jaiph/security_review.jh "main..HEAD" # a ref range
-# Writes a markdown report to .jaiph/tmp and publishes it as a run artifact.
-# Fails when any HIGH severity finding is confirmed.
+# Security review of the codebase (or a targeted diff).
 #
-# Review methodology adapted from anthropics/claude-code-security-review
-# (claudecode/prompts.py): high-confidence findings only, explicit
-# false-positive exclusions, severity + confidence scoring.
+#   jaiph run .jaiph/security_review.jh              # whole codebase
+#   jaiph run .jaiph/security_review.jh codebase     # same as default
+#   jaiph run .jaiph/security_review.jh diff         # staged + unstaged + untracked
+#   jaiph run .jaiph/security_review.jh "main..HEAD" # a ref range
+#
+# Writes a Diátaxis-style markdown report to
+#   .jaiph/tmp/security_review_<timestamp>.md
+# (name "security_review" is in the filename) and publishes it as a run
+# artifact. Fails when any HIGH severity finding is confirmed.
+#
+# Review methodology: OWASP Agentic Security Initiative (ASI) Top 10 via
+#   .jaiph/skills/agent-owasp-compliance/SKILL.md
+# Report writing follows .jaiph/skills/documentation-writer/SKILL.md.
 #
 import "./lib_common.jh" as common
 import "jaiphlang/artifacts" as artifacts
@@ -21,37 +26,45 @@ config {
   agent.claude_flags = "--permission-mode bypassPermissions"
 }
 
-const report_file = .jaiph/tmp/security_review_report.md
+script new_security_review_report_path = `echo ".jaiph/tmp/security_review_$(date +%Y-%m-%d_%H-%M-%S).md"`
+
+script write_security_review_pointer = `printf '%s\n' "$1" > .jaiph/tmp/security_review_active.txt`
 
 const reviewer_role = """
-  You are a senior security engineer conducting a focused security review.
-  Identify HIGH-CONFIDENCE security vulnerabilities with real exploitation
-  potential. Minimize false positives: flag only issues where you are more
-  than 80% confident of actual exploitability in this codebase.
+  You are a senior security engineer reviewing Jaiph — a workflow DSL,
+  TypeScript CLI/runtime, Docker sandbox, and agent-backend runner that
+  executes tools and scripts on behalf of users.
 
-  Vulnerability classes to examine:
-  1. Input validation: SQL/command/template/NoSQL injection, XXE,
-     path traversal.
-  2. Authentication & authorization: bypass logic, privilege escalation,
-     session flaws, JWT issues, insecure direct object references.
-  3. Crypto & secrets: hardcoded credentials, weak algorithms, improper key
-     storage, certificate validation bypasses, insecure randomness.
-  4. Code execution: unsafe deserialization, eval/exec on untrusted input,
-     unsafe YAML/pickle loading, XSS (reflected, stored, DOM-based).
-  5. Data exposure: secrets or PII in logs, debug info leaks, overly
-     revealing error messages, sensitive data written to artifacts.
+  Methodology: follow OWASP Agentic Security Initiative (ASI) Top 10 as
+  defined in .jaiph/skills/agent-owasp-compliance/SKILL.md. Map every
+  finding to an ASI id (ASI-01 … ASI-10). Prefer agentic/control-plane
+  risks over web-app checklists: there is no SQL database or browser XSS
+  surface here — do not hunt for those.
+
+  Jaiph attack surface to prioritize:
+  - Prompt / agent backends (injection into tool/shell execution)
+  - Script and shell step execution (command injection, unsafe spawn)
+  - Docker sandbox (mount allowlist, env allowlist, caps, isolation escape)
+  - Secrets and credentials in env, logs, artifacts, run summaries
+  - Privilege / --unsafe / permission-mode bypass paths
+  - Supply chain of binaries, installers, skills, and libraries
+  - Auditability of runs (events, artifacts, tamper resistance)
 
   Severity scale:
-  - HIGH: directly exploitable; leads to RCE, data breach, or auth bypass.
+  - HIGH: directly exploitable; leads to RCE, sandbox escape, secret
+    exfiltration, or auth/policy bypass.
   - MEDIUM: exploitable under specific conditions, significant impact.
   - LOW: defense-in-depth gaps or low-impact weaknesses.
 
-  Do NOT report (out of scope, treated as noise):
+  Confidence: flag only issues where you are more than 80% confident of
+  actual exploitability in this codebase (discard below 0.7).
+
+  Do NOT report (out of scope / noise):
+  - SQL/NoSQL injection, XSS, CSRF, JWT session flaws, XXE — irrelevant
+    unless you can show Jaiph actually exposes that surface.
   - Denial of service, rate limiting, memory/CPU exhaustion.
-  - Missing input validation on non-security-critical fields without a
-    demonstrated security impact.
-  - Any finding you cannot back with a concrete exploit scenario.
   - Style, performance, or general code-quality issues.
+  - Findings without a concrete exploit scenario.
 """
 
 script git_diff_uncommitted = ```
@@ -69,23 +82,47 @@ script git_diff_range = `git diff "$1"`
 
 script worktree_fingerprint = `git status --porcelain | sort | cksum`
 
-workflow review_diff(diff_text) {
+script report_file_nonempty = `test -s "$1"`
+
+workflow review_scope(mode, scope_detail, report_file) {
   const result = prompt """
+    First read and follow the OWASP ASI compliance skill at
+    .jaiph/skills/agent-owasp-compliance/SKILL.md — use its ASI-01..ASI-10
+    checklist, quick assessment questions, and compliance matrix as the
+    review framework.
+
+    Then, for report writing only, follow
+    .jaiph/skills/documentation-writer/SKILL.md (clarity, accuracy,
+    user-centricity, consistency). Treat the report as a Diátaxis
+    **Explanation**: understanding-oriented, for engineers deciding what
+    to fix next.
+
     <role>
     ${reviewer_role}
     </role>
     <task>
-    Review the following code changes for security vulnerabilities. You have
-    read access to the full repository — read surrounding source files
-    whenever needed to confirm whether a finding is actually exploitable;
-    do not judge from the diff alone.
+    Scope mode: ${mode}
+    ${scope_detail}
 
-    Write a full markdown report to ${report_file} (overwrite if present)
-    with one section per finding: title, severity (HIGH/MEDIUM/LOW),
-    confidence (0.7-1.0; discard anything below 0.7), file and line,
-    a concrete exploit scenario, and a specific remediation. If there are
-    no findings, write a short report stating what was reviewed and that
-    nothing was found.
+    Write a full markdown report to ${report_file} (overwrite if present).
+    The report MUST start with YAML front matter that includes:
+      name: security_review
+      title: Security review
+      diataxis: explanation
+      date: <ISO date of this review>
+      scope: <short description of what was reviewed>
+      framework: OWASP ASI Top 10
+
+    Then a clear H1 and structured body:
+    - Executive summary (verdict, finding counts, ASI coverage X/10)
+    - ASI compliance matrix (ASI-01..ASI-10: PASS/FAIL/PARTIAL + one-line note)
+    - Scope and method
+    - Findings (one section each: ASI id, title, severity HIGH/MEDIUM/LOW,
+      confidence 0.7–1.0, file and line, concrete exploit scenario,
+      specific remediation). Discard confidence below 0.7.
+    - Critical gaps / recommendations
+    - If no HIGH/MEDIUM findings: still fill the ASI matrix; state what
+      was reviewed and residual LOW/PARTIAL gaps if any
 
     Do not modify any file in the repository other than ${report_file}.
 
@@ -93,33 +130,56 @@ workflow review_diff(diff_text) {
     - verdict: the string "fail" if there is at least one HIGH finding,
       otherwise the string "pass".
     - highs, mediums, lows: finding counts by severity.
+    - asi_covered: number of ASI controls marked PASS (0-10).
     - summary: 1-3 sentences describing the overall result.
-
-    Code changes under review:
-    ${diff_text}
+    - report_path: the exact path you wrote (${report_file}).
     </task>
   """
-  returns "{ verdict: string, highs: number, mediums: number, lows: number, summary: string }"
+  returns "{ verdict: string, highs: number, mediums: number, lows: number, asi_covered: number, summary: string, report_path: string }"
 
   log "Security review: ${result.summary}"
-  log "Findings: high=${result.highs} medium=${result.mediums} low=${result.lows} (report: ${report_file})"
+  log "Findings: high=${result.highs} medium=${result.mediums} low=${result.lows} ASI=${result.asi_covered}/10 (report: ${result.report_path})"
   return result.verdict
 }
 
-workflow default(scope) {
-  run common.mkdir_p_simple(".jaiph/tmp")
-  const fingerprint_before = run worktree_fingerprint()
+workflow review_codebase(report_file) {
+  return run review_scope(
+    "codebase",
+    """
+    Review the ENTIRE repository against OWASP ASI Top 10. Explore agent
+    backends, prompt paths, script/shell execution, Docker sandbox,
+    env/secrets handling, artifacts/run logs, installers, and skills.
+    Do not limit yourself to a diff — this is a full codebase scan.
+    """,
+    report_file
+  )
+}
 
-  const diff_text = match scope {
-    "" => run git_diff_uncommitted()
-    _ => run git_diff_range(scope)
-  }
+workflow review_diff_text(mode, scope_label, diff_text, report_file) {
   if diff_text == "" {
-    log "Security review: no changes to review."
+    log "Security review: no changes to review (${scope_label})."
+    return "skip"
+  }
+  return run review_scope(
+    mode,
+    """
+    Review the following code changes (${scope_label}) against OWASP ASI
+    Top 10. You have read access to the full repository — read surrounding
+    source whenever needed to confirm exploitability; do not judge from
+    the diff alone.
+
+    Code changes under review:
+    ${diff_text}
+    """,
+    report_file
+  )
+}
+
+workflow finish_review(verdict, report_file, fingerprint_before) {
+  if verdict == "skip" {
+    log "Security review skipped (nothing in scope)."
     return ""
   }
-
-  const verdict = run review_diff(diff_text)
 
   # The reviewer must be read-only apart from the (gitignored) report file.
   const fingerprint_after = run worktree_fingerprint()
@@ -127,6 +187,9 @@ workflow default(scope) {
     fail "Security review must not modify the worktree, but git status changed during review. Inspect git status before trusting this run."
   }
 
+  run report_file_nonempty(report_file) catch (err) {
+    fail "Security review did not write a report at ${report_file}."
+  }
   run artifacts.save(report_file)
 
   run common.str_equals(verdict, "pass") catch (err) {
@@ -135,5 +198,33 @@ workflow default(scope) {
       See ${report_file} (also published to the run artifacts directory).
     """
   }
-  log "Security review passed."
+  log "Security review passed. Report: ${report_file}"
+}
+
+workflow dispatch_review(mode, scope, report_file) {
+  if mode == "codebase" {
+    return run review_codebase(report_file)
+  } else if mode == "diff" {
+    const uncommitted = run git_diff_uncommitted()
+    return run review_diff_text("diff", "uncommitted changes", uncommitted, report_file)
+  } else {
+    const ranged = run git_diff_range(scope)
+    return run review_diff_text("range", scope, ranged, report_file)
+  }
+}
+
+workflow default(scope) {
+  run common.mkdir_p_simple(".jaiph/tmp")
+  const report_file = run new_security_review_report_path()
+  run write_security_review_pointer(report_file)
+  const fingerprint_before = run worktree_fingerprint()
+
+  const mode = match scope {
+    "" | "codebase" | "full" => "codebase"
+    "diff" => "diff"
+    _ => "range"
+  }
+
+  const verdict = run dispatch_review(mode, scope, report_file)
+  run finish_review(verdict, report_file, fingerprint_before)
 }
