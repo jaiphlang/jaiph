@@ -191,6 +191,24 @@ jobs:
           sha256sum jaiph-darwin-arm64 jaiph-darwin-x64 jaiph-linux-x64 jaiph-linux-arm64 jaiph-windows-x64.exe > SHA256SUMS
           cat SHA256SUMS
 
+      - name: Sign SHA256SUMS with minisign
+        working-directory: release-assets
+        env:
+          MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${MINISIGN_SECRET_KEY}" ]; then
+            echo "MINISIGN_SECRET_KEY secret is not set — skipping detached signature." >&2
+            echo "Set the secret to enable signed releases (see docs/contributing.md)." >&2
+            touch SHA256SUMS.minisig
+          else
+            which minisign || (apt-get update -qq && apt-get install -y -qq minisign)
+            printf '%s' "${MINISIGN_SECRET_KEY}" > /tmp/jaiph-release.key
+            minisign -S -s /tmp/jaiph-release.key -m SHA256SUMS -x SHA256SUMS.minisig
+            rm -f /tmp/jaiph-release.key
+            echo "SHA256SUMS.minisig written."
+          fi
+
       - name: Sanity gate (linux-x64 --version)
         working-directory: release-assets
         run: |
@@ -212,7 +230,7 @@ jobs:
               jaiph-darwin-arm64 jaiph-darwin-x64 \
               jaiph-linux-x64 jaiph-linux-arm64 \
               jaiph-windows-x64.exe \
-              SHA256SUMS
+              SHA256SUMS SHA256SUMS.minisig
           else
             gh release create "${tag}" \
               --title "${tag}" \
@@ -220,7 +238,7 @@ jobs:
               jaiph-darwin-arm64 jaiph-darwin-x64 \
               jaiph-linux-x64 jaiph-linux-arm64 \
               jaiph-windows-x64.exe \
-              SHA256SUMS
+              SHA256SUMS SHA256SUMS.minisig
           fi
 
       - name: Publish nightly prerelease
@@ -233,7 +251,7 @@ jobs:
               jaiph-darwin-arm64 jaiph-darwin-x64 \
               jaiph-linux-x64 jaiph-linux-arm64 \
               jaiph-windows-x64.exe \
-              SHA256SUMS
+              SHA256SUMS SHA256SUMS.minisig
           else
             gh release create nightly \
               --title "Nightly" \
@@ -243,5 +261,5 @@ jobs:
               jaiph-darwin-arm64 jaiph-darwin-x64 \
               jaiph-linux-x64 jaiph-linux-arm64 \
               jaiph-windows-x64.exe \
-              SHA256SUMS
+              SHA256SUMS SHA256SUMS.minisig
           fi

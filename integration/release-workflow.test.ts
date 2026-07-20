@@ -25,6 +25,7 @@ const RELEASE_YML = readFileSync(join(REPO_ROOT, ".github/workflows/release.yml"
 const CONTRIBUTING = readFileSync(join(REPO_ROOT, "docs/contributing.md"), "utf8");
 const INSTALLER = readFileSync(join(REPO_ROOT, "docs/install"), "utf8");
 const INSTALLER_TEST = readFileSync(join(REPO_ROOT, "e2e/tests/07_installer_binary.sh"), "utf8");
+const DOCKERFILE = readFileSync(join(REPO_ROOT, "runtime/Dockerfile"), "utf8");
 const VERSION_CHECK = join(REPO_ROOT, "scripts/release-version-check.sh");
 
 // Single source of truth for the assets a release must ship.
@@ -154,20 +155,20 @@ test("a windows-latest job runs the .exe --version through the shared gate and b
 // ── Acceptance 3: contract ↔ matrix ↔ installer parity ────────────────────────
 
 function contractAssets(): string[] {
-  const section = sliceBetween(CONTRIBUTING, "#### Release asset naming contract", "### Local docs site");
+  const section = sliceBetween(CONTRIBUTING, "#### Release asset naming contract", "#### Release signing");
   const names = new Set<string>();
-  for (const m of section.matchAll(/`(jaiph-[A-Za-z0-9.\-]+|SHA256SUMS)`/g)) {
+  for (const m of section.matchAll(/`(jaiph-[A-Za-z0-9.\-]+|SHA256SUMS(?:\.minisig)?)`/g)) {
     names.add(m[1]);
   }
   return [...names];
 }
 
-test("the naming contract lists exactly the five binaries plus SHA256SUMS", () => {
+test("the naming contract lists exactly the five binaries plus SHA256SUMS and SHA256SUMS.minisig", () => {
   const listed = contractAssets().sort();
-  const expected = [...BINARY_ASSETS, "SHA256SUMS"].sort();
+  const expected = [...BINARY_ASSETS, "SHA256SUMS", "SHA256SUMS.minisig"].sort();
   assert.deepEqual(listed, expected, "contract asset set matches the release");
   // The prose count stays in sync with the table.
-  assert.match(CONTRIBUTING, /exactly these six assets/);
+  assert.match(CONTRIBUTING, /exactly these seven assets/);
 });
 
 test("release matrix builds exactly the binaries named in the contract", () => {
@@ -198,4 +199,61 @@ test("installer and its e2e test can only produce asset names the contract lists
   }
   // The .exe is release-only; the bash installer does not download it.
   assert.ok(listed.has("jaiph-windows-x64.exe"));
+});
+
+// ── Acceptance 4: release signing (SHA256SUMS.minisig) ────────────────────────
+
+test("release workflow signs SHA256SUMS and uploads SHA256SUMS.minisig", () => {
+  assert.match(RELEASE_YML, /Sign SHA256SUMS with minisign/, "has a signing step");
+  assert.match(RELEASE_YML, /MINISIGN_SECRET_KEY/, "signing step uses the CI secret");
+  const stable = sliceBetween(RELEASE_YML, "Publish stable release", "Publish nightly prerelease");
+  const nightly = sliceBetween(RELEASE_YML, "Publish nightly prerelease", null);
+  for (const [label, section] of [["stable", stable], ["nightly", nightly]] as const) {
+    assert.ok(section.includes("SHA256SUMS.minisig"), `${label} upload list includes SHA256SUMS.minisig`);
+  }
+});
+
+test("release naming contract lists SHA256SUMS.minisig", () => {
+  const section = sliceBetween(CONTRIBUTING, "#### Release asset naming contract", "#### Release signing");
+  assert.ok(section.includes("SHA256SUMS.minisig"), "naming contract table includes SHA256SUMS.minisig");
+  assert.match(CONTRIBUTING, /exactly these seven assets/, "prose says seven assets (not six)");
+});
+
+test("contributing.md documents the trust model and key management", () => {
+  assert.match(CONTRIBUTING, /#### Release signing/, "has a Release signing section");
+  assert.match(CONTRIBUTING, /minisign/, "mentions minisign");
+  assert.match(CONTRIBUTING, /MINISIGN_SECRET_KEY/, "documents the required CI secret");
+  assert.match(CONTRIBUTING, /Trust model/, "describes the trust model");
+  assert.match(CONTRIBUTING, /Key rotation/, "documents key rotation");
+});
+
+// ── Acceptance 5: Dockerfile has no pipe-to-shell patterns ───────────────────
+
+test("Dockerfile does not pipe curl output directly to bash or sh", () => {
+  // Each line is checked independently so multi-line pipes are caught.
+  const lines = DOCKERFILE.split("\n");
+  const pipeToBashOrSh = lines.filter((line) => /\|\s*(bash|sh)(\s|-|\b)/.test(line));
+  assert.deepEqual(
+    pipeToBashOrSh,
+    [],
+    `Dockerfile has pipe-to-shell lines (fix by download-to-file + hash-verify):\n${pipeToBashOrSh.join("\n")}`,
+  );
+});
+
+test("Dockerfile uses download-to-file + optional hash verify for each remote installer", () => {
+  // Each install ARG must appear once and must be paired with sha256sum usage.
+  for (const argName of ["UV_INSTALL_SHA256", "RUSTUP_INIT_SHA256", "BUN_INSTALL_SHA256"]) {
+    assert.match(DOCKERFILE, new RegExp(`ARG ${argName}`), `ARG ${argName} declared`);
+    assert.match(DOCKERFILE, new RegExp(argName), `${argName} referenced in verification step`);
+  }
+  assert.match(DOCKERFILE, /sha256sum -c/, "Dockerfile uses sha256sum -c for verification");
+});
+
+test("bash installer requires SHA256SUMS.minisig and fails closed when absent", () => {
+  assert.match(INSTALLER, /SHA256SUMS\.minisig/, "downloads SHA256SUMS.minisig");
+  assert.match(INSTALLER, /Failed to download.*SHA256SUMS\.minisig/, "fails with message when sig file is missing");
+  // The sig download must come BEFORE the checksum verification step.
+  const sigIdx = INSTALLER.indexOf("SHA256SUMS.minisig");
+  const csumIdx = INSTALLER.indexOf("Verifying checksum");
+  assert.ok(sigIdx !== -1 && csumIdx !== -1 && sigIdx < csumIdx, "sig file download precedes checksum verification");
 });

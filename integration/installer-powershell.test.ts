@@ -34,9 +34,24 @@ test("docs/install.ps1 exists", () => {
   assert.ok(existsSync(join(REPO_ROOT, "docs/install.ps1")), "docs/install.ps1 present");
 });
 
-test("install.ps1 downloads the windows-x64 asset and SHA256SUMS", () => {
+test("install.ps1 downloads the windows-x64 asset, SHA256SUMS, and SHA256SUMS.minisig", () => {
   assert.match(PS_INSTALLER, /jaiph-windows-x64\.exe/, "downloads the .exe asset");
   assert.match(PS_INSTALLER, /SHA256SUMS/, "downloads SHA256SUMS");
+  assert.match(PS_INSTALLER, /SHA256SUMS\.minisig/, "downloads SHA256SUMS.minisig");
+});
+
+test("install.ps1 fails closed when SHA256SUMS.minisig is missing", () => {
+  assert.match(PS_INSTALLER, /Failed to download.*SHA256SUMS\.minisig/, "reports missing signature file");
+  // Verify the download failure exits before verifying the checksum.
+  const sigIdx = PS_INSTALLER.indexOf("SHA256SUMS.minisig");
+  const csumIdx = PS_INSTALLER.indexOf("Verifying checksum");
+  assert.ok(sigIdx !== -1 && csumIdx !== -1 && sigIdx < csumIdx, "sig download precedes checksum verification");
+});
+
+test("install.ps1 verifies the signature with minisign when installed and key is configured", () => {
+  assert.match(PS_INSTALLER, /JAIPH_MINISIGN_PUBLIC_KEY/, "references the minisign public key env var");
+  assert.match(PS_INSTALLER, /minisign.*-V/, "calls minisign -V for verification");
+  assert.match(PS_INSTALLER, /Release signature verification failed/, "reports an invalid signature");
 });
 
 test("install.ps1 verifies the checksum with Get-FileHash and aborts on mismatch", () => {
@@ -83,6 +98,12 @@ test("bash installer rejects Windows and points at the PowerShell installer", ()
   assert.match(BASH_INSTALLER, /irm https:\/\/jaiph\.org\/install\.ps1 \| iex/, "points at the PowerShell one-liner");
   // The generic unsupported message (AIX etc.) is preserved for the e2e test.
   assert.match(BASH_INSTALLER, /Unsupported platform: \$\{uname_s\} \$\{uname_m\}/);
+});
+
+test("bash installer downloads SHA256SUMS.minisig and fails closed when absent", () => {
+  assert.match(BASH_INSTALLER, /SHA256SUMS\.minisig/, "downloads SHA256SUMS.minisig");
+  assert.match(BASH_INSTALLER, /Failed to download.*SHA256SUMS\.minisig/, "fails with message when sig file is missing");
+  assert.match(BASH_INSTALLER, /JAIPH_MINISIGN_PUBLIC_KEY/, "references the minisign public key env var");
 });
 
 test("bash installer verifies the staging binary and replaces the target atomically", () => {

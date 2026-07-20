@@ -92,6 +92,39 @@ try {
   try { Get-ReleaseAsset $BaseUrl "SHA256SUMS" (Join-Path $tmpDir "SHA256SUMS") }
   catch { Print-Error "Failed to download $BaseUrl/SHA256SUMS"; exit 1 }
 
+  Print-Step "Downloading SHA256SUMS.minisig..."
+  try { Get-ReleaseAsset $BaseUrl "SHA256SUMS.minisig" (Join-Path $tmpDir "SHA256SUMS.minisig") }
+  catch {
+    Print-Error "Failed to download $BaseUrl/SHA256SUMS.minisig"
+    Write-Host "The release signature file is missing. This may indicate a compromised or incomplete release." -ForegroundColor Red
+    Write-Host "Install manually from source: https://jaiph.org/contributing#installing-from-source"
+    exit 1
+  }
+
+  # Jaiph release signing public key (minisign).
+  # Releases are signed with: minisign -S -s jaiph.key -m SHA256SUMS
+  # Verify manually:          minisign -V -P <pubkey> -m SHA256SUMS
+  # Key generation/rotation:  see docs/contributing.md -> "Release signing"
+  $JaiphMinisignKey = if ($env:JAIPH_MINISIGN_PUBLIC_KEY) { $env:JAIPH_MINISIGN_PUBLIC_KEY } else { "" }
+  $minisignCmd = Get-Command "minisign" -ErrorAction SilentlyContinue
+  if ($JaiphMinisignKey -and $minisignCmd) {
+    Print-Step "Verifying release signature..."
+    $verifyResult = & minisign -V -P $JaiphMinisignKey `
+        -m (Join-Path $tmpDir "SHA256SUMS") `
+        -x (Join-Path $tmpDir "SHA256SUMS.minisig") 2>&1
+    if ($LASTEXITCODE -ne 0) {
+      Print-Error "Release signature verification failed for SHA256SUMS"
+      Write-Host "The signature does not match the release signing key." -ForegroundColor Red
+      Write-Host "This may indicate a tampered download. Do not proceed."
+      exit 1
+    }
+    Print-Success "Release signature verified"
+  } else {
+    Print-Warning "Skipping detached-signature verification (minisign not installed or key not configured)"
+    Write-Host "  Install minisign for full verification: https://jedisct1.github.io/minisign/"
+    Write-Host "  Or set JAIPH_MINISIGN_PUBLIC_KEY to the project public key."
+  }
+
   Print-Step "Verifying checksum..."
   $expected = Get-ExpectedSum (Join-Path $tmpDir "SHA256SUMS") $BinName
   if (-not $expected) { Print-Error "No checksum entry for $BinName in SHA256SUMS"; exit 1 }

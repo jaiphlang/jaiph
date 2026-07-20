@@ -73,8 +73,13 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
     apt-get install -y --no-install-recommends gh && \
     rm -rf /var/lib/apt/lists/*
 
-# Node.js for running jaiph
-RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
+# Node.js — set up NodeSource APT repository via GPG key; no installer-script
+# execution (same pattern as the GitHub CLI block above).
+RUN curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key \
+      | gpg --dearmor -o /usr/share/keyrings/nodesource.gpg && \
+    echo "deb [signed-by=/usr/share/keyrings/nodesource.gpg] https://deb.nodesource.com/node_22.x nodistro main" \
+      > /etc/apt/sources.list.d/nodesource.list && \
+    apt-get update && \
     apt-get install -y --no-install-recommends nodejs && \
     rm -rf /var/lib/apt/lists/*
 
@@ -83,7 +88,16 @@ RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
 RUN npm install -g pnpm yarn && corepack enable
 
 # Fast Python env/deps (common alternative to raw pip in modern repos).
-RUN curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/bin sh
+# ARG UV_INSTALL_SHA256: sha256 of https://astral.sh/uv/install.sh at build time.
+# Leave empty for dev builds; CI/release builds should populate this to pin the script.
+ARG UV_INSTALL_SHA256=""
+RUN set -eux; \
+    curl -LsSf https://astral.sh/uv/install.sh -o /tmp/uv-install.sh; \
+    if [ -n "${UV_INSTALL_SHA256}" ]; then \
+      printf '%s  /tmp/uv-install.sh\n' "${UV_INSTALL_SHA256}" | sha256sum -c -; \
+    fi; \
+    env UV_INSTALL_DIR=/usr/local/bin sh /tmp/uv-install.sh; \
+    rm -f /tmp/uv-install.sh
 
 # Go — single stable release; matches go.dev "current stable" at image build time.
 ARG GO_VERSION=1.26.5
@@ -101,8 +115,16 @@ ENV PATH="/usr/local/go/bin:${PATH}"
 ENV RUSTUP_HOME=/usr/local/rustup
 ENV CARGO_HOME=/usr/local/cargo
 ENV PATH="/usr/local/cargo/bin:${PATH}"
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
-    sh -s -- -y --default-toolchain stable --profile minimal --no-modify-path && \
+# ARG RUSTUP_INIT_SHA256: sha256 of https://sh.rustup.rs at build time.
+# Leave empty for dev builds; CI/release builds should populate this to pin the script.
+ARG RUSTUP_INIT_SHA256=""
+RUN set -eux; \
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs -o /tmp/rustup-init.sh; \
+    if [ -n "${RUSTUP_INIT_SHA256}" ]; then \
+      printf '%s  /tmp/rustup-init.sh\n' "${RUSTUP_INIT_SHA256}" | sha256sum -c -; \
+    fi; \
+    sh /tmp/rustup-init.sh -y --default-toolchain stable --profile minimal --no-modify-path; \
+    rm -f /tmp/rustup-init.sh; \
     chmod -R a+rx /usr/local/rustup /usr/local/cargo
 
 # YAML CLI (mikefarah/yq — distinct from the Python yq package).
@@ -120,7 +142,16 @@ RUN set -eux; \
 
 # Bun — fast JS runtime used by many modern repos (and Jaiph's own build).
 ENV BUN_INSTALL=/usr/local/bun
-RUN curl -fsSL https://bun.sh/install | env BUN_INSTALL="${BUN_INSTALL}" bash
+# ARG BUN_INSTALL_SHA256: sha256 of https://bun.sh/install at build time.
+# Leave empty for dev builds; CI/release builds should populate this to pin the script.
+ARG BUN_INSTALL_SHA256=""
+RUN set -eux; \
+    curl -fsSL https://bun.sh/install -o /tmp/bun-install.sh; \
+    if [ -n "${BUN_INSTALL_SHA256}" ]; then \
+      printf '%s  /tmp/bun-install.sh\n' "${BUN_INSTALL_SHA256}" | sha256sum -c -; \
+    fi; \
+    env BUN_INSTALL="${BUN_INSTALL}" bash /tmp/bun-install.sh; \
+    rm -f /tmp/bun-install.sh
 ENV PATH="${BUN_INSTALL}/bin:${PATH}"
 
 # kubectl — Kubernetes cluster automation.
@@ -184,8 +215,14 @@ ENV PATH="/home/jaiph/.local/bin:/usr/local/bun/bin:/usr/local/cargo/bin:/usr/lo
 # cursor-agent (Cursor) — install as the runtime user so the binary is
 # reachable after switching away from root. The installer currently places
 # the CLI in ~/.local/bin and may name it "agent" or "cursor".
+# ARG CURSOR_INSTALL_SHA256: sha256 of https://cursor.com/install at build time.
+# Cursor does not publish checksums publicly; set this ARG when the hash is known.
+ARG CURSOR_INSTALL_SHA256=""
 RUN mkdir -p "$HOME/.local/bin" && \
     curl -fsSL https://cursor.com/install -o /tmp/install-cursor-agent.sh && \
+    if [ -n "${CURSOR_INSTALL_SHA256}" ]; then \
+      printf '%s  /tmp/install-cursor-agent.sh\n' "${CURSOR_INSTALL_SHA256}" | sha256sum -c -; \
+    fi && \
     bash /tmp/install-cursor-agent.sh && \
     export PATH="$HOME/.local/bin:$PATH" && \
     if command -v cursor-agent >/dev/null 2>&1; then \

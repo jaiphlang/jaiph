@@ -219,7 +219,7 @@ The workflow refuses to start when the git tree is dirty or when `v<version>` al
 Pushing a **`v*`** tag triggers two things in this repo:
 
 1. **Docker image publish** — the `docker-publish` job in `ci.yml` pushes `ghcr.io/jaiphlang/jaiph-runtime:<version>` and `:latest` after the other CI jobs succeed.
-2. **Standalone-binary release** — `.github/workflows/release.yml` cross-compiles the Bun-compiled standalone binary for five targets via `oven-sh/setup-bun` and `bun build --compile --target=…`, generates a `SHA256SUMS` file, runs a Linux x64 sanity gate and a `windows-latest` Windows x64 sanity gate (`--version` must equal `jaiph <tag-without-v>` for stable tags — both delegate to `scripts/release-version-check.sh`), and uploads all six assets to the GitHub Release for the tag (creating it if needed). The Windows gate is a required dependency of the publish job, so a version mismatch there fails the whole release. The release job waits for the `CI` workflow on the same SHA to succeed before publishing. Re-runs are available via `workflow_dispatch`.
+2. **Standalone-binary release** — `.github/workflows/release.yml` cross-compiles the Bun-compiled standalone binary for five targets via `oven-sh/setup-bun` and `bun build --compile --target=…`, generates a `SHA256SUMS` file, signs it with minisign (if `MINISIGN_SECRET_KEY` is set) to produce `SHA256SUMS.minisig`, runs a Linux x64 sanity gate and a `windows-latest` Windows x64 sanity gate (`--version` must equal `jaiph <tag-without-v>` for stable tags — both delegate to `scripts/release-version-check.sh`), and uploads all seven assets to the GitHub Release for the tag (creating it if needed). The Windows gate is a required dependency of the publish job, so a version mismatch there fails the whole release. The release job waits for the `CI` workflow on the same SHA to succeed before publishing. Re-runs are available via `workflow_dispatch`.
 
 Pushes to the **`nightly`** branch follow the same matrix and upload to a **rolling prerelease** tagged `nightly` (`gh release upload nightly --clobber`), so `jaiph use nightly` keeps working under the binary installer.
 
@@ -237,8 +237,36 @@ The installer (`docs/install`) downloads these exact filenames from the release 
 | `bun-linux-arm64`  | `jaiph-linux-arm64` |
 | `bun-windows-x64`  | `jaiph-windows-x64.exe` |
 | —                  | `SHA256SUMS` (covers all five binaries) |
+| —                  | `SHA256SUMS.minisig` (detached minisign signature over `SHA256SUMS`) |
 
-Bun has no `bun-windows-arm64` target, so Windows ships x64 only. Every release (stable `v*` and rolling `nightly`) ships exactly these six assets.
+Bun has no `bun-windows-arm64` target, so Windows ships x64 only. Every release (stable `v*` and rolling `nightly`) ships exactly these seven assets.
+
+#### Release signing
+
+Jaiph releases are signed with **[minisign](https://jedisct1.github.io/minisign/)**, a simple Ed25519-based signing tool. The release workflow signs `SHA256SUMS` and publishes a detached `SHA256SUMS.minisig` alongside every release.
+
+**Trust model.** The installer (`docs/install`) always requires `SHA256SUMS.minisig` to be downloadable — it fails closed if the file is absent. When `minisign` is installed and `JAIPH_MINISIGN_PUBLIC_KEY` is set, the installer also verifies the signature before executing any binary. Without `minisign`, installation proceeds with TOFU + checksum-only (the pre-existing behaviour), but a warning is printed.
+
+**Key management.** The signing key pair is generated once and stored securely:
+
+1. Generate a key pair (keep the private key secret):
+   ```bash
+   minisign -G -p jaiph.pub -s jaiph.key
+   ```
+2. Store the private key as the `MINISIGN_SECRET_KEY` GitHub Actions secret (Settings → Secrets → Actions). The secret value is the full content of `jaiph.key`.
+3. Embed the public key in both installer scripts (`docs/install` and `docs/install.ps1`) as the `JAIPH_MINISIGN_PUBLIC_KEY` variable. The public key is a single-line string starting with `RW`.
+
+**User verification.** After downloading, users can verify manually:
+```bash
+# Download the release assets
+curl -fsSL https://github.com/jaiphlang/jaiph/releases/download/v0.11.0/SHA256SUMS -o SHA256SUMS
+curl -fsSL https://github.com/jaiphlang/jaiph/releases/download/v0.11.0/SHA256SUMS.minisig -o SHA256SUMS.minisig
+minisign -V -P "$JAIPH_MINISIGN_PUBLIC_KEY" -m SHA256SUMS
+```
+
+**Key rotation.** Generate a new key pair, update the `MINISIGN_SECRET_KEY` secret, update the public key in both installer scripts, and document the rotation in release notes.
+
+**Dockerfile toolchain verification.** `runtime/Dockerfile` pins each remote installer script via build ARGs (`UV_INSTALL_SHA256`, `RUSTUP_INIT_SHA256`, `BUN_INSTALL_SHA256`, `CURSOR_INSTALL_SHA256`). ARGs default to empty (skip verification) for development; CI/release builds should populate them with the SHA256 of each installer script at the pinned version. The NodeSource APT block uses GPG-signed packages directly — no installer script execution.
 
 ### Local docs site (Jekyll)
 

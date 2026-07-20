@@ -227,6 +227,35 @@ else
     exit 1
   fi
 
+  print_step "Downloading SHA256SUMS.minisig..."
+  if ! curl -fsSL -o "${tmp_dir}/SHA256SUMS.minisig" "${BASE_URL}/SHA256SUMS.minisig"; then
+    print_error "Failed to download ${BASE_URL}/SHA256SUMS.minisig"
+    echo "The release signature file is missing. This may indicate a compromised or incomplete release." >&2
+    echo "Install manually from source: https://jaiph.org/contributing#installing-from-source" >&2
+    exit 1
+  fi
+
+  # Jaiph release signing public key (minisign).
+  # Releases are signed with: minisign -S -s jaiph.key -m SHA256SUMS
+  # Verify manually:          minisign -V -P "${JAIPH_MINISIGN_PUBLIC_KEY}" -m SHA256SUMS
+  # Key generation/rotation:  see docs/contributing.md → "Release signing"
+  JAIPH_MINISIGN_PUBLIC_KEY="${JAIPH_MINISIGN_PUBLIC_KEY:-}"
+  if [ -n "${JAIPH_MINISIGN_PUBLIC_KEY}" ] && command -v minisign >/dev/null 2>&1; then
+    print_step "Verifying release signature..."
+    if ! minisign -V -P "${JAIPH_MINISIGN_PUBLIC_KEY}" -m "${tmp_dir}/SHA256SUMS" \
+        -x "${tmp_dir}/SHA256SUMS.minisig" >/dev/null 2>&1; then
+      print_error "Release signature verification failed for SHA256SUMS"
+      echo "The signature does not match the release signing key." >&2
+      echo "This may indicate a tampered download. Do not proceed." >&2
+      exit 1
+    fi
+    print_success "Release signature verified"
+  else
+    print_warning "Skipping detached-signature verification (minisign not installed or key not configured)"
+    echo "  Install minisign for full verification: https://jedisct1.github.io/minisign/" >&2
+    echo "  Or set JAIPH_MINISIGN_PUBLIC_KEY to the project public key." >&2
+  fi
+
   print_step "Verifying checksum..."
   expected_sum="$(awk -v name="${BIN_NAME}" '$2 == name || $2 == "*"name { print $1 }' "${tmp_dir}/SHA256SUMS")"
   if [ -z "${expected_sum}" ]; then

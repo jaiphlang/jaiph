@@ -49,6 +49,37 @@ case "${host_uname_m}" in
 esac
 HOST_BIN_NAME="jaiph-${HOST_OS}-${HOST_ARCH}"
 
+# ── Missing signature file (SHA256SUMS.minisig absent) ────────────────────────
+#
+# The installer must fail closed when the release is not accompanied by a
+# detached signature file — regardless of whether minisign is installed.
+
+e2e::section "Missing SHA256SUMS.minisig fails and installs nothing"
+
+RELEASE_DIR_NOSIG="${TEST_DIR}/release-nosig"
+BIN_DIR_NOSIG="${TEST_DIR}/bin-nosig"
+mkdir -p "${RELEASE_DIR_NOSIG}" "${BIN_DIR_NOSIG}"
+
+printf 'real-binary-bytes' > "${RELEASE_DIR_NOSIG}/${HOST_BIN_NAME}"
+actual_sum="$(host_sha256 "${RELEASE_DIR_NOSIG}/${HOST_BIN_NAME}")"
+printf '%s  %s\n' "${actual_sum}" "${HOST_BIN_NAME}" > "${RELEASE_DIR_NOSIG}/SHA256SUMS"
+# SHA256SUMS.minisig is intentionally absent.
+
+nosig_status=0
+nosig_output="$(
+  unset JAIPH_REPO_URL
+  JAIPH_RELEASE_BASE_URL="file://${RELEASE_DIR_NOSIG}" \
+  JAIPH_BIN_DIR="${BIN_DIR_NOSIG}" \
+  bash "${INSTALL_SCRIPT}" 2>&1
+)" || nosig_status=$?
+e2e::assert_equals "${nosig_status}" "1" "missing SHA256SUMS.minisig exits non-zero"
+# assert_contains: ANSI color codes in the output prevent full equality match
+e2e::assert_contains "${nosig_output}" "SHA256SUMS.minisig" "error message names the missing signature file"
+if [ -e "${BIN_DIR_NOSIG}/jaiph" ]; then
+  e2e::fail "installer left ${BIN_DIR_NOSIG}/jaiph when signature file was absent"
+fi
+e2e::pass "missing signature file is non-recoverable and leaves no binary"
+
 # ── Checksum mismatch ────────────────────────────────────────────────────────
 
 e2e::section "Checksum mismatch fails and installs nothing"
@@ -62,6 +93,9 @@ printf 'real-binary-bytes' > "${RELEASE_DIR}/${HOST_BIN_NAME}"
 # reaches the verify step and fails with a checksum mismatch (not an http 404).
 printf '%s  %s\n' "0000000000000000000000000000000000000000000000000000000000000000" "${HOST_BIN_NAME}" \
   > "${RELEASE_DIR}/SHA256SUMS"
+# Provide a placeholder sig file so the installer proceeds past the sig-download
+# step and reaches the checksum verification (the real test target here).
+printf 'placeholder-sig\n' > "${RELEASE_DIR}/SHA256SUMS.minisig"
 
 bad_status=0
 # Unset JAIPH_REPO_URL: the shared e2e context points it at this repo root,
