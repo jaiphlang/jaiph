@@ -1237,3 +1237,45 @@ test("NodeWorkflowRuntime: multi-message fan-out below the cap is unaffected", a
   assert.equal(status, 0, "fan-out below the cap must succeed");
   assert.ok(!summary.includes("E_INBOX_DISPATCH_LIMIT"), "must not flag the cap below the limit");
 });
+
+test("NodeWorkflowRuntime: ANTHROPIC_API_KEY value in prompt text is redacted in run summary", async () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-prompt-redact-"));
+  // Use a long, distinctive secret value that cannot appear by accident.
+  const secret = "sk-ant-redacttest-1234567890abcdef";
+  try {
+    const jh = join(root, "prompt_redact.jh");
+    writeFileSync(
+      jh,
+      [
+        "workflow default() {",
+        // Embed the literal secret in the prompt source so the write path must redact it.
+        `  prompt "Call endpoint with token ${secret} and return result"`,
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const mockJson = JSON.stringify(["ok"]);
+    const graph = buildRuntimeGraph(jh);
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      JAIPH_TEST_MODE: "1",
+      JAIPH_MOCK_RESPONSES_JSON: mockJson,
+      JAIPH_RUNS_DIR: join(root, ".jaiph", "runs"),
+      ANTHROPIC_API_KEY: secret,
+    };
+    const runtime = new NodeWorkflowRuntime(graph, { env, cwd: root, suppressLiveEvents: true });
+    const prevSummaryEnv = process.env.JAIPH_RUN_SUMMARY_FILE;
+    process.env.JAIPH_RUN_SUMMARY_FILE = runtime.getSummaryFile();
+    try {
+      await runtime.runDefault([]);
+    } finally {
+      if (prevSummaryEnv === undefined) delete process.env.JAIPH_RUN_SUMMARY_FILE;
+      else process.env.JAIPH_RUN_SUMMARY_FILE = prevSummaryEnv;
+    }
+    const summaryText = readFileSync(runtime.getSummaryFile(), "utf8");
+    assert.ok(!summaryText.includes(secret), "credential value must not appear in run summary");
+    assert.ok(summaryText.includes("[REDACTED]"), "run summary must contain [REDACTED] in place of credential");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
