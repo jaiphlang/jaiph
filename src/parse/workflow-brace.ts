@@ -12,6 +12,7 @@ import {
   rejectTrailingContent,
 } from "./core";
 import { consumeTripleQuotedArg, dedentTripleQuotedBody, tripleQuoteBodyToRaw } from "./triple-quote";
+import { parseCallRefMultiline } from "./call-args";
 import { parseConstRhs } from "./const-rhs";
 import { parseAnonymousInlineScript } from "./inline-script";
 import { parseConfigBlock } from "./metadata";
@@ -213,7 +214,7 @@ function parseRunOrEnsure(
   }
 
   if (!attached) {
-    const call = parseCallRef(hostBody);
+    const call = parseCallRefMultiline(filePath, lines, idx, hostBody);
     if (!call) {
       fail(
         filePath,
@@ -226,7 +227,7 @@ function parseRunOrEnsure(
     const body: Expr = host === "ensure"
       ? { kind: "ensure_call", callee, args: call.args }
       : { kind: "call", callee, args: call.args, ...(isAsync ? { async: true as const } : {}) };
-    return { step: execStep(body, stepLoc, { captureName }), nextIdx: idx + 1 };
+    return { step: execStep(body, stepLoc, { captureName }), nextIdx: call.nextLineIdx };
   }
 
   const call = parseCallRef(attached.left);
@@ -595,24 +596,27 @@ function tryParseReturn(c: BlockCtx): BlockResult | null {
       };
       return { step: { type: "return", value, loc: retLoc }, nextIdx: result.nextLineIdx };
     }
-    const call = parseCallRef(runBody);
+    // parseCallRefMultiline returns null only when runBody does not start with ref(.
+    // When runBody starts with ref( but the call is incomplete (unclosed paren),
+    // it calls fail() so the line never falls through to a shell step.
+    const call = parseCallRefMultiline(c.filePath, c.lines, c.idx, runBody);
     if (call) {
       rejectTrailingContent(c.filePath, c.innerNo, "run", call.rest);
       const callee = { value: call.ref, loc: retLoc };
       return {
         step: { type: "return", value: { kind: "call", callee, args: call.args }, loc: retLoc },
-        nextIdx: c.idx + 1,
+        nextIdx: call.nextLineIdx,
       };
     }
   }
   if (returnValue.startsWith("ensure ")) {
-    const call = parseCallRef(returnValue.slice("ensure ".length).trim());
+    const call = parseCallRefMultiline(c.filePath, c.lines, c.idx, returnValue.slice("ensure ".length).trim());
     if (call) {
       rejectTrailingContent(c.filePath, c.innerNo, "ensure", call.rest);
       const callee = { value: call.ref, loc: retLoc };
       return {
         step: { type: "return", value: { kind: "ensure_call", callee, args: call.args }, loc: retLoc },
-        nextIdx: c.idx + 1,
+        nextIdx: call.nextLineIdx,
       };
     }
   }

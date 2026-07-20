@@ -156,6 +156,7 @@ Any identifier tag is accepted; there is no hardcoded allowlist.
 call_ref      = REF "(" [ call_args ] ")" ;
 call_args     = call_arg { "," call_arg } ;
 call_arg      = double_quoted_string
+              | triple_quoted_block               (* multiline literal; must start on its own line *)
               | IDENT                            (* bare identifier: in-scope variable *)
               | IDENT "." IDENT                  (* typed-prompt field access *)
               | "run" ( call_ref | inline_script )   (* explicit nested managed call *)
@@ -164,8 +165,22 @@ inline_script = backtick_script_body "(" [ call_args ] ")"
               | fenced_script_block "(" [ call_args ] ")" ;
 ```
 
+`call_ref` may span multiple source lines when the opening `(` is not closed on the same line.
+Each `call_arg` must still be a complete single-line token or a `triple_quoted_block` that
+opens `"""` as the first non-whitespace character on its own line. A `triple_quoted_block` arg is
+normalised to an inline double-quoted string by the formatter (intentional — `Arg` nodes do not
+carry Trivia).
+
+**Hard error contract:** any line that begins with `run`/`ensure`/`return run`/`return ensure`
+followed by a valid identifier and `(` is treated as a managed call start. If the matching `)` is
+never found (e.g. the file ends or the block closes first), the compiler emits `E_PARSE` and the
+line is **never** silently treated as a workflow shell step (`sh_line_*`).
+Intentionally free-form shell lines that are not prefixed with a managed-call keyword continue to
+fall through to the shell executor unchanged.
+
 | Position | Rule |
 |---|---|
+| Triple-quoted block argument | `"""…"""` must open as the first non-whitespace token on its own line (same rule as every other triple-quoted position). The body is dedented to the common leading margin. The formatter normalises triple-quoted call args to an inline double-quoted string (intentional — `Arg` nodes do not carry Trivia for round-trip preservation). |
 | Bare identifier argument | Must reference an in-scope binding (`const`, capture, parameter). `name` and `"${name}"` (quoted string) are both accepted when the variable is in scope. Unknown names are `E_VALIDATE`. Jaiph keywords are rejected. |
 | Bare dotted argument | `IDENT.IDENT` is typed-prompt field access (same as in `return` / `if` / `match`). The base must be a typed prompt capture and the field must appear in its `returns` schema (`E_VALIDATE` otherwise). |
 | Unquoted interpolation | Unquoted `${ident}` / `${base.field}` in call-argument position is `E_VALIDATE` — interpolation belongs inside strings. Use the bare form (`name`, `result.role`) or a quoted string (`"${name}"`). |

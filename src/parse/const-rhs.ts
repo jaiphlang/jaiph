@@ -1,6 +1,7 @@
 import type { Expr, RuleRefDef, WorkflowRefDef } from "../types";
 import { createTrivia, type Trivia } from "./trivia";
 import { fail, parseCallRef, rejectTrailingContent } from "./core";
+import { parseCallRefMultiline } from "./call-args";
 import { dedentTripleQuotedBody, parseTripleQuoteBlock, tripleQuoteBodyToRaw } from "./triple-quote";
 import { parseAnonymousInlineScript } from "./inline-script";
 import { parsePromptStep } from "./prompt";
@@ -123,7 +124,7 @@ export function parseConstRhs(
     if (rest.startsWith("script(") || rest.startsWith("script (")) {
       fail(filePath, 'inline script syntax has changed: use const name = run `body`(args) instead of run script(args) "body"', lineNo, col);
     }
-    const call = parseCallRef(rest);
+    const call = parseCallRefMultiline(filePath, lines, lineIdx, rest);
     if (!call) {
       fail(filePath, "const ... = run must target a valid reference", lineNo, col);
     }
@@ -131,12 +132,12 @@ export function parseConstRhs(
     const callee: WorkflowRefDef = { value: call.ref, loc: { line: lineNo, col } };
     return {
       value: { kind: "call", callee, args: call.args },
-      nextLineIdx: lineIdx,
+      nextLineIdx: call.nextLineIdx - 1,
     };
   }
   if (head.startsWith("ensure ")) {
     const rest = head.slice("ensure ".length).trim();
-    const call = parseCallRef(rest);
+    const call = parseCallRefMultiline(filePath, lines, lineIdx, rest);
     if (!call) {
       fail(filePath, "const ... = ensure must target a valid reference", lineNo, col);
     }
@@ -146,7 +147,7 @@ export function parseConstRhs(
     const callee: RuleRefDef = { value: call.ref, loc: { line: lineNo, col } };
     return {
       value: { kind: "ensure_call", callee, args: call.args },
-      nextLineIdx: lineIdx,
+      nextLineIdx: call.nextLineIdx - 1,
     };
   }
   // const name = match var { ... }

@@ -14,53 +14,6 @@ Process rules:
 
 ***
 
-## Fix: Accept triple-quoted call args; never silently shell-fall back incomplete `run`/`return run` calls #dev-ready
-
-**Problem:** Authors naturally write multiline managed calls with a triple-quoted string argument, e.g.:
-
-```jaiph
-return run review_scope(
-  "codebase",
-  """
-  Review the ENTIRE repository…
-  """,
-  report_file
-)
-```
-
-Two failures compound:
-
-1. **Grammar gap.** `docs/grammar.md` `call_arg` allows only `double_quoted_string | IDENT | IDENT.IDENT | run … | ensure …` — **not** `triple_quoted_block`, even though triple-quoted literals are first-class in `const`, `return`, `log`/`fail`, `prompt`, and match arms. Call sites that need multiline text are forced into a `const` binding first (workaround used in `.jaiph/security_review.jh`).
-2. **Silent shell fallback (the real bug).** When the parser does not recognize the multiline / triple-quoted call form, it does **not** emit `E_PARSE`. The line with the opening `return run review_scope(` (or similar) is treated as a free-form workflow shell step (`sh_line_<N>`). `jaiph compile` can still succeed (or the failure is deferred), and `jaiph run` then dies at runtime with an opaque shell error such as `sh: 1: Syntax error: "(" unexpected`. That is a language/runtime contract violation: unrecognized managed syntax must fail at compile time with `path:line:col CODE message`, never become a shell step.
-
-Observed in practice while running `.jaiph/security_review.jh` under Docker: step `script sh_line_147` failed with `Syntax error: "(" unexpected` instead of a compile diagnostic.
-
-**Required behavior:**
-
-* Extend `call_arg` to accept `triple_quoted_block` (same dedent / `${…}` interpolation rules as other triple-quoted positions). Applies to `run`, `ensure`, `return run`, `return ensure`, nested `run`/`ensure` call args, and inline-script arg lists wherever `call_arg` is used.
-* Multiline managed calls whose `(` … `)` span multiple source lines must parse when each argument is a valid `call_arg` (including triple-quoted blocks and bare identifiers). Prefer documenting and testing the form used above (`return run name(\n  …\n)`).
-* Any line that *looks like* a managed call start (`run` / `ensure` / `return run` / `return ensure` with an identifier and `(`) but cannot be completed as a valid call **must** be `E_PARSE` (or `E_VALIDATE` only when the shape is unambiguous but a name/arity/scope rule fails). It must **never** become a workflow shell (`sh_line_*`) step.
-* Double-quoted single-line call args, bare ids, nested `run`/`ensure`, and existing shell-line workflows that are *intentionally* free-form shell (no `run`/`ensure`/`return` keyword prefix) keep working unchanged.
-* Update `docs/grammar.md` (`call_arg` production) and `docs/language.md` (call-argument table) to list triple-quoted blocks; call out that incomplete managed calls are hard errors, not shell.
-
-**Implementation sketch:**
-
-* Parser path that builds call argument lists (workflow brace / call parsing under `src/parse/`) — accept triple-quoted blocks as `Arg` literals; ensure multiline `(` … `)` consumption does not abort into the “unrecognised line → shell step” branch mid-call.
-* Wherever workflow body lines fall through to `Expr.shell` / inline shell steps: if the line (or an open multiline call buffer) begins with a managed-call prefix, emit `E_PARSE` with a message that names the problem (e.g. unclosed `(`, unsupported argument form) instead of recording a shell step.
-* Formatter (`src/format/emit.ts`) — emit triple-quoted call args when the AST has them; round-trip the multiline call shape if the author wrote it that way (or document intentional normalization).
-* Validator — reuse existing literal `${…}` / unknown-ident checks for the new arg form; no special-case needed beyond treating them like other string literal args.
-
-Acceptance:
-
-* **Positive compile:** `jaiph compile` accepts a workflow containing `return run helper("x", """line1\nline2""", y)` (and the same with `run` / `ensure` statement forms) where `helper` / rule / script is declared with matching arity; emitted runtime graph has a managed call with three args — **no** `sh_line_*` step.
-* **Multiline form:** the exact multiline `return run name(\n  "a",\n  """…""",\n  ident\n)` shape compiles and runs; capture/`return` value is the callee’s return value.
-* **Negative compile (the bug lock):** a deliberately broken managed call that previously became shell — e.g. `return run missing_close(` alone, or a call with an argument form that is still illegal — yields `E_PARSE` (or documented `E_VALIDATE`) from `jaiph compile` / txtar, **exit non-zero**, and must **not** produce a `sh_line_*` script in the runtime graph. Add a txtar case under `test-fixtures/compiler-txtar/` (parse-errors or validate-errors as appropriate) that fails if shell fallback returns.
-* **Unit / golden:** parser unit test that a triple-quoted call arg is stored as `Arg` literal (not shell); optional golden-ast fixture if the repo still maintains golden AST for call shapes.
-* **Docs:** `docs/grammar.md` and `docs/language.md` updated; no “triple-quoted only via const” workaround required in docs examples for call args.
-* `npm test` and `npm run test:e2e` pass (add a focused e2e only if unit/txtar cannot cover the runtime path; prefer txtar + unit for the compile-time contract).
-
-***
-
 ## Fix: MCP sandbox parity with `jaiph run` — default Docker isolation, not inplace #dev-ready
 
 **Source:** `.jaiph/security_review_2026-07-20.md` Finding 2 (MEDIUM, ASI-03).

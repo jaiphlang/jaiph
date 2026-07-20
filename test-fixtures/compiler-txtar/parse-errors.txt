@@ -2587,3 +2587,17 @@ workflow default(x) {
 workflow default() {
   run `false`() recover(e) { log "r" } catch (e) { log "c" }
 }
+
+=== return run with unclosed paren is E_PARSE not shell
+# @expect error E_PARSE "unterminated" @2:1
+--- input.jh
+workflow default() {
+  return run missing_close(
+}
+
+=== return ensure with unclosed paren is E_PARSE not shell
+# @expect error E_PARSE "unterminated" @2:1
+--- input.jh
+workflow default() {
+  return ensure missing_close(
+}

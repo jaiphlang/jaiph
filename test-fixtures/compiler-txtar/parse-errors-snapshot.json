@@ -2007,5 +2007,19 @@
     "col": 1,
     "code": "E_PARSE",
     "message": "unexpected content after log string: '} catch (e) { log \"c\"'"
+  },
+  "return run with unclosed paren is E_PARSE not shell": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "unterminated multiline call — missing closing \")\""
+  },
+  "return ensure with unclosed paren is E_PARSE not shell": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "unterminated multiline call — missing closing \")\""
   }
 }
