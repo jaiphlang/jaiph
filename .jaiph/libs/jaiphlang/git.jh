@@ -11,6 +11,20 @@ script git_mark_workspace_safe = `git config --global --add safe.directory "$(pw
 # format-patch emits real diff to stdout only with --stdout; otherwise git writes *.patch files and stdout is only the path.
 script git_create_patch_from_commit = `git config --global --add safe.directory "$(pwd)" && git format-patch -1 HEAD --stdout > $1`
 
+# Push local HEAD to origin. This is a trusted, deterministic step so the push
+# target is controlled by the caller, not by agent output. With an explicit
+# branch ($1), force the remote ref (HEAD:refs/heads/<branch>) so the push
+# cannot be retargeted by whatever branch happens to be checked out; with no
+# branch, push HEAD to its tracking branch (matches `git push -u origin HEAD`).
+script git_push_head = ```
+  git config --global --add safe.directory "$(pwd)"
+  if [ -n "$1" ]; then
+    git push -u origin "HEAD:refs/heads/$1"
+  else
+    git push -u origin HEAD
+  fi
+```
+
 rule in_git_repo() {
   run git_mark_workspace_safe()
   run git_inside_worktree() catch (err) {
@@ -73,6 +87,11 @@ workflow commit(task) {
   run git_create_patch_from_commit(patch_file_name)
 
   return patch_file_name
+}
+
+workflow push(branch) {
+  ensure in_git_repo()
+  run git_push_head(branch)
 }
 
 workflow default(task) {

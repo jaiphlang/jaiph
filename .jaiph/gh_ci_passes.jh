@@ -66,15 +66,16 @@ workflow ensure_gh_ci_passes(branch, workflow_name) {
     """
     ensure git.in_git_repo()
     prompt """
-      Commit and push the CI fix so GitHub Actions can re-run.
+      Commit the CI fix locally so Jaiph can push it. Do NOT push — Jaiph
+      performs the push in a trusted step after this.
 
       Requirements:
       1. Review git status and git diff --stat.
       2. Stage only relevant changes.
       3. Create exactly one commit with a clear imperative message.
-      4. Push with: git push -u origin HEAD
-      5. Do not push unrelated changes or amend commits already on the remote.
+      4. Do NOT push, and do NOT amend commits already on the remote.
     """
+    run git.push(branch)
   }
 
   run common.rm_file_simple(ci_log_file)
