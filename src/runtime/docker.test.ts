@@ -1616,6 +1616,35 @@ test("cloneWorkspaceForSandbox: empty workspace produces empty clone", () => {
   }
 });
 
+test("cloneWorkspaceForSandbox: excludes custom runs root when clone dest is nested inside it", () => {
+  // Regression: copy-mode allocates `.sandbox-*` under the configured runs
+  // root. When that root is a workspace-relative JAIPH_RUNS_DIR (not
+  // `.jaiph/runs`), cloning without excluding it makes GNU `cp` refuse to
+  // copy a directory into itself.
+  const src = mkdtempSync(join(tmpdir(), "jaiph-clone-src-"));
+  try {
+    writeFileSync(join(src, "file.txt"), "hello");
+    const runsRoot = join(src, "custom_runs");
+    mkdirSync(join(runsRoot, "prior-run"), { recursive: true });
+    writeFileSync(join(runsRoot, "prior-run", "log.txt"), "secret");
+    const dst = allocateSandboxWorkspaceDir(runsRoot);
+
+    assert.doesNotThrow(
+      () => cloneWorkspaceForSandbox(src, dst, () => {}, runsRoot),
+      "clone must not fail when dest lives under a nested custom runs root",
+    );
+
+    assert.equal(readFileSync(join(dst, "file.txt"), "utf8"), "hello");
+    assert.ok(!existsSync(join(dst, "custom_runs")), "custom runs root must NOT be copied into the sandbox clone");
+    assert.ok(
+      existsSync(join(runsRoot, "prior-run", "log.txt")),
+      "host runs root content must remain intact outside the clone",
+    );
+  } finally {
+    rmSync(src, { recursive: true, force: true });
+  }
+});
+
 test("allocateSandboxWorkspaceDir: creates a fresh .sandbox-* dir under the runs root", () => {
   const runsRoot = mkdtempSync(join(tmpdir(), "jaiph-runs-"));
   try {
