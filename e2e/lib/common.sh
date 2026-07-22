@@ -423,7 +423,7 @@ e2e::prepare_shared_context() {
   local _jaiph_var
   while IFS= read -r _jaiph_var; do
     case "${_jaiph_var}" in
-      JAIPH_E2E_* | JAIPH_REPO_URL | JAIPH_REPO_REF) continue ;;
+      JAIPH_E2E_* | JAIPH_REPO_URL | JAIPH_REPO_REF | JAIPH_DOCKER_NO_OVERLAY) continue ;;
     esac
     unset "${_jaiph_var}" 2>/dev/null || true
   done < <(compgen -e | grep '^JAIPH_' || true)

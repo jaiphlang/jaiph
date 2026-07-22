@@ -111,11 +111,7 @@ call_tool() {
   printf '%s\n' \
     '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{}}}' \
     "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"${tool}\",\"arguments\":${args}}}" \
-    | jaiph mcp "$@" --workspace "${TEST_DIR}" "${TEST_DIR}/tools.jh" >"${out}" 2>"${out}.stderr"
-  echo "DIAG stderr for ${out}:" >&2
-  cat "${out}.stderr" >&2
-  echo "DIAG stdout for ${out}:" >&2
-  cat "${out}" >&2
+    | jaiph mcp "$@" --workspace "${TEST_DIR}" "${TEST_DIR}/tools.jh" >"${out}" 2>/dev/null
 }
 
 export JAIPH_DOCKER_ENABLED=true
