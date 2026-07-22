@@ -181,3 +181,48 @@ test("executeScript: missing interpreter fails with a diagnosable error naming t
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+// Regression for the prompt env scrub (kernel/env-allowlist.ts): scrubbing is
+// scoped to prompt backend subprocesses only. A trusted `run` script step must
+// still receive the full workflow env — including a `--env`-injected secret
+// (host mode merges the pairs into the runner env; Docker forwards them as
+// explicit `-e` args). If the scrub ever extended to script spawns, the token
+// below would be empty and this test would fail.
+test("executeScript: a run script step still receives a --env-injected non-allowlisted secret", async () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-script-env-secret-"));
+  try {
+    const jh = join(root, "flow.jh");
+    writeFileSync(
+      jh,
+      [
+        'script show_token = `echo "token=$GITHUB_TOKEN"`',
+        "",
+        "workflow default() {",
+        "  const t = run show_token()",
+        '  return "${t}"',
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const scriptsDir = join(root, "scripts");
+    mkdirSync(scriptsDir, { recursive: true });
+    writeFileSync(join(scriptsDir, "show_token"), '#!/usr/bin/env bash\necho "token=$GITHUB_TOKEN"\n');
+
+    const graph = buildRuntimeGraph(jh);
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      JAIPH_TEST_MODE: "1",
+      JAIPH_RUNS_DIR: join(root, ".jaiph", "runs"),
+      JAIPH_SCRIPTS: scriptsDir,
+      JAIPH_WORKSPACE: root,
+      GITHUB_TOKEN: "fake-gh-secret",
+    };
+    const runtime = new NodeWorkflowRuntime(graph, { env, cwd: root, suppressLiveEvents: true });
+    const status = await runtime.runDefault([]);
+    assert.equal(status, 0);
+    const returnValue = readFileSync(join(runtime.getRunDir(), "return_value.txt"), "utf8");
+    assert.equal(returnValue, "token=fake-gh-secret");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

@@ -1,8 +1,8 @@
 import { describe, it, afterEach } from "node:test";
 import * as assert from "node:assert/strict";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
 import type { ChildProcess } from "node:child_process";
@@ -18,6 +18,7 @@ import {
   resolvePromptConfig,
   type PromptConfig,
 } from "./prompt";
+import { buildDockerArgs } from "../docker";
 
 describe("resolveConfig", () => {
   it("uses defaults when env is empty", () => {
@@ -702,6 +703,150 @@ describe("codex backend", () => {
     } finally {
       process.stderr.write = origWrite;
       server.close();
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Prompt env scrub — credential isolation at the backend spawn boundary
+// ---------------------------------------------------------------------------
+
+/** Write an executable fake agent that dumps its environment to `envDumpPath`
+ *  and then emits a terminal stream-json result event. */
+function writeEnvDumpAgent(agentPath: string, envDumpPath: string): void {
+  writeFileSync(
+    agentPath,
+    [
+      "#!/usr/bin/env bash",
+      `printenv > "${envDumpPath}"`,
+      'echo \'{"type":"result","result":"ok"}\'',
+      "",
+    ].join("\n"),
+  );
+  chmodSync(agentPath, 0o755);
+}
+
+describe("prompt env scrub (runBackend)", () => {
+  it("host mode (cursor): an injected secret never reaches the agent; base env and CURSOR_API_KEY do", async () => {
+    const root = mkdtempSync(join(tmpdir(), "jaiph-prompt-env-scrub-host-"));
+    try {
+      const envDump = join(root, "agent-env.txt");
+      const fakeAgent = join(root, "cursor-agent");
+      writeEnvDumpAgent(fakeAgent, envDump);
+      const execEnv: NodeJS.ProcessEnv = {
+        PATH: process.env.PATH,
+        HOME: process.env.HOME,
+        JAIPH_RUN_DIR: join(root, "run"),
+        // Host mode merges `--env` pairs straight into the workflow env — this
+        // models `jaiph run --env GITHUB_TOKEN ...`.
+        GITHUB_TOKEN: "fake-gh-secret",
+        CURSOR_API_KEY: "fake-cursor-key",
+      };
+      const result = await executePrompt(
+        "ignored",
+        makeConfig({ agentCommand: fakeAgent, workspaceRoot: root, trustedWorkspace: root }),
+        new PassThrough(),
+        execEnv,
+      );
+      assert.equal(result.status, 0);
+      const dump = readFileSync(envDump, "utf8");
+      assert.ok(!dump.includes("GITHUB_TOKEN"), `agent env must not contain GITHUB_TOKEN:\n${dump}`);
+      assert.ok(!dump.includes("fake-gh-secret"), "agent env must not contain the secret value");
+      assert.match(dump, /^CURSOR_API_KEY=fake-cursor-key$/m, "backend's own credential must pass");
+      assert.match(dump, /^PATH=./m, "base env PATH must pass");
+      assert.match(dump, /^JAIPH_RUN_DIR=./m, "JAIPH_ control keys must pass");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("host mode (claude): scrub applies before spawn; ANTHROPIC_API_KEY and CLAUDE_CONFIG_DIR pass", async () => {
+    const root = mkdtempSync(join(tmpdir(), "jaiph-prompt-env-scrub-claude-"));
+    const origPath = process.env.PATH;
+    try {
+      const binDir = join(root, "bin");
+      mkdirSync(binDir, { recursive: true });
+      const envDump = join(root, "claude-env.txt");
+      writeEnvDumpAgent(join(binDir, "claude"), envDump);
+      // commandExists("claude") resolves against process.env.PATH.
+      process.env.PATH = `${binDir}${delimiter}${origPath ?? ""}`;
+      const execEnv: NodeJS.ProcessEnv = {
+        PATH: process.env.PATH,
+        HOME: root,
+        CLAUDE_CONFIG_DIR: join(root, "claude-cfg"),
+        GITHUB_TOKEN: "fake-gh-secret",
+        ANTHROPIC_API_KEY: "fake-anthropic-key",
+        CURSOR_API_KEY: "other-backend-key",
+      };
+      const result = await executePrompt(
+        "hello",
+        makeConfig({ backend: "claude", workspaceRoot: root, trustedWorkspace: root }),
+        new PassThrough(),
+        execEnv,
+      );
+      assert.equal(result.status, 0);
+      const dump = readFileSync(envDump, "utf8");
+      assert.ok(!dump.includes("GITHUB_TOKEN"), `agent env must not contain GITHUB_TOKEN:\n${dump}`);
+      assert.ok(!dump.includes("fake-gh-secret"), "agent env must not contain the secret value");
+      assert.ok(!dump.includes("other-backend-key"), "another backend's credential must not pass");
+      assert.match(dump, /^ANTHROPIC_API_KEY=fake-anthropic-key$/m, "claude's own credential must pass");
+      assert.match(dump, /^CLAUDE_CONFIG_DIR=./m, "CLAUDE_CONFIG_DIR must pass");
+      assert.match(dump, /^HOME=./m, "base env HOME must pass");
+    } finally {
+      process.env.PATH = origPath;
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("docker copy mode: a --env secret crosses into the container env but stops at the prompt subprocess", async () => {
+    const root = mkdtempSync(join(tmpdir(), "jaiph-prompt-env-scrub-docker-"));
+    try {
+      const wsDir = join(root, "ws");
+      const cloneDir = join(root, "clone");
+      const runDir = join(root, "run");
+      for (const d of [wsDir, cloneDir, runDir]) mkdirSync(d, { recursive: true });
+      const args = buildDockerArgs({
+        config: { enabled: true, image: "ubuntu:24.04", imageExplicit: false, network: "default", timeoutSeconds: 300 },
+        sourceAbs: join(wsDir, "main.jh"),
+        workspaceRoot: wsDir,
+        sandboxRunDir: runDir,
+        runArgs: [],
+        env: { JAIPH_RUN_ID: "r1", CURSOR_API_KEY: "fake-cursor-key", GITHUB_TOKEN: "host-value" },
+        isTTY: false,
+        sandboxMode: "copy",
+        sandboxWorkspaceDir: cloneDir,
+        backends: ["cursor"],
+        extraEnv: { GITHUB_TOKEN: "fake-gh-secret" },
+      });
+      // Reconstruct the env the containerized runtime sees: image base + the
+      // emitted `-e` pairs (docker.ts owns which keys cross the boundary).
+      const containerEnv: NodeJS.ProcessEnv = { PATH: process.env.PATH, HOME: root };
+      for (let i = 0; i + 1 < args.length; i += 1) {
+        if (args[i] !== "-e") continue;
+        const eq = args[i + 1].indexOf("=");
+        containerEnv[args[i + 1].slice(0, eq)] = args[i + 1].slice(eq + 1);
+      }
+      // Existing `--env` contract: the pair crosses the sandbox boundary verbatim.
+      assert.equal(containerEnv.GITHUB_TOKEN, "fake-gh-secret");
+      assert.equal(containerEnv.CURSOR_API_KEY, "fake-cursor-key");
+
+      const envDump = join(root, "agent-env.txt");
+      const fakeAgent = join(root, "cursor-agent");
+      writeEnvDumpAgent(fakeAgent, envDump);
+      const result = await executePrompt(
+        "ignored",
+        makeConfig({ agentCommand: fakeAgent, workspaceRoot: wsDir, trustedWorkspace: wsDir }),
+        new PassThrough(),
+        containerEnv,
+      );
+      assert.equal(result.status, 0);
+      const dump = readFileSync(envDump, "utf8");
+      assert.ok(!dump.includes("GITHUB_TOKEN"), `agent env must not contain GITHUB_TOKEN:\n${dump}`);
+      assert.ok(!dump.includes("fake-gh-secret"), "agent env must not contain the secret value");
+      assert.match(dump, /^CURSOR_API_KEY=fake-cursor-key$/m, "backend's own credential must pass");
+      assert.match(dump, /^PATH=./m, "base env PATH must pass");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
     }
   });
 });

@@ -14,47 +14,6 @@ Process rules:
 
 ***
 
-## Fix: Ship a tailored AppArmor profile for overlay mode
-
-**Source:** `.jaiph/security_review_2026-07-20.md` Finding 3 (LOW, ASI-03/ASI-05) — the tracked exception left by "Prefer `copy` over elevated overlay defaults; document overlay capability posture" (overlay default kept; posture documented in `docs/sandboxing.md#overlay-capability-posture` and locked by tests in `src/runtime/docker.test.ts`).
-
-**Problem:** Overlay mode on Linux runs with `--security-opt apparmor=unconfined` because default host AppArmor profiles deny fuse mounts inside containers, and Docker can only reference profiles already loaded on the host — which the unprivileged CLI cannot do. Unconfined is broader than the fuse mount requires.
-
-**Required behavior:**
-
-* Ship a loadable AppArmor profile (docker-default semantics plus `mount fstype=fuse`) under `runtime/`, with a documented `apparmor_parser` install step for hosts that opt in.
-* When that profile is loaded on the host, `buildDockerArgs` prefers `--security-opt apparmor=<profile>` for overlay containers; when it is not loaded, fall back to `apparmor=unconfined` (current posture) so overlay keeps working out of the box.
-* Update the overlay posture section in `docs/sandboxing.md` and the posture-lock tests in `src/runtime/docker.test.ts` for both branches.
-
-Acceptance:
-
-* Overlay containers use the tailored profile when it is loaded and `unconfined` otherwise, with unit tests covering both branches (profile-detection injectable for tests).
-* Docs describe how to load the profile and exactly what it permits beyond docker-default.
-* `npm test` passes.
-
-***
-
-## Fix: Keep injected credentials out of prompt agent subprocesses #dev-ready
-
-**Source:** Security review of the `--env` credential path. A `.jh` script that needs a credential (e.g. `jaiph run --env GITHUB_TOKEN .jaiph/gh_ci_passes.jh`) currently leaks that credential into the LLM agent's environment, even though only trusted `run` steps need it.
-
-**Problem:** The prompt agent inherits the full workflow env. In `runBackend` (`src/runtime/kernel/prompt.ts:584`) `childEnv` defaults to `execEnv` (the workflow's `scope.env`, itself a spread of `process.env` plus everything merged from `--env`). For the Claude backend, `prepareClaudeEnv` (`prompt.ts:~316`) only *augments* the env (adds `CLAUDE_CONFIG_DIR`); it never strips. So the `claude` subprocess — spawned with `--permission-mode bypassPermissions` and fed untrusted content such as CI failure logs — receives `GITHUB_TOKEN` and every other `--env` secret. This bypasses the fail-closed per-backend allowlist that already exists for the Docker boundary (`isEnvAllowed`/`BACKEND_CREDENTIAL_KEYS` at `src/runtime/docker.ts:640/593`); in host mode there is no allowlist at all (`src/cli/commands/run.ts:161`), and `--env` values cross the Docker boundary verbatim (`docker.ts:853`).
-
-Trust model context: `run <ref>` executes deterministic author-written stdlib via `executeRunRef` (`src/runtime/kernel/node-workflow-runtime.ts:1286`); only `prompt` hands control to the model. Credentials should therefore be visible to `run` steps and never to `prompt` steps. The read-side ops (`gh_actions.sh`: `gh run list/watch/view --log`) are trusted `run` steps and read-only; the one credentialed write (push) is already a trusted `run git.push(...)` step in `.jaiph/` (do not edit `.jaiph/` in this task — it is out of scope and already handled). Local editing and local `git commit` need no credential. Therefore no `prompt` step legitimately needs an `--env`-injected secret, and this scrub can be applied unconditionally.
-
-**Required behavior:**
-
-* When spawning any prompt backend, pass an allowlisted environment instead of `execEnv` verbatim: forward `JAIPH_*` control keys and the agent's *own* backend credential (`ANTHROPIC_API_KEY`/`CLAUDE_CODE_OAUTH_TOKEN` for Claude, `CURSOR_API_KEY`, `OPENAI_API_KEY` per backend) and drop everything else, fail-closed. Reuse/lift the existing `isEnvAllowed`/`BACKEND_CREDENTIAL_KEYS` logic (`docker.ts:640/593`) so the same allowlist governs prompt subprocesses in *all* sandbox modes, including host mode.
-* Non-credential env the agent legitimately needs (e.g. `PATH`, `HOME`, locale, `CLAUDE_CONFIG_DIR`) must still pass — the allowlist strips secrets, not the base environment.
-
-Acceptance:
-
-* A unit test asserts that the env handed to a prompt backend subprocess excludes an injected non-allowlisted secret (e.g. a fake `GITHUB_TOKEN`) while still including the base env and the backend's own credential key; the test fails if the agent env contains the secret. Cover host mode and at least one Docker mode.
-* A regression test asserts a trusted `run` step (script/workflow) still receives the full `--env`-injected value, so scrubbing is scoped to `prompt` subprocesses only and does not break credentialed `run` steps.
-* `npm test` passes.
-
-***
-
 ## Feat: `trusted_envs` — declare host secrets a workflow pulls into trusted steps
 
 **Source:** Design discussion on encoding a script's credential intent in the file instead of relying on the imperative `--env` flag. Today a script that needs `GITHUB_TOKEN` requires the operator to remember `jaiph run --env GITHUB_TOKEN …`; the need is not visible in the script, and the injected value reaches everything in the workflow env.
