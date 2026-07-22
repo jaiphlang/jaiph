@@ -58,6 +58,9 @@ try {
   # Wrong hash so the installer reaches verify and fails (not a download error).
   Set-Content -Path (Join-Path $relBad "SHA256SUMS") `
     -Value ("0000000000000000000000000000000000000000000000000000000000000000  $BinName")
+  # Placeholder sig so the installer proceeds past the sig-download step and
+  # reaches checksum verification (the real test target here).
+  Set-Content -Path (Join-Path $relBad "SHA256SUMS.minisig") -Value "placeholder-sig"
 
   $env:PROCESSOR_ARCHITECTURE = "AMD64"
   $env:JAIPH_RELEASE_BASE_URL = $relBad
@@ -100,6 +103,10 @@ try {
     Copy-Item -LiteralPath $exe -Destination (Join-Path $relOk $BinName) -Force
     $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $relOk $BinName)).Hash.ToLower()
     Set-Content -Path (Join-Path $relOk "SHA256SUMS") -Value "$hash  $BinName"
+    # Placeholder sig — signature verification itself only runs when minisign
+    # is installed and JAIPH_MINISIGN_PUBLIC_KEY is set, neither of which apply
+    # here; the installer just needs the file present to proceed.
+    Set-Content -Path (Join-Path $relOk "SHA256SUMS.minisig") -Value "placeholder-sig"
 
     $env:JAIPH_RELEASE_BASE_URL = $relOk
     $env:JAIPH_BIN_DIR = $binOk

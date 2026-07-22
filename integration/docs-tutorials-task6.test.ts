@@ -167,7 +167,10 @@ test("task-6: first-workflow tutorial's `.jh` snippet runs end-to-end and matche
   );
 
   const snippet = jhBlocks[0];
-  const expectedOutput = textBlocks[0];
+  // The tutorial now shows two ```text blocks: the interactive confirmation
+  // prompt (stderr-only, not part of captured stdout) and, after it, the
+  // actual post-run output. The latter is always the last ```text block.
+  const expectedOutput = textBlocks[textBlocks.length - 1];
 
   // The snippet is parameterised with `who`. The tutorial copy-paste invokes
   // it with "Adam"; pinning the same argument here keeps the contract honest.
