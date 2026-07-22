@@ -122,7 +122,8 @@ Inside any orchestration string:
 | `${name}` | Value of a `const`, capture, or parameter in scope (unknown names are compile errors) |
 | `${name.field}` | Field of a typed-prompt capture (compile-checked against the schema) |
 | `${run ref(args)}` / `${ensure ref(args)}` | Inline managed call; its output is spliced in. No nesting. |
-| `${JAIPH_WORKSPACE}` etc. | Falls back to process environment when no workflow variable matches |
+
+Environment variables are **not** readable via `${…}` here: an unknown name in an orchestration string is a compile error (`E_VALIDATE unknown identifier`), so `${JAIPH_WORKSPACE}` does not resolve. Read env vars inside a `script` body as normal shell (`$JAIPH_WORKSPACE`) and capture the result.
 
 ### Scripts — the shell layer
 
@@ -197,6 +198,8 @@ rule preconditions() {
 ```
 
 Allowed in rule bodies: `ensure`, `run` (**scripts only**), `const`, `if`, `match`, `for`, `log`/`logerr`, `fail`, `return`, `catch`/`recover` suffixes. **Not allowed:** `prompt`, channel sends, `run async`, `run` to a workflow, raw shell lines. A rule passes when it exits 0. Treat rules as read-only: do mutations in workflows and scripts.
+
+A rule that `return`s a value can double as a validator-and-normalizer, and the caller captures that value with `const x = ensure rule()` — the same capture form as `run`. For example `const name = ensure valid_name(input)` fails the workflow if the rule fails, otherwise binds the rule's returned (cleaned) value.
 
 ### Prompts — delegating to an agent
 
@@ -358,7 +361,7 @@ Precedence: **environment > workflow-level config > module-level config > defaul
 
 ## Testing your workflows
 
-Test files are `*.test.jh` next to your modules, run with `jaiph test`. They execute the same interpreter with prompts and bodies mocked — no live LLM calls.
+Test files are `*.test.jh` next to your modules, run with `jaiph test`. They run the same interpreter with mocked prompts and bodies. Mock every prompt (see below) so no live LLM call happens — an unmocked `prompt` still calls the backend.
 
 ```jaiph
 import "main.jh" as app

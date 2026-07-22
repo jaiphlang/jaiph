@@ -24,6 +24,17 @@ This recipe sets the credentials each agent backend needs so the CLI's credentia
 
 Under Docker sandboxing the host-side stored logins (Keychain entries, `~/.claude`, `cursor-agent login`) do **not** cross the container boundary. Only `JAIPH_*` run-control keys plus the credential keys in the table above are forwarded, and credential keys only for the backends the entry file selects (see [Sandboxing](sandboxing.md#what-docker-protects-against)). Set credentials on the **host** so the allowlist can forward them into the container; forward anything else per key with `--env` (an intentional allowlist bypass).
 
+### Which backends get checked
+
+The pre-flight validates every backend the entry file could reach: **each backend the entry file declares, plus the effective default backend.** The default is `cursor` unless `JAIPH_AGENT_BACKEND` overrides it, and it is always included because `prompt` steps that name no backend fall back to it. Each backend is checked independently, so a file that reaches more than one backend can emit more than one warning or error in a single pre-flight.
+
+The default is deduplicated against your declarations, so **where** you set the backend decides whether the `cursor` default is also checked:
+
+- **Module scope** — `config { agent.backend = "claude" }` at the top of the file makes `claude` the effective default, so only `claude` is checked.
+- **Workflow scope only** — `config { agent.backend = "claude" }` inside a workflow, with no module-level backend, leaves `cursor` as the default. The pre-flight then checks **both** `claude` and `cursor`. Under Docker that makes a missing `CURSOR_API_KEY` a hard error even when every prompt targets Claude.
+
+To check only the backend you intend to use, set it at module scope or export `JAIPH_AGENT_BACKEND` — either one becomes the default and absorbs the extra check. See [Configure backend/model](/how-to/configure-backend) for the config scopes.
+
 ## 1. Authenticate Claude
 
 Either set the API key directly:

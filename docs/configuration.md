@@ -42,7 +42,7 @@ Docker enablement uses a separate, env-only resolution; see [Docker enablement](
 | Double-quoted string | `"${model}"` or `"prefix-${model}"` | string content as-is |
 | Bare interpolation ref | `${model}` or `${model.field}` | `${model}` / `${model.field}` |
 
-All three resolve identically at runtime. Shell expansion forms (`${var:-default}`, `${var//…}`, `${#var}`) are `E_PARSE` in all string positions.
+All three resolve identically at runtime. The only interpolation Jaiph understands is `${name}` / `${name.field}` — shell expansion forms (`${var:-default}`, `${var//…}`, `${#var}`) are not. Written as a bare config value they fail with `E_PARSE` (`config value must be a quoted string, bare identifier, or true/false`); written inside a double-quoted config value they are stored as literal text and never expanded.
 
 | Type | Format | Example |
 |---|---|---|
@@ -70,7 +70,7 @@ Interpolation runs when the config scope is applied (workflow entry for workflow
 | `agent.model` | string | — | `JAIPH_AGENT_MODEL` (env only) | Model for `prompt` steps in this scope. Resolved at each `prompt` invocation and passed as a per-call `--model` flag — it does **not** set `JAIPH_AGENT_MODEL` in the workflow environment, so scripts and other steps do not see it. Set `JAIPH_AGENT_MODEL` in the shell to override all prompts in a run. |
 | `agent.command` | string | `cursor-agent` | `JAIPH_AGENT_COMMAND` | Cursor backend command. Basename other than `cursor-agent` enables custom-command mode (stdin → command → stdout). **Entry module only** — imported modules cannot set this key by default (see [Import trust boundary](#import-trust-boundary)). |
 | `agent.backend` | string (`cursor` \| `claude` \| `codex`) | `cursor` | `JAIPH_AGENT_BACKEND` | Backend selector. **Entry module only** — imported modules cannot set this key by default (see [Import trust boundary](#import-trust-boundary)). |
-| `agent.trusted_workspace` | string (path) | workspace root | `JAIPH_AGENT_TRUSTED_WORKSPACE` | Directory passed to Cursor as `--trust`. When unset, defaults to `JAIPH_WORKSPACE`. In-file values are assigned to the env var as authored (relative paths are not normalized to absolute paths). |
+| `agent.trusted_workspace` | string (path) | workspace root | `JAIPH_AGENT_TRUSTED_WORKSPACE` | Directory passed to Cursor as `--trust`. When unset, defaults to `JAIPH_WORKSPACE`. A relative path in the **entry module's module-level** config is resolved against the workspace root to an absolute path at CLI startup. Values applied at runtime — a workflow-level block or an imported module — are assigned to the env var exactly as authored (not normalized). |
 | `agent.cursor_flags` | string | — | `JAIPH_AGENT_CURSOR_FLAGS` | Extra flags appended to Cursor invocations (whitespace-split). |
 | `agent.claude_flags` | string | — | `JAIPH_AGENT_CLAUDE_FLAGS` | Extra flags appended to Claude invocations (whitespace-split). |
 

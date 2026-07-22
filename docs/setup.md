@@ -15,7 +15,7 @@ The curl installer downloads a per-platform standalone binary from the current s
 
 ## Prerequisites
 
-- A POSIX `sh` (the runtime uses `sh -c` for inline shell lines inside workflows). Each emitted `script` step runs under the interpreter named by its shebang (`bash` by default), so that interpreter must be on `PATH`; the runtime spawns it explicitly and does not rely on the file's exec bit, so scripts also work under `noexec` mounts.
+- A POSIX `sh` on `PATH` — the runtime uses `sh -c` for inline shell lines inside workflows. Any `script` step also needs the interpreter named by its shebang on `PATH` (`bash` by default). The runtime spawns that interpreter explicitly rather than relying on the file's exec bit, so scripts still run under `noexec` mounts.
 - For the curl installer (step 1): `curl` and either `shasum` or `sha256sum` on `PATH`.
 - For the PowerShell installer (step 1, Windows): PowerShell (`irm`/`Invoke-WebRequest` and `Get-FileHash` are built in).
 - For the npm alternative (step 1): Node.js and npm on the host.

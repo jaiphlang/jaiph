@@ -26,7 +26,7 @@ Crossings produce specific `E_VALIDATE` messages identifying the violated rule.
 
 | Top-level | Description |
 |---|---|
-| `import "path" as alias` | Loads another module. `.jh` appended automatically. Resolution: relative-first, then library fallback (`<workspace>/.jaiph/libs/<name>/...`). |
+| `import "path" as alias` | Loads another module. `.jh` is appended unless the path already ends in `.jh`. Resolution: relative-first; then, for paths containing a `/` (and when a workspace root is known), library fallback (`<workspace>/.jaiph/libs/<name>/...`). |
 | `import script "path" as name` | Loads an external script file (no `.jh` appended). Path is relative-only. Treated as a `script` symbol. |
 | `export rule` / `export workflow` / `export script` | Marks a definition public. At least one `export` makes module visibility explicit; otherwise all top-level definitions are implicitly public. |
 | `channel name [-> target [, target …]]` | Declares a named queue. Inline routes target workflows with exactly three parameters (message, channel, sender). |
@@ -46,7 +46,7 @@ There are eight `WorkflowStepDef` variants. Every body line that does not match 
 
 | Type | Surface | Description |
 |---|---|---|
-| `exec` | `run` / `ensure` / `prompt` / standalone `match` / inline shell | Side-effecting managed call statement. The discriminator (call / inline_script / prompt / match / shell) lives in `body.kind`. Carries optional `captureName`, `catch`, or `recover`. |
+| `exec` | `run` / `ensure` / `prompt` / standalone `match` / inline shell | Side-effecting managed call statement. The discriminator (call / ensure_call / inline_script / prompt / match / shell) lives in `body.kind`. Carries optional `captureName`, `catch`, or `recover`. |
 | `const` | `const NAME = <expr>` | Bind a value expression to a name. |
 | `return` | `return <expr>` | Set the managed return value. |
 | `send` | `channel <- <expr>` | Enqueue a payload on a channel for the current workflow context. |
@@ -118,7 +118,7 @@ run `echo $1-$2`("hello", "world")   # => hello-world
 | Mixing fence tag + manual shebang | Error. |
 | Default shebang | `#!/usr/bin/env bash` when neither tag nor `#!` line is present. |
 | Emitted name | `scripts/__inline_<12-hex>`; deterministic across runs. |
-| `catch` / `recover` | Allowed on a standalone `run` step with inline-script body. Forbidden on inline scripts in `log` / `logerr` / `return` / `const` RHS. |
+| `catch` / `recover` | Allowed on a standalone `run` step with inline-script body. Forbidden on inline scripts in `log` / `logerr` / `logwarn` / `return` / `const` RHS. |
 | Subprocess env | Same `scope.env` as named scripts (runner `process.env` plus Jaiph metadata). Module `const` values are not auto-exported — pass via `$1`, `$2`. |
 | `run async` | Not supported. |
 
@@ -183,7 +183,7 @@ Validation rules:
 | Binding required | Exactly one binding. Bare `catch` / `recover` is `E_PARSE`. |
 | Argument placement | All call arguments inside `()` before `catch` / `recover`. |
 | Mutual exclusion | A single `run` step accepts `catch` or `recover` but not both. |
-| Inline-script position | `catch` / `recover` only on standalone `run` steps. Forbidden on inline scripts in `log` / `logerr` / `return` / `const` RHS. |
+| Inline-script position | `catch` / `recover` only on standalone `run` steps. Forbidden on inline scripts in `log` / `logerr` / `logwarn` / `return` / `const` RHS. |
 
 ## `prompt` — agent interaction
 
@@ -203,7 +203,7 @@ Sends text to the configured agent backend. Three body forms:
 | Capture required when `returns` | `prompt … returns "…"` without `const` is `E_PARSE`. |
 | Dot notation | Bare `result.field` (in `return`, `if` / `match` subjects, and call arguments) and `${result.field}` **inside strings** require that the base is a typed-prompt capture and the field appears in the schema. Unquoted `${result.field}` in call-argument position is `E_VALIDATE`. |
 | Interpolation into shell steps | A prompt capture (`const x = prompt …`, typed or untyped) interpolated into a workflow shell step — e.g. `echo "${x}"` as a free-form body line — is `W_PROMPT_IN_SHELL`. Shell steps run via `sh -c` on the interpolated string, so the agent-controlled value is spliced into the command. Pass it as a script argument instead (`run my_script(x)` → `$1`, which is argv, not shell-expanded). Only shell steps are flagged; `run script(x)`, `log`, `logerr`, and non-prompt variables are not. See [Sandboxing — Prompt captures in shell steps](sandboxing.md#prompt-in-shell). |
-| Rule scope | Forbidden — `prompt` and `const … = prompt` are `E_VALIDATE` inside rules. |
+| Rule scope | Forbidden — `prompt` and `const … = prompt` are rejected at parse time (`E_PARSE`) inside rules. |
 | Transport retry | Transport failures retry on a backoff schedule; deterministic post-processing failures do not. See [Configuration — Prompt retry on transport failure](configuration.md#prompt-retry-on-transport-failure). |
 
 ## `const` — bind a value
@@ -376,7 +376,7 @@ for path in paths {
 
 ## String interpolation
 
-**Global three-form rule:** Every Jaiph string position — `config`, `log`, `logerr`, `fail`, `prompt`, `const`, `return`, `send`, and any other orchestration string — accepts three equivalent forms for a single variable reference:
+**Global three-form rule:** Every Jaiph string position — `config`, `log`, `logerr`, `logwarn`, `fail`, `prompt`, `const`, `return`, `send`, and any other orchestration string — accepts three equivalent forms for a single variable reference:
 
 | Author writes | Stored / AST form | Resolves at runtime |
 |---|---|---|
@@ -396,7 +396,8 @@ No string-RHS site accepts two of these but rejects the third.
 | `${ensure ref(args)}` | Inline capture — executes a rule and inlines result. | All orchestration strings. |
 | `$ident` (no braces) | `E_PARSE` in orchestration strings. | — |
 | `$1`, `$2`, … | Positional args | `script` bodies only (interpretation depends on the interpreter). |
-| `${var:-fallback}`, `${var%%…}`, `${var//…}`, `${#var}` | `E_PARSE` in orchestration strings and backtick scripts; passes through in fenced scripts. | — |
+| `${var:-fallback}` (and `:+`, `:=`, `:?`) | `E_PARSE` in every orchestration string (`const`, `log`, `logerr`, `logwarn`, `fail`, `prompt`, `return`, `send`, `config`). Passes through unchanged in backtick and fenced scripts. | — |
+| `${var%%…}`, `${var//…}`, `${#var}` | `E_PARSE` in `const` RHS only. In other orchestration strings and in backtick / fenced scripts they pass through unchanged. | — |
 | `$(…)` | `E_PARSE` in orchestration strings. | — |
 
 If an inline capture fails, the enclosing step fails. Nested inline captures (`${run foo(${run bar()})}`) are `E_PARSE` — extract the inner call to a `const`.

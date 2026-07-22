@@ -22,12 +22,12 @@ Jaiph treats orchestration as the language. The structure that an ad-hoc bash sc
 
 ## The model
 
-A `.jh` file declares four primitives, and the orchestration is what they compose into:
+Jaiph is built from four primitives, and the orchestration is what they compose into (`rule`, `script`, and `workflow` are top-level declarations; `prompt` is a step form used inside a workflow):
 
 - **`rule`** — a non-mutating check. Calls other rules via `ensure`, calls scripts via `run`. The compiler rejects `send`, `prompt`, inline shell, and `run async` in rule bodies; rules are the place to put assumptions the rest of the workflow gets to rely on.
 - **`script`** — a named executable block (shell, Python, Node, anything with a shebang). Workflow bodies can also run inline shell or `` run `body`(args) `` steps, but reusable shell lives in `script` definitions. Scripts do not inherit module-scoped `const` bindings; pass values as positional arguments.
 - **`prompt`** — a task delegated to an AI agent. The body is interpolated, the agent's stdout is captured, and structured output (`returns "{ field: type }"`) is parsed and validated against a schema.
-- **`workflow`** — the orchestration unit. Composes the other three, plus `run async` for concurrency, channels for message passing, `if` / `match` / `for_lines` for flow control, and `recover` / `catch` for failure handling.
+- **`workflow`** — the orchestration unit. Composes the other three, plus [`run async`](spec-async-handles.md) for concurrency, channels for message passing, `if` / `match` / `for_lines` for flow control, and `recover` / `catch` for failure handling.
 
 Orchestration values are strings, every step is logged, and every run leaves durable artifacts under `.jaiph/runs/` (per-step `.out` and `.err` captures, plus an append-only `run_summary.jsonl`). That is the payoff over hand-rolled shell: repeatable, inspectable, testable automation.
 
@@ -51,10 +51,3 @@ Naming the boundaries helps as much as naming the design:
 - **Not a prompt framework.** There is no chain abstraction, no agent class hierarchy, no built-in memory store. A `prompt` step calls a backend; if you want chaining, compose steps.
 
 The deliberate smallness is the point. The promise is that a `.jh` file behaves the way it reads, and the structure around it — sandboxing, logging, testing, formatting — is the runtime's job, not the workflow author's.
-
-## Where to go next
-
-- [Architecture](architecture.md) — the implementation map: parser, validator, runtime, CLI, contracts.
-- [Sandboxing](sandboxing.md) — the design of the Docker boundary and what it does and does not protect against.
-- [Inbox & Dispatch](inbox.md) — how `channel` and `send` compose workflows without a broker.
-- [Spec: Async Handles](spec-async-handles.md) — the value model behind `run async`.

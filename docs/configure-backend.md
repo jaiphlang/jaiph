@@ -75,7 +75,13 @@ Each `prompt` step records the resolved backend and model in `run_summary.jsonl`
 jq -c 'select(.type=="PROMPT_START")' .jaiph/runs/<date>/<time>-<entry>/run_summary.jsonl | head -1
 ```
 
-The line includes `"backend":"<backend>"`, `"model"` (the resolved string, or `null` when the backend auto-selects), and `model_reason` (`explicit`, `flags`, or `backend-default`). When `model_reason` is `backend-default`, codex still calls the API with `gpt-4o` even though `"model"` is `null` in the summary.
+The line includes `"backend":"<backend>"`, `"model"` (the resolved string, or `null` when the backend auto-selects), and `model_reason`:
+
+- `explicit` — from `agent.model` or `JAIPH_AGENT_MODEL`.
+- `flags` — from a `--model` embedded in `agent.cursor_flags` / `agent.claude_flags` (see [Configuration](/reference/configuration)).
+- `backend-default` — no model was requested, so the backend CLI picks its own.
+
+When `model_reason` is `backend-default`, codex still calls the API with `gpt-4o` even though `"model"` is `null` in the summary.
 
 ## Related
 

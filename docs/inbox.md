@@ -56,9 +56,11 @@ For each queued message, route targets run **strictly in declaration order, one 
 
 The reason is failure semantics. With sequential dispatch:
 
-- A target's failure is the failure of that delivery. Subsequent targets for the same message are skipped (fail-fast).
+- A target's failure aborts the whole drain pass. The remaining targets for that message are skipped, no further queued messages are dispatched, and the failure propagates outward as the owning workflow's failure (fail-fast — there is no per-target error isolation).
 - Cascading sends from inside a route target enqueue on the orchestrator frame's queue and are drained in the same pass, so a chain of sends produces a deterministic timeline.
 - There is no need for users to reason about which side effects of two parallel handlers happened first.
+
+Each delivery is bracketed in `run_summary.jsonl` by an `INBOX_DISPATCH_START` and an `INBOX_DISPATCH_COMPLETE` event (the latter carrying the target's exit status and elapsed time), so the whole dispatch order is reconstructable after the fact — the enqueue side is only half the timeline.
 
 A single frame's drain pass is bounded (default **1000** messages; override with `JAIPH_INBOX_MAX_DISPATCH`) so circular send loops abort with `E_INBOX_DISPATCH_LIMIT` instead of running forever.
 
@@ -87,7 +89,7 @@ The receiver picks its own parameter names. That is the entire contract: no envi
 
 ## Why this design, in one paragraph
 
-Channels are a deliberately small idea in Jaiph. They are an in-process, drain-driven, sequentially-dispatched, late-binding handoff between workflows — described once at the top of the module, validated at compile time, and recorded in `run_summary.jsonl` (every send) plus `inbox/` audit files (routed sends only) for after-the-fact inspection. Anything more powerful (concurrency, brokers, retries, dead-letter queues) is intentionally out of scope: those problems belong to other tools, and Jaiph keeps channels small enough to reason about without leaving the runtime.
+Channels are a deliberately small idea in Jaiph. They are an in-process, drain-driven, sequentially-dispatched, late-binding handoff between workflows — described once at the top of the module, validated at compile time, and recorded in `run_summary.jsonl` (every send, plus start/complete events for every delivery) with `inbox/` audit files for routed sends, all for after-the-fact inspection. Anything more powerful (concurrency, brokers, retries, dead-letter queues) is intentionally out of scope: those problems belong to other tools, and Jaiph keeps channels small enough to reason about without leaving the runtime.
 
 ## Related
 

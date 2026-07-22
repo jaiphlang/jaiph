@@ -84,6 +84,13 @@ A successful step_end record looks like:
 
 The jq filter above drops several fields. A full `step_end` payload also includes `workflow_id`, `step_id`, `timestamp`, `run_path`, and `workspace`, and may include `out_file` / `err_file` when log captures exist.
 
+The other events carry different fields:
+
+- `workflow_start` — `event`, `timestamp`, `run_path`, `workspace`. Its `workflow_id` is present but **empty**: the run id is not known until the runner reports the first step, so do not key on it here.
+- `workflow_end` — `event`, `workflow_id`, `status` (the resolved run exit status), `elapsed_ms` (total run time), `timestamp`, `run_path`, `workspace`, and, when the runner reported them, `run_dir` (the run directory under `.jaiph/runs`) and `summary_file` (path to `run_summary.jsonl`). These two point a webhook at the run artifacts.
+
+Every command also inherits the CLI's environment, which is why `$HOME` resolves in the examples above.
+
 ## Disable a global hook for one project
 
 There is no explicit "disable" flag. An empty array does not override global hooks. Override the event in the project file with a no-op instead:
