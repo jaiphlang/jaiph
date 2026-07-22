@@ -2,7 +2,7 @@ import { execFileSync, spawn, spawnSync, ChildProcess } from "node:child_process
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { randomBytes } from "node:crypto";
 import { tmpdir } from "node:os";
-import { join, resolve, dirname, relative } from "node:path";
+import { join, resolve, dirname, relative, sep } from "node:path";
 import type { RuntimeConfig } from "../types";
 import { VERSION } from "../version";
 import { OVERLAY_RUN_SH_BASE64, decodeEmbeddedAsset } from "./embedded-assets";
@@ -478,29 +478,38 @@ class WorkspaceCloner {
  *
  * Excludes `.jaiph/runs` (mounted separately at `/jaiph/run`) and `.git/objects`
  * is intentionally NOT excluded — workflows may need git history.
+ *
+ * `runsRootAbs` additionally excludes the actual configured runs directory
+ * when `JAIPH_RUNS_DIR` points somewhere other than `.jaiph/runs` (defaults to
+ * `.jaiph/runs` when omitted). Without this, a runs dir nested inside the
+ * workspace (e.g. a relative `JAIPH_RUNS_DIR`) would have the sandbox clone
+ * created *inside* it, and GNU `cp` refuses to copy a directory into itself.
  */
 export function cloneWorkspaceForSandbox(
   srcRoot: string,
   dstRoot: string,
   warn: (msg: string) => void = (m) => process.stderr.write(`${m}\n`),
+  runsRootAbs?: string,
 ): void {
-  mkdirSync(dstRoot, { recursive: true });
+  const srcRootAbs = resolve(srcRoot);
+  const defaultRunsRoot = join(srcRootAbs, ".jaiph", "runs");
+  const excludes = new Set([defaultRunsRoot, runsRootAbs ? resolve(runsRootAbs) : defaultRunsRoot]);
   const cloner = new WorkspaceCloner();
 
-  for (const entry of readdirSync(srcRoot, { withFileTypes: true })) {
-    if (entry.name === ".jaiph") continue;
-    cloner.copy(join(srcRoot, entry.name), join(dstRoot, entry.name));
-  }
-
-  const jaiphSrc = join(srcRoot, ".jaiph");
-  if (existsSync(jaiphSrc)) {
-    const jaiphDst = join(dstRoot, ".jaiph");
-    mkdirSync(jaiphDst, { recursive: true });
-    for (const entry of readdirSync(jaiphSrc, { withFileTypes: true })) {
-      if (entry.name === "runs") continue;
-      cloner.copy(join(jaiphSrc, entry.name), join(jaiphDst, entry.name));
+  const copyDir = (srcDir: string, dstDir: string): void => {
+    mkdirSync(dstDir, { recursive: true });
+    for (const entry of readdirSync(srcDir, { withFileTypes: true })) {
+      const srcPath = join(srcDir, entry.name);
+      if (excludes.has(srcPath)) continue;
+      if (entry.isDirectory() && [...excludes].some((ex) => ex.startsWith(srcPath + sep))) {
+        copyDir(srcPath, join(dstDir, entry.name));
+        continue;
+      }
+      cloner.copy(srcPath, join(dstDir, entry.name));
     }
-  }
+  };
+
+  copyDir(srcRootAbs, dstRoot);
 
   if (process.platform === "darwin" && cloner.fellBackToPlainCopy) {
     warn(
@@ -950,7 +959,12 @@ export function spawnDockerProcess(opts: DockerSpawnOptions): DockerSpawnResult 
     overlayScriptDir = dirname(overlayScriptPath);
   } else if (mode === "copy") {
     sandboxWorkspaceDir = opts.sandboxWorkspaceDir ?? allocateSandboxWorkspaceDir(opts.sandboxRunDir);
-    cloneWorkspaceForSandbox(opts.workspaceRoot, sandboxWorkspaceDir);
+    cloneWorkspaceForSandbox(
+      opts.workspaceRoot,
+      sandboxWorkspaceDir,
+      undefined,
+      resolve(opts.sandboxRunDir),
+    );
   }
   // inplace: no overlay script, no workspace clone — the host workspace is
   // bind-mounted rw directly. The runs mount is still created above.
