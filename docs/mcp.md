@@ -13,7 +13,7 @@ No SDK project and no build step are involved: `jaiph mcp ./tools.jh` reuses the
 ## Prerequisites
 
 - A `.jh` file with at least one workflow.
-- Agent credentials for any exposed workflow that uses `prompt` — see [Authenticate agent backends](/how-to/agent-auth). Set them on the **host** environment: in Docker mode the credential keys for the backends the served file selects (`ANTHROPIC_API_KEY`/`CLAUDE_CODE_OAUTH_TOKEN`, `CURSOR_API_KEY`, `OPENAI_API_KEY`) are forwarded into the container through the env allowlist, and in host mode they are read directly.
+- Agent credentials for any exposed workflow that uses `prompt` — see [Authenticate agent backends](/how-to/agent-auth). Set them on the **host** environment: in Docker mode the credential keys for the backends the served file selects (`ANTHROPIC_API_KEY`/`CLAUDE_CODE_OAUTH_TOKEN`, `CURSOR_API_KEY`, `OPENAI_API_KEY`) are forwarded into the container through the env allowlist, and in host mode they are read directly. Any *other* host variable a workflow needs (a `GITHUB_TOKEN`, an API base URL) does not cross the sandbox on its own — forward it explicitly with `--env` (see below).
 
 ## 1. Serve a file over stdio
 
@@ -24,6 +24,8 @@ jaiph mcp ./tools.jh
 The server speaks newline-delimited [JSON-RPC 2.0](https://www.jsonrpc.org/specification) over stdio (the MCP stdio transport) and runs until stdin closes or it receives `SIGINT` / `SIGTERM`. `jaiph --mcp ./tools.jh` is an equivalent alias.
 
 Add `--workspace <dir>` to set the import-resolution root explicitly (default: auto-detected from the file's directory, exactly as in `jaiph run`).
+
+Add `--env KEY=VALUE` (or `--env KEY` to forward the host's current value) to define a variable in every tool call's environment. The flag is repeatable and the pairs are resolved **once at startup**, then applied to every call for the server's lifetime — a bare `--env KEY` whose value is missing on the host fails fast (`E_ENV_MISSING`) before the server starts. In a Docker sandbox `--env` is the per-key consent that crosses a host variable into the container verbatim, bypassing the credential allowlist; use it for any config or secret a workflow needs that the backend allowlist does not already forward (see [Safety posture](#safety-posture)).
 
 > **stdout carries only protocol JSON.** From the moment the server starts, stdout is the JSON-RPC channel. Every banner, warning, reload notice, and compile diagnostic goes to **stderr**. If the file has compile errors, the server prints `file:line:col CODE message` lines to stderr and exits `1` with nothing on stdout.
 

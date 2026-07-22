@@ -34,9 +34,12 @@ jaiph install https://github.com/you/queue-lib.git
 
 # Pin a branch or tag
 jaiph install https://github.com/you/queue-lib.git@v1.0
+
+# Install several at once — names and URLs can be mixed
+jaiph install jaiphlang mylib@v1.2 https://github.com/you/queue-lib.git
 ```
 
-The argument shape decides the path. A token matching `/^[A-Za-z0-9_-]+(@[A-Za-z0-9._+/-]+)?$/` with no `/` and no `:` is a **registry name** and is resolved through the index. Everything else is parsed as a **git URL** (optional `@<ref>` suffix for branch or tag).
+Each argument is resolved independently, so a single command can mix registry names and git URLs; missing libraries are cloned in parallel. The argument shape decides the path. A token matching `/^[A-Za-z0-9_-]+(@[A-Za-z0-9._+/-]+)?$/` with no `/` and no `:` is a **registry name** and is resolved through the index. Everything else is parsed as a **git URL** (optional `@<ref>` suffix for branch or tag).
 
 Registry names install into `.jaiph/libs/<name>/` using the registry key. Git URLs install into `.jaiph/libs/<derived-name>/`, where `<derived-name>` is the last URL path segment without the `.git` suffix — the import prefix may differ from a registry name for the same repository.
 

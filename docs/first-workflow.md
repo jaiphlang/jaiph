@@ -70,12 +70,24 @@ Three things are happening:
 jaiph run --unsafe ./hello.jh "Adam"
 ```
 
-`--unsafe` sets `JAIPH_UNSAFE=true` for this run only and skips the Docker sandbox. Two notes on what happens before any step runs:
+`--unsafe` sets `JAIPH_UNSAFE=true` for this run only and skips the Docker sandbox.
+
+Because Docker is on by default, disabling the sandbox with `--unsafe` requires confirmation. The CLI prints a warning and waits for you to answer `y`:
+
+```text
+⚠️ You are going to run the Jaiph workflow in the unsafe mode with no sandboxing. It has full access to your machine.
+
+Continue? [y/N] y
+```
+
+Type `y` and press Enter. (In non-interactive contexts such as CI, add `--yes` — or set `JAIPH_INPLACE_YES=1` — to skip this prompt.)
+
+Two things happen before any step runs:
 
 - The CLI loads the entry file plus its import closure into a `ModuleGraph` once (this file has no imports, so the closure is one module).
 - The CLI validates the graph and emits each `script` body as an executable file under a temp `scripts/` directory referenced by `$JAIPH_SCRIPTS`. Workflow steps stay as interpreted AST — there is no transpiled `default.sh`.
 
-You should see this (timings will differ):
+After you confirm, you should see this (timings will differ):
 
 ```text
 Jaiph: Running hello.jh (Docker sandbox, unsafe)
@@ -131,7 +143,7 @@ workflow default(who) {
 }
 ```
 
-Re-run with the same arguments:
+Re-run with the same arguments (confirm the `--unsafe` prompt again with `y`):
 
 ```bash
 jaiph run --unsafe ./hello.jh "Adam"

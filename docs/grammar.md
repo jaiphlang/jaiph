@@ -22,7 +22,7 @@ This page is the authoritative syntactic reference for Jaiph: lexical rules, sta
 | Comment | Full-line `#` comment. Trailing `#` on a step line is not a comment. |
 | Blank line | Preserved between steps inside workflow and rule bodies (as `blank_line` trivia). `jaiph format` collapses multiple consecutive body blanks to one and trims trailing blanks before `}`. Top-level blank lines are not preserved — the formatter emits one blank line between emitted sections. |
 | Shebang | A `#!` first line of the file is ignored by the parser. |
-| Single-line string | Double-quoted `"…"`. Single-quoted strings are `E_PARSE`. Use `\"`, `\\`, `\n`, `\t`. |
+| Single-line string | Double-quoted `"…"`. Single-quoted strings are `E_PARSE`. Write `\"` to include a quote without ending the string. In orchestration strings the backslash is otherwise passed through verbatim — `\n`, `\t`, and `\\` are **not** decoded to newline/tab/backslash (use a `"""…"""` block or a `script` for literal newlines). Config-block string values are the exception: they decode `\"`, `\\`, `\n`, and `\t`. |
 | Multiline string | Triple-quoted `"""…"""`. The opening `"""` must end the line; the closing `"""` must be on its own line. |
 | Script body (single-line) | Backtick `` `…` ``. Jaiph `${identifier}` / `${identifier.field}` interpolation is `E_PARSE`; bash parameter expansion (for example `${var:-default}`) passes through. |
 | Script body (fenced) | Triple-backtick `` ``` ``…`` ``` ``. Optional lang tag `` ```<tag> ``. `${…}` passes through to the shell. |
@@ -193,7 +193,7 @@ fall through to the shell executor unchanged.
 ```ebnf
 workflow_step = ensure_stmt | run_stmt | run_catch_stmt | run_recover_stmt | run_async_stmt
               | prompt_stmt | const_decl_step | return_stmt
-              | fail_stmt | log_stmt | logerr_stmt | send_stmt
+              | fail_stmt | log_stmt | logerr_stmt | logwarn_stmt | send_stmt
               | match_stmt | if_stmt | for_lines_stmt | comment_line ;
 ```
 
@@ -240,19 +240,19 @@ recover_body     = workflow_step | "{" { workflow_step } "}" ;
 | Argument placement | All call arguments appear inside `()` before `catch` / `recover`. |
 | Body content | Parsed by the same `parseBlockStatement` that handles top-level statements; rule scope still rejects shell. |
 | Mutual exclusion | `catch` and `recover` are mutually exclusive on the same `run` step. |
-| Inline-script attachment | `catch` / `recover` only attach to a standalone `run` step. Inline scripts in `log` / `logerr` / `return` / `const` RHS do not accept them. |
+| Inline-script attachment | `catch` / `recover` only attach to a standalone `run` step. Inline scripts in `log` / `logerr` / `logwarn` / `return` / `const` RHS do not accept them. |
 
 ### `prompt`
 
 ```ebnf
 prompt_stmt    = "prompt" prompt_body [ returns_schema ] ;
-prompt_body    = double_quoted_string | IDENT | triple_quoted_block ;
+prompt_body    = double_quoted_string | IDENT | "${" IDENT [ "." IDENT ] "}" | triple_quoted_block ;
 returns_schema = "returns" double_quoted_string ;
 ```
 
 | Aspect | Rule |
 |---|---|
-| Body forms | Single-line string, in-scope identifier, or triple-quoted block. Triple-backtick fences in prompt context are `E_PARSE`. |
+| Body forms | Single-line string, in-scope identifier (bare `name` or `${name}` / `${name.field}`), or triple-quoted block. Triple-backtick fences in prompt context are `E_PARSE`. |
 | Multiline form | Opening `"""` must end the line; closing `"""` must be on its own line. |
 | `returns` placement | After a single-line or identifier body on the same line, or on the line after the closing `"""`, or on the same line as the closing `"""` (nothing else may follow). |
 | `returns` schema | Flat `{ field: type, … }` with types `string`, `number`, `boolean`. Invalid schemas are `E_SCHEMA`. |
@@ -304,15 +304,14 @@ send_rhs  = double_quoted_string | triple_quoted_block | "$" IDENT | "${" … "}
 | Shell fragment RHS | A raw shell expression (for example `findings <- echo "$payload"`) parses as a managed shell payload; allowed only on `send` (`E_VALIDATE` elsewhere). |
 | Bare ref RHS | A bare `ref`-shaped word that names a workflow / rule / script is `E_VALIDATE`. Use `run ref()` or a string. |
 | `run` without `()` | Does not parse as a managed send RHS. |
-| Capture-and-send | `const name = channel <- …` is `E_PARSE`. |
 | Allowed in | Workflows only. Rules forbid `send`. |
 
 ### `log` / `logerr` / `logwarn`
 
 ```ebnf
-log_stmt     = "log" ( double_quoted_string | triple_quoted_block | IDENT | "run" inline_script ) ;
-logerr_stmt  = "logerr" ( double_quoted_string | triple_quoted_block | IDENT | "run" inline_script ) ;
-logwarn_stmt = "logwarn" ( double_quoted_string | triple_quoted_block | IDENT | "run" inline_script ) ;
+log_stmt     = "log" ( double_quoted_string | triple_quoted_block | IDENT | "${" IDENT [ "." IDENT ] "}" | "run" inline_script ) ;
+logerr_stmt  = "logerr" ( double_quoted_string | triple_quoted_block | IDENT | "${" IDENT [ "." IDENT ] "}" | "run" inline_script ) ;
+logwarn_stmt = "logwarn" ( double_quoted_string | triple_quoted_block | IDENT | "${" IDENT [ "." IDENT ] "}" | "run" inline_script ) ;
 ```
 
 Bare identifier form expands to `"${ident}"`. `log run \`…\`(args)`, `logerr run \`…\`(args)`, and `logwarn run \`…\`(args)` execute the inline script and log its stdout — the `run` keyword is required (bare inline scripts in `log` / `logerr` / `logwarn` are `E_PARSE`).
@@ -320,7 +319,7 @@ Bare identifier form expands to `"${ident}"`. `log run \`…\`(args)`, `logerr r
 ### `fail`
 
 ```ebnf
-fail_stmt = "fail" ( double_quoted_string | triple_quoted_block ) ;
+fail_stmt = "fail" ( double_quoted_string | triple_quoted_block | "${" IDENT [ "." IDENT ] "}" ) ;
 ```
 
 Aborts the workflow or rule with a stderr message and non-zero exit.
@@ -393,11 +392,11 @@ inline_script = backtick_script_body "(" [ call_args ] ")"
 
 | Aspect | Rule |
 |---|---|
-| Allowed positions | `run_stmt` / `run_catch_stmt` / `run_recover_stmt` / `log_stmt` / `logerr_stmt` / `return_stmt`, and `const` RHS. |
+| Allowed positions | `run_stmt` / `run_catch_stmt` / `run_recover_stmt` / `log_stmt` / `logerr_stmt` / `logwarn_stmt` / `return_stmt`, and `const` RHS. |
 | `run async` | Not supported with inline scripts. |
 | Backtick interpolation | Jaiph `${identifier}` / `${identifier.field}` forms are `E_PARSE`. Bash parameter expansion passes through. Use `$1`, `$2`, … for positional arguments. |
 | Fenced interpolation | All `${…}` passes through to the shell (standard parameter expansion). |
-| `catch` / `recover` suffix | Allowed only on standalone `run` steps with inline-script body. Forbidden in `log` / `logerr` / `return` / `const` RHS positions. |
+| `catch` / `recover` suffix | Allowed only on standalone `run` steps with inline-script body. Forbidden in `log` / `logerr` / `logwarn` / `return` / `const` RHS positions. |
 | Emitted name | `scripts/__inline_<hash>` where `<hash>` is the first 12 hex digits of `sha256(shebang + "\n" + body)` (or `sha256(body)` if no shebang). Deterministic across runs. |
 
 ## String interpolation
@@ -412,7 +411,8 @@ inline_script = backtick_script_body "(" [ call_args ] ")"
 | `${ensure ref(args)}` | Inline capture — executes the rule, inlines result. | All orchestration strings. |
 | `$varName` (no braces) | `E_PARSE` in orchestration strings. | — |
 | `$1`, `$2` | Positional args | `script` bodies only. |
-| `${var:-fallback}` / `${var%%…}` / `${var//…}` / `${#var}` | `E_PARSE` in orchestration strings; passes through in script bodies (backtick and fenced). | — |
+| `${var:-fallback}` (and `:+` / `:=` / `:?`) | `E_PARSE` in orchestration strings; passes through in script bodies (backtick and fenced). | — |
+| `${var%%…}` / `${var//…}` / `${#var}` | Rejected (`E_PARSE`) only on a bare `const` RHS (see [`const`](#const)); inside orchestration string literals they are **not** flagged and pass through verbatim. Passes through in script bodies. | — |
 | `$(…)` | `E_PARSE` in orchestration strings. | — |
 
 If an inline capture fails, the enclosing step fails. Nested inline captures (`${run foo(${run bar()})}`) are rejected — extract the inner call to a `const`.
@@ -428,7 +428,8 @@ Every step produces three distinct outputs — status, capture value, and logs.
 | `run script` (named) | script exit code | trimmed stdout | script `.out` / `.err` |
 | `` run `…`() `` (inline) | script exit code | trimmed stdout | script `.out` / `.err` |
 | `prompt` | prompt exit code | final assistant answer | transcript artifacts |
-| `log` / `logerr` | always 0 | empty | live event stream + stdout/stderr |
+| `log` | always 0 | empty | live event stream + stdout |
+| `logerr` / `logwarn` | always 0 | empty | live event stream + stderr |
 | `fail` | non-zero (abort) | empty | message to stderr |
 | `run async` | aggregated | `Handle<T>` — resolves to return value on read | async step artifacts |
 | `const` | same as RHS step | empty (binds local) | n/a |
@@ -467,7 +468,7 @@ Validator entry points (`src/transpile/validate.ts` for the outer layer; `src/tr
 | `script name = \`…\`` (single-line) | `scripts/<name>` with `#!/usr/bin/env bash` (or the fence-tag / manual shebang). |
 | `script name = \`\`\`<tag>…\`\`\`` (fenced) | `scripts/<name>` with `#!/usr/bin/env <tag>` or the manual `#!` line. |
 | `` run `body`(args) `` / `` run ```lang body```(args) `` | `scripts/__inline_<12-hex>` with the deterministic name from `inlineScriptName`. |
-| `import script "path" as name` | No emission; the runtime resolves the existing file at runtime (shebangs preserved). |
+| `import script "path" as name` | Copied verbatim to `scripts/<name>` with its original shebang preserved; the runtime resolves it through `JAIPH_SCRIPTS` like any other script. |
 
 Workflows, rules, prompts, channels, and control flow are interpreted by `NodeWorkflowRuntime` from the AST. There is no workflow-level shell emission. Script subprocesses inherit the runner's `process.env` plus Jaiph metadata.
 

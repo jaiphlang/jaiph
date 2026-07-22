@@ -32,7 +32,7 @@ The runtime scans for `${name}` substrings in the places where a handle's conten
 - **Passthrough** — the step does not look at the value. Examples: the `const h = run async foo()` binding itself (the token stays in the variable until something reads it); a bare `run async` with no capture variable (the handle is still tracked for the implicit join).
 - **Resolving reads** — the step needs the string. Examples: any `${h}` interpolation (`log "result: ${h}"`, send RHS, prompt body, shell one-liner); passing `h` as an argument to `run` or `ensure` (bare-identifier args are rewritten as `${name}` before the call); using `h` as the subject of `if` / `match`; a bare-identifier `const h2 = h1` (parser sugar for `"${h1}"`).
 
-There is no `await` keyword and no copy-without-reading form. To keep work overlapping, read the handle late: hold it in the original binding and avoid `${…}`, bare-identifier args to `run`/`ensure`, or `if`/`match` subjects until you need the value. When a resolving read fails (the underlying `run` ended non-zero), the binding is cleared to an empty string in that scope.
+There is no `await` keyword and no copy-without-reading form. To keep work overlapping, read the handle late: hold it in the original binding and avoid `${…}`, bare-identifier args to `run`/`ensure`, or `if`/`match` subjects until you need the value. When a resolving read hits a handle whose underlying `run` failed (non-zero exit), the read itself fails and that error propagates exactly like a failed synchronous `run` — the reading step does not silently continue with an empty value. (The handle's binding is emptied in that scope as a side effect of the failed resolve.)
 
 `for_lines` is the one surprising exception: it reads the loop source as a plain variable value *without* passing through handle resolution. If the source is still a handle token, the loop sees the token and iterates wrong. Materialize the value first (`const text = "${h}"`) before iterating.
 
@@ -42,7 +42,7 @@ When a step list **runs through to its normal end** — every step executed with
 
 The "uncaptured handles still join" rule is part of the value model. There is no opt-out on the normal-exit path: starting async work without storing the handle does not skip the wait. The runtime keeps a list of every handle created in the current step list and walks it on normal exit, in creation order, awaiting each one sequentially.
 
-The guarantee this preserves is straightforward: when a step list reaches its normal end, **every piece of async work it scheduled has settled**. That is the property that lets the rest of the workflow — return values, channel drains, parent step lists — reason about completion without thinking about background tasks. For an entry workflow frame, the order is: the step list runs, the implicit join runs, *then* that frame's channel queue drains ([Inbox](inbox.md)). If several joined branches end with a `catch`/`recover` `return`, the first such branch in creation order supplies the parent workflow return value.
+The guarantee this preserves is straightforward: when a step list reaches its normal end, **every piece of async work it scheduled has settled**. That is the property that lets the rest of the workflow — return values, channel drains, parent step lists — reason about completion without thinking about background tasks. For an entry workflow frame, the order is: the step list runs, the implicit join runs, *then* that frame's channel queue drains ([Inbox](inbox.md)). If several joined branches end with a `catch` `return`, the first such branch in creation order supplies the parent workflow return value. (Only `catch` return values propagate this way; a value returned from a `recover` body settles that branch but is not adopted as the parent return.)
 
 If any joined handle ended with a non-zero status, the join itself fails; multiple failures are aggregated into a single error.
 
@@ -73,7 +73,7 @@ These restrictions are enforced at compile time (parser or validator), not at ru
 
 ## Async indices and the progress tree
 
-Concurrent branches are tagged with a chain of 1-based indices stored on `STEP_START`, `STEP_END`, `LOG`, and `LOGERR` events as `async_indices`. The CLI renders them as subscript prefixes on the live event stream, so interleaved branches stay legible in the progress tree. Indexing uses `AsyncLocalStorage` in the runtime, which means nested async work — a `run async` inside a `run async` — gets a deeper chain rather than colliding with its parent.
+Concurrent branches are tagged with a chain of 1-based indices stored on `STEP_START`, `STEP_END`, `LOG`, `LOGWARN`, and `LOGERR` events as `async_indices`. The CLI renders them as subscript prefixes on the live event stream, so interleaved branches stay legible in the progress tree. Indexing uses `AsyncLocalStorage` in the runtime, which means nested async work — a `run async` inside a `run async` — gets a deeper chain rather than colliding with its parent.
 
 Resolving a handle does **not** emit a separate event. The branch's own step and log events are the timeline; the resolve is just the point where a particular consumer stopped passing the token along.
 

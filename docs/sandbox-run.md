@@ -47,7 +47,7 @@ JAIPH_INPLACE=1 jaiph run ./flow.jh
 
 The `--inplace` flag normalizes into `JAIPH_INPLACE=1` for one run only. The container's other protections (`--cap-drop ALL`, `--security-opt no-new-privileges`, env allowlist, mount allowlist) are unchanged — only the workspace-isolation half is removed.
 
-Before launch the CLI prints a warning tailored to your git state (clean tree → `git restore .` recovers; dirty tree → commit/stash first; no repo → no safety net) and waits for `y`. The default answer on empty input or EOF is **no**.
+Before launch the CLI prints a warning — the run can edit files directly in your workspace directory, and the rest of your machine stays inside the Docker sandbox — then waits for `y`. The default answer on empty input or EOF is **no**.
 
 ## 3. Skip the inplace confirmation prompt in CI
 
@@ -75,7 +75,9 @@ or:
 JAIPH_UNSAFE=true jaiph run ./flow.jh
 ```
 
-This disables Docker entirely; the workflow runs on the host. Combining `--unsafe` with `--inplace` is rejected with `E_FLAG_CONFLICT` before any container starts (one keeps the sandbox on, the other turns it off).
+This disables Docker entirely; the workflow runs on the host with full access to your machine. Because that is strictly more exposure than inplace, the CLI prints its own (stronger) warning and waits for `y` before launching — default **no**. Skip it the same way as the inplace prompt: `-y` / `--yes`, or `JAIPH_INPLACE_YES=1` / `JAIPH_INPLACE_YES=true`. In a non-TTY environment without one of these, the run aborts with `E_UNSAFE_NO_CONFIRM`. The prompt fires only when the unsafe opt-in is what turns Docker off — not when Docker is disabled for another reason (the Windows host-only override, or an explicit `JAIPH_DOCKER_ENABLED=false`).
+
+Combining `--unsafe` with `--inplace` is rejected with `E_FLAG_CONFLICT` before any container starts (one keeps the sandbox on, the other turns it off).
 
 ## Verification
 
@@ -84,7 +86,8 @@ The CLI banner reports the sandbox mode it picked:
 - `Docker sandbox, fusefs` — overlay mode.
 - `Docker sandbox, tmp workspace` — copy mode.
 - `Docker sandbox, in-place` — inplace mode.
-- `no sandbox` — `--unsafe` / `JAIPH_UNSAFE=true` is active (Docker disabled).
+- `Docker sandbox, unsafe` — `--unsafe` / `JAIPH_UNSAFE=true` opted out of the sandbox (Docker off, host-only).
+- `no sandbox` — Docker is off for another reason (the Windows host-only override, or an explicit `JAIPH_DOCKER_ENABLED=false`).
 
 Run artifacts always land under host `.jaiph/runs/<date>/<time>-<entry>/` regardless of mode. Open `run_summary.jsonl` there to inspect the live `__JAIPH_EVENT__` timeline the CLI also rendered.
 

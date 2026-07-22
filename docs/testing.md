@@ -11,7 +11,7 @@ redirect_from:
 
 This recipe authors a `*.test.jh` file with mocked prompts and stubbed dependencies, then runs it through `jaiph test`. Test blocks execute the workflow under test in-process through `NodeWorkflowRuntime` — the same interpreter `jaiph run` uses — and assert on captured output.
 
-`jaiph test` runs on the host in-process — no Docker sandbox, no credential pre-flight, and no hooks. Mock every `prompt` step (and stub external workflows, rules, or scripts when needed): when no mocks are configured, or when a queued `mock prompt "…"` list is exhausted, the runtime falls through to the real agent backend the same way `jaiph run` would. Pattern-based `mock prompt { … }` blocks do not fall through — an unmatched prompt fails the test unless a `_` default arm catches it. The goal is fixed inputs and checkable outputs so refactors and CI catch regressions deterministically.
+`jaiph test` runs on the host in-process — no Docker sandbox, no credential pre-flight, and no hooks. Mock every `prompt` step (and stub external workflows, rules, or scripts when needed): when no mocks are configured, or when a queued `mock prompt "…"` list is exhausted, the runtime falls through to a real, live `prompt` call against the configured agent backend — just as `jaiph run` would, except that `jaiph test` disables prompt retries by default (`JAIPH_PROMPT_RETRY=0`) so a fell-through prompt that errors fails fast instead of retrying on the production schedule (set `JAIPH_PROMPT_RETRY` explicitly to exercise retry behaviour). Pattern-based `mock prompt { … }` blocks do not fall through — an unmatched prompt fails the test unless a `_` default arm catches it. The goal is fixed inputs and checkable outputs so refactors and CI catch regressions deterministically.
 
 ## Prerequisites
 
@@ -59,7 +59,7 @@ mock prompt {
 }
 ```
 
-Arms are evaluated top-to-bottom; the first match wins. Without a `_` wildcard arm, an unmatched prompt fails the test.
+Arms are evaluated top-to-bottom; the first match wins. A `/regex/` arm matches when its pattern is found anywhere in the prompt text; a `"string"` arm matches only when the whole prompt text equals it exactly. Without a `_` wildcard arm, an unmatched prompt fails the test.
 
 ## 3. (Optional) Stub workflows, rules, or scripts
 
@@ -110,7 +110,7 @@ jaiph test ./e2e/workflow_greeting.test.jh  # single file
 jaiph ./e2e/workflow_greeting.test.jh       # shorthand: a *.test.jh path is treated as jaiph test
 ```
 
-The runner discovers `*.test.jh` files recursively. Zero matches in discovery mode print `jaiph test: no *.test.jh files found (nothing to do)` and exit **0** — safe to call unconditionally from CI.
+The runner discovers `*.test.jh` files recursively. Zero matches — whether from bare discovery or an explicit directory — print `jaiph test: no *.test.jh files found (nothing to do)` and exit **0**, so it is safe to call unconditionally from CI.
 
 ## Verification
 

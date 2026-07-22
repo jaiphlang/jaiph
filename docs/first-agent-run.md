@@ -83,7 +83,7 @@ workflow default(name_arg) {
 Three pieces of new syntax compared with [Your first workflow](/tutorials/first-workflow):
 
 - `config { agent.backend = "claude" }` selects the agent backend at module scope. Drop the block entirely to use the `cursor` default, or set `JAIPH_AGENT_BACKEND` in the environment to override either form (env wins; see [Configure backend & model](/how-to/configure-backend)).
-- `rule valid_name(name_arg) { … }` is a read-only validator. Rules cannot use `prompt` or raw shell — they enforce structure on inputs before the workflow continues. `ensure valid_name(name_arg)` runs the rule and aborts the workflow with the failure message if any arm matches `fail`.
+- `rule valid_name(name_arg) { … }` is a read-only validator. Rules cannot use `prompt` or raw shell — they enforce structure on inputs before the workflow continues. `ensure valid_name(name_arg)` runs the rule and aborts the workflow with the failure message if any arm matches `fail`. The `match` arms are tried top-to-bottom, first match wins: the regex `/[A-Z][a-z]+/` matches any name containing an uppercase letter followed by lowercase letters (so `Adam` passes, while `adam` and `ADAM` fall through to `_`), the `""` arm catches an empty name, and `_` catches everything else.
 - `prompt """ … """` is a managed agent call. The triple-quoted body is dedented at parse time and sent to the selected backend's CLI; the agent's stdout is captured as the step value. The `${name}` substitution happens before the prompt is sent.
 
 Save the file as `greet.jh`.

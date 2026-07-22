@@ -89,6 +89,15 @@ The table below covers every `JAIPH_*` name read from `process.env` / `env` in `
 
 <!-- end: src-parity -->
 
+### Internal Docker-only variables
+
+Three more variables are set by the host CLI on the Docker container but are **not** in the table above: the source-parity harness tracks only names accessed through a literal `env.JAIPH_*` / `process.env["JAIPH_*"]` read in `src/`, and these escape that pattern. They are managed entirely by the CLI — never export them by hand.
+
+| Variable | Scope | Role |
+|---|---|---|
+| `JAIPH_RUN_WORKFLOW` | internal | Root workflow symbol the inner `jaiph run --raw` executes. Set as `-e` only for a non-`default` root (for example an MCP tool call); read back in the container by `runWorkflowRaw` through a computed key. Reserved from `--env` (`E_ENV_RESERVED`). |
+| `JAIPH_HOST_UID` / `JAIPH_HOST_GID` | internal | Host UID/GID, forwarded in overlay mode only. `overlay-run.sh` uses them to `setpriv` the run down to the invoking user so artifacts written to `/jaiph/run` keep host ownership. |
+
 ## Agent credentials
 
 The host CLI checks these before spawning the runner or container when [credential pre-flight](configuration.md#credential-pre-flight) applies. Pre-flight is skipped when the entry file declares no explicit backend and uses no `prompt` step, on `jaiph run --raw`, and when `JAIPH_UNSAFE=true`. See [Authenticate agent backends](/how-to/agent-auth) for per-backend rules and [Sandboxing](sandboxing.md) for which credentials cross the container boundary.
@@ -102,7 +111,7 @@ The host CLI checks these before spawning the runner or container when [credenti
 
 Forwarding allowlist into the Docker container: `JAIPH_*` run-control keys (except `JAIPH_DOCKER_*`, `JAIPH_INPLACE`, and `JAIPH_INPLACE_YES`) plus the enumerated credential keys of the backends the entry file selects — `ANTHROPIC_API_KEY` and `CLAUDE_CODE_OAUTH_TOKEN` for `claude`, `CURSOR_API_KEY` for `cursor`, `OPENAI_API_KEY` for `codex`. Other variables in those families (for example `ANTHROPIC_BASE_URL` or `CLAUDE_CONFIG_DIR`) and everything else — including unrelated cloud credentials — are silently dropped; use `--env` below to forward one intentionally. See [Sandboxing](sandboxing.md).
 
-To forward a variable outside the allowlist (for example `GITHUB_TOKEN` or `AWS_ACCESS_KEY_ID`) into a specific run, use the per-key **`--env`** flag on `jaiph run` / `jaiph mcp`: `--env KEY=VALUE` sets an exact value and `--env KEY` forwards the host's current value. In host mode `--env` defines the variable on the workflow process directly; in a Docker sandbox it crosses the boundary verbatim as an explicit `-e KEY=VALUE` container arg **bypassing the allowlist above** (the flag is the per-key consent), winning over any allowlist-forwarded value for the same key. A bare `--env KEY` unset on the host aborts with `E_ENV_MISSING` before anything is spawned; invalid names give `E_ENV_INVALID`; and the sandbox-control / runtime-managed keys the CLI owns (`JAIPH_UNSAFE`, `JAIPH_INPLACE`, `JAIPH_INPLACE_YES`, any `JAIPH_DOCKER_*`, `JAIPH_WORKSPACE`, `JAIPH_RUNS_DIR`, `JAIPH_RUN_ID`, `JAIPH_SCRIPTS`, `JAIPH_MODULE_GRAPH_FILE`, `JAIPH_SOURCE_ABS`, `JAIPH_META_FILE`, `JAIPH_AGENT_TRUSTED_WORKSPACE`) are rejected with `E_ENV_RESERVED` — use the sandbox flags or real env vars for those. Values are never path-remapped. See [CLI — `jaiph run` flags](cli.md#jaiph-run).
+To forward a variable outside the allowlist (for example `GITHUB_TOKEN` or `AWS_ACCESS_KEY_ID`) into a specific run, use the per-key **`--env`** flag on `jaiph run` / `jaiph mcp`: `--env KEY=VALUE` sets an exact value and `--env KEY` forwards the host's current value. In host mode `--env` defines the variable on the workflow process directly; in a Docker sandbox it crosses the boundary verbatim as an explicit `-e KEY=VALUE` container arg **bypassing the allowlist above** (the flag is the per-key consent), winning over any allowlist-forwarded value for the same key. A bare `--env KEY` unset on the host aborts with `E_ENV_MISSING` before anything is spawned; invalid names give `E_ENV_INVALID`; and the sandbox-control / runtime-managed keys the CLI owns (`JAIPH_UNSAFE`, `JAIPH_INPLACE`, `JAIPH_INPLACE_YES`, any `JAIPH_DOCKER_*`, `JAIPH_WORKSPACE`, `JAIPH_RUNS_DIR`, `JAIPH_RUN_ID`, `JAIPH_SCRIPTS`, `JAIPH_MODULE_GRAPH_FILE`, `JAIPH_SOURCE_ABS`, `JAIPH_META_FILE`, `JAIPH_AGENT_TRUSTED_WORKSPACE`, `JAIPH_RUN_WORKFLOW`) are rejected with `E_ENV_RESERVED` — use the sandbox flags or real env vars for those. Values are never path-remapped. See [CLI — `jaiph run` flags](cli.md#jaiph-run).
 
 ## Installer and `jaiph use`
 
