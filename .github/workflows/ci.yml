@@ -53,7 +53,9 @@ jobs:
       # "docker": unset JAIPH_UNSAFE so resolveDockerConfig enables the sandbox (pulls ghcr.io/jaiphlang/jaiph-runtime).
       # "host": explicit opt-out, same as a fast local `JAIPH_UNSAFE=true npm run test:e2e`.
       # fuse-overlayfs inside nested Docker on GHA Ubuntu is unreliable — force copy for all sandbox runs.
-      JAIPH_DOCKER_NO_OVERLAY: ${{ matrix.label == 'docker' && '1' || '' }}
+      # Docker-gated e2e tests self-check `docker info` and run regardless of matrix.label (e.g. the
+      # "host" job still exercises Docker-sandboxed legs), so this must key on the runner OS, not the label.
+      JAIPH_DOCKER_NO_OVERLAY: ${{ matrix.os == 'ubuntu-latest' && '1' || '' }}
       JAIPH_UNSAFE: ${{ matrix.jaiph_unsafe }}
     strategy:
       fail-fast: false
