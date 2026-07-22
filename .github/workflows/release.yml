@@ -197,10 +197,12 @@ jobs:
           MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
         run: |
           set -euo pipefail
+          rm -f SHA256SUMS.minisig
           if [ -z "${MINISIGN_SECRET_KEY}" ]; then
             echo "MINISIGN_SECRET_KEY secret is not set — skipping detached signature." >&2
             echo "Set the secret to enable signed releases (see docs/contributing.md)." >&2
-            touch SHA256SUMS.minisig
+            echo "Installers fail closed without SHA256SUMS.minisig; do not upload an empty stub" >&2
+            echo "(GitHub rejects 0-byte release assets with HTTP 400 Bad Content-Length)." >&2
           else
             which minisign || (apt-get update -qq && apt-get install -y -qq minisign)
             printf '%s' "${MINISIGN_SECRET_KEY}" > /tmp/jaiph-release.key
@@ -225,20 +227,25 @@ jobs:
         run: |
           set -euo pipefail
           tag="${{ steps.meta.outputs.tag }}"
+          assets=(
+            jaiph-darwin-arm64 jaiph-darwin-x64
+            jaiph-linux-x64 jaiph-linux-arm64
+            jaiph-windows-x64.exe
+            SHA256SUMS
+          )
+          if [ -s SHA256SUMS.minisig ]; then
+            assets+=(SHA256SUMS.minisig)
+          elif gh release view "${tag}" >/dev/null 2>&1; then
+            # Drop a stale signature so installers fail closed instead of verifying an old one.
+            gh release delete-asset "${tag}" SHA256SUMS.minisig --yes 2>/dev/null || true
+          fi
           if gh release view "${tag}" >/dev/null 2>&1; then
-            gh release upload "${tag}" --clobber \
-              jaiph-darwin-arm64 jaiph-darwin-x64 \
-              jaiph-linux-x64 jaiph-linux-arm64 \
-              jaiph-windows-x64.exe \
-              SHA256SUMS SHA256SUMS.minisig
+            gh release upload "${tag}" --clobber "${assets[@]}"
           else
             gh release create "${tag}" \
               --title "${tag}" \
               --notes "Jaiph ${tag} — standalone binaries (darwin/linux × arm64/x64, windows x64) plus SHA256SUMS." \
-              jaiph-darwin-arm64 jaiph-darwin-x64 \
-              jaiph-linux-x64 jaiph-linux-arm64 \
-              jaiph-windows-x64.exe \
-              SHA256SUMS SHA256SUMS.minisig
+              "${assets[@]}"
           fi
 
       - name: Publish nightly prerelease
@@ -246,20 +253,25 @@ jobs:
         working-directory: release-assets
         run: |
           set -euo pipefail
+          assets=(
+            jaiph-darwin-arm64 jaiph-darwin-x64
+            jaiph-linux-x64 jaiph-linux-arm64
+            jaiph-windows-x64.exe
+            SHA256SUMS
+          )
+          if [ -s SHA256SUMS.minisig ]; then
+            assets+=(SHA256SUMS.minisig)
+          elif gh release view nightly >/dev/null 2>&1; then
+            # Drop a stale signature so installers fail closed instead of verifying an old one.
+            gh release delete-asset nightly SHA256SUMS.minisig --yes 2>/dev/null || true
+          fi
           if gh release view nightly >/dev/null 2>&1; then
-            gh release upload nightly --clobber \
-              jaiph-darwin-arm64 jaiph-darwin-x64 \
-              jaiph-linux-x64 jaiph-linux-arm64 \
-              jaiph-windows-x64.exe \
-              SHA256SUMS SHA256SUMS.minisig
+            gh release upload nightly --clobber "${assets[@]}"
           else
             gh release create nightly \
               --title "Nightly" \
               --notes "Rolling nightly prerelease — standalone binaries built from the latest \`nightly\` branch." \
               --prerelease \
               --target "${GITHUB_SHA}" \
-              jaiph-darwin-arm64 jaiph-darwin-x64 \
-              jaiph-linux-x64 jaiph-linux-arm64 \
-              jaiph-windows-x64.exe \
-              SHA256SUMS SHA256SUMS.minisig
+              "${assets[@]}"
           fi
