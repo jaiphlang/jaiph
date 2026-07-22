@@ -7,6 +7,7 @@ import type { RuntimeConfig } from "../types";
 import { VERSION } from "../version";
 import { OVERLAY_RUN_SH_BASE64, decodeEmbeddedAsset } from "./embedded-assets";
 import { killProcessTree } from "./kernel/portability";
+import { isEnvAllowed, RUN_WORKFLOW_ENV, type AgentBackend } from "./kernel/env-allowlist";
 
 /** Resolved Docker runtime config with defaults applied and env overrides merged. */
 export interface DockerRunConfig {
@@ -588,72 +589,18 @@ export interface DockerSpawnOptions {
 export const CONTAINER_WORKSPACE = "/jaiph/workspace";
 export const CONTAINER_RUN_DIR = "/jaiph/run";
 
-/** Agent backends the runtime can execute prompts against. */
-export type AgentBackend = "cursor" | "claude" | "codex";
-
-/**
- * Enumerated credential keys forwarded into the container per agent backend.
- * Only the keys for the run's resolved backends cross the boundary — the rest
- * of the `ANTHROPIC_*` / `CLAUDE_*` / `CURSOR_*` / `OPENAI_*` families stay on
- * the host. Anything else goes through the explicit `--env` escape hatch.
- * Must stay in sync with the credential pre-flight
- * (`src/cli/run/preflight-credentials.ts`) and docs/env-vars.md.
- */
-export const BACKEND_CREDENTIAL_KEYS: Record<AgentBackend, readonly string[]> = {
-  cursor: ["CURSOR_API_KEY"],
-  claude: ["ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN"],
-  codex: ["OPENAI_API_KEY"],
-};
-
-/**
- * Environment variable prefixes forwarded into the container. Only `JAIPH_*`
- * run-control keys are prefix-forwarded — the runtime inside the container
- * consumes them (with `JAIPH_DOCKER_*` and the explicit name exclusions below
- * carved out). Agent credentials are NOT prefix-forwarded: only the enumerated
- * per-backend keys in `BACKEND_CREDENTIAL_KEYS` cross, and only for the run's
- * resolved backends. Everything else is dropped — fail-closed by design.
- */
-export const ENV_ALLOW_PREFIXES = ["JAIPH_"] as const;
-
-/** Prefix excluded from the allowlist even though it starts with JAIPH_. */
-export const ENV_ALLOW_EXCLUDE_PREFIX = "JAIPH_DOCKER_";
-
-/**
- * Container env var naming the workflow symbol the inner `jaiph run --raw`
- * should execute. Emitted explicitly from `DockerSpawnOptions.workflowSymbol`
- * (see `buildDockerArgs`), never auto-forwarded from the host env — so it is
- * excluded from the allowlist below and reserved against `--env`.
- */
-export const RUN_WORKFLOW_ENV = "JAIPH_RUN_WORKFLOW";
-
-/**
- * Explicit exclusions that would otherwise pass the JAIPH_ allowlist.
- * Forwarding these would leak host control flags into the container (and let a
- * nested run re-trigger the same mode).
- */
-export const ENV_ALLOW_EXCLUDE_NAMES = new Set<string>([
-  "JAIPH_INPLACE",
-  "JAIPH_INPLACE_YES",
-  // Never inherit a stale symbol from the host env: the inner run's root is
-  // set only through the explicit `workflowSymbol` wiring below.
+// The agent env allowlist lives in the kernel (`kernel/env-allowlist.ts`) so
+// the prompt backend spawn applies the same fail-closed policy in every
+// sandbox mode; re-exported here for the Docker boundary's existing consumers.
+export {
+  BACKEND_CREDENTIAL_KEYS,
+  ENV_ALLOW_PREFIXES,
+  ENV_ALLOW_EXCLUDE_PREFIX,
+  ENV_ALLOW_EXCLUDE_NAMES,
   RUN_WORKFLOW_ENV,
-]);
-
-/**
- * Returns true if `key` may be forwarded into the container for a run that
- * resolved to `backends`. `JAIPH_*` run-control keys pass regardless of
- * backend (minus the exclusions); credential keys pass only when one of the
- * given backends needs them (`BACKEND_CREDENTIAL_KEYS`). An empty `backends`
- * forwards no credentials — fail-closed.
- */
-export function isEnvAllowed(key: string, backends: readonly AgentBackend[]): boolean {
-  if (key.startsWith(ENV_ALLOW_EXCLUDE_PREFIX)) return false;
-  if (ENV_ALLOW_EXCLUDE_NAMES.has(key)) return false;
-  if (ENV_ALLOW_PREFIXES.some((prefix) => key.startsWith(prefix))) return true;
-  // Guard the lookup: `backends` may carry an unrecognized JAIPH_AGENT_BACKEND
-  // value at runtime, which forwards nothing rather than throwing.
-  return backends.some((backend) => BACKEND_CREDENTIAL_KEYS[backend]?.includes(key) ?? false);
-}
+  isEnvAllowed,
+  type AgentBackend,
+} from "./kernel/env-allowlist";
 
 /** Resolve the host run-artifacts root for Docker-backed runs. */
 export function resolveDockerHostRunsRoot(

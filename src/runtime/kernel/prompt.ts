@@ -7,6 +7,7 @@ import { homedir, tmpdir } from "node:os";
 import { parseStream, type StreamWriter } from "./stream-parser";
 import { consumeNextMockResponse, dispatchMockArms, type MockPromptArm } from "./mock";
 import { killProcessTree } from "./portability";
+import { scrubPromptEnv } from "./env-allowlist";
 
 export type PromptConfig = {
   backend: string;
@@ -581,9 +582,14 @@ function runBackend(
     const { command, args } = buildBackendArgs(config, promptText);
     const isClaude = config.backend === "claude";
     const isCustom = isCustomCommand(config);
-    let childEnv: NodeJS.ProcessEnv = execEnv;
+    // The agent subprocess never inherits the workflow env verbatim: it gets
+    // the base environment, JAIPH_* control keys, and this backend's own
+    // credential keys only. `--env`-injected secrets (e.g. GITHUB_TOKEN) stay
+    // with trusted `run` steps and never reach the model — in host mode and
+    // in every Docker sandbox mode alike.
+    let childEnv: NodeJS.ProcessEnv = scrubPromptEnv(execEnv, config.backend);
     if (isClaude) {
-      const prepared = prepareClaudeEnv(execEnv, config.workspaceRoot);
+      const prepared = prepareClaudeEnv(childEnv, config.workspaceRoot);
       if (prepared.error) {
         stderr.write(`${prepared.error}\n`);
         resolve({ final: "", status: 1 });
