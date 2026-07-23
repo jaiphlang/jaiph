@@ -14,7 +14,7 @@
 // Importable: scripts/build-registry.test.mjs imports `buildRegistry` to
 // exercise the contract against local fixtures without spawning a process.
 
-import { readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
+import { readFileSync, renameSync, unlinkSync, writeFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import { createRequire } from "node:module";
@@ -69,6 +69,38 @@ export async function buildRegistry({ source, outPath, loadRegistryIndex }) {
   return { source, outPath, bytes: Buffer.byteLength(text) };
 }
 
+function isUpstreamFetchFailure(err, source, defaultSource) {
+  const msg = err && err.message ? err.message : String(err);
+  return source === defaultSource && msg.includes("failed to fetch");
+}
+
+/**
+ * Like `buildRegistry`, but when the default upstream URL is unreachable and
+ * `outPath` already contains a valid index, keep the shipped file instead of
+ * failing release prep (the separate jaiphlang/registry repo may not exist yet).
+ */
+export async function buildRegistryOrKeepShipped({
+  source,
+  outPath,
+  loadRegistryIndex,
+  defaultSource = DEFAULT_SOURCE,
+}) {
+  try {
+    return await buildRegistry({ source, outPath, loadRegistryIndex });
+  } catch (err) {
+    if (!isUpstreamFetchFailure(err, source, defaultSource) || !existsSync(outPath)) {
+      throw err;
+    }
+    await loadRegistryIndex(outPath);
+    return {
+      source: outPath,
+      outPath,
+      bytes: readFileSync(outPath).byteLength,
+      kept: true,
+    };
+  }
+}
+
 async function main() {
   const source = resolveSource(process.argv.slice(2), process.env);
   const require = createRequire(import.meta.url);
@@ -83,7 +115,17 @@ async function main() {
     process.exit(1);
   }
   try {
-    const result = await buildRegistry({ source, outPath: OUT_PATH, loadRegistryIndex });
+    const result = await buildRegistryOrKeepShipped({
+      source,
+      outPath: OUT_PATH,
+      loadRegistryIndex,
+    });
+    if (result.kept) {
+      process.stderr.write(
+        `build-registry: upstream unavailable; kept validated ${result.outPath} (${result.bytes} bytes)\n`,
+      );
+      return;
+    }
     process.stdout.write(`wrote ${result.outPath} (${result.bytes} bytes) from ${result.source}\n`);
   } catch (err) {
     process.stderr.write(`build-registry: ${err.message}\n`);
