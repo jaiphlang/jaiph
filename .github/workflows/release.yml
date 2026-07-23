@@ -232,17 +232,17 @@ jobs:
               echo "First line: ${first_line}" >&2
               exit 1
             fi
-            if grep -q 'encrypted secret key' "${key_file}"; then
-              echo "MINISIGN_SECRET_KEY is password-protected. Regenerate with:" >&2
-              echo "  minisign -G -W -p jaiph.pub -s jaiph.key -f" >&2
-              exit 1
-            fi
             if [ "$(grep -c . "${key_file}")" -lt 2 ]; then
               echo "MINISIGN_SECRET_KEY is incomplete — need header line and base64 body line." >&2
               exit 1
             fi
 
-            minisign -S -s "${key_file}" -m SHA256SUMS -x SHA256SUMS.minisig
+            # minisign -W still writes "encrypted secret key" with an empty password.
+            if [[ "${first_line}" == *"encrypted secret key"* ]]; then
+              printf '\n' | minisign -S -s "${key_file}" -m SHA256SUMS -x SHA256SUMS.minisig
+            else
+              minisign -S -s "${key_file}" -m SHA256SUMS -x SHA256SUMS.minisig
+            fi
             echo "SHA256SUMS.minisig written."
           fi
 

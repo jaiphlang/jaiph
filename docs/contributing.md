@@ -244,7 +244,7 @@ Bun has no `bun-windows-arm64` target, so Windows ships x64 only. Every release 
 
 Releases sign `SHA256SUMS` with [minisign](https://jedisct1.github.io/minisign/), publishing a detached `SHA256SUMS.minisig`. Installers always download that file and verify it when `minisign` is on `PATH` (public key embedded in both installers; canonical copy in `jaiph.pub`).
 
-**Maintainers:** generate once with `minisign -G -W -p jaiph.pub -s jaiph.key -f`, store **`jaiph.key`** (not `jaiph.pub`) as the `MINISIGN_SECRET_KEY` GitHub Actions secret — paste both lines, or `base64 -w0 jaiph.key` as a single line. Commit `jaiph.pub` and keep installer defaults in sync. To rotate, repeat and note it in the release.
+**Maintainers:** generate once with `minisign -G -W -p jaiph.pub -s jaiph.key -f` (no passphrase; `-W` still labels the file "encrypted secret key" but uses an empty password). Store **`jaiph.key`** (not `jaiph.pub`) as the `MINISIGN_SECRET_KEY` GitHub Actions secret — paste both lines, or `base64 -w0 jaiph.key` as a single line. Commit `jaiph.pub` and keep installer defaults in sync.
 
 Manual verification: [Install & switch versions — Verify the release signature](setup.md#verify-the-release-signature).
 
