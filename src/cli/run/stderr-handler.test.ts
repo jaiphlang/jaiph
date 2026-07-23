@@ -75,12 +75,12 @@ test("registerTTYSubscriber: stderr_line renders immediately in TTY mode", () =>
   try {
     registerTTYSubscriber(emitter, ctx);
     emitter.emit("stderr_line", {
-      line: "jaiph docker: workspace overlay unavailable; copying workspace into a temp directory before startup",
+      line: "jaiph docker: taking a point-in-time snapshot of the workspace before startup",
     });
   } finally {
     (process.stdout.write as unknown as typeof process.stdout.write) = originalWrite as typeof process.stdout.write;
   }
 
   const output = writes.join("");
-  assert.equal(output, "jaiph docker: workspace overlay unavailable; copying workspace into a temp directory before startup\n");
+  assert.equal(output, "jaiph docker: taking a point-in-time snapshot of the workspace before startup\n");
 });

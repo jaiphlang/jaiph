@@ -29,11 +29,10 @@ const MCP_USAGE =
   "only workflow, under a tool name derived from the file's basename.\n" +
   "Tool descriptions come from the `#` comment lines directly above each workflow.\n" +
   "Sources are re-validated on change and clients get notifications/tools/list_changed.\n\n" +
-  "Tool calls honor the same env-driven Docker sandbox as `jaiph run`: workspace is\n" +
-  "isolated by default (overlay when fuse is available, otherwise a disposable copy).\n" +
+  "Tool calls honor the same env-driven Docker sandbox as `jaiph run`: the workspace\n" +
+  "is isolated by default via a writable point-in-time snapshot taken at call start.\n" +
   "Set JAIPH_INPLACE=1 to bind the live workspace read-write (effects land on the\n" +
-  "host), JAIPH_DOCKER_NO_OVERLAY=1 to force the copy path, or JAIPH_UNSAFE=true\n" +
-  "to run on the host with no sandbox.\n\n" +
+  "host), or JAIPH_UNSAFE=true to run on the host with no sandbox.\n\n" +
   "  --workspace <dir>  workspace root for import resolution (default: auto-detect)\n" +
   "  -h, --help         show this help\n\n" +
   "Example:\n" +
@@ -154,8 +153,9 @@ export async function runMcp(rest: string[]): Promise<number> {
   }
 
   // Resolve the sandbox posture once at startup. Tool calls honor the same
-  // env-driven Docker selection as `jaiph run`: workspace is isolated by
-  // default (overlay or copy). Inplace is an explicit opt-in via JAIPH_INPLACE=1.
+  // env-driven Docker selection as `jaiph run`: the workspace is isolated by
+  // default via a point-in-time snapshot. Inplace is an explicit opt-in via
+  // JAIPH_INPLACE=1.
   const mod = state.graph.modules.get(inputAbs)!.ast;
   const startupEnv = resolveRuntimeEnv(state.callEnv.effectiveConfig, workspaceRoot, inputAbs);
   const dockerConfig = resolveDockerConfig(resolveModuleMetadata(mod, process.env)?.runtime, startupEnv);

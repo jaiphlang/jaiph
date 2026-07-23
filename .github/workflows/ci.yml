@@ -4,19 +4,6 @@ on:
   push:
 
 jobs:
-  shellcheck:
-    name: ShellCheck
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install shellcheck
-        run: sudo apt-get update && sudo apt-get install -y shellcheck
-
-      - name: Run shellcheck
-        run: shellcheck runtime/overlay-run.sh
-
   test:
     name: Compiler and unit tests
     runs-on: ubuntu-latest
@@ -52,10 +39,6 @@ jobs:
       # Host/safe split applies on Ubuntu only. macOS runners do not ship Docker the same way — keep host-only there.
       # "docker": unset JAIPH_UNSAFE so resolveDockerConfig enables the sandbox (pulls ghcr.io/jaiphlang/jaiph-runtime).
       # "host": explicit opt-out, same as a fast local `JAIPH_UNSAFE=true npm run test:e2e`.
-      # fuse-overlayfs inside nested Docker on GHA Ubuntu is unreliable — force copy for all sandbox runs.
-      # Docker-gated e2e tests self-check `docker info` and run regardless of matrix.label (e.g. the
-      # "host" job still exercises Docker-sandboxed legs), so this must key on the runner OS, not the label.
-      JAIPH_DOCKER_NO_OVERLAY: ${{ matrix.os == 'ubuntu-latest' && '1' || '' }}
       JAIPH_UNSAFE: ${{ matrix.jaiph_unsafe }}
     strategy:
       fail-fast: false
@@ -94,7 +77,6 @@ jobs:
     name: Getting started (local)
     runs-on: ubuntu-latest
     env:
-      JAIPH_DOCKER_NO_OVERLAY: "1"
       CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
       CURSOR_TOKEN: ${{ secrets.CURSOR_TOKEN }}
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -405,4 +387,4 @@ jobs:
         run: |
           TAG="$(echo '${{ steps.meta.outputs.tags }}' | cut -d',' -f1)"
           docker run --rm --entrypoint sh "${TAG}" -lc "command -v jaiph && jaiph --version"
-          docker run --rm --user 0:0 --cap-drop ALL --cap-add SYS_ADMIN --entrypoint sh "${TAG}" -lc "command -v jaiph"
+          docker run --rm --cap-drop ALL --entrypoint sh "${TAG}" -lc "command -v jaiph"

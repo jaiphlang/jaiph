@@ -21,34 +21,27 @@ test("formatJaiphRunningBannerLines: unsafe opt-in shows Docker sandbox, unsafe 
   assert.equal(s, "\nJaiph: Running engineer.jh (Docker sandbox, unsafe)\n\n");
 });
 
-test("formatJaiphRunningBannerLines: Docker overlay shows fusefs (no color)", () => {
-  const s = formatJaiphRunningBannerLines("say_hello.jh", true, "overlay", false);
-  assert.equal(s, "\nJaiph: Running say_hello.jh (Docker sandbox, fusefs)\n\n");
+test("formatJaiphRunningBannerLines: Docker snapshot (default) shows snapshot (no color)", () => {
+  const s = formatJaiphRunningBannerLines("say_hello.jh", true, "snapshot", false);
+  assert.equal(s, "\nJaiph: Running say_hello.jh (Docker sandbox, snapshot)\n\n");
 });
 
-test("formatJaiphRunningBannerLines: Docker copy shows tmp workspace (no color)", () => {
-  const s = formatJaiphRunningBannerLines("say_hello.jh", true, "copy", false);
-  assert.equal(s, "\nJaiph: Running say_hello.jh (Docker sandbox, tmp workspace)\n\n");
-});
-
-test("formatJaiphRunningBannerLines: Docker inplace shows in-place, distinct from overlay/copy", () => {
+test("formatJaiphRunningBannerLines: Docker inplace shows in-place, distinct from snapshot", () => {
   const sInplace = formatJaiphRunningBannerLines("say_hello.jh", true, "inplace", false);
-  const sOverlay = formatJaiphRunningBannerLines("say_hello.jh", true, "overlay", false);
-  const sCopy = formatJaiphRunningBannerLines("say_hello.jh", true, "copy", false);
+  const sSnapshot = formatJaiphRunningBannerLines("say_hello.jh", true, "snapshot", false);
   assert.equal(sInplace, "\nJaiph: Running say_hello.jh (Docker sandbox, in-place)\n\n");
-  assert.notEqual(sInplace, sOverlay);
-  assert.notEqual(sInplace, sCopy);
+  assert.notEqual(sInplace, sSnapshot);
 });
 
 test("formatJaiphRunningBannerLines: banner is the same in CI and locally (no obfuscation)", () => {
   const prev = process.env.CI;
   process.env.CI = "true";
   try {
-    const sCi = formatJaiphRunningBannerLines("say_hello.jh", true, "overlay", false);
+    const sCi = formatJaiphRunningBannerLines("say_hello.jh", true, "snapshot", false);
     delete process.env.CI;
-    const sLocal = formatJaiphRunningBannerLines("say_hello.jh", true, "overlay", false);
+    const sLocal = formatJaiphRunningBannerLines("say_hello.jh", true, "snapshot", false);
     assert.equal(sCi, sLocal);
-    assert.equal(sCi, "\nJaiph: Running say_hello.jh (Docker sandbox, fusefs)\n\n");
+    assert.equal(sCi, "\nJaiph: Running say_hello.jh (Docker sandbox, snapshot)\n\n");
   } finally {
     if (prev === undefined) delete process.env.CI;
     else process.env.CI = prev;

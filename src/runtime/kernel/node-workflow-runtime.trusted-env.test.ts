@@ -282,7 +282,7 @@ test("trusted_envs: docker copy mode — declared key crosses as -e, reaches the
       runArgs: [],
       env: { JAIPH_RUN_ID: "r1" },
       isTTY: false,
-      sandboxMode: "copy",
+      sandboxMode: "snapshot",
       sandboxWorkspaceDir: cloneDir,
       backends: ["cursor"],
       extraEnv: { ...plan.resolved },
