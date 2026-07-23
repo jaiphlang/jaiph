@@ -115,6 +115,8 @@ To forward a variable outside the allowlist (for example `GITHUB_TOKEN` or `AWS_
 
 An `--env`-forwarded variable is visible to trusted `run` script/workflow steps but **not** to `prompt` agent subprocesses: every prompt backend is spawned with a fail-closed scrub that forwards only the base environment (`PATH`, `HOME`, locale, proxies, `CLAUDE_CONFIG_DIR`, …), `JAIPH_*` control keys, and that backend's own credential keys — in host mode and every Docker sandbox mode alike. See [Sandboxing — environment exposure](sandboxing.md#env-exposure).
 
+For the common "forward this host key" case, the [`trusted_envs`](configuration.md#trusted-envs) config key is the declarative in-file alternative to `--env`: a `.jh` file names the host keys its trusted `run` steps require (`trusted_envs = "GITHUB_TOKEN"`), they resolve from a pristine host-env snapshot, and the same reserved-key (`E_ENV_RESERVED`) and missing-value (`E_ENV_MISSING`) rules apply. An explicit `--env KEY=VALUE` still overrides the snapshot value for that key. Like `--env`, `trusted_envs` values reach trusted `run` steps only — never `prompt` subprocesses.
+
 ## Installer and `jaiph use`
 
 These variables are consumed by `docs/install` (the installer shell script) and by `jaiph use` when it re-invokes the installer. They are **not** read from inside the Jaiph TypeScript source.

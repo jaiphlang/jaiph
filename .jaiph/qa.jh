@@ -146,7 +146,7 @@ const analyze_gaps_prompt = """
 
 workflow analyze_gaps() {
   config {
-    agent.model = "fable"
+    agent.model = "opus"
   }
 
   const report_path = run new_qa_gap_report_path()

@@ -68,6 +68,7 @@ import {
 import { loadMergedHooks, registerHooksSubscriber } from "../run/hooks";
 import { resolveRuntimeEnv, applySandboxFlags, resolveEnvPairs } from "../run/env";
 import { preflightAgentCredentials, collectEntryBackends } from "../run/preflight-credentials";
+import { planTrustedEnvs } from "../run/trusted-envs";
 import { colorize, formatJaiphRunningBannerLines } from "../run/display";
 import { createRunEmitter } from "../run/emitter";
 import {
@@ -176,6 +177,18 @@ export async function runWorkflow(rest: string[]): Promise<number> {
       }
       return 1;
     }
+    // trusted_envs pre-flight: a declared key with no host/--env value fails
+    // before anything is spawned, like a bare `--env KEY` with no host value.
+    const trustedPlan = planTrustedEnvs(graph, extraEnv, process.env);
+    for (const w of trustedPlan.warnings) {
+      process.stderr.write(`${w}\n`);
+    }
+    if (trustedPlan.errors.length > 0) {
+      for (const e of trustedPlan.errors) {
+        process.stderr.write(`${e}\n`);
+      }
+      return 1;
+    }
     if (dockerConfigForBanner.enabled) {
       checkDockerAvailable();
       prepareImage(dockerConfigForBanner);
@@ -259,8 +272,13 @@ export async function runWorkflow(rest: string[]): Promise<number> {
       workspace: workspaceRoot,
     });
 
+    // Docker forwards the entry file's resolved trusted_envs values through
+    // the same explicit `-e` channel as `--env` (declaration = per-key
+    // consent), with an explicit `--env` pair winning on the same key. Host
+    // modes ignore this merge — the runner inherits the host env directly.
     const { execResult, dockerResult, dockerConfig: activeDockerConfig } = spawnExec(
-      mod, runtimeEnv, outDir, workspaceRoot, metaFile, "default", runArgs, isTTY, extraEnv,
+      mod, runtimeEnv, outDir, workspaceRoot, metaFile, "default", runArgs, isTTY,
+      { ...trustedPlan.resolved, ...extraEnv },
     );
 
     // On interrupt, stop+remove the container (docker run --rm can outlive its
