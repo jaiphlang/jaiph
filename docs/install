@@ -235,11 +235,11 @@ else
     exit 1
   fi
 
-  # Jaiph release signing public key (minisign).
+  # Jaiph release signing public key (minisign). Canonical copy: jaiph.pub (repo root).
   # Releases are signed with: minisign -S -s jaiph.key -m SHA256SUMS
   # Verify manually:          minisign -V -P "${JAIPH_MINISIGN_PUBLIC_KEY}" -m SHA256SUMS
   # Key generation/rotation:  see docs/contributing.md → "Release signing"
-  JAIPH_MINISIGN_PUBLIC_KEY="${JAIPH_MINISIGN_PUBLIC_KEY:-}"
+  JAIPH_MINISIGN_PUBLIC_KEY="${JAIPH_MINISIGN_PUBLIC_KEY:-RWTQyxCqm5agwxi7ZwlGHc/kwGqT7QQjy9FxNGQGM/Y+m6LWsrk2l4fQ}"
   if [ -n "${JAIPH_MINISIGN_PUBLIC_KEY}" ] && command -v minisign >/dev/null 2>&1; then
     print_step "Verifying release signature..."
     if ! minisign -V -P "${JAIPH_MINISIGN_PUBLIC_KEY}" -m "${tmp_dir}/SHA256SUMS" \
@@ -251,9 +251,8 @@ else
     fi
     print_success "Release signature verified"
   else
-    print_warning "Skipping detached-signature verification (minisign not installed or key not configured)"
+    print_warning "Skipping detached-signature verification (minisign not installed)"
     echo "  Install minisign for full verification: https://jedisct1.github.io/minisign/" >&2
-    echo "  Or set JAIPH_MINISIGN_PUBLIC_KEY to the project public key." >&2
   fi
 
   print_step "Verifying checksum..."
