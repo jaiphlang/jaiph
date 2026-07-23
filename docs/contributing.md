@@ -246,6 +246,8 @@ Releases sign `SHA256SUMS` with [minisign](https://jedisct1.github.io/minisign/)
 
 **Maintainers:** generate once with `minisign -G -W -p jaiph.pub -s jaiph.key -f` (no passphrase; `-W` still labels the file "encrypted secret key" but uses an empty password). Store **`jaiph.key`** (not `jaiph.pub`) as the `MINISIGN_SECRET_KEY` GitHub Actions secret — paste both lines, or `base64 -w0 jaiph.key` as a single line. Commit `jaiph.pub` and keep installer defaults in sync.
 
+**Key rotation:** generate a new keypair with the same command, commit the new `jaiph.pub`, update the embedded public key in both installers, rotate `MINISIGN_SECRET_KEY` in GitHub Actions, and cut a release signed with the new key. Until users upgrade to a release that ships the new public key, they can verify with `JAIPH_MINISIGN_PUBLIC_KEY` (see [Verify the release signature](setup.md#verify-the-release-signature)).
+
 Manual verification: [Install & switch versions — Verify the release signature](setup.md#verify-the-release-signature).
 
 **Dockerfile toolchain verification.** `runtime/Dockerfile` pins each remote installer script via build ARGs (`UV_INSTALL_SHA256`, `RUSTUP_INIT_SHA256`, `BUN_INSTALL_SHA256`, `CURSOR_INSTALL_SHA256`). ARGs default to empty (skip verification) for development; CI/release builds should populate them with the SHA256 of each installer script at the pinned version. The NodeSource APT block uses GPG-signed packages directly — no installer script execution.
