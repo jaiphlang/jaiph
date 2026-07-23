@@ -76,17 +76,17 @@ This prints `jaiph <version>` (sourced from the installed release at build time)
 
 ## Verify the release signature
 
-Every release ships a `SHA256SUMS` file covering all binaries plus a detached [minisign](https://jedisct1.github.io/minisign/) signature `SHA256SUMS.minisig`. The installer downloads both and always requires the signature file to be present; when `minisign` is on `PATH` it verifies the signature with the project public key embedded in the installer (same `RW…` line as `jaiph.pub` in the repo root).
+Every release ships `SHA256SUMS` and a detached [minisign](https://jedisct1.github.io/minisign/) signature `SHA256SUMS.minisig`. The installer downloads both and verifies when `minisign` is on `PATH`.
 
-To verify a release manually (for example assets downloaded from the GitHub Release page):
+From a checkout of this repo:
 
 ```bash
-minisign -V -P "RWTQyxCqm5agwxi7ZwlGHc/kwGqT7QQjy9FxNGQGM/Y+m6LWsrk2l4fQ" -m SHA256SUMS -x SHA256SUMS.minisig
+minisign -V -P "$(grep '^RW' jaiph.pub)" -m SHA256SUMS -x SHA256SUMS.minisig
 ```
 
-Override the key with `JAIPH_MINISIGN_PUBLIC_KEY` only when testing key rotation.
+Override with `JAIPH_MINISIGN_PUBLIC_KEY` only when testing a key rotation before merge.
 
-For the signing trust model, the project public key, and key-rotation policy, see [Contributing — Release signing](contributing.md#release-signing).
+For maintainer setup, see [Contributing — Release signing](contributing.md#release-signing).
 
 ## Related
 
