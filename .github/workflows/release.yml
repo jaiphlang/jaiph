@@ -198,6 +198,7 @@ jobs:
         working-directory: release-assets
         env:
           MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
+          MINISIGN_PASSPHRASE: ${{ secrets.MINISIGN_PASSPHRASE }}
         run: |
           set -euo pipefail
           rm -f SHA256SUMS.minisig
@@ -208,9 +209,31 @@ jobs:
             echo "(GitHub rejects 0-byte release assets with HTTP 400 Bad Content-Length)." >&2
           else
             command -v minisign >/dev/null
-            printf '%s' "${MINISIGN_SECRET_KEY}" > /tmp/jaiph-release.key
-            minisign -S -s /tmp/jaiph-release.key -m SHA256SUMS -x SHA256SUMS.minisig
-            rm -f /tmp/jaiph-release.key
+            key_file="$(mktemp)"
+            cleanup() { rm -f "${key_file}"; }
+            trap cleanup EXIT
+            printf '%s' "${MINISIGN_SECRET_KEY}" > "${key_file}"
+            chmod 600 "${key_file}"
+
+            if ! head -1 "${key_file}" | grep -q '^untrusted comment: minisign'; then
+              echo "MINISIGN_SECRET_KEY does not look like a minisign secret key (missing header line)." >&2
+              echo "Paste the full jaiph.key file into the secret, not just the base64 body line." >&2
+              exit 1
+            fi
+
+            sign_args=(-S -s "${key_file}" -m SHA256SUMS -x SHA256SUMS.minisig)
+            if grep -q 'encrypted secret key' "${key_file}"; then
+              if [ -z "${MINISIGN_PASSPHRASE:-}" ]; then
+                echo "MINISIGN_SECRET_KEY is password-protected but MINISIGN_PASSPHRASE is not set." >&2
+                echo "Set MINISIGN_PASSPHRASE in GitHub Actions secrets, or regenerate a CI key with:" >&2
+                echo "  minisign -G -W -p jaiph.pub -s jaiph.key -f" >&2
+                exit 1
+              fi
+              export MINISIGN_PASSWORD="${MINISIGN_PASSPHRASE}"
+              printf '%s\n' "${MINISIGN_PASSPHRASE}" | minisign "${sign_args[@]}"
+            else
+              minisign "${sign_args[@]}"
+            fi
             echo "SHA256SUMS.minisig written."
           fi
 

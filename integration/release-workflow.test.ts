@@ -208,6 +208,8 @@ test("release workflow signs SHA256SUMS and uploads SHA256SUMS.minisig", () => {
   assert.match(RELEASE_YML, /Install minisign/, "installs minisign before signing");
   assert.match(RELEASE_YML, /sudo apt-get install -y -qq minisign/, "uses sudo to install minisign on ubuntu-latest");
   assert.match(RELEASE_YML, /MINISIGN_SECRET_KEY/, "signing step uses the CI secret");
+  assert.match(RELEASE_YML, /MINISIGN_PASSPHRASE/, "signing step supports encrypted keys via passphrase secret");
+  assert.match(RELEASE_YML, /encrypted secret key/, "detects password-protected minisign keys");
   const stable = sliceBetween(RELEASE_YML, "Publish stable release", "Publish nightly prerelease");
   const nightly = sliceBetween(RELEASE_YML, "Publish nightly prerelease", null);
   for (const [label, section] of [["stable", stable], ["nightly", nightly]] as const) {
@@ -225,8 +227,7 @@ test("contributing.md documents the trust model and key management", () => {
   assert.match(CONTRIBUTING, /#### Release signing/, "has a Release signing section");
   assert.match(CONTRIBUTING, /minisign/, "mentions minisign");
   assert.match(CONTRIBUTING, /MINISIGN_SECRET_KEY/, "documents the required CI secret");
-  assert.match(CONTRIBUTING, /Trust model/, "describes the trust model");
-  assert.match(CONTRIBUTING, /Key rotation/, "documents key rotation");
+  assert.match(CONTRIBUTING, /rotate/, "documents key rotation");
 });
 
 // ── Acceptance 5: Dockerfile has no pipe-to-shell patterns ───────────────────

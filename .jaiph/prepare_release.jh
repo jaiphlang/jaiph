@@ -296,9 +296,7 @@ workflow default(arg) {
       1. Review the diff (git diff) — especially CHANGELOG.md
       2. Commit the staged changes
       3. Confirm MINISIGN_SECRET_KEY is set in GitHub Actions secrets
-         (Settings → Secrets → Actions). Without it, release.yml skips
-         SHA256SUMS.minisig and curl|bash / irm|iex installers fail closed.
-         See docs/contributing.md → Release signing.
+         (see docs/contributing.md → Release signing).
       4. Tag: git tag v${version}
       5. Push branch + tag (tag push triggers docker-publish and release.yml)
       6. Smoke check: jaiph use ${version}

@@ -108,7 +108,7 @@ try {
   $JaiphMinisignKey = if ($env:JAIPH_MINISIGN_PUBLIC_KEY) {
     $env:JAIPH_MINISIGN_PUBLIC_KEY
   } else {
-    "RWTQyxCqm5agwxi7ZwlGHc/kwGqT7QQjy9FxNGQGM/Y+m6LWsrk2l4fQ"
+    "RWSSXpVKgVIX79jsA5r833g6yWwkO+Ka5HAtSjrN1V7t4+qP4zSOIlWy"
   }
   $minisignCmd = Get-Command "minisign" -ErrorAction SilentlyContinue
   if ($JaiphMinisignKey -and $minisignCmd) {

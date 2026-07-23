@@ -239,7 +239,7 @@ else
   # Releases are signed with: minisign -S -s jaiph.key -m SHA256SUMS
   # Verify manually:          minisign -V -P "${JAIPH_MINISIGN_PUBLIC_KEY}" -m SHA256SUMS
   # Key generation/rotation:  see docs/contributing.md → "Release signing"
-  JAIPH_MINISIGN_PUBLIC_KEY="${JAIPH_MINISIGN_PUBLIC_KEY:-RWTQyxCqm5agwxi7ZwlGHc/kwGqT7QQjy9FxNGQGM/Y+m6LWsrk2l4fQ}"
+  JAIPH_MINISIGN_PUBLIC_KEY="${JAIPH_MINISIGN_PUBLIC_KEY:-RWSSXpVKgVIX79jsA5r833g6yWwkO+Ka5HAtSjrN1V7t4+qP4zSOIlWy}"
   if [ -n "${JAIPH_MINISIGN_PUBLIC_KEY}" ] && command -v minisign >/dev/null 2>&1; then
     print_step "Verifying release signature..."
     if ! minisign -V -P "${JAIPH_MINISIGN_PUBLIC_KEY}" -m "${tmp_dir}/SHA256SUMS" \
