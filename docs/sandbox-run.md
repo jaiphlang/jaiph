@@ -24,6 +24,8 @@ jaiph run ./flow.jh
 
 Docker is **on by default**. In the default **snapshot mode** the CLI takes a **writable point-in-time snapshot** of the workspace at run start — a host-side clone (block-level copy-on-write where the filesystem supports it, a plain data copy otherwise) placed at `<run dir>/sandbox` (under `.jaiph/runs/` by default) — and bind-mounts that snapshot read-write at `/jaiph/workspace`. The live host workspace is never mounted into the container: host edits during the run are invisible to it, and the container's workspace writes are discarded when the snapshot is deleted at exit.
 
+The snapshot content is **git-defined**: in a git workspace it contains exactly the files git tracks or reports as untracked-but-not-ignored, plus `.git/` — gitignored paths (`node_modules/`, `.env`, build output) are **absent**, not just empty. A workflow that builds or tests therefore installs its dependencies inside the container (`npm install`, `pip install`, …), the same as a fresh CI checkout. A non-git workspace falls back to copying everything. See [Sandboxing — What the snapshot contains](sandboxing.md#snapshot-content).
+
 The host checkout is unmodified after the run. Run artifacts always land under host `.jaiph/runs/` via a separate read-write mount, and the snapshot source is masked from the container's own `/jaiph/run` view by a tmpfs so the run cannot read it back.
 
 Snapshot mode **never elevates**: the container runs with `--cap-drop ALL` and **zero** cap-adds, `--security-opt no-new-privileges`, no `--device`, no AppArmor exception, and on Linux as your own UID/GID from the first instruction. There is no device probing and no capability-posture knob to tune.
