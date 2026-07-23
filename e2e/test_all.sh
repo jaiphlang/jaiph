@@ -27,6 +27,7 @@ TEST_SCRIPTS=(
   "e2e/tests/74b_docker_signal_cleanup.sh"
   "e2e/tests/74c_docker_prepull.sh"
   "e2e/tests/74d_docker_snapshot_isolation.sh"
+  "e2e/tests/74e_docker_git_snapshot_content.sh"
   "e2e/tests/74_live_step_output.sh"
   "e2e/tests/76_docker_failure_parity.sh"
   "e2e/tests/77_unsafe_confirm.sh"

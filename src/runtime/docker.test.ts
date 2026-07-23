@@ -37,7 +37,8 @@ import {
 import { VERSION } from "../version";
 import { mkdtempSync, writeFileSync, mkdirSync, existsSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join, resolve, relative } from "node:path";
+import { execFileSync } from "node:child_process";
 
 /** Shared temp workspace for buildDockerArgs tests. */
 const TEST_WS = mkdtempSync(join(tmpdir(), "jaiph-test-ws-"));
@@ -1430,6 +1431,196 @@ test("allocateSandboxWorkspaceDir: creates <runsRoot>/sandbox (unique per run di
     assert.ok(existsSync(a));
   } finally {
     rmSync(runsRoot, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// cloneWorkspaceForSandbox: git-defined snapshot content
+// ---------------------------------------------------------------------------
+
+/** Init a deterministic git repo in `dir` (no signing, fixed identity). */
+function gitInit(dir: string): void {
+  const opts = { cwd: dir, stdio: "ignore" as const };
+  execFileSync("git", ["init", "-q"], opts);
+  execFileSync("git", ["config", "user.email", "t@t.test"], opts);
+  execFileSync("git", ["config", "user.name", "Test"], opts);
+  execFileSync("git", ["config", "commit.gpgsign", "false"], opts);
+}
+
+function gitRun(dir: string, ...args: string[]): void {
+  execFileSync("git", args, { cwd: dir, stdio: "ignore" });
+}
+
+/** Collect workspace-relative file paths under `root`, skipping `.git/`. */
+function walkFiles(root: string, base = root): string[] {
+  const out: string[] = [];
+  for (const entry of readdirSync(root, { withFileTypes: true })) {
+    if (entry.name === ".git") continue;
+    const p = join(root, entry.name);
+    if (entry.isDirectory()) out.push(...walkFiles(p, base));
+    else out.push(relative(base, p));
+  }
+  return out.sort();
+}
+
+test("cloneWorkspaceForSandbox: git snapshot content is git-defined and mechanism-independent", () => {
+  // The clone must contain exactly {tracked, untracked-not-ignored} — the
+  // gitignored file AND the gitignored directory are absent (never scanned) —
+  // and the selection must not depend on which `cp` mechanism runs. We prove
+  // that by recording the source paths handed to `cp` under both the darwin
+  // (clonefile) and linux (reflink) code paths and asserting identical sets.
+  const src = mkdtempSync(join(tmpdir(), "jaiph-git-src-"));
+  try {
+    gitInit(src);
+    writeFileSync(join(src, "tracked.txt"), "t");
+    gitRun(src, "add", "tracked.txt");
+    gitRun(src, "commit", "-qm", "init");
+    writeFileSync(join(src, "untracked.txt"), "u");
+    writeFileSync(join(src, ".gitignore"), ".env\nnode_modules/\n");
+    writeFileSync(join(src, ".env"), "SECRET=1");
+    mkdirSync(join(src, "node_modules", "pkg"), { recursive: true });
+    writeFileSync(join(src, "node_modules", "pkg", "index.js"), "x");
+
+    const collectFor = (platform: string): string[] => {
+      const origPlatform = Object.getOwnPropertyDescriptor(process, "platform");
+      Object.defineProperty(process, "platform", { value: platform, configurable: true });
+      const origCp = _cpSpawn.run;
+      const copied: string[] = [];
+      _cpSpawn.run = (args) => {
+        copied.push(args[args.length - 2]); // src is the penultimate arg for every cp flag set
+        return { status: 0, stderr: "" };
+      };
+      try {
+        const dst = mkdtempSync(join(tmpdir(), "jaiph-git-dst-"));
+        try {
+          cloneWorkspaceForSandbox(src, dst);
+        } finally {
+          rmSync(dst, { recursive: true, force: true });
+        }
+      } finally {
+        _cpSpawn.run = origCp;
+        if (origPlatform) Object.defineProperty(process, "platform", origPlatform);
+      }
+      return copied.map((p) => relative(src, p)).sort();
+    };
+
+    const darwin = collectFor("darwin");
+    const linux = collectFor("linux");
+
+    assert.deepStrictEqual(darwin, linux, "content set must not depend on the copy mechanism");
+    // Present: the tracked file, the untracked non-ignored file, .gitignore, and .git wholesale.
+    assert.deepStrictEqual(darwin, [".git", ".gitignore", "tracked.txt", "untracked.txt"]);
+    // Absent: the gitignored file and the entire gitignored directory (not even scanned).
+    assert.ok(!darwin.includes(".env"), "gitignored .env must be absent");
+    assert.ok(!darwin.some((p) => p.startsWith("node_modules")), "gitignored node_modules/ must be absent");
+  } finally {
+    rmSync(src, { recursive: true, force: true });
+  }
+});
+
+test("cloneWorkspaceForSandbox: nested .gitignore with a ! negation matches git exactly", () => {
+  // Proves git is the oracle: a nested ignore + `!` re-include is a case a
+  // hand-rolled matcher or rsync `:- .gitignore` filter would get wrong.
+  const src = mkdtempSync(join(tmpdir(), "jaiph-neg-src-"));
+  const dst = mkdtempSync(join(tmpdir(), "jaiph-neg-dst-"));
+  try {
+    gitInit(src);
+    writeFileSync(join(src, ".gitignore"), "*.log\n!important.log\n");
+    writeFileSync(join(src, "a.txt"), "a");
+    writeFileSync(join(src, "debug.log"), "d"); // ignored
+    writeFileSync(join(src, "important.log"), "i"); // re-included
+    mkdirSync(join(src, "nested"), { recursive: true });
+    writeFileSync(join(src, "nested", ".gitignore"), "!*.log\n"); // un-ignore logs here
+    writeFileSync(join(src, "nested", "trace.log"), "n"); // present again
+    gitRun(src, "add", "-A");
+    gitRun(src, "commit", "-qm", "init");
+
+    cloneWorkspaceForSandbox(src, dst);
+
+    // The oracle: exactly what git reports (filtered to files that exist on disk).
+    const oracle = execFileSync(
+      "git",
+      ["-C", src, "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
+      { encoding: "utf8" },
+    )
+      .split("\0")
+      .filter((p) => p.length > 0)
+      .filter((p) => existsSync(join(src, p)))
+      .sort();
+
+    assert.deepStrictEqual(walkFiles(dst), oracle, "snapshot content must equal git's answer");
+    assert.ok(walkFiles(dst).includes("important.log"), "re-included file present");
+    assert.ok(walkFiles(dst).includes(join("nested", "trace.log")), "nested-negated file present");
+    assert.ok(!walkFiles(dst).includes("debug.log"), "root-ignored .log absent");
+  } finally {
+    rmSync(src, { recursive: true, force: true });
+    rmSync(dst, { recursive: true, force: true });
+  }
+});
+
+test("cloneWorkspaceForSandbox: .git is present and functional in the clone", () => {
+  const src = mkdtempSync(join(tmpdir(), "jaiph-dotgit-src-"));
+  const dst = mkdtempSync(join(tmpdir(), "jaiph-dotgit-dst-"));
+  try {
+    gitInit(src);
+    writeFileSync(join(src, "f.txt"), "f");
+    gitRun(src, "add", "-A");
+    gitRun(src, "commit", "-qm", "init");
+    const srcHead = execFileSync("git", ["-C", src, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+
+    cloneWorkspaceForSandbox(src, dst);
+
+    assert.ok(existsSync(join(dst, ".git")), ".git present in clone");
+    // git works against the clone and sees the same history.
+    const dstHead = execFileSync("git", ["-C", dst, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+    assert.equal(dstHead, srcHead, "git log/history is functional inside the clone");
+  } finally {
+    rmSync(src, { recursive: true, force: true });
+    rmSync(dst, { recursive: true, force: true });
+  }
+});
+
+test("cloneWorkspaceForSandbox: non-git workspace falls back to copy-everything", () => {
+  const src = mkdtempSync(join(tmpdir(), "jaiph-nogit-src-"));
+  const dst = mkdtempSync(join(tmpdir(), "jaiph-nogit-dst-"));
+  try {
+    // No `.git` at the root → fallback. An "ignored-looking" file has no git to
+    // consult, so it is copied.
+    writeFileSync(join(src, ".env"), "SECRET=1");
+    mkdirSync(join(src, "node_modules"), { recursive: true });
+    writeFileSync(join(src, "node_modules", "x.js"), "x");
+    writeFileSync(join(src, "keep.txt"), "k");
+
+    cloneWorkspaceForSandbox(src, dst);
+
+    assert.ok(existsSync(join(dst, ".env")), "ignored-looking file present in non-git fallback");
+    assert.ok(existsSync(join(dst, "node_modules", "x.js")), "everything is copied in non-git fallback");
+    assert.ok(existsSync(join(dst, "keep.txt")));
+  } finally {
+    rmSync(src, { recursive: true, force: true });
+    rmSync(dst, { recursive: true, force: true });
+  }
+});
+
+test("cloneWorkspaceForSandbox: tracked-but-deleted-from-worktree file does not fail the clone", () => {
+  // `git ls-files --cached` lists a tracked file that was removed from the
+  // worktree; the on-disk walk must skip it without erroring.
+  const src = mkdtempSync(join(tmpdir(), "jaiph-del-src-"));
+  const dst = mkdtempSync(join(tmpdir(), "jaiph-del-dst-"));
+  try {
+    gitInit(src);
+    writeFileSync(join(src, "gone.txt"), "g");
+    writeFileSync(join(src, "here.txt"), "h");
+    gitRun(src, "add", "-A");
+    gitRun(src, "commit", "-qm", "init");
+    rmSync(join(src, "gone.txt")); // deleted from worktree, still in the index
+
+    assert.doesNotThrow(() => cloneWorkspaceForSandbox(src, dst));
+    assert.ok(!existsSync(join(dst, "gone.txt")), "deleted-from-worktree file is absent");
+    assert.ok(existsSync(join(dst, "here.txt")), "surviving tracked file is present");
+  } finally {
+    rmSync(src, { recursive: true, force: true });
+    rmSync(dst, { recursive: true, force: true });
   }
 });
 

@@ -1,7 +1,7 @@
 import { execFileSync, spawn, spawnSync, ChildProcess } from "node:child_process";
-import { mkdirSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import { mkdirSync, readFileSync, readdirSync, rmSync, existsSync } from "node:fs";
 import { randomBytes } from "node:crypto";
-import { join, resolve, relative, sep } from "node:path";
+import { join, resolve, relative, sep, dirname } from "node:path";
 import type { RuntimeConfig } from "../types";
 import { VERSION } from "../version";
 import { killProcessTree } from "./kernel/portability";
@@ -369,6 +369,46 @@ function tryCp(flags: string[], src: string, dst: string): { ok: boolean; stderr
 }
 
 /**
+ * Test seam for `git ls-files` — lets the snapshot content-policy tests assert
+ * on the git-driven file selection without a real repo, and lets callers inject
+ * a deterministic file list.
+ *
+ * `ok: false` means "not a git workspace" (git absent, no repo, or the command
+ * failed): the caller falls back to copy-everything. Paths are workspace-
+ * relative, `/`-separated (git's native output), NUL-split from `-z`.
+ */
+export const _gitLsFiles = {
+  run(srcRootAbs: string): { ok: boolean; paths: string[] } {
+    try {
+      const out = execFileSync(
+        "git",
+        ["-C", srcRootAbs, "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
+        { encoding: "utf8", maxBuffer: 512 * 1024 * 1024 },
+      );
+      return { ok: true, paths: out.split("\0").filter((p) => p.length > 0) };
+    } catch {
+      return { ok: false, paths: [] };
+    }
+  },
+};
+
+/**
+ * Resolve the workspace-relative paths that make up a git snapshot, or `null`
+ * for a non-git workspace (no `.git` at the root, or `git ls-files` failed) —
+ * signalling the copy-everything fallback.
+ *
+ * git is the single gitignore oracle: the returned list is exactly
+ * `git ls-files --cached --others --exclude-standard` (tracked + untracked-but-
+ * not-ignored). We never reimplement ignore semantics (nested ignores, `!`
+ * negations, `.git/info/exclude`, global excludes) — those all live in git's answer.
+ */
+function gitSnapshotRelPaths(srcRootAbs: string): string[] | null {
+  if (!existsSync(join(srcRootAbs, ".git"))) return null;
+  const r = _gitLsFiles.run(srcRootAbs);
+  return r.ok ? r.paths : null;
+}
+
+/**
  * Handles workspace cloning with automatic clonefile detection and fallback.
  *
  * On macOS, the first `copy()` call probes `cp -cR` (APFS clonefile, O(1)).
@@ -429,16 +469,31 @@ class WorkspaceCloner {
 /**
  * Clone the host workspace into a sandbox directory.
  *
+ * Copy mechanism (identical for both content policies below):
  * - macOS: tries `cp -cR` (APFS clonefile, O(1)); on failure, falls back to
  *   `cp -pR` (real copy) with a single stderr warning noting the reason.
  * - Linux/other: uses `cp --reflink=auto -pR` (block-level CoW on btrfs/XFS,
  *   transparent data-copy fallback on ext4 and cross-filesystem destinations).
  *
- * Excludes `.jaiph/runs` (mounted separately at `/jaiph/run`) and `.git/objects`
- * is intentionally NOT excluded — workflows may need git history.
+ * Content policy (uniform across every platform and copy mechanism — what the
+ * container sees never depends on which `cp` variant ran):
+ * - **Git workspace** (`.git` at the root and `git ls-files` succeeds): the
+ *   snapshot contains exactly the files git reports (tracked + untracked-but-
+ *   not-ignored, via `git ls-files --cached --others --exclude-standard`) plus
+ *   `.git/` wholesale (workflows need history and commit inside the sandbox).
+ *   Gitignored files (`.env`, `node_modules/`, …) are **absent** — never copied,
+ *   never even scanned. git is the only gitignore oracle; we consume its list
+ *   rather than reimplement ignore semantics. Submodule directories appear as a
+ *   single gitlink path in the list and are copied wholesale as opaque dirs.
+ *   Tracked-but-deleted-from-worktree paths are silently skipped (the on-disk
+ *   walk only copies entries that exist).
+ * - **Non-git workspace**: copy everything (minus the runs root). This is the
+ *   documented fallback — an "ignored-looking" file with no git to consult is
+ *   copied.
  *
- * `runsRootAbs` additionally excludes the actual configured runs directory
- * when `JAIPH_RUNS_DIR` points somewhere other than `.jaiph/runs` (defaults to
+ * Both policies still exclude `.jaiph/runs` (mounted separately at `/jaiph/run`).
+ * `runsRootAbs` additionally excludes the actual configured runs directory when
+ * `JAIPH_RUNS_DIR` points somewhere other than `.jaiph/runs` (defaults to
  * `.jaiph/runs` when omitted). Without this, a runs dir nested inside the
  * workspace (e.g. a relative `JAIPH_RUNS_DIR`) would have the sandbox clone
  * created *inside* it, and GNU `cp` refuses to copy a directory into itself.
@@ -454,20 +509,75 @@ export function cloneWorkspaceForSandbox(
   const excludes = new Set([defaultRunsRoot, runsRootAbs ? resolve(runsRootAbs) : defaultRunsRoot]);
   const cloner = new WorkspaceCloner();
 
-  const copyDir = (srcDir: string, dstDir: string): void => {
+  // Excludes-aware entry-by-entry recursion. Used for the non-git fallback and
+  // for the `.git/` wholesale copy when the runs dir is nested inside `.git`
+  // (unusual). Prunes at directory granularity: an excluded subtree is skipped.
+  const copyDirExcluding = (srcDir: string, dstDir: string): void => {
     mkdirSync(dstDir, { recursive: true });
     for (const entry of readdirSync(srcDir, { withFileTypes: true })) {
       const srcPath = join(srcDir, entry.name);
       if (excludes.has(srcPath)) continue;
       if (entry.isDirectory() && [...excludes].some((ex) => ex.startsWith(srcPath + sep))) {
-        copyDir(srcPath, join(dstDir, entry.name));
+        copyDirExcluding(srcPath, join(dstDir, entry.name));
         continue;
       }
       cloner.copy(srcPath, join(dstDir, entry.name));
     }
   };
 
-  copyDir(srcRootAbs, dstRoot);
+  const gitPaths = gitSnapshotRelPaths(srcRootAbs);
+  if (gitPaths === null) {
+    // Non-git fallback: copy everything (minus the runs root).
+    copyDirExcluding(srcRootAbs, dstRoot);
+  } else {
+    // Git workspace: copy exactly git's file list, pruning at directory
+    // granularity. `allowedFiles` are the leaf paths to copy; `allowedDirs` are
+    // the ancestor directories we descend into — an entirely-ignored subtree
+    // (e.g. `node_modules/`) is in neither set, so it is never scanned.
+    const allowedFiles = new Set<string>();
+    const allowedDirs = new Set<string>();
+    for (const rel of gitPaths) {
+      const abs = join(srcRootAbs, rel);
+      if (excludes.has(abs) || [...excludes].some((ex) => abs.startsWith(ex + sep))) continue;
+      allowedFiles.add(abs);
+      for (let dir = dirname(abs); dir !== srcRootAbs && dir.startsWith(srcRootAbs + sep); dir = dirname(dir)) {
+        allowedDirs.add(dir);
+      }
+    }
+
+    const copyGitDir = (srcDir: string, dstDir: string): void => {
+      mkdirSync(dstDir, { recursive: true });
+      for (const entry of readdirSync(srcDir, { withFileTypes: true })) {
+        const srcPath = join(srcDir, entry.name);
+        if (entry.isDirectory()) {
+          if (allowedDirs.has(srcPath)) {
+            copyGitDir(srcPath, join(dstDir, entry.name));
+          } else if (allowedFiles.has(srcPath)) {
+            // Submodule gitlink: git lists it as a single opaque path. Copy the
+            // whole directory (recursion into it would find nothing allowed).
+            cloner.copy(srcPath, join(dstDir, entry.name));
+          }
+          // Otherwise entirely ignored: pruned — never scanned or recursed.
+        } else if (allowedFiles.has(srcPath)) {
+          cloner.copy(srcPath, join(dstDir, entry.name));
+        }
+        // A tracked-but-deleted path never appears in this on-disk walk.
+      }
+    };
+    copyGitDir(srcRootAbs, dstRoot);
+
+    // `.git/` wholesale — workflows need history/commit inside the sandbox.
+    const gitDir = join(srcRootAbs, ".git");
+    if (existsSync(gitDir)) {
+      if ([...excludes].some((ex) => ex.startsWith(gitDir + sep))) {
+        // Runs dir nested inside `.git` (unusual): recurse with the excludes
+        // filter so the snapshot source is not copied into itself.
+        copyDirExcluding(gitDir, join(dstRoot, ".git"));
+      } else {
+        cloner.copy(gitDir, join(dstRoot, ".git"));
+      }
+    }
+  }
 
   if (process.platform === "darwin" && cloner.fellBackToPlainCopy) {
     warn(
