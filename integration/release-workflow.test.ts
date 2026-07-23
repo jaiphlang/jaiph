@@ -205,6 +205,8 @@ test("installer and its e2e test can only produce asset names the contract lists
 
 test("release workflow signs SHA256SUMS and uploads SHA256SUMS.minisig", () => {
   assert.match(RELEASE_YML, /Sign SHA256SUMS with minisign/, "has a signing step");
+  assert.match(RELEASE_YML, /Install minisign/, "installs minisign before signing");
+  assert.match(RELEASE_YML, /sudo apt-get install -y -qq minisign/, "uses sudo to install minisign on ubuntu-latest");
   assert.match(RELEASE_YML, /MINISIGN_SECRET_KEY/, "signing step uses the CI secret");
   const stable = sliceBetween(RELEASE_YML, "Publish stable release", "Publish nightly prerelease");
   const nightly = sliceBetween(RELEASE_YML, "Publish nightly prerelease", null);
