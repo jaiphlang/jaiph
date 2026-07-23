@@ -47,9 +47,8 @@ The table below covers every `JAIPH_*` name read from `process.env` / `env` in `
 | `JAIPH_DEBUG_LOCKED` | internal | bool | — | — | Lock flag for `JAIPH_DEBUG`. |
 | `JAIPH_DOCKER_ENABLED` | host | bool (exact `true`) | — | — | Force Docker on (`true`) or off (any other value). When unset, Docker is on unless `JAIPH_UNSAFE=true`. Ignored on Windows (`win32`), where the sandbox is out of scope and runs are always host-only. |
 | `JAIPH_DOCKER_IMAGE` | host | string | `ghcr.io/jaiphlang/jaiph-runtime:<version>` | `runtime.docker_image` | Container image. Must already contain `jaiph`. |
-| `JAIPH_DOCKER_KEEP_SANDBOX` | host | bool (`1` / `true`) | `false` | — | Copy mode only — when enabled, leave the host-side `.sandbox-<id>/` clone on disk after exit for debugging. |
+| `JAIPH_DOCKER_KEEP_SANDBOX` | host | bool (`1` / `true`) | `false` | — | Snapshot mode only — when enabled, leave the host-side workspace snapshot at `<run dir>/sandbox` on disk after exit for debugging. |
 | `JAIPH_DOCKER_NETWORK` | host | string (`default`, `none`, or named network) | `default` | `runtime.docker_network` | `docker run --network` value. `none` disables egress. |
-| `JAIPH_DOCKER_NO_OVERLAY` | host | bool (`1` / `true`) | `false` | — | Force copy mode even when `/dev/fuse` is available — picks the non-elevated posture (no added caps, no `apparmor=unconfined`) at the cost of a per-run workspace copy. See [Sandboxing](sandboxing.md#overlay-capability-posture). |
 | `JAIPH_DOCKER_TIMEOUT` | host | int (seconds) | `14400` (4h) | `runtime.docker_timeout_seconds` | Container execution timeout. `0` disables. Invalid values produce `E_DOCKER_TIMEOUT`. |
 | `JAIPH_INBOX_MAX_DISPATCH` | runtime | int | `1000` | — | Maximum inbox messages a single workflow frame may drain before aborting with `E_INBOX_DISPATCH_LIMIT`. |
 | `JAIPH_INBOX_PARALLEL` | — | — | — | — | Unused — the runtime does not read this variable (tests assert setting it has no effect on inbox dispatch order). |
@@ -91,12 +90,11 @@ The table below covers every `JAIPH_*` name read from `process.env` / `env` in `
 
 ### Internal Docker-only variables
 
-Three more variables are set by the host CLI on the Docker container but are **not** in the table above: the source-parity harness tracks only names accessed through a literal `env.JAIPH_*` / `process.env["JAIPH_*"]` read in `src/`, and these escape that pattern. They are managed entirely by the CLI — never export them by hand.
+One more variable is set by the host CLI on the Docker container but is **not** in the table above: the source-parity harness tracks only names accessed through a literal `env.JAIPH_*` / `process.env["JAIPH_*"]` read in `src/`, and this one escapes that pattern. It is managed entirely by the CLI — never export it by hand.
 
 | Variable | Scope | Role |
 |---|---|---|
 | `JAIPH_RUN_WORKFLOW` | internal | Root workflow symbol the inner `jaiph run --raw` executes. Set as `-e` only for a non-`default` root (for example an MCP tool call); read back in the container by `runWorkflowRaw` through a computed key. Reserved from `--env` (`E_ENV_RESERVED`). |
-| `JAIPH_HOST_UID` / `JAIPH_HOST_GID` | internal | Host UID/GID, forwarded in overlay mode only. `overlay-run.sh` uses them to `setpriv` the run down to the invoking user so artifacts written to `/jaiph/run` keep host ownership. |
 
 ## Agent credentials
 
@@ -138,10 +136,9 @@ These error codes surface during Docker-backed `jaiph run` invocations. They are
 | `E_DOCKER_PULL` | `docker pull` fails (network error, image not found, auth failure). | Run exits before launch. |
 | `E_DOCKER_NO_JAIPH` | Selected image does not contain a `jaiph` CLI. | Run exits before launch. |
 | `E_DOCKER_RUNS_DIR` | Absolute `JAIPH_RUNS_DIR` points outside the workspace. | Run exits before launch. |
-| `E_DOCKER_OVERLAY` | Overlay mode selected but `fuse-overlayfs` is missing or the mount fails. | Container exits with code 78. |
 | `E_DOCKER_TIMEOUT` | `JAIPH_DOCKER_TIMEOUT` is empty, non-numeric, negative, or has trailing junk; or `runtime.docker_timeout_seconds` is negative. | Run exits before launch. |
 | `E_DOCKER_UID` | Linux host UID/GID detection failed. | Run exits before launch. |
-| `E_DOCKER_SANDBOX_COPY` | Copy mode failed to clone the host workspace. | Run exits before launch. |
+| `E_DOCKER_SANDBOX_COPY` | Snapshot mode failed to clone the host workspace. | Run exits before launch. |
 | `E_DOCKER_INPLACE_NO_CONFIRM` | `JAIPH_INPLACE` is set but stdin is not a TTY and `JAIPH_INPLACE_YES` is not set. | Run exits before launch. |
 | `E_UNSAFE_NO_CONFIRM` | Unsafe host-only run (`JAIPH_UNSAFE=true` / `--unsafe`, Docker otherwise on) but stdin is not a TTY and `JAIPH_INPLACE_YES` is not set. | Run exits before launch. |
 | `E_FLAG_CONFLICT` | `--inplace` / `JAIPH_INPLACE` and `--unsafe` / `JAIPH_UNSAFE=true` are both set. | Run exits before launch. |

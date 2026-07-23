@@ -8,8 +8,8 @@
 #
 # Contract asserted here (SIGINT on the host `jaiph` PID):
 #   1. The container is gone from `docker ps` within a bounded window (15s).
-#   2. Host cleanup still runs: no `.sandbox-*` clones remain under the runs root.
-#   3. Holds for copy/inplace-style fixtures and for a nested long-lived shell
+#   2. Host cleanup still runs: no `sandbox` snapshot remains under the runs root.
+#   3. Holds for the default snapshot mode and for a nested long-lived shell
 #      (closer to agent behavior: a `sleep` spawned inside an `ensure` rule).
 #
 # Manual repro:
@@ -51,7 +51,7 @@ container_ids() {
 }
 
 # Run one signal-cleanup scenario against $1 (a .jh fixture basename under TEST_DIR).
-# Asserts: container appears, SIGINT stops it within 15s, and no .sandbox-* remains.
+# Asserts: container appears, SIGINT stops it within 15s, and no snapshot remains.
 run_signal_scenario() {
   local flow="$1"
 
@@ -101,14 +101,11 @@ run_signal_scenario() {
   fi
   e2e::pass "docker signal cleanup [${flow}]: container gone from docker ps within 15s of SIGINT"
 
-  # Host cleanup still runs: no .sandbox-* directories remain under runs root.
-  shopt -s nullglob
-  local sandbox_dirs=( "${runs_root}"/.sandbox-* )
-  shopt -u nullglob
-  if [[ ${#sandbox_dirs[@]} -gt 0 ]]; then
-    e2e::fail "docker signal cleanup [${flow}]: .sandbox-* dirs remain after SIGINT: ${sandbox_dirs[*]}"
+  # Host cleanup still runs: no `sandbox` snapshot remains under the runs root.
+  if [[ -d "${runs_root}/sandbox" ]]; then
+    e2e::fail "docker signal cleanup [${flow}]: snapshot dir remains after SIGINT: ${runs_root}/sandbox"
   fi
-  e2e::pass "docker signal cleanup [${flow}]: no .sandbox-* dirs after SIGINT"
+  e2e::pass "docker signal cleanup [${flow}]: no snapshot dir after SIGINT"
 }
 
 # ---------------------------------------------------------------------------

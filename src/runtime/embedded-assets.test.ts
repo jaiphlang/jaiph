@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import {
-  OVERLAY_RUN_SH_BASE64,
   JAIPH_SKILL_MD_BASE64,
   decodeEmbeddedAsset,
 } from "./embedded-assets";
@@ -23,11 +22,6 @@ function findRepoRoot(): string {
   throw new Error("could not locate repo root for embedded-assets test");
 }
 const REPO_ROOT = findRepoRoot();
-
-test("OVERLAY_RUN_SH_BASE64 matches runtime/overlay-run.sh on disk", () => {
-  const disk = readFileSync(join(REPO_ROOT, "runtime/overlay-run.sh"), "utf8");
-  assert.equal(decodeEmbeddedAsset(OVERLAY_RUN_SH_BASE64), disk);
-});
 
 test("JAIPH_SKILL_MD_BASE64 matches docs/jaiph-skill.md on disk", () => {
   const disk = readFileSync(join(REPO_ROOT, "docs/jaiph-skill.md"), "utf8");

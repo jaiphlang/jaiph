@@ -1,11 +1,9 @@
 import { execFileSync, spawn, spawnSync, ChildProcess } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { randomBytes } from "node:crypto";
-import { tmpdir } from "node:os";
-import { join, resolve, dirname, relative, sep } from "node:path";
+import { join, resolve, relative, sep } from "node:path";
 import type { RuntimeConfig } from "../types";
 import { VERSION } from "../version";
-import { OVERLAY_RUN_SH_BASE64, decodeEmbeddedAsset } from "./embedded-assets";
 import { killProcessTree } from "./kernel/portability";
 import { isEnvAllowed, RUN_WORKFLOW_ENV, type AgentBackend } from "./kernel/env-allowlist";
 
@@ -315,102 +313,59 @@ export function resolveImage(config: DockerRunConfig): string {
 }
 
 // ---------------------------------------------------------------------------
-// Overlay entrypoint script (written to temp file, mounted into container)
-// ---------------------------------------------------------------------------
-
-/**
- * Container-side fuse-overlayfs setup loaded from runtime/overlay-run.sh.
- *
- * Resolves the script in this order, so the npm/disk install and the
- * bun-compiled standalone binary both work:
- *   1. Sibling `overlay-run.sh` next to this module (npm `dist/src/runtime/`).
- *   2. Repo-root `runtime/overlay-run.sh` three hops up (dev `src/runtime/`).
- *   3. Embedded base64 baked into the executable (bun --compile binary).
- * Lazy so importing the docker module from non-Docker code paths never
- * touches the asset.
- */
-let overlayScriptCache: string | undefined;
-
-export function loadOverlayScript(): string {
-  if (overlayScriptCache !== undefined) return overlayScriptCache;
-  const diskCandidates = [
-    resolve(__dirname, "overlay-run.sh"),
-    resolve(__dirname, "..", "..", "..", "runtime", "overlay-run.sh"),
-  ];
-  for (const scriptPath of diskCandidates) {
-    if (existsSync(scriptPath)) {
-      overlayScriptCache = readFileSync(scriptPath, "utf8");
-      return overlayScriptCache;
-    }
-  }
-  overlayScriptCache = decodeEmbeddedAsset(OVERLAY_RUN_SH_BASE64);
-  return overlayScriptCache;
-}
-
-/**
- * Write overlay-run.sh to a temp file and return its path.
- * Mounted read-only at /jaiph/overlay-run.sh inside the container.
- */
-export function writeOverlayScript(): string {
-  const dir = mkdtempSync(join(tmpdir(), "jaiph-overlay-"));
-  const scriptPath = join(dir, "overlay-run.sh");
-  writeFileSync(scriptPath, loadOverlayScript(), { mode: 0o755 });
-  return scriptPath;
-}
-
-// ---------------------------------------------------------------------------
-// Sandbox mode selection + host-side workspace clone
+// Sandbox mode selection + host-side workspace snapshot
 // ---------------------------------------------------------------------------
 
 /** Selected sandbox primitive for a Docker run. */
-export type SandboxMode = "overlay" | "copy" | "inplace";
+export type SandboxMode = "snapshot" | "inplace";
 
 /**
  * Choose the sandbox mode for the upcoming run.
  *
- * `JAIPH_INPLACE` is the highest-priority opt-in: when truthy, the host
- * workspace is bind-mounted rw directly so the run's edits land live on the
- * host. The machine boundary (mount set, caps, env allowlist) is unchanged.
- * Otherwise, presence of `/dev/fuse` on the host is a strong proxy for
- * fuse-overlayfs viability inside the container. Linux dev/CI hosts typically
- * have it; macOS Docker Desktop typically doesn't expose it. Override with
- * `JAIPH_DOCKER_NO_OVERLAY=1` to force the host-copy path.
+ * `JAIPH_INPLACE` is the opt-in: when truthy, the host workspace is
+ * bind-mounted rw directly so the run's edits land live on the host. The
+ * machine boundary (mount set, caps, env allowlist) is unchanged.
  *
- * Overlay stays the fuse-host default deliberately: it starts in O(1)
- * regardless of workspace size, where copy pays a full `cp -pR` of the
- * checkout per run (Linux has no clonefile fallback). The cost is an elevated
- * setup posture (root + SYS_ADMIN + apparmor=unconfined on Linux, dropped
- * before workflow code runs) — documented in docs/sandboxing.md
- * (#overlay-capability-posture) and locked by tests in docker.test.ts.
- * Hosts that want the minimal-capability posture force copy via
- * `JAIPH_DOCKER_NO_OVERLAY=1`.
+ * Otherwise the default is `snapshot`: the host takes a writable point-in-time
+ * clone of the workspace at run start and bind-mounts that clone rw. Host
+ * changes during the run are invisible to the container; container workspace
+ * writes are discarded at exit; the live host workspace is never mounted. No
+ * device probing and no elevated capabilities are involved.
  */
 export function selectSandboxMode(env: Record<string, string | undefined>): SandboxMode {
   if (env.JAIPH_INPLACE === "1" || env.JAIPH_INPLACE === "true") {
     return "inplace";
   }
-  if (env.JAIPH_DOCKER_NO_OVERLAY === "1" || env.JAIPH_DOCKER_NO_OVERLAY === "true") {
-    return "copy";
-  }
-  return existsSync("/dev/fuse") ? "overlay" : "copy";
+  return "snapshot";
 }
 
 /**
  * Choose the sandbox mode for a `jaiph mcp` tool call.
  *
  * Delegates to `selectSandboxMode` so MCP and `jaiph run` share identical
- * semantics: overlay or copy by default (workspace isolated), inplace only
- * when `JAIPH_INPLACE=1|true`. `JAIPH_DOCKER_NO_OVERLAY` forces copy in both
- * contexts. Kept as a named export so callers and tests import a stable symbol.
+ * semantics: a point-in-time snapshot by default (workspace isolated), inplace
+ * only when `JAIPH_INPLACE=1|true`. Kept as a named export so callers and tests
+ * import a stable symbol.
  */
 export function selectMcpSandboxMode(env: Record<string, string | undefined>): SandboxMode {
   return selectSandboxMode(env);
 }
 
+/**
+ * Test seam for the `cp` spawn — lets clone tests assert the flags chosen per
+ * platform without a real filesystem copy.
+ */
+export const _cpSpawn = {
+  run(args: string[]): { status: number | null; stderr: string } {
+    const r = spawnSync("cp", args, { stdio: ["ignore", "ignore", "pipe"] });
+    return { status: r.status, stderr: r.stderr?.toString() ?? "" };
+  },
+};
+
 /** Run `cp` with the given flags. Returns true on success. */
 function tryCp(flags: string[], src: string, dst: string): { ok: boolean; stderr: string } {
-  const r = spawnSync("cp", [...flags, src, dst], { stdio: ["ignore", "ignore", "pipe"] });
-  return { ok: r.status === 0, stderr: r.stderr?.toString() ?? "" };
+  const r = _cpSpawn.run([...flags, src, dst]);
+  return { ok: r.status === 0, stderr: r.stderr };
 }
 
 /**
@@ -419,7 +374,9 @@ function tryCp(flags: string[], src: string, dst: string): { ok: boolean; stderr
  * On macOS, the first `copy()` call probes `cp -cR` (APFS clonefile, O(1)).
  * If it works, subsequent calls use clonefile directly. If it fails, all calls
  * fall back to `cp -pR` and the reason is recorded for a one-time warning.
- * On Linux/other platforms, always uses `cp -pR`.
+ * On Linux/other platforms, uses `cp --reflink=auto -pR`: block-level CoW on
+ * btrfs/XFS, with `cp`'s own transparent data-copy fallback on ext4 and
+ * cross-filesystem destinations (e.g. a `JAIPH_RUNS_DIR` on another volume).
  */
 class WorkspaceCloner {
   private cloneAttempted = false;
@@ -428,7 +385,7 @@ class WorkspaceCloner {
 
   copy(src: string, dst: string): void {
     if (process.platform !== "darwin") {
-      const r = tryCp(["-pR"], src, dst);
+      const r = tryCp(["--reflink=auto", "-pR"], src, dst);
       if (!r.ok) {
         throw new Error(`E_DOCKER_SANDBOX_COPY failed to copy ${src} → ${dst}: ${r.stderr.trim()}`);
       }
@@ -474,8 +431,8 @@ class WorkspaceCloner {
  *
  * - macOS: tries `cp -cR` (APFS clonefile, O(1)); on failure, falls back to
  *   `cp -pR` (real copy) with a single stderr warning noting the reason.
- * - Linux/other: uses `cp -pR` directly. The slow case (no fuse-overlayfs +
- *   non-COW filesystem) is documented; users on those hosts pay the copy cost.
+ * - Linux/other: uses `cp --reflink=auto -pR` (block-level CoW on btrfs/XFS,
+ *   transparent data-copy fallback on ext4 and cross-filesystem destinations).
  *
  * Excludes `.jaiph/runs` (mounted separately at `/jaiph/run`) and `.git/objects`
  * is intentionally NOT excluded — workflows may need git history.
@@ -520,10 +477,17 @@ export function cloneWorkspaceForSandbox(
   }
 }
 
-/** Allocate a fresh sandbox workspace directory adjacent to the runs root. */
+/**
+ * The host-side snapshot directory for a run: `<runsRoot>/sandbox`.
+ *
+ * Uniqueness comes from the run's runs root (one run per invocation); crash
+ * orphans are swept with the run-dir lifecycle. The runs root is bind-mounted
+ * at `/jaiph/run` and excluded from its own clone (see `cloneWorkspaceForSandbox`),
+ * so the snapshot never copies itself; the container cannot read it back through
+ * `/jaiph/run` because `buildDockerArgs` masks `/jaiph/run/sandbox` with a tmpfs.
+ */
 export function allocateSandboxWorkspaceDir(runsRoot: string): string {
-  const id = randomBytes(4).toString("hex");
-  const dir = join(runsRoot, `.sandbox-${id}`);
+  const dir = join(runsRoot, "sandbox");
   mkdirSync(dir, { recursive: true });
   return dir;
 }
@@ -567,14 +531,14 @@ export interface DockerSpawnOptions {
   workflowSymbol?: string;
   /**
    * How to make the workspace appear writable inside the container.
-   *  - "overlay": bind workspace ro, set up fuse-overlayfs in-container.
-   *  - "copy":    pre-clone workspace on host, bind the clone rw.
+   *  - "snapshot": pre-clone the workspace on the host, bind the clone rw.
+   *  - "inplace":  bind the live host workspace rw (edits persist on the host).
    * Defaults to `selectSandboxMode(env)` when omitted.
    */
   sandboxMode?: SandboxMode;
   /**
-   * Required when `sandboxMode === "copy"`: the host path of the cloned
-   * workspace to bind at `/jaiph/workspace`. Caller owns its lifecycle.
+   * Required when `sandboxMode === "snapshot"`: the host path of the cloned
+   * workspace snapshot to bind at `/jaiph/workspace`. Caller owns its lifecycle.
    */
   sandboxWorkspaceDir?: string;
   /**
@@ -660,43 +624,32 @@ export function remapDockerEnv(
   return out;
 }
 
-/** Remap a container mount path to the overlay lower-layer equivalent. */
-export function overlayMountPath(containerPath: string): string {
-  if (containerPath === CONTAINER_WORKSPACE || containerPath === CONTAINER_WORKSPACE + "/") {
-    return `${CONTAINER_WORKSPACE}-ro`;
-  }
-  if (containerPath.startsWith(CONTAINER_WORKSPACE + "/")) {
-    return `${CONTAINER_WORKSPACE}-ro${containerPath.slice(CONTAINER_WORKSPACE.length)}`;
-  }
-  return containerPath;
-}
-
 /**
  * Build the `docker run --rm` argument list.
  *
- * Three sandbox shapes:
- *  - "overlay": workspace bind-mounts ro at /jaiph/workspace-ro; entrypoint
- *    script sets up fuse-overlayfs at /jaiph/workspace. Requires SYS_ADMIN
- *    and /dev/fuse. Run artifacts mount at /jaiph/run (outside the overlay).
- *  - "copy": host pre-clones workspace to `opts.sandboxWorkspaceDir`; that
- *    dir bind-mounts rw at /jaiph/workspace. No overlay script, no fuse,
- *    no SYS_ADMIN. Run artifacts mount at /jaiph/run as before.
- *  - "inplace": host workspace itself bind-mounts rw at /jaiph/workspace —
- *    edits land live on the host. Same caps/network/env posture as "copy".
- *    Concurrent runs on the same workspace are a known sharp edge — no
- *    locking is performed.
+ * Two sandbox shapes:
+ *  - "snapshot": the host takes a writable point-in-time clone of the workspace
+ *    to `opts.sandboxWorkspaceDir` before launch; that dir bind-mounts rw at
+ *    /jaiph/workspace. The live host workspace is never mounted. Run artifacts
+ *    mount at /jaiph/run; because the snapshot source lives under the run mount
+ *    (`<runsRoot>/sandbox`), it is masked daemon-side with a tmpfs at
+ *    /jaiph/run/sandbox so the container cannot read it back through /jaiph/run.
+ *  - "inplace": the host workspace itself bind-mounts rw at /jaiph/workspace —
+ *    edits land live on the host. Concurrent runs on the same workspace are a
+ *    known sharp edge — no locking is performed.
+ *
+ * Both modes share one posture: `--cap-drop ALL` with zero cap-adds,
+ * `--security-opt no-new-privileges`, no `--device`, no apparmor security-opt,
+ * and on Linux `--user host_uid:host_gid`.
  *
  * The container runs `jaiph run --raw <file>` using its own installed jaiph.
  *
- * `overlayScriptPath` is required for "overlay" mode and ignored for the rest.
+ * `opts.sandboxWorkspaceDir` is required for "snapshot" mode.
  */
-export function buildDockerArgs(opts: DockerSpawnOptions, overlayScriptPath?: string): string[] {
+export function buildDockerArgs(opts: DockerSpawnOptions): string[] {
   const mode: SandboxMode = opts.sandboxMode ?? selectSandboxMode(opts.env);
-  if (mode === "overlay" && !overlayScriptPath) {
-    throw new Error("buildDockerArgs: overlay mode requires overlayScriptPath");
-  }
-  if (mode === "copy" && !opts.sandboxWorkspaceDir) {
-    throw new Error("buildDockerArgs: copy mode requires sandboxWorkspaceDir");
+  if (mode === "snapshot" && !opts.sandboxWorkspaceDir) {
+    throw new Error("buildDockerArgs: snapshot mode requires sandboxWorkspaceDir");
   }
 
   const args: string[] = ["run", "--rm"];
@@ -707,53 +660,11 @@ export function buildDockerArgs(opts: DockerSpawnOptions, overlayScriptPath?: st
   }
 
   args.push("--cap-drop", "ALL");
-  if (mode === "overlay") {
-    // Overlay setup runs as root, then drops to host UID/GID via setpriv.
-    //   SYS_ADMIN: fuse-overlayfs mount
-    //   SETUID/SETGID: setpriv uid/gid switch
-    //   CHOWN: best-effort chown of /jaiph/run
-    //   DAC_READ_SEARCH: fuse-overlayfs daemon (running as root) needs to read
-    //     lower-layer files owned by host_uid with restrictive perms (e.g. 0600
-    //     workflow files, 0700 workspace dirs) so the kernel can serve them
-    //     through the merged view to the dropped-uid workflow process.
-    args.push("--cap-add", "SYS_ADMIN");
-    args.push("--cap-add", "SETUID");
-    args.push("--cap-add", "SETGID");
-    args.push("--cap-add", "CHOWN");
-    args.push("--cap-add", "DAC_READ_SEARCH");
-  }
   args.push("--security-opt", "no-new-privileges");
 
-  if (mode === "overlay") {
-    args.push("--device", "/dev/fuse");
-    // Many Linux hosts (Ubuntu 22.04+, GitHub Actions runners, etc.) ship a
-    // default AppArmor profile that denies fuse mounts inside containers
-    // even when SYS_ADMIN + /dev/fuse are present. Unconfining apparmor for
-    // this single container restores the documented fuse-overlayfs
-    // behavior. Linux-only: macOS Docker Desktop has no AppArmor and
-    // rejects unknown security-opts on some versions.
-    //
-    // TRACKED EXCEPTION (security review 2026-07-20, Finding 3): unconfined
-    // is broader than the fuse mount needs, but Docker can only reference
-    // AppArmor profiles already loaded on the host, and the unprivileged CLI
-    // cannot load one. A tailored profile (docker-default semantics plus fuse
-    // mounts) is a queued follow-up — QUEUE.md, "Ship a tailored AppArmor
-    // profile for overlay mode". Until then the posture is documented in
-    // docs/sandboxing.md (#overlay-capability-posture) and locked by the
-    // posture-lock tests in docker.test.ts so it cannot widen silently.
-    if (process.platform === "linux") {
-      args.push("--security-opt", "apparmor=unconfined");
-    }
-  }
-
-  // UID/GID strategy (Linux):
-  //   copy mode    → --user host_uid:host_gid directly.
-  //   overlay mode → --user 0:0 so fuse-overlayfs can mount on /jaiph/workspace.
-  //                  The workflow runs as root inside the container in this mode.
-  // macOS Docker Desktop translates UIDs across the VM boundary, so we don't
-  // override --user there.
-  let hostUid: string | undefined;
-  let hostGid: string | undefined;
+  // UID/GID strategy (Linux): both modes run as the host UID/GID directly so
+  // files written to the bind mounts keep host ownership. macOS Docker Desktop
+  // translates UIDs across the VM boundary, so we don't override --user there.
   if (process.platform === "linux") {
     const detected = _uidDetect.getHostUidGid();
     if (!detected) {
@@ -761,13 +672,7 @@ export function buildDockerArgs(opts: DockerSpawnOptions, overlayScriptPath?: st
         "E_DOCKER_UID failed to determine host UID/GID; refusing to run sandbox as root.",
       );
     }
-    hostUid = detected.uid;
-    hostGid = detected.gid;
-    if (mode === "overlay") {
-      args.push("--user", "0:0");
-    } else {
-      args.push("--user", `${hostUid}:${hostGid}`);
-    }
+    args.push("--user", `${detected.uid}:${detected.gid}`);
   }
 
   if (opts.config.network !== "default") {
@@ -775,11 +680,7 @@ export function buildDockerArgs(opts: DockerSpawnOptions, overlayScriptPath?: st
   }
 
   // Single workspace mount — no user-configurable mounts.
-  if (mode === "overlay") {
-    const hostAbs = resolve(opts.workspaceRoot);
-    validateMountHostPath(hostAbs);
-    args.push("-v", `${hostAbs}:${overlayMountPath(CONTAINER_WORKSPACE)}:ro`);
-  } else if (mode === "inplace") {
+  if (mode === "inplace") {
     const hostAbs = resolve(opts.workspaceRoot);
     validateMountHostPath(hostAbs);
     args.push("-v", `${hostAbs}:${CONTAINER_WORKSPACE}:rw`);
@@ -791,8 +692,11 @@ export function buildDockerArgs(opts: DockerSpawnOptions, overlayScriptPath?: st
 
   args.push("-v", `${opts.sandboxRunDir}:${CONTAINER_RUN_DIR}:rw`);
 
-  if (mode === "overlay") {
-    args.push("-v", `${overlayScriptPath}:/jaiph/overlay-run.sh:ro`);
+  // The run mount exposes the host runs root, which contains the snapshot source
+  // at <runsRoot>/sandbox. Mask it with a zero-cap tmpfs so the container cannot
+  // see its own snapshot source through /jaiph/run.
+  if (mode === "snapshot") {
+    args.push("--mount", `type=tmpfs,dst=${CONTAINER_RUN_DIR}/sandbox`);
   }
 
   const extraEnv = opts.extraEnv ?? {};
@@ -816,29 +720,16 @@ export function buildDockerArgs(opts: DockerSpawnOptions, overlayScriptPath?: st
   if (opts.workflowSymbol && opts.workflowSymbol !== "default") {
     args.push("-e", `${RUN_WORKFLOW_ENV}=${opts.workflowSymbol}`);
   }
-  if (mode === "overlay" && hostUid && hostGid) {
-    args.push("-e", `JAIPH_HOST_UID=${hostUid}`);
-    args.push("-e", `JAIPH_HOST_GID=${hostGid}`);
-  }
 
   args.push("-w", CONTAINER_WORKSPACE);
   args.push(opts.config.image);
 
   const relSource = relative(opts.workspaceRoot, opts.sourceAbs);
-  if (mode === "overlay") {
-    args.push(
-      "/jaiph/overlay-run.sh",
-      "jaiph", "run", "--raw",
-      `${CONTAINER_WORKSPACE}/${relSource}`,
-      ...opts.runArgs,
-    );
-  } else {
-    args.push(
-      "jaiph", "run", "--raw",
-      `${CONTAINER_WORKSPACE}/${relSource}`,
-      ...opts.runArgs,
-    );
-  }
+  args.push(
+    "jaiph", "run", "--raw",
+    `${CONTAINER_WORKSPACE}/${relSource}`,
+    ...opts.runArgs,
+  );
 
   return args;
 }
@@ -855,9 +746,7 @@ export interface DockerSpawnResult {
   sandboxRunDir: string;
   /** Selected sandbox primitive for this run. */
   sandboxMode: SandboxMode;
-  /** Temp directory containing overlay-run.sh — cleaned up after exit (overlay mode). */
-  overlayScriptDir?: string;
-  /** Pre-cloned workspace dir mounted rw — removed on cleanup unless kept (copy mode). */
+  /** Point-in-time workspace snapshot mounted rw — removed on cleanup unless kept (snapshot mode). */
   sandboxWorkspaceDir?: string;
   /** When true, cleanup leaves `sandboxWorkspaceDir` on disk for debugging. */
   keepSandboxWorkspace: boolean;
@@ -873,38 +762,20 @@ export interface DockerSpawnResult {
  * Events flow via stderr; stdout carries workflow output.
  *
  * Sandbox mode is picked from `opts.sandboxMode` if set, otherwise
- * `selectSandboxMode(opts.env)`. In "copy" mode the workspace is cloned to a
- * fresh `<runsRoot>/.sandbox-<id>/` directory (or the provided
- * `opts.sandboxWorkspaceDir`) before launch.
+ * `selectSandboxMode(opts.env)`. In "snapshot" mode the workspace is cloned to
+ * `<runsRoot>/sandbox` (or the provided `opts.sandboxWorkspaceDir`) before launch.
  */
 export function spawnDockerProcess(opts: DockerSpawnOptions): DockerSpawnResult {
   checkDockerAvailable();
 
   const mode: SandboxMode = opts.sandboxMode ?? selectSandboxMode(opts.env);
   mkdirSync(opts.sandboxRunDir, { recursive: true });
-  // Linux overlay mode runs as container root. Some hosts run Docker with
-  // user-namespace remapping, where container root is not host root and cannot
-  // create entries in a 0755 host-owned bind mount. Make the run dir
-  // world-writable so artifacts remain writable regardless of UID mapping.
-  if (process.platform === "linux" && mode === "overlay") {
-    try {
-      chmodSync(opts.sandboxRunDir, 0o777);
-    } catch {
-      // Best effort: if chmod fails, docker run may still succeed on hosts
-      // without user-namespace remapping.
-    }
-  }
 
-  let overlayScriptPath: string | undefined;
-  let overlayScriptDir: string | undefined;
   let sandboxWorkspaceDir: string | undefined;
   const keepSandboxWorkspace =
     opts.env.JAIPH_DOCKER_KEEP_SANDBOX === "1" || opts.env.JAIPH_DOCKER_KEEP_SANDBOX === "true";
 
-  if (mode === "overlay") {
-    overlayScriptPath = writeOverlayScript();
-    overlayScriptDir = dirname(overlayScriptPath);
-  } else if (mode === "copy") {
+  if (mode === "snapshot") {
     sandboxWorkspaceDir = opts.sandboxWorkspaceDir ?? allocateSandboxWorkspaceDir(opts.sandboxRunDir);
     cloneWorkspaceForSandbox(
       opts.workspaceRoot,
@@ -913,14 +784,14 @@ export function spawnDockerProcess(opts: DockerSpawnOptions): DockerSpawnResult 
       resolve(opts.sandboxRunDir),
     );
   }
-  // inplace: no overlay script, no workspace clone — the host workspace is
-  // bind-mounted rw directly. The runs mount is still created above.
+  // inplace: no workspace clone — the host workspace is bind-mounted rw
+  // directly. The runs mount is still created above.
 
   // Deterministic container name so an interrupt or timeout can force-remove
   // this exact container by name, regardless of the host `docker` client's fate.
   const containerName = `jaiph-run-${randomBytes(6).toString("hex")}`;
   opts = { ...opts, sandboxMode: mode, sandboxWorkspaceDir, containerName };
-  const dockerArgs = buildDockerArgs(opts, overlayScriptPath);
+  const dockerArgs = buildDockerArgs(opts);
 
   const child = _dockerSpawn.run(dockerArgs, {
     stdio: ["ignore", "pipe", "pipe"],
@@ -954,7 +825,6 @@ export function spawnDockerProcess(opts: DockerSpawnOptions): DockerSpawnResult 
     containerName,
     sandboxRunDir: opts.sandboxRunDir,
     sandboxMode: mode,
-    overlayScriptDir,
     sandboxWorkspaceDir,
     keepSandboxWorkspace,
     timeoutTimer,
@@ -1007,21 +877,14 @@ export function stopDockerRunOnSignal(result: DockerSpawnResult): void {
  *
  * Idempotent: subsequent calls on the same `result` short-circuit on
  * `result.cleaned` — exit-guard + finally-path pairing relies on this.
- * Removes the overlay script tempdir (overlay mode) and the cloned workspace
- * (copy mode), unless `JAIPH_DOCKER_KEEP_SANDBOX=1` was set.
+ * Removes the cloned workspace snapshot (snapshot mode), unless
+ * `JAIPH_DOCKER_KEEP_SANDBOX=1` was set.
  */
 export function cleanupDocker(result: DockerSpawnResult): void {
   if (result.cleaned) return;
   result.cleaned = true;
   if (result.timeoutTimer) {
     clearTimeout(result.timeoutTimer);
-  }
-  if (result.overlayScriptDir) {
-    try {
-      rmSync(result.overlayScriptDir, { recursive: true, force: true });
-    } catch {
-      // Best-effort cleanup
-    }
   }
   if (result.sandboxWorkspaceDir && !result.keepSandboxWorkspace) {
     try {

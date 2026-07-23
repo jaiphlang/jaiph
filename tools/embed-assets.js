@@ -16,7 +16,6 @@ const { join, resolve } = require("node:path");
 const ROOT = resolve(__dirname, "..");
 
 const ASSETS = [
-  { name: "OVERLAY_RUN_SH", path: "runtime/overlay-run.sh" },
   { name: "JAIPH_SKILL_MD", path: "docs/jaiph-skill.md" },
 ];
 

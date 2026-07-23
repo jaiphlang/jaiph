@@ -6,7 +6,7 @@
 # `jaiph mcp` tool calls honor the same env-driven sandbox as `jaiph run`:
 #
 #   1. Isolation is the DEFAULT — a tool call runs in a container with the
-#      workspace isolated (overlay or copy); host workspace is untouched, but
+#      workspace isolated (a point-in-time snapshot); host workspace is untouched, but
 #      a non-`default` tool symbol still returns its value correctly.
 #      A failing tool call composes an `isError` result with a host-side
 #      `run dir:` pointer discovered from the sandbox runs mount.

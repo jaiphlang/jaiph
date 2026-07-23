@@ -227,7 +227,7 @@ workflow default(name_arg) {
                     <p>Running the workflow:</p>
                     <pre><code class="jaiph-run" data-sample-output="success"><span class="run-command">➜  ./say_hello.jh Adam</span>
 
-Jaiph: Running say_hello.jh<span class="run-banner-meta"> (Docker sandbox, fusefs)</span>
+Jaiph: Running say_hello.jh<span class="run-banner-meta"> (Docker sandbox, snapshot)</span>
 
 <span class="run-keyword">workflow</span> default <span class="run-params">(name_arg="Adam")</span>
   <span class="run-marker">▸</span> <span class="run-keyword">rule</span> valid_name <span class="run-params">(name_arg="Adam")</span>
@@ -241,7 +241,7 @@ Hello, Adam—Adam Smith, the 18th-century Scottish economist and philosopher, i
                     <p>When you don't provide the name parameter, the workflow fails:</p>
                     <pre><code class="jaiph-run" data-sample-output="failure"><span class="run-command">➜  ./say_hello.jh</span>
 
-Jaiph: Running say_hello.jh<span class="run-banner-meta"> (Docker sandbox, fusefs)</span>
+Jaiph: Running say_hello.jh<span class="run-banner-meta"> (Docker sandbox, snapshot)</span>
 
 <span class="run-keyword">workflow</span> default
   <span class="run-marker">▸</span> <span class="run-keyword">rule</span> valid_name
@@ -353,7 +353,7 @@ workflow default() {
                     </p>
                     <pre><code class="jaiph-run" data-sample-output="run"><span class="run-command">➜  ./recover_loop.jh</span>
 
-Jaiph: Running recover_loop.jh<span class="run-banner-meta"> (Docker sandbox, fusefs)</span>
+Jaiph: Running recover_loop.jh<span class="run-banner-meta"> (Docker sandbox, snapshot)</span>
 
 <span class="run-keyword">workflow</span> default
   <span class="run-marker">▸</span> <span class="run-keyword">script</span> check_report_exists
@@ -417,7 +417,7 @@ workflow default() {
                     <p>Running the workflow:</p>
                     <pre><code class="jaiph-run" data-sample-output="run"><span class="run-command">➜  ./agent_inbox.jh</span>
 
-Jaiph: Running agent_inbox.jh<span class="run-banner-meta"> (Docker sandbox, fusefs)</span>
+Jaiph: Running agent_inbox.jh<span class="run-banner-meta"> (Docker sandbox, snapshot)</span>
 
 <span class="run-keyword">workflow</span> default
   <span class="run-marker">▸</span> <span class="run-keyword">workflow</span> scanner
@@ -464,7 +464,7 @@ workflow default(name) {
                     <p>Running the workflow:</p>
                     <pre><code class="jaiph-run" data-sample-output="run"><span class="run-command">➜  ./async.jh</span>
 
-Jaiph: Running async.jh<span class="run-banner-meta"> (Docker sandbox, fusefs)</span>
+Jaiph: Running async.jh<span class="run-banner-meta"> (Docker sandbox, snapshot)</span>
 
 <span class="run-keyword">workflow</span> default
  <span class="run-marker">₁</span><span class="run-marker">▸</span> <span class="run-keyword">workflow</span> cursor_say_hello

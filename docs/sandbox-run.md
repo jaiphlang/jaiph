@@ -22,14 +22,11 @@ For the design (what the sandbox protects against, what it does not), see [Sandb
 jaiph run ./flow.jh
 ```
 
-Docker is **on by default**. The CLI picks the workspace-presentation mode automatically:
+Docker is **on by default**. In the default **snapshot mode** the CLI takes a **writable point-in-time snapshot** of the workspace at run start — a host-side clone (block-level copy-on-write where the filesystem supports it, a plain data copy otherwise) placed at `<run dir>/sandbox` (under `.jaiph/runs/` by default) — and bind-mounts that snapshot read-write at `/jaiph/workspace`. The live host workspace is never mounted into the container: host edits during the run are invisible to it, and the container's workspace writes are discarded when the snapshot is deleted at exit.
 
-- **Overlay mode** when `/dev/fuse` exists on the host (typically Linux). Reads come from the read-only host workspace; writes land in a `fuse-overlayfs` upper layer and are discarded at container exit.
-- **Copy mode** when `/dev/fuse` is missing (typically macOS Docker Desktop), or when `JAIPH_DOCKER_NO_OVERLAY=1` or `JAIPH_DOCKER_NO_OVERLAY=true` is set. The CLI clones the workspace into `.jaiph/runs/.sandbox-<id>/` (or `<runs-root>/.sandbox-<id>/` when `JAIPH_RUNS_DIR` overrides the default) and mounts the clone read-write.
+The host checkout is unmodified after the run. Run artifacts always land under host `.jaiph/runs/` via a separate read-write mount, and the snapshot source is masked from the container's own `/jaiph/run` view by a tmpfs so the run cannot read it back.
 
-In both modes the host checkout is unmodified after the run. Run artifacts always land under host `.jaiph/runs/` via a separate read-write mount.
-
-The two modes differ in capability posture, not in the isolation guarantee. Overlay **elevates during setup**: the container starts as root with `SYS_ADMIN` (plus `SETUID`/`SETGID`/`CHOWN`/`DAC_READ_SEARCH`, and `apparmor=unconfined` on Linux) so it can mount `fuse-overlayfs`, then drops to your UID before the workflow starts. Copy mode never elevates — no added capabilities, no AppArmor exception. Force `JAIPH_DOCKER_NO_OVERLAY=1` on shared hosts, under security policy that forbids `SYS_ADMIN`/unconfined containers, or for untrusted workflows: you pay a per-run workspace copy and get the minimal posture. Details: [Sandboxing — Overlay elevates during setup](sandboxing.md#overlay-capability-posture).
+Snapshot mode **never elevates**: the container runs with `--cap-drop ALL` and **zero** cap-adds, `--security-opt no-new-privileges`, no `--device`, no AppArmor exception, and on Linux as your own UID/GID from the first instruction. There is no device probing and no capability-posture knob to tune.
 
 ## 2. Pick inplace mode for live edits
 
@@ -83,8 +80,7 @@ Combining `--unsafe` with `--inplace` is rejected with `E_FLAG_CONFLICT` before 
 
 The CLI banner reports the sandbox mode it picked:
 
-- `Docker sandbox, fusefs` — overlay mode.
-- `Docker sandbox, tmp workspace` — copy mode.
+- `Docker sandbox, snapshot` — default snapshot mode.
 - `Docker sandbox, in-place` — inplace mode.
 - `Docker sandbox, unsafe` — `--unsafe` / `JAIPH_UNSAFE=true` opted out of the sandbox (Docker off, host-only).
 - `no sandbox` — Docker is off for another reason (the Windows host-only override, or an explicit `JAIPH_DOCKER_ENABLED=false`).

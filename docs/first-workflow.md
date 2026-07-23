@@ -104,7 +104,7 @@ Hello, Adam!
 
 The first line is the sandbox banner. The `workflow default` row and the indented `▸` / `✓` rows are the live progress tree (`▸` = step started, `✓` = step completed; `(0s)` is per-step elapsed time). The root workflow row is static; only nested steps emit `▸` / `✓` lines. The blank line and `Hello, Adam!` after `PASS` are the workflow **return value** — `jaiph run` prints it on stdout after a successful run.
 
-The `(Docker sandbox, unsafe)` banner reflects `--unsafe`: the workflow runs on the host with no container, and the runtime prints a warning reminding you that the workflow has full access to your machine. Omit `--unsafe` and `jaiph run` uses the [Docker sandbox by default](/how-to/sandbox-run); the banner then reads `(Docker sandbox, fusefs)` or `(Docker sandbox, tmp workspace)` depending on the host. If Docker is enabled but the daemon is unavailable, the CLI exits with `E_DOCKER_NOT_FOUND` rather than falling back to the host.
+The `(Docker sandbox, unsafe)` banner reflects `--unsafe`: the workflow runs on the host with no container, and the runtime prints a warning reminding you that the workflow has full access to your machine. Omit `--unsafe` and `jaiph run` uses the [Docker sandbox by default](/how-to/sandbox-run); the banner then reads `(Docker sandbox, snapshot)`. If Docker is enabled but the daemon is unavailable, the CLI exits with `E_DOCKER_NOT_FOUND` rather than falling back to the host.
 
 ## 4. Inspect the run artifacts
 

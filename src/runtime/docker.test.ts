@@ -5,9 +5,7 @@ import {
   resolveDockerConfig,
   buildDockerArgs,
   remapDockerEnv,
-  overlayMountPath,
   resolveDockerHostRunsRoot,
-  writeOverlayScript,
   verifyImageHasJaiph,
   prepareImage,
   isEnvAllowed,
@@ -29,6 +27,7 @@ import {
   withDockerExitGuard,
   _dockerExec,
   _dockerSpawn,
+  _cpSpawn,
   _uidDetect,
   _win32Notice,
   type DockerRunConfig,
@@ -37,19 +36,18 @@ import {
 } from "./docker";
 import { VERSION } from "../version";
 import { mkdtempSync, writeFileSync, mkdirSync, existsSync, readFileSync, readdirSync, rmSync } from "node:fs";
-import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
-import { join, dirname, resolve } from "node:path";
+import { join, resolve } from "node:path";
 
 /** Shared temp workspace for buildDockerArgs tests. */
 const TEST_WS = mkdtempSync(join(tmpdir(), "jaiph-test-ws-"));
 const TEST_SANDBOX = mkdtempSync(join(tmpdir(), "jaiph-test-sandbox-"));
-const TEST_OVERLAY = writeOverlayScript();
-const TEST_OVERLAY_DIR = dirname(TEST_OVERLAY);
+/** Stand-in for the host-side snapshot directory bound at /jaiph/workspace. */
+const TEST_SNAPSHOT = mkdtempSync(join(tmpdir(), "jaiph-test-snapshot-"));
 test.after(() => {
   rmSync(TEST_WS, { recursive: true, force: true });
   rmSync(TEST_SANDBOX, { recursive: true, force: true });
-  rmSync(TEST_OVERLAY_DIR, { recursive: true, force: true });
+  rmSync(TEST_SNAPSHOT, { recursive: true, force: true });
 });
 
 function defaultOpts(overrides?: Partial<DockerSpawnOptions>): DockerSpawnOptions {
@@ -67,13 +65,18 @@ function defaultOpts(overrides?: Partial<DockerSpawnOptions>): DockerSpawnOption
     runArgs: [],
     env: {},
     isTTY: false,
-    sandboxMode: "overlay",
+    sandboxMode: "snapshot",
+    sandboxWorkspaceDir: TEST_SNAPSHOT,
     ...overrides,
   };
 }
 
-function copyOpts(sandboxWorkspaceDir: string, overrides?: Partial<DockerSpawnOptions>): DockerSpawnOptions {
-  return defaultOpts({ sandboxMode: "copy", sandboxWorkspaceDir, ...overrides });
+function snapshotOpts(sandboxWorkspaceDir: string, overrides?: Partial<DockerSpawnOptions>): DockerSpawnOptions {
+  return defaultOpts({ sandboxMode: "snapshot", sandboxWorkspaceDir, ...overrides });
+}
+
+function inplaceOpts(overrides?: Partial<DockerSpawnOptions>): DockerSpawnOptions {
+  return defaultOpts({ sandboxMode: "inplace", sandboxWorkspaceDir: undefined, ...overrides });
 }
 
 // ---------------------------------------------------------------------------
@@ -274,12 +277,12 @@ test("checkDockerAvailable: E_DOCKER_NOT_FOUND message mentions JAIPH_UNSAFE", (
 });
 
 // ---------------------------------------------------------------------------
-// buildDockerArgs
+// buildDockerArgs: snapshot mode (host clone bound rw at /jaiph/workspace)
 // ---------------------------------------------------------------------------
 
-test("buildDockerArgs: workspace-ro + sandbox run rw + fuse device", () => {
+test("buildDockerArgs: snapshot mounts cloned workspace rw + run dir rw + tmpfs mask", () => {
   const opts = defaultOpts({ runArgs: ["arg1"] });
-  const args = buildDockerArgs(opts, TEST_OVERLAY);
+  const args = buildDockerArgs(opts);
 
   assert.ok(args.includes("run"));
   assert.ok(args.includes("--rm"));
@@ -287,41 +290,74 @@ test("buildDockerArgs: workspace-ro + sandbox run rw + fuse device", () => {
   assert.ok(!args.includes("--network"));
   assert.ok(args.includes("ubuntu:24.04"));
 
-  const deviceIdx = args.indexOf("--device");
-  assert.ok(deviceIdx >= 0);
-  assert.equal(args[deviceIdx + 1], "/dev/fuse");
+  // No overlay/fuse surface remains anywhere.
+  assert.ok(!args.includes("--device"), "no --device flag");
+  assert.ok(!args.some((a) => a.includes("/dev/fuse")), "no fuse device");
+  assert.ok(!args.some((a) => a.includes("/jaiph/workspace-ro")), "no overlay lower-layer mount");
+  assert.ok(!args.some((a) => a.includes("overlay-run.sh")), "no overlay script mount");
 
   const vFlags = args.filter((_, i) => i > 0 && args[i - 1] === "-v");
 
-  // Overlay lower-layer ro
-  const wsRoMount = vFlags.find((v) => v.includes("/jaiph/workspace-ro:"));
-  assert.ok(wsRoMount, "workspace-ro mount present");
-  assert.ok(wsRoMount!.endsWith(":ro"), "workspace-ro must be ro");
-  assert.ok(!vFlags.some((v) => v.includes("/jaiph/workspace:")), "workspace mount must stay writable inside image");
+  // Snapshot clone bound rw at /jaiph/workspace — the live host workspace is
+  // never mounted.
+  const wsMount = vFlags.find((v) => v.endsWith(":/jaiph/workspace:rw"));
+  assert.ok(wsMount, "workspace bound rw at /jaiph/workspace");
+  assert.ok(wsMount!.startsWith(`${resolve(TEST_SNAPSHOT)}:`), "host side is the snapshot clone");
+  assert.ok(
+    !vFlags.some((v) => v.startsWith(`${resolve(TEST_WS)}:`)),
+    "the live host workspace path is never a mount source",
+  );
 
   // Sandbox run dir rw
   const runMount = vFlags.find((v) => v.includes("/jaiph/run:"));
   assert.ok(runMount, "sandbox run mount present");
   assert.ok(runMount!.endsWith(":rw"), "sandbox run must be rw");
 
-  // Overlay script mounted ro
-  const overlayMount = vFlags.find((v) => v.includes("/jaiph/overlay-run.sh:"));
-  assert.ok(overlayMount, "overlay script mount present");
-  assert.ok(overlayMount!.endsWith(":ro"), "overlay script must be ro");
+  // tmpfs mask over the snapshot source under the run mount.
+  const mountIdx = args.indexOf("--mount");
+  assert.ok(mountIdx >= 0, "--mount tmpfs present");
+  assert.equal(args[mountIdx + 1], "type=tmpfs,dst=/jaiph/run/sandbox");
 
-  // Total: 1 workspace-ro + 1 run + 1 overlay script = 3
-  assert.equal(vFlags.length, 3);
+  // Command: direct `jaiph run --raw <source>` (no wrapper).
+  const idxImage = args.indexOf("ubuntu:24.04");
+  const tail = args.slice(idxImage + 1);
+  assert.equal(tail[0], "jaiph");
+  assert.equal(tail[1], "run");
+  assert.equal(tail[2], "--raw");
+  assert.equal(tail[3], "/jaiph/workspace/main.jh");
+  assert.equal(tail[4], "arg1");
+});
 
-  // Command: overlay-run.sh → jaiph run --raw <source>
-  assert.ok(args.includes("/jaiph/overlay-run.sh"));
-  assert.ok(args.includes("jaiph"));
-  assert.ok(args.includes("--raw"));
-  assert.ok(args.includes("/jaiph/workspace/main.jh"));
-  assert.ok(args.includes("arg1"));
+test("buildDockerArgs: snapshot binds run dir rw at /jaiph/run", () => {
+  const cloneDir = mkdtempSync(join(tmpdir(), "jaiph-test-clone-"));
+  try {
+    const args = buildDockerArgs(snapshotOpts(cloneDir));
+    const vFlags = args.filter((_, i) => i > 0 && args[i - 1] === "-v");
+    const runMount = vFlags.find((v) => v.endsWith(":/jaiph/run:rw"));
+    assert.ok(runMount, "run dir bound rw at /jaiph/run");
+  } finally {
+    rmSync(cloneDir, { recursive: true, force: true });
+  }
+});
+
+test("buildDockerArgs: tmpfs mask at /jaiph/run/sandbox is present in snapshot mode, absent in inplace", () => {
+  const cloneDir = mkdtempSync(join(tmpdir(), "jaiph-test-mask-"));
+  try {
+    const snap = buildDockerArgs(snapshotOpts(cloneDir));
+    const inplace = buildDockerArgs(inplaceOpts());
+    const maskOf = (args: string[]): string[] =>
+      args
+        .map((v, i) => (v === "--mount" ? args[i + 1] : null))
+        .filter((v): v is string => v !== null);
+    assert.deepStrictEqual(maskOf(snap), ["type=tmpfs,dst=/jaiph/run/sandbox"]);
+    assert.deepStrictEqual(maskOf(inplace), [], "inplace mode creates no snapshot, so no mask");
+  } finally {
+    rmSync(cloneDir, { recursive: true, force: true });
+  }
 });
 
 test("buildDockerArgs: no -t flag even when isTTY is true", () => {
-  const args = buildDockerArgs(defaultOpts({ isTTY: true }), TEST_OVERLAY);
+  const args = buildDockerArgs(defaultOpts({ isTTY: true }));
   assert.ok(!args.includes("-t"));
 });
 
@@ -329,7 +365,7 @@ test("buildDockerArgs: --network flag for non-default network", () => {
   const opts = defaultOpts({
     config: { ...defaultOpts().config, network: "none" },
   });
-  const args = buildDockerArgs(opts, TEST_OVERLAY);
+  const args = buildDockerArgs(opts);
   const netIdx = args.indexOf("--network");
   assert.ok(netIdx > 0);
   assert.equal(args[netIdx + 1], "none");
@@ -339,7 +375,7 @@ test("buildDockerArgs: forwards JAIPH_ env vars, excludes JAIPH_DOCKER_*", () =>
   const opts = defaultOpts({
     env: { JAIPH_DEBUG: "true", JAIPH_DOCKER_IMAGE: "nope", OTHER_VAR: "ignored" },
   });
-  const args = buildDockerArgs(opts, TEST_OVERLAY);
+  const args = buildDockerArgs(opts);
   assert.ok(args.includes("JAIPH_DEBUG=true"));
   assert.ok(!args.some((a) => a.includes("JAIPH_DOCKER_IMAGE")));
   assert.ok(!args.some((a) => a.includes("OTHER_VAR")));
@@ -349,7 +385,7 @@ test("buildDockerArgs: overrides JAIPH_WORKSPACE and JAIPH_RUNS_DIR", () => {
   const opts = defaultOpts({
     env: { JAIPH_WORKSPACE: "/host/path", JAIPH_RUNS_DIR: "/host/runs" },
   });
-  const args = buildDockerArgs(opts, TEST_OVERLAY);
+  const args = buildDockerArgs(opts);
   assert.ok(args.includes("JAIPH_WORKSPACE=/jaiph/workspace"));
   assert.ok(args.includes("JAIPH_RUNS_DIR=/jaiph/run"));
   assert.ok(!args.some((a) => a === "JAIPH_WORKSPACE=/host/path"));
@@ -372,14 +408,13 @@ function envArgsFor(args: string[], key: string): string[] {
 }
 
 test("buildDockerArgs: a non-allowlisted key is dropped without extraEnv (fail-closed default)", () => {
-  const args = buildDockerArgs(defaultOpts({ env: { MY_TOKEN: "s3cret" } }), TEST_OVERLAY);
+  const args = buildDockerArgs(defaultOpts({ env: { MY_TOKEN: "s3cret" } }));
   assert.deepEqual(envArgsFor(args, "MY_TOKEN"), [], "MY_TOKEN must not cross the boundary by default");
 });
 
 test("buildDockerArgs: extraEnv forwards a non-allowlisted key as -e KEY=VALUE", () => {
   const args = buildDockerArgs(
     defaultOpts({ env: { MY_TOKEN: "ignored-host" }, extraEnv: { MY_TOKEN: "s3cret" } }),
-    TEST_OVERLAY,
   );
   assert.deepEqual(envArgsFor(args, "MY_TOKEN"), ["MY_TOKEN=s3cret"]);
 });
@@ -387,7 +422,6 @@ test("buildDockerArgs: extraEnv forwards a non-allowlisted key as -e KEY=VALUE",
 test("buildDockerArgs: extraEnv value passes verbatim (no path remapping, '=' preserved)", () => {
   const args = buildDockerArgs(
     defaultOpts({ extraEnv: { API_URL: "https://x.test/a=b" } }),
-    TEST_OVERLAY,
   );
   assert.deepEqual(envArgsFor(args, "API_URL"), ["API_URL=https://x.test/a=b"]);
 });
@@ -399,7 +433,6 @@ test("buildDockerArgs: a key both allowlist-forwarded and in extraEnv appears on
       extraEnv: { ANTHROPIC_API_KEY: "from-flag" },
       backends: ["claude"],
     }),
-    TEST_OVERLAY,
   );
   assert.deepEqual(
     envArgsFor(args, "ANTHROPIC_API_KEY"),
@@ -444,7 +477,6 @@ function forwardedProbeKeys(args: string[]): string[] {
 test("buildDockerArgs: backend claude forwards exactly ANTHROPIC_API_KEY + CLAUDE_CODE_OAUTH_TOKEN", () => {
   const args = buildDockerArgs(
     defaultOpts({ env: { ...CREDENTIAL_PROBE_ENV }, backends: ["claude"] }),
-    TEST_OVERLAY,
   );
   assert.deepEqual(forwardedProbeKeys(args), ["ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN"]);
   assert.ok(
@@ -456,7 +488,6 @@ test("buildDockerArgs: backend claude forwards exactly ANTHROPIC_API_KEY + CLAUD
 test("buildDockerArgs: backend cursor forwards exactly CURSOR_API_KEY", () => {
   const args = buildDockerArgs(
     defaultOpts({ env: { ...CREDENTIAL_PROBE_ENV }, backends: ["cursor"] }),
-    TEST_OVERLAY,
   );
   assert.deepEqual(forwardedProbeKeys(args), ["CURSOR_API_KEY"]);
 });
@@ -464,7 +495,6 @@ test("buildDockerArgs: backend cursor forwards exactly CURSOR_API_KEY", () => {
 test("buildDockerArgs: backend codex forwards exactly OPENAI_API_KEY", () => {
   const args = buildDockerArgs(
     defaultOpts({ env: { ...CREDENTIAL_PROBE_ENV }, backends: ["codex"] }),
-    TEST_OVERLAY,
   );
   assert.deepEqual(forwardedProbeKeys(args), ["OPENAI_API_KEY"]);
 });
@@ -472,7 +502,6 @@ test("buildDockerArgs: backend codex forwards exactly OPENAI_API_KEY", () => {
 test("buildDockerArgs: multiple backends forward the union of their credential keys", () => {
   const args = buildDockerArgs(
     defaultOpts({ env: { ...CREDENTIAL_PROBE_ENV }, backends: ["claude", "cursor"] }),
-    TEST_OVERLAY,
   );
   assert.deepEqual(forwardedProbeKeys(args), [
     "ANTHROPIC_API_KEY",
@@ -482,7 +511,7 @@ test("buildDockerArgs: multiple backends forward the union of their credential k
 });
 
 test("buildDockerArgs: omitted backends forward no credential keys (fail-closed)", () => {
-  const args = buildDockerArgs(defaultOpts({ env: { ...CREDENTIAL_PROBE_ENV } }), TEST_OVERLAY);
+  const args = buildDockerArgs(defaultOpts({ env: { ...CREDENTIAL_PROBE_ENV } }));
   assert.deepEqual(forwardedProbeKeys(args), []);
 });
 
@@ -490,7 +519,7 @@ test("buildDockerArgs: does not forward undefined agent env vars", () => {
   const args = buildDockerArgs(defaultOpts({
     env: { ANTHROPIC_API_KEY: undefined, CURSOR_API_KEY: undefined },
     backends: ["claude", "cursor"],
-  }), TEST_OVERLAY);
+  }));
   assert.ok(!args.some((a) => a.includes("ANTHROPIC_API_KEY")));
   assert.ok(!args.some((a) => a.includes("CURSOR_API_KEY")));
 });
@@ -564,113 +593,6 @@ test("resolveDockerHostRunsRoot: rejects absolute path outside workspace", () =>
 });
 
 // ---------------------------------------------------------------------------
-// overlayMountPath
-// ---------------------------------------------------------------------------
-
-test("overlayMountPath: /jaiph/workspace → /jaiph/workspace-ro", () => {
-  assert.equal(overlayMountPath("/jaiph/workspace"), "/jaiph/workspace-ro");
-});
-
-test("overlayMountPath: subpath remapped", () => {
-  assert.equal(overlayMountPath("/jaiph/workspace/config"), "/jaiph/workspace-ro/config");
-});
-
-test("overlayMountPath: non-workspace path unchanged", () => {
-  assert.equal(overlayMountPath("/other/path"), "/other/path");
-});
-
-// ---------------------------------------------------------------------------
-// writeOverlayScript
-// ---------------------------------------------------------------------------
-
-test("writeOverlayScript: creates executable script with fuse-overlayfs setup", () => {
-  const scriptPath = writeOverlayScript();
-  try {
-    assert.ok(existsSync(scriptPath));
-    const content = readFileSync(scriptPath, "utf8");
-    assert.ok(content.startsWith("#!/usr/bin/env bash"));
-    assert.ok(content.includes("fuse-overlayfs -o"));
-    assert.ok(content.includes("lowerdir=$LOWER,upperdir=$UPPER,workdir=$WORK"));
-    assert.ok(content.includes('exec "$@"'));
-    assert.ok(content.includes("E_DOCKER_OVERLAY"));
-  } finally {
-    rmSync(dirname(scriptPath), { recursive: true, force: true });
-  }
-});
-
-test("writeOverlayScript: mounts as root and then drops to host uid via setpriv", () => {
-  const scriptPath = writeOverlayScript();
-  try {
-    const content = readFileSync(scriptPath, "utf8");
-    assert.ok(content.includes("JAIPH_HOST_UID"), "host uid contract present");
-    assert.ok(content.includes("JAIPH_HOST_GID"), "host gid contract present");
-    assert.ok(content.includes("setpriv"), "drops privileges via setpriv");
-    assert.ok(content.includes("chown"), "best-effort chown for /jaiph/run");
-    assert.ok(content.includes("allow_other"), "allow_other so dropped uid can use mounted overlay");
-  } finally {
-    rmSync(dirname(scriptPath), { recursive: true, force: true });
-  }
-});
-
-test("writeOverlayScript: contains no in-container rsync/cp fallback (host handles it now)", () => {
-  const scriptPath = writeOverlayScript();
-  try {
-    const content = readFileSync(scriptPath, "utf8");
-    assert.ok(!content.includes("rsync"), "rsync fallback removed from container script");
-    assert.ok(!content.includes("copy_workspace_with_cp"), "cp fallback removed from container script");
-    assert.ok(!content.includes("rewrite_workspace_path"), "path-rewrite logic removed");
-    assert.ok(!content.includes("RUNTIME_WORKSPACE"), "workspace switch logic removed");
-  } finally {
-    rmSync(dirname(scriptPath), { recursive: true, force: true });
-  }
-});
-
-// Importing the docker module must not read overlay-run.sh — non-Docker CLI
-// paths (jaiph compile/format) load this module transitively via shared imports
-// (e.g. CONTAINER_RUN_DIR in src/cli/shared/errors.ts) and must not crash with a
-// raw ENOENT when the installation is incomplete.
-//
-// `writeOverlayScript` now falls back to the embedded base64 copy when both
-// on-disk candidates are absent, so the bun-compiled standalone binary works
-// without any sibling files. The "import does no I/O" property is still
-// asserted; the "throws when missing" half was removed when the embedded
-// fallback shipped.
-test("loadOverlayScript: import does not read overlay-run.sh; writeOverlayScript falls back to embedded copy", () => {
-  const dockerPath = require.resolve("./docker");
-  const dockerDir = dirname(dockerPath);
-  const distOverlay = join(dockerDir, "overlay-run.sh");
-  const repoOverlay = resolve(dockerDir, "..", "..", "..", "runtime", "overlay-run.sh");
-  // Hide on-disk overlay candidates via existsSync patching — do not rename
-  // repo-root runtime/overlay-run.sh; parallel tests (embedded-assets) read it.
-  const script = `
-    const fs = require("node:fs");
-    const dist = ${JSON.stringify(distOverlay)};
-    const repo = ${JSON.stringify(repoOverlay)};
-    const origExists = fs.existsSync;
-    fs.existsSync = (p) => (p === dist || p === repo ? false : origExists(p));
-    const mod = require(${JSON.stringify(dockerPath)});
-    // Mirrors what jaiph compile/format pull from the docker module (only
-    // constants/types, never the overlay path).
-    if (mod.CONTAINER_RUN_DIR !== "/jaiph/run") {
-      console.error("FAIL: CONTAINER_RUN_DIR unexpected: " + mod.CONTAINER_RUN_DIR);
-      process.exit(5);
-    }
-    const tmpPath = mod.writeOverlayScript();
-    const body = fs.readFileSync(tmpPath, "utf8");
-    if (!body.startsWith("#!/usr/bin/env bash")) {
-      console.error("FAIL: embedded overlay body did not start with bash shebang: " + body.slice(0, 60));
-      process.exit(2);
-    }
-    fs.rmSync(require("node:path").dirname(tmpPath), { recursive: true, force: true });
-    console.log("OK");
-  `;
-  const r = spawnSync(process.execPath, ["-e", script], { encoding: "utf8" });
-  assert.equal(r.status, 0, `subprocess failed (status=${r.status}); stdout=${r.stdout}; stderr=${r.stderr}`);
-  assert.match(r.stdout, /OK/);
-});
-
-
-// ---------------------------------------------------------------------------
 // spawnDockerProcess: stdin must be ignored
 // ---------------------------------------------------------------------------
 
@@ -680,12 +602,6 @@ test("spawnDockerProcess: stdin ignored, stdout+stderr piped for events", () => 
     src.includes('["ignore", "pipe", "pipe"]'),
     "spawnDockerProcess must use stdio: [\"ignore\", \"pipe\", \"pipe\"]",
   );
-});
-
-test("spawnDockerProcess: Linux overlay mode chmods sandbox run dir for userns-remap compatibility", () => {
-  const src = readFileSync(join(__dirname, "docker.ts"), "utf8");
-  assert.ok(src.includes("mode === \"overlay\""), "guarded to overlay mode");
-  assert.ok(src.includes("chmodSync(opts.sandboxRunDir, 0o777)"), "run dir chmod present");
 });
 
 // ---------------------------------------------------------------------------
@@ -889,7 +805,7 @@ test("buildDockerArgs: only forwards env vars matching allowlist", () => {
       DOCKER_HOST: "unix:///var/run/docker.sock",
     },
   });
-  const args = buildDockerArgs(opts, TEST_OVERLAY);
+  const args = buildDockerArgs(opts);
   assert.ok(args.includes("JAIPH_DEBUG=true"), "allowed JAIPH_ var forwarded");
   assert.ok(!args.some((a) => a.includes("GITHUB_TOKEN")), "GITHUB_TOKEN not forwarded");
   assert.ok(!args.some((a) => a.includes("PYPI_TOKEN")), "PYPI_TOKEN not forwarded");
@@ -903,7 +819,7 @@ test("buildDockerArgs: only forwards env vars matching allowlist", () => {
 // ---------------------------------------------------------------------------
 
 test("buildDockerArgs: includes --cap-drop ALL and --security-opt no-new-privileges", () => {
-  const args = buildDockerArgs(defaultOpts(), TEST_OVERLAY);
+  const args = buildDockerArgs(defaultOpts());
   const capDropIdx = args.indexOf("--cap-drop");
   assert.ok(capDropIdx >= 0, "--cap-drop present");
   assert.equal(args[capDropIdx + 1], "ALL");
@@ -912,148 +828,52 @@ test("buildDockerArgs: includes --cap-drop ALL and --security-opt no-new-privile
   assert.equal(args[secOptIdx + 1], "no-new-privileges");
 });
 
-test("buildDockerArgs: overlay mode adds SYS_ADMIN + SETUID + SETGID + CHOWN + DAC_READ_SEARCH", () => {
-  const args = buildDockerArgs(defaultOpts(), TEST_OVERLAY);
-  const capAddValues = args
-    .map((v, i) => (v === "--cap-add" ? args[i + 1] : null))
-    .filter((v): v is string => v !== null);
-  assert.ok(capAddValues.includes("SYS_ADMIN"), "SYS_ADMIN present");
-  assert.ok(capAddValues.includes("SETUID"), "SETUID present");
-  assert.ok(capAddValues.includes("SETGID"), "SETGID present");
-  assert.ok(capAddValues.includes("CHOWN"), "CHOWN present");
-  assert.ok(
-    capAddValues.includes("DAC_READ_SEARCH"),
-    "DAC_READ_SEARCH present so fuse-overlayfs can read host files with restrictive perms",
-  );
-});
-
-test("buildDockerArgs: copy mode adds no caps", () => {
+test("buildDockerArgs: snapshot mode adds no caps", () => {
   const cloneDir = mkdtempSync(join(tmpdir(), "jaiph-test-clone-"));
   try {
-    const args = buildDockerArgs(copyOpts(cloneDir));
+    const args = buildDockerArgs(snapshotOpts(cloneDir));
     const capAddValues = args
       .map((v, i) => (v === "--cap-add" ? args[i + 1] : null))
       .filter((v): v is string => v !== null);
-    assert.deepStrictEqual(capAddValues, [], "copy mode runs with no added capabilities");
+    assert.deepStrictEqual(capAddValues, [], "snapshot mode runs with no added capabilities");
   } finally {
     rmSync(cloneDir, { recursive: true, force: true });
   }
 });
 
-test("buildDockerArgs: overlay mode adds --security-opt apparmor=unconfined on Linux to allow fuse mounts", () => {
-  if (process.platform !== "linux") return;
-  const args = buildDockerArgs(defaultOpts(), TEST_OVERLAY);
-  const secOptIndices = args
-    .map((v, i) => (v === "--security-opt" ? i : -1))
-    .filter((i) => i >= 0);
-  const values = secOptIndices.map((i) => args[i + 1]);
-  assert.ok(values.includes("apparmor=unconfined"), "apparmor=unconfined present in overlay mode");
-});
-
-test("buildDockerArgs: copy mode does not add --security-opt apparmor=unconfined", () => {
+test("buildDockerArgs: snapshot mode does not add --security-opt apparmor=unconfined", () => {
   const cloneDir = mkdtempSync(join(tmpdir(), "jaiph-test-clone-"));
   try {
-    const args = buildDockerArgs(copyOpts(cloneDir));
+    const args = buildDockerArgs(snapshotOpts(cloneDir));
     const secOptIndices = args
       .map((v, i) => (v === "--security-opt" ? i : -1))
       .filter((i) => i >= 0);
     const values = secOptIndices.map((i) => args[i + 1]);
-    assert.ok(!values.includes("apparmor=unconfined"), "no apparmor flag needed in copy mode");
+    assert.ok(!values.includes("apparmor=unconfined"), "no apparmor flag in snapshot mode");
   } finally {
     rmSync(cloneDir, { recursive: true, force: true });
   }
-});
-
-// ---------------------------------------------------------------------------
-// buildDockerArgs: copy-mode sandbox (host pre-clones workspace, mounts rw)
-// ---------------------------------------------------------------------------
-
-test("buildDockerArgs: copy mode mounts cloned workspace rw at /jaiph/workspace and skips overlay/fuse/SYS_ADMIN", () => {
-  const cloneDir = mkdtempSync(join(tmpdir(), "jaiph-test-clone-"));
-  try {
-    const args = buildDockerArgs(copyOpts(cloneDir));
-    const vFlags = args.filter((_, i) => i > 0 && args[i - 1] === "-v");
-
-    const wsMount = vFlags.find((v) => v.endsWith(":/jaiph/workspace:rw"));
-    assert.ok(wsMount, "workspace bound rw at /jaiph/workspace");
-    assert.ok(wsMount!.startsWith(`${cloneDir}:`), "host side is the cloned workspace");
-    assert.ok(!vFlags.some((v) => v.includes("/jaiph/workspace-ro")), "no overlay lower-layer mount in copy mode");
-    assert.ok(!vFlags.some((v) => v.includes("/jaiph/overlay-run.sh")), "no overlay script mount in copy mode");
-
-    assert.ok(!args.includes("/dev/fuse"), "no fuse device in copy mode");
-    assert.ok(!args.includes("SYS_ADMIN"), "no SYS_ADMIN cap in copy mode");
-
-    assert.ok(args.includes("--cap-drop"));
-    assert.ok(args.includes("ALL"));
-    assert.ok(args.includes("--security-opt"));
-    assert.ok(args.includes("no-new-privileges"));
-
-    const idxImage = args.indexOf("ubuntu:24.04");
-    const tail = args.slice(idxImage + 1);
-    assert.equal(tail[0], "jaiph", "no overlay-run.sh wrapper in copy mode");
-    assert.equal(tail[1], "run");
-    assert.equal(tail[2], "--raw");
-    assert.equal(tail[3], "/jaiph/workspace/main.jh");
-  } finally {
-    rmSync(cloneDir, { recursive: true, force: true });
-  }
-});
-
-test("buildDockerArgs: copy mode binds run dir rw at /jaiph/run", () => {
-  const cloneDir = mkdtempSync(join(tmpdir(), "jaiph-test-clone-"));
-  try {
-    const args = buildDockerArgs(copyOpts(cloneDir));
-    const vFlags = args.filter((_, i) => i > 0 && args[i - 1] === "-v");
-    const runMount = vFlags.find((v) => v.endsWith(":/jaiph/run:rw"));
-    assert.ok(runMount, "run dir bound rw at /jaiph/run");
-  } finally {
-    rmSync(cloneDir, { recursive: true, force: true });
-  }
-});
-
-test("buildDockerArgs: throws when overlay mode is selected without script path", () => {
-  assert.throws(() => buildDockerArgs(defaultOpts({ sandboxMode: "overlay" })), /overlay mode requires/);
 });
 
 // ---------------------------------------------------------------------------
 // buildDockerArgs: UID/GID handling (Linux only)
 // ---------------------------------------------------------------------------
 
-test("buildDockerArgs: overlay mode runs as root and injects JAIPH_HOST_UID/GID (Linux)", () => {
-  if (process.platform !== "linux") return;
-  const args = buildDockerArgs(defaultOpts(), TEST_OVERLAY);
-  const userIdx = args.indexOf("--user");
-  assert.ok(userIdx >= 0, "--user flag present");
-  assert.equal(args[userIdx + 1], "0:0", "overlay starts as root so fuse-overlayfs can mount /jaiph/workspace");
-
-  const envFlags = args
-    .map((v, i) => (v === "-e" ? args[i + 1] : null))
-    .filter((v): v is string => v !== null);
-  assert.ok(envFlags.some((v) => v.startsWith("JAIPH_HOST_UID=")), "JAIPH_HOST_UID env present");
-  assert.ok(envFlags.some((v) => v.startsWith("JAIPH_HOST_GID=")), "JAIPH_HOST_GID env present");
-});
-
-test("buildDockerArgs: copy mode runs as host UID:GID directly (Linux)", () => {
+test("buildDockerArgs: snapshot mode runs as host UID:GID directly (Linux)", () => {
   if (process.platform !== "linux") return;
   const cloneDir = mkdtempSync(join(tmpdir(), "jaiph-test-clone-"));
   try {
-    const args = buildDockerArgs(copyOpts(cloneDir));
+    const args = buildDockerArgs(snapshotOpts(cloneDir));
     const userIdx = args.indexOf("--user");
     assert.ok(userIdx >= 0, "--user flag present");
-    assert.notEqual(args[userIdx + 1], "0:0", "copy mode runs as host UID, not root");
-    assert.match(args[userIdx + 1], /^\d+:\d+$/, "copy mode --user is uid:gid");
-
-    const envFlags = args
-      .map((v, i) => (v === "-e" ? args[i + 1] : null))
-      .filter((v): v is string => v !== null);
-    assert.ok(!envFlags.some((v) => v.startsWith("JAIPH_HOST_UID=")), "no JAIPH_HOST_UID env in copy mode");
-    assert.ok(!envFlags.some((v) => v.startsWith("JAIPH_HOST_GID=")), "no JAIPH_HOST_GID env in copy mode");
+    assert.notEqual(args[userIdx + 1], "0:0", "snapshot mode runs as host UID, not root");
+    assert.match(args[userIdx + 1], /^\d+:\d+$/, "snapshot mode --user is uid:gid");
   } finally {
     rmSync(cloneDir, { recursive: true, force: true });
   }
 });
 
-test("buildDockerArgs: throws E_DOCKER_UID on Linux when UID/GID detection fails (copy mode)", (t) => {
+test("buildDockerArgs: throws E_DOCKER_UID on Linux when UID/GID detection fails (snapshot mode)", () => {
   const origPlatform = Object.getOwnPropertyDescriptor(process, "platform");
   Object.defineProperty(process, "platform", { value: "linux", configurable: true });
   const origGetHostUidGid = _uidDetect.getHostUidGid;
@@ -1062,29 +882,12 @@ test("buildDockerArgs: throws E_DOCKER_UID on Linux when UID/GID detection fails
     const cloneDir = mkdtempSync(join(tmpdir(), "jaiph-test-uid-"));
     try {
       assert.throws(
-        () => buildDockerArgs(copyOpts(cloneDir)),
+        () => buildDockerArgs(snapshotOpts(cloneDir)),
         /E_DOCKER_UID/,
       );
     } finally {
       rmSync(cloneDir, { recursive: true, force: true });
     }
-  } finally {
-    _uidDetect.getHostUidGid = origGetHostUidGid;
-    if (origPlatform) Object.defineProperty(process, "platform", origPlatform);
-    else Object.defineProperty(process, "platform", { value: process.platform, configurable: true });
-  }
-});
-
-test("buildDockerArgs: throws E_DOCKER_UID on Linux when UID/GID detection fails (overlay mode)", () => {
-  const origPlatform = Object.getOwnPropertyDescriptor(process, "platform");
-  Object.defineProperty(process, "platform", { value: "linux", configurable: true });
-  const origGetHostUidGid = _uidDetect.getHostUidGid;
-  _uidDetect.getHostUidGid = () => undefined;
-  try {
-    assert.throws(
-      () => buildDockerArgs(defaultOpts(), TEST_OVERLAY),
-      /E_DOCKER_UID/,
-    );
   } finally {
     _uidDetect.getHostUidGid = origGetHostUidGid;
     if (origPlatform) Object.defineProperty(process, "platform", origPlatform);
@@ -1099,7 +902,7 @@ test("buildDockerArgs: does not throw E_DOCKER_UID on macOS even without UID det
   _uidDetect.getHostUidGid = () => undefined;
   try {
     // Should not throw — macOS skips UID handling entirely
-    assert.doesNotThrow(() => buildDockerArgs(defaultOpts(), TEST_OVERLAY));
+    assert.doesNotThrow(() => buildDockerArgs(defaultOpts()));
   } finally {
     _uidDetect.getHostUidGid = origGetHostUidGid;
     if (origPlatform) Object.defineProperty(process, "platform", origPlatform);
@@ -1107,10 +910,10 @@ test("buildDockerArgs: does not throw E_DOCKER_UID on macOS even without UID det
   }
 });
 
-test("buildDockerArgs: throws when copy mode is selected without sandboxWorkspaceDir", () => {
+test("buildDockerArgs: throws when snapshot mode is selected without sandboxWorkspaceDir", () => {
   assert.throws(
-    () => buildDockerArgs(defaultOpts({ sandboxMode: "copy", sandboxWorkspaceDir: undefined })),
-    /copy mode requires sandboxWorkspaceDir/,
+    () => buildDockerArgs(defaultOpts({ sandboxMode: "snapshot", sandboxWorkspaceDir: undefined })),
+    /snapshot mode requires sandboxWorkspaceDir/,
   );
 });
 
@@ -1118,73 +921,41 @@ test("buildDockerArgs: throws when copy mode is selected without sandboxWorkspac
 // selectSandboxMode
 // ---------------------------------------------------------------------------
 
-test("selectSandboxMode: JAIPH_DOCKER_NO_OVERLAY=1 forces copy", () => {
-  assert.equal(selectSandboxMode({ JAIPH_DOCKER_NO_OVERLAY: "1" }), "copy");
-  assert.equal(selectSandboxMode({ JAIPH_DOCKER_NO_OVERLAY: "true" }), "copy");
+test("selectSandboxMode: default (no env) is snapshot", () => {
+  assert.equal(selectSandboxMode({}), "snapshot");
 });
 
-test("selectSandboxMode: returns overlay iff /dev/fuse exists on host (platform-correlated)", () => {
-  const expected = existsSync("/dev/fuse") ? "overlay" : "copy";
-  assert.equal(selectSandboxMode({}), expected);
+test("selectSandboxMode: no fuse probing — snapshot regardless of host state", () => {
+  // There is no /dev/fuse probe and no JAIPH_DOCKER_NO_OVERLAY escape hatch;
+  // the default is always snapshot.
+  assert.equal(selectSandboxMode({ JAIPH_DOCKER_NO_OVERLAY: "1" }), "snapshot");
+  assert.equal(selectSandboxMode({ JAIPH_DOCKER_NO_OVERLAY: "true" }), "snapshot");
 });
-
-// ---------------------------------------------------------------------------
-// selectSandboxMode + inplace
-// ---------------------------------------------------------------------------
 
 test("selectSandboxMode: JAIPH_INPLACE=1 forces inplace", () => {
   assert.equal(selectSandboxMode({ JAIPH_INPLACE: "1" }), "inplace");
   assert.equal(selectSandboxMode({ JAIPH_INPLACE: "true" }), "inplace");
 });
 
-test("selectSandboxMode: JAIPH_INPLACE wins over JAIPH_DOCKER_NO_OVERLAY", () => {
-  assert.equal(
-    selectSandboxMode({ JAIPH_INPLACE: "1", JAIPH_DOCKER_NO_OVERLAY: "1" }),
-    "inplace",
-  );
-});
-
 test("selectSandboxMode: JAIPH_INPLACE=other-value does not switch mode (only 1/true)", () => {
-  const expected = existsSync("/dev/fuse") ? "overlay" : "copy";
-  assert.equal(selectSandboxMode({ JAIPH_INPLACE: "yes" }), expected);
-  assert.equal(selectSandboxMode({ JAIPH_INPLACE: "0" }), expected);
-  assert.equal(selectSandboxMode({ JAIPH_INPLACE: "" }), expected);
-});
-
-test("selectSandboxMode: existing overlay/copy behavior unchanged when JAIPH_INPLACE unset (regression)", () => {
-  // Without JAIPH_INPLACE, the function returns exactly what /dev/fuse +
-  // JAIPH_DOCKER_NO_OVERLAY would have returned before this change.
-  assert.equal(selectSandboxMode({ JAIPH_DOCKER_NO_OVERLAY: "1" }), "copy");
-  assert.equal(selectSandboxMode({ JAIPH_DOCKER_NO_OVERLAY: "true" }), "copy");
-  const expected = existsSync("/dev/fuse") ? "overlay" : "copy";
-  assert.equal(selectSandboxMode({}), expected);
+  assert.equal(selectSandboxMode({ JAIPH_INPLACE: "yes" }), "snapshot");
+  assert.equal(selectSandboxMode({ JAIPH_INPLACE: "0" }), "snapshot");
+  assert.equal(selectSandboxMode({ JAIPH_INPLACE: "" }), "snapshot");
 });
 
 // ---------------------------------------------------------------------------
 // selectMcpSandboxMode — must share the exact same truth table as selectSandboxMode
 // ---------------------------------------------------------------------------
 
-test("selectMcpSandboxMode: default matches selectSandboxMode (overlay or copy, never inplace)", () => {
+test("selectMcpSandboxMode: default matches selectSandboxMode (snapshot, never inplace)", () => {
   const expected = selectSandboxMode({});
-  assert.notEqual(expected, "inplace", "selectSandboxMode default must never be inplace");
+  assert.equal(expected, "snapshot", "selectSandboxMode default is snapshot");
   assert.equal(selectMcpSandboxMode({}), expected);
 });
 
 test("selectMcpSandboxMode: JAIPH_INPLACE=1 → inplace (same as selectSandboxMode)", () => {
   assert.equal(selectMcpSandboxMode({ JAIPH_INPLACE: "1" }), "inplace");
   assert.equal(selectMcpSandboxMode({ JAIPH_INPLACE: "true" }), "inplace");
-});
-
-test("selectMcpSandboxMode: JAIPH_DOCKER_NO_OVERLAY=1 → copy (same as selectSandboxMode)", () => {
-  assert.equal(selectMcpSandboxMode({ JAIPH_DOCKER_NO_OVERLAY: "1" }), "copy");
-  assert.equal(selectMcpSandboxMode({ JAIPH_DOCKER_NO_OVERLAY: "true" }), "copy");
-});
-
-test("selectMcpSandboxMode: JAIPH_INPLACE wins over JAIPH_DOCKER_NO_OVERLAY (same as selectSandboxMode)", () => {
-  assert.equal(
-    selectMcpSandboxMode({ JAIPH_INPLACE: "1", JAIPH_DOCKER_NO_OVERLAY: "1" }),
-    "inplace",
-  );
 });
 
 test("selectMcpSandboxMode: full truth-table parity with selectSandboxMode", () => {
@@ -1195,9 +966,6 @@ test("selectMcpSandboxMode: full truth-table parity with selectSandboxMode", () 
     { JAIPH_INPLACE: "0" },
     { JAIPH_INPLACE: "false" },
     { JAIPH_INPLACE: "" },
-    { JAIPH_DOCKER_NO_OVERLAY: "1" },
-    { JAIPH_DOCKER_NO_OVERLAY: "true" },
-    { JAIPH_INPLACE: "1", JAIPH_DOCKER_NO_OVERLAY: "1" },
   ];
   for (const env of envCases) {
     assert.equal(
@@ -1213,7 +981,7 @@ test("selectMcpSandboxMode: full truth-table parity with selectSandboxMode", () 
 // ---------------------------------------------------------------------------
 
 test("buildDockerArgs: workflowSymbol is carried in as -e JAIPH_RUN_WORKFLOW", () => {
-  const args = buildDockerArgs(defaultOpts({ workflowSymbol: "greet" }), TEST_OVERLAY);
+  const args = buildDockerArgs(defaultOpts({ workflowSymbol: "greet" }));
   const envFlags = args.filter((_, i) => i > 0 && args[i - 1] === "-e");
   assert.ok(
     envFlags.includes(`${RUN_WORKFLOW_ENV}=greet`),
@@ -1223,7 +991,7 @@ test("buildDockerArgs: workflowSymbol is carried in as -e JAIPH_RUN_WORKFLOW", (
 
 test("buildDockerArgs: default (or absent) workflowSymbol emits no JAIPH_RUN_WORKFLOW", () => {
   for (const opts of [defaultOpts(), defaultOpts({ workflowSymbol: "default" })]) {
-    const args = buildDockerArgs(opts, TEST_OVERLAY);
+    const args = buildDockerArgs(opts);
     const envFlags = args.filter((_, i) => i > 0 && args[i - 1] === "-e");
     assert.ok(
       !envFlags.some((v) => v.startsWith(`${RUN_WORKFLOW_ENV}=`)),
@@ -1237,7 +1005,6 @@ test("buildDockerArgs: a stale JAIPH_RUN_WORKFLOW in the host env is not auto-fo
   // value inherited from the host env must be dropped by the allowlist.
   const args = buildDockerArgs(
     defaultOpts({ env: { [RUN_WORKFLOW_ENV]: "stale" } }),
-    TEST_OVERLAY,
   );
   const envFlags = args.filter((_, i) => i > 0 && args[i - 1] === "-e");
   assert.ok(
@@ -1254,10 +1021,6 @@ test("isEnvAllowed: rejects JAIPH_RUN_WORKFLOW (set only via explicit spawn wiri
 // buildDockerArgs: inplace mode
 // ---------------------------------------------------------------------------
 
-function inplaceOpts(overrides?: Partial<DockerSpawnOptions>): DockerSpawnOptions {
-  return defaultOpts({ sandboxMode: "inplace", sandboxWorkspaceDir: undefined, ...overrides });
-}
-
 test("buildDockerArgs: inplace binds real workspaceRoot rw at /jaiph/workspace", () => {
   const args = buildDockerArgs(inplaceOpts());
   const vFlags = args.filter((_, i) => i > 0 && args[i - 1] === "-v");
@@ -1266,23 +1029,22 @@ test("buildDockerArgs: inplace binds real workspaceRoot rw at /jaiph/workspace",
   assert.ok(wsMount!.startsWith(`${resolve(TEST_WS)}:`), "host side is the real workspaceRoot");
 });
 
-test("buildDockerArgs: inplace has no :ro workspace mount, no fuse, no overlay script, no overlay caps", () => {
+test("buildDockerArgs: inplace has no :ro workspace mount, no fuse, no overlay script, no caps", () => {
   const args = buildDockerArgs(inplaceOpts());
   const vFlags = args.filter((_, i) => i > 0 && args[i - 1] === "-v");
   assert.ok(!vFlags.some((v) => v.includes("/jaiph/workspace-ro")), "no overlay lower-layer mount");
-  assert.ok(!vFlags.some((v) => v.includes("/jaiph/overlay-run.sh")), "no overlay script mount");
+  assert.ok(!vFlags.some((v) => v.includes("overlay-run.sh")), "no overlay script mount");
   assert.ok(!vFlags.some((v) => v.endsWith(":ro") && v.includes("/jaiph/workspace")), "no :ro workspace mount");
   assert.ok(!args.includes("/dev/fuse"), "no fuse device");
   assert.ok(!args.includes("--device"), "no --device flag at all");
   const capAddValues = args
     .map((v, i) => (v === "--cap-add" ? args[i + 1] : null))
     .filter((v): v is string => v !== null);
-  assert.deepStrictEqual(capAddValues, [], "no overlay-only --cap-add flags");
+  assert.deepStrictEqual(capAddValues, [], "no --cap-add flags");
   const secOptValues = args
     .map((v, i) => (v === "--security-opt" ? args[i + 1] : null))
     .filter((v): v is string => v !== null);
   assert.ok(!secOptValues.includes("apparmor=unconfined"), "no apparmor=unconfined");
-  assert.ok(!args.includes("/jaiph/overlay-run.sh"), "container command does not invoke overlay-run.sh");
 });
 
 test("buildDockerArgs: inplace still includes --cap-drop ALL, no-new-privileges, and runs mount", () => {
@@ -1298,7 +1060,7 @@ test("buildDockerArgs: inplace still includes --cap-drop ALL, no-new-privileges,
   assert.ok(runMount, "run dir bound rw at /jaiph/run");
 });
 
-test("buildDockerArgs: inplace requires neither overlayScriptPath nor sandboxWorkspaceDir", () => {
+test("buildDockerArgs: inplace requires no sandboxWorkspaceDir", () => {
   assert.doesNotThrow(() => buildDockerArgs(inplaceOpts()));
 });
 
@@ -1311,7 +1073,7 @@ test("buildDockerArgs: inplace on Linux runs as --user host_uid:host_gid", () =>
   assert.match(args[userIdx + 1], /^\d+:\d+$/, "inplace --user is uid:gid");
 });
 
-test("buildDockerArgs: inplace command tail is direct `jaiph run --raw <file>` (no overlay-run.sh wrapper)", () => {
+test("buildDockerArgs: inplace command tail is direct `jaiph run --raw <file>` (no wrapper)", () => {
   const args = buildDockerArgs(inplaceOpts());
   const idxImage = args.indexOf("ubuntu:24.04");
   const tail = args.slice(idxImage + 1);
@@ -1338,14 +1100,13 @@ test("isEnvAllowed: rejects JAIPH_INPLACE and JAIPH_INPLACE_YES (would otherwise
   assert.equal(isEnvAllowed("JAIPH_INPLACE_YES", []), false);
 });
 
-test("buildDockerArgs: write to inplace workspace bind appears at the host workspace; copy does not", () => {
+test("buildDockerArgs: write to inplace workspace bind appears at the host workspace; snapshot does not", () => {
   // Filesystem-level assertion. We do not run docker — we identify the
   // host path that the mount spec exposes to the container's /jaiph/workspace
   // and write to it directly. That path is the real workspaceRoot in inplace
-  // mode, and a separate clone dir in copy mode.
+  // mode, and a separate snapshot clone dir in snapshot mode.
   const hostWs = mkdtempSync(join(tmpdir(), "jaiph-inplace-host-"));
   const cloneDir = mkdtempSync(join(tmpdir(), "jaiph-inplace-clone-"));
-  const runDir = mkdtempSync(join(tmpdir(), "jaiph-inplace-run-"));
   try {
     writeFileSync(join(hostWs, "main.jh"), "");
     const findHostBindFor = (args: string[], containerPath: string): string => {
@@ -1360,49 +1121,40 @@ test("buildDockerArgs: write to inplace workspace bind appears at the host works
     const inplaceArgs = buildDockerArgs(
       defaultOpts({ sandboxMode: "inplace", workspaceRoot: hostWs, sandboxWorkspaceDir: undefined, sourceAbs: join(hostWs, "main.jh") }),
     );
-    const copyArgs = buildDockerArgs(
-      defaultOpts({ sandboxMode: "copy", workspaceRoot: hostWs, sandboxWorkspaceDir: cloneDir, sourceAbs: join(hostWs, "main.jh") }),
+    const snapshotArgs = buildDockerArgs(
+      defaultOpts({ sandboxMode: "snapshot", workspaceRoot: hostWs, sandboxWorkspaceDir: cloneDir, sourceAbs: join(hostWs, "main.jh") }),
     );
     const inplaceHostPath = findHostBindFor(inplaceArgs, "/jaiph/workspace");
-    const copyHostPath = findHostBindFor(copyArgs, "/jaiph/workspace");
+    const snapshotHostPath = findHostBindFor(snapshotArgs, "/jaiph/workspace");
     assert.equal(inplaceHostPath, resolve(hostWs), "inplace points at real workspace");
-    assert.notEqual(copyHostPath, resolve(hostWs), "copy points at clone, not workspace");
+    assert.notEqual(snapshotHostPath, resolve(hostWs), "snapshot points at clone, not workspace");
     // Simulate the container writing a file through the bind.
     writeFileSync(join(inplaceHostPath, "wrote_from_container.txt"), "x");
-    writeFileSync(join(copyHostPath, "wrote_from_container.txt"), "x");
+    writeFileSync(join(snapshotHostPath, "wrote_from_container.txt"), "x");
     assert.ok(
       existsSync(join(hostWs, "wrote_from_container.txt")),
       "inplace bind: container write lands on host workspace",
     );
-    // Re-check after copy write — host workspace must only have the inplace file
-    // (already present); the copy write went to cloneDir, not hostWs.
-    const cloneWrite = join(cloneDir, "wrote_from_container.txt");
-    assert.ok(existsSync(cloneWrite), "copy bind: write landed in clone");
-    // Remove the inplace marker, then prove that subsequent copy writes don't leak.
+    // Remove the inplace marker, then prove that subsequent snapshot writes don't leak.
     rmSync(join(hostWs, "wrote_from_container.txt"));
     writeFileSync(join(cloneDir, "second_write.txt"), "x");
     assert.ok(
       !existsSync(join(hostWs, "second_write.txt")),
-      "copy bind: writes do not leak to host workspace",
+      "snapshot bind: writes do not leak to host workspace",
     );
-    void runDir;
   } finally {
     rmSync(hostWs, { recursive: true, force: true });
     rmSync(cloneDir, { recursive: true, force: true });
-    rmSync(runDir, { recursive: true, force: true });
   }
 });
 
 // ---------------------------------------------------------------------------
-// Capability posture lock (security review 2026-07-20, Finding 3)
+// Capability posture lock
 // ---------------------------------------------------------------------------
-// Overlay's elevated setup posture (root + caps + apparmor=unconfined on
-// Linux, dropped via setpriv before workflow code runs) is a documented,
-// tracked exception — see docs/sandboxing.md#overlay-capability-posture and
-// the QUEUE.md follow-up "Ship a tailored AppArmor profile for overlay mode".
-// These tests pin the EXACT flag sets, not just inclusion: any widening (a
-// new cap-add, a new security-opt) fails here and must go through docs and
-// review, and copy/inplace must stay non-elevated.
+// Snapshot is now the only default posture and it never elevates. These tests
+// pin the EXACT flag sets, not just inclusion: any widening (a new cap-add, a
+// new security-opt, a --device, an apparmor exception) fails here and must go
+// through docs and review first.
 
 function capAddsOf(args: string[]): string[] {
   return args
@@ -1416,42 +1168,21 @@ function securityOptsOf(args: string[]): string[] {
     .filter((v): v is string => v !== null);
 }
 
-test("posture lock: overlay adds exactly SYS_ADMIN, SETUID, SETGID, CHOWN, DAC_READ_SEARCH — nothing else", () => {
-  const args = buildDockerArgs(defaultOpts(), TEST_OVERLAY);
-  assert.deepStrictEqual(
-    capAddsOf(args),
-    ["SYS_ADMIN", "SETUID", "SETGID", "CHOWN", "DAC_READ_SEARCH"],
-    "overlay cap set widened or shrank — update docs/sandboxing.md#overlay-capability-posture with the review rationale first",
-  );
-});
-
-test("posture lock: overlay security-opts are exactly no-new-privileges plus apparmor=unconfined on Linux only", () => {
-  const args = buildDockerArgs(defaultOpts(), TEST_OVERLAY);
-  const expected =
-    process.platform === "linux"
-      ? ["no-new-privileges", "apparmor=unconfined"]
-      : ["no-new-privileges"];
-  assert.deepStrictEqual(
-    securityOptsOf(args),
-    expected,
-    "overlay security-opt posture changed — this is the tracked AppArmor exception; update docs and QUEUE.md follow-up first",
-  );
-});
-
-test("posture lock: copy and inplace add no caps and no security-opt beyond no-new-privileges", () => {
+test("posture lock: snapshot and inplace add no caps, no device, no security-opt beyond no-new-privileges", () => {
   const cloneDir = mkdtempSync(join(tmpdir(), "jaiph-test-posture-"));
   try {
     const modes: Array<[string, string[]]> = [
-      ["copy", buildDockerArgs(copyOpts(cloneDir))],
+      ["snapshot", buildDockerArgs(snapshotOpts(cloneDir))],
       ["inplace", buildDockerArgs(inplaceOpts())],
     ];
     for (const [mode, args] of modes) {
-      assert.deepStrictEqual(capAddsOf(args), [], `${mode} mode must never add capabilities back`);
+      assert.deepStrictEqual(capAddsOf(args), [], `${mode} mode must never add capabilities`);
       assert.deepStrictEqual(
         securityOptsOf(args),
         ["no-new-privileges"],
         `${mode} mode must never set an AppArmor exception or other security-opt`,
       );
+      assert.ok(!args.includes("--device"), `${mode} mode must not add a --device`);
       assert.ok(!args.includes("/dev/fuse"), `${mode} mode must not expose /dev/fuse`);
     }
   } finally {
@@ -1459,14 +1190,13 @@ test("posture lock: copy and inplace add no caps and no security-opt beyond no-n
   }
 });
 
-test("posture lock (Linux): overlay starts as root 0:0; copy and inplace start as the host uid:gid", () => {
+test("posture lock (Linux): snapshot and inplace start as the host uid:gid, never root", () => {
   if (process.platform !== "linux") return;
   const cloneDir = mkdtempSync(join(tmpdir(), "jaiph-test-posture-uid-"));
   try {
     const userOf = (args: string[]): string => args[args.indexOf("--user") + 1];
-    assert.equal(userOf(buildDockerArgs(defaultOpts(), TEST_OVERLAY)), "0:0");
-    assert.match(userOf(buildDockerArgs(copyOpts(cloneDir))), /^\d+:\d+$/);
-    assert.notEqual(userOf(buildDockerArgs(copyOpts(cloneDir))), "0:0");
+    assert.match(userOf(buildDockerArgs(snapshotOpts(cloneDir))), /^\d+:\d+$/);
+    assert.notEqual(userOf(buildDockerArgs(snapshotOpts(cloneDir))), "0:0");
     assert.match(userOf(buildDockerArgs(inplaceOpts())), /^\d+:\d+$/);
     assert.notEqual(userOf(buildDockerArgs(inplaceOpts())), "0:0");
   } finally {
@@ -1474,47 +1204,95 @@ test("posture lock (Linux): overlay starts as root 0:0; copy and inplace start a
   }
 });
 
-test("docs/sandboxing.md documents the overlay capability posture (caps, AppArmor, UID drop, opt-out)", () => {
+test("docs/sandboxing.md documents the snapshot posture and the removal of overlay caps", () => {
   const doc = readFileSync(join(REPO_ROOT, "docs", "sandboxing.md"), "utf8");
-  const tokens = [
-    "SYS_ADMIN",
-    "SETUID",
-    "SETGID",
-    "CHOWN",
-    "DAC_READ_SEARCH",
-    "apparmor=unconfined",
-    "setpriv",
-    "JAIPH_DOCKER_NO_OVERLAY",
-    "overlay-capability-posture",
-  ];
-  for (const token of tokens) {
-    assert.ok(doc.includes(token), `sandboxing.md missing overlay-posture token ${token}`);
+  for (const token of ["--cap-drop ALL", "no-new-privileges", "snapshot", "point-in-time"]) {
+    assert.ok(doc.includes(token), `sandboxing.md missing snapshot-posture token ${token}`);
   }
 });
 
-test("docs/sandbox-run.md states that overlay elevates during setup, copy does not, and the opt-out", () => {
+test("docs/sandbox-run.md states the snapshot default and that it never elevates", () => {
   const doc = readFileSync(join(REPO_ROOT, "docs", "sandbox-run.md"), "utf8");
-  for (const token of ["elevates during setup", "apparmor=unconfined", "JAIPH_DOCKER_NO_OVERLAY", "never elevates"]) {
-    assert.ok(doc.includes(token), `sandbox-run.md missing overlay-posture token ${token}`);
+  for (const token of ["snapshot", "never elevates", "point-in-time"]) {
+    assert.ok(doc.includes(token), `sandbox-run.md missing snapshot token ${token}`);
   }
 });
 
 // ---------------------------------------------------------------------------
-// spawnDockerProcess: inplace mode skips cloneWorkspaceForSandbox path
+// spawnDockerProcess: snapshot lands at <runDir>/sandbox and cleanup lifecycle
 // ---------------------------------------------------------------------------
 
-test("spawnDockerProcess: inplace mode does not clone or allocate sandbox workspace dir", () => {
+function spawnStubbedSnapshot(runsRoot: string, srcWs: string, envExtra: Record<string, string> = {}): DockerSpawnResult {
+  const origExec = _dockerExec.run;
+  const origSpawn = _dockerSpawn.run;
+  _dockerExec.run = () => {}; // docker info / etc. succeed
+  _dockerSpawn.run = () =>
+    ({ kill: () => true, pid: 0, stdout: null, stderr: null } as unknown as DockerSpawnResult["child"]);
+  try {
+    return spawnDockerProcess({
+      config: { enabled: true, image: "ubuntu:24.04", imageExplicit: false, network: "default", timeoutSeconds: 0 },
+      sourceAbs: join(srcWs, "main.jh"),
+      workspaceRoot: srcWs,
+      sandboxRunDir: runsRoot,
+      runArgs: [],
+      env: envExtra,
+      isTTY: false,
+      sandboxMode: "snapshot",
+    });
+  } finally {
+    _dockerExec.run = origExec;
+    _dockerSpawn.run = origSpawn;
+  }
+}
+
+test("spawnDockerProcess: snapshot lands at <runDir>/sandbox and is removed on cleanup (success and failure alike)", () => {
+  const runsRoot = mkdtempSync(join(tmpdir(), "jaiph-snap-runs-"));
+  const srcWs = mkdtempSync(join(tmpdir(), "jaiph-snap-ws-"));
+  try {
+    writeFileSync(join(srcWs, "main.jh"), "");
+    writeFileSync(join(srcWs, "marker.txt"), "live");
+    const result = spawnStubbedSnapshot(runsRoot, srcWs);
+    assert.equal(result.sandboxMode, "snapshot");
+    assert.equal(result.sandboxWorkspaceDir, join(runsRoot, "sandbox"), "snapshot lands at <runDir>/sandbox");
+    assert.ok(existsSync(join(runsRoot, "sandbox", "marker.txt")), "workspace content cloned into the snapshot");
+    // cleanupDocker is status-independent — it runs identically on success and
+    // failure, so removing here covers both exit paths.
+    cleanupDocker(result);
+    assert.ok(!existsSync(join(runsRoot, "sandbox")), "snapshot removed on cleanup");
+  } finally {
+    rmSync(runsRoot, { recursive: true, force: true });
+    rmSync(srcWs, { recursive: true, force: true });
+  }
+});
+
+test("spawnDockerProcess: JAIPH_DOCKER_KEEP_SANDBOX=1 keeps the snapshot under the run dir", () => {
+  const runsRoot = mkdtempSync(join(tmpdir(), "jaiph-snap-keep-runs-"));
+  const srcWs = mkdtempSync(join(tmpdir(), "jaiph-snap-keep-ws-"));
+  try {
+    writeFileSync(join(srcWs, "main.jh"), "");
+    const result = spawnStubbedSnapshot(runsRoot, srcWs, { JAIPH_DOCKER_KEEP_SANDBOX: "1" });
+    assert.equal(result.keepSandboxWorkspace, true);
+    cleanupDocker(result);
+    assert.ok(existsSync(join(runsRoot, "sandbox")), "snapshot kept when JAIPH_DOCKER_KEEP_SANDBOX=1");
+  } finally {
+    rmSync(runsRoot, { recursive: true, force: true });
+    rmSync(srcWs, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// spawnDockerProcess: inplace mode skips the snapshot clone path
+// ---------------------------------------------------------------------------
+
+test("spawnDockerProcess: inplace mode does not clone or allocate a snapshot dir", () => {
   const runsRoot = mkdtempSync(join(tmpdir(), "jaiph-inplace-runs-"));
   const srcWs = mkdtempSync(join(tmpdir(), "jaiph-inplace-ws-"));
-  const { _dockerSpawn, spawnDockerProcess } = require("./docker");
   const origExec = _dockerExec.run;
   const origSpawn = _dockerSpawn.run;
   let capturedArgs: string[] | undefined;
   _dockerExec.run = () => {}; // pretend docker info / etc. succeed
-  // Stub the long-running docker run with a no-op child that won't outlive the test.
   _dockerSpawn.run = (args: string[], _opts: object) => {
     capturedArgs = args;
-    // Minimal ChildProcess stand-in: only the fields the helper exposes via DockerSpawnResult.
     return { kill: () => true, pid: 0, stdout: null, stderr: null } as unknown as DockerSpawnResult["child"];
   };
   try {
@@ -1537,13 +1315,12 @@ test("spawnDockerProcess: inplace mode does not clone or allocate sandbox worksp
       sandboxMode: "inplace",
     });
     assert.equal(result.sandboxMode, "inplace");
-    assert.equal(result.sandboxWorkspaceDir, undefined, "no sandbox clone dir tracked");
-    assert.equal(result.overlayScriptDir, undefined, "no overlay script dir tracked");
-    // No .sandbox-* entry was created under the runs root.
+    assert.equal(result.sandboxWorkspaceDir, undefined, "no snapshot clone dir tracked");
+    // No `sandbox` snapshot dir was created under the runs root.
     const entries = readdirSync(runsRoot);
     assert.ok(
-      !entries.some((e) => e.startsWith(".sandbox-")),
-      `inplace must not allocate .sandbox-* dirs (found: ${entries.join(",")})`,
+      !entries.includes("sandbox"),
+      `inplace must not allocate a sandbox dir (found: ${entries.join(",")})`,
     );
     // The host workspace is untouched (no clone copied files elsewhere).
     assert.equal(readFileSync(join(srcWs, "marker.txt"), "utf8"), "live");
@@ -1617,10 +1394,10 @@ test("cloneWorkspaceForSandbox: empty workspace produces empty clone", () => {
 });
 
 test("cloneWorkspaceForSandbox: excludes custom runs root when clone dest is nested inside it", () => {
-  // Regression: copy-mode allocates `.sandbox-*` under the configured runs
-  // root. When that root is a workspace-relative JAIPH_RUNS_DIR (not
-  // `.jaiph/runs`), cloning without excluding it makes GNU `cp` refuse to
-  // copy a directory into itself.
+  // Regression: snapshot mode places `sandbox` under the configured runs root.
+  // When that root is a workspace-relative JAIPH_RUNS_DIR (not `.jaiph/runs`),
+  // cloning without excluding it makes GNU `cp` refuse to copy a directory into
+  // itself — and, critically, keeps the snapshot out of its own copy.
   const src = mkdtempSync(join(tmpdir(), "jaiph-clone-src-"));
   try {
     writeFileSync(join(src, "file.txt"), "hello");
@@ -1635,7 +1412,7 @@ test("cloneWorkspaceForSandbox: excludes custom runs root when clone dest is nes
     );
 
     assert.equal(readFileSync(join(dst, "file.txt"), "utf8"), "hello");
-    assert.ok(!existsSync(join(dst, "custom_runs")), "custom runs root must NOT be copied into the sandbox clone");
+    assert.ok(!existsSync(join(dst, "custom_runs")), "custom runs root must NOT be copied into the snapshot");
     assert.ok(
       existsSync(join(runsRoot, "prior-run", "log.txt")),
       "host runs root content must remain intact outside the clone",
@@ -1645,23 +1422,74 @@ test("cloneWorkspaceForSandbox: excludes custom runs root when clone dest is nes
   }
 });
 
-test("allocateSandboxWorkspaceDir: creates a fresh .sandbox-* dir under the runs root", () => {
+test("allocateSandboxWorkspaceDir: creates <runsRoot>/sandbox (unique per run dir)", () => {
   const runsRoot = mkdtempSync(join(tmpdir(), "jaiph-runs-"));
   try {
     const a = allocateSandboxWorkspaceDir(runsRoot);
-    const b = allocateSandboxWorkspaceDir(runsRoot);
-    assert.notEqual(a, b);
-    assert.ok(a.startsWith(join(runsRoot, ".sandbox-")));
-    assert.ok(b.startsWith(join(runsRoot, ".sandbox-")));
-    assert.ok(existsSync(a) && existsSync(b));
+    assert.equal(a, join(runsRoot, "sandbox"));
+    assert.ok(existsSync(a));
   } finally {
     rmSync(runsRoot, { recursive: true, force: true });
   }
 });
 
 // ---------------------------------------------------------------------------
-// pullImageIfNeeded: shell metacharacter safety (execFileSync migration)
+// WorkspaceCloner: cp flag choice per platform (spawn-injectable)
 // ---------------------------------------------------------------------------
+
+test("cloneWorkspaceForSandbox: Linux/other uses `cp --reflink=auto -pR` (CoW-first, transparent fallback)", () => {
+  const origPlatform = Object.getOwnPropertyDescriptor(process, "platform");
+  Object.defineProperty(process, "platform", { value: "linux", configurable: true });
+  const origCp = _cpSpawn.run;
+  const calls: string[][] = [];
+  _cpSpawn.run = (args) => { calls.push(args); return { status: 0, stderr: "" }; };
+  try {
+    const src = mkdtempSync(join(tmpdir(), "jaiph-reflink-src-"));
+    const dst = mkdtempSync(join(tmpdir(), "jaiph-reflink-dst-"));
+    try {
+      writeFileSync(join(src, "a.txt"), "x");
+      cloneWorkspaceForSandbox(src, dst);
+      assert.ok(calls.length > 0, "cp was invoked");
+      for (const c of calls) {
+        assert.equal(c[0], "--reflink=auto", "Linux clone uses --reflink=auto");
+        assert.equal(c[1], "-pR");
+      }
+    } finally {
+      rmSync(src, { recursive: true, force: true });
+      rmSync(dst, { recursive: true, force: true });
+    }
+  } finally {
+    _cpSpawn.run = origCp;
+    if (origPlatform) Object.defineProperty(process, "platform", origPlatform);
+    else Object.defineProperty(process, "platform", { value: process.platform, configurable: true });
+  }
+});
+
+test("cloneWorkspaceForSandbox: darwin probes `cp -cR` (APFS clonefile) first", () => {
+  const origPlatform = Object.getOwnPropertyDescriptor(process, "platform");
+  Object.defineProperty(process, "platform", { value: "darwin", configurable: true });
+  const origCp = _cpSpawn.run;
+  const calls: string[][] = [];
+  _cpSpawn.run = (args) => { calls.push(args); return { status: 0, stderr: "" }; };
+  try {
+    const src = mkdtempSync(join(tmpdir(), "jaiph-clonefile-src-"));
+    const dst = mkdtempSync(join(tmpdir(), "jaiph-clonefile-dst-"));
+    try {
+      writeFileSync(join(src, "a.txt"), "x");
+      cloneWorkspaceForSandbox(src, dst);
+      assert.ok(calls.length > 0, "cp was invoked");
+      assert.equal(calls[0][0], "-cR", "darwin probes clonefile via cp -cR first");
+      assert.ok(!calls.some((c) => c[0] === "--reflink=auto"), "no --reflink on darwin");
+    } finally {
+      rmSync(src, { recursive: true, force: true });
+      rmSync(dst, { recursive: true, force: true });
+    }
+  } finally {
+    _cpSpawn.run = origCp;
+    if (origPlatform) Object.defineProperty(process, "platform", origPlatform);
+    else Object.defineProperty(process, "platform", { value: process.platform, configurable: true });
+  }
+});
 
 // ---------------------------------------------------------------------------
 // prepareImage: structured status output
@@ -1774,41 +1602,34 @@ function makeStubDockerResult(overrides?: Partial<DockerSpawnResult>): DockerSpa
   return {
     child: {} as DockerSpawnResult["child"],
     sandboxRunDir: "/tmp/none",
-    sandboxMode: "copy",
+    sandboxMode: "snapshot",
     keepSandboxWorkspace: false,
     ...overrides,
   } as DockerSpawnResult;
 }
 
 test("cleanupDocker: second invocation on same result is a no-op", () => {
-  const overlayDir = mkdtempSync(join(tmpdir(), "jaiph-cleanup-overlay-"));
   const sandboxDir = mkdtempSync(join(tmpdir(), "jaiph-cleanup-sandbox-"));
   let timerFired = 0;
   const timer = setTimeout(() => { timerFired += 1; }, 60_000);
   const result = makeStubDockerResult({
-    overlayScriptDir: overlayDir,
     sandboxWorkspaceDir: sandboxDir,
     timeoutTimer: timer,
   });
 
   cleanupDocker(result);
   assert.equal(result.cleaned, true, "result is marked cleaned after first call");
-  assert.equal(existsSync(overlayDir), false, "overlay tempdir removed");
   assert.equal(existsSync(sandboxDir), false, "sandbox tempdir removed");
 
-  // Recreate paths to detect a buggy second-pass rmSync; idempotent guard
+  // Recreate the path to detect a buggy second-pass rmSync; idempotent guard
   // must prevent any further filesystem work.
-  mkdirSync(overlayDir, { recursive: true });
   mkdirSync(sandboxDir, { recursive: true });
-  writeFileSync(join(overlayDir, "sentinel"), "keep", "utf8");
   writeFileSync(join(sandboxDir, "sentinel"), "keep", "utf8");
 
   assert.doesNotThrow(() => cleanupDocker(result), "second call is silent");
-  assert.equal(existsSync(join(overlayDir, "sentinel")), true, "second call did not re-delete overlay");
   assert.equal(existsSync(join(sandboxDir, "sentinel")), true, "second call did not re-delete sandbox");
   assert.equal(timerFired, 0, "timer never fires (cleared on first cleanup)");
 
-  rmSync(overlayDir, { recursive: true, force: true });
   rmSync(sandboxDir, { recursive: true, force: true });
 });
 
@@ -1854,12 +1675,12 @@ test("withDockerExitGuard: does not register any exit listener when dockerResult
 // ---------------------------------------------------------------------------
 
 test("buildDockerArgs: emits --name right after `run --rm` when containerName is set", () => {
-  const args = buildDockerArgs(defaultOpts({ containerName: "jaiph-run-abc123" }), TEST_OVERLAY);
+  const args = buildDockerArgs(defaultOpts({ containerName: "jaiph-run-abc123" }));
   assert.deepEqual(args.slice(0, 4), ["run", "--rm", "--name", "jaiph-run-abc123"]);
 });
 
 test("buildDockerArgs: omits --name when containerName is not set", () => {
-  const args = buildDockerArgs(defaultOpts(), TEST_OVERLAY);
+  const args = buildDockerArgs(defaultOpts());
   assert.equal(args.indexOf("--name"), -1, "no --name flag without a containerName");
 });
 
@@ -1961,4 +1782,3 @@ test("spawnDockerProcess: assigns a container name and passes it as --name to do
     rmSync(srcWs, { recursive: true, force: true });
   }
 });
-

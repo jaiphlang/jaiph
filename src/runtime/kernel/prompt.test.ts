@@ -813,7 +813,7 @@ describe("prompt env scrub (runBackend)", () => {
         runArgs: [],
         env: { JAIPH_RUN_ID: "r1", CURSOR_API_KEY: "fake-cursor-key", GITHUB_TOKEN: "host-value" },
         isTTY: false,
-        sandboxMode: "copy",
+        sandboxMode: "snapshot",
         sandboxWorkspaceDir: cloneDir,
         backends: ["cursor"],
         extraEnv: { GITHUB_TOKEN: "fake-gh-secret" },

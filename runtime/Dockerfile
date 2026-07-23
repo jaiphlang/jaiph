@@ -3,17 +3,16 @@ FROM node:22-bookworm-slim AS builder
 WORKDIR /src
 COPY package.json package-lock.json tsconfig.json ./
 COPY src ./src
-COPY runtime/overlay-run.sh ./runtime/overlay-run.sh
 # npm ci / npm pack run the `prepare` script (tools/embed-assets.js), which
-# reads runtime/overlay-run.sh and docs/jaiph-skill.md to regenerate the
-# embedded assets — those sources must be in the build context.
+# reads docs/jaiph-skill.md to regenerate the embedded assets — that source
+# must be in the build context.
 COPY tools ./tools
 COPY docs/jaiph-skill.md ./docs/jaiph-skill.md
 RUN npm ci && npm run build && npm pack --pack-destination /tmp >/dev/null && mv /tmp/jaiph-*.tgz /tmp/jaiph.tgz
 
 FROM ubuntu:24.04
 
-# Broad workflow toolchain + fuse-overlayfs for CoW sandbox.
+# Broad workflow toolchain for the sandbox runtime.
 # Curated for generic engineering: VCS, shell, JS/Python, Go, Java, Rust,
 # GitHub CLI, and common build utilities — not full CI-VM parity.
 RUN apt-get update && \
@@ -53,8 +52,6 @@ RUN apt-get update && \
       gradle \
       protobuf-compiler \
       just \
-      fuse-overlayfs \
-      fuse3 \
       rsync && \
     rm -rf /var/lib/apt/lists/*
 
@@ -193,12 +190,12 @@ RUN set -eux; \
       | tar -xz -C /usr/local/bin task && \
     chmod +x /usr/local/bin/task
 
-# Non-root user for agent CLIs and default shell behavior. /jaiph/workspace is
-# root-owned because Linux overlay mode mounts there as --user 0:0.
+# Non-root user for agent CLIs and default shell behavior. The workspace and
+# run bind mounts are created and owned by the host UID at run time, so no
+# root-owned mountpoint is needed.
 RUN useradd --create-home --uid 10001 --shell /bin/bash jaiph && \
-    mkdir -p /jaiph/workspace /jaiph/workspace-ro /jaiph/run && \
+    mkdir -p /jaiph/workspace /jaiph/run && \
     chown -R jaiph:jaiph /jaiph && \
-    chown root:root /jaiph/workspace && \
     chmod 755 /home/jaiph
 
 # Claude Code CLI (Anthropic) — global install for all users
@@ -235,9 +232,9 @@ RUN mkdir -p "$HOME/.local/bin" && \
     command -v cursor-agent >/dev/null 2>&1 && \
     rm -f /tmp/install-cursor-agent.sh
 
-# At runtime the container drops to the host UID (overlay mode) or starts as
-# the host UID directly (copy mode) — neither is the `jaiph` user that owns
-# /home/jaiph. cursor-agent (~/.cursor) and claude CLI (~/.claude*) need to
+# At runtime the container starts as the host UID directly — not the `jaiph`
+# user that owns /home/jaiph. cursor-agent (~/.cursor) and claude CLI
+# (~/.claude*) need to
 # create state files inside HOME, which would fail without write permission.
 # Apply 1777 (world-writable + sticky) to every dir under /home/jaiph so any
 # UID can create new files; existing files keep their modes and the sticky bit

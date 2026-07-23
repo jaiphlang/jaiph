@@ -9,7 +9,7 @@ redirect_from:
 
 # Save artifacts
 
-This recipe publishes files from a workflow into the run's `artifacts/` directory under the run logs root (`.jaiph/runs/` by default). That is the supported export path when Docker sandboxing is on — in the default overlay and copy modes, workspace edits are discarded at container exit, but anything copied into `artifacts/` remains on the host.
+This recipe publishes files from a workflow into the run's `artifacts/` directory under the run logs root (`.jaiph/runs/` by default). That is the supported export path when Docker sandboxing is on — in the default snapshot mode, workspace edits are discarded at container exit, but anything copied into `artifacts/` remains on the host.
 
 The runtime always creates an `artifacts/` directory under the run log directory and exposes its absolute path as `JAIPH_ARTIFACTS_DIR`. The `jaiphlang/artifacts` library is the canonical way to copy files into that directory; you can also write there directly from a `script` step.
 
@@ -109,4 +109,4 @@ A clean chain prints `chain intact (N lines)` and exits `0`; a rewritten or trun
 
 - [Architecture — Durable artifact layout](architecture.md#durable-artifact-layout) — the full run directory tree, including where `artifacts/` sits, plus the hash chain and secret-redaction contracts for `run_summary.jsonl`.
 - [Use & publish a library](/how-to/libraries) — installing `jaiphlang/artifacts` and writing your own libraries.
-- [Sandboxing — The three sandbox modes](sandboxing.md#the-three-sandbox-modes) — overlay and copy discard workspace edits; artifacts persist on the host in every mode.
+- [Sandboxing — The two sandbox modes](sandboxing.md#the-three-sandbox-modes) — snapshot mode discards workspace edits; artifacts persist on the host in every mode.

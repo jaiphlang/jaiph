@@ -41,12 +41,9 @@ Install Docker and confirm:
 docker info
 ```
 
-Docker is on by default for `jaiph run`. There is no `--docker` flag — sandboxing is driven by `JAIPH_DOCKER_ENABLED` / `JAIPH_UNSAFE`. The CLI picks a workspace-presentation mode automatically:
+Docker is on by default for `jaiph run`. There is no `--docker` flag — sandboxing is driven by `JAIPH_DOCKER_ENABLED` / `JAIPH_UNSAFE`. In the default **snapshot mode** the CLI takes a writable point-in-time snapshot of the workspace at run start and mounts that clone read-write; the live host checkout is never mounted.
 
-- **Overlay mode** when `/dev/fuse` exists (typically Linux).
-- **Copy mode** when `/dev/fuse` is missing (typically macOS Docker Desktop).
-
-Both modes leave your host workspace unmodified at run end. See [Run in a Docker sandbox](/how-to/sandbox-run) for inplace mode (live host edits, opt-in) and for the CLI-line / env-var matrix.
+Snapshot mode leaves your host workspace unmodified at run end. See [Run in a Docker sandbox](/how-to/sandbox-run) for inplace mode (live host edits, opt-in) and for the CLI-line / env-var matrix.
 
 ## 1. Configure the backend (optional)
 
@@ -97,15 +94,15 @@ jaiph run ./greet.jh "Adam"
 The CLI does a few things before any workflow step runs:
 
 1. **Loads the module graph** (parses the entry file — one file in this tutorial).
-2. **Resolves Docker mode**: picks overlay (`fusefs` banner) when `/dev/fuse` is present, copy (`tmp workspace`) otherwise.
+2. **Resolves Docker mode**: snapshot by default (`snapshot` banner), inplace when `JAIPH_INPLACE=1`.
 3. **Runs the credential pre-flight** for the selected backend. Under Docker, missing env vars abort with `E_AGENT_CREDENTIALS` — no container is launched.
 4. **Pulls the runtime image** (`ghcr.io/jaiphlang/jaiph-runtime:<version>`) if it is not already local. Status lines stream on stderr before the banner.
-5. **Validates the module, emits scripts, prints the banner**, then **spawns the container** — workspace mounted read-only (overlay) or as a disposable clone (copy), and `.jaiph/runs/` read-write for artifacts.
+5. **Validates the module, emits scripts, prints the banner**, then **spawns the container** — the workspace snapshot mounted read-write at `/jaiph/workspace`, and `.jaiph/runs/` read-write for artifacts.
 
 You should see (timings, model output, and exact step name will differ):
 
 ```text
-Jaiph: Running greet.jh (Docker sandbox, fusefs)
+Jaiph: Running greet.jh (Docker sandbox, snapshot)
 
 workflow default (name_arg="Adam")
   ▸ rule valid_name (name_arg="Adam")
@@ -120,7 +117,7 @@ Hello, Adam — Adam Smith, the 18th-century Scottish economist, is often called
 
 Three things to notice:
 
-- The `(Docker sandbox, fusefs)` / `(Docker sandbox, tmp workspace)` banner confirms isolation is on.
+- The `(Docker sandbox, snapshot)` banner confirms isolation is on.
 - The `prompt` step line names the backend (`claude` here), the effective model (`sonnet-4` — omitted when the backend auto-selects), and a truncated preview of the prompt body. The full body is in `run_summary.jsonl`.
 - The line printed after `PASS` is `workflow default`'s return value (`return response`).
 
