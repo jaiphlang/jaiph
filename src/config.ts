@@ -110,6 +110,10 @@ export function interpolateWorkflowMetadata(
       out.runtime.dockerNetwork = interpolateStringField(metadata.runtime.dockerNetwork, vars, env);
     }
   }
+  // trusted_envs keys are literal env var names — never interpolated.
+  if (metadata.trustedEnvs) {
+    out.trustedEnvs = [...metadata.trustedEnvs];
+  }
   if (metadata.module) {
     out.module = {};
     if (metadata.module.name !== undefined) {

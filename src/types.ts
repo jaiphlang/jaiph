@@ -274,6 +274,13 @@ export interface WorkflowMetadata {
   run?: { debug?: boolean; logsDir?: string; recoverLimit?: number };
   runtime?: RuntimeConfig;
   module?: { name?: string; version?: string; description?: string };
+  /**
+   * Host env keys this scope's trusted `run` steps may receive
+   * (`trusted_envs = "GITHUB_TOKEN NPM_TOKEN"`). Only honored when declared
+   * in the entry file; resolved from the pristine host env snapshot, never
+   * from a calling workflow's scope env.
+   */
+  trustedEnvs?: string[];
 }
 
 /** Step inside a test block. Only present when module is a test file (*.test.jh). */

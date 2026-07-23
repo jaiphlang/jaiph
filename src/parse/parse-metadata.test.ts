@@ -423,6 +423,112 @@ test("workflow config: rejects runtime.* keys", () => {
   );
 });
 
+// ---------------------------------------------------------------------------
+// trusted_envs (declarative host-secret forwarding for trusted run steps)
+// ---------------------------------------------------------------------------
+
+test("parseConfigBlock: parses trusted_envs into a key list", () => {
+  const lines = [
+    "config {",
+    '  trusted_envs = "GITHUB_TOKEN NPM_TOKEN"',
+    "}",
+  ];
+  const { metadata } = parseConfigBlock("test.jh", lines, 0);
+  assert.deepEqual(metadata.trustedEnvs, ["GITHUB_TOKEN", "NPM_TOKEN"]);
+});
+
+test("parseConfigBlock: trusted_envs with a single key", () => {
+  const lines = [
+    "config {",
+    '  trusted_envs = "GITHUB_TOKEN"',
+    "}",
+  ];
+  const { metadata } = parseConfigBlock("test.jh", lines, 0);
+  assert.deepEqual(metadata.trustedEnvs, ["GITHUB_TOKEN"]);
+});
+
+test("parseConfigBlock: trusted_envs rejects an invalid env var name", () => {
+  const lines = [
+    "config {",
+    '  trusted_envs = "GITHUB_TOKEN 1BAD"',
+    "}",
+  ];
+  assert.throws(
+    () => parseConfigBlock("test.jh", lines, 0),
+    /trusted_envs key "1BAD" is not a valid environment variable name/,
+  );
+});
+
+test("parseConfigBlock: trusted_envs rejects reserved keys (same rule as --env)", () => {
+  const lines = [
+    "config {",
+    '  trusted_envs = "JAIPH_WORKSPACE"',
+    "}",
+  ];
+  assert.throws(
+    () => parseConfigBlock("test.jh", lines, 0),
+    /trusted_envs cannot declare reserved key "JAIPH_WORKSPACE".*E_ENV_RESERVED/,
+  );
+});
+
+test("parseConfigBlock: trusted_envs rejects JAIPH_DOCKER_* keys", () => {
+  const lines = [
+    "config {",
+    '  trusted_envs = "JAIPH_DOCKER_ENABLED"',
+    "}",
+  ];
+  assert.throws(
+    () => parseConfigBlock("test.jh", lines, 0),
+    /trusted_envs cannot declare reserved key "JAIPH_DOCKER_ENABLED"/,
+  );
+});
+
+test("parseConfigBlock: trusted_envs must be a string", () => {
+  const lines = [
+    "config {",
+    "  trusted_envs = true",
+    "}",
+  ];
+  assert.throws(
+    () => parseConfigBlock("test.jh", lines, 0),
+    /trusted_envs must be a string/,
+  );
+});
+
+test("workflow config: trusted_envs is accepted at workflow level", () => {
+  const src = [
+    "workflow default() {",
+    "  config {",
+    '    trusted_envs = "GITHUB_TOKEN"',
+    "  }",
+    '  log "hello"',
+    "}",
+  ].join("\n");
+  const mod = parsejaiph(src, "test.jh");
+  assert.deepEqual(mod.workflows[0].metadata?.trustedEnvs, ["GITHUB_TOKEN"]);
+});
+
+test("trusted_envs round-trips through formatter", () => {
+  const src = [
+    "config {",
+    '  trusted_envs = "GITHUB_TOKEN NPM_TOKEN"',
+    "}",
+    "",
+    "workflow default() {",
+    "  config {",
+    '    trusted_envs = "EXTRA_KEY"',
+    "  }",
+    '  log "ok"',
+    "}",
+  ].join("\n");
+  const mod = parsejaiph(src, "test.jh");
+  const { emitModule } = require("../format/emit");
+  const emitted = emitModule(mod);
+  const reparsed = parsejaiph(emitted, "test.jh");
+  assert.deepEqual(reparsed.metadata?.trustedEnvs, ["GITHUB_TOKEN", "NPM_TOKEN"]);
+  assert.deepEqual(reparsed.workflows[0].metadata?.trustedEnvs, ["EXTRA_KEY"]);
+});
+
 test("workflow config: coexists with module-level config", () => {
   const src = [
     "config {",

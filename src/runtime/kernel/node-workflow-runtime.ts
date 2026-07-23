@@ -41,6 +41,11 @@ import { RuntimeEventEmitter, type Frame } from "./runtime-event-emitter";
 import { createStepIdleOutputWarn } from "./step-idle-warn";
 import { executeMockBodyDef, type MockBodyDef, type StepResult } from "./runtime-mock";
 import { resetMockResponses } from "./mock";
+import {
+  collectDeclaredTrustedEnvKeys,
+  resolveTrustedEnv,
+  trustedEnvKeysForWorkflow,
+} from "./trusted-env";
 import { linesOfDelimitedString } from "../string-lines";
 import {
   defaultPromptSleep,
@@ -96,6 +101,12 @@ type Scope = {
   env: NodeJS.ProcessEnv;
   /** Declared parameter names for the active workflow or rule. */
   declaredParamNames?: string[];
+  /**
+   * Host-snapshot values for this workflow's `trusted_envs` declaration.
+   * Injected only into `run`-step script spawns (`executeRunRef`); never into
+   * `scope.env`, so nested workflows and prompts cannot inherit them.
+   */
+  trustedEnv?: Record<string, string>;
 };
 
 type StepIO = {
@@ -145,6 +156,10 @@ export class NodeWorkflowRuntime {
   private cachedPromptRetryDelays: number[] | undefined;
   private cachedPromptRetryError: Error | undefined;
   private readonly promptRetryDelaysOverride: readonly number[] | undefined;
+  /** Pristine env snapshot `trusted_envs` keys resolve against (see trusted-env.ts). */
+  private readonly trustedEnvSnapshot: NodeJS.ProcessEnv;
+  /** Every trusted_envs key declared anywhere in the graph — the scrub set. */
+  private readonly declaredTrustedEnvKeys: Set<string>;
 
   private getFrameStack(): Frame[] {
     return this.asyncFrameStack.getStore() ?? this.stack;
@@ -269,6 +284,10 @@ export class NodeWorkflowRuntime {
     // runs must not share one exhausted queue (see resetMockResponses).
     resetMockResponses();
     this.env = opts.env ?? process.env;
+    // Pristine env captured once at process start: `trusted_envs` keys resolve
+    // against this snapshot, never against a calling workflow's scope env.
+    this.trustedEnvSnapshot = { ...this.env };
+    this.declaredTrustedEnvKeys = collectDeclaredTrustedEnvKeys(graph);
     this.cwd = opts.cwd ?? process.cwd();
     this.mockBodies = opts.mockBodies ?? new Map();
     this.sleep = opts.sleep ?? defaultPromptSleep;
@@ -380,10 +399,11 @@ export class NodeWorkflowRuntime {
    */
   async runRoot(workflowName: string, args: string[]): Promise<number> {
     this.emitter.emitWorkflow("WORKFLOW_START", workflowName);
+    const rootEnv = this.scrubTrustedKeys({ ...this.env });
     const rootScope: Scope = {
       filePath: this.graph.entryFile,
-      vars: this.newScopeVars(this.graph.entryFile, undefined, this.env),
-      env: { ...this.env },
+      vars: this.newScopeVars(this.graph.entryFile, undefined, rootEnv),
+      env: rootEnv,
     };
     const resolved = resolveWorkflowRef(this.graph, this.graph.entryFile, {
       value: workflowName,
@@ -420,10 +440,11 @@ export class NodeWorkflowRuntime {
   }
 
   async runNamedWorkflow(ref: string, args: string[]): Promise<{ status: number; output: string; error?: string; returnValue?: string }> {
+    const rootEnv = this.scrubTrustedKeys({ ...this.env });
     const rootScope: Scope = {
       filePath: this.graph.entryFile,
-      vars: this.newScopeVars(this.graph.entryFile, undefined, this.env),
-      env: { ...this.env },
+      vars: this.newScopeVars(this.graph.entryFile, undefined, rootEnv),
+      env: rootEnv,
     };
     const resolved = resolveWorkflowRef(this.graph, this.graph.entryFile, {
       value: ref,
@@ -508,8 +529,12 @@ export class NodeWorkflowRuntime {
       const childScope: Scope = {
         filePath: resolved.filePath,
         vars: metadataVars,
-        env: workflowEnv,
+        // Scrub graph-declared trusted keys so a workflow that did not declare
+        // them cannot see them ambiently (and prompts never can); this
+        // workflow's own declaration comes back via `trustedEnv` below.
+        env: this.scrubTrustedKeys(workflowEnv),
         declaredParamNames: resolved.workflow.params,
+        trustedEnv: this.resolveWorkflowTrustedEnv(resolved.filePath, resolved.workflow.metadata),
       };
       const ctx: WorkflowContext = {
         workflowName,
@@ -1309,11 +1334,14 @@ export class NodeWorkflowRuntime {
       if (mockBody !== undefined) {
         return this.executeManagedStep("script", ref, args, async () => this.dispatchMockBody(ref, mockBody, args));
       }
+      // Trusted `run` step: layer the calling workflow's trusted_envs values
+      // over its scope env for the script subprocess only.
+      const scriptEnv = scope.trustedEnv ? { ...scope.env, ...scope.trustedEnv } : scope.env;
       return this.executeManagedStep(
         "script",
         ref,
         args,
-        async (io) => this.executeScript(resolvedScript.filePath, resolvedScript.script.name, args, scope.env, io),
+        async (io) => this.executeScript(resolvedScript.filePath, resolvedScript.script.name, args, scriptEnv, io),
       );
     }
     return { status: 1, output: "", error: `Unknown run target: ${ref}` };
@@ -1692,6 +1720,36 @@ export class NodeWorkflowRuntime {
     }
     if (layered.agent?.model === undefined) return undefined;
     return interpolateWorkflowMetadata(layered, scope.vars, scope.env).agent?.model;
+  }
+
+  /**
+   * Delete every graph-declared trusted_envs key from `env` (in place on the
+   * caller's fresh copy). Declaring a key anywhere in the file (or an import)
+   * makes it non-ambient for every workflow scope — it reaches subprocesses
+   * only through the declaring workflow's `run`-step injection.
+   */
+  private scrubTrustedKeys(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+    for (const key of this.declaredTrustedEnvKeys) {
+      delete env[key];
+    }
+    return env;
+  }
+
+  /**
+   * Resolve the trusted env map for a workflow: entry-file declarations only
+   * (module-level sugar plus the workflow's own), resolved against the
+   * pristine snapshot. Imported modules get nothing — they must not be able
+   * to pull host secrets into their own steps.
+   */
+  private resolveWorkflowTrustedEnv(
+    filePath: string,
+    workflowMeta: WorkflowMetadata | undefined,
+  ): Record<string, string> | undefined {
+    if (resolvePath(filePath) !== resolvePath(this.graph.entryFile)) return undefined;
+    const moduleMeta = this.graph.modules.get(filePath)?.ast.metadata;
+    const keys = trustedEnvKeysForWorkflow(moduleMeta, workflowMeta);
+    if (keys.length === 0) return undefined;
+    return resolveTrustedEnv(this.trustedEnvSnapshot, keys);
   }
 
   private applyMetadataScope(

@@ -197,6 +197,9 @@ function emitConfigKeyLines(meta: WorkflowMetadata, key: string, pad: string): s
     case "module.description":
       if (meta.module?.description === undefined) return [];
       return [`${pad}module.description = ${emitConfigStringRhs(meta.module.description)}`];
+    case "trusted_envs":
+      if (meta.trustedEnvs === undefined) return [];
+      return [`${pad}trusted_envs = ${emitConfigStringRhs(meta.trustedEnvs.join(" "))}`];
     default:
       return [];
   }
@@ -240,6 +243,9 @@ function emitConfig(meta: WorkflowMetadata, pad: string, trivia: Trivia): string
     if (meta.module.name !== undefined) lines.push(`${pad}module.name = ${emitConfigStringRhs(meta.module.name)}`);
     if (meta.module.version !== undefined) lines.push(`${pad}module.version = ${emitConfigStringRhs(meta.module.version)}`);
     if (meta.module.description !== undefined) lines.push(`${pad}module.description = ${emitConfigStringRhs(meta.module.description)}`);
+  }
+  if (meta.trustedEnvs !== undefined) {
+    lines.push(`${pad}trusted_envs = ${emitConfigStringRhs(meta.trustedEnvs.join(" "))}`);
   }
   lines.push("}");
   return lines.join("\n");

@@ -92,6 +92,35 @@ Informational metadata only; does not affect execution. Allowed in module-level 
 | `module.version` | string | — |
 | `module.description` | string | — |
 
+## Trusted env keys (`trusted_envs`)
+{: #trusted-envs}
+
+`trusted_envs = "GITHUB_TOKEN NPM_TOKEN"` declares which **host** environment variables a workflow's trusted `run` steps receive — the declarative alternative to remembering `jaiph run --env GITHUB_TOKEN …`. The value is a quoted, space-separated list of env var names.
+
+| Scope | Effect |
+|---|---|
+| Module-level `config` | Sugar: applies to every workflow in the file. |
+| Workflow-level `config` | Scopes the keys to that workflow only. |
+| Imported (non-entry) module | **Ignored** (warned at pre-flight) — an imported module must not be able to pull arbitrary host secrets into its own steps. Mirrors the [import trust boundary](#import-trust-boundary) for `agent.command` / `agent.backend`. |
+
+```jaiph
+config { trusted_envs = "NPM_TOKEN" }   # module-level: every workflow's run steps
+
+workflow publish {
+  config { trusted_envs = "GITHUB_TOKEN" }   # only publish's run steps also see GITHUB_TOKEN
+  run release()
+}
+```
+
+Semantics:
+
+- Declared keys resolve from the **pristine host environment captured once at process start** — never from the calling workflow's scope env. A sub-workflow does not inherit a caller's keys by being called; it must declare `trusted_envs` itself.
+- Resolved values are injected **only into `run`-step script subprocesses** of the declaring workflow. They are **never** forwarded to `prompt` agent subprocesses — the prompt env stays the fail-closed allowlist described in [Sandboxing](sandboxing.md), in every sandbox mode.
+- Declaring a key anywhere in the file (or an imported module) also **scrubs** it from every workflow's ambient scope env, so only the declaring workflow's `run` steps see it.
+- Pre-flight: a declared key with no value on the host (and no `--env` override) aborts before anything is spawned (`E_ENV_MISSING`). Reserved keys (the `--env` `E_ENV_RESERVED` set, including `JAIPH_DOCKER_*`) are rejected at parse time.
+- `--env KEY=VALUE` remains the imperative override: it wins over the host-snapshot value for the same key.
+- Docker: the entry file's resolved keys cross the sandbox boundary through the same explicit `-e` channel as `--env` pairs — the in-file declaration is the per-key consent.
+
 ## Runtime (Docker) keys
 
 These configure the Docker sandbox. Allowed in **module-level** config only. They are read by the host CLI when it considers a Docker launch (`resolveDockerConfig` in `src/runtime/docker.ts`) and never affect `NodeWorkflowRuntime` directly. **Docker on/off is not a `runtime.*` key** — see [Docker enablement](#docker-enablement).
@@ -163,6 +192,8 @@ Locked names: `JAIPH_AGENT_BACKEND`, `JAIPH_AGENT_MODEL`, `JAIPH_AGENT_COMMAND`,
 {: #import-trust-boundary}
 
 `agent.command` and `agent.backend` are **execution-binary keys** — they determine which process runs `prompt` steps. To prevent a third-party `.jh` library from silently redirecting execution to a different binary, these two keys may only be set from the **entry module's** `config {}` block (module-level or workflow-level). Imported modules that declare `agent.command` or `agent.backend` in their `config {}` are silently ignored for these keys.
+
+[`trusted_envs`](#trusted-envs) carries the same entry-only restriction: declarations in imported modules are ignored (with a pre-flight warning) so a library cannot pull host secrets into its own steps.
 
 All other config keys (`agent.model`, `agent.trusted_workspace`, `agent.cursor_flags`, `agent.claude_flags`, `run.logs_dir`, `run.debug`) are not restricted and follow the normal scoping rules for cross-module calls.
 

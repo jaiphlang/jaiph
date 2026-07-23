@@ -2,6 +2,7 @@ import type { WorkflowMetadata } from "../types";
 import type { Trivia, ConfigBodyPart } from "./trivia";
 import { colFromRaw, fail, isBareIdentifier, isJaiphInterpolationRef } from "./core";
 import { validateJaiphStringContent } from "../transpile/validate-string";
+import { ENV_KEY_RE, isReservedEnvKey } from "../env-reserved";
 
 const CONFIG_INTERPOLATION_RE = /\$\{[a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)?\}/;
 
@@ -26,6 +27,7 @@ const ALLOWED_KEYS = new Set([
   "module.name",
   "module.version",
   "module.description",
+  "trusted_envs",
 ]);
 
 /** Expected value type for each key that needs type validation. */
@@ -45,6 +47,7 @@ const KEY_TYPES: Record<string, "string" | "boolean" | "number" | "string[]"> = 
   "module.name": "string",
   "module.version": "string",
   "module.description": "string",
+  "trusted_envs": "string",
 };
 
 function parseMetadataValue(filePath: string, rawLine: string, valuePart: string, lineNo: number): string | boolean | number | string[] {
@@ -178,6 +181,40 @@ const KEY_SETTERS: Record<string, (out: WorkflowMetadata, value: ConfigValue) =>
   "module.description": (m, v) => ((m.module ??= {}).description = v as string),
 };
 
+/**
+ * `trusted_envs = "GITHUB_TOKEN NPM_TOKEN"` — a quoted, space-separated list
+ * of host env keys. Each key must be a valid env var name and not reserved:
+ * the same `E_ENV_RESERVED` rules as `--env` (src/env-reserved.ts) apply, so
+ * a config block cannot smuggle in a runtime-managed or sandbox-control key.
+ */
+function parseTrustedEnvsValue(
+  filePath: string,
+  value: string,
+  lineNo: number,
+  raw: string,
+): string[] {
+  const keys = value.split(/\s+/).filter((k) => k.length > 0);
+  for (const key of keys) {
+    if (!ENV_KEY_RE.test(key)) {
+      return fail(
+        filePath,
+        `trusted_envs key "${key}" is not a valid environment variable name (must match [A-Za-z_][A-Za-z0-9_]*)`,
+        lineNo,
+        colFromRaw(raw),
+      );
+    }
+    if (isReservedEnvKey(key)) {
+      return fail(
+        filePath,
+        `trusted_envs cannot declare reserved key "${key}" (E_ENV_RESERVED — same rule as --env); JAIPH_DOCKER_* and runtime-managed keys are off-limits`,
+        lineNo,
+        colFromRaw(raw),
+      );
+    }
+  }
+  return keys;
+}
+
 function assignConfigKey(
   filePath: string,
   out: WorkflowMetadata,
@@ -187,6 +224,10 @@ function assignConfigKey(
   raw: string,
 ): void {
   validateKeyType(filePath, key, value, lineNo, raw);
+  if (key === "trusted_envs") {
+    out.trustedEnvs = parseTrustedEnvsValue(filePath, value as string, lineNo, raw);
+    return;
+  }
   if (key === "agent.backend") {
     if (
       typeof value === "string" &&
