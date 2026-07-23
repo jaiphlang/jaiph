@@ -244,16 +244,16 @@ Bun has no `bun-windows-arm64` target, so Windows ships x64 only. Every release 
 
 Jaiph releases are signed with **[minisign](https://jedisct1.github.io/minisign/)**, a simple Ed25519-based signing tool. The release workflow signs `SHA256SUMS` and publishes a detached `SHA256SUMS.minisig` alongside every release.
 
-**Trust model.** The installer (`docs/install`) always requires `SHA256SUMS.minisig` to be downloadable — it fails closed if the file is absent. When `minisign` is installed and `JAIPH_MINISIGN_PUBLIC_KEY` is set, the installer also verifies the signature before executing any binary. Without `minisign`, installation proceeds with TOFU + checksum-only (the pre-existing behaviour), but a warning is printed.
+**Trust model.** The installer (`docs/install`) always requires `SHA256SUMS.minisig` to be downloadable — it fails closed if the file is absent. When `minisign` is on `PATH`, the installer verifies the signature with the project public key (embedded in both installers; canonical copy in `jaiph.pub` at the repo root). Without `minisign`, installation proceeds with checksum-only, but a warning is printed.
 
 **Key management.** The signing key pair is generated once and stored securely:
 
-1. Generate a key pair (keep the private key secret):
+1. Generate a key pair (keep the private key secret; commit only `jaiph.pub`):
    ```bash
    minisign -G -p jaiph.pub -s jaiph.key
    ```
 2. Store the private key as the `MINISIGN_SECRET_KEY` GitHub Actions secret (Settings → Secrets → Actions). The secret value is the full content of `jaiph.key`.
-3. Embed the public key in both installer scripts (`docs/install` and `docs/install.ps1`) as the `JAIPH_MINISIGN_PUBLIC_KEY` variable. The public key is a single-line string starting with `RW`.
+3. Embed the `RW…` public-key line from `jaiph.pub` in both installer scripts (`docs/install` and `docs/install.ps1`) as the default for `JAIPH_MINISIGN_PUBLIC_KEY`. Keep `jaiph.pub` in sync on key rotation.
 
 **User verification.** After downloading, users can verify manually:
 ```bash
@@ -263,7 +263,7 @@ curl -fsSL https://github.com/jaiphlang/jaiph/releases/download/v0.11.0/SHA256SU
 minisign -V -P "$JAIPH_MINISIGN_PUBLIC_KEY" -m SHA256SUMS
 ```
 
-**Key rotation.** Generate a new key pair, update the `MINISIGN_SECRET_KEY` secret, update the public key in both installer scripts, and document the rotation in release notes.
+**Key rotation.** Generate a new key pair, update the `MINISIGN_SECRET_KEY` secret, replace `jaiph.pub`, update the embedded default in both installer scripts, and document the rotation in release notes.
 
 **Dockerfile toolchain verification.** `runtime/Dockerfile` pins each remote installer script via build ARGs (`UV_INSTALL_SHA256`, `RUSTUP_INIT_SHA256`, `BUN_INSTALL_SHA256`, `CURSOR_INSTALL_SHA256`). ARGs default to empty (skip verification) for development; CI/release builds should populate them with the SHA256 of each installer script at the pinned version. The NodeSource APT block uses GPG-signed packages directly — no installer script execution.
 

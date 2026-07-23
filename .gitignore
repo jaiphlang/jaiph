@@ -24,6 +24,9 @@ pnpm-debug.log*
 .env
 .env.*
 
+# minisign release signing (public key jaiph.pub is committed)
+jaiph.key
+
 # OS/editor files
 .DS_Store
 .vscode/

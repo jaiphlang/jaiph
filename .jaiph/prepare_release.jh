@@ -1,18 +1,18 @@
 #!/usr/bin/env jaiph
 
 #
-# Release-prep workflow. Single-sources the CLI version: bumps package.json,
-# refreshes the installer's hardcoded ref, rebuilds the CLI, verifies that
-# `jaiph --version` matches package.json, and regenerates docs/registry.
+# Release-prep workflow. Single-sources the CLI version: reviews/stamps
+# CHANGELOG.md (prompt step), bumps package.json, refreshes the installer's
+# hardcoded ref, rebuilds the CLI, verifies that `jaiph --version` matches
+# package.json, and regenerates docs/registry.
 #
 # Run as:
-#   jaiph run .jaiph/prepare_release.jh -- 0.9.5     # explicit version
-#   jaiph run .jaiph/prepare_release.jh              # next patch version
+#   jaiph run .jaiph/prepare_release.jh -- 0.11.0    # explicit X.Y.Z
+#   jaiph run .jaiph/prepare_release.jh              # next patch from package.json
 #
 # The workflow never creates a commit or git tag — it stages edits for the
 # operator to review, commit, tag, and push manually.
 #
-
 script read_pkg_version = `node -p "require('./package.json').version"`
 
 script assert_version_format = ```
@@ -27,14 +27,14 @@ script assert_version_format = ```
 ```
 
 script compute_next_patch = ```python3
-import sys
-v = sys.argv[1]
-parts = v.split('.')
-if len(parts) != 3 or not all(p.isdigit() for p in parts):
-    sys.stderr.write(f"invalid current version in package.json: {v}\n")
-    sys.exit(1)
-parts[-1] = str(int(parts[-1]) + 1)
-print('.'.join(parts))
+  import sys
+  v = sys.argv[1]
+  parts = v.split('.')
+  if len(parts) != 3 or not all(p.isdigit() for p in parts):
+      sys.stderr.write(f"invalid current version in package.json: {v}\n")
+      sys.exit(1)
+  parts[-1] = str(int(parts[-1]) + 1)
+  print('.'.join(parts))
 ```
 
 script assert_git_tree_clean = ```
@@ -56,22 +56,22 @@ script assert_tag_does_not_exist = ```
 script npm_version_no_tag = `npm version "$1" --no-git-tag-version --allow-same-version >/dev/null`
 
 script update_install_release_ref = ```python3
-import sys
-old, new = sys.argv[1], sys.argv[2]
-needle = f"v{old}"
-total = 0
-# Both installers pin the same hardcoded ref; keep them in lockstep.
-for path in ("docs/install", "docs/install.ps1"):
-    with open(path, "r", encoding="utf-8") as f:
-        src = f.read()
-    count = src.count(needle)
-    if count == 0:
-        sys.stderr.write(f"{path}: hardcoded ref v{old} not found\n")
-        sys.exit(1)
-    with open(path, "w", encoding="utf-8") as f:
-        f.write(src.replace(needle, f"v{new}"))
-    total += count
-print(total)
+  import sys
+  old, new = sys.argv[1], sys.argv[2]
+  needle = f"v{old}"
+  total = 0
+  # Both installers pin the same hardcoded ref; keep them in lockstep.
+  for path in ("docs/install", "docs/install.ps1"):
+      with open(path, "r", encoding="utf-8") as f:
+          src = f.read()
+      count = src.count(needle)
+      if count == 0:
+          sys.stderr.write(f"{path}: hardcoded ref v{old} not found\n")
+          sys.exit(1)
+      with open(path, "w", encoding="utf-8") as f:
+          f.write(src.replace(needle, f"v{new}"))
+      total += count
+  print(total)
 ```
 
 script run_npm_build = `npm run build >&2`
@@ -87,6 +87,167 @@ script assert_built_cli_version_equals = ```
 ```
 
 script run_registry_build = `npm run registry:build >&2`
+
+script latest_release_tag = `git tag -l 'v*' | sort -V | tail -1`
+
+script commits_since_latest_tag = ```
+  tag="$(git tag -l 'v*' | sort -V | tail -1)"
+  if [ -z "${tag}" ]; then
+    git log --oneline
+  else
+    git log "${tag}"..HEAD --oneline
+  fi
+```
+
+script read_changelog_unreleased = ```python3
+  import re
+  import sys
+
+  path = "CHANGELOG.md"
+  with open(path, encoding="utf-8") as f:
+      lines = f.readlines()
+
+  out = []
+  in_unreleased = False
+  for line in lines:
+      if re.match(r"^# Unreleased\s*$", line):
+          in_unreleased = True
+          out.append(line)
+          continue
+      if in_unreleased and re.match(r"^# \d+\.\d+\.\d+\s*$", line):
+          break
+      if in_unreleased:
+          out.append(line)
+
+  sys.stdout.write("".join(out))
+```
+
+script read_changelog_version_section = ```python3
+  import re
+  import sys
+
+  version = sys.argv[1]
+  path = "CHANGELOG.md"
+  header = f"# {version}\n"
+  with open(path, encoding="utf-8") as f:
+      lines = f.readlines()
+
+  out = []
+  in_section = False
+  for line in lines:
+      if line == header:
+          in_section = True
+          out.append(line)
+          continue
+      if in_section and re.match(r"^# \d+\.\d+\.\d+\s*$", line):
+          break
+      if in_section and re.match(r"^# Unreleased\s*$", line):
+          break
+      if in_section:
+          out.append(line)
+
+  sys.stdout.write("".join(out))
+```
+
+script assert_changelog_stamped = ```
+  v="$1"
+  grep -Eq '^# Unreleased$' CHANGELOG.md || {
+    echo "CHANGELOG.md: missing # Unreleased header at top" >&2
+    exit 1
+  }
+  grep -Eq "^# ${v}$" CHANGELOG.md || {
+    echo "CHANGELOG.md: missing stamped # ${v} section" >&2
+    exit 1
+  }
+```
+
+const changelog_reviewer_role = """
+  You are a release engineer preparing Jaiph for publication. You edit
+  CHANGELOG.md in the repo root — the operator runs prepare_release next
+  for package.json, installers, and docs/registry.
+
+  Changelog shape (match existing style exactly):
+    # Unreleased
+    ## Summary
+    - **Feature name:** one-line user-facing blurb …
+    ## All changes
+    - **Kind — Title:** long technical bullet …
+
+    # X.Y.Z
+    ## Summary
+    …
+    ## All changes
+    …
+
+  Summary bullets: 5–10 max, end-user facing, bold lead token.
+  All changes: exhaustive, grouped by Feat/Fix/Change/Breaking, one bullet
+  per commit-worthy change. Do not drop existing detail when merging.
+"""
+
+workflow review_changelog(version) {
+  config {
+    agent.backend = "claude"
+    agent.model = "opus"
+    agent.claude_flags = "--permission-mode bypassPermissions"
+  }
+  const latest_tag = run latest_release_tag()
+  const commit_list = run commits_since_latest_tag()
+  const unreleased_block = run read_changelog_unreleased()
+  const existing_section = run read_changelog_version_section(version)
+
+  prompt """
+    ${changelog_reviewer_role}
+
+    <target_version>${version}</target_version>
+    <latest_published_tag>${latest_tag}</latest_published_tag>
+
+    <commits_since_latest_tag>
+    ${commit_list}
+    </commits_since_latest_tag>
+
+    <current_unreleased_section>
+    ${unreleased_block}
+    </current_unreleased_section>
+
+    <existing_version_section if_any>
+    ${existing_section}
+    </existing_version_section>
+    (Empty existing_version_section means no prior # ${version} block yet.)
+
+    <task>
+    1. Read CHANGELOG.md in full for surrounding context and voice.
+    2. Compare commits_since_latest_tag against the unreleased All changes
+       bullets. List any commit themes missing from the changelog (in your
+       head — do not add a separate report file).
+    3. Stamp the release for v${version}:
+       - If an existing_version_section is present (package was bumped early),
+         merge current_unreleased_section into that # ${version} block —
+         combine Summary bullets (dedupe), append All changes (dedupe by
+         title), keep chronological/newest-first within All changes.
+       - Otherwise rename # Unreleased to # ${version} in place.
+    4. Fix stale All-changes wording superseded by later work, especially:
+       - overlay / copy / fuse / JAIPH_DOCKER_NO_OVERLAY → snapshot | inplace
+       - MCP "in-place by default" → same sandbox truth table as jaiph run
+         (snapshot default; inplace only with JAIPH_INPLACE)
+       - Docker Ctrl+C / signal cleanup: snapshot and inplace modes only
+    5. Ensure Summary covers the headline themes: sandbox snapshot + git-defined
+       content, trusted_envs, language sugar (else if, match |), logging,
+       security hardening, and anything from the merged 0.11.0 tranche (MCP,
+       Windows, --env, agent.model) when that section is being folded in.
+    6. Replace the top of CHANGELOG.md with a fresh empty scaffold:
+         # Unreleased
+
+         ## Summary
+
+         ## All changes
+
+    7. Write the updated CHANGELOG.md (UTF-8). Do not edit other files.
+    </task>
+  """
+
+  run assert_changelog_stamped(version)
+  log "CHANGELOG.md stamped for v${version}"
+}
 
 workflow resolve_version(arg) {
   const pkg_version = run read_pkg_version()
@@ -119,6 +280,7 @@ workflow default(arg) {
   log "Preparing release v${version} (current: v${old_version})"
 
   run preflight(version)
+  run review_changelog(version)
   run apply_version_change(old_version, version)
   run check_displayed_version(version)
   run run_registry_build()
@@ -131,11 +293,15 @@ workflow default(arg) {
       - dist/ (rebuilt; jaiph --version == jaiph ${version})
 
     Remaining manual steps:
-      1. Review the diff (git diff)
+      1. Review the diff (git diff) — especially CHANGELOG.md
       2. Commit the staged changes
-      3. Tag: git tag v${version}
-      4. Push branch + tag (tag push triggers docker-publish and release.yml)
-      5. Smoke check: jaiph use ${version}
+      3. Confirm MINISIGN_SECRET_KEY is set in GitHub Actions secrets
+         (Settings → Secrets → Actions). Without it, release.yml skips
+         SHA256SUMS.minisig and curl|bash / irm|iex installers fail closed.
+         See docs/contributing.md → Release signing.
+      4. Tag: git tag v${version}
+      5. Push branch + tag (tag push triggers docker-publish and release.yml)
+      6. Smoke check: jaiph use ${version}
   """
   return version
 }

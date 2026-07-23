@@ -25,6 +25,10 @@ const BASH_INSTALLER = read("docs/install");
 const SETUP = read("docs/setup.md");
 const INDEX = read("docs/index.html");
 const PREPARE_RELEASE = read(".jaiph/prepare_release.jh");
+const JAIPH_PUB = read("jaiph.pub");
+
+const minisignPubKeyLine = JAIPH_PUB.split("\n").find((line) => line.startsWith("RW"));
+assert.ok(minisignPubKeyLine, "jaiph.pub contains an RW public-key line");
 
 const ONE_LINER = "irm https://jaiph.org/install.ps1 | iex";
 
@@ -123,6 +127,12 @@ test("both installers pin the same release ref", () => {
   assert.ok(bashRef, "bash installer pins a vX.Y.Z ref");
   assert.ok(psRef, "PowerShell installer pins a vX.Y.Z ref");
   assert.equal(psRef![1], bashRef![1], "PowerShell ref matches the bash ref");
+});
+
+test("both installers embed the jaiph.pub minisign public key as the default", () => {
+  assert.ok(minisignPubKeyLine!.length > 0, "public key line non-empty");
+  assert.match(BASH_INSTALLER, new RegExp(minisignPubKeyLine!.replace(/[+/=]/g, "\\$&")), "bash installer default matches jaiph.pub");
+  assert.match(PS_INSTALLER, new RegExp(minisignPubKeyLine!.replace(/[+/=]/g, "\\$&")), "PowerShell installer default matches jaiph.pub");
 });
 
 test("prepare_release refreshes both installers' pinned ref in lockstep", () => {

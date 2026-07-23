@@ -19,7 +19,7 @@ The curl installer downloads a per-platform standalone binary from the current s
 - For the curl installer (step 1): `curl` and either `shasum` or `sha256sum` on `PATH`.
 - For the PowerShell installer (step 1, Windows): PowerShell (`irm`/`Invoke-WebRequest` and `Get-FileHash` are built in).
 - For the npm alternative (step 1): Node.js and npm on the host.
-- (Optional) [`minisign`](https://jedisct1.github.io/minisign/) and the project public key in `JAIPH_MINISIGN_PUBLIC_KEY` to cryptographically verify the detached release signature. Without them the installer still **requires** the signature file to be present (it fails closed when it is missing) but skips signature verification and falls back to checksum-only with a warning.
+- (Optional) [`minisign`](https://jedisct1.github.io/minisign/) on `PATH` to cryptographically verify the detached release signature. Both installers embed the project public key (`jaiph.pub`); when `minisign` is missing they still **require** the signature file to be present (fail closed when it is missing) but skip verification and fall back to checksum-only with a warning.
 
 ## 1. Install the binary
 
@@ -76,22 +76,15 @@ This prints `jaiph <version>` (sourced from the installed release at build time)
 
 ## Verify the release signature
 
-Every release ships a `SHA256SUMS` file covering all binaries plus a detached [minisign](https://jedisct1.github.io/minisign/) signature `SHA256SUMS.minisig`. The installer downloads both and always requires the signature file to be present; when `minisign` and the project public key are available it also verifies the signature before touching any binary.
+Every release ships a `SHA256SUMS` file covering all binaries plus a detached [minisign](https://jedisct1.github.io/minisign/) signature `SHA256SUMS.minisig`. The installer downloads both and always requires the signature file to be present; when `minisign` is on `PATH` it verifies the signature with the project public key embedded in the installer (same `RW…` line as `jaiph.pub` in the repo root).
 
-To enable full verification during install, install `minisign` and export the project public key first:
-
-```bash
-export JAIPH_MINISIGN_PUBLIC_KEY="RW..."   # the single-line minisign public key
-curl -fsSL https://jaiph.org/install | bash
-```
-
-On PowerShell, set `$env:JAIPH_MINISIGN_PUBLIC_KEY` before running the installer.
-
-To verify a release manually (for example an asset downloaded from the GitHub Release page):
+To verify a release manually (for example assets downloaded from the GitHub Release page):
 
 ```bash
-minisign -V -P "$JAIPH_MINISIGN_PUBLIC_KEY" -m SHA256SUMS
+minisign -V -P "RWTQyxCqm5agwxi7ZwlGHc/kwGqT7QQjy9FxNGQGM/Y+m6LWsrk2l4fQ" -m SHA256SUMS -x SHA256SUMS.minisig
 ```
+
+Override the key with `JAIPH_MINISIGN_PUBLIC_KEY` only when testing key rotation.
 
 For the signing trust model, the project public key, and key-rotation policy, see [Contributing — Release signing](contributing.md#release-signing).
 
