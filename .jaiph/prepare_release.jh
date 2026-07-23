@@ -86,7 +86,7 @@ script assert_built_cli_version_equals = ```
   fi
 ```
 
-script run_registry_build = `npm run registry:build >&2`
+script run_registry_build = `node scripts/build-registry.mjs >&2`
 
 script latest_release_tag = `git tag -l 'v*' | sort -V | tail -1`
 

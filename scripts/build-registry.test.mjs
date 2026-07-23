@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { buildRegistry } from "./build-registry.mjs";
+import { buildRegistry, buildRegistryOrKeepShipped } from "./build-registry.mjs";
 import { loadRegistryIndex } from "../dist/src/cli/commands/registry.js";
 
 async function withTmp(body) {
@@ -86,5 +86,25 @@ test("build-registry: no tmp residue alongside outPath on failure", async () => 
     const stale = readdirSync(dir).filter((n) => n.startsWith("registry.tmp-build-"));
     assert.deepEqual(stale, [], `stale tmp files left behind: ${stale.join(", ")}`);
     assert.equal(readFileSync(outPath, "utf8"), previousText);
+  });
+});
+
+test("build-registry: upstream fetch failure keeps a valid shipped outPath", async () => {
+  await withTmp(async (dir) => {
+    const outPath = join(dir, "registry");
+    const shipped = JSON.stringify({
+      libs: {
+        mylib: { url: "https://example.com/mylib.git", description: "demo" },
+      },
+    }, null, 2) + "\n";
+    writeFileSync(outPath, shipped);
+    const result = await buildRegistryOrKeepShipped({
+      source: "https://example.com/missing-registry.json",
+      outPath,
+      loadRegistryIndex,
+      defaultSource: "https://example.com/missing-registry.json",
+    });
+    assert.equal(result.kept, true);
+    assert.equal(readFileSync(outPath, "utf8"), shipped, "shipped registry must be untouched");
   });
 });
