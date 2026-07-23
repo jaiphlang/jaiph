@@ -208,8 +208,7 @@ test("release workflow signs SHA256SUMS and uploads SHA256SUMS.minisig", () => {
   assert.match(RELEASE_YML, /Install minisign/, "installs minisign before signing");
   assert.match(RELEASE_YML, /sudo apt-get install -y -qq minisign/, "uses sudo to install minisign on ubuntu-latest");
   assert.match(RELEASE_YML, /MINISIGN_SECRET_KEY/, "signing step uses the CI secret");
-  assert.match(RELEASE_YML, /MINISIGN_PASSPHRASE/, "signing step supports encrypted keys via passphrase secret");
-  assert.match(RELEASE_YML, /encrypted secret key/, "detects password-protected minisign keys");
+  assert.match(RELEASE_YML, /public key/, "rejects jaiph.pub pasted as the signing secret");
   const stable = sliceBetween(RELEASE_YML, "Publish stable release", "Publish nightly prerelease");
   const nightly = sliceBetween(RELEASE_YML, "Publish nightly prerelease", null);
   for (const [label, section] of [["stable", stable], ["nightly", nightly]] as const) {

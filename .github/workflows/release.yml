@@ -198,7 +198,6 @@ jobs:
         working-directory: release-assets
         env:
           MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
-          MINISIGN_PASSPHRASE: ${{ secrets.MINISIGN_PASSPHRASE }}
         run: |
           set -euo pipefail
           rm -f SHA256SUMS.minisig
@@ -212,28 +211,38 @@ jobs:
             key_file="$(mktemp)"
             cleanup() { rm -f "${key_file}"; }
             trap cleanup EXIT
-            printf '%s' "${MINISIGN_SECRET_KEY}" > "${key_file}"
+
+            if [[ "${MINISIGN_SECRET_KEY}" == untrusted\ comment:* ]]; then
+              printf '%s' "${MINISIGN_SECRET_KEY}" > "${key_file}"
+            else
+              if ! printf '%s' "${MINISIGN_SECRET_KEY}" | base64 -d > "${key_file}" 2>/dev/null; then
+                echo "MINISIGN_SECRET_KEY must be the full jaiph.key file or base64 -w0 jaiph.key" >&2
+                exit 1
+              fi
+            fi
             chmod 600 "${key_file}"
 
-            if ! head -1 "${key_file}" | grep -q '^untrusted comment: minisign'; then
-              echo "MINISIGN_SECRET_KEY does not look like a minisign secret key (missing header line)." >&2
-              echo "Paste the full jaiph.key file into the secret, not just the base64 body line." >&2
+            first_line="$(head -1 "${key_file}")"
+            if [[ "${first_line}" == *"public key"* ]]; then
+              echo "MINISIGN_SECRET_KEY is jaiph.pub (public key). Paste jaiph.key (secret key) instead." >&2
+              exit 1
+            fi
+            if [[ "${first_line}" != *"secret key"* ]]; then
+              echo "MINISIGN_SECRET_KEY does not look like a minisign secret key." >&2
+              echo "First line: ${first_line}" >&2
+              exit 1
+            fi
+            if grep -q 'encrypted secret key' "${key_file}"; then
+              echo "MINISIGN_SECRET_KEY is password-protected. Regenerate with:" >&2
+              echo "  minisign -G -W -p jaiph.pub -s jaiph.key -f" >&2
+              exit 1
+            fi
+            if [ "$(grep -c . "${key_file}")" -lt 2 ]; then
+              echo "MINISIGN_SECRET_KEY is incomplete — need header line and base64 body line." >&2
               exit 1
             fi
 
-            sign_args=(-S -s "${key_file}" -m SHA256SUMS -x SHA256SUMS.minisig)
-            if grep -q 'encrypted secret key' "${key_file}"; then
-              if [ -z "${MINISIGN_PASSPHRASE:-}" ]; then
-                echo "MINISIGN_SECRET_KEY is password-protected but MINISIGN_PASSPHRASE is not set." >&2
-                echo "Set MINISIGN_PASSPHRASE in GitHub Actions secrets, or regenerate a CI key with:" >&2
-                echo "  minisign -G -W -p jaiph.pub -s jaiph.key -f" >&2
-                exit 1
-              fi
-              export MINISIGN_PASSWORD="${MINISIGN_PASSPHRASE}"
-              printf '%s\n' "${MINISIGN_PASSPHRASE}" | minisign "${sign_args[@]}"
-            else
-              minisign "${sign_args[@]}"
-            fi
+            minisign -S -s "${key_file}" -m SHA256SUMS -x SHA256SUMS.minisig
             echo "SHA256SUMS.minisig written."
           fi
 
