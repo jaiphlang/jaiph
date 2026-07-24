@@ -93,9 +93,19 @@ printf 'real-binary-bytes' > "${RELEASE_DIR}/${HOST_BIN_NAME}"
 # reaches the verify step and fails with a checksum mismatch (not an http 404).
 printf '%s  %s\n' "0000000000000000000000000000000000000000000000000000000000000000" "${HOST_BIN_NAME}" \
   > "${RELEASE_DIR}/SHA256SUMS"
-# Provide a placeholder sig file so the installer proceeds past the sig-download
-# step and reaches the checksum verification (the real test target here).
-printf 'placeholder-sig\n' > "${RELEASE_DIR}/SHA256SUMS.minisig"
+# The installer verifies the detached signature BEFORE the checksum, so a bogus
+# signature would fail first and never reach the checksum step. To exercise the
+# checksum path, sign the (tampered) SHA256SUMS with a throwaway key and hand the
+# installer its matching public key. When minisign is absent the installer skips
+# signature verification, so a placeholder sig is enough to reach the checksum.
+TEST_PUBKEY=""
+if command -v minisign >/dev/null 2>&1; then
+  minisign -G -W -p "${RELEASE_DIR}/test.pub" -s "${RELEASE_DIR}/test.key" >/dev/null 2>&1
+  minisign -S -s "${RELEASE_DIR}/test.key" -m "${RELEASE_DIR}/SHA256SUMS" >/dev/null 2>&1
+  TEST_PUBKEY="$(tail -n 1 "${RELEASE_DIR}/test.pub")"
+else
+  printf 'placeholder-sig\n' > "${RELEASE_DIR}/SHA256SUMS.minisig"
+fi
 
 bad_status=0
 # Unset JAIPH_REPO_URL: the shared e2e context points it at this repo root,
@@ -104,6 +114,7 @@ bad_output="$(
   unset JAIPH_REPO_URL
   JAIPH_RELEASE_BASE_URL="file://${RELEASE_DIR}" \
   JAIPH_BIN_DIR="${BIN_DIR_BAD}" \
+  JAIPH_MINISIGN_PUBLIC_KEY="${TEST_PUBKEY}" \
   bash "${INSTALL_SCRIPT}" 2>&1
 )" || bad_status=$?
 e2e::assert_equals "${bad_status}" "1" "checksum mismatch exits non-zero"

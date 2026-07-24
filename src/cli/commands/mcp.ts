@@ -1,24 +1,20 @@
-import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync, unwatchFile, watchFile } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, statSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import { dirname, extname, join, resolve } from "node:path";
 import { createInterface } from "node:readline";
-import { loadModuleGraph, writeModuleGraph, type ModuleGraph } from "../../transpile/module-graph";
-import { collectDiagnostics } from "../../transpile/validate";
-import { buildScriptsFromGraph } from "../../transpiler";
-import { resolveModuleMetadata, metadataToConfig } from "../../config";
-import {
-  resolveDockerConfig,
-  checkDockerAvailable,
-  prepareImage,
-  selectMcpSandboxMode,
-} from "../../runtime/docker";
 import { detectWorkspaceRoot } from "../shared/paths";
 import { hasHelpFlag, parseArgs } from "../shared/usage";
-import { resolveRuntimeEnv, resolveEnvPairs } from "../run/env";
-import { preflightAgentCredentials } from "../run/preflight-credentials";
-import { deriveTools, type McpToolSpec } from "../mcp/tools";
+import { resolveEnvPairs } from "../run/env";
 import { McpServer } from "../mcp/server";
-import { callWorkflow, type McpCallEnvironment } from "../mcp/call";
+import { callWorkflow } from "../exec/call";
+import {
+  loadGeneration,
+  createSourceWatcher,
+  resolveStartupPosture,
+  WATCH_INTERVAL_MS,
+  type GenerationState,
+} from "../shared/generation";
 import { VERSION } from "../../version";
 
 const MCP_USAGE =
@@ -37,60 +33,6 @@ const MCP_USAGE =
   "  -h, --help         show this help\n\n" +
   "Example:\n" +
   "  claude mcp add mytools -- jaiph mcp ./tools.jh\n";
-
-/** How often watchFile polls module sources for hot reload (ms). */
-const WATCH_INTERVAL_MS = 750;
-
-interface McpState {
-  graph: ModuleGraph;
-  tools: McpToolSpec[];
-  callEnv: McpCallEnvironment;
-}
-
-/**
- * Load (or reload) everything one generation of the server needs: module
- * graph, compile-time validation, tool derivation, emitted scripts, and the
- * serialized graph the spawned runners consume. Throws on parse errors;
- * returns diagnostics without throwing on validation errors.
- */
-function loadState(
-  inputAbs: string,
-  workspaceRoot: string,
-  tempRoot: string,
-  generation: number,
-  extraEnv: Record<string, string>,
-  log: (line: string) => void,
-): { state?: McpState; failures: string[] } {
-  const graph = loadModuleGraph(inputAbs, workspaceRoot);
-  const diag = collectDiagnostics(graph);
-  if (diag.errors.length > 0) {
-    return {
-      failures: diag.sorted().map((d) => `${d.file}:${d.line}:${d.col} ${d.code} ${d.message}`),
-    };
-  }
-
-  const mod = graph.modules.get(inputAbs)!.ast;
-  const { tools, warnings } = deriveTools(mod, inputAbs);
-  for (const w of warnings) log(`jaiph mcp: ${w}`);
-
-  const outDir = join(tempRoot, `gen-${generation}`);
-  mkdirSync(outDir, { recursive: true });
-  const { scriptsDir } = buildScriptsFromGraph(graph, outDir);
-  const graphFile = join(outDir, ".jaiph-module-graph.json");
-  writeModuleGraph(graphFile, graph);
-
-  const resolvedModuleMetadata = resolveModuleMetadata(mod, process.env);
-  const effectiveConfig = metadataToConfig(resolvedModuleMetadata);
-
-  return {
-    state: {
-      graph,
-      tools,
-      callEnv: { inputAbs, workspaceRoot, mod, effectiveConfig, scriptsDir, graphFile, outDir, extraEnv },
-    },
-    failures: [],
-  };
-}
 
 export async function runMcp(rest: string[]): Promise<number> {
   if (hasHelpFlag(rest)) {
@@ -137,9 +79,9 @@ export async function runMcp(rest: string[]): Promise<number> {
 
   const tempRoot = mkdtempSync(join(tmpdir(), "jaiph-mcp-"));
   let generation = 0;
-  let state: McpState;
+  let state: GenerationState;
   try {
-    const loaded = loadState(inputAbs, workspaceRoot, tempRoot, generation, extraEnv, log);
+    const loaded = loadGeneration(inputAbs, workspaceRoot, tempRoot, generation, extraEnv, log, "jaiph mcp");
     if (!loaded.state) {
       for (const f of loaded.failures) log(f);
       rmSync(tempRoot, { recursive: true, force: true });
@@ -156,38 +98,25 @@ export async function runMcp(rest: string[]): Promise<number> {
   // env-driven Docker selection as `jaiph run`: the workspace is isolated by
   // default via a point-in-time snapshot. Inplace is an explicit opt-in via
   // JAIPH_INPLACE=1.
-  const mod = state.graph.modules.get(inputAbs)!.ast;
-  const startupEnv = resolveRuntimeEnv(state.callEnv.effectiveConfig, workspaceRoot, inputAbs);
-  const dockerConfig = resolveDockerConfig(resolveModuleMetadata(mod, process.env)?.runtime, startupEnv);
-  if (dockerConfig.enabled) {
-    // Prepare the image once here rather than per call (a cold pull is slow).
-    try {
-      checkDockerAvailable();
-      prepareImage(dockerConfig);
-    } catch (err) {
-      log(err instanceof Error ? err.message : String(err));
-      rmSync(tempRoot, { recursive: true, force: true });
-      return 1;
+  let dockerConfig: ReturnType<typeof resolveStartupPosture>["dockerConfig"];
+  try {
+    const posture = resolveStartupPosture(state, inputAbs, workspaceRoot, log);
+    dockerConfig = posture.dockerConfig;
+    if (dockerConfig.enabled) {
+      if (posture.sandboxMode === "inplace") {
+        log(
+          `jaiph mcp: tool calls run in a Docker sandbox in-place on ${workspaceRoot} ` +
+            "(JAIPH_INPLACE=1 opt-in: effects land live on the workspace).",
+        );
+      } else {
+        log(`jaiph mcp: tool calls run in a Docker sandbox (${posture.sandboxMode} mode; workspace isolated).`);
+      }
     }
-    const mode = selectMcpSandboxMode(startupEnv);
-    if (mode === "inplace") {
-      log(
-        `jaiph mcp: tool calls run in a Docker sandbox in-place on ${workspaceRoot} ` +
-          "(JAIPH_INPLACE=1 opt-in: effects land live on the workspace).",
-      );
-    } else {
-      log(`jaiph mcp: tool calls run in a Docker sandbox (${mode} mode; workspace isolated).`);
-    }
+  } catch (err) {
+    log(err instanceof Error ? err.message : String(err));
+    rmSync(tempRoot, { recursive: true, force: true });
+    return 1;
   }
-  // Credential pre-flight once at startup (warnings only in MCP mode: the
-  // server may outlive a credential fix, and per-call failures still surface).
-  const credPreflight = preflightAgentCredentials({
-    mod,
-    inputAbs,
-    runtimeEnv: startupEnv,
-    dockerEnabled: dockerConfig.enabled,
-  });
-  for (const w of [...credPreflight.warnings, ...credPreflight.errors]) log(w);
 
   const server = new McpServer({
     serverVersion: VERSION,
@@ -198,6 +127,7 @@ export async function runMcp(rest: string[]): Promise<number> {
         dockerConfig,
         spec.workflow,
         spec.params.map((p) => args[p] ?? ""),
+        randomUUID(),
         ctx,
       ),
     write: (message) => {
@@ -208,19 +138,13 @@ export async function runMcp(rest: string[]): Promise<number> {
 
   // Hot reload: poll every module source; on change re-validate and swap the
   // generation. Validation failures keep the previous generation serving.
-  let watched: string[] = [];
-  const rewatch = (): void => {
-    for (const f of watched) unwatchFile(f, onSourceChange);
-    watched = [...state.graph.modules.keys()];
-    for (const f of watched) watchFile(f, { interval: WATCH_INTERVAL_MS }, onSourceChange);
-  };
   let reloading = false;
   const onSourceChange = (): void => {
     if (reloading) return;
     reloading = true;
     try {
       generation += 1;
-      const loaded = loadState(inputAbs, workspaceRoot, tempRoot, generation, extraEnv, log);
+      const loaded = loadGeneration(inputAbs, workspaceRoot, tempRoot, generation, extraEnv, log, "jaiph mcp");
       if (!loaded.state) {
         log("jaiph mcp: reload failed; keeping the previous tool set:");
         for (const f of loaded.failures) log(`  ${f}`);
@@ -228,7 +152,7 @@ export async function runMcp(rest: string[]): Promise<number> {
       }
       const previousOutDir = state.callEnv.outDir;
       state = loaded.state;
-      rewatch();
+      watcher.rewatch([...state.graph.modules.keys()]);
       server.notifyToolsChanged();
       log(`jaiph mcp: sources reloaded (${state.tools.length} tool(s))`);
       rmSync(previousOutDir, { recursive: true, force: true });
@@ -238,7 +162,8 @@ export async function runMcp(rest: string[]): Promise<number> {
       reloading = false;
     }
   };
-  rewatch();
+  const watcher = createSourceWatcher(WATCH_INTERVAL_MS, onSourceChange);
+  watcher.rewatch([...state.graph.modules.keys()]);
 
   log(`jaiph mcp: serving ${state.tools.length} tool(s) from ${inputAbs} over stdio`);
 
@@ -247,7 +172,7 @@ export async function runMcp(rest: string[]): Promise<number> {
     const shutdown = (code: number): void => {
       if (settled) return;
       settled = true;
-      for (const f of watched) unwatchFile(f, onSourceChange);
+      watcher.stop();
       rmSync(tempRoot, { recursive: true, force: true });
       resolveExit(code);
     };

@@ -9,6 +9,7 @@ import { runFormat } from "./commands/format";
 import { runInstall } from "./commands/install";
 import { runCompile } from "./commands/compile";
 import { runMcp } from "./commands/mcp";
+import { runServe } from "./commands/serve";
 import { runWorkflowRunner, WORKFLOW_RUNNER_ARG } from "../runtime/kernel/node-workflow-runner";
 import { VERSION } from "../version";
 
@@ -66,6 +67,9 @@ export async function main(argv: string[]): Promise<number> {
     // `--mcp` is an ergonomic alias for the `mcp` subcommand (`jaiph --mcp tools.jh`).
     if (cmd === "mcp" || cmd === "--mcp") {
       return await runMcp(rest);
+    }
+    if (cmd === "serve") {
+      return await runServe(rest);
     }
     process.stderr.write(`Unknown command: ${cmd}\n`);
     printUsage();
