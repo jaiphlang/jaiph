@@ -187,7 +187,7 @@ Beyond those two boundaries (journal copies and returned call results), redactio
 
 ## Channels and hooks in context
 
-Channels are validated at compile time (`validateReferences` / send RHS rules) and executed via in-memory queue and dispatch in the Node runtime; durable **`inbox/`** files under the run directory appear only for **routed** sends (audit — see [Inbox & Dispatch](inbox.md)). Hooks are CLI-only: they load from `hooks.json` and run as shell commands with JSON on stdin, driven by the same `__JAIPH_EVENT__` stream as the progress UI — see [Hooks](hooks.md).
+Channels are validated at compile time (`validateReferences` / send RHS rules) and executed via in-memory queue and dispatch in the Node runtime; durable **`inbox/`** files under the run directory appear only for **routed** sends (audit — see [Inbox & Dispatch](inbox.md)). Hooks are CLI-only: they load from `hooks.json` and run as shell commands with JSON on stdin, driven by the same `__JAIPH_EVENT__` stream as the progress UI. One dispatch contract covers all three invocation modes — interactive `jaiph run` (via the run emitter) and `jaiph serve` / `jaiph mcp` calls (via `callWorkflow`'s shared event collector), with `jaiph run --raw` and `jaiph test` documented as no-hook lanes — see [Hooks](hooks.md).
 
 ## Test runner integration (`*.test.jh` in the kernel)
 

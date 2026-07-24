@@ -229,6 +229,70 @@ test("parseArgs: --env rejects JAIPH_RUN_WORKFLOW (managed via Docker MCP spawn 
 });
 
 // ---------------------------------------------------------------------------
+// parseArgs: per-command flag scoping — shared execution-policy set everywhere,
+// command-specific flags rejected elsewhere, unknown flags never positionals
+// ---------------------------------------------------------------------------
+
+test("parseArgs: shared execution-policy flags parse identically for run, serve, and mcp", () => {
+  for (const command of ["run", "serve", "mcp"] as const) {
+    const r = parseArgs(
+      ["--workspace", "/tmp/ws", "--inplace", "--yes", "--env", "A=1", "flow.jh"],
+      command,
+    );
+    assert.equal(r.workspace, "/tmp/ws", `${command}: --workspace`);
+    assert.equal(r.inplace, true, `${command}: --inplace`);
+    assert.equal(r.yes, true, `${command}: --yes`);
+    assert.deepEqual(r.env, [{ key: "A", value: "1" }], `${command}: --env`);
+    assert.deepEqual(r.positional, ["flow.jh"], `${command}: positional`);
+  }
+});
+
+test("parseArgs: --unsafe and -y are accepted by serve and mcp", () => {
+  for (const command of ["serve", "mcp"] as const) {
+    const r = parseArgs(["--unsafe", "-y", "flow.jh"], command);
+    assert.equal(r.unsafe, true);
+    assert.equal(r.yes, true);
+  }
+});
+
+test("parseArgs: run rejects serve's transport flags, naming the owning command", () => {
+  assert.throws(() => parseArgs(["--host", "0.0.0.0", "flow.jh"], "run"), /--host is not a jaiph run flag.*jaiph serve/);
+  assert.throws(() => parseArgs(["--port", "8080", "flow.jh"], "run"), /--port is not a jaiph run flag.*jaiph serve/);
+});
+
+test("parseArgs: serve rejects run-only flags as usage errors", () => {
+  assert.throws(() => parseArgs(["--target", "/tmp/out", "flow.jh"], "serve"), /--target is not a jaiph serve flag.*jaiph run/);
+  assert.throws(() => parseArgs(["--raw", "flow.jh"], "serve"), /--raw is not a jaiph serve flag.*jaiph run/);
+});
+
+test("parseArgs: mcp rejects run-only and serve-only flags as usage errors", () => {
+  assert.throws(() => parseArgs(["--raw", "flow.jh"], "mcp"), /--raw is not a jaiph mcp flag.*jaiph run/);
+  assert.throws(() => parseArgs(["--target", "/tmp", "flow.jh"], "mcp"), /--target is not a jaiph mcp flag.*jaiph run/);
+  assert.throws(() => parseArgs(["--host", "::1", "flow.jh"], "mcp"), /--host is not a jaiph mcp flag.*jaiph serve/);
+  assert.throws(() => parseArgs(["--port", "1", "flow.jh"], "mcp"), /--port is not a jaiph mcp flag.*jaiph serve/);
+});
+
+test("parseArgs: an unknown flag is a usage error, not a positional", () => {
+  assert.throws(() => parseArgs(["--bogus", "flow.jh"], "run"), /unknown flag --bogus for jaiph run/);
+  assert.throws(() => parseArgs(["-x", "flow.jh"], "serve"), /unknown flag -x for jaiph serve/);
+  assert.throws(() => parseArgs(["--bogus=1", "flow.jh"], "mcp"), /unknown flag --bogus for jaiph mcp/);
+});
+
+test("parseArgs: jaiph run's unknown-flag error points at -- for dash-leading workflow args", () => {
+  assert.throws(() => parseArgs(["flow.jh", "-v5"], "run"), /Use `--` before workflow arguments/);
+});
+
+test("parseArgs: rejected flags are still fine after -- (workflow args untouched)", () => {
+  const r = parseArgs(["flow.jh", "--", "--host", "--bogus", "-x"], "mcp");
+  assert.deepEqual(r.positional, ["flow.jh", "--host", "--bogus", "-x"]);
+});
+
+test("parseArgs: a bare '-' stays positional", () => {
+  const r = parseArgs(["-", "flow.jh"], "run");
+  assert.deepEqual(r.positional, ["-", "flow.jh"]);
+});
+
+// ---------------------------------------------------------------------------
 // printUsage: lists the new flags under `jaiph run`
 // ---------------------------------------------------------------------------
 
@@ -271,4 +335,27 @@ test("printUsage: example shows --inplace + --workspace combo", () => {
     cap.text().includes("jaiph run --inplace --workspace"),
     "examples block has the documented --inplace + --workspace combo",
   );
+});
+
+test("printUsage: documents the shared execution policy (precedence + consent) once", () => {
+  const cap = captureStdout();
+  try {
+    printUsage();
+  } finally {
+    cap.restore();
+  }
+  const text = cap.text();
+  assert.ok(text.includes("Execution policy (shared by jaiph run, jaiph serve, jaiph mcp):"));
+  assert.ok(
+    text.includes("CLI flags > JAIPH_* env vars > workflow config"),
+    "precedence order is spelled out",
+  );
+  assert.ok(text.includes("E_FLAG_CONFLICT"), "posture conflict rule is documented");
+  const serveSection = text.slice(text.indexOf("jaiph serve:"));
+  const mcpSection = text.slice(text.indexOf("jaiph mcp:"));
+  for (const [label, section] of [["serve", serveSection], ["mcp", mcpSection]] as const) {
+    assert.ok(section.includes("--inplace"), `jaiph ${label} section mentions --inplace`);
+    assert.ok(section.includes("--unsafe"), `jaiph ${label} section mentions --unsafe`);
+    assert.ok(section.includes("--yes"), `jaiph ${label} section mentions --yes`);
+  }
 });

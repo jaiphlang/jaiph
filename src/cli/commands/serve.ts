@@ -11,8 +11,10 @@ import {
   createGenerationTracker,
   createSourceWatcher,
   resolveStartupPosture,
+  logStartupPosture,
   WATCH_INTERVAL_MS,
   type GenerationTracker,
+  type StartupPosture,
 } from "../shared/generation";
 import { ServeHandler } from "../serve/handler";
 import { createHttpServer, listen } from "../serve/server";
@@ -44,7 +46,7 @@ function intEnv(raw: string | undefined, name: string, fallback: number, min: nu
 }
 
 const SERVE_USAGE =
-  "Usage: jaiph serve [--host <addr>] [--port <n>] [--workspace <dir>] [--env KEY[=VALUE]]... <file.jh>\n\n" +
+  "Usage: jaiph serve [--host <addr>] [--port <n>] [--workspace <dir>] [--inplace] [--unsafe] [--yes|-y] [--env KEY[=VALUE]]... <file.jh>\n\n" +
   "Serve the file's workflows as an HTTP API with a generated OpenAPI 3.1 document\n" +
   "and an embedded Swagger UI. Anything that speaks HTTP can invoke tested workflows\n" +
   "and inspect their runs.\n\n" +
@@ -70,7 +72,17 @@ const SERVE_USAGE =
   "  --port <n>         listen port (default: 5247)\n" +
   "  --workspace <dir>  workspace root for import resolution (default: auto-detect)\n" +
   "  --env KEY=VALUE    define KEY in every run's env (repeatable); --env KEY forwards the host value.\n" +
+  "  --inplace          Docker sandbox with the host workspace bind-mounted rw for every run (JAIPH_INPLACE=1)\n" +
+  "  --unsafe           every run executes on the host with no sandbox (JAIPH_UNSAFE=true)\n" +
+  "  -y, --yes          record auto-consent for the posture (JAIPH_INPLACE_YES=1)\n" +
   "  -h, --help         show this help\n\n" +
+  "Execution policy: --workspace/--env/--inplace/--unsafe/--yes are shared with jaiph run and\n" +
+  "jaiph mcp. Precedence: CLI flags > JAIPH_* env vars > workflow config metadata > defaults.\n" +
+  "--inplace and --unsafe conflict (E_FLAG_CONFLICT, at startup before anything is spawned).\n" +
+  "The effective sandbox posture is resolved and printed once at startup and applied to every\n" +
+  "run; launching the server with the flag or env var is the consent (no interactive prompt).\n" +
+  "Inside a container the container itself is the sandbox (the runtime image bakes\n" +
+  "JAIPH_UNSAFE=true), so host-only execution there is the documented standalone posture.\n\n" +
   "Example:\n" +
   "  JAIPH_SERVE_TOKEN=secret jaiph serve --host 0.0.0.0 ./tools.jh\n";
 
@@ -87,12 +99,13 @@ export async function runServe(rest: string[]): Promise<number> {
   }
   let parsed: ReturnType<typeof parseArgs>;
   try {
-    parsed = parseArgs(rest);
+    parsed = parseArgs(rest, "serve");
   } catch (err) {
     process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`);
     return 1;
   }
-  const { workspace, env, positional, host: hostArg, port: portArg } = parsed;
+  const { workspace, env, positional, host: hostArg, port: portArg, inplace, unsafe, yes } = parsed;
+  const sandboxFlags = { inplace, unsafe, yes };
   const input = positional[0];
   if (!input) {
     process.stderr.write("jaiph serve requires a .jh file path\n");
@@ -175,7 +188,7 @@ export async function runServe(rest: string[]): Promise<number> {
   let generation = 0;
   let generations: GenerationTracker;
   try {
-    const loaded = loadGeneration(inputAbs, workspaceRoot, tempRoot, generation, extraEnv, log, "jaiph serve");
+    const loaded = loadGeneration(inputAbs, workspaceRoot, tempRoot, generation, extraEnv, log, "jaiph serve", sandboxFlags);
     if (!loaded.state) {
       for (const f of loaded.failures) log(f);
       rmSync(tempRoot, { recursive: true, force: true });
@@ -188,24 +201,12 @@ export async function runServe(rest: string[]): Promise<number> {
     return 1;
   }
 
-  let dockerConfig: ReturnType<typeof resolveStartupPosture>["dockerConfig"];
+  let posture: StartupPosture;
   let hostRunsRoot: string;
   try {
-    const posture = resolveStartupPosture(generations.current(), inputAbs, workspaceRoot, log);
-    dockerConfig = posture.dockerConfig;
+    posture = resolveStartupPosture(generations.current(), inputAbs, workspaceRoot, log);
     hostRunsRoot = posture.hostRunsRoot;
-    if (dockerConfig.enabled) {
-      if (posture.sandboxMode === "inplace") {
-        log(
-          `jaiph serve: runs execute in a Docker sandbox in-place on ${workspaceRoot} ` +
-            "(JAIPH_INPLACE=1 opt-in: effects land live on the workspace).",
-        );
-      } else {
-        log(`jaiph serve: runs execute in a Docker sandbox (${posture.sandboxMode} mode; workspace isolated).`);
-      }
-    } else {
-      log("jaiph serve: runs execute on the host with no sandbox.");
-    }
+    logStartupPosture("jaiph serve", "runs", posture, workspaceRoot, log);
   } catch (err) {
     log(err instanceof Error ? err.message : String(err));
     rmSync(tempRoot, { recursive: true, force: true });
@@ -237,7 +238,7 @@ export async function runServe(rest: string[]): Promise<number> {
       const lease = generations.acquire();
       const p = callWorkflow(
         lease.state.callEnv,
-        dockerConfig,
+        posture,
         spec.workflow,
         spec.params.map((pp) => args[pp] ?? ""),
         runId,
@@ -262,7 +263,7 @@ export async function runServe(rest: string[]): Promise<number> {
     reloading = true;
     try {
       generation += 1;
-      const loaded = loadGeneration(inputAbs, workspaceRoot, tempRoot, generation, extraEnv, log, "jaiph serve");
+      const loaded = loadGeneration(inputAbs, workspaceRoot, tempRoot, generation, extraEnv, log, "jaiph serve", sandboxFlags);
       if (!loaded.state) {
         log("jaiph serve: reload failed; keeping the previous workflows:");
         for (const f of loaded.failures) log(`  ${f}`);

@@ -39,7 +39,11 @@ const RUN_USAGE =
   "  -y, --yes          skip the in-place confirmation prompt (sets JAIPH_INPLACE_YES=1 for this run)\n" +
   "  --                 end of jaiph flags; remaining args go to workflow default\n" +
   "  -h, --help         show this help\n\n" +
-  "Note: these flags only affect `jaiph run`; the corresponding env vars also apply to other entry points.\n\n" +
+  "--workspace, --env, --inplace, --unsafe, and --yes are the shared execution-policy flags,\n" +
+  "accepted identically by jaiph serve and jaiph mcp. Precedence: CLI flags > JAIPH_* env vars >\n" +
+  "workflow config metadata > defaults. --inplace and --unsafe conflict (E_FLAG_CONFLICT).\n" +
+  "Consent: jaiph run confirms --inplace / unsafe host-only interactively (--yes auto-confirms;\n" +
+  "required non-TTY); the corresponding env vars also apply to other entry points.\n\n" +
   "Examples:\n" +
   "  jaiph run ./flows/review.jh \"review this diff\"\n" +
   "  jaiph run --inplace --workspace ./app ./flows/fix.jh\n";
@@ -66,7 +70,7 @@ import {
   formatRunningBottomLine,
 } from "../run/progress";
 import { loadMergedHooks, registerHooksSubscriber } from "../run/hooks";
-import { resolveRuntimeEnv, applySandboxFlags, resolveEnvPairs } from "../run/env";
+import { resolveRuntimeEnv, applySandboxFlags, resolveEnvPairs, isUnsafeHostOnly } from "../run/env";
 import { preflightAgentCredentials, collectEntryBackends } from "../run/preflight-credentials";
 import { planTrustedEnvs } from "../run/trusted-envs";
 import { colorize, formatJaiphRunningBannerLines } from "../run/display";
@@ -89,7 +93,7 @@ export async function runWorkflow(rest: string[]): Promise<number> {
   }
   let parsed: ReturnType<typeof parseArgs>;
   try {
-    parsed = parseArgs(rest);
+    parsed = parseArgs(rest, "run");
   } catch (err) {
     process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`);
     return 1;
@@ -267,7 +271,7 @@ export async function runWorkflow(rest: string[]): Promise<number> {
 
     emitter.emit("workflow_start", {
       event: "workflow_start",
-      workflow_id: "",
+      workflow_id: runId,
       timestamp: new Date().toISOString(),
       run_path: inputAbs,
       workspace: workspaceRoot,
@@ -344,27 +348,6 @@ export async function runWorkflow(rest: string[]): Promise<number> {
       rmSync(outDir, { recursive: true, force: true });
     }
   }
-}
-
-/**
- * True when Docker is off specifically because the user opted into unsafe mode
- * (`JAIPH_UNSAFE=true` / `--unsafe`) while Docker would otherwise be on.
- *
- * "Would otherwise be on" is the key gate: it excludes win32 (forced host-only
- * with its own notice) and an explicit `JAIPH_DOCKER_ENABLED=false` (Docker
- * disabled by config, not by the unsafe opt-in). Only the unsafe-driven case
- * gets the extra host-only confirmation.
- */
-function isUnsafeHostOnly(
-  dockerEnabled: boolean,
-  env: Record<string, string | undefined>,
-): boolean {
-  return (
-    !dockerEnabled &&
-    process.platform !== "win32" &&
-    env.JAIPH_DOCKER_ENABLED === undefined &&
-    env.JAIPH_UNSAFE === "true"
-  );
 }
 
 /**

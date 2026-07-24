@@ -13,9 +13,17 @@ This recipe wires a shell command to a workflow lifecycle event so the CLI runs 
 
 Hooks run **on the host CLI** even when the workflow runs inside Docker. The CLI dispatches them at lifecycle points — step events from parsed `__JAIPH_EVENT__` lines on the runner's stderr, plus `workflow_start` before the runner spawns and `workflow_end` after it exits — with a JSON payload on stdin per invocation.
 
+**One contract, three invocation modes.** The same four events (`workflow_start`, `step_start`, `step_end`, `workflow_end`) with the same payload shapes fire for:
+
+- **direct runs** — interactive `jaiph run` / `jaiph <file.jh>`;
+- **HTTP runs** — every `jaiph serve` workflow run, dispatched by the server process;
+- **MCP tool calls** — every `jaiph mcp` tool call, dispatched by the server process (hook stderr goes to the server's stderr; stdout stays clean for the protocol).
+
+The explicit mode differences: `jaiph run --raw` dispatches **no** hooks (transparent embedding / the Docker inner run — the host side of a Docker run still dispatches), and `jaiph test` executes workflows in-process without hooks. Servers load `hooks.json` at startup and re-read it on each source reload.
+
 ## Prerequisites
 
-- An entry `.jh` file you can run with `jaiph run` or `jaiph <file.jh>` (hooks do **not** fire for `jaiph test`, `jaiph compile`, `jaiph format`, `jaiph init`, `jaiph install`, `jaiph use`, or `jaiph run --raw`).
+- An entry `.jh` file you can run with `jaiph run` / `jaiph <file.jh>`, or serve with `jaiph serve` / `jaiph mcp` (hooks do **not** fire for `jaiph test`, `jaiph compile`, `jaiph format`, `jaiph init`, `jaiph install`, `jaiph use`, or `jaiph run --raw`).
 - `sh`, plus whatever tool the hook command needs (`jq`, `curl`, etc.).
 
 ## 1. Create the hooks file
@@ -86,7 +94,7 @@ The jq filter above drops several fields. A full `step_end` payload also include
 
 The other events carry different fields:
 
-- `workflow_start` — `event`, `timestamp`, `run_path`, `workspace`. Its `workflow_id` is present but **empty**: the run id is not known until the runner reports the first step, so do not key on it here.
+- `workflow_start` — `event`, `workflow_id` (the run id in every invocation mode — direct, HTTP, and MCP), `timestamp`, `run_path`, `workspace`.
 - `workflow_end` — `event`, `workflow_id`, `status` (the resolved run exit status), `elapsed_ms` (total run time), `timestamp`, `run_path`, `workspace`, and, when the runner reported them, `run_dir` (the run directory under `.jaiph/runs`) and `summary_file` (path to `run_summary.jsonl`). These two point a webhook at the run artifacts.
 
 Every command also inherits the CLI's environment, which is why `$HOME` resolves in the examples above.

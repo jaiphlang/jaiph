@@ -14,27 +14,6 @@ Process rules:
 
 ***
 
-## Use one execution-policy contract across run, serve, and MCP #dev-ready
-
-The shared parser accepts flags for every command, but commands silently ignore options they do not destructure. For example, `jaiph serve --unsafe` and `jaiph mcp --inplace` parse successfully but do not apply those flags. `run` exposes sandbox flags while long-lived modes require env vars, creating different mental models for the same execution engine.
-
-Scope:
-
-- Define shared options for `--workspace`, repeatable `--env`, `--inplace`, `--unsafe`, and `--yes`; support them consistently in `run`, `serve`, and `mcp`.
-- Define and document one precedence order across CLI flags, `JAIPH_*` env vars, and workflow runtime metadata.
-- Reject mutually exclusive posture and all command-specific unsupported flags as usage errors instead of treating or ignoring them as positionals.
-- Resolve and print the effective sandbox posture once at server startup, then apply it to every call. Preserve the documented standalone-container exception where the container/pod is the sandbox.
-- Decide and implement one lifecycle-hook contract for all three modes; mode differences must be explicit rather than caused by separate execution paths.
-- Keep display-only options such as `--raw` and transport options such as `--host`/`--port` command-specific.
-
-Acceptance:
-
-- A table-driven integration suite runs the same sandbox/env cases through all three modes and observes the same effective child env and filesystem isolation.
-- `serve --unsafe`, `serve --inplace`, `mcp --unsafe`, and `mcp --inplace` have tested effects; conflicting flags fail before spawning.
-- Flags belonging to another command fail with a clear usage error.
-- Hook tests prove the documented contract for direct, HTTP, and MCP invocations.
-- Command help and env-var reference describe the same precedence and consent rules.
-
 ## Give every run mode complete, bounded telemetry behavior #dev-ready
 
 Normal `jaiph run`, HTTP calls, and MCP calls invoke the shared OTLP/Sentry hook, but `jaiph run --raw` bypasses it while the docs claim every run is covered. OTLP and Sentry are awaited sequentially, so unavailable backends can hold a completed run and a service concurrency slot for up to 20 seconds despite being described as non-load-bearing.
