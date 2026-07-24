@@ -27,6 +27,8 @@ const DEFAULT_RETAIN_RUNS = 500;
 const DEFAULT_RETAIN_AGE_SEC = 24 * 60 * 60;
 /** 1 MiB per stream / log buffer / result_text; bounds one run's memory. */
 const DEFAULT_MAX_OUTPUT_BYTES = 1024 * 1024;
+/** No cap on artifact downloads by default — they stream, so size costs no memory. */
+const DEFAULT_MAX_ARTIFACT_BYTES = 0;
 
 /**
  * Parse an integer env var, returning the fallback when unset. Throws a
@@ -61,7 +63,9 @@ const SERVE_USAGE =
   "(per-run stdout/stderr/log/result cap, default 1 MiB), JAIPH_SERVE_RETAIN_RUNS\n" +
   "(completed runs kept in memory, default 500), and JAIPH_SERVE_RETAIN_AGE_SEC\n" +
   "(max completed-run age, default 86400; 0 disables). GET /v1/runs is paginated\n" +
-  "(?limit default 100, max 1000; ?offset).\n\n" +
+  "(?limit default 100, max 1000; ?offset). Artifact downloads stream with\n" +
+  "backpressure; JAIPH_SERVE_MAX_ARTIFACT_BYTES (default 0 = no cap) refuses\n" +
+  "larger files with 413.\n\n" +
   "  --host <addr>      listen address (default: 127.0.0.1)\n" +
   "  --port <n>         listen port (default: 5247)\n" +
   "  --workspace <dir>  workspace root for import resolution (default: auto-detect)\n" +
@@ -145,10 +149,12 @@ export async function runServe(rest: string[]): Promise<number> {
   let retainRuns: number;
   let retainAgeSec: number;
   let maxOutputBytes: number;
+  let maxArtifactBytes: number;
   try {
     retainRuns = intEnv(process.env.JAIPH_SERVE_RETAIN_RUNS, "JAIPH_SERVE_RETAIN_RUNS", DEFAULT_RETAIN_RUNS, 1);
     retainAgeSec = intEnv(process.env.JAIPH_SERVE_RETAIN_AGE_SEC, "JAIPH_SERVE_RETAIN_AGE_SEC", DEFAULT_RETAIN_AGE_SEC, 0);
     maxOutputBytes = intEnv(process.env.JAIPH_SERVE_MAX_OUTPUT_BYTES, "JAIPH_SERVE_MAX_OUTPUT_BYTES", DEFAULT_MAX_OUTPUT_BYTES, 1);
+    maxArtifactBytes = intEnv(process.env.JAIPH_SERVE_MAX_ARTIFACT_BYTES, "JAIPH_SERVE_MAX_ARTIFACT_BYTES", DEFAULT_MAX_ARTIFACT_BYTES, 0);
   } catch (err) {
     process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`);
     return 1;
@@ -216,11 +222,14 @@ export async function runServe(rest: string[]): Promise<number> {
     maxConcurrent,
     retainRuns,
     retainAgeSec,
+    maxArtifactBytes,
     now: () => new Date().toISOString(),
     // A run's dir is only recorded on its object at finalize; while it runs the
     // events/artifacts endpoints locate it by scanning the host runs root for
     // the run id (works host- and Docker-side — the run dir is a host mount).
-    resolveRunDir: (record) => record.run_dir ?? findRunDir(hostRunsRoot, record.run_id),
+    // The handler caches the first hit per record, so a live SSE poll loop
+    // scans at most once.
+    resolveRunDir: (record) => findRunDir(hostRunsRoot, record.run_id),
     getTools: () => generations.current().tools,
     callTool: (spec, args, runId, ctx) => {
       // Bind the run to the generation live at start; the lease keeps its

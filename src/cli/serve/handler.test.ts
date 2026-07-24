@@ -1,9 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ServeHandler, type ServeRequest, type ServeResponse } from "./handler";
+import { ServeHandler, type RunRecord, type ServeRequest, type ServeResponse } from "./handler";
 import type { StreamTarget } from "./runfiles";
 import type { McpToolSpec } from "../mcp/tools";
 import type { WorkflowCallResult, WorkflowCallContext } from "../exec/call";
@@ -44,6 +44,9 @@ function makeHandler(overrides?: {
   retainRuns?: number;
   retainAgeSec?: number;
   now?: () => string;
+  resolveRunDir?: (record: RunRecord) => string | null;
+  ssePollMs?: number;
+  maxArtifactBytes?: number;
 }): ServeHandler {
   let n = 0;
   return new ServeHandler({
@@ -57,6 +60,9 @@ function makeHandler(overrides?: {
     retainAgeSec: overrides?.retainAgeSec,
     now: overrides?.now ?? (() => "2026-07-24T00:00:00.000Z"),
     newRunId: () => `run-${n++}`,
+    resolveRunDir: overrides?.resolveRunDir,
+    ssePollMs: overrides?.ssePollMs,
+    maxArtifactBytes: overrides?.maxArtifactBytes,
   });
 }
 
@@ -423,7 +429,7 @@ test("events + artifacts require the bearer token when one is configured", async
   }
 });
 
-test("NDJSON events on a terminal run byte-match the run_summary.jsonl file", async () => {
+test("NDJSON events on a terminal run stream the run_summary.jsonl file itself", async () => {
   const runDir = mkdtempSync(join(tmpdir(), "jaiph-h-ndjson-"));
   try {
     const journal = '{"type":"WORKFLOW_START","run_id":"r"}\n{"type":"WORKFLOW_END","run_id":"r"}\n';
@@ -432,8 +438,10 @@ test("NDJSON events on a terminal run byte-match the run_summary.jsonl file", as
     const res = await h.handleRequest(req("GET", `/v1/runs/${runId}/events`));
     assert.equal(res.status, 200);
     assert.equal(res.headers["content-type"], "application/x-ndjson");
-    assert.ok(res.bodyBuffer, "NDJSON is served as a binary body");
-    assert.deepEqual(res.bodyBuffer, readFileSync(join(runDir, "run_summary.jsonl")), "byte-identical to the journal");
+    assert.ok(res.bodyFile, "NDJSON is streamed from a file, never buffered whole");
+    assert.equal(res.bodyFile!.path, join(runDir, "run_summary.jsonl"), "the streamed file is the journal");
+    assert.equal(res.bodyFile!.size, Buffer.byteLength(journal), "exactly the journal's bytes are streamed");
+    assert.equal(res.headers["content-length"], String(Buffer.byteLength(journal)));
   } finally {
     rmSync(runDir, { recursive: true, force: true });
   }
@@ -479,11 +487,104 @@ test("artifacts round-trip through the handler: list then byte-identical downloa
     assert.equal(dl.status, 200);
     assert.equal(dl.headers["content-type"], "application/octet-stream");
     assert.match(dl.headers["content-disposition"], /filename="out\.bin"/);
-    assert.deepEqual(dl.bodyBuffer, payload, "downloaded bytes match the published file");
+    assert.equal(dl.headers["content-length"], String(payload.length));
+    assert.ok(dl.bodyFile, "the artifact is streamed from disk, never buffered whole");
+    assert.equal(dl.bodyFile!.size, payload.length);
+    assert.deepEqual(readFileSync(dl.bodyFile!.path), payload, "the streamed file is the published artifact");
 
     // Traversal to a run-dir file (not under artifacts/) is a 404.
     const escape = await h.handleRequest(req("GET", `/v1/runs/${runId}/artifacts/${encodeURIComponent("../run_summary.jsonl")}`));
     assert.equal(escape.status, 404);
+  } finally {
+    rmSync(runDir, { recursive: true, force: true });
+  }
+});
+
+/** A stream target that records writes and can be aborted like a disconnecting client. */
+function abortableTarget(): StreamTarget & { chunks: string[]; abort: () => void } {
+  let aborted = false;
+  const cbs: Array<() => void> = [];
+  const chunks: string[] = [];
+  return {
+    chunks,
+    write: (c: string) => void chunks.push(c),
+    get aborted(): boolean {
+      return aborted;
+    },
+    onAbort: (cb: () => void) => void cbs.push(cb),
+    abort(): void {
+      aborted = true;
+      for (const cb of cbs) cb();
+    },
+  };
+}
+
+/** Poll until `target` holds at least `n` SSE `data:` frames. */
+async function waitForDataFrames(target: { chunks: string[] }, n: number): Promise<void> {
+  const deadline = Date.now() + 5000;
+  while (target.chunks.filter((c) => c.startsWith("data: ")).length < n) {
+    if (Date.now() > deadline) throw new Error(`timed out waiting for ${n} SSE data frames`);
+    await new Promise((r) => setTimeout(r, 5));
+  }
+}
+
+test("a live SSE connection resolves the run dir with at most one scan", async () => {
+  const runDir = mkdtempSync(join(tmpdir(), "jaiph-h-scan-"));
+  try {
+    const journal = join(runDir, "run_summary.jsonl");
+    writeFileSync(journal, '{"type":"WORKFLOW_START","run_id":"r"}\n');
+    let scans = 0;
+    const h = makeHandler({
+      tools: [NOARG_TOOL],
+      // The run never finishes, so `run_dir` is never set on the record and
+      // every poll must go through the resolver.
+      callTool: () => new Promise<WorkflowCallResult>(() => {}),
+      resolveRunDir: () => {
+        scans += 1;
+        return runDir;
+      },
+      ssePollMs: 5,
+    });
+    const started = bodyJson(await h.handleRequest(req("POST", "/v1/workflows/ping/runs")));
+    const res = await h.handleRequest(req("GET", `/v1/runs/${started.run_id}/events`, { headers: { accept: "text/event-stream" } }));
+    assert.ok(res.stream);
+    const target = abortableTarget();
+    const done = res.stream!(target);
+    await waitForDataFrames(target, 1);
+    // Grow the journal and wait for its frame — proof that later polls (each of
+    // which resolves the run dir) happened after the first scan.
+    appendFileSync(journal, '{"type":"STEP_END","status":0}\n');
+    await waitForDataFrames(target, 2);
+    target.abort();
+    await done;
+    assert.equal(scans, 1, "the runs tree was scanned exactly once for the whole live stream");
+  } finally {
+    rmSync(runDir, { recursive: true, force: true });
+  }
+});
+
+test("an artifact past maxArtifactBytes is 413 while a smaller one still streams", async () => {
+  const runDir = mkdtempSync(join(tmpdir(), "jaiph-h-cap-"));
+  try {
+    mkdirSync(join(runDir, "artifacts"), { recursive: true });
+    writeFileSync(join(runDir, "artifacts", "big.bin"), Buffer.alloc(10, 1));
+    writeFileSync(join(runDir, "artifacts", "small.bin"), Buffer.alloc(4, 2));
+    writeFileSync(join(runDir, "run_summary.jsonl"), "");
+    const h = makeHandler({
+      tools: [NOARG_TOOL],
+      maxArtifactBytes: 4,
+      callTool: async () => ({ text: "ok", isError: false, exitStatus: 0, runDir }),
+    });
+    const started = bodyJson(await h.handleRequest(req("POST", "/v1/workflows/ping/runs?wait=true")));
+
+    const big = await h.handleRequest(req("GET", `/v1/runs/${started.run_id}/artifacts/big.bin`));
+    assert.equal(big.status, 413);
+    assert.equal(bodyJson(big).error.code, "E_ARTIFACT_TOO_LARGE");
+    assert.match(bodyJson(big).error.message, /JAIPH_SERVE_MAX_ARTIFACT_BYTES/);
+
+    const small = await h.handleRequest(req("GET", `/v1/runs/${started.run_id}/artifacts/small.bin`));
+    assert.equal(small.status, 200);
+    assert.equal(small.bodyFile!.size, 4);
   } finally {
     rmSync(runDir, { recursive: true, force: true });
   }

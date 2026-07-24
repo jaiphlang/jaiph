@@ -14,42 +14,6 @@ Process rules:
 
 ***
 
-## Make the Kubernetes example runnable and hardened by default #dev-ready
-
-The current manifest mounts the workflow ConfigMap read-only at `/work`, while standalone host mode writes runs under `/work/.jaiph/runs`; the example is schema-valid but cannot complete a real run. It also ships publicly known placeholder secrets and omits the pod hardening that `docs/deploy.md` says the operator must supply.
-
-Scope:
-
-- Mount a writable `emptyDir` or PVC for `JAIPH_RUNS_DIR` without making workflow sources writable.
-- Remove applyable placeholder credentials from the base manifest; document and validate an external Secret contract.
-- Add `runAsNonRoot`, fixed UID/GID, `allowPrivilegeEscalation: false`, dropped capabilities, a runtime-default seccomp profile, and disabled service-account token mounting.
-- Provide writable mounts only for paths genuinely required by Jaiph and agent CLIs; keep the remaining filesystem read-only where feasible.
-- Add optional OTLP and Sentry env wiring examples without embedding credentials.
-
-Acceptance:
-
-- A Kind-based test applies the manifest, invokes the HTTP workflow with auth, observes a successful run, and reads its journal from the writable runs volume.
-- The pod runs as non-root and the test fails if privilege escalation, capabilities, or the default service-account token are reintroduced.
-- `kubectl apply --dry-run=client` remains a fast schema check, but is not the only deployment test.
-
-## Make HTTP request, event, and artifact I/O scale with bytes transferred #dev-ready
-
-The HTTP layer still performs avoidable whole-resource work: an aborted request body can leave `readBody` pending, SSE repeatedly scans historical run directories until `run_dir` is known, each SSE poll rereads the whole journal, and artifact downloads load the complete file into memory.
-
-Scope:
-
-- Settle request-body reads on `aborted`/premature `close` and stop all associated work.
-- Cache `run_id -> run_dir` as soon as it is first resolved so a live SSE stream does not repeatedly scan the runs tree.
-- Follow journals with an open file descriptor and byte offset instead of rereading prior bytes on every poll.
-- Stream artifacts with backpressure and an explicit configurable size policy; do not buffer the complete artifact.
-
-Acceptance:
-
-- Destroying a request mid-upload settles its handler promptly and leaves no request or run slot occupied.
-- With many historical runs, one live SSE connection performs at most one full run-directory resolution scan.
-- Instrumented SSE tests prove bytes before the current offset are not reread.
-- A multi-gigabyte sparse artifact can be served with bounded process memory, and disconnecting the client closes the file stream.
-
 ## Use one execution-policy contract across run, serve, and MCP #dev-ready
 
 The shared parser accepts flags for every command, but commands silently ignore options they do not destructure. For example, `jaiph serve --unsafe` and `jaiph mcp --inplace` parse successfully but do not apply those flags. `run` exposes sandbox flags while long-lived modes require env vars, creating different mental models for the same execution engine.
