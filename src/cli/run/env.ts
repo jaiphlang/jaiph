@@ -73,6 +73,29 @@ export function applySandboxFlags(
   }
 }
 
+/**
+ * True when Docker is off specifically because the user opted into unsafe mode
+ * (`JAIPH_UNSAFE=true` / `--unsafe`) while Docker would otherwise be on.
+ *
+ * "Would otherwise be on" is the key gate: it excludes win32 (forced host-only
+ * with its own notice) and an explicit `JAIPH_DOCKER_ENABLED=false` (Docker
+ * disabled by config, not by the unsafe opt-in). Only the unsafe-driven case
+ * gets the extra host-only consent (interactive on `jaiph run`; a startup
+ * notice on `jaiph serve` / `jaiph mcp`, where launching the server with the
+ * flag or env var is the consent).
+ */
+export function isUnsafeHostOnly(
+  dockerEnabled: boolean,
+  env: Record<string, string | undefined>,
+): boolean {
+  return (
+    !dockerEnabled &&
+    process.platform !== "win32" &&
+    env.JAIPH_DOCKER_ENABLED === undefined &&
+    env.JAIPH_UNSAFE === "true"
+  );
+}
+
 const LOCKED_ENV_KEYS = [
   "JAIPH_AGENT_MODEL",
   "JAIPH_AGENT_COMMAND",

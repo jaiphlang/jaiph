@@ -5,6 +5,7 @@ import { spawn } from "node:child_process";
 import { resolveShell } from "../../runtime/kernel/portability";
 import type { HookConfig, HookEventName, HookPayload } from "../../types";
 import type { RunEmitter } from "./emitter";
+import type { StepEvent } from "./events";
 
 const HOOKS_FILENAME = "hooks.json";
 
@@ -166,6 +167,52 @@ export function runHooksForEvent(
   }
 }
 
+/**
+ * Build the `step_start` hook payload from a parsed runtime step event. One
+ * builder for every invocation mode (direct `jaiph run`, `jaiph serve` HTTP
+ * runs, `jaiph mcp` tool calls) so the payload contract cannot drift.
+ */
+export function stepStartHookPayload(
+  event: StepEvent,
+  stepId: string,
+  inputAbs: string,
+  workspaceRoot: string,
+): HookPayload {
+  return {
+    event: "step_start",
+    workflow_id: event.run_id,
+    step_id: stepId,
+    step_kind: event.kind,
+    step_name: event.name,
+    timestamp: event.ts || new Date().toISOString(),
+    run_path: inputAbs,
+    workspace: workspaceRoot,
+  };
+}
+
+/** Build the `step_end` hook payload — shared across all three invocation modes. */
+export function stepEndHookPayload(
+  event: StepEvent,
+  stepId: string,
+  inputAbs: string,
+  workspaceRoot: string,
+): HookPayload {
+  return {
+    event: "step_end",
+    workflow_id: event.run_id,
+    step_id: stepId,
+    step_kind: event.kind,
+    step_name: event.name,
+    status: event.status ?? 1,
+    elapsed_ms: event.elapsed_ms ?? 0,
+    timestamp: event.ts || new Date().toISOString(),
+    run_path: inputAbs,
+    workspace: workspaceRoot,
+    out_file: event.out_file || undefined,
+    err_file: event.err_file || undefined,
+  };
+}
+
 /** Subscribe to emitter events and invoke hooks for each lifecycle event. */
 export function registerHooksSubscriber(
   emitter: RunEmitter,
@@ -174,33 +221,11 @@ export function registerHooksSubscriber(
   workspaceRoot: string,
 ): void {
   emitter.on("step_start", (data) => {
-    runHooksForEvent(config, "step_start", {
-      event: "step_start",
-      workflow_id: data.event.run_id,
-      step_id: data.eventId,
-      step_kind: data.event.kind,
-      step_name: data.event.name,
-      timestamp: data.event.ts || new Date().toISOString(),
-      run_path: inputAbs,
-      workspace: workspaceRoot,
-    });
+    runHooksForEvent(config, "step_start", stepStartHookPayload(data.event, data.eventId, inputAbs, workspaceRoot));
   });
 
   emitter.on("step_end", (data) => {
-    runHooksForEvent(config, "step_end", {
-      event: "step_end",
-      workflow_id: data.event.run_id,
-      step_id: data.eventId,
-      step_kind: data.event.kind,
-      step_name: data.event.name,
-      status: data.event.status ?? 1,
-      elapsed_ms: data.event.elapsed_ms ?? 0,
-      timestamp: data.event.ts || new Date().toISOString(),
-      run_path: inputAbs,
-      workspace: workspaceRoot,
-      out_file: data.event.out_file || undefined,
-      err_file: data.event.err_file || undefined,
-    });
+    runHooksForEvent(config, "step_end", stepEndHookPayload(data.event, data.eventId, inputAbs, workspaceRoot));
   });
 
   emitter.on("workflow_start", (payload) => {

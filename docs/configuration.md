@@ -163,11 +163,12 @@ Checks are applied top to bottom; the first match wins.
 
 | Layer | Effect |
 |---|---|
-| Environment (`JAIPH_DOCKER_*`) | Highest priority for `image`, `network`, `timeout`. |
+| CLI flags (`--inplace`, `--unsafe`, `--yes` on `jaiph run` / `jaiph serve` / `jaiph mcp`) | Set the corresponding `JAIPH_*` variable on the launched env for that process, so the env layer below stays the single source of truth. |
+| Environment (`JAIPH_DOCKER_*`, `JAIPH_UNSAFE`, `JAIPH_INPLACE`) | Highest env-layer priority for `image`, `network`, `timeout`, and sandbox posture. |
 | Module-level `config` (`runtime.*`) | Applies when no env override is set. |
 | Built-in defaults | Lowest priority. |
 
-Workflow-level `config` cannot set `runtime.*` keys.
+Workflow-level `config` cannot set `runtime.*` keys. Contradictory posture (`--inplace`/`JAIPH_INPLACE` together with `--unsafe`/`JAIPH_UNSAFE`) is rejected with `E_FLAG_CONFLICT` before anything is spawned rather than resolved by precedence — see [Environment variables — Precedence](env-vars.md#precedence).
 
 ### Scoping across nested calls
 

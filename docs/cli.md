@@ -49,7 +49,7 @@ Compile and execute a workflow's `default` entrypoint.
 jaiph run [--target <dir>] [--raw] [--workspace <dir>] [--inplace] [--unsafe] [--yes|-y] [--env KEY[=VALUE]]... <file.jh> [--] [args...]
 ```
 
-Sandbox selection is environment-driven; there is no `--docker` flag. The boolean sandbox flags (`--inplace`, `--unsafe`, `--yes`) are CLI front-ends that mutate the launched runtime env for one run only — see [Configuration — Precedence](configuration.md#precedence) and [Environment variables](env-vars.md).
+Sandbox selection is environment-driven; there is no `--docker` flag. The boolean sandbox flags (`--inplace`, `--unsafe`, `--yes`) are CLI front-ends that mutate the launched runtime env for one run only, and are shared verbatim with `jaiph serve` and `jaiph mcp` (one execution-policy contract; precedence: CLI flags > `JAIPH_*` env vars > workflow config metadata > defaults) — see [Configuration — Precedence](configuration.md#precedence) and [Environment variables — Precedence](env-vars.md#precedence). Flags belonging to another command (`--host`, `--port`) and unknown flags are usage errors, never positionals.
 
 ### Flags
 
@@ -278,7 +278,7 @@ Implementation: re-invokes `JAIPH_INSTALL_COMMAND` (default `curl -fsSL https://
 Serve a file's workflows as [MCP](https://modelcontextprotocol.io/) tools over stdio. See [Serve workflows as MCP tools](/how-to/mcp) for the recipe and client-registration steps.
 
 ```text
-jaiph mcp [--workspace <dir>] [--env KEY[=VALUE]]... <file.jh>
+jaiph mcp [--workspace <dir>] [--inplace] [--unsafe] [--yes|-y] [--env KEY[=VALUE]]... <file.jh>
 ```
 
 `jaiph --mcp <file.jh>` is an equivalent alias, dispatched after `compile` in `src/cli/index.ts`.
@@ -287,7 +287,12 @@ jaiph mcp [--workspace <dir>] [--env KEY[=VALUE]]... <file.jh>
 |---|---|---|
 | `--workspace` | `<dir>` | Workspace root for import resolution (default: auto-detected from the file's directory). A missing value or non-directory path aborts with a specific message. |
 | `--env` | `KEY=VALUE` or `KEY` | Same per-key passthrough as `jaiph run --env` (same forms, validation, and reserved-key rejection), resolved once at startup and applied to **every** tool call for the server's lifetime. A bare `--env KEY` unset on the host aborts server startup with `E_ENV_MISSING`. In Docker mode the pairs cross the container boundary as explicit `-e` args bypassing the allowlist, exactly as for `jaiph run --env`. |
+| `--inplace` | — | Front-end for `JAIPH_INPLACE=1`: every tool call's Docker sandbox bind-mounts the host workspace read-write. Mutually exclusive with `--unsafe` (`E_FLAG_CONFLICT` at startup, before anything is spawned). No interactive prompt — launching the server with the flag (or env var) is the consent; the effective posture is printed once at startup and applied to every call. |
+| `--unsafe` | — | Front-end for `JAIPH_UNSAFE=true`: every tool call runs on the host with no sandbox. Same startup-consent model as `--inplace`. |
+| `-y`, `--yes` | — | Front-end for `JAIPH_INPLACE_YES=1` (recorded on every call's env; servers themselves never prompt). |
 | `-h`, `--help` | — | Print the subcommand usage and exit `0`. |
+
+Flags that belong to another command (for example `--raw` or `--port`) are usage errors naming the owning command — never silently ignored. Precedence across layers is the shared execution-policy order: CLI flags > `JAIPH_*` env vars > workflow config metadata > defaults (see [Environment variables — Precedence](env-vars.md#precedence)).
 
 ### Startup and exit behaviour
 
@@ -343,7 +348,7 @@ Tool descriptions come from the `#` comment lines directly above each workflow (
 ### Execution and hot reload
 
 - Tool calls honor the same env-driven sandbox selection as `jaiph run` (`resolveDockerConfig`): Docker on macOS/Linux by default, host-only under `JAIPH_UNSAFE=true` or on Windows. The image is prepared once at startup (`checkDockerAvailable` + `prepareImage`), not per call. Run artifacts land under `.jaiph/runs/` exactly as for `jaiph run`.
-- **The workspace is isolated by default** for `jaiph mcp` — the same as `jaiph run`. Each tool call's container works on a writable point-in-time snapshot of the workspace, so edits are discarded on exit and the host tree is untouched. Set `JAIPH_INPLACE=1` to bind the real workspace read-write so tool effects land live (opt-in), or `JAIPH_UNSAFE=true` to run on the host with no sandbox.
+- **The workspace is isolated by default** for `jaiph mcp` — the same as `jaiph run`. Each tool call's container works on a writable point-in-time snapshot of the workspace, so edits are discarded on exit and the host tree is untouched. Pass `--inplace` (or set `JAIPH_INPLACE=1`) to bind the real workspace read-write so tool effects land live (opt-in), or `--unsafe` (`JAIPH_UNSAFE=true`) to run on the host with no sandbox. The posture is resolved and printed once at startup and applied to every call.
 - Source files in the module graph are watched (polling, ~750 ms). A valid edit re-derives tools and emits `notifications/tools/list_changed`; an edit that fails to compile keeps the previous tool set serving and logs diagnostics to stderr.
 - Calls bind to the generation (emitted scripts + serialized graph) live when they start; a superseded generation's scripts dir survives until its last in-flight call settles, so a call spanning a reload still runs its remaining steps — the same lease model `jaiph serve` uses for HTTP runs.
 
@@ -353,7 +358,7 @@ Tool descriptions come from the `#` comment lines directly above each workflow (
 Serve a file's workflows as an HTTP API with a generated OpenAPI 3.1 document and an embedded Swagger UI. Same exposure rules and execution layer as `jaiph mcp`, over HTTP instead of stdio. See [Serve workflows over HTTP](/how-to/serve) for the recipe.
 
 ```text
-jaiph serve [--host <addr>] [--port <n>] [--workspace <dir>] [--env KEY[=VALUE]]... <file.jh>
+jaiph serve [--host <addr>] [--port <n>] [--workspace <dir>] [--inplace] [--unsafe] [--yes|-y] [--env KEY[=VALUE]]... <file.jh>
 ```
 
 | Flag | Argument | Effect |
@@ -362,9 +367,14 @@ jaiph serve [--host <addr>] [--port <n>] [--workspace <dir>] [--env KEY[=VALUE]]
 | `--port` | `<n>` | Listen port (default `5247`). `0` picks a free port. |
 | `--workspace` | `<dir>` | Workspace root for import resolution (default: auto-detected). |
 | `--env` | `KEY=VALUE` or `KEY` | Same per-key passthrough as `jaiph run --env`, resolved once at startup and applied to every run for the server's lifetime. |
+| `--inplace` | — | Front-end for `JAIPH_INPLACE=1`: every run's Docker sandbox bind-mounts the host workspace read-write. Mutually exclusive with `--unsafe` (`E_FLAG_CONFLICT` at startup, before anything is spawned). No interactive prompt — launching the server with the flag (or env var) is the consent; the effective posture is printed once at startup and applied to every run. |
+| `--unsafe` | — | Front-end for `JAIPH_UNSAFE=true`: every run executes on the host with no sandbox. Same startup-consent model as `--inplace`. |
+| `-y`, `--yes` | — | Front-end for `JAIPH_INPLACE_YES=1` (recorded on every run's env; servers themselves never prompt). |
 | `-h`, `--help` | — | Print the subcommand usage and exit `0`. |
 
-Startup mirrors `jaiph mcp`: graph load + `collectDiagnostics` (diagnostics to stderr, exit `1`), one-time Docker image preparation, credential pre-flight as warnings, and a sandbox-mode notice. All logs go to stderr; one startup line prints the listen URL and the `/docs` URL.
+Flags that belong to another command (for example `--raw` or `--target`) are usage errors naming the owning command — never silently ignored. Precedence across layers is the shared execution-policy order: CLI flags > `JAIPH_*` env vars > workflow config metadata > defaults (see [Environment variables — Precedence](env-vars.md#precedence)).
+
+Startup mirrors `jaiph mcp`: graph load + `collectDiagnostics` (diagnostics to stderr, exit `1`), one-time Docker image preparation, credential pre-flight as warnings, and a sandbox-posture notice. All logs go to stderr; one startup line prints the listen URL and the `/docs` URL.
 
 ### Endpoints
 

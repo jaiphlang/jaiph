@@ -13,8 +13,9 @@ import {
   type DockerRunConfig,
   type SandboxMode,
 } from "../../runtime/docker";
-import { resolveRuntimeEnv } from "../run/env";
+import { resolveRuntimeEnv, applySandboxFlags, isUnsafeHostOnly, type SandboxFlags } from "../run/env";
 import { preflightAgentCredentials } from "../run/preflight-credentials";
+import { loadMergedHooks } from "../run/hooks";
 import { deriveTools, type McpToolSpec } from "../mcp/tools";
 import type { WorkflowCallEnvironment } from "../exec/call";
 
@@ -43,6 +44,7 @@ export function loadGeneration(
   extraEnv: Record<string, string>,
   log: (line: string) => void,
   label: string,
+  sandboxFlags: SandboxFlags = {},
 ): { state?: GenerationState; failures: string[] } {
   const graph = loadModuleGraph(inputAbs, workspaceRoot);
   const diag = collectDiagnostics(graph);
@@ -65,11 +67,15 @@ export function loadGeneration(
   const resolvedModuleMetadata = resolveModuleMetadata(mod, process.env);
   const effectiveConfig = metadataToConfig(resolvedModuleMetadata);
 
+  // Hooks reload with the generation, so a hooks.json edit is picked up on the
+  // next source change like every other per-generation input.
+  const hooks = loadMergedHooks(workspaceRoot);
+
   return {
     state: {
       graph,
       tools,
-      callEnv: { inputAbs, workspaceRoot, mod, effectiveConfig, scriptsDir, graphFile, outDir, extraEnv },
+      callEnv: { inputAbs, workspaceRoot, mod, effectiveConfig, scriptsDir, graphFile, outDir, extraEnv, sandboxFlags, hooks },
     },
     failures: [],
   };
@@ -139,23 +145,35 @@ export function createGenerationTracker(initial: GenerationState): GenerationTra
   };
 }
 
+/** Startup sandbox posture of a workflow server, resolved once and applied to every call. */
+export interface StartupPosture {
+  dockerConfig: DockerRunConfig;
+  sandboxMode: SandboxMode;
+  hostRunsRoot: string;
+  /** True when Docker is off *because of* the unsafe opt-in (not config/platform). */
+  unsafeHostOnly: boolean;
+}
+
 /**
  * Resolve the shared startup sandbox posture for a workflow server (`jaiph mcp`
- * and `jaiph serve`): the env-driven Docker selection (`jaiph run` semantics),
- * a one-time image preparation when Docker is on, and the credential pre-flight
- * (demoted to warnings — the server may outlive a credential fix). Throws when
- * Docker is enabled but unavailable / the image can't be prepared; the caller
- * turns that into an exit-1. Returns the resolved config + sandbox mode so the
- * caller can print its own startup notice.
+ * and `jaiph serve`): sandbox flags normalized into env (`jaiph run` semantics —
+ * a flag/env posture conflict throws `E_FLAG_CONFLICT` here, before anything is
+ * spawned), the env-driven Docker selection, a one-time image preparation when
+ * Docker is on, and the credential pre-flight (demoted to warnings — the server
+ * may outlive a credential fix). Throws when Docker is enabled but unavailable /
+ * the image can't be prepared; the caller turns that into an exit-1. Returns the
+ * resolved posture so the caller can print the startup notice and apply the same
+ * posture to every call.
  */
 export function resolveStartupPosture(
   state: GenerationState,
   inputAbs: string,
   workspaceRoot: string,
   log: (line: string) => void,
-): { dockerConfig: DockerRunConfig; sandboxMode: SandboxMode; hostRunsRoot: string } {
+): StartupPosture {
   const mod = state.graph.modules.get(inputAbs)!.ast;
   const startupEnv = resolveRuntimeEnv(state.callEnv.effectiveConfig, workspaceRoot, inputAbs);
+  applySandboxFlags(startupEnv, state.callEnv.sandboxFlags ?? {});
   const dockerConfig = resolveDockerConfig(resolveModuleMetadata(mod, process.env)?.runtime, startupEnv);
   if (dockerConfig.enabled) {
     // Prepare the image once here rather than per call (a cold pull is slow).
@@ -163,6 +181,7 @@ export function resolveStartupPosture(
     prepareImage(dockerConfig);
   }
   const sandboxMode = selectMcpSandboxMode(startupEnv);
+  const unsafeHostOnly = isUnsafeHostOnly(dockerConfig.enabled, startupEnv);
   // Credential pre-flight once at startup (warnings only: the server may outlive
   // a credential fix, and per-call failures still surface).
   const credPreflight = preflightAgentCredentials({
@@ -178,7 +197,39 @@ export function resolveStartupPosture(
   const hostRunsRoot = dockerConfig.enabled
     ? resolveDockerHostRunsRoot(workspaceRoot, startupEnv)
     : resolveHostRunsRoot(workspaceRoot, startupEnv);
-  return { dockerConfig, sandboxMode, hostRunsRoot };
+  return { dockerConfig, sandboxMode, hostRunsRoot, unsafeHostOnly };
+}
+
+/**
+ * Print the effective sandbox posture once at server startup — the single
+ * notice both `jaiph serve` and `jaiph mcp` emit, so the wording (and the
+ * consent story it states) cannot drift between modes. `noun` names what the
+ * server executes ("runs" for HTTP, "tool calls" for MCP).
+ */
+export function logStartupPosture(
+  label: string,
+  noun: string,
+  posture: StartupPosture,
+  workspaceRoot: string,
+  log: (line: string) => void,
+): void {
+  if (posture.dockerConfig.enabled) {
+    if (posture.sandboxMode === "inplace") {
+      log(
+        `${label}: ${noun} execute in a Docker sandbox in-place on ${workspaceRoot} ` +
+          "(inplace opt-in: effects land live on the workspace).",
+      );
+    } else {
+      log(`${label}: ${noun} execute in a Docker sandbox (${posture.sandboxMode} mode; workspace isolated).`);
+    }
+  } else if (posture.unsafeHostOnly) {
+    log(
+      `${label}: ${noun} execute on the host with no sandbox (unsafe opt-in: ` +
+        "full filesystem and host environment access).",
+    );
+  } else {
+    log(`${label}: ${noun} execute on the host with no sandbox.`);
+  }
 }
 
 /** Host runs root: absolute `JAIPH_RUNS_DIR` as-is, relative under the workspace, else `.jaiph/runs`. */

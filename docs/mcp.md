@@ -161,11 +161,13 @@ Tool calls honor the **same env-driven Docker sandbox as `jaiph run`** ([Sandbox
 
 **The workspace is isolated by default** — the same as `jaiph run`. Each tool call's container works on its own writable point-in-time snapshot of the workspace; edits are discarded when the container exits and the host workspace is untouched. Concurrent calls each get their own run id and run directory.
 
-To **opt into live writes**, set `JAIPH_INPLACE=1` before starting the server. In inplace mode the host workspace is bind-mounted read-write into each tool call's container, so effects land live — two calls that mutate the *same* files can still race.
+To **opt into live writes**, pass `--inplace` (or set `JAIPH_INPLACE=1`) when starting the server. In inplace mode the host workspace is bind-mounted read-write into each tool call's container, so effects land live — two calls that mutate the *same* files can still race.
 
 Other sandbox controls:
 
-- `JAIPH_UNSAFE=true` — run on the host with no sandbox at all.
+- `--unsafe` / `JAIPH_UNSAFE=true` — run on the host with no sandbox at all.
+
+The sandbox flags are the shared execution-policy surface of `jaiph run` / `jaiph serve` / `jaiph mcp` (precedence: CLI flags > `JAIPH_*` env vars > workflow config metadata > defaults; `--inplace` + `--unsafe` is `E_FLAG_CONFLICT` at startup). The server resolves the posture **once at startup**, prints it, and applies it to every call — there is no interactive confirmation: launching the server with the flag or env var is the consent. See [Environment variables — Precedence](env-vars.md#precedence).
 
 Agent-credential pre-flight runs once at startup. In MCP mode its findings are demoted to warnings even in Docker mode (the server can outlive a credential fix, and per-call failures still surface to the client); set credentials on the host so the allowlist forwards them into the container.
 

@@ -4,16 +4,22 @@ import type { ChildProcess } from "node:child_process";
 import type { JaiphConfig } from "../../config";
 import type { jaiphModule } from "../../types";
 import { spawnRunProcess, waitForRunExit, cancelRunProcess } from "../run/lifecycle";
-import { resolveRuntimeEnv } from "../run/env";
+import { resolveRuntimeEnv, applySandboxFlags, type SandboxFlags } from "../run/env";
 import { collectEntryBackends } from "../run/preflight-credentials";
-import { parseLogEvent, parseStepEvent } from "../run/events";
+import { parseLogEvent, parseStepEvent, type StepEvent } from "../run/events";
+import {
+  runHooksForEvent,
+  stepStartHookPayload,
+  stepEndHookPayload,
+  type MergedHookConfig,
+} from "../run/hooks";
 import {
   spawnDockerProcess,
   stopDockerContainer,
   withDockerExitGuard,
   resolveDockerHostRunsRoot,
-  selectMcpSandboxMode,
   type DockerRunConfig,
+  type SandboxMode,
 } from "../../runtime/docker";
 import { discoverDockerRunDir, remapContainerPath } from "../shared/errors";
 import { exportRunTelemetry } from "../telemetry/otlp";
@@ -76,6 +82,30 @@ export interface WorkflowCallEnvironment {
    * choke point either way.
    */
   extraEnv: Record<string, string>;
+  /**
+   * Sandbox flags from the server's CLI surface (`--inplace` / `--unsafe` /
+   * `--yes`), applied to every call's runtime env exactly as `jaiph run`
+   * applies them, so the child observes the same `JAIPH_*` posture vars in
+   * every mode. Conflicts were already rejected at server startup.
+   */
+  sandboxFlags?: SandboxFlags;
+  /**
+   * Merged lifecycle-hook config (`hooks.json`), loaded once per generation.
+   * When present, every call dispatches the same four hook events as
+   * interactive `jaiph run` (`workflow_start`, `step_start`, `step_end`,
+   * `workflow_end`) with the same payload shapes.
+   */
+  hooks?: MergedHookConfig;
+}
+
+/**
+ * Sandbox posture for a workflow server, resolved **once at startup**
+ * (`resolveStartupPosture`) and applied verbatim to every call — a call never
+ * re-derives Docker enablement or the sandbox mode from its own env.
+ */
+export interface ExecutionPosture {
+  dockerConfig: DockerRunConfig;
+  sandboxMode: SandboxMode;
 }
 
 /** Output accumulated from a run child's streams while it executes. */
@@ -146,7 +176,7 @@ export function capBytes(text: string, cap: number): string {
  */
 export async function callWorkflow(
   env: WorkflowCallEnvironment,
-  dockerConfig: DockerRunConfig,
+  posture: ExecutionPosture,
   workflowSymbol: string,
   positionalArgs: string[],
   runId: string,
@@ -157,10 +187,38 @@ export async function callWorkflow(
   runtimeEnv.JAIPH_SOURCE_ABS = env.inputAbs;
   runtimeEnv.JAIPH_RUN_ID = runId;
   runtimeEnv.JAIPH_SCRIPTS = env.scriptsDir;
+  // Same env normalization as `jaiph run --inplace/--unsafe/--yes`: the child
+  // observes identical JAIPH_* posture vars in every invocation mode. Never
+  // throws here — a flag/env conflict already failed server startup.
+  applySandboxFlags(runtimeEnv, env.sandboxFlags ?? {});
 
-  const result = dockerConfig.enabled
-    ? await callWorkflowDocker(env, dockerConfig, workflowSymbol, positionalArgs, runtimeEnv, runId, caps, ctx)
+  const startedAt = Date.now();
+  if (env.hooks) {
+    runHooksForEvent(env.hooks, "workflow_start", {
+      event: "workflow_start",
+      workflow_id: runId,
+      timestamp: new Date().toISOString(),
+      run_path: env.inputAbs,
+      workspace: env.workspaceRoot,
+    });
+  }
+
+  const result = posture.dockerConfig.enabled
+    ? await callWorkflowDocker(env, posture, workflowSymbol, positionalArgs, runtimeEnv, runId, caps, ctx)
     : await callWorkflowHost(env, workflowSymbol, positionalArgs, runtimeEnv, runId, caps, ctx);
+
+  if (env.hooks) {
+    runHooksForEvent(env.hooks, "workflow_end", {
+      event: "workflow_end",
+      workflow_id: runId,
+      status: result.isError ? (result.exitStatus || 1) : 0,
+      elapsed_ms: Date.now() - startedAt,
+      timestamp: new Date().toISOString(),
+      run_path: env.inputAbs,
+      workspace: env.workspaceRoot,
+      run_dir: result.runDir,
+    });
+  }
   // One export per call — the shared choke point covering every MCP tool call and
   // HTTP `jaiph serve` invocation. Best-effort; never changes the call result.
   await exportRunTelemetry({
@@ -171,6 +229,28 @@ export async function callWorkflow(
     env: process.env,
   });
   return result;
+}
+
+/**
+ * Combined per-step-event handler for one call: dispatches the step hooks
+ * (when configured) and forwards the caller's progress callback. Passed to
+ * `attachOutputCollector` by both execution paths so hook dispatch cannot
+ * diverge between host and Docker.
+ */
+function buildStepEventHandler(
+  env: WorkflowCallEnvironment,
+  ctx: WorkflowCallContext | undefined,
+): (ev: StepEvent) => void {
+  return (ev) => {
+    if (env.hooks) {
+      if (ev.type === "STEP_START") {
+        runHooksForEvent(env.hooks, "step_start", stepStartHookPayload(ev, ev.id, env.inputAbs, env.workspaceRoot));
+      } else {
+        runHooksForEvent(env.hooks, "step_end", stepEndHookPayload(ev, ev.id, env.inputAbs, env.workspaceRoot));
+      }
+    }
+    ctx?.onStep?.(ev.kind, ev.name);
+  };
 }
 
 /** Host execution — same self-spawn path as `jaiph run --raw`. */
@@ -196,7 +276,7 @@ async function callWorkflowHost(
     env: runtimeEnv,
   });
   ctx?.onCancelHandle?.(() => cancelRunProcess(child));
-  const collector = attachOutputCollector(child, ctx?.onStep, caps);
+  const collector = attachOutputCollector(child, buildStepEventHandler(env, ctx), caps);
   const exit = await waitForRunExit(child);
   collector.drain();
 
@@ -213,7 +293,7 @@ async function callWorkflowHost(
  */
 async function callWorkflowDocker(
   env: WorkflowCallEnvironment,
-  dockerConfig: DockerRunConfig,
+  posture: ExecutionPosture,
   workflowSymbol: string,
   positionalArgs: string[],
   runtimeEnv: Record<string, string | undefined>,
@@ -221,10 +301,12 @@ async function callWorkflowDocker(
   caps: OutputCaps,
   ctx?: WorkflowCallContext,
 ): Promise<WorkflowCallResult> {
-  const sandboxMode = selectMcpSandboxMode(runtimeEnv);
+  // Posture (Docker enablement + sandbox mode) was resolved once at server
+  // startup; the call applies it verbatim rather than re-deriving from env.
+  const sandboxMode = posture.sandboxMode;
   const sandboxRunDir = resolveDockerHostRunsRoot(env.workspaceRoot, runtimeEnv);
   const dockerResult = spawnDockerProcess({
-    config: dockerConfig,
+    config: posture.dockerConfig,
     sourceAbs: env.inputAbs,
     workspaceRoot: env.workspaceRoot,
     sandboxRunDir,
@@ -242,7 +324,7 @@ async function callWorkflowDocker(
     stopDockerContainer(dockerResult.containerName);
     cancelRunProcess(dockerResult.child);
   });
-  const collector = attachOutputCollector(dockerResult.child, ctx?.onStep, caps);
+  const collector = attachOutputCollector(dockerResult.child, buildStepEventHandler(env, ctx), caps);
   return withDockerExitGuard(dockerResult, async () => {
     const exit = await waitForRunExit(dockerResult.child);
     collector.drain();
@@ -264,13 +346,13 @@ async function callWorkflowDocker(
 /**
  * Attach line-oriented listeners to a run child's stderr/stdout. Parses
  * `__JAIPH_EVENT__` log/step lines from stderr (child stdout is captured but
- * never forwarded). `onStep` (when given) fires once per `STEP_START`/`STEP_END`
- * event so the caller can stream progress. `drain()` flushes any trailing
- * partial stderr line.
+ * never forwarded). `onStepEvent` (when given) fires once per parsed
+ * `STEP_START`/`STEP_END` event with the full event so the caller can stream
+ * progress and dispatch hooks. `drain()` flushes any trailing partial stderr line.
  */
 export function attachOutputCollector(
   child: ChildProcess,
-  onStep: ((kind: string, name: string) => void) | undefined,
+  onStepEvent: ((event: StepEvent) => void) | undefined,
   caps: OutputCaps,
 ): { data: CollectedOutput; drain: () => void } {
   const data: CollectedOutput = { logs: [], rawStderr: "", rawStdout: "" };
@@ -310,7 +392,7 @@ export function attachOutputCollector(
         const detail = stepEvent.err_content.trim() || stepEvent.out_content.trim();
         data.failedStep = { name: `${stepEvent.kind} ${stepEvent.name}`.trim(), detail };
       }
-      onStep?.(stepEvent.kind, stepEvent.name);
+      onStepEvent?.(stepEvent);
       return;
     }
     if (!stderrCut) {

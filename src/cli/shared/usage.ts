@@ -14,12 +14,26 @@ export function printUsage(): void {
       "  jaiph use <version|nightly>",
       "  jaiph format [--check] [--indent <n>] <file.jh ...>",
       "  jaiph compile [--json] [--workspace <dir>] <file.jh | directory> ...",
-      "  jaiph mcp [--workspace <dir>] [--env KEY[=VALUE]]... <file.jh>  # serve the file's workflows as MCP tools over stdio (alias: jaiph --mcp)",
-      "  jaiph serve [--host <addr>] [--port <n>] [--workspace <dir>] [--env KEY[=VALUE]]... <file.jh>  # serve workflows as an HTTP API + OpenAPI + Swagger UI",
+      "  jaiph mcp [--workspace <dir>] [--inplace] [--unsafe] [--yes|-y] [--env KEY[=VALUE]]... <file.jh>  # serve the file's workflows as MCP tools over stdio (alias: jaiph --mcp)",
+      "  jaiph serve [--host <addr>] [--port <n>] [--workspace <dir>] [--inplace] [--unsafe] [--yes|-y] [--env KEY[=VALUE]]... <file.jh>  # serve workflows as an HTTP API + OpenAPI + Swagger UI",
       "",
       "Global options:",
       "  -h, --help     show this usage (jaiph --help) — each subcommand also accepts -h / --help",
       "  -v, --version  show version",
+      "",
+      "Execution policy (shared by jaiph run, jaiph serve, jaiph mcp):",
+      "  --workspace <dir>, --env KEY[=VALUE], --inplace, --unsafe, and --yes|-y mean the same",
+      "  thing in all three commands. Precedence: CLI flags > JAIPH_* env vars > workflow config",
+      "  metadata > built-in defaults (a flag sets its env var for that process, so the env layer",
+      "  stays the single source of truth consumed by sandbox resolution). --inplace and --unsafe",
+      "  are mutually exclusive (E_FLAG_CONFLICT, before anything is spawned). A flag belonging to",
+      "  another command is a usage error, never a silently-ignored option or a positional.",
+      "  Consent: jaiph run confirms --inplace and unsafe host-only interactively (--yes|-y or",
+      "  JAIPH_INPLACE_YES auto-confirms; non-TTY requires it). jaiph serve / jaiph mcp are",
+      "  operator-launched servers: passing the flag (or env var) at startup is the consent —",
+      "  the effective sandbox posture is resolved and printed once at startup and applied to",
+      "  every call. Inside a container the container itself is the sandbox, so unsafe host-only",
+      "  proceeds with a notice (the runtime image bakes JAIPH_UNSAFE=true).",
       "",
       "jaiph run:",
       "  --target <dir>     keep emitted script files and run metadata under <dir> (default: temp dir, cleaned up)",
@@ -31,8 +45,9 @@ export function printUsage(): void {
       "  --env KEY=VALUE    define KEY=VALUE in the workflow env (repeatable); --env KEY forwards the host value.",
       "                     In a Docker sandbox this is the per-key consent that crosses the env allowlist verbatim.",
       "  --                 end of jaiph flags; remaining args are passed to workflow default",
-      "  Note: these flags only affect `jaiph run`; the corresponding env vars (JAIPH_INPLACE,",
-      "  JAIPH_UNSAFE, JAIPH_INPLACE_YES) also apply to other entry points (e.g. `jaiph test`).",
+      "  Note: --inplace/--unsafe/--yes are also accepted by jaiph serve and jaiph mcp (see the",
+      "  execution-policy section above); the corresponding env vars (JAIPH_INPLACE, JAIPH_UNSAFE,",
+      "  JAIPH_INPLACE_YES) additionally apply to other entry points (e.g. `jaiph test`).",
       "",
       "jaiph test:",
       "  With no path, discovers *.test.jh under the workspace root. Extra arguments after an optional",
@@ -60,9 +75,14 @@ export function printUsage(): void {
       "  Serve the file's workflows as MCP tools over stdio. Exposes `export workflow` declarations",
       "  if any exist, otherwise all top-level workflows except channel route targets; `default` is",
       "  exposed only when it is the only workflow, named after the file's basename. Tool descriptions",
-      "  come from `#` comments directly above each workflow. Calls run on the host (like jaiph run --raw).",
+      "  come from `#` comments directly above each workflow.",
       "  --workspace <dir>  workspace root for import resolution (default: auto-detect).",
       "  --env KEY=VALUE    define KEY in every tool call's env (repeatable); --env KEY forwards the host value.",
+      "  --inplace          Docker sandbox with the host workspace bind-mounted rw for every call (JAIPH_INPLACE=1).",
+      "  --unsafe           every call runs on the host with no sandbox (JAIPH_UNSAFE=true).",
+      "  -y, --yes          record auto-consent for the posture (JAIPH_INPLACE_YES=1).",
+      "  Sandbox posture is resolved and printed once at startup and applied to every call",
+      "  (see the shared execution-policy section above).",
       "",
       "jaiph serve:",
       "  Serve the file's workflows as an HTTP API with a generated OpenAPI 3.1 document",
@@ -76,6 +96,11 @@ export function printUsage(): void {
       "  --port <n>         listen port (default: 5247)",
       "  --workspace <dir>  workspace root for import resolution (default: auto-detect).",
       "  --env KEY=VALUE    define KEY in every run's env (repeatable); --env KEY forwards the host value.",
+      "  --inplace          Docker sandbox with the host workspace bind-mounted rw for every run (JAIPH_INPLACE=1).",
+      "  --unsafe           every run executes on the host with no sandbox (JAIPH_UNSAFE=true).",
+      "  -y, --yes          record auto-consent for the posture (JAIPH_INPLACE_YES=1).",
+      "  Sandbox posture is resolved and printed once at startup and applied to every run",
+      "  (see the shared execution-policy section above).",
       "",
       "Examples:",
       "  jaiph --help",
@@ -179,7 +204,49 @@ export interface ParsedArgs {
   positional: string[];
 }
 
-export function parseArgs(args: string[]): ParsedArgs {
+/** Commands that share the execution-policy flag surface. */
+export type CliCommand = "run" | "serve" | "mcp";
+
+/**
+ * Which commands accept each flag. The execution-policy set (`--workspace`,
+ * `--env`, `--inplace`, `--unsafe`, `--yes`/`-y`) is shared by all three
+ * commands; the rest are command-specific (display / launch / transport).
+ * A flag passed to a command outside its row is a usage error, never a
+ * silently-ignored option or a positional.
+ */
+const FLAG_COMMANDS: Record<string, CliCommand[]> = {
+  "--workspace": ["run", "serve", "mcp"],
+  "--env": ["run", "serve", "mcp"],
+  "--inplace": ["run", "serve", "mcp"],
+  "--unsafe": ["run", "serve", "mcp"],
+  "--yes": ["run", "serve", "mcp"],
+  "-y": ["run", "serve", "mcp"],
+  "--target": ["run"],
+  "--raw": ["run"],
+  "--host": ["serve"],
+  "--port": ["serve"],
+};
+
+/**
+ * Reject a token that looks like a flag (`-…` before `--`) but is not accepted
+ * by this command. Distinguishes "belongs to another command" (named in the
+ * error) from "unknown everywhere", and points `jaiph run` users at `--` for
+ * workflow arguments that begin with `-`.
+ */
+function rejectUnsupportedFlag(name: string, command: CliCommand): never {
+  const owners = FLAG_COMMANDS[name];
+  if (owners) {
+    throw new Error(
+      `${name} is not a jaiph ${command} flag (it belongs to ${owners.map((c) => `jaiph ${c}`).join(", ")}). ` +
+        `Run \`jaiph ${command} --help\` for the supported flags.`,
+    );
+  }
+  const passthroughHint =
+    command === "run" ? " Use \`--\` before workflow arguments that start with \`-\`." : "";
+  throw new Error(`unknown flag ${name} for jaiph ${command}.${passthroughHint}`);
+}
+
+export function parseArgs(args: string[], command: CliCommand = "run"): ParsedArgs {
   let target: string | undefined;
   let raw: boolean | undefined;
   let workspace: string | undefined;
@@ -205,6 +272,12 @@ export function parseArgs(args: string[]): ParsedArgs {
       const eq = arg.indexOf("=");
       name = arg.slice(0, eq);
       inlineValue = arg.slice(eq + 1);
+    }
+
+    // Every `-…` token before `--` must be a flag this command supports.
+    // A bare `-` stays positional (conventional stdin marker).
+    if (arg.startsWith("-") && arg !== "-" && !FLAG_COMMANDS[name]?.includes(command)) {
+      rejectUnsupportedFlag(name, command);
     }
 
     // Value-taking flags: value comes from `=` or the next token.

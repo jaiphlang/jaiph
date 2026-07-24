@@ -13,13 +13,15 @@ import {
   createGenerationTracker,
   createSourceWatcher,
   resolveStartupPosture,
+  logStartupPosture,
   WATCH_INTERVAL_MS,
   type GenerationTracker,
+  type StartupPosture,
 } from "../shared/generation";
 import { VERSION } from "../../version";
 
 const MCP_USAGE =
-  "Usage: jaiph mcp [--workspace <dir>] <file.jh>\n\n" +
+  "Usage: jaiph mcp [--workspace <dir>] [--inplace] [--unsafe] [--yes|-y] [--env KEY[=VALUE]]... <file.jh>\n\n" +
   "Serve the file's workflows as MCP tools over stdio (newline-delimited JSON-RPC).\n" +
   "Exposure: `export workflow` declarations if any exist, otherwise every top-level\n" +
   "workflow except channel route targets. `default` is exposed only when it is the\n" +
@@ -28,10 +30,21 @@ const MCP_USAGE =
   "Sources are re-validated on change and clients get notifications/tools/list_changed.\n\n" +
   "Tool calls honor the same env-driven Docker sandbox as `jaiph run`: the workspace\n" +
   "is isolated by default via a writable point-in-time snapshot taken at call start.\n" +
-  "Set JAIPH_INPLACE=1 to bind the live workspace read-write (effects land on the\n" +
-  "host), or JAIPH_UNSAFE=true to run on the host with no sandbox.\n\n" +
+  "Use --inplace (JAIPH_INPLACE=1) to bind the live workspace read-write (effects land\n" +
+  "on the host), or --unsafe (JAIPH_UNSAFE=true) to run on the host with no sandbox.\n\n" +
   "  --workspace <dir>  workspace root for import resolution (default: auto-detect)\n" +
+  "  --env KEY=VALUE    define KEY in every tool call's env (repeatable); --env KEY forwards the host value\n" +
+  "  --inplace          Docker sandbox with the host workspace bind-mounted rw for every call (JAIPH_INPLACE=1)\n" +
+  "  --unsafe           every call runs on the host with no sandbox (JAIPH_UNSAFE=true)\n" +
+  "  -y, --yes          record auto-consent for the posture (JAIPH_INPLACE_YES=1)\n" +
   "  -h, --help         show this help\n\n" +
+  "Execution policy: --workspace/--env/--inplace/--unsafe/--yes are shared with jaiph run and\n" +
+  "jaiph serve. Precedence: CLI flags > JAIPH_* env vars > workflow config metadata > defaults.\n" +
+  "--inplace and --unsafe conflict (E_FLAG_CONFLICT, at startup before anything is spawned).\n" +
+  "The effective sandbox posture is resolved and printed once at startup and applied to every\n" +
+  "tool call; launching the server with the flag or env var is the consent (no interactive\n" +
+  "prompt). Inside a container the container itself is the sandbox (the runtime image bakes\n" +
+  "JAIPH_UNSAFE=true), so host-only execution there is the documented standalone posture.\n\n" +
   "Example:\n" +
   "  claude mcp add mytools -- jaiph mcp ./tools.jh\n";
 
@@ -42,12 +55,13 @@ export async function runMcp(rest: string[]): Promise<number> {
   }
   let parsed: ReturnType<typeof parseArgs>;
   try {
-    parsed = parseArgs(rest);
+    parsed = parseArgs(rest, "mcp");
   } catch (err) {
     process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`);
     return 1;
   }
-  const { workspace, env, positional } = parsed;
+  const { workspace, env, positional, inplace, unsafe, yes } = parsed;
+  const sandboxFlags = { inplace, unsafe, yes };
   const input = positional[0];
   if (!input) {
     process.stderr.write("jaiph mcp requires a .jh file path\n");
@@ -82,7 +96,7 @@ export async function runMcp(rest: string[]): Promise<number> {
   let generation = 0;
   let generations: GenerationTracker;
   try {
-    const loaded = loadGeneration(inputAbs, workspaceRoot, tempRoot, generation, extraEnv, log, "jaiph mcp");
+    const loaded = loadGeneration(inputAbs, workspaceRoot, tempRoot, generation, extraEnv, log, "jaiph mcp", sandboxFlags);
     if (!loaded.state) {
       for (const f of loaded.failures) log(f);
       rmSync(tempRoot, { recursive: true, force: true });
@@ -95,24 +109,13 @@ export async function runMcp(rest: string[]): Promise<number> {
     return 1;
   }
 
-  // Resolve the sandbox posture once at startup. Tool calls honor the same
-  // env-driven Docker selection as `jaiph run`: the workspace is isolated by
-  // default via a point-in-time snapshot. Inplace is an explicit opt-in via
-  // JAIPH_INPLACE=1.
-  let dockerConfig: ReturnType<typeof resolveStartupPosture>["dockerConfig"];
+  // Resolve the sandbox posture once at startup (flags + env, `jaiph run`
+  // semantics: isolated snapshot by default, inplace/unsafe as explicit
+  // opt-ins). Every tool call applies this posture verbatim.
+  let posture: StartupPosture;
   try {
-    const posture = resolveStartupPosture(generations.current(), inputAbs, workspaceRoot, log);
-    dockerConfig = posture.dockerConfig;
-    if (dockerConfig.enabled) {
-      if (posture.sandboxMode === "inplace") {
-        log(
-          `jaiph mcp: tool calls run in a Docker sandbox in-place on ${workspaceRoot} ` +
-            "(JAIPH_INPLACE=1 opt-in: effects land live on the workspace).",
-        );
-      } else {
-        log(`jaiph mcp: tool calls run in a Docker sandbox (${posture.sandboxMode} mode; workspace isolated).`);
-      }
-    }
+    posture = resolveStartupPosture(generations.current(), inputAbs, workspaceRoot, log);
+    logStartupPosture("jaiph mcp", "tool calls", posture, workspaceRoot, log);
   } catch (err) {
     log(err instanceof Error ? err.message : String(err));
     rmSync(tempRoot, { recursive: true, force: true });
@@ -128,7 +131,7 @@ export async function runMcp(rest: string[]): Promise<number> {
       const lease = generations.acquire();
       return callWorkflow(
         lease.state.callEnv,
-        dockerConfig,
+        posture,
         spec.workflow,
         spec.params.map((p) => args[p] ?? ""),
         randomUUID(),
@@ -152,7 +155,7 @@ export async function runMcp(rest: string[]): Promise<number> {
     reloading = true;
     try {
       generation += 1;
-      const loaded = loadGeneration(inputAbs, workspaceRoot, tempRoot, generation, extraEnv, log, "jaiph mcp");
+      const loaded = loadGeneration(inputAbs, workspaceRoot, tempRoot, generation, extraEnv, log, "jaiph mcp", sandboxFlags);
       if (!loaded.state) {
         log("jaiph mcp: reload failed; keeping the previous tool set:");
         for (const f of loaded.failures) log(`  ${f}`);
