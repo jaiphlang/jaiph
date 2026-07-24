@@ -91,4 +91,5 @@ For maintainer setup, see [Contributing — Release signing](contributing.md#rel
 ## Related
 
 - [Architecture — Distribution: Node vs Bun standalone](architecture.md#distribution-node-vs-bun-standalone) — what the installer downloads and why the binary is self-contained.
+- [Deploy the runtime image standalone](deploy.md) — skip installing entirely: run the prebuilt `ghcr.io/jaiphlang/jaiph-runtime` image directly via `docker run` or Kubernetes.
 - [Why Jaiph](why-jaiph.md) — the design context behind the single-binary distribution.

@@ -580,6 +580,12 @@ Jaiph: Running async.jh<span class="run-banner-meta"> (Docker sandbox, snapshot)
                     pointer &mdash; so operators get alerting and grouping without scraping run dirs. Host-side,
                     redacted, with zero new dependencies, never load-bearing; successful runs send nothing.
                     See <a href="/how-to/observability#report-failed-runs-to-sentry">Report failed runs to Sentry</a>.</p>
+                <p><strong>Standalone deployment.</strong> The published
+                    <code>ghcr.io/jaiphlang/jaiph-runtime</code> image bakes <code>JAIPH_UNSAFE=true</code>, so
+                    <code>docker run &hellip; jaiph run flow.jh</code> (or a Kubernetes pod) runs workflows directly &mdash;
+                    put credentials plus <code>.jh</code> files and go, with no host Jaiph process and no Docker daemon
+                    inside the container. Here the container/pod boundary <em>is</em> the sandbox; there is no
+                    jaiph-managed isolation. See <a href="/how-to/deploy">Deploy the runtime image standalone</a>.</p>
 
                 <h3>Samples</h3>
                 <p>Jaiph source code is built mostly with real Jaiph workflows. The

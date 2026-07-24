@@ -243,4 +243,14 @@ USER root
 RUN find /home/jaiph -type d -exec chmod 1777 {} +
 USER jaiph
 
+# Default to host-mode execution: inside this image, the container IS the
+# sandbox, so jaiph must not try to launch a nested Docker daemon (there is
+# none), and the interactive `--unsafe` confirmation is impossible/meaningless
+# in an unattended pod. This only affects the image run *standalone*
+# (`docker run … jaiph run flow.jh`, or as a k8s pod); when the image is used
+# as a host-orchestrated sandbox rootfs the inner invocation is
+# `jaiph run --raw`, which never launches Docker regardless of JAIPH_UNSAFE, so
+# host-orchestrated sandbox behavior is unchanged. See docs/deploy.md.
+ENV JAIPH_UNSAFE=true
+
 WORKDIR /jaiph/workspace

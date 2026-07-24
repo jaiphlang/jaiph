@@ -32,6 +32,21 @@ jobs:
           VERSION="$(node -p "require('./package.json').version")"
           git ls-remote --exit-code https://github.com/jaiphlang/jaiph.git "refs/tags/v${VERSION}"
 
+  k8s-manifest:
+    name: Validate Kubernetes deploy manifest
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # `kubectl apply --dry-run=client` still needs an API server for resource
+      # discovery (RESTMapper), so provision a throwaway kind cluster for it.
+      - name: Create kind cluster
+        uses: helm/kind-action@v1
+
+      - name: Dry-run apply the standalone deploy manifest
+        run: kubectl apply --dry-run=client -f docs/deploy/k8s.yaml
+
   e2e:
     name: E2E (${{ matrix.os }}, ${{ matrix.label }})
     runs-on: ${{ matrix.os }}

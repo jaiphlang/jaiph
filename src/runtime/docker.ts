@@ -220,10 +220,41 @@ export const _uidDetect = {
 // Docker availability
 // ---------------------------------------------------------------------------
 
+/**
+ * Test seam for the container-indicator probe. `/.dockerenv` (Docker) and
+ * `/run/.containerenv` (Podman / CRI runtimes) mark that the current process is
+ * already running inside a container. Injectable so the container-detection
+ * error path can be unit-tested without a real container.
+ */
+export const _containerIndicator = {
+  present(): boolean {
+    return existsSync("/.dockerenv") || existsSync("/run/.containerenv");
+  },
+};
+
+/**
+ * True when jaiph is running inside a container (Docker `/.dockerenv` or a
+ * Podman / CRI `/run/.containerenv` marker). In that case the container itself
+ * is the sandbox boundary.
+ */
+export function isRunningInContainer(): boolean {
+  return _containerIndicator.present();
+}
+
 export function checkDockerAvailable(): void {
   try {
     _dockerExec.run(["info"], { stdio: "ignore", timeout: 10_000 });
   } catch {
+    // Docker is unavailable. If a container indicator is present we are almost
+    // certainly running the runtime image directly (docker run / a k8s pod), so
+    // there is no nested Docker daemon to reach — point the user at the standalone
+    // story rather than telling them to install Docker.
+    if (isRunningInContainer()) {
+      throw new Error(
+        "E_DOCKER_NOT_FOUND docker is not available, and jaiph is running inside a container already. " +
+        "Set JAIPH_UNSAFE=true to run in host mode (the container is the sandbox). See https://jaiph.org/deploy for details.",
+      );
+    }
     throw new Error("E_DOCKER_NOT_FOUND docker is not available. Install Docker and ensure the daemon is running, or set JAIPH_UNSAFE=true to run on the host (no sandbox).");
   }
 }
