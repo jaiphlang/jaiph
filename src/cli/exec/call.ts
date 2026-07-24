@@ -16,6 +16,7 @@ import {
   type DockerRunConfig,
 } from "../../runtime/docker";
 import { discoverDockerRunDir, remapContainerPath } from "../shared/errors";
+import { exportRunTelemetry } from "../telemetry/otlp";
 
 /**
  * Result of executing one workflow call. `text` is the same content an MCP
@@ -109,10 +110,19 @@ export async function callWorkflow(
   runtimeEnv.JAIPH_RUN_ID = runId;
   runtimeEnv.JAIPH_SCRIPTS = env.scriptsDir;
 
-  if (dockerConfig.enabled) {
-    return callWorkflowDocker(env, dockerConfig, workflowSymbol, positionalArgs, runtimeEnv, runId, ctx);
-  }
-  return callWorkflowHost(env, workflowSymbol, positionalArgs, runtimeEnv, runId, ctx);
+  const result = dockerConfig.enabled
+    ? await callWorkflowDocker(env, dockerConfig, workflowSymbol, positionalArgs, runtimeEnv, runId, ctx)
+    : await callWorkflowHost(env, workflowSymbol, positionalArgs, runtimeEnv, runId, ctx);
+  // One export per call — the shared choke point covering every MCP tool call and
+  // HTTP `jaiph serve` invocation. Best-effort; never changes the call result.
+  await exportRunTelemetry({
+    runDir: result.runDir,
+    workflow: workflowSymbol,
+    exitStatus: result.exitStatus ?? 0,
+    signal: result.signal ?? null,
+    env: process.env,
+  });
+  return result;
 }
 
 /** Host execution — same self-spawn path as `jaiph run --raw`. */

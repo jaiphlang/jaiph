@@ -569,6 +569,11 @@ Jaiph: Running async.jh<span class="run-banner-meta"> (Docker sandbox, snapshot)
                         rel="noopener noreferrer">OpenAPI 3.1</a> document and a browser Swagger UI at <code>/docs</code>,
                     so any HTTP client (CI, Kubernetes, another service) can invoke them and inspect runs. See
                     <a href="/how-to/serve">Serve workflows over HTTP</a>.</p>
+                <p><strong>OpenTelemetry.</strong> Set the standard
+                    <code>OTEL_EXPORTER_OTLP_ENDPOINT</code> and every run exports one span tree
+                    (workflow&nbsp;&rarr;&nbsp;steps&nbsp;&rarr;&nbsp;prompts) to any OTLP collector &mdash; Grafana Tempo,
+                    Honeycomb, Datadog. Host-side, end-of-run, credential-redacted, with zero new dependencies, and never
+                    load-bearing. See <a href="/how-to/observability">Export traces to an OTLP collector</a>.</p>
 
                 <h3>Samples</h3>
                 <p>Jaiph source code is built mostly with real Jaiph workflows. The

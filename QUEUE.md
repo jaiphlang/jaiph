@@ -14,41 +14,6 @@ Process rules:
 
 ***
 
-## Feat: OTLP trace export — one span tree per run, zero dependencies #dev-ready
-
-**Source:** Observability feedback (2026-07-23): "OTEL + Sentry configurable would be the easiest way" to make jaiph observable in a company setting. This task is the OTEL half.
-
-**Problem:** A jaiph run already produces a complete, credential-redacted, hash-chained event timeline (`run_summary.jsonl`, written by `RuntimeEventEmitter`, `src/runtime/kernel/runtime-event-emitter.ts`), but it is invisible to standard observability stacks (Grafana/Tempo, Honeycomb, Datadog, any OTLP collector). Operators running workflows in CI or as a service have no traces, no latency breakdown per step/prompt, and no failure signal outside the local run dir.
-
-**Required behavior:**
-
-* **Architecture decision (pinned):** export happens **host-side, after the run completes, by reading the run's `run_summary.jsonl`** — not inside the runtime/emitter. Rationale: the journal is complete (the live stderr stream lacks `WORKFLOW_*` events), already redacted, and host-visible in every sandbox mode (the run dir is a host mount), so nothing new crosses the container boundary and no `OTEL_*` env forwarding into the sandbox is needed. Runs are minutes-long; end-of-run batching is the normal OTLP pattern anyway.
-* New module `src/cli/telemetry/otlp.ts`, zero runtime dependencies (`node:https`/`node:http` request only):
-  * a **pure** function `runSummaryToOtlp(lines, meta)` mapping journal lines + `{workflow, exitStatus, signal, serviceName, resourceAttributes}` to an OTLP/HTTP **JSON** `ExportTraceServiceRequest`;
-  * a poster with a 10 s timeout.
-* Mapping contract:
-  * `traceId` = the run id UUID with dashes stripped (32 hex chars — OTLP/JSON encodes trace/span ids as hex per the spec's JSON mapping); `spanId` = first 16 hex chars of `sha256(<event id>)`. Deterministic: re-exporting a run yields identical ids.
-  * Root span per run: name `workflow <name>`, from `WORKFLOW_START`/`WORKFLOW_END` timestamps (fallback: first/last event `ts`); status `ERROR` (code 2) when `exitStatus !== 0` or a signal terminated the run, else `OK`.
-  * One span per `STEP_START`/`STEP_END` pair (matched by event `id`), parented via the event's `parent_id` (root when null); `kind: SPAN_KIND_INTERNAL`; attributes: `jaiph.step.kind`, `jaiph.step.func`, `jaiph.step.name`, `jaiph.step.seq`, `jaiph.step.depth`, `jaiph.step.status`, `jaiph.step.elapsed_ms`; span status ERROR when the step status is nonzero.
-  * `PROMPT_START`/`PROMPT_END` pairs become child spans of their `step_id` with `jaiph.prompt.backend`, `jaiph.prompt.model`, `jaiph.prompt.status`.
-  * `LOGERR`/`LOGWARN` become span events on the root span. `ts` (ISO) → `timeUnixNano` as strings. A `STEP_START` with no matching `STEP_END` (crash) closes at the last event timestamp with status ERROR.
-  * Resource: `service.name` from `OTEL_SERVICE_NAME` (default `jaiph`), pairs from `OTEL_RESOURCE_ATTRIBUTES`, plus `jaiph.version`, `jaiph.run_id`, `jaiph.workflow`, `jaiph.source`.
-* Enablement & endpoint (standard OTEL env, no new `JAIPH_*` unless genuinely needed — any that is added must get its `docs/env-vars.md` row, the parity lint enforces this): enabled iff `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` (used verbatim) or `OTEL_EXPORTER_OTLP_ENDPOINT` (base URL, `/v1/traces` appended) is set. `OTEL_EXPORTER_OTLP_HEADERS` (comma-separated `k=v`) applied. Only `http/json` is spoken: if `OTEL_EXPORTER_OTLP_PROTOCOL` is set to anything other than `http/json`, warn on stderr and skip export (respect the operator's explicit intent rather than mis-speak a protocol).
-* Hook point: a single shared post-run function (e.g. `exportRunTelemetry({runDir, workflow, exitStatus, signal, env})`) invoked wherever a run reaches terminal state on the host — `jaiph run` completion and the shared workflow-call layer used by MCP tool calls (`src/cli/mcp/call.ts` or its current location). One choke point, all modes covered (host, Docker snapshot, inplace).
-* **Failure semantics: telemetry is never load-bearing.** Unreachable/erroring collector → exactly one stderr warning line; the run's exit code, output, and journal are untouched. No retries, no queue.
-* Docs: `docs/observability.md` how-to (enabling against a local `otel-collector`, one hosted-backend example, span-tree screenshot-level description of what maps to what); `docs/env-vars.md` gets a "Telemetry variables" section listing the consumed `OTEL_*` names (the page already covers non-`JAIPH_*` vendor variables); README bullet.
-
-Acceptance:
-
-* Unit tests on `runSummaryToOtlp` with fixture journals: trace id derived from run id; step span parented per `parent_id`; prompt span is a child of its `step_id` with backend/model attributes; failed step → span status 2; nonzero run exit → root status 2; ISO `ts` → correct `timeUnixNano` strings; unmatched `STEP_START` closes with ERROR at last event time; deterministic ids across two invocations.
-* Unit tests: endpoint resolution (traces-specific verbatim vs generic + `/v1/traces`; traces-specific wins when both set), header parsing, `http/json`-only protocol guard (warn + skip on `grpc`).
-* Integration test: a local fake-collector HTTP server receives exactly one well-formed POST to `/v1/traces` after a `jaiph run` with the env set; the same run with no OTEL env sends nothing; with the collector returning 500 (and separately: connection refused), the run's exit code is 0 and exactly one warning line appears on stderr.
-* Integration test: an MCP `tools/call` (or shared-call-layer invocation) also triggers exactly one export per call.
-* Redaction test: a credential value present in step output appears in the exported payload only as `[REDACTED]` (the export reads the journal, never raw captures).
-* `package.json` `dependencies` remains absent/empty; `npm test` passes.
-
-***
-
 ## Feat: Sentry error reporting on failed runs #dev-ready
 
 **Source:** Observability feedback (2026-07-23): "OTEL + Sentry configurable". This task is the Sentry half: failed workflow runs become Sentry error events so operators get alerting/grouping without scraping run dirs.

@@ -117,6 +117,24 @@ An `--env`-forwarded variable is visible to trusted `run` script/workflow steps 
 
 For the common "forward this host key" case, the [`trusted_envs`](configuration.md#trusted-envs) config key is the declarative in-file alternative to `--env`: a `.jh` file names the host keys its trusted `run` steps require (`trusted_envs = "GITHUB_TOKEN"`), they resolve from a pristine host-env snapshot, and the same reserved-key (`E_ENV_RESERVED`) and missing-value (`E_ENV_MISSING`) rules apply. An explicit `--env KEY=VALUE` still overrides the snapshot value for that key. Like `--env`, `trusted_envs` values reach trusted `run` steps only — never `prompt` subprocesses.
 
+## Telemetry variables
+
+Jaiph reads the standard OpenTelemetry environment variables to export one trace
+per run to an OTLP collector — there are **no `JAIPH_*` variables** for this
+feature. These are consumed **host-side, after the run completes** (they are never
+forwarded into the Docker sandbox), so they are not tracked by the `JAIPH_*`
+source-parity harness above. Export is enabled iff a traces endpoint is set. See
+[Export traces to an OTLP collector](observability.md).
+
+| Variable | Type | Default | Role |
+|---|---|---|---|
+| `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` | string (URL) | — | Traces endpoint, used verbatim. Enables export. Wins over the generic endpoint when both are set. |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | string (URL) | — | Generic OTLP base URL; `/v1/traces` is appended. Enables export when the traces-specific one is unset. |
+| `OTEL_EXPORTER_OTLP_HEADERS` | string (`k=v,k=v`) | — | Comma-separated headers applied to the export POST (for example an auth token). |
+| `OTEL_EXPORTER_OTLP_PROTOCOL` | string (`http/json`) | `http/json` | Only `http/json` is spoken. Any other value (for example `grpc`) → warn on stderr and skip export. |
+| `OTEL_SERVICE_NAME` | string | `jaiph` | `service.name` resource attribute on every exported span. |
+| `OTEL_RESOURCE_ATTRIBUTES` | string (`k=v,k=v`) | — | Extra resource attributes. Jaiph also always adds `jaiph.version`, `jaiph.run_id`, `jaiph.workflow`, and `jaiph.source`. |
+
 ## Installer and `jaiph use`
 
 These variables are consumed by `docs/install` (the installer shell script) and by `jaiph use` when it re-invokes the installer. They are **not** read from inside the Jaiph TypeScript source.
