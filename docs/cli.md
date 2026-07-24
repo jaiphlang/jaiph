@@ -346,6 +346,47 @@ Tool descriptions come from the `#` comment lines directly above each workflow (
 - **The workspace is isolated by default** for `jaiph mcp` — the same as `jaiph run`. Each tool call's container works on a writable point-in-time snapshot of the workspace, so edits are discarded on exit and the host tree is untouched. Set `JAIPH_INPLACE=1` to bind the real workspace read-write so tool effects land live (opt-in), or `JAIPH_UNSAFE=true` to run on the host with no sandbox.
 - Source files in the module graph are watched (polling, ~750 ms). A valid edit re-derives tools and emits `notifications/tools/list_changed`; an edit that fails to compile keeps the previous tool set serving and logs diagnostics to stderr.
 
+## `jaiph serve`
+{: #jaiph-serve}
+
+Serve a file's workflows as an HTTP API with a generated OpenAPI 3.1 document and an embedded Swagger UI. Same exposure rules and execution layer as `jaiph mcp`, over HTTP instead of stdio. See [Serve workflows over HTTP](/how-to/serve) for the recipe.
+
+```text
+jaiph serve [--host <addr>] [--port <n>] [--workspace <dir>] [--env KEY[=VALUE]]... <file.jh>
+```
+
+| Flag | Argument | Effect |
+|---|---|---|
+| `--host` | `<addr>` | Listen address (default `127.0.0.1`). Binding a non-loopback host without `JAIPH_SERVE_TOKEN` set aborts startup. |
+| `--port` | `<n>` | Listen port (default `5247`). `0` picks a free port. |
+| `--workspace` | `<dir>` | Workspace root for import resolution (default: auto-detected). |
+| `--env` | `KEY=VALUE` or `KEY` | Same per-key passthrough as `jaiph run --env`, resolved once at startup and applied to every run for the server's lifetime. |
+| `-h`, `--help` | — | Print the subcommand usage and exit `0`. |
+
+Startup mirrors `jaiph mcp`: graph load + `collectDiagnostics` (diagnostics to stderr, exit `1`), one-time Docker image preparation, credential pre-flight as warnings, and a sandbox-mode notice. All logs go to stderr; one startup line prints the listen URL and the `/docs` URL.
+
+### Endpoints
+
+| Method & path | Auth | Behaviour |
+|---|---|---|
+| `GET /` | none | `302` → `/docs`. |
+| `GET /healthz` | none | `200 {status, version, tools, in_flight}`. |
+| `GET /openapi.json` | none | OpenAPI 3.1 document, regenerated per request (hot reload needs no cache invalidation). |
+| `GET /docs` | none | Swagger UI shell (loads `swagger-ui-dist` from a pinned, SRI-verified CDN). |
+| `GET /v1/workflows` | bearer | `{workflows: [{name, description, params}]}`. |
+| `POST /v1/workflows/{name}/runs` | bearer | Start a run. Default `202` + `Location: /v1/runs/{id}`; `?wait=true` blocks for the terminal `200`. |
+| `GET /v1/runs` | bearer | Runs started by this process (in-memory), newest first. |
+| `GET /v1/runs/{id}` | bearer | The run object. `404` unknown. |
+| `POST /v1/runs/{id}/cancel` | bearer | `202`; the run reaches `cancelled`. `409` if already terminal. |
+
+The run object is `{run_id, workflow, status, started_at, ended_at, exit_status, signal, result_text, run_dir}` where `status` is `running` \| `succeeded` \| `failed` \| `cancelled`. **A workflow failure is not an HTTP error** — the run object reports `status: "failed"` with the same failure narrative `jaiph mcp` returns, over HTTP `200`/`202`. Errors use `{error: {code, message}}` with `400 E_BAD_ARGS`, `401 E_UNAUTHORIZED`, `404 E_NOT_FOUND`, `409 E_RUN_TERMINAL`, `413 E_BODY_TOO_LARGE` (1 MiB body cap), `415` (non-`application/json` body), and `429 E_TOO_MANY_RUNS`.
+
+### Auth and limits
+
+- `JAIPH_SERVE_TOKEN` (env only) enables a bearer token required on every `/v1/*` request, compared in constant time. `/healthz`, `/openapi.json`, and `/docs` stay unauthenticated (schema metadata only). On loopback the token is optional; binding a non-loopback `--host` without it is a startup error.
+- `JAIPH_SERVE_MAX_CONCURRENT` (default `4`) caps simultaneous runs; requests beyond it get `429`.
+- Execution and hot reload are identical to `jaiph mcp`; a superseded generation's scripts dir survives until its in-flight HTTP runs finish.
+
 ## Environment variables
 
 See [Environment variables](env-vars.md) for the complete inventory. The variables most relevant to CLI behaviour:

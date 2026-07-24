@@ -564,6 +564,11 @@ Jaiph: Running async.jh<span class="run-banner-meta"> (Docker sandbox, snapshot)
                     <a href="https://modelcontextprotocol.io/" target="_blank" rel="noopener noreferrer">MCP</a> tools
                     over stdio, so any MCP client (Claude Code, Claude Desktop, Cursor) can call tested Jaiph workflows
                     as tools. See <a href="/how-to/mcp">Serve workflows as MCP tools</a>.</p>
+                <p><strong>HTTP API.</strong> <code>jaiph serve ./tools.jh</code> serves the same workflows over HTTP
+                    with a generated <a href="https://spec.openapis.org/oas/v3.1.0" target="_blank"
+                        rel="noopener noreferrer">OpenAPI 3.1</a> document and a browser Swagger UI at <code>/docs</code>,
+                    so any HTTP client (CI, Kubernetes, another service) can invoke them and inspect runs. See
+                    <a href="/how-to/serve">Serve workflows over HTTP</a>.</p>
 
                 <h3>Samples</h3>
                 <p>Jaiph source code is built mostly with real Jaiph workflows. The

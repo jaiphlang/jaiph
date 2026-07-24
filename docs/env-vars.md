@@ -78,6 +78,8 @@ The table below covers every `JAIPH_*` name read from `process.env` / `env` in `
 | `JAIPH_RUNS_DIR` | host, runtime | path | `.jaiph/runs` under the workspace | `run.logs_dir` | Root directory for run logs. Inside Docker the host CLI overrides this to `/jaiph/run`. |
 | `JAIPH_RUNS_DIR_LOCKED` | internal | bool | — | — | Lock flag for `JAIPH_RUNS_DIR`. |
 | `JAIPH_SCRIPTS` | internal | path | — | — | Directory of emitted `script` files for this run. Set after `buildScripts()`. Any parent-shell value is cleared before launch. |
+| `JAIPH_SERVE_MAX_CONCURRENT` | host | int | `4` | — | `jaiph serve` — cap on simultaneously-running workflows; requests beyond it get HTTP `429`. Must be a positive integer. |
+| `JAIPH_SERVE_TOKEN` | host | string | — | — | `jaiph serve` — bearer token required on every `/v1/*` request (constant-time compared). Unset leaves `/v1/*` open on loopback; binding a non-loopback `--host` without it is a startup error. `/healthz`, `/openapi.json`, `/docs` are always unauthenticated. |
 | `JAIPH_SKILL_PATH` | host | path | — | — | When set and the path exists, `jaiph init` writes `.jaiph/SKILL.md` from that file. Otherwise the CLI walks an install-relative search. |
 | `JAIPH_SOURCE_ABS` | internal | path | — | — | Absolute path to the entry `.jh` file. Set by the CLI before spawning the runner. |
 | `JAIPH_SOURCE_FILE` | internal | string (basename) | entry-file basename | — | Used to name run directories. |

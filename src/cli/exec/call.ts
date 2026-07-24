@@ -1,5 +1,4 @@
 import { existsSync, readFileSync } from "node:fs";
-import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import type { ChildProcess } from "node:child_process";
 import type { JaiphConfig } from "../../config";
@@ -17,14 +16,42 @@ import {
   type DockerRunConfig,
 } from "../../runtime/docker";
 import { discoverDockerRunDir, remapContainerPath } from "../shared/errors";
-import type { McpCallResult, McpCallContext } from "./server";
 
 /**
- * Everything a `tools/call` needs from the server session. Built once per
+ * Result of executing one workflow call. `text` is the same content an MCP
+ * client sees (`composeResult`); `isError` is true when the workflow failed.
+ * The `runDir` / `exitStatus` / `signal` fields let HTTP callers (`jaiph serve`)
+ * populate a durable run object — MCP ignores them.
+ */
+export interface WorkflowCallResult {
+  /** Text returned to the caller as the call result. */
+  text: string;
+  /** True when the workflow failed; surfaces as `isError` on the result. */
+  isError: boolean;
+  /** Absolute run directory under `.jaiph/runs/`, when discoverable. */
+  runDir?: string;
+  /** Child exit status (0 on success). */
+  exitStatus?: number;
+  /** Terminating signal, when the child was killed. */
+  signal?: NodeJS.Signals | null;
+}
+
+/**
+ * Live hooks handed to `callWorkflow` for one in-flight call. `onStep` fires per
+ * `STEP_START`/`STEP_END` event; the executor registers its child-termination
+ * function via `onCancelHandle` so a cancellation can kill the run.
+ */
+export interface WorkflowCallContext {
+  onStep?: (kind: string, name: string) => void;
+  onCancelHandle?: (cancel: () => void) => void;
+}
+
+/**
+ * Everything a workflow call needs from the server session. Built once per
  * module-graph generation (startup and each hot reload) — scripts and the
  * serialized graph are read-only, so concurrent calls can share them.
  */
-export interface McpCallEnvironment {
+export interface WorkflowCallEnvironment {
   inputAbs: string;
   workspaceRoot: string;
   /**
@@ -41,7 +68,7 @@ export interface McpCallEnvironment {
   /** Generation dir for per-call meta files. */
   outDir: string;
   /**
-   * Resolved `--env` passthrough applied to every tool call for the server's
+   * Resolved `--env` passthrough applied to every call for the server's
    * lifetime. Host execution merges it into the runner env; Docker execution
    * threads it through `DockerSpawnOptions.extraEnv` — this is the single
    * choke point either way.
@@ -58,23 +85,26 @@ interface CollectedOutput {
 }
 
 /**
- * Execute one workflow as an MCP tool call. Honors the same env-driven sandbox
- * selection as `jaiph run`: when `dockerConfig.enabled`, the call runs in a
- * per-call container (workspace isolated by default; inplace when JAIPH_INPLACE=1);
+ * Execute one workflow call. Honors the same env-driven sandbox selection as
+ * `jaiph run`: when `dockerConfig.enabled`, the call runs in a per-call
+ * container (workspace isolated by default; inplace when JAIPH_INPLACE=1);
  * otherwise it runs on the host like `jaiph run --raw`.
+ *
+ * The caller supplies `runId` so it can register the run before the child
+ * exits (the HTTP server needs the id while the run is still `running`).
  *
  * Success text, in order of preference: the workflow's return value
  * (`return_value.txt`), collected `log` output, or a completion note.
  */
 export async function callWorkflow(
-  env: McpCallEnvironment,
+  env: WorkflowCallEnvironment,
   dockerConfig: DockerRunConfig,
   workflowSymbol: string,
   positionalArgs: string[],
-  ctx?: McpCallContext,
-): Promise<McpCallResult> {
+  runId: string,
+  ctx?: WorkflowCallContext,
+): Promise<WorkflowCallResult> {
   const runtimeEnv = resolveRuntimeEnv(env.effectiveConfig, env.workspaceRoot, env.inputAbs);
-  const runId = randomUUID();
   runtimeEnv.JAIPH_SOURCE_ABS = env.inputAbs;
   runtimeEnv.JAIPH_RUN_ID = runId;
   runtimeEnv.JAIPH_SCRIPTS = env.scriptsDir;
@@ -87,13 +117,13 @@ export async function callWorkflow(
 
 /** Host execution — same self-spawn path as `jaiph run --raw`. */
 async function callWorkflowHost(
-  env: McpCallEnvironment,
+  env: WorkflowCallEnvironment,
   workflowSymbol: string,
   positionalArgs: string[],
   runtimeEnv: Record<string, string | undefined>,
   runId: string,
-  ctx?: McpCallContext,
-): Promise<McpCallResult> {
+  ctx?: WorkflowCallContext,
+): Promise<WorkflowCallResult> {
   runtimeEnv.JAIPH_MODULE_GRAPH_FILE = env.graphFile;
   // `--env` passthrough defines the workflow process's env, overriding
   // inherited values, on every call.
@@ -117,20 +147,20 @@ async function callWorkflowHost(
 
 /**
  * Container execution — the same Docker path as `jaiph run`. The workflow
- * symbol is carried into the container so a non-`default` tool runs correctly.
+ * symbol is carried into the container so a non-`default` call runs correctly.
  * Sandbox mode matches `jaiph run` (isolated by default; inplace when
  * JAIPH_INPLACE=1). The container meta file is inaccessible from the host, so
  * the run dir is discovered from the sandbox runs mount.
  */
 async function callWorkflowDocker(
-  env: McpCallEnvironment,
+  env: WorkflowCallEnvironment,
   dockerConfig: DockerRunConfig,
   workflowSymbol: string,
   positionalArgs: string[],
   runtimeEnv: Record<string, string | undefined>,
   runId: string,
-  ctx?: McpCallContext,
-): Promise<McpCallResult> {
+  ctx?: WorkflowCallContext,
+): Promise<WorkflowCallResult> {
   const sandboxMode = selectMcpSandboxMode(runtimeEnv);
   const sandboxRunDir = resolveDockerHostRunsRoot(env.workspaceRoot, runtimeEnv);
   const dockerResult = spawnDockerProcess({
@@ -220,14 +250,14 @@ function attachOutputCollector(
   };
 }
 
-/** Compose the MCP result text from a finished run's output + run dir. */
+/** Compose the call result text from a finished run's output + run dir. */
 function composeResult(
   workflowSymbol: string,
   data: CollectedOutput,
   exit: { status: number; signal: NodeJS.Signals | null },
   runDir: string | undefined,
   sandboxRunDir: string | undefined,
-): McpCallResult {
+): WorkflowCallResult {
   const failed = exit.status !== 0 || exit.signal !== null;
 
   if (!failed) {
@@ -238,7 +268,7 @@ function composeResult(
         : data.logs.length > 0
           ? data.logs.join("\n")
           : `workflow ${workflowSymbol} completed`;
-    return { text: trimTrailingNewline(text), isError: false };
+    return { text: trimTrailingNewline(text), isError: false, runDir, exitStatus: exit.status, signal: exit.signal };
   }
 
   const parts: string[] = [];
@@ -257,7 +287,7 @@ function composeResult(
   if (!data.failedStep && !stderrTrimmed && stdoutTrimmed) parts.push(stdoutTrimmed);
   if (data.logs.length > 0) parts.push(`log output:\n${data.logs.join("\n")}`);
   if (runDir) parts.push(`run dir: ${runDir}`);
-  return { text: parts.join("\n\n"), isError: true };
+  return { text: parts.join("\n\n"), isError: true, runDir, exitStatus: exit.status, signal: exit.signal };
 }
 
 function readMetaFile(metaFile: string): { runDir?: string; summaryFile?: string } {

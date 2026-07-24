@@ -14,41 +14,6 @@ Process rules:
 
 ***
 
-## Feat: `jaiph serve` — HTTP API with OpenAPI + Swagger UI #dev-ready
-
-**Source:** Deployability feedback (2026-07-23): workflows must be invokable over the network and self-describing, not bound to a local stdio parent. Full contract: `design/2026-07-23-serve-http-api.md` — that document is the spec; this task pins the deliverable and its acceptance.
-
-**Problem:** `jaiph mcp` (`src/cli/commands/mcp.ts`) exposes workflows only over stdio JSON-RPC to a co-located parent process. There is no way to invoke a workflow over HTTP, no machine-readable API description, and no browser-usable surface. This blocks running jaiph as a deployed service (docker/kubernetes) callable by other systems.
-
-**Required behavior** (details, endpoint table, and error contract in the design doc):
-
-* New command `jaiph serve [--host <addr>] [--port <n>] [--workspace <dir>] [--env KEY[=VALUE]]... <file.jh>`, default `127.0.0.1:5247`, dispatched from `src/cli/index.ts`, implemented in `src/cli/commands/serve.ts` + `src/cli/serve/`. Hand-rolled on `node:http` — **no runtime npm dependencies** (project policy; the MCP server set the precedent). devDependencies for tests are fine.
-* Startup identical in spirit to `jaiph mcp`: graph load + `collectDiagnostics` (errors → stderr, exit 1), `--env` resolved once via `resolveEnvPairs`, Docker config resolved once, image prepared once, credential preflight as warnings, sandbox-mode startup notice. Logs to stderr; startup line prints listen URL + `/docs` URL.
-* Endpoints (this task): `GET /` → 302 `/docs`; `GET /healthz`; `GET /openapi.json`; `GET /docs`; `GET /v1/workflows`; `POST /v1/workflows/{name}/runs` (async `202` + `Location`, or `?wait=true` → `200` terminal); `GET /v1/runs`; `GET /v1/runs/{id}`; `POST /v1/runs/{id}/cancel`. Run object and `{error:{code,message}}` shape per the design doc. A workflow failure is **not** an HTTP error (run object `status:"failed"`, HTTP 200/202).
-* Exposure, naming, descriptions, and request-body schemas come from `deriveTools` (`src/cli/mcp/tools.ts`) — identical rules to MCP (export-narrowing, route-target exclusion, `default` handling, required-string params, `additionalProperties: false`). Param validation mirrors the MCP `-32602` rules as HTTP 400.
-* Execution reuses the MCP call layer: move `src/cli/mcp/call.ts` to `src/cli/exec/call.ts`, rename `McpCallResult` → `WorkflowCallResult`, let the caller supply `runId` (today created inside `callWorkflow`), and extend the result with `{runDir?, exitStatus?, signal?}`. `jaiph mcp` behavior is unchanged after the move (its tests prove it). Sandbox selection, `--env` passthrough, and cancellation (child kill + `stopDockerContainer`) work exactly as for MCP calls.
-* Hot reload: extract the generation machinery (`loadState`, watch/rewatch, generation dirs) from `src/cli/commands/mcp.ts` into `src/cli/shared/generation.ts`, used by both commands. For serve, a superseded generation's out dir is deleted only after its in-flight runs finish (refcount), since HTTP runs can outlive a reload.
-* Auth: bearer token from `JAIPH_SERVE_TOKEN`, constant-time compare; required for all `/v1/*`; `/healthz`, `/openapi.json`, `/docs` stay unauthenticated (schema metadata only — documented trade). **Binding a non-loopback host without the token set is a startup error.**
-* Concurrency cap `JAIPH_SERVE_MAX_CONCURRENT` (default 4) on simultaneous runs → `429`. Body cap 1 MiB → `413`; non-JSON POST → `415`.
-* `GET /openapi.json`: OpenAPI **3.1.0** generated per request by a pure `buildOpenApi(tools, serverInfo)` (`src/cli/serve/openapi.ts`): one concrete path per workflow (own `operationId`, description from `#` comments, MCP input schema as request body), the run-resource paths, run/error component schemas, bearer `securityScheme`.
-* `GET /docs`: static Swagger UI shell loading `swagger-ui-dist` from CDN with **pinned exact version + SRI integrity hashes + crossorigin**, `SwaggerUIBundle({url:"/openapi.json", persistAuthorization:true})`. No embedded/vendored UI assets (decision + air-gap consequence recorded in the design doc; `/openapi.json` is the offline fallback).
-* Shutdown: first SIGINT/SIGTERM stops accepting and drains in-flight runs; second signal cancels them; exit 0.
-* Docs: new `docs/serve.md` how-to; `docs/cli.md` section; `printUsage` in `src/cli/shared/usage.ts`; README bullet; `docs/env-vars.md` rows for `JAIPH_SERVE_TOKEN` and `JAIPH_SERVE_MAX_CONCURRENT` (src-parity docs-lint pins every new `JAIPH_*` name).
-
-Acceptance:
-
-* Integration test (real server, port 0, fixture `.jh`): `POST /v1/workflows/{name}/runs?wait=true` round-trips a workflow `return` value in `result_text` with `status:"succeeded"`; async POST returns `202` + `Location`, and polling `GET /v1/runs/{id}` reaches the same terminal result; the run dir exists under `.jaiph/runs/` with `run_summary.jsonl`.
-* Integration test: a failing workflow returns HTTP 200 (`wait=true`) with `status:"failed"`, `exit_status` set, and `result_text` containing the failed step and `run dir:` — proving workflow failure is not an HTTP error.
-* Unit tests (injected-deps handler, `McpServer`-style): unknown workflow → 404; missing / non-string / unexpected param key → 400; cancel → 202 then terminal `cancelled` (child + container teardown invoked), cancel on terminal run → 409; concurrency cap → 429; body cap → 413; non-JSON POST → 415.
-* Auth matrix test: with `JAIPH_SERVE_TOKEN` set, `/v1/*` without or with a wrong bearer → 401 and correct bearer → 200, while `/healthz`, `/openapi.json`, `/docs` answer 200 unauthenticated; a unit test proves non-loopback `--host` without the token exits 1 before listening.
-* `buildOpenApi` output passes a real OpenAPI 3.1 schema validator (devDependency, test-only); a test asserts one path per exposed workflow with the exact MCP-derived schema, covering the export-narrowing fixture.
-* A test asserts the `/docs` HTML pins an exact `swagger-ui-dist` version with `integrity` + `crossorigin` attributes on both assets.
-* Hot-reload integration test: adding a workflow to the fixture file surfaces it in `/openapi.json` and `/v1/workflows` without restart; a run started before the reload still completes successfully.
-* `jaiph mcp` unit/integration tests pass unchanged after the `call.ts`/generation extraction (no behavior drift in the shared layer).
-* `package.json` `dependencies` remains absent/empty; `npm test` passes (which enforces the env-vars docs parity rows).
-
-***
-
 ## Feat: `jaiph serve` run inspection — live event stream + artifacts #dev-ready
 
 **Source:** Deployability feedback (2026-07-23): "a UI on top to be able to inspect what it is doing" — the API half of that is streaming run events and exposing artifacts over HTTP. Contract: `design/2026-07-23-serve-http-api.md` (§ Events streaming). Requires the `jaiph serve` command (`src/cli/commands/serve.ts`, run registry + bearer auth) already in the codebase.

@@ -15,6 +15,7 @@ export function printUsage(): void {
       "  jaiph format [--check] [--indent <n>] <file.jh ...>",
       "  jaiph compile [--json] [--workspace <dir>] <file.jh | directory> ...",
       "  jaiph mcp [--workspace <dir>] [--env KEY[=VALUE]]... <file.jh>  # serve the file's workflows as MCP tools over stdio (alias: jaiph --mcp)",
+      "  jaiph serve [--host <addr>] [--port <n>] [--workspace <dir>] [--env KEY[=VALUE]]... <file.jh>  # serve workflows as an HTTP API + OpenAPI + Swagger UI",
       "",
       "Global options:",
       "  -h, --help     show this usage (jaiph --help) — each subcommand also accepts -h / --help",
@@ -63,6 +64,17 @@ export function printUsage(): void {
       "  --workspace <dir>  workspace root for import resolution (default: auto-detect).",
       "  --env KEY=VALUE    define KEY in every tool call's env (repeatable); --env KEY forwards the host value.",
       "",
+      "jaiph serve:",
+      "  Serve the file's workflows as an HTTP API with a generated OpenAPI 3.1 document",
+      "  and Swagger UI at /docs. Exposure mirrors `jaiph mcp`. Runs are durable resources",
+      "  under .jaiph/runs/, inspectable via GET /v1/runs/{id}. Set JAIPH_SERVE_TOKEN to",
+      "  require a bearer token on /v1/*; binding a non-loopback --host without it is a",
+      "  startup error. JAIPH_SERVE_MAX_CONCURRENT (default 4) caps simultaneous runs.",
+      "  --host <addr>      listen address (default: 127.0.0.1)",
+      "  --port <n>         listen port (default: 5247)",
+      "  --workspace <dir>  workspace root for import resolution (default: auto-detect).",
+      "  --env KEY=VALUE    define KEY in every run's env (repeatable); --env KEY forwards the host value.",
+      "",
       "Examples:",
       "  jaiph --help",
       "  jaiph --version",
@@ -90,6 +102,8 @@ export function printUsage(): void {
       "  jaiph compile --json .",
       "  jaiph mcp ./tools.jh",
       "  jaiph mcp --env GITHUB_TOKEN ./tools.jh",
+      "  jaiph serve ./tools.jh",
+      "  JAIPH_SERVE_TOKEN=secret jaiph serve --host 0.0.0.0 --port 8080 ./tools.jh",
       "",
     ].join("\n"),
   );
@@ -154,6 +168,10 @@ export interface ParsedArgs {
   inplace?: boolean;
   unsafe?: boolean;
   yes?: boolean;
+  /** `jaiph serve` listen host. */
+  host?: string;
+  /** `jaiph serve` listen port (kept as raw string; the command validates it). */
+  port?: string;
   /** Repeatable `--env` passthrough entries, in flag order. */
   env: EnvSpec[];
   positional: string[];
@@ -166,6 +184,8 @@ export function parseArgs(args: string[]): ParsedArgs {
   let inplace: boolean | undefined;
   let unsafe: boolean | undefined;
   let yes: boolean | undefined;
+  let host: string | undefined;
+  let port: string | undefined;
   const env: EnvSpec[] = [];
   const positional: string[] = [];
   for (let i = 0; i < args.length; i += 1) {
@@ -202,6 +222,23 @@ export function parseArgs(args: string[]): ParsedArgs {
       continue;
     }
 
+    // `jaiph serve` listen address flags.
+    if (name === "--host" || name === "--port") {
+      let val: string | undefined;
+      if (inlineValue !== undefined) {
+        val = inlineValue;
+      } else {
+        val = args[i + 1];
+        i += 1;
+      }
+      if (!val) {
+        throw new Error(`${name} requires a value`);
+      }
+      if (name === "--host") host = val;
+      else port = val;
+      continue;
+    }
+
     // Repeatable `--env KEY` / `--env KEY=VALUE`. Value comes from `=` or the
     // next token; validation (name shape, reserved keys) happens now, but a
     // bare `KEY`'s host lookup is deferred to spawn time (resolveEnvPairs).
@@ -234,5 +271,5 @@ export function parseArgs(args: string[]): ParsedArgs {
 
     positional.push(arg);
   }
-  return { target, raw, workspace, inplace, unsafe, yes, env, positional };
+  return { target, raw, workspace, inplace, unsafe, yes, host, port, env, positional };
 }
