@@ -8,24 +8,8 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { appendRunSummaryLine, CHAIN_GENESIS, sha256hex } from "./emit";
+import { redactCredentials } from "./redact";
 import { MAX_EMBED, nowIso, sanitizeName, stripOuterQuotes } from "./runtime-arg-parser";
-
-const CREDENTIAL_KEY_SUFFIXES = ["_API_KEY", "_TOKEN", "_SECRET", "_API_TOKEN"] as const;
-
-function isCredentialKey(key: string): boolean {
-  const upper = key.toUpperCase();
-  return CREDENTIAL_KEY_SUFFIXES.some((s) => upper.endsWith(s));
-}
-
-/** Replace each credential env value (≥8 chars) found in `text` with [REDACTED]. */
-function redactCredentials(text: string, env: NodeJS.ProcessEnv): string {
-  let result = text;
-  for (const [key, value] of Object.entries(env)) {
-    if (!value || value.length < 8 || !isCredentialKey(key)) continue;
-    result = result.split(value).join("[REDACTED]");
-  }
-  return result;
-}
 
 export type Frame = {
   id: string;

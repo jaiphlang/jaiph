@@ -41,6 +41,12 @@ const BASE_FIXTURE = [
   '  return "done"',
   "}",
   "",
+  'script leak_fail = `echo "stdout token $LEAK_API_KEY"; echo "stderr token $LEAK_API_KEY" >&2; exit 1`',
+  "# Echoes a credential to both streams then fails, to exercise result_text redaction.",
+  "workflow leak_and_fail() {",
+  "  run leak_fail()",
+  "}",
+  "",
   'script publish = `printf \'artifact-payload\' > "$JAIPH_ARTIFACTS_DIR/result.txt"`',
   "# Publishes a file into the run's artifacts dir.",
   "workflow make_artifact() {",
@@ -387,6 +393,35 @@ test("jaiph serve: a credential echoed by a run is [REDACTED] in the event strea
     const journal = await ev.text();
     assert.ok(!journal.includes(secret), "the raw credential value must not appear in the event stream");
     assert.ok(journal.includes("[REDACTED]"), "the redaction marker is present where the value was");
+  } finally {
+    await srv.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("jaiph serve: a failing run's result_text is [REDACTED] via wait=true and GET /v1/runs/{id}", async () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-serve-redact-fail-"));
+  const jh = join(root, "tools.jh");
+  writeFileSync(jh, BASE_FIXTURE);
+  const secret = "supersecretvalue123";
+  const srv = await startServe(jh, root, serveEnv(join(root, ".jaiph/runs")), ["--env", `LEAK_API_KEY=${secret}`]);
+  try {
+    const res = await fetch(`${srv.baseUrl}/v1/workflows/leak_and_fail/runs?wait=true`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+    });
+    assert.equal(res.status, 200);
+    const run = await res.json();
+    assert.equal(run.status, "failed");
+    assert.ok(!run.result_text.includes(secret), "wait=true result_text must not contain the credential");
+    assert.ok(run.result_text.includes("[REDACTED]"), "diagnostic context is retained with the marker");
+    assert.match(run.result_text, /failed step/, "failed-step diagnostics survive redaction");
+
+    const again = await (await fetch(`${srv.baseUrl}/v1/runs/${run.run_id}`)).json();
+    assert.equal(again.status, "failed");
+    assert.ok(!again.result_text.includes(secret), "GET /v1/runs/{id} result_text must not contain the credential");
+    assert.ok(again.result_text.includes("[REDACTED]"), "the marker persists on the durable run object");
   } finally {
     await srv.close();
     rmSync(root, { recursive: true, force: true });

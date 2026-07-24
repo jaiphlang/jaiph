@@ -315,6 +315,38 @@ test("jaiph mcp --env GREETING=hi: every tools/call sees the var in the result t
   }
 });
 
+const LEAK_FAIL_FIXTURE = [
+  'script leak_fail = `echo "stdout token $LEAK_API_KEY"; echo "stderr token $LEAK_API_KEY" >&2; exit 1`',
+  "# Echoes a credential to both streams then fails, to exercise tool-result redaction.",
+  "workflow leak_and_fail() {",
+  "  run leak_fail()",
+  "}",
+  "",
+].join("\n");
+
+test("jaiph mcp: a failing tool call that prints a credential returns [REDACTED], never the value", async () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-mcp-redact-fail-"));
+  const jh = join(root, "tools.jh");
+  writeFileSync(jh, LEAK_FAIL_FIXTURE);
+  const secret = "supersecretvalue123";
+  const client = startMcp(jh, root, mcpEnv(join(root, ".jaiph/runs")), false, ["--env", `LEAK_API_KEY=${secret}`]);
+  try {
+    await initialize(client);
+    client.send({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "leak_and_fail", arguments: {} } });
+    const res = await client.waitFor((m) => m.id === 1, "leak_and_fail call response");
+    assert.equal(res.error, undefined, "workflow failure must not be a protocol error");
+    const result = res.result as { content: Array<{ type: string; text: string }>; isError: boolean };
+    assert.equal(result.isError, true);
+    const text = result.content[0].text;
+    assert.ok(!text.includes(secret), "the MCP tool result must not contain the credential");
+    assert.ok(text.includes("[REDACTED]"), "diagnostic context is retained with the marker");
+    assert.match(text, /failed step/, "failed-step diagnostics survive redaction");
+  } finally {
+    await client.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("jaiph mcp --env GREETING (bare) forwards the host value to every call", async () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-mcp-env-bare-"));
   const jh = join(root, "tools.jh");

@@ -48,7 +48,7 @@ curl -s -X POST 'http://127.0.0.1:5247/v1/workflows/greet/runs?wait=true' \
   -H 'content-type: application/json' -d '{"name":"world"}' | jq
 ```
 
-The run object is `{run_id, workflow, status, started_at, ended_at, exit_status, signal, result_text, run_dir}`. `result_text` is the same content an MCP client sees — the workflow's `return` value, or its failure narrative. **A workflow failure is not an HTTP error:** a failed run comes back `200`/`202` with `status: "failed"` and a `run dir:` pointer in `result_text`. Poll `GET /v1/runs/{id}` for an async run, list them with `GET /v1/runs` (newest first), and stop one with `POST /v1/runs/{id}/cancel`.
+The run object is `{run_id, workflow, status, started_at, ended_at, exit_status, signal, result_text, run_dir}`. `result_text` is the same content an MCP client sees — the workflow's `return` value, or its failure narrative. Failure narratives are credential-redacted (`[REDACTED]`) the same way as the event journal; the `return` value of a successful run is intentional API output and returned verbatim. **A workflow failure is not an HTTP error:** a failed run comes back `200`/`202` with `status: "failed"` and a `run dir:` pointer in `result_text`. Poll `GET /v1/runs/{id}` for an async run, list them with `GET /v1/runs` (newest first), and stop one with `POST /v1/runs/{id}/cancel`.
 
 ## 4. Watch a run as it executes
 

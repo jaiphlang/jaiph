@@ -14,22 +14,6 @@ Process rules:
 
 ***
 
-## Redact credentials from every workflow result surface #dev-ready
-
-`src/cli/exec/call.ts` builds failed-call text from live stderr events, while the durable journal is credential-redacted. As a result, `jaiph serve` can return a secret in `result_text` and `jaiph mcp` can return it in a tool error even though events, OTLP, and Sentry redact the same value.
-
-Scope:
-
-- Build failed-step details and other returned output from redacted data, using one redaction boundary shared by HTTP and MCP.
-- Cover `failedStep.detail`, raw stderr/stdout, and collected log messages; do not rely only on the durable event endpoint.
-- Keep successful return values unchanged: workflow return values are intentional API output, not diagnostic capture.
-
-Acceptance:
-
-- An integration workflow that prints a credential-like env value and fails never exposes the value through `?wait=true`, `GET /v1/runs/{id}`, or an MCP tool result.
-- The same test proves `[REDACTED]` is returned where diagnostic context is retained.
-- Existing event-journal, OTLP, and Sentry redaction tests still pass.
-
 ## Keep MCP generations alive while calls are in flight #dev-ready
 
 `jaiph mcp` handles tool calls concurrently, but hot reload immediately deletes the previous generation's scripts directory. A call started just before reload can still need those scripts. Signal shutdown also removes the shared temp root without draining or cancelling active calls. `jaiph serve` already refcounts generations; MCP needs the same lifecycle guarantee.
