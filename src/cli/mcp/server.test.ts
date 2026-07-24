@@ -286,6 +286,41 @@ test("notifications/cancelled arriving before the child spawns cancels once regi
   assert.equal(cancelled, true, "a cancel that predates the child still terminates it");
 });
 
+test("cancelAll: kills every in-flight run but still delivers each isError response", async () => {
+  // Shutdown drain-then-cancel: unlike a client cancellation, the calls are not
+  // marked cancelled, so each killed run must settle with a normal response.
+  const killed: number[] = [];
+  const calls = [deferred(), deferred()];
+  let callIndex = 0;
+  const { server, written } = makeServer({
+    callTool: async (_spec, _args, ctx) => {
+      const i = callIndex++;
+      ctx.onCancelHandle?.(() => {
+        killed.push(i);
+        calls[i].resolve({ text: "workflow build terminated by signal SIGINT", isError: true });
+      });
+      return calls[i].promise;
+    },
+  });
+  await initialize(server);
+  const p1 = server.handleLine(
+    JSON.stringify({ jsonrpc: "2.0", id: 30, method: "tools/call", params: { name: "build", arguments: { target: "x" } } }),
+  );
+  const p2 = server.handleLine(
+    JSON.stringify({ jsonrpc: "2.0", id: 31, method: "tools/call", params: { name: "build", arguments: { target: "y" } } }),
+  );
+
+  server.cancelAll();
+  await Promise.all([p1, p2]);
+
+  assert.deepEqual(killed.sort(), [0, 1], "every in-flight run's terminator ran");
+  for (const id of [30, 31]) {
+    const res = written.find((m) => m.id === id) as { result: { isError: boolean } } | undefined;
+    assert.ok(res, `call ${id} still got a response (drain can settle)`);
+    assert.equal(res.result.isError, true, `call ${id} reports the termination as an error result`);
+  }
+});
+
 test("notifications/cancelled for an unknown request id is a harmless no-op", async () => {
   const { server, written } = makeServer();
   await initialize(server);

@@ -1,4 +1,4 @@
-import { mkdirSync, unwatchFile, watchFile } from "node:fs";
+import { mkdirSync, rmSync, unwatchFile, watchFile } from "node:fs";
 import { join } from "node:path";
 import { loadModuleGraph, writeModuleGraph, type ModuleGraph } from "../../transpile/module-graph";
 import { collectDiagnostics } from "../../transpile/validate";
@@ -72,6 +72,70 @@ export function loadGeneration(
       callEnv: { inputAbs, workspaceRoot, mod, effectiveConfig, scriptsDir, graphFile, outDir, extraEnv },
     },
     failures: [],
+  };
+}
+
+/** One live generation with the refcount that keeps its scripts dir alive. */
+interface LiveGeneration {
+  state: GenerationState;
+  refs: number;
+  superseded: boolean;
+}
+
+/** A lease on one generation, held by one in-flight call. */
+export interface GenerationLease {
+  /** The generation live when the call started; stable for the call's lifetime. */
+  state: GenerationState;
+  /** Settle the lease (idempotent). The last release of a superseded generation deletes its out dir. */
+  release: () => void;
+}
+
+export interface GenerationTracker {
+  /** The generation new calls should bind to. */
+  current: () => GenerationState;
+  /** Lease the current generation for one call; release when the call settles. */
+  acquire: () => GenerationLease;
+  /** Install a new generation; the previous one is deleted once its last lease settles. */
+  swap: (next: GenerationState) => void;
+}
+
+/**
+ * Refcounted generation lifecycle shared by `jaiph mcp` and `jaiph serve`. A
+ * hot reload must not delete the superseded generation's out dir (emitted
+ * scripts + serialized graph) while a call started under it is still running —
+ * the runner spawns each script step from that dir for the whole run. Calls
+ * lease the generation live at call start; a superseded generation's dir is
+ * removed only when its last lease is released (immediately on swap when idle).
+ */
+export function createGenerationTracker(initial: GenerationState): GenerationTracker {
+  let current: LiveGeneration = { state: initial, refs: 0, superseded: false };
+  const maybeDelete = (gen: LiveGeneration): void => {
+    if (gen.superseded && gen.refs === 0) {
+      rmSync(gen.state.callEnv.outDir, { recursive: true, force: true });
+    }
+  };
+  return {
+    current: () => current.state,
+    acquire(): GenerationLease {
+      const gen = current;
+      gen.refs += 1;
+      let released = false;
+      return {
+        state: gen.state,
+        release(): void {
+          if (released) return;
+          released = true;
+          gen.refs -= 1;
+          maybeDelete(gen);
+        },
+      };
+    },
+    swap(next: GenerationState): void {
+      const prev = current;
+      current = { state: next, refs: 0, superseded: false };
+      prev.superseded = true;
+      maybeDelete(prev);
+    },
   };
 }
 

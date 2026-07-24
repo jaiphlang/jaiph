@@ -147,6 +147,11 @@ The server watches every source file in the module graph (polling, ~750 ms). Whe
 
 - The graph is reloaded and re-validated, tools are re-derived, and the server emits `notifications/tools/list_changed`. A subsequent `tools/list` reflects the new tool set.
 - If the edit introduces a **compile error**, the server keeps serving the previous, valid tool set and logs the diagnostics to stderr — clients are never left with a broken tool list.
+- A tool call already in flight is untouched: it keeps executing against the scripts of the generation it started under, and that generation's files are deleted only once its last in-flight call settles. New calls use the reloaded sources.
+
+## Shutdown (drain, then cancel)
+
+The server shuts down when stdin closes or on `SIGINT` / `SIGTERM`. Either way it first **drains**: it stops accepting input and waits for in-flight tool calls to finish — their scripts stay on disk until they settle — then cleans up and exits `0`. If you don't want to wait, send a **second** signal: every in-flight run's child process tree is terminated (`SIGINT`, then `SIGKILL` after a short grace period) and, in Docker mode, each call's container is force-removed (`docker rm -f`), the same no-orphan contract as per-call cancellation above. The killed calls report error results and the server exits `0`.
 
 ## Safety posture
 

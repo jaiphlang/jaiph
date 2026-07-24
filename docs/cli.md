@@ -293,7 +293,7 @@ jaiph mcp [--workspace <dir>] [--env KEY[=VALUE]]... <file.jh>
 
 - Loads the module graph and runs `collectDiagnostics` (the same compile-time pass as `jaiph compile`). Any diagnostic prints `file:line:col CODE message` lines to **stderr** and exits `1`.
 - A missing path, a non-`.jh` path, or a path that is not a file exits `1` with a message on stderr.
-- On success the server runs until stdin closes or it receives `SIGINT` / `SIGTERM`, then drains in-flight calls and exits `0`.
+- On success the server runs until stdin closes or it receives `SIGINT` / `SIGTERM`. Shutdown is **drain-then-cancel**: stdin closing (or the first signal) stops accepting input and waits for in-flight calls to finish before cleaning up and exiting `0` — a draining call keeps its scripts until it settles. A **second** signal cancels the in-flight calls instead of waiting: each run's child process tree is terminated (`SIGINT`, then `SIGKILL` after a grace period) and, in Docker mode, its container is force-removed (`docker rm -f`), so no child process or container outlives the server; the killed calls settle with error results and the server still exits `0`.
 
 ### stdout invariant
 
@@ -345,6 +345,7 @@ Tool descriptions come from the `#` comment lines directly above each workflow (
 - Tool calls honor the same env-driven sandbox selection as `jaiph run` (`resolveDockerConfig`): Docker on macOS/Linux by default, host-only under `JAIPH_UNSAFE=true` or on Windows. The image is prepared once at startup (`checkDockerAvailable` + `prepareImage`), not per call. Run artifacts land under `.jaiph/runs/` exactly as for `jaiph run`.
 - **The workspace is isolated by default** for `jaiph mcp` — the same as `jaiph run`. Each tool call's container works on a writable point-in-time snapshot of the workspace, so edits are discarded on exit and the host tree is untouched. Set `JAIPH_INPLACE=1` to bind the real workspace read-write so tool effects land live (opt-in), or `JAIPH_UNSAFE=true` to run on the host with no sandbox.
 - Source files in the module graph are watched (polling, ~750 ms). A valid edit re-derives tools and emits `notifications/tools/list_changed`; an edit that fails to compile keeps the previous tool set serving and logs diagnostics to stderr.
+- Calls bind to the generation (emitted scripts + serialized graph) live when they start; a superseded generation's scripts dir survives until its last in-flight call settles, so a call spanning a reload still runs its remaining steps — the same lease model `jaiph serve` uses for HTTP runs.
 
 ## `jaiph serve`
 {: #jaiph-serve}
