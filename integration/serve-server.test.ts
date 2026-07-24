@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -23,6 +23,29 @@ const BASE_FIXTURE = [
   "workflow slow() {",
   "  run sleeper()",
   '  return "woke"',
+  "}",
+  "",
+  "script step_one = `sleep 0.4; echo one`",
+  "script step_two = `sleep 0.4; echo two`",
+  "# Two slow steps so a STEP_END is observable before the run is terminal.",
+  "workflow watchable() {",
+  "  run step_one()",
+  "  run step_two()",
+  '  return "watched"',
+  "}",
+  "",
+  'script leak = `echo "token is $LEAK_API_KEY"`',
+  "# Echoes a credential value to stdout to exercise journal redaction.",
+  "workflow leak_secret() {",
+  "  run leak()",
+  '  return "done"',
+  "}",
+  "",
+  'script publish = `printf \'artifact-payload\' > "$JAIPH_ARTIFACTS_DIR/result.txt"`',
+  "# Publishes a file into the run's artifacts dir.",
+  "workflow make_artifact() {",
+  "  run publish()",
+  '  return "published"',
   "}",
   "",
 ].join("\n");
@@ -243,6 +266,168 @@ test("jaiph serve: binding a non-loopback host without JAIPH_SERVE_TOKEN exits 1
     assert.match(result.stderr, /JAIPH_SERVE_TOKEN/);
     assert.doesNotMatch(result.stderr, /listening on/, "must not bind before failing");
   } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+/**
+ * Extract the journal `data:` payloads (one per journal line) from an SSE
+ * buffer. The terminating `event: end\ndata: {}` frame is excluded — only the
+ * replayed/followed journal lines are returned.
+ */
+function sseDataLines(sse: string): string[] {
+  return sse
+    .split("event: end")[0]
+    .split("\n")
+    .filter((l) => l.startsWith("data: "))
+    .map((l) => l.slice("data: ".length));
+}
+
+test("jaiph serve: SSE events replay WORKFLOW_START, stream a STEP_END mid-run, then close on event: end", async () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-serve-sse-"));
+  const jh = join(root, "tools.jh");
+  writeFileSync(jh, BASE_FIXTURE);
+  const srv = await startServe(jh, root, serveEnv(join(root, ".jaiph/runs")));
+  try {
+    // Start async, then connect the event stream while the run is still going.
+    const startRes = await fetch(`${srv.baseUrl}/v1/workflows/watchable/runs`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+    });
+    assert.equal(startRes.status, 202);
+    const runId = (await startRes.json()).run_id;
+
+    const evRes = await fetch(`${srv.baseUrl}/v1/runs/${runId}/events`, { headers: { accept: "text/event-stream" } });
+    assert.equal(evRes.status, 200);
+    assert.match(evRes.headers.get("content-type") ?? "", /text\/event-stream/);
+
+    // Read the stream to completion (the server closes after `event: end`).
+    const reader = evRes.body!.getReader();
+    const decoder = new TextDecoder();
+    let sse = "";
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      sse += decoder.decode(value, { stream: true });
+      if (sse.includes("event: end")) break;
+    }
+
+    const dataLines = sseDataLines(sse);
+    const events = dataLines.map((l) => JSON.parse(l));
+    // (a) the replayed WORKFLOW_START is present.
+    assert.ok(events.some((e) => e.type === "WORKFLOW_START"), "WORKFLOW_START replayed");
+    // (b) a STEP_END arrived, and it precedes the terminating `event: end`.
+    const stepEndIdx = sse.indexOf('"type":"STEP_END"');
+    const endIdx = sse.indexOf("event: end");
+    assert.ok(stepEndIdx !== -1, "at least one STEP_END streamed");
+    assert.ok(stepEndIdx < endIdx, "STEP_END arrived before the run went terminal");
+    // (c) the stream closed with event: end.
+    assert.match(sse, /event: end/);
+
+    // (d) the concatenated data payloads equal the final run_summary.jsonl line set.
+    const run = await pollRun(srv.baseUrl, runId);
+    assert.equal(run.status, "succeeded");
+    const journalLines = readFileSync(join(run.run_dir, "run_summary.jsonl"), "utf8").split("\n").filter(Boolean);
+    assert.deepEqual(dataLines, journalLines, "SSE data payloads match the journal exactly");
+  } finally {
+    await srv.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("jaiph serve: NDJSON events on a terminal run byte-match the journal; unknown run → 404, unauthenticated → 401", async () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-serve-ndjson-"));
+  const jh = join(root, "tools.jh");
+  writeFileSync(jh, BASE_FIXTURE);
+  // A token so the 401 path is exercised.
+  const srv = await startServe(jh, root, serveEnv(join(root, ".jaiph/runs"), { JAIPH_SERVE_TOKEN: "t0ken" }));
+  const auth = { authorization: "Bearer t0ken" };
+  try {
+    const runRes = await fetch(`${srv.baseUrl}/v1/workflows/greet/runs?wait=true`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...auth },
+      body: JSON.stringify({ name: "nd" }),
+    });
+    const run = await runRes.json();
+    assert.equal(run.status, "succeeded");
+
+    const ev = await fetch(`${srv.baseUrl}/v1/runs/${run.run_id}/events`, { headers: auth });
+    assert.equal(ev.status, 200);
+    assert.match(ev.headers.get("content-type") ?? "", /application\/x-ndjson/);
+    const body = Buffer.from(await ev.arrayBuffer());
+    assert.deepEqual(body, readFileSync(join(run.run_dir, "run_summary.jsonl")), "NDJSON is byte-identical to the journal");
+
+    // Unknown run id → 404.
+    assert.equal((await fetch(`${srv.baseUrl}/v1/runs/does-not-exist/events`, { headers: auth })).status, 404);
+    // Unauthenticated → 401.
+    assert.equal((await fetch(`${srv.baseUrl}/v1/runs/${run.run_id}/events`)).status, 401);
+  } finally {
+    await srv.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("jaiph serve: a credential echoed by a run is [REDACTED] in the event stream", async () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-serve-redact-"));
+  const jh = join(root, "tools.jh");
+  writeFileSync(jh, BASE_FIXTURE);
+  const secret = "supersecretvalue123";
+  const srv = await startServe(jh, root, serveEnv(join(root, ".jaiph/runs")), ["--env", `LEAK_API_KEY=${secret}`]);
+  try {
+    const runRes = await fetch(`${srv.baseUrl}/v1/workflows/leak_secret/runs?wait=true`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+    });
+    const run = await runRes.json();
+    assert.equal(run.status, "succeeded", `run failed: ${JSON.stringify(run)}`);
+
+    const ev = await fetch(`${srv.baseUrl}/v1/runs/${run.run_id}/events`);
+    const journal = await ev.text();
+    assert.ok(!journal.includes(secret), "the raw credential value must not appear in the event stream");
+    assert.ok(journal.includes("[REDACTED]"), "the redaction marker is present where the value was");
+  } finally {
+    await srv.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("jaiph serve: artifacts round-trip — list then byte-identical download, traversal is 404", async () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-serve-art-"));
+  const jh = join(root, "tools.jh");
+  writeFileSync(jh, BASE_FIXTURE);
+  const srv = await startServe(jh, root, serveEnv(join(root, ".jaiph/runs")));
+  try {
+    const runRes = await fetch(`${srv.baseUrl}/v1/workflows/make_artifact/runs?wait=true`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+    });
+    const run = await runRes.json();
+    assert.equal(run.status, "succeeded", `run failed: ${JSON.stringify(run)}`);
+
+    const list = await (await fetch(`${srv.baseUrl}/v1/runs/${run.run_id}/artifacts`)).json();
+    assert.deepEqual(
+      list.artifacts.map((a: any) => a.path),
+      ["result.txt"],
+      "the published file is listed",
+    );
+
+    const dl = await fetch(`${srv.baseUrl}/v1/runs/${run.run_id}/artifacts/result.txt`);
+    assert.equal(dl.status, 200);
+    assert.match(dl.headers.get("content-type") ?? "", /application\/octet-stream/);
+    assert.match(dl.headers.get("content-disposition") ?? "", /filename="result\.txt"/);
+    assert.equal(Buffer.from(await dl.arrayBuffer()).toString("utf8"), "artifact-payload");
+
+    // Traversal battery: encoded `..`, `%2e%2e`, and an absolute path all 404,
+    // and the run's own run_summary.jsonl (outside artifacts/) is unreachable.
+    for (const escape of ["..%2Frun_summary.jsonl", "%2e%2e%2frun_summary.jsonl", "%2Fetc%2Fpasswd"]) {
+      const res = await fetch(`${srv.baseUrl}/v1/runs/${run.run_id}/artifacts/${escape}`);
+      assert.equal(res.status, 404, `traversal ${escape} → 404`);
+    }
+  } finally {
+    await srv.close();
     rmSync(root, { recursive: true, force: true });
   }
 });

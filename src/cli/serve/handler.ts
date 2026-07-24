@@ -1,8 +1,17 @@
 import { randomUUID, timingSafeEqual } from "node:crypto";
+import { existsSync, readFileSync } from "node:fs";
+import { basename, join } from "node:path";
 import type { McpToolSpec } from "../mcp/tools";
 import type { WorkflowCallResult, WorkflowCallContext } from "../exec/call";
 import { buildOpenApi } from "./openapi";
 import { DOCS_HTML } from "./docs";
+import {
+  listArtifacts,
+  resolveArtifactPath,
+  streamRunEventsSse,
+  RUN_SUMMARY,
+  type StreamTarget,
+} from "./runfiles";
 
 /** 1 MiB cap on request bodies (design doc). */
 export const MAX_BODY_BYTES = 1024 * 1024;
@@ -46,6 +55,15 @@ export interface ServeResponse {
   status: number;
   headers: Record<string, string>;
   body: string;
+  /** Binary body (artifact download / NDJSON journal); takes precedence over `body`. */
+  bodyBuffer?: Buffer;
+  /**
+   * When set, the HTTP layer streams the body by driving this function instead
+   * of writing `body` — used for the SSE event follow. It resolves when the
+   * stream is complete (run terminal or client gone); the layer then ends the
+   * response.
+   */
+  stream?: (target: StreamTarget) => Promise<void>;
 }
 
 export interface ServeHandlerOptions {
@@ -69,6 +87,18 @@ export interface ServeHandlerOptions {
   now: () => string;
   /** Run-id source, injectable for tests. Defaults to `randomUUID`. */
   newRunId?: () => string;
+  /**
+   * Resolve a run's host-side run directory (the one holding
+   * `run_summary.jsonl` and `artifacts/`). Called live — mid-run and after —
+   * for the events/artifacts endpoints. Defaults to the record's own `run_dir`
+   * (populated at finalize); the server supplies a resolver that also scans the
+   * runs root by run id so a still-running run is reachable.
+   */
+  resolveRunDir?: (record: RunRecord) => string | null;
+  /** SSE journal-follow poll interval (ms). Defaults to 250. */
+  ssePollMs?: number;
+  /** SSE keep-alive comment cadence (ms). Defaults to 15000. */
+  sseKeepAliveMs?: number;
 }
 
 function isTerminal(status: RunStatus): boolean {
@@ -168,6 +198,24 @@ export class ServeHandler {
         .sort((a, b) => b.order - a.order)
         .map((r) => this.toRunObject(r));
       return this.json(200, { runs });
+    }
+
+    const events = /^\/v1\/runs\/([^/]+)\/events$/.exec(path);
+    if (events) {
+      if (method !== "GET") return this.methodNotAllowed();
+      return this.runEvents(req, decodeURIComponent(events[1]));
+    }
+
+    const artifactsList = /^\/v1\/runs\/([^/]+)\/artifacts$/.exec(path);
+    if (artifactsList) {
+      if (method !== "GET") return this.methodNotAllowed();
+      return this.listRunArtifacts(decodeURIComponent(artifactsList[1]));
+    }
+
+    const artifactGet = /^\/v1\/runs\/([^/]+)\/artifacts\/(.+)$/.exec(path);
+    if (artifactGet) {
+      if (method !== "GET") return this.methodNotAllowed();
+      return this.downloadArtifact(decodeURIComponent(artifactGet[1]), artifactGet[2]);
     }
 
     const cancel = /^\/v1\/runs\/([^/]+)\/cancel$/.exec(path);
@@ -281,6 +329,92 @@ export class ServeHandler {
     record.cancelled = true;
     record.cancel?.();
     return { status: 202, headers: { "content-type": "application/json" }, body: JSON.stringify(this.toRunObject(record)) };
+  }
+
+  /** Host-side run dir for a record: injected resolver, else its own `run_dir`. */
+  private runDirFor(record: RunRecord): string | null {
+    return this.opts.resolveRunDir ? this.opts.resolveRunDir(record) : record.run_dir;
+  }
+
+  /**
+   * `GET /v1/runs/{id}/events`. Default: the run's `run_summary.jsonl` as
+   * `application/x-ndjson`, verbatim, then close. `Accept: text/event-stream`:
+   * SSE replay + live follow until the run is terminal. The journal's own
+   * redaction is the redaction guarantee; raw capture files are never served.
+   */
+  private runEvents(req: ServeRequest, id: string): ServeResponse {
+    const record = this.runs.get(id);
+    if (!record) return this.error(404, "E_NOT_FOUND", "unknown run id");
+    const wantsSse = (req.headers["accept"] ?? "").includes("text/event-stream");
+    const resolveRunDir = (): string | null => this.runDirFor(record);
+    if (!wantsSse) {
+      const dir = resolveRunDir();
+      const file = dir ? join(dir, RUN_SUMMARY) : null;
+      const bodyBuffer = file && existsSync(file) ? readFileSync(file) : Buffer.alloc(0);
+      return { status: 200, headers: { "content-type": "application/x-ndjson" }, body: "", bodyBuffer };
+    }
+    return {
+      status: 200,
+      headers: {
+        "content-type": "text/event-stream",
+        "cache-control": "no-cache",
+        connection: "keep-alive",
+      },
+      body: "",
+      stream: (target) =>
+        streamRunEventsSse(target, {
+          resolveRunDir,
+          isTerminal: () => isTerminal(record.status),
+          pollMs: this.opts.ssePollMs ?? 250,
+          keepAliveMs: this.opts.sseKeepAliveMs ?? 15000,
+        }),
+    };
+  }
+
+  /** `GET /v1/runs/{id}/artifacts`: JSON list of published files (empty when none). */
+  private listRunArtifacts(id: string): ServeResponse {
+    const record = this.runs.get(id);
+    if (!record) return this.error(404, "E_NOT_FOUND", "unknown run id");
+    const dir = this.runDirFor(record);
+    return this.json(200, { artifacts: dir ? listArtifacts(dir) : [] });
+  }
+
+  /**
+   * `GET /v1/runs/{id}/artifacts/{path}`: download one published file as
+   * `application/octet-stream`. Traversal-proof — anything escaping the run's
+   * `artifacts/` dir (`..`, absolute paths, escaping symlinks) is a 404, and
+   * raw `%06d-*.out`/`.err` capture files (run-dir root, not `artifacts/`) are
+   * unreachable by construction.
+   */
+  private downloadArtifact(id: string, rawPath: string): ServeResponse {
+    const record = this.runs.get(id);
+    if (!record) return this.error(404, "E_NOT_FOUND", "unknown run id");
+    const dir = this.runDirFor(record);
+    if (!dir) return this.error(404, "E_NOT_FOUND", "unknown artifact");
+    let requested: string;
+    try {
+      requested = decodeURIComponent(rawPath);
+    } catch {
+      return this.error(404, "E_NOT_FOUND", "unknown artifact");
+    }
+    const abs = resolveArtifactPath(dir, requested);
+    if (!abs) return this.error(404, "E_NOT_FOUND", "unknown artifact");
+    let bodyBuffer: Buffer;
+    try {
+      bodyBuffer = readFileSync(abs);
+    } catch {
+      return this.error(404, "E_NOT_FOUND", "unknown artifact");
+    }
+    const filename = basename(abs).replace(/"/g, "");
+    return {
+      status: 200,
+      headers: {
+        "content-type": "application/octet-stream",
+        "content-disposition": `attachment; filename="${filename}"`,
+      },
+      body: "",
+      bodyBuffer,
+    };
   }
 
   private finalize(record: RunRecord, result: WorkflowCallResult): void {

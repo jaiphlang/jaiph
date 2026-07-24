@@ -14,35 +14,6 @@ Process rules:
 
 ***
 
-## Feat: `jaiph serve` run inspection — live event stream + artifacts #dev-ready
-
-**Source:** Deployability feedback (2026-07-23): "a UI on top to be able to inspect what it is doing" — the API half of that is streaming run events and exposing artifacts over HTTP. Contract: `design/2026-07-23-serve-http-api.md` (§ Events streaming). Requires the `jaiph serve` command (`src/cli/commands/serve.ts`, run registry + bearer auth) already in the codebase.
-
-**Problem:** A `jaiph serve` client can see a run's terminal result but not what the run is doing while it executes, and cannot retrieve published artifacts. The durable journal (`run_summary.jsonl`, written by `RuntimeEventEmitter` — hash-chained, credential-redacted, host-visible in every sandbox mode because the run dir is a host mount) already contains everything needed; it just isn't reachable over HTTP.
-
-**Required behavior:**
-
-* `GET /v1/runs/{id}/events` (bearer-authed, 404 unknown run):
-  * default: `application/x-ndjson` — the run's `run_summary.jsonl` content as-is, then close.
-  * `Accept: text/event-stream` → SSE: replay every existing journal line as `data: <raw json line>`, then follow the file (poll ~250 ms) emitting new lines as they append; when the server's registry marks the run terminal, emit `event: end` and close. Keep-alive comment (`:ka`) every 15 s. Works for already-terminal runs (full replay + immediate `end`).
-  * The journal is served verbatim — the redaction already applied by `RuntimeEventEmitter` is the redaction guarantee. Raw `%06d-*.out/.err` capture files are **never** exposed by any endpoint.
-* `GET /v1/runs/{id}/artifacts` → JSON list of files under the run dir's `artifacts/` (relative paths, size, mtime); empty list when none.
-* `GET /v1/runs/{id}/artifacts/{path}` → file bytes, `application/octet-stream`, `Content-Disposition` filename. **Traversal-proof:** resolve the requested path against the artifacts dir and reject (404) anything escaping it — `..` segments, absolute paths, and symlinks pointing outside the artifacts dir (check `realpath` containment, not string prefix only).
-* Docker-mode runs: the journal/artifacts are read from the host-side run dir (discovered as the existing call layer already does via `discoverDockerRunDir`/`remapContainerPath` in `src/cli/shared/errors.ts`).
-* Docs: extend `docs/serve.md` with a "watch a run" section (curl SSE example) and artifacts section; note the raw-captures non-exposure as a security property.
-
-Acceptance:
-
-* Integration test with a multi-step fixture workflow slow enough to observe (e.g. `sleep` steps): connect SSE mid-run and assert (a) replayed `WORKFLOW_START` arrives, (b) at least one `STEP_END` event arrives **before** the run is terminal, (c) `event: end` arrives and the socket closes after completion, (d) the concatenated `data:` payloads equal the final `run_summary.jsonl` line set.
-* Test: NDJSON mode on a terminal run byte-matches the journal file; events endpoint on an unknown run id → 404; unauthenticated → 401.
-* Redaction test: a workflow that echoes a credential env value (key matching the `_API_KEY`/`_TOKEN` redaction suffixes, value ≥8 chars) produces an event stream where the value is absent and `[REDACTED]` present.
-* Artifacts round-trip test: a workflow publishing a file to `$JAIPH_ARTIFACTS_DIR` lists and downloads it byte-identically.
-* Traversal test battery: `../`-containing path, absolute path, URL-encoded `%2e%2e`, and a symlink inside `artifacts/` pointing outside the run dir all return 404 without reading the target; a symlink target **inside** artifacts still serves.
-* A grep-style test or unit assertion proves no route serves `*.out`/`*.err` capture files.
-* `npm test` passes.
-
-***
-
 ## Feat: OTLP trace export — one span tree per run, zero dependencies #dev-ready
 
 **Source:** Observability feedback (2026-07-23): "OTEL + Sentry configurable would be the easiest way" to make jaiph observable in a company setting. This task is the OTEL half.

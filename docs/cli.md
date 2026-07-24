@@ -377,6 +377,9 @@ Startup mirrors `jaiph mcp`: graph load + `collectDiagnostics` (diagnostics to s
 | `POST /v1/workflows/{name}/runs` | bearer | Start a run. Default `202` + `Location: /v1/runs/{id}`; `?wait=true` blocks for the terminal `200`. |
 | `GET /v1/runs` | bearer | Runs started by this process (in-memory), newest first. |
 | `GET /v1/runs/{id}` | bearer | The run object. `404` unknown. |
+| `GET /v1/runs/{id}/events` | bearer | The run's `run_summary.jsonl`. Default `application/x-ndjson` snapshot; `Accept: text/event-stream` replays then follows it live, closing with `event: end` when terminal. Served verbatim (already credential-redacted); raw capture files are never exposed. `404` unknown. |
+| `GET /v1/runs/{id}/artifacts` | bearer | `{artifacts: [{path, size, mtime}]}` for files published under the run's `artifacts/` (empty when none). `404` unknown. |
+| `GET /v1/runs/{id}/artifacts/{path}` | bearer | Download one published file (`application/octet-stream`). Traversal-proof — `..`, absolute paths, and escaping symlinks are `404`. |
 | `POST /v1/runs/{id}/cancel` | bearer | `202`; the run reaches `cancelled`. `409` if already terminal. |
 
 The run object is `{run_id, workflow, status, started_at, ended_at, exit_status, signal, result_text, run_dir}` where `status` is `running` \| `succeeded` \| `failed` \| `cancelled`. **A workflow failure is not an HTTP error** — the run object reports `status: "failed"` with the same failure narrative `jaiph mcp` returns, over HTTP `200`/`202`. Errors use `{error: {code, message}}` with `400 E_BAD_ARGS`, `401 E_UNAUTHORIZED`, `404 E_NOT_FOUND`, `409 E_RUN_TERMINAL`, `413 E_BODY_TOO_LARGE` (1 MiB body cap), `415` (non-`application/json` body), and `429 E_TOO_MANY_RUNS`.

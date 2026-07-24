@@ -223,18 +223,21 @@ export function readFailedStepOutput(summaryPath: string): string | null {
 }
 
 /**
- * Discover run directory from the Docker sandbox runs mount.
- * In Docker mode the container's meta file is inaccessible from the host,
- * so we scan the bind-mounted sandboxRunDir for the latest run directory.
+ * Locate a run's host-side directory under `runsRoot` by matching `runId`
+ * against the `WORKFLOW_START` line (always the first line) of each candidate
+ * `run_summary.jsonl`. Works while the run is still executing (that line is
+ * written at run start) and in every sandbox mode (the run dir is a host mount
+ * even under Docker). Scans date/time directories newest-first; returns `null`
+ * when no run dir matches or `runsRoot` is unreadable.
  */
-export function discoverDockerRunDir(sandboxRunDir: string, expectedRunId: string): { runDir?: string; summaryFile?: string } {
+export function findRunDir(runsRoot: string, runId: string): string | null {
   try {
-    const dateDirs = readdirSync(sandboxRunDir)
-      .filter((d) => !d.startsWith(".") && statSync(join(sandboxRunDir, d)).isDirectory())
+    const dateDirs = readdirSync(runsRoot)
+      .filter((d) => !d.startsWith(".") && statSync(join(runsRoot, d)).isDirectory())
       .sort()
       .reverse();
     for (const dateDir of dateDirs) {
-      const datePath = join(sandboxRunDir, dateDir);
+      const datePath = join(runsRoot, dateDir);
       const timeDirs = readdirSync(datePath)
         .filter((d) => statSync(join(datePath, d)).isDirectory())
         .sort()
@@ -247,8 +250,8 @@ export function discoverDockerRunDir(sandboxRunDir: string, expectedRunId: strin
         if (!firstLine) continue;
         try {
           const parsed = JSON.parse(firstLine) as { type?: string; run_id?: string };
-          if (parsed.type === "WORKFLOW_START" && parsed.run_id === expectedRunId) {
-            return { runDir, summaryFile };
+          if (parsed.type === "WORKFLOW_START" && parsed.run_id === runId) {
+            return runDir;
           }
         } catch {
           // ignore malformed JSON
@@ -256,9 +259,20 @@ export function discoverDockerRunDir(sandboxRunDir: string, expectedRunId: strin
       }
     }
   } catch {
-    // ignore — sandboxRunDir may not exist or be readable
+    // ignore — runsRoot may not exist or be readable
   }
-  return {};
+  return null;
+}
+
+/**
+ * Discover run directory from the Docker sandbox runs mount.
+ * In Docker mode the container's meta file is inaccessible from the host,
+ * so we scan the bind-mounted sandboxRunDir for the matching run directory.
+ */
+export function discoverDockerRunDir(sandboxRunDir: string, expectedRunId: string): { runDir?: string; summaryFile?: string } {
+  const runDir = findRunDir(sandboxRunDir, expectedRunId);
+  if (!runDir) return {};
+  return { runDir, summaryFile: join(runDir, "run_summary.jsonl") };
 }
 
 /** Remap a container-internal path to the equivalent host path. */

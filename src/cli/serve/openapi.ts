@@ -177,6 +177,89 @@ export function buildOpenApi(tools: McpToolSpec[], serverInfo: OpenApiServerInfo
     },
   };
 
+  paths["/v1/runs/{id}/events"] = {
+    get: {
+      operationId: "getRunEvents",
+      summary: "Stream a run's event journal",
+      description:
+        "The run's durable `run_summary.jsonl`. Default: `application/x-ndjson` snapshot. " +
+        "With `Accept: text/event-stream`, Server-Sent Events replay the journal then follow it " +
+        "live until the run is terminal (`event: end`). The journal is served verbatim — already " +
+        "credential-redacted; raw step capture files are never exposed.",
+      security: BEARER_SECURITY,
+      parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+      responses: {
+        "200": {
+          description: "The event journal (NDJSON snapshot or an SSE stream).",
+          content: {
+            "application/x-ndjson": { schema: { type: "string" } },
+            "text/event-stream": { schema: { type: "string" } },
+          },
+        },
+        "401": errorResponse("Missing or invalid bearer token."),
+        "404": errorResponse("Unknown run id."),
+      },
+    },
+  };
+
+  paths["/v1/runs/{id}/artifacts"] = {
+    get: {
+      operationId: "listRunArtifacts",
+      summary: "List a run's published artifacts",
+      security: BEARER_SECURITY,
+      parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+      responses: {
+        "200": {
+          description: "Files published under the run's artifacts directory (empty when none).",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  artifacts: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        path: { type: "string" },
+                        size: { type: "integer" },
+                        mtime: { type: "string" },
+                      },
+                      required: ["path", "size", "mtime"],
+                    },
+                  },
+                },
+                required: ["artifacts"],
+              },
+            },
+          },
+        },
+        "401": errorResponse("Missing or invalid bearer token."),
+        "404": errorResponse("Unknown run id."),
+      },
+    },
+  };
+
+  paths["/v1/runs/{id}/artifacts/{path}"] = {
+    get: {
+      operationId: "downloadRunArtifact",
+      summary: "Download one published artifact",
+      security: BEARER_SECURITY,
+      parameters: [
+        { name: "id", in: "path", required: true, schema: { type: "string" } },
+        { name: "path", in: "path", required: true, schema: { type: "string" } },
+      ],
+      responses: {
+        "200": {
+          description: "The artifact bytes.",
+          content: { "application/octet-stream": { schema: { type: "string", format: "binary" } } },
+        },
+        "401": errorResponse("Missing or invalid bearer token."),
+        "404": errorResponse("Unknown run id or artifact (including any path traversal attempt)."),
+      },
+    },
+  };
+
   paths["/v1/runs/{id}/cancel"] = {
     post: {
       operationId: "cancelRun",

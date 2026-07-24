@@ -43,6 +43,13 @@ workflow greet(name) {
 workflow boom() {
   fail "boom-failed"
 }
+
+script publish = `printf 'artifact-payload' > "$JAIPH_ARTIFACTS_DIR/result.txt"`
+# Publishes a file into the run's artifacts dir.
+workflow make_artifact() {
+  run publish()
+  return "published"
+}
 EOF
 
 e2e::section "jaiph serve exposes an HTTP API over host-mode runs"
@@ -116,10 +123,44 @@ e2e::assert_equals "${boom_code}" "200" "a failing workflow is HTTP 200 (workflo
 boom_status="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["status"])' "${boom_body}")"
 e2e::assert_equals "${boom_status}" "failed" "boom run status is failed"
 
-# --- GET /v1/workflows lists both exposed workflows ---
+# --- GET /v1/workflows lists all exposed workflows ---
 workflows="$(curl -s "${base}/v1/workflows" | python3 -c '
 import json, sys
 names = sorted(w["name"] for w in json.load(sys.stdin)["workflows"])
 print(",".join(names))
 ')"
-e2e::assert_equals "${workflows}" "boom,greet" "GET /v1/workflows lists both workflows"
+e2e::assert_equals "${workflows}" "boom,greet,make_artifact" "GET /v1/workflows lists all workflows"
+
+# --- GET /v1/runs/{id}/events (NDJSON) mirrors the durable journal ---
+# The greet run above returned a run object; re-run it capturing the id, then
+# byte-compare the events endpoint against the on-disk run_summary.jsonl.
+run_json="$(curl -s -X POST "${base}/v1/workflows/greet/runs?wait=true" \
+  -H 'content-type: application/json' -d '{"name":"events"}')"
+run_id="$(printf '%s' "${run_json}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["run_id"])')"
+run_dir="$(printf '%s' "${run_json}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["run_dir"])')"
+
+events_body="${TEST_DIR}/events.ndjson"
+curl -s "${base}/v1/runs/${run_id}/events" -o "${events_body}"
+# Full-content equality: the NDJSON stream is the journal, verbatim.
+e2e::assert_equals "$(cat "${events_body}")" "$(cat "${run_dir}/run_summary.jsonl")" \
+  "GET events (NDJSON) byte-matches the run's run_summary.jsonl"
+
+# --- artifacts: list + byte-identical download, traversal is rejected ---
+art_json="$(curl -s -X POST "${base}/v1/workflows/make_artifact/runs?wait=true" \
+  -H 'content-type: application/json' -d '{}')"
+art_id="$(printf '%s' "${art_json}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["run_id"])')"
+
+art_list="$(curl -s "${base}/v1/runs/${art_id}/artifacts" | python3 -c '
+import json, sys
+print(",".join(a["path"] for a in json.load(sys.stdin)["artifacts"]))
+')"
+e2e::assert_equals "${art_list}" "result.txt" "GET artifacts lists the published file"
+
+art_file="${TEST_DIR}/downloaded.txt"
+curl -s "${base}/v1/runs/${art_id}/artifacts/result.txt" -o "${art_file}"
+e2e::assert_equals "$(cat "${art_file}")" "artifact-payload" "artifact downloads byte-identically"
+
+# A URL-encoded `..` traversal escaping artifacts/ is a 404 (no bytes served).
+trav_code="$(curl -s -o /dev/null -w '%{http_code}' \
+  "${base}/v1/runs/${art_id}/artifacts/%2e%2e%2frun_summary.jsonl")"
+e2e::assert_equals "${trav_code}" "404" "artifact path traversal is rejected with 404"
