@@ -574,6 +574,12 @@ Jaiph: Running async.jh<span class="run-banner-meta"> (Docker sandbox, snapshot)
                     (workflow&nbsp;&rarr;&nbsp;steps&nbsp;&rarr;&nbsp;prompts) to any OTLP collector &mdash; Grafana Tempo,
                     Honeycomb, Datadog. Host-side, end-of-run, credential-redacted, with zero new dependencies, and never
                     load-bearing. See <a href="/how-to/observability">Export traces to an OTLP collector</a>.</p>
+                <p><strong>Sentry error reporting.</strong> Set the standard
+                    <code>SENTRY_DSN</code> and every failed run (nonzero exit or a signal) is pushed to Sentry
+                    as one error event &mdash; workflow, failing step, a redacted output excerpt, and a run-dir
+                    pointer &mdash; so operators get alerting and grouping without scraping run dirs. Host-side,
+                    redacted, with zero new dependencies, never load-bearing; successful runs send nothing.
+                    See <a href="/how-to/observability#report-failed-runs-to-sentry">Report failed runs to Sentry</a>.</p>
 
                 <h3>Samples</h3>
                 <p>Jaiph source code is built mostly with real Jaiph workflows. The

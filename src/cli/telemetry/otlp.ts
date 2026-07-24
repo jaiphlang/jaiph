@@ -15,9 +15,9 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
-import http from "node:http";
-import https from "node:https";
 import { VERSION } from "../../version";
+import { postWithTimeout } from "./http";
+import { reportRunFailureToSentry } from "./sentry";
 
 /** Metadata the pure mapper needs beyond the journal lines themselves. */
 export interface OtlpMeta {
@@ -296,40 +296,12 @@ function postOtlp(
   payload: Record<string, unknown>,
   headers: Record<string, string>,
 ): Promise<void> {
-  return new Promise((resolve, reject) => {
-    let url: URL;
-    try {
-      url = new URL(endpoint);
-    } catch {
-      reject(new Error(`invalid endpoint ${endpoint}`));
-      return;
-    }
-    const body = JSON.stringify(payload);
-    const lib = url.protocol === "https:" ? https : http;
-    const req = lib.request(
-      url,
-      {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "content-length": Buffer.byteLength(body),
-          ...headers,
-        },
-      },
-      (res) => {
-        res.resume();
-        res.on("end", () => {
-          const code = res.statusCode ?? 0;
-          if (code >= 200 && code < 300) resolve();
-          else reject(new Error(`collector returned HTTP ${code}`));
-        });
-      },
-    );
-    req.setTimeout(10_000, () => req.destroy(new Error("timed out after 10s")));
-    req.on("error", reject);
-    req.write(body);
-    req.end();
-  });
+  return postWithTimeout(
+    endpoint,
+    JSON.stringify(payload),
+    { "content-type": "application/json", ...headers },
+    10_000,
+  );
 }
 
 /** Options for the shared post-run export hook. */
@@ -344,11 +316,20 @@ export interface ExportRunTelemetryOptions {
 
 /**
  * Single shared post-run hook, invoked wherever a run reaches terminal state on
- * the host (`jaiph run` completion, the shared workflow-call layer). Enabled iff
- * an OTLP traces endpoint is configured. Best-effort: any failure produces one
- * stderr warning and nothing else.
+ * the host (`jaiph run` completion, the shared MCP/HTTP workflow-call layer) —
+ * one choke point for every mode. Dispatches the two independent, best-effort
+ * exporters: OTLP traces (every run, when a collector is configured) and a
+ * Sentry error report (failed runs only, when `SENTRY_DSN` is set). Neither is
+ * load-bearing: a failure in either produces exactly one stderr warning and
+ * never affects the run's exit code, output, or journal.
  */
 export async function exportRunTelemetry(opts: ExportRunTelemetryOptions): Promise<void> {
+  await exportOtlpTraces(opts);
+  await reportRunFailureToSentry(opts);
+}
+
+/** OTLP/HTTP trace export half of the post-run hook. Enabled iff a traces endpoint is set. */
+async function exportOtlpTraces(opts: ExportRunTelemetryOptions): Promise<void> {
   const { runDir, workflow, exitStatus, signal, env } = opts;
   const endpoint = resolveOtlpEndpoint(env);
   if (!endpoint) return;

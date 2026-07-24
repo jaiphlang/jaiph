@@ -14,38 +14,6 @@ Process rules:
 
 ***
 
-## Feat: Sentry error reporting on failed runs #dev-ready
-
-**Source:** Observability feedback (2026-07-23): "OTEL + Sentry configurable". This task is the Sentry half: failed workflow runs become Sentry error events so operators get alerting/grouping without scraping run dirs.
-
-**Problem:** A failed run's only trace is its local run dir and a nonzero exit code. Teams running jaiph workflows on schedules or as a service (CI, k8s) need failures pushed to their error tracker with enough context to triage — workflow, failing step, redacted output excerpt, run dir pointer.
-
-**Required behavior:**
-
-* New module `src/cli/telemetry/sentry.ts`, zero runtime dependencies — a Sentry **envelope** POST hand-rolled over `node:https` (create `src/cli/telemetry/http.ts` for the shared timeout-guarded POST helper if `src/cli/telemetry/` already has one, reuse it).
-* Enabled iff `SENTRY_DSN` is set. DSN `https://<key>@<host>/<projectId>` parses to endpoint `https://<host>/api/<projectId>/envelope/` with header `X-Sentry-Auth: Sentry sentry_version=7, sentry_key=<key>, sentry_client=jaiph/<VERSION>`. Malformed DSN → one stderr warning, no send.
-* Fires **only** when a run terminates unsuccessfully (nonzero exit or signal), from the same host-side post-run hook that handles run completion for all modes (`jaiph run` and the shared MCP/HTTP call layer) — one choke point. Successful runs send nothing.
-* Event content (all excerpts sourced from the run's `run_summary.jsonl`, which is already credential-redacted — never from raw `.out`/`.err` captures):
-  * `event_id` = run id UUID, dashes stripped; `timestamp`; `platform: "node"`; `level: "error"`;
-  * `message.formatted` = `workflow <name> failed (exit N)` / `terminated by signal S`;
-  * `tags`: `jaiph.workflow`, `jaiph.source` (basename), failing step kind/name when known;
-  * `extra`: failing step detail excerpt (the `STEP_END` `err_content`/`out_content`), `run_dir`;
-  * `fingerprint`: `["jaiph", <workflow>, <failing step name or "unknown">]` so re-occurrences group per workflow+step;
-  * `release` = `SENTRY_RELEASE` or `jaiph@<VERSION>`; `environment` = `SENTRY_ENVIRONMENT` when set.
-  * Envelope body = header line `{"event_id","sent_at"}` + item header `{"type":"event"}` + event JSON, newline-separated.
-* **Failure semantics: never load-bearing.** Unreachable Sentry, non-2xx, timeout (10 s) → exactly one stderr warning; run exit code and output untouched. No retries.
-* No new `JAIPH_*` variables expected; if any is introduced it gets its `docs/env-vars.md` row (parity lint). `SENTRY_DSN`/`SENTRY_ENVIRONMENT`/`SENTRY_RELEASE` are documented in the env-vars page's non-`JAIPH_*` telemetry section and in `docs/observability.md`.
-
-Acceptance:
-
-* Unit tests: DSN parsing (endpoint + auth header; malformed → warn/no-send), envelope framing (three newline-separated JSON documents, `event_id` matches run id hex), fingerprint and message composition for exit-code vs signal terminations.
-* Integration test with a local fake-Sentry HTTP server: a failing `jaiph run` with `SENTRY_DSN` set delivers exactly one envelope whose event carries the failing step tag and redacted excerpt; a succeeding run delivers nothing; a failing run **without** `SENTRY_DSN` delivers nothing.
-* Failure-isolation test: fake Sentry returns 500 (and separately: connection refused) — the run's exit code is unchanged from the no-DSN baseline and exactly one warning line lands on stderr.
-* Redaction test: a credential value that appears in the failing step's output shows up in the delivered event only as `[REDACTED]`.
-* `package.json` `dependencies` remains absent/empty; `npm test` passes.
-
-***
-
 ## Feat: standalone runtime image — run jaiph in docker/k8s without a host orchestrator #dev-ready
 
 **Source:** Deployability feedback (2026-07-23): "a docker image with codex/cursor/claude code already installed so that the user only needs to put the credentials + the jaiph files and run it … that would allow anyone to run jaiph in docker/kubernetes" — and "it can't depend on a local machine + docker".
