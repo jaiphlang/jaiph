@@ -100,7 +100,7 @@ A workflow with no parameters produces the same shape with an empty `properties`
 On `tools/call`, the server maps the arguments object to positional workflow arguments in declared order and runs the workflow — in a Docker sandbox or on the host, per the same env-driven selection as `jaiph run` (see [Safety posture](#safety-posture)). The result is a text content block:
 
 - **On success**, the text is the workflow's `return` value (persisted as `return_value.txt`); if the workflow returns nothing, it falls back to the workflow's `log` output, then to a `workflow <name> completed` note.
-- **On failure**, the result carries `isError: true` and text describing the failing step, its captured output, and a `run dir: <path>` pointer so the client can inspect the full run.
+- **On failure**, the result carries `isError: true` and text describing the failing step, its captured output, and a `run dir: <path>` pointer so the client can inspect the full run. This failure text is **credential-redacted** (`[REDACTED]`) the same way as the event journal, so a secret echoed by a failing step is never returned to the client. The successful `return` value above is intentional API output and is returned verbatim.
 
 A **workflow failure is not a protocol error** — it comes back as a normal result with `isError: true`. Protocol-level errors (JSON-RPC `-32602`) are reserved for calls that never start: an unknown tool name, a missing or non-string required argument, or an unexpected argument key.
 

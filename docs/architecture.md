@@ -181,7 +181,9 @@ Before `RuntimeEventEmitter` writes an event line to `run_summary.jsonl`, it red
 
 This covers backend API keys such as `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, and `CURSOR_API_KEY` (the same names on the [Docker env allowlist](sandboxing.md)).
 
-Redaction applies **only to the copies embedded in `run_summary.jsonl`**. The per-step raw capture files (`%06d-<name>.out` / `.err`) are streamed to disk verbatim and are not redacted — treat them, and the run directory as a whole, as sensitive.
+The same credential rule lives in one shared helper — **`redactCredentials`** (`src/runtime/kernel/redact.ts`) — which is also the redaction boundary for returned call results: `composeResult` (`src/cli/exec/call.ts`) redacts a failed call's diagnostic capture (failed-step detail, raw stderr/stdout, collected `log` messages) before it becomes `jaiph serve`'s `result_text` or a `jaiph mcp` tool result. A successful workflow's **return value** is intentional API output, not diagnostic capture, and is returned verbatim.
+
+Beyond those two boundaries (journal copies and returned call results), redaction is not applied. The per-step raw capture files (`%06d-<name>.out` / `.err`) are streamed to disk verbatim and are not redacted — treat them, and the run directory as a whole, as sensitive.
 
 ## Channels and hooks in context
 

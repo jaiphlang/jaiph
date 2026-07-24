@@ -17,6 +17,7 @@ import {
 } from "../../runtime/docker";
 import { discoverDockerRunDir, remapContainerPath } from "../shared/errors";
 import { exportRunTelemetry } from "../telemetry/otlp";
+import { redactCredentials } from "../../runtime/kernel/redact";
 
 /**
  * Result of executing one workflow call. `text` is the same content an MCP
@@ -78,7 +79,7 @@ export interface WorkflowCallEnvironment {
 }
 
 /** Output accumulated from a run child's streams while it executes. */
-interface CollectedOutput {
+export interface CollectedOutput {
   logs: string[];
   failedStep?: { name: string; detail: string };
   rawStderr: string;
@@ -152,7 +153,7 @@ async function callWorkflowHost(
   collector.drain();
 
   const meta = readMetaFile(metaFile);
-  return composeResult(workflowSymbol, collector.data, exit, meta.runDir, undefined);
+  return composeResult(workflowSymbol, collector.data, exit, meta.runDir, undefined, runtimeEnv);
 }
 
 /**
@@ -197,7 +198,12 @@ async function callWorkflowDocker(
     const exit = await waitForRunExit(dockerResult.child);
     collector.drain();
     const discovered = discoverDockerRunDir(sandboxRunDir, runId);
-    return composeResult(workflowSymbol, collector.data, exit, discovered.runDir, sandboxRunDir);
+    // Docker keeps `--env` passthrough out of runtimeEnv (it flows through
+    // DockerSpawnOptions.extraEnv), so merge it back in for redaction.
+    return composeResult(workflowSymbol, collector.data, exit, discovered.runDir, sandboxRunDir, {
+      ...runtimeEnv,
+      ...env.extraEnv,
+    });
   });
 }
 
@@ -260,13 +266,24 @@ function attachOutputCollector(
   };
 }
 
-/** Compose the call result text from a finished run's output + run dir. */
-function composeResult(
+/**
+ * Compose the call result text from a finished run's output + run dir.
+ *
+ * Diagnostic capture — failed-step detail, raw stderr/stdout, and collected
+ * `log` messages — is credential-redacted here, the single boundary both
+ * `jaiph serve` (`result_text`, `?wait=true`, `GET /v1/runs/{id}`) and
+ * `jaiph mcp` (tool results) return through. Live `__JAIPH_EVENT__` lines are
+ * not redacted at the source, so this must not rely on the event stream.
+ * A successful workflow's return value is intentional API output, not
+ * diagnostic capture, and is returned verbatim.
+ */
+export function composeResult(
   workflowSymbol: string,
   data: CollectedOutput,
   exit: { status: number; signal: NodeJS.Signals | null },
   runDir: string | undefined,
   sandboxRunDir: string | undefined,
+  env: NodeJS.ProcessEnv,
 ): WorkflowCallResult {
   const failed = exit.status !== 0 || exit.signal !== null;
 
@@ -276,7 +293,7 @@ function composeResult(
       returnValue !== undefined && returnValue.length > 0
         ? returnValue
         : data.logs.length > 0
-          ? data.logs.join("\n")
+          ? redactCredentials(data.logs.join("\n"), env)
           : `workflow ${workflowSymbol} completed`;
     return { text: trimTrailingNewline(text), isError: false, runDir, exitStatus: exit.status, signal: exit.signal };
   }
@@ -297,7 +314,16 @@ function composeResult(
   if (!data.failedStep && !stderrTrimmed && stdoutTrimmed) parts.push(stdoutTrimmed);
   if (data.logs.length > 0) parts.push(`log output:\n${data.logs.join("\n")}`);
   if (runDir) parts.push(`run dir: ${runDir}`);
-  return { text: parts.join("\n\n"), isError: true, runDir, exitStatus: exit.status, signal: exit.signal };
+  // Redact the assembled failure text once so every part — step detail, raw
+  // streams, and logs — passes the same boundary regardless of which branch
+  // contributed it.
+  return {
+    text: redactCredentials(parts.join("\n\n"), env),
+    isError: true,
+    runDir,
+    exitStatus: exit.status,
+    signal: exit.signal,
+  };
 }
 
 function readMetaFile(metaFile: string): { runDir?: string; summaryFile?: string } {
