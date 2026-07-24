@@ -263,4 +263,5 @@ Custom images are supported via `JAIPH_DOCKER_IMAGE` / `runtime.docker_image`; t
 
 - [Architecture — Docker runtime helper](architecture.md#core-components) — the spawn, mount, and event-stream wiring.
 - [Architecture — Channels and hooks in context](architecture.md#channels-and-hooks-in-context) — why hooks run on the host even for containerized runs.
+- [Deploy the runtime image standalone](deploy.md) — running the runtime image directly (`docker run` / Kubernetes) where the container *is* the sandbox and there is no jaiph-managed isolation.
 - [Why Jaiph](why-jaiph.md) — the design context that puts the sandbox into the broader picture.

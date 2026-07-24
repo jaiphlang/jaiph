@@ -25,6 +25,8 @@ import {
   stopDockerRunOnSignal,
   spawnDockerProcess,
   withDockerExitGuard,
+  checkDockerAvailable,
+  _containerIndicator,
   _dockerExec,
   _dockerSpawn,
   _cpSpawn,
@@ -275,6 +277,53 @@ test("checkDockerAvailable: E_DOCKER_NOT_FOUND message mentions JAIPH_UNSAFE", (
     src.includes("JAIPH_UNSAFE=true to run on the host"),
     "E_DOCKER_NOT_FOUND must mention JAIPH_UNSAFE escape hatch",
   );
+});
+
+test("checkDockerAvailable: container indicator present → 'container is the sandbox' guidance", () => {
+  const origExec = _dockerExec.run;
+  const origPresent = _containerIndicator.present;
+  try {
+    // Docker unavailable + a container indicator present (as inside the runtime
+    // image run standalone): the error must steer the user to JAIPH_UNSAFE=true.
+    _dockerExec.run = () => {
+      throw new Error("docker not found");
+    };
+    _containerIndicator.present = () => true;
+    assert.throws(
+      () => checkDockerAvailable(),
+      (err: Error) =>
+        /E_DOCKER_NOT_FOUND/.test(err.message) &&
+        /running inside a container already/.test(err.message) &&
+        /JAIPH_UNSAFE=true/.test(err.message) &&
+        /the container is the sandbox/.test(err.message),
+      "container-detection path must tell the user to set JAIPH_UNSAFE=true",
+    );
+  } finally {
+    _dockerExec.run = origExec;
+    _containerIndicator.present = origPresent;
+  }
+});
+
+test("checkDockerAvailable: no container indicator → existing error unchanged", () => {
+  const origExec = _dockerExec.run;
+  const origPresent = _containerIndicator.present;
+  try {
+    _dockerExec.run = () => {
+      throw new Error("docker not found");
+    };
+    _containerIndicator.present = () => false;
+    assert.throws(
+      () => checkDockerAvailable(),
+      (err: Error) =>
+        /E_DOCKER_NOT_FOUND docker is not available\. Install Docker/.test(err.message) &&
+        /JAIPH_UNSAFE=true to run on the host/.test(err.message) &&
+        !/running inside a container already/.test(err.message),
+      "without a container indicator the original install-Docker error must be unchanged",
+    );
+  } finally {
+    _dockerExec.run = origExec;
+    _containerIndicator.present = origPresent;
+  }
 });
 
 // ---------------------------------------------------------------------------

@@ -1,4 +1,5 @@
 import { createInterface } from "node:readline";
+import { isRunningInContainer } from "./docker";
 
 /** Runtime tree warning emitted at the start of every consented unsafe host-only run. */
 export const UNSAFE_RUN_LOGWARN_MESSAGE =
@@ -104,6 +105,18 @@ export async function confirmUnsafeRun(
   isTTY: boolean,
 ): Promise<boolean> {
   if (isAutoConfirmed(env)) {
+    return true;
+  }
+  // Inside a container the container IS the sandbox: host-only execution is the
+  // correct posture, the "full access to your machine" warning is meaningless
+  // (there is no host to endanger), and an unattended pod has no TTY to confirm.
+  // Proceed with a one-line notice instead of prompting or aborting — mirrors
+  // the win32 host-only override. This is what lets the runtime image, which
+  // bakes JAIPH_UNSAFE=true, run standalone (docker run … jaiph run flow.jh).
+  if (isRunningInContainer()) {
+    process.stderr.write(
+      "jaiph: running host-only inside a container (the container is the sandbox).\n",
+    );
     return true;
   }
   if (!isTTY) {

@@ -1,0 +1,125 @@
+# Standalone Jaiph on Kubernetes — long-lived HTTP runner.
+#
+# This runs the published runtime image directly as a Deployment: the image
+# already contains `jaiph`, the claude/cursor/codex backends, and a full
+# toolchain, and it bakes `JAIPH_UNSAFE=true`, so the pod runs workflows in
+# host mode — the pod boundary IS the sandbox (there is no jaiph-managed Docker
+# sandbox in standalone mode). See docs/deploy.md for the security posture.
+#
+# Validate without a cluster:
+#   kubectl apply --dry-run=client -f docs/deploy/k8s.yaml
+#
+# The workflow file is supplied here via a ConfigMap mounted at /work for a
+# self-contained example; a real deployment usually bakes workflows into a
+# derived image or mounts them from a volume / git-sync sidecar instead.
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: jaiph-credentials
+  labels:
+    app: jaiph-runner
+type: Opaque
+stringData:
+  # HTTP API bearer token. `jaiph serve` refuses to bind a non-loopback host
+  # (0.0.0.0) unless this is set — every /v1/* request then requires
+  # `Authorization: Bearer <token>`. Replace with a real secret (e.g. via a
+  # sealed-secret / external-secrets operator) before applying to a cluster.
+  JAIPH_SERVE_TOKEN: "replace-me-with-a-long-random-token"
+  # Backend credentials — set only the one(s) your workflows use.
+  #   claude  -> ANTHROPIC_API_KEY (or CLAUDE_CODE_OAUTH_TOKEN)
+  #   cursor  -> CURSOR_API_KEY
+  #   codex   -> OPENAI_API_KEY
+  ANTHROPIC_API_KEY: "replace-me"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: jaiph-workflows
+  labels:
+    app: jaiph-runner
+data:
+  tools.jh: |
+    # health — trivial workflow proving the runner is live.
+    export workflow health() {
+      return "ok"
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jaiph-runner
+  labels:
+    app: jaiph-runner
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jaiph-runner
+  template:
+    metadata:
+      labels:
+        app: jaiph-runner
+    spec:
+      containers:
+        - name: jaiph
+          # Pin the image tag (or, better, a @sha256 digest) for reproducible
+          # rollouts — do NOT track a moving tag like :nightly in production.
+          image: ghcr.io/jaiphlang/jaiph-runtime:nightly
+          # The image sets no ENTRYPOINT, so spell the full command.
+          command: ["jaiph", "serve", "--host", "0.0.0.0", "/work/tools.jh"]
+          ports:
+            - name: http
+              containerPort: 5247
+          envFrom:
+            - secretRef:
+                name: jaiph-credentials
+          volumeMounts:
+            - name: workflows
+              mountPath: /work
+          # /healthz stays open (no bearer token required) and is served as soon
+          # as the HTTP listener is up.
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          # Agent workloads are CPU- and memory-hungry (they spawn backend CLIs
+          # plus build/test toolchains). Size generously and tune to your flows.
+          resources:
+            requests:
+              cpu: "1"
+              memory: 2Gi
+            limits:
+              cpu: "2"
+              memory: 4Gi
+      volumes:
+        - name: workflows
+          configMap:
+            name: jaiph-workflows
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jaiph-runner
+  labels:
+    app: jaiph-runner
+spec:
+  selector:
+    app: jaiph-runner
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+  type: ClusterIP
+# TLS: keep the Service ClusterIP and terminate TLS at an Ingress / gateway in
+# front of it (cert-manager, a cloud LB, or a service mesh). `jaiph serve`
+# speaks plain HTTP; do not expose it to the internet without TLS termination
+# and the JAIPH_SERVE_TOKEN bearer check above.
