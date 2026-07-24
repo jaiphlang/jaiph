@@ -2,6 +2,7 @@ import { existsSync, mkdtempSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, extname, join, resolve } from "node:path";
 import { detectWorkspaceRoot } from "../shared/paths";
+import { findRunDir } from "../shared/errors";
 import { hasHelpFlag, parseArgs } from "../shared/usage";
 import { resolveEnvPairs } from "../run/env";
 import { callWorkflow } from "../exec/call";
@@ -31,7 +32,8 @@ const SERVE_USAGE =
   "from the `#` comment lines above each workflow. Sources are re-validated on change.\n\n" +
   "Endpoints: GET /docs (Swagger UI), GET /openapi.json, GET /healthz, GET /v1/workflows,\n" +
   "POST /v1/workflows/{name}/runs (async 202 or ?wait=true for 200), GET /v1/runs,\n" +
-  "GET /v1/runs/{id}, POST /v1/runs/{id}/cancel.\n\n" +
+  "GET /v1/runs/{id}, GET /v1/runs/{id}/events (NDJSON, or SSE with Accept: text/event-stream),\n" +
+  "GET /v1/runs/{id}/artifacts, GET /v1/runs/{id}/artifacts/{path}, POST /v1/runs/{id}/cancel.\n\n" +
   "Auth: set JAIPH_SERVE_TOKEN to require `Authorization: Bearer <token>` on every\n" +
   "/v1/* request (/healthz, /openapi.json, /docs stay open). Binding a non-loopback\n" +
   "host without the token set is a startup error. Cap concurrent runs with\n" +
@@ -145,9 +147,11 @@ export async function runServe(rest: string[]): Promise<number> {
   }
 
   let dockerConfig: ReturnType<typeof resolveStartupPosture>["dockerConfig"];
+  let hostRunsRoot: string;
   try {
     const posture = resolveStartupPosture(current.state, inputAbs, workspaceRoot, log);
     dockerConfig = posture.dockerConfig;
+    hostRunsRoot = posture.hostRunsRoot;
     if (dockerConfig.enabled) {
       if (posture.sandboxMode === "inplace") {
         log(
@@ -183,6 +187,10 @@ export async function runServe(rest: string[]): Promise<number> {
     token,
     maxConcurrent,
     now: () => new Date().toISOString(),
+    // A run's dir is only recorded on its object at finalize; while it runs the
+    // events/artifacts endpoints locate it by scanning the host runs root for
+    // the run id (works host- and Docker-side — the run dir is a host mount).
+    resolveRunDir: (record) => record.run_dir ?? findRunDir(hostRunsRoot, record.run_id),
     getTools: () => current.state.tools,
     callTool: (spec, args, runId, ctx) => {
       // Bind the run to the generation live at start; keep its scripts dir alive

@@ -50,11 +50,42 @@ curl -s -X POST 'http://127.0.0.1:5247/v1/workflows/greet/runs?wait=true' \
 
 The run object is `{run_id, workflow, status, started_at, ended_at, exit_status, signal, result_text, run_dir}`. `result_text` is the same content an MCP client sees — the workflow's `return` value, or its failure narrative. **A workflow failure is not an HTTP error:** a failed run comes back `200`/`202` with `status: "failed"` and a `run dir:` pointer in `result_text`. Poll `GET /v1/runs/{id}` for an async run, list them with `GET /v1/runs` (newest first), and stop one with `POST /v1/runs/{id}/cancel`.
 
-## 4. Use the Swagger UI
+## 4. Watch a run as it executes
+
+`GET /v1/runs/{id}/events` streams the run's durable event journal (`run_summary.jsonl`) — the same timeline the CLI progress tree is built from. Two modes:
+
+```bash
+# Snapshot (default): the whole journal as newline-delimited JSON, then close.
+curl -s http://127.0.0.1:5247/v1/runs/$ID/events
+
+# Live: Server-Sent Events — replays the journal so far, then follows it as the
+# run appends, and closes with an `event: end` when the run is terminal.
+curl -sN -H 'accept: text/event-stream' http://127.0.0.1:5247/v1/runs/$ID/events
+```
+
+Each SSE message is a `data:` line carrying one raw journal line (`WORKFLOW_START`, `STEP_START`/`STEP_END`, `LOG*`, `PROMPT_*`, `WORKFLOW_END`); a `:ka` comment every 15 s keeps proxies from idling the connection out. Connect while the run is still going to watch step-by-step, or after it finishes for a full replay plus an immediate `event: end`. (Add `-H 'authorization: Bearer <token>'` when a token is set — `curl -N` disables buffering so events surface as they arrive.)
+
+> **Security:** the journal is served **verbatim** — the credential redaction `jaiph` applies when writing it (values of `*_API_KEY` / `*_TOKEN` / `*_SECRET` env vars become `[REDACTED]`) is the redaction guarantee. The raw per-step capture files (`NNNNNN-*.out` / `.err`) are **never** exposed by any endpoint; only the redacted journal and files a workflow explicitly publishes are reachable over HTTP.
+
+## 5. Download a run's artifacts
+
+Files a workflow publishes to `$JAIPH_ARTIFACTS_DIR` (see [artifacts](/how-to/artifacts)) are listable and downloadable:
+
+```bash
+# List published files: [{path, size, mtime}, ...] (empty when the run made none).
+curl -s http://127.0.0.1:5247/v1/runs/$ID/artifacts | jq
+
+# Download one by its relative path (application/octet-stream).
+curl -s http://127.0.0.1:5247/v1/runs/$ID/artifacts/report.txt -o report.txt
+```
+
+The download path is resolved strictly inside the run's `artifacts/` directory and is traversal-proof: `..` segments, absolute paths, and symlinks pointing outside the directory all return `404` without touching the target file.
+
+## 6. Use the Swagger UI
 
 Open `http://127.0.0.1:5247/docs` in a browser to get a live form for every workflow. When a token is configured, paste it into the **Authorize** box (Swagger UI keeps it across reloads). The UI loads its assets from a pinned, SRI-verified CDN, so `/docs` needs internet access in the browser; air-gapped operators use `/openapi.json` with any locally-hosted renderer.
 
-## 5. Require a token and expose the port
+## 7. Require a token and expose the port
 
 The token comes from the environment (never argv, which leaks into process listings). With it set, every `/v1/*` request must carry `Authorization: Bearer <token>`; `/healthz`, `/openapi.json`, and `/docs` stay open.
 

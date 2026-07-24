@@ -1,6 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { ServeHandler, type ServeRequest, type ServeResponse } from "./handler";
+import type { StreamTarget } from "./runfiles";
 import type { McpToolSpec } from "../mcp/tools";
 import type { WorkflowCallResult, WorkflowCallContext } from "../exec/call";
 
@@ -289,4 +293,120 @@ test("cancel on an unknown run is 404; cancel on a terminal run is 409", async (
   const again = await h.handleRequest(req("POST", `/v1/runs/${start.run_id}/cancel`));
   assert.equal(again.status, 409);
   assert.equal(bodyJson(again).error.code, "E_RUN_TERMINAL");
+});
+
+// === events + artifacts ===
+
+/** Run `ping` to completion with its `run_dir` pointed at a real temp dir. */
+async function runWithDir(runDir: string): Promise<{ h: ServeHandler; runId: string }> {
+  const h = makeHandler({
+    tools: [NOARG_TOOL],
+    callTool: async () => ({ text: "ok", isError: false, exitStatus: 0, runDir }),
+  });
+  const started = bodyJson(await h.handleRequest(req("POST", "/v1/workflows/ping/runs?wait=true")));
+  return { h, runId: started.run_id };
+}
+
+function fakeTarget(): StreamTarget & { chunks: string[] } {
+  const chunks: string[] = [];
+  return {
+    chunks,
+    write: (c: string) => void chunks.push(c),
+    aborted: false,
+    onAbort: () => {},
+  };
+}
+
+test("events + artifacts on an unknown run id are 404", async () => {
+  const h = makeHandler();
+  for (const path of ["/v1/runs/nope/events", "/v1/runs/nope/artifacts", "/v1/runs/nope/artifacts/x.txt"]) {
+    const res = await h.handleRequest(req("GET", path));
+    assert.equal(res.status, 404, `${path} → 404`);
+    assert.equal(bodyJson(res).error.code, "E_NOT_FOUND");
+  }
+});
+
+test("events + artifacts require the bearer token when one is configured", async () => {
+  const h = makeHandler({ token: "secret" });
+  for (const path of ["/v1/runs/x/events", "/v1/runs/x/artifacts", "/v1/runs/x/artifacts/f"]) {
+    assert.equal((await h.handleRequest(req("GET", path))).status, 401, `${path} → 401`);
+  }
+});
+
+test("NDJSON events on a terminal run byte-match the run_summary.jsonl file", async () => {
+  const runDir = mkdtempSync(join(tmpdir(), "jaiph-h-ndjson-"));
+  try {
+    const journal = '{"type":"WORKFLOW_START","run_id":"r"}\n{"type":"WORKFLOW_END","run_id":"r"}\n';
+    writeFileSync(join(runDir, "run_summary.jsonl"), journal);
+    const { h, runId } = await runWithDir(runDir);
+    const res = await h.handleRequest(req("GET", `/v1/runs/${runId}/events`));
+    assert.equal(res.status, 200);
+    assert.equal(res.headers["content-type"], "application/x-ndjson");
+    assert.ok(res.bodyBuffer, "NDJSON is served as a binary body");
+    assert.deepEqual(res.bodyBuffer, readFileSync(join(runDir, "run_summary.jsonl")), "byte-identical to the journal");
+  } finally {
+    rmSync(runDir, { recursive: true, force: true });
+  }
+});
+
+test("SSE events on a terminal run replay the journal then close with event: end", async () => {
+  const runDir = mkdtempSync(join(tmpdir(), "jaiph-h-sse-"));
+  try {
+    const lines = ['{"type":"WORKFLOW_START","run_id":"r"}', '{"type":"WORKFLOW_END","run_id":"r"}'];
+    writeFileSync(join(runDir, "run_summary.jsonl"), lines.map((l) => `${l}\n`).join(""));
+    const { h, runId } = await runWithDir(runDir);
+    const res = await h.handleRequest(req("GET", `/v1/runs/${runId}/events`, { headers: { accept: "text/event-stream" } }));
+    assert.equal(res.status, 200);
+    assert.equal(res.headers["content-type"], "text/event-stream");
+    assert.ok(res.stream, "SSE is served as a stream");
+    const target = fakeTarget();
+    await res.stream!(target);
+    const dataPayloads = target.chunks.filter((c) => c.startsWith("data: ")).map((c) => c.slice(6).replace(/\n\n$/, ""));
+    assert.deepEqual(dataPayloads, lines);
+    assert.equal(target.chunks[target.chunks.length - 1], "event: end\ndata: {}\n\n");
+  } finally {
+    rmSync(runDir, { recursive: true, force: true });
+  }
+});
+
+test("artifacts round-trip through the handler: list then byte-identical download", async () => {
+  const runDir = mkdtempSync(join(tmpdir(), "jaiph-h-art-"));
+  try {
+    mkdirSync(join(runDir, "artifacts"), { recursive: true });
+    const payload = Buffer.from("artifact bytes\n binary", "utf8");
+    writeFileSync(join(runDir, "artifacts", "out.bin"), payload);
+    writeFileSync(join(runDir, "run_summary.jsonl"), "");
+    const { h, runId } = await runWithDir(runDir);
+
+    const list = await h.handleRequest(req("GET", `/v1/runs/${runId}/artifacts`));
+    assert.equal(list.status, 200);
+    assert.deepEqual(
+      bodyJson(list).artifacts.map((a: any) => a.path),
+      ["out.bin"],
+    );
+
+    const dl = await h.handleRequest(req("GET", `/v1/runs/${runId}/artifacts/out.bin`));
+    assert.equal(dl.status, 200);
+    assert.equal(dl.headers["content-type"], "application/octet-stream");
+    assert.match(dl.headers["content-disposition"], /filename="out\.bin"/);
+    assert.deepEqual(dl.bodyBuffer, payload, "downloaded bytes match the published file");
+
+    // Traversal to a run-dir file (not under artifacts/) is a 404.
+    const escape = await h.handleRequest(req("GET", `/v1/runs/${runId}/artifacts/${encodeURIComponent("../run_summary.jsonl")}`));
+    assert.equal(escape.status, 404);
+  } finally {
+    rmSync(runDir, { recursive: true, force: true });
+  }
+});
+
+test("artifacts list is empty for a run with no published files", async () => {
+  const runDir = mkdtempSync(join(tmpdir(), "jaiph-h-empty-"));
+  try {
+    writeFileSync(join(runDir, "run_summary.jsonl"), "");
+    const { h, runId } = await runWithDir(runDir);
+    const list = await h.handleRequest(req("GET", `/v1/runs/${runId}/artifacts`));
+    assert.deepEqual(bodyJson(list).artifacts, []);
+  } finally {
+    rmSync(runDir, { recursive: true, force: true });
+  }
 });

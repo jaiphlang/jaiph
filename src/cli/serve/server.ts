@@ -1,6 +1,7 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { MAX_BODY_BYTES, type ServeHandler, type ServeRequest } from "./handler";
+import type { StreamTarget } from "./runfiles";
 
 /**
  * Wire a `node:http` server to a `ServeHandler`. This is the only place that
@@ -26,7 +27,16 @@ export function createHttpServer(handler: ServeHandler, log: (line: string) => v
       })
       .then((response) => {
         res.writeHead(response.status, response.headers);
-        res.end(response.body);
+        if (response.stream) {
+          // Long-lived streaming response (SSE follow): drive it over a target
+          // wired to this socket, then end when it resolves.
+          const target = makeStreamTarget(req, res);
+          return response.stream(target).then(() => {
+            res.end();
+          });
+        }
+        res.end(response.bodyBuffer ?? response.body);
+        return undefined;
       })
       .catch((err) => {
         log(`jaiph serve: request handling failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -36,6 +46,36 @@ export function createHttpServer(handler: ServeHandler, log: (line: string) => v
         res.end(JSON.stringify({ error: { code: "E_INTERNAL", message: "internal error" } }));
       });
   });
+}
+
+/**
+ * Wire a `StreamTarget` to a live socket: writes go straight to the response,
+ * and the client disconnecting (`req` close) flips `aborted` and fires the
+ * registered callbacks so a follow loop stops promptly instead of writing to a
+ * dead socket.
+ */
+function makeStreamTarget(req: IncomingMessage, res: ServerResponse): StreamTarget {
+  let aborted = false;
+  const onAbortCbs: Array<() => void> = [];
+  const abort = (): void => {
+    if (aborted) return;
+    aborted = true;
+    for (const cb of onAbortCbs) cb();
+  };
+  req.on("close", abort);
+  res.on("close", abort);
+  return {
+    write(chunk: string): void {
+      if (!aborted && res.writable) res.write(chunk);
+    },
+    get aborted(): boolean {
+      return aborted;
+    },
+    onAbort(cb: () => void): void {
+      if (aborted) cb();
+      else onAbortCbs.push(cb);
+    },
+  };
 }
 
 /** Read the request body as a string, flagging (and truncating) once it passes the cap. */

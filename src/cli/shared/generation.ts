@@ -9,6 +9,7 @@ import {
   checkDockerAvailable,
   prepareImage,
   selectMcpSandboxMode,
+  resolveDockerHostRunsRoot,
   type DockerRunConfig,
   type SandboxMode,
 } from "../../runtime/docker";
@@ -88,7 +89,7 @@ export function resolveStartupPosture(
   inputAbs: string,
   workspaceRoot: string,
   log: (line: string) => void,
-): { dockerConfig: DockerRunConfig; sandboxMode: SandboxMode } {
+): { dockerConfig: DockerRunConfig; sandboxMode: SandboxMode; hostRunsRoot: string } {
   const mod = state.graph.modules.get(inputAbs)!.ast;
   const startupEnv = resolveRuntimeEnv(state.callEnv.effectiveConfig, workspaceRoot, inputAbs);
   const dockerConfig = resolveDockerConfig(resolveModuleMetadata(mod, process.env)?.runtime, startupEnv);
@@ -107,7 +108,22 @@ export function resolveStartupPosture(
     dockerEnabled: dockerConfig.enabled,
   });
   for (const w of [...credPreflight.warnings, ...credPreflight.errors]) log(w);
-  return { dockerConfig, sandboxMode };
+  // Host-visible runs root (same formula the runtime uses to place a run dir).
+  // Docker keeps it within the workspace so the bind mount can expose it; host
+  // mode allows an out-of-workspace absolute `JAIPH_RUNS_DIR`.
+  const hostRunsRoot = dockerConfig.enabled
+    ? resolveDockerHostRunsRoot(workspaceRoot, startupEnv)
+    : resolveHostRunsRoot(workspaceRoot, startupEnv);
+  return { dockerConfig, sandboxMode, hostRunsRoot };
+}
+
+/** Host runs root: absolute `JAIPH_RUNS_DIR` as-is, relative under the workspace, else `.jaiph/runs`. */
+function resolveHostRunsRoot(workspaceRoot: string, env: Record<string, string | undefined>): string {
+  const configured = env.JAIPH_RUNS_DIR;
+  if (configured && configured.length > 0) {
+    return configured.startsWith("/") ? configured : join(workspaceRoot, configured);
+  }
+  return join(workspaceRoot, ".jaiph", "runs");
 }
 
 /**
