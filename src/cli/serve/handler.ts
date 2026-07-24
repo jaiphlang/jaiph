@@ -16,6 +16,11 @@ import {
 /** 1 MiB cap on request bodies (design doc). */
 export const MAX_BODY_BYTES = 1024 * 1024;
 
+/** Default page size for `GET /v1/runs` when the caller gives no `limit`. */
+export const DEFAULT_RUNS_PAGE = 100;
+/** Hard maximum page size for `GET /v1/runs` — a `limit` above this is clamped. */
+export const MAX_RUNS_PAGE = 1000;
+
 export type RunStatus = "running" | "succeeded" | "failed" | "cancelled";
 
 /** In-memory record for one run: the public run object plus cancel bookkeeping. */
@@ -83,6 +88,20 @@ export interface ServeHandlerOptions {
   token?: string;
   /** Cap on simultaneously-running workflows (429 beyond it). */
   maxConcurrent: number;
+  /**
+   * Max completed (terminal) runs kept in the in-memory registry. When the
+   * terminal count exceeds this, the oldest terminal records are evicted first.
+   * Active (`running`) runs are never evicted. `0` disables count eviction.
+   * Eviction only drops the in-memory record; the durable `run_summary.jsonl`
+   * and `artifacts/` on disk are untouched (their retention is the operator's).
+   */
+  retainRuns?: number;
+  /**
+   * Max age in seconds of a completed run's `ended_at` before it is evicted
+   * from the in-memory registry. `0` disables age eviction. Same disk caveat
+   * as {@link retainRuns}.
+   */
+  retainAgeSec?: number;
   /** Current-time source (ISO string), injectable for tests. */
   now: () => string;
   /** Run-id source, injectable for tests. Defaults to `randomUUID`. */
@@ -194,10 +213,7 @@ export class ServeHandler {
 
     if (path === "/v1/runs") {
       if (method !== "GET") return this.methodNotAllowed();
-      const runs = [...this.runs.values()]
-        .sort((a, b) => b.order - a.order)
-        .map((r) => this.toRunObject(r));
-      return this.json(200, { runs });
+      return this.listRuns(req);
     }
 
     const events = /^\/v1\/runs\/([^/]+)\/events$/.exec(path);
@@ -320,6 +336,47 @@ export class ServeHandler {
     };
   }
 
+  /**
+   * `GET /v1/runs`: newest-first page of runs. `limit` defaults to
+   * {@link DEFAULT_RUNS_PAGE} and is clamped to `[1, MAX_RUNS_PAGE]`; `offset`
+   * defaults to 0 (clamped to `>= 0`). The response can never be unbounded —
+   * at most `MAX_RUNS_PAGE` records regardless of the query. Order is stable:
+   * the monotonic `order` field is unique and never reused, so paging is
+   * deterministic across requests as long as no new run is inserted between
+   * them. `total` is the full registry size so a client can page through it.
+   */
+  private listRuns(req: ServeRequest): ServeResponse {
+    const limit = clampInt(req.query.get("limit"), DEFAULT_RUNS_PAGE, 1, MAX_RUNS_PAGE);
+    const offset = clampInt(req.query.get("offset"), 0, 0, Number.MAX_SAFE_INTEGER);
+    const sorted = [...this.runs.values()].sort((a, b) => b.order - a.order);
+    const runs = sorted.slice(offset, offset + limit).map((r) => this.toRunObject(r));
+    return this.json(200, { runs, total: sorted.length, limit, offset });
+  }
+
+  /**
+   * Drop terminal records past the retention limits so the registry cannot grow
+   * without bound over a long-lived server. Active runs are never touched, and
+   * only the in-memory record is removed — the durable journal and artifacts on
+   * disk are the operator's to prune. Called after every run finalizes.
+   */
+  private evictCompleted(): void {
+    const ageSec = this.opts.retainAgeSec ?? 0;
+    if (ageSec > 0) {
+      const cutoff = Date.parse(this.opts.now()) - ageSec * 1000;
+      for (const r of this.runs.values()) {
+        if (!isTerminal(r.status) || !r.ended_at) continue;
+        const ended = Date.parse(r.ended_at);
+        if (Number.isFinite(ended) && ended < cutoff) this.runs.delete(r.run_id);
+      }
+    }
+    const max = this.opts.retainRuns ?? 0;
+    if (max > 0) {
+      // Oldest terminal records first (ascending `order`); keep the newest `max`.
+      const terminal = [...this.runs.values()].filter((r) => isTerminal(r.status)).sort((a, b) => a.order - b.order);
+      for (let i = 0; i < terminal.length - max; i += 1) this.runs.delete(terminal[i].run_id);
+    }
+  }
+
   private cancelRun(id: string): ServeResponse {
     const record = this.runs.get(id);
     if (!record) return this.error(404, "E_NOT_FOUND", "unknown run id");
@@ -424,12 +481,14 @@ export class ServeHandler {
     record.result_text = result.text;
     record.run_dir = result.runDir ?? null;
     record.status = record.cancelled ? "cancelled" : result.isError ? "failed" : "succeeded";
+    this.evictCompleted();
   }
 
   private finalizeError(record: RunRecord, err: unknown): void {
     record.ended_at = this.opts.now();
     record.result_text = err instanceof Error ? err.message : String(err);
     record.status = record.cancelled ? "cancelled" : "failed";
+    this.evictCompleted();
   }
 
   private authorized(req: ServeRequest): boolean {
@@ -473,4 +532,18 @@ export class ServeHandler {
 
 function isJsonContentType(contentType: string | undefined): boolean {
   return typeof contentType === "string" && contentType.split(";")[0].trim().toLowerCase() === "application/json";
+}
+
+/**
+ * Parse a query param as an integer, clamped to `[min, max]`. A missing or
+ * malformed value falls back to `fallback` (itself already within range), so a
+ * hostile `?limit=` can never widen the page beyond `max`.
+ */
+function clampInt(raw: string | null, fallback: number, min: number, max: number): number {
+  if (raw === null || raw.trim() === "") return fallback;
+  const n = Number(raw);
+  if (!Number.isInteger(n)) return fallback;
+  if (n < min) return min;
+  if (n > max) return max;
+  return n;
 }

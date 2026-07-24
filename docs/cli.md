@@ -376,7 +376,7 @@ Startup mirrors `jaiph mcp`: graph load + `collectDiagnostics` (diagnostics to s
 | `GET /docs` | none | Swagger UI shell (loads `swagger-ui-dist` from a pinned, SRI-verified CDN). |
 | `GET /v1/workflows` | bearer | `{workflows: [{name, description, params}]}`. |
 | `POST /v1/workflows/{name}/runs` | bearer | Start a run. Default `202` + `Location: /v1/runs/{id}`; `?wait=true` blocks for the terminal `200`. |
-| `GET /v1/runs` | bearer | Runs started by this process (in-memory), newest first. |
+| `GET /v1/runs` | bearer | Runs started by this process (in-memory), newest first. Paginated: `?limit` (default `100`, clamped to `1000`), `?offset` (default `0`). Response is `{runs, total, limit, offset}` and never unbounded. |
 | `GET /v1/runs/{id}` | bearer | The run object. `404` unknown. |
 | `GET /v1/runs/{id}/events` | bearer | The run's `run_summary.jsonl`. Default `application/x-ndjson` snapshot; `Accept: text/event-stream` replays then follows it live, closing with `event: end` when terminal. Served verbatim (already credential-redacted); raw capture files are never exposed. `404` unknown. |
 | `GET /v1/runs/{id}/artifacts` | bearer | `{artifacts: [{path, size, mtime}]}` for files published under the run's `artifacts/` (empty when none). `404` unknown. |
@@ -389,6 +389,7 @@ The run object is `{run_id, workflow, status, started_at, ended_at, exit_status,
 
 - `JAIPH_SERVE_TOKEN` (env only) enables a bearer token required on every `/v1/*` request, compared in constant time. `/healthz`, `/openapi.json`, and `/docs` stay unauthenticated (schema metadata only). On loopback the token is optional; binding a non-loopback `--host` without it is a startup error.
 - `JAIPH_SERVE_MAX_CONCURRENT` (default `4`) caps simultaneous runs; requests beyond it get `429`.
+- Memory bounds keep a long-lived server from growing without limit: `JAIPH_SERVE_MAX_OUTPUT_BYTES` (default 1 MiB) caps collected stdout, stderr, log output, and the resident `result_text` per run (overflow dropped with a truncation marker); `JAIPH_SERVE_RETAIN_RUNS` (default `500`) and `JAIPH_SERVE_RETAIN_AGE_SEC` (default `86400`, `0` disables) bound how many completed runs stay in the in-memory registry, evicting the oldest terminal records first. **Active runs are never evicted**, and eviction drops only the in-memory record — durable `.jaiph/runs` journals and artifacts persist on disk and are the operator's to prune. See [Serve workflows over HTTP](serve.md#8-bound-memory-over-a-long-lived-server).
 - Execution and hot reload are identical to `jaiph mcp`; a superseded generation's scripts dir survives until its in-flight HTTP runs finish.
 
 ## Environment variables

@@ -41,6 +41,9 @@ function makeHandler(overrides?: {
   tools?: McpToolSpec[];
   token?: string;
   maxConcurrent?: number;
+  retainRuns?: number;
+  retainAgeSec?: number;
+  now?: () => string;
 }): ServeHandler {
   let n = 0;
   return new ServeHandler({
@@ -50,7 +53,9 @@ function makeHandler(overrides?: {
     callTool: overrides?.callTool ?? (async () => ({ text: "done", isError: false, exitStatus: 0 })),
     token: overrides?.token,
     maxConcurrent: overrides?.maxConcurrent ?? 4,
-    now: () => "2026-07-24T00:00:00.000Z",
+    retainRuns: overrides?.retainRuns,
+    retainAgeSec: overrides?.retainAgeSec,
+    now: overrides?.now ?? (() => "2026-07-24T00:00:00.000Z"),
     newRunId: () => `run-${n++}`,
   });
 }
@@ -248,6 +253,91 @@ test("GET /v1/runs/{id} for an unknown id is 404, and lists newest first", async
   // newest first: run-1 then run-0
   assert.equal(list.runs[0].run_id, "run-1");
   assert.equal(list.runs[1].run_id, "run-0");
+});
+
+// === run retention (bounded in-memory registry) ===
+
+test("count retention evicts only the oldest terminal records, keeping the newest", async () => {
+  const h = makeHandler({ tools: [NOARG_TOOL], retainRuns: 2, callTool: async () => ({ text: "ok", isError: false, exitStatus: 0 }) });
+  for (let i = 0; i < 5; i += 1) {
+    await h.handleRequest(req("POST", "/v1/workflows/ping/runs?wait=true"));
+  }
+  // 5 completed, retain 2 → only run-3 and run-4 (newest) survive.
+  const ids = [...h.runs.keys()].sort();
+  assert.deepEqual(ids, ["run-3", "run-4"]);
+  const notFound = await h.handleRequest(req("GET", "/v1/runs/run-0"));
+  assert.equal(notFound.status, 404, "evicted run is gone from the registry");
+});
+
+test("retention never evicts an active run even when the terminal budget is exceeded", async () => {
+  let releaseActive!: (r: WorkflowCallResult) => void;
+  let calls = 0;
+  const h = makeHandler({
+    tools: [NOARG_TOOL],
+    retainRuns: 1,
+    callTool: () => {
+      calls += 1;
+      // The first call stays in-flight; later calls resolve immediately.
+      if (calls === 1) return new Promise<WorkflowCallResult>((r) => (releaseActive = r));
+      return Promise.resolve({ text: "ok", isError: false, exitStatus: 0 });
+    },
+  });
+  const active = bodyJson(await h.handleRequest(req("POST", "/v1/workflows/ping/runs")));
+  assert.equal(active.status, "running");
+  // Complete three more runs; with retainRuns=1 they churn, but the active run
+  // must never be evicted.
+  for (let i = 0; i < 3; i += 1) {
+    await h.handleRequest(req("POST", "/v1/workflows/ping/runs?wait=true"));
+  }
+  assert.ok(h.runs.has(active.run_id), "the running run survives eviction");
+  releaseActive({ text: "ok", isError: false, exitStatus: 0 });
+  await flush();
+});
+
+test("age retention evicts a completed run once it is older than the window", async () => {
+  let clock = "2026-07-24T00:00:00.000Z";
+  const h = makeHandler({
+    tools: [NOARG_TOOL],
+    retainAgeSec: 60,
+    now: () => clock,
+    callTool: async () => ({ text: "ok", isError: false, exitStatus: 0 }),
+  });
+  // First run ends at T0.
+  const first = bodyJson(await h.handleRequest(req("POST", "/v1/workflows/ping/runs?wait=true")));
+  assert.ok(h.runs.has(first.run_id));
+  // Advance the clock 2 minutes; a new completion triggers age eviction of the
+  // now-stale first run (ended > 60s ago).
+  clock = "2026-07-24T00:02:00.000Z";
+  await h.handleRequest(req("POST", "/v1/workflows/ping/runs?wait=true"));
+  assert.ok(!h.runs.has(first.run_id), "the stale completed run was evicted");
+});
+
+// === /v1/runs pagination (bounded listing) ===
+
+test("GET /v1/runs paginates: bounded default, stable newest-first order, total count", async () => {
+  const h = makeHandler({ tools: [NOARG_TOOL], callTool: async () => ({ text: "ok", isError: false, exitStatus: 0 }) });
+  for (let i = 0; i < 5; i += 1) {
+    await h.handleRequest(req("POST", "/v1/workflows/ping/runs?wait=true"));
+  }
+  const page = bodyJson(await h.handleRequest(req("GET", "/v1/runs?limit=2")));
+  assert.equal(page.total, 5, "total reflects the full registry");
+  assert.equal(page.limit, 2);
+  assert.equal(page.offset, 0);
+  assert.deepEqual(page.runs.map((r: any) => r.run_id), ["run-4", "run-3"], "newest first");
+
+  const next = bodyJson(await h.handleRequest(req("GET", "/v1/runs?limit=2&offset=2")));
+  assert.deepEqual(next.runs.map((r: any) => r.run_id), ["run-2", "run-1"], "stable next page");
+});
+
+test("GET /v1/runs clamps limit to the maximum and cannot return an unbounded response", async () => {
+  const h = makeHandler({ tools: [NOARG_TOOL], callTool: async () => ({ text: "ok", isError: false, exitStatus: 0 }) });
+  await h.handleRequest(req("POST", "/v1/workflows/ping/runs?wait=true"));
+  const page = bodyJson(await h.handleRequest(req("GET", "/v1/runs?limit=999999")));
+  assert.equal(page.limit, 1000, "limit clamped to MAX_RUNS_PAGE");
+
+  // A malformed limit falls back to the bounded default rather than being unbounded.
+  const bad = bodyJson(await h.handleRequest(req("GET", "/v1/runs?limit=abc")));
+  assert.equal(bad.limit, 100);
 });
 
 // === cancellation ===
