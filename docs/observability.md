@@ -97,7 +97,52 @@ Only OTLP/HTTP with a JSON payload is spoken. If `OTEL_EXPORTER_OTLP_PROTOCOL` i
 set to anything other than `http/json` (for example `grpc`), Jaiph warns and skips
 the export rather than mis-speak a protocol.
 
+## Report failed runs to Sentry
+
+Traces cover every run; **Sentry** covers the runs you get paged about. When a run
+terminates *unsuccessfully* (nonzero exit or a signal), Jaiph posts one Sentry
+**error event** so operators get alerting and grouping without scraping run
+directories. Successful runs send nothing.
+
+Reporting is off until you set a Sentry **DSN** — there are, again, **no `JAIPH_*`
+variables** for this feature:
+
+```bash
+export SENTRY_DSN="https://<key>@<host>/<projectId>"
+export SENTRY_ENVIRONMENT="prod"   # optional — sets the event's environment
+export SENTRY_RELEASE="jaiph@1.2.3" # optional — defaults to jaiph@<version>
+
+jaiph run ./deploy.jh
+```
+
+The same host-side, end-of-run choke point that exports traces fires the report —
+so `jaiph run` completions and workflows invoked through `jaiph mcp` / `jaiph serve`
+are all covered. A malformed DSN produces exactly one stderr warning and no send.
+
+### What the event carries
+
+Everything is sourced from the run's `run_summary.jsonl` (already
+credential-redacted), never from the raw `.out` / `.err` captures:
+
+- **`event_id`** — the run's UUID with dashes stripped, so a re-report of the same
+  run keeps the same id.
+- **`message`** — `workflow <name> failed (exit N)`, or `terminated by signal S`.
+- **`level`** `error`, **`platform`** `node`.
+- **`tags`** — `jaiph.workflow`, `jaiph.source` (the source file basename), and the
+  failing step's `jaiph.step.kind` / `jaiph.step.name` when known.
+- **`extra`** — `failing_step_detail` (the failing step's redacted `err`/`out`
+  excerpt) and `run_dir` (a pointer to the run directory for triage).
+- **`fingerprint`** — `["jaiph", <workflow>, <failing step name or "unknown">]`, so
+  re-occurrences group per workflow + failing step.
+- **`release`** / **`environment`** — from `SENTRY_RELEASE` / `SENTRY_ENVIRONMENT`.
+
+### Failure is never load-bearing
+
+Like trace export, a Sentry report never affects a run. An unreachable or erroring
+Sentry, a malformed DSN, or a timeout (10 s) produces **exactly one** stderr warning
+line; the run's exit code, output, and journal are untouched. There are no retries.
+
 ## Related
 
-- [Environment variables — Telemetry variables](env-vars.md#telemetry-variables) — the full list of consumed `OTEL_*` names.
-- [Architecture — Durable artifact layout](architecture.md#durable-artifact-layout) — the `run_summary.jsonl` timeline the export reads.
+- [Environment variables — Telemetry variables](env-vars.md#telemetry-variables) — the full list of consumed `OTEL_*` / `SENTRY_*` names.
+- [Architecture — Durable artifact layout](architecture.md#durable-artifact-layout) — the `run_summary.jsonl` timeline both exporters read.

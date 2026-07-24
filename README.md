@@ -29,6 +29,7 @@
 - **MCP server** — `jaiph mcp ./tools.jh` serves a file's workflows as [MCP](https://modelcontextprotocol.io/) tools over stdio, so any MCP client (Claude Code, Cursor) can call tested Jaiph workflows as tools ([Serve workflows as MCP tools](docs/mcp.md)).
 - **HTTP API** — `jaiph serve ./tools.jh` serves the same workflows over HTTP with a generated OpenAPI 3.1 document and a browser Swagger UI at `/docs`, so any HTTP client (CI, Kubernetes, another service) can invoke them and inspect runs ([Serve workflows over HTTP](docs/serve.md)).
 - **OpenTelemetry** — set the standard `OTEL_EXPORTER_OTLP_ENDPOINT` and each run exports one span tree (workflow → steps → prompts) to any OTLP collector — Grafana Tempo, Honeycomb, Datadog. Host-side, end-of-run, credential-redacted, zero new dependencies, never load-bearing ([Export traces to an OTLP collector](docs/observability.md)).
+- **Sentry error reporting** — set the standard `SENTRY_DSN` and every failed run (nonzero exit or a signal) is pushed to Sentry as one error event — workflow, failing step, a redacted output excerpt, and a run-dir pointer — so operators get alerting and grouping without scraping run dirs. Host-side, redacted, zero new dependencies, never load-bearing; successful runs send nothing ([Report failed runs to Sentry](docs/observability.md#report-failed-runs-to-sentry)).
 
 ## Core components
 

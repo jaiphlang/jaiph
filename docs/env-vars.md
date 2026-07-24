@@ -135,6 +135,19 @@ source-parity harness above. Export is enabled iff a traces endpoint is set. See
 | `OTEL_SERVICE_NAME` | string | `jaiph` | `service.name` resource attribute on every exported span. |
 | `OTEL_RESOURCE_ATTRIBUTES` | string (`k=v,k=v`) | — | Extra resource attributes. Jaiph also always adds `jaiph.version`, `jaiph.run_id`, `jaiph.workflow`, and `jaiph.source`. |
 
+Jaiph also reads the standard Sentry environment variables to report **failed**
+runs to a Sentry error tracker — again **no `JAIPH_*` variables**, consumed
+host-side after the run completes (never forwarded into the Docker sandbox), so
+they are not tracked by the `JAIPH_*` source-parity harness above. A report is
+sent iff `SENTRY_DSN` is set **and** the run terminated unsuccessfully (nonzero
+exit or a signal); successful runs send nothing. See [Observability](observability.md#report-failed-runs-to-sentry).
+
+| Variable | Type | Default | Role |
+|---|---|---|---|
+| `SENTRY_DSN` | string (DSN) | — | Sentry DSN `https://<key>@<host>/<projectId>`. Enables failed-run reporting. A malformed DSN → one stderr warning and no send. |
+| `SENTRY_ENVIRONMENT` | string | — | Sets the event's `environment` when present (for example `prod`, `ci`). |
+| `SENTRY_RELEASE` | string | `jaiph@<version>` | Sets the event's `release`. |
+
 ## Installer and `jaiph use`
 
 These variables are consumed by `docs/install` (the installer shell script) and by `jaiph use` when it re-invokes the installer. They are **not** read from inside the Jaiph TypeScript source.
