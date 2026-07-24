@@ -86,6 +86,17 @@ export class McpServer {
     this.opts = opts;
   }
 
+  /**
+   * Kill every in-flight call's run (second-signal shutdown: child + container
+   * teardown through each call's cancel handle). Unlike a client
+   * `notifications/cancelled`, the calls are NOT marked cancelled: each killed
+   * run settles with a normal `isError` response, so a shutdown drain awaiting
+   * those calls completes deterministically.
+   */
+  cancelAll(): void {
+    for (const entry of this.inFlight.values()) entry.cancelRun?.();
+  }
+
   /** Tell connected clients the tool list changed (hot reload). */
   notifyToolsChanged(): void {
     if (!this.initialized) return;

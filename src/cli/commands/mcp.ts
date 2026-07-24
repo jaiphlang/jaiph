@@ -10,10 +10,11 @@ import { McpServer } from "../mcp/server";
 import { callWorkflow } from "../exec/call";
 import {
   loadGeneration,
+  createGenerationTracker,
   createSourceWatcher,
   resolveStartupPosture,
   WATCH_INTERVAL_MS,
-  type GenerationState,
+  type GenerationTracker,
 } from "../shared/generation";
 import { VERSION } from "../../version";
 
@@ -79,7 +80,7 @@ export async function runMcp(rest: string[]): Promise<number> {
 
   const tempRoot = mkdtempSync(join(tmpdir(), "jaiph-mcp-"));
   let generation = 0;
-  let state: GenerationState;
+  let generations: GenerationTracker;
   try {
     const loaded = loadGeneration(inputAbs, workspaceRoot, tempRoot, generation, extraEnv, log, "jaiph mcp");
     if (!loaded.state) {
@@ -87,7 +88,7 @@ export async function runMcp(rest: string[]): Promise<number> {
       rmSync(tempRoot, { recursive: true, force: true });
       return 1;
     }
-    state = loaded.state;
+    generations = createGenerationTracker(loaded.state);
   } catch (err) {
     log(err instanceof Error ? err.message : String(err));
     rmSync(tempRoot, { recursive: true, force: true });
@@ -100,7 +101,7 @@ export async function runMcp(rest: string[]): Promise<number> {
   // JAIPH_INPLACE=1.
   let dockerConfig: ReturnType<typeof resolveStartupPosture>["dockerConfig"];
   try {
-    const posture = resolveStartupPosture(state, inputAbs, workspaceRoot, log);
+    const posture = resolveStartupPosture(generations.current(), inputAbs, workspaceRoot, log);
     dockerConfig = posture.dockerConfig;
     if (dockerConfig.enabled) {
       if (posture.sandboxMode === "inplace") {
@@ -120,16 +121,20 @@ export async function runMcp(rest: string[]): Promise<number> {
 
   const server = new McpServer({
     serverVersion: VERSION,
-    getTools: () => state.tools,
-    callTool: (spec, args, ctx) =>
-      callWorkflow(
-        state.callEnv,
+    getTools: () => generations.current().tools,
+    callTool: (spec, args, ctx) => {
+      // Bind the call to the generation live at start; the lease keeps its
+      // scripts dir alive until the call settles (deleted then if superseded).
+      const lease = generations.acquire();
+      return callWorkflow(
+        lease.state.callEnv,
         dockerConfig,
         spec.workflow,
         spec.params.map((p) => args[p] ?? ""),
         randomUUID(),
         ctx,
-      ),
+      ).finally(() => lease.release());
+    },
     write: (message) => {
       process.stdout.write(`${JSON.stringify(message)}\n`);
     },
@@ -137,7 +142,10 @@ export async function runMcp(rest: string[]): Promise<number> {
   });
 
   // Hot reload: poll every module source; on change re-validate and swap the
-  // generation. Validation failures keep the previous generation serving.
+  // generation. Validation failures keep the previous generation serving. The
+  // tracker deletes the superseded generation's scripts dir only once its last
+  // in-flight call settles — a call started just before the reload still runs
+  // its remaining script steps from the generation it captured at start.
   let reloading = false;
   const onSourceChange = (): void => {
     if (reloading) return;
@@ -150,12 +158,10 @@ export async function runMcp(rest: string[]): Promise<number> {
         for (const f of loaded.failures) log(`  ${f}`);
         return;
       }
-      const previousOutDir = state.callEnv.outDir;
-      state = loaded.state;
-      watcher.rewatch([...state.graph.modules.keys()]);
+      generations.swap(loaded.state);
+      watcher.rewatch([...loaded.state.graph.modules.keys()]);
       server.notifyToolsChanged();
-      log(`jaiph mcp: sources reloaded (${state.tools.length} tool(s))`);
-      rmSync(previousOutDir, { recursive: true, force: true });
+      log(`jaiph mcp: sources reloaded (${loaded.state.tools.length} tool(s))`);
     } catch (err) {
       log(`jaiph mcp: reload failed; keeping the previous tool set: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
@@ -163,25 +169,37 @@ export async function runMcp(rest: string[]): Promise<number> {
     }
   };
   const watcher = createSourceWatcher(WATCH_INTERVAL_MS, onSourceChange);
-  watcher.rewatch([...state.graph.modules.keys()]);
+  watcher.rewatch([...generations.current().graph.modules.keys()]);
 
-  log(`jaiph mcp: serving ${state.tools.length} tool(s) from ${inputAbs} over stdio`);
+  log(`jaiph mcp: serving ${generations.current().tools.length} tool(s) from ${inputAbs} over stdio`);
 
   return await new Promise<number>((resolveExit) => {
+    let draining = false;
     let settled = false;
-    const shutdown = (code: number): void => {
+    const finish = (code: number): void => {
       if (settled) return;
       settled = true;
+      process.removeListener("SIGINT", onSignal);
+      process.removeListener("SIGTERM", onSignal);
       watcher.stop();
       rmSync(tempRoot, { recursive: true, force: true });
       resolveExit(code);
     };
-
-    const rl = createInterface({ input: process.stdin, terminal: false });
     // Handle requests concurrently: a long tools/call must not stall pings or
     // further calls. JSON-RPC matches responses by id, so ordering is free to
     // interleave; each outbound message is a single atomic stdout write.
     const inFlight = new Set<Promise<void>>();
+    // Drain-then-cancel shutdown: stop accepting input, let in-flight calls
+    // settle, then clean up. The temp root (scripts, graph files) must outlive
+    // every draining call — a run reads its scripts dir until it exits.
+    const drain = (): void => {
+      if (draining) return;
+      draining = true;
+      watcher.stop();
+      void Promise.allSettled([...inFlight]).then(() => finish(0));
+    };
+
+    const rl = createInterface({ input: process.stdin, terminal: false });
     rl.on("line", (line) => {
       const p = server.handleLine(line).catch((err) => {
         log(`jaiph mcp: ${err instanceof Error ? err.message : String(err)}`);
@@ -189,10 +207,21 @@ export async function runMcp(rest: string[]): Promise<number> {
       inFlight.add(p);
       void p.finally(() => inFlight.delete(p));
     });
-    rl.on("close", () => {
-      void Promise.allSettled([...inFlight]).then(() => shutdown(0));
-    });
-    process.once("SIGINT", () => shutdown(0));
-    process.once("SIGTERM", () => shutdown(0));
+    rl.on("close", drain);
+    const onSignal = (): void => {
+      if (!draining) {
+        log("jaiph mcp: shutting down; draining in-flight calls (signal again to cancel them)...");
+        rl.close();
+        drain();
+      } else {
+        // Second signal: kill every in-flight run's child process tree and, in
+        // Docker mode, force-remove its container; the calls then settle and
+        // the drain above finishes cleanup.
+        log("jaiph mcp: cancelling in-flight calls...");
+        server.cancelAll();
+      }
+    };
+    process.on("SIGINT", onSignal);
+    process.on("SIGTERM", onSignal);
   });
 }

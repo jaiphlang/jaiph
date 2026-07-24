@@ -104,6 +104,7 @@ TEST_SCRIPTS=(
   "e2e/tests/140_env_passthrough.sh"
   "e2e/tests/141_mcp_docker_sandbox.sh"
   "e2e/tests/147_serve_http_api.sh"
+  "e2e/tests/149_mcp_generation_lifecycle.sh"
   "e2e/tests/146_trusted_envs.sh"
   "e2e/tests/148_standalone_image.sh"
   "e2e/tests/210_standalone_binary.sh"

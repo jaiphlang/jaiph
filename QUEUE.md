@@ -14,22 +14,6 @@ Process rules:
 
 ***
 
-## Keep MCP generations alive while calls are in flight #dev-ready
-
-`jaiph mcp` handles tool calls concurrently, but hot reload immediately deletes the previous generation's scripts directory. A call started just before reload can still need those scripts. Signal shutdown also removes the shared temp root without draining or cancelling active calls. `jaiph serve` already refcounts generations; MCP needs the same lifecycle guarantee.
-
-Scope:
-
-- Share or mirror the generation lease/refcount model for MCP and HTTP.
-- Delete a superseded generation only after its last call settles.
-- On stdin close, drain active calls before cleanup. On SIGINT/SIGTERM, use a documented drain-then-cancel policy and stop Docker containers as well as child processes.
-
-Acceptance:
-
-- A slow MCP call started before a source reload completes successfully after the new generation is active.
-- Concurrent calls spanning multiple reloads use the generation captured at call start and leave no generation directories after all calls settle.
-- Shutdown tests prove no active call reads deleted scripts and no child process/container is orphaned.
-
 ## Make the Kubernetes example runnable and hardened by default #dev-ready
 
 The current manifest mounts the workflow ConfigMap read-only at `/work`, while standalone host mode writes runs under `/work/.jaiph/runs`; the example is schema-valid but cannot complete a real run. It also ships publicly known placeholder secrets and omits the pod hardening that `docs/deploy.md` says the operator must supply.

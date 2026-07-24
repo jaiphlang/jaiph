@@ -8,10 +8,11 @@ import { resolveEnvPairs } from "../run/env";
 import { callWorkflow } from "../exec/call";
 import {
   loadGeneration,
+  createGenerationTracker,
   createSourceWatcher,
   resolveStartupPosture,
   WATCH_INTERVAL_MS,
-  type GenerationState,
+  type GenerationTracker,
 } from "../shared/generation";
 import { ServeHandler } from "../serve/handler";
 import { createHttpServer, listen } from "../serve/server";
@@ -50,13 +51,6 @@ const LOOPBACK_HOSTS = new Set(["127.0.0.1", "::1", "localhost", "0:0:0:0:0:0:0:
 
 function isLoopbackHost(host: string): boolean {
   return LOOPBACK_HOSTS.has(host.toLowerCase());
-}
-
-/** One in-flight generation: its state, live-run refcount, and superseded flag. */
-interface LiveGeneration {
-  state: GenerationState;
-  refs: number;
-  superseded: boolean;
 }
 
 export async function runServe(rest: string[]): Promise<number> {
@@ -131,7 +125,7 @@ export async function runServe(rest: string[]): Promise<number> {
 
   const tempRoot = mkdtempSync(join(tmpdir(), "jaiph-serve-"));
   let generation = 0;
-  let current: LiveGeneration;
+  let generations: GenerationTracker;
   try {
     const loaded = loadGeneration(inputAbs, workspaceRoot, tempRoot, generation, extraEnv, log, "jaiph serve");
     if (!loaded.state) {
@@ -139,7 +133,7 @@ export async function runServe(rest: string[]): Promise<number> {
       rmSync(tempRoot, { recursive: true, force: true });
       return 1;
     }
-    current = { state: loaded.state, refs: 0, superseded: false };
+    generations = createGenerationTracker(loaded.state);
   } catch (err) {
     log(err instanceof Error ? err.message : String(err));
     rmSync(tempRoot, { recursive: true, force: true });
@@ -149,7 +143,7 @@ export async function runServe(rest: string[]): Promise<number> {
   let dockerConfig: ReturnType<typeof resolveStartupPosture>["dockerConfig"];
   let hostRunsRoot: string;
   try {
-    const posture = resolveStartupPosture(current.state, inputAbs, workspaceRoot, log);
+    const posture = resolveStartupPosture(generations.current(), inputAbs, workspaceRoot, log);
     dockerConfig = posture.dockerConfig;
     hostRunsRoot = posture.hostRunsRoot;
     if (dockerConfig.enabled) {
@@ -170,14 +164,6 @@ export async function runServe(rest: string[]): Promise<number> {
     return 1;
   }
 
-  // Delete a superseded generation's out dir only once its in-flight runs finish
-  // — HTTP runs can outlive a reload (unlike MCP, where the client blocks).
-  const maybeDeleteGeneration = (gen: LiveGeneration): void => {
-    if (gen.superseded && gen.refs === 0) {
-      rmSync(gen.state.callEnv.outDir, { recursive: true, force: true });
-    }
-  };
-
   // Track in-flight run promises so shutdown can drain them.
   const inFlightRuns = new Set<Promise<unknown>>();
 
@@ -191,23 +177,19 @@ export async function runServe(rest: string[]): Promise<number> {
     // events/artifacts endpoints locate it by scanning the host runs root for
     // the run id (works host- and Docker-side — the run dir is a host mount).
     resolveRunDir: (record) => record.run_dir ?? findRunDir(hostRunsRoot, record.run_id),
-    getTools: () => current.state.tools,
+    getTools: () => generations.current().tools,
     callTool: (spec, args, runId, ctx) => {
-      // Bind the run to the generation live at start; keep its scripts dir alive
-      // until the run finishes, then delete it if the generation was superseded.
-      const gen = current;
-      gen.refs += 1;
+      // Bind the run to the generation live at start; the lease keeps its
+      // scripts dir alive until the run finishes (deleted then if superseded).
+      const lease = generations.acquire();
       const p = callWorkflow(
-        gen.state.callEnv,
+        lease.state.callEnv,
         dockerConfig,
         spec.workflow,
         spec.params.map((pp) => args[pp] ?? ""),
         runId,
         ctx,
-      ).finally(() => {
-        gen.refs -= 1;
-        maybeDeleteGeneration(gen);
-      });
+      ).finally(() => lease.release());
       const tracked = p.then(
         () => undefined,
         () => undefined,
@@ -232,12 +214,9 @@ export async function runServe(rest: string[]): Promise<number> {
         for (const f of loaded.failures) log(`  ${f}`);
         return;
       }
-      const prev = current;
-      current = { state: loaded.state, refs: 0, superseded: false };
-      watcher.rewatch([...current.state.graph.modules.keys()]);
-      log(`jaiph serve: sources reloaded (${current.state.tools.length} workflow(s))`);
-      prev.superseded = true;
-      maybeDeleteGeneration(prev);
+      generations.swap(loaded.state);
+      watcher.rewatch([...loaded.state.graph.modules.keys()]);
+      log(`jaiph serve: sources reloaded (${loaded.state.tools.length} workflow(s))`);
     } catch (err) {
       log(`jaiph serve: reload failed; keeping the previous workflows: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
@@ -245,7 +224,7 @@ export async function runServe(rest: string[]): Promise<number> {
     }
   };
   const watcher = createSourceWatcher(WATCH_INTERVAL_MS, onSourceChange);
-  watcher.rewatch([...current.state.graph.modules.keys()]);
+  watcher.rewatch([...generations.current().graph.modules.keys()]);
 
   const httpServer = createHttpServer(handler, log);
   let boundPort: number;
@@ -259,7 +238,7 @@ export async function runServe(rest: string[]): Promise<number> {
   }
 
   const base = `http://${host}:${boundPort}`;
-  log(`jaiph serve: listening on ${base} — API docs at ${base}/docs (${current.state.tools.length} workflow(s))`);
+  log(`jaiph serve: listening on ${base} — API docs at ${base}/docs (${generations.current().tools.length} workflow(s))`);
 
   return await new Promise<number>((resolveExit) => {
     let draining = false;
