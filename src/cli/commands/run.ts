@@ -71,6 +71,7 @@ import { preflightAgentCredentials, collectEntryBackends } from "../run/prefligh
 import { planTrustedEnvs } from "../run/trusted-envs";
 import { colorize, formatJaiphRunningBannerLines } from "../run/display";
 import { createRunEmitter } from "../run/emitter";
+import { exportRunTelemetry } from "../telemetry/otlp";
 import {
   createStderrParser,
   createRunState,
@@ -333,8 +334,8 @@ export async function runWorkflow(rest: string[]): Promise<number> {
       ttyCtx.nonTTYHeartbeatInterval = undefined;
     }
 
-    return reportResult(
-      runState.capturedStderr, childExit.status, startedAt, runtimeEnv,
+    return await reportResult(
+      runState.capturedStderr, childExit.status, childExit.signal, startedAt, runtimeEnv,
       emitter, runState.workflowRunId, inputAbs, workspaceRoot, metaFile,
       dockerResult?.sandboxRunDir, runId,
     );
@@ -554,9 +555,10 @@ function writePlainStdout(chunk: string, ttyCtx: TTYContext): void {
   redrawTTYBottomLine(ttyCtx);
 }
 
-function reportResult(
+async function reportResult(
   capturedStderr: string,
   exitStatus: number,
+  signal: NodeJS.Signals | null,
   startedAt: number,
   runtimeEnv: Record<string, string | undefined>,
   emitter: ReturnType<typeof createRunEmitter>,
@@ -566,7 +568,7 @@ function reportResult(
   metaFile: string,
   sandboxRunDir?: string,
   expectedRunId?: string,
-): number {
+): Promise<number> {
   const elapsedMs = Date.now() - startedAt;
   const elapsedLabel = formatElapsedDuration(elapsedMs);
   let runDir: string | undefined;
@@ -592,6 +594,9 @@ function reportResult(
     runDir = discovered.runDir;
     summaryFile = discovered.summaryFile;
   }
+  // Export a trace to an OTLP collector when configured (standard OTEL env).
+  // Best-effort: never affects the exit code, output, or journal below.
+  await exportRunTelemetry({ runDir, workflow: "default", exitStatus, signal, env: process.env });
   const runtimeDebugEnabled = runtimeEnv.JAIPH_DEBUG === "true";
   const runtimeErrorPrinted = sandboxRunDir
     ? false
