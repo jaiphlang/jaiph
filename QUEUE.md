@@ -32,24 +32,6 @@ Acceptance:
 - The pod runs as non-root and the test fails if privilege escalation, capabilities, or the default service-account token are reintroduced.
 - `kubectl apply --dry-run=client` remains a fast schema check, but is not the only deployment test.
 
-## Bound HTTP service memory, output, and run retention #dev-ready
-
-The concurrency cap limits active children but not process memory. The in-memory run map grows forever, completed `result_text` stays resident forever, and raw child stdout/stderr/log accumulation is not bounded. An authenticated caller can exhaust a long-lived service.
-
-Scope:
-
-- Add explicit byte caps for collected stdout, stderr, logs, and public `result_text`, with a visible truncation marker.
-- Add configurable completed-run retention by count and age; active runs must never be evicted.
-- Paginate `GET /v1/runs` with a bounded default and maximum page size.
-- Keep durable journals/artifacts independent from in-memory eviction and document their disk-retention responsibility.
-
-Acceptance:
-
-- Runs producing output beyond every cap keep the process within a tested memory bound and return deterministic truncation markers.
-- More completed runs than the configured limit evicts only the oldest terminal records.
-- Run listing cannot return an unbounded response, and pagination order is stable.
-- Concurrency, cancellation, SSE, and artifact tests continue to pass.
-
 ## Make HTTP request, event, and artifact I/O scale with bytes transferred #dev-ready
 
 The HTTP layer still performs avoidable whole-resource work: an aborted request body can leave `readBody` pending, SSE repeatedly scans historical run directories until `run_dir` is known, each SSE poll rereads the whole journal, and artifact downloads load the complete file into memory.

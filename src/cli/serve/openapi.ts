@@ -143,17 +143,38 @@ export function buildOpenApi(tools: McpToolSpec[], serverInfo: OpenApiServerInfo
   paths["/v1/runs"] = {
     get: {
       operationId: "listRuns",
-      summary: "List runs started by this server (newest first)",
+      summary: "List runs started by this server (newest first, paginated)",
       security: BEARER_SECURITY,
+      parameters: [
+        {
+          name: "limit",
+          in: "query",
+          required: false,
+          description: "Page size (default 100, clamped to 1000). The response is never unbounded.",
+          schema: { type: "integer", minimum: 1, maximum: 1000, default: 100 },
+        },
+        {
+          name: "offset",
+          in: "query",
+          required: false,
+          description: "Number of newest-first records to skip before the page.",
+          schema: { type: "integer", minimum: 0, default: 0 },
+        },
+      ],
       responses: {
         "200": {
-          description: "Runs started by this server process.",
+          description: "One page of runs started by this server process, plus the total registry size.",
           content: {
             "application/json": {
               schema: {
                 type: "object",
-                properties: { runs: { type: "array", items: { $ref: "#/components/schemas/Run" } } },
-                required: ["runs"],
+                properties: {
+                  runs: { type: "array", items: { $ref: "#/components/schemas/Run" } },
+                  total: { type: "integer" },
+                  limit: { type: "integer" },
+                  offset: { type: "integer" },
+                },
+                required: ["runs", "total", "limit", "offset"],
               },
             },
           },

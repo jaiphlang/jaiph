@@ -87,6 +87,52 @@ export interface CollectedOutput {
 }
 
 /**
+ * Byte caps that bound one call's in-memory capture. A long-lived server
+ * (`jaiph serve`) can be driven by an authenticated caller into producing
+ * unbounded stdout/stderr/log output; these caps stop a single run from
+ * exhausting process memory, and bound the `result_text` the server keeps
+ * resident per run. Each field is measured in UTF-8 bytes. The defaults keep an
+ * ordinary run's full output; the server lowers them via env when needed.
+ */
+export interface OutputCaps {
+  /** Max bytes retained for raw stdout capture. */
+  stdout: number;
+  /** Max bytes retained for raw stderr capture. */
+  stderr: number;
+  /** Max bytes retained across all collected `log` messages. */
+  logs: number;
+  /** Max bytes of the composed, returned `result_text`. */
+  resultText: number;
+}
+
+/**
+ * Effectively-unbounded caps — the default for every caller that does not opt
+ * in (`jaiph mcp`, direct callers), so their existing behavior is unchanged.
+ * Only the long-lived HTTP service (`jaiph serve`) passes finite caps.
+ */
+export const DEFAULT_OUTPUT_CAPS: OutputCaps = {
+  stdout: Number.MAX_SAFE_INTEGER,
+  stderr: Number.MAX_SAFE_INTEGER,
+  logs: Number.MAX_SAFE_INTEGER,
+  resultText: Number.MAX_SAFE_INTEGER,
+};
+
+/**
+ * Deterministic marker appended to any captured stream or result text cut at a
+ * cap, so a truncated response is self-describing rather than silently short.
+ */
+export const TRUNCATION_MARKER = "\n[jaiph: output truncated — exceeded the configured byte cap]";
+
+/** Cap `text` to `cap` UTF-8 bytes, appending {@link TRUNCATION_MARKER} on overflow. */
+export function capBytes(text: string, cap: number): string {
+  if (Buffer.byteLength(text) <= cap) return text;
+  // Slice on a byte boundary, then drop a trailing partial multibyte char
+  // (which `toString` decodes to U+FFFD) so the head stays valid UTF-8.
+  const head = Buffer.from(text, "utf8").subarray(0, cap).toString("utf8").replace(/\uFFFD+$/, "");
+  return head + TRUNCATION_MARKER;
+}
+
+/**
  * Execute one workflow call. Honors the same env-driven sandbox selection as
  * `jaiph run`: when `dockerConfig.enabled`, the call runs in a per-call
  * container (workspace isolated by default; inplace when JAIPH_INPLACE=1);
@@ -105,6 +151,7 @@ export async function callWorkflow(
   positionalArgs: string[],
   runId: string,
   ctx?: WorkflowCallContext,
+  caps: OutputCaps = DEFAULT_OUTPUT_CAPS,
 ): Promise<WorkflowCallResult> {
   const runtimeEnv = resolveRuntimeEnv(env.effectiveConfig, env.workspaceRoot, env.inputAbs);
   runtimeEnv.JAIPH_SOURCE_ABS = env.inputAbs;
@@ -112,8 +159,8 @@ export async function callWorkflow(
   runtimeEnv.JAIPH_SCRIPTS = env.scriptsDir;
 
   const result = dockerConfig.enabled
-    ? await callWorkflowDocker(env, dockerConfig, workflowSymbol, positionalArgs, runtimeEnv, runId, ctx)
-    : await callWorkflowHost(env, workflowSymbol, positionalArgs, runtimeEnv, runId, ctx);
+    ? await callWorkflowDocker(env, dockerConfig, workflowSymbol, positionalArgs, runtimeEnv, runId, caps, ctx)
+    : await callWorkflowHost(env, workflowSymbol, positionalArgs, runtimeEnv, runId, caps, ctx);
   // One export per call — the shared choke point covering every MCP tool call and
   // HTTP `jaiph serve` invocation. Best-effort; never changes the call result.
   await exportRunTelemetry({
@@ -133,6 +180,7 @@ async function callWorkflowHost(
   positionalArgs: string[],
   runtimeEnv: Record<string, string | undefined>,
   runId: string,
+  caps: OutputCaps,
   ctx?: WorkflowCallContext,
 ): Promise<WorkflowCallResult> {
   runtimeEnv.JAIPH_MODULE_GRAPH_FILE = env.graphFile;
@@ -148,12 +196,12 @@ async function callWorkflowHost(
     env: runtimeEnv,
   });
   ctx?.onCancelHandle?.(() => cancelRunProcess(child));
-  const collector = attachOutputCollector(child, ctx?.onStep);
+  const collector = attachOutputCollector(child, ctx?.onStep, caps);
   const exit = await waitForRunExit(child);
   collector.drain();
 
   const meta = readMetaFile(metaFile);
-  return composeResult(workflowSymbol, collector.data, exit, meta.runDir, undefined, runtimeEnv);
+  return composeResult(workflowSymbol, collector.data, exit, meta.runDir, undefined, runtimeEnv, caps);
 }
 
 /**
@@ -170,6 +218,7 @@ async function callWorkflowDocker(
   positionalArgs: string[],
   runtimeEnv: Record<string, string | undefined>,
   runId: string,
+  caps: OutputCaps,
   ctx?: WorkflowCallContext,
 ): Promise<WorkflowCallResult> {
   const sandboxMode = selectMcpSandboxMode(runtimeEnv);
@@ -193,17 +242,22 @@ async function callWorkflowDocker(
     stopDockerContainer(dockerResult.containerName);
     cancelRunProcess(dockerResult.child);
   });
-  const collector = attachOutputCollector(dockerResult.child, ctx?.onStep);
+  const collector = attachOutputCollector(dockerResult.child, ctx?.onStep, caps);
   return withDockerExitGuard(dockerResult, async () => {
     const exit = await waitForRunExit(dockerResult.child);
     collector.drain();
     const discovered = discoverDockerRunDir(sandboxRunDir, runId);
     // Docker keeps `--env` passthrough out of runtimeEnv (it flows through
     // DockerSpawnOptions.extraEnv), so merge it back in for redaction.
-    return composeResult(workflowSymbol, collector.data, exit, discovered.runDir, sandboxRunDir, {
-      ...runtimeEnv,
-      ...env.extraEnv,
-    });
+    return composeResult(
+      workflowSymbol,
+      collector.data,
+      exit,
+      discovered.runDir,
+      sandboxRunDir,
+      { ...runtimeEnv, ...env.extraEnv },
+      caps,
+    );
   });
 }
 
@@ -214,15 +268,35 @@ async function callWorkflowDocker(
  * event so the caller can stream progress. `drain()` flushes any trailing
  * partial stderr line.
  */
-function attachOutputCollector(
+export function attachOutputCollector(
   child: ChildProcess,
-  onStep?: (kind: string, name: string) => void,
+  onStep: ((kind: string, name: string) => void) | undefined,
+  caps: OutputCaps,
 ): { data: CollectedOutput; drain: () => void } {
   const data: CollectedOutput = { logs: [], rawStderr: "", rawStdout: "" };
+  // Per-stream byte counters + one-shot "cut" flags so accumulation stops at the
+  // cap (each stream overshoots by at most one over-cap chunk, which is then
+  // dropped) and the truncation marker is recorded exactly once.
+  let logsBytes = 0;
+  let logsCut = false;
+  let stderrBytes = 0;
+  let stderrCut = false;
+  let stdoutBytes = 0;
+  let stdoutCut = false;
+
   const onStderrLine = (line: string): void => {
     const logEvent = parseLogEvent(line);
     if (logEvent) {
-      data.logs.push(logEvent.message);
+      if (!logsCut) {
+        const b = Buffer.byteLength(logEvent.message);
+        if (logsBytes + b <= caps.logs) {
+          data.logs.push(logEvent.message);
+          logsBytes += b;
+        } else {
+          data.logs.push(TRUNCATION_MARKER.trim());
+          logsCut = true;
+        }
+      }
       return;
     }
     const stepEvent = parseStepEvent(line);
@@ -239,7 +313,17 @@ function attachOutputCollector(
       onStep?.(stepEvent.kind, stepEvent.name);
       return;
     }
-    data.rawStderr += `${line}\n`;
+    if (!stderrCut) {
+      const add = `${line}\n`;
+      const b = Buffer.byteLength(add);
+      if (stderrBytes + b <= caps.stderr) {
+        data.rawStderr += add;
+        stderrBytes += b;
+      } else {
+        data.rawStderr += TRUNCATION_MARKER;
+        stderrCut = true;
+      }
+    }
   };
 
   let stderrBuf = "";
@@ -255,7 +339,15 @@ function attachOutputCollector(
   });
   child.stdout?.setEncoding("utf8");
   child.stdout?.on("data", (chunk: string) => {
-    data.rawStdout += chunk;
+    if (stdoutCut) return;
+    const b = Buffer.byteLength(chunk);
+    if (stdoutBytes + b <= caps.stdout) {
+      data.rawStdout += chunk;
+      stdoutBytes += b;
+    } else {
+      data.rawStdout += TRUNCATION_MARKER;
+      stdoutCut = true;
+    }
   });
 
   return {
@@ -276,6 +368,11 @@ function attachOutputCollector(
  * not redacted at the source, so this must not rely on the event stream.
  * A successful workflow's return value is intentional API output, not
  * diagnostic capture, and is returned verbatim.
+ *
+ * The composed `text` is capped at `caps.resultText` bytes (with a deterministic
+ * truncation marker) as the final backstop: it is the value a long-lived
+ * `jaiph serve` keeps resident per run, so an unbounded return value or log
+ * dump cannot grow the run registry without limit.
  */
 export function composeResult(
   workflowSymbol: string,
@@ -284,6 +381,7 @@ export function composeResult(
   runDir: string | undefined,
   sandboxRunDir: string | undefined,
   env: NodeJS.ProcessEnv,
+  caps: OutputCaps = DEFAULT_OUTPUT_CAPS,
 ): WorkflowCallResult {
   const failed = exit.status !== 0 || exit.signal !== null;
 
@@ -295,7 +393,13 @@ export function composeResult(
         : data.logs.length > 0
           ? redactCredentials(data.logs.join("\n"), env)
           : `workflow ${workflowSymbol} completed`;
-    return { text: trimTrailingNewline(text), isError: false, runDir, exitStatus: exit.status, signal: exit.signal };
+    return {
+      text: capBytes(trimTrailingNewline(text), caps.resultText),
+      isError: false,
+      runDir,
+      exitStatus: exit.status,
+      signal: exit.signal,
+    };
   }
 
   const parts: string[] = [];
@@ -318,7 +422,7 @@ export function composeResult(
   // streams, and logs — passes the same boundary regardless of which branch
   // contributed it.
   return {
-    text: redactCredentials(parts.join("\n\n"), env),
+    text: capBytes(redactCredentials(parts.join("\n\n"), env), caps.resultText),
     isError: true,
     runDir,
     exitStatus: exit.status,

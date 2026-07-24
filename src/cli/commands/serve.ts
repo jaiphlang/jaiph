@@ -5,7 +5,7 @@ import { detectWorkspaceRoot } from "../shared/paths";
 import { findRunDir } from "../shared/errors";
 import { hasHelpFlag, parseArgs } from "../shared/usage";
 import { resolveEnvPairs } from "../run/env";
-import { callWorkflow } from "../exec/call";
+import { callWorkflow, type OutputCaps } from "../exec/call";
 import {
   loadGeneration,
   createGenerationTracker,
@@ -21,6 +21,25 @@ import { VERSION } from "../../version";
 const DEFAULT_HOST = "127.0.0.1";
 const DEFAULT_PORT = 5247;
 const DEFAULT_MAX_CONCURRENT = 4;
+/** Keep the newest 500 completed runs resident; older terminal records evict. */
+const DEFAULT_RETAIN_RUNS = 500;
+/** Evict a completed run 24h after it ended (0 would disable age eviction). */
+const DEFAULT_RETAIN_AGE_SEC = 24 * 60 * 60;
+/** 1 MiB per stream / log buffer / result_text; bounds one run's memory. */
+const DEFAULT_MAX_OUTPUT_BYTES = 1024 * 1024;
+
+/**
+ * Parse an integer env var, returning the fallback when unset. Throws a
+ * diagnosable error (caught by the caller) when set but not an integer `>= min`.
+ */
+function intEnv(raw: string | undefined, name: string, fallback: number, min: number): number {
+  if (raw === undefined) return fallback;
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < min) {
+    throw new Error(`${name} must be an integer >= ${min}, got "${raw}"`);
+  }
+  return n;
+}
 
 const SERVE_USAGE =
   "Usage: jaiph serve [--host <addr>] [--port <n>] [--workspace <dir>] [--env KEY[=VALUE]]... <file.jh>\n\n" +
@@ -38,7 +57,11 @@ const SERVE_USAGE =
   "Auth: set JAIPH_SERVE_TOKEN to require `Authorization: Bearer <token>` on every\n" +
   "/v1/* request (/healthz, /openapi.json, /docs stay open). Binding a non-loopback\n" +
   "host without the token set is a startup error. Cap concurrent runs with\n" +
-  "JAIPH_SERVE_MAX_CONCURRENT (default 4).\n\n" +
+  "JAIPH_SERVE_MAX_CONCURRENT (default 4). Bound memory with JAIPH_SERVE_MAX_OUTPUT_BYTES\n" +
+  "(per-run stdout/stderr/log/result cap, default 1 MiB), JAIPH_SERVE_RETAIN_RUNS\n" +
+  "(completed runs kept in memory, default 500), and JAIPH_SERVE_RETAIN_AGE_SEC\n" +
+  "(max completed-run age, default 86400; 0 disables). GET /v1/runs is paginated\n" +
+  "(?limit default 100, max 1000; ?offset).\n\n" +
   "  --host <addr>      listen address (default: 127.0.0.1)\n" +
   "  --port <n>         listen port (default: 5247)\n" +
   "  --workspace <dir>  workspace root for import resolution (default: auto-detect)\n" +
@@ -118,6 +141,25 @@ export async function runServe(rest: string[]): Promise<number> {
     maxConcurrent = n;
   }
 
+  // Memory bounds: retained completed runs (count + age) and per-run output caps.
+  let retainRuns: number;
+  let retainAgeSec: number;
+  let maxOutputBytes: number;
+  try {
+    retainRuns = intEnv(process.env.JAIPH_SERVE_RETAIN_RUNS, "JAIPH_SERVE_RETAIN_RUNS", DEFAULT_RETAIN_RUNS, 1);
+    retainAgeSec = intEnv(process.env.JAIPH_SERVE_RETAIN_AGE_SEC, "JAIPH_SERVE_RETAIN_AGE_SEC", DEFAULT_RETAIN_AGE_SEC, 0);
+    maxOutputBytes = intEnv(process.env.JAIPH_SERVE_MAX_OUTPUT_BYTES, "JAIPH_SERVE_MAX_OUTPUT_BYTES", DEFAULT_MAX_OUTPUT_BYTES, 1);
+  } catch (err) {
+    process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`);
+    return 1;
+  }
+  const outputCaps: OutputCaps = {
+    stdout: maxOutputBytes,
+    stderr: maxOutputBytes,
+    logs: maxOutputBytes,
+    resultText: maxOutputBytes,
+  };
+
   // All logs go to stderr — stdout stays clean for scripting.
   const log = (line: string): void => {
     process.stderr.write(`${line}\n`);
@@ -172,6 +214,8 @@ export async function runServe(rest: string[]): Promise<number> {
     serverTitle: `jaiph — ${basename(inputAbs)}`,
     token,
     maxConcurrent,
+    retainRuns,
+    retainAgeSec,
     now: () => new Date().toISOString(),
     // A run's dir is only recorded on its object at finalize; while it runs the
     // events/artifacts endpoints locate it by scanning the host runs root for
@@ -189,6 +233,7 @@ export async function runServe(rest: string[]): Promise<number> {
         spec.params.map((pp) => args[pp] ?? ""),
         runId,
         ctx,
+        outputCaps,
       ).finally(() => lease.release());
       const tracked = p.then(
         () => undefined,
@@ -239,6 +284,11 @@ export async function runServe(rest: string[]): Promise<number> {
 
   const base = `http://${host}:${boundPort}`;
   log(`jaiph serve: listening on ${base} — API docs at ${base}/docs (${generations.current().tools.length} workflow(s))`);
+  log(
+    `jaiph serve: memory bounds — retain ${retainRuns} completed run(s)` +
+      `${retainAgeSec > 0 ? ` up to ${retainAgeSec}s old` : ""}, ${maxOutputBytes} output bytes/run; ` +
+      "durable .jaiph/runs artifacts are pruned separately (operator responsibility).",
+  );
 
   return await new Promise<number>((resolveExit) => {
     let draining = false;

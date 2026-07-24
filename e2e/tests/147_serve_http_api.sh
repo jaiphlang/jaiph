@@ -131,6 +131,17 @@ print(",".join(names))
 ')"
 e2e::assert_equals "${workflows}" "boom,greet,make_artifact" "GET /v1/workflows lists all workflows"
 
+# --- GET /v1/runs is paginated (bounded listing) ---
+# Two runs exist by now (greet, boom); ?limit=1 must return exactly one record,
+# echo the requested limit, and report the full total so the response can never
+# be unbounded. Field-level checks: run objects carry volatile run_dir/timestamps.
+runs_page="$(curl -s "${base}/v1/runs?limit=1" | python3 -c '
+import json, sys
+d = json.load(sys.stdin)
+print("%d,%d,%d" % (len(d["runs"]), d["limit"], d["total"]))
+')"
+e2e::assert_equals "${runs_page}" "1,1,2" "GET /v1/runs?limit=1 returns a bounded page with a total count"
+
 # --- GET /v1/runs/{id}/events (NDJSON) mirrors the durable journal ---
 # The greet run above returned a run object; re-run it capturing the id, then
 # byte-compare the events endpoint against the on-disk run_summary.jsonl.

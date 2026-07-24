@@ -48,7 +48,7 @@ curl -s -X POST 'http://127.0.0.1:5247/v1/workflows/greet/runs?wait=true' \
   -H 'content-type: application/json' -d '{"name":"world"}' | jq
 ```
 
-The run object is `{run_id, workflow, status, started_at, ended_at, exit_status, signal, result_text, run_dir}`. `result_text` is the same content an MCP client sees — the workflow's `return` value, or its failure narrative. Failure narratives are credential-redacted (`[REDACTED]`) the same way as the event journal; the `return` value of a successful run is intentional API output and returned verbatim. **A workflow failure is not an HTTP error:** a failed run comes back `200`/`202` with `status: "failed"` and a `run dir:` pointer in `result_text`. Poll `GET /v1/runs/{id}` for an async run, list them with `GET /v1/runs` (newest first), and stop one with `POST /v1/runs/{id}/cancel`.
+The run object is `{run_id, workflow, status, started_at, ended_at, exit_status, signal, result_text, run_dir}`. `result_text` is the same content an MCP client sees — the workflow's `return` value, or its failure narrative. Failure narratives are credential-redacted (`[REDACTED]`) the same way as the event journal; the `return` value of a successful run is intentional API output and returned verbatim. **A workflow failure is not an HTTP error:** a failed run comes back `200`/`202` with `status: "failed"` and a `run dir:` pointer in `result_text`. Poll `GET /v1/runs/{id}` for an async run, list them with `GET /v1/runs` (newest first, paginated — `?limit=` defaults to 100 and is clamped to 1000, `?offset=` skips that many; the response carries `{runs, total, limit, offset}`), and stop one with `POST /v1/runs/{id}/cancel`.
 
 ## 4. Watch a run as it executes
 
@@ -96,6 +96,16 @@ curl -s http://host:8080/v1/workflows -H 'authorization: Bearer secret' | jq
 
 Binding a non-loopback `--host` **without** `JAIPH_SERVE_TOKEN` is a startup error — the server refuses to expose unauthenticated arbitrary shell. Cap simultaneous runs with `JAIPH_SERVE_MAX_CONCURRENT` (default `4`); requests beyond the cap get `429`. See [Environment variables](env-vars.md) for both.
 
+## 8. Bound memory over a long-lived server
+
+The concurrency cap limits *active* children, not process memory. A long-lived server accumulates run state, so three bounds keep it from growing without limit — all overridable via [environment variables](env-vars.md):
+
+- **Per-run output caps.** `JAIPH_SERVE_MAX_OUTPUT_BYTES` (default 1 MiB) caps collected stdout, stderr, log output, and the resident `result_text` independently. Output beyond a cap is dropped and marked with a deterministic `[jaiph: output truncated — exceeded the configured byte cap]` marker, so a run that emits gigabytes still costs bounded memory and returns a self-describing result.
+- **Completed-run retention.** The in-memory run registry keeps at most `JAIPH_SERVE_RETAIN_RUNS` completed runs (default 500) and drops any completed run older than `JAIPH_SERVE_RETAIN_AGE_SEC` (default 24h). The oldest terminal records evict first; **active runs are never evicted.**
+- **Bounded listing.** `GET /v1/runs` is paginated (`?limit=`, `?offset=`) with a default of 100 and a hard maximum of 1000 per page, so the endpoint can never return an unbounded response.
+
+**Eviction is in-memory only.** Dropping a run from the registry does **not** delete its durable `.jaiph/runs/<run>/run_summary.jsonl` journal or published `artifacts/` — those persist on disk (via `JAIPH_RUNS_DIR`, an `emptyDir` or PVC under Kubernetes) and are **the operator's to prune**. Once a run is evicted its API endpoints (`GET /v1/runs/{id}`, `/events`, `/artifacts`) return `404`; read the durable artifacts from the filesystem instead.
+
 Execution honors the same env-driven sandbox as [`jaiph run`](cli.md#jaiph-run) and [Run in a Docker sandbox](/how-to/sandbox-run): a Docker sandbox with an isolated workspace by default. `JAIPH_INPLACE=1` keeps the sandbox but binds the real workspace read-write so run effects land live; `JAIPH_UNSAFE=true` runs on the host with no sandbox at all. Publish files a run produces with [artifacts](/how-to/artifacts). Editing a served source hot-reloads the workflow set (and the OpenAPI document) with no restart; runs already in flight keep running.
 
 ## Verification
@@ -108,6 +118,10 @@ curl -s http://127.0.0.1:5247/healthz | jq -e '.status == "ok"'
 curl -s -X POST 'http://127.0.0.1:5247/v1/workflows/greet/runs?wait=true' \
   -H 'content-type: application/json' -d '{"name":"ok"}' \
   | jq -e '.status == "succeeded" and (.run_dir | length > 0)'
+
+# The run listing is bounded: a hostile limit is clamped to at most 1000 records.
+curl -s 'http://127.0.0.1:5247/v1/runs?limit=100000' \
+  | jq -e '.limit == 1000 and (.runs | length) <= 1000'
 ```
 
 Both `jq -e` checks exit `0` when the contract holds. The run's durable record is under `.jaiph/runs/…/run_summary.jsonl` (`run_dir` in the response), the same artifact layout as `jaiph run`.
@@ -117,4 +131,4 @@ Both `jq -e` checks exit `0` when the contract holds. The run's durable record i
 - [CLI — `jaiph serve`](cli.md#jaiph-serve) — flag and endpoint reference.
 - [Serve workflows as MCP tools](mcp.md) — the stdio sibling with the same exposure rules.
 - [Run in a Docker sandbox](/how-to/sandbox-run) — the execution sandbox HTTP runs use.
-- [Environment variables](env-vars.md) — `JAIPH_SERVE_TOKEN`, `JAIPH_SERVE_MAX_CONCURRENT`, and the sandbox controls.
+- [Environment variables](env-vars.md) — `JAIPH_SERVE_TOKEN`, `JAIPH_SERVE_MAX_CONCURRENT`, the `JAIPH_SERVE_MAX_OUTPUT_BYTES` / `JAIPH_SERVE_RETAIN_RUNS` / `JAIPH_SERVE_RETAIN_AGE_SEC` memory bounds, and the sandbox controls.
