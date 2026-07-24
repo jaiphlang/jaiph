@@ -214,8 +214,8 @@ script check_claude_capacity = ```
       ;;
   esac
 
-  printf 'Claude current session usage is %s%%.\n' "$percent"
-  (( percent <= 95 ))
+  printf 'Claude current session usage is %s%%.' "$percent"
+  (( percent <= 90 ))
 ```
 
 script first_line_task = ```
