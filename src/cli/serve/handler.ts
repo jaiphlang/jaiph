@@ -1,5 +1,5 @@
 import { randomUUID, timingSafeEqual } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
+import { statSync } from "node:fs";
 import { basename, join } from "node:path";
 import type { McpToolSpec } from "../mcp/tools";
 import type { WorkflowCallResult, WorkflowCallContext } from "../exec/call";
@@ -40,6 +40,12 @@ export interface RunRecord {
   cancel?: () => void;
   /** Monotonic insertion index for newest-first listing. */
   order: number;
+  /**
+   * Cached result of the injected `resolveRunDir` scan for a still-running run,
+   * so a live SSE poll loop resolves the runs tree at most once. Never part of
+   * the public run object; `run_dir` (set at finalize) takes precedence.
+   */
+  resolvedRunDir?: string;
 }
 
 /** A normalized inbound request — decoupled from `node:http` so it is unit-testable. */
@@ -60,8 +66,13 @@ export interface ServeResponse {
   status: number;
   headers: Record<string, string>;
   body: string;
-  /** Binary body (artifact download / NDJSON journal); takes precedence over `body`. */
-  bodyBuffer?: Buffer;
+  /**
+   * Absolute path + byte count of a file to stream as the body (artifact
+   * download / NDJSON journal). The HTTP layer pipes exactly `size` bytes with
+   * backpressure and never buffers the whole file; takes precedence over
+   * `body`.
+   */
+  bodyFile?: { path: string; size: number };
   /**
    * When set, the HTTP layer streams the body by driving this function instead
    * of writing `body` — used for the SSE event follow. It resolves when the
@@ -107,17 +118,25 @@ export interface ServeHandlerOptions {
   /** Run-id source, injectable for tests. Defaults to `randomUUID`. */
   newRunId?: () => string;
   /**
-   * Resolve a run's host-side run directory (the one holding
-   * `run_summary.jsonl` and `artifacts/`). Called live — mid-run and after —
-   * for the events/artifacts endpoints. Defaults to the record's own `run_dir`
-   * (populated at finalize); the server supplies a resolver that also scans the
-   * runs root by run id so a still-running run is reachable.
+   * Resolve a still-running run's host-side run directory (the one holding
+   * `run_summary.jsonl` and `artifacts/`). Consulted by the events/artifacts
+   * endpoints only while the record's own `run_dir` (populated at finalize) is
+   * absent, and the first non-null result is cached on the record — so one
+   * live SSE connection scans the runs tree at most once, no matter how many
+   * times it polls. The server supplies a resolver that scans the runs root by
+   * run id.
    */
   resolveRunDir?: (record: RunRecord) => string | null;
   /** SSE journal-follow poll interval (ms). Defaults to 250. */
   ssePollMs?: number;
   /** SSE keep-alive comment cadence (ms). Defaults to 15000. */
   sseKeepAliveMs?: number;
+  /**
+   * Max size in bytes of one artifact download; a larger file is refused with
+   * 413. `0` (the default) serves any size — downloads stream with
+   * backpressure, so size never translates into server memory.
+   */
+  maxArtifactBytes?: number;
 }
 
 function isTerminal(status: RunStatus): boolean {
@@ -388,16 +407,25 @@ export class ServeHandler {
     return { status: 202, headers: { "content-type": "application/json" }, body: JSON.stringify(this.toRunObject(record)) };
   }
 
-  /** Host-side run dir for a record: injected resolver, else its own `run_dir`. */
+  /**
+   * Host-side run dir for a record: its own `run_dir` (set at finalize), else
+   * the cached mid-run resolution, else one injected-resolver scan whose hit is
+   * cached on the record — repeated polls never rescan the runs tree.
+   */
   private runDirFor(record: RunRecord): string | null {
-    return this.opts.resolveRunDir ? this.opts.resolveRunDir(record) : record.run_dir;
+    if (record.run_dir) return record.run_dir;
+    if (record.resolvedRunDir) return record.resolvedRunDir;
+    const dir = this.opts.resolveRunDir ? this.opts.resolveRunDir(record) : null;
+    if (dir) record.resolvedRunDir = dir;
+    return dir;
   }
 
   /**
    * `GET /v1/runs/{id}/events`. Default: the run's `run_summary.jsonl` as
-   * `application/x-ndjson`, verbatim, then close. `Accept: text/event-stream`:
-   * SSE replay + live follow until the run is terminal. The journal's own
-   * redaction is the redaction guarantee; raw capture files are never served.
+   * `application/x-ndjson`, streamed verbatim (never buffered whole), then
+   * close. `Accept: text/event-stream`: SSE replay + live follow until the run
+   * is terminal. The journal's own redaction is the redaction guarantee; raw
+   * capture files are never served.
    */
   private runEvents(req: ServeRequest, id: string): ServeResponse {
     const record = this.runs.get(id);
@@ -407,8 +435,20 @@ export class ServeHandler {
     if (!wantsSse) {
       const dir = resolveRunDir();
       const file = dir ? join(dir, RUN_SUMMARY) : null;
-      const bodyBuffer = file && existsSync(file) ? readFileSync(file) : Buffer.alloc(0);
-      return { status: 200, headers: { "content-type": "application/x-ndjson" }, body: "", bodyBuffer };
+      let size = 0;
+      if (file) {
+        try {
+          size = statSync(file).size;
+        } catch {
+          size = 0; // Absent journal serves as an empty body.
+        }
+      }
+      return {
+        status: 200,
+        headers: { "content-type": "application/x-ndjson", "content-length": String(size) },
+        body: "",
+        bodyFile: file && size > 0 ? { path: file, size } : undefined,
+      };
     }
     return {
       status: 200,
@@ -438,10 +478,13 @@ export class ServeHandler {
 
   /**
    * `GET /v1/runs/{id}/artifacts/{path}`: download one published file as
-   * `application/octet-stream`. Traversal-proof — anything escaping the run's
-   * `artifacts/` dir (`..`, absolute paths, escaping symlinks) is a 404, and
-   * raw `%06d-*.out`/`.err` capture files (run-dir root, not `artifacts/`) are
-   * unreachable by construction.
+   * `application/octet-stream`, streamed with backpressure — the complete
+   * artifact is never buffered, so an arbitrarily large file costs no server
+   * memory. `maxArtifactBytes > 0` refuses larger files with 413.
+   * Traversal-proof — anything escaping the run's `artifacts/` dir (`..`,
+   * absolute paths, escaping symlinks) is a 404, and raw `%06d-*.out`/`.err`
+   * capture files (run-dir root, not `artifacts/`) are unreachable by
+   * construction.
    */
   private downloadArtifact(id: string, rawPath: string): ServeResponse {
     const record = this.runs.get(id);
@@ -456,11 +499,19 @@ export class ServeHandler {
     }
     const abs = resolveArtifactPath(dir, requested);
     if (!abs) return this.error(404, "E_NOT_FOUND", "unknown artifact");
-    let bodyBuffer: Buffer;
+    let size: number;
     try {
-      bodyBuffer = readFileSync(abs);
+      size = statSync(abs).size;
     } catch {
       return this.error(404, "E_NOT_FOUND", "unknown artifact");
+    }
+    const maxBytes = this.opts.maxArtifactBytes ?? 0;
+    if (maxBytes > 0 && size > maxBytes) {
+      return this.error(
+        413,
+        "E_ARTIFACT_TOO_LARGE",
+        `artifact is ${size} bytes; downloads are capped at ${maxBytes} (JAIPH_SERVE_MAX_ARTIFACT_BYTES)`,
+      );
     }
     const filename = basename(abs).replace(/"/g, "");
     return {
@@ -468,9 +519,10 @@ export class ServeHandler {
       headers: {
         "content-type": "application/octet-stream",
         "content-disposition": `attachment; filename="${filename}"`,
+        "content-length": String(size),
       },
       body: "",
-      bodyBuffer,
+      bodyFile: { path: abs, size },
     };
   }
 

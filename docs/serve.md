@@ -81,6 +81,8 @@ curl -s http://127.0.0.1:5247/v1/runs/$ID/artifacts/report.txt -o report.txt
 
 The download path is resolved strictly inside the run's `artifacts/` directory and is traversal-proof: `..` segments, absolute paths, and symlinks pointing outside the directory all return `404` without touching the target file.
 
+Downloads stream from disk with backpressure — the server never buffers a complete artifact, so a multi-gigabyte file costs no server memory and a client disconnect closes the file immediately. To refuse oversized downloads outright, set `JAIPH_SERVE_MAX_ARTIFACT_BYTES` (default `0` = no cap); larger artifacts return `413`.
+
 ## 6. Use the Swagger UI
 
 Open `http://127.0.0.1:5247/docs` in a browser to get a live form for every workflow. When a token is configured, paste it into the **Authorize** box (Swagger UI keeps it across reloads). The UI loads its assets from a pinned, SRI-verified CDN, so `/docs` needs internet access in the browser; air-gapped operators use `/openapi.json` with any locally-hosted renderer.

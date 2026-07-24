@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, readdirSync, realpathSync, statSync, type Dirent } from "node:fs";
+import { closeSync, existsSync, fstatSync, openSync, readSync, readdirSync, realpathSync, statSync, type Dirent } from "node:fs";
 import { join, resolve, sep } from "node:path";
 
 /** A run's durable journal file name, under its run directory. */
@@ -112,28 +112,80 @@ export interface SseEventsOptions {
   keepAliveMs: number;
 }
 
-/** Read complete (newline-terminated) lines from `file` starting at byte `offset`. */
-function readNewLines(file: string, offset: number): { lines: string[]; nextOffset: number } {
-  let buf: Buffer;
-  try {
-    buf = readFileSync(file);
-  } catch {
-    return { lines: [], nextOffset: offset };
-  }
-  if (buf.length <= offset) return { lines: [], nextOffset: offset };
-  const chunk = buf.toString("utf8", offset);
-  const lastNl = chunk.lastIndexOf("\n");
-  if (lastNl === -1) return { lines: [], nextOffset: offset };
-  const complete = chunk.slice(0, lastNl);
-  const lines = complete.length > 0 ? complete.split("\n") : [];
-  const nextOffset = offset + Buffer.byteLength(chunk.slice(0, lastNl + 1), "utf8");
-  return { lines, nextOffset };
+/**
+ * Incremental reader over an append-only journal: an open file descriptor plus
+ * a byte offset, so each poll reads only the bytes appended since the previous
+ * one — bytes before the current offset are never read again, and no poll
+ * loads the whole file. Bytes after the last newline (a partial line still
+ * being written) are buffered in memory and completed on a later call, never
+ * re-read from disk.
+ */
+export interface JournalFollower {
+  /** Complete (newline-terminated) lines appended to `file` since the last call. */
+  readNewLines(file: string): string[];
+  close(): void;
+}
+
+export function createJournalFollower(): JournalFollower {
+  let fd: number | null = null;
+  let offset = 0;
+  let tail = Buffer.alloc(0);
+  return {
+    readNewLines(file: string): string[] {
+      if (fd === null) {
+        try {
+          fd = openSync(file, "r");
+        } catch {
+          return []; // The journal may not exist yet; try again next poll.
+        }
+      }
+      let size: number;
+      try {
+        size = fstatSync(fd).size;
+      } catch {
+        return [];
+      }
+      if (size <= offset) return [];
+      const appended = Buffer.alloc(size - offset);
+      let read = 0;
+      try {
+        while (read < appended.length) {
+          const n = readSync(fd, appended, read, appended.length - read, offset + read);
+          if (n === 0) break;
+          read += n;
+        }
+      } catch {
+        return [];
+      }
+      offset += read;
+      const buf = tail.length > 0 ? Buffer.concat([tail, appended.subarray(0, read)]) : appended.subarray(0, read);
+      const lastNl = buf.lastIndexOf(0x0a);
+      if (lastNl === -1) {
+        tail = Buffer.from(buf);
+        return [];
+      }
+      // Copy the partial tail out so the full appended buffer can be collected.
+      tail = Buffer.from(buf.subarray(lastNl + 1));
+      const complete = buf.toString("utf8", 0, lastNl);
+      return complete.length > 0 ? complete.split("\n") : [];
+    },
+    close(): void {
+      if (fd === null) return;
+      try {
+        closeSync(fd);
+      } catch {
+        // Already closed; nothing to release.
+      }
+      fd = null;
+    },
+  };
 }
 
 /**
  * SSE follower for a run's durable journal. Replays every existing line as
  * `data: <raw json line>`, follows the file as it appends (polling every
- * `pollMs`), keeps proxies from idling the connection out with a `:ka` comment
+ * `pollMs` through a {@link JournalFollower}, so each poll reads only the new
+ * bytes), keeps proxies from idling the connection out with a `:ka` comment
  * every `keepAliveMs`, and closes with `event: end` once the run is terminal —
  * so it works identically for a still-running run and an already-terminal one
  * (full replay + immediate end).
@@ -143,31 +195,33 @@ function readNewLines(file: string, offset: number): { lines: string[]; nextOffs
  * `.err` capture files are never opened here.
  */
 export async function streamRunEventsSse(target: StreamTarget, opts: SseEventsOptions): Promise<void> {
-  let offset = 0;
+  const follower = createJournalFollower();
   let lastKeepAlive = Date.now();
   const flush = (): void => {
     const dir = opts.resolveRunDir();
     if (!dir) return;
-    const { lines, nextOffset } = readNewLines(join(dir, RUN_SUMMARY), offset);
-    offset = nextOffset;
-    for (const line of lines) target.write(`data: ${line}\n\n`);
+    for (const line of follower.readNewLines(join(dir, RUN_SUMMARY))) target.write(`data: ${line}\n\n`);
   };
-  for (;;) {
-    if (target.aborted) return;
-    flush();
-    if (opts.isTerminal()) {
-      // A final line (e.g. WORKFLOW_END) may have landed between the read above
-      // and the registry marking the run terminal; flush once more so the
-      // stream is complete before closing.
+  try {
+    for (;;) {
+      if (target.aborted) return;
       flush();
-      target.write("event: end\ndata: {}\n\n");
-      return;
+      if (opts.isTerminal()) {
+        // A final line (e.g. WORKFLOW_END) may have landed between the read above
+        // and the registry marking the run terminal; flush once more so the
+        // stream is complete before closing.
+        flush();
+        target.write("event: end\ndata: {}\n\n");
+        return;
+      }
+      if (Date.now() - lastKeepAlive >= opts.keepAliveMs) {
+        target.write(":ka\n\n");
+        lastKeepAlive = Date.now();
+      }
+      await sleep(opts.pollMs, target);
     }
-    if (Date.now() - lastKeepAlive >= opts.keepAliveMs) {
-      target.write(":ka\n\n");
-      lastKeepAlive = Date.now();
-    }
-    await sleep(opts.pollMs, target);
+  } finally {
+    follower.close();
   }
 }
 

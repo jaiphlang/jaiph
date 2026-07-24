@@ -41,11 +41,29 @@ jobs:
 
       # `kubectl apply --dry-run=client` still needs an API server for resource
       # discovery (RESTMapper), so provision a throwaway kind cluster for it.
+      # The same cluster then backs the real deploy test below.
       - name: Create kind cluster
         uses: helm/kind-action@v1
+        with:
+          cluster_name: jaiph-e2e
 
+      # Fast schema gate — cheap, but only proves the manifest parses.
       - name: Dry-run apply the standalone deploy manifest
         run: kubectl apply --dry-run=client -f docs/deploy/k8s.yaml
+
+      - name: Build runtime image for the deploy test
+        run: docker build -t jaiph-e2e-runtime:local -f runtime/Dockerfile .
+
+      # Real deployment contract: external Secret gate, pod hardening
+      # (non-root, no privilege escalation, dropped caps, no SA token,
+      # read-only rootfs), an authenticated HTTP run, and its journal on the
+      # writable runs volume.
+      - name: Deploy and exercise the manifest on kind
+        run: |
+          JAIPH_E2E_SKIP_INSTALL=1 \
+          JAIPH_E2E_KIND_CLUSTER=jaiph-e2e \
+          JAIPH_E2E_DOCKER_IMAGE=jaiph-e2e-runtime:local \
+          bash e2e/tests/150_k8s_deploy.sh
 
   e2e:
     name: E2E (${{ matrix.os }}, ${{ matrix.label }})

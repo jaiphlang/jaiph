@@ -61,20 +61,28 @@ Reach for this image when you want the whole toolchain and all three backends pr
 
 ## Kubernetes
 
-A complete, apply-ready manifest lives at [`docs/deploy/k8s.yaml`](https://github.com/jaiphlang/jaiph/blob/main/docs/deploy/k8s.yaml). It defines a **Deployment**, a **Secret** for backend credentials (and the serve token), and a **Service**. Validate it without a cluster:
+A complete, apply-ready manifest lives at [`docs/deploy/k8s.yaml`](https://github.com/jaiphlang/jaiph/blob/main/docs/deploy/k8s.yaml). It defines a **Deployment** and a **Service** — credentials are deliberately **not** in the file. Create the `jaiph-credentials` Secret out-of-band first:
 
 ```bash
-kubectl apply --dry-run=client -f docs/deploy/k8s.yaml
+kubectl create secret generic jaiph-credentials \
+  --from-literal=JAIPH_SERVE_TOKEN="$(openssl rand -hex 32)" \
+  --from-literal=ANTHROPIC_API_KEY="sk-ant-..."   # only the backend key(s) your workflows use
+kubectl apply -f docs/deploy/k8s.yaml
 ```
+
+The Deployment references the Secret as a **required** `envFrom` — a missing Secret holds the pod in `CreateContainerConfigError` rather than ever starting an unauthenticated runner. `kubectl apply --dry-run=client -f docs/deploy/k8s.yaml` remains a fast schema check, but the real deployment contract is exercised end-to-end on a [kind](https://kind.sigs.k8s.io/) cluster by `e2e/tests/150_k8s_deploy.sh` (run in CI): it applies the manifest, verifies the Secret gate and the hardening below, invokes the health workflow over HTTP with bearer auth, and reads the run's journal back from the runs volume.
 
 The manifest runs `jaiph serve --host 0.0.0.0` as a long-lived HTTP runner (see [Serve workflows over HTTP](serve.md)) with `JAIPH_SERVE_TOKEN` sourced from the Secret, and liveness/readiness probes on `GET /healthz` (which stays open — no bearer token required). Highlights, all reflected in the file:
 
+- **Pod hardening by default.** `runAsNonRoot` with the image's fixed `jaiph` UID/GID (`10001`), `allowPrivilegeEscalation: false`, all capabilities dropped, the `RuntimeDefault` seccomp profile, `readOnlyRootFilesystem: true`, and `automountServiceAccountToken: false` (workflows never talk to the Kubernetes API, so they get no API credential to leak).
+- **Writable mounts only where required.** Workflow sources stay read-only (a ConfigMap at `/work`); run artifacts go to a dedicated `emptyDir` at `/jaiph/runs` via `JAIPH_RUNS_DIR` (swap it for a PVC if runs must survive pod replacement). Two more `emptyDir`s cover what Jaiph and the agent CLIs genuinely write: `/tmp` (extracted scripts, scratch) and a fresh `$HOME` at `/jaiph/home` (claude/cursor state; the baked `PATH` still finds `cursor-agent` under the image's read-only `/home/jaiph/.local/bin`).
 - **Image tag pinning.** The manifest ships `:nightly` with an inline note to pin a released tag or a `@sha256:` digest for production — never track a moving tag.
 - **TLS via ingress.** `jaiph serve` speaks plain HTTP; the Service stays `ClusterIP` and you terminate TLS at an Ingress / gateway (cert-manager, a cloud LB, or a mesh) in front of it. Do not expose the token-guarded API to the internet without TLS.
 - **Resource requests.** Agent workloads are CPU- and memory-hungry — they spawn backend CLIs plus build/test toolchains. The manifest requests `1` CPU / `2Gi` and limits `2` CPU / `4Gi` as a starting point; tune to your workflows.
 - **Auth.** Binding `0.0.0.0` without `JAIPH_SERVE_TOKEN` is a startup error by design, so the Secret is mandatory. Every `/v1/*` request then requires `Authorization: Bearer <token>`.
+- **Observability wiring, credential-free.** Commented `env` entries show where `OTEL_EXPORTER_OTLP_ENDPOINT` / `OTEL_SERVICE_NAME` / `SENTRY_ENVIRONMENT` go; anything secret (`SENTRY_DSN`, an `OTEL_EXPORTER_OTLP_HEADERS` auth token) belongs in the `jaiph-credentials` Secret, never in the manifest. See [Observability](observability.md).
 
-The same security posture applies: the pod runs in host mode (`JAIPH_UNSAFE=true` is baked), so **isolation is the pod boundary you configure** — there is no jaiph-managed sandbox inside.
+The same security posture applies: the pod runs in host mode (`JAIPH_UNSAFE=true` is baked), so **isolation is the pod boundary** — the manifest configures that boundary, and there is no jaiph-managed sandbox inside.
 
 ## Related
 

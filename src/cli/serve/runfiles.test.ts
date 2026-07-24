@@ -1,9 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, readSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { listArtifacts, resolveArtifactPath, streamRunEventsSse, type StreamTarget } from "./runfiles";
+import { createJournalFollower, listArtifacts, resolveArtifactPath, streamRunEventsSse, type StreamTarget } from "./runfiles";
 
 /** A run dir with an `artifacts/` subdir and a couple of raw capture files at the root. */
 function makeRunDir(): string {
@@ -186,6 +187,99 @@ test("streamRunEventsSse replays a terminal run's journal as data: frames then e
   } finally {
     rmSync(runDir, { recursive: true, force: true });
   }
+});
+
+// === journal follower: fd + offset, no rereads ===
+
+test("createJournalFollower emits only complete lines and finishes a split line without rereading", () => {
+  const runDir = mkdtempSync(join(tmpdir(), "jaiph-follow-"));
+  const file = join(runDir, "run_summary.jsonl");
+  const follower = createJournalFollower();
+  try {
+    assert.deepEqual(follower.readNewLines(file), [], "missing file is not an error");
+    writeFileSync(file, '{"a":1}\n{"b":');
+    assert.deepEqual(follower.readNewLines(file), ['{"a":1}'], "the partial trailing line is withheld");
+    appendFileSync(file, '2}\n');
+    assert.deepEqual(follower.readNewLines(file), ['{"b":2}'], "the completed line is emitted from the buffered tail");
+    assert.deepEqual(follower.readNewLines(file), [], "no appended bytes, no lines");
+  } finally {
+    follower.close();
+    rmSync(runDir, { recursive: true, force: true });
+  }
+});
+
+/** Poll until `target` holds at least `n` SSE `data:` frames. */
+async function waitForFrames(target: { chunks: string[] }, n: number): Promise<void> {
+  const deadline = Date.now() + 5000;
+  while (target.chunks.filter((c) => c.startsWith("data: ")).length < n) {
+    if (Date.now() > deadline) throw new Error(`timed out waiting for ${n} SSE data frames`);
+    await new Promise((r) => setTimeout(r, 5));
+  }
+}
+
+test("SSE follow reads each appended journal byte exactly once, never before the current offset", async () => {
+  const runDir = makeRunDir();
+  const journal = join(runDir, "run_summary.jsonl");
+  const lines = ['{"n":1}', '{"n":2}', '{"n":3}', '{"n":4}'];
+  writeFileSync(journal, `${lines[0]}\n${lines[1]}\n`);
+  // Instrument fs: record every positional read, and catch any whole-file load
+  // of the journal (the pre-follower implementation reread it on every poll).
+  // Patch the live CJS module object (what the compiled code reads at call
+  // time) — the tsc `import *` namespace copy is getter-only.
+  const fsAny = createRequire(__filename)("node:fs") as Record<string, unknown>;
+  const origReadSync = readSync;
+  const origReadFileSync = readFileSync;
+  const reads: Array<{ fd: number; position: number; bytes: number }> = [];
+  let wholeJournalReads = 0;
+  const target = fakeTarget();
+  let terminal = false;
+  try {
+    fsAny.readSync = (fd: number, buffer: Buffer, off: number, len: number, pos: number): number => {
+      const n = (origReadSync as (...a: unknown[]) => number)(fd, buffer, off, len, pos);
+      reads.push({ fd, position: pos, bytes: n });
+      return n;
+    };
+    fsAny.readFileSync = (...args: unknown[]): unknown => {
+      if (args[0] === journal) wholeJournalReads += 1;
+      return (origReadFileSync as (...a: unknown[]) => unknown)(...args);
+    };
+    const done = streamRunEventsSse(target, {
+      resolveRunDir: () => runDir,
+      isTerminal: () => terminal,
+      pollMs: 5,
+      keepAliveMs: 15000,
+    });
+    await waitForFrames(target, 2);
+    appendFileSync(journal, `${lines[2]}\n`);
+    await waitForFrames(target, 3);
+    appendFileSync(journal, `${lines[3]}\n`);
+    await waitForFrames(target, 4);
+    terminal = true;
+    await done;
+  } finally {
+    fsAny.readSync = origReadSync;
+    fsAny.readFileSync = origReadFileSync;
+    rmSync(runDir, { recursive: true, force: true });
+  }
+  const payloads = target.chunks.filter((c) => c.startsWith("data: ")).map((c) => c.slice(6).replace(/\n\n$/, ""));
+  assert.deepEqual(payloads, lines, "every line arrived once, in order");
+  assert.equal(wholeJournalReads, 0, "the journal is never loaded whole on a poll");
+  // The follower's fd is the one whose positional reads total the journal size.
+  const totalBytes = Buffer.byteLength(lines.map((l) => `${l}\n`).join(""));
+  const byFd = new Map<number, Array<{ position: number; bytes: number }>>();
+  for (const r of reads) {
+    const list = byFd.get(r.fd) ?? [];
+    list.push({ position: r.position, bytes: r.bytes });
+    byFd.set(r.fd, list);
+  }
+  const followerReads = [...byFd.values()].find((rs) => rs.reduce((s, r) => s + r.bytes, 0) === totalBytes);
+  assert.ok(followerReads, "exactly the journal's byte count was read — each byte once");
+  let offset = 0;
+  for (const r of followerReads!) {
+    assert.equal(r.position, offset, "every read starts at the high-water mark — no byte before the offset is reread");
+    offset += r.bytes;
+  }
+  assert.equal(offset, totalBytes);
 });
 
 test("streamRunEventsSse stops promptly when the client disconnects mid-run", async () => {

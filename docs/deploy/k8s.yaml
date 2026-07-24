@@ -6,31 +6,34 @@
 # host mode — the pod boundary IS the sandbox (there is no jaiph-managed Docker
 # sandbox in standalone mode). See docs/deploy.md for the security posture.
 #
-# Validate without a cluster:
-#   kubectl apply --dry-run=client -f docs/deploy/k8s.yaml
+# Credentials are NOT part of this manifest. Create the `jaiph-credentials`
+# Secret out-of-band before applying — the Deployment references it as a
+# required secretRef, so the pod stays in CreateContainerConfigError until
+# the Secret exists:
 #
-# The workflow file is supplied here via a ConfigMap mounted at /work for a
-# self-contained example; a real deployment usually bakes workflows into a
-# derived image or mounts them from a volume / git-sync sidecar instead.
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: jaiph-credentials
-  labels:
-    app: jaiph-runner
-type: Opaque
-stringData:
-  # HTTP API bearer token. `jaiph serve` refuses to bind a non-loopback host
-  # (0.0.0.0) unless this is set — every /v1/* request then requires
-  # `Authorization: Bearer <token>`. Replace with a real secret (e.g. via a
-  # sealed-secret / external-secrets operator) before applying to a cluster.
-  JAIPH_SERVE_TOKEN: "replace-me-with-a-long-random-token"
-  # Backend credentials — set only the one(s) your workflows use.
-  #   claude  -> ANTHROPIC_API_KEY (or CLAUDE_CODE_OAUTH_TOKEN)
-  #   cursor  -> CURSOR_API_KEY
-  #   codex   -> OPENAI_API_KEY
-  ANTHROPIC_API_KEY: "replace-me"
+#   kubectl create secret generic jaiph-credentials \
+#     --from-literal=JAIPH_SERVE_TOKEN="$(openssl rand -hex 32)" \
+#     --from-literal=ANTHROPIC_API_KEY="sk-ant-..."
+#
+# JAIPH_SERVE_TOKEN is mandatory: `jaiph serve` refuses to bind a non-loopback
+# host (0.0.0.0) without it, and every /v1/* request then requires
+# `Authorization: Bearer <token>`. Backend credentials — add only the one(s)
+# your workflows use:
+#   claude  -> ANTHROPIC_API_KEY (or CLAUDE_CODE_OAUTH_TOKEN)
+#   cursor  -> CURSOR_API_KEY
+#   codex   -> OPENAI_API_KEY
+#
+# Validate the schema without a cluster:
+#   kubectl apply --dry-run=client -f docs/deploy/k8s.yaml
+# The real deployment contract (a run completes and lands its journal on the
+# writable runs volume, the pod is non-root with no privilege escalation) is
+# exercised end-to-end against a kind cluster by e2e/tests/150_k8s_deploy.sh.
+#
+# The workflow file is supplied here via a ConfigMap mounted read-only at
+# /work for a self-contained example; a real deployment usually bakes
+# workflows into a derived image or mounts them from a volume / git-sync
+# sidecar instead. Workflow sources stay read-only either way — run artifacts
+# go to the dedicated runs volume via JAIPH_RUNS_DIR.
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -61,6 +64,18 @@ spec:
       labels:
         app: jaiph-runner
     spec:
+      # The runner never talks to the Kubernetes API; don't hand workflows
+      # (and the agent backends they spawn) an API credential.
+      automountServiceAccountToken: false
+      securityContext:
+        # UID/GID 10001 is the image's `jaiph` user; fsGroup makes the
+        # emptyDir volumes below group-writable for it.
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: jaiph
           # Pin the image tag (or, better, a @sha256 digest) for reproducible
@@ -68,15 +83,54 @@ spec:
           image: ghcr.io/jaiphlang/jaiph-runtime:nightly
           # The image sets no ENTRYPOINT, so spell the full command.
           command: ["jaiph", "serve", "--host", "0.0.0.0", "/work/tools.jh"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
           ports:
             - name: http
               containerPort: 5247
+          env:
+            # Run artifacts (journal, step captures, inbox) go to the writable
+            # runs volume — /work is the read-only ConfigMap.
+            - name: JAIPH_RUNS_DIR
+              value: /jaiph/runs
+            # Agent CLIs (claude, cursor-agent) persist state under $HOME.
+            # Point HOME at a writable emptyDir instead of the image's
+            # read-only /home/jaiph; the baked PATH still resolves
+            # cursor-agent from /home/jaiph/.local/bin.
+            - name: HOME
+              value: /jaiph/home
+            # Optional observability — uncomment and point at your stack.
+            # Values here are addresses only; anything secret (an OTLP auth
+            # header, the Sentry DSN) belongs in the jaiph-credentials Secret
+            # so it arrives via the envFrom below, never in this manifest:
+            #   OTEL_EXPORTER_OTLP_HEADERS: "authorization=Bearer <token>"
+            #   SENTRY_DSN: "https://<key>@<host>/<projectId>"
+            # - name: OTEL_EXPORTER_OTLP_ENDPOINT
+            #   value: "http://otel-collector.observability.svc:4318"
+            # - name: OTEL_SERVICE_NAME
+            #   value: "jaiph-runner"
+            # - name: SENTRY_ENVIRONMENT
+            #   value: "prod"
           envFrom:
             - secretRef:
+                # Required (not `optional: true`): a missing Secret must block
+                # startup rather than expose an unauthenticated runner.
                 name: jaiph-credentials
           volumeMounts:
             - name: workflows
               mountPath: /work
+              readOnly: true
+            - name: runs
+              mountPath: /jaiph/runs
+            - name: home
+              mountPath: /jaiph/home
+            # `jaiph serve` extracts compiled scripts to a temp dir; agent
+            # CLIs and workflow scripts also expect a writable /tmp.
+            - name: tmp
+              mountPath: /tmp
           # /healthz stays open (no bearer token required) and is served as soon
           # as the HTTP listener is up.
           readinessProbe:
@@ -104,6 +158,14 @@ spec:
         - name: workflows
           configMap:
             name: jaiph-workflows
+        # Runs are durable per-run records; swap the emptyDir for a
+        # PersistentVolumeClaim if they must survive pod replacement.
+        - name: runs
+          emptyDir: {}
+        - name: home
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service

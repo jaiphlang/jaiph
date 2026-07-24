@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, ftruncateSync, mkdtempSync, openSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -68,6 +68,7 @@ function serveEnv(runsRoot: string, extra?: Record<string, string>): NodeJS.Proc
 
 interface ServeProc {
   baseUrl: string;
+  pid: number;
   stderr: () => string;
   close: () => Promise<void>;
 }
@@ -91,6 +92,7 @@ function startServe(fixture: string, cwd: string, env: NodeJS.ProcessEnv, extraA
         clearTimeout(timer);
         resolve({
           baseUrl: m[1],
+          pid: child.pid!,
           stderr: () => stderrBuf,
           close: () =>
             new Promise<void>((res) => {
@@ -466,6 +468,69 @@ test("jaiph serve: artifacts round-trip — list then byte-identical download, t
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+/** Resident set size of `pid` in KB via `ps` (0 when unavailable). */
+function sampleRssKb(pid: number): number {
+  const out = spawnSync("ps", ["-o", "rss=", "-p", String(pid)], { encoding: "utf8" });
+  const n = Number((out.stdout ?? "").trim());
+  return Number.isFinite(n) ? n : 0;
+}
+
+test(
+  "jaiph serve: a multi-gigabyte sparse artifact streams with bounded server memory",
+  { skip: process.platform === "win32" ? "needs ps for RSS sampling" : false },
+  async () => {
+    const root = mkdtempSync(join(tmpdir(), "jaiph-serve-bigart-"));
+    const jh = join(root, "tools.jh");
+    writeFileSync(jh, BASE_FIXTURE);
+    const srv = await startServe(jh, root, serveEnv(join(root, ".jaiph/runs")));
+    try {
+      const runRes = await fetch(`${srv.baseUrl}/v1/workflows/make_artifact/runs?wait=true`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "{}",
+      });
+      const run = await runRes.json();
+      assert.equal(run.status, "succeeded", `run failed: ${JSON.stringify(run)}`);
+
+      // Publish a 3 GiB sparse file into the run's durable artifacts dir. It
+      // occupies no disk, but a server that buffers the download whole would
+      // hold all 3 GiB resident.
+      const SIZE = 3 * 1024 ** 3;
+      const fd = openSync(join(run.run_dir, "artifacts", "big.bin"), "w");
+      ftruncateSync(fd, SIZE);
+      closeSync(fd);
+
+      const dl = await fetch(`${srv.baseUrl}/v1/runs/${run.run_id}/artifacts/big.bin`);
+      assert.equal(dl.status, 200);
+      assert.equal(dl.headers.get("content-length"), String(SIZE));
+
+      // Consume the stream, sampling the serve process's RSS as it flows.
+      const reader = dl.body!.getReader();
+      let received = 0;
+      let maxRssKb = 0;
+      let lastSample = 0;
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        received += value!.length;
+        if (Date.now() - lastSample > 250) {
+          lastSample = Date.now();
+          maxRssKb = Math.max(maxRssKb, sampleRssKb(srv.pid));
+        }
+      }
+      assert.equal(received, SIZE, "every artifact byte arrived");
+      assert.ok(maxRssKb > 0, "RSS sampling observed the serve process during the transfer");
+      // Streaming keeps the server at a few hundred MB at most; buffering the
+      // artifact whole would put it well past 3 GiB.
+      const BOUND_KB = 1.5 * 1024 * 1024;
+      assert.ok(maxRssKb < BOUND_KB, `server RSS stayed bounded during the 3 GiB download (max ${maxRssKb} KB)`);
+    } finally {
+      await srv.close();
+      rmSync(root, { recursive: true, force: true });
+    }
+  },
+);
 
 test("jaiph --help lists jaiph serve", () => {
   const result = spawnSync("node", [CLI_PATH, "--help"], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
