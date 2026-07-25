@@ -601,3 +601,244 @@ test("artifacts list is empty for a run with no published files", async () => {
     rmSync(runDir, { recursive: true, force: true });
   }
 });
+
+// === MCP Streamable HTTP (POST /mcp) ===
+//
+// The embedded MCP engine reuses the exact stdio protocol machine; these tests
+// pin that a POST /mcp `tools/call` funnels into the SAME run registry,
+// concurrency cap, and auth boundary as the REST surface — the acceptance
+// contract for one process serving both transports against one generation.
+
+const mcpPost = (body: unknown, headers?: Record<string, string>): ServeRequest =>
+  req("POST", "/mcp", { headers: { "content-type": "application/json", ...headers }, body: JSON.stringify(body) });
+
+test("POST /mcp initialize returns a JSON-RPC result over application/json", async () => {
+  const res = await makeHandler().handleRequest(
+    mcpPost({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18" } }),
+  );
+  assert.equal(res.status, 200);
+  assert.match(res.headers["content-type"], /application\/json/);
+  const body = bodyJson(res);
+  assert.equal(body.id, 1);
+  assert.equal(body.result.protocolVersion, "2025-06-18");
+  assert.equal(body.result.serverInfo.name, "jaiph");
+});
+
+test("POST /mcp tools/list returns the same tools as the REST surface", async () => {
+  const res = await makeHandler().handleRequest(mcpPost({ jsonrpc: "2.0", id: 2, method: "tools/list" }));
+  const body = bodyJson(res);
+  assert.deepEqual(
+    body.result.tools.map((t: { name: string }) => t.name),
+    ["build"],
+  );
+});
+
+test("POST /mcp tools/call runs the workflow and registers it in the same run registry", async () => {
+  const seen: Array<{ workflow: string; runId: string }> = [];
+  const h = makeHandler({
+    callTool: async (spec, _args, runId) => {
+      seen.push({ workflow: spec.workflow, runId });
+      return { text: "built ok", isError: false, exitStatus: 0, runDir: "/runs/x" };
+    },
+  });
+  const res = await h.handleRequest(
+    mcpPost({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "build", arguments: { target: "app" } } }),
+  );
+  const body = bodyJson(res);
+  assert.equal(body.id, 3);
+  assert.equal(body.result.isError, false);
+  assert.equal(body.result.content[0].text, "built ok");
+  // The MCP call is now a first-class run: it appears in the REST registry,
+  // succeeded, and reused the injected executor exactly once.
+  assert.equal(seen.length, 1);
+  assert.equal(seen[0].workflow, "build");
+  const listed = bodyJson(await h.handleRequest(req("GET", "/v1/runs")));
+  assert.equal(listed.total, 1);
+  assert.equal(listed.runs[0].run_id, seen[0].runId);
+  assert.equal(listed.runs[0].status, "succeeded");
+});
+
+test("POST /mcp tools/call failure comes back as isError, not a protocol error", async () => {
+  const h = makeHandler({
+    callTool: async () => ({ text: "boom detail", isError: true, exitStatus: 1 }),
+  });
+  const res = await h.handleRequest(
+    mcpPost({ jsonrpc: "2.0", id: 4, method: "tools/call", params: { name: "build", arguments: { target: "x" } } }),
+  );
+  const body = bodyJson(res);
+  assert.equal(body.result.isError, true);
+  assert.equal(body.result.content[0].text, "boom detail");
+  assert.equal(bodyJson(await h.handleRequest(req("GET", "/v1/runs"))).runs[0].status, "failed");
+});
+
+test("POST /mcp tools/call obeys the shared concurrency cap (MCP analogue of 429)", async () => {
+  // The first call never resolves so it holds the only slot; the second must be
+  // refused as an isError result naming the cap, and must NOT start a run.
+  let started = 0;
+  const h = makeHandler({
+    maxConcurrent: 1,
+    callTool: () => {
+      started += 1;
+      return new Promise<WorkflowCallResult>(() => {});
+    },
+  });
+  void h.handleRequest(
+    mcpPost({ jsonrpc: "2.0", id: 5, method: "tools/call", params: { name: "build", arguments: { target: "a" } } }),
+  );
+  await flush();
+  const res = await h.handleRequest(
+    mcpPost({ jsonrpc: "2.0", id: 6, method: "tools/call", params: { name: "build", arguments: { target: "b" } } }),
+  );
+  const body = bodyJson(res);
+  assert.equal(body.result.isError, true);
+  assert.match(body.result.content[0].text, /too many concurrent runs/);
+  assert.equal(started, 1, "the capped call never reached the executor");
+});
+
+test("POST /mcp notifications settle as 202 with no body", async () => {
+  const res = await makeHandler().handleRequest(mcpPost({ jsonrpc: "2.0", method: "notifications/initialized" }));
+  assert.equal(res.status, 202);
+  assert.equal(res.body, "");
+});
+
+test("POST /mcp requires the bearer token when one is configured", async () => {
+  const h = makeHandler({ token: "secret" });
+  const none = await h.handleRequest(mcpPost({ jsonrpc: "2.0", id: 7, method: "tools/list" }));
+  assert.equal(none.status, 401);
+  assert.equal(bodyJson(none).error.code, "E_UNAUTHORIZED");
+  const ok = await h.handleRequest(
+    mcpPost({ jsonrpc: "2.0", id: 7, method: "tools/list" }, { authorization: "Bearer secret" }),
+  );
+  assert.equal(ok.status, 200);
+  assert.equal(bodyJson(ok).result.tools[0].name, "build");
+});
+
+test("GET /mcp is 405 (no server-initiated stream offered)", async () => {
+  const res = await makeHandler().handleRequest(req("GET", "/mcp"));
+  assert.equal(res.status, 405);
+  assert.equal(res.headers.allow, "POST");
+});
+
+test("POST /mcp tools/call streams progress as SSE when the client accepts it", async () => {
+  const h = makeHandler({
+    tools: [NOARG_TOOL],
+    callTool: async (_spec, _args, _runId, ctx) => {
+      ctx.onStep?.("workflow", "ping");
+      ctx.onStep?.("script", "ping_sh");
+      return { text: "pong", isError: false, exitStatus: 0 };
+    },
+  });
+  const res = await h.handleRequest(
+    mcpPost(
+      { jsonrpc: "2.0", id: 8, method: "tools/call", params: { name: "ping", arguments: {}, _meta: { progressToken: "p" } } },
+      { accept: "text/event-stream" },
+    ),
+  );
+  assert.equal(res.status, 200);
+  assert.match(res.headers["content-type"], /text\/event-stream/);
+  assert.ok(res.stream, "SSE response drives a stream");
+  const target = fakeTarget();
+  await res.stream!(target);
+  const messages = target.chunks
+    .filter((c) => c.startsWith("data: "))
+    .map((c) => JSON.parse(c.slice("data: ".length)));
+  const progress = messages.filter((m) => m.method === "notifications/progress");
+  assert.equal(progress.length, 2, "each step boundary emits one progress notification");
+  assert.equal(progress[1].params.progress, 2);
+  const result = messages.find((m) => m.id === 8);
+  assert.equal(result.result.content[0].text, "pong");
+});
+
+test("POST /mcp cancel (notifications/cancelled) marks the shared run cancelled, not failed", async () => {
+  // MCP cancel must share the REST cancel contract: the run registry records
+  // `cancelled`, not a generic `failed` from the killed child's nonzero exit.
+  let runPromise!: Promise<WorkflowCallResult>;
+  const h = makeHandler({
+    tools: [NOARG_TOOL],
+    callTool: (_spec, _args, _runId, ctx) => {
+      runPromise = new Promise<WorkflowCallResult>((resolve) => {
+        ctx.onCancelHandle?.(() => {
+          resolve({ text: "terminated by signal SIGINT", isError: true, exitStatus: 1, signal: "SIGINT" });
+        });
+      });
+      return runPromise;
+    },
+  });
+  const call = h.handleRequest(
+    mcpPost({ jsonrpc: "2.0", id: 9, method: "tools/call", params: { name: "ping", arguments: {} } }),
+  );
+  await flush();
+  const listed = bodyJson(await h.handleRequest(req("GET", "/v1/runs?limit=1")));
+  assert.equal(listed.runs[0].status, "running");
+  const runId = listed.runs[0].run_id;
+
+  const notify = await h.handleRequest(
+    mcpPost({ jsonrpc: "2.0", method: "notifications/cancelled", params: { requestId: 9 } }),
+  );
+  assert.equal(notify.status, 202);
+  await runPromise.catch(() => {});
+  const settled = await call;
+  // Cancelled requests produce no JSON-RPC response.
+  assert.equal(settled.status, 202);
+  assert.equal(settled.body, "");
+  assert.equal(bodyJson(await h.handleRequest(req("GET", `/v1/runs/${runId}`))).status, "cancelled");
+});
+
+test("POST /v1/runs/{id}/cancel cancels an MCP-initiated run in the shared registry", async () => {
+  let childKilled = false;
+  let runPromise!: Promise<WorkflowCallResult>;
+  const h = makeHandler({
+    tools: [NOARG_TOOL],
+    callTool: (_spec, _args, _runId, ctx) => {
+      runPromise = new Promise<WorkflowCallResult>((resolve) => {
+        ctx.onCancelHandle?.(() => {
+          childKilled = true;
+          resolve({ text: "terminated by signal SIGINT", isError: true, exitStatus: 1, signal: "SIGINT" });
+        });
+      });
+      return runPromise;
+    },
+  });
+  const call = h.handleRequest(
+    mcpPost({ jsonrpc: "2.0", id: 10, method: "tools/call", params: { name: "ping", arguments: {} } }),
+  );
+  await flush();
+  const runId = bodyJson(await h.handleRequest(req("GET", "/v1/runs?limit=1"))).runs[0].run_id;
+
+  const cancel = await h.handleRequest(req("POST", `/v1/runs/${runId}/cancel`));
+  assert.equal(cancel.status, 202);
+  assert.equal(childKilled, true, "REST cancel tears down the MCP call's child");
+  await runPromise.catch(() => {});
+  await call;
+  assert.equal(bodyJson(await h.handleRequest(req("GET", `/v1/runs/${runId}`))).status, "cancelled");
+});
+
+test("POST /mcp SSE hangup cancels the run through the shared cancel path", async () => {
+  let runPromise!: Promise<WorkflowCallResult>;
+  const h = makeHandler({
+    tools: [NOARG_TOOL],
+    callTool: (_spec, _args, _runId, ctx) => {
+      runPromise = new Promise<WorkflowCallResult>((resolve) => {
+        ctx.onCancelHandle?.(() => {
+          resolve({ text: "terminated by signal SIGINT", isError: true, exitStatus: 1, signal: "SIGINT" });
+        });
+      });
+      return runPromise;
+    },
+  });
+  const res = await h.handleRequest(
+    mcpPost(
+      { jsonrpc: "2.0", id: 11, method: "tools/call", params: { name: "ping", arguments: {} } },
+      { accept: "text/event-stream" },
+    ),
+  );
+  assert.ok(res.stream);
+  const target = abortableTarget();
+  const streaming = res.stream!(target);
+  await flush();
+  const runId = bodyJson(await h.handleRequest(req("GET", "/v1/runs?limit=1"))).runs[0].run_id;
+  target.abort();
+  await runPromise.catch(() => {});
+  await streaming;
+  assert.equal(bodyJson(await h.handleRequest(req("GET", `/v1/runs/${runId}`))).status, "cancelled");
+});

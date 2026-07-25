@@ -98,7 +98,29 @@ curl -s http://host:8080/v1/workflows -H 'authorization: Bearer secret' | jq
 
 Binding a non-loopback `--host` **without** `JAIPH_SERVE_TOKEN` is a startup error — the server refuses to expose unauthenticated arbitrary shell. Cap simultaneous runs with `JAIPH_SERVE_MAX_CONCURRENT` (default `4`); requests beyond the cap get `429`. See [Environment variables](env-vars.md) for both.
 
-## 8. Bound memory over a long-lived server
+## 8. Connect an MCP client over HTTP
+
+The same process also speaks **MCP [Streamable HTTP](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports#streamable-http)** at `POST /mcp` — the network sibling of [`jaiph mcp`](mcp.md) stdio. It exposes the **same tools** (identical [exposure rules](mcp.md#3-choose-which-workflows-are-exposed) and comment-derived descriptions), runs them through the **same run registry, concurrency cap, sandbox posture, and hot reload** as the REST API, and — when a token is set — sits behind the **same bearer auth** as `/v1/*`. A single deployment serves REST clients, browsers, and MCP agents at once; there is no second process.
+
+```bash
+# initialize → tools/list → tools/call, all as POST /mcp (one JSON-RPC message each).
+curl -s -X POST http://127.0.0.1:5247/mcp -H 'content-type: application/json' \
+  -H 'authorization: Bearer secret' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}'
+
+curl -s -X POST http://127.0.0.1:5247/mcp -H 'content-type: application/json' \
+  -H 'authorization: Bearer secret' \
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"greet","arguments":{"name":"world"}}}'
+```
+
+- **One JSON-RPC message per POST.** A **request** (`initialize`, `tools/list`, `tools/call`) returns its reply as a single `application/json` object. A **notification** (`notifications/initialized`, `notifications/cancelled`) returns `202 Accepted` with no body. `GET`/`DELETE /mcp` return `405` — this endpoint offers no server-initiated stream.
+- **Progress streaming.** Send `Accept: text/event-stream` on a `tools/call` and include a `params._meta.progressToken` to receive the run's step boundaries as `notifications/progress` SSE frames, followed by the result frame — the same progress model as [`jaiph mcp`](mcp.md#7-stream-progress-and-cancel-a-long-call). Without that `Accept` header the call returns a single JSON result (progress is dropped).
+- **Same run inspection.** Every `tools/call` is a first-class run: it appears in `GET /v1/runs`, streams at `GET /v1/runs/{id}/events`, and is cancellable with `POST /v1/runs/{id}/cancel` — the identical registry the REST endpoint populates. A client that hangs up a streaming call cancels the run (child process tree + Docker container torn down), the same as an MCP `notifications/cancelled`.
+- **Auth.** With `JAIPH_SERVE_TOKEN` set, `POST /mcp` requires `Authorization: Bearer <token>` exactly like `/v1/*`; unauthenticated calls get `401`.
+
+Point any Streamable-HTTP MCP client at `http(s)://<host>/mcp`. Use `jaiph mcp` for a co-located stdio client; use `jaiph serve` when the workflows must be reachable over the network by MCP and REST clients alike.
+
+## 9. Bound memory over a long-lived server
 
 The concurrency cap limits *active* children, not process memory. A long-lived server accumulates run state, so three bounds keep it from growing without limit — all overridable via [environment variables](env-vars.md):
 
@@ -109,6 +131,15 @@ The concurrency cap limits *active* children, not process memory. A long-lived s
 **Eviction is in-memory only.** Dropping a run from the registry does **not** delete its durable `.jaiph/runs/<run>/run_summary.jsonl` journal or published `artifacts/` — those persist on disk (via `JAIPH_RUNS_DIR`, an `emptyDir` or PVC under Kubernetes) and are **the operator's to prune**. Once a run is evicted its API endpoints (`GET /v1/runs/{id}`, `/events`, `/artifacts`) return `404`; read the durable artifacts from the filesystem instead.
 
 Execution honors the same execution-policy contract as [`jaiph run`](cli.md#jaiph-run) and [Run in a Docker sandbox](/how-to/sandbox-run): a Docker sandbox with an isolated workspace by default. `--inplace` (`JAIPH_INPLACE=1`) keeps the sandbox but binds the real workspace read-write so run effects land live; `--unsafe` (`JAIPH_UNSAFE=true`) runs on the host with no sandbox at all. The two are mutually exclusive (`E_FLAG_CONFLICT` at startup), the posture is resolved and printed once at startup and applied to every run, and launching the server with the flag or env var is the consent (no interactive prompt) — see [Environment variables — Precedence](env-vars.md#precedence). Publish files a run produces with [artifacts](/how-to/artifacts). Editing a served source hot-reloads the workflow set (and the OpenAPI document) with no restart; runs already in flight keep running.
+
+## Reverse-proxy and ingress requirements
+
+`jaiph serve` speaks **plain HTTP** and holds long-lived streaming connections (SSE at `GET /v1/runs/{id}/events`, and MCP progress at `POST /mcp` with `Accept: text/event-stream`). Front it with a reverse proxy / ingress that is configured for streaming and TLS, not just request/response:
+
+- **Disable response buffering on the streaming routes.** A proxy that buffers the whole response defeats live streaming — clients see nothing until the run ends. nginx: `proxy_buffering off;` (or the `X-Accel-Buffering: no` header) on `/v1/runs/*/events` and `/mcp`. Envoy/Ingress: disable response buffering for those paths. The server already sends `Cache-Control: no-cache` and a `:ka` keep-alive comment every 15 s on SSE to keep intermediaries from idling the connection out.
+- **Raise read/idle timeouts to cover the longest run.** A `tools/call` or `?wait=true` REST run blocks the connection until the workflow finishes, and an SSE follow stays open for the whole run. Set the proxy's upstream read timeout (nginx `proxy_read_timeout`, cloud LB idle timeout) above your slowest workflow, or those clients get cut off mid-run. `HTTP/1.1` (not buffered `HTTP/2` translation that coalesces) on the streaming hops.
+- **Terminate TLS at the proxy.** The process serves cleartext; put HTTPS at the ingress/gateway (cert-manager, a cloud LB, or a mesh) in front of it and keep the app port private (loopback or a `ClusterIP` Service — see [Deploy](deploy.md)). Never expose the token-guarded API to the internet without TLS: the bearer token would travel in the clear.
+- **Preserve and require authentication end to end.** Forward the `Authorization` header unchanged (do not strip it), and terminate untrusted traffic at the proxy only if the proxy itself authenticates. `jaiph`'s own bearer check guards `/v1/*` and `/mcp`; `/healthz`, `/openapi.json`, and `/docs` stay open for probes and discovery. If the proxy adds its own auth, keep `JAIPH_SERVE_TOKEN` set anyway so a proxy misconfiguration can never expose unauthenticated shell.
 
 ## Verification
 
@@ -131,6 +162,6 @@ Both `jq -e` checks exit `0` when the contract holds. The run's durable record i
 ## Related
 
 - [CLI — `jaiph serve`](cli.md#jaiph-serve) — flag and endpoint reference.
-- [Serve workflows as MCP tools](mcp.md) — the stdio sibling with the same exposure rules.
+- [Serve workflows as MCP tools](mcp.md) — the stdio sibling with the same exposure rules; `POST /mcp` here is its network transport.
 - [Run in a Docker sandbox](/how-to/sandbox-run) — the execution sandbox HTTP runs use.
 - [Environment variables](env-vars.md) — `JAIPH_SERVE_TOKEN`, `JAIPH_SERVE_MAX_CONCURRENT`, the `JAIPH_SERVE_MAX_OUTPUT_BYTES` / `JAIPH_SERVE_RETAIN_RUNS` / `JAIPH_SERVE_RETAIN_AGE_SEC` memory bounds, and the sandbox controls.

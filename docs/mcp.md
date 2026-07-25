@@ -23,6 +23,8 @@ jaiph mcp ./tools.jh
 
 The server speaks newline-delimited [JSON-RPC 2.0](https://www.jsonrpc.org/specification) over stdio (the MCP stdio transport) and runs until stdin closes or it receives `SIGINT` / `SIGTERM`. `jaiph --mcp ./tools.jh` is an equivalent alias.
 
+> **Need MCP over the network?** [`jaiph serve`](serve.md) exposes the *same* tools over **MCP Streamable HTTP** at `POST /mcp` (alongside its REST API), sharing one run registry, concurrency cap, sandbox posture, hot reload, and bearer auth. Use `jaiph mcp` for a co-located stdio client; use `jaiph serve` when an MCP client must reach the workflows over HTTP. Everything below (exposure rules, descriptions, input schema, result shape, progress, cancel) applies identically to both transports.
+
 Add `--workspace <dir>` to set the import-resolution root explicitly (default: auto-detected from the file's directory, exactly as in `jaiph run`).
 
 Add `--env KEY=VALUE` (or `--env KEY` to forward the host's current value) to define a variable in every tool call's environment. The flag is repeatable and the pairs are resolved **once at startup**, then applied to every call for the server's lifetime — a bare `--env KEY` whose value is missing on the host fails fast (`E_ENV_MISSING`) before the server starts. In a Docker sandbox `--env` is the per-key consent that crosses a host variable into the container verbatim, bypassing the credential allowlist; use it for any config or secret a workflow needs that the backend allowlist does not already forward (see [Safety posture](#safety-posture)).

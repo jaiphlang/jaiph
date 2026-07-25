@@ -107,6 +107,7 @@ TEST_SCRIPTS=(
   "e2e/tests/149_mcp_generation_lifecycle.sh"
   "e2e/tests/146_trusted_envs.sh"
   "e2e/tests/148_standalone_image.sh"
+  "e2e/tests/151_serve_transports_docker.sh"
   "e2e/tests/150_k8s_deploy.sh"
   "e2e/tests/210_standalone_binary.sh"
 )
