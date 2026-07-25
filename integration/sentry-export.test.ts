@@ -53,6 +53,54 @@ function reservedClosedPort(): Promise<number> {
   });
 }
 
+/** Poll until the fake ingest has received at least `n` requests (or time out). */
+function waitForRequests(sentry: FakeSentry, n: number, label: string, timeoutMs = 5_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  return new Promise((resolve, reject) => {
+    const tick = (): void => {
+      if (sentry.requests.length >= n) return resolve();
+      if (Date.now() > deadline) return reject(new Error(`timeout waiting for ${n} envelope(s): ${label}`));
+      setTimeout(tick, 25);
+    };
+    tick();
+  });
+}
+
+interface ServeProc {
+  baseUrl: string;
+  close: () => Promise<void>;
+}
+
+/** Spawn `jaiph serve --port 0`, resolving once it logs its bound listen URL. */
+function startServe(fixture: string, cwd: string, env: NodeJS.ProcessEnv): Promise<ServeProc> {
+  const child = spawn("node", [CLI_PATH, "serve", "--port", "0", fixture], { cwd, env, stdio: ["ignore", "pipe", "pipe"] });
+  let stderrBuf = "";
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`serve did not start\nstderr:\n${stderrBuf}`)), 20_000);
+    child.stderr.setEncoding("utf8");
+    child.stderr.on("data", (chunk: string) => {
+      stderrBuf += chunk;
+      const m = stderrBuf.match(/listening on (http:\/\/[^ ]+)/);
+      if (m) {
+        clearTimeout(timer);
+        resolve({
+          baseUrl: m[1],
+          close: () =>
+            new Promise<void>((res) => {
+              child.on("exit", () => res());
+              child.kill("SIGTERM");
+              setTimeout(() => child.kill("SIGKILL"), 8_000).unref();
+            }),
+        });
+      }
+    });
+    child.on("exit", (code) => {
+      clearTimeout(timer);
+      reject(new Error(`serve exited early (code ${code})\nstderr:\n${stderrBuf}`));
+    });
+  });
+}
+
 /**
  * Run the CLI asynchronously so the test process's event loop keeps running —
  * the in-process fake Sentry must accept the envelope connection while the run
@@ -164,6 +212,55 @@ test("jaiph run: a succeeding run with SENTRY_DSN delivers nothing", async () =>
     assert.equal(sentry.requests.length, 0, "successful runs send nothing");
     assert.equal(sentryWarnings(result.stderr).length, 0);
   } finally {
+    await sentry.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("jaiph run --raw: a failed standalone raw run delivers exactly one Sentry event", async () => {
+  const sentry = await startSentry(200);
+  const root = mkdtempSync(join(tmpdir(), "jaiph-sentry-raw-"));
+  try {
+    const jh = join(root, "app.jh");
+    writeFileSync(jh, FAIL_FIXTURE);
+    const result = await runCli(["run", "--raw", jh], {
+      cwd: root,
+      env: { ...baseEnv(join(root, ".jaiph/runs")), SENTRY_DSN: dsn(sentry.port) },
+    });
+    assert.notEqual(result.status, 0, "the run itself fails");
+    // A one-shot raw run awaits delivery before exit, so the envelope has landed.
+    assert.equal(sentry.requests.length, 1, "standalone --raw delivers exactly one Sentry event");
+    const event = JSON.parse(sentry.requests[0].body.split("\n")[2]) as { message: { formatted: string } };
+    assert.equal(event.message.formatted, "workflow default failed (exit 3)");
+  } finally {
+    await sentry.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("jaiph serve: a failed HTTP run delivers exactly one Sentry event via the shared call layer", async () => {
+  const sentry = await startSentry(200);
+  const root = mkdtempSync(join(tmpdir(), "jaiph-sentry-serve-"));
+  const jh = join(root, "tools.jh");
+  // A named workflow (serve requires named tools) whose one step fails.
+  writeFileSync(jh, ['script boom = `echo "step output"; exit 3`', "# Fails on purpose.", "workflow crash() {", "  run boom()", "}", ""].join("\n"));
+  const serve = await startServe(jh, root, { ...baseEnv(join(root, ".jaiph/runs")), SENTRY_DSN: dsn(sentry.port) });
+  try {
+    const res = await fetch(`${serve.baseUrl}/v1/workflows/crash/runs?wait=true`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+    });
+    const run = (await res.json()) as { status: string };
+    assert.equal(run.status, "failed", JSON.stringify(run));
+    // Detached: the terminal result returns before delivery, so poll for the envelope.
+    await waitForRequests(sentry, 1, "one Sentry event per failed HTTP run");
+    assert.equal(sentry.requests.length, 1, "exactly one Sentry event per failed HTTP run");
+    const event = JSON.parse(sentry.requests[0].body.split("\n")[2]) as { message: { formatted: string }; tags: Record<string, string> };
+    assert.equal(event.message.formatted, "workflow crash failed (exit 3)");
+    assert.equal(event.tags["jaiph.workflow"], "crash");
+  } finally {
+    await serve.close();
     await sentry.close();
     rmSync(root, { recursive: true, force: true });
   }

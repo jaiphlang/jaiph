@@ -290,17 +290,18 @@ export function parseKeyValueList(raw: string | undefined): Record<string, strin
   return out;
 }
 
-/** POST the payload as JSON with a 10 s timeout. Rejects on non-2xx / transport error. */
+/** POST the payload as JSON with a caller-supplied timeout. Rejects on non-2xx / transport error. */
 function postOtlp(
   endpoint: string,
   payload: Record<string, unknown>,
   headers: Record<string, string>,
+  timeoutMs: number,
 ): Promise<void> {
   return postWithTimeout(
     endpoint,
     JSON.stringify(payload),
     { "content-type": "application/json", ...headers },
-    10_000,
+    timeoutMs,
   );
 }
 
@@ -314,44 +315,150 @@ export interface ExportRunTelemetryOptions {
   env: NodeJS.ProcessEnv;
 }
 
+/** Per-exporter delivery result — `sent`, `skipped` (disabled/no data), or `failed`. */
+export type ExportOutcome = "sent" | "skipped" | "failed";
+
+/** Default total flush budget (ms) shared by the concurrent exporters. */
+const DEFAULT_FLUSH_BUDGET_MS = 10_000;
+
 /**
- * Single shared post-run hook, invoked wherever a run reaches terminal state on
- * the host (`jaiph run` completion, the shared MCP/HTTP workflow-call layer) —
- * one choke point for every mode. Dispatches the two independent, best-effort
- * exporters: OTLP traces (every run, when a collector is configured) and a
- * Sentry error report (failed runs only, when `SENTRY_DSN` is set). Neither is
- * load-bearing: a failure in either produces exactly one stderr warning and
- * never affects the run's exit code, output, or journal.
+ * Total flush budget shared by both exporters (they run concurrently, each
+ * bounded by this, so the whole post-run flush cannot exceed it). Configurable
+ * via `JAIPH_TELEMETRY_FLUSH_MS`; a non-positive or unparseable value falls back
+ * to the default.
  */
-export async function exportRunTelemetry(opts: ExportRunTelemetryOptions): Promise<void> {
-  await exportOtlpTraces(opts);
-  await reportRunFailureToSentry(opts);
+export function resolveFlushBudgetMs(env: NodeJS.ProcessEnv): number {
+  const raw = env.JAIPH_TELEMETRY_FLUSH_MS?.trim();
+  if (!raw) return DEFAULT_FLUSH_BUDGET_MS;
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : DEFAULT_FLUSH_BUDGET_MS;
 }
 
-/** OTLP/HTTP trace export half of the post-run hook. Enabled iff a traces endpoint is set. */
-async function exportOtlpTraces(opts: ExportRunTelemetryOptions): Promise<void> {
+/** Default warning sink — one stderr line per failure. */
+function stderrWarn(msg: string): void {
+  process.stderr.write(msg);
+}
+
+/**
+ * Run both best-effort exporters concurrently under one shared flush budget:
+ * OTLP traces (every run, when a collector is configured) and a Sentry error
+ * report (failed runs only, when `SENTRY_DSN` is set). Concurrency (not the
+ * former sequential await) keeps the worst case at one budget instead of two.
+ * Neither is load-bearing: a failure produces exactly one warning through
+ * `warn` and never affects the run's exit code, output, or journal.
+ */
+function runExporters(
+  opts: ExportRunTelemetryOptions,
+  warn: (msg: string) => void,
+): Promise<{ otlp: ExportOutcome; sentry: ExportOutcome }> {
+  const budgetMs = resolveFlushBudgetMs(opts.env);
+  return Promise.all([
+    exportOtlpTraces(opts, budgetMs, warn),
+    reportRunFailureToSentry(opts, budgetMs, warn),
+  ]).then(([otlp, sentry]) => ({ otlp, sentry }));
+}
+
+/**
+ * Single shared post-run hook for one-shot callers (`jaiph run` completion,
+ * standalone `jaiph run --raw`) that must stay alive for the flush. Awaits both
+ * exporters concurrently under one flush budget; warnings go to stderr.
+ */
+export async function exportRunTelemetry(opts: ExportRunTelemetryOptions): Promise<void> {
+  await runExporters(opts, stderrWarn);
+}
+
+/**
+ * Bounded, cumulative delivery metrics for the long-lived (detached) path. A
+ * `jaiph serve` / `jaiph mcp` process can drive many exports at an unreachable
+ * backend; these counters (and the bounded warning cap below) keep that
+ * observable without unbounded stderr growth.
+ */
+export interface TelemetryDeliveryMetrics {
+  otlpFailures: number;
+  sentryFailures: number;
+  warningsEmitted: number;
+  warningsSuppressed: number;
+}
+
+const deliveryMetrics: TelemetryDeliveryMetrics = {
+  otlpFailures: 0,
+  sentryFailures: 0,
+  warningsEmitted: 0,
+  warningsSuppressed: 0,
+};
+
+/** Snapshot of the cumulative detached-delivery metrics (copy — never the live object). */
+export function telemetryDeliveryMetrics(): TelemetryDeliveryMetrics {
+  return { ...deliveryMetrics };
+}
+
+/** Max warning lines the detached path prints before suppressing (still counted). */
+const MAX_DELIVERY_WARNINGS = 100;
+
+/** Bounded stderr warner for the detached path: prints up to a cap, then counts silently. */
+function boundedDeliveryWarn(msg: string): void {
+  if (deliveryMetrics.warningsEmitted < MAX_DELIVERY_WARNINGS) {
+    process.stderr.write(msg);
+    deliveryMetrics.warningsEmitted += 1;
+    if (deliveryMetrics.warningsEmitted === MAX_DELIVERY_WARNINGS) {
+      process.stderr.write("jaiph: further telemetry delivery warnings suppressed (counted in metrics)\n");
+    }
+  } else {
+    deliveryMetrics.warningsSuppressed += 1;
+  }
+}
+
+/**
+ * Post-run hook for long-lived HTTP/MCP processes. Fire-and-forget: the caller
+ * has already marked the run terminal and released its execution-concurrency
+ * slot, so telemetry delivery cannot delay a terminal result or hold a slot.
+ * Failures are tracked as bounded metrics (`telemetryDeliveryMetrics`) with
+ * capped stderr warnings, never load-bearing on the run.
+ */
+export function deliverRunTelemetryDetached(opts: ExportRunTelemetryOptions): void {
+  void runExporters(opts, boundedDeliveryWarn)
+    .then(({ otlp, sentry }) => {
+      if (otlp === "failed") deliveryMetrics.otlpFailures += 1;
+      if (sentry === "failed") deliveryMetrics.sentryFailures += 1;
+    })
+    .catch(() => {
+      // runExporters already swallows per-exporter failures; this guards only
+      // against an unexpected internal error so no rejection escapes.
+    });
+}
+
+/**
+ * OTLP/HTTP trace export half of the post-run hook. Enabled iff a traces
+ * endpoint is set. `timeoutMs` bounds the POST; `warn` receives the single
+ * failure/skip line. Returns the delivery outcome for metrics.
+ */
+export async function exportOtlpTraces(
+  opts: ExportRunTelemetryOptions,
+  timeoutMs: number,
+  warn: (msg: string) => void,
+): Promise<ExportOutcome> {
   const { runDir, workflow, exitStatus, signal, env } = opts;
   const endpoint = resolveOtlpEndpoint(env);
-  if (!endpoint) return;
+  if (!endpoint) return "skipped";
 
   const protocol = env.OTEL_EXPORTER_OTLP_PROTOCOL?.trim();
   if (protocol && protocol !== "http/json") {
-    process.stderr.write(
+    warn(
       `jaiph: OTLP trace export skipped — unsupported OTEL_EXPORTER_OTLP_PROTOCOL "${protocol}" (only http/json is supported)\n`,
     );
-    return;
+    return "failed";
   }
 
-  if (!runDir) return;
+  if (!runDir) return "skipped";
   const summaryFile = join(runDir, "run_summary.jsonl");
-  if (!existsSync(summaryFile)) return;
+  if (!existsSync(summaryFile)) return "skipped";
   let lines: string[];
   try {
     lines = readFileSync(summaryFile, "utf8").split("\n");
   } catch {
-    return;
+    return "skipped";
   }
-  if (lines.every((l) => l.trim().length === 0)) return;
+  if (lines.every((l) => l.trim().length === 0)) return "skipped";
 
   const serviceName = env.OTEL_SERVICE_NAME?.trim() || "jaiph";
   const resourceAttrs = {
@@ -362,10 +469,10 @@ async function exportOtlpTraces(opts: ExportRunTelemetryOptions): Promise<void> 
   const headers = parseKeyValueList(env.OTEL_EXPORTER_OTLP_HEADERS);
 
   try {
-    await postOtlp(endpoint, payload, headers);
+    await postOtlp(endpoint, payload, headers, timeoutMs);
+    return "sent";
   } catch (err) {
-    process.stderr.write(
-      `jaiph: OTLP trace export failed — ${err instanceof Error ? err.message : String(err)}\n`,
-    );
+    warn(`jaiph: OTLP trace export failed — ${err instanceof Error ? err.message : String(err)}\n`);
+    return "failed";
   }
 }

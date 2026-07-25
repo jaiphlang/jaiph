@@ -20,10 +20,15 @@ import { existsSync, readFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { VERSION } from "../../version";
 import { postWithTimeout } from "./http";
-import type { ExportRunTelemetryOptions } from "./otlp";
+import type { ExportOutcome, ExportRunTelemetryOptions } from "./otlp";
 
-/** 10 s hard cap on the envelope POST, matching the OTLP exporter. */
+/** Default hard cap on the envelope POST when no flush budget is supplied. */
 const SEND_TIMEOUT_MS = 10_000;
+
+/** Default warning sink — a single stderr line, matching the OTLP exporter. */
+function stderrWarn(msg: string): void {
+  process.stderr.write(msg);
+}
 
 type JournalEvent = Record<string, unknown>;
 
@@ -160,35 +165,44 @@ export function buildEnvelope(event: Record<string, unknown>, sentAt: string): s
 /**
  * Report a failed run to Sentry from the shared post-run hook. No-op on success
  * (only nonzero exit / a signal reports) and when `SENTRY_DSN` is unset. Any
- * transport/HTTP/DSN failure produces exactly one stderr warning and nothing
- * else — the run's exit code and output are untouched.
+ * transport/HTTP/DSN failure produces exactly one warning through `warn`
+ * (default: one stderr line) and nothing else — the run's exit code and output
+ * are untouched. Returns the delivery outcome so the caller can track failures
+ * as bounded metrics on the long-lived (detached) delivery path.
+ *
+ * `timeoutMs` bounds the envelope POST; callers pass the shared flush budget so
+ * OTLP and Sentry share one total budget when run concurrently.
  */
-export async function reportRunFailureToSentry(opts: ExportRunTelemetryOptions): Promise<void> {
+export async function reportRunFailureToSentry(
+  opts: ExportRunTelemetryOptions,
+  timeoutMs: number = SEND_TIMEOUT_MS,
+  warn: (msg: string) => void = stderrWarn,
+): Promise<ExportOutcome> {
   const { runDir, workflow, exitStatus, signal, env } = opts;
 
   // Fire only on an unsuccessful terminal state — successful runs send nothing.
   const runFailed = exitStatus !== 0 || signal != null;
-  if (!runFailed) return;
+  if (!runFailed) return "skipped";
 
   const dsnRaw = env.SENTRY_DSN?.trim();
-  if (!dsnRaw) return; // disabled
+  if (!dsnRaw) return "skipped"; // disabled
 
   const dsn = parseSentryDsn(dsnRaw);
   if (!dsn) {
-    process.stderr.write("jaiph: Sentry error report skipped — malformed SENTRY_DSN\n");
-    return;
+    warn("jaiph: Sentry error report skipped — malformed SENTRY_DSN\n");
+    return "failed";
   }
 
-  if (!runDir) return;
+  if (!runDir) return "skipped";
   const summaryFile = join(runDir, "run_summary.jsonl");
-  if (!existsSync(summaryFile)) return;
+  if (!existsSync(summaryFile)) return "skipped";
   let lines: string[];
   try {
     lines = readFileSync(summaryFile, "utf8").split("\n");
   } catch {
-    return;
+    return "skipped";
   }
-  if (lines.every((l) => l.trim().length === 0)) return;
+  if (lines.every((l) => l.trim().length === 0)) return "skipped";
 
   const release = env.SENTRY_RELEASE?.trim() || `jaiph@${VERSION}`;
   const environment = env.SENTRY_ENVIRONMENT?.trim() || undefined;
@@ -200,11 +214,11 @@ export async function reportRunFailureToSentry(opts: ExportRunTelemetryOptions):
       dsn.endpoint,
       envelope,
       { "content-type": "application/x-sentry-envelope", "x-sentry-auth": dsn.authHeader },
-      SEND_TIMEOUT_MS,
+      timeoutMs,
     );
+    return "sent";
   } catch (err) {
-    process.stderr.write(
-      `jaiph: Sentry error report failed — ${err instanceof Error ? err.message : String(err)}\n`,
-    );
+    warn(`jaiph: Sentry error report failed — ${err instanceof Error ? err.message : String(err)}\n`);
+    return "failed";
   }
 }

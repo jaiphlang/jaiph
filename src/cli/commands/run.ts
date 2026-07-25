@@ -62,6 +62,7 @@ import {
   resolveDockerHostRunsRoot,
   selectSandboxMode,
   RUN_WORKFLOW_ENV,
+  DOCKER_SANDBOX_ENV,
 } from "../../runtime/docker";
 import { confirmInplaceRun, confirmUnsafeRun, UNSAFE_RUN_LOGWARN_MESSAGE } from "../../runtime/docker-inplace";
 import {
@@ -396,12 +397,46 @@ async function runWorkflowRaw(
     );
 
     const childExit = await waitForRunExit(execResult);
+    // A user-invoked standalone `jaiph run --raw` exports telemetry like a normal
+    // run. The inner raw process of a host-orchestrated Docker run is marked with
+    // DOCKER_SANDBOX_ENV and skips here — the outer host process exports that run
+    // exactly once. Best-effort; never affects the exit status below.
+    if (shouldExportRawTelemetry(process.env)) {
+      await exportRunTelemetry({
+        runDir: readRunDirFromMeta(metaFile),
+        workflow: workflowSymbol,
+        exitStatus: childExit.status,
+        signal: childExit.signal,
+        env: process.env,
+      });
+    }
     return childExit.status;
   } finally {
     if (shouldCleanup) {
       rmSync(outDir, { recursive: true, force: true });
     }
   }
+}
+
+/**
+ * A standalone `jaiph run --raw` exports its own telemetry; the inner raw run of
+ * a host-orchestrated Docker run does not (marked by DOCKER_SANDBOX_ENV), so the
+ * outer host process is the single exporter for that run — no double export.
+ */
+export function shouldExportRawTelemetry(env: NodeJS.ProcessEnv): boolean {
+  return !env[DOCKER_SANDBOX_ENV];
+}
+
+/** Read `run_dir=` from a runner meta file; undefined when absent/unwritten. */
+function readRunDirFromMeta(metaFile: string): string | undefined {
+  if (!existsSync(metaFile)) return undefined;
+  for (const line of readFileSync(metaFile, "utf8").split(/\r?\n/)) {
+    if (line.startsWith("run_dir=")) {
+      const value = line.slice("run_dir=".length).trim();
+      if (value) return value;
+    }
+  }
+  return undefined;
 }
 
 function writeWorkflowRootLabel(

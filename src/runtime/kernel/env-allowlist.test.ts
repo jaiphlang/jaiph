@@ -35,6 +35,17 @@ test("scrubPromptEnv: drops an injected non-allowlisted secret, keeps base env",
   assert.equal(env.TMPDIR, "/tmp");
 });
 
+test("scrubPromptEnv: operator telemetry config (OTEL_*/SENTRY_*) never reaches a prompt backend", () => {
+  const env = scrubPromptEnv(
+    { PATH: "/usr/bin", OTEL_EXPORTER_OTLP_ENDPOINT: "http://c:4318", OTEL_EXPORTER_OTLP_HEADERS: "authorization=Bearer x", SENTRY_DSN: "https://k@h/1" },
+    "claude",
+  );
+  assert.equal(env.OTEL_EXPORTER_OTLP_ENDPOINT, undefined);
+  assert.equal(env.OTEL_EXPORTER_OTLP_HEADERS, undefined, "OTLP auth header must not leak to the model");
+  assert.equal(env.SENTRY_DSN, undefined);
+  assert.equal(env.PATH, "/usr/bin");
+});
+
 test("scrubPromptEnv: forwards only the backend's own credential keys", () => {
   const all = {
     ANTHROPIC_API_KEY: "anthropic-key",

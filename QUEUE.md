@@ -14,24 +14,6 @@ Process rules:
 
 ***
 
-## Give every run mode complete, bounded telemetry behavior #dev-ready
-
-Normal `jaiph run`, HTTP calls, and MCP calls invoke the shared OTLP/Sentry hook, but `jaiph run --raw` bypasses it while the docs claim every run is covered. OTLP and Sentry are awaited sequentially, so unavailable backends can hold a completed run and a service concurrency slot for up to 20 seconds despite being described as non-load-bearing.
-
-Scope:
-
-- Export telemetry for a user-invoked standalone `jaiph run --raw` without double-exporting the inner raw process used by host-orchestrated Docker.
-- Run independent exporters concurrently under one configurable total flush budget.
-- In long-lived HTTP/MCP processes, mark the run terminal and release execution concurrency before best-effort delivery; track delivery failures through bounded logging/metrics.
-- Keep telemetry operator-side: `OTEL_*` and `SENTRY_*` values must not enter workflow sandboxes unless explicitly passed as workflow env.
-
-Acceptance:
-
-- Standard run, standalone raw run, MCP, and HTTP each produce one OTLP trace; each failed mode produces one Sentry event.
-- A Docker-sandboxed run still exports exactly once.
-- Unreachable telemetry endpoints cannot delay an HTTP/MCP terminal result or occupied execution slot beyond a small tested bound.
-- Export failures never change workflow output or exit status.
-
 ## Expose HTTP API and network MCP from one service process #dev-ready
 
 Today `jaiph serve` is HTTP-only and `jaiph mcp` is stdio-only. The same file can be exposed by two separate processes, but there is no single deployed company service that serves both protocols or a Kubernetes-addressable MCP endpoint.

@@ -1,11 +1,19 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { createServer, type Server } from "node:http";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { AddressInfo } from "node:net";
+import { join } from "node:path";
 import {
   runSummaryToOtlp,
   resolveOtlpEndpoint,
   parseKeyValueList,
+  resolveFlushBudgetMs,
   exportRunTelemetry,
+  deliverRunTelemetryDetached,
+  telemetryDeliveryMetrics,
   type OtlpMeta,
 } from "./otlp";
 
@@ -263,4 +271,118 @@ test("exportRunTelemetry: no OTLP endpoint → no-op, no output", async () => {
     (process.stderr as unknown as { write: typeof original }).write = original;
   }
   assert.equal(captured.length, 0);
+});
+
+test("resolveFlushBudgetMs: default when unset, override when positive, fallback on junk", () => {
+  assert.equal(resolveFlushBudgetMs({}), 10_000);
+  assert.equal(resolveFlushBudgetMs({ JAIPH_TELEMETRY_FLUSH_MS: "2500" }), 2500);
+  assert.equal(resolveFlushBudgetMs({ JAIPH_TELEMETRY_FLUSH_MS: "0" }), 10_000, "0 is non-positive → default");
+  assert.equal(resolveFlushBudgetMs({ JAIPH_TELEMETRY_FLUSH_MS: "-5" }), 10_000, "negative → default");
+  assert.equal(resolveFlushBudgetMs({ JAIPH_TELEMETRY_FLUSH_MS: "abc" }), 10_000, "unparseable → default");
+});
+
+/** Accepts a connection and never responds — an awaited POST hangs until the budget. */
+function startBlackHole(): Promise<{ port: number; close: () => Promise<void> }> {
+  return new Promise((resolve) => {
+    const sockets = new Set<import("node:net").Socket>();
+    const server: Server = createServer((req) => req.resume());
+    server.on("connection", (s) => {
+      sockets.add(s);
+      s.on("close", () => sockets.delete(s));
+    });
+    server.listen(0, "127.0.0.1", () => {
+      const port = (server.address() as AddressInfo).port;
+      resolve({
+        port,
+        close: () =>
+          new Promise<void>((r) => {
+            for (const s of sockets) s.destroy();
+            server.close(() => r());
+          }),
+      });
+    });
+  });
+}
+
+/** Minimal failed-run journal: one workflow + one nonzero step, with a run_id. */
+function writeFailedJournal(dir: string): void {
+  const runId = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
+  const lines = [
+    { type: "WORKFLOW_START", workflow: "default", source: "x.jh", ts: "2026-04-21T16:02:00Z", run_id: runId },
+    { type: "STEP_END", func: "boom", kind: "script", name: "boom", ts: "2026-04-21T16:02:01Z", status: 1, id: "R:2", run_id: runId, out_content: "", err_content: "bad\n" },
+    { type: "WORKFLOW_END", workflow: "default", source: "x.jh", ts: "2026-04-21T16:02:02Z", run_id: runId },
+  ];
+  writeFileSync(join(dir, "run_summary.jsonl"), lines.map((l) => JSON.stringify(l)).join("\n"));
+}
+
+test("exportRunTelemetry: OTLP + Sentry run concurrently under one shared flush budget", async () => {
+  const hole = await startBlackHole();
+  const dir = mkdtempSync(join(tmpdir(), "jaiph-flush-"));
+  const original = process.stderr.write.bind(process.stderr);
+  (process.stderr as unknown as { write: (s: string) => boolean }).write = () => true;
+  try {
+    writeFailedJournal(dir);
+    const started = Date.now();
+    await exportRunTelemetry({
+      runDir: dir,
+      workflow: "default",
+      exitStatus: 1,
+      signal: null,
+      env: {
+        OTEL_EXPORTER_OTLP_ENDPOINT: `http://127.0.0.1:${hole.port}`,
+        SENTRY_DSN: `http://key@127.0.0.1:${hole.port}/1`,
+        JAIPH_TELEMETRY_FLUSH_MS: "400",
+      },
+    });
+    const elapsed = Date.now() - started;
+    // Both exporters hang; concurrent-under-one-budget finishes near one budget
+    // (~400ms), well under the sequential 2x (~800ms+).
+    assert.ok(elapsed < 750, `concurrent flush should be ~one budget, took ${elapsed}ms`);
+  } finally {
+    (process.stderr as unknown as { write: typeof original }).write = original;
+    await hole.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("deliverRunTelemetryDetached: failures are tracked in bounded metrics, never thrown", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "jaiph-detached-"));
+  const original = process.stderr.write.bind(process.stderr);
+  (process.stderr as unknown as { write: (s: string) => boolean }).write = () => true;
+  try {
+    writeFailedJournal(dir);
+    const before = telemetryDeliveryMetrics();
+    // A refused port (bind then release) fails fast for both exporters.
+    const refused = await new Promise<number>((resolve) => {
+      const s = createServer();
+      s.listen(0, "127.0.0.1", () => {
+        const p = (s.address() as AddressInfo).port;
+        s.close(() => resolve(p));
+      });
+    });
+    deliverRunTelemetryDetached({
+      runDir: dir,
+      workflow: "default",
+      exitStatus: 1,
+      signal: null,
+      env: {
+        OTEL_EXPORTER_OTLP_ENDPOINT: `http://127.0.0.1:${refused}`,
+        SENTRY_DSN: `http://key@127.0.0.1:${refused}/1`,
+        JAIPH_TELEMETRY_FLUSH_MS: "1000",
+      },
+    });
+    // Poll the metrics until both failures register (delivery is fire-and-forget).
+    const deadline = Date.now() + 5_000;
+    for (;;) {
+      const m = telemetryDeliveryMetrics();
+      if (m.otlpFailures > before.otlpFailures && m.sentryFailures > before.sentryFailures) break;
+      if (Date.now() > deadline) {
+        assert.fail(`metrics did not register both failures: ${JSON.stringify(m)}`);
+      }
+      await new Promise((r) => setTimeout(r, 25));
+    }
+  } finally {
+    (process.stderr as unknown as { write: typeof original }).write = original;
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

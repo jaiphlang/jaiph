@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import { mkdtempSync, writeFileSync, rmSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { runWorkflow } from "./run";
-import { _dockerExec, _dockerSpawn } from "../../runtime/docker";
+import { runWorkflow, shouldExportRawTelemetry } from "./run";
+import { _dockerExec, _dockerSpawn, DOCKER_SANDBOX_ENV } from "../../runtime/docker";
 import { UNSAFE_RUN_LOGWARN_MESSAGE } from "../../runtime/docker-inplace";
 
 const MIN_WORKFLOW = `workflow default() {\n  log "hi"\n}\n`;
@@ -266,4 +266,14 @@ test("runWorkflow: --workspace bypasses detectWorkspaceRoot — explicit-missing
     `error must name the explicit --workspace path; got: ${cap.stderr()}`,
   );
   assert.deepEqual(fence.calls(), []);
+});
+
+// --- Standalone raw telemetry gate -----------------------------------------
+
+test("shouldExportRawTelemetry: standalone raw exports; docker-inner raw is skipped", () => {
+  // A user-invoked `jaiph run --raw` on the host exports its own telemetry.
+  assert.equal(shouldExportRawTelemetry({}), true);
+  // The inner raw run of a host-orchestrated Docker run is marked and must skip,
+  // so the outer host process is the single exporter (no double export).
+  assert.equal(shouldExportRawTelemetry({ [DOCKER_SANDBOX_ENV]: "1" }), false);
 });

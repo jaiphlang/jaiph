@@ -99,6 +99,7 @@ Contradictory posture is never resolved by precedence: `--inplace` / `JAIPH_INPL
 | `JAIPH_SOURCE_ABS` | internal | path | — | — | Absolute path to the entry `.jh` file. Set by the CLI before spawning the runner. |
 | `JAIPH_SOURCE_FILE` | internal | string (basename) | entry-file basename | — | Used to name run directories. |
 | `JAIPH_STDLIB` | host | path | — | — | Removed from the product. Stripped from the launched env. |
+| `JAIPH_TELEMETRY_FLUSH_MS` | host | int (ms) | `10000` | — | Total flush budget for the post-run telemetry hook. The OTLP-trace and Sentry exporters run concurrently, each bounded by this, so the whole flush cannot exceed it. A non-positive or unparseable value falls back to the default. Best-effort only — never load-bearing on the run. |
 | `JAIPH_TEST_MODE` | runtime | bool (exact `"1"`) | `false` | — | Set by `jaiph test` so the runtime skips production-only branches (e.g. file-mode normalization). |
 | `JAIPH_UNSAFE` | host | bool (`true` only) | `false` | — | Disable Docker for this run; execute on the host with **no sandbox** (entire filesystem and host environment visible to scripts and agent backends). `--unsafe` is the flag form on `jaiph run`, `jaiph serve`, and `jaiph mcp` (flag wins: it sets this variable for that process). Mutually exclusive with `JAIPH_INPLACE` / `--inplace` (`E_FLAG_CONFLICT`). When this turns Docker off while it would otherwise be on, `jaiph run` requires consent: a TTY warning + `Continue? [y/N]` (default no), or `JAIPH_INPLACE_YES` / `--yes` non-interactively (else `E_UNSAFE_NO_CONFIRM`). `jaiph serve` / `jaiph mcp` never prompt: launching the server with the flag or env var is the consent, and the effective posture is printed once at startup and applied to every call. No prompt when Docker is off for another reason (explicit `JAIPH_DOCKER_ENABLED=false`, Windows host-only override) or on `jaiph run --raw`. The `ghcr.io/jaiphlang/jaiph-runtime` image **bakes `JAIPH_UNSAFE=true`** so it can run standalone (`docker run … jaiph run flow.jh`, or as a k8s pod) — inside the image the container is the sandbox and unsafe host-only proceeds with a one-line notice; see [Deploy](deploy.md). |
 | `JAIPH_WORKSPACE` | host, runtime | path | autodetected | — | Workspace root. Inside Docker the host CLI overrides this to `/jaiph/workspace`. |
@@ -107,11 +108,12 @@ Contradictory posture is never resolved by precedence: `--inplace` / `JAIPH_INPL
 
 ### Internal Docker-only variables
 
-One more variable is set by the host CLI on the Docker container but is **not** in the table above: the source-parity harness tracks only names accessed through a literal `env.JAIPH_*` / `process.env["JAIPH_*"]` read in `src/`, and this one escapes that pattern. It is managed entirely by the CLI — never export it by hand.
+Two variables are set by the host CLI on the Docker container but are **not** in the table above: the source-parity harness tracks only names accessed through a literal `env.JAIPH_*` / `process.env["JAIPH_*"]` read in `src/`, and these escape that pattern (read through a computed key). Both are managed entirely by the CLI — never export them by hand.
 
 | Variable | Scope | Role |
 |---|---|---|
 | `JAIPH_RUN_WORKFLOW` | internal | Root workflow symbol the inner `jaiph run --raw` executes. Set as `-e` only for a non-`default` root (for example an MCP tool call); read back in the container by `runWorkflowRaw` through a computed key. Reserved from `--env` (`E_ENV_RESERVED`). |
+| `JAIPH_DOCKER_SANDBOX` | internal | Marks the inner `jaiph run --raw` as the host-orchestrated sandbox run so it does **not** re-export telemetry — the outer host process exports that run exactly once. Always set as `-e` on the container. Covered by the `JAIPH_DOCKER_*` reservation (`E_ENV_RESERVED`) and never auto-forwarded from the host env. |
 
 ## Agent credentials
 
@@ -135,10 +137,12 @@ For the common "forward this host key" case, the [`trusted_envs`](configuration.
 ## Telemetry variables
 
 Jaiph reads the standard OpenTelemetry environment variables to export one trace
-per run to an OTLP collector — there are **no `JAIPH_*` variables** for this
-feature. These are consumed **host-side, after the run completes** (they are never
+per run to an OTLP collector — enablement uses **only `OTEL_*` / `SENTRY_*`**, not
+`JAIPH_*`. These are consumed **host-side, after the run completes** (they are never
 forwarded into the Docker sandbox), so they are not tracked by the `JAIPH_*`
-source-parity harness above. Export is enabled iff a traces endpoint is set. See
+source-parity harness above. Export is enabled iff a traces endpoint is set. The
+one Jaiph-owned knob is the shared flush budget `JAIPH_TELEMETRY_FLUSH_MS` (in the
+source-parity table above), which bounds — but never enables — delivery. See
 [Export traces to an OTLP collector](observability.md).
 
 | Variable | Type | Default | Role |

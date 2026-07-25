@@ -694,6 +694,17 @@ export interface DockerSpawnOptions {
 export const CONTAINER_WORKSPACE = "/jaiph/workspace";
 export const CONTAINER_RUN_DIR = "/jaiph/run";
 
+/**
+ * Container marker set by `buildDockerArgs` so the inner `jaiph run --raw` knows
+ * it is the host-orchestrated sandbox run and must NOT export telemetry: the
+ * outer host process already exports once from the bind-mounted journal. Without
+ * this, a `--env`-forwarded `OTEL_*`/`SENTRY_*` inside the container would make
+ * the sandbox re-export the same run. `JAIPH_DOCKER_*` is reserved against
+ * `--env` and excluded from the forwarding allowlist, so it is never
+ * user-settable and never auto-forwarded — this marker is emitted explicitly.
+ */
+export const DOCKER_SANDBOX_ENV = "JAIPH_DOCKER_SANDBOX";
+
 // The agent env allowlist lives in the kernel (`kernel/env-allowlist.ts`) so
 // the prompt backend spawn applies the same fail-closed policy in every
 // sandbox mode; re-exported here for the Docker boundary's existing consumers.
@@ -861,6 +872,9 @@ export function buildDockerArgs(opts: DockerSpawnOptions): string[] {
   if (opts.workflowSymbol && opts.workflowSymbol !== "default") {
     args.push("-e", `${RUN_WORKFLOW_ENV}=${opts.workflowSymbol}`);
   }
+  // Mark the inner run as the host-orchestrated sandbox so it does not
+  // re-export telemetry — the outer host process exports this run exactly once.
+  args.push("-e", `${DOCKER_SANDBOX_ENV}=1`);
 
   args.push("-w", CONTAINER_WORKSPACE);
   args.push(opts.config.image);
