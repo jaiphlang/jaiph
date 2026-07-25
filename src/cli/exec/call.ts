@@ -22,7 +22,7 @@ import {
   type SandboxMode,
 } from "../../runtime/docker";
 import { discoverDockerRunDir, remapContainerPath } from "../shared/errors";
-import { exportRunTelemetry } from "../telemetry/otlp";
+import { deliverRunTelemetryDetached } from "../telemetry/otlp";
 import { redactCredentials } from "../../runtime/kernel/redact";
 
 /**
@@ -220,8 +220,12 @@ export async function callWorkflow(
     });
   }
   // One export per call — the shared choke point covering every MCP tool call and
-  // HTTP `jaiph serve` invocation. Best-effort; never changes the call result.
-  await exportRunTelemetry({
+  // HTTP `jaiph serve` invocation. Detached (fire-and-forget): returning here lets
+  // the caller mark the run terminal and release its execution-concurrency slot
+  // before best-effort delivery, so an unreachable backend can never delay a
+  // terminal result or hold a slot. Delivery failures are tracked as bounded
+  // metrics; never changes the call result.
+  deliverRunTelemetryDetached({
     runDir: result.runDir,
     workflow: workflowSymbol,
     exitStatus: result.exitStatus ?? 0,

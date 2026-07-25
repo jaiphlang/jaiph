@@ -125,7 +125,7 @@ test("buildEnvelope: three newline-separated JSON documents (header, item header
 
 // --- Enablement / failure gates (no network) -------------------------------
 
-async function captureStderr(fn: () => Promise<void>): Promise<string[]> {
+async function captureStderr(fn: () => Promise<unknown>): Promise<string[]> {
   const captured: string[] = [];
   const original = process.stderr.write.bind(process.stderr);
   (process.stderr as unknown as { write: (s: string) => boolean }).write = (s: string) => {

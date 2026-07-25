@@ -16,6 +16,7 @@ import {
   selectSandboxMode,
   selectMcpSandboxMode,
   RUN_WORKFLOW_ENV,
+  DOCKER_SANDBOX_ENV,
   cloneWorkspaceForSandbox,
   allocateSandboxWorkspaceDir,
   pullImageIfNeeded,
@@ -431,6 +432,19 @@ test("buildDockerArgs: forwards JAIPH_ env vars, excludes JAIPH_DOCKER_*", () =>
   assert.ok(!args.some((a) => a.includes("OTHER_VAR")));
 });
 
+test("buildDockerArgs: always marks the inner run as the sandbox so it does not re-export telemetry", () => {
+  // The outer host process exports the run exactly once from the bind-mounted
+  // journal; the inner `jaiph run --raw` must skip export. Without this marker a
+  // `--env`-forwarded OTEL_*/SENTRY_* inside the container would double-export.
+  const args = buildDockerArgs(defaultOpts({ env: {} }));
+  const eFlags = args.filter((_, i) => args[i - 1] === "-e");
+  assert.equal(
+    eFlags.filter((v) => v === `${DOCKER_SANDBOX_ENV}=1`).length,
+    1,
+    "exactly one JAIPH_DOCKER_SANDBOX=1 marker is emitted",
+  );
+});
+
 test("buildDockerArgs: overrides JAIPH_WORKSPACE and JAIPH_RUNS_DIR", () => {
   const opts = defaultOpts({
     env: { JAIPH_WORKSPACE: "/host/path", JAIPH_RUNS_DIR: "/host/runs" },
@@ -460,6 +474,27 @@ function envArgsFor(args: string[], key: string): string[] {
 test("buildDockerArgs: a non-allowlisted key is dropped without extraEnv (fail-closed default)", () => {
   const args = buildDockerArgs(defaultOpts({ env: { MY_TOKEN: "s3cret" } }));
   assert.deepEqual(envArgsFor(args, "MY_TOKEN"), [], "MY_TOKEN must not cross the boundary by default");
+});
+
+test("buildDockerArgs: OTEL_*/SENTRY_* stay operator-side unless explicitly passed as workflow env", () => {
+  // Telemetry config is host-side only; forwarding it into the sandbox would
+  // both leak operator secrets to workflow code and make the inner run
+  // re-export. The fail-closed allowlist drops them by default; an explicit
+  // --env (extraEnv) is the only way in — the documented escape hatch.
+  const dropped = buildDockerArgs(
+    defaultOpts({ env: { OTEL_EXPORTER_OTLP_ENDPOINT: "http://c:4318", SENTRY_DSN: "https://k@h/1" } }),
+  );
+  assert.deepEqual(envArgsFor(dropped, "OTEL_EXPORTER_OTLP_ENDPOINT"), [], "OTEL_* not forwarded by default");
+  assert.deepEqual(envArgsFor(dropped, "SENTRY_DSN"), [], "SENTRY_* not forwarded by default");
+
+  const forwarded = buildDockerArgs(
+    defaultOpts({ extraEnv: { OTEL_EXPORTER_OTLP_ENDPOINT: "http://c:4318" } }),
+  );
+  assert.deepEqual(
+    envArgsFor(forwarded, "OTEL_EXPORTER_OTLP_ENDPOINT"),
+    ["OTEL_EXPORTER_OTLP_ENDPOINT=http://c:4318"],
+    "explicit --env is the only path into the sandbox",
+  );
 });
 
 test("buildDockerArgs: extraEnv forwards a non-allowlisted key as -e KEY=VALUE", () => {

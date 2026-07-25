@@ -35,8 +35,12 @@ export OTEL_EXPORTER_OTLP_TRACES_ENDPOINT="http://localhost:4318/v1/traces"
 jaiph run ./flows/review.jh "review this diff"
 ```
 
-Every `jaiph run` completion and every workflow invoked through `jaiph mcp` /
-`jaiph serve` then posts exactly one trace.
+Every terminal run posts exactly one trace: an interactive `jaiph run`, a
+standalone `jaiph run --raw`, and every workflow invoked through `jaiph mcp` /
+`jaiph serve`. A Docker-sandboxed run is exported once by the host process that
+launched the container — the inner `jaiph run --raw` inside the container is
+marked as the sandbox run and never re-exports (no `OTEL_*`/`SENTRY_*` crosses
+the boundary anyway), so a container run is not double-counted.
 
 ### A local collector
 
@@ -93,6 +97,15 @@ Telemetry never affects a run. An unreachable or erroring collector produces
 are untouched. There are no retries and no queue — a run is minutes long, so
 end-of-run batching is the normal OTLP pattern.
 
+The OTLP-trace and Sentry exporters run **concurrently under one total flush
+budget** (`JAIPH_TELEMETRY_FLUSH_MS`, default 10 s), so the whole post-run flush
+is bounded by that budget rather than the sum of two sequential timeouts. In the
+long-lived `jaiph serve` / `jaiph mcp` processes delivery is **detached**: the
+run is marked terminal and its execution-concurrency slot released *before*
+best-effort delivery, so an unreachable backend can never delay a terminal
+result or hold a slot. Detached delivery failures are counted as bounded
+metrics with capped stderr warnings.
+
 Only OTLP/HTTP with a JSON payload is spoken. If `OTEL_EXPORTER_OTLP_PROTOCOL` is
 set to anything other than `http/json` (for example `grpc`), Jaiph warns and skips
 the export rather than mis-speak a protocol.
@@ -116,8 +129,10 @@ jaiph run ./deploy.jh
 ```
 
 The same host-side, end-of-run choke point that exports traces fires the report —
-so `jaiph run` completions and workflows invoked through `jaiph mcp` / `jaiph serve`
-are all covered. A malformed DSN produces exactly one stderr warning and no send.
+so `jaiph run` completions (including standalone `jaiph run --raw`) and workflows
+invoked through `jaiph mcp` / `jaiph serve` are all covered, each producing one
+Sentry event on failure. A malformed DSN produces exactly one stderr warning and
+no send.
 
 ### What the event carries
 
@@ -139,8 +154,9 @@ credential-redacted), never from the raw `.out` / `.err` captures:
 ### Failure is never load-bearing
 
 Like trace export, a Sentry report never affects a run. An unreachable or erroring
-Sentry, a malformed DSN, or a timeout (10 s) produces **exactly one** stderr warning
-line; the run's exit code, output, and journal are untouched. There are no retries.
+Sentry, a malformed DSN, or a timeout (the shared `JAIPH_TELEMETRY_FLUSH_MS`
+budget, default 10 s) produces **exactly one** stderr warning line; the run's exit
+code, output, and journal are untouched. There are no retries.
 
 ## Related
 
