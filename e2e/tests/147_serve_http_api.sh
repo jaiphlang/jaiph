@@ -175,3 +175,54 @@ e2e::assert_equals "$(cat "${art_file}")" "artifact-payload" "artifact downloads
 trav_code="$(curl -s -o /dev/null -w '%{http_code}' \
   "${base}/v1/runs/${art_id}/artifacts/%2e%2e%2frun_summary.jsonl")"
 e2e::assert_equals "${trav_code}" "404" "artifact path traversal is rejected with 404"
+
+# --- MCP Streamable HTTP (POST /mcp) on the SAME process ---
+# The same server also speaks MCP over HTTP: a client can initialize, list the
+# same tools, and call one — and that call lands in the SAME run registry as the
+# REST API above. This proves one process serves both transports against one
+# workflow generation (design acceptance: same tools + same run inspection API).
+mcp_call() {
+  curl -s -X POST "${base}/mcp" -H 'content-type: application/json' \
+    -H 'accept: application/json' -d "$1"
+}
+
+init_ver="$(mcp_call '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}' \
+  | python3 -c 'import json,sys; print(json.load(sys.stdin)["result"]["protocolVersion"])')"
+e2e::assert_equals "${init_ver}" "2025-06-18" "POST /mcp initialize negotiates the protocol version"
+
+mcp_tools="$(mcp_call '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' | python3 -c '
+import json, sys
+print(",".join(sorted(t["name"] for t in json.load(sys.stdin)["result"]["tools"])))
+')"
+e2e::assert_equals "${mcp_tools}" "boom,greet,make_artifact" "POST /mcp tools/list matches the REST workflow set"
+
+mcp_result="$(mcp_call '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"greet","arguments":{"name":"mcp"}}}' | python3 -c '
+import json, sys
+d = json.load(sys.stdin)["result"]
+print(d["content"][0]["text"])
+print("true" if d.get("isError") else "false")
+')"
+{
+  read -r p_mcp_text
+  read -r p_mcp_iserror
+} <<< "${mcp_result}"
+e2e::assert_equals "${p_mcp_text}" "hello mcp" "POST /mcp tools/call returns the workflow return value"
+e2e::assert_equals "${p_mcp_iserror}" "false" "POST /mcp tools/call reports isError:false on success"
+
+# The MCP call is a first-class run: it is the newest entry in the shared REST
+# registry, succeeded, and carries the same result_text the MCP client saw.
+newest="$(curl -s "${base}/v1/runs?limit=1" | python3 -c '
+import json, sys
+r = json.load(sys.stdin)["runs"][0]
+print(r["workflow"])
+print(r["status"])
+print(r["result_text"])
+')"
+{
+  read -r p_newest_wf
+  read -r p_newest_status
+  read -r p_newest_text
+} <<< "${newest}"
+e2e::assert_equals "${p_newest_wf}" "greet" "the MCP call appears in the shared /v1/runs registry"
+e2e::assert_equals "${p_newest_status}" "succeeded" "the MCP-initiated run status is succeeded"
+e2e::assert_equals "${p_newest_text}" "hello mcp" "the MCP-initiated run's result_text matches the tool result"

@@ -14,24 +14,6 @@ Process rules:
 
 ***
 
-## Expose HTTP API and network MCP from one service process #dev-ready
-
-Today `jaiph serve` is HTTP-only and `jaiph mcp` is stdio-only. The same file can be exposed by two separate processes, but there is no single deployed company service that serves both protocols or a Kubernetes-addressable MCP endpoint.
-
-Scope:
-
-- Add standards-compliant MCP Streamable HTTP to `jaiph serve` on a documented path while retaining the existing REST/OpenAPI API.
-- Reuse the same tool generation, hot reload, auth boundary, concurrency limiter, cancellation, sandbox/env policy, run IDs, artifacts, and telemetry for both transports.
-- Keep `jaiph mcp` stdio for local clients; do not duplicate workflow execution logic.
-- Document reverse-proxy requirements for streaming, timeouts, TLS, and authentication.
-
-Acceptance:
-
-- One process serves REST and MCP clients concurrently against the same workflow generation.
-- MCP calls appear in the same run inspection API and obey the same concurrency and cancellation rules.
-- Bearer auth protects both protocol surfaces on non-loopback binds.
-- Docker and Kind integration tests exercise both transports from outside the container/pod.
-
 ## Make service runs restart-safe and retry-safe #dev-ready
 
 Run artifacts are durable, but HTTP run discovery is only an in-memory map. Restarting the process makes completed run IDs unreachable, loses in-flight state, and makes client retries start duplicate expensive workflows. This is a single-process developer server, not yet a reliable company service contract.

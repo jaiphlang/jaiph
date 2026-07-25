@@ -2,6 +2,7 @@ import { randomUUID, timingSafeEqual } from "node:crypto";
 import { statSync } from "node:fs";
 import { basename, join } from "node:path";
 import type { McpToolSpec } from "../mcp/tools";
+import { McpServer, type McpCallContext } from "../mcp/server";
 import type { WorkflowCallResult, WorkflowCallContext } from "../exec/call";
 import { buildOpenApi } from "./openapi";
 import { DOCS_HTML } from "./docs";
@@ -115,6 +116,8 @@ export interface ServeHandlerOptions {
   retainAgeSec?: number;
   /** Current-time source (ISO string), injectable for tests. */
   now: () => string;
+  /** Diagnostic line (stderr) for the embedded MCP endpoint. Defaults to a no-op. */
+  log?: (line: string) => void;
   /** Run-id source, injectable for tests. Defaults to `randomUUID`. */
   newRunId?: () => string;
   /**
@@ -157,10 +160,101 @@ export class ServeHandler {
   /** In-memory run registry, keyed by run id. Public so tests can inspect it. */
   readonly runs = new Map<string, RunRecord>();
   private orderCounter = 0;
+  /**
+   * MCP protocol engine for the `POST /mcp` Streamable HTTP endpoint. Reuses the
+   * exact stdio state machine (`jaiph mcp`); its `tools/call` funnels into the
+   * same {@link startRun} the REST endpoint uses, so an MCP call registers in
+   * the same run registry, counts against the same concurrency cap, and obeys
+   * the same cancellation rules. Per-request outbound routing is handled by
+   * `handleLine(line, write)`.
+   */
+  private readonly mcp: McpServer;
 
   constructor(opts: ServeHandlerOptions) {
     this.opts = opts;
     this.newRunId = opts.newRunId ?? randomUUID;
+    this.mcp = new McpServer({
+      serverVersion: opts.version,
+      getTools: opts.getTools,
+      callTool: (spec, args, ctx) => this.callToolAsRun(spec, args, ctx),
+      // Server-initiated broadcasts have no HTTP sink without a GET stream (not
+      // offered); every real reply is routed per-request via handleLine(write).
+      write: () => {},
+      log: opts.log ?? ((): void => {}),
+    });
+  }
+
+  /**
+   * Bridge an MCP `tools/call` into the shared run path. Registers a run
+   * (respecting the concurrency cap), forwards MCP progress/cancel hooks, waits
+   * for it to finish, then reports the finalized record as an MCP result. At
+   * capacity the call comes back as a normal `isError` result — the MCP analogue
+   * of the REST `429`, not a protocol error.
+   */
+  private async callToolAsRun(
+    spec: McpToolSpec,
+    args: Record<string, string>,
+    ctx: McpCallContext,
+  ): Promise<{ text: string; isError: boolean }> {
+    const started = this.startRun(spec, args, { onStep: ctx.onStep, onCancelHandle: ctx.onCancelHandle });
+    if ("atCapacity" in started) {
+      return { text: `too many concurrent runs (max ${this.opts.maxConcurrent})`, isError: true };
+    }
+    await started.done;
+    const r = started.record;
+    return { text: r.result_text ?? "", isError: r.status !== "succeeded" };
+  }
+
+  /**
+   * Register and launch one run through the injected executor, shared by the
+   * REST create-run endpoint and the MCP `tools/call` bridge. Enforces the
+   * concurrency cap up front (returns `{ atCapacity: true }` so each caller maps
+   * its own error shape), records the run so it is inspectable and cancellable,
+   * and finalizes it when the executor settles. `done` never rejects.
+   */
+  private startRun(
+    spec: McpToolSpec,
+    args: Record<string, string>,
+    extra?: WorkflowCallContext,
+  ): { record: RunRecord; done: Promise<void> } | { atCapacity: true } {
+    if (this.inFlight() >= this.opts.maxConcurrent) return { atCapacity: true };
+    const runId = this.newRunId();
+    const record: RunRecord = {
+      run_id: runId,
+      workflow: spec.workflow,
+      status: "running",
+      started_at: this.opts.now(),
+      ended_at: null,
+      exit_status: null,
+      signal: null,
+      result_text: null,
+      run_dir: null,
+      cancelled: false,
+      order: this.orderCounter++,
+    };
+    this.runs.set(runId, record);
+    const ctx: WorkflowCallContext = {
+      onStep: extra?.onStep,
+      onCancelHandle: (cancelFn) => {
+        // Wrap so every cancel path (REST /v1/.../cancel, MCP
+        // notifications/cancelled, SSE hangup, cancelAll) marks the shared
+        // record before killing the child — otherwise an MCP-only cancel
+        // would finalize as `failed` instead of `cancelled`.
+        const cancel = (): void => {
+          record.cancelled = true;
+          cancelFn();
+        };
+        record.cancel = cancel;
+        // A cancel may arrive before the child spawns; honor it now.
+        if (record.cancelled) cancel();
+        extra?.onCancelHandle?.(cancel);
+      },
+    };
+    const done = this.opts
+      .callTool(spec, args, runId, ctx)
+      .then((result) => this.finalize(record, result))
+      .catch((err) => this.finalizeError(record, err));
+    return { record, done };
   }
 
   /** Number of runs still executing (drives the concurrency cap + healthz). */
@@ -204,7 +298,15 @@ export class ServeHandler {
       return { status: 200, headers: { "content-type": "text/html; charset=utf-8" }, body: DOCS_HTML };
     }
 
-    // Everything under /v1 is bearer-protected (when a token is configured).
+    // The MCP Streamable HTTP endpoint and everything under /v1 are the two
+    // bearer-protected surfaces (when a token is configured); the same auth
+    // boundary guards both transports.
+    if (path === "/mcp") {
+      if (!this.authorized(req)) {
+        return this.error(401, "E_UNAUTHORIZED", "missing or invalid bearer token");
+      }
+      return this.handleMcp(req);
+    }
     if (path === "/v1" || path.startsWith("/v1/")) {
       if (!this.authorized(req)) {
         return this.error(401, "E_UNAUTHORIZED", "missing or invalid bearer token");
@@ -308,40 +410,14 @@ export class ServeHandler {
       return this.error(400, "E_BAD_ARGS", `unexpected argument(s) for "${spec.name}": ${unexpected.join(", ")}`);
     }
 
-    if (this.inFlight() >= this.opts.maxConcurrent) {
-      return this.error(429, "E_TOO_MANY_RUNS", `too many concurrent runs (max ${this.opts.maxConcurrent})`);
-    }
-
     const args: Record<string, string> = {};
     for (const p of spec.params) args[p] = raw[p] as string;
 
-    const runId = this.newRunId();
-    const record: RunRecord = {
-      run_id: runId,
-      workflow: spec.workflow,
-      status: "running",
-      started_at: this.opts.now(),
-      ended_at: null,
-      exit_status: null,
-      signal: null,
-      result_text: null,
-      run_dir: null,
-      cancelled: false,
-      order: this.orderCounter++,
-    };
-    this.runs.set(runId, record);
-
-    const ctx: WorkflowCallContext = {
-      onCancelHandle: (cancelFn) => {
-        record.cancel = cancelFn;
-        // A cancel may arrive before the child spawns; honor it now.
-        if (record.cancelled) cancelFn();
-      },
-    };
-    const done = this.opts
-      .callTool(spec, args, runId, ctx)
-      .then((result) => this.finalize(record, result))
-      .catch((err) => this.finalizeError(record, err));
+    const started = this.startRun(spec, args);
+    if ("atCapacity" in started) {
+      return this.error(429, "E_TOO_MANY_RUNS", `too many concurrent runs (max ${this.opts.maxConcurrent})`);
+    }
+    const { record, done } = started;
 
     const wait = req.query.get("wait") === "true";
     if (wait) {
@@ -350,9 +426,74 @@ export class ServeHandler {
     }
     return {
       status: 202,
-      headers: { "content-type": "application/json", location: `/v1/runs/${runId}` },
+      headers: { "content-type": "application/json", location: `/v1/runs/${record.run_id}` },
       body: JSON.stringify(this.toRunObject(record)),
     };
+  }
+
+  /**
+   * `POST /mcp`: MCP Streamable HTTP. One JSON-RPC message per request, handled
+   * by the shared {@link mcp} engine — so `tools/call` runs the exact same
+   * workflow generation, sandbox posture, run registry, concurrency cap, and
+   * cancellation as the REST API.
+   *
+   * Response shape: a message carrying no reply (a notification such as
+   * `notifications/cancelled`, or a `notifications/initialized`) settles as
+   * `202 Accepted` with no body. A request gets its reply either as a single
+   * `application/json` object or, when the client offers `text/event-stream`
+   * for a `tools/call`, as an SSE stream carrying `notifications/progress` and
+   * then the result. A GET/DELETE gets `405` (no server-initiated stream is
+   * offered here), matching the transport spec.
+   */
+  private async handleMcp(req: ServeRequest): Promise<ServeResponse> {
+    if (req.method !== "POST") {
+      return {
+        status: 405,
+        headers: { allow: "POST", "content-type": "application/json" },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: null,
+          error: { code: -32000, message: "use POST for MCP Streamable HTTP" },
+        }),
+      };
+    }
+    if (req.bodyTooLarge) {
+      return this.error(413, "E_BODY_TOO_LARGE", `request body exceeds ${MAX_BODY_BYTES} bytes`);
+    }
+
+    const parsed = safeJsonObject(req.body);
+    const requestId = parsed && "id" in parsed && "method" in parsed ? parsed.id : undefined;
+    const method = parsed && typeof parsed.method === "string" ? parsed.method : undefined;
+    const wantsSse = (req.headers["accept"] ?? "").includes("text/event-stream");
+
+    // A tools/call may emit progress; stream it as SSE when the client offers
+    // that content type. The client hanging up cancels the run through the same
+    // MCP cancel path (kills the child + Docker container).
+    if (requestId !== undefined && method === "tools/call" && wantsSse) {
+      return {
+        status: 200,
+        headers: { "content-type": "text/event-stream", "cache-control": "no-cache", connection: "keep-alive" },
+        body: "",
+        stream: (target) => {
+          target.onAbort(() => {
+            void this.mcp.handleLine(
+              JSON.stringify({ jsonrpc: "2.0", method: "notifications/cancelled", params: { requestId } }),
+            );
+          });
+          return this.mcp.handleLine(req.body, (m) => {
+            if (!target.aborted) target.write(`data: ${JSON.stringify(m)}\n\n`);
+          });
+        },
+      };
+    }
+
+    // JSON mode: buffer this message's outbound traffic and return the reply.
+    const collected: Record<string, unknown>[] = [];
+    await this.mcp.handleLine(req.body, (m) => collected.push(m));
+    // A pure notification produces nothing to return.
+    if (collected.length === 0) return { status: 202, headers: {}, body: "" };
+    const reply = collected.find((m) => "id" in m) ?? collected[collected.length - 1];
+    return { status: 200, headers: { "content-type": "application/json" }, body: JSON.stringify(reply) };
   }
 
   /**
@@ -579,6 +720,17 @@ export class ServeHandler {
 
   private methodNotAllowed(): ServeResponse {
     return this.error(405, "E_METHOD_NOT_ALLOWED", "method not allowed");
+  }
+}
+
+/** Parse a JSON object, returning null for non-objects or malformed input. */
+function safeJsonObject(body: string): Record<string, unknown> | null {
+  try {
+    const parsed: unknown = JSON.parse(body);
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return null;
+    return parsed as Record<string, unknown>;
+  } catch {
+    return null;
   }
 }
 

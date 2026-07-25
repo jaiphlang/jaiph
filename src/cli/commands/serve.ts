@@ -57,9 +57,11 @@ const SERVE_USAGE =
   "Endpoints: GET /docs (Swagger UI), GET /openapi.json, GET /healthz, GET /v1/workflows,\n" +
   "POST /v1/workflows/{name}/runs (async 202 or ?wait=true for 200), GET /v1/runs,\n" +
   "GET /v1/runs/{id}, GET /v1/runs/{id}/events (NDJSON, or SSE with Accept: text/event-stream),\n" +
-  "GET /v1/runs/{id}/artifacts, GET /v1/runs/{id}/artifacts/{path}, POST /v1/runs/{id}/cancel.\n\n" +
+  "GET /v1/runs/{id}/artifacts, GET /v1/runs/{id}/artifacts/{path}, POST /v1/runs/{id}/cancel.\n" +
+  "MCP clients: POST /mcp speaks MCP Streamable HTTP over the same workflows, run\n" +
+  "registry, concurrency cap, and auth — the network sibling of `jaiph mcp` stdio.\n\n" +
   "Auth: set JAIPH_SERVE_TOKEN to require `Authorization: Bearer <token>` on every\n" +
-  "/v1/* request (/healthz, /openapi.json, /docs stay open). Binding a non-loopback\n" +
+  "/v1/* and /mcp request (/healthz, /openapi.json, /docs stay open). Binding a non-loopback\n" +
   "host without the token set is a startup error. Cap concurrent runs with\n" +
   "JAIPH_SERVE_MAX_CONCURRENT (default 4). Bound memory with JAIPH_SERVE_MAX_OUTPUT_BYTES\n" +
   "(per-run stdout/stderr/log/result cap, default 1 MiB), JAIPH_SERVE_RETAIN_RUNS\n" +
@@ -224,6 +226,7 @@ export async function runServe(rest: string[]): Promise<number> {
     retainRuns,
     retainAgeSec,
     maxArtifactBytes,
+    log,
     now: () => new Date().toISOString(),
     // A run's dir is only recorded on its object at finalize; while it runs the
     // events/artifacts endpoints locate it by scanning the host runs root for
@@ -293,7 +296,10 @@ export async function runServe(rest: string[]): Promise<number> {
   }
 
   const base = `http://${host}:${boundPort}`;
-  log(`jaiph serve: listening on ${base} — API docs at ${base}/docs (${generations.current().tools.length} workflow(s))`);
+  log(
+    `jaiph serve: listening on ${base} — API docs at ${base}/docs, MCP at ${base}/mcp ` +
+      `(${generations.current().tools.length} workflow(s))`,
+  );
   log(
     `jaiph serve: memory bounds — retain ${retainRuns} completed run(s)` +
       `${retainAgeSec > 0 ? ` up to ${retainAgeSec}s old` : ""}, ${maxOutputBytes} output bytes/run; ` +

@@ -1,13 +1,22 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import type { McpToolSpec } from "./tools";
 
 /**
- * Minimal MCP server over newline-delimited JSON-RPC 2.0 (stdio transport).
+ * Minimal MCP server over newline-delimited JSON-RPC 2.0.
  *
  * The transport and the workflow execution are injected so the protocol layer
  * stays a pure line-in / message-out state machine (unit-testable without
  * spawning processes). Handles: `initialize`, `ping`, `tools/list`,
  * `tools/call`; emits `notifications/tools/list_changed` on hot reload.
  * All diagnostics go through `log` (stderr) — stdout carries protocol JSON only.
+ *
+ * One instance drives two transports without duplicating protocol logic: the
+ * `jaiph mcp` stdio loop (every outbound message goes to the constructor's
+ * `write`) and `jaiph serve`'s MCP Streamable HTTP endpoint (`handleLine(line,
+ * write)` routes that one message's outbound traffic — its response plus any
+ * `notifications/progress` — to the request's own HTTP response). Per-call
+ * routing is carried through the async call by an `AsyncLocalStorage` so
+ * concurrent HTTP POSTs never cross-talk.
  */
 
 /** MCP protocol revisions this server knows; the newest is the fallback. */
@@ -76,14 +85,30 @@ function readProgressToken(params: Record<string, unknown>): JsonRpcId | undefin
   return isJsonRpcId(token) ? token : undefined;
 }
 
+/** Outbound protocol message writer (one JSON message). */
+type WriteFn = (message: Record<string, unknown>) => void;
+
 export class McpServer {
   private readonly opts: McpServerOptions;
   private initialized = false;
   /** In-flight `tools/call` requests keyed by request id (for cancellation). */
   private readonly inFlight = new Map<JsonRpcId, InFlightCall>();
+  /**
+   * Per-`handleLine` outbound writer, set when the transport routes one
+   * message's replies to a dedicated sink (the HTTP endpoint). Propagates
+   * across the `tools/call` await so its `notifications/progress` and final
+   * response land on the same sink; absent (stdio) the constructor `write` is
+   * used.
+   */
+  private readonly writeStore = new AsyncLocalStorage<WriteFn>();
 
   constructor(opts: McpServerOptions) {
     this.opts = opts;
+  }
+
+  /** Route one outbound message to the active per-call sink, else the transport default. */
+  private write(message: Record<string, unknown>): void {
+    (this.writeStore.getStore() ?? this.opts.write)(message);
   }
 
   /**
@@ -103,8 +128,18 @@ export class McpServer {
     this.opts.write({ jsonrpc: "2.0", method: "notifications/tools/list_changed" });
   }
 
-  /** Handle one inbound line. Async because `tools/call` runs a workflow. */
-  async handleLine(line: string): Promise<void> {
+  /**
+   * Handle one inbound line. Async because `tools/call` runs a workflow. When
+   * `write` is supplied (the HTTP transport), every message this line produces —
+   * response and progress notifications — is routed to it instead of the
+   * transport default, for the whole async lifetime of the call.
+   */
+  handleLine(line: string, write?: WriteFn): Promise<void> {
+    if (write) return this.writeStore.run(write, () => this.dispatch(line));
+    return this.dispatch(line);
+  }
+
+  private async dispatch(line: string): Promise<void> {
     const trimmed = line.trim();
     if (trimmed.length === 0) return;
 
@@ -258,7 +293,7 @@ export class McpServer {
               // Suppress once the call is cancelled or its response was sent.
               if (entry.cancelled || !this.inFlight.has(id)) return;
               progress += 1;
-              this.opts.write({
+              this.write({
                 jsonrpc: "2.0",
                 method: "notifications/progress",
                 params: { progressToken, progress, message: `${kind} ${name}`.trim() },
@@ -283,10 +318,10 @@ export class McpServer {
   }
 
   private writeResult(id: JsonRpcId, result: Record<string, unknown>): void {
-    this.opts.write({ jsonrpc: "2.0", id, result });
+    this.write({ jsonrpc: "2.0", id, result });
   }
 
   private writeError(id: JsonRpcId | null, code: number, message: string): void {
-    this.opts.write({ jsonrpc: "2.0", id, error: { code, message } });
+    this.write({ jsonrpc: "2.0", id, error: { code, message } });
   }
 }

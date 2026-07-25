@@ -209,3 +209,34 @@ journal="$(kc exec "${pod}" -- cat "${p_run_dir}/run_summary.jsonl")"
 events="$(curl -s "${base}/v1/runs/${p_run_id}/events" -H "authorization: Bearer ${serve_token}")"
 e2e::assert_equals "${events}" "${journal}" \
   "GET events (NDJSON) byte-matches run_summary.jsonl read from the runs volume"
+
+e2e::section "the same pod serves MCP Streamable HTTP from outside, behind the same bearer auth"
+
+# Both transports are one process against one generation. The MCP surface obeys
+# the same bearer boundary as /v1, and a tools/call over HTTP runs the same
+# workflow and lands in the same run registry as the REST call above.
+mcp_unauth_code="$(curl -s -o /dev/null -w '%{http_code}' -X POST "${base}/mcp" \
+  -H 'content-type: application/json' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}')"
+e2e::assert_equals "${mcp_unauth_code}" "401" "POST /mcp without the bearer token is rejected with 401"
+
+mcp_ver="$(curl -s -X POST "${base}/mcp" \
+  -H "authorization: Bearer ${serve_token}" -H 'content-type: application/json' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}' \
+  | python3 -c 'import json,sys; print(json.load(sys.stdin)["result"]["protocolVersion"])')"
+e2e::assert_equals "${mcp_ver}" "2025-06-18" "authenticated POST /mcp initialize negotiates the protocol version"
+
+mcp_result="$(curl -s -X POST "${base}/mcp" \
+  -H "authorization: Bearer ${serve_token}" -H 'content-type: application/json' \
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"health","arguments":{}}}' | python3 -c '
+import json, sys
+d = json.load(sys.stdin)["result"]
+print(d["content"][0]["text"])
+print("true" if d.get("isError") else "false")
+')"
+{
+  read -r p_mcp_text
+  read -r p_mcp_iserror
+} <<< "${mcp_result}"
+e2e::assert_equals "${p_mcp_text}" "ok" "authenticated POST /mcp tools/call returns the workflow return value"
+e2e::assert_equals "${p_mcp_iserror}" "false" "POST /mcp tools/call reports isError:false on success"

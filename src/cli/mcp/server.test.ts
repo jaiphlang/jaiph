@@ -390,3 +390,61 @@ test("notifyToolsChanged: emits the list_changed notification once initialized",
   server.notifyToolsChanged();
   assert.deepEqual(written[1], { jsonrpc: "2.0", method: "notifications/tools/list_changed" });
 });
+
+// === per-line write routing (HTTP transport) ===
+//
+// `jaiph serve` reuses one McpServer across concurrent HTTP POSTs, routing each
+// message's replies to that request's own response via handleLine(line, write).
+// These pin that the per-call sink — not the constructor write — receives the
+// reply, and that two overlapping calls never cross-talk.
+
+test("handleLine(line, write): routes the reply to the per-call sink, not the transport default", async () => {
+  const { server, written } = makeServer();
+  const sink: Array<Record<string, unknown>> = [];
+  await server.handleLine(JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }), (m) => sink.push(m));
+  assert.equal(written.length, 0, "constructor write is untouched");
+  assert.equal((sink[0] as { id: number }).id, 1);
+  assert.ok((sink[0] as { result: unknown }).result);
+});
+
+test("handleLine(line, write): concurrent calls keep their progress + reply on their own sink", async () => {
+  // Two tools/call requests interleave; each gets a distinct progressToken and a
+  // distinct sink. The AsyncLocalStorage routing must keep every notification and
+  // response on the sink of the call that produced it.
+  const gates: Record<string, () => void> = {};
+  const { server } = makeServer({
+    callTool: (spec, args, ctx) =>
+      new Promise((resolve) => {
+        ctx.onStep?.("workflow", spec.workflow);
+        gates[args.target] = () => {
+          ctx.onStep?.("script", spec.workflow);
+          resolve({ text: `done ${args.target}`, isError: false });
+        };
+      }),
+  });
+  const sinkA: Array<Record<string, unknown>> = [];
+  const sinkB: Array<Record<string, unknown>> = [];
+  const call = (id: number, target: string, token: string, sink: Array<Record<string, unknown>>): Promise<void> =>
+    server.handleLine(
+      JSON.stringify({ jsonrpc: "2.0", id, method: "tools/call", params: { name: "build", arguments: { target }, _meta: { progressToken: token } } }),
+      (m) => sink.push(m),
+    );
+  const pA = call(1, "a", "tok-a", sinkA);
+  const pB = call(2, "b", "tok-b", sinkB);
+  // Let both calls register their onStep before resolving; then finish A then B.
+  await new Promise((r) => setImmediate(r));
+  gates["a"]();
+  gates["b"]();
+  await Promise.all([pA, pB]);
+
+  const tokens = (sink: Array<Record<string, unknown>>): Set<unknown> =>
+    new Set(
+      sink
+        .filter((m) => m.method === "notifications/progress")
+        .map((m) => (m.params as { progressToken: unknown }).progressToken),
+    );
+  assert.deepEqual([...tokens(sinkA)], ["tok-a"], "sink A only carries token a's progress");
+  assert.deepEqual([...tokens(sinkB)], ["tok-b"], "sink B only carries token b's progress");
+  assert.equal((sinkA.find((m) => m.id === 1)!.result as { content: [{ text: string }] }).content[0].text, "done a");
+  assert.equal((sinkB.find((m) => m.id === 2)!.result as { content: [{ text: string }] }).content[0].text, "done b");
+});
