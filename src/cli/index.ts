@@ -9,7 +9,6 @@ import { runFormat } from "./commands/format";
 import { runInstall } from "./commands/install";
 import { runCompile } from "./commands/compile";
 import { runMcp } from "./commands/mcp";
-import { runServe } from "./commands/serve";
 import { runWorkflowRunner, WORKFLOW_RUNNER_ARG } from "../runtime/kernel/node-workflow-runner";
 import { VERSION } from "../version";
 
@@ -69,6 +68,9 @@ export async function main(argv: string[]): Promise<number> {
       return await runMcp(rest);
     }
     if (cmd === "serve") {
+      // Lazy import: `serve` pulls in the OIDC/JWT auth stack (`jose`) and HTTP
+      // server deps that every other command would otherwise pay to load.
+      const { runServe } = await import("./commands/serve");
       return await runServe(rest);
     }
     process.stderr.write(`Unknown command: ${cmd}\n`);
