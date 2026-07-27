@@ -17,6 +17,7 @@ import {
   type StartupPosture,
 } from "../shared/generation";
 import { ServeHandler } from "../serve/handler";
+import { createAuthenticator, type AuthConfig } from "../serve/auth";
 import { loadPersistedRuns, persistRunRecord } from "../serve/run-store";
 import { createHttpServer, listen } from "../serve/server";
 import { VERSION } from "../../version";
@@ -61,9 +62,14 @@ const SERVE_USAGE =
   "GET /v1/runs/{id}/artifacts, GET /v1/runs/{id}/artifacts/{path}, POST /v1/runs/{id}/cancel.\n" +
   "MCP clients: POST /mcp speaks MCP Streamable HTTP over the same workflows, run\n" +
   "registry, concurrency cap, and auth — the network sibling of `jaiph mcp` stdio.\n\n" +
-  "Auth: set JAIPH_SERVE_TOKEN to require `Authorization: Bearer <token>` on every\n" +
-  "/v1/* and /mcp request (/healthz, /openapi.json, /docs stay open). Binding a non-loopback\n" +
-  "host without the token set is a startup error. Cap concurrent runs with\n" +
+  "Auth: JAIPH_SERVE_TOKEN sets a static single-operator bearer required on every /v1/* and\n" +
+  "/mcp request — single-operator, not multi-tenant. For per-user identity and authorization,\n" +
+  "configure OIDC/JWT with JAIPH_SERVE_OIDC_ISSUER + JAIPH_SERVE_OIDC_AUDIENCE (JWKS discovered\n" +
+  "from the issuer, or set JAIPH_SERVE_OIDC_JWKS_URI). OIDC tokens are authorized by scope —\n" +
+  "jaiph:invoke (run), jaiph:inspect (read runs/artifacts), jaiph:cancel — and a principal may\n" +
+  "inspect/cancel only its own runs. /healthz is always open and credential-free; /docs and\n" +
+  "/openapi.json are open unless JAIPH_SERVE_EXPOSE_DOCS=false. Binding a non-loopback host with\n" +
+  "no auth is a startup error. Cap concurrent runs with\n" +
   "JAIPH_SERVE_MAX_CONCURRENT (default 4). Bound memory with JAIPH_SERVE_MAX_OUTPUT_BYTES\n" +
   "(per-run stdout/stderr/log/result cap, default 1 MiB), JAIPH_SERVE_RETAIN_RUNS\n" +
   "(completed runs kept in memory, default 500), and JAIPH_SERVE_RETAIN_AGE_SEC\n" +
@@ -139,16 +145,38 @@ export async function runServe(rest: string[]): Promise<number> {
     return 1;
   }
 
+  // Authentication: OIDC/JWT (multi-tenant, per-user identity + scopes) when an
+  // issuer + audience are configured, else the static single-operator token,
+  // else open (loopback only). OIDC wins when both are present.
   const token = process.env.JAIPH_SERVE_TOKEN;
-  // Fail closed on exposure: a non-loopback bind without a token is a startup
-  // error, before any socket is opened.
-  if (!isLoopbackHost(host) && !token) {
+  const oidcIssuer = process.env.JAIPH_SERVE_OIDC_ISSUER?.trim();
+  const oidcAudience = process.env.JAIPH_SERVE_OIDC_AUDIENCE?.trim();
+  const oidcJwksUri = process.env.JAIPH_SERVE_OIDC_JWKS_URI?.trim();
+  if ((oidcIssuer && !oidcAudience) || (!oidcIssuer && oidcAudience)) {
     process.stderr.write(
-      `jaiph serve: refusing to bind non-loopback host "${host}" without JAIPH_SERVE_TOKEN set ` +
-        "(every /v1/* endpoint would be unauthenticated arbitrary shell). Set JAIPH_SERVE_TOKEN and retry.\n",
+      "jaiph serve: OIDC mode requires both JAIPH_SERVE_OIDC_ISSUER and JAIPH_SERVE_OIDC_AUDIENCE\n",
     );
     return 1;
   }
+  const authConfig: AuthConfig =
+    oidcIssuer && oidcAudience
+      ? { oidc: { issuer: oidcIssuer, audience: oidcAudience, jwksUri: oidcJwksUri || undefined } }
+      : { token };
+  const authenticator = createAuthenticator(authConfig);
+
+  // Fail closed on exposure: a non-loopback bind with no authentication is a
+  // startup error, before any socket is opened.
+  if (!isLoopbackHost(host) && !authenticator.enabled) {
+    process.stderr.write(
+      `jaiph serve: refusing to bind non-loopback host "${host}" without authentication ` +
+        "(every /v1/* endpoint would be unauthenticated arbitrary shell). Set JAIPH_SERVE_TOKEN or configure " +
+        "OIDC (JAIPH_SERVE_OIDC_ISSUER + JAIPH_SERVE_OIDC_AUDIENCE) and retry.\n",
+    );
+    return 1;
+  }
+
+  // Hide the API surface (/docs + /openapi.json) with JAIPH_SERVE_EXPOSE_DOCS=false.
+  const exposeDocs = !/^(false|0)$/i.test((process.env.JAIPH_SERVE_EXPOSE_DOCS ?? "").trim());
 
   const maxRaw = process.env.JAIPH_SERVE_MAX_CONCURRENT;
   let maxConcurrent = DEFAULT_MAX_CONCURRENT;
@@ -236,7 +264,8 @@ export async function runServe(rest: string[]): Promise<number> {
   const handler = new ServeHandler({
     version: VERSION,
     serverTitle: `jaiph — ${basename(inputAbs)}`,
-    token,
+    authenticator,
+    exposeDocs,
     maxConcurrent,
     retainRuns,
     retainAgeSec,
@@ -318,6 +347,11 @@ export async function runServe(rest: string[]): Promise<number> {
   log(
     `jaiph serve: listening on ${base} — API docs at ${base}/docs, MCP at ${base}/mcp ` +
       `(${generations.current().tools.length} workflow(s))`,
+  );
+  log(
+    `jaiph serve: auth mode ${authenticator.mode}` +
+      (authenticator.mode === "oidc" ? ` (issuer ${oidcIssuer}, audience ${oidcAudience})` : "") +
+      `; docs ${exposeDocs ? "exposed at /docs + /openapi.json" : "hidden (JAIPH_SERVE_EXPOSE_DOCS=false)"}.`,
   );
   log(
     `jaiph serve: memory bounds — retain ${retainRuns} completed run(s)` +

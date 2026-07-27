@@ -214,7 +214,7 @@ script check_claude_capacity = ```
       ;;
   esac
 
-  printf 'Claude current session usage is %s%%.' "$percent"
+  printf 'Claude current session usage is %s%% (threshold: 90%%).' "$percent"
   (( percent <= 90 ))
 ```
 
@@ -257,7 +257,7 @@ workflow classify_role(task) {
 
 workflow implement(task, role_name) {
   config {
-    agent.model = "fable"
+    agent.model = "opus"
   }
 
   run task_text_has_header(task) catch (err) {

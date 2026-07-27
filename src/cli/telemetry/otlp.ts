@@ -313,6 +313,13 @@ export interface ExportRunTelemetryOptions {
   exitStatus: number;
   signal: string | null;
   env: NodeJS.ProcessEnv;
+  /**
+   * Authenticated caller identity for a `jaiph serve` run: surfaced as OTLP
+   * resource attributes (`jaiph.principal`, `jaiph.correlation_id`) and Sentry
+   * tags. Absent for `jaiph run` / anonymous callers. Never a token or a
+   * secret-bearing claim.
+   */
+  identity?: { principal?: string; correlationId?: string };
 }
 
 /** Per-exporter delivery result — `sent`, `skipped` (disabled/no data), or `failed`. */
@@ -461,10 +468,13 @@ export async function exportOtlpTraces(
   if (lines.every((l) => l.trim().length === 0)) return "skipped";
 
   const serviceName = env.OTEL_SERVICE_NAME?.trim() || "jaiph";
-  const resourceAttrs = {
+  const resourceAttrs: Record<string, string> = {
     ...parseKeyValueList(env.OTEL_RESOURCE_ATTRIBUTES),
     "jaiph.version": VERSION,
   };
+  // Attach the authenticated caller identity (never a token) as resource attrs.
+  if (opts.identity?.principal) resourceAttrs["jaiph.principal"] = opts.identity.principal;
+  if (opts.identity?.correlationId) resourceAttrs["jaiph.correlation_id"] = opts.identity.correlationId;
   const payload = runSummaryToOtlp(lines, { workflow, exitStatus, signal, serviceName, resourceAttributes: resourceAttrs });
   const headers = parseKeyValueList(env.OTEL_EXPORTER_OTLP_HEADERS);
 

@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ServeHandler, type RunRecord, type ServeRequest, type ServeResponse } from "./handler";
 import { hashArgs } from "./run-store";
+import type { Authenticator, Capability, Principal } from "./auth";
 import type { StreamTarget } from "./runfiles";
 import type { McpToolSpec } from "../mcp/tools";
 import type { WorkflowCallResult, WorkflowCallContext } from "../exec/call";
@@ -50,6 +51,9 @@ function makeHandler(overrides?: {
   maxArtifactBytes?: number;
   initialRuns?: RunRecord[];
   persistRun?: (record: RunRecord) => void;
+  authenticator?: Authenticator;
+  exposeDocs?: boolean;
+  log?: (line: string) => void;
 }): ServeHandler {
   let n = 0;
   return new ServeHandler({
@@ -58,6 +62,9 @@ function makeHandler(overrides?: {
     getTools: () => overrides?.tools ?? [BUILD_TOOL],
     callTool: overrides?.callTool ?? (async () => ({ text: "done", isError: false, exitStatus: 0 })),
     token: overrides?.token,
+    authenticator: overrides?.authenticator,
+    exposeDocs: overrides?.exposeDocs,
+    log: overrides?.log,
     maxConcurrent: overrides?.maxConcurrent ?? 4,
     retainRuns: overrides?.retainRuns,
     retainAgeSec: overrides?.retainAgeSec,
@@ -142,6 +149,177 @@ test("auth matrix: /v1/* requires the bearer token when JAIPH_SERVE_TOKEN is set
 test("with no token configured, /v1/* is open (loopback default)", async () => {
   const res = await makeHandler().handleRequest(req("GET", "/v1/workflows"));
   assert.equal(res.status, 200);
+});
+
+// === authorization: capabilities + ownership (OIDC-style principals) ===
+//
+// A stub authenticator lets these unit tests exercise the capability +
+// ownership contract without JWTs (the real JWT verification path is covered
+// end-to-end in integration/serve-auth.test.ts).
+
+function principal(subject: string, caps: Capability[], ownsAllRuns = false): Principal {
+  return { subject, capabilities: new Set(caps), ownsAllRuns };
+}
+
+/** Authenticator that maps a fixed principal to every request. */
+function principalAuth(p: Principal): Authenticator {
+  return { enabled: true, mode: "oidc", authenticate: () => Promise.resolve({ ok: true, principal: p }) };
+}
+
+/** Authenticator that resolves a principal by bearer token, else 401. */
+function tokenAuth(map: Record<string, Principal>): Authenticator {
+  return {
+    enabled: true,
+    mode: "oidc",
+    authenticate: (header) => {
+      const m = /^Bearer\s+(.+)$/.exec(header ?? "");
+      const p = m ? map[m[1]] : undefined;
+      return Promise.resolve(
+        p ? { ok: true, principal: p } : { ok: false, status: 401, code: "E_UNAUTHORIZED", message: "no" },
+      );
+    },
+  };
+}
+
+test("authz: a principal without the invoke capability cannot create a run (403)", async () => {
+  const h = makeHandler({ authenticator: principalAuth(principal("alice", ["inspect", "cancel"])) });
+  const res = await h.handleRequest(
+    req("POST", "/v1/workflows/build/runs", { headers: { "content-type": "application/json" }, body: JSON.stringify({ target: "x" }) }),
+  );
+  assert.equal(res.status, 403);
+  assert.equal(bodyJson(res).error.code, "E_FORBIDDEN");
+});
+
+test("authz: a principal without the inspect capability cannot list or read runs (403)", async () => {
+  const h = makeHandler({ authenticator: principalAuth(principal("alice", ["invoke"])) });
+  assert.equal((await h.handleRequest(req("GET", "/v1/runs"))).status, 403);
+  assert.equal((await h.handleRequest(req("GET", "/v1/workflows"))).status, 403);
+  assert.equal((await h.handleRequest(req("GET", "/v1/runs/whatever"))).status, 403);
+});
+
+test("authz: a principal without the cancel capability cannot cancel a run it owns (403)", async () => {
+  const p = principal("alice", ["invoke", "inspect"]);
+  const h = makeHandler({
+    tools: [NOARG_TOOL],
+    authenticator: principalAuth(p),
+    callTool: () => new Promise<WorkflowCallResult>(() => {}),
+  });
+  const start = bodyJson(await h.handleRequest(req("POST", "/v1/workflows/ping/runs")));
+  assert.equal(start.status, "running");
+  const cancel = await h.handleRequest(req("POST", `/v1/runs/${start.run_id}/cancel`));
+  assert.equal(cancel.status, 403);
+  assert.equal(bodyJson(cancel).error.code, "E_FORBIDDEN");
+});
+
+test("authz: a principal cannot inspect or cancel another principal's runs (404, not leaked)", async () => {
+  const alice = principal("alice", ["invoke", "inspect", "cancel"]);
+  const bob = principal("bob", ["invoke", "inspect", "cancel"]);
+  const h = makeHandler({
+    tools: [NOARG_TOOL],
+    authenticator: tokenAuth({ "alice-tok": alice, "bob-tok": bob }),
+    callTool: async () => ({ text: "ok", isError: false, exitStatus: 0, runDir: "/runs/x" }),
+  });
+  const aliceHdr = { authorization: "Bearer alice-tok" };
+  const bobHdr = { authorization: "Bearer bob-tok" };
+  const run = bodyJson(await h.handleRequest(req("POST", "/v1/workflows/ping/runs?wait=true", { headers: aliceHdr })));
+  assert.equal(run.principal, "alice", "the run records its creating principal");
+
+  // Bob cannot see or cancel Alice's run — indistinguishable from nonexistent.
+  assert.equal((await h.handleRequest(req("GET", `/v1/runs/${run.run_id}`, { headers: bobHdr }))).status, 404);
+  assert.equal((await h.handleRequest(req("GET", `/v1/runs/${run.run_id}/events`, { headers: bobHdr }))).status, 404);
+  assert.equal((await h.handleRequest(req("GET", `/v1/runs/${run.run_id}/artifacts`, { headers: bobHdr }))).status, 404);
+  assert.equal((await h.handleRequest(req("POST", `/v1/runs/${run.run_id}/cancel`, { headers: bobHdr }))).status, 404);
+  // Bob's listing excludes it entirely.
+  assert.equal(bodyJson(await h.handleRequest(req("GET", "/v1/runs", { headers: bobHdr }))).total, 0);
+
+  // Alice sees her own run.
+  const aliceGet = await h.handleRequest(req("GET", `/v1/runs/${run.run_id}`, { headers: aliceHdr }));
+  assert.equal(aliceGet.status, 200);
+  assert.equal(bodyJson(await h.handleRequest(req("GET", "/v1/runs", { headers: aliceHdr }))).total, 1);
+});
+
+test("docs exposure can be disabled (404) while /healthz stays open", async () => {
+  const h = makeHandler({ exposeDocs: false, token: "secret" });
+  assert.equal((await h.handleRequest(req("GET", "/docs"))).status, 404);
+  assert.equal((await h.handleRequest(req("GET", "/openapi.json"))).status, 404);
+  assert.equal((await h.handleRequest(req("GET", "/healthz"))).status, 200);
+});
+
+test("audit: invoke and cancel log the principal + correlation, never the bearer token", async () => {
+  const logs: string[] = [];
+  const alice = principal("alice", ["invoke", "inspect", "cancel"]);
+  const TOKEN = "super-secret-jwt-value";
+  let runPromise!: Promise<WorkflowCallResult>;
+  const h = makeHandler({
+    tools: [NOARG_TOOL],
+    authenticator: tokenAuth({ [TOKEN]: alice }),
+    log: (l) => logs.push(l),
+    callTool: (_spec, _args, _runId, ctx) => {
+      runPromise = new Promise<WorkflowCallResult>((resolve) => {
+        ctx.onCancelHandle?.(() => resolve({ text: "t", isError: true, exitStatus: 1, signal: "SIGINT" }));
+      });
+      return runPromise;
+    },
+  });
+  const hdr = { authorization: `Bearer ${TOKEN}`, "x-correlation-id": "cid-1" };
+  const start = bodyJson(await h.handleRequest(req("POST", "/v1/workflows/ping/runs", { headers: hdr })));
+  assert.equal(start.principal, "alice", "the public run object carries the audit principal");
+  assert.equal(start.correlation_id, "cid-1");
+
+  await h.handleRequest(req("POST", `/v1/runs/${start.run_id}/cancel`, { headers: { authorization: `Bearer ${TOKEN}` } }));
+  await runPromise.catch(() => {});
+
+  const joined = logs.join("\n");
+  assert.match(joined, /invoked — principal=alice correlation=cid-1/, "invoke is audited with who + correlation");
+  assert.match(joined, /cancelled — principal=alice/, "cancel is audited with who");
+  assert.ok(!joined.includes(TOKEN), "the audit log never contains the bearer token");
+});
+
+test("authz: an MCP SSE tools/call is owned and audited by the authenticated principal (not anonymous)", async () => {
+  const alice = principal("alice", ["invoke", "inspect", "cancel"]);
+  const h = makeHandler({
+    tools: [NOARG_TOOL],
+    authenticator: tokenAuth({ tok: alice }),
+    callTool: async () => ({ text: "pong", isError: false, exitStatus: 0, runDir: "/runs/x" }),
+  });
+  const res = await h.handleRequest(
+    req("POST", "/mcp", {
+      headers: { "content-type": "application/json", accept: "text/event-stream", authorization: "Bearer tok" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 20, method: "tools/call", params: { name: "ping", arguments: {} } }),
+    }),
+  );
+  assert.ok(res.stream, "SSE tools/call drives a stream");
+  await res.stream!(fakeTarget());
+  // The run the deferred SSE stream created carries alice's identity — proof the
+  // request context is re-established inside the stream body.
+  const listed = bodyJson(await h.handleRequest(req("GET", "/v1/runs", { headers: { authorization: "Bearer tok" } })));
+  assert.equal(listed.total, 1);
+  assert.equal(listed.runs[0].principal, "alice");
+});
+
+test("authz: MCP tools/call without invoke is a JSON-RPC authorization error and spawns nothing", async () => {
+  let started = 0;
+  const h = makeHandler({
+    authenticator: principalAuth(principal("alice", ["inspect"])),
+    callTool: async () => {
+      started += 1;
+      return { text: "x", isError: false, exitStatus: 0 };
+    },
+  });
+  const res = await h.handleRequest(
+    req("POST", "/mcp", {
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "build", arguments: { target: "x" } } }),
+    }),
+  );
+  assert.equal(res.status, 200);
+  assert.equal(bodyJson(res).error.code, -32003);
+  assert.equal(started, 0, "an unauthorized MCP call never reaches the executor");
+  // tools/list only needs inspect, which alice has.
+  const list = await h.handleRequest(
+    req("POST", "/mcp", { headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/list" }) }),
+  );
+  assert.ok(bodyJson(list).result, "tools/list is allowed with the inspect capability");
 });
 
 // === POST run: validation ===

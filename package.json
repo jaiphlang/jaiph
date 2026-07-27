@@ -35,5 +35,8 @@
     "@seriousme/openapi-schema-validator": "^2.4.1",
     "@types/node": "^24.5.2",
     "typescript": "^5.9.2"
+  },
+  "dependencies": {
+    "jose": "^5.10.0"
   }
 }
