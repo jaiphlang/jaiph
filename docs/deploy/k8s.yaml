@@ -55,7 +55,17 @@ metadata:
   labels:
     app: jaiph-runner
 spec:
+  # Single replica is the ONLY supported topology. `jaiph serve` keeps its run
+  # registry, concurrency cap, and idempotency index in process — there is no
+  # shared store, so a second replica would not see the first's runs, would
+  # enforce the concurrency cap independently, and could run the same
+  # Idempotency-Key once per replica. Scale vertically (resources +
+  # JAIPH_SERVE_MAX_CONCURRENT), never by raising this. See docs/serve.md
+  # "Deployment topology". Recreate ensures a rollout hands the runs volume to
+  # exactly one successor pod.
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: jaiph-runner

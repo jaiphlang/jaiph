@@ -17,6 +17,7 @@ import {
   type StartupPosture,
 } from "../shared/generation";
 import { ServeHandler } from "../serve/handler";
+import { loadPersistedRuns, persistRunRecord } from "../serve/run-store";
 import { createHttpServer, listen } from "../serve/server";
 import { VERSION } from "../../version";
 
@@ -218,6 +219,20 @@ export async function runServe(rest: string[]): Promise<number> {
   // Track in-flight run promises so shutdown can drain them.
   const inFlightRuns = new Set<Promise<unknown>>();
 
+  // Reconstruct durable run state from the runs tree: reload terminal runs from
+  // their persisted run.json and reconcile any run left `running` by a previous
+  // process death into the terminal `interrupted` state. A restart therefore
+  // keeps list/get/events/artifacts and idempotency working for prior runs.
+  let initialRuns: ReturnType<typeof loadPersistedRuns> = [];
+  try {
+    initialRuns = loadPersistedRuns(hostRunsRoot, new Date().toISOString());
+    if (initialRuns.length > 0) {
+      log(`jaiph serve: reconstructed ${initialRuns.length} run(s) from ${hostRunsRoot}`);
+    }
+  } catch (err) {
+    log(`jaiph serve: could not reconstruct prior runs: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
   const handler = new ServeHandler({
     version: VERSION,
     serverTitle: `jaiph — ${basename(inputAbs)}`,
@@ -228,6 +243,10 @@ export async function runServe(rest: string[]): Promise<number> {
     maxArtifactBytes,
     log,
     now: () => new Date().toISOString(),
+    initialRuns,
+    // Persist each run's public record beside its journal at finalize so a
+    // restart can reload it (and its idempotency key) from disk.
+    persistRun: persistRunRecord,
     // A run's dir is only recorded on its object at finalize; while it runs the
     // events/artifacts endpoints locate it by scanning the host runs root for
     // the run id (works host- and Docker-side — the run dir is a host mount).
