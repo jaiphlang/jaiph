@@ -29,8 +29,10 @@ interface PersistedRun {
   run_dir: string | null;
   /** Composite idempotency key (`principal\nworkflow\nkey`), when the create carried one. */
   idempotency_key?: string;
-  /** Opaque principal the idempotency key is scoped to. */
+  /** Authenticated principal (audit subject) that created the run; scopes idempotency + ownership. */
   principal?: string;
+  /** Request/correlation id attached at create time. */
+  correlation_id?: string;
   /** SHA-256 of the run's canonical arguments, for idempotency conflict detection. */
   args_hash?: string;
 }
@@ -71,6 +73,7 @@ export function persistRunRecord(record: RunRecord): void {
     run_dir: record.run_dir,
     idempotency_key: record.idempotency_key,
     principal: record.principal,
+    correlation_id: record.correlation_id,
     args_hash: record.args_hash,
   };
   const target = join(record.run_dir, PUBLIC_RUN_FILE);
@@ -157,6 +160,7 @@ function reloadRun(runDir: string): RunRecord | null {
     order: 0,
     idempotency_key: parsed.idempotency_key,
     principal: parsed.principal,
+    correlation_id: parsed.correlation_id,
     args_hash: parsed.args_hash,
   };
 }

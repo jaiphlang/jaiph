@@ -90,6 +90,13 @@ The exported payload is sourced entirely from `run_summary.jsonl`, which is alre
 credential-redacted, so secrets in step output arrive as `[REDACTED]`. The raw
 per-step capture files are never read.
 
+**Authenticated `jaiph serve` runs** also carry the caller's identity as resource
+attributes: `jaiph.principal` (the audit subject — the token `sub` in OIDC mode,
+`operator` / `anonymous` otherwise) and `jaiph.correlation_id` (the request's
+`X-Correlation-Id` / `X-Request-Id`, else a generated UUID). Both are attached on
+every span of the trace; neither is ever a bearer token or a secret-bearing claim.
+They are absent for `jaiph run` and anonymous callers.
+
 ## Failure is never load-bearing
 
 Telemetry never affects a run. An unreachable or erroring collector produces
@@ -144,7 +151,9 @@ credential-redacted), never from the raw `.out` / `.err` captures:
 - **`message`** — `workflow <name> failed (exit N)`, or `terminated by signal S`.
 - **`level`** `error`, **`platform`** `node`.
 - **`tags`** — `jaiph.workflow`, `jaiph.source` (the source file basename), and the
-  failing step's `jaiph.step.kind` / `jaiph.step.name` when known.
+  failing step's `jaiph.step.kind` / `jaiph.step.name` when known. An authenticated
+  `jaiph serve` run also tags `jaiph.principal` (the audit subject) and
+  `jaiph.correlation_id` (the request id) — never a token or a secret-bearing claim.
 - **`extra`** — `failing_step_detail` (the failing step's redacted `err`/`out`
   excerpt) and `run_dir` (a pointer to the run directory for triage).
 - **`fingerprint`** — `["jaiph", <workflow>, <failing step name or "unknown">]`, so

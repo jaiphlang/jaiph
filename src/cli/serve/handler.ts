@@ -1,4 +1,5 @@
-import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
+import { randomUUID } from "node:crypto";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { statSync } from "node:fs";
 import { basename, join } from "node:path";
 import type { McpToolSpec } from "../mcp/tools";
@@ -14,6 +15,7 @@ import {
   type StreamTarget,
 } from "./runfiles";
 import { hashArgs } from "./run-store";
+import { createAuthenticator, openPrincipal, type Authenticator, type Capability, type Principal } from "./auth";
 
 /** 1 MiB cap on request bodies (design doc). */
 export const MAX_BODY_BYTES = 1024 * 1024;
@@ -54,8 +56,14 @@ export interface RunRecord {
    * when the create carried no `Idempotency-Key`.
    */
   idempotency_key?: string;
-  /** Principal the idempotency key is scoped to (persisted for reconstruction). */
+  /**
+   * Authenticated principal (subject) that created the run. The audit identity
+   * — never a token — that also scopes idempotency and ownership. Persisted for
+   * reconstruction. `anonymous`/`operator` in open/static mode.
+   */
   principal?: string;
+  /** Request/correlation id attached at create time (audit + telemetry). */
+  correlation_id?: string;
   /** SHA-256 of the run's canonical args, compared to reject a reused key with changed args. */
   args_hash?: string;
   /**
@@ -113,8 +121,24 @@ export interface ServeHandlerOptions {
     runId: string,
     ctx: WorkflowCallContext,
   ) => Promise<WorkflowCallResult>;
-  /** Bearer token; when set, every `/v1/*` request must present it. */
+  /**
+   * Static single-operator bearer token. When set (and no `authenticator` is
+   * injected) every `/v1/*` and `/mcp` request must present it. Single-operator,
+   * not multi-tenant — for per-user identity/authorization pass an `authenticator`.
+   */
   token?: string;
+  /**
+   * Authentication/authorization engine. When omitted the handler builds one
+   * from `token` (static) or, with neither, open mode (anonymous, all
+   * capabilities). The serve command injects the OIDC/JWT authenticator here.
+   */
+  authenticator?: Authenticator;
+  /**
+   * Expose `GET /docs` (Swagger UI) and `GET /openapi.json`. Default `true`;
+   * `false` returns 404 for both so a hardened deployment can hide its API
+   * surface. `/healthz` is always available and credential-free.
+   */
+  exposeDocs?: boolean;
   /** Cap on simultaneously-running workflows (429 beyond it). */
   maxConcurrent: number;
   /**
@@ -208,10 +232,24 @@ export class ServeHandler {
    * `handleLine(line, write)`.
    */
   private readonly mcp: McpServer;
+  /** Authentication/authorization engine (static/oidc/open). */
+  private readonly auth: Authenticator;
+  /** Whether `/docs` and `/openapi.json` are exposed. */
+  private readonly exposeDocs: boolean;
+  /**
+   * The authenticated principal + correlation id of the request in flight,
+   * propagated across every async step (including the MCP engine's `tools/call`
+   * dispatch) so capability checks, run ownership, audit logging, and telemetry
+   * identity all read one consistent identity without threading it as a param
+   * through every method. Absent only outside a request (defaults to open).
+   */
+  private readonly reqCtx = new AsyncLocalStorage<{ principal: Principal; correlationId: string }>();
 
   constructor(opts: ServeHandlerOptions) {
     this.opts = opts;
     this.newRunId = opts.newRunId ?? randomUUID;
+    this.auth = opts.authenticator ?? createAuthenticator({ token: opts.token });
+    this.exposeDocs = opts.exposeDocs ?? true;
     this.mcp = new McpServer({
       serverVersion: opts.version,
       getTools: opts.getTools,
@@ -241,6 +279,10 @@ export class ServeHandler {
     args: Record<string, string>,
     ctx: McpCallContext,
   ): Promise<{ text: string; isError: boolean }> {
+    const { principal } = this.currentCtx();
+    if (!principal.capabilities.has("invoke")) {
+      return { text: `not authorized: the principal lacks the "invoke" capability`, isError: true };
+    }
     const started = this.startRun(spec, args, { onStep: ctx.onStep, onCancelHandle: ctx.onCancelHandle });
     if ("atCapacity" in started) {
       return { text: `too many concurrent runs (max ${this.opts.maxConcurrent})`, isError: true };
@@ -264,6 +306,7 @@ export class ServeHandler {
   ): { record: RunRecord; done: Promise<void> } | { atCapacity: true } {
     if (this.inFlight() >= this.opts.maxConcurrent) return { atCapacity: true };
     const runId = this.newRunId();
+    const { principal, correlationId } = this.currentCtx();
     const record: RunRecord = {
       run_id: runId,
       workflow: spec.workflow,
@@ -276,10 +319,21 @@ export class ServeHandler {
       run_dir: null,
       cancelled: false,
       order: this.orderCounter++,
+      // Attach the authenticated identity at create time: this is the run's
+      // owner (inspect/cancel scope), audit subject, and idempotency scope.
+      principal: principal.subject,
+      correlation_id: correlationId || undefined,
     };
     this.runs.set(runId, record);
+    this.opts.log?.(
+      `jaiph serve: run ${runId} invoked — principal=${principal.subject} correlation=${correlationId || "-"} workflow=${spec.workflow}`,
+    );
     const ctx: WorkflowCallContext = {
       onStep: extra?.onStep,
+      // Identity for the detached telemetry export (OTLP resource attrs + Sentry
+      // tags). Never a token — only the audit subject and correlation id.
+      principal: principal.subject,
+      correlationId: correlationId || undefined,
       onCancelHandle: (cancelFn) => {
         // Wrap so every cancel path (REST /v1/.../cancel, MCP
         // notifications/cancelled, SSE hangup, cancelAll) marks the shared
@@ -336,37 +390,79 @@ export class ServeHandler {
     }
     if (path === "/openapi.json") {
       if (method !== "GET") return this.methodNotAllowed();
+      if (!this.exposeDocs) return this.error(404, "E_NOT_FOUND", `not found: ${path}`);
       return this.json(200, buildOpenApi(this.opts.getTools(), { title: this.opts.serverTitle, version: this.opts.version }));
     }
     if (path === "/docs") {
       if (method !== "GET") return this.methodNotAllowed();
+      if (!this.exposeDocs) return this.error(404, "E_NOT_FOUND", `not found: ${path}`);
       return { status: 200, headers: { "content-type": "text/html; charset=utf-8" }, body: DOCS_HTML };
     }
 
-    // The MCP Streamable HTTP endpoint and everything under /v1 are the two
-    // bearer-protected surfaces (when a token is configured); the same auth
-    // boundary guards both transports.
+    // The MCP Streamable HTTP endpoint and everything under /v1 share one
+    // authentication boundary. A verified request carries a Principal
+    // (capabilities + ownership) + correlation id through an AsyncLocalStorage,
+    // so authorization, ownership, audit, and telemetry read one identity
+    // consistently across both transports.
     if (path === "/mcp") {
-      if (!this.authorized(req)) {
-        return this.error(401, "E_UNAUTHORIZED", "missing or invalid bearer token");
-      }
-      return this.handleMcp(req);
+      const auth = await this.auth.authenticate(req.headers["authorization"]);
+      if (!auth.ok) return this.error(auth.status, auth.code, auth.message);
+      return this.reqCtx.run({ principal: auth.principal, correlationId: this.correlationOf(req) }, () => this.handleMcp(req));
     }
     if (path === "/v1" || path.startsWith("/v1/")) {
-      if (!this.authorized(req)) {
-        return this.error(401, "E_UNAUTHORIZED", "missing or invalid bearer token");
-      }
-      return this.handleV1(req);
+      const auth = await this.auth.authenticate(req.headers["authorization"]);
+      if (!auth.ok) return this.error(auth.status, auth.code, auth.message);
+      return this.reqCtx.run({ principal: auth.principal, correlationId: this.correlationOf(req) }, () => this.handleV1(req));
     }
 
     return this.error(404, "E_NOT_FOUND", `not found: ${path}`);
   }
 
+  /** Identity of the request in flight; open-mode default outside a request. */
+  private currentCtx(): { principal: Principal; correlationId: string } {
+    return this.reqCtx.getStore() ?? { principal: openPrincipal(), correlationId: "" };
+  }
+
+  /**
+   * The request/correlation id for this request: an `X-Correlation-Id` /
+   * `X-Request-Id` header (sanitized, bounded) if the caller supplied one, else
+   * a fresh UUID. Newlines are stripped so it can never forge an audit log line.
+   */
+  private correlationOf(req: ServeRequest): string {
+    const raw = req.headers["x-correlation-id"] ?? req.headers["x-request-id"];
+    if (typeof raw === "string") {
+      const clean = raw.replace(/[\r\n]/g, "").trim().slice(0, 200);
+      if (clean.length > 0) return clean;
+    }
+    return randomUUID();
+  }
+
+  /** 403 for a principal missing a required capability. */
+  private forbidden(cap: Capability): ServeResponse {
+    return this.error(403, "E_FORBIDDEN", `the principal lacks the "${cap}" capability`);
+  }
+
+  /**
+   * Look up a run visible to the current principal. A run the principal does not
+   * own (and cannot see all of) is indistinguishable from a nonexistent one, so
+   * cross-principal access returns `undefined` → 404 rather than leaking that
+   * the run exists.
+   */
+  private lookupRun(id: string): RunRecord | undefined {
+    const record = this.runs.get(id);
+    if (!record) return undefined;
+    const { principal } = this.currentCtx();
+    if (!principal.ownsAllRuns && record.principal !== principal.subject) return undefined;
+    return record;
+  }
+
   private handleV1(req: ServeRequest): ServeResponse | Promise<ServeResponse> {
     const { method, path } = req;
+    const { principal } = this.currentCtx();
 
     if (path === "/v1/workflows") {
       if (method !== "GET") return this.methodNotAllowed();
+      if (!principal.capabilities.has("inspect")) return this.forbidden("inspect");
       const workflows = this.opts.getTools().map((t) => ({ name: t.name, description: t.description, params: t.params }));
       return this.json(200, { workflows });
     }
@@ -374,42 +470,49 @@ export class ServeHandler {
     const runPost = /^\/v1\/workflows\/([^/]+)\/runs$/.exec(path);
     if (runPost) {
       if (method !== "POST") return this.methodNotAllowed();
+      if (!principal.capabilities.has("invoke")) return this.forbidden("invoke");
       return this.createRun(req, decodeURIComponent(runPost[1]));
     }
 
     if (path === "/v1/runs") {
       if (method !== "GET") return this.methodNotAllowed();
+      if (!principal.capabilities.has("inspect")) return this.forbidden("inspect");
       return this.listRuns(req);
     }
 
     const events = /^\/v1\/runs\/([^/]+)\/events$/.exec(path);
     if (events) {
       if (method !== "GET") return this.methodNotAllowed();
+      if (!principal.capabilities.has("inspect")) return this.forbidden("inspect");
       return this.runEvents(req, decodeURIComponent(events[1]));
     }
 
     const artifactsList = /^\/v1\/runs\/([^/]+)\/artifacts$/.exec(path);
     if (artifactsList) {
       if (method !== "GET") return this.methodNotAllowed();
+      if (!principal.capabilities.has("inspect")) return this.forbidden("inspect");
       return this.listRunArtifacts(decodeURIComponent(artifactsList[1]));
     }
 
     const artifactGet = /^\/v1\/runs\/([^/]+)\/artifacts\/(.+)$/.exec(path);
     if (artifactGet) {
       if (method !== "GET") return this.methodNotAllowed();
+      if (!principal.capabilities.has("inspect")) return this.forbidden("inspect");
       return this.downloadArtifact(decodeURIComponent(artifactGet[1]), artifactGet[2]);
     }
 
     const cancel = /^\/v1\/runs\/([^/]+)\/cancel$/.exec(path);
     if (cancel) {
       if (method !== "POST") return this.methodNotAllowed();
+      if (!principal.capabilities.has("cancel")) return this.forbidden("cancel");
       return this.cancelRun(decodeURIComponent(cancel[1]));
     }
 
     const getRun = /^\/v1\/runs\/([^/]+)$/.exec(path);
     if (getRun) {
       if (method !== "GET") return this.methodNotAllowed();
-      const record = this.runs.get(decodeURIComponent(getRun[1]));
+      if (!principal.capabilities.has("inspect")) return this.forbidden("inspect");
+      const record = this.lookupRun(decodeURIComponent(getRun[1]));
       if (!record) return this.error(404, "E_NOT_FOUND", "unknown run id");
       return this.json(200, this.toRunObject(record));
     }
@@ -463,9 +566,8 @@ export class ServeHandler {
     const idempotencyKey = req.headers["idempotency-key"];
     let composite: string | undefined;
     let argsHash: string | undefined;
-    let principal: string | undefined;
+    const principal = this.currentCtx().principal.subject;
     if (typeof idempotencyKey === "string" && idempotencyKey.trim() !== "") {
-      principal = this.principalOf(req);
       composite = `${principal}\n${spec.workflow}\n${idempotencyKey.trim()}`;
       argsHash = hashArgs(args);
       const existingId = this.idempotencyIndex.get(composite);
@@ -548,10 +650,33 @@ export class ServeHandler {
     const method = parsed && typeof parsed.method === "string" ? parsed.method : undefined;
     const wantsSse = (req.headers["accept"] ?? "").includes("text/event-stream");
 
+    // Authorize the two capability-bearing MCP methods before doing any work:
+    // `tools/call` needs `invoke`, `tools/list` needs `inspect`. An
+    // insufficiently-scoped principal gets a JSON-RPC error and nothing spawns.
+    const { principal } = this.currentCtx();
+    const requiredCap: Capability | undefined =
+      method === "tools/call" ? "invoke" : method === "tools/list" ? "inspect" : undefined;
+    if (requiredCap && !principal.capabilities.has(requiredCap)) {
+      return {
+        status: 200,
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: requestId ?? null,
+          error: { code: -32003, message: `not authorized: the principal lacks the "${requiredCap}" capability` },
+        }),
+      };
+    }
+
     // A tools/call may emit progress; stream it as SSE when the client offers
     // that content type. The client hanging up cancels the run through the same
     // MCP cancel path (kills the child + Docker container).
     if (requestId !== undefined && method === "tools/call" && wantsSse) {
+      // The stream body runs after this method returns (outside the request's
+      // AsyncLocalStorage scope), so capture the identity and re-establish it
+      // there — otherwise the run this tools/call creates would be owned and
+      // audited as the anonymous principal instead of the authenticated caller.
+      const captured = this.currentCtx();
       return {
         status: 200,
         headers: { "content-type": "text/event-stream", "cache-control": "no-cache", connection: "keep-alive" },
@@ -562,9 +687,11 @@ export class ServeHandler {
               JSON.stringify({ jsonrpc: "2.0", method: "notifications/cancelled", params: { requestId } }),
             );
           });
-          return this.mcp.handleLine(req.body, (m) => {
-            if (!target.aborted) target.write(`data: ${JSON.stringify(m)}\n\n`);
-          });
+          return this.reqCtx.run(captured, () =>
+            this.mcp.handleLine(req.body, (m) => {
+              if (!target.aborted) target.write(`data: ${JSON.stringify(m)}\n\n`);
+            }),
+          );
         },
       };
     }
@@ -588,9 +715,12 @@ export class ServeHandler {
    * them. `total` is the full registry size so a client can page through it.
    */
   private listRuns(req: ServeRequest): ServeResponse {
+    const { principal } = this.currentCtx();
     const limit = clampInt(req.query.get("limit"), DEFAULT_RUNS_PAGE, 1, MAX_RUNS_PAGE);
     const offset = clampInt(req.query.get("offset"), 0, 0, Number.MAX_SAFE_INTEGER);
-    const sorted = [...this.runs.values()].sort((a, b) => b.order - a.order);
+    // Only runs the principal owns (all runs for the operator/open principal).
+    const visible = [...this.runs.values()].filter((r) => principal.ownsAllRuns || r.principal === principal.subject);
+    const sorted = visible.sort((a, b) => b.order - a.order);
     const runs = sorted.slice(offset, offset + limit).map((r) => this.toRunObject(r));
     return this.json(200, { runs, total: sorted.length, limit, offset });
   }
@@ -632,11 +762,15 @@ export class ServeHandler {
   }
 
   private cancelRun(id: string): ServeResponse {
-    const record = this.runs.get(id);
+    const record = this.lookupRun(id);
     if (!record) return this.error(404, "E_NOT_FOUND", "unknown run id");
     if (isTerminal(record.status)) {
       return this.error(409, "E_RUN_TERMINAL", `run is already ${record.status}`);
     }
+    const { principal, correlationId } = this.currentCtx();
+    this.opts.log?.(
+      `jaiph serve: run ${id} cancelled — principal=${principal.subject} correlation=${correlationId || "-"}`,
+    );
     record.cancelled = true;
     record.cancel?.();
     return { status: 202, headers: { "content-type": "application/json" }, body: JSON.stringify(this.toRunObject(record)) };
@@ -663,7 +797,7 @@ export class ServeHandler {
    * capture files are never served.
    */
   private runEvents(req: ServeRequest, id: string): ServeResponse {
-    const record = this.runs.get(id);
+    const record = this.lookupRun(id);
     if (!record) return this.error(404, "E_NOT_FOUND", "unknown run id");
     const wantsSse = (req.headers["accept"] ?? "").includes("text/event-stream");
     const resolveRunDir = (): string | null => this.runDirFor(record);
@@ -705,7 +839,7 @@ export class ServeHandler {
 
   /** `GET /v1/runs/{id}/artifacts`: JSON list of published files (empty when none). */
   private listRunArtifacts(id: string): ServeResponse {
-    const record = this.runs.get(id);
+    const record = this.lookupRun(id);
     if (!record) return this.error(404, "E_NOT_FOUND", "unknown run id");
     const dir = this.runDirFor(record);
     return this.json(200, { artifacts: dir ? listArtifacts(dir) : [] });
@@ -722,7 +856,7 @@ export class ServeHandler {
    * construction.
    */
   private downloadArtifact(id: string, rawPath: string): ServeResponse {
-    const record = this.runs.get(id);
+    const record = this.lookupRun(id);
     if (!record) return this.error(404, "E_NOT_FOUND", "unknown run id");
     const dir = this.runDirFor(record);
     if (!dir) return this.error(404, "E_NOT_FOUND", "unknown artifact");
@@ -782,32 +916,6 @@ export class ServeHandler {
     this.evictCompleted();
   }
 
-  /**
-   * Opaque principal an idempotency key is scoped to. With a bearer token
-   * configured it is a hash of the presented token (so a future multi-token
-   * model scopes per caller); without one every caller shares `anonymous`.
-   * Never the raw token — the principal is persisted in `run.json`.
-   */
-  private principalOf(req: ServeRequest): string {
-    if (!this.opts.token) return "anonymous";
-    const header = req.headers["authorization"] ?? "";
-    const match = /^Bearer\s+(.+)$/.exec(header);
-    const token = match ? match[1] : this.opts.token;
-    return createHash("sha256").update(token).digest("hex").slice(0, 16);
-  }
-
-  private authorized(req: ServeRequest): boolean {
-    if (!this.opts.token) return true;
-    const header = req.headers["authorization"];
-    if (!header) return false;
-    const match = /^Bearer\s+(.+)$/.exec(header);
-    if (!match) return false;
-    const provided = Buffer.from(match[1]);
-    const expected = Buffer.from(this.opts.token);
-    if (provided.length !== expected.length) return false;
-    return timingSafeEqual(provided, expected);
-  }
-
   private toRunObject(r: RunRecord): Record<string, unknown> {
     return {
       run_id: r.run_id,
@@ -819,6 +927,9 @@ export class ServeHandler {
       signal: r.signal,
       result_text: r.result_text,
       run_dir: r.run_dir,
+      // Audit identity + correlation on the public run object (never a token).
+      principal: r.principal ?? null,
+      correlation_id: r.correlation_id ?? null,
     };
   }
 

@@ -52,6 +52,14 @@ export interface WorkflowCallResult {
 export interface WorkflowCallContext {
   onStep?: (kind: string, name: string) => void;
   onCancelHandle?: (cancel: () => void) => void;
+  /**
+   * Authenticated principal (audit subject) for this call, attached to the
+   * run's telemetry identity (OTLP resource attributes + Sentry tags). Never a
+   * token or a secret-bearing claim.
+   */
+  principal?: string;
+  /** Request/correlation id, attached to the run's telemetry identity. */
+  correlationId?: string;
 }
 
 /**
@@ -231,6 +239,9 @@ export async function callWorkflow(
     exitStatus: result.exitStatus ?? 0,
     signal: result.signal ?? null,
     env: process.env,
+    // Principal + correlation surface on telemetry only (OTLP resource attrs,
+    // Sentry tags) — deliberately not written into the run's journal.
+    identity: { principal: ctx?.principal, correlationId: ctx?.correlationId },
   });
   return result;
 }

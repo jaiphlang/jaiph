@@ -52,6 +52,10 @@ export interface SentryEventMeta {
   release: string;
   /** `environment` field — set only when `SENTRY_ENVIRONMENT` is present. */
   environment?: string;
+  /** Authenticated caller (audit subject) — a Sentry tag; never a token. */
+  principal?: string;
+  /** Request/correlation id — a Sentry tag. */
+  correlationId?: string;
 }
 
 function asString(v: unknown): string {
@@ -130,6 +134,8 @@ export function buildSentryEvent(lines: string[], meta: SentryEventMeta): Record
   if (source) tags["jaiph.source"] = basename(source);
   if (stepKind) tags["jaiph.step.kind"] = stepKind;
   if (stepName) tags["jaiph.step.name"] = stepName;
+  if (meta.principal) tags["jaiph.principal"] = meta.principal;
+  if (meta.correlationId) tags["jaiph.correlation_id"] = meta.correlationId;
 
   const extra: Record<string, string> = {};
   if (detail) extra.failing_step_detail = detail;
@@ -206,7 +212,16 @@ export async function reportRunFailureToSentry(
 
   const release = env.SENTRY_RELEASE?.trim() || `jaiph@${VERSION}`;
   const environment = env.SENTRY_ENVIRONMENT?.trim() || undefined;
-  const event = buildSentryEvent(lines, { workflow, exitStatus, signal, runDir, release, environment });
+  const event = buildSentryEvent(lines, {
+    workflow,
+    exitStatus,
+    signal,
+    runDir,
+    release,
+    environment,
+    principal: opts.identity?.principal,
+    correlationId: opts.identity?.correlationId,
+  });
   const envelope = buildEnvelope(event, new Date().toISOString());
 
   try {

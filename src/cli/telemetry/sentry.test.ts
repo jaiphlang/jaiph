@@ -56,6 +56,19 @@ test("parseSentryDsn: malformed DSNs return null (no send)", () => {
 
 // --- Event composition -----------------------------------------------------
 
+test("buildSentryEvent: identity surfaces as jaiph.principal / jaiph.correlation_id tags (never a token)", () => {
+  const event = buildSentryEvent(fixtureLines(), { ...META, principal: "alice", correlationId: "corr-9" });
+  const tags = event.tags as Record<string, string>;
+  assert.equal(tags["jaiph.principal"], "alice");
+  assert.equal(tags["jaiph.correlation_id"], "corr-9");
+});
+
+test("buildSentryEvent: identity tags are absent when no principal/correlation is provided", () => {
+  const tags = buildSentryEvent(fixtureLines(), META).tags as Record<string, string>;
+  assert.ok(!("jaiph.principal" in tags));
+  assert.ok(!("jaiph.correlation_id" in tags));
+});
+
 test("buildSentryEvent: event_id is the run id UUID with dashes stripped", () => {
   const event = buildSentryEvent(fixtureLines(), META);
   assert.equal(event.event_id, "11111111222233334444555555555555");

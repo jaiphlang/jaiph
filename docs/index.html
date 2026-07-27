@@ -567,7 +567,10 @@ Jaiph: Running async.jh<span class="run-banner-meta"> (Docker sandbox, snapshot)
                 <p><strong>HTTP API.</strong> <code>jaiph serve ./tools.jh</code> serves the same workflows over HTTP
                     with a generated <a href="https://spec.openapis.org/oas/v3.1.0" target="_blank"
                         rel="noopener noreferrer">OpenAPI 3.1</a> document and a browser Swagger UI at <code>/docs</code>,
-                    so any HTTP client (CI, Kubernetes, another service) can invoke them and inspect runs. See
+                    so any HTTP client (CI, Kubernetes, another service) can invoke them and inspect runs. Production
+                    auth is a static single-operator bearer token or OIDC/JWT with per-user identity and
+                    <code>invoke</code>&nbsp;/&nbsp;<code>inspect</code>&nbsp;/&nbsp;<code>cancel</code> scope
+                    authorization, and every run is audit-attributed to its principal and correlation id. See
                     <a href="/how-to/serve">Serve workflows over HTTP</a>.</p>
                 <p><strong>OpenTelemetry.</strong> Set the standard
                     <code>OTEL_EXPORTER_OTLP_ENDPOINT</code> and every run exports one span tree

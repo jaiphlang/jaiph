@@ -12,6 +12,7 @@ import {
   parseKeyValueList,
   resolveFlushBudgetMs,
   exportRunTelemetry,
+  exportOtlpTraces,
   deliverRunTelemetryDetached,
   telemetryDeliveryMetrics,
   type OtlpMeta,
@@ -341,6 +342,47 @@ test("exportRunTelemetry: OTLP + Sentry run concurrently under one shared flush 
   } finally {
     (process.stderr as unknown as { write: typeof original }).write = original;
     await hole.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("exportOtlpTraces: identity is exported as jaiph.principal / jaiph.correlation_id resource attributes", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "jaiph-otlp-id-"));
+  let captured: Record<string, unknown> | undefined;
+  const server: Server = createServer((req, res) => {
+    let body = "";
+    req.setEncoding("utf8");
+    req.on("data", (c: string) => (body += c));
+    req.on("end", () => {
+      captured = JSON.parse(body) as Record<string, unknown>;
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end("{}");
+    });
+  });
+  await new Promise<void>((r) => server.listen(0, "127.0.0.1", () => r()));
+  const port = (server.address() as AddressInfo).port;
+  try {
+    writeFailedJournal(dir);
+    const outcome = await exportOtlpTraces(
+      {
+        runDir: dir,
+        workflow: "default",
+        exitStatus: 1,
+        signal: null,
+        env: { OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: `http://127.0.0.1:${port}/v1/traces` },
+        identity: { principal: "alice", correlationId: "corr-123" },
+      },
+      5000,
+      () => {},
+    );
+    assert.equal(outcome, "sent");
+    const rs = (captured!.resourceSpans as Array<Record<string, unknown>>)[0];
+    const attrs = (rs.resource as { attributes: Array<{ key: string; value: { stringValue?: string } }> }).attributes;
+    const get = (k: string): string | undefined => attrs.find((a) => a.key === k)?.value.stringValue;
+    assert.equal(get("jaiph.principal"), "alice");
+    assert.equal(get("jaiph.correlation_id"), "corr-123");
+  } finally {
+    await new Promise<void>((r) => server.close(() => r()));
     rmSync(dir, { recursive: true, force: true });
   }
 });
