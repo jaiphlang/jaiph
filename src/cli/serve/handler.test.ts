@@ -4,6 +4,7 @@ import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFile
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ServeHandler, type RunRecord, type ServeRequest, type ServeResponse } from "./handler";
+import { hashArgs } from "./run-store";
 import type { StreamTarget } from "./runfiles";
 import type { McpToolSpec } from "../mcp/tools";
 import type { WorkflowCallResult, WorkflowCallContext } from "../exec/call";
@@ -47,6 +48,8 @@ function makeHandler(overrides?: {
   resolveRunDir?: (record: RunRecord) => string | null;
   ssePollMs?: number;
   maxArtifactBytes?: number;
+  initialRuns?: RunRecord[];
+  persistRun?: (record: RunRecord) => void;
 }): ServeHandler {
   let n = 0;
   return new ServeHandler({
@@ -63,6 +66,8 @@ function makeHandler(overrides?: {
     resolveRunDir: overrides?.resolveRunDir,
     ssePollMs: overrides?.ssePollMs,
     maxArtifactBytes: overrides?.maxArtifactBytes,
+    initialRuns: overrides?.initialRuns,
+    persistRun: overrides?.persistRun,
   });
 }
 
@@ -243,6 +248,128 @@ test("a workflow failure is not an HTTP error: 200 with status failed and exit_s
   assert.equal(body.status, "failed");
   assert.equal(body.exit_status, 1);
   assert.match(body.result_text, /run dir:/);
+});
+
+// === idempotency ===
+
+/** A create request carrying an Idempotency-Key header and JSON args. */
+function idemReq(target: string, key: string, headers?: Record<string, string>): ServeRequest {
+  return req("POST", "/v1/workflows/build/runs?wait=true", {
+    headers: { "content-type": "application/json", "idempotency-key": key, ...headers },
+    body: JSON.stringify({ target }),
+  });
+}
+
+test("idempotency: repeating a create with the same key and args returns the original run and never re-spawns", async () => {
+  let spawns = 0;
+  const h = makeHandler({
+    callTool: async () => {
+      spawns += 1;
+      return { text: "built", isError: false, exitStatus: 0, runDir: "/runs/x" };
+    },
+  });
+  const first = bodyJson(await h.handleRequest(idemReq("app", "key-1")));
+  assert.equal(first.status, "succeeded");
+  const again = await h.handleRequest(idemReq("app", "key-1"));
+  assert.equal(again.status, 200);
+  assert.equal(bodyJson(again).run_id, first.run_id, "same run id returned");
+  assert.equal(spawns, 1, "the workflow ran exactly once");
+});
+
+test("idempotency: the same key with different arguments is 409 and never spawns", async () => {
+  let spawns = 0;
+  const h = makeHandler({
+    callTool: async () => {
+      spawns += 1;
+      return { text: "built", isError: false, exitStatus: 0, runDir: "/runs/x" };
+    },
+  });
+  await h.handleRequest(idemReq("app", "key-1"));
+  const conflict = await h.handleRequest(idemReq("other", "key-1"));
+  assert.equal(conflict.status, 409);
+  assert.equal(bodyJson(conflict).error.code, "E_IDEMPOTENCY_CONFLICT");
+  assert.equal(spawns, 1, "the conflicting request did not start a run");
+});
+
+test("idempotency: distinct keys, workflows, and principals are independent", async () => {
+  const h = makeHandler({
+    token: "secret",
+    tools: [BUILD_TOOL, { ...BUILD_TOOL, name: "other_wf", workflow: "other_wf" }],
+    callTool: async () => ({ text: "built", isError: false, exitStatus: 0, runDir: "/runs/x" }),
+  });
+  const auth = { authorization: "Bearer secret" };
+  const r1 = bodyJson(await h.handleRequest(idemReq("app", "k", auth)));
+  // Different key → new run.
+  const r2 = bodyJson(await h.handleRequest(idemReq("app", "k2", auth)));
+  assert.notEqual(r2.run_id, r1.run_id);
+  // Same key but different workflow → new run (scope includes the workflow).
+  const otherWf = req("POST", "/v1/workflows/other_wf/runs?wait=true", {
+    headers: { "content-type": "application/json", "idempotency-key": "k", ...auth },
+    body: JSON.stringify({ target: "app" }),
+  });
+  const r3 = bodyJson(await h.handleRequest(otherWf));
+  assert.notEqual(r3.run_id, r1.run_id, "same key on a different workflow is a separate run");
+});
+
+test("idempotency: an evicted original spawns fresh instead of returning a dangling id", async () => {
+  const h = makeHandler({
+    retainRuns: 1,
+    callTool: async () => ({ text: "built", isError: false, exitStatus: 0, runDir: "/runs/x" }),
+  });
+  const first = bodyJson(await h.handleRequest(idemReq("app", "key-1")));
+  // A second run under a different key evicts the first (retainRuns=1).
+  await h.handleRequest(idemReq("app", "key-2"));
+  assert.equal(h.runs.has(first.run_id), false, "original was evicted");
+  // Replaying key-1 now must create a new run, not return the evicted id.
+  const replay = bodyJson(await h.handleRequest(idemReq("app", "key-1")));
+  assert.notEqual(replay.run_id, first.run_id);
+  assert.equal(replay.status, "succeeded");
+});
+
+// === restart reconstruction (seeded registry) ===
+
+test("initialRuns seed the registry so a restarted server serves prior terminal runs and their idempotency keys", async () => {
+  const seeded: RunRecord = {
+    run_id: "prior-1",
+    workflow: "build",
+    status: "succeeded",
+    started_at: "2026-07-23T00:00:00.000Z",
+    ended_at: "2026-07-23T00:00:01.000Z",
+    exit_status: 0,
+    signal: null,
+    result_text: "built earlier",
+    run_dir: "/runs/prior-1",
+    cancelled: false,
+    order: 0,
+    idempotency_key: "anonymous\nbuild\nkey-1",
+    args_hash: hashArgs({ target: "app" }),
+  };
+  const h = makeHandler({
+    initialRuns: [seeded],
+    callTool: async () => ({ text: "fresh", isError: false, exitStatus: 0, runDir: "/runs/x" }),
+  });
+  // GET works for the pre-restart run.
+  const got = bodyJson(await h.handleRequest(req("GET", "/v1/runs/prior-1")));
+  assert.equal(got.status, "succeeded");
+  assert.equal(got.result_text, "built earlier");
+  // Its idempotency key is honored across the restart: a matching replay
+  // returns the reconstructed run rather than spawning a new one.
+  const replay = await h.handleRequest(idemReq("app", "key-1"));
+  assert.equal(replay.status, 200);
+  assert.equal(bodyJson(replay).run_id, "prior-1");
+});
+
+test("persistRun fires with the terminal record at finalize", async () => {
+  const persisted: RunRecord[] = [];
+  const h = makeHandler({
+    tools: [NOARG_TOOL],
+    persistRun: (r) => persisted.push({ ...r }),
+    callTool: async () => ({ text: "ok", isError: false, exitStatus: 0, runDir: "/runs/x" }),
+  });
+  await h.handleRequest(req("POST", "/v1/workflows/ping/runs?wait=true"));
+  assert.equal(persisted.length, 1);
+  assert.equal(persisted[0].status, "succeeded");
+  assert.equal(persisted[0].run_dir, "/runs/x");
 });
 
 // === run inspection ===

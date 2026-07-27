@@ -1,4 +1,4 @@
-import { randomUUID, timingSafeEqual } from "node:crypto";
+import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { statSync } from "node:fs";
 import { basename, join } from "node:path";
 import type { McpToolSpec } from "../mcp/tools";
@@ -13,6 +13,7 @@ import {
   RUN_SUMMARY,
   type StreamTarget,
 } from "./runfiles";
+import { hashArgs } from "./run-store";
 
 /** 1 MiB cap on request bodies (design doc). */
 export const MAX_BODY_BYTES = 1024 * 1024;
@@ -22,7 +23,13 @@ export const DEFAULT_RUNS_PAGE = 100;
 /** Hard maximum page size for `GET /v1/runs` — a `limit` above this is clamped. */
 export const MAX_RUNS_PAGE = 1000;
 
-export type RunStatus = "running" | "succeeded" | "failed" | "cancelled";
+/**
+ * `interrupted` is a terminal state reserved for a run that was `running` when
+ * the serving process died: on restart it is reconciled out of `running` (a run
+ * is never reported as permanently running) but its real outcome is unknown, so
+ * it is neither `succeeded` nor `failed`.
+ */
+export type RunStatus = "running" | "succeeded" | "failed" | "cancelled" | "interrupted";
 
 /** In-memory record for one run: the public run object plus cancel bookkeeping. */
 export interface RunRecord {
@@ -41,6 +48,16 @@ export interface RunRecord {
   cancel?: () => void;
   /** Monotonic insertion index for newest-first listing. */
   order: number;
+  /**
+   * Composite idempotency key (`principal\nworkflow\nkey`) this run reserved, so
+   * eviction can drop the index entry and startup can rebuild the index. Absent
+   * when the create carried no `Idempotency-Key`.
+   */
+  idempotency_key?: string;
+  /** Principal the idempotency key is scoped to (persisted for reconstruction). */
+  principal?: string;
+  /** SHA-256 of the run's canonical args, compared to reject a reused key with changed args. */
+  args_hash?: string;
   /**
    * Cached result of the injected `resolveRunDir` scan for a still-running run,
    * so a live SSE poll loop resolves the runs tree at most once. Never part of
@@ -140,10 +157,24 @@ export interface ServeHandlerOptions {
    * backpressure, so size never translates into server memory.
    */
   maxArtifactBytes?: number;
+  /**
+   * Records reconstructed from the durable runs tree at startup (terminal runs
+   * reloaded from their persisted `run.json`, plus interrupted runs reconciled
+   * out of `running`). Seeded into the registry before the first request so
+   * list/get/events/artifacts and idempotency survive a process restart. The
+   * order is oldest-first; the handler assigns monotonic `order`.
+   */
+  initialRuns?: RunRecord[];
+  /**
+   * Persist a run's public record beside its journal when it finalizes, so a
+   * later restart can reload it. Defaults to a no-op (tests that don't exercise
+   * durability skip it); the serve command supplies the real filesystem writer.
+   */
+  persistRun?: (record: RunRecord) => void;
 }
 
 function isTerminal(status: RunStatus): boolean {
-  return status === "succeeded" || status === "failed" || status === "cancelled";
+  return status === "succeeded" || status === "failed" || status === "cancelled" || status === "interrupted";
 }
 
 /**
@@ -160,6 +191,14 @@ export class ServeHandler {
   /** In-memory run registry, keyed by run id. Public so tests can inspect it. */
   readonly runs = new Map<string, RunRecord>();
   private orderCounter = 0;
+  /**
+   * Composite idempotency key (`principal\nworkflow\nkey`) → run id. Reserved
+   * synchronously at create time and consulted before spawning, so a repeated
+   * create with the same key returns the original run instead of starting a
+   * duplicate. Rebuilt from reconstructed records at startup; entries are
+   * dropped when their run is evicted.
+   */
+  private readonly idempotencyIndex = new Map<string, string>();
   /**
    * MCP protocol engine for the `POST /mcp` Streamable HTTP endpoint. Reuses the
    * exact stdio state machine (`jaiph mcp`); its `tools/call` funnels into the
@@ -182,6 +221,12 @@ export class ServeHandler {
       write: () => {},
       log: opts.log ?? ((): void => {}),
     });
+    // Seed the registry from durable state so a restart does not lose run ids.
+    for (const record of opts.initialRuns ?? []) {
+      record.order = this.orderCounter++;
+      this.runs.set(record.run_id, record);
+      if (record.idempotency_key) this.idempotencyIndex.set(record.idempotency_key, record.run_id);
+    }
   }
 
   /**
@@ -413,11 +458,48 @@ export class ServeHandler {
     const args: Record<string, string> = {};
     for (const p of spec.params) args[p] = raw[p] as string;
 
+    // Idempotency: a client that retries a create with the same key (scoped to
+    // this principal + workflow) must never spawn a second expensive run.
+    const idempotencyKey = req.headers["idempotency-key"];
+    let composite: string | undefined;
+    let argsHash: string | undefined;
+    let principal: string | undefined;
+    if (typeof idempotencyKey === "string" && idempotencyKey.trim() !== "") {
+      principal = this.principalOf(req);
+      composite = `${principal}\n${spec.workflow}\n${idempotencyKey.trim()}`;
+      argsHash = hashArgs(args);
+      const existingId = this.idempotencyIndex.get(composite);
+      const existing = existingId ? this.runs.get(existingId) : undefined;
+      if (existing) {
+        // Same key, changed args → conflict, and never spawn.
+        if (existing.args_hash !== argsHash) {
+          return this.error(
+            409,
+            "E_IDEMPOTENCY_CONFLICT",
+            `idempotency key already used for "${spec.name}" with different arguments`,
+          );
+        }
+        // Same key, same args → return the original run verbatim.
+        return this.json(200, this.toRunObject(existing));
+      }
+      // Stale index entry (its run was evicted): drop it and create fresh.
+      if (existingId) this.idempotencyIndex.delete(composite);
+    }
+
     const started = this.startRun(spec, args);
     if ("atCapacity" in started) {
       return this.error(429, "E_TOO_MANY_RUNS", `too many concurrent runs (max ${this.opts.maxConcurrent})`);
     }
     const { record, done } = started;
+
+    // Reserve the key now (synchronously, before any await) so a concurrent
+    // retry sees this run rather than racing to start a duplicate.
+    if (composite) {
+      record.idempotency_key = composite;
+      record.principal = principal;
+      record.args_hash = argsHash;
+      this.idempotencyIndex.set(composite, record.run_id);
+    }
 
     const wait = req.query.get("wait") === "true";
     if (wait) {
@@ -526,14 +608,26 @@ export class ServeHandler {
       for (const r of this.runs.values()) {
         if (!isTerminal(r.status) || !r.ended_at) continue;
         const ended = Date.parse(r.ended_at);
-        if (Number.isFinite(ended) && ended < cutoff) this.runs.delete(r.run_id);
+        if (Number.isFinite(ended) && ended < cutoff) this.evict(r);
       }
     }
     const max = this.opts.retainRuns ?? 0;
     if (max > 0) {
       // Oldest terminal records first (ascending `order`); keep the newest `max`.
       const terminal = [...this.runs.values()].filter((r) => isTerminal(r.status)).sort((a, b) => a.order - b.order);
-      for (let i = 0; i < terminal.length - max; i += 1) this.runs.delete(terminal[i].run_id);
+      for (let i = 0; i < terminal.length - max; i += 1) this.evict(terminal[i]);
+    }
+  }
+
+  /**
+   * Drop one record from the in-memory registry and its idempotency index
+   * entry, so the index cannot grow past the retained-run set. The durable
+   * `run.json` / journal on disk are untouched (the operator's to prune).
+   */
+  private evict(record: RunRecord): void {
+    this.runs.delete(record.run_id);
+    if (record.idempotency_key && this.idempotencyIndex.get(record.idempotency_key) === record.run_id) {
+      this.idempotencyIndex.delete(record.idempotency_key);
     }
   }
 
@@ -674,6 +768,9 @@ export class ServeHandler {
     record.result_text = result.text;
     record.run_dir = result.runDir ?? null;
     record.status = record.cancelled ? "cancelled" : result.isError ? "failed" : "succeeded";
+    // Persist the public record beside the journal before eviction, so a
+    // restart can reload this terminal run (and its idempotency key).
+    this.opts.persistRun?.(record);
     this.evictCompleted();
   }
 
@@ -681,7 +778,22 @@ export class ServeHandler {
     record.ended_at = this.opts.now();
     record.result_text = err instanceof Error ? err.message : String(err);
     record.status = record.cancelled ? "cancelled" : "failed";
+    this.opts.persistRun?.(record);
     this.evictCompleted();
+  }
+
+  /**
+   * Opaque principal an idempotency key is scoped to. With a bearer token
+   * configured it is a hash of the presented token (so a future multi-token
+   * model scopes per caller); without one every caller shares `anonymous`.
+   * Never the raw token — the principal is persisted in `run.json`.
+   */
+  private principalOf(req: ServeRequest): string {
+    if (!this.opts.token) return "anonymous";
+    const header = req.headers["authorization"] ?? "";
+    const match = /^Bearer\s+(.+)$/.exec(header);
+    const token = match ? match[1] : this.opts.token;
+    return createHash("sha256").update(token).digest("hex").slice(0, 16);
   }
 
   private authorized(req: ServeRequest): boolean {

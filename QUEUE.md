@@ -14,24 +14,6 @@ Process rules:
 
 ***
 
-## Make service runs restart-safe and retry-safe #dev-ready
-
-Run artifacts are durable, but HTTP run discovery is only an in-memory map. Restarting the process makes completed run IDs unreachable, loses in-flight state, and makes client retries start duplicate expensive workflows. This is a single-process developer server, not yet a reliable company service contract.
-
-Scope:
-
-- Persist the public run record beside the journal and reconstruct terminal runs on startup.
-- Reconcile interrupted `running` records after process death into an explicit terminal state.
-- Support an idempotency key on run creation, scoped to workflow plus authenticated principal, with conflict detection for a reused key and different arguments.
-- Define the supported deployment topology explicitly. If multi-replica operation is not implemented, fail/document it as single-replica and keep the Kubernetes example at one replica.
-
-Acceptance:
-
-- After restart, list/get/events/artifacts work for pre-restart terminal runs.
-- A run interrupted by process death is not reported as permanently running.
-- Repeating an identical create request with the same idempotency key returns the original run; changed arguments produce a conflict and never spawn.
-- Recovery and idempotency survive a real process restart integration test.
-
 ## Add production authentication, authorization, and audit identity #dev-ready
 
 `JAIPH_SERVE_TOKEN` is a useful fail-closed shared-secret gate, but it provides no user identity, revocation, per-action authorization, or attribution. That is insufficient when multiple company users can invoke arbitrary engineering workflows.

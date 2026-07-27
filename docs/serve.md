@@ -130,6 +130,33 @@ The concurrency cap limits *active* children, not process memory. A long-lived s
 
 **Eviction is in-memory only.** Dropping a run from the registry does **not** delete its durable `.jaiph/runs/<run>/run_summary.jsonl` journal or published `artifacts/` — those persist on disk (via `JAIPH_RUNS_DIR`, an `emptyDir` or PVC under Kubernetes) and are **the operator's to prune**. Once a run is evicted its API endpoints (`GET /v1/runs/{id}`, `/events`, `/artifacts`) return `404`; read the durable artifacts from the filesystem instead.
 
+## Restart-safe and retry-safe
+
+The run registry is in memory, but it is **rebuilt from disk on startup** so a restart is not a data-loss event:
+
+- **Durable run records.** When a run finishes, its public record (`run.json`) is written atomically beside its journal in the run directory. On startup `jaiph serve` scans `JAIPH_RUNS_DIR` and reloads every `run.json`, so `GET /v1/runs`, `GET /v1/runs/{id}`, `/events`, and `/artifacts` keep answering for terminal runs that completed before the restart.
+- **Interrupted runs are reconciled.** A run that was still `running` when the process died has a journal but no `run.json`. On startup it is reconciled into the explicit terminal status **`interrupted`** — its real outcome is unknown (so it is neither `succeeded` nor `failed`), but it is **never reported as permanently `running`**. The reconciliation is persisted, so it is stable across further restarts.
+- **Idempotent run creation.** Send an `Idempotency-Key` request header on `POST /v1/workflows/{name}/runs`. The key is scoped to the authenticated principal **and** the workflow. Repeating the request with the same key and identical arguments returns the **original** run (`200`) and starts nothing; reusing the key with **different** arguments is `409 E_IDEMPOTENCY_CONFLICT` and, again, spawns nothing — so a client that retries an expensive run after a network blip or a server restart never doubles it. The key→run mapping is stored in the durable record, so it survives a restart too. (An idempotency key is only remembered as long as its run is retained in the registry; once a run is evicted by the retention bounds above, its key is forgotten and a fresh request with that key starts a new run.)
+
+```bash
+# The same key + same args returns the original run and spawns nothing.
+KEY=$(uuidgen)
+curl -s -X POST 'http://127.0.0.1:5247/v1/workflows/greet/runs?wait=true' \
+  -H 'content-type: application/json' -H "Idempotency-Key: $KEY" -d '{"name":"ok"}' | jq .run_id
+curl -s -X POST 'http://127.0.0.1:5247/v1/workflows/greet/runs?wait=true' \
+  -H 'content-type: application/json' -H "Idempotency-Key: $KEY" -d '{"name":"ok"}' | jq .run_id   # same id
+
+# The same key + different args is a 409 conflict (spawns nothing).
+curl -s -o /dev/null -w '%{http_code}\n' -X POST 'http://127.0.0.1:5247/v1/workflows/greet/runs' \
+  -H 'content-type: application/json' -H "Idempotency-Key: $KEY" -d '{"name":"changed"}'   # 409
+```
+
+## Deployment topology
+
+`jaiph serve` is a **single-replica** service. Its run registry, in-flight concurrency cap, and idempotency index are **per-process** — there is no shared store and no cross-replica coordination. Running two or more replicas behind a load balancer is **not supported**: each replica would see only its own runs (`GET /v1/runs/{id}` would `404` for a run another replica started), enforce `JAIPH_SERVE_MAX_CONCURRENT` independently, and keep a separate idempotency index (so the same `Idempotency-Key` could start one run per replica). Restart safety and retry safety hold **within a single long-lived process** that owns one `JAIPH_RUNS_DIR`.
+
+Deploy exactly one replica. The [Kubernetes manifest](deploy.md#kubernetes) pins `replicas: 1` for this reason; scale vertically (CPU/memory and `JAIPH_SERVE_MAX_CONCURRENT`), not horizontally. Point `JAIPH_RUNS_DIR` at a durable volume (a PVC rather than an `emptyDir`) if runs and their idempotency keys must survive pod replacement, and keep the pod a `Recreate`-strategy single instance so a rollout hands the runs directory to exactly one successor.
+
 Execution honors the same execution-policy contract as [`jaiph run`](cli.md#jaiph-run) and [Run in a Docker sandbox](/how-to/sandbox-run): a Docker sandbox with an isolated workspace by default. `--inplace` (`JAIPH_INPLACE=1`) keeps the sandbox but binds the real workspace read-write so run effects land live; `--unsafe` (`JAIPH_UNSAFE=true`) runs on the host with no sandbox at all. The two are mutually exclusive (`E_FLAG_CONFLICT` at startup), the posture is resolved and printed once at startup and applied to every run, and launching the server with the flag or env var is the consent (no interactive prompt) — see [Environment variables — Precedence](env-vars.md#precedence). Publish files a run produces with [artifacts](/how-to/artifacts). Editing a served source hot-reloads the workflow set (and the OpenAPI document) with no restart; runs already in flight keep running.
 
 ## Reverse-proxy and ingress requirements

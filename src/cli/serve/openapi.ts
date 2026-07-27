@@ -63,13 +63,24 @@ export function buildOpenApi(tools: McpToolSpec[], serverInfo: OpenApiServerInfo
             description: "Respond only when the run is terminal (200) instead of returning 202 immediately.",
             schema: { type: "boolean" },
           },
+          {
+            name: "Idempotency-Key",
+            in: "header",
+            required: false,
+            description:
+              "Opaque retry key scoped to the authenticated principal and this workflow. Repeating a " +
+              "create with the same key and identical arguments returns the original run (200) instead of " +
+              "starting a second one; a reused key with different arguments is a 409 conflict and never spawns.",
+            schema: { type: "string" },
+          },
         ],
         requestBody,
         responses: {
-          "200": runResponse("Run reached a terminal state (wait=true)."),
+          "200": runResponse("Run reached a terminal state (wait=true), or an idempotent replay of the original run."),
           "202": runResponse("Run accepted and started."),
           "400": errorResponse("Invalid arguments."),
           "401": errorResponse("Missing or invalid bearer token."),
+          "409": errorResponse("Idempotency key reused with different arguments."),
           "413": errorResponse("Request body too large."),
           "415": errorResponse("Request body was not application/json."),
           "429": errorResponse("Too many concurrent runs."),
@@ -308,7 +319,7 @@ export function buildOpenApi(tools: McpToolSpec[], serverInfo: OpenApiServerInfo
           properties: {
             run_id: { type: "string" },
             workflow: { type: "string" },
-            status: { type: "string", enum: ["running", "succeeded", "failed", "cancelled"] },
+            status: { type: "string", enum: ["running", "succeeded", "failed", "cancelled", "interrupted"] },
             started_at: { type: "string" },
             ended_at: { type: ["string", "null"] },
             exit_status: { type: ["integer", "null"] },
