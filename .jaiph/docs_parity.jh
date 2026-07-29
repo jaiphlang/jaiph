@@ -19,6 +19,8 @@ const role = """
     (docs/_layouts/docs.html). Do not add manual navigation blocks (e.g.
     "More Documentation" sections) to individual markdown pages — inline
     contextual links to other docs are fine.
+  - Prose must pass the humanizer skill (.jaiph/skills/humanizer/SKILL.md):
+    no AI-writing tells in committed docs.
 """
 
 script assert_newline_paths_are_files = ```
@@ -102,11 +104,16 @@ script build_allowed_paths_block = ```
 
 workflow update_from_task(taskDesc) {
   prompt """
-    Before doing anything else, read and follow the documentation skill at
-    .jaiph/skills/documentation-writer/SKILL.md. It defines the Diátaxis
-    framework, the four document types, the clarify -> outline -> write
-    workflow, and the four guiding principles (clarity, accuracy,
-    user-centricity, consistency) you must apply to this task.
+    Before doing anything else, read and follow BOTH skills:
+    1. .jaiph/skills/documentation-writer/SKILL.md — Diátaxis framework,
+       the four document types, the clarify -> outline -> write workflow,
+       and the four guiding principles (clarity, accuracy, user-centricity,
+       consistency).
+    2. .jaiph/skills/humanizer/SKILL.md — remove AI-writing tells from every
+       sentence you write or revise (promotional tone, filler, inflated
+       symbolism, em-dash habit, AI vocabulary, vague attributions, etc.).
+       Apply it before considering the page done; do not leave AI-sounding
+       prose in the docs.
     <role>
     ${role}
     </role>
@@ -130,11 +137,16 @@ workflow update_from_task(taskDesc) {
 
 workflow docs_page(path) {
   prompt """
-    Before doing anything else, read and follow the documentation skill at
-    .jaiph/skills/documentation-writer/SKILL.md. It defines the Diátaxis
-    framework, the four document types, the clarify -> outline -> write
-    workflow, and the four guiding principles (clarity, accuracy,
-    user-centricity, consistency) you must apply to this task.
+    Before doing anything else, read and follow BOTH skills:
+    1. .jaiph/skills/documentation-writer/SKILL.md — Diátaxis framework,
+       the four document types, the clarify -> outline -> write workflow,
+       and the four guiding principles (clarity, accuracy, user-centricity,
+       consistency).
+    2. .jaiph/skills/humanizer/SKILL.md — remove AI-writing tells from every
+       sentence you write or revise (promotional tone, filler, inflated
+       symbolism, em-dash habit, AI vocabulary, vague attributions, etc.).
+       Apply it before considering the page done; do not leave AI-sounding
+       prose in the docs.
     <role>
     ${role}
     </role>
@@ -152,9 +164,9 @@ workflow docs_page(path) {
        suggestions, improvements and other issues.
     4. Keep examples (if present) executable and aligned with current behavior.
     5. Ensure the content is approachable and understandable by a human reader.
-       It should be written in a way that is easy to understand and follow.
-       Avoid too many emojis and AI-like language. Keep it simple, concise and
-       clear.
+       Keep it simple, concise and clear. After factual edits, run the prose
+       through the humanizer skill (.jaiph/skills/humanizer/SKILL.md) so the
+       page does not read as AI-generated.
     6. Navigation links between docs pages are provided by the Jekyll template
        (docs/_layouts/docs.html). Do NOT add manual navigation blocks (like
        'More Documentation' sections with links to other docs pages) to
@@ -166,11 +178,16 @@ workflow docs_page(path) {
 
 workflow docs_overview(docPaths) {
   prompt """
-    Before doing anything else, read and follow the documentation skill at
-    .jaiph/skills/documentation-writer/SKILL.md. It defines the Diátaxis
-    framework, the four document types, the clarify -> outline -> write
-    workflow, and the four guiding principles (clarity, accuracy,
-    user-centricity, consistency) you must apply to this task.
+    Before doing anything else, read and follow BOTH skills:
+    1. .jaiph/skills/documentation-writer/SKILL.md — Diátaxis framework,
+       the four document types, the clarify -> outline -> write workflow,
+       and the four guiding principles (clarity, accuracy, user-centricity,
+       consistency).
+    2. .jaiph/skills/humanizer/SKILL.md — remove AI-writing tells from every
+       sentence you write or revise (promotional tone, filler, inflated
+       symbolism, em-dash habit, AI vocabulary, vague attributions, etc.).
+       Apply it before considering the page done; do not leave AI-sounding
+       prose in the docs.
     <role>
     ${role}
     </role>
