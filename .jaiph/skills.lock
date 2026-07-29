@@ -12,6 +12,12 @@
       "sourceType": "github",
       "skillPath": "skills/agent-owasp-compliance/SKILL.md",
       "computedHash": "5c1f92c48888beb811d2435e58aa02b2619422a921d6f70e3cc15e5c5be8e7da"
+    },
+    "humanizer": {
+      "source": "blader/humanizer",
+      "sourceType": "github",
+      "skillPath": "SKILL.md",
+      "computedHash": "70938f3cce25970e1ded5fdd194b755c03f1e4e4fa76820958ce78f86b677b1a"
     }
   }
 }
