@@ -61,7 +61,7 @@ or prepend npm's global bin directory: `export PATH="$(npm prefix -g)/bin:$PATH"
 
 ```bash
 jaiph use nightly      # rolling nightly prerelease
-jaiph use 0.11.0       # reinstalls the v0.11.0 release binary
+jaiph use 0.12.0       # reinstalls the v0.12.0 release binary
 ```
 
 `jaiph use` re-invokes the step-1 installer (`JAIPH_INSTALL_COMMAND`, default `curl -fsSL https://jaiph.org/install | bash`) with `JAIPH_REPO_REF` set to `nightly` or `v<version>`, then replaces `~/.local/bin/jaiph` (or `JAIPH_BIN_DIR`). Override `JAIPH_INSTALL_COMMAND` for forks, offline bundles, or local scripts.
@@ -72,7 +72,7 @@ jaiph use 0.11.0       # reinstalls the v0.11.0 release binary
 jaiph --version
 ```
 
-This prints `jaiph <version>` (sourced from the installed release at build time). After `jaiph use <version>`, re-run `jaiph --version` and confirm the printed version matches (for example `jaiph 0.11.0` after `jaiph use 0.11.0`).
+This prints `jaiph <version>` (sourced from the installed release at build time). After `jaiph use <version>`, re-run `jaiph --version` and confirm the printed version matches (for example `jaiph 0.12.0` after `jaiph use 0.12.0`).
 
 ## Verify the release signature
 
@@ -94,13 +94,13 @@ To install a pinned `jaiph` CLI in a GitHub Actions job, use the reusable [`setu
 
 ```yaml
 steps:
-  - uses: jaiphlang/jaiph/actions/setup-jaiph@v0.11.0
+  - uses: jaiphlang/jaiph/actions/setup-jaiph@v0.12.0
     with:
-      version: 0.11.0        # semver, a release tag (v0.11.0), or 'nightly'
+      version: 0.12.0        # semver, a release tag (v0.12.0), or 'nightly'
   - run: jaiph --version     # jaiph is now on PATH for later steps
 ```
 
-Pin both the action ref (`@v0.11.0`) and the `version` input to an exact release for reproducible CI; use `nightly` to track the rolling prerelease. The action supports GitHub-hosted **Linux** and **macOS** runners (arm64 / x64) covered by release artifacts.
+Pin both the action ref (`@v0.12.0`) and the `version` input to an exact release for reproducible CI; use `nightly` to track the rolling prerelease. The action supports GitHub-hosted **Linux** and **macOS** runners (arm64 / x64) covered by release artifacts.
 
 The action inherits the installer's [fail-closed policy](#1-install-the-binary): a checksum mismatch, a missing signature file, or a missing release artifact fails the step and installs nothing (and the signature is verified when [`minisign`](https://jedisct1.github.io/minisign/) is on the runner's `PATH`). For the full input/output reference, see the [action README](https://github.com/jaiphlang/jaiph/tree/main/actions/setup-jaiph).
 

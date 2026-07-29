@@ -1,6 +1,6 @@
 {
   "name": "jaiph-zed",
-  "version": "0.1.0",
+  "version": "0.12.0",
   "description": "Query-check harness for the Jaiph Zed extension (Tree-sitter highlights/injections)",
   "private": true,
   "license": "MIT",

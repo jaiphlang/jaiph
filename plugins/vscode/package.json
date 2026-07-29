@@ -2,7 +2,7 @@
   "name": "jaiph-syntax-vscode",
   "displayName": "Jaiph Syntax",
   "description": "Syntax highlighting and compiler diagnostics for the Jaiph orchestration language (.jh files)",
-  "version": "0.9.0",
+  "version": "0.12.0",
   "publisher": "jaiph",
   "license": "MIT",
   "icon": "media/icon.png",
