@@ -1,0 +1,11 @@
+**/.git/**
+**/.github/**
+**/.vscode/**
+**/node_modules/**
+**/*.vsix
+**/*.log
+src/**
+syntaxes/fixtures/**
+tsconfig.json
+.tmp-jaiph-*/**
+tmp/**

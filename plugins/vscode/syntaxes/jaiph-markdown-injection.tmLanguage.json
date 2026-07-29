@@ -1,0 +1,7 @@
+{
+  "scopeName": "source.jaiph.embedded.markdown",
+  "injectionSelector": "L:meta.embedded.block.markdown.jaiph",
+  "patterns": [
+    { "include": "text.html.markdown" }
+  ]
+}

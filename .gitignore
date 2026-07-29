@@ -29,8 +29,10 @@ jaiph.key
 
 # OS/editor files
 .DS_Store
-.vscode/
+# Only the repo-root editor folder — do not blanket-ignore plugins/vscode/.vscode/
+/.vscode/
 *.swp
+*.vsix
 
 .jaiph/runs/
 .jaiph/*.jaiph.map

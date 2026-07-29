@@ -1,0 +1,7 @@
+{
+  "scopeName": "source.jaiph.embedded.javascript",
+  "injectionSelector": "L:meta.embedded.block.javascript.jaiph",
+  "patterns": [
+    { "include": "source.js" }
+  ]
+}

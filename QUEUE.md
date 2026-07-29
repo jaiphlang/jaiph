@@ -13,3 +13,55 @@ Process rules:
 7. **Acceptance criteria are non-negotiable.** A task is not done until every acceptance bullet is verified by a test that fails when the contract is violated. "It works on my machine" or "the existing tests pass" is not acceptance.
 
 ***
+
+## Bring the in-tree VS Code plugin up to current Jaiph #dev-ready
+
+`plugins/vscode/` was imported from the old `jaiph-syntax-vscode` repo and still reflects a stale language surface (`.jph` fixtures/docs, incomplete keyword/grammar coverage, repository metadata already retargeted to this monorepo). Editor support that lies about the language is worse than no support.
+
+Scope:
+
+- Align TextMate grammar, language configuration, and fixtures with the current `.jh` / `*.test.jh` grammar (including constructs the old extension never knew: `script`, `async`, `catch`, `recover`, channels/send, tests, etc. — derive the keyword and structure set from `docs/grammar.md` / `docs/language.md` and parser sources, not from the old extension README).
+- Keep diagnostics and formatting wired to the installed `jaiph` CLI (`compile` / `format`); fail clearly when the binary is missing; cover happy path and error diagnostics with automated tests that break when the CLI contract changes.
+- Fix packaging metadata and docs: only `.jh`, monorepo paths, how to F5 from `plugins/vscode/`, publish/package scripts.
+- Add a path-filtered CI job (or documented npm script gate) so `plugins/vscode` compile/package/tests run when that tree changes without making every core PR rebuild the extension by default.
+
+Acceptance:
+
+- Opening a fixture that exercises current language constructs highlights correctly; a regression fixture for a removed/wrong extension (e.g. `.jph`-only assumptions) fails the plugin's test suite.
+- Saving a deliberately invalid `.jh` file produces at least one diagnostic sourced from `jaiph compile` (or equivalent); with `jaiph` missing from PATH and no `jaiph.compilerPath`, the extension reports a clear configuration error instead of silent success.
+- `npm run compile` (and package) succeed from `plugins/vscode/`; README instructions match that layout.
+- A CI path filter or equivalent check fails the PR when `plugins/vscode` grammar/tests are broken.
+
+## Add a Zed language extension under `plugins/zed` #dev-ready
+
+Zed has no Jaiph support. Zed language extensions require Tree-sitter (not TextMate), so VS Code grammars cannot be reused as-is. An empty `plugins/zed/` placeholder exists; ship a real extension there.
+
+Scope:
+
+- Create a Zed extension at `plugins/zed/` with `extension.toml` and `languages/jaiph/` (`.jh` / `*.test.jh` suffixes, comment/bracket config, highlights queries).
+- Provide a Tree-sitter grammar for Jaiph (new tree under this repo, e.g. `grammars/tree-sitter-jaiph/`, unless an existing grammar already exists — do not invent a second grammar home). Pin it from `extension.toml` by repository + revision (or `file://` for local dev).
+- Cover the same current-language construct set as the VS Code task (keywords, blocks, comments, strings, embedded script regions as far as Tree-sitter queries reasonably allow).
+- Document local install (Zed "Install Dev Extension" pointing at `plugins/zed`) and the marketplace path (`path = "plugins/zed"` when publishing to `zed-industries/extensions`).
+
+Acceptance:
+
+- A Zed fixture `.jh` file for current constructs receives highlighting tokens for keywords, comments, and strings; a test or query-check fails if those queries regress.
+- `extension.toml` builds/loads as a Zed extension from `plugins/zed/` without requiring files outside that tree except the pinned grammar.
+- Docs state how to install from this monorepo path and how the grammar is version-pinned.
+
+## Add `actions/setup-jaiph` for CI installs #dev-ready
+
+Other repositories need a one-step way to install a pinned Jaiph CLI in GitHub Actions. A placeholder exists at `actions/setup-jaiph/`; ship a reusable composite (or JS) action there.
+
+Scope:
+
+- Implement `actions/setup-jaiph/action.yml` that installs Jaiph onto `PATH` for `runner.os` / arch used by GitHub-hosted runners.
+- Inputs at minimum: `version` (semver / `nightly` / release tag). Prefer the same release/binary channel as `docs/setup.md` (standalone release binaries + checksums); do not require Node on the consumer workflow unless npm is an explicit documented fallback.
+- Add the install directory to `GITHUB_PATH`. Fail closed on checksum (and signature when `minisign` is available) failure — match installer fail-closed policy.
+- Document usage: `- uses: jaiphlang/jaiph/actions/setup-jaiph@<tag>` with a pinned version input. Optionally exercise the action from this repo's CI on a path filter so it does not bitrot.
+
+Acceptance:
+
+- A workflow using the action can run `jaiph --version` and get the requested version (or nightly) on linux and darwin runners covered by release artifacts.
+- Wrong checksum / missing artifact fails the step; success leaves `jaiph` on `PATH` for subsequent steps.
+- README under `actions/setup-jaiph/` shows a minimal workflow snippet that matches the implemented inputs.

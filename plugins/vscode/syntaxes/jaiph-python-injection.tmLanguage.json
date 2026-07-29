@@ -1,0 +1,7 @@
+{
+  "scopeName": "source.jaiph.embedded.python",
+  "injectionSelector": "L:meta.embedded.block.python.jaiph",
+  "patterns": [
+    { "include": "source.python" }
+  ]
+}
