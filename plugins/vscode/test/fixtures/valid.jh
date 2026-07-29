@@ -1,0 +1,4 @@
+workflow default() {
+  log "hello"
+  return "done"
+}

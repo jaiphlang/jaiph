@@ -147,3 +147,6 @@ vite.config.ts.timestamp-*
 # Jaiph
 .jaiph/runs
 tmp/
+
+# Compiled test output
+out-test/

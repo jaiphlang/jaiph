@@ -243,25 +243,34 @@ function resolveHostRunsRoot(workspaceRoot: string, env: Record<string, string |
 
 /**
  * A `watchFile`-based source watcher shared by `jaiph mcp` and `jaiph serve`.
- * `rewatch(files)` swaps the watched set (unwatch old, watch new) so each hot
- * reload re-derives the file list from the current module graph; `stop()`
- * unwatches everything on shutdown. The `onChange` callback is the single
- * listener registered against every file, so unwatch matches watch exactly.
+ * `rewatch(files)` reconciles the watched set to `files` (unwatch only those
+ * that left, watch only those that arrived) so each hot reload re-derives the
+ * file list from the current module graph; `stop()` unwatches everything on
+ * shutdown. The `onChange` callback is the single listener registered against
+ * every file, so unwatch matches watch exactly.
+ *
+ * A file that survives a reload keeps its existing `watchFile` untouched:
+ * re-watching resets `watchFile`'s baseline, which it captures with an
+ * asynchronous initial stat that fires no callback — so an edit landing before
+ * that stat completes would be silently absorbed into the new baseline and
+ * never detected. Leaving persistent files alone keeps their live baseline
+ * (and the poll that catches the next edit) intact.
  */
 export function createSourceWatcher(
   intervalMs: number,
   onChange: () => void,
 ): { rewatch: (files: string[]) => void; stop: () => void } {
-  let watched: string[] = [];
+  let watched = new Set<string>();
   return {
     rewatch(files: string[]): void {
-      for (const f of watched) unwatchFile(f, onChange);
-      watched = [...files];
-      for (const f of watched) watchFile(f, { interval: intervalMs }, onChange);
+      const next = new Set(files);
+      for (const f of watched) if (!next.has(f)) unwatchFile(f, onChange);
+      for (const f of next) if (!watched.has(f)) watchFile(f, { interval: intervalMs }, onChange);
+      watched = next;
     },
     stop(): void {
       for (const f of watched) unwatchFile(f, onChange);
-      watched = [];
+      watched = new Set();
     },
   };
 }
