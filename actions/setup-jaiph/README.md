@@ -1,9 +1,48 @@
 # `setup-jaiph` GitHub Action
 
-Placeholder. Implement via the QUEUE task that adds `action.yml` here so workflows can install a pinned Jaiph CLI with:
+Install a pinned [Jaiph](https://github.com/jaiphlang/jaiph) CLI onto `PATH` in a
+GitHub Actions job. Downloads the standalone per-platform release binary — the
+same channel as the [curl installer](https://jaiph.org/how-to/install) — so no
+Node/npm is required on the runner.
+
+Supported runners: GitHub-hosted **Linux** and **macOS** (arm64 / x64), covered by
+release artifacts.
+
+## Usage
 
 ```yaml
-- uses: jaiphlang/jaiph/actions/setup-jaiph@v0.11.0
-  with:
-    version: 0.11.0
+steps:
+  - uses: jaiphlang/jaiph/actions/setup-jaiph@v0.11.0
+    with:
+      version: 0.11.0        # semver, a release tag (v0.11.0), or 'nightly'
+  - run: jaiph --version     # jaiph is now on PATH for every later step
 ```
+
+Pin both the action (`@v0.11.0`) and the `version` input to an exact release for
+reproducible CI. Use `nightly` to track the rolling prerelease:
+
+```yaml
+  - uses: jaiphlang/jaiph/actions/setup-jaiph@nightly
+    with:
+      version: nightly
+```
+
+## Inputs
+
+| Input     | Required | Default   | Description |
+|-----------|----------|-----------|-------------|
+| `version` | no       | `nightly` | Version to install: a bare semver (`0.11.0`), a release tag (`v0.11.0`), or `nightly`. |
+
+## Outputs
+
+| Output    | Description |
+|-----------|-------------|
+| `version` | The resolved `jaiph --version` banner of the installed CLI. |
+
+## Security
+
+The action reuses the release installer's fail-closed policy: it verifies the
+`SHA256SUMS` checksum for the downloaded binary and the detached
+`SHA256SUMS.minisig` signature when [`minisign`](https://jedisct1.github.io/minisign/)
+is on `PATH`. A checksum mismatch, a missing signature file, or a missing release
+artifact fails the step and installs nothing.

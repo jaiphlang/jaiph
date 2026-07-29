@@ -88,6 +88,22 @@ Override with `JAIPH_MINISIGN_PUBLIC_KEY` only when testing a key rotation befor
 
 For maintainer setup, see [Contributing — Release signing](contributing.md#release-signing).
 
+## Install in GitHub Actions (CI)
+
+To install a pinned `jaiph` CLI in a GitHub Actions job, use the reusable [`setup-jaiph`](https://github.com/jaiphlang/jaiph/tree/main/actions/setup-jaiph) composite action instead of scripting the installer yourself. It downloads the same standalone per-platform release binary as the curl installer, so **no Node/npm is required on the runner**, and appends the install directory to `GITHUB_PATH` so `jaiph` is on `PATH` for every later step.
+
+```yaml
+steps:
+  - uses: jaiphlang/jaiph/actions/setup-jaiph@v0.11.0
+    with:
+      version: 0.11.0        # semver, a release tag (v0.11.0), or 'nightly'
+  - run: jaiph --version     # jaiph is now on PATH for later steps
+```
+
+Pin both the action ref (`@v0.11.0`) and the `version` input to an exact release for reproducible CI; use `nightly` to track the rolling prerelease. The action supports GitHub-hosted **Linux** and **macOS** runners (arm64 / x64) covered by release artifacts.
+
+The action inherits the installer's [fail-closed policy](#1-install-the-binary): a checksum mismatch, a missing signature file, or a missing release artifact fails the step and installs nothing (and the signature is verified when [`minisign`](https://jedisct1.github.io/minisign/) is on the runner's `PATH`). For the full input/output reference, see the [action README](https://github.com/jaiphlang/jaiph/tree/main/actions/setup-jaiph).
+
 ## Related
 
 - [Architecture — Distribution: Node vs Bun standalone](architecture.md#distribution-node-vs-bun-standalone) — what the installer downloads and why the binary is self-contained.

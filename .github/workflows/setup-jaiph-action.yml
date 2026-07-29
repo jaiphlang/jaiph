@@ -1,0 +1,40 @@
+name: setup-jaiph action
+
+# Path-filtered so core PRs do not run this. Exercises the composite action from
+# this repo on the runners it advertises (Linux + macOS) against the nightly
+# release so it does not bitrot.
+on:
+  push:
+    paths:
+      - "actions/setup-jaiph/**"
+      - "docs/install"
+      - ".github/workflows/setup-jaiph-action.yml"
+
+jobs:
+  setup-jaiph:
+    name: Install nightly and run jaiph
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install jaiph
+        id: setup
+        uses: ./actions/setup-jaiph
+        with:
+          version: nightly
+
+      # jaiph must be on PATH for subsequent steps, and the action's output must
+      # match what the CLI reports directly.
+      - name: Verify jaiph is on PATH
+        shell: bash
+        run: |
+          which jaiph
+          got="$(jaiph --version)"
+          echo "on PATH: ${got}"
+          echo "action output: ${{ steps.setup.outputs.version }}"
+          [ "${got}" = "${{ steps.setup.outputs.version }}" ]

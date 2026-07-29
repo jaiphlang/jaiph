@@ -1,0 +1,29 @@
+name: Setup Jaiph
+description: Install a pinned Jaiph CLI onto PATH for GitHub-hosted Linux and macOS runners.
+author: jaiphlang
+branding:
+  icon: terminal
+  color: purple
+
+inputs:
+  version:
+    description: >-
+      Jaiph version to install: a bare semver (e.g. 0.11.0), a release tag
+      (e.g. v0.11.0), or 'nightly' for the rolling prerelease. Pin an exact
+      version for reproducible CI.
+    required: false
+    default: nightly
+
+outputs:
+  version:
+    description: The resolved `jaiph --version` banner of the installed CLI.
+    value: ${{ steps.install.outputs.version }}
+
+runs:
+  using: composite
+  steps:
+    - id: install
+      shell: bash
+      env:
+        INPUT_VERSION: ${{ inputs.version }}
+      run: bash "${{ github.action_path }}/setup.sh"
