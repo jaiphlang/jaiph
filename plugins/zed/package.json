@@ -1,0 +1,18 @@
+{
+  "name": "jaiph-zed",
+  "version": "0.1.0",
+  "description": "Query-check harness for the Jaiph Zed extension (Tree-sitter highlights/injections)",
+  "private": true,
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jaiphlang/jaiph.git",
+    "directory": "plugins/zed"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  },
+  "devDependencies": {
+    "tree-sitter-cli": "^0.24.0"
+  }
+}

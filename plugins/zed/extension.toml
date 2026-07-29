@@ -1,0 +1,20 @@
+id = "jaiph"
+name = "Jaiph"
+description = "Jaiph orchestration language support for Zed (Tree-sitter syntax highlighting)."
+version = "0.1.0"
+schema_version = 1
+authors = ["Jaiph contributors"]
+repository = "https://github.com/jaiphlang/jaiph"
+
+# The Tree-sitter grammar lives in this same monorepo at
+# `grammars/tree-sitter-jaiph`. It is pinned by repository + revision, with the
+# in-repo subdirectory given by `path`. Bump `rev` to the commit that carries a
+# matching `grammars/tree-sitter-jaiph/src/` whenever the grammar changes.
+#
+# For local grammar development, point `repository` at a local checkout with a
+# `file://` URL, e.g.:
+#   repository = "file:///absolute/path/to/jaiph"
+[grammars.jaiph]
+repository = "https://github.com/jaiphlang/jaiph"
+rev = "c41c0a429ea537e4de469e27bb3400b6cebe9a7d"
+path = "grammars/tree-sitter-jaiph"

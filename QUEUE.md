@@ -14,23 +14,6 @@ Process rules:
 
 ***
 
-## Add a Zed language extension under `plugins/zed` #dev-ready
-
-Zed has no Jaiph support. Zed language extensions require Tree-sitter (not TextMate), so VS Code grammars cannot be reused as-is. An empty `plugins/zed/` placeholder exists; ship a real extension there.
-
-Scope:
-
-- Create a Zed extension at `plugins/zed/` with `extension.toml` and `languages/jaiph/` (`.jh` / `*.test.jh` suffixes, comment/bracket config, highlights queries).
-- Provide a Tree-sitter grammar for Jaiph (new tree under this repo, e.g. `grammars/tree-sitter-jaiph/`, unless an existing grammar already exists — do not invent a second grammar home). Pin it from `extension.toml` by repository + revision (or `file://` for local dev).
-- Cover the same current-language construct set as the VS Code task (keywords, blocks, comments, strings, embedded script regions as far as Tree-sitter queries reasonably allow).
-- Document local install (Zed "Install Dev Extension" pointing at `plugins/zed`) and the marketplace path (`path = "plugins/zed"` when publishing to `zed-industries/extensions`).
-
-Acceptance:
-
-- A Zed fixture `.jh` file for current constructs receives highlighting tokens for keywords, comments, and strings; a test or query-check fails if those queries regress.
-- `extension.toml` builds/loads as a Zed extension from `plugins/zed/` without requiring files outside that tree except the pinned grammar.
-- Docs state how to install from this monorepo path and how the grammar is version-pinned.
-
 ## Add `actions/setup-jaiph` for CI installs #dev-ready
 
 Other repositories need a one-step way to install a pinned Jaiph CLI in GitHub Actions. A placeholder exists at `actions/setup-jaiph/`; ship a reusable composite (or JS) action there.
