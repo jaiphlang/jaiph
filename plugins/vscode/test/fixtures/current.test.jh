@@ -1,0 +1,11 @@
+# Grammar fixture: current *.test.jh test-block surface.
+
+test "happy path" {
+  mock prompt "canned answer"
+
+  const response = run helpers.default() allow_failure
+
+  expect_contain response "canned answer"
+  expect_not_contain response "error"
+  expect_equal response "canned answer"
+}

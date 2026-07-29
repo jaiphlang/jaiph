@@ -1,0 +1,43 @@
+name: VS Code plugin
+
+# Path-filtered so core PRs do not rebuild the extension by default. Runs when
+# the plugin tree changes, or when the compile command it depends on changes
+# (the diagnostics tests invoke the real `jaiph compile --json` contract).
+on:
+  push:
+    paths:
+      - "plugins/vscode/**"
+      - "src/cli/commands/compile.ts"
+      - ".github/workflows/vscode-plugin.yml"
+
+jobs:
+  vscode-plugin:
+    name: Compile, grammar & diagnostics tests, package
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      # The plugin's diagnostics tests run the real monorepo CLI, so build it.
+      - name: Build the jaiph CLI
+        run: |
+          npm ci
+          npm run build
+
+      - name: Install plugin dependencies
+        run: npm ci
+        working-directory: plugins/vscode
+
+      - name: Typecheck, compile, grammar & diagnostics tests
+        run: npm test
+        working-directory: plugins/vscode
+
+      - name: Package the extension
+        run: npm run package
+        working-directory: plugins/vscode

@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import { execFile } from "child_process";
+import { isMissingBinaryError, missingBinaryMessage } from "./compile";
 
 export class JaiphFormattingProvider implements vscode.DocumentFormattingEditProvider {
   provideDocumentFormattingEdits(
@@ -8,6 +9,9 @@ export class JaiphFormattingProvider implements vscode.DocumentFormattingEditPro
   ): Promise<vscode.TextEdit[]> {
     const config = vscode.workspace.getConfiguration("jaiph");
     const compilerPath = config.get<string>("compilerPath", "jaiph");
+    const usingDefaultPath = !config.inspect<string>("compilerPath")?.globalValue
+      && !config.inspect<string>("compilerPath")?.workspaceValue
+      && !config.inspect<string>("compilerPath")?.workspaceFolderValue;
     const filePath = document.uri.fsPath;
     const cwd = vscode.workspace.getWorkspaceFolder(document.uri)?.uri.fsPath;
 
@@ -16,7 +20,9 @@ export class JaiphFormattingProvider implements vscode.DocumentFormattingEditPro
     return new Promise<vscode.TextEdit[]>((resolve) => {
       execFile(compilerPath, args, { cwd, timeout: 15_000 }, (error, _stdout, stderr) => {
         if (error) {
-          if (stderr) {
+          if (isMissingBinaryError(error)) {
+            vscode.window.showErrorMessage(missingBinaryMessage(compilerPath, usingDefaultPath));
+          } else if (stderr) {
             vscode.window.showErrorMessage(`Jaiph format: ${stderr.trim()}`);
           }
           resolve([]);

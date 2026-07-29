@@ -1,0 +1,11 @@
+# Regression fixture for stale surface the old extension assumed.
+# The grammar test asserts NONE of these get their old (wrong) scopes.
+config {
+  agent.default_model = "old-key"
+  runtime.docker_enabled = true
+}
+
+workflow default() {
+  # `wait` was removed from the language (E_PARSE). Not a command keyword.
+  wait for_something
+}

@@ -1,13 +1,9 @@
 import * as vscode from "vscode";
-import { execFile } from "child_process";
+import { runCompile, CompileDiagnostic } from "./compile";
 
-interface CompileDiagnostic {
-  file: string;
-  line: number;
-  col: number;
-  code: string;
-  message: string;
-}
+// Show the "compiler missing" error at most once until it is resolved, so a
+// misconfigured PATH does not spam a popup on every save/open.
+let configErrorShown = false;
 
 function toDiagnostic(err: CompileDiagnostic): vscode.Diagnostic {
   const line = Math.max(0, err.line - 1);
@@ -19,6 +15,13 @@ function toDiagnostic(err: CompileDiagnostic): vscode.Diagnostic {
   return diag;
 }
 
+function isCompilerPathConfigured(config: vscode.WorkspaceConfiguration): boolean {
+  const inspected = config.inspect<string>("compilerPath");
+  return Boolean(
+    inspected?.globalValue || inspected?.workspaceValue || inspected?.workspaceFolderValue,
+  );
+}
+
 export async function runDiagnostics(
   document: vscode.TextDocument,
   collection: vscode.DiagnosticCollection,
@@ -27,44 +30,37 @@ export async function runDiagnostics(
   if (!config.get<boolean>("diagnostics.enabled", true)) return;
 
   const compilerPath = config.get<string>("compilerPath", "jaiph");
-  const filePath = document.uri.fsPath;
-  const cwd = vscode.workspace.getWorkspaceFolder(document.uri)?.uri.fsPath;
+  const result = await runCompile({
+    compilerPath,
+    filePath: document.uri.fsPath,
+    cwd: vscode.workspace.getWorkspaceFolder(document.uri)?.uri.fsPath,
+    usingDefaultPath: !isCompilerPathConfigured(config),
+  });
 
-  try {
-    const stdout = await new Promise<string>((resolve, reject) => {
-      execFile(
-        compilerPath,
-        ["compile", "--json", filePath],
-        { cwd, timeout: 15_000 },
-        (error, stdout, stderr) => {
-          // compile exits non-zero on errors but still prints JSON to stdout
-          if (stdout) {
-            resolve(stdout);
-          } else {
-            reject(error ?? new Error(stderr));
-          }
-        },
-      );
-    });
-
-    const errors: CompileDiagnostic[] = JSON.parse(stdout);
-    const byFile = new Map<string, vscode.Diagnostic[]>();
-
-    for (const err of errors) {
-      const uri = vscode.Uri.file(err.file).toString();
-      if (!byFile.has(uri)) byFile.set(uri, []);
-      byFile.get(uri)!.push(toDiagnostic(err));
+  if (result.kind === "config-error") {
+    if (!configErrorShown) {
+      configErrorShown = true;
+      vscode.window.showErrorMessage(result.message);
     }
+    return;
+  }
+  configErrorShown = false;
 
-    collection.clear();
-    for (const [uriStr, diags] of byFile) {
-      collection.set(vscode.Uri.parse(uriStr), diags);
-    }
+  // A transient failure (timeout, non-JSON output) leaves prior diagnostics in place.
+  if (result.kind === "error") return;
 
-    if (errors.length === 0) {
-      collection.delete(document.uri);
-    }
-  } catch {
-    // Compiler not found or crashed — silently ignore
+  const byFile = new Map<string, vscode.Diagnostic[]>();
+  for (const err of result.diagnostics) {
+    const uri = vscode.Uri.file(err.file).toString();
+    if (!byFile.has(uri)) byFile.set(uri, []);
+    byFile.get(uri)!.push(toDiagnostic(err));
+  }
+
+  collection.clear();
+  for (const [uriStr, diags] of byFile) {
+    collection.set(vscode.Uri.parse(uriStr), diags);
+  }
+  if (result.diagnostics.length === 0) {
+    collection.delete(document.uri);
   }
 }

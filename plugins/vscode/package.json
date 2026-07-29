@@ -22,13 +22,19 @@
   "scripts": {
     "compile": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --sourcemap",
     "watch": "npm run compile -- --watch",
+    "check": "tsc -p tsconfig.json --noEmit",
+    "build:test": "tsc -p tsconfig.test.json",
+    "test": "npm run check && npm run compile && npm run build:test && node --test out-test/test/*.test.js",
     "package": "npm run compile -- --minify && vsce package"
   },
   "devDependencies": {
+    "@types/node": "^20.0.0",
     "@types/vscode": "^1.85.0",
     "@vscode/vsce": "^3.6.0",
     "esbuild": "^0.25.0",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "vscode-oniguruma": "^2.0.1",
+    "vscode-textmate": "^9.0.0"
   },
   "engines": {
     "vscode": "^1.85.0"

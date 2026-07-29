@@ -16,6 +16,7 @@
     { "include": "#variable-declaration" },
     { "include": "#channel-declaration" },
     { "include": "#config-keys" },
+    { "include": "#for-loop" },
     { "include": "#if-statement" },
     { "include": "#conditionals" },
     { "include": "#recover-bindings" },
@@ -713,7 +714,7 @@
       "patterns": [
         {
           "name": "meta.config.key-value.jaiph",
-          "match": "\\b(agent\\.default_model|agent\\.command|agent\\.backend|agent\\.trusted_workspace|agent\\.cursor_flags|agent\\.claude_flags|run\\.logs_dir|run\\.debug|run\\.inbox_parallel|runtime\\.docker_enabled|runtime\\.docker_image|runtime\\.docker_network|runtime\\.docker_timeout|runtime\\.workspace)\\b\\s*(=)",
+          "match": "\\b(agent\\.model|agent\\.command|agent\\.backend|agent\\.trusted_workspace|agent\\.cursor_flags|agent\\.claude_flags|run\\.logs_dir|run\\.debug|run\\.recover_limit|runtime\\.docker_image|runtime\\.docker_network|runtime\\.docker_timeout_seconds|module\\.name|module\\.version|module\\.description)\\b\\s*(=)",
           "captures": {
             "1": { "name": "variable.other.property.jaiph" },
             "2": { "name": "keyword.operator.assignment.jaiph" }
@@ -763,14 +764,30 @@
     "recover-bindings": {
       "patterns": [
         {
-          "comment": "recover (binding) - failure recovery with binding",
+          "comment": "recover (binding) / catch (binding) — failure handler with binding",
           "name": "meta.recover.jaiph",
-          "match": "\\b(recover)\\b\\s*(\\()([A-Za-z_][A-Za-z0-9_]*)(\\))",
+          "match": "\\b(recover|catch)\\b\\s*(\\()([A-Za-z_][A-Za-z0-9_]*)(\\))",
           "captures": {
             "1": { "name": "keyword.control.command.jaiph" },
             "2": { "name": "punctuation.section.parens.begin.jaiph" },
             "3": { "name": "variable.parameter.jaiph" },
             "4": { "name": "punctuation.section.parens.end.jaiph" }
+          }
+        }
+      ]
+    },
+
+    "for-loop": {
+      "patterns": [
+        {
+          "comment": "for IDENT in IDENT { ... }",
+          "name": "meta.loop.for.jaiph",
+          "match": "\\b(for)\\b\\s+([A-Za-z_][A-Za-z0-9_]*)\\s+\\b(in)\\b\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": { "name": "keyword.control.loop.jaiph" },
+            "2": { "name": "variable.other.jaiph" },
+            "3": { "name": "keyword.control.loop.jaiph" },
+            "4": { "name": "variable.other.jaiph" }
           }
         }
       ]
@@ -847,15 +864,15 @@
         },
         {
           "name": "keyword.control.command.jaiph",
-          "match": "\\b(ensure|run|prompt|log|logerr|recover|fail|return|wait)\\b"
+          "match": "\\b(ensure|run|prompt|log|logerr|logwarn|recover|catch|fail|return)\\b"
         },
         {
           "name": "keyword.control.test.jaiph",
-          "match": "\\b(mock|respond|allow_failure)\\b"
+          "match": "\\b(mock|allow_failure)\\b"
         },
         {
           "name": "keyword.other.assertion.jaiph",
-          "match": "\\b(expectContain|expectNotContain|expectEqual)\\b"
+          "match": "\\b(expect_contain|expect_not_contain|expect_equal)\\b"
         },
         {
           "name": "storage.modifier.jaiph",

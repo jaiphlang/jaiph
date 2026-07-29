@@ -1,0 +1,3 @@
+workflow default() {
+  run nonexistent_reference()
+}

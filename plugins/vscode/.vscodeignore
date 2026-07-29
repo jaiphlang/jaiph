@@ -5,7 +5,9 @@
 **/*.vsix
 **/*.log
 src/**
-syntaxes/fixtures/**
+test/**
+out-test/**
 tsconfig.json
+tsconfig.test.json
 .tmp-jaiph-*/**
 tmp/**

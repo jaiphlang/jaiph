@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "out-test",
+    "types": ["node"],
+    "sourceMap": false
+  },
+  "include": ["src/compile.ts", "test/**/*.ts"]
+}

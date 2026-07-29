@@ -14,24 +14,6 @@ Process rules:
 
 ***
 
-## Bring the in-tree VS Code plugin up to current Jaiph #dev-ready
-
-`plugins/vscode/` was imported from the old `jaiph-syntax-vscode` repo and still reflects a stale language surface (`.jph` fixtures/docs, incomplete keyword/grammar coverage, repository metadata already retargeted to this monorepo). Editor support that lies about the language is worse than no support.
-
-Scope:
-
-- Align TextMate grammar, language configuration, and fixtures with the current `.jh` / `*.test.jh` grammar (including constructs the old extension never knew: `script`, `async`, `catch`, `recover`, channels/send, tests, etc. — derive the keyword and structure set from `docs/grammar.md` / `docs/language.md` and parser sources, not from the old extension README).
-- Keep diagnostics and formatting wired to the installed `jaiph` CLI (`compile` / `format`); fail clearly when the binary is missing; cover happy path and error diagnostics with automated tests that break when the CLI contract changes.
-- Fix packaging metadata and docs: only `.jh`, monorepo paths, how to F5 from `plugins/vscode/`, publish/package scripts.
-- Add a path-filtered CI job (or documented npm script gate) so `plugins/vscode` compile/package/tests run when that tree changes without making every core PR rebuild the extension by default.
-
-Acceptance:
-
-- Opening a fixture that exercises current language constructs highlights correctly; a regression fixture for a removed/wrong extension (e.g. `.jph`-only assumptions) fails the plugin's test suite.
-- Saving a deliberately invalid `.jh` file produces at least one diagnostic sourced from `jaiph compile` (or equivalent); with `jaiph` missing from PATH and no `jaiph.compilerPath`, the extension reports a clear configuration error instead of silent success.
-- `npm run compile` (and package) succeed from `plugins/vscode/`; README instructions match that layout.
-- A CI path filter or equivalent check fails the PR when `plugins/vscode` grammar/tests are broken.
-
 ## Add a Zed language extension under `plugins/zed` #dev-ready
 
 Zed has no Jaiph support. Zed language extensions require Tree-sitter (not TextMate), so VS Code grammars cannot be reused as-is. An empty `plugins/zed/` placeholder exists; ship a real extension there.
