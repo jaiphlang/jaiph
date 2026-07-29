@@ -1,5 +1,7 @@
 #!/usr/bin/env jaiph
 
+import "jaiphlang/claude" as claude
+
 config {
   agent.backend = "claude"
   agent.model = "fable"
@@ -216,6 +218,7 @@ workflow docs_overview(docPaths) {
 }
 
 workflow default() {
+  run claude.ensure_usage()
   ensure worktree_is_clean()
   const allowed_list = run build_allowed_paths_block()
   ensure docs_files_present(allowed_list)
