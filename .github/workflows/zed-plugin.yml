@@ -1,0 +1,33 @@
+name: Zed plugin
+
+# Path-filtered so core PRs do not rebuild the extension by default. Runs when
+# the Zed extension tree or the Tree-sitter grammar it pins changes.
+on:
+  push:
+    paths:
+      - "plugins/zed/**"
+      - "grammars/tree-sitter-jaiph/**"
+      - ".github/workflows/zed-plugin.yml"
+
+jobs:
+  zed-plugin:
+    name: Grammar generate & highlight query-check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install plugin dependencies
+        run: npm install
+        working-directory: plugins/zed
+
+      # Regenerates the grammar from grammar.js and query-checks the shipped
+      # highlights.scm / injections.scm against the fixtures.
+      - name: Grammar & highlight query-check
+        run: npm test
+        working-directory: plugins/zed

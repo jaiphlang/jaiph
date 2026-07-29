@@ -1,0 +1,20 @@
+{
+  "name": "tree-sitter-jaiph",
+  "version": "0.1.0",
+  "description": "Tree-sitter grammar for the Jaiph orchestration language (.jh / *.test.jh)",
+  "license": "MIT",
+  "homepage": "https://jaiph.org",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jaiphlang/jaiph.git",
+    "directory": "grammars/tree-sitter-jaiph"
+  },
+  "keywords": ["tree-sitter", "jaiph", "parser"],
+  "files": ["grammar.js", "tree-sitter.json", "src"],
+  "scripts": {
+    "generate": "tree-sitter generate"
+  },
+  "devDependencies": {
+    "tree-sitter-cli": "^0.24.0"
+  }
+}

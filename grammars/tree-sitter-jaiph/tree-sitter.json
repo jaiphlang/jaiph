@@ -1,0 +1,19 @@
+{
+  "grammars": [
+    {
+      "name": "jaiph",
+      "camelcase": "Jaiph",
+      "scope": "source.jaiph",
+      "file-types": ["jh"]
+    }
+  ],
+  "metadata": {
+    "version": "0.1.0",
+    "license": "MIT",
+    "description": "Tree-sitter grammar for the Jaiph orchestration language",
+    "authors": [{ "name": "Jaiph contributors" }],
+    "links": {
+      "repository": "https://github.com/jaiphlang/jaiph"
+    }
+  }
+}

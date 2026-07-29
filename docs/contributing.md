@@ -222,7 +222,7 @@ Pushing a **`v*`** tag triggers two things in this repo:
 
 Pushes to the **`nightly`** branch follow the same matrix and upload to a **rolling prerelease** tagged `nightly` (`gh release upload nightly --clobber`), so `jaiph use nightly` keeps working under the binary installer.
 
-Pushing a **`v*`** ref does **not** run any npm publish step from this repository — `.github/workflows/` contains `ci.yml` (push CI), `release.yml` (standalone binaries; see above), and `nightly-engineer.yml` (optional manual engineer run), and **none publishes to npm**. If you are preparing a release that includes the **npm** package, coordinate version bumps, registry publish, and smoke checks with the maintainers — that flow is intentionally outside this repo's workflows.
+Pushing a **`v*`** ref does **not** run any npm publish step from this repository — `.github/workflows/` contains `ci.yml` (push CI), `release.yml` (standalone binaries; see above), `nightly-engineer.yml` (optional manual engineer run), and the path-filtered editor-plugin jobs `vscode-plugin.yml` and `zed-plugin.yml` (each builds and tests its extension under `plugins/` only when that extension's tree changes), and **none publishes to npm**. If you are preparing a release that includes the **npm** package, coordinate version bumps, registry publish, and smoke checks with the maintainers — that flow is intentionally outside this repo's workflows.
 
 #### Release asset naming contract
 

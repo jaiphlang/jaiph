@@ -1,0 +1,73 @@
+#!/usr/bin/env jaiph
+# Zed grammar fixture: exercises the current .jh language surface.
+
+import "helpers.jh" as helpers
+
+config {
+  agent.backend = "claude"
+  agent.model = "claude-opus"
+  run.recover_limit = 3
+  runtime.docker_timeout_seconds = 600
+  module.name = "sample"
+}
+
+const REPO = "my-project"
+const NOTE = """
+Multi-line note for ${REPO}
+"""
+
+channel alerts
+channel findings -> handler
+
+script setup_env = ```bash
+mkdir -p out
+```
+
+rule check_deps(path) {
+  run setup_env()
+  return "${path}"
+}
+
+export workflow default(task) {
+  const status = run setup_env()
+
+  if status == "ok" {
+    log "ready"
+  } else if status =~ /warn/ {
+    logwarn "degraded"
+  } else {
+    logerr "failed"
+  }
+
+  for item in status {
+    log item
+  }
+
+  ensure check_deps("package.json") catch (failure) {
+    fail "deps missing"
+  }
+
+  run setup_env() recover (err) {
+    logwarn "retrying"
+  }
+
+  run async helpers.scan()
+
+  const script_out = run ```python3
+print("inline")
+```(task)
+
+  const answer = prompt "Summarize ${task}" returns "{ risk: string }"
+  log "risk: ${answer.risk}"
+
+  alerts <- "started"
+  findings <- run setup_env()
+
+  const label = match status {
+    "ok" => "pass"
+    /err/ => "error"
+    _ => "unknown"
+  }
+
+  return "${label}"
+}
