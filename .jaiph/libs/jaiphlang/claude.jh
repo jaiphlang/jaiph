@@ -1,0 +1,53 @@
+#!/usr/bin/env jaiph
+
+#
+# Claude session capacity gate for long-running orchestration workflows.
+#
+# Usage:
+#   import "jaiphlang/claude" as claude
+#   run claude.ensure_usage()
+#
+# Polls `claude -p "/usage"` until current session usage is at or below 90%,
+# sleeping 10 minutes between recoveries (recover_limit 1000 ≈ 7 days).
+#
+
+script check_capacity = ```
+  local usage percent
+
+  if ! usage="$(claude -p "/usage")"; then
+    printf 'Failed to read Claude usage.\n' >&2
+    return 1
+  fi
+
+  percent="$(
+    printf '%s\n' "$usage" |
+      sed -nE 's/.*Current session: ([0-9]+)% used.*/\1/p' |
+      awk 'NR == 1 { print; exit }'
+  )"
+  case "$percent" in
+    ''|*[!0-9]*)
+      printf 'Could not parse current Claude session usage.\n' >&2
+      return 1
+      ;;
+  esac
+
+  printf 'Claude current session usage is %s%% (threshold: 90%%).' "$percent"
+  (( percent <= 90 ))
+```
+
+workflow probe_and_log() {
+  const status = run check_capacity()
+  log status
+}
+
+export workflow ensure_usage() {
+  config {
+    # At ten-minute intervals this permits roughly 7 days of capacity checks.
+    run.recover_limit = 1000
+  }
+
+  run probe_and_log() recover (failure) {
+    logwarn "${failure}. Checking again in 10 minutes."
+    run `sleep 600`()
+  }
+}

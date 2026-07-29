@@ -5,6 +5,7 @@
 # updates docs, removes from queue, and publishes a workspace patch artifact.
 #
 import "jaiphlang/artifacts" as artifacts
+import "jaiphlang/claude" as claude
 import "jaiphlang/git" as git
 import "jaiphlang/queue" as queue
 import "./docs_parity.jh" as docs
@@ -194,30 +195,6 @@ workflow select_role(role_name) {
 
 script task_text_has_header = `printf '%s\n' "$1" | grep -q '^## '`
 
-script check_claude_capacity = ```
-  local usage percent
-
-  if ! usage="$(claude -p "/usage")"; then
-    printf 'Failed to read Claude usage.\n' >&2
-    return 1
-  fi
-
-  percent="$(
-    printf '%s\n' "$usage" |
-      sed -nE 's/.*Current session: ([0-9]+)% used.*/\1/p' |
-      awk 'NR == 1 { print; exit }'
-  )"
-  case "$percent" in
-    ''|*[!0-9]*)
-      printf 'Could not parse current Claude session usage.\n' >&2
-      return 1
-      ;;
-  esac
-
-  printf 'Claude current session usage is %s%% (threshold: 90%%).' "$percent"
-  (( percent <= 90 ))
-```
-
 script first_line_task = ```
   local line
   line="$(printf '%s\n' "$1" | awk 'NR==1 { print; exit }')"
@@ -323,21 +300,9 @@ workflow implement(task, role_name) {
   """
 }
 
-workflow ensure_claude_usage() {
-  config {
-    # At ten-minute intervals this permits roughly 7 days of capacity checks.
-    run.recover_limit = 1000
-  }
-
-  run check_claude_capacity() recover (failure) {
-    logwarn "${failure}. Checking again in 10 minutes."
-    run `sleep 600`()
-  }
-}
-
 workflow default(name) {
   # ensure git.is_clean
-  run ensure_claude_usage()
+  run claude.ensure_usage()
   const task = run queue.get_first_task()
   const task_header = run first_line_task(task)
   ensure queue.task_is_dev_ready(task)
