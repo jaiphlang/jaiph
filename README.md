@@ -75,6 +75,15 @@ Or install from npm:
 npm install -g jaiph
 ```
 
+In GitHub Actions, install a pinned CLI with the [`setup-jaiph`](actions/setup-jaiph/) composite action (same release binaries, no Node required on the runner):
+
+```yaml
+- uses: jaiphlang/jaiph/actions/setup-jaiph@v0.11.0
+  with:
+    version: 0.11.0        # semver, a release tag, or 'nightly'
+- run: jaiph --version     # jaiph is now on PATH for later steps
+```
+
 Verify: `jaiph --version`. Switch versions: `jaiph use nightly` or `jaiph use 0.11.0`.
 
 Releases ship a `SHA256SUMS` file plus a detached [minisign](https://jedisct1.github.io/minisign/) signature (`SHA256SUMS.minisig`); the installer verifies the checksum and, when `minisign` and the project public key are available, the signature — see [Verify the release signature](docs/setup.md#verify-the-release-signature).
