@@ -4,7 +4,7 @@ import "jaiphlang/claude" as claude
 
 config {
   agent.backend = "claude"
-  agent.model = "fable"
+  agent.model = "opus"
   agent.claude_flags = "--permission-mode bypassPermissions"
 }
 
@@ -19,8 +19,25 @@ const role = """
     (docs/_layouts/docs.html). Do not add manual navigation blocks (e.g.
     "More Documentation" sections) to individual markdown pages — inline
     contextual links to other docs are fine.
-  - Prose must pass the humanizer skill (.jaiph/skills/humanizer/SKILL.md):
-    no AI-writing tells in committed docs.
+  - Prose must follow the plain-writing skill
+    (.jaiph/skills/plain-writing/SKILL.md): everyday words, complete
+    sentences, limited clause stacking, and no unnecessary jargon. Real
+    Jaiph terms (workflow, sandbox, MCP, …) are allowed; define them briefly
+    on first use when a newcomer might not know them.
+"""
+
+const skills_preamble = """
+  Before doing anything else, read and follow BOTH skills:
+  1. .jaiph/skills/documentation-writer/SKILL.md — Diátaxis framework,
+     the four document types, the clarify -> outline -> write workflow,
+     and the four guiding principles (clarity, accuracy, user-centricity,
+     consistency).
+  2. .jaiph/skills/plain-writing/SKILL.md — write and revise prose in a
+     plain, human-readable style (simple words, complete sentences, no
+     unnecessary jargon, limited sentence complexity, full clear
+     explanations). Apply it before considering a page done.
+     For this workflow, follow the writing rules only — do NOT write the
+     optional /tmp revision HTML artifact from that skill.
 """
 
 script assert_newline_paths_are_files = ```
@@ -93,10 +110,12 @@ script list_docs_md_paths = ```
   printf '%s\n' "$out"
 ```
 
+# Docs surfaces the agent may edit: markdown/HTML, CHANGELOG, CLI usage/help
+# strings in usage.ts and per-command USAGE constants (e.g. run.ts).
 script build_allowed_paths_block = ```
   local out f
-  out="$(printf '%s\n' README.md docs/index.html docs/_layouts/docs.html src/cli/shared/usage.ts)"
-  for f in docs/*.md; do
+  out="$(printf '%s\n' README.md CHANGELOG.md docs/index.html docs/_layouts/docs.html src/cli/shared/usage.ts)"
+  for f in docs/*.md src/cli/commands/*.ts; do
     out="$out"$'\n'"$f"
   done
   printf '%s\n' "$out"
@@ -104,28 +123,22 @@ script build_allowed_paths_block = ```
 
 workflow update_from_task(taskDesc) {
   prompt """
-    Before doing anything else, read and follow BOTH skills:
-    1. .jaiph/skills/documentation-writer/SKILL.md — Diátaxis framework,
-       the four document types, the clarify -> outline -> write workflow,
-       and the four guiding principles (clarity, accuracy, user-centricity,
-       consistency).
-    2. .jaiph/skills/humanizer/SKILL.md — remove AI-writing tells from every
-       sentence you write or revise (promotional tone, filler, inflated
-       symbolism, em-dash habit, AI vocabulary, vague attributions, etc.).
-       Apply it before considering the page done; do not leave AI-sounding
-       prose in the docs.
+    ${skills_preamble}
     <role>
     ${role}
     </role>
     <task>
-    Update relevant docs/*.md files and -- if needed -- README.md
-    and docs/index.html to reflect the changes made in the task covered in
-    uncommitted changes. Update also the CHANGELOG.md file to reflect the changes
-    made in the task.
+    Update relevant docs/*.md files and -- if needed -- README.md,
+    docs/index.html, CHANGELOG.md, src/cli/shared/usage.ts, and
+    src/cli/commands/*.ts help/USAGE strings to reflect the changes made in
+    the task covered in uncommitted changes.
 
     Constraints:
-    - Only modify documentation files (docs/*.md, README.md, CHANGELOG.md,
-      docs/index.html). Do NOT modify source code, tests, or config files.
+    - Only modify allowed documentation surfaces: docs/*.md, README.md,
+      CHANGELOG.md, docs/index.html, docs/_layouts/docs.html,
+      src/cli/shared/usage.ts, and src/cli/commands/*.ts (help text / USAGE
+      constants only — do not change command behavior).
+      Do NOT modify tests, config, or unrelated source.
     - Navigation links between docs pages are provided by the Jekyll template.
       Do NOT add manual navigation blocks to individual markdown pages.
 
@@ -137,16 +150,7 @@ workflow update_from_task(taskDesc) {
 
 workflow docs_page(path) {
   prompt """
-    Before doing anything else, read and follow BOTH skills:
-    1. .jaiph/skills/documentation-writer/SKILL.md — Diátaxis framework,
-       the four document types, the clarify -> outline -> write workflow,
-       and the four guiding principles (clarity, accuracy, user-centricity,
-       consistency).
-    2. .jaiph/skills/humanizer/SKILL.md — remove AI-writing tells from every
-       sentence you write or revise (promotional tone, filler, inflated
-       symbolism, em-dash habit, AI vocabulary, vague attributions, etc.).
-       Apply it before considering the page done; do not leave AI-sounding
-       prose in the docs.
+    ${skills_preamble}
     <role>
     ${role}
     </role>
@@ -164,30 +168,23 @@ workflow docs_page(path) {
        suggestions, improvements and other issues.
     4. Keep examples (if present) executable and aligned with current behavior.
     5. Ensure the content is approachable and understandable by a human reader.
-       Keep it simple, concise and clear. After factual edits, run the prose
-       through the humanizer skill (.jaiph/skills/humanizer/SKILL.md) so the
-       page does not read as AI-generated.
+       After factual edits, revise the prose with the plain-writing skill
+       (.jaiph/skills/plain-writing/SKILL.md).
     6. Navigation links between docs pages are provided by the Jekyll template
        (docs/_layouts/docs.html). Do NOT add manual navigation blocks (like
        'More Documentation' sections with links to other docs pages) to
        individual markdown pages. Inline contextual links to other docs are
        fine.
+    7. If this page documents CLI flags or subcommands, also keep
+       src/cli/shared/usage.ts and the matching src/cli/commands/*.ts USAGE
+       / help strings aligned (allowed edit; behavior unchanged).
     </task>
   """
 }
 
 workflow docs_overview(docPaths) {
   prompt """
-    Before doing anything else, read and follow BOTH skills:
-    1. .jaiph/skills/documentation-writer/SKILL.md — Diátaxis framework,
-       the four document types, the clarify -> outline -> write workflow,
-       and the four guiding principles (clarity, accuracy, user-centricity,
-       consistency).
-    2. .jaiph/skills/humanizer/SKILL.md — remove AI-writing tells from every
-       sentence you write or revise (promotional tone, filler, inflated
-       symbolism, em-dash habit, AI vocabulary, vague attributions, etc.).
-       Apply it before considering the page done; do not leave AI-sounding
-       prose in the docs.
+    ${skills_preamble}
     <role>
     ${role}
     </role>
@@ -228,8 +225,10 @@ workflow docs_overview(docPaths) {
        that supports safe feature delivery, preflight checks, implementation
        workflow, verification workflow, and a default entrypoint that
        orchestrates the above.
-    10.Ensure src/cli/shared/usage.ts is up to date with the latest CLI commands
-       and options. It should be a single source of truth for the CLI usage.
+    10.Ensure CLI help text stays aligned with the docs: update
+       src/cli/shared/usage.ts and src/cli/commands/*.ts USAGE / -h strings
+       when flags or subcommands change (help text only; do not change
+       command behavior).
     </task>
   """
 }
