@@ -1,0 +1,81 @@
+#!/usr/bin/env jaiph
+
+#
+# Project orchestration hub — the serve/mcp entrypoint for Jaiph's own
+# maintenance workflows. Exposes only the `export workflow` surface below;
+# helpers in the imported modules stay hidden.
+#
+# Serve (HTTP + MCP Streamable HTTP on the same port):
+#   jaiph serve --inplace -y --env ANTHROPIC_API_KEY --env GITHUB_TOKEN .jaiph/main.jh
+#
+# MCP over stdio:
+#   jaiph mcp --inplace -y --env ANTHROPIC_API_KEY --env GITHUB_TOKEN .jaiph/main.jh
+#
+# Optional args use "" for the workflow default (MCP/HTTP require every
+# declared parameter as a string). gh_ci_passes needs GITHUB_TOKEN or GH_TOKEN.
+#
+import "./architect_review.jh" as arch_mod
+import "./docs_parity.jh" as docs_mod
+import "./engineer.jh" as eng_mod
+import "./ensure_ci_passes.jh" as ci_mod
+import "./gh_ci_passes.jh" as gh_ci_mod
+import "./security_review.jh" as sec_mod
+import "./simplifier.jh" as simp_mod
+import "./prepare_release.jh" as rel_mod
+import "./qa.jh" as qa_mod
+
+config {
+  agent.backend = "claude"
+  agent.claude_flags = "--permission-mode bypassPermissions"
+}
+
+# Review every QUEUE.md task for clarity, architecture fit, and #dev-ready.
+# Marks ready tasks; fails if any still need work.
+export workflow architect_review() {
+  run arch_mod.default()
+}
+
+# Bring docs/ and CLI usage strings in line with the current TypeScript/Bash source.
+# Requires a clean worktree; edits docs and related usage surfaces only.
+export workflow docs_parity() {
+  run docs_mod.default()
+}
+
+# Implement the first #dev-ready QUEUE.md task end-to-end: code, CI, docs, commit patch.
+# Optional role name (e.g. "engineer"); "" lets the workflow classify the role.
+export workflow engineer(role) {
+  return run eng_mod.default(role)
+}
+
+# Run npm run test:ci and loop with an agent until it passes (or recover_limit).
+export workflow ensure_ci_passes() {
+  run ci_mod.default()
+}
+
+# Wait for GitHub Actions CI on the branch, pull failure logs, and repair until green.
+# branch="" uses the current branch; workflow_name="" defaults to "CI". Needs GITHUB_TOKEN.
+export workflow gh_ci_passes(branch, workflow_name) {
+  run gh_ci_mod.default(branch, workflow_name)
+}
+
+# OWASP ASI Top 10 security review; writes a report under .jaiph/tmp/ and fails on HIGH.
+# scope: ""|"codebase"|"full" for whole tree, "diff" for uncommitted, or a git range.
+export workflow security_review(scope) {
+  run sec_mod.default(scope)
+}
+
+# Find and apply safe simplifications (no test/e2e edits), then re-run local CI.
+export workflow simplifier() {
+  run simp_mod.default()
+}
+
+# Stage a release: CHANGELOG review, version bump, installer ref, rebuild, registry.
+# version="" bumps the next patch from package.json; otherwise pass X.Y.Z. No tag/push.
+export workflow prepare_release(version) {
+  return run rel_mod.default(version)
+}
+
+# Find test-coverage gaps and write missing tests until local CI is green.
+export workflow qa() {
+  run qa_mod.default()
+}
