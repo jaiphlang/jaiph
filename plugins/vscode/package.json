@@ -1,0 +1,125 @@
+{
+  "name": "jaiph-syntax-vscode",
+  "displayName": "Jaiph Syntax",
+  "description": "Syntax highlighting and compiler diagnostics for the Jaiph orchestration language (.jh files)",
+  "version": "0.9.0",
+  "publisher": "jaiph",
+  "license": "MIT",
+  "icon": "media/icon.png",
+  "homepage": "https://jaiph.org",
+  "main": "./dist/extension.js",
+  "bugs": {
+    "url": "https://github.com/jaiphlang/jaiph/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jaiphlang/jaiph.git",
+    "directory": "plugins/vscode"
+  },
+  "activationEvents": [
+    "onLanguage:jaiph"
+  ],
+  "scripts": {
+    "compile": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --sourcemap",
+    "watch": "npm run compile -- --watch",
+    "package": "npm run compile -- --minify && vsce package"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.6.0",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.7.0"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "keywords": [
+    "jaiph",
+    "syntax",
+    "highlighting",
+    "diagnostics",
+    "language"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "jaiph",
+        "aliases": [
+          "Jaiph",
+          "jaiph"
+        ],
+        "extensions": [
+          ".jh"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "jaiph",
+        "scopeName": "source.jaiph",
+        "path": "./syntaxes/jaiph.tmLanguage.json",
+        "embeddedLanguages": {
+          "meta.embedded.block.shell.jaiph": "shellscript",
+          "meta.embedded.block.python.jaiph": "python",
+          "meta.embedded.block.javascript.jaiph": "javascript",
+          "meta.embedded.block.typescript.jaiph": "typescript",
+          "meta.embedded.block.ruby.jaiph": "ruby",
+          "meta.embedded.block.perl.jaiph": "perl",
+          "meta.embedded.block.lua.jaiph": "lua",
+          "meta.embedded.block.powershell.jaiph": "powershell",
+          "meta.embedded.block.php.jaiph": "php",
+          "meta.embedded.block.markdown.jaiph": "markdown"
+        }
+      },
+      {
+        "scopeName": "source.jaiph.embedded.python",
+        "path": "./syntaxes/jaiph-python-injection.tmLanguage.json",
+        "injectTo": [
+          "source.jaiph"
+        ],
+        "embeddedLanguages": {
+          "meta.embedded.block.python.jaiph": "python"
+        }
+      },
+      {
+        "scopeName": "source.jaiph.embedded.javascript",
+        "path": "./syntaxes/jaiph-javascript-injection.tmLanguage.json",
+        "injectTo": [
+          "source.jaiph"
+        ],
+        "embeddedLanguages": {
+          "meta.embedded.block.javascript.jaiph": "javascript"
+        }
+      },
+      {
+        "scopeName": "source.jaiph.embedded.markdown",
+        "path": "./syntaxes/jaiph-markdown-injection.tmLanguage.json",
+        "injectTo": [
+          "source.jaiph"
+        ],
+        "embeddedLanguages": {
+          "meta.embedded.block.markdown.jaiph": "markdown"
+        }
+      }
+    ],
+    "configuration": {
+      "title": "Jaiph",
+      "properties": {
+        "jaiph.compilerPath": {
+          "type": "string",
+          "default": "jaiph",
+          "description": "Path to the Jaiph compiler binary (absolute path or command name on PATH)"
+        },
+        "jaiph.diagnostics.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable compiler diagnostics on save and file open"
+        }
+      }
+    }
+  }
+}
