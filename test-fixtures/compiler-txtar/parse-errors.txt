@@ -2650,3 +2650,13 @@ workflow default() {
 config {
   trusted_envs = [
     "PATH"
+
+=== module.* keys rejected in workflow-level config
+# @expect error E_PARSE "module.* keys are not allowed in workflow-level config" @2:1
+--- input.jh
+workflow default() {
+  config {
+    module.name = "nope"
+  }
+  log "hi"
+}

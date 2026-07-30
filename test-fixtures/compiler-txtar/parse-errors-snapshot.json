@@ -2056,5 +2056,12 @@
     "col": 1,
     "code": "E_PARSE",
     "message": "array not closed with ']'"
+  },
+  "module.* keys rejected in workflow-level config": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "module.* keys are not allowed in workflow-level config (only agent.* and run.* keys)"
   }
 }
