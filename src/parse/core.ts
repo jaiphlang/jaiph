@@ -17,6 +17,23 @@ export function stripQuotes(value: string): string {
   return trimmed;
 }
 
+/**
+ * Unescape the inner text of a double-quoted DSL string. The replacement order
+ * (`\"` → `"`, then `\n` → newline, then `\\` → `\`) is significant and matches
+ * every double-quoted-string decode site in the parser.
+ */
+export function unescapeDoubleQuotedInner(inner: string): string {
+  return inner.replace(/\\"/g, '"').replace(/\\n/g, "\n").replace(/\\\\/g, "\\");
+}
+
+/**
+ * Unescape the inner text of a config/metadata string value. Adds `\t` handling
+ * and uses the config-site order (`\n`, `\t`, `\"`, `\\`).
+ */
+export function unescapeConfigInner(inner: string): string {
+  return inner.replace(/\\n/g, "\n").replace(/\\t/g, "\t").replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+}
+
 export function isRef(value: string): boolean {
   return /^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?$/.test(value);
 }
@@ -211,7 +228,7 @@ export function commaArgsToArgList(content: string): Arg[] {
   return out;
 }
 
-function pushArg(out: Arg[], segment: string): void {
+export function pushArg(out: Arg[], segment: string): void {
   const trimmed = segment.trim();
   if (!trimmed) return;
   if (isBareIdentifier(trimmed) || isBareDottedIdentifier(trimmed)) {

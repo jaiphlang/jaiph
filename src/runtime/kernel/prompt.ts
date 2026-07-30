@@ -6,7 +6,7 @@ import { basename, delimiter, join } from "node:path";
 import { homedir, tmpdir } from "node:os";
 import { parseStream, type StreamWriter } from "./stream-parser";
 import { consumeNextMockResponse, dispatchMockArms, type MockPromptArm } from "./mock";
-import { killProcessTree } from "./portability";
+import { killProcessTreeEscalating } from "./portability";
 import { scrubPromptEnv } from "./env-allowlist";
 
 export type PromptConfig = {
@@ -505,12 +505,8 @@ export function installPromptWatchdog(
     }
     // Terminate the backend and any descendants it spawned. On win32 this
     // taskkill /T already force-kills the tree, so the SIGKILL escalation
-    // below is a documented no-op there (see killProcessTree).
-    killProcessTree(pid, "SIGTERM");
-    const escalate = setTimeout(() => {
-      killProcessTree(pid, "SIGKILL");
-    }, 5000);
-    escalate.unref?.();
+    // is a documented no-op there (see killProcessTree).
+    killProcessTreeEscalating(pid);
   };
 
   const expire = (status: number, reason: string): void => {

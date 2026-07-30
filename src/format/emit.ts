@@ -359,6 +359,16 @@ function emitLogLiteralRhs(message: string): string {
   return JSON.stringify(message);
 }
 
+/**
+ * Decode a double-quoted literal's `raw` back to the inner body of its
+ * triple-quoted (`"""…"""`) source form: strip the outer quotes and undo the
+ * `\"` / `\\` escaping the parser applied. Used only as the fallback when
+ * `trivia.rawBody` (the verbatim original body) is absent.
+ */
+function decodeTripleQuotedInner(raw: string): string {
+  return raw.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+}
+
 function emitSteps(steps: WorkflowStepDef[], pad: string, currentIndent: string, trivia: Trivia): string[] {
   const lines: string[] = [];
   for (const step of steps) {
@@ -410,7 +420,7 @@ function emitMatchPattern(p: import("../types").MatchPatternDef): string {
 function emitMatchArm(arm: import("../types").MatchArmDef, armIndent: string, bodyIndent: string): string[] {
   const patStr = emitMatchPattern(arm.pattern);
   if (arm.body.startsWith('"') && arm.body.endsWith('"') && arm.body.includes("\n")) {
-    const inner = arm.body.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+    const inner = decodeTripleQuotedInner(arm.body);
     const lines: string[] = [`${armIndent}${patStr} => """`];
     for (const bl of inner.split("\n")) {
       lines.push(bl);
@@ -436,7 +446,7 @@ function emitExprFirstLine(
   const valueTrivia = tn(trivia, expr);
   if (expr.kind === "literal") {
     if (valueTrivia.tripleQuoted) {
-      const inner = valueTrivia.rawBody ?? expr.raw.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+      const inner = valueTrivia.rawBody ?? decodeTripleQuotedInner(expr.raw);
       const tail: string[] = [];
       for (const bl of inner.split("\n")) tail.push(bl);
       tail.push(`${ci}"""`);
@@ -470,7 +480,7 @@ function emitExprFirstLine(
       return { head: `prompt ${valueTrivia.bodyIdentifier}${returns}`, tail: [] };
     }
     if (valueTrivia.bodyKind === "triple_quoted") {
-      const inner = valueTrivia.rawBody ?? expr.raw.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+      const inner = valueTrivia.rawBody ?? decodeTripleQuotedInner(expr.raw);
       const tail: string[] = [];
       for (const bl of inner.split("\n")) tail.push(bl);
       tail.push(`${ci}"""`);
@@ -523,7 +533,7 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string, tri
       // fail always takes a literal message; preserve triple-quoted form when present.
       const msgTrivia = tn(trivia, message);
       if (message.kind === "literal" && msgTrivia.tripleQuoted) {
-        const inner = msgTrivia.rawBody ?? message.raw.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+        const inner = msgTrivia.rawBody ?? decodeTripleQuotedInner(message.raw);
         lines.push(`${ci}fail """`);
         for (const bl of inner.split("\n")) lines.push(bl);
         lines.push(`${ci}"""`);
@@ -641,7 +651,7 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string, tri
       if (bodyTrivia.bodyKind === "identifier" && bodyTrivia.bodyIdentifier) {
         lines.push(`${ci}${capture}prompt ${bodyTrivia.bodyIdentifier}${returns}`);
       } else if (bodyTrivia.bodyKind === "triple_quoted") {
-        const inner = bodyTrivia.rawBody ?? body.raw.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+        const inner = bodyTrivia.rawBody ?? decodeTripleQuotedInner(body.raw);
         lines.push(`${ci}${capture}prompt """`);
         for (const bl of inner.split("\n")) lines.push(bl);
         lines.push(`${ci}"""`);

@@ -1,16 +1,6 @@
 import type { Arg } from "../types";
-import { fail, isBareIdentifier, isBareDottedIdentifier, isRef, parseCallRef } from "./core";
+import { fail, isRef, parseCallRef, pushArg } from "./core";
 import { dedentTripleQuotedBody, parseTripleQuoteBlock, tripleQuoteBodyToRaw } from "./triple-quote";
-
-function pushArgFromSegment(out: Arg[], segment: string): void {
-  const trimmed = segment.trim();
-  if (!trimmed) return;
-  if (isBareIdentifier(trimmed) || isBareDottedIdentifier(trimmed)) {
-    out.push({ kind: "var", name: trimmed });
-    return;
-  }
-  out.push({ kind: "literal", raw: trimmed });
-}
 
 /**
  * Collect call arguments for a managed call whose `(` is on `openLineIdx` and may
@@ -56,13 +46,13 @@ export function parseMultilineCallArgList(
       if (ch === ")") {
         parenDepth--;
         if (parenDepth === 0) {
-          pushArgFromSegment(args, pendingText);
+          pushArg(args, pendingText);
           return { args, nextLineIdx: lineIdx + 1, rest: toScan.slice(i + 1) };
         }
         pendingText += ch; i++; continue;
       }
       if (ch === "," && parenDepth === 1) {
-        pushArgFromSegment(args, pendingText);
+        pushArg(args, pendingText);
         pendingText = "";
         i++;
         continue;

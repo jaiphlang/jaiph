@@ -125,6 +125,20 @@ export function killProcessTree(pid: number, signal: NodeJS.Signals): void {
   }
 }
 
+/**
+ * Send `SIGTERM` to the process tree now, then escalate to `SIGKILL` after
+ * `graceMs` if anything survives. The escalation timer is `unref`d so it never
+ * keeps the event loop alive on its own. On win32 the SIGKILL escalation is a
+ * documented no-op (see {@link killProcessTree}).
+ */
+export function killProcessTreeEscalating(pid: number, graceMs = 5000): void {
+  killProcessTree(pid, "SIGTERM");
+  const escalate = setTimeout(() => {
+    killProcessTree(pid, "SIGKILL");
+  }, graceMs);
+  escalate.unref?.();
+}
+
 function killProcessTreeWin32(pid: number, signal: NodeJS.Signals): void {
   // `taskkill /F` already force-killed the tree on the first (SIGTERM/SIGINT)
   // call, so the SIGKILL escalation has nothing left to terminate.
