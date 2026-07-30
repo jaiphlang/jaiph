@@ -935,6 +935,15 @@
       "message": "script \"myscript\" cannot be called with run"
     }
   ],
+  "validate-errors.txt > log with nested inline capture rejected": [
+    {
+      "file": "input.jh",
+      "line": 3,
+      "col": 3,
+      "code": "E_PARSE",
+      "message": "log cannot contain nested inline captures; extract to a const variable"
+    }
+  ],
   "validate-errors-multi-module.txt > duplicate import alias": [
     {
       "file": "main.jh",

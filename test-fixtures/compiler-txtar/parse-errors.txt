@@ -2660,3 +2660,33 @@ workflow default() {
   }
   log "hi"
 }
+
+=== match arm closing triple-quote with trailing content
+# @expect error E_PARSE "in match arm must not have content on the same line" @6:1
+--- input.jh
+workflow default() {
+  const x = "hello"
+  return match x {
+    "a" => """
+body
+""" oops
+  }
+}
+
+=== top-level const without equals sign
+# @expect error E_PARSE "invalid declaration" @1:1
+--- input.jh
+const FOO
+workflow default() {
+  log "hi"
+}
+
+=== top-level const triple-quote with trailing content after close
+# @expect error E_PARSE "in const declaration" @3:1
+--- input.jh
+const FOO = """
+hi
+""" trailing
+workflow default() {
+  log "hi"
+}

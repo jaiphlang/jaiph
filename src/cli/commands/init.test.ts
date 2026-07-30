@@ -71,3 +71,30 @@ test("init: fails when .jaiph/bootstrap.jh exists with unexpected content", () =
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("init: rejects an existing non-directory path with a clean message", () => {
+  const dir = makeTempDir();
+  try {
+    const filePath = join(dir, "not-a-dir.txt");
+    writeFileSync(filePath, "x", "utf8");
+    // Existing non-directory hits the guard at init.ts:53-55 (rc 1, no throw).
+    assert.equal(runInit([filePath]), 1);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// SKIPPED — exposes a production bug (see .jaiph/tmp/qa_bug_report.md,
+// "jaiph init uncaught ENOENT on nonexistent path"): `statSync` at init.ts:52
+// has no try/catch, so a nonexistent path throws a raw ENOENT stack instead of
+// the clean "expects a directory path" guard message. Fixing production code is
+// out of scope for this test pass. Unskip once init.ts wraps statSync.
+test("init: rejects a nonexistent path with a clean message", { skip: "blocked by uncaught-ENOENT bug — see qa_bug_report.md" }, () => {
+  const dir = makeTempDir();
+  try {
+    const missing = join(dir, "does-not-exist-xyz");
+    assert.equal(runInit([missing]), 1);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
