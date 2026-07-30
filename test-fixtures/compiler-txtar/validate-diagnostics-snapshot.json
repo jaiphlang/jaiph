@@ -899,6 +899,42 @@
       "message": "cannot mix \"mock prompt { … }\" with queued \"mock prompt …\" in one test block; choose one style"
     }
   ],
+  "validate-errors.txt > const inside workflow shadows module script name": [
+    {
+      "file": "input.jh",
+      "line": 3,
+      "col": 3,
+      "code": "E_VALIDATE",
+      "message": "cannot rebind immutable name \"greet\"; already bound as script in this module"
+    }
+  ],
+  "validate-errors.txt > for-loop iterator name collides with const": [
+    {
+      "file": "input.jh",
+      "line": 3,
+      "col": 3,
+      "code": "E_VALIDATE",
+      "message": "for loop iterator \"x\" conflicts with an existing binding"
+    }
+  ],
+  "validate-errors.txt > run unknown name inside rule": [
+    {
+      "file": "input.jh",
+      "line": 2,
+      "col": 3,
+      "code": "E_VALIDATE",
+      "message": "unknown local script reference \"nope\" (run in rules must target a script)"
+    }
+  ],
+  "validate-errors.txt > channel route targeting a script is rejected": [
+    {
+      "file": "input.jh",
+      "line": 1,
+      "col": 21,
+      "code": "E_VALIDATE",
+      "message": "script \"myscript\" cannot be called with run"
+    }
+  ],
   "validate-errors-multi-module.txt > duplicate import alias": [
     {
       "file": "main.jh",
