@@ -1,5 +1,11 @@
 #!/usr/bin/env jaiph
 
+#
+# Find and apply safe simplifications, verify CI, commit if anything changed.
+# Safe for overnight loops: starts clean, ends clean (commit or no-op).
+#
+#   jaiph run .jaiph/simplifier.jh
+#
 import "./ensure_ci_passes.jh" as ci
 import "jaiphlang/git" as git
 
@@ -142,6 +148,11 @@ workflow apply_simplifications() {
 
 script mkdir_tmp_jaiph = `mkdir -p .jaiph/tmp`
 
+const commit_task = """
+  Simplifier pass: apply safe code simplifications from
+  .jaiph/tmp/simplifier_report.md. Preserve behavior; no test/ or e2e/ edits.
+"""
+
 workflow default() {
   ensure git.is_clean()
   run mkdir_tmp_jaiph()
@@ -149,4 +160,5 @@ workflow default() {
   run apply_simplifications()
   run ci.ensure_ci_passes()
   ensure no_test_or_e2e_paths_changed()
+  run git.commit_if_changes(commit_task)
 }

@@ -58,13 +58,14 @@ export workflow gh_ci_passes(branch, workflow_name) {
   run gh_ci_mod.default(branch, workflow_name)
 }
 
-# OWASP ASI Top 10 security review; writes a report under .jaiph/tmp/ and fails on HIGH.
+# OWASP ASI Top 10 security review; report under .jaiph/tmp/, HIGH/MEDIUM →
+# #dev-ready QUEUE.md tasks (committed when the queue changes). Overnight-safe.
 # scope: ""|"codebase"|"full" for whole tree, "diff" for uncommitted, or a git range.
 export workflow security_review(scope) {
   run sec_mod.default(scope)
 }
 
-# Find and apply safe simplifications (no test/e2e edits), then re-run local CI.
+# Find and apply safe simplifications (no test/e2e edits), CI, commit if changed.
 export workflow simplifier() {
   run simp_mod.default()
 }
@@ -75,7 +76,7 @@ export workflow prepare_release(version) {
   return run rel_mod.default(version)
 }
 
-# Find test-coverage gaps and write missing tests until local CI is green.
+# Find test-coverage gaps, write missing tests, CI, commit if changed.
 export workflow qa() {
   run qa_mod.default()
 }
