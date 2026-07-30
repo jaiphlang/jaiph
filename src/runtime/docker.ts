@@ -4,7 +4,7 @@ import { randomBytes } from "node:crypto";
 import { join, resolve, relative, sep, dirname } from "node:path";
 import type { RuntimeConfig } from "../types";
 import { VERSION } from "../version";
-import { killProcessTree } from "./kernel/portability";
+import { killProcessTreeEscalating } from "./kernel/portability";
 import { isEnvAllowed, RUN_WORKFLOW_ENV, type AgentBackend } from "./kernel/env-allowlist";
 
 /** Resolved Docker runtime config with defaults applied and env overrides merged. */
@@ -830,15 +830,9 @@ export function buildDockerArgs(opts: DockerSpawnOptions): string[] {
   }
 
   // Single workspace mount — no user-configurable mounts.
-  if (mode === "inplace") {
-    const hostAbs = resolve(opts.workspaceRoot);
-    validateMountHostPath(hostAbs);
-    args.push("-v", `${hostAbs}:${CONTAINER_WORKSPACE}:rw`);
-  } else {
-    const hostAbs = resolve(opts.sandboxWorkspaceDir!);
-    validateMountHostPath(hostAbs);
-    args.push("-v", `${hostAbs}:${CONTAINER_WORKSPACE}:rw`);
-  }
+  const hostAbs = resolve(mode === "inplace" ? opts.workspaceRoot : opts.sandboxWorkspaceDir!);
+  validateMountHostPath(hostAbs);
+  args.push("-v", `${hostAbs}:${CONTAINER_WORKSPACE}:rw`);
 
   args.push("-v", `${opts.sandboxRunDir}:${CONTAINER_RUN_DIR}:rw`);
 
@@ -964,12 +958,9 @@ export function spawnDockerProcess(opts: DockerSpawnOptions): DockerSpawnResult 
         return;
       }
       // Terminate the `docker run` client and its descendants. On win32 the
-      // taskkill /T force-kills the tree, so the SIGKILL escalation below is a
+      // taskkill /T force-kills the tree, so the SIGKILL escalation is a
       // documented no-op there (see killProcessTree).
-      killProcessTree(pid, "SIGTERM");
-      setTimeout(() => {
-        killProcessTree(pid, "SIGKILL");
-      }, 5000);
+      killProcessTreeEscalating(pid);
     }, opts.config.timeoutSeconds * 1000);
   }
 

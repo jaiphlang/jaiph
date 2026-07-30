@@ -506,26 +506,20 @@ export class NodeWorkflowRuntime {
       // Nested cross-module calls: only the entry module is trusted for execution-binary keys.
       const fromEntryModule = !inheritCallerMetadataScope
         || calleeModulePath === resolvePath(this.graph.entryFile);
-      let workflowEnv: NodeJS.ProcessEnv;
-      if (inheritCallerMetadataScope && crossModuleNested) {
-        workflowEnv = this.applyMetadataScope(
-          scope.env,
-          this.graph.modules.get(resolved.filePath)?.ast.metadata,
-          resolved.workflow.metadata,
-          metadataVars,
-          fromEntryModule,
-        );
-      } else if (inheritCallerMetadataScope) {
-        workflowEnv = this.applyMetadataScope(scope.env, undefined, resolved.workflow.metadata, metadataVars, fromEntryModule);
-      } else {
-        workflowEnv = this.applyMetadataScope(
-          scope.env,
-          this.graph.modules.get(resolved.filePath)?.ast.metadata,
-          resolved.workflow.metadata,
-          metadataVars,
-          fromEntryModule,
-        );
-      }
+      // Same-module nested `run` layers only the callee workflow metadata (module config is already
+      // in the caller's effective env); root entry and cross-module `run` both also apply the callee
+      // module's metadata.
+      const moduleMeta =
+        inheritCallerMetadataScope && !crossModuleNested
+          ? undefined
+          : this.graph.modules.get(resolved.filePath)?.ast.metadata;
+      const workflowEnv = this.applyMetadataScope(
+        scope.env,
+        moduleMeta,
+        resolved.workflow.metadata,
+        metadataVars,
+        fromEntryModule,
+      );
       const childScope: Scope = {
         filePath: resolved.filePath,
         vars: metadataVars,

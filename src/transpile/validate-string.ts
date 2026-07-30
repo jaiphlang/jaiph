@@ -204,7 +204,7 @@ export function extractDotFieldRefs(content: string): DotFieldRef[] {
 /**
  * Strip outer double quotes from a string if present.
  */
-function stripDoubleQuotes(s: string): string {
+export function stripDoubleQuotes(s: string): string {
   if (s.length >= 2 && s[0] === '"' && s[s.length - 1] === '"') {
     return s.slice(1, -1);
   }

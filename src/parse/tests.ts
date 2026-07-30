@@ -1,6 +1,14 @@
 import type { MatchArmDef, TestBlockDef, WorkflowStepDef } from "../types";
 import { createTrivia, type Trivia } from "./trivia";
-import { colFromRaw, fail, hasUnescapedClosingQuote, isRef, parseParamList, stripQuotes } from "./core";
+import {
+  colFromRaw,
+  fail,
+  hasUnescapedClosingQuote,
+  isRef,
+  parseParamList,
+  stripQuotes,
+  unescapeDoubleQuotedInner,
+} from "./core";
 import { parseMatchArms } from "./match";
 import { parseBraceBlockBody } from "./workflow-brace";
 
@@ -53,8 +61,7 @@ function parseMockScriptBlock(
 }
 
 function decodeQuotedTestString(arg: string): string {
-  const inner = stripQuotes(arg);
-  return inner.replace(/\\"/g, '"').replace(/\\n/g, "\n").replace(/\\\\/g, "\\");
+  return unescapeDoubleQuotedInner(stripQuotes(arg));
 }
 
 /** Parse mock params: "()" or "(a, b)" from a string like "alias.name(a, b) {" */
@@ -300,7 +307,7 @@ export function parseTestBlock(
       testBlock.steps.push({
         type: "test_const",
         name: constLiteralMatch[1],
-        value: constLiteralMatch[2].replace(/\\"/g, '"').replace(/\\n/g, "\n").replace(/\\\\/g, "\\"),
+        value: unescapeDoubleQuotedInner(constLiteralMatch[2]),
         loc,
       });
       continue;
@@ -401,7 +408,7 @@ function parseTestCallArgs(argsRaw: string): string[] {
 
 function decodeTestArg(token: string): string {
   if (token.startsWith('"') && token.endsWith('"')) {
-    return token.slice(1, -1).replace(/\\"/g, '"').replace(/\\n/g, "\n").replace(/\\\\/g, "\\");
+    return unescapeDoubleQuotedInner(token.slice(1, -1));
   }
   return token;
 }

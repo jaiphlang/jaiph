@@ -1,6 +1,6 @@
 import type { WorkflowMetadata } from "../types";
 import type { Trivia, ConfigBodyPart } from "./trivia";
-import { colFromRaw, fail, isBareIdentifier, isJaiphInterpolationRef } from "./core";
+import { colFromRaw, fail, isBareIdentifier, isJaiphInterpolationRef, unescapeConfigInner } from "./core";
 import { validateJaiphStringContent } from "../transpile/validate-string";
 import { ENV_KEY_RE, isReservedEnvKey } from "../env-reserved";
 
@@ -68,7 +68,7 @@ function parseMetadataValue(filePath: string, rawLine: string, valuePart: string
     return fail(filePath, 'single-quoted strings are not supported; use double quotes ("...") instead', lineNo, colFromRaw(rawLine));
   }
   if (trimmed.startsWith(`"`) && trimmed.endsWith(`"`)) {
-    const content = trimmed.slice(1, -1).replace(/\\n/g, "\n").replace(/\\t/g, "\t").replace(/\\"/g, `"`).replace(/\\\\/g, `\\`);
+    const content = unescapeConfigInner(trimmed.slice(1, -1));
     if (configValueHasInterpolation(content)) {
       validateJaiphStringContent(content, filePath, lineNo, colFromRaw(rawLine), "config");
     }
@@ -151,9 +151,7 @@ function parseArrayValue(
       return fail(filePath, 'single-quoted strings are not supported; use double quotes ("...") instead', lineNo, colFromRaw(raw));
     }
     if (element.startsWith(`"`) && element.endsWith(`"`)) {
-      result.push(
-        element.slice(1, -1).replace(/\\n/g, "\n").replace(/\\t/g, "\t").replace(/\\"/g, `"`).replace(/\\\\/g, `\\`),
-      );
+      result.push(unescapeConfigInner(element.slice(1, -1)));
     } else {
       return fail(filePath, `array elements must be quoted strings: ${element}`, lineNo, colFromRaw(raw));
     }

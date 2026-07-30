@@ -29,6 +29,7 @@ import {
 import {
   extractDotFieldRefs,
   extractInlineCaptures,
+  stripDoubleQuotes,
   validateFailString,
   validateJaiphStringContent,
   validateLogString,
@@ -191,7 +192,7 @@ function validateSayStep(s: WorkflowStepDef, ctx: ValidatorCtx): void {
     );
   }
   validateFailString(s.message.raw, ctx.ast.filePath, s.loc.line, s.loc.col);
-  const failInner = semanticQuotedOrchestrationInner(s.message.raw);
+  const failInner = stripDoubleQuotes(s.message.raw);
   validateInlineStringCaptures(failInner, s.loc, ctx);
   if (ctx.scope.withPromptSchemas) {
     validateDotFieldRefs(failInner, s.loc, ctx);
@@ -373,7 +374,7 @@ function validateLiteralExpr(
   if (label === "return") {
     validateReturnString(expr.raw, ctx.ast.filePath, stepLoc.line, stepLoc.col);
     if (expr.raw.startsWith('"')) {
-      const retInner = stripDQ(expr.raw);
+      const retInner = stripDoubleQuotes(expr.raw);
       validateInlineStringCaptures(retInner, stepLoc, ctx);
       if (ctx.scope.withPromptSchemas) {
         validateDotFieldRefs(retInner, stepLoc, ctx);
@@ -404,7 +405,7 @@ function validateLiteralExpr(
       `scripts are not values; "${scriptName}" is a script definition`,
     );
   }
-  const inner = stripDQ(expr.raw);
+  const inner = stripDoubleQuotes(expr.raw);
   validateInlineStringCaptures(inner, stepLoc, ctx);
   if (ctx.scope.withPromptSchemas) {
     validateDotFieldRefs(inner, stepLoc, ctx);
@@ -461,7 +462,7 @@ function validatePromptExpr(
   if (expr.returns !== undefined) {
     validatePromptReturnsSchema(expr.returns, ctx.ast.filePath, stepLoc.line, stepLoc.col);
   }
-  const pcInner = stripDQ(expr.raw);
+  const pcInner = stripDoubleQuotes(expr.raw);
   validateInlineStringCaptures(pcInner, stepLoc, ctx);
   validateDotFieldRefs(pcInner, stepLoc, ctx);
   validateSimpleInterpolationIdentifiers(
@@ -1057,18 +1058,10 @@ function hasUnquotedSendArrow(line: string): boolean {
   return false;
 }
 
-function stripDQ(s: string): string {
-  return s.length >= 2 && s[0] === '"' && s[s.length - 1] === '"' ? s.slice(1, -1) : s;
-}
-
-function semanticQuotedOrchestrationInner(dqRaw: string): string {
-  return stripDQ(dqRaw);
-}
-
 function extractConstScriptName(rhs: string): string | undefined {
   const trimmed = rhs.trim();
   if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(trimmed)) return trimmed;
-  const inner = stripDQ(trimmed);
+  const inner = stripDoubleQuotes(trimmed);
   const m = inner.match(/^\$\{([a-zA-Z_][a-zA-Z0-9_]*)\}$/);
   return m?.[1];
 }
