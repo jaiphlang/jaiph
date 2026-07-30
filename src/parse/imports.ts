@@ -1,5 +1,5 @@
 import type { ImportDef, ScriptImportDef } from "../types";
-import { fail, stripQuotes } from "./core";
+import { fail, SINGLE_QUOTE_MESSAGE, stripQuotes } from "./core";
 
 function parsePathAlias(
   filePath: string,
@@ -15,7 +15,7 @@ function parsePathAlias(
   }
   const pathRaw = match[1].trim();
   if (pathRaw.startsWith("'")) {
-    fail(filePath, 'single-quoted strings are not supported; use double quotes ("...") instead', lineNo);
+    fail(filePath, SINGLE_QUOTE_MESSAGE, lineNo);
   }
   return {
     path: stripQuotes(pathRaw),

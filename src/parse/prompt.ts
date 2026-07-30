@@ -1,6 +1,6 @@
 import type { Expr, WorkflowStepDef } from "../types";
 import { createTrivia, type Trivia } from "./trivia";
-import { fail, hasUnescapedClosingQuote, indexOfClosingDoubleQuote, isJaiphInterpolationRef } from "./core";
+import { fail, SINGLE_QUOTE_MESSAGE, hasUnescapedClosingQuote, indexOfClosingDoubleQuote, isJaiphInterpolationRef } from "./core";
 import { dedentTripleQuotedBody, parseTripleQuoteBlock, tripleQuoteBodyToRaw } from "./triple-quote";
 
 /**
@@ -47,7 +47,7 @@ function splitPromptAndReturns(
     if (/^returns\s+'/.test(trimmed)) {
       fail(
         filePath,
-        'single-quoted strings are not supported; use double quotes ("...") instead',
+        SINGLE_QUOTE_MESSAGE,
         lineNo,
         1,
       );
@@ -107,7 +107,7 @@ export function parseReturnsClause(
   const returnsMatch = trimmed.match(/^returns\s+"/);
   if (!returnsMatch) {
     if (/^returns\s+'/.test(trimmed)) {
-      fail(filePath, 'single-quoted strings are not supported; use double quotes ("...") instead', lineNo, 1);
+      fail(filePath, SINGLE_QUOTE_MESSAGE, lineNo, 1);
     }
     fail(
       filePath,

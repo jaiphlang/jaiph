@@ -5,6 +5,9 @@ export function fail(filePath: string, message: string, lineNo: number, col = 1)
   throw jaiphError(filePath, lineNo, col, "E_PARSE", message);
 }
 
+export const SINGLE_QUOTE_MESSAGE =
+  'single-quoted strings are not supported; use double quotes ("...") instead';
+
 export function stripQuotes(value: string): string {
   const trimmed = value.trim();
   if (trimmed.length >= 2) {
