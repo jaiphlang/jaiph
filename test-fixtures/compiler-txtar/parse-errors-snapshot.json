@@ -2021,5 +2021,40 @@
     "col": 1,
     "code": "E_PARSE",
     "message": "unterminated multiline call — missing closing \")\""
+  },
+  "multiline call content before triple-quoted argument": {
+    "file": "input.jh",
+    "line": 4,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "unexpected content before triple-quoted call argument"
+  },
+  "malformed for loop header missing in keyword": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 3,
+    "code": "E_PARSE",
+    "message": "invalid for syntax; expected: for <identifier> in <identifier> { ... }"
+  },
+  "match alternation with trailing pipe before arrow": {
+    "file": "input.jh",
+    "line": 4,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "trailing | in match alternation; expected a pattern after |"
+  },
+  "config array element must be a quoted string": {
+    "file": "input.jh",
+    "line": 3,
+    "col": 5,
+    "code": "E_PARSE",
+    "message": "array elements must be quoted strings: unquoted_value"
+  },
+  "config multi-line array not closed": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "array not closed with ']'"
   }
 }

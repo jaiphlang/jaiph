@@ -2601,3 +2601,52 @@ workflow default() {
 workflow default() {
   return ensure missing_close(
 }
+
+=== multiline call content before triple-quoted argument
+# @expect error E_PARSE "unexpected content before triple-quoted call argument" @4:1
+--- input.jh
+workflow default() {
+  const x = run foo(
+junk
+"""
+body
+""")
+}
+
+=== malformed for loop header missing in keyword
+# @expect error E_PARSE "invalid for syntax" @2:3
+--- input.jh
+workflow default() {
+  for x {
+  }
+}
+
+=== match alternation with trailing pipe before arrow
+# @expect error E_PARSE "trailing | in match alternation" @4:1
+--- input.jh
+workflow default() {
+  const x = "hello"
+  return match x {
+    "hello" | => "hi"
+    _ => "no"
+  }
+}
+
+=== config array element must be a quoted string
+# @expect error E_PARSE "array elements must be quoted strings" @3:5
+--- input.jh
+config {
+  trusted_envs = [
+    unquoted_value
+  ]
+}
+workflow default() {
+  log "ok"
+}
+
+=== config multi-line array not closed
+# @expect error E_PARSE "array not closed with ']'" @2:1
+--- input.jh
+config {
+  trusted_envs = [
+    "PATH"

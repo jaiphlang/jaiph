@@ -1053,3 +1053,41 @@ workflow ask() {
   return r
 }
 
+
+=== const inside workflow shadows module script name
+# @expect error E_VALIDATE "already bound as script in this module" @3:3
+--- input.jh
+script greet = `echo hi`
+workflow default() {
+  const greet = "x"
+  log "done"
+}
+
+=== for-loop iterator name collides with const
+# @expect error E_VALIDATE "conflicts with an existing binding" @3:3
+--- input.jh
+workflow default(items) {
+  const x = "a"
+  for x in items {
+    log "${x}"
+  }
+}
+
+=== run unknown name inside rule
+# @expect error E_VALIDATE "unknown local script reference" @2:3
+--- input.jh
+rule check() {
+  run nope()
+}
+workflow default() {
+  ensure check()
+}
+
+=== channel route targeting a script is rejected
+# @expect error E_VALIDATE "cannot be called with run" @1:21
+--- input.jh
+channel findings -> myscript
+script myscript = `true`
+workflow default() {
+  log "ok"
+}

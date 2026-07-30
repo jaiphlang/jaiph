@@ -234,6 +234,217 @@ test("buildRunTreeRows: includes root and children", () => {
   assert.equal(rows[0].rawLabel, "workflow default");
 });
 
+test("buildRunTreeRows: prefix indents 4 spaces per nesting level", () => {
+  const mod = modFor([
+    "workflow default() {",
+    "  run a()",
+    "}",
+    "workflow a() {",
+    "  run b()",
+    "}",
+    "workflow b() {",
+    "  log \"deep\"",
+    "}",
+  ].join("\n"));
+  const rows = buildRunTreeRows(mod);
+  // root's direct children sit at prefix 0; each deeper level adds 4 spaces.
+  const byLabel = (label: string) => rows.find((r) => r.rawLabel === label);
+  assert.equal(rows[0].prefix, ""); // root
+  assert.equal(byLabel("workflow a")?.prefix, ""); // default's child
+  assert.equal(byLabel("workflow b")?.prefix, "    "); // a's child (depth 1)
+  assert.equal(byLabel("ℹ deep")?.prefix, "        "); // b's child (depth 2)
+});
+
+test("buildRunTreeRows: self-recursive workflow expands exactly one level then stops", () => {
+  const mod = modFor([
+    "workflow default() {",
+    "  run rec()",
+    "}",
+    "workflow rec() {",
+    "  log \"x\"",
+    "  run rec()",
+    "}",
+  ].join("\n"));
+  const rows = buildRunTreeRows(mod);
+  // rec renders once under default, its self-call expands one more level, then
+  // the innermost self-call is gated off — bounded, not infinite.
+  const recRows = rows.filter((r) => r.rawLabel === "workflow rec");
+  assert.equal(recRows.length, 2);
+  assert.equal(recRows[0].prefix, ""); // rec called from default
+  assert.equal(recRows[1].prefix, "    "); // expanded self-call one level deeper
+  // exactly two "ℹ x" bodies: one per rendered rec frame
+  assert.equal(rows.filter((r) => r.rawLabel === "ℹ x").length, 2);
+});
+
+test("buildRunTreeRows: imported workflow renders with alias label and stepFunc", () => {
+  const mainMod = parsejaiph(
+    [
+      'import "lib.jh" as lib',
+      "workflow default() {",
+      "  run lib.helper()",
+      "}",
+    ].join("\n"),
+    "/tmp/proj/main.jh",
+  );
+  const libMod = parsejaiph(
+    ["export workflow helper() {", '  log "from lib"', "}"].join("\n"),
+    "/tmp/proj/lib.jh",
+  );
+  const rows = buildRunTreeRows(
+    mainMod,
+    "workflow default",
+    new Map([["lib", libMod]]),
+    "/tmp/proj",
+  );
+  const helper = rows.find((r) => r.rawLabel === "workflow lib.helper");
+  assert.ok(helper, "imported workflow row present");
+  assert.equal(helper?.stepFunc, "lib::helper");
+  assert.equal(helper?.prefix, ""); // default's direct child
+  // the imported workflow's body is rendered one level deeper
+  const body = rows.find((r) => r.rawLabel === "ℹ from lib");
+  assert.equal(body?.prefix, "    ");
+});
+
+test("buildRunTreeRows: mutual-reference cycle is bounded by the visited guard", () => {
+  const mod = modFor([
+    "workflow default() {",
+    "  run a()",
+    "}",
+    "workflow a() {",
+    "  run b()",
+    "}",
+    "workflow b() {",
+    "  run a()",
+    "}",
+  ].join("\n"));
+  const rows = buildRunTreeRows(mod);
+  // default -> a -> b -> a(leaf, not re-expanded). Without the guard this would
+  // recurse forever; the guard leaves exactly one un-expanded trailing "a".
+  assert.deepEqual(
+    rows.map((r) => r.rawLabel),
+    ["workflow default", "workflow a", "workflow b", "workflow a"],
+  );
+  assert.equal(rows[rows.length - 1].prefix, "        ");
+});
+
+test("collectWorkflowChildren: recover steps flatten as sibling rows", () => {
+  const mod = modFor([
+    "workflow default() {",
+    "  run risky() recover(e) {",
+    "    run fallback()",
+    "  }",
+    "}",
+    "workflow risky() {",
+    '  log "r"',
+    "}",
+    "workflow fallback() {",
+    '  log "f"',
+    "}",
+  ].join("\n"));
+  const items = collectWorkflowChildren(mod, "default");
+  assert.equal(items[0].label, "workflow risky");
+  assert.equal(items[0].nested, "risky");
+  assert.equal(items[1].label, "workflow fallback");
+  assert.equal(items[1].nested, "fallback");
+});
+
+test("collectWorkflowChildren: catch steps flatten as sibling rows", () => {
+  const mod = modFor([
+    "workflow default() {",
+    "  run risky() catch (e) {",
+    '    log "caught"',
+    "  }",
+    "}",
+    "workflow risky() {",
+    '  log "r"',
+    "}",
+  ].join("\n"));
+  const items = collectWorkflowChildren(mod, "default");
+  assert.equal(items[0].label, "workflow risky");
+  assert.equal(items[1].label, "ℹ caught");
+});
+
+test("collectWorkflowChildren: long prompt preview is truncated with ellipsis", () => {
+  const mod = modFor([
+    "workflow default() {",
+    '  prompt "This is a very long prompt that should be truncated"',
+    "}",
+  ].join("\n"));
+  const items = collectWorkflowChildren(mod, "default");
+  // 24-char preview + ellipsis
+  assert.equal(items[0].label, 'prompt "This is a very long prom..."');
+});
+
+test("collectWorkflowChildren: prompt preview escapes embedded double-quotes", () => {
+  const mod = modFor([
+    "workflow default() {",
+    '  prompt "Say \\"hi\\" now"',
+    "}",
+  ].join("\n"));
+  const items = collectWorkflowChildren(mod, "default");
+  assert.equal(items[0].label, 'prompt "Say \\"hi\\" now"');
+});
+
+test("collectWorkflowChildren: return run and return match label variants", () => {
+  const mod = modFor([
+    "workflow other() {",
+    '  log "o"',
+    "}",
+    "workflow default(name) {",
+    "  return run other()",
+    "}",
+  ].join("\n"));
+  const items = collectWorkflowChildren(mod, "default");
+  assert.ok(items.some((i) => i.label === "return run other(...)"));
+
+  const matchMod = modFor([
+    "workflow default(name) {",
+    "  return match name {",
+    '    "x" => "yes"',
+    '    _ => "no"',
+    "  }",
+    "}",
+  ].join("\n"));
+  const matchItems = collectWorkflowChildren(matchMod, "default");
+  assert.ok(matchItems.some((i) => i.label === "return match name"));
+});
+
+// --- style helpers (ANSI paths) ---
+
+test("style helpers: emit ANSI escape codes when stdout is a TTY", () => {
+  const prevTty = process.stdout.isTTY;
+  const prevNoColor = process.env.NO_COLOR;
+  Object.defineProperty(process.stdout, "isTTY", { value: true, configurable: true });
+  delete process.env.NO_COLOR;
+  try {
+    assert.equal(styleKeywordLabel("workflow default"), "[1mworkflow[0m default");
+    assert.equal(styleDim("x"), "[2mx[0m");
+    assert.equal(styleYellow("x"), "[33mx[0m");
+    assert.equal(styleBold("x"), "[1mx[0m");
+  } finally {
+    Object.defineProperty(process.stdout, "isTTY", { value: prevTty, configurable: true });
+    if (prevNoColor === undefined) delete process.env.NO_COLOR;
+    else process.env.NO_COLOR = prevNoColor;
+  }
+});
+
+test("style helpers: NO_COLOR disables ANSI even on a TTY", () => {
+  const prevTty = process.stdout.isTTY;
+  const prevNoColor = process.env.NO_COLOR;
+  Object.defineProperty(process.stdout, "isTTY", { value: true, configurable: true });
+  process.env.NO_COLOR = "1";
+  try {
+    assert.equal(styleKeywordLabel("workflow default"), "workflow default");
+    assert.equal(styleDim("x"), "x");
+    assert.equal(styleYellow("x"), "x");
+    assert.equal(styleBold("x"), "x");
+  } finally {
+    Object.defineProperty(process.stdout, "isTTY", { value: prevTty, configurable: true });
+    if (prevNoColor === undefined) delete process.env.NO_COLOR;
+    else process.env.NO_COLOR = prevNoColor;
+  }
+});
+
 // --- style helpers (no-color paths) ---
 
 test("styleKeywordLabel: returns plain text when no TTY", () => {
