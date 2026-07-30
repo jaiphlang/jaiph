@@ -263,17 +263,27 @@ export function checkDockerAvailable(): void {
 // Image pull
 // ---------------------------------------------------------------------------
 
-export function pullImageIfNeeded(image: string): void {
+/** True when the image is already present in the local Docker image store. */
+function imageExistsLocally(image: string): boolean {
   try {
     _dockerExec.run(["image", "inspect", image], { stdio: "ignore", timeout: 30_000 });
+    return true;
   } catch {
-    // Image not present locally — pull it (--quiet suppresses layer progress)
-    try {
-      _dockerExec.run(["pull", "--quiet", image], { stdio: "ignore", timeout: 300_000 });
-    } catch {
-      throw new Error(`E_DOCKER_PULL failed to pull image "${image}"`);
-    }
+    return false;
   }
+}
+
+/** Pull the image (`--quiet` suppresses layer progress); throws E_DOCKER_PULL on failure. */
+function pullImage(image: string): void {
+  try {
+    _dockerExec.run(["pull", "--quiet", image], { stdio: "ignore", timeout: 300_000 });
+  } catch {
+    throw new Error(`E_DOCKER_PULL failed to pull image "${image}"`);
+  }
+}
+
+export function pullImageIfNeeded(image: string): void {
+  if (!imageExistsLocally(image)) pullImage(image);
 }
 
 function imageHasJaiph(image: string): boolean {
@@ -313,20 +323,9 @@ export function verifyImageHasJaiph(image: string): void {
 export function prepareImage(config: DockerRunConfig): string {
   const image = config.image;
 
-  let needsPull = false;
-  try {
-    _dockerExec.run(["image", "inspect", image], { stdio: "ignore", timeout: 30_000 });
-  } catch {
-    needsPull = true;
-  }
-
-  if (needsPull) {
+  if (!imageExistsLocally(image)) {
     process.stderr.write(`pulling image ${image}…\n`);
-    try {
-      _dockerExec.run(["pull", "--quiet", image], { stdio: "ignore", timeout: 300_000 });
-    } catch {
-      throw new Error(`E_DOCKER_PULL failed to pull image "${image}"`);
-    }
+    pullImage(image);
     process.stderr.write(`pulled\n`);
   }
 
@@ -454,12 +453,17 @@ class WorkspaceCloner {
   private cloneSupported = false;
   private firstFallbackReason: string | null = null;
 
+  /** Run one `cp` variant, throwing E_DOCKER_SANDBOX_COPY when it fails. */
+  private copyOrThrow(flags: string[], src: string, dst: string): void {
+    const r = tryCp(flags, src, dst);
+    if (!r.ok) {
+      throw new Error(`E_DOCKER_SANDBOX_COPY failed to copy ${src} → ${dst}: ${r.stderr.trim()}`);
+    }
+  }
+
   copy(src: string, dst: string): void {
     if (process.platform !== "darwin") {
-      const r = tryCp(["--reflink=auto", "-pR"], src, dst);
-      if (!r.ok) {
-        throw new Error(`E_DOCKER_SANDBOX_COPY failed to copy ${src} → ${dst}: ${r.stderr.trim()}`);
-      }
+      this.copyOrThrow(["--reflink=auto", "-pR"], src, dst);
       return;
     }
 
@@ -471,10 +475,7 @@ class WorkspaceCloner {
         return;
       }
       this.firstFallbackReason = r.stderr.trim().split("\n")[0] || "cp -cR failed";
-      const fb = tryCp(["-pR"], src, dst);
-      if (!fb.ok) {
-        throw new Error(`E_DOCKER_SANDBOX_COPY failed to copy ${src} → ${dst}: ${fb.stderr.trim()}`);
-      }
+      this.copyOrThrow(["-pR"], src, dst);
       return;
     }
 
@@ -482,10 +483,7 @@ class WorkspaceCloner {
       const r = tryCp(["-cR"], src, dst);
       if (r.ok) return;
     }
-    const fb = tryCp(["-pR"], src, dst);
-    if (!fb.ok) {
-      throw new Error(`E_DOCKER_SANDBOX_COPY failed to copy ${src} → ${dst}: ${fb.stderr.trim()}`);
-    }
+    this.copyOrThrow(["-pR"], src, dst);
   }
 
   get fellBackToPlainCopy(): boolean {

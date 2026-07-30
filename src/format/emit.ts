@@ -148,6 +148,30 @@ function emitConfigStringRhs(value: string): string {
   return JSON.stringify(value);
 }
 
+/**
+ * Config keys in canonical emit order, used for the fallback when no original
+ * `configBodySequence` is recorded. `runtime.docker_enabled` is intentionally
+ * absent — it is never re-emitted (see {@link emitConfigKeyLines}).
+ */
+const DEFAULT_CONFIG_KEY_ORDER = [
+  "agent.model",
+  "agent.command",
+  "agent.backend",
+  "agent.trusted_workspace",
+  "agent.cursor_flags",
+  "agent.claude_flags",
+  "run.debug",
+  "run.logs_dir",
+  "run.recover_limit",
+  "runtime.docker_image",
+  "runtime.docker_network",
+  "runtime.docker_timeout_seconds",
+  "module.name",
+  "module.version",
+  "module.description",
+  "trusted_envs",
+];
+
 function emitConfigKeyLines(meta: WorkflowMetadata, key: string, pad: string): string[] {
   switch (key) {
     case "agent.model":
@@ -219,33 +243,10 @@ function emitConfig(meta: WorkflowMetadata, pad: string, trivia: Trivia): string
     lines.push("}");
     return lines.join("\n");
   }
-  if (meta.agent) {
-    if (meta.agent.model !== undefined) lines.push(`${pad}agent.model = ${emitConfigStringRhs(meta.agent.model)}`);
-    if (meta.agent.command !== undefined) lines.push(`${pad}agent.command = ${emitConfigStringRhs(meta.agent.command)}`);
-    if (meta.agent.backend !== undefined) lines.push(`${pad}agent.backend = ${emitConfigStringRhs(meta.agent.backend)}`);
-    if (meta.agent.trustedWorkspace !== undefined) lines.push(`${pad}agent.trusted_workspace = ${emitConfigStringRhs(meta.agent.trustedWorkspace)}`);
-    if (meta.agent.cursorFlags !== undefined) lines.push(`${pad}agent.cursor_flags = ${emitConfigStringRhs(meta.agent.cursorFlags)}`);
-    if (meta.agent.claudeFlags !== undefined) lines.push(`${pad}agent.claude_flags = ${emitConfigStringRhs(meta.agent.claudeFlags)}`);
-  }
-  if (meta.run) {
-    if (meta.run.debug !== undefined) lines.push(`${pad}run.debug = ${meta.run.debug}`);
-    if (meta.run.logsDir !== undefined) lines.push(`${pad}run.logs_dir = ${emitConfigStringRhs(meta.run.logsDir)}`);
-    if (meta.run.recoverLimit !== undefined) lines.push(`${pad}run.recover_limit = ${meta.run.recoverLimit}`);
-  }
-  if (meta.runtime) {
-    if (meta.runtime.dockerImage !== undefined) lines.push(`${pad}runtime.docker_image = ${emitConfigStringRhs(meta.runtime.dockerImage)}`);
-    if (meta.runtime.dockerNetwork !== undefined) lines.push(`${pad}runtime.docker_network = ${emitConfigStringRhs(meta.runtime.dockerNetwork)}`);
-    if (meta.runtime.dockerTimeoutSeconds !== undefined) {
-      lines.push(`${pad}runtime.docker_timeout_seconds = ${meta.runtime.dockerTimeoutSeconds}`);
-    }
-  }
-  if (meta.module) {
-    if (meta.module.name !== undefined) lines.push(`${pad}module.name = ${emitConfigStringRhs(meta.module.name)}`);
-    if (meta.module.version !== undefined) lines.push(`${pad}module.version = ${emitConfigStringRhs(meta.module.version)}`);
-    if (meta.module.description !== undefined) lines.push(`${pad}module.description = ${emitConfigStringRhs(meta.module.description)}`);
-  }
-  if (meta.trustedEnvs !== undefined) {
-    lines.push(`${pad}trusted_envs = ${emitConfigStringRhs(meta.trustedEnvs.join(" "))}`);
+  // No recorded body sequence: emit every set key in canonical order. This
+  // mirrors emitConfigKeyLines exactly, so the two paths never diverge.
+  for (const key of DEFAULT_CONFIG_KEY_ORDER) {
+    lines.push(...emitConfigKeyLines(meta, key, pad));
   }
   lines.push("}");
   return lines.join("\n");

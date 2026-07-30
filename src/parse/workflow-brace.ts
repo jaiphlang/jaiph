@@ -379,6 +379,30 @@ function tryParseConst(c: BlockCtx): BlockResult | null {
   };
 }
 
+type InlineScriptResult = ReturnType<typeof parseAnonymousInlineScript>;
+
+/** Build an `inline_script` Expr from a parsed anonymous-script result. */
+function makeInlineScriptExpr(result: InlineScriptResult): Expr {
+  return {
+    kind: "inline_script",
+    body: result.body,
+    ...(result.lang ? { lang: result.lang } : {}),
+    args: result.args,
+  };
+}
+
+/**
+ * Build a triple-quoted literal Expr and record its trivia. `toRaw` selects the
+ * escaping: `fail` / `return` bodies go through `tripleQuoteBodyToRaw`, while
+ * `say`/`log` bodies keep the dedented body verbatim.
+ */
+function makeTripleQuotedLiteral(trivia: Trivia, body: string, toRaw: boolean): Expr {
+  const dedented = dedentTripleQuotedBody(body);
+  const expr: Expr = { kind: "literal", raw: toRaw ? tripleQuoteBodyToRaw(dedented) : dedented };
+  trivia.setNode(expr, { tripleQuoted: true, rawBody: body });
+  return expr;
+}
+
 function tryParseFail(c: BlockCtx): BlockResult | null {
   if (!/^fail\s+/.test(c.inner)) return null;
   const arg = c.inner.slice("fail".length).trimStart();
@@ -386,9 +410,7 @@ function tryParseFail(c: BlockCtx): BlockResult | null {
   const stepLoc = { line: c.innerNo, col: failCol };
   if (arg.startsWith('"""')) {
     const { body, nextIdx } = consumeTripleQuotedArg(c.filePath, c.lines, c.idx, arg);
-    const raw = tripleQuoteBodyToRaw(dedentTripleQuotedBody(body));
-    const message: Expr = { kind: "literal", raw };
-    c.trivia.setNode(message, { tripleQuoted: true, rawBody: body });
+    const message = makeTripleQuotedLiteral(c.trivia, body, true);
     return { step: { type: "say", level: "fail", message, loc: stepLoc }, nextIdx };
   }
   if (isJaiphInterpolationRef(arg.trim())) {
@@ -484,12 +506,7 @@ function tryParseRun(c: BlockCtx): BlockResult | null {
   const runBody = c.inner.slice("run ".length).trim();
   if (runBody.startsWith("`")) {
     const result = parseAnonymousInlineScript(c.filePath, c.lines, c.idx, runBody, c.innerNo, runCol, true);
-    const body: Expr = {
-      kind: "inline_script",
-      body: result.body,
-      ...(result.lang ? { lang: result.lang } : {}),
-      args: result.args,
-    };
+    const body = makeInlineScriptExpr(result);
     const stepLoc = { line: c.innerNo, col: runCol };
     return parseInlineScriptTail(c, result, body, stepLoc);
   }
@@ -519,12 +536,7 @@ function parseSayBody(
   if (arg.startsWith("run ") && arg.slice("run ".length).trimStart().startsWith("`")) {
     const runBody = arg.slice("run ".length).trim();
     const result = parseAnonymousInlineScript(c.filePath, c.lines, c.idx, runBody, c.innerNo, col);
-    const message: Expr = {
-      kind: "inline_script",
-      body: result.body,
-      ...(result.lang ? { lang: result.lang } : {}),
-      args: result.args,
-    };
+    const message = makeInlineScriptExpr(result);
     return { step: { type: "say", level, message, loc: stepLoc }, nextIdx: result.nextLineIdx };
   }
   if (arg.startsWith("`") || arg.startsWith("```")) {
@@ -532,9 +544,7 @@ function parseSayBody(
   }
   if (arg.startsWith('"""')) {
     const { body, nextIdx } = consumeTripleQuotedArg(c.filePath, c.lines, c.idx, arg);
-    const raw = dedentTripleQuotedBody(body);
-    const message: Expr = { kind: "literal", raw };
-    c.trivia.setNode(message, { tripleQuoted: true, rawBody: body });
+    const message = makeTripleQuotedLiteral(c.trivia, body, false);
     return { step: { type: "say", level, message, loc: stepLoc }, nextIdx };
   }
   if (arg.startsWith('"') && !hasUnescapedClosingQuote(arg, 1)) {
@@ -547,20 +557,17 @@ function parseSayBody(
   };
 }
 
-function tryParseLog(c: BlockCtx): BlockResult | null {
-  if (!c.inner.startsWith("log ") && c.inner !== "log") return null;
-  return parseSayBody(c, "log");
+/** Build a `log`/`logerr`/`logwarn` handler that fires on `<level>` or `<level> …`. */
+function makeSayHandler(level: "log" | "logerr" | "logwarn"): BlockHandler {
+  return (c) => {
+    if (!c.inner.startsWith(`${level} `) && c.inner !== level) return null;
+    return parseSayBody(c, level);
+  };
 }
 
-function tryParseLogerr(c: BlockCtx): BlockResult | null {
-  if (!c.inner.startsWith("logerr ") && c.inner !== "logerr") return null;
-  return parseSayBody(c, "logerr");
-}
-
-function tryParseLogwarn(c: BlockCtx): BlockResult | null {
-  if (!c.inner.startsWith("logwarn ") && c.inner !== "logwarn") return null;
-  return parseSayBody(c, "logwarn");
-}
+const tryParseLog = makeSayHandler("log");
+const tryParseLogerr = makeSayHandler("logerr");
+const tryParseLogwarn = makeSayHandler("logwarn");
 
 function tryParseReturn(c: BlockCtx): BlockResult | null {
   const retLoc = { line: c.innerNo, col: c.innerRaw.indexOf("return") + 1 };
@@ -575,8 +582,7 @@ function tryParseReturn(c: BlockCtx): BlockResult | null {
   const returnValue = m[1].trim();
   if (returnValue.startsWith('"""')) {
     const { body, nextIdx } = consumeTripleQuotedArg(c.filePath, c.lines, c.idx, returnValue);
-    const value: Expr = { kind: "literal", raw: tripleQuoteBodyToRaw(dedentTripleQuotedBody(body)) };
-    c.trivia.setNode(value, { tripleQuoted: true, rawBody: body });
+    const value = makeTripleQuotedLiteral(c.trivia, body, true);
     return { step: { type: "return", value, loc: retLoc }, nextIdx };
   }
   const matchHead = returnValue.match(/^match\s+(.+?)\s*\{\s*$/);
@@ -588,12 +594,7 @@ function tryParseReturn(c: BlockCtx): BlockResult | null {
     const runBody = returnValue.slice("run ".length).trim();
     if (runBody.startsWith("`")) {
       const result = parseAnonymousInlineScript(c.filePath, c.lines, c.idx, runBody, c.innerNo, c.innerRaw.indexOf("run") + 1);
-      const value: Expr = {
-        kind: "inline_script",
-        body: result.body,
-        ...(result.lang ? { lang: result.lang } : {}),
-        args: result.args,
-      };
+      const value = makeInlineScriptExpr(result);
       return { step: { type: "return", value, loc: retLoc }, nextIdx: result.nextLineIdx };
     }
     // parseCallRefMultiline returns null only when runBody does not start with ref(.
