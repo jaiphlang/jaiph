@@ -28,7 +28,7 @@ The snapshot content is defined by git. In a git workspace it contains exactly t
 
 The host checkout is unmodified after the run. Run artifacts always land under the host `.jaiph/runs/` directory through a separate read-write mount, and a tmpfs masks the snapshot source from the container's own `/jaiph/run` view so the run cannot read it back.
 
-Snapshot mode never raises the container's privileges. The container runs with `--cap-drop ALL` and zero cap-adds, `--security-opt no-new-privileges`, no `--device`, and no AppArmor exception. On Linux it runs as your own UID and GID. There is no device probing and no capability setting to tune.
+Snapshot mode never elevates the container's privileges. The container runs with `--cap-drop ALL` and zero cap-adds, `--security-opt no-new-privileges`, no `--device`, and no AppArmor exception. On Linux it runs as your own UID and GID. There is no device probing and no capability setting to tune.
 
 ## 2. Pick inplace mode for live edits
 
