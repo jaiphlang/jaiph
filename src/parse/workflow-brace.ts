@@ -10,6 +10,7 @@ import {
   parseCallRef,
   parseLogMessageRhs,
   rejectTrailingContent,
+  SINGLE_QUOTE_MESSAGE,
 } from "./core";
 import { consumeTripleQuotedArg, dedentTripleQuotedBody, tripleQuoteBodyToRaw } from "./triple-quote";
 import { parseCallRefMultiline } from "./call-args";
@@ -625,7 +626,7 @@ function tryParseReturn(c: BlockCtx): BlockResult | null {
     fail(c.filePath, 'bare inline scripts in return are not allowed; use "return run `...`()" to execute a managed inline script', c.innerNo, retLoc.col);
   }
   if (returnValue.startsWith("'")) {
-    fail(c.filePath, 'single-quoted strings are not supported; use double quotes ("...") instead', c.innerNo, retLoc.col);
+    fail(c.filePath, SINGLE_QUOTE_MESSAGE, c.innerNo, retLoc.col);
   }
   if (/^[0-9]+$/.test(returnValue) || returnValue === "$?") {
     fail(

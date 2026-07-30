@@ -1,5 +1,5 @@
 import type { MatchArmDef, MatchExprDef, MatchPatternDef } from "../types";
-import { fail, indexOfClosingDoubleQuote, unescapeDoubleQuotedInner } from "./core";
+import { fail, SINGLE_QUOTE_MESSAGE, indexOfClosingDoubleQuote, unescapeDoubleQuotedInner } from "./core";
 import { splitStatementsOnSemicolons } from "./statement-split";
 import { tripleQuoteBodyToRaw, trimAdjacentBlankLines } from "./triple-quote";
 
@@ -40,7 +40,7 @@ function parsePattern(filePath: string, text: string, lineNo: number): { pattern
     return { pattern: { kind: "string_literal", value }, rest };
   }
   if (t.startsWith("'")) {
-    fail(filePath, 'single-quoted strings are not supported; use double quotes ("...") instead', lineNo);
+    fail(filePath, SINGLE_QUOTE_MESSAGE, lineNo);
   }
   if (t.startsWith("/")) {
     // Find closing / (not escaped)
@@ -119,7 +119,7 @@ function parseArmBody(filePath: string, text: string, lineNo: number): { body: s
     return { body: t.slice(0, closeIdx + 1), rest: t.slice(closeIdx + 1).trimStart() };
   }
   if (t.startsWith("'")) {
-    fail(filePath, 'single-quoted strings are not supported; use double quotes ("...") instead', lineNo);
+    fail(filePath, SINGLE_QUOTE_MESSAGE, lineNo);
   }
   // Allow $var, ${var}, ${var.field}, or bare words up to end of line
   return { body: t, rest: "" };

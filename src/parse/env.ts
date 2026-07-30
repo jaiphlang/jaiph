@@ -1,5 +1,5 @@
 import type { EnvDeclDef } from "../types";
-import { fail, hasUnescapedClosingQuote, indexOfClosingDoubleQuote } from "./core";
+import { fail, SINGLE_QUOTE_MESSAGE, hasUnescapedClosingQuote, indexOfClosingDoubleQuote } from "./core";
 import { parseTripleQuoteBlock } from "./triple-quote";
 
 export function parseEnvDecl(
@@ -54,7 +54,7 @@ export function parseEnvDecl(
   }
 
   if (valuePart.startsWith("'")) {
-    fail(filePath, 'single-quoted strings are not supported; use double quotes ("...") instead', lineNo);
+    fail(filePath, SINGLE_QUOTE_MESSAGE, lineNo);
   }
 
   // Bare value (rest of line)

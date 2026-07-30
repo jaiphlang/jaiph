@@ -6,6 +6,7 @@ import {
   hasUnescapedClosingQuote,
   isRef,
   parseParamList,
+  SINGLE_QUOTE_MESSAGE,
   stripQuotes,
   unescapeDoubleQuotedInner,
 } from "./core";
@@ -160,7 +161,7 @@ export function parseTestBlock(
         continue;
       }
       if (arg.startsWith("'")) {
-        fail(filePath, 'single-quoted strings are not supported; use double quotes ("...") instead', innerNo, innerRaw.indexOf("mock"));
+        fail(filePath, SINGLE_QUOTE_MESSAGE, innerNo, innerRaw.indexOf("mock"));
       }
       // `mock prompt <ident>` resolves the ident from a previously declared `const` in this block.
       if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(arg)) {

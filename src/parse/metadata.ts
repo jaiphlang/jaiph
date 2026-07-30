@@ -1,6 +1,13 @@
 import type { WorkflowMetadata } from "../types";
 import type { Trivia, ConfigBodyPart } from "./trivia";
-import { colFromRaw, fail, isBareIdentifier, isJaiphInterpolationRef, unescapeConfigInner } from "./core";
+import {
+  colFromRaw,
+  fail,
+  isBareIdentifier,
+  isJaiphInterpolationRef,
+  SINGLE_QUOTE_MESSAGE,
+  unescapeConfigInner,
+} from "./core";
 import { validateJaiphStringContent } from "../transpile/validate-string";
 import { ENV_KEY_RE, isReservedEnvKey } from "../env-reserved";
 
@@ -65,7 +72,7 @@ function parseMetadataValue(filePath: string, rawLine: string, valuePart: string
     return [];
   }
   if (trimmed.startsWith(`'`)) {
-    return fail(filePath, 'single-quoted strings are not supported; use double quotes ("...") instead', lineNo, colFromRaw(rawLine));
+    return fail(filePath, SINGLE_QUOTE_MESSAGE, lineNo, colFromRaw(rawLine));
   }
   if (trimmed.startsWith(`"`) && trimmed.endsWith(`"`)) {
     const content = unescapeConfigInner(trimmed.slice(1, -1));
@@ -148,7 +155,7 @@ function parseArrayValue(
     }
 
     if (element.startsWith(`'`)) {
-      return fail(filePath, 'single-quoted strings are not supported; use double quotes ("...") instead', lineNo, colFromRaw(raw));
+      return fail(filePath, SINGLE_QUOTE_MESSAGE, lineNo, colFromRaw(raw));
     }
     if (element.startsWith(`"`) && element.endsWith(`"`)) {
       result.push(unescapeConfigInner(element.slice(1, -1)));
