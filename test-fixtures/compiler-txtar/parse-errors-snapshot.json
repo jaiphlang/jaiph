@@ -2063,5 +2063,19 @@
     "col": 1,
     "code": "E_PARSE",
     "message": "module.* keys are not allowed in workflow-level config (only agent.* and run.* keys)"
+  },
+  "match arm closing triple-quote with trailing content": {
+    "file": "input.jh",
+    "line": 6,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "closing \"\"\" in match arm must not have content on the same line"
+  },
+  "top-level const without equals sign": {
+    "file": "input.jh",
+    "line": 1,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "invalid declaration — expected: const NAME = VALUE"
   }
 }

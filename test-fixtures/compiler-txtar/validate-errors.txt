@@ -1091,3 +1091,11 @@ script myscript = `true`
 workflow default() {
   log "ok"
 }
+
+=== log with nested inline capture rejected
+# @expect error E_PARSE "cannot contain nested inline captures" @3:3
+--- input.jh
+script foo = `echo a`
+workflow default() {
+  log "x ${run foo('${ensure y')}"
+}
