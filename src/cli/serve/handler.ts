@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { errText } from "../../errors";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { statSync } from "node:fs";
 import { basename, join } from "node:path";
@@ -742,7 +743,7 @@ export class ServeHandler {
 
   private finalizeError(record: RunRecord, err: unknown): void {
     record.ended_at = this.opts.now();
-    record.result_text = err instanceof Error ? err.message : String(err);
+    record.result_text = errText(err);
     record.status = record.cancelled ? "cancelled" : "failed";
     this.opts.persistRun?.(record);
     this.evictCompleted();

@@ -1,4 +1,5 @@
 import { existsSync, mkdtempSync, rmSync, statSync } from "node:fs";
+import { errText } from "../../errors";
 import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import { dirname, extname, join, resolve } from "node:path";
@@ -57,7 +58,7 @@ export async function runMcp(rest: string[]): Promise<number> {
   try {
     parsed = parseArgs(rest, "mcp");
   } catch (err) {
-    process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`);
+    process.stderr.write(`${errText(err)}\n`);
     return 1;
   }
   const { workspace, env, positional, inplace, unsafe, yes } = parsed;
@@ -73,7 +74,7 @@ export async function runMcp(rest: string[]): Promise<number> {
   try {
     extraEnv = resolveEnvPairs(env, process.env);
   } catch (err) {
-    process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`);
+    process.stderr.write(`${errText(err)}\n`);
     return 1;
   }
   const inputAbs = resolve(input);
@@ -104,7 +105,7 @@ export async function runMcp(rest: string[]): Promise<number> {
     }
     generations = createGenerationTracker(loaded.state);
   } catch (err) {
-    log(err instanceof Error ? err.message : String(err));
+    log(errText(err));
     rmSync(tempRoot, { recursive: true, force: true });
     return 1;
   }
@@ -117,7 +118,7 @@ export async function runMcp(rest: string[]): Promise<number> {
     posture = resolveStartupPosture(generations.current(), inputAbs, workspaceRoot, log);
     logStartupPosture("jaiph mcp", "tool calls", posture, workspaceRoot, log);
   } catch (err) {
-    log(err instanceof Error ? err.message : String(err));
+    log(errText(err));
     rmSync(tempRoot, { recursive: true, force: true });
     return 1;
   }
@@ -166,7 +167,7 @@ export async function runMcp(rest: string[]): Promise<number> {
       server.notifyToolsChanged();
       log(`jaiph mcp: sources reloaded (${loaded.state.tools.length} tool(s))`);
     } catch (err) {
-      log(`jaiph mcp: reload failed; keeping the previous tool set: ${err instanceof Error ? err.message : String(err)}`);
+      log(`jaiph mcp: reload failed; keeping the previous tool set: ${errText(err)}`);
     } finally {
       reloading = false;
     }
@@ -205,7 +206,7 @@ export async function runMcp(rest: string[]): Promise<number> {
     const rl = createInterface({ input: process.stdin, terminal: false });
     rl.on("line", (line) => {
       const p = server.handleLine(line).catch((err) => {
-        log(`jaiph mcp: ${err instanceof Error ? err.message : String(err)}`);
+        log(`jaiph mcp: ${errText(err)}`);
       });
       inFlight.add(p);
       void p.finally(() => inFlight.delete(p));

@@ -5,6 +5,7 @@ import {
   rmSync,
   statSync,
 } from "node:fs";
+import { errText } from "../../errors";
 import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve, extname } from "node:path";
@@ -25,6 +26,7 @@ import {
   remapContainerPath,
   formatDockerTimeoutMessage,
 } from "../shared/errors";
+import { readMetaFields, readReturnValue } from "../shared/run-meta";
 import { detectWorkspaceRoot } from "../shared/paths";
 import { hasHelpFlag, parseArgs } from "../shared/usage";
 
@@ -409,7 +411,7 @@ export function shouldExportRawTelemetry(env: NodeJS.ProcessEnv): boolean {
 
 /** Write an error's message to stderr and return exit code 1. */
 function failWith(err: unknown): 1 {
-  process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`);
+  process.stderr.write(`${errText(err)}\n`);
   return 1;
 }
 
@@ -425,22 +427,6 @@ function reportPreflight(warnings: string[], errors: string[]): boolean {
     return true;
   }
   return false;
-}
-
-/** Read `key=value` lines from a runner meta file; returns the trimmed value per requested key (absent when missing/empty). */
-function readMetaFields(metaFile: string, keys: readonly string[]): Record<string, string> {
-  const out: Record<string, string> = {};
-  if (!existsSync(metaFile)) return out;
-  for (const line of readFileSync(metaFile, "utf8").split(/\r?\n/)) {
-    for (const key of keys) {
-      const prefix = `${key}=`;
-      if (line.startsWith(prefix)) {
-        const value = line.slice(prefix.length).trim();
-        if (value) out[key] = value;
-      }
-    }
-  }
-  return out;
 }
 
 /** Read `run_dir=` from a runner meta file; undefined when absent/unwritten. */
@@ -638,7 +624,7 @@ async function reportResult(
     );
     // Print workflow return value (if any) on its own line, separated by a blank line.
     // The runtime writes return_value.txt only when the default workflow returns a value.
-    const returnValue = readWorkflowReturnValue(runDir, sandboxRunDir);
+    const returnValue = readReturnValue(runDir, sandboxRunDir);
     if (returnValue !== undefined && returnValue.length > 0) {
       const trimmed = returnValue.endsWith("\n") ? returnValue.slice(0, -1) : returnValue;
       process.stdout.write(`\n${trimmed}\n`);
@@ -692,18 +678,3 @@ async function reportResult(
   return resolvedStatus;
 }
 
-function readWorkflowReturnValue(
-  runDir: string | undefined,
-  sandboxRunDir: string | undefined,
-): string | undefined {
-  if (!runDir) return undefined;
-  const candidate = sandboxRunDir
-    ? remapContainerPath(join(runDir, "return_value.txt"), sandboxRunDir)
-    : join(runDir, "return_value.txt");
-  if (!existsSync(candidate)) return undefined;
-  try {
-    return readFileSync(candidate, "utf8");
-  } catch {
-    return undefined;
-  }
-}

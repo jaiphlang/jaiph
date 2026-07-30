@@ -1,4 +1,5 @@
 import { existsSync, mkdtempSync, rmSync, statSync } from "node:fs";
+import { errText } from "../../errors";
 import { tmpdir } from "node:os";
 import { basename, dirname, extname, join, resolve } from "node:path";
 import { detectWorkspaceRoot } from "../shared/paths";
@@ -110,7 +111,7 @@ export async function runServe(rest: string[]): Promise<number> {
   try {
     parsed = parseArgs(rest, "serve");
   } catch (err) {
-    process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`);
+    process.stderr.write(`${errText(err)}\n`);
     return 1;
   }
   const { workspace, env, positional, host: hostArg, port: portArg, inplace, unsafe, yes } = parsed;
@@ -124,7 +125,7 @@ export async function runServe(rest: string[]): Promise<number> {
   try {
     extraEnv = resolveEnvPairs(env, process.env);
   } catch (err) {
-    process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`);
+    process.stderr.write(`${errText(err)}\n`);
     return 1;
   }
   const inputAbs = resolve(input);
@@ -200,7 +201,7 @@ export async function runServe(rest: string[]): Promise<number> {
     maxOutputBytes = intEnv(process.env.JAIPH_SERVE_MAX_OUTPUT_BYTES, "JAIPH_SERVE_MAX_OUTPUT_BYTES", DEFAULT_MAX_OUTPUT_BYTES, 1);
     maxArtifactBytes = intEnv(process.env.JAIPH_SERVE_MAX_ARTIFACT_BYTES, "JAIPH_SERVE_MAX_ARTIFACT_BYTES", DEFAULT_MAX_ARTIFACT_BYTES, 0);
   } catch (err) {
-    process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`);
+    process.stderr.write(`${errText(err)}\n`);
     return 1;
   }
   const outputCaps: OutputCaps = {
@@ -227,7 +228,7 @@ export async function runServe(rest: string[]): Promise<number> {
     }
     generations = createGenerationTracker(loaded.state);
   } catch (err) {
-    log(err instanceof Error ? err.message : String(err));
+    log(errText(err));
     rmSync(tempRoot, { recursive: true, force: true });
     return 1;
   }
@@ -239,7 +240,7 @@ export async function runServe(rest: string[]): Promise<number> {
     hostRunsRoot = posture.hostRunsRoot;
     logStartupPosture("jaiph serve", "runs", posture, workspaceRoot, log);
   } catch (err) {
-    log(err instanceof Error ? err.message : String(err));
+    log(errText(err));
     rmSync(tempRoot, { recursive: true, force: true });
     return 1;
   }
@@ -258,7 +259,7 @@ export async function runServe(rest: string[]): Promise<number> {
       log(`jaiph serve: reconstructed ${initialRuns.length} run(s) from ${hostRunsRoot}`);
     }
   } catch (err) {
-    log(`jaiph serve: could not reconstruct prior runs: ${err instanceof Error ? err.message : String(err)}`);
+    log(`jaiph serve: could not reconstruct prior runs: ${errText(err)}`);
   }
 
   const handler = new ServeHandler({
@@ -324,7 +325,7 @@ export async function runServe(rest: string[]): Promise<number> {
       watcher.rewatch([...loaded.state.graph.modules.keys()]);
       log(`jaiph serve: sources reloaded (${loaded.state.tools.length} workflow(s))`);
     } catch (err) {
-      log(`jaiph serve: reload failed; keeping the previous workflows: ${err instanceof Error ? err.message : String(err)}`);
+      log(`jaiph serve: reload failed; keeping the previous workflows: ${errText(err)}`);
     } finally {
       reloading = false;
     }
@@ -337,7 +338,7 @@ export async function runServe(rest: string[]): Promise<number> {
   try {
     boundPort = await listen(httpServer, host, port);
   } catch (err) {
-    log(`jaiph serve: failed to listen on ${host}:${port}: ${err instanceof Error ? err.message : String(err)}`);
+    log(`jaiph serve: failed to listen on ${host}:${port}: ${errText(err)}`);
     watcher.stop();
     rmSync(tempRoot, { recursive: true, force: true });
     return 1;

@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { errText } from "../errors";
 import { resolve } from "node:path";
 import { printUsage } from "./shared/usage";
 import { runWorkflow } from "./commands/run";
@@ -22,7 +23,7 @@ export async function main(argv: string[]): Promise<number> {
     try {
       return await runWorkflowRunner(rest);
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = errText(error);
       process.stderr.write(`jaiph node runner: ${message}\n`);
       return 1;
     }
@@ -77,7 +78,7 @@ export async function main(argv: string[]): Promise<number> {
     printUsage();
     return 1;
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = errText(error);
     process.stderr.write(`${message}\n`);
     return 1;
   }
@@ -89,7 +90,7 @@ export function runCli(argv: string[]): void {
       process.exit(code);
     })
     .catch((error) => {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = errText(error);
       process.stderr.write(`${message}\n`);
       process.exit(1);
     });

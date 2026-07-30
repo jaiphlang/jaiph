@@ -1,4 +1,5 @@
 import { basename, dirname, join } from "node:path";
+import { errText } from "../../errors";
 import { writeFileSync } from "node:fs";
 import { loadModuleGraph, readModuleGraph } from "../../transpile/module-graph";
 import { buildRuntimeGraph } from "./graph";
@@ -63,7 +64,7 @@ if (require.main === module) {
   runWorkflowRunner(process.argv.slice(2))
     .then((status) => process.exit(status))
     .catch((err) => {
-      process.stderr.write(`jaiph node runner: ${err instanceof Error ? err.message : String(err)}\n`);
+      process.stderr.write(`jaiph node runner: ${errText(err)}\n`);
       process.exit(1);
     });
 }

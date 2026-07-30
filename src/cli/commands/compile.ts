@@ -1,4 +1,5 @@
 import { existsSync, statSync } from "node:fs";
+import { errText } from "../../errors";
 import { dirname, resolve } from "node:path";
 import { loadModuleGraph } from "../../transpile/module-graph";
 import { collectDiagnostics } from "../../transpile/validate";
@@ -116,7 +117,7 @@ export function runCompile(args: string[]): number {
       line: 1,
       col: 1,
       code: "E_COMPILE",
-      message: err instanceof Error ? err.message : String(err),
+      message: errText(err),
     };
     writeDiagnostics(json, [d ?? fallback]);
     return 1;
@@ -142,7 +143,7 @@ export function runCompile(args: string[]): number {
           line: 1,
           col: 1,
           code: "E_COMPILE",
-          message: err instanceof Error ? err.message : String(err),
+          message: errText(err),
         },
       );
     }

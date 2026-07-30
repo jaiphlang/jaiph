@@ -1,4 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
+import { errText } from "../../errors";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
@@ -161,7 +162,7 @@ export function runHooksForEvent(
         }
       });
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      const message = errText(err);
       process.stderr.write(`jaiph hooks: failed to run ${cmd}: ${message}\n`);
     }
   }

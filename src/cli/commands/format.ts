@@ -1,4 +1,5 @@
 import { readFileSync, writeFileSync } from "node:fs";
+import { errText } from "../../errors";
 import { resolve } from "node:path";
 import { parsejaiphWithTrivia } from "../../parser";
 import { emitModule } from "../../format/emit";
@@ -70,7 +71,7 @@ export function runFormat(args: string[]): number {
     try {
       parsed = parsejaiphWithTrivia(source, abs);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
+      const msg = errText(err);
       process.stderr.write(`parse error: ${msg}\n`);
       return 1;
     }
