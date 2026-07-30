@@ -10,7 +10,7 @@ redirect_from:
 
 Some workflows reach a point where two pieces of work do not depend on each other. For example, an analysis and a build can run at the same time. The two could overlap, but only if the runtime keeps a record of every piece of work that has started and waits for each one to finish before the workflow ends.
 
-Jaiph provides `run async` and a value type called `Handle<T>` for overlapping independent work. The value model covers what a handle represents, when it turns into a real string, and how it interacts with recovery and joins. For the surface syntax see [Language, `run async`](language.md#run-async--concurrent-execution-with-handles) and [Grammar, `run async`](grammar.md). For the runtime implementation see [Architecture, Core components](architecture.md#core-components).
+Jaiph provides `run async` and a value type called `Handle<T>` for overlapping independent work. The value model covers what a handle represents, when it turns into a real string, and how it interacts with recovery and joins. For the surface syntax see [Language, `run async`](language.md#run-async-concurrent-execution-with-handles) and [Grammar, `run async`](grammar.md). For the runtime implementation see [Architecture, Core components](architecture.md#core-components).
 
 ## What a handle is
 
@@ -89,4 +89,4 @@ Async handles in Jaiph are a token bookkeeping model built on top of a normal `r
 
 - [Inbox](inbox.md) covers the drain step that runs after the implicit join.
 - [Architecture, CLI progress reporting pipeline](architecture.md#cli-progress-reporting-pipeline) covers how `async_indices` shape the live progress tree.
-- [Language, `run async`](language.md#run-async--concurrent-execution-with-handles) and [Grammar, `run async`](grammar.md) cover the surface syntax.
+- [Language, `run async`](language.md#run-async-concurrent-execution-with-handles) and [Grammar, `run async`](grammar.md) cover the surface syntax.
