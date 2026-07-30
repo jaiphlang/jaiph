@@ -9,30 +9,36 @@ redirect_from:
 
 # Environment variables
 
-This page is the canonical inventory of every environment variable Jaiph reads from process state. It aggregates `JAIPH_*` variables read by the TypeScript runtime/CLI (`src/`), the vendor credentials Jaiph checks before launching workflows, and the host-side variables the installer script consumes.
+This page lists every environment variable Jaiph reads. It covers the `JAIPH_*` variables the TypeScript runtime and CLI read (`src/`), the vendor credentials Jaiph checks before it launches a workflow, and the host-side variables the installer script reads.
 
-For role-oriented overviews see [Configuration](configuration.md), [CLI](cli.md), and [Sandboxing](sandboxing.md). For the credential pre-flight contract see [Authenticate agent backends](/how-to/agent-auth).
+For role-oriented overviews see [Configuration](configuration.md), [CLI](cli.md), and [Sandboxing](sandboxing.md). For the credential pre-flight contract see [Authenticate agent backends](agent-auth.md).
 
-Symbols used below:
+The tables below use three symbols.
 
-- **Type** — `string`, `path`, `bool` (the literal text `"true"` / `"1"` enables; anything else disables, with per-variable rules noted), `int` (decimal milliseconds or seconds), `int-list` (comma-separated non-negative integers).
-- **Scope** — `host` = read by the host CLI before spawning the runner; `runtime` = read inside the workflow runner (and inside the Docker container when forwarded); `internal` = set automatically by the CLI on the child process and must not be exported manually.
-- **Default** — `—` means the variable has no built-in default (an absent value disables the feature, or the surrounding code falls back to a config-key default).
+- **Type**. `string`, `path`, `bool` (the literal text `"true"` or `"1"` enables it, anything else disables it, with per-variable rules noted), `int` (decimal milliseconds or seconds), and `int-list` (comma-separated non-negative integers).
+- **Scope**. `host` means the host CLI reads it before it spawns the runner. `runtime` means the workflow runner reads it, and so does the Docker container when the value is forwarded. `internal` means the CLI sets it automatically on the child process, and you must not export it by hand.
+- **Default**. `—` means the variable has no built-in default. An absent value then disables the feature, or the surrounding code falls back to a config-key default.
 
 ## Runtime, CLI, and internal variables
 
-The table below covers every `JAIPH_*` name read from `process.env` / `env` in `src/`. It is bidirectionally pinned by the docs-lint harness — a `JAIPH_*` name added or removed in source must be added or removed here in the same change.
+The table below covers every `JAIPH_*` name read from `process.env` or `env` in `src/`. The docs-lint harness keeps the table and the source in sync in both directions. When you add or remove a `JAIPH_*` name in the source, you must add or remove it here in the same change.
 
 ### Precedence
 
 `jaiph run`, `jaiph serve`, and `jaiph mcp` share one execution-policy contract. For every policy input the resolution order is:
 
-1. **CLI flags** (`--workspace`, `--env`, `--inplace`, `--unsafe`, `--yes`) — a flag sets the corresponding `JAIPH_*` variable on that process's launched env, so the env layer below stays the single source of truth that sandbox resolution consumes.
+1. **CLI flags** (`--workspace`, `--env`, `--inplace`, `--unsafe`, `--yes`). A flag sets the corresponding `JAIPH_*` variable on that process's launched env, so the env layer below stays the single source Jaiph reads when it resolves the sandbox.
 2. **`JAIPH_*` environment variables** (this table).
-3. **Workflow runtime metadata** — the entry file's `config { runtime { … } }` keys (for example `docker_image`, `docker_network`).
+3. **Workflow runtime metadata**, from the entry file's `config { runtime { … } }` keys such as `docker_image` and `docker_network`.
 4. **Built-in defaults.**
 
-Contradictory posture is never resolved by precedence: `--inplace` / `JAIPH_INPLACE` together with `--unsafe` / `JAIPH_UNSAFE` fails with `E_FLAG_CONFLICT` before anything is spawned, in all three commands. Long-lived servers (`jaiph serve`, `jaiph mcp`) resolve the effective posture **once at startup**, print it, and apply it to every call; `jaiph run` resolves it per run. Consent rules: `jaiph run` confirms inplace / unsafe-host-only interactively (`--yes` / `JAIPH_INPLACE_YES` auto-confirms; required non-TTY); for `jaiph serve` / `jaiph mcp`, launching the server with the flag or env var **is** the consent (no prompt). Inside a container the container itself is the sandbox, so unsafe host-only proceeds with a one-line notice — the documented standalone posture of the runtime image.
+Precedence never resolves a contradiction between the two sandbox postures. Setting `--inplace` or `JAIPH_INPLACE` together with `--unsafe` or `JAIPH_UNSAFE` fails with `E_FLAG_CONFLICT` before Jaiph spawns anything, in all three commands.
+
+The long-lived servers `jaiph serve` and `jaiph mcp` resolve the effective posture once at startup, print it, and apply it to every call. `jaiph run` resolves it once per run.
+
+The consent rules differ by command. `jaiph run` confirms inplace and unsafe host-only mode interactively, and `--yes` or `JAIPH_INPLACE_YES` auto-confirms it (required when stdin is not a TTY). `jaiph serve` and `jaiph mcp` never prompt, because launching the server with the flag or the environment variable is itself the consent.
+
+Inside a container the container is the sandbox, so unsafe host-only mode proceeds with a one-line notice, which is the standalone posture the runtime image is built for.
 
 <!-- begin: src-parity -->
 
@@ -112,7 +118,7 @@ Contradictory posture is never resolved by precedence: `--inplace` / `JAIPH_INPL
 
 ### Internal Docker-only variables
 
-Two variables are set by the host CLI on the Docker container but are **not** in the table above: the source-parity harness tracks only names accessed through a literal `env.JAIPH_*` / `process.env["JAIPH_*"]` read in `src/`, and these escape that pattern (read through a computed key). Both are managed entirely by the CLI — never export them by hand.
+The host CLI sets two more variables on the Docker container that are not in the table above. The source-parity harness tracks only names read through a literal `env.JAIPH_*` or `process.env["JAIPH_*"]` access in `src/`, and both of these are read through a computed key instead, so they escape that pattern. The CLI manages both of them, so never export them by hand.
 
 | Variable | Scope | Role |
 |---|---|---|
@@ -121,7 +127,7 @@ Two variables are set by the host CLI on the Docker container but are **not** in
 
 ## Agent credentials
 
-The host CLI checks these before spawning the runner or container when [credential pre-flight](configuration.md#credential-pre-flight) applies. Pre-flight is skipped when the entry file declares no explicit backend and uses no `prompt` step, on `jaiph run --raw`, and when `JAIPH_UNSAFE=true`. See [Authenticate agent backends](/how-to/agent-auth) for per-backend rules and [Sandboxing](sandboxing.md) for which credentials cross the container boundary.
+The host CLI checks these before spawning the runner or container when [credential pre-flight](configuration.md#credential-pre-flight) applies. Pre-flight is skipped when the entry file declares no explicit backend and uses no `prompt` step, on `jaiph run --raw`, and when `JAIPH_UNSAFE=true`. See [Authenticate agent backends](agent-auth.md) for per-backend rules and [Sandboxing](sandboxing.md) for which credentials cross the container boundary.
 
 | Variable | Backend | Host behaviour | Docker behaviour | Notes |
 |---|---|---|---|---|
@@ -130,23 +136,26 @@ The host CLI checks these before spawning the runner or container when [credenti
 | `CURSOR_API_KEY` | `cursor` | warning if absent | hard error (`E_AGENT_CREDENTIALS`) | A stored `cursor-agent login` may still work on host runs. |
 | `OPENAI_API_KEY` | `codex` | hard error (`E_AGENT_CREDENTIALS`) | hard error (`E_AGENT_CREDENTIALS`) | No CLI-login fallback. Forwarded into the Docker container when the entry file selects `codex` — set on the host before `jaiph run`. |
 
-Forwarding allowlist into the Docker container: `JAIPH_*` run-control keys (except `JAIPH_DOCKER_*`, `JAIPH_INPLACE`, and `JAIPH_INPLACE_YES`) plus the enumerated credential keys of the backends the entry file selects — `ANTHROPIC_API_KEY` and `CLAUDE_CODE_OAUTH_TOKEN` for `claude`, `CURSOR_API_KEY` for `cursor`, `OPENAI_API_KEY` for `codex`. Other variables in those families (for example `ANTHROPIC_BASE_URL` or `CLAUDE_CONFIG_DIR`) and everything else — including unrelated cloud credentials — are silently dropped; use `--env` below to forward one intentionally. See [Sandboxing](sandboxing.md).
+Jaiph forwards a fixed allowlist into the Docker container. The allowlist is the `JAIPH_*` run-control keys, except `JAIPH_DOCKER_*`, `JAIPH_INPLACE`, and `JAIPH_INPLACE_YES`, plus the credential keys of the backends the entry file selects. The credential keys are `ANTHROPIC_API_KEY` and `CLAUDE_CODE_OAUTH_TOKEN` for `claude`, `CURSOR_API_KEY` for `cursor`, and `OPENAI_API_KEY` for `codex`. Jaiph silently drops every other variable, including other variables in those families (for example `ANTHROPIC_BASE_URL` or `CLAUDE_CONFIG_DIR`) and unrelated cloud credentials. To forward one on purpose, use the `--env` flag described below. See [Sandboxing](sandboxing.md).
 
-To forward a variable outside the allowlist (for example `GITHUB_TOKEN` or `AWS_ACCESS_KEY_ID`) into a specific run, use the per-key **`--env`** flag on `jaiph run` / `jaiph serve` / `jaiph mcp`: `--env KEY=VALUE` sets an exact value and `--env KEY` forwards the host's current value. In host mode `--env` defines the variable on the workflow process directly; in a Docker sandbox it crosses the boundary verbatim as an explicit `-e KEY=VALUE` container arg **bypassing the allowlist above** (the flag is the per-key consent), winning over any allowlist-forwarded value for the same key. A bare `--env KEY` unset on the host aborts with `E_ENV_MISSING` before anything is spawned; invalid names give `E_ENV_INVALID`; and the sandbox-control / runtime-managed keys the CLI owns (`JAIPH_UNSAFE`, `JAIPH_INPLACE`, `JAIPH_INPLACE_YES`, any `JAIPH_DOCKER_*`, `JAIPH_WORKSPACE`, `JAIPH_RUNS_DIR`, `JAIPH_RUN_ID`, `JAIPH_SCRIPTS`, `JAIPH_MODULE_GRAPH_FILE`, `JAIPH_SOURCE_ABS`, `JAIPH_META_FILE`, `JAIPH_AGENT_TRUSTED_WORKSPACE`, `JAIPH_RUN_WORKFLOW`) are rejected with `E_ENV_RESERVED` — use the sandbox flags or real env vars for those. Values are never path-remapped. See [CLI — `jaiph run` flags](cli.md#jaiph-run).
+To forward a variable outside the allowlist, for example `GITHUB_TOKEN` or `AWS_ACCESS_KEY_ID`, into a single run, use the per-key `--env` flag on `jaiph run`, `jaiph serve`, or `jaiph mcp`. `--env KEY=VALUE` sets an exact value, and `--env KEY` forwards the host's current value. In host mode `--env` defines the variable on the workflow process directly. In a Docker sandbox it crosses the boundary unchanged as an explicit `-e KEY=VALUE` container argument, so it bypasses the allowlist above, and the flag is the per-key consent for that. An `--env` value wins over any allowlist-forwarded value for the same key.
 
-An `--env`-forwarded variable is visible to trusted `run` script/workflow steps but **not** to `prompt` agent subprocesses: every prompt backend is spawned with a fail-closed scrub that forwards only the base environment (`PATH`, `HOME`, locale, proxies, `CLAUDE_CONFIG_DIR`, …), `JAIPH_*` control keys, and that backend's own credential keys — in host mode and every Docker sandbox mode alike. See [Sandboxing — environment exposure](sandboxing.md#env-exposure).
+Jaiph rejects some names before it spawns anything. A bare `--env KEY` that is unset on the host aborts with `E_ENV_MISSING`. An invalid name gives `E_ENV_INVALID`. The sandbox-control and runtime-managed keys the CLI owns (`JAIPH_UNSAFE`, `JAIPH_INPLACE`, `JAIPH_INPLACE_YES`, any `JAIPH_DOCKER_*`, `JAIPH_WORKSPACE`, `JAIPH_RUNS_DIR`, `JAIPH_RUN_ID`, `JAIPH_SCRIPTS`, `JAIPH_MODULE_GRAPH_FILE`, `JAIPH_SOURCE_ABS`, `JAIPH_META_FILE`, `JAIPH_AGENT_TRUSTED_WORKSPACE`, `JAIPH_RUN_WORKFLOW`) are rejected with `E_ENV_RESERVED`, so use the sandbox flags or real environment variables for those. Values are never path-remapped. See [CLI — `jaiph run` flags](cli.md#jaiph-run).
 
-For the common "forward this host key" case, the [`trusted_envs`](configuration.md#trusted-envs) config key is the declarative in-file alternative to `--env`: a `.jh` file names the host keys its trusted `run` steps require (`trusted_envs = "GITHUB_TOKEN"`), they resolve from a pristine host-env snapshot, and the same reserved-key (`E_ENV_RESERVED`) and missing-value (`E_ENV_MISSING`) rules apply. An explicit `--env KEY=VALUE` still overrides the snapshot value for that key. Like `--env`, `trusted_envs` values reach trusted `run` steps only — never `prompt` subprocesses.
+A variable forwarded with `--env` is visible to trusted `run` script and workflow steps, but not to `prompt` agent subprocesses. Jaiph spawns every prompt backend with a fail-closed scrub of the environment. The scrub forwards only the base environment (`PATH`, `HOME`, locale, proxies, `CLAUDE_CONFIG_DIR`, and so on), the `JAIPH_*` control keys, and that backend's own credential keys. The scrub works the same way in host mode and in every Docker sandbox mode. See [Sandboxing — environment exposure](sandboxing.md#env-exposure).
+
+For the common case of forwarding a host key, the [`trusted_envs`](configuration.md#trusted-envs) config key is the in-file alternative to `--env`. A `.jh` file names the host keys its trusted `run` steps need, for example `trusted_envs = "GITHUB_TOKEN"`. The keys resolve from a clean snapshot of the host environment, and the same reserved-key (`E_ENV_RESERVED`) and missing-value (`E_ENV_MISSING`) rules apply. An explicit `--env KEY=VALUE` still overrides the snapshot value for that key. Like `--env`, `trusted_envs` values reach trusted `run` steps only, never `prompt` subprocesses.
 
 ## Telemetry variables
 
 Jaiph reads the standard OpenTelemetry environment variables to export one trace
-per run to an OTLP collector — enablement uses **only `OTEL_*` / `SENTRY_*`**, not
-`JAIPH_*`. These are consumed **host-side, after the run completes** (they are never
-forwarded into the Docker sandbox), so they are not tracked by the `JAIPH_*`
-source-parity harness above. Export is enabled iff a traces endpoint is set. The
-one Jaiph-owned knob is the shared flush budget `JAIPH_TELEMETRY_FLUSH_MS` (in the
-source-parity table above), which bounds — but never enables — delivery. See
+per run to an OTLP collector. Only the `OTEL_*` and `SENTRY_*` variables turn
+export on, not any `JAIPH_*` variable. Jaiph reads them on the host after the run
+completes and never forwards them into the Docker sandbox, so the `JAIPH_*`
+source-parity harness above does not track them. Export is enabled only when a
+traces endpoint is set. The one variable Jaiph owns here is the shared flush
+budget `JAIPH_TELEMETRY_FLUSH_MS`, listed in the source-parity table above, which
+bounds delivery but never enables it. See
 [Export traces to an OTLP collector](observability.md).
 
 | Variable | Type | Default | Role |
@@ -158,12 +167,13 @@ source-parity table above), which bounds — but never enables — delivery. See
 | `OTEL_SERVICE_NAME` | string | `jaiph` | `service.name` resource attribute on every exported span. |
 | `OTEL_RESOURCE_ATTRIBUTES` | string (`k=v,k=v`) | — | Extra resource attributes. Jaiph also always adds `jaiph.version`, `jaiph.run_id`, `jaiph.workflow`, and `jaiph.source`; an authenticated `jaiph serve` run additionally adds `jaiph.principal` (audit subject) and `jaiph.correlation_id` (request id) — never a token or a secret-bearing claim. |
 
-Jaiph also reads the standard Sentry environment variables to report **failed**
-runs to a Sentry error tracker — again **no `JAIPH_*` variables**, consumed
-host-side after the run completes (never forwarded into the Docker sandbox), so
-they are not tracked by the `JAIPH_*` source-parity harness above. A report is
-sent iff `SENTRY_DSN` is set **and** the run terminated unsuccessfully (nonzero
-exit or a signal); successful runs send nothing. See [Observability](observability.md#report-failed-runs-to-sentry).
+Jaiph also reads the standard Sentry environment variables to report failed
+runs to a Sentry error tracker. As with the OpenTelemetry variables, no `JAIPH_*`
+variable turns the reporting on. Jaiph reads them on the host after the run
+completes and never forwards them into the Docker sandbox, so the `JAIPH_*`
+source-parity harness above does not track them. Jaiph sends a report only when
+`SENTRY_DSN` is set and the run ended unsuccessfully, from a nonzero exit or a
+signal. A successful run sends nothing. See [Observability](observability.md#report-failed-runs-to-sentry).
 
 | Variable | Type | Default | Role |
 |---|---|---|---|
@@ -173,7 +183,7 @@ exit or a signal); successful runs send nothing. See [Observability](observabili
 
 ## Installer and `jaiph use`
 
-These variables are consumed by `docs/install` (the installer shell script) and by `jaiph use` when it re-invokes the installer. They are **not** read from inside the Jaiph TypeScript source.
+The installer shell script (`docs/install`) reads these variables, and `jaiph use` reads them too when it re-invokes the installer. Jaiph does not read them from inside its TypeScript source.
 
 | Variable | Type | Default | Role |
 |---|---|---|---|
@@ -184,7 +194,7 @@ These variables are consumed by `docs/install` (the installer shell script) and 
 
 ## Docker sandbox failure modes
 
-These error codes surface during Docker-backed `jaiph run` invocations. They are emitted to stderr (and to the failure footer) and produce non-zero exit codes. Most are `E_DOCKER_*`; `E_TIMEOUT`, `E_VALIDATE_MOUNT`, and `E_FLAG_CONFLICT` appear in Docker contexts but are not strictly Docker-scoped.
+The error codes below surface during Docker-backed `jaiph run` invocations. Jaiph writes them to stderr and to the failure footer, and they produce non-zero exit codes. Most start with `E_DOCKER_`. The codes `E_TIMEOUT`, `E_VALIDATE_MOUNT`, and `E_FLAG_CONFLICT` also appear in Docker contexts, but they are not strictly Docker-scoped.
 
 | Code | Trigger | Behaviour |
 |---|---|---|

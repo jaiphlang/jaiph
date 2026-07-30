@@ -6,14 +6,14 @@ diataxis: how-to
 
 # Configure the agent backend and model
 
-This recipe picks which agent backend `prompt` steps use (`cursor`, `claude`, or `codex`) and which model to ask for. Configuration can live in the workflow file (`config { … }`) or in the environment. Environment wins over in-file when both are set.
+This guide shows how to pick which agent backend your `prompt` steps use (`cursor`, `claude`, or `codex`) and which model to request. You can set both in the workflow file with a `config { … }` block or in the environment. The environment wins over the in-file value when both are set.
 
-For the full key/default/precedence reference, see [Configuration](/reference/configuration). For credential setup per backend, see [Authenticate agent backends](/how-to/agent-auth).
+For the full key/default/precedence reference, see [Configuration](configuration.md). For credential setup per backend, see [Authenticate agent backends](agent-auth.md).
 
 ## Prerequisites
 
 - The agent CLI for the chosen backend is on `PATH` (`cursor-agent` for `cursor`, `claude` for `claude`; `codex` uses HTTP and needs no CLI).
-- Credentials are set per [Authenticate agent backends](/how-to/agent-auth).
+- Credentials are set per [Authenticate agent backends](agent-auth.md).
 
 ## 1. Set the backend in the entry file
 
@@ -31,7 +31,7 @@ workflow default() {
 }
 ```
 
-The valid backend values are `"cursor"` (the default), `"claude"`, and `"codex"`. The model string is forwarded to the backend — use a name the backend recognizes (e.g. `gpt-4o` for codex, `sonnet-4` for claude).
+The valid backend values are `"cursor"` (the default), `"claude"`, and `"codex"`. The model string is forwarded to the backend, so use a name the backend recognizes (e.g. `gpt-4o` for codex, `sonnet-4` for claude).
 
 ## 2. Override per-workflow
 
@@ -47,7 +47,7 @@ workflow fast_check() {
 }
 ```
 
-Only `agent.*` and `run.*` keys are allowed at workflow scope. `runtime.*` and `module.*` keys are module-only.
+A workflow-level block can set `agent.*` and `run.*` keys. The `runtime.*` and `module.*` keys are module-only, so a workflow-level block cannot set them.
 
 ## 3. Override from the environment
 
@@ -57,7 +57,7 @@ export JAIPH_AGENT_MODEL="sonnet-4"
 jaiph run ./flow.jh
 ```
 
-When set, `JAIPH_AGENT_BACKEND` (and other mapped agent/run env vars) win over in-file `config` for the lifetime of that run. The CLI marks inherited agent/run env vars as locked (`JAIPH_AGENT_BACKEND_LOCKED=1`, …) so in-file overrides never silently take effect. Model is different: in-file `agent.model` does not set `JAIPH_AGENT_MODEL` — it applies per `prompt` step only. Set `JAIPH_AGENT_MODEL` in the shell to override the model for every prompt in a run.
+When set, `JAIPH_AGENT_BACKEND` (and the other mapped agent and run env vars) win over in-file `config` for the lifetime of that run. The CLI marks inherited agent and run env vars as locked (`JAIPH_AGENT_BACKEND_LOCKED=1`, and so on) so in-file overrides never silently take effect. The model works differently. In-file `agent.model` does not set `JAIPH_AGENT_MODEL`, and it applies per `prompt` step only. Set `JAIPH_AGENT_MODEL` in the shell to override the model for every prompt in a run.
 
 ## 4. (Codex) Override the API URL
 
@@ -78,13 +78,13 @@ jq -c 'select(.type=="PROMPT_START")' .jaiph/runs/<date>/<time>-<entry>/run_summ
 The line includes `"backend":"<backend>"`, `"model"` (the resolved string, or `null` when the backend auto-selects), and `model_reason`:
 
 - `explicit` — from `agent.model` or `JAIPH_AGENT_MODEL`.
-- `flags` — from a `--model` embedded in `agent.cursor_flags` / `agent.claude_flags` (see [Configuration](/reference/configuration)).
+- `flags` — from a `--model` embedded in `agent.cursor_flags` / `agent.claude_flags` (see [Configuration](configuration.md)).
 - `backend-default` — no model was requested, so the backend CLI picks its own.
 
 When `model_reason` is `backend-default`, codex still calls the API with `gpt-4o` even though `"model"` is `null` in the summary.
 
 ## Related
 
-- [Authenticate agent backends](/how-to/agent-auth) — the credentials each backend needs.
-- [Configuration — Precedence](/reference/configuration#precedence) — env vs module vs workflow layering, lock flags, and nested-call scoping.
-- [Configuration](/reference/configuration) — the full set of config keys, defaults, and env equivalents.
+- [Authenticate agent backends](agent-auth.md) — the credentials each backend needs.
+- [Configuration — Precedence](configuration.md#precedence) — env vs module vs workflow layering, lock flags, and nested-call scoping.
+- [Configuration](configuration.md) — the full set of config keys, defaults, and env equivalents.

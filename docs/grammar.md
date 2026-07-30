@@ -11,7 +11,7 @@ redirect_from:
 
 This page is the authoritative syntactic reference for Jaiph: lexical rules, statement shapes, EBNF, and the validator's error catalog. For step semantics see [Language](language.md). For the system around the grammar see [Architecture](architecture.md).
 
-**Scope.** Normal modules (`.jh`) and test modules (`*.test.jh`). For `jaiph run` / `jaiph test`, the compile path is `loadModuleGraph` → `buildScriptsFromGraph(graph, outDir)` (per-module `validateModule` + script emit via `emitScriptsForModuleFromGraph`). `jaiph compile` walks the same import closure through `collectDiagnostics(graph)` and emits no scripts. `parsejaiph(source, filePath)` is I/O-pure. `buildRuntimeGraph` consumes an already-loaded graph and never re-runs validation or re-reads `.jh` sources.
+**Scope.** This page covers normal modules (`.jh`) and test modules (`*.test.jh`). A module is a plain text file. At the top level it holds imports, config blocks, channels, top-level `const` values, rules, scripts, and workflows, and a test module may also hold `test` blocks. The sections below describe the syntax of each construct, the rules the validator enforces, and the error codes it reports. For how these files are parsed, validated, and run, see [Architecture](architecture.md).
 
 ## Lexical rules
 
@@ -22,7 +22,7 @@ This page is the authoritative syntactic reference for Jaiph: lexical rules, sta
 | Comment | Full-line `#` comment. Trailing `#` on a step line is not a comment. |
 | Blank line | Preserved between steps inside workflow and rule bodies (as `blank_line` trivia). `jaiph format` collapses multiple consecutive body blanks to one and trims trailing blanks before `}`. Top-level blank lines are not preserved — the formatter emits one blank line between emitted sections. |
 | Shebang | A `#!` first line of the file is ignored by the parser. |
-| Single-line string | Double-quoted `"…"`. Single-quoted strings are `E_PARSE`. Write `\"` to include a quote without ending the string. In orchestration strings the backslash is otherwise passed through verbatim — `\n`, `\t`, and `\\` are **not** decoded to newline/tab/backslash (use a `"""…"""` block or a `script` for literal newlines). Config-block string values are the exception: they decode `\"`, `\\`, `\n`, and `\t`. |
+| Single-line string | Double-quoted `"…"`. Single-quoted strings are `E_PARSE`. Write `\"` to include a quote without ending the string. In orchestration strings the backslash is otherwise passed through verbatim — `\n`, `\t`, and `\\` are **not** decoded to newline/tab/backslash (use a `"""…"""` block or a `script` for literal newlines). Config-block string values are the exception: they decode `\"`, `\\`, `\n`, and `\t`. Match string patterns are a second exception: they decode `\"`, `\n`, and `\\` (but not `\t`). |
 | Multiline string | Triple-quoted `"""…"""`. The opening `"""` must end the line; the closing `"""` must be on its own line. |
 | Script body (single-line) | Backtick `` `…` ``. Jaiph `${identifier}` / `${identifier.field}` interpolation is `E_PARSE`; bash parameter expansion (for example `${var:-default}`) passes through. |
 | Script body (fenced) | Triple-backtick `` ``` ``…`` ``` ``. Optional lang tag `` ```<tag> ``. `${…}` passes through to the shell. |
@@ -43,7 +43,7 @@ top_level = config_block
           | workflow_decl ;
 ```
 
-`env_decl` is written `const` in source; the parser stores it under `envDecls` / module constants. Test modules may also contain `test` blocks — see [Write & run tests](/how-to/testing).
+`env_decl` is written `const` in source; the parser stores it under `envDecls` / module constants. Test modules may also contain `test` blocks — see [Write & run tests](testing.md).
 
 ### Top-level ordering
 
@@ -74,7 +74,7 @@ import_script_stmt = "import" "script" string "as" IDENT ;
 | Library fallback | When relative resolution finds no file and the path contains `/`, the path is split as `<lib-name>/<sub-path>` and resolved to `<workspace>/.jaiph/libs/<lib-name>/<sub-path>.jh`. |
 | Script import path | Quoted string. Relative-only (no library fallback). The path refers to a raw script file (no `.jh` appended). |
 | Missing target | `E_IMPORT_NOT_FOUND` at compile time. |
-| Alias collision | Aliases share the unified namespace with channels, rules, workflows, scripts, and top-level `const`. Duplicates are `E_VALIDATE`. |
+| Alias collision | A duplicate module-import alias is `E_VALIDATE`. Script-import aliases (`import script … as name`) join the parse-time unified namespace shared with channels, rules, workflows, scripts, and top-level `const`, so a name clash there is `E_PARSE`. See [rule 4](#validation-rules). |
 | `export` | Marks a top-level `rule` / `workflow` / `script` as public. If at least one `export` exists, only exported names are reachable through the alias (`E_VALIDATE: "<name>" is not exported from module "<alias>"`). Modules with zero `export` declarations have implicit-public semantics. |
 
 ## Channels
@@ -96,7 +96,7 @@ interp_ref   = "${" IDENT [ "." IDENT ] "}" ;
 
 All three string forms are equivalent: a bare `identifier`, a bare `${name}` interpolation ref, and a double-quoted string `"${name}"` all store and resolve identically. Shell expansion forms (`${var:-default}`, `${#var}`, etc.) are `E_PARSE`. See [Configuration](configuration.md#value-syntax).
 
-Allowed keys: `agent.model`, `agent.command`, `agent.backend`, `agent.trusted_workspace`, `agent.cursor_flags`, `agent.claude_flags`, `run.logs_dir`, `run.debug`, `run.recover_limit`, `runtime.docker_image`, `runtime.docker_network`, `runtime.docker_timeout_seconds`, `module.name`, `module.version`, `module.description`. See [Configuration](configuration.md). Workflow-level `config` permits only `agent.*` and `run.*` (`runtime.*` / `module.*` are `E_PARSE`).
+Allowed keys: `agent.model`, `agent.command`, `agent.backend`, `agent.trusted_workspace`, `agent.cursor_flags`, `agent.claude_flags`, `run.logs_dir`, `run.debug`, `run.recover_limit`, `runtime.docker_image`, `runtime.docker_network`, `runtime.docker_timeout_seconds`, `module.name`, `module.version`, `module.description`, and `trusted_envs`. See [Configuration](configuration.md). The `trusted_envs` value is a quoted, space-separated list of host environment variable names (for example `trusted_envs = "GITHUB_TOKEN NPM_TOKEN"`). See [Trusted env keys](configuration.md#trusted-env-keys-trusted_envs). Workflow-level `config` permits `agent.*`, `run.*`, and `trusted_envs` (`runtime.*` / `module.*` are `E_PARSE`).
 
 The opening line is `config` followed by `{` with optional whitespace between them. Duplicate blocks are `E_PARSE` (`duplicate config block …`). Unknown keys are `E_PARSE` listing the allowed keys. Wrong value types are `E_PARSE`.
 

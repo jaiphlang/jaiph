@@ -29,7 +29,7 @@ function toCompileDiagnostic(d: JaiphDiagnostic): CompileDiagnostic {
 
 const COMPILE_USAGE =
   "Usage: jaiph compile [--json] [--workspace <dir>] <file.jh | directory> ...\n\n" +
-  "Parse import closures and run validateReferences only (same compile-time checks as before jaiph run).\n" +
+  "Parse and validate import closures, collecting every compile-time error at once (jaiph run stops at the first).\n" +
   "Does not emit scripts/, does not run buildRuntimeGraph, does not spawn the workflow runner.\n" +
   "With a directory, all non-test *.jh files are used as entrypoints; each file's import closure is validated.\n" +
   "Pass *.test.jh explicitly to validate a test module.\n\n" +

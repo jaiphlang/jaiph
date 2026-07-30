@@ -9,16 +9,16 @@ redirect_from:
 
 # Use & publish a library
 
-This recipe installs a reusable Jaiph library into your workspace, imports it from a workflow, and (in the second half) publishes a library of your own.
+This guide installs a reusable Jaiph library into your workspace, imports it from a workflow, and (in the second half) publishes a library of your own.
 
-A **Jaiph library is a public git repository** containing at least one `.jh` module anywhere in the tree. Imports written as `lib-name/path` resolve to `<workspace>/.jaiph/libs/<lib-name>/<path>.jh` after `jaiph install` clones the library into that directory.
+A **Jaiph library** is a git repository with at least one `.jh` module anywhere in the tree. Imports written as `lib-name/path` resolve to `<workspace>/.jaiph/libs/<lib-name>/<path>.jh` after `jaiph install` clones the library into that directory.
 
 ## Prerequisites
 
-- Run commands from your project directory. `jaiph install` detects the workspace root from the current directory (walks up for `.jaiph` or `.git`, with temp-directory guards; if no marker is found, the starting directory is used).
+- Run commands from your project directory. `jaiph install` detects the workspace root from the current directory. It walks up looking for a `.jaiph` or `.git` marker, guards against stray markers in temp directories, and falls back to the starting directory when it finds no marker.
 - `git` on `PATH`.
 
-## Part A — Use a library
+## Part A. Use a library
 
 ### 1. Install by name or URL
 
@@ -35,13 +35,13 @@ jaiph install https://github.com/you/queue-lib.git
 # Pin a branch or tag
 jaiph install https://github.com/you/queue-lib.git@v1.0
 
-# Install several at once — names and URLs can be mixed
+# Install several at once (names and URLs can be mixed)
 jaiph install jaiphlang mylib@v1.2 https://github.com/you/queue-lib.git
 ```
 
-Each argument is resolved independently, so a single command can mix registry names and git URLs; missing libraries are cloned in parallel. The argument shape decides the path. A token matching `/^[A-Za-z0-9_-]+(@[A-Za-z0-9._+/-]+)?$/` with no `/` and no `:` is a **registry name** and is resolved through the index. Everything else is parsed as a **git URL** (optional `@<ref>` suffix for branch or tag).
+Each argument is resolved independently, so a single command can mix registry names and git URLs, and missing libraries are cloned in parallel. The argument shape decides the path. A token matching `/^[A-Za-z0-9_-]+(@[A-Za-z0-9._+/-]+)?$/` with no `/` and no `:` is a **registry name** and is resolved through the index. Everything else is parsed as a **git URL** (optional `@<ref>` suffix for branch or tag).
 
-Registry names install into `.jaiph/libs/<name>/` using the registry key. Git URLs install into `.jaiph/libs/<derived-name>/`, where `<derived-name>` is the last URL path segment without the `.git` suffix — the import prefix may differ from a registry name for the same repository.
+Registry names install into `.jaiph/libs/<name>/` using the registry key. Git URLs install into `.jaiph/libs/<derived-name>/`, where `<derived-name>` is the last URL path segment without the `.git` suffix. For the same repository, the import prefix from a git URL may differ from the prefix a registry name would give.
 
 `jaiph install` shallow-clones (`git clone --depth 1`) each missing library, removes the nested `.git` directory, and writes a `.jaiph/libs.lock` entry recording the resolved URL, optional version, and the 40-char commit captured before `.git` was removed. Existing directories are skipped unless you pass `--force`. Commit the lockfile.
 
@@ -51,7 +51,7 @@ Registry names install into `.jaiph/libs/<name>/` using the registry key. Git UR
 jaiph install
 ```
 
-With no arguments, `jaiph install` restores every entry in `.jaiph/libs.lock`: it clones any missing library directory (existing directories are skipped unless you pass `--force`). When a lock entry includes a `commit`, the cloned HEAD must match it; on mismatch the directory is removed and the run fails with the locked vs cloned SHAs. Lock entries without `commit` (older lockfiles) restore without that check. The registry is never read on this path.
+With no arguments, `jaiph install` restores every entry in `.jaiph/libs.lock`. It clones any missing library directory, and existing directories are skipped unless you pass `--force`. When a lock entry includes a `commit`, the cloned HEAD must match it. On a mismatch the directory is removed and the run fails, reporting the locked SHA and the cloned SHA. Lock entries without `commit` (older lockfiles) restore without that check. The registry is never read on this path.
 
 ### 3. Import from a workflow
 
@@ -67,7 +67,7 @@ workflow default() {
 }
 ```
 
-Imports without `/` only attempt relative-to-file lookup; the library fallback is skipped.
+An import whose path has no `/` is looked up only relative to the importing file. The library fallback is skipped for it.
 
 ### 4. Verify
 
@@ -79,22 +79,22 @@ jaiph run ./flow.jh               # imports must resolve at compile time
 
 A clone with no `.jh` files anywhere in the tree is rejected with `lib "<name>" contains no .jh modules — not a jaiph library?` and the directory is removed before any lock entry is written.
 
-### Execution-config trust boundary
+### Trust boundary for the execution binary
 
-An imported library cannot silently redirect which binary runs your `prompt` steps. The execution-binary config keys — `agent.command` and `agent.backend` — are applied **only** from your entry module's `config {}` block; an imported module that sets either key is ignored for that key. All other config keys (`agent.model`, `agent.trusted_workspace`, `agent.*_flags`, `run.*`) follow the normal cross-module scoping rules. See [Configuration — Import trust boundary](configuration.md#import-trust-boundary) for the full contract and the advanced `JAIPH_AGENT_COMMAND_IMPORT_UNLOCK` / `JAIPH_AGENT_BACKEND_IMPORT_UNLOCK` opt-in.
+An imported library cannot silently redirect which binary runs your `prompt` steps. The `agent.command` and `agent.backend` config keys set that binary, and Jaiph applies both keys **only** from your entry module's `config {}` block. An imported module that sets either key is ignored for that key. All other config keys (`agent.model`, `agent.trusted_workspace`, `agent.*_flags`, `run.*`) follow the normal cross-module scoping rules. See the [import trust boundary](configuration.md#import-trust-boundary) section of the configuration reference for the full contract and the advanced `JAIPH_AGENT_COMMAND_IMPORT_UNLOCK` and `JAIPH_AGENT_BACKEND_IMPORT_UNLOCK` opt-in.
 
-## Part B — Publish a library
+## Part B. Publish a library
 
-Publishing is git-native — no package registry upload, no build step.
+Publishing uses plain git. There is no package registry upload and no build step.
 
 ### 1. Lay out the repo
 
-A library is a git repository of `.jh` modules plus any companion script files those modules reference. Two common shapes:
+A library is a git repository of `.jh` modules plus any companion script files those modules reference. Libraries commonly take one of these shapes:
 
-- **Single-file lib** — `repo-root/queue.jh`, imported as `"queue-lib/queue"` when installed as `queue-lib`.
-- **Multi-module lib** — several `.jh` files (at the repo root or in subdirectories), each imported as `"<install-name>/<path>"` without the `.jh` suffix (for example `"mylib/subdir/helper"` for `subdir/helper.jh`).
+- **Single-file lib.** `repo-root/queue.jh`, imported as `"queue-lib/queue"` when installed as `queue-lib`.
+- **Multi-module lib.** Several `.jh` files (at the repo root or in subdirectories), each imported as `"<install-name>/<path>"` without the `.jh` suffix (for example `"mylib/subdir/helper"` for `subdir/helper.jh`).
 
-Companion scripts (e.g. `queue.py` next to `queue.jh`) must be referenced with **relative paths** — `import script "./queue.py"` — because `import script` has no workspace-libs fallback.
+Companion scripts (e.g. `queue.py` next to `queue.jh`) must be referenced with **relative paths**, such as `import script "./queue.py"`. The `import script` statement resolves the path only relative to the importing file, so it has no fallback to the workspace libraries directory.
 
 ### 2. Decide the public surface
 
@@ -114,7 +114,7 @@ git tag v0.1.0
 git push --tags
 ```
 
-Consumers pin to that tag with `jaiph install <name>@v0.1.0` or `jaiph install <url>.git@v0.1.0`. The ref is passed straight to `git clone --branch`; the resolved 40-char commit is recorded in `.jaiph/libs.lock` so restore is reproducible even when the tag later moves.
+Consumers pin to that tag with `jaiph install <name>@v0.1.0` or `jaiph install <url>.git@v0.1.0`. The ref is passed straight to `git clone --branch`. The resolved 40-char commit is recorded in `.jaiph/libs.lock`, so restore is reproducible even when the tag later moves.
 
 ### 4. (Optional) List on `jaiph.org/registry`
 
@@ -131,7 +131,7 @@ To let consumers install by bare name, open a PR against [`jaiphlang/registry`](
 }
 ```
 
-The key is the import prefix consumers will write (`import "<your-name>/…"`). After the PR merges upstream, maintainers of the Jaiph repo run `npm run registry:build`, commit the updated `docs/registry`, and push — GitHub Pages then serves the index at `https://jaiph.org/registry`.
+The key is the import prefix consumers will write (`import "<your-name>/…"`). After the PR merges upstream, maintainers of the Jaiph repo run `npm run registry:build`, commit the updated `docs/registry`, and push. GitHub Pages then serves the index at `https://jaiph.org/registry`.
 
 ## Verification
 
@@ -149,4 +149,4 @@ For a publisher:
 ## Related
 
 - [Architecture — Local module graph](architecture.md#local-module-graph) — how `<lib>/<path>` imports resolve through `.jaiph/libs/`.
-- [Save artifacts](/how-to/artifacts) — the `jaiphlang/artifacts` library covered there is one example consumer.
+- [Save artifacts](artifacts.md) — the `jaiphlang/artifacts` library covered there is one example consumer.

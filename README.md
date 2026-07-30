@@ -94,7 +94,7 @@ Initialize a project (optional): `jaiph init` writes `.jaiph/` with bootstrap wo
 
 - Run the default workflow: `jaiph run path/to/main.jh [args...]` or `./main.jh [args...]` with a `#!/usr/bin/env jaiph` shebang.
 - Run tests: `jaiph test` (workspace), `jaiph test ./dir`, or `jaiph test path.test.jh`.
-- Validate without executing: `jaiph compile …` (same `validateReferences` checks as before `jaiph run`; no `scripts/` emission — see [Architecture](docs/architecture.md)).
+- Validate without executing: `jaiph compile …` (runs the same compile-time validation as `jaiph run`, but collects every error at once instead of stopping at the first; no `scripts/` emission — see [Architecture](docs/architecture.md)).
 - Format sources: `jaiph format …` / `jaiph format --check …`.
 
 Full flags and environment variables: [CLI](docs/cli.md), [Environment variables](docs/env-vars.md). New here? Start with [Your first workflow](docs/first-workflow.md).

@@ -8,7 +8,7 @@ redirect_from:
 
 # Jaiph Skill (for Agents)
 
-You are an agent. A user has asked you to automate a repetitive task — a delivery pipeline, a review loop, a recurring check, a queue of work items. This document teaches you to author **Jaiph workflows** that do that. Read it fully before writing any `.jh` file; Jaiph looks like shell plus YAML but is neither, and most authoring mistakes come from guessing syntax instead of following the rules below.
+You are an agent. A user has asked you to automate a repetitive task, for example a delivery pipeline, a review loop, a recurring check, or a queue of work items. This page teaches you to author **Jaiph workflows** for those tasks. Read it fully before you write any `.jh` file. Jaiph looks like shell plus YAML but is neither, and most authoring mistakes come from guessing at the syntax instead of following the rules below.
 
 ## What Jaiph is
 
@@ -22,7 +22,7 @@ Jaiph is a small workflow language. A `.jh` file declares:
 | `prompt` | A task delegated to an AI agent (Cursor / Claude / Codex backend) | Backend CLI or API call; you capture the answer |
 | `channel` | A message queue with declared workflow listeners | Drained after the sending workflow finishes |
 
-Everything is **strings**. Every step is logged. Every run leaves durable artifacts under `.jaiph/runs/` (per-step `.out`/`.err` files and an append-only `run_summary.jsonl`). That is the payoff over ad-hoc shell: repeatable, inspectable, testable automation.
+Everything is **strings**. Every step is logged. Every run leaves durable artifacts under `.jaiph/runs/` (per-step `.out`/`.err` files and an append-only `run_summary.jsonl`). Compared with ad-hoc shell scripts, a Jaiph run is repeatable, inspectable, and testable.
 
 **Source of truth:** when this document and the compiler disagree, the compiler wins. Full references: [Grammar](grammar.md), [CLI](cli.md), [Configuration](configuration.md), [Write & run tests](testing.md), [Inbox & dispatch](inbox.md), [Sandboxing](sandboxing.md).
 
@@ -54,7 +54,7 @@ Run it: `jaiph run ./flow.jh "clean up the auth module"`. The CLI executes `work
 
 ## Your authoring loop
 
-Follow this sequence every time you create or edit `.jh` files. Do not skip the compile step — it catches almost every mistake described in this document, with file:line:col positions.
+Follow this sequence every time you create or edit `.jh` files. Do not skip the compile step. It catches almost every mistake described in this document and reports each one with a file:line:col position.
 
 1. **Write** the `.jh` files (syntax below).
 2. **Format:** `jaiph format <files…>` — canonical whitespace and top-level ordering.
@@ -79,13 +79,13 @@ Shorthand: `jaiph ./file.jh` routes by extension (`*.test.jh` → test, other `.
 
 ## Core rules you must internalize
 
-These six rules prevent 90% of compile errors:
+Most compile errors come from breaking one of these six rules:
 
 1. **Parentheses everywhere.** Definitions and call sites both require `()`, even with zero arguments: `workflow default() { … }`, `run setup()`, `ensure check()`. Bare `run setup` is a parse error.
 2. **All captures use `const`, and all bindings are immutable.** `const x = run foo()` — never `x = run foo()`, never rebind `x` later, never shadow a parameter with a `const` of the same name.
 3. **Call keyword must match callee type.** `ensure` → rules only. `run` → workflows and scripts (inside a workflow); scripts **only** (inside a rule). Mixing them is `E_VALIDATE`.
 4. **Shell lives in scripts.** Rules reject raw shell lines entirely. Workflows technically allow inline shell lines, but you should not write them — use a named `script` or an inline script (`` run `cmd`() ``). Shell operators next to managed calls (`run foo() | grep x`, `run foo() > file`, `run foo() &`) are parse errors. Interpolating a `prompt` capture into a shell line (`const x = prompt …` then `echo "${x}"`) is `W_PROMPT_IN_SHELL` and fails the build: the agent-controlled value would be spliced into `sh -c`. Pass it as a script argument (`run my_script(x)` → `$1`, argv, not shell-expanded) — see [Sandboxing](sandboxing.md#prompt-in-shell).
-5. **Interpolation is `${name}` only.** No `$name` in orchestration strings, no `$(…)`, no `${var:-default}`, no `${var//x/y}`. Those shell forms are valid *inside script bodies* only.
+5. **Interpolation is `${name}` only.** In an orchestration string, `$name`, `$(…)`, and shell fallback forms like `${var:-default}` are compile errors. Other shell parameter forms like `${var//x/y}` are not caught, so they pass through as literal text, which is almost never what you want. Keep all of these in a `script` body, where they run as normal shell.
 6. **Arguments are not forwarded implicitly.** If `workflow default(task)` calls `run implement()`, the implement workflow does not see `task`. Pass it: `run implement(task)`.
 
 ## Syntax reference
@@ -111,7 +111,7 @@ Channels, rules, workflows, scripts, script-import aliases, and module `const` s
 
 ### Strings and interpolation
 
-- `"single line"` — double quotes only; single quotes are parse errors. Escapes: `\"`, `\\`, `\n`, `\t`.
+- `"single line"` — double quotes only; single quotes are parse errors. Only `\"` is decoded, so you can include a quote. `\n`, `\t`, and `\\` are passed through verbatim, so use a `"""…"""` block for real line breaks.
 - `"""…"""` — multiline. Opening `"""` ends its line; closing `"""` is on its own line.
 - A double-quoted string spanning multiple lines is rejected — use `"""`.
 
@@ -173,7 +173,8 @@ workflow release(version) {
   const notes = run gen_notes(version)      # run a script/workflow, capture
   run publish(version, notes)               # args: bare identifiers for variables
   log "published ${version}"                # info line in the progress tree (stdout)
-  logerr "warning: slow registry"           # red ! line (stderr)
+  logerr "registry error"                   # red ! line (stderr)
+  logwarn "registry is slow"                # yellow warning line
   alerts <- "released ${version}"           # send to a channel
   return notes                              # set this workflow's return value
 }
@@ -182,7 +183,7 @@ workflow release(version) {
 - **Call arguments:** quoted literals (`"main"`), bare identifiers for in-scope variables (`version` — preferred style), bare `IDENT.IDENT` for typed-prompt fields (`result.role`), quoted strings that embed interpolation (`"${version}"`, `"v${version}"`), or explicit nested calls (`run outer(run inner())`, `run outer(ensure check())`). Unquoted `${…}` outside a string (`run greet(${name})`, `run to_lower(${result.role})`) is `E_VALIDATE` — use the bare form instead. Bare call shapes like `run outer(inner())` are rejected.
 - **Arity is checked** when the callee declares parameters: `run greet("a","b")` against `workflow greet(name)` is `E_VALIDATE`.
 - **`fail "reason"`** aborts with a non-zero exit. **`return`** accepts `"string"`, `"""…"""`, a bare identifier, `run ref()` / `ensure ref()`, an inline script, or a `match` expression.
-- **`log` / `logerr`** accept `"string"`, `"""…"""`, a bare identifier (`log status` ≡ `log "${status}"`), or `log run \`cmd\`()`.
+- **`log` / `logerr` / `logwarn`** accept `"string"`, `"""…"""`, a bare identifier (`log status` ≡ `log "${status}"`), or `log run \`cmd\`()`. `logerr` writes a red line and `logwarn` a yellow warning line; both also appear on stderr.
 
 ### Rules — checks only
 
@@ -199,7 +200,7 @@ rule preconditions() {
 
 Allowed in rule bodies: `ensure`, `run` (**scripts only**), `const`, `if`, `match`, `for`, `log`/`logerr`, `fail`, `return`, `catch`/`recover` suffixes. **Not allowed:** `prompt`, channel sends, `run async`, `run` to a workflow, raw shell lines. A rule passes when it exits 0. Treat rules as read-only: do mutations in workflows and scripts.
 
-A rule that `return`s a value can double as a validator-and-normalizer, and the caller captures that value with `const x = ensure rule()` — the same capture form as `run`. For example `const name = ensure valid_name(input)` fails the workflow if the rule fails, otherwise binds the rule's returned (cleaned) value.
+A rule that `return`s a value can both check its input and return a cleaned version of it, and the caller captures that value with `const x = ensure rule()`, the same capture form as `run`. For example `const name = ensure valid_name(input)` fails the workflow if the rule fails, and otherwise binds the rule's returned (cleaned) value.
 
 ### Prompts — delegating to an agent
 
@@ -258,7 +259,7 @@ run tests() recover (err) {
 - `recover` retries until success or `run.recover_limit` (default **10**; workflow-level config overrides module-level).
 - A common pattern: a `catch` whose body is the "else branch" — note `return` inside a catch body returns from the **enclosing workflow**.
 
-`recover` + `prompt` is Jaiph's signature loop for repetitive agent work: *check → if broken, ask agent to fix → re-check*, fully unattended.
+A `recover` step with a `prompt` body is the core loop for repetitive agent work. It runs a check, asks the agent to fix the code when the check fails, then runs the check again, all without a human.
 
 ### Control flow: `if`, `match`, `for`
 
@@ -373,7 +374,11 @@ test "happy path" {
 }
 
 test "failure path is handled" {
-  mock prompt { /fix/ => "fixed", _ => "noop" }   # content-based dispatch
+  # content-based dispatch; arms on separate lines, like a match
+  mock prompt {
+    /fix/ => "fixed"
+    _ => "noop"
+  }
   mock script app.run_tests() {
     exit 1
   }
@@ -382,7 +387,7 @@ test "failure path is handled" {
 }
 ```
 
-- Mocks: `mock prompt "…"` (queued, one per prompt call), `mock prompt { /re/ => "…", _ => "…" }`, `mock workflow ref() { … }`, `mock rule ref() { … }`, `mock script ref() { shell lines }`. All mock refs need `()`.
+- Mocks: `mock prompt "…"` (queued, one per prompt call), a `mock prompt { … }` block with content-based arms (`/regex/ => "…"` matches when the pattern appears anywhere in the prompt, `"exact" => "…"` matches the whole prompt text, `_ => "…"` is the default; each arm on its own line, like a `match`), `mock workflow ref() { … }`, `mock rule ref() { … }`, `mock script ref() { shell lines }`. All mock refs need `()`.
 - Assertions: `expect_contain`, `expect_not_contain`, `expect_equal` — `expect_* <captureVar> "literal"` or a test-block `const` name.
 - For typed prompts, the mock text must be one line of valid JSON matching the schema.
 - Mixing queued `mock prompt "…"` / `mock prompt <const>` and a `mock prompt { … }` block in one test is rejected at compile time (`E_VALIDATE`: `cannot mix "mock prompt { … }" with queued "mock prompt …" in one test block; choose one style`). Use one style per block; separate tests in the same file may use different styles.

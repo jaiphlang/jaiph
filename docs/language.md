@@ -9,9 +9,15 @@ redirect_from:
 
 # Language
 
-This page is the per-step reference: every `WorkflowStepDef` variant and every `Expr` kind the runtime executes, with the visible contract. For the formal grammar (EBNF, lexical rules, validation catalog) see [Grammar](grammar.md). For the conceptual model — why the language is shaped this way — see [Why Jaiph](why-jaiph.md).
+Jaiph is a small language for writing workflows. A workflow is an ordered list of steps that the runtime executes one after another. Each step either runs something (a script, another workflow, a rule, or an agent prompt), binds a value to a name, returns or logs a value, makes a decision with `if` or `match`, loops over lines of text with `for`, or sends a message on a channel.
 
-The runtime is `NodeWorkflowRuntime` (`src/runtime/kernel/node-workflow-runtime.ts`). Step dispatch is driven by `WorkflowStepDef.type` (8 variants). Value evaluation goes through one private `evaluateExpr` over `Expr.kind` (8 variants); see [Architecture — AST / Types](architecture.md#core-components).
+You write a Jaiph program as one or more modules. Each `.jh` module holds top-level definitions: workflows, rules, scripts, channels, constants, imports, and an optional `config` block. The rest of this page describes what you can write inside those definitions. It covers every step type a workflow or rule body can hold, and every value expression a step can carry.
+
+Every value in a workflow is either a `string` or a `script`. A `string` is ordinary text that you can interpolate, pass as an argument, and return. A `script` is an executable body that you invoke with `run`. The Value types table below lists what you can do with each and which uses the validator rejects.
+
+The runtime that executes these definitions is `NodeWorkflowRuntime` (`src/runtime/kernel/node-workflow-runtime.ts`). It dispatches on `WorkflowStepDef.type` (eight step types) and evaluates every value through one private `evaluateExpr` over `Expr.kind` (eight expression kinds). See [Architecture](architecture.md#core-components).
+
+For the formal grammar (EBNF, lexical rules, and the validation catalog) see [Grammar](grammar.md). For why the language is shaped the way it is, see [Why Jaiph](why-jaiph.md).
 
 ## Value types
 
@@ -67,7 +73,7 @@ Every value position (`const` RHS, `return`, `send` RHS, `log` / `logerr` / `fai
 | `inline_script` | `` `body`(args) `` / `` ```lang...body...```(args) `` | Inline script body emitted as `scripts/__inline_<hash>`. |
 | `prompt` | `prompt body [returns "<schema>"]` | Sends body to the agent backend; JSON-quoted in transport. |
 | `match` | `match <subject> { … }` | Walks arms top-to-bottom; first match wins. |
-| `shell` | Free-form workflow body line; send RHS parse fallback | Workflow: unparsed line becomes an inline-shell `exec` step (rules forbid). Send: non-literal RHS fallback — usually `E_VALIDATE`. |
+| `shell` | Free-form workflow body line; raw shell fragment on a `send` RHS | Workflow: an unparsed line becomes an inline-shell `exec` step (rules forbid it). Send: a raw shell fragment (e.g. `findings <- echo "$payload"`) is a valid managed shell payload. `send` is the only position that accepts `shell`; it is `E_VALIDATE` anywhere else. |
 | `bare_ref` | A bare symbol on a `send` RHS | Always rejected by the validator; preserved so the error can name the symbol. |
 
 ## `run` — execute a workflow or script
@@ -102,7 +108,7 @@ Call arguments:
 
 ### Inline scripts
 
-Inline scripts embed a script body in a step without a separate `script` definition. Single backticks for one-liners, triple backticks for multiline or polyglot bodies.
+Inline scripts embed a script body in a step without a separate `script` definition. Use single backticks for one-liners, and triple backticks for multiline bodies or bodies written in another language.
 
 ```jaiph
 run `echo hello`()
@@ -187,7 +193,7 @@ Validation rules:
 
 ## `prompt` — agent interaction
 
-Sends text to the configured agent backend. Three body forms:
+Sends text to the configured agent backend. The body can take one of these forms:
 
 | Body form | Syntax |
 |---|---|
@@ -270,6 +276,7 @@ alerts <- """
 |---|---|
 | RHS required | Bare `channel <-` is `E_PARSE`. |
 | Allowed RHS | Double-quoted string, triple-quoted block, `${ident}` / `${…}`, `run ref(args)` (with parens). |
+| Shell fragment RHS | A raw shell fragment (e.g. `findings <- echo "$payload"`) is a managed shell payload — allowed only on `send`. |
 | Bare ref RHS | A bare workflow / rule / script name is `E_VALIDATE`. |
 | Combined capture | `name = channel <- …` is `E_VALIDATE` (`invalid send: channel must be a single name or …`). |
 | Allowed in | Workflows only. Rules forbid `send`. |

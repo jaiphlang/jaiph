@@ -26,8 +26,8 @@ Docker enablement uses a separate, env-only resolution; see [Docker enablement](
 |---|---|
 | Module-level | At most one `config { … }` block per `.jh` file. May appear anywhere among top-level constructs. |
 | Workflow-level | At most one nested `config { … }` per workflow body. Must be the first non-comment construct in the body. |
-| Allowed module keys | `agent.*`, `run.*`, `runtime.*`, `module.*`. |
-| Allowed workflow keys | `agent.*`, `run.*` only. `runtime.*` and `module.*` are `E_PARSE`. |
+| Allowed module keys | `agent.*`, `run.*`, `runtime.*`, `module.*`, and `trusted_envs`. |
+| Allowed workflow keys | `agent.*`, `run.*`, and `trusted_envs`. `runtime.*` and `module.*` are `E_PARSE`. |
 | Duplicate block | `E_PARSE duplicate config block (only one allowed per file)` / `E_PARSE duplicate config block inside workflow (only one allowed per workflow)`. |
 | Unknown key | `E_PARSE unknown config key: <key>. Allowed: …` (lists every allowed key). |
 | Wrong value type | `E_PARSE`. |
@@ -269,7 +269,7 @@ Resolution order for a `prompt` step:
 
 For the Claude backend, when `agent.model` is set and `agent.claude_flags` does not already contain `--model`, Jaiph passes `--model <value>` to the Claude CLI automatically. If both are set, the value in `agent.claude_flags` wins (appended last).
 
-`PROMPT_START` / `PROMPT_END` records in `run_summary.jsonl` carry `model` (resolved string, or null when backend auto-selects) and `model_reason`.
+`PROMPT_START` / `PROMPT_END` records in `run_summary.jsonl` carry `model` (resolved string, or null when the backend auto-selects) and `model_reason` (`explicit`, `flags`, `backend-default`, or `none` for a [custom agent command](#custom-agent-commands), which has no model concept).
 
 ## Prompt retry on transport failure
 {: #prompt-retry-on-transport-failure}
