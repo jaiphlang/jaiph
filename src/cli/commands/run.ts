@@ -96,8 +96,7 @@ export async function runWorkflow(rest: string[]): Promise<number> {
   try {
     parsed = parseArgs(rest, "run");
   } catch (err) {
-    process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`);
-    return 1;
+    return failWith(err);
   }
   const { target, raw, workspace, inplace, unsafe, yes, env, positional } = parsed;
   const input = positional[0];
@@ -110,8 +109,7 @@ export async function runWorkflow(rest: string[]): Promise<number> {
   try {
     extraEnv = resolveEnvPairs(env, process.env);
   } catch (err) {
-    process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`);
-    return 1;
+    return failWith(err);
   }
   const inputAbs = resolve(input);
   const workspaceRoot = workspace ? resolve(workspace) : detectWorkspaceRoot(dirname(inputAbs));
@@ -157,8 +155,7 @@ export async function runWorkflow(rest: string[]): Promise<number> {
     try {
       applySandboxFlags(runtimeEnv, sandboxFlags);
     } catch (err) {
-      process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`);
-      return 1;
+      return failWith(err);
     }
     const dockerConfigForBanner = resolveDockerConfig(resolvedModuleMetadata?.runtime, runtimeEnv);
     // Host modes: `--env` defines the workflow process's env directly,
@@ -174,27 +171,11 @@ export async function runWorkflow(rest: string[]): Promise<number> {
       runtimeEnv,
       dockerEnabled: dockerConfigForBanner.enabled,
     });
-    for (const w of credPreflight.warnings) {
-      process.stderr.write(`${w}\n`);
-    }
-    if (credPreflight.errors.length > 0) {
-      for (const e of credPreflight.errors) {
-        process.stderr.write(`${e}\n`);
-      }
-      return 1;
-    }
+    if (reportPreflight(credPreflight.warnings, credPreflight.errors)) return 1;
     // trusted_envs pre-flight: a declared key with no host/--env value fails
     // before anything is spawned, like a bare `--env KEY` with no host value.
     const trustedPlan = planTrustedEnvs(graph, extraEnv, process.env);
-    for (const w of trustedPlan.warnings) {
-      process.stderr.write(`${w}\n`);
-    }
-    if (trustedPlan.errors.length > 0) {
-      for (const e of trustedPlan.errors) {
-        process.stderr.write(`${e}\n`);
-      }
-      return 1;
-    }
+    if (reportPreflight(trustedPlan.warnings, trustedPlan.errors)) return 1;
     if (dockerConfigForBanner.enabled) {
       checkDockerAvailable();
       prepareImage(dockerConfigForBanner);
@@ -376,8 +357,7 @@ async function runWorkflowRaw(
     try {
       applySandboxFlags(runtimeEnv, sandboxFlags);
     } catch (err) {
-      process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`);
-      return 1;
+      return failWith(err);
     }
     // Raw mode runs host-only (used for embedding and the Docker inner run);
     // `--env` defines the workflow process's env directly.
@@ -427,16 +407,45 @@ export function shouldExportRawTelemetry(env: NodeJS.ProcessEnv): boolean {
   return !env[DOCKER_SANDBOX_ENV];
 }
 
-/** Read `run_dir=` from a runner meta file; undefined when absent/unwritten. */
-function readRunDirFromMeta(metaFile: string): string | undefined {
-  if (!existsSync(metaFile)) return undefined;
+/** Write an error's message to stderr and return exit code 1. */
+function failWith(err: unknown): 1 {
+  process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`);
+  return 1;
+}
+
+/** Print preflight warnings, then errors; returns true when the errors mean the run must abort. */
+function reportPreflight(warnings: string[], errors: string[]): boolean {
+  for (const w of warnings) {
+    process.stderr.write(`${w}\n`);
+  }
+  if (errors.length > 0) {
+    for (const e of errors) {
+      process.stderr.write(`${e}\n`);
+    }
+    return true;
+  }
+  return false;
+}
+
+/** Read `key=value` lines from a runner meta file; returns the trimmed value per requested key (absent when missing/empty). */
+function readMetaFields(metaFile: string, keys: readonly string[]): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (!existsSync(metaFile)) return out;
   for (const line of readFileSync(metaFile, "utf8").split(/\r?\n/)) {
-    if (line.startsWith("run_dir=")) {
-      const value = line.slice("run_dir=".length).trim();
-      if (value) return value;
+    for (const key of keys) {
+      const prefix = `${key}=`;
+      if (line.startsWith(prefix)) {
+        const value = line.slice(prefix.length).trim();
+        if (value) out[key] = value;
+      }
     }
   }
-  return undefined;
+  return out;
+}
+
+/** Read `run_dir=` from a runner meta file; undefined when absent/unwritten. */
+function readRunDirFromMeta(metaFile: string): string | undefined {
+  return readMetaFields(metaFile, ["run_dir"]).run_dir;
 }
 
 function writeWorkflowRootLabel(
@@ -589,22 +598,9 @@ async function reportResult(
 ): Promise<number> {
   const elapsedMs = Date.now() - startedAt;
   const elapsedLabel = formatElapsedDuration(elapsedMs);
-  let runDir: string | undefined;
-  let summaryFile: string | undefined;
-
-  if (existsSync(metaFile)) {
-    const metaLines = readFileSync(metaFile, "utf8").split(/\r?\n/);
-    for (const line of metaLines) {
-      if (line.startsWith("run_dir=")) {
-        const value = line.slice("run_dir=".length).trim();
-        if (value) runDir = value;
-      }
-      if (line.startsWith("summary_file=")) {
-        const value = line.slice("summary_file=".length).trim();
-        if (value) summaryFile = value;
-      }
-    }
-  }
+  const metaFields = readMetaFields(metaFile, ["run_dir", "summary_file"]);
+  let runDir: string | undefined = metaFields.run_dir;
+  let summaryFile: string | undefined = metaFields.summary_file;
   // Docker mode: container meta file is inaccessible from host.
   // Discover the run directory from the bind-mounted sandbox runs dir.
   if (!runDir && sandboxRunDir && expectedRunId) {

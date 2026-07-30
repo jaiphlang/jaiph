@@ -140,17 +140,21 @@ export function resolvePromptConfig(env: NodeJS.ProcessEnv, configModel?: string
   return config;
 }
 
+/** Basename of the agent command's first token (`/usr/bin/my-agent -x` → `my-agent`). */
+function agentCommandName(config: PromptConfig): string {
+  return basename(config.agentCommand.split(/\s+/)[0]);
+}
+
 /** True when the cursor backend uses a custom command (not cursor-agent). */
 export function isCustomCommand(config: PromptConfig): boolean {
   if (config.backend !== "cursor") return false;
-  const command = config.agentCommand.split(/\s+/)[0];
-  return basename(command) !== "cursor-agent";
+  return agentCommandName(config) !== "cursor-agent";
 }
 
 /** Resolve the display name for a prompt step (backend name or custom command basename). */
 export function resolvePromptStepName(config: PromptConfig): string {
   if (isCustomCommand(config)) {
-    return basename(config.agentCommand.split(/\s+/)[0]);
+    return agentCommandName(config);
   }
   return config.backend || "cursor";
 }
@@ -726,6 +730,20 @@ function writeFinalFile(filePath: string, content: string): void {
   }
 }
 
+/** Emit a mock/backend final answer to the transcript + final-capture file, ensuring a trailing newline. */
+function emitFinalAnswer(
+  text: string,
+  config: PromptConfig,
+  stdout: NodeJS.WritableStream,
+): { final: string; status: number } {
+  writeFinalFile(config.promptFinalFile, text);
+  stdout.write(text);
+  if (!text.endsWith("\n")) {
+    stdout.write("\n");
+  }
+  return { final: text, status: 0 };
+}
+
 /** Remove only surrounding blank lines while preserving inner formatting. */
 function trimSurroundingBlankLines(input: string): string {
   return input.replace(/^(?:[ \t]*\r?\n)+/, "").replace(/(?:\r?\n[ \t]*)+$/, "");
@@ -776,12 +794,7 @@ export async function executePrompt(
       }
       const result = dispatchMockArms(promptText, arms);
       if (result.status === 0) {
-        writeFinalFile(config.promptFinalFile, result.response);
-        stdout.write(result.response);
-        if (!result.response.endsWith("\n")) {
-          stdout.write("\n");
-        }
-        return { final: result.response, status: 0 };
+        return emitFinalAnswer(result.response, config, stdout);
       }
       return { final: "", status: result.status };
     }
@@ -789,12 +802,7 @@ export async function executePrompt(
     if (responsesJson) {
       const mockResult = consumeNextMockResponse(responsesJson);
       if (mockResult !== null) {
-        writeFinalFile(config.promptFinalFile, mockResult);
-        stdout.write(mockResult);
-        if (!mockResult.endsWith("\n")) {
-          stdout.write("\n");
-        }
-        return { final: mockResult, status: 0 };
+        return emitFinalAnswer(mockResult, config, stdout);
       }
     }
     // No mock set or no match: fall through to real backend
