@@ -8,7 +8,7 @@ diataxis: how-to
 
 This recipe sets the credentials each agent backend needs so the CLI's credential pre-flight passes and `prompt` steps reach the model.
 
-`jaiph run` runs a host-side **credential pre-flight** before it spawns the runner or the Docker container. The pre-flight is keyed to the backend(s) declared in the entry file. Missing credentials produce `E_AGENT_CREDENTIALS` (hard abort) or a `jaiph: warning:` (host-only, for `claude` and `cursor` — see the table below). Hard failures exit before any runner or container is launched. The behavior is implemented in `src/cli/run/preflight-credentials.ts`.
+`jaiph run` runs a host-side credential pre-flight before it spawns the runner or the Docker container. The pre-flight is keyed to the backends the entry file declares. Missing credentials produce either `E_AGENT_CREDENTIALS`, which is a hard abort, or a `jaiph: warning:` on host-only runs for the `claude` and `cursor` backends (see the table below). Hard failures exit before any runner or container is launched. The behavior is implemented in `src/cli/run/preflight-credentials.ts`.
 
 ## Prerequisites
 
@@ -18,22 +18,22 @@ This recipe sets the credentials each agent backend needs so the CLI's credentia
 
 | Backend | Required credentials | Host run (no Docker) | Docker run (any mode incl. `inplace`) |
 |---|---|---|---|
-| `claude` | `ANTHROPIC_API_KEY` **or** `CLAUDE_CODE_OAUTH_TOKEN` | warn only (a stored Claude CLI login may still work) | hard error `E_AGENT_CREDENTIALS` |
+| `claude` | `ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN` | warn only (a stored Claude CLI login may still work) | hard error `E_AGENT_CREDENTIALS` |
 | `cursor` | `CURSOR_API_KEY` | warn only (a stored `cursor-agent login` may still work) | hard error `E_AGENT_CREDENTIALS` |
 | `codex`  | `OPENAI_API_KEY` | hard error `E_AGENT_CREDENTIALS` (no CLI-login fallback) | hard error `E_AGENT_CREDENTIALS` when `OPENAI_API_KEY` is unset on the host (`OPENAI_API_KEY` is forwarded into the container) |
 
-Under Docker sandboxing the host-side stored logins (Keychain entries, `~/.claude`, `cursor-agent login`) do **not** cross the container boundary. Only `JAIPH_*` run-control keys plus the credential keys in the table above are forwarded, and credential keys only for the backends the entry file selects (see [Sandboxing](sandboxing.md#what-docker-protects-against)). Set credentials on the **host** so the allowlist can forward them into the container; forward anything else per key with `--env` (an intentional allowlist bypass).
+Under Docker sandboxing the host-side stored logins (Keychain entries, `~/.claude`, `cursor-agent login`) do not cross the container boundary. Only `JAIPH_*` run-control keys plus the credential keys in the table above are forwarded, and credential keys only for the backends the entry file selects (see [Sandboxing](sandboxing.md#what-docker-protects-against)). Set credentials on the host so the allowlist can forward them into the container. Forward anything else one key at a time with `--env`, which is an intentional allowlist bypass.
 
 ### Which backends get checked
 
-The pre-flight validates every backend the entry file could reach: **each backend the entry file declares, plus the effective default backend.** The default is `cursor` unless `JAIPH_AGENT_BACKEND` overrides it, and it is always included because `prompt` steps that name no backend fall back to it. Each backend is checked independently, so a file that reaches more than one backend can emit more than one warning or error in a single pre-flight.
+The pre-flight validates every backend the entry file could reach, which is each backend the entry file declares plus the effective default backend. The default is `cursor` unless `JAIPH_AGENT_BACKEND` overrides it, and it is always included because `prompt` steps that name no backend fall back to it. Each backend is checked independently, so a file that reaches more than one backend can emit more than one warning or error in a single pre-flight.
 
-The default is deduplicated against your declarations, so **where** you set the backend decides whether the `cursor` default is also checked:
+The default is deduplicated against your declarations, so where you set the backend decides whether the `cursor` default is also checked:
 
-- **Module scope** — `config { agent.backend = "claude" }` at the top of the file makes `claude` the effective default, so only `claude` is checked.
-- **Workflow scope only** — `config { agent.backend = "claude" }` inside a workflow, with no module-level backend, leaves `cursor` as the default. The pre-flight then checks **both** `claude` and `cursor`. Under Docker that makes a missing `CURSOR_API_KEY` a hard error even when every prompt targets Claude.
+- **Module scope.** Putting `config { agent.backend = "claude" }` at the top of the file makes `claude` the effective default, so only `claude` is checked.
+- **Workflow scope only.** Putting `config { agent.backend = "claude" }` inside a workflow, with no module-level backend, leaves `cursor` as the default. The pre-flight then checks both `claude` and `cursor`. Under Docker that makes a missing `CURSOR_API_KEY` a hard error even when every prompt targets Claude.
 
-To check only the backend you intend to use, set it at module scope or export `JAIPH_AGENT_BACKEND` — either one becomes the default and absorbs the extra check. See [Configure backend/model](/how-to/configure-backend) for the config scopes.
+To check only the backend you intend to use, set it at module scope or export `JAIPH_AGENT_BACKEND`. Either one becomes the default and absorbs the extra check. See [Configure backend/model](configure-backend.md) for the config scopes.
 
 ## 1. Authenticate Claude
 
@@ -50,7 +50,7 @@ claude setup-token
 export CLAUDE_CODE_OAUTH_TOKEN="..."
 ```
 
-On host runs (no Docker), a stored `~/.claude` / macOS Keychain login from a previous interactive `claude` session also works — but in that case the pre-flight emits a warning rather than failing.
+On host runs (no Docker), a stored `~/.claude` or macOS Keychain login from a previous interactive `claude` session also works, but in that case the pre-flight emits a warning rather than failing.
 
 ## 2. Authenticate Cursor
 
@@ -58,7 +58,7 @@ On host runs (no Docker), a stored `~/.claude` / macOS Keychain login from a pre
 export CURSOR_API_KEY="..."
 ```
 
-For host runs only, an interactive `cursor-agent login` (stored on disk) also satisfies the runtime — but the pre-flight emits a warning unless the env var is set.
+For host runs only, an interactive `cursor-agent login` (stored on disk) also satisfies the runtime, but the pre-flight emits a warning unless the env var is set.
 
 ## 3. Authenticate Codex (OpenAI)
 
@@ -66,7 +66,7 @@ For host runs only, an interactive `cursor-agent login` (stored on disk) also sa
 export OPENAI_API_KEY="sk-..."
 ```
 
-`OPENAI_API_KEY` is required on **both** host and Docker runs. The `codex` backend has no CLI-login fallback — there is no warning path. Under Docker, export the key on the host; it crosses the container boundary via the env allowlist when the entry file selects `codex` (same per-backend rule as `ANTHROPIC_API_KEY` / `CURSOR_API_KEY`).
+`OPENAI_API_KEY` is required on both host and Docker runs. The `codex` backend has no CLI-login fallback, so there is no warning path. Under Docker, export the key on the host. It crosses the container boundary via the env allowlist when the entry file selects `codex`, the same per-backend rule as `ANTHROPIC_API_KEY` and `CURSOR_API_KEY`.
 
 To target an OpenAI-compatible endpoint instead of the default, set `JAIPH_CODEX_API_URL` to the chat-completions URL (`JAIPH_*` is forwarded under Docker).
 
@@ -80,11 +80,13 @@ The pre-flight runs before the banner. Hard failures print a stderr message nami
 
 ## Skip the pre-flight (escape hatch)
 
-`JAIPH_UNSAFE=true` (or `jaiph run --unsafe`) skips the pre-flight entirely — the host is in charge, a stored CLI login may work, and the runtime's per-backend guards remain as a backstop. The pre-flight is also skipped when the entry file neither declares an explicit backend nor uses any `prompt` step (nothing would credential against).
+`JAIPH_UNSAFE=true` (or `jaiph run --unsafe`) skips the pre-flight entirely. The host is in charge, a stored CLI login may work, and the runtime's per-backend guards remain as a backstop. The pre-flight is also skipped when the entry file neither declares an explicit backend nor uses any `prompt` step, because nothing would credential against.
+
+`jaiph run --raw` also skips the pre-flight. Raw mode is the passthrough the host uses to run the workflow inside the Docker container, so the outer `jaiph run` has already run the pre-flight before it spawns the inner raw run.
 
 ## Verification
 
-When every required credential is present, preflight is silent — no stderr before the banner. On host runs, missing `claude` or `cursor` env vars emit `jaiph: warning:` lines and the run still proceeds (a stored CLI login may satisfy the runtime). A hard failure prints:
+When every required credential is present, the pre-flight is silent, with no stderr before the banner. On host runs, missing `claude` or `cursor` env vars emit `jaiph: warning:` lines and the run still proceeds, because a stored CLI login may satisfy the runtime. A hard failure prints:
 
 ```
 E_AGENT_CREDENTIALS: agent.backend "claude" selected by module config in /path/to/flow.jh — neither ANTHROPIC_API_KEY nor CLAUDE_CODE_OAUTH_TOKEN is set. Run `claude setup-token` and export CLAUDE_CODE_OAUTH_TOKEN, or set ANTHROPIC_API_KEY.
@@ -94,6 +96,6 @@ Under Docker the message includes the suffix `(Docker is on — set the env var 
 
 ## Related
 
-- [Run a workflow in a Docker sandbox](/how-to/sandbox-run) — how host env vars cross the container boundary.
-- [Configure backend/model](/how-to/configure-backend) — picking which backend a workflow uses.
+- [Run a workflow in a Docker sandbox](sandbox-run.md) — how host env vars cross the container boundary.
+- [Configure backend/model](configure-backend.md) — picking which backend a workflow uses.
 - [Sandboxing — What Docker protects against](sandboxing.md#what-docker-protects-against) — env allowlist and what crosses the container boundary.

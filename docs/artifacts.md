@@ -9,13 +9,13 @@ redirect_from:
 
 # Save artifacts
 
-This recipe publishes files from a workflow into the run's `artifacts/` directory under the run logs root (`.jaiph/runs/` by default). That is the supported export path when Docker sandboxing is on — in the default snapshot mode, workspace edits are discarded at container exit, but anything copied into `artifacts/` remains on the host.
+This recipe publishes files from a workflow into the run's `artifacts/` directory under the run logs root (`.jaiph/runs/` by default). Copying files into `artifacts/` is the supported way to export them when Docker sandboxing is on. In the default snapshot mode, workspace edits are discarded when the container exits, but anything copied into `artifacts/` stays on the host.
 
-The runtime always creates an `artifacts/` directory under the run log directory and exposes its absolute path as `JAIPH_ARTIFACTS_DIR`. The `jaiphlang/artifacts` library is the canonical way to copy files into that directory; you can also write there directly from a `script` step.
+The runtime always creates an `artifacts/` directory under the run log directory and exposes its absolute path as `JAIPH_ARTIFACTS_DIR`. The `jaiphlang/artifacts` library is the standard way to copy files into that directory, and you can also write there directly from a `script` step.
 
 ## Prerequisites
 
-- A workspace with `.jaiph/libs/jaiphlang/` installed (`jaiph install jaiphlang`) if you want to use the library — see [Use & publish a library](/how-to/libraries).
+- A workspace with `.jaiph/libs/jaiphlang/` installed (`jaiph install jaiphlang`) if you want to use the library. See [Use & publish a library](libraries.md).
 - The file(s) you want to save exist by the time the `artifacts.save(...)` step runs.
 
 ## 1. Import the library
@@ -38,7 +38,7 @@ workflow default() {
 
 ## 3. Save several files at once
 
-`save` accepts a **newline-separated** list of paths. Blank or whitespace-only lines are ignored:
+`save` accepts a newline-separated list of paths. Blank or whitespace-only lines are ignored:
 
 ```jh
 workflow default() {
@@ -78,15 +78,15 @@ After the run, list the artifacts directory:
 ls <runs_root>/<YYYY-MM-DD>/<HH-MM-SS>-<source>/artifacts/
 ```
 
-Replace `<runs_root>` with `.jaiph/runs` when `JAIPH_RUNS_DIR` is unset, or with your configured runs directory otherwise. Date and time segments are UTC; `<source>` is the entry-file basename (or `JAIPH_SOURCE_FILE` when set). You should see the files your workflow saved. Under Docker sandboxing the host path is the same — the run mount at `/jaiph/run` inside the container is bound to the host runs root, so artifacts land on the host even though the run executed inside the container.
+Replace `<runs_root>` with `.jaiph/runs` when `JAIPH_RUNS_DIR` is unset, or with your configured runs directory otherwise. The date and time segments are UTC, and `<source>` is the entry-file basename (or `JAIPH_SOURCE_FILE` when set). You should see the files your workflow saved. Under Docker sandboxing the host path is the same. The run mount at `/jaiph/run` inside the container is bound to the host runs root, so artifacts land on the host even though the run executed inside the container.
 
-`artifacts.save(...)` exits with a failure when the input list is empty after trimming, when any listed path is missing or not a regular file, or when `JAIPH_ARTIFACTS_DIR` is unset — wrap the call in `recover` / `catch` if you want the workflow to tolerate that.
+`artifacts.save(...)` fails when the input list is empty after trimming, when any listed path is missing or not a regular file, or when `JAIPH_ARTIFACTS_DIR` is unset. Wrap the call in `recover` or `catch` if you want the workflow to tolerate that failure.
 
 ## Verify a run's integrity chain
 
-Every line the runtime appends to `run_summary.jsonl` carries a `prev_hash` field — the SHA-256 of the previous raw line (or 64 zeroes for the first line). Rewriting or truncating any line breaks the hash of every line after it, so a verifier can detect tampering with a run's audit trail. See [Architecture — Hash chain](architecture.md#durable-artifact-layout) for the format.
+Every line the runtime appends to `run_summary.jsonl` carries a `prev_hash` field. The field holds the SHA-256 of the previous raw line, or 64 zeroes for the first line. Rewriting or truncating any line breaks the hash of every line after it, so you can detect tampering with a run's audit trail. See [Architecture — Hash chain](architecture.md#hash-chain) for the format.
 
-To check a run directory, run this self-contained Node script against its `run_summary.jsonl` (no jaiph build required — it recomputes the chain the same way the runtime does):
+To check a run directory, run this self-contained Node script against its `run_summary.jsonl`. You do not need a jaiph build, because the script recomputes the chain the same way the runtime does:
 
 ```bash
 node -e '
@@ -103,10 +103,10 @@ node -e '
 ' <runs_root>/<YYYY-MM-DD>/<HH-MM-SS>-<source>/run_summary.jsonl
 ```
 
-A clean chain prints `chain intact (N lines)` and exits `0`; a rewritten or truncated file prints the first broken line number and exits `1`. Inside the repo you can call the exported `verifyRunSummaryChain(filePath)` helper (`src/runtime/kernel/emit.ts`) instead, which returns `{ ok, error }`.
+A clean chain prints `chain intact (N lines)` and exits `0`. A rewritten or truncated file prints the first broken line number and exits `1`. Inside the repo you can call the exported `verifyRunSummaryChain(filePath)` helper (`src/runtime/kernel/emit.ts`) instead, which returns `{ ok, error }`.
 
 ## Related
 
 - [Architecture — Durable artifact layout](architecture.md#durable-artifact-layout) — the full run directory tree, including where `artifacts/` sits, plus the hash chain and secret-redaction contracts for `run_summary.jsonl`.
-- [Use & publish a library](/how-to/libraries) — installing `jaiphlang/artifacts` and writing your own libraries.
-- [Sandboxing — The two sandbox modes](sandboxing.md#the-three-sandbox-modes) — snapshot mode discards workspace edits; artifacts persist on the host in every mode.
+- [Use & publish a library](libraries.md) — installing `jaiphlang/artifacts` and writing your own libraries.
+- [Sandboxing — The two sandbox modes](sandboxing.md#the-two-sandbox-modes) — snapshot mode discards workspace edits; artifacts persist on the host in every mode.

@@ -39,6 +39,7 @@ The reserved internal marker `__workflow-runner` is excluded from `--help`/usage
 | `install` | Install project-scoped libraries from the registry or git URLs. |
 | `use` | Reinstall `jaiph` globally with a selected version or channel. |
 | `mcp` | Serve a file's workflows as MCP tools over stdio (newline-delimited JSON-RPC). |
+| `serve` | Serve a file's workflows as an HTTP API, with an OpenAPI document and an embedded Swagger UI. |
 
 ## `jaiph run`
 {: #jaiph-run}
@@ -66,7 +67,7 @@ Sandbox selection is environment-driven; there is no `--docker` flag. The boolea
 
 ### Pre-flight
 
-After module-graph load and Docker-mode resolution, before the runner / container is spawned, the host CLI runs a credential pre-flight (`src/cli/run/preflight-credentials.ts`). Missing credentials produce either `E_AGENT_CREDENTIALS` (hard error) or a warning depending on backend and Docker mode — see [Authenticate agent backends](/how-to/agent-auth) and [Configuration — Credential pre-flight](configuration.md#credential-pre-flight). `jaiph run --raw` does not run the pre-flight.
+After module-graph load and Docker-mode resolution, before the runner / container is spawned, the host CLI runs a credential pre-flight (`src/cli/run/preflight-credentials.ts`). Missing credentials produce either `E_AGENT_CREDENTIALS` (hard error) or a warning depending on backend and Docker mode — see [Authenticate agent backends](agent-auth.md) and [Configuration — Credential pre-flight](configuration.md#credential-pre-flight). `jaiph run --raw` does not run the pre-flight.
 
 ### Progress markers
 
@@ -105,7 +106,7 @@ Interactive `jaiph run` only (`--raw` omits this block). On non-zero exit, the C
 
 ### Hook events
 
-Hooks load from `~/.jaiph/hooks.json` (global) and `<project>/.jaiph/hooks.json` (project-local; project overrides global per event). Hooks run on the **host** CLI process even in Docker mode. See [Add a hook](/how-to/hooks).
+Hooks load from `~/.jaiph/hooks.json` (global) and `<project>/.jaiph/hooks.json` (project-local; project overrides global per event). Hooks run on the **host** CLI process even in Docker mode. See [Add a hook](hooks.md).
 
 ## `jaiph test`
 
@@ -125,7 +126,7 @@ jaiph test <file.test.jh>             # run a single test file
 
 Zero matches with no arguments (or with a directory containing no `*.test.jh` files) writes `jaiph test: no *.test.jh files found (nothing to do)` to stderr and exits `0`. An explicit file path that does not exist or is not `*.test.jh` exits `1`. Plain workflow files (`*.jh` without `.test`) are not supported as test entries. Extra positional tokens after the path are accepted but ignored.
 
-Assertions: `expect_contain`, `expect_equal`, `expect_not_contain` — see [Write & run tests](/how-to/testing).
+Assertions: `expect_contain`, `expect_equal`, `expect_not_contain` — see [Write & run tests](testing.md).
 
 ## `jaiph compile`
 {: #jaiph-compile}
@@ -275,7 +276,7 @@ Implementation: re-invokes `JAIPH_INSTALL_COMMAND` (default `curl -fsSL https://
 ## `jaiph mcp`
 {: #jaiph-mcp}
 
-Serve a file's workflows as [MCP](https://modelcontextprotocol.io/) tools over stdio. See [Serve workflows as MCP tools](/how-to/mcp) for the recipe and client-registration steps.
+Serve a file's workflows as [MCP](https://modelcontextprotocol.io/) tools over stdio. See [Serve workflows as MCP tools](mcp.md) for the recipe and client-registration steps.
 
 ```text
 jaiph mcp [--workspace <dir>] [--inplace] [--unsafe] [--yes|-y] [--env KEY[=VALUE]]... <file.jh>
@@ -355,7 +356,7 @@ Tool descriptions come from the `#` comment lines directly above each workflow (
 ## `jaiph serve`
 {: #jaiph-serve}
 
-Serve a file's workflows as an HTTP API with a generated OpenAPI 3.1 document and an embedded Swagger UI. Same exposure rules and execution layer as `jaiph mcp`, over HTTP instead of stdio. See [Serve workflows over HTTP](/how-to/serve) for the recipe.
+Serve a file's workflows as an HTTP API with a generated OpenAPI 3.1 document and an embedded Swagger UI. Same exposure rules and execution layer as `jaiph mcp`, over HTTP instead of stdio. See [Serve workflows over HTTP](serve.md) for the recipe.
 
 ```text
 jaiph serve [--host <addr>] [--port <n>] [--workspace <dir>] [--inplace] [--unsafe] [--yes|-y] [--env KEY[=VALUE]]... <file.jh>
@@ -437,4 +438,4 @@ See [Environment variables](env-vars.md) for the complete inventory. The variabl
 - [Grammar](grammar.md) — syntax and validation catalog.
 - [Language](language.md) — step semantics and step-output contract.
 - [Environment variables](env-vars.md) — every variable Jaiph reads.
-- [Serve workflows as MCP tools](/how-to/mcp) — exposing a file's workflows to MCP clients via `jaiph mcp`.
+- [Serve workflows as MCP tools](mcp.md) — exposing a file's workflows to MCP clients via `jaiph mcp`.

@@ -6,25 +6,25 @@ diataxis: how-to
 
 # Serve workflows over HTTP
 
-This recipe turns a `.jh` file into an HTTP API: `jaiph serve ./tools.jh` exposes the file's workflows as endpoints, publishes a machine-readable [OpenAPI 3.1](https://spec.openapis.org/oas/v3.1.0) document, and serves a browser-usable Swagger UI. Anything that speaks HTTP — a CI job, a Kubernetes deployment, another service, a human with a browser — can invoke tested workflows and inspect their runs without an MCP client or a local jaiph install.
+This guide turns a `.jh` file into an HTTP API. `jaiph serve ./tools.jh` exposes the file's workflows as endpoints, publishes a machine-readable [OpenAPI 3.1](https://spec.openapis.org/oas/v3.1.0) document, and serves a Swagger UI you can open in a browser. Any HTTP client can invoke the tested workflows and inspect their runs without an MCP client or a local jaiph install. For example, a CI job, a Kubernetes deployment, another service, or a person with a browser can all reach the same endpoints.
 
-It reuses the same compile-time validation, sandboxed execution, and `.jaiph/runs/` artifacts as [`jaiph run`](cli.md#jaiph-run), and the same exposure rules as [`jaiph mcp`](mcp.md). Where MCP binds the server to a co-located stdio parent, `jaiph serve` makes the workflows reachable over the network.
+It reuses the same compile-time validation, sandboxed execution, and `.jaiph/runs/` artifacts as [`jaiph run`](cli.md#jaiph-run), and the same exposure rules as [`jaiph mcp`](mcp.md). `jaiph mcp` binds the server to a stdio parent on the same machine, and `jaiph serve` instead makes the workflows reachable over the network.
 
-> **Security:** an HTTP-exposed workflow is arbitrary shell reachable by anyone who can reach the port (and, if set, holds the token) — that is the point. Bind to loopback for local use; for anything else configure authentication (a static `JAIPH_SERVE_TOKEN` for a single operator, or OIDC/JWT for multiple users — see [Authenticate and authorize](#7-authenticate-and-authorize)), put the server behind a TLS-terminating reverse proxy / ingress (the process speaks plain HTTP), and treat the run directory as sensitive.
+> **Security.** An exposed workflow is arbitrary shell that anyone who can reach the port can run, and that is the point of serving it. When a token is set, the caller must also hold the token. Bind to loopback for local use. For anything else, configure authentication, put the server behind a reverse proxy or ingress that terminates TLS, and treat the run directory as sensitive. The process itself speaks plain HTTP. For authentication, use a static `JAIPH_SERVE_TOKEN` for a single operator, or OIDC/JWT for multiple users (see [Authenticate and authorize](#7-authenticate-and-authorize)).
 
 ## Prerequisites
 
 - A `.jh` file with at least one workflow.
-- Agent credentials for any exposed workflow that uses `prompt` — see [Authenticate agent backends](/how-to/agent-auth). Set them on the **host**; in Docker mode the backend's credential keys are forwarded through the env allowlist. Forward any other host variable a workflow needs with `--env` (same rules as `jaiph run`).
+- Agent credentials for any exposed workflow that uses `prompt`. See [Authenticate agent backends](agent-auth.md). Set them on the host. In Docker mode the backend's credential keys are forwarded through the env allowlist. Forward any other host variable a workflow needs with `--env`, using the same rules as `jaiph run`.
 
 ## 1. Start the server
 
 ```bash
 jaiph serve ./tools.jh
-# jaiph serve: listening on http://127.0.0.1:5247 — API docs at http://127.0.0.1:5247/docs (2 workflow(s))
+# jaiph serve: listening on http://127.0.0.1:5247 — API docs at http://127.0.0.1:5247/docs, MCP at http://127.0.0.1:5247/mcp (2 workflow(s))
 ```
 
-Defaults are `--host 127.0.0.1` and `--port 5247`. All logs go to stderr. Startup validates the file exactly like [`jaiph mcp`](cli.md#jaiph-mcp): a compile diagnostic prints `file:line:col CODE message` to stderr and exits `1`.
+The defaults are `--host 127.0.0.1` and `--port 5247`. All logs go to stderr. Startup validates the file exactly like [`jaiph mcp`](cli.md#jaiph-mcp). A compile error prints a `file:line:col CODE message` diagnostic to stderr and exits `1`.
 
 ## 2. Discover the workflows
 
@@ -32,11 +32,11 @@ Defaults are `--host 127.0.0.1` and `--port 5247`. All logs go to stderr. Startu
 curl -s http://127.0.0.1:5247/v1/workflows | jq
 ```
 
-`GET /openapi.json` returns the full OpenAPI 3.1 document (one path per workflow, each with the workflow's `#`-comment description and its parameters as a JSON request-body schema). `GET /healthz` is an unauthenticated liveness/readiness probe.
+`GET /openapi.json` returns the full OpenAPI 3.1 document, with one path per workflow. Each path carries the workflow's `#`-comment description and its parameters as a JSON request-body schema. `GET /healthz` is a liveness and readiness probe that needs no authentication.
 
 ## 3. Invoke a workflow
 
-A run is a durable resource. `POST /v1/workflows/{name}/runs` starts one; the body is a JSON object of the workflow's parameters (all strings).
+A run is a durable resource. `POST /v1/workflows/{name}/runs` starts one. The request body is a JSON object of the workflow's parameters, and every value is a string.
 
 ```bash
 # Async: 202 + a Location header pointing at the run resource.
@@ -48,28 +48,32 @@ curl -s -X POST 'http://127.0.0.1:5247/v1/workflows/greet/runs?wait=true' \
   -H 'content-type: application/json' -d '{"name":"world"}' | jq
 ```
 
-The run object is `{run_id, workflow, status, started_at, ended_at, exit_status, signal, result_text, run_dir, principal, correlation_id}` (`principal` is the audit subject that created the run and `correlation_id` its request id — see [Authenticate and authorize](#7-authenticate-and-authorize); both are `null` when unset). `result_text` is the same content an MCP client sees — the workflow's `return` value, or its failure narrative. Failure narratives are credential-redacted (`[REDACTED]`) the same way as the event journal; the `return` value of a successful run is intentional API output and returned verbatim. **A workflow failure is not an HTTP error:** a failed run comes back `200`/`202` with `status: "failed"` and a `run dir:` pointer in `result_text`. Poll `GET /v1/runs/{id}` for an async run, list them with `GET /v1/runs` (newest first, paginated — `?limit=` defaults to 100 and is clamped to 1000, `?offset=` skips that many; the response carries `{runs, total, limit, offset}`), and stop one with `POST /v1/runs/{id}/cancel`.
+The run object has these fields: `run_id`, `workflow`, `status`, `started_at`, `ended_at`, `exit_status`, `signal`, `result_text`, `run_dir`, `principal`, and `correlation_id`. `principal` is the audit subject that created the run, which is `anonymous` in the open loopback default and `operator` under a static token. `correlation_id` is the request id, taken from an `X-Correlation-Id` or `X-Request-Id` header, or a generated UUID. See [Authenticate and authorize](#7-authenticate-and-authorize) for both. A run reconstructed after a restart can carry `null` for either field.
+
+`result_text` is the same content an MCP client sees, which is the workflow's `return` value or its failure narrative. A failure narrative is credential-redacted the same way as the event journal, so values of `*_API_KEY`, `*_TOKEN`, and `*_SECRET` env vars become `[REDACTED]`. The `return` value of a successful run is intended API output, so it is returned verbatim.
+
+A workflow failure is not an HTTP error. A failed run comes back `200` or `202` with `status: "failed"` and a `run dir:` pointer in `result_text`. Poll `GET /v1/runs/{id}` for an async run. List runs with `GET /v1/runs`, which returns them newest first and paginated. `?limit=` defaults to 100 and is clamped to 1000, and `?offset=` skips that many records. The listing response carries `{runs, total, limit, offset}`. Stop a run with `POST /v1/runs/{id}/cancel`.
 
 ## 4. Watch a run as it executes
 
-`GET /v1/runs/{id}/events` streams the run's durable event journal (`run_summary.jsonl`) — the same timeline the CLI progress tree is built from. Two modes:
+`GET /v1/runs/{id}/events` streams the run's durable event journal (`run_summary.jsonl`), which is the same timeline the CLI builds its progress tree from. It has two modes.
 
 ```bash
 # Snapshot (default): the whole journal as newline-delimited JSON, then close.
 curl -s http://127.0.0.1:5247/v1/runs/$ID/events
 
-# Live: Server-Sent Events — replays the journal so far, then follows it as the
+# Live: Server-Sent Events. Replays the journal so far, then follows it as the
 # run appends, and closes with an `event: end` when the run is terminal.
 curl -sN -H 'accept: text/event-stream' http://127.0.0.1:5247/v1/runs/$ID/events
 ```
 
-Each SSE message is a `data:` line carrying one raw journal line (`WORKFLOW_START`, `STEP_START`/`STEP_END`, `LOG*`, `PROMPT_*`, `WORKFLOW_END`); a `:ka` comment every 15 s keeps proxies from idling the connection out. Connect while the run is still going to watch step-by-step, or after it finishes for a full replay plus an immediate `event: end`. (Add `-H 'authorization: Bearer <token>'` when a token is set — `curl -N` disables buffering so events surface as they arrive.)
+Each SSE message is a `data:` line that carries one raw journal line, such as `WORKFLOW_START`, `STEP_START`, `STEP_END`, `LOG*`, `PROMPT_*`, or `WORKFLOW_END`. A `:ka` comment every 15 seconds keeps proxies from idling the connection out. Connect while the run is still going to watch it step by step, or connect after it finishes for a full replay followed by an immediate `event: end`. Add `-H 'authorization: Bearer <token>'` when a token is set. The `-N` flag on `curl` disables buffering, so events surface as they arrive.
 
-> **Security:** the journal is served **verbatim** — the credential redaction `jaiph` applies when writing it (values of `*_API_KEY` / `*_TOKEN` / `*_SECRET` env vars become `[REDACTED]`) is the redaction guarantee. The raw per-step capture files (`NNNNNN-*.out` / `.err`) are **never** exposed by any endpoint; only the redacted journal and files a workflow explicitly publishes are reachable over HTTP.
+> **Security.** The journal is served verbatim, so the only redaction is the one `jaiph` applies when it writes the journal. Values of `*_API_KEY`, `*_TOKEN`, and `*_SECRET` env vars become `[REDACTED]`. The raw per-step capture files (`NNNNNN-*.out` and `.err`) are never exposed by any endpoint. Only the redacted journal and the files a workflow publishes are reachable over HTTP.
 
 ## 5. Download a run's artifacts
 
-Files a workflow publishes to `$JAIPH_ARTIFACTS_DIR` (see [artifacts](/how-to/artifacts)) are listable and downloadable:
+A workflow can publish files to `$JAIPH_ARTIFACTS_DIR` (see [artifacts](artifacts.md)). You can list and download them.
 
 ```bash
 # List published files: [{path, size, mtime}, ...] (empty when the run made none).
@@ -79,28 +83,28 @@ curl -s http://127.0.0.1:5247/v1/runs/$ID/artifacts | jq
 curl -s http://127.0.0.1:5247/v1/runs/$ID/artifacts/report.txt -o report.txt
 ```
 
-The download path is resolved strictly inside the run's `artifacts/` directory and is traversal-proof: `..` segments, absolute paths, and symlinks pointing outside the directory all return `404` without touching the target file.
+The download path is resolved strictly inside the run's `artifacts/` directory and is safe against path traversal. A `..` segment, an absolute path, or a symlink pointing outside the directory all return `404` without touching the target file.
 
-Downloads stream from disk with backpressure — the server never buffers a complete artifact, so a multi-gigabyte file costs no server memory and a client disconnect closes the file immediately. To refuse oversized downloads outright, set `JAIPH_SERVE_MAX_ARTIFACT_BYTES` (default `0` = no cap); larger artifacts return `413`.
+Downloads stream from disk with backpressure. The server never buffers a complete artifact, so a file of several gigabytes costs no server memory, and a client disconnect closes the file immediately. To refuse oversized downloads, set `JAIPH_SERVE_MAX_ARTIFACT_BYTES`. The default is `0`, which means no cap. A larger artifact returns `413`.
 
 ## 6. Use the Swagger UI
 
-Open `http://127.0.0.1:5247/docs` in a browser to get a live form for every workflow. When a token is configured, paste it into the **Authorize** box (Swagger UI keeps it across reloads). The UI loads its assets from a pinned, SRI-verified CDN, so `/docs` needs internet access in the browser; air-gapped operators use `/openapi.json` with any locally-hosted renderer.
+Open `http://127.0.0.1:5247/docs` in a browser to get a live form for every workflow. When a token is configured, paste it into the Authorize box, and Swagger UI keeps it across reloads. The UI loads its assets from a pinned CDN that it verifies with Subresource Integrity hashes, so `/docs` needs internet access in the browser. An operator on an air-gapped network can instead use `/openapi.json` with any locally-hosted renderer.
 
 ## 7. Authenticate and authorize
 
-`jaiph serve` has two production auth modes plus an open loopback-dev default. Credentials come from the environment (never argv, which leaks into process listings). Whatever the mode, `/healthz` stays open and credential-free; `/docs` and `/openapi.json` stay open unless `JAIPH_SERVE_EXPOSE_DOCS=false` hides them (`404`).
+`jaiph serve` has two production authentication modes, plus an open default meant for loopback development. Credentials come from the environment, never from argv, because argv leaks into process listings. In every mode, `/healthz` stays open and needs no credentials. `/docs` and `/openapi.json` also stay open, unless `JAIPH_SERVE_EXPOSE_DOCS=false` hides them behind a `404`.
 
-**Static single-operator token.** `JAIPH_SERVE_TOKEN` is a shared secret required on every `/v1/*` and `/mcp` request (`Authorization: Bearer <token>`, constant-time compared). It is a fail-closed gate for **one operator** — there is no per-user identity, revocation, or per-action authorization; the operator holds every capability and sees every run. Use it for a single trusted caller, not for multiple company users.
+**Static single-operator token.** `JAIPH_SERVE_TOKEN` is a shared secret required on every `/v1/*` and `/mcp` request, sent as `Authorization: Bearer <token>` and compared in constant time. It is a fail-closed gate for one operator. There is no per-user identity, no revocation, and no per-action authorization, so the one operator holds every capability and sees every run. Use it for a single trusted caller, not for several people in a company.
 
 ```bash
 JAIPH_SERVE_TOKEN=secret jaiph serve --host 0.0.0.0 --port 8080 ./tools.jh
 curl -s http://host:8080/v1/workflows -H 'authorization: Bearer secret' | jq
 ```
 
-**OIDC/JWT (multi-tenant).** Set `JAIPH_SERVE_OIDC_ISSUER` and `JAIPH_SERVE_OIDC_AUDIENCE` (OIDC takes precedence over the static token). Bearer tokens are verified against the issuer's JWKS — the signing key set is discovered from `<issuer>/.well-known/openid-configuration`, or set `JAIPH_SERVE_OIDC_JWKS_URI` explicitly. A maintained JWT library does the crypto: signature, `exp`/`nbf`, `aud`, `iss`, and key selection by `kid`. Verification failures are `401` (`E_TOKEN_EXPIRED` for expiry, `E_TOKEN_INVALID` for a bad audience/issuer/key/signature); an unreachable IdP is `503` (`E_AUTH_UNAVAILABLE`).
+**OIDC/JWT for multiple users.** Set `JAIPH_SERVE_OIDC_ISSUER` and `JAIPH_SERVE_OIDC_AUDIENCE`. OIDC takes precedence over the static token when both are set. Bearer tokens are verified against the issuer's JWKS, which is the set of public signing keys. Jaiph discovers the key set from `<issuer>/.well-known/openid-configuration`, or you can set `JAIPH_SERVE_OIDC_JWKS_URI` explicitly. A maintained JWT library (`jose`) does the cryptographic checks: the signature, the `exp` and `nbf` times, the `aud` and `iss` claims, and key selection by `kid`. A verification failure is a `401`, with `E_TOKEN_EXPIRED` for an expired token and `E_TOKEN_INVALID` for a bad audience, issuer, key, or signature. An unreachable identity provider is a `503` (`E_AUTH_UNAVAILABLE`).
 
-Each token is authorized by three OAuth scopes — request them in the `scope` (or `scp`) claim:
+Each token is authorized by three OAuth scopes. Request them in the `scope` claim (or the `scp` claim):
 
 | Scope | Grants |
 | --- | --- |
@@ -108,7 +112,7 @@ Each token is authorized by three OAuth scopes — request them in the `scope` (
 | `jaiph:inspect` | `GET /v1/workflows`, `/v1/runs`, a run, its events and artifacts; MCP `tools/list` |
 | `jaiph:cancel` | `POST /v1/runs/{id}/cancel` |
 
-A missing capability is `403` (`E_FORBIDDEN`). A principal (the token `sub`) may inspect or cancel **only the runs it created** — another principal's run is `404`, indistinguishable from nonexistent. The authenticated `sub` and the request's correlation id (`X-Correlation-Id` / `X-Request-Id`, else a generated UUID) are attached to each run's metadata (`principal` / `correlation_id` on the run object), to the invoke/cancel audit log lines, and to OTLP resource attributes and Sentry tags — never the token or a claim value.
+A missing capability is a `403` (`E_FORBIDDEN`). A principal is the token `sub`, and it may inspect or cancel only the runs it created. Another principal's run returns `404`, so it looks the same as a run that does not exist. The authenticated `sub` and the request's correlation id are attached to three places: each run's metadata (`principal` and `correlation_id` on the run object), the invoke and cancel audit log lines, and the OTLP resource attributes and Sentry tags. The correlation id comes from an `X-Correlation-Id` or `X-Request-Id` header, or a generated UUID when neither is present. Jaiph never attaches the token or a claim value.
 
 ```bash
 JAIPH_SERVE_OIDC_ISSUER=https://issuer.example \
@@ -117,14 +121,14 @@ JAIPH_SERVE_OIDC_AUDIENCE=jaiph-serve \
 curl -s http://host:8080/v1/runs -H "authorization: Bearer $JWT" | jq
 ```
 
-Binding a non-loopback `--host` with **no** authentication (neither the token nor OIDC) is a startup error — the server refuses to expose unauthenticated arbitrary shell. Cap simultaneous runs with `JAIPH_SERVE_MAX_CONCURRENT` (default `4`); requests beyond the cap get `429`. See [Environment variables](env-vars.md) for all of these.
+Binding a non-loopback `--host` with no authentication, meaning neither the token nor OIDC, is a startup error. The server refuses to expose unauthenticated arbitrary shell. Cap simultaneous runs with `JAIPH_SERVE_MAX_CONCURRENT`, which defaults to `4`. A request beyond the cap gets `429`. See [Environment variables](env-vars.md) for all of these.
 
 ## 8. Connect an MCP client over HTTP
 
-The same process also speaks **MCP [Streamable HTTP](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports#streamable-http)** at `POST /mcp` — the network sibling of [`jaiph mcp`](mcp.md) stdio. It exposes the **same tools** (identical [exposure rules](mcp.md#3-choose-which-workflows-are-exposed) and comment-derived descriptions), runs them through the **same run registry, concurrency cap, sandbox posture, and hot reload** as the REST API, and — when a token is set — sits behind the **same bearer auth** as `/v1/*`. A single deployment serves REST clients, browsers, and MCP agents at once; there is no second process.
+The same process also speaks MCP [Streamable HTTP](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports#streamable-http) at `POST /mcp`, which is the network sibling of [`jaiph mcp`](mcp.md) stdio. It exposes the same tools, with identical [exposure rules](mcp.md#3-choose-which-workflows-are-exposed) and comment-derived descriptions. It runs them through the same run registry, concurrency cap, sandbox posture, and hot reload as the REST API. When a token is set, it sits behind the same bearer authentication as `/v1/*`. A single deployment serves REST clients, browsers, and MCP agents at once, with no second process.
 
 ```bash
-# initialize → tools/list → tools/call, all as POST /mcp (one JSON-RPC message each).
+# One JSON-RPC message per POST: initialize, then tools/list, then tools/call.
 curl -s -X POST http://127.0.0.1:5247/mcp -H 'content-type: application/json' \
   -H 'authorization: Bearer secret' \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}'
@@ -134,30 +138,30 @@ curl -s -X POST http://127.0.0.1:5247/mcp -H 'content-type: application/json' \
   -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"greet","arguments":{"name":"world"}}}'
 ```
 
-- **One JSON-RPC message per POST.** A **request** (`initialize`, `tools/list`, `tools/call`) returns its reply as a single `application/json` object. A **notification** (`notifications/initialized`, `notifications/cancelled`) returns `202 Accepted` with no body. `GET`/`DELETE /mcp` return `405` — this endpoint offers no server-initiated stream.
-- **Progress streaming.** Send `Accept: text/event-stream` on a `tools/call` and include a `params._meta.progressToken` to receive the run's step boundaries as `notifications/progress` SSE frames, followed by the result frame — the same progress model as [`jaiph mcp`](mcp.md#7-stream-progress-and-cancel-a-long-call). Without that `Accept` header the call returns a single JSON result (progress is dropped).
-- **Same run inspection.** Every `tools/call` is a first-class run: it appears in `GET /v1/runs`, streams at `GET /v1/runs/{id}/events`, and is cancellable with `POST /v1/runs/{id}/cancel` — the identical registry the REST endpoint populates. A client that hangs up a streaming call cancels the run (child process tree + Docker container torn down), the same as an MCP `notifications/cancelled`.
-- **Auth.** `POST /mcp` sits behind the **same** authentication boundary as `/v1/*` (see [Authenticate and authorize](#7-authenticate-and-authorize)): a bearer token — static or OIDC/JWT — on every request, unauthenticated calls get `401`. Capabilities apply per method: `tools/call` needs `invoke`, `tools/list` needs `inspect`; an insufficiently-scoped principal gets a JSON-RPC error (nothing spawns) rather than an HTTP `403`. The authenticated principal and correlation id are attached to every run an MCP `tools/call` creates, exactly as for a REST run.
+- **One JSON-RPC message per POST.** A request (`initialize`, `tools/list`, or `tools/call`) returns its reply as a single `application/json` object. A notification (`notifications/initialized` or `notifications/cancelled`) returns `202 Accepted` with no body. `GET` and `DELETE` on `/mcp` return `405`, because this endpoint offers no server-initiated stream.
+- **Progress streaming.** Send `Accept: text/event-stream` on a `tools/call` and include a `params._meta.progressToken`. You then receive the run's step boundaries as `notifications/progress` SSE frames, followed by the result frame. It uses the same progress model as [`jaiph mcp`](mcp.md#7-stream-progress-and-cancel-a-long-call). Without that `Accept` header, the call returns a single JSON result and progress is dropped.
+- **Same run inspection.** Every `tools/call` is a run like any other. It appears in `GET /v1/runs`, streams at `GET /v1/runs/{id}/events`, and can be cancelled with `POST /v1/runs/{id}/cancel`, all in the same registry the REST endpoint populates. A client that hangs up a streaming call cancels the run, which tears down the child process tree and the Docker container, the same as an MCP `notifications/cancelled`.
+- **Authentication.** `POST /mcp` sits behind the same authentication boundary as `/v1/*` (see [Authenticate and authorize](#7-authenticate-and-authorize)). Every request needs a bearer token, either static or OIDC/JWT, and an unauthenticated call gets `401`. Capabilities apply per method, so `tools/call` needs `invoke` and `tools/list` needs `inspect`. A principal without the needed scope gets a JSON-RPC error and nothing spawns, rather than an HTTP `403`. The authenticated principal and correlation id are attached to every run an MCP `tools/call` creates, exactly as for a REST run.
 
-Point any Streamable-HTTP MCP client at `http(s)://<host>/mcp`. Use `jaiph mcp` for a co-located stdio client; use `jaiph serve` when the workflows must be reachable over the network by MCP and REST clients alike.
+Point any Streamable HTTP MCP client at `http(s)://<host>/mcp`. Use `jaiph mcp` for a stdio client on the same machine, and use `jaiph serve` when MCP and REST clients both need to reach the workflows over the network.
 
 ## 9. Bound memory over a long-lived server
 
-The concurrency cap limits *active* children, not process memory. A long-lived server accumulates run state, so three bounds keep it from growing without limit — all overridable via [environment variables](env-vars.md):
+The concurrency cap limits active children, not process memory. A long-lived server keeps accumulating run state, so three bounds stop it from growing without limit. You can override all of them through [environment variables](env-vars.md).
 
-- **Per-run output caps.** `JAIPH_SERVE_MAX_OUTPUT_BYTES` (default 1 MiB) caps collected stdout, stderr, log output, and the resident `result_text` independently. Output beyond a cap is dropped and marked with a deterministic `[jaiph: output truncated — exceeded the configured byte cap]` marker, so a run that emits gigabytes still costs bounded memory and returns a self-describing result.
-- **Completed-run retention.** The in-memory run registry keeps at most `JAIPH_SERVE_RETAIN_RUNS` completed runs (default 500) and drops any completed run older than `JAIPH_SERVE_RETAIN_AGE_SEC` (default 24h). The oldest terminal records evict first; **active runs are never evicted.**
-- **Bounded listing.** `GET /v1/runs` is paginated (`?limit=`, `?offset=`) with a default of 100 and a hard maximum of 1000 per page, so the endpoint can never return an unbounded response.
+- **Per-run output caps.** `JAIPH_SERVE_MAX_OUTPUT_BYTES` (default 1 MiB) caps collected stdout, stderr, log output, and the resident `result_text`, each independently. Output beyond a cap is dropped and replaced with a fixed `[jaiph: output truncated — exceeded the configured byte cap]` marker. A run that emits gigabytes therefore still costs bounded memory and returns a result that describes what happened.
+- **Completed-run retention.** The in-memory run registry keeps at most `JAIPH_SERVE_RETAIN_RUNS` completed runs (default 500), and it drops any completed run older than `JAIPH_SERVE_RETAIN_AGE_SEC` (default 24 hours). The oldest terminal records evict first, and active runs are never evicted.
+- **Bounded listing.** `GET /v1/runs` is paginated with `?limit=` and `?offset=`. The default page is 100 and the hard maximum is 1000, so the endpoint can never return an unbounded response.
 
-**Eviction is in-memory only.** Dropping a run from the registry does **not** delete its durable `.jaiph/runs/<run>/run_summary.jsonl` journal or published `artifacts/` — those persist on disk (via `JAIPH_RUNS_DIR`, an `emptyDir` or PVC under Kubernetes) and are **the operator's to prune**. Once a run is evicted its API endpoints (`GET /v1/runs/{id}`, `/events`, `/artifacts`) return `404`; read the durable artifacts from the filesystem instead.
+Eviction is in-memory only. Dropping a run from the registry does not delete its durable `run_summary.jsonl` journal or its published `artifacts/`. Both persist on disk under `JAIPH_RUNS_DIR`, which is an `emptyDir` or a PVC under Kubernetes, and pruning them is the operator's job. Once a run is evicted, its API endpoints (`GET /v1/runs/{id}`, `/events`, and `/artifacts`) return `404`, so read the durable artifacts from the filesystem instead.
 
 ## Restart-safe and retry-safe
 
-The run registry is in memory, but it is **rebuilt from disk on startup** so a restart is not a data-loss event:
+The run registry is in memory, but `jaiph serve` rebuilds it from disk on startup, so a restart does not lose run data.
 
-- **Durable run records.** When a run finishes, its public record (`run.json`) is written atomically beside its journal in the run directory. On startup `jaiph serve` scans `JAIPH_RUNS_DIR` and reloads every `run.json`, so `GET /v1/runs`, `GET /v1/runs/{id}`, `/events`, and `/artifacts` keep answering for terminal runs that completed before the restart.
-- **Interrupted runs are reconciled.** A run that was still `running` when the process died has a journal but no `run.json`. On startup it is reconciled into the explicit terminal status **`interrupted`** — its real outcome is unknown (so it is neither `succeeded` nor `failed`), but it is **never reported as permanently `running`**. The reconciliation is persisted, so it is stable across further restarts.
-- **Idempotent run creation.** Send an `Idempotency-Key` request header on `POST /v1/workflows/{name}/runs`. The key is scoped to the authenticated principal **and** the workflow. Repeating the request with the same key and identical arguments returns the **original** run (`200`) and starts nothing; reusing the key with **different** arguments is `409 E_IDEMPOTENCY_CONFLICT` and, again, spawns nothing — so a client that retries an expensive run after a network blip or a server restart never doubles it. The key→run mapping is stored in the durable record, so it survives a restart too. (An idempotency key is only remembered as long as its run is retained in the registry; once a run is evicted by the retention bounds above, its key is forgotten and a fresh request with that key starts a new run.)
+- **Durable run records.** When a run finishes, `jaiph serve` writes its public record (`run.json`) atomically beside its journal in the run directory. On startup `jaiph serve` scans `JAIPH_RUNS_DIR` and reloads every `run.json`, so `GET /v1/runs`, `GET /v1/runs/{id}`, `/events`, and `/artifacts` keep answering for terminal runs that finished before the restart.
+- **Interrupted runs are reconciled.** A run that was still `running` when the process died has a journal but no `run.json`. On startup `jaiph serve` reconciles it into the explicit terminal status `interrupted`. Its real outcome is unknown, so it is neither `succeeded` nor `failed`, but it is never reported as permanently `running`. Jaiph persists the reconciliation, so it stays stable across further restarts.
+- **Idempotent run creation.** Send an `Idempotency-Key` request header on `POST /v1/workflows/{name}/runs`. The key is scoped to the authenticated principal and the workflow. Repeating the request with the same key and identical arguments returns the original run (`200`) and starts nothing. Reusing the key with different arguments is a `409 E_IDEMPOTENCY_CONFLICT` and, again, spawns nothing. A client that retries an expensive run after a network blip or a server restart therefore never doubles it. The key and run mapping is stored in the durable record, so it survives a restart too. An idempotency key is remembered only as long as its run is retained in the registry. Once the retention bounds above evict a run, its key is forgotten, and a fresh request with that key starts a new run.
 
 ```bash
 # The same key + same args returns the original run and spawns nothing.
@@ -174,20 +178,20 @@ curl -s -o /dev/null -w '%{http_code}\n' -X POST 'http://127.0.0.1:5247/v1/workf
 
 ## Deployment topology
 
-`jaiph serve` is a **single-replica** service. Its run registry, in-flight concurrency cap, and idempotency index are **per-process** — there is no shared store and no cross-replica coordination. Running two or more replicas behind a load balancer is **not supported**: each replica would see only its own runs (`GET /v1/runs/{id}` would `404` for a run another replica started), enforce `JAIPH_SERVE_MAX_CONCURRENT` independently, and keep a separate idempotency index (so the same `Idempotency-Key` could start one run per replica). Restart safety and retry safety hold **within a single long-lived process** that owns one `JAIPH_RUNS_DIR`.
+`jaiph serve` is a single-replica service. Its run registry, in-flight concurrency cap, and idempotency index are per-process, with no shared store and no coordination between replicas. Running two or more replicas behind a load balancer is not supported. Each replica would see only its own runs, so `GET /v1/runs/{id}` would return `404` for a run another replica started. Each replica would also enforce `JAIPH_SERVE_MAX_CONCURRENT` on its own and keep a separate idempotency index, so the same `Idempotency-Key` could start one run per replica. Restart safety and retry safety hold within a single long-lived process that owns one `JAIPH_RUNS_DIR`.
 
-Deploy exactly one replica. The [Kubernetes manifest](deploy.md#kubernetes) pins `replicas: 1` for this reason; scale vertically (CPU/memory and `JAIPH_SERVE_MAX_CONCURRENT`), not horizontally. Point `JAIPH_RUNS_DIR` at a durable volume (a PVC rather than an `emptyDir`) if runs and their idempotency keys must survive pod replacement, and keep the pod a `Recreate`-strategy single instance so a rollout hands the runs directory to exactly one successor.
+Deploy exactly one replica. The [Kubernetes manifest](deploy.md#kubernetes) pins `replicas: 1` for this reason. Scale it vertically, with more CPU and memory and a higher `JAIPH_SERVE_MAX_CONCURRENT`, rather than horizontally. Point `JAIPH_RUNS_DIR` at a durable volume, a PVC rather than an `emptyDir`, if runs and their idempotency keys must survive pod replacement. Keep the pod a single instance with the `Recreate` strategy, so a rollout hands the runs directory to exactly one successor.
 
-Execution honors the same execution-policy contract as [`jaiph run`](cli.md#jaiph-run) and [Run in a Docker sandbox](/how-to/sandbox-run): a Docker sandbox with an isolated workspace by default. `--inplace` (`JAIPH_INPLACE=1`) keeps the sandbox but binds the real workspace read-write so run effects land live; `--unsafe` (`JAIPH_UNSAFE=true`) runs on the host with no sandbox at all. The two are mutually exclusive (`E_FLAG_CONFLICT` at startup), the posture is resolved and printed once at startup and applied to every run, and launching the server with the flag or env var is the consent (no interactive prompt) — see [Environment variables — Precedence](env-vars.md#precedence). Publish files a run produces with [artifacts](/how-to/artifacts). Editing a served source hot-reloads the workflow set (and the OpenAPI document) with no restart; runs already in flight keep running.
+Execution follows the same execution-policy contract as [`jaiph run`](cli.md#jaiph-run) and [Run in a Docker sandbox](sandbox-run.md). By default every run uses a Docker sandbox with an isolated workspace. `--inplace` (`JAIPH_INPLACE=1`) keeps the sandbox but binds the real workspace read-write, so a run's effects land live. `--unsafe` (`JAIPH_UNSAFE=true`) runs on the host with no sandbox at all. The two flags are mutually exclusive and conflict with `E_FLAG_CONFLICT` at startup. `jaiph serve` resolves the posture once at startup, prints it, and applies it to every run. Launching the server with the flag or env var is the consent, so there is no interactive prompt. See [Environment variables, Precedence](env-vars.md#precedence) for the details. Publish the files a run produces with [artifacts](artifacts.md). Editing a served source hot-reloads the workflow set and the OpenAPI document with no restart, and runs already in flight keep running.
 
 ## Reverse-proxy and ingress requirements
 
-`jaiph serve` speaks **plain HTTP** and holds long-lived streaming connections (SSE at `GET /v1/runs/{id}/events`, and MCP progress at `POST /mcp` with `Accept: text/event-stream`). Front it with a reverse proxy / ingress that is configured for streaming and TLS, not just request/response:
+`jaiph serve` speaks plain HTTP and holds long-lived streaming connections, both the SSE stream at `GET /v1/runs/{id}/events` and MCP progress at `POST /mcp` with `Accept: text/event-stream`. Front it with a reverse proxy or ingress that is configured for streaming and TLS, not only for request and response:
 
-- **Disable response buffering on the streaming routes.** A proxy that buffers the whole response defeats live streaming — clients see nothing until the run ends. nginx: `proxy_buffering off;` (or the `X-Accel-Buffering: no` header) on `/v1/runs/*/events` and `/mcp`. Envoy/Ingress: disable response buffering for those paths. The server already sends `Cache-Control: no-cache` and a `:ka` keep-alive comment every 15 s on SSE to keep intermediaries from idling the connection out.
-- **Raise read/idle timeouts to cover the longest run.** A `tools/call` or `?wait=true` REST run blocks the connection until the workflow finishes, and an SSE follow stays open for the whole run. Set the proxy's upstream read timeout (nginx `proxy_read_timeout`, cloud LB idle timeout) above your slowest workflow, or those clients get cut off mid-run. `HTTP/1.1` (not buffered `HTTP/2` translation that coalesces) on the streaming hops.
-- **Terminate TLS at the proxy.** The process serves cleartext; put HTTPS at the ingress/gateway (cert-manager, a cloud LB, or a mesh) in front of it and keep the app port private (loopback or a `ClusterIP` Service — see [Deploy](deploy.md)). Never expose the token-guarded API to the internet without TLS: the bearer token would travel in the clear.
-- **Preserve and require authentication end to end.** Forward the `Authorization` header unchanged (do not strip it), and terminate untrusted traffic at the proxy only if the proxy itself authenticates. `jaiph`'s own bearer check guards `/v1/*` and `/mcp`; `/healthz`, `/openapi.json`, and `/docs` stay open for probes and discovery. If the proxy adds its own auth, keep `JAIPH_SERVE_TOKEN` set anyway so a proxy misconfiguration can never expose unauthenticated shell.
+- **Disable response buffering on the streaming routes.** A proxy that buffers the whole response defeats live streaming, because clients see nothing until the run ends. On nginx, set `proxy_buffering off;` (or the `X-Accel-Buffering: no` header) on `/v1/runs/*/events` and `/mcp`. On Envoy or another ingress, disable response buffering for those paths. The server already sends `Cache-Control: no-cache` and a `:ka` keep-alive comment every 15 seconds on SSE, to keep intermediaries from idling the connection out.
+- **Raise read and idle timeouts to cover the longest run.** A `tools/call` or a `?wait=true` REST run blocks the connection until the workflow finishes, and an SSE follow stays open for the whole run. Set the proxy's upstream read timeout above your slowest workflow (nginx `proxy_read_timeout`, or a cloud load balancer's idle timeout), or those clients get cut off mid-run. Use `HTTP/1.1` on the streaming hops, rather than a buffered `HTTP/2` translation that coalesces frames.
+- **Terminate TLS at the proxy.** The process serves cleartext, so put HTTPS at the ingress or gateway in front of it, using cert-manager, a cloud load balancer, or a service mesh. Keep the app port private, on loopback or a `ClusterIP` Service (see [Deploy](deploy.md)). Never expose the token-guarded API to the internet without TLS, because the bearer token would travel in the clear.
+- **Preserve and require authentication end to end.** Forward the `Authorization` header unchanged, and do not strip it. Terminate untrusted traffic at the proxy only if the proxy itself authenticates. Jaiph's own bearer check guards `/v1/*` and `/mcp`, while `/healthz`, `/openapi.json`, and `/docs` stay open for probes and discovery. If the proxy adds its own authentication, keep `JAIPH_SERVE_TOKEN` set anyway, so a proxy misconfiguration can never expose unauthenticated shell.
 
 ## Verification
 
@@ -205,11 +209,11 @@ curl -s 'http://127.0.0.1:5247/v1/runs?limit=100000' \
   | jq -e '.limit == 1000 and (.runs | length) <= 1000'
 ```
 
-Both `jq -e` checks exit `0` when the contract holds. The run's durable record is under `.jaiph/runs/…/run_summary.jsonl` (`run_dir` in the response), the same artifact layout as `jaiph run`.
+Each `jq -e` check exits `0` when the contract holds. The run's durable record is under `.jaiph/runs/…/run_summary.jsonl`, whose path is `run_dir` in the response, and it uses the same artifact layout as `jaiph run`.
 
 ## Related
 
-- [CLI — `jaiph serve`](cli.md#jaiph-serve) — flag and endpoint reference.
-- [Serve workflows as MCP tools](mcp.md) — the stdio sibling with the same exposure rules; `POST /mcp` here is its network transport.
-- [Run in a Docker sandbox](/how-to/sandbox-run) — the execution sandbox HTTP runs use.
-- [Environment variables](env-vars.md) — `JAIPH_SERVE_TOKEN`, `JAIPH_SERVE_MAX_CONCURRENT`, the `JAIPH_SERVE_MAX_OUTPUT_BYTES` / `JAIPH_SERVE_RETAIN_RUNS` / `JAIPH_SERVE_RETAIN_AGE_SEC` memory bounds, and the sandbox controls.
+- [CLI reference for `jaiph serve`](cli.md#jaiph-serve): the flag and endpoint reference.
+- [Serve workflows as MCP tools](mcp.md): the stdio sibling with the same exposure rules. `POST /mcp` here is its network transport.
+- [Run in a Docker sandbox](sandbox-run.md): the execution sandbox HTTP runs use.
+- [Environment variables](env-vars.md): `JAIPH_SERVE_TOKEN`, `JAIPH_SERVE_MAX_CONCURRENT`, the `JAIPH_SERVE_MAX_OUTPUT_BYTES`, `JAIPH_SERVE_RETAIN_RUNS`, and `JAIPH_SERVE_RETAIN_AGE_SEC` memory bounds, and the sandbox controls.
