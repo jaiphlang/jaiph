@@ -1,4 +1,5 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import { errText } from "../../errors";
 import type { AddressInfo } from "node:net";
 import { createReadStream } from "node:fs";
 import { pipeline } from "node:stream";
@@ -51,7 +52,7 @@ export function createHttpServer(handler: ServeHandler, log: (line: string) => v
         return undefined;
       })
       .catch((err) => {
-        log(`jaiph serve: request handling failed: ${err instanceof Error ? err.message : String(err)}`);
+        log(`jaiph serve: request handling failed: ${errText(err)}`);
         if (!res.headersSent) {
           res.writeHead(500, { "content-type": "application/json" });
         }

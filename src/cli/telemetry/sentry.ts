@@ -17,6 +17,7 @@
  * warning and never touches the run's exit code, output, or journal. No retries.
  */
 import { existsSync, readFileSync } from "node:fs";
+import { errText } from "../../errors";
 import { basename, join } from "node:path";
 import { VERSION } from "../../version";
 import { postWithTimeout } from "./http";
@@ -233,7 +234,7 @@ export async function reportRunFailureToSentry(
     );
     return "sent";
   } catch (err) {
-    warn(`jaiph: Sentry error report failed — ${err instanceof Error ? err.message : String(err)}\n`);
+    warn(`jaiph: Sentry error report failed — ${errText(err)}\n`);
     return "failed";
   }
 }

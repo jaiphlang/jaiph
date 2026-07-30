@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { errText } from "../../errors";
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve as resolvePath } from "node:path";
 import { PassThrough } from "node:stream";
@@ -1592,7 +1593,7 @@ export class NodeWorkflowRuntime {
         const code = (err as NodeJS.ErrnoException).code;
         const msg = code === "ENOENT" && interpreter
           ? `script interpreter "${interpreter}" not found — install it or fix the script shebang`
-          : err instanceof Error ? err.message : String(err);
+          : errText(err);
         error += msg;
         io?.appendErr(msg);
         resolve({ status: 1, output, error });

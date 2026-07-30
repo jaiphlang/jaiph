@@ -1,4 +1,3 @@
-import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ChildProcess } from "node:child_process";
 import type { JaiphConfig } from "../../config";
@@ -21,7 +20,8 @@ import {
   type DockerRunConfig,
   type SandboxMode,
 } from "../../runtime/docker";
-import { discoverDockerRunDir, remapContainerPath } from "../shared/errors";
+import { discoverDockerRunDir } from "../shared/errors";
+import { readMetaFields, readReturnValue } from "../shared/run-meta";
 import { deliverRunTelemetryDetached } from "../telemetry/otlp";
 import { redactCredentials } from "../../runtime/kernel/redact";
 
@@ -295,8 +295,8 @@ async function callWorkflowHost(
   const exit = await waitForRunExit(child);
   collector.drain();
 
-  const meta = readMetaFile(metaFile);
-  return composeResult(workflowSymbol, collector.data, exit, meta.runDir, undefined, runtimeEnv, caps);
+  const runDir = readMetaFields(metaFile, ["run_dir"]).run_dir;
+  return composeResult(workflowSymbol, collector.data, exit, runDir, undefined, runtimeEnv, caps);
 }
 
 /**
@@ -525,40 +525,6 @@ export function composeResult(
     exitStatus: exit.status,
     signal: exit.signal,
   };
-}
-
-function readMetaFile(metaFile: string): { runDir?: string; summaryFile?: string } {
-  if (!existsSync(metaFile)) return {};
-  const out: { runDir?: string; summaryFile?: string } = {};
-  for (const line of readFileSync(metaFile, "utf8").split(/\r?\n/)) {
-    if (line.startsWith("run_dir=")) {
-      const value = line.slice("run_dir=".length).trim();
-      if (value) out.runDir = value;
-    }
-    if (line.startsWith("summary_file=")) {
-      const value = line.slice("summary_file=".length).trim();
-      if (value) out.summaryFile = value;
-    }
-  }
-  return out;
-}
-
-/**
- * Read a run's `return_value.txt`. In Docker mode `runDir` is discovered from
- * the host-side sandbox runs mount, so `remapContainerPath` normalizes any
- * container-internal prefix to the host path before reading.
- */
-function readReturnValue(runDir: string | undefined, sandboxRunDir: string | undefined): string | undefined {
-  if (!runDir) return undefined;
-  const candidate = sandboxRunDir
-    ? remapContainerPath(join(runDir, "return_value.txt"), sandboxRunDir)
-    : join(runDir, "return_value.txt");
-  if (!existsSync(candidate)) return undefined;
-  try {
-    return readFileSync(candidate, "utf8");
-  } catch {
-    return undefined;
-  }
 }
 
 function trimTrailingNewline(text: string): string {

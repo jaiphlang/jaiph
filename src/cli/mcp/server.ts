@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
+import { errText } from "../../errors";
 import type { McpToolSpec } from "./tools";
 
 /**
@@ -264,7 +265,7 @@ export class McpServer {
       });
     } catch (err) {
       if (entry.cancelled) return;
-      const message = err instanceof Error ? err.message : String(err);
+      const message = errText(err);
       this.opts.log(`jaiph mcp: tool "${spec.name}" crashed: ${message}`);
       this.writeError(id, JSONRPC_INTERNAL_ERROR, `tool "${spec.name}" failed: ${message}`);
     } finally {

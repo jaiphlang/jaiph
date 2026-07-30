@@ -13,6 +13,7 @@
  * dependencies — a `node:https`/`node:http` request is the whole transport.
  */
 import { existsSync, readFileSync } from "node:fs";
+import { errText } from "../../errors";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
 import { VERSION } from "../../version";
@@ -482,7 +483,7 @@ export async function exportOtlpTraces(
     await postOtlp(endpoint, payload, headers, timeoutMs);
     return "sent";
   } catch (err) {
-    warn(`jaiph: OTLP trace export failed — ${err instanceof Error ? err.message : String(err)}\n`);
+    warn(`jaiph: OTLP trace export failed — ${errText(err)}\n`);
     return "failed";
   }
 }
