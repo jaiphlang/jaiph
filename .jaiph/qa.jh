@@ -1,5 +1,11 @@
 #!/usr/bin/env jaiph
 
+#
+# Find test-coverage gaps, write missing tests, verify CI, commit if changed.
+# Safe for overnight loops: starts clean, ends clean (commit or no-op).
+#
+#   jaiph run .jaiph/qa.jh
+#
 import "./ensure_ci_passes.jh" as ci
 import "jaiphlang/git" as git
 
@@ -229,10 +235,16 @@ workflow write_tests() {
 
 script mkdir_tmp_jaiph_qa = `mkdir -p .jaiph/tmp`
 
+const commit_task = """
+  QA pass: add missing tests from the gap report under
+  .jaiph/tmp/qa_gap_report_*.md. Production code unchanged.
+"""
+
 workflow default() {
-  # ensure git.is_clean()
+  ensure git.is_clean()
   run mkdir_tmp_jaiph_qa()
   run analyze_gaps()
   run write_tests()
   run ci.ensure_ci_passes()
+  run git.commit_if_changes(commit_task)
 }

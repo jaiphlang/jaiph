@@ -89,6 +89,20 @@ workflow commit(task) {
   return patch_file_name
 }
 
+# Like commit(), but no-ops when the worktree is clean (overnight loops).
+# Deletes the generated .patch from the worktree so the next loop starts clean.
+workflow commit_if_changes(task) {
+  ensure has_changes() catch (err) {
+    log "No changes to commit."
+    return ""
+  }
+  const patch_file = run commit(task)
+  run git_rm_patch(patch_file)
+  return patch_file
+}
+
+script git_rm_patch = `rm -f -- "$1"`
+
 workflow push(branch) {
   ensure in_git_repo()
   run git_push_head(branch)

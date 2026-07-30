@@ -9,6 +9,7 @@
 #   jaiph .jaiph/libs/jaiphlang/queue.jh headers
 #   jaiph .jaiph/libs/jaiphlang/queue.jh get dev-ready
 #   jaiph .jaiph/libs/jaiphlang/queue.jh json
+#   jaiph .jaiph/libs/jaiphlang/queue.jh add_from_file path/to/tasks.md
 #
 import script "./queue.py" as queue
 
@@ -16,6 +17,12 @@ import script "./queue.py" as queue
 workflow default(cmd, arg1, arg2) {
   const result = run queue(cmd, arg1, arg2)
   log result
+}
+
+# Append ## tasks from a markdown file into QUEUE.md. Titles already present
+# are skipped. Missing #dev-ready tags are added automatically.
+export workflow add_tasks_from_file(path) {
+  run queue("add_from_file", path)
 }
 
 # Returns the full text block (header + body) of the first task.

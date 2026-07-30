@@ -178,13 +178,54 @@ def cmd_has_tag(args):
 def cmd_json(args):
     print(json.dumps(parse_queue(queue_path()), indent=2))
 
+def cmd_add_from_file(args):
+    """Append tasks from a markdown file. Skips titles that already exist.
+
+    The file is parsed like QUEUE.md (## Title #tags + body). Existing titles
+    in QUEUE.md are left untouched. Returns how many tasks were added.
+    """
+    if not args:
+        print("add_from_file: path required", file=sys.stderr)
+        sys.exit(1)
+    src = args[0]
+    if not os.path.isfile(src):
+        print(f"add_from_file: file not found: {src}", file=sys.stderr)
+        sys.exit(1)
+    incoming = parse_queue(src)
+    if not incoming["tasks"]:
+        print("Added 0 tasks (file had no ## sections)")
+        return
+    path = queue_path()
+    q = parse_queue(path)
+    existing = {t["title"] for t in q["tasks"]}
+    added = 0
+    skipped = 0
+    for t in incoming["tasks"]:
+        if t["title"] in existing:
+            skipped += 1
+            continue
+        # Overnight / engineer loops require #dev-ready on the header.
+        tags = list(t["tags"])
+        if "dev-ready" not in tags:
+            tags.append("dev-ready")
+        q["tasks"].append({
+            "title": t["title"],
+            "tags": tags,
+            "description": t["description"],
+        })
+        existing.add(t["title"])
+        added += 1
+    if added:
+        write_queue(path, q)
+    print(f"Added {added} tasks" + (f" (skipped {skipped} existing)" if skipped else ""))
+
 cmds = {
     "get": cmd_get, "get_by_header": cmd_get_by_header,
     "headers": cmd_headers, "complete": cmd_complete,
     "complete_by_header": cmd_complete_by_header, "mark": cmd_mark,
     "set_description": cmd_set_description,
     "has_tag": cmd_has_tag, "check_all_tagged": cmd_check_all_tagged,
-    "json": cmd_json,
+    "json": cmd_json, "add_from_file": cmd_add_from_file,
 }
 
 argv = [a for a in sys.argv[1:] if a]

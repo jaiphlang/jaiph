@@ -11,15 +11,18 @@
 # Writes a Diátaxis-style markdown report to
 #   .jaiph/tmp/security_review_<timestamp>.md
 # (name "security_review" is in the filename) and publishes it as a run
-# artifact. Fails when any HIGH severity finding is confirmed.
+# artifact. HIGH and MEDIUM findings become #dev-ready QUEUE.md tasks
+# (committed when the queue changes) so overnight loops can feed engineer.
+# Does not fail the run on HIGH — findings are queued instead.
 #
 # Review methodology: OWASP Agentic Security Initiative (ASI) Top 10 via
 #   .jaiph/skills/agent-owasp-compliance/SKILL.md
-# Report writing follows .jaiph/kills/documentation-writer/SKILL.md.
+# Report writing follows .jaiph/skills/documentation-writer/SKILL.md.
 #
 import "./lib_common.jh" as common
 import "jaiphlang/artifacts" as artifacts
 import "jaiphlang/git" as git
+import "jaiphlang/queue" as queue
 
 config {
   agent.backend = "claude"
@@ -30,6 +33,8 @@ config {
 script new_security_review_report_path = `echo ".jaiph/tmp/security_review_$(date +%Y-%m-%d_%H-%M-%S).md"`
 
 script write_security_review_pointer = `printf '%s\n' "$1" > .jaiph/tmp/security_review_active.txt`
+
+script security_review_tasks_path = `echo ".jaiph/tmp/security_review_queue_tasks.md"`
 
 const reviewer_role = """
   You are a senior security engineer reviewing Jaiph — a workflow DSL,
@@ -170,7 +175,7 @@ workflow review_diff_text(mode, scope_label, diff_text, report_file) {
   return run review_scope(mode, scope_detail, report_file)
 }
 
-workflow finish_review(verdict, report_file, fingerprint_before) {
+workflow finish_report(verdict, report_file, fingerprint_before) {
   if verdict == "skip" {
     log "Security review skipped (nothing in scope)."
     return ""
@@ -186,15 +191,66 @@ workflow finish_review(verdict, report_file, fingerprint_before) {
     fail "Security review did not write a report at ${report_file}."
   }
   run artifacts.save(report_file)
-
-  run common.str_equals(verdict, "pass") catch (err) {
-    fail """
-      Security review found HIGH severity issues.
-      See ${report_file} (also published to the run artifacts directory).
-    """
-  }
-  log "Security review passed. Report: ${report_file}"
+  log "Security review report ready: ${report_file}"
 }
+
+script truncate_file = `: > "$1"`
+
+workflow queue_findings(report_file) {
+  const tasks_file = run security_review_tasks_path()
+  # Default to empty so a no-finding pass is a clean no-op for add_from_file.
+  run truncate_file(tasks_file)
+
+  prompt """
+    <role>
+    You turn confirmed security findings into standalone QUEUE.md tasks for
+    the Jaiph engineer overnight loop.
+    </role>
+
+    <task>
+    Read the security review report at ${report_file} and the current
+    QUEUE.md.
+
+    For every HIGH and MEDIUM finding in the report, write one QUEUE task
+    into ${tasks_file} (overwrite that file). Skip LOW findings.
+
+    File format — one or more task sections, nothing else.
+    Only task titles use ##. Body subsections use ### (never ##):
+
+    ## Short imperative title #dev-ready
+
+    Context: <1-2 sentences, ASI id, severity, confidence>
+
+    Problem: <concrete exploit scenario from the report>
+
+    Location: <file:line or symbol>
+
+    Remediation: <specific fix from the report>
+
+    ### Acceptance criteria
+    - <testable bullet that fails today and passes when fixed>
+    - <additional bullets as needed>
+
+    Rules:
+    - Every ## header MUST end with #dev-ready.
+    - Do not put ## inside a task body (QUEUE.md treats every ## as a new task).
+    - Each task must be standalone (QUEUE.md rule 5) — no "see prior task".
+    - Prefer small, implementable tasks; split a broad finding if needed.
+    - Skip a finding if QUEUE.md already has an equivalent title/topic.
+    - If there are no HIGH/MEDIUM findings to queue, write an empty file
+      (zero bytes or whitespace only) — do not invent work.
+    - Do NOT edit QUEUE.md yourself; only write ${tasks_file}.
+    - Do not modify any other repository file.
+    </task>
+  """
+
+  run queue.add_tasks_from_file(tasks_file)
+}
+
+const commit_task = """
+  Security review: add #dev-ready QUEUE.md tasks for HIGH/MEDIUM findings
+  from the latest .jaiph/tmp/security_review_*.md report.
+"""
 
 workflow dispatch_review(mode, scope, report_file) {
   if mode == "codebase" {
@@ -210,10 +266,6 @@ workflow dispatch_review(mode, scope, report_file) {
 
 workflow default(scope) {
   ensure git.in_git_repo()
-  run common.mkdir_p_simple(".jaiph/tmp")
-  const report_file = run new_security_review_report_path()
-  run write_security_review_pointer(report_file)
-  const fingerprint_before = run worktree_fingerprint()
 
   const mode = match scope {
     "" | "codebase" | "full" => "codebase"
@@ -221,6 +273,39 @@ workflow default(scope) {
     _ => "range"
   }
 
+  # Overnight / codebase / range runs require a clean tree so the QUEUE.md
+  # commit only contains queued findings. Diff mode reviews an existing dirty
+  # tree and updates QUEUE.md without committing.
+  if mode != "diff" {
+    ensure git.branch_clean()
+  }
+
+  run common.mkdir_p_simple(".jaiph/tmp")
+  const report_file = run new_security_review_report_path()
+  run write_security_review_pointer(report_file)
+  const fingerprint_before = run worktree_fingerprint()
+
   const verdict = run dispatch_review(mode, scope, report_file)
-  run finish_review(verdict, report_file, fingerprint_before)
+  run finish_report(verdict, report_file, fingerprint_before)
+
+  if verdict == "skip" {
+    return ""
+  }
+
+  run queue_findings(report_file)
+
+  if mode == "diff" {
+    ensure git.has_changes() catch (err) {
+      log "Security review finished (no QUEUE.md changes). Report: ${report_file}"
+      return ""
+    }
+    log "QUEUE.md updated; commit skipped in diff mode. Report: ${report_file}"
+  } else {
+    run git.commit_if_changes(commit_task)
+    if verdict == "fail" {
+      log "Security review found HIGH findings — queued as #dev-ready tasks (see QUEUE.md and ${report_file})."
+    } else {
+      log "Security review finished. Report: ${report_file}"
+    }
+  }
 }
