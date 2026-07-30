@@ -70,12 +70,16 @@ e2e::pass "no run directory created — runner/container never launched"
 
 e2e::section "claude on host without credentials warns but proceeds"
 
-# Use --unsafe to force Docker off without needing a Docker daemon.
+# The harness already runs on the host (JAIPH_DOCKER_ENABLED=false), so a plain
+# `jaiph run` exercises the host warn-only pre-flight path. NOTE: do not pass
+# --unsafe here — unsafe mode (`JAIPH_UNSAFE`) deliberately skips the credential
+# pre-flight entirely (see preflight-credentials.ts), which would suppress the
+# very warning this section asserts.
 err_file="$(mktemp)"
 stdout_file="$(mktemp)"
 exit_code=0
 env -u ANTHROPIC_API_KEY -u CLAUDE_CODE_OAUTH_TOKEN \
-  jaiph run --unsafe "${TEST_DIR}/claude_docker.jh" >"${stdout_file}" 2>"${err_file}" \
+  jaiph run "${TEST_DIR}/claude_docker.jh" >"${stdout_file}" 2>"${err_file}" \
   || exit_code=$?
 err_msg="$(cat "${err_file}")"
 out_msg="$(cat "${stdout_file}")"
@@ -115,8 +119,10 @@ EOF
 
 err_file="$(mktemp)"
 exit_code=0
+# Plain host run (no --unsafe): unsafe mode skips the credential pre-flight, so
+# it would suppress the codex hard error this section asserts.
 env -u OPENAI_API_KEY \
-  jaiph run --unsafe "${TEST_DIR}/codex_host.jh" 2>"${err_file}" >/dev/null \
+  jaiph run "${TEST_DIR}/codex_host.jh" 2>"${err_file}" >/dev/null \
   || exit_code=$?
 err_msg="$(cat "${err_file}")"
 rm -f "${err_file}"

@@ -474,3 +474,104 @@ test("formatRunningBottomLine: renders status with elapsed", () => {
   assert.ok(line.includes("default"));
   assert.ok(line.includes("1.5s"));
 });
+
+// --- buildRunTreeRows: multi-site self-recursion ---
+
+test("buildRunTreeRows: workflow with two self-recursive call sites expands bounded per-site", () => {
+  const mod = modFor([
+    "workflow default() {",
+    "  run rec()",
+    "}",
+    "workflow rec() {",
+    '  log "x"',
+    "  run rec()",
+    "  run rec()",
+    "}",
+  ].join("\n"));
+  const rows = buildRunTreeRows(mod);
+  // The per-site index bookkeeping picks a different self-call to expand at each
+  // depth (site 0 at depth 0, site 1 at depth 1) and clamps deeper frames off,
+  // so the tree is finite rather than infinite. This locks the exact shape.
+  assert.deepEqual(
+    rows.map((r) => ({ label: r.rawLabel, prefix: r.prefix.length })),
+    [
+      { label: "workflow default", prefix: 0 },
+      { label: "workflow rec", prefix: 0 },
+      { label: "ℹ x", prefix: 4 },
+      { label: "workflow rec", prefix: 4 },
+      { label: "ℹ x", prefix: 8 },
+      { label: "workflow rec", prefix: 8 },
+      { label: "ℹ x", prefix: 12 },
+      { label: "workflow rec", prefix: 4 },
+    ],
+  );
+  assert.equal(rows[0].isRoot, true);
+});
+
+// --- channel route declarations as tree nodes ---
+
+test("collectWorkflowChildren: single-target channel route becomes a tree node", () => {
+  const mod = modFor([
+    "channel findings -> analyst",
+    "workflow analyst(message, chan, sender) {",
+    '  log "a"',
+    "}",
+    "workflow default() {",
+    '  log "start"',
+    "}",
+  ].join("\n"));
+  const items = collectWorkflowChildren(mod, "default");
+  assert.equal(items[0].label, "findings -> analyst");
+});
+
+test("collectWorkflowChildren: multi-target channel route joins targets with comma", () => {
+  const mod = modFor([
+    "channel findings -> analyst, reviewer",
+    "workflow analyst(message, chan, sender) {",
+    '  log "a"',
+    "}",
+    "workflow reviewer(message, chan, sender) {",
+    '  log "r"',
+    "}",
+    "workflow default() {",
+    '  log "start"',
+    "}",
+  ].join("\n"));
+  const items = collectWorkflowChildren(mod, "default");
+  assert.equal(items[0].label, "findings -> analyst, reviewer");
+});
+
+test("buildRunTreeRows: channel route node renders as a top-level child row", () => {
+  const mod = modFor([
+    "channel findings -> analyst, reviewer",
+    "workflow analyst(message, chan, sender) {",
+    '  log "a"',
+    "}",
+    "workflow reviewer(message, chan, sender) {",
+    '  log "r"',
+    "}",
+    "workflow default() {",
+    '  log "start"',
+    "}",
+  ].join("\n"));
+  const rows = buildRunTreeRows(mod);
+  assert.deepEqual(
+    rows.map((r) => ({ label: r.rawLabel, prefix: r.prefix.length })),
+    [
+      { label: "workflow default", prefix: 0 },
+      { label: "findings -> analyst, reviewer", prefix: 0 },
+      { label: "ℹ start", prefix: 0 },
+    ],
+  );
+});
+
+// --- buildRunTreeRows: empty / root-only workflow ---
+
+test("buildRunTreeRows: childless workflow yields exactly one root row", () => {
+  const mod = modFor("workflow default() {\n}");
+  const rows = buildRunTreeRows(mod);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].rawLabel, "workflow default");
+  assert.equal(rows[0].prefix, "");
+  assert.equal(rows[0].isRoot, true);
+});

@@ -152,6 +152,16 @@ test("formatCompletedLine: failure with kind/name has red marker and label (colo
   assert.ok(result.includes("\u001b[31m✗ workflow reviewer (2s)\u001b[0m"));
 });
 
+test("formatCompletedLine: failure carries the model token in the label (no color)", () => {
+  const result = formatCompletedLine("  ", 1, 3, false, "prompt", "claude", "sonnet");
+  assert.equal(result, "✗ prompt claude sonnet (3s)");
+});
+
+test("formatCompletedLine: failure with model token has red marker and label (color enabled)", () => {
+  const result = formatCompletedLine("  ", 1, 3, true, "prompt", "claude", "sonnet");
+  assert.ok(result.includes("[31m✗ prompt claude sonnet (3s)[0m"));
+});
+
 test("formatCompletedLine: without kind/name still works (backward compat)", () => {
   const result = formatCompletedLine("  ", 0, 5, false);
   assert.equal(result, "✓ (5s)");
