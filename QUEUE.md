@@ -14,22 +14,6 @@ Process rules:
 
 ***
 
-## Require explicit unsafe consent flag for mcp/serve host-only mode #dev-ready
-
-Context: Security review 2026-07-31, finding M-1 (ASI-04 Unauthorized Escalation), severity MEDIUM, confidence 0.85. `jaiph run` gates host-only execution behind an interactive confirmation, but the long-lived server modes do not.
-
-Problem: `resolveStartupPosture` builds the runtime env by spreading `process.env`, so an inherited/exported `JAIPH_UNSAFE=true` (e.g. left over in a shell profile from an earlier host-only `jaiph run`) silently switches `jaiph mcp ./untrusted.jh` or `jaiph serve` into host-only execution. Every tool call then runs on the host with full filesystem and credential access, unsandboxed, with only a single stderr log line — no prompt, no explicit consent.
-
-Location: `src/cli/shared/generation.ts:177-186` (posture resolution spreads `process.env`); contrast the consent gate in `src/cli/commands/run.ts:209-220` and `src/runtime/docker-inplace.ts:102-129`.
-
-Remediation: Apply the same consent gate to `mcp`/`serve` as `run` has: host-only execution requires `--unsafe` (or `--yes`) passed on the server's own command line, and an inherited ambient `JAIPH_UNSAFE=true` without that explicit flag is refused (startup error) rather than honored. If host-only mode is entered, print a loud, non-suppressible startup banner instead of one stderr log line.
-
-### Acceptance criteria
-- Starting `jaiph mcp` or `jaiph serve` with `JAIPH_UNSAFE=true` in the environment but without an explicit unsafe CLI flag exits with an error (does not start host-only), verified by a test.
-- Starting `jaiph mcp`/`jaiph serve` with the explicit unsafe CLI flag runs host-only and emits a prominent startup banner stating that sandboxing is disabled, verified by a test asserting the banner text.
-- Without `JAIPH_UNSAFE` and without the flag, `mcp`/`serve` behavior is unchanged (sandboxed default), verified by an existing or new test.
-- `docs/env-vars.md` documents the new `JAIPH_UNSAFE` semantics for server modes.
-
 ## Make serve anonymous loopback auth an explicit opt-in #dev-ready
 
 Context: Security review 2026-07-31, finding M-2 (ASI-04/ASI-07), severity MEDIUM, confidence 0.8. When neither `JAIPH_SERVE_TOKEN` nor OIDC is configured, `serve` runs in auth mode `none` on loopback with no warning.
@@ -110,3 +94,63 @@ Remediation: Pin the runtime image by `@sha256:` digest baked into the release a
 - A run using a locally-cached image whose digest does not match the expected digest fails closed with a clear error, verified by a test (e.g. tagging a different image with the runtime tag).
 - A run with a matching digest proceeds normally, including the cache-hit path, verified by a test.
 - The digest-mismatch error message tells the operator how to recover (e.g. re-pull the pinned image).
+
+## Redact credentials in generic step params in the run journal #dev-ready
+
+Context: Security review 2026-07-31, finding L-2 (ASI-06), severity LOW, confidence 0.7. Generic step params are persisted and served unredacted, inconsistent with prompt params.
+
+Problem: `emitStep` redacts only `out_content` and `err_content` (`runtime-event-emitter.ts:98-113`). Params built by `format-params.ts:40-52` and attached at `node-workflow-runtime.ts:1907,1934` land verbatim in `run_summary.jsonl` and are served by `GET /v1/runs/{id}/events`. Prompt-step params are already redacted (`runtime-event-emitter.ts:169`). A secret passed as a positional argument to a `run`/tool step therefore bypasses the journal scrub.
+
+Location: `src/runtime/kernel/runtime-event-emitter.ts:98-113`, `:169`; `src/cli/commands/format-params.ts:40-52`; `src/runtime/kernel/node-workflow-runtime.ts:1907,1934`.
+
+Remediation: Run `redactCredentials` over generic step `params` in `emitStep`, matching the treatment prompt params already receive.
+
+### Acceptance criteria
+- A workflow step that receives a credential-named env value as a param persists `[REDACTED]` (not the raw secret) in the journal `params` field; a test asserts the durable line is redacted.
+- Prompt-step param redaction behaviour is unchanged; a regression test still asserts prompt params are redacted.
+- `GET /v1/runs/{id}/events` (or the journal read path) does not expose the raw secret in step params; a test covers at least one of those paths.
+
+## Commit journal length or terminality so truncated chains fail verification #dev-ready
+
+Context: Security review 2026-07-31, finding L-3 (ASI-06), severity LOW, confidence 0.7. The hash chain commits to prefix integrity but not to length or terminality. Complements M-3 (chain-key squat / fail-open).
+
+Problem: `verifyRunSummaryChain` (`emit.ts:81-106`) iterates only the lines present — no terminal-marker check, no committed line count. Deleting the last *K* lines of a terminal journal leaves a shorter but still internally-valid chain that verifies `ok:true`. During-run truncation is caught (later kernel appends break the chain), so standalone exploitation needs post-terminal filesystem access — but once the key is gone (M-3 fail-open), truncation is trivially undetectable.
+
+Location: `src/runtime/kernel/emit.ts:81-106` (`verifyRunSummaryChain`).
+
+Remediation: Record a terminal event (e.g. `WORKFLOW_END`) and verify its presence, and/or commit a signed line count, so a truncated-but-valid prefix is rejected.
+
+### Acceptance criteria
+- A journal whose last lines were deleted after a successful terminal run fails verification (`ok:false` or equivalent integrity failure); a test asserts truncation is rejected.
+- A complete terminal journal with an intact `WORKFLOW_END` (or signed line count) still verifies successfully; a test asserts the happy path.
+- During-run appends that break the chain continue to fail verification; a regression test covers that case.
+
+## Pin runtime Dockerfile base images and global npm installs #dev-ready
+
+Context: Security review 2026-07-31, finding L-4 (ASI-09), severity LOW, confidence 0.75. Unpinned base images and global npm installs weaken runtime-image provenance.
+
+Problem: `runtime/Dockerfile` uses `FROM node:22-bookworm-slim` and `FROM ubuntu:24.04` by tag (not digest), and runs unpinned `npm install -g pnpm yarn` / `npm install -g @anthropic-ai/claude-code`. Direct toolchain downloads already go through `runtime/fetch-verify.sh` with pinned SHA-256; the registry-sourced layers are the weaker link.
+
+Location: `runtime/Dockerfile:1`, `:13`, `:91`, `:215`; `runtime/fetch-verify.sh`.
+
+Remediation: Pin base images by digest and pin the global npm installs to exact versions (ideally with an integrity check), so the built image is reproducible and its inputs are attested.
+
+### Acceptance criteria
+- Every `FROM` in `runtime/Dockerfile` references an image by `@sha256:` digest (or an equivalent pinned digest form); a test or CI check asserts no bare mutable tags remain on `FROM` lines.
+- Global `npm install -g` invocations pin exact package versions; a test or CI check asserts version pins are present.
+- A runtime image build with the pinned inputs still succeeds (documented or exercised in CI).
+
+## Verify per-library registry signatures only against the embedded key #dev-ready
+
+Context: Security review 2026-07-31, finding L-5 (ASI-05), severity LOW, confidence 0.7. Per-library registry signature is self-authenticating when the entry supplies its own public key.
+
+Problem: `install.ts:199-208` verifies `spec.signature` against `spec.signaturePublicKey ?? EMBEDDED_REGISTRY_PUBKEY`, and `signaturePublicKey` comes from the registry entry itself (`registry.ts:194,212-213`). An entry that supplies its own `publicKey` plus a `signature` over its commit verifies successfully — the signature attests nothing an attacker controlling the entry could not forge. The check is only meaningful against the embedded key. The whole index is already signature-verified against the embedded key (`registry.ts:143`), so this is a false sense of end-to-end attestation rather than a direct break.
+
+Location: `src/cli/commands/install.ts:199-208`; `src/cli/commands/registry.ts:194,212-213`, `:143`.
+
+Remediation: Verify per-library signatures only against the embedded registry key (or a curated set of pinned keys), never against a key supplied by the same entry being verified.
+
+### Acceptance criteria
+- A registry entry with a valid signature under an entry-supplied `publicKey` that is not the embedded key is rejected (or the entry key is ignored and verification uses the embedded key only); a test asserts fail-closed or embedded-key-only behaviour.
+- A registry entry whose signature verifies against the embedded key still installs successfully; a test asserts the happy path.
+- Docs/registry schema no longer imply that a per-entry `publicKey` is a trust anchor for that entry's signature.
