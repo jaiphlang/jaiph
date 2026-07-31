@@ -15,7 +15,7 @@ import {
 } from "../../runtime/docker";
 import { resolveRuntimeEnv, applySandboxFlags, isUnsafeHostOnly, type SandboxFlags } from "../run/env";
 import { preflightAgentCredentials } from "../run/preflight-credentials";
-import { loadMergedHooks } from "../run/hooks";
+import { loadMergedHooks, isProjectHooksTrusted } from "../run/hooks";
 import { deriveTools, type McpToolSpec } from "../mcp/tools";
 import type { WorkflowCallEnvironment } from "../exec/call";
 
@@ -68,8 +68,10 @@ export function loadGeneration(
   const effectiveConfig = metadataToConfig(resolvedModuleMetadata);
 
   // Hooks reload with the generation, so a hooks.json edit is picked up on the
-  // next source change like every other per-generation input.
-  const hooks = loadMergedHooks(workspaceRoot);
+  // next source change like every other per-generation input. Project-local
+  // hooks stay gated behind the per-workspace trust opt-in (finding M-10); the
+  // server reads it from the host env, the same as `jaiph run`.
+  const hooks = loadMergedHooks(workspaceRoot, isProjectHooksTrusted(process.env));
 
   return {
     state: {

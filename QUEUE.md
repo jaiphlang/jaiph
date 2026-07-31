@@ -14,21 +14,6 @@ Process rules:
 
 ***
 
-## Gate project-local `.jaiph/hooks.json` behind a workspace-trust decision #dev-ready
-
-Context: ASI-03/ASI-05, MEDIUM, confidence 0.80. Finding M-10 — project hooks execute on the host with no trust gate.
-
-Problem: Hooks run on the host CLI even for Docker runs (`hooks.ts:127-169`, `spawn(resolveShell(), ["-c", cmd], …)`), and a project-local `<workspace>/.jaiph/hooks.json` is loaded and executed automatically on `jaiph run` with no confirmation, allowlist, or workspace-trust prompt (`hooks.ts:96-119`, registered at `run.ts:140,243`). The hook payload is delivered safely on stdin, but the hook command strings come from a file that may have arrived with an untrusted repository. Docs call it "trusted config" (`docs/sandboxing.md:112`) but nothing enforces that boundary. A user cloning a shared Jaiph repo and running any workflow (`jaiph run flow.jh`) executes a malicious `.jaiph/hooks.json`'s arbitrary host commands on `workflow_start` — before and outside the Docker sandbox.
-
-Location: `src/cli/run/hooks.ts:96-119`, `:127-169`; `src/cli/commands/run.ts:140`, `:243`; `docs/sandboxing.md:112`.
-
-Remediation: Gate project-local hooks behind an explicit per-workspace trust decision (prompt on first use, or an opt-in flag / allowlist), mirroring editor "workspace trust." Global `~/.jaiph/hooks.json` can remain implicitly trusted.
-
-### Acceptance criteria
-- Running a workflow in a workspace with an untrusted project-local `.jaiph/hooks.json` does not execute its hook commands without an explicit trust decision; a test asserts the hook does not run absent trust.
-- After the operator grants trust (prompt/flag/allowlist), the project hooks run; a test asserts the trusted path works.
-- Global `~/.jaiph/hooks.json` continues to run without the workspace-trust gate; a test asserts global hooks are unaffected.
-
 ## Make release-install and runtime-image toolchain verification fail-closed #dev-ready
 
 Context: ASI-09, MEDIUM, confidence 0.80. Finding M-11 — release-install verification is fail-open and the runtime image pulls toolchains without checksums.

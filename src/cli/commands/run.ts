@@ -72,7 +72,7 @@ import {
   formatElapsedDuration,
   formatRunningBottomLine,
 } from "../run/progress";
-import { loadMergedHooks, registerHooksSubscriber } from "../run/hooks";
+import { loadMergedHooks, registerHooksSubscriber, isProjectHooksTrusted } from "../run/hooks";
 import { resolveRuntimeEnv, applySandboxFlags, resolveEnvPairs, isUnsafeHostOnly } from "../run/env";
 import { preflightAgentCredentials, collectEntryBackends } from "../run/preflight-credentials";
 import { planTrustedEnvs, isTrustedEnvsOptIn } from "../run/trusted-envs";
@@ -138,7 +138,7 @@ export async function runWorkflow(rest: string[]): Promise<number> {
     return runWorkflowRaw(inputAbs, workspaceRoot, target, runArgs, sandboxFlags, extraEnv);
   }
 
-  const hooksConfig = loadMergedHooks(workspaceRoot);
+  const hooksConfig = loadMergedHooks(workspaceRoot, isProjectHooksTrusted(process.env));
   const graph = loadModuleGraph(inputAbs, workspaceRoot);
   const mod = graph.modules.get(inputAbs)!.ast;
   const resolvedModuleMetadata = resolveModuleMetadata(mod, process.env);

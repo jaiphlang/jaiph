@@ -30,12 +30,22 @@ Some run modes dispatch no hooks. `jaiph run --raw` dispatches no hooks, because
 
 Hooks come from one of two files. Project hooks override global hooks for each event, and the lists are not merged. If the project file defines commands for an event, only those commands run for that event. Omit an event from the project file to keep the global commands for that event.
 
-| Scope | Path |
-|---|---|
-| Global | `~/.jaiph/hooks.json` |
-| Project | `<workspace>/.jaiph/hooks.json` |
+| Scope | Path | Trust |
+|---|---|---|
+| Global | `~/.jaiph/hooks.json` | Always runs (the operator's own file). |
+| Project | `<workspace>/.jaiph/hooks.json` | Runs only when the workspace is trusted (see below). |
 
-Both files are optional. If a file contains invalid JSON, the CLI writes a `jaiph hooks: …` line to stderr and skips that file. Create the one you want:
+Both files are optional. If a file contains invalid JSON, the CLI writes a `jaiph hooks: …` line to stderr and skips that file.
+
+Hook commands run on the **host**, before and outside any Docker sandbox, so a project-local `<workspace>/.jaiph/hooks.json` that arrives with a cloned or untrusted repository is gated behind a per-workspace trust decision. Absent trust, the CLI ignores the project file and writes a one-line notice to stderr; the global file is unaffected. Trust the current workspace by exporting the opt-in before you run:
+
+```bash
+export JAIPH_TRUST_PROJECT_HOOKS=1
+```
+
+The variable is read from the host environment on `jaiph run`, `jaiph serve`, and `jaiph mcp`; it cannot be set from a `.jh` file via `--env` or `trusted_envs` (a file must not be able to trust itself). See [`JAIPH_TRUST_PROJECT_HOOKS`](env-vars.md).
+
+Create the one you want:
 
 ```bash
 mkdir -p .jaiph
@@ -70,7 +80,10 @@ The CLI discards each hook's stdout and copies its stderr to the CLI's stderr. A
 
 ## 3. Run the workflow
 
+Trust the workspace first if the hooks live in the project file (`<workspace>/.jaiph/hooks.json`); global hooks need no opt-in.
+
 ```bash
+export JAIPH_TRUST_PROJECT_HOOKS=1
 jaiph run ./flow.jh
 ```
 

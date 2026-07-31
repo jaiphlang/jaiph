@@ -41,7 +41,7 @@ const FIXTURE = [
 ].join("\n");
 
 /** Sandbox-control keys that must not leak in from the test-runner env. */
-const CONTROL_KEYS = ["JAIPH_UNSAFE", "JAIPH_INPLACE", "JAIPH_INPLACE_YES", "JAIPH_DOCKER_ENABLED", "PROBE_A", "PROBE_B"];
+const CONTROL_KEYS = ["JAIPH_UNSAFE", "JAIPH_INPLACE", "JAIPH_INPLACE_YES", "JAIPH_DOCKER_ENABLED", "JAIPH_TRUST_PROJECT_HOOKS", "PROBE_A", "PROBE_B"];
 
 function cleanEnv(extra: Record<string, string>): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...process.env, PATH: `${dirname(process.execPath)}:${process.env.PATH ?? ""}` };
@@ -399,9 +399,32 @@ test("hook contract: direct `jaiph run` dispatches all four events with the docu
   const { ws, fixture } = makeWorkspace();
   try {
     const hooksLog = writeHooksConfig(ws);
-    const outcome = runDirect(ws, fixture, [], cleanEnv({ JAIPH_DOCKER_ENABLED: "false", HOOKS_LOG: hooksLog }));
+    // Project-local hooks are gated behind the per-workspace trust opt-in
+    // (finding M-10); this contract exercises the trusted path.
+    const outcome = runDirect(ws, fixture, [], cleanEnv({ JAIPH_DOCKER_ENABLED: "false", JAIPH_TRUST_PROJECT_HOOKS: "1", HOOKS_LOG: hooksLog }));
     assert.equal(outcome.exitCode, 0, `run failed:\n${outcome.stderr}`);
     assertHookContract(await waitForHookEvents(hooksLog), fixture, ws, "run");
+  } finally {
+    rmSync(ws, { recursive: true, force: true });
+  }
+});
+
+test("hook contract: untrusted workspace does not run project-local hooks (finding M-10)", async () => {
+  const { ws, fixture } = makeWorkspace();
+  try {
+    const hooksLog = writeHooksConfig(ws);
+    // No JAIPH_TRUST_PROJECT_HOOKS: the project-local .jaiph/hooks.json must not
+    // execute its host commands, so the hooks log is never created. The run
+    // itself still succeeds (a hook gate never fails the workflow).
+    const outcome = runDirect(ws, fixture, [], cleanEnv({ JAIPH_DOCKER_ENABLED: "false", HOOKS_LOG: hooksLog }));
+    assert.equal(outcome.exitCode, 0, `run should still succeed:\n${outcome.stderr}`);
+    assert.equal(existsSync(hooksLog), false, "no hook command ran, so the log was never written");
+    assert.match(
+      outcome.stderr,
+      /project-local hooks .* are ignored \(untrusted workspace\)/,
+      "the CLI states why the project hooks were skipped and how to trust them",
+    );
+    assert.match(outcome.stderr, /JAIPH_TRUST_PROJECT_HOOKS=1/, "the notice names the opt-in");
   } finally {
     rmSync(ws, { recursive: true, force: true });
   }
@@ -411,7 +434,7 @@ test("hook contract: HTTP `jaiph serve` runs dispatch the same four events", asy
   const { ws, fixture } = makeWorkspace();
   try {
     const hooksLog = writeHooksConfig(ws);
-    const outcome = await runServeMode(ws, fixture, [], cleanEnv({ JAIPH_DOCKER_ENABLED: "false", HOOKS_LOG: hooksLog }));
+    const outcome = await runServeMode(ws, fixture, [], cleanEnv({ JAIPH_DOCKER_ENABLED: "false", JAIPH_TRUST_PROJECT_HOOKS: "1", HOOKS_LOG: hooksLog }));
     assert.notEqual(outcome.exitCode, 1, `serve failed:\n${outcome.stderr}`);
     assertHookContract(await waitForHookEvents(hooksLog), fixture, ws, "serve");
   } finally {
@@ -423,7 +446,7 @@ test("hook contract: MCP tool calls dispatch the same four events", async () => 
   const { ws, fixture } = makeWorkspace();
   try {
     const hooksLog = writeHooksConfig(ws);
-    const outcome = await runMcpMode(ws, fixture, [], cleanEnv({ JAIPH_DOCKER_ENABLED: "false", HOOKS_LOG: hooksLog }));
+    const outcome = await runMcpMode(ws, fixture, [], cleanEnv({ JAIPH_DOCKER_ENABLED: "false", JAIPH_TRUST_PROJECT_HOOKS: "1", HOOKS_LOG: hooksLog }));
     assert.notEqual(outcome.exitCode, 1, `mcp failed:\n${outcome.stderr}`);
     assertHookContract(await waitForHookEvents(hooksLog), fixture, ws, "mcp");
   } finally {

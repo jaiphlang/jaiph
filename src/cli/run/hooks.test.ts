@@ -9,6 +9,7 @@ import {
   parseHookConfig,
   loadMergedHooks,
   runHooksForEvent,
+  isProjectHooksTrusted,
   type MergedHookConfig,
 } from "./hooks";
 
@@ -59,7 +60,7 @@ test("parseHookConfig ignores non-string array elements", () => {
 test("loadMergedHooks returns empty when no config files exist", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-hooks-none-"));
   try {
-    const merged = loadMergedHooks(root);
+    const merged = loadMergedHooks(root, true);
     assert.deepEqual(merged.workflow_start, []);
     assert.deepEqual(merged.workflow_end, []);
     assert.deepEqual(merged.step_start, []);
@@ -69,7 +70,7 @@ test("loadMergedHooks returns empty when no config files exist", () => {
   }
 });
 
-test("loadMergedHooks loads project-local hooks.json when present", () => {
+test("loadMergedHooks loads project-local hooks.json when the workspace is trusted", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-hooks-project-"));
   try {
     const jaiphDir = join(root, ".jaiph");
@@ -82,7 +83,7 @@ test("loadMergedHooks loads project-local hooks.json when present", () => {
         workflow_end: ["echo end"],
       }),
     );
-    const merged = loadMergedHooks(root);
+    const merged = loadMergedHooks(root, true);
     assert.deepEqual(merged.workflow_start, ["echo start"]);
     assert.deepEqual(merged.workflow_end, ["echo end"]);
     assert.deepEqual(merged.step_start, []);
@@ -90,6 +91,67 @@ test("loadMergedHooks loads project-local hooks.json when present", () => {
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test("loadMergedHooks ignores project-local hooks.json when the workspace is untrusted (finding M-10)", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-hooks-untrusted-"));
+  try {
+    const jaiphDir = join(root, ".jaiph");
+    mkdirSync(jaiphDir, { recursive: true });
+    writeFileSync(
+      join(jaiphDir, "hooks.json"),
+      JSON.stringify({ workflow_start: ["touch /tmp/should-not-run"] }),
+    );
+    const merged = loadMergedHooks(root, false);
+    // Absent the trust decision the project file's commands must not be loaded.
+    assert.deepEqual(merged.workflow_start, []);
+    assert.deepEqual(merged.workflow_end, []);
+    assert.deepEqual(merged.step_start, []);
+    assert.deepEqual(merged.step_end, []);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("loadMergedHooks keeps global ~/.jaiph/hooks.json even when the workspace is untrusted", () => {
+  const realHome = process.env.HOME;
+  const fakeHome = mkdtempSync(join(tmpdir(), "jaiph-hooks-home-"));
+  const root = mkdtempSync(join(tmpdir(), "jaiph-hooks-global-"));
+  try {
+    // Global hooks live under the operator's own home and are implicitly
+    // trusted; the workspace-trust gate applies only to the project file.
+    const globalDir = join(fakeHome, ".jaiph");
+    mkdirSync(globalDir, { recursive: true });
+    writeFileSync(
+      join(globalDir, "hooks.json"),
+      JSON.stringify({ workflow_start: ["echo global"] }),
+    );
+    // An untrusted project file present alongside must not run, but must also
+    // not suppress the global command for the same event.
+    const projectDir = join(root, ".jaiph");
+    mkdirSync(projectDir, { recursive: true });
+    writeFileSync(
+      join(projectDir, "hooks.json"),
+      JSON.stringify({ workflow_start: ["echo project"] }),
+    );
+    process.env.HOME = fakeHome;
+    const merged = loadMergedHooks(root, false);
+    assert.deepEqual(merged.workflow_start, ["echo global"]);
+    assert.deepEqual(merged.workflow_end, []);
+  } finally {
+    if (realHome === undefined) delete process.env.HOME;
+    else process.env.HOME = realHome;
+    rmSync(fakeHome, { recursive: true, force: true });
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("isProjectHooksTrusted honours only the documented opt-in values", () => {
+  assert.equal(isProjectHooksTrusted({ JAIPH_TRUST_PROJECT_HOOKS: "1" }), true);
+  assert.equal(isProjectHooksTrusted({ JAIPH_TRUST_PROJECT_HOOKS: "true" }), true);
+  assert.equal(isProjectHooksTrusted({ JAIPH_TRUST_PROJECT_HOOKS: "0" }), false);
+  assert.equal(isProjectHooksTrusted({ JAIPH_TRUST_PROJECT_HOOKS: "yes" }), false);
+  assert.equal(isProjectHooksTrusted({}), false);
 });
 
 test("runHooksForEvent with empty config does not throw", () => {
