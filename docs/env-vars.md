@@ -29,7 +29,7 @@ The table below covers every `JAIPH_*` name read from `process.env` or `env` in 
 
 1. **CLI flags** (`--workspace`, `--env`, `--inplace`, `--unsafe`, `--yes`). A flag sets the corresponding `JAIPH_*` variable on that process's launched env, so the env layer below stays the single source Jaiph reads when it resolves the sandbox.
 2. **`JAIPH_*` environment variables** (this table).
-3. **Workflow runtime metadata**, from the entry file's `config { runtime { … } }` keys such as `docker_image` and `docker_network`.
+3. **Workflow runtime metadata**, from the entry file's `config { runtime { … } }` keys such as `docker_image` and `docker_network`. This layer is untrusted (repo- or model-supplied): `docker_image` and isolation-breaking `docker_network` values (`host`, `container:*`, `ns:*`) are **host-controlled** — a file-declared value is rejected when Docker is the active sandbox (`E_DOCKER_IMAGE_HOST_ONLY` / `E_DOCKER_NETWORK_HOST_ONLY`), so only the env layer above can set them (finding M-6).
 4. **Built-in defaults.**
 
 Precedence never resolves a contradiction between the two sandbox postures. Setting `--inplace` or `JAIPH_INPLACE` together with `--unsafe` or `JAIPH_UNSAFE` fails with `E_FLAG_CONFLICT` before Jaiph spawns anything, in all three commands.
@@ -63,9 +63,9 @@ Inside a container the container is the sandbox, so unsafe host-only mode procee
 | `JAIPH_DEBUG` | host, runtime | bool (exact `"true"`) | `false` | `run.debug` | Enable debug tracing for the run. |
 | `JAIPH_DEBUG_LOCKED` | internal | bool | — | — | Lock flag for `JAIPH_DEBUG`. |
 | `JAIPH_DOCKER_ENABLED` | host | bool (exact `true`) | — | — | Force Docker on (`true`) or off (any other value). When unset, Docker is on unless `JAIPH_UNSAFE=true`. Ignored on Windows (`win32`), where the sandbox is out of scope and runs are always host-only. |
-| `JAIPH_DOCKER_IMAGE` | host | string | `ghcr.io/jaiphlang/jaiph-runtime:<version>` | `runtime.docker_image` | Container image. Must already contain `jaiph`. |
+| `JAIPH_DOCKER_IMAGE` | host | string | `ghcr.io/jaiphlang/jaiph-runtime:<version>` | `runtime.docker_image` (host-controlled) | Container image. Must already contain `jaiph`. The in-file `runtime.docker_image` is rejected when Docker is the active sandbox (`E_DOCKER_IMAGE_HOST_ONLY`); only this env var selects a non-default image. |
 | `JAIPH_DOCKER_KEEP_SANDBOX` | host | bool (`1` / `true`) | `false` | — | Snapshot mode only — when enabled, leave the host-side workspace snapshot at `<run dir>/sandbox` on disk after exit for debugging. |
-| `JAIPH_DOCKER_NETWORK` | host | string (`default`, `none`, or named network) | `default` | `runtime.docker_network` | `docker run --network` value. `none` disables egress. |
+| `JAIPH_DOCKER_NETWORK` | host | string (`default`, `none`, or named network) | `default` | `runtime.docker_network` (host-controlled for `host` / `container:*` / `ns:*`) | `docker run --network` value. `none` disables egress. This env var is trusted and used verbatim (it may even be `host`). A file-declared `host` / `container:*` / `ns:*` is rejected (`E_DOCKER_NETWORK_HOST_ONLY`) when Docker is the active sandbox; host-safe in-file values (`default`, `none`, named bridge) are still honoured. |
 | `JAIPH_DOCKER_TIMEOUT` | host | int (seconds) | `14400` (4h) | `runtime.docker_timeout_seconds` | Container execution timeout. `0` disables. Invalid values produce `E_DOCKER_TIMEOUT`. |
 | `JAIPH_INBOX_MAX_DISPATCH` | runtime | int | `1000` | — | Maximum inbox messages a single workflow frame may drain before aborting with `E_INBOX_DISPATCH_LIMIT`. |
 | `JAIPH_INBOX_PARALLEL` | — | — | — | — | Unused — the runtime does not read this variable (tests assert setting it has no effect on inbox dispatch order). |
@@ -201,6 +201,8 @@ The error codes below surface during Docker-backed `jaiph run` invocations. Jaip
 | `E_DOCKER_NOT_FOUND` | `docker info` fails (Docker not installed or daemon not running). | Run exits before launch. No fallback to local execution. Not reachable on Windows, where the CLI resolves to host-only mode without probing `docker`. |
 | `E_DOCKER_PULL` | `docker pull` fails (network error, image not found, auth failure). | Run exits before launch. |
 | `E_DOCKER_NO_JAIPH` | Selected image does not contain a `jaiph` CLI. | Run exits before launch. |
+| `E_DOCKER_IMAGE_HOST_ONLY` | Entry file declares `runtime.docker_image` while Docker is the active sandbox and no `JAIPH_DOCKER_IMAGE` was set. The image is host-controlled. | Run exits before launch. |
+| `E_DOCKER_NETWORK_HOST_ONLY` | Entry file declares an isolation-breaking `runtime.docker_network` (`host`, `container:*`, `ns:*`) while Docker is the active sandbox and no `JAIPH_DOCKER_NETWORK` was set. | Run exits before launch. |
 | `E_DOCKER_RUNS_DIR` | Absolute `JAIPH_RUNS_DIR` points outside the workspace. | Run exits before launch. |
 | `E_DOCKER_TIMEOUT` | `JAIPH_DOCKER_TIMEOUT` is empty, non-numeric, negative, or has trailing junk; or `runtime.docker_timeout_seconds` is negative. | Run exits before launch. |
 | `E_DOCKER_UID` | Linux host UID/GID detection failed. | Run exits before launch. |
