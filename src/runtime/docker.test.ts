@@ -2229,3 +2229,80 @@ test("spawnDockerProcess: assigns a container name and passes it as --name to do
     rmSync(srcWs, { recursive: true, force: true });
   }
 });
+
+// ---------------------------------------------------------------------------
+// spawnDockerProcess: Docker-mode timeout path (regression — AC4)
+// ---------------------------------------------------------------------------
+
+test("spawnDockerProcess: the Docker timeout path force-removes the container by name", async () => {
+  const runsRoot = mkdtempSync(join(tmpdir(), "jaiph-dtimeout-runs-"));
+  const srcWs = mkdtempSync(join(tmpdir(), "jaiph-dtimeout-ws-"));
+  const origExec = _dockerExec.run;
+  const origSpawn = _dockerSpawn.run;
+  const calls: string[][] = [];
+  _dockerExec.run = (args: string[]) => {
+    calls.push(args);
+  };
+  // pid 0 → the timeout callback stops the container but skips the process-tree
+  // kill (no real client process to signal), so no real signals are sent.
+  _dockerSpawn.run = () => ({ pid: 0 } as unknown as DockerSpawnResult["child"]);
+  let result: DockerSpawnResult | undefined;
+  try {
+    writeFileSync(join(srcWs, "main.jh"), "");
+    result = spawnDockerProcess({
+      config: { enabled: true, image: "ubuntu:24.04", imageExplicit: false, network: "default", timeoutSeconds: 1 },
+      sourceAbs: join(srcWs, "main.jh"),
+      workspaceRoot: srcWs,
+      sandboxRunDir: runsRoot,
+      runArgs: [],
+      env: {},
+      isTTY: false,
+      sandboxMode: "inplace",
+    });
+    assert.ok(result.timeoutTimer !== undefined, "timeout timer is armed when timeoutSeconds > 0");
+    assert.ok(result.containerName, "container gets a deterministic --name for force-removal");
+    // Wait past the 1s budget so the timeout callback runs.
+    await new Promise((r) => setTimeout(r, 1200));
+    const name = result.containerName;
+    const kill = calls.find((a) => a[0] === "kill" && a[1] === name);
+    const rm = calls.find((a) => a[0] === "rm" && a[1] === "-f" && a[2] === name);
+    assert.ok(kill, "timeout path runs `docker kill <name>`");
+    assert.ok(rm, "timeout path runs `docker rm -f <name>`");
+  } finally {
+    if (result) cleanupDocker(result);
+    _dockerExec.run = origExec;
+    _dockerSpawn.run = origSpawn;
+    rmSync(runsRoot, { recursive: true, force: true });
+    rmSync(srcWs, { recursive: true, force: true });
+  }
+});
+
+test("spawnDockerProcess: timeoutSeconds=0 arms no timeout timer", () => {
+  const runsRoot = mkdtempSync(join(tmpdir(), "jaiph-dtimeout0-runs-"));
+  const srcWs = mkdtempSync(join(tmpdir(), "jaiph-dtimeout0-ws-"));
+  const origExec = _dockerExec.run;
+  const origSpawn = _dockerSpawn.run;
+  _dockerExec.run = () => {};
+  _dockerSpawn.run = () => ({ pid: 0 } as unknown as DockerSpawnResult["child"]);
+  let result: DockerSpawnResult | undefined;
+  try {
+    writeFileSync(join(srcWs, "main.jh"), "");
+    result = spawnDockerProcess({
+      config: { enabled: true, image: "ubuntu:24.04", imageExplicit: false, network: "default", timeoutSeconds: 0 },
+      sourceAbs: join(srcWs, "main.jh"),
+      workspaceRoot: srcWs,
+      sandboxRunDir: runsRoot,
+      runArgs: [],
+      env: {},
+      isTTY: false,
+      sandboxMode: "inplace",
+    });
+    assert.equal(result.timeoutTimer, undefined, "no timeout timer when timeoutSeconds = 0");
+  } finally {
+    if (result) cleanupDocker(result);
+    _dockerExec.run = origExec;
+    _dockerSpawn.run = origSpawn;
+    rmSync(runsRoot, { recursive: true, force: true });
+    rmSync(srcWs, { recursive: true, force: true });
+  }
+});

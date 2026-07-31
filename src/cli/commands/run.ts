@@ -25,6 +25,7 @@ import {
   discoverDockerRunDir,
   remapContainerPath,
   formatDockerTimeoutMessage,
+  formatRunTimeoutMessage,
 } from "../shared/errors";
 import { readMetaFields, readReturnValue } from "../shared/run-meta";
 import { detectWorkspaceRoot } from "../shared/paths";
@@ -53,6 +54,8 @@ import {
   spawnRunProcess,
   setupRunSignalHandlers,
   waitForRunExit,
+  armRunTimeout,
+  parseRunTimeoutSeconds,
 } from "../run/lifecycle";
 import {
   resolveDockerConfig,
@@ -290,6 +293,16 @@ export async function runWorkflow(rest: string[]): Promise<number> {
       forceKillAfterMs: 1500,
       onSignalCleanup,
     });
+    // Host mode: parent-enforced wall-clock run timeout. Docker mode enforces its
+    // own JAIPH_DOCKER_TIMEOUT inside spawnDockerProcess, so it is skipped here to
+    // avoid a double timer. On expiry the run child's process group is terminated
+    // (SIGTERM → SIGKILL) without requiring Ctrl-C.
+    const hostRunTimeoutSec = dockerResult ? 0 : parseRunTimeoutSeconds(runtimeEnv);
+    const runTimeout = armRunTimeout(execResult, hostRunTimeoutSec, {
+      onTimeout: () => {
+        runState.capturedStderr += `${formatRunTimeoutMessage(hostRunTimeoutSec)}\n`;
+      },
+    });
     const childExit = await withDockerExitGuard(dockerResult, async () => {
       if (isTTY) {
         ttyCtx.runningInterval = setInterval(() => {
@@ -321,6 +334,7 @@ export async function runWorkflow(rest: string[]): Promise<number> {
       return exit;
     });
 
+    runTimeout.cancel();
     if (childExit.signal && runState.capturedStderr.trim().length === 0) {
       runState.capturedStderr = `Process terminated by signal ${childExit.signal}`;
     }

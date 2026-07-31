@@ -14,22 +14,6 @@ Process rules:
 
 ***
 
-## Add a host-mode wall-clock timeout and optional max-step circuit breaker #dev-ready
-
-Context: ASI-10, LOW, confidence 0.85. Finding L-2 — no host-mode wall-clock timeout, step cap, or circuit breaker (kill-switch control absent).
-
-Problem: Docker timeout exists only for Docker mode (`docker.ts:157-176`); the host spawn in `run.ts` / `lifecycle.ts` has only user-signal SIGINT/SIGTERM handlers, no timer; the per-prompt idle watchdog covers individual backend calls only. The only automatic stop for a host/`--unsafe` run is a manual Ctrl-C. There is no overall wall-clock cap, no max-step / max-iteration bound, and no circuit breaker — the ASI-10 controls the checklist looks for. (Framed strictly as a missing kill-switch control, not a DoS finding.)
-
-Location: `src/runtime/docker.ts:157-176`; `src/cli/commands/run.ts`; `src/cli/run/lifecycle.ts`; `src/cli/exec/call.ts`.
-
-Remediation: add a parent-enforced overall run timeout (for host mode in `run.ts`, for serve/mcp in `callWorkflow`) that escalates through `killProcessTree`, plus an optional max-step circuit breaker in the runtime.
-
-### Acceptance criteria
-- A host/`--unsafe` run that exceeds a configured wall-clock timeout is terminated without requiring Ctrl-C; a test asserts the parent kills the child after the budget.
-- The same timeout applies to serve/mcp workflow calls (or is documented as shared); a test covers at least one of those paths.
-- An optional max-step / max-iteration circuit breaker stops a runaway workflow; a test asserts the run ends when the cap is hit.
-- Docker-mode timeout behaviour remains intact; a regression test still asserts the Docker timeout path.
-
 ## Pin an explicit OIDC JWT algorithms allowlist in `jwtVerify` #dev-ready
 
 Context: ASI-08, LOW, confidence 0.72. Finding L-3 — OIDC `jwtVerify` pins no explicit `algorithms` allowlist (defense-in-depth).

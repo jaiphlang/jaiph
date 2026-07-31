@@ -74,6 +74,8 @@ Both of these opt-outs can change your files or your machine, so `jaiph run` sho
 - **Unsafe prompt.** It is deliberately stronger, because unsafe mode gives a run more access than inplace mode, not less. It states in one line that the run is in unsafe mode with no sandbox and full access to your machine. It fires only when the unsafe opt-in is what turns Docker off, that is, when Docker would otherwise be on. It does not fire when Docker is off for another reason, such as an explicit `JAIPH_DOCKER_ENABLED=false` or the [Windows host-only override](#windows-runs-host-only), which prints its own one-line notice. When stdin is not a TTY and no consent is given, the run aborts with `E_UNSAFE_NO_CONFIRM`.
 - **Auto-confirm.** `--yes` or `-y` (the env form is `JAIPH_INPLACE_YES=1`) skips both prompts. It is the single consent switch, and you need it for non-interactive use of either mode, where stdin is not a TTY. `jaiph run --raw` skips both prompts every time, because it is the entry point used when Jaiph is embedded or run inside Docker, and the wrapping context has already given consent.
 
+An unsafe or host-only run has no Docker timeout, because Docker is off, so by default the only automatic stop is a manual Ctrl-C. Set `JAIPH_RUN_TIMEOUT` (seconds) to give the host run a parent-enforced wall-clock cap that stops it without a manual signal. See [Configuration — Overall run timeout and step cap](configuration.md#overall-run-timeout-and-step-cap).
+
 In every mode, run artifacts go to a separate read-write mount at `/jaiph/run`, which is outside the workspace sandbox, so the artifact tree under `.jaiph/runs/` stays on the host no matter what happened inside the container.
 
 ## Interrupting a Docker run
