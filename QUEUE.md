@@ -14,21 +14,6 @@ Process rules:
 
 ***
 
-## Pin an explicit OIDC JWT algorithms allowlist in `jwtVerify` #dev-ready
-
-Context: ASI-08, LOW, confidence 0.72. Finding L-3 — OIDC `jwtVerify` pins no explicit `algorithms` allowlist (defense-in-depth).
-
-Problem: `jwtVerify(token, keys, { issuer, audience })` is called with no `algorithms` option (`auth.ts:227`). Not exploitable today: `jose` rejects `alg:none` and type-matches the JWK to the algorithm, so RS256↔HS256 confusion is not reachable with a remote JWKS. Still worth pinning `algorithms: ["RS256","ES256", …]` to constrain future key-type/JWKS changes.
-
-Location: `src/cli/serve/auth.ts:227`.
-
-Remediation: add an explicit `algorithms` allowlist matching the IdP's signing algorithms.
-
-### Acceptance criteria
-- `jwtVerify` is invoked with a non-empty `algorithms` allowlist that includes the supported asymmetric algorithms (at least RS256 and ES256, or the project's chosen set); a test asserts the options object includes `algorithms`.
-- A token whose `alg` is outside the allowlist is rejected; a test asserts 401 (or the existing invalid-token mapping) for a disallowed algorithm.
-- Valid tokens signed with an allowed algorithm still authenticate; a regression test asserts success for the existing OIDC happy path.
-
 ## Use `npm ci` and exact-pin the runtime dependency in local builds #dev-ready
 
 Context: ASI-09, LOW, confidence 0.72. Finding L-4 — caret dependency ranges and `npm install` (not `ci`) in the local build path.

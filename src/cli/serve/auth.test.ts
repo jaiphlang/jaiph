@@ -5,6 +5,8 @@ import {
   capabilitiesFromClaims,
   principalSubject,
   openPrincipal,
+  oidcVerifyOptions,
+  OIDC_JWT_ALGORITHMS,
   ALL_CAPABILITIES,
   type Capability,
 } from "./auth";
@@ -93,6 +95,27 @@ test("principalSubject: prefers sub, falls back to client_id, else null — neve
   assert.equal(principalSubject({ sub: "", client_id: "" } as Record<string, unknown>), null);
   // The removed shared fallback must never come back for isolation purposes.
   assert.notEqual(principalSubject({}), "unknown");
+});
+
+// === OIDC verify options: pinned algorithms allowlist (finding L-3) ===
+
+test("oidcVerifyOptions: pins issuer, audience, and a non-empty asymmetric algorithms allowlist", () => {
+  const opts = oidcVerifyOptions({ issuer: "https://issuer.example", audience: "aud" });
+  assert.equal(opts.issuer, "https://issuer.example");
+  assert.equal(opts.audience, "aud");
+  // The options object must carry a non-empty algorithms allowlist.
+  assert.ok(Array.isArray(opts.algorithms), "options include an algorithms allowlist");
+  assert.ok(opts.algorithms!.length > 0, "the algorithms allowlist is non-empty");
+  // The supported asymmetric algorithms are present (at least RS256 and ES256).
+  assert.ok(opts.algorithms!.includes("RS256"), "RS256 is allowed");
+  assert.ok(opts.algorithms!.includes("ES256"), "ES256 is allowed");
+  // Symmetric algorithms, alg:none, and the non-recommended secp256k1 curve must never be allowed.
+  for (const banned of ["HS256", "HS384", "HS512", "none", "ES256K"]) {
+    assert.ok(!opts.algorithms!.includes(banned), `${banned} must not be in the allowlist`);
+  }
+  // The returned array is a copy, not the shared constant (jose must not mutate the source of truth).
+  assert.notEqual(opts.algorithms, OIDC_JWT_ALGORITHMS);
+  assert.deepEqual(opts.algorithms, [...OIDC_JWT_ALGORITHMS]);
 });
 
 // === mode selection ===
