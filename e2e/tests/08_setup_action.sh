@@ -86,12 +86,19 @@ EOF
 # Run the action entrypoint against a mock release, using REL_PUBKEY for the
 # signature key. Args: version, bin_dir, release_dir, github_path, github_output.
 # Echoes combined output; returns the entrypoint's exit status.
+# REL_PUBKEY is only set when minisign produced a real throwaway key above. When
+# minisign is absent it's empty — passing that explicitly would trip the
+# installer's empty-key fail-closed guard, so leave the variable unset instead.
 run_setup() {
   local version="$1" bin_dir="$2" release_dir="$3" gh_path="$4" gh_out="$5"
+  if [ -n "${REL_PUBKEY}" ]; then
+    export JAIPH_MINISIGN_PUBLIC_KEY="${REL_PUBKEY}"
+  else
+    unset JAIPH_MINISIGN_PUBLIC_KEY
+  fi
   INPUT_VERSION="${version}" \
   JAIPH_BIN_DIR="${bin_dir}" \
   JAIPH_RELEASE_BASE_URL="file://${release_dir}" \
-  JAIPH_MINISIGN_PUBLIC_KEY="${REL_PUBKEY}" \
   GITHUB_PATH="${gh_path}" \
   GITHUB_OUTPUT="${gh_out}" \
   bash "${SETUP_SCRIPT}" 2>&1
