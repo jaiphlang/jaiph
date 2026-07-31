@@ -35,8 +35,8 @@ const FIXTURE = [
 interface Idp {
   issuer: string;
   jwksUri: string;
-  /** Sign a token with the trusted key (kid `k1`). */
-  sign(claims: { sub: string; scope: string; issuer?: string; audience?: string; expiresInSec?: number }): Promise<string>;
+  /** Sign a token with the trusted key (kid `k1`). Omit `sub` to mint a machine token (optionally carrying `clientId`). */
+  sign(claims: { sub?: string; scope: string; clientId?: string; issuer?: string; audience?: string; expiresInSec?: number }): Promise<string>;
   /** Sign a token with a key whose public half is NOT in the served JWKS. */
   signUnknownKey(claims: { sub: string; scope: string }): Promise<string>;
   close(): Promise<void>;
@@ -67,17 +67,17 @@ async function startIdp(): Promise<Idp> {
   const port = (server.address() as AddressInfo).port;
   issuer = `http://127.0.0.1:${port}`;
 
-  async function signWith(key: KeyLike, kid: string, claims: { sub: string; scope: string; issuer?: string; audience?: string; expiresInSec?: number }): Promise<string> {
+  async function signWith(key: KeyLike, kid: string, claims: { sub?: string; scope: string; clientId?: string; issuer?: string; audience?: string; expiresInSec?: number }): Promise<string> {
     const now = Math.floor(Date.now() / 1000);
     const exp = now + (claims.expiresInSec ?? 3600);
-    return new SignJWT({ scope: claims.scope })
+    const jwt = new SignJWT({ scope: claims.scope, ...(claims.clientId ? { client_id: claims.clientId } : {}) })
       .setProtectedHeader({ alg: "RS256", kid })
       .setIssuer(claims.issuer ?? issuer)
       .setAudience(claims.audience ?? AUDIENCE)
-      .setSubject(claims.sub)
       .setIssuedAt(now)
-      .setExpirationTime(exp)
-      .sign(key);
+      .setExpirationTime(exp);
+    if (claims.sub !== undefined) jwt.setSubject(claims.sub);
+    return jwt.sign(key);
   }
 
   return {
@@ -256,6 +256,63 @@ test("jaiph serve OIDC: capabilities are separate, runs are per-principal, and i
     const logged = srv.stderr();
     assert.match(logged, /invoked — principal=alice/, "invoke is audited with the acting principal");
     assert.ok(!logged.includes(aliceTok), "the audit log never contains the bearer token");
+  } finally {
+    await srv.close();
+    await idp.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("jaiph serve OIDC: sub-less machine tokens get distinct client_id identities and cannot cross-access; a token with neither is 401 (finding M-9)", async () => {
+  const idp = await startIdp();
+  const root = mkdtempSync(join(tmpdir(), "jaiph-oidc-subless-"));
+  const jh = join(root, "tools.jh");
+  writeFileSync(jh, FIXTURE);
+  const srv = await startServe(
+    jh,
+    root,
+    serveEnv(join(root, ".jaiph/runs"), {
+      JAIPH_SERVE_OIDC_ISSUER: idp.issuer,
+      JAIPH_SERVE_OIDC_AUDIENCE: AUDIENCE,
+      JAIPH_SERVE_OIDC_JWKS_URI: idp.jwksUri,
+    }),
+  );
+  try {
+    const fullScope = "jaiph:invoke jaiph:inspect jaiph:cancel";
+    // Two OAuth2 client-credentials tokens: no `sub`, distinct `client_id`.
+    const clientA = await idp.sign({ scope: fullScope, clientId: "service-a" });
+    const clientB = await idp.sign({ scope: fullScope, clientId: "service-b" });
+
+    // Client A runs greet; the run records client A's identity, never the shared "unknown".
+    const created = await fetch(`${srv.baseUrl}/v1/workflows/greet/runs?wait=true`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...bearer(clientA) },
+      body: JSON.stringify({ name: "world" }),
+    });
+    assert.equal(created.status, 200);
+    const run = await created.json();
+    assert.equal(run.status, "succeeded");
+    assert.equal(run.principal, "service-a", "the run records its creating client_id");
+    assert.notEqual(run.principal, "unknown", "no principal collapses onto the shared constant");
+
+    // Client B (a distinct sub-less token) cannot enumerate or cancel client A's run.
+    assert.equal((await fetch(`${srv.baseUrl}/v1/runs/${run.run_id}`, { headers: bearer(clientB) })).status, 404);
+    const bList = await (await fetch(`${srv.baseUrl}/v1/runs`, { headers: bearer(clientB) })).json();
+    assert.equal(bList.total, 0, "client B's listing does not include client A's run");
+    const cancelDenied = await fetch(`${srv.baseUrl}/v1/runs/${run.run_id}/cancel`, { method: "POST", headers: bearer(clientB) });
+    assert.equal(cancelDenied.status, 404, "client B cannot cancel client A's run");
+
+    // Client A still sees its own run.
+    assert.equal((await fetch(`${srv.baseUrl}/v1/runs/${run.run_id}`, { headers: bearer(clientA) })).status, 200);
+
+    // A verified token with neither `sub` nor `client_id` is rejected — never bucketed together.
+    const anon = await fetch(`${srv.baseUrl}/v1/workflows/greet/runs?wait=true`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...bearer(await idp.sign({ scope: fullScope })) },
+      body: JSON.stringify({ name: "x" }),
+    });
+    assert.equal(anon.status, 401);
+    assert.equal((await anon.json()).error.code, "E_UNAUTHORIZED");
   } finally {
     await srv.close();
     await idp.close();

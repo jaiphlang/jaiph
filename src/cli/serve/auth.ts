@@ -16,9 +16,11 @@ import { createRemoteJWKSet, jwtVerify, errors as joseErrors, type JWTPayload } 
  * - **oidc** — a standard OIDC/JWT bearer. Tokens are verified against the
  *   issuer's JWKS (a maintained JWT library, `jose`, does the crypto: signature,
  *   `exp`/`nbf`, `aud`, `iss`, and `kid` selection with unknown-key refetch).
- *   The principal is the token `sub`; its capabilities come from OAuth scopes
- *   (`jaiph:invoke` / `jaiph:inspect` / `jaiph:cancel`); it may inspect/cancel
- *   only the runs it created.
+ *   The principal identity is the token `sub`, falling back to `client_id` for
+ *   `sub`-less machine tokens; a verified token carrying neither is rejected
+ *   (never a shared constant — finding M-9). Its capabilities come from OAuth
+ *   scopes (`jaiph:invoke` / `jaiph:inspect` / `jaiph:cancel`); it may
+ *   inspect/cancel only the runs it created.
  */
 
 /** A distinct action a principal may be authorized for. */
@@ -40,7 +42,7 @@ const SCOPE_FOR: Record<string, Capability> = {
  * logs, OTLP resource attributes, and Sentry tags.
  */
 export interface Principal {
-  /** Audit identity: JWT `sub` (oidc), `operator` (static), `anonymous` (open). */
+  /** Audit identity: JWT `sub` else `client_id` (oidc), `operator` (static), `anonymous` (open). */
   subject: string;
   /** Actions this principal is authorized for. */
   capabilities: Set<Capability>;
@@ -111,6 +113,21 @@ function bearerToken(header: string | undefined): string | null {
  * are ignored. A token with none of the `jaiph:*` scopes gets no capability, so
  * every action is refused (403) — the insufficient-scope contract.
  */
+/**
+ * Derive the stable audit/isolation identity from a verified token. Prefer the
+ * standard `sub`; fall back to `client_id` (OAuth2 client-credentials / machine
+ * tokens commonly omit `sub`). Returns `null` when neither is a non-empty
+ * string — such a token is rejected rather than collapsed onto a shared
+ * constant, so two distinct callers can never share a run-visibility bucket or
+ * idempotency namespace (finding M-9).
+ */
+export function principalSubject(payload: JWTPayload): string | null {
+  if (typeof payload.sub === "string" && payload.sub.length > 0) return payload.sub;
+  const clientId = (payload as Record<string, unknown>).client_id;
+  if (typeof clientId === "string" && clientId.length > 0) return clientId;
+  return null;
+}
+
 export function capabilitiesFromClaims(payload: JWTPayload): Set<Capability> {
   const caps = new Set<Capability>();
   const raw: string[] = [];
@@ -225,7 +242,8 @@ function createOidcAuthenticator(cfg: OidcConfig): Authenticator {
       }
       try {
         const { payload } = await jwtVerify(token, keys, { issuer: cfg.issuer, audience: cfg.audience });
-        const subject = typeof payload.sub === "string" && payload.sub.length > 0 ? payload.sub : "unknown";
+        const subject = principalSubject(payload);
+        if (subject === null) return unauthorized("token has no subject (sub/client_id) to identify the caller");
         return {
           ok: true,
           principal: { subject, capabilities: capabilitiesFromClaims(payload), ownsAllRuns: false },

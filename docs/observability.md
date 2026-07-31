@@ -100,8 +100,9 @@ with `OTEL_RESOURCE_ATTRIBUTES`, and you can set the service name with
 `OTEL_SERVICE_NAME` (the default is `jaiph`).
 
 An authenticated `jaiph serve` run also carries the caller's identity as resource
-attributes. `jaiph.principal` is the audit subject, which is the token `sub` in
-OIDC mode and `operator` or `anonymous` otherwise. `jaiph.correlation_id` is the
+attributes. `jaiph.principal` is the audit subject, which is the token `sub` (or
+`client_id` for `sub`-less machine tokens) in OIDC mode and `operator` or
+`anonymous` otherwise. `jaiph.correlation_id` is the
 request's `X-Correlation-Id` or `X-Request-Id`, or a generated UUID when neither is
 present. Both attributes are attached to every span of the trace, and neither is
 ever a bearer token or any value that carries a secret. They are absent for `jaiph
