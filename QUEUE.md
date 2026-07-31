@@ -14,21 +14,6 @@ Process rules:
 
 ***
 
-## Harden the image `jaiph`-presence probe and drop its login shell #dev-ready
-
-Context: ASI-05, MEDIUM, confidence 0.72. Finding M-8 — the image probe runs a workflow-selected image with none of the run hardening.
-
-Problem: `imageHasJaiph` (`docker.ts:289-299`) runs `docker run --rm --entrypoint sh <image> -lc "command -v jaiph …"` with no `--cap-drop ALL`, no `--user`, no `--security-opt no-new-privileges`, and no `--network none` — unlike `buildDockerArgs`. The image derives from the entry file's `runtime.docker_image` (`docker.ts:145-149`) and is `docker pull`ed first (`:277-287`). `sh -lc` is a login shell, so it sources `/etc/profile` and `/etc/profile.d/*` — scripts baked into an attacker-chosen image execute as the image's default user (typically root), with default capabilities, new-privileges allowed, and default bridge egress. An untrusted `.jh` setting `runtime.docker_image = "attacker/img:tag"` gets attacker profile scripts run at higher privilege than the real hardened run.
-
-Location: `src/runtime/docker.ts:145-149`, `:277-287`, `:289-299`.
-
-Remediation: Apply the same hardening flags to the probe (`--cap-drop ALL`, `--user`, `--security-opt no-new-privileges`, `--network none`) and drop the `-l` login flag (`sh -c`); better, detect `jaiph` without executing image-controlled code (`docker inspect` / a pinned entrypoint), and gate `runtime.docker_image` to host control (see the docker_network/docker_image task).
-
-### Acceptance criteria
-- The probe invocation includes `--cap-drop ALL`, `--security-opt no-new-privileges`, a non-root `--user`, and `--network none` (a test asserts these flags are present in the probe args).
-- The probe shell no longer uses the `-l` login flag (a test asserts `sh -c`, not `sh -lc`), or the probe no longer executes image-controlled code at all.
-- A test asserts profile scripts baked into the probed image are not sourced/executed by the probe.
-
 ## Reject or distinctly identify OIDC tokens lacking `sub` #dev-ready
 
 Context: ASI-07/ASI-04, MEDIUM, confidence 0.72. Finding M-9 — `sub`-less OIDC tokens collapse to one shared `unknown` principal.

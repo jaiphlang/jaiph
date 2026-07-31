@@ -29,6 +29,7 @@ TEST_SCRIPTS=(
   "e2e/tests/74c_docker_prepull.sh"
   "e2e/tests/74d_docker_snapshot_isolation.sh"
   "e2e/tests/74e_docker_git_snapshot_content.sh"
+  "e2e/tests/74f_docker_probe_hardening.sh"
   "e2e/tests/74_docker_lifecycle.sh"
   "e2e/tests/74_live_step_output.sh"
   "e2e/tests/75_docker_live_step_output.sh"
