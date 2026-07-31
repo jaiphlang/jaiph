@@ -7,6 +7,8 @@ import {
   remapDockerEnv,
   resolveDockerHostRunsRoot,
   verifyImageHasJaiph,
+  buildImageProbeArgs,
+  PROBE_USER,
   prepareImage,
   isEnvAllowed,
   ENV_ALLOW_PREFIXES,
@@ -830,6 +832,88 @@ test("verifyImageHasJaiph: throws E_DOCKER_NO_JAIPH with guidance for missing ja
   const src = readFileSync(join(__dirname, "docker.ts"), "utf8");
   assert.ok(src.includes("E_DOCKER_NO_JAIPH"), "verifyImageHasJaiph must use E_DOCKER_NO_JAIPH error code");
   assert.ok(src.includes(GHCR_IMAGE_REPO), "error message must reference official GHCR image");
+});
+
+// ---------------------------------------------------------------------------
+// buildImageProbeArgs: the presence probe runs image-selected code, so it must
+// carry the same hardening as a real run and never use a login shell (M-8).
+// ---------------------------------------------------------------------------
+
+test("buildImageProbeArgs: applies full run hardening (cap-drop, no-new-privileges, non-root user, network none)", () => {
+  const args = buildImageProbeArgs("attacker/img:tag");
+
+  // --cap-drop ALL
+  const capIdx = args.indexOf("--cap-drop");
+  assert.ok(capIdx >= 0, "probe must pass --cap-drop");
+  assert.equal(args[capIdx + 1], "ALL", "probe must drop ALL capabilities");
+
+  // --security-opt no-new-privileges
+  const secIdx = args.indexOf("--security-opt");
+  assert.ok(secIdx >= 0, "probe must pass --security-opt");
+  assert.equal(args[secIdx + 1], "no-new-privileges", "probe must set no-new-privileges");
+
+  // --user <non-root>
+  const userIdx = args.indexOf("--user");
+  assert.ok(userIdx >= 0, "probe must pass --user");
+  const userArg = args[userIdx + 1];
+  assert.equal(userArg, PROBE_USER, "probe must run as the pinned non-root user");
+  const uid = userArg.split(":")[0];
+  assert.notEqual(uid, "0", "probe --user must not be root (uid 0)");
+
+  // --network none
+  const netIdx = args.indexOf("--network");
+  assert.ok(netIdx >= 0, "probe must pass --network");
+  assert.equal(args[netIdx + 1], "none", "probe must disable networking");
+});
+
+test("buildImageProbeArgs: uses a non-login shell (sh -c), never -l / -lc", () => {
+  const args = buildImageProbeArgs("attacker/img:tag");
+
+  // Entrypoint is sh with the presence check as a -c command.
+  const entryIdx = args.indexOf("--entrypoint");
+  assert.ok(entryIdx >= 0, "probe must pin --entrypoint");
+  assert.equal(args[entryIdx + 1], "sh", "probe entrypoint must be sh");
+
+  assert.ok(args.includes("-c"), "probe must invoke the shell with -c");
+  // A login shell (-l / -lc) sources /etc/profile and /etc/profile.d/* baked
+  // into an attacker-chosen image. The probe must never request one.
+  assert.ok(!args.includes("-l"), "probe must not pass the -l login flag");
+  assert.ok(!args.includes("-lc"), "probe must not use the -lc login shell");
+});
+
+test("buildImageProbeArgs: profile scripts baked into the probed image are not sourced/executed", () => {
+  // The only shell command the probe runs is the bare PATH lookup — no login
+  // shell, so /etc/profile and /etc/profile.d/* are never sourced.
+  const args = buildImageProbeArgs("attacker/img:tag");
+  const cmd = args[args.length - 1];
+  assert.equal(
+    cmd,
+    "command -v jaiph >/dev/null 2>&1",
+    "probe command must be exactly the PATH lookup, with no image-controlled sourcing",
+  );
+  assert.ok(!cmd.includes("."), "probe command must not source any script (no `.`/`source`)");
+  assert.ok(!cmd.includes("source"), "probe command must not source any script");
+  assert.ok(!cmd.includes("profile"), "probe command must not reference profile scripts");
+});
+
+test("imageHasJaiph: verifyImageHasJaiph probes with the hardened, non-login args", () => {
+  // Capture the args the real probe path passes to docker, proving imageHasJaiph
+  // uses buildImageProbeArgs (hardening + non-login shell) end to end.
+  const origExec = _dockerExec.run;
+  let probeArgs: string[] | undefined;
+  _dockerExec.run = (args: string[]) => {
+    if (args[0] === "run") probeArgs = args;
+  };
+  try {
+    assert.doesNotThrow(() => verifyImageHasJaiph("attacker/img:tag"));
+  } finally {
+    _dockerExec.run = origExec;
+  }
+  assert.deepEqual(
+    probeArgs,
+    buildImageProbeArgs("attacker/img:tag"),
+    "verifyImageHasJaiph must probe via buildImageProbeArgs",
+  );
 });
 
 // ---------------------------------------------------------------------------

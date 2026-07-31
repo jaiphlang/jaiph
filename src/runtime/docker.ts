@@ -329,12 +329,56 @@ export function pullImageIfNeeded(image: string): void {
   if (!imageExistsLocally(image)) pullImage(image);
 }
 
+/**
+ * Fixed non-root UID:GID for the presence probe (`nobody:nogroup`).
+ *
+ * The probe has no bind mounts, so — unlike a real run (`buildDockerArgs`) — it
+ * never needs to match host ownership and can pin the same non-root user on
+ * every platform (including macOS, where a real run leaves `--user` to Docker
+ * Desktop's UID translation). `command -v jaiph` only reads PATH and executes
+ * the world-executable jaiph binary, so `nobody` is sufficient.
+ */
+export const PROBE_USER = "65534:65534";
+
+/**
+ * Build the `docker run` argument list for the jaiph-presence probe.
+ *
+ * The probed image is workflow-selectable (`runtime.docker_image`) and is
+ * `docker pull`ed before this runs, so it is attacker-influenced. The probe
+ * therefore adopts the SAME hardening posture as a real run
+ * (`buildDockerArgs`): every capability dropped, no new privileges, a non-root
+ * user, and no network — so image-baked code has nothing elevated to abuse.
+ *
+ * The shell is a NON-login `sh -c` (never `-l`/`-lc`): a login shell sources
+ * `/etc/profile` and `/etc/profile.d/*` baked into the image, executing
+ * image-controlled code before we have even confirmed the image is the official
+ * runtime. `command -v jaiph` needs only PATH resolution, which a non-login
+ * shell provides, so nothing image-controlled is sourced or executed beyond the
+ * bare PATH lookup.
+ */
+export function buildImageProbeArgs(image: string): string[] {
+  return [
+    "run",
+    "--rm",
+    "--cap-drop",
+    "ALL",
+    "--security-opt",
+    "no-new-privileges",
+    "--user",
+    PROBE_USER,
+    "--network",
+    "none",
+    "--entrypoint",
+    "sh",
+    image,
+    "-c",
+    "command -v jaiph >/dev/null 2>&1",
+  ];
+}
+
 function imageHasJaiph(image: string): boolean {
   try {
-    _dockerExec.run(
-      ["run", "--rm", "--entrypoint", "sh", image, "-lc", "command -v jaiph >/dev/null 2>&1"],
-      { stdio: "ignore", timeout: 30_000 },
-    );
+    _dockerExec.run(buildImageProbeArgs(image), { stdio: "ignore", timeout: 30_000 });
     return true;
   } catch {
     return false;
