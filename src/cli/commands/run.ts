@@ -75,7 +75,7 @@ import {
 import { loadMergedHooks, registerHooksSubscriber } from "../run/hooks";
 import { resolveRuntimeEnv, applySandboxFlags, resolveEnvPairs, isUnsafeHostOnly } from "../run/env";
 import { preflightAgentCredentials, collectEntryBackends } from "../run/preflight-credentials";
-import { planTrustedEnvs } from "../run/trusted-envs";
+import { planTrustedEnvs, isTrustedEnvsOptIn } from "../run/trusted-envs";
 import { colorize, formatJaiphRunningBannerLines } from "../run/display";
 import { createRunEmitter } from "../run/emitter";
 import { exportRunTelemetry } from "../telemetry/otlp";
@@ -183,7 +183,13 @@ export async function runWorkflow(rest: string[]): Promise<number> {
     if (reportPreflight(credPreflight.warnings, credPreflight.errors)) return 1;
     // trusted_envs pre-flight: a declared key with no host/--env value fails
     // before anything is spawned, like a bare `--env KEY` with no host value.
-    const trustedPlan = planTrustedEnvs(graph, extraEnv, process.env);
+    // Under Docker the entry file's trusted_envs only crosses the sandbox
+    // allowlist when the operator opts in (JAIPH_TRUSTED_ENVS) — the file naming
+    // a host secret is not consent on its own (finding M-7).
+    const trustedPlan = planTrustedEnvs(graph, extraEnv, process.env, {
+      dockerEnabled: dockerConfigForBanner.enabled,
+      optIn: isTrustedEnvsOptIn(runtimeEnv),
+    });
     if (reportPreflight(trustedPlan.warnings, trustedPlan.errors)) return 1;
     if (dockerConfigForBanner.enabled) {
       checkDockerAvailable();

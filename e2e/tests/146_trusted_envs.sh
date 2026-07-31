@@ -6,8 +6,10 @@
 # the host value); a sub-workflow that does not declare a key never inherits
 # it; `trusted_envs` in an imported module is ignored (with a warning); a
 # missing declared key fails pre-flight with E_ENV_MISSING; reserved keys are
-# rejected at parse time. In Docker, declared keys cross the sandbox boundary
-# like `--env` pairs.
+# rejected at parse time. In Docker, the entry file's declared keys cross the
+# sandbox boundary like `--env` pairs — but only with the operator opt-in
+# JAIPH_TRUSTED_ENVS (finding M-7); without it they are ignored so the file
+# cannot pull host secrets past the allowlist.
 
 set -euo pipefail
 
@@ -171,9 +173,11 @@ e2e::assert_contains "${reserved_out}" 'trusted_envs cannot declare reserved key
   "trusted_envs: reserved key rejected"
 
 # ---------------------------------------------------------------------------
-# Docker leg: a declared key crosses the sandbox boundary without --env.
-# TR_TOKEN is not on ENV_ALLOW_PREFIXES, so only the trusted_envs declaration
-# (threaded through the same explicit -e channel as --env) can carry it.
+# Docker leg: the entry file's trusted_envs crosses the sandbox boundary only
+# with the operator opt-in (JAIPH_TRUSTED_ENVS). TR_TOKEN is not on
+# ENV_ALLOW_PREFIXES, so only the trusted_envs declaration (threaded through the
+# same explicit -e channel as --env) can carry it — and only once the operator
+# consents (finding M-7). TR_TOKEN is an arbitrary non-JAIPH_ secret name.
 # ---------------------------------------------------------------------------
 
 if ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
@@ -187,14 +191,26 @@ if ! e2e::ensure_docker_test_image; then
   exit 0
 fi
 
-e2e::section "docker — declared key crosses the sandbox boundary without --env"
+e2e::section "docker — without the operator opt-in the declared key does NOT cross the allowlist"
 
-docker_out="$(TR_TOKEN=host-secret JAIPH_DOCKER_ENABLED=true JAIPH_DOCKER_IMAGE="${E2E_DOCKER_TEST_IMAGE}" jaiph run "${TEST_DIR}/trusted_show.jh" 2>/dev/null)"
+# No JAIPH_TRUSTED_ENVS: the file naming TR_TOKEN is not consent on its own, so
+# the host secret must stay out of the sandbox (the run step sees <unset>).
+nooptin_out="$(TR_TOKEN=host-secret JAIPH_DOCKER_ENABLED=true JAIPH_DOCKER_IMAGE="${E2E_DOCKER_TEST_IMAGE}" jaiph run "${TEST_DIR}/trusted_show.jh" 2>/dev/null)"
 # assert_contains: full Docker stdout carries pull/status lines that vary; the
 # workflow's return value is what we pin.
-e2e::assert_contains "${docker_out}" "TR_TOKEN=[host-secret]" "docker: trusted_envs forwards the declared key across the allowlist"
+e2e::assert_contains "${nooptin_out}" "TR_TOKEN=[<unset>]" "docker: entry trusted_envs is ignored without JAIPH_TRUSTED_ENVS (host secret stays out of the sandbox)"
+if [[ "${nooptin_out}" == *"TR_TOKEN=[host-secret]"* ]]; then
+  e2e::fail "docker: host secret leaked into the sandbox without the operator opt-in"
+fi
 
-docker_sub_out="$(TR_TOKEN=host-secret JAIPH_DOCKER_ENABLED=true JAIPH_DOCKER_IMAGE="${E2E_DOCKER_TEST_IMAGE}" jaiph run "${TEST_DIR}/trusted_sub.jh" 2>/dev/null)"
+e2e::section "docker — with the operator opt-in the declared key crosses the sandbox boundary"
+
+docker_out="$(TR_TOKEN=host-secret JAIPH_TRUSTED_ENVS=1 JAIPH_DOCKER_ENABLED=true JAIPH_DOCKER_IMAGE="${E2E_DOCKER_TEST_IMAGE}" jaiph run "${TEST_DIR}/trusted_show.jh" 2>/dev/null)"
+# assert_contains: full Docker stdout carries pull/status lines that vary; the
+# workflow's return value is what we pin.
+e2e::assert_contains "${docker_out}" "TR_TOKEN=[host-secret]" "docker: trusted_envs forwards the declared key across the allowlist with JAIPH_TRUSTED_ENVS"
+
+docker_sub_out="$(TR_TOKEN=host-secret JAIPH_TRUSTED_ENVS=1 JAIPH_DOCKER_ENABLED=true JAIPH_DOCKER_IMAGE="${E2E_DOCKER_TEST_IMAGE}" jaiph run "${TEST_DIR}/trusted_sub.jh" 2>/dev/null)"
 # assert_contains: same rationale; inside the container the undeclared
 # sub-workflow must still not see the key.
 e2e::assert_contains "${docker_sub_out}" "MAIN=[host-secret] SUB=[<unset>]" "docker: undeclared sub-workflow stays scrubbed inside the sandbox"

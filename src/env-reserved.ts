@@ -28,6 +28,10 @@ export const RESERVED_ENV_KEYS = new Set<string>([
   "JAIPH_SOURCE_ABS",
   "JAIPH_META_FILE",
   "JAIPH_AGENT_TRUSTED_WORKSPACE",
+  // Operator opt-in that lets the entry file's `trusted_envs` cross the Docker
+  // sandbox allowlist. It is the operator's consent, not the file's, so the
+  // file must not be able to name it via `--env` / `trusted_envs`.
+  "JAIPH_TRUSTED_ENVS",
   // Selects the inner run's root symbol in a Docker MCP call; managed via the
   // container spawn wiring, not user env.
   "JAIPH_RUN_WORKFLOW",
