@@ -14,22 +14,6 @@ Process rules:
 
 ***
 
-## Self-host Swagger UI for `jaiph serve` (no CDN) #dev-ready
-
-Context: Feature — `/docs` already serves a Swagger UI shell, but it loads `swagger-ui-dist` from a pinned CDN with SRI (`src/cli/serve/docs.ts`). Air-gapped and hardened deployments get a blank page; only `/openapi.json` remains usable offline. The serve design doc deferred embedding (~1.5 MB) until air-gapped demand; that demand is now explicit.
-
-Problem: `GET /docs` requires the browser to fetch JS/CSS from `cdn.jsdelivr.net`. With no egress, or with a CSP that blocks that host, operators cannot invoke or inspect workflows from the built-in UI even though the HTTP API is healthy.
-
-Location: `src/cli/serve/docs.ts`; `tools/embed-assets.js` (existing embed pipeline); `docs/serve.md` § Swagger UI; `src/cli/serve/docs.test.ts`.
-
-Remediation: Embed the pinned `swagger-ui-dist` assets (or an equivalent minimal OpenAPI renderer) into the jaiph binary via the existing embed-assets mechanism, serve them from same-origin paths under `/docs`, and keep SRI or integrity checks appropriate for first-party assets. Preserve `JAIPH_SERVE_EXPOSE_DOCS` and the Authorize / `persistAuthorization` behaviour. Document that `/docs` no longer needs browser internet access.
-
-### Acceptance criteria
-- With network egress blocked in the browser (or CDN unreachable), `GET /docs` still renders a working Swagger UI that loads `/openapi.json` and can invoke a workflow (Authorize + try-it-out) when a token is configured.
-- No `cdn.jsdelivr.net` (or other third-party host) references remain in the `/docs` HTML or its loaded assets; a test asserts same-origin asset URLs only.
-- `JAIPH_SERVE_EXPOSE_DOCS=false` still returns `404` for `/docs` and `/openapi.json`.
-- Docs (`docs/serve.md`, CLI help) state that `/docs` is self-contained and does not require browser internet access.
-
 ## Redact credentials in durable `log` / `logwarn` / `logerr` journal lines #dev-ready
 
 Context: ASI-06, LOW, confidence 0.75. Finding L-1 — `log()` messages persisted to the journal are not credential-redacted.

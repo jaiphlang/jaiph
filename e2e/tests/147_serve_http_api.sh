@@ -96,6 +96,32 @@ print("yes" if "/v1/workflows/greet/runs" in d["paths"] else "no")
 e2e::assert_equals "${p_openapi_version}" "3.1.0" "GET /openapi.json is OpenAPI 3.1.0"
 e2e::assert_equals "${p_has_greet_path}" "yes" "/openapi.json has a concrete path for the greet workflow"
 
+# --- GET /docs is a self-contained Swagger UI (no CDN / no browser egress) ---
+# The shell must reference only same-origin /docs/* assets — never a third-party
+# host — and those assets must be served by the same process so an air-gapped
+# browser renders a working UI. curl the shell + both assets from this origin.
+docs_html="$(curl -s "${base}/docs")"
+# assert_contains (not full-equality): the shell embeds version-specific SRI
+# hashes that change on every swagger-ui-dist bump, so pinning the whole HTML
+# would be brittle; we assert the offline-critical invariants instead.
+if printf '%s' "${docs_html}" | grep -q 'cdn.jsdelivr.net'; then
+  e2e::fail "/docs still references cdn.jsdelivr.net (must be self-hosted)"
+fi
+if printf '%s' "${docs_html}" | grep -qE 'https?://'; then
+  e2e::fail "/docs references an absolute http(s) URL (assets must be same-origin)"
+fi
+e2e::assert_contains "${docs_html}" 'src="/docs/swagger-ui-bundle.js"' "/docs loads the bundle from a same-origin path"
+e2e::assert_contains "${docs_html}" 'href="/docs/swagger-ui.css"' "/docs loads the stylesheet from a same-origin path"
+e2e::assert_contains "${docs_html}" 'url: "/openapi.json"' "/docs points Swagger UI at same-origin /openapi.json"
+
+docs_js_code="$(curl -s -o "${TEST_DIR}/swagger-ui-bundle.js" -w '%{http_code}' "${base}/docs/swagger-ui-bundle.js")"
+e2e::assert_equals "${docs_js_code}" "200" "the embedded swagger-ui bundle is served same-origin"
+# assert_contains: the bundle is a ~1.4 MB minified vendor file; a marker check
+# proves it is the real Swagger UI rather than an error page.
+e2e::assert_contains "$(cat "${TEST_DIR}/swagger-ui-bundle.js")" "SwaggerUIBundle" "the served bundle is the real swagger-ui"
+docs_css_code="$(curl -s -o "${TEST_DIR}/swagger-ui.css" -w '%{http_code}' "${base}/docs/swagger-ui.css")"
+e2e::assert_equals "${docs_css_code}" "200" "the embedded swagger-ui stylesheet is served same-origin"
+
 # --- POST greet ?wait=true → succeeded, return value round-trips ---
 greet="$(curl -s -X POST "${base}/v1/workflows/greet/runs?wait=true" \
   -H 'content-type: application/json' -d '{"name":"world"}')"

@@ -4,6 +4,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import {
   JAIPH_SKILL_MD_BASE64,
+  SWAGGER_UI_BUNDLE_JS_BASE64,
+  SWAGGER_UI_CSS_BASE64,
   decodeEmbeddedAsset,
 } from "./embedded-assets";
 
@@ -26,4 +28,17 @@ const REPO_ROOT = findRepoRoot();
 test("JAIPH_SKILL_MD_BASE64 matches docs/jaiph-skill.md on disk", () => {
   const disk = readFileSync(join(REPO_ROOT, "docs/jaiph-skill.md"), "utf8");
   assert.equal(decodeEmbeddedAsset(JAIPH_SKILL_MD_BASE64), disk);
+});
+
+// The self-hosted Swagger UI (jaiph serve /docs) ships these inside the binary.
+// If they drift from the pinned swagger-ui-dist devDependency, the standalone
+// jaiph would serve stale assets; fail loudly so the next build reruns embed.
+test("SWAGGER_UI_*_BASE64 match the pinned swagger-ui-dist on disk", () => {
+  for (const [b64, rel] of [
+    [SWAGGER_UI_BUNDLE_JS_BASE64, "node_modules/swagger-ui-dist/swagger-ui-bundle.js"],
+    [SWAGGER_UI_CSS_BASE64, "node_modules/swagger-ui-dist/swagger-ui.css"],
+  ] as const) {
+    const disk = readFileSync(join(REPO_ROOT, rel), "utf8");
+    assert.equal(decodeEmbeddedAsset(b64), disk);
+  }
 });

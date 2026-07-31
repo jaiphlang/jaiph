@@ -99,17 +99,23 @@ e2e::section "in-flight call survives a hot reload on the generation it started 
 
 gate1="${TEST_DIR}/gate1"
 pid1="${TEST_DIR}/pause1.pid"
+pid2="${TEST_DIR}/pause2.pid"
+reload_ack="${TEST_DIR}/reload_ack"
 write_fixture "${TEST_DIR}/tools.jh" "generation-one" "${pid1}" "${gate1}"
 
 out1="${TEST_DIR}/mcp1.out"
 err1="${TEST_DIR}/mcp1.err"
-# The feeder sends the second call only after the reload is live, then exits —
-# closing stdin while BOTH calls are still gated, so the drain must keep the
-# generations' scripts alive until the gate opens and the calls settle.
+# The feeder issues id:4 only once the driver has confirmed the swap is live
+# (the `reload_ack` marker), then exits — closing stdin while BOTH calls are
+# still gated, so the drain must keep the generations' scripts alive until the
+# gate opens and the calls settle. The handshake is one-sided on purpose: an
+# independent per-side poll on "sources reloaded" let id:4 race ahead of the
+# swap under load and bind to the superseded generation (returning the OLD
+# marker); gating id:4 on the driver-set marker makes the ordering exact.
 (
   printf '%s\n' "${INIT_REQ}"
   printf '%s\n' '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"slow","arguments":{}}}'
-  for _ in $(seq 1 150); do grep -q "sources reloaded" "${err1}" 2>/dev/null && break; sleep 0.2; done
+  for _ in $(seq 1 600); do [[ -f "${reload_ack}" ]] && break; sleep 0.1; done
   printf '%s\n' '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"slow","arguments":{}}}'
 ) | jaiph mcp "${TEST_DIR}/tools.jh" >"${out1}" 2>"${err1}" &
 E2E_SERVER_PID="$!"
@@ -117,11 +123,18 @@ E2E_SERVER_PID="$!"
 # The first call is provably in flight (its first script step wrote the pid
 # file) before the source is rewritten.
 wait_for "gen-1 call started" "${pid1}" "[0-9]"
-write_fixture "${TEST_DIR}/tools.jh" "generation-two" "${TEST_DIR}/pause2.pid" "${gate1}"
+write_fixture "${TEST_DIR}/tools.jh" "generation-two" "${pid2}" "${gate1}"
 wait_for "sources reloaded" "${err1}" "sources reloaded"
 
-# Only now — with the new generation active and stdin about to close — unblock
-# both calls; the old call's `stamp` step spawns from the superseded
+# The swap is confirmed live; release id:4, then wait until it too is provably
+# in flight on the NEW generation (its pause step wrote the new pid file) — so
+# stdin closes with BOTH calls gated, and id:4 can never have bound to the
+# superseded generation.
+touch "${reload_ack}"
+wait_for "gen-2 call started" "${pid2}" "[0-9]"
+
+# Only now — with both calls gated on live generations and stdin about to
+# close — unblock them; the old call's `stamp` step spawns from the superseded
 # generation's scripts dir.
 touch "${gate1}"
 

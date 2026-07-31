@@ -91,7 +91,7 @@ Downloads stream from disk with backpressure. The server never buffers a complet
 
 ## 6. Use the Swagger UI
 
-Open `http://127.0.0.1:5247/docs` in a browser to get a live form for every workflow. When a token is configured, paste it into the Authorize box, and Swagger UI keeps it across reloads. The UI loads its assets from a pinned CDN that it verifies with Subresource Integrity hashes, so `/docs` needs internet access in the browser. An operator on an air-gapped network can instead use `/openapi.json` with any locally-hosted renderer.
+Open `http://127.0.0.1:5247/docs` in a browser to get a live form for every workflow. When a token is configured, paste it into the Authorize box, and Swagger UI keeps it across reloads. `/docs` is self-contained and does not require browser internet access. The pinned `swagger-ui-dist` assets are embedded in the jaiph binary and served from same-origin `/docs/*` paths, so the browser never fetches anything from a third-party host. Each asset tag carries a Subresource Integrity hash computed from the embedded bytes, so a proxy or cache that changes an asset in flight is rejected. Because everything loads from the same origin, `/docs` renders and can invoke workflows on an air-gapped network, and behind a Content-Security-Policy that blocks external hosts. `/openapi.json` stays available for any other renderer.
 
 ## 7. Authenticate and authorize
 
