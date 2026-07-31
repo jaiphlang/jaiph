@@ -39,6 +39,12 @@ interface Idp {
   sign(claims: { sub?: string; scope: string; clientId?: string; issuer?: string; audience?: string; expiresInSec?: number }): Promise<string>;
   /** Sign a token with a key whose public half is NOT in the served JWKS. */
   signUnknownKey(claims: { sub: string; scope: string }): Promise<string>;
+  /**
+   * Sign a token with a valid asymmetric key that IS in the served JWKS but
+   * whose `alg` (secp256k1 `ES256K`) is outside the server's pinned allowlist —
+   * verifiable by signature yet rejected by the algorithms allowlist (L-3).
+   */
+  signDisallowedAlg(claims: { sub: string; scope: string }): Promise<string>;
   close(): Promise<void>;
 }
 
@@ -46,13 +52,16 @@ interface Idp {
 async function startIdp(): Promise<Idp> {
   const trusted = await generateKeyPair("RS256");
   const stranger = await generateKeyPair("RS256");
+  // A real asymmetric key whose `alg` is outside the server's pinned allowlist.
+  const disallowed = await generateKeyPair("ES256K");
   const trustedJwk: JWK = { ...(await exportJWK(trusted.publicKey)), kid: "k1", alg: "RS256", use: "sig" };
+  const disallowedJwk: JWK = { ...(await exportJWK(disallowed.publicKey)), kid: "k-es256k", alg: "ES256K", use: "sig" };
 
   let issuer = "";
   const server: Server = createServer((req, res) => {
     if (req.url === "/jwks") {
       res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify({ keys: [trustedJwk] }));
+      res.end(JSON.stringify({ keys: [trustedJwk, disallowedJwk] }));
       return;
     }
     if (req.url === "/.well-known/openid-configuration") {
@@ -80,11 +89,24 @@ async function startIdp(): Promise<Idp> {
     return jwt.sign(key);
   }
 
+  async function signDisallowedAlg(claims: { sub: string; scope: string }): Promise<string> {
+    const now = Math.floor(Date.now() / 1000);
+    return new SignJWT({ scope: claims.scope })
+      .setProtectedHeader({ alg: "ES256K", kid: "k-es256k" })
+      .setIssuer(issuer)
+      .setAudience(AUDIENCE)
+      .setIssuedAt(now)
+      .setExpirationTime(now + 3600)
+      .setSubject(claims.sub)
+      .sign(disallowed.privateKey);
+  }
+
   return {
     issuer,
     jwksUri: `${issuer}/jwks`,
     sign: (claims) => signWith(trusted.privateKey, "k1", claims),
     signUnknownKey: (claims) => signWith(stranger.privateKey, "unknown-kid", claims),
+    signDisallowedAlg,
     close: () => new Promise<void>((r) => server.close(() => r())),
   };
 }
@@ -137,7 +159,7 @@ function startServe(fixture: string, cwd: string, env: NodeJS.ProcessEnv): Promi
 
 const bearer = (token: string): Record<string, string> => ({ authorization: `Bearer ${token}` });
 
-test("jaiph serve OIDC: token validity matrix (valid, expired, wrong-aud, wrong-iss, unknown-key, insufficient-scope, missing)", async () => {
+test("jaiph serve OIDC: token validity matrix (valid, expired, wrong-aud, wrong-iss, unknown-key, disallowed-alg, insufficient-scope, missing)", async () => {
   const idp = await startIdp();
   const root = mkdtempSync(join(tmpdir(), "jaiph-oidc-matrix-"));
   const jh = join(root, "tools.jh");
@@ -184,6 +206,13 @@ test("jaiph serve OIDC: token validity matrix (valid, expired, wrong-aud, wrong-
     const unknownKey = await post(await idp.signUnknownKey({ sub: "alice", scope: fullScope }));
     assert.equal(unknownKey.status, 401);
     assert.equal((await unknownKey.json()).error.code, "E_TOKEN_INVALID");
+
+    // Valid signature by a key that IS in the JWKS, but its `alg` (ES256K) is
+    // outside the pinned algorithms allowlist → rejected (finding L-3). Without
+    // the allowlist this token would verify, so this guards the contract.
+    const disallowedAlg = await post(await idp.signDisallowedAlg({ sub: "alice", scope: fullScope }));
+    assert.equal(disallowedAlg.status, 401);
+    assert.equal((await disallowedAlg.json()).error.code, "E_TOKEN_INVALID");
 
     // Valid signature, but no `jaiph:invoke` scope → authenticated yet forbidden.
     const insufficient = await post(await idp.sign({ sub: "alice", scope: "jaiph:inspect" }));

@@ -1,5 +1,5 @@
 import { timingSafeEqual } from "node:crypto";
-import { createRemoteJWKSet, jwtVerify, errors as joseErrors, type JWTPayload } from "jose";
+import { createRemoteJWKSet, jwtVerify, errors as joseErrors, type JWTPayload, type JWTVerifyOptions } from "jose";
 
 /**
  * Authentication and authorization for `jaiph serve` (REST + MCP Streamable
@@ -205,6 +205,37 @@ function mapVerifyError(err: unknown): AuthFail {
   return { ok: false, status: 503, code: "E_AUTH_UNAVAILABLE", message: "identity provider is unavailable" };
 }
 
+/**
+ * Asymmetric JWS algorithms accepted for OIDC token verification, pinned as an
+ * explicit allowlist (finding L-3, defense-in-depth). Covers the RSA (`RS*` /
+ * `PS*`), ECDSA (`ES256`/`ES384`/`ES512`), and EdDSA families every standard
+ * OIDC IdP signs with, and deliberately excludes symmetric algorithms (`HS*`),
+ * `alg: none`, and the non-recommended secp256k1 curve (`ES256K`). Pinning it
+ * means a future JWKS or key-type change can never make an RS↔HS confusion or
+ * an `alg: none` forgery reachable, even though `jose` also rejects those today.
+ */
+export const OIDC_JWT_ALGORITHMS: readonly string[] = [
+  "RS256",
+  "RS384",
+  "RS512",
+  "PS256",
+  "PS384",
+  "PS512",
+  "ES256",
+  "ES384",
+  "ES512",
+  "EdDSA",
+];
+
+/**
+ * Verification options for an OIDC token: the expected `iss`/`aud` claims plus
+ * the pinned `algorithms` allowlist. A fresh algorithms array is returned so the
+ * exported constant can never be mutated by `jose`.
+ */
+export function oidcVerifyOptions(cfg: OidcConfig): JWTVerifyOptions {
+  return { issuer: cfg.issuer, audience: cfg.audience, algorithms: [...OIDC_JWT_ALGORITHMS] };
+}
+
 /** OIDC/JWT authenticator. JWKS is resolved lazily and cached (with refetch on unknown kid). */
 function createOidcAuthenticator(cfg: OidcConfig): Authenticator {
   type Jwks = ReturnType<typeof createRemoteJWKSet>;
@@ -241,7 +272,7 @@ function createOidcAuthenticator(cfg: OidcConfig): Authenticator {
         return mapVerifyError(err);
       }
       try {
-        const { payload } = await jwtVerify(token, keys, { issuer: cfg.issuer, audience: cfg.audience });
+        const { payload } = await jwtVerify(token, keys, oidcVerifyOptions(cfg));
         const subject = principalSubject(payload);
         if (subject === null) return unauthorized("token has no subject (sub/client_id) to identify the caller");
         return {
