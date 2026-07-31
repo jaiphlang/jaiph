@@ -268,6 +268,11 @@ jobs:
           set -euo pipefail
           export DEBIAN_FRONTEND=noninteractive
           export JAIPH_UNSAFE=true
+          # wsl.exe does not forward the parent runner's env into this Linux
+          # session, so CI (which docs/install treats as "trusted toolchain,
+          # checksum-only OK when minisign is absent") must be re-set here —
+          # this WSL shell IS the CI runner, just one hop removed.
+          export CI=true
           SUDO=
           if [ "$(id -u)" -ne 0 ]; then
             SUDO=sudo

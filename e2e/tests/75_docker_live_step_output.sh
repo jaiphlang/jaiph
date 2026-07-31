@@ -16,6 +16,17 @@ if ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
   exit 0
 fi
 
+# Build a local test image with jaiph installed from current source. Without
+# this, JAIPH_DOCKER_IMAGE is unset and jaiph falls back to the default
+# ghcr.io image, which isn't preloaded on a fresh CI runner — a real registry
+# pull then runs before the container starts, blowing past the poll window
+# below and reporting the files as never having appeared.
+if ! e2e::ensure_docker_test_image; then
+  e2e::section "docker live step output (skipped — test image build failed)"
+  e2e::skip "Could not build local Docker test image"
+  exit 0
+fi
+
 e2e::section "docker step .out/.err files grow live during execution"
 
 e2e::file "live_out_docker.jh" <<'WORKFLOW'
@@ -39,7 +50,7 @@ workflow default() {
 WORKFLOW
 
 run_err="$(mktemp)"
-JAIPH_DOCKER_ENABLED=true jaiph run "${TEST_DIR}/live_out_docker.jh" 2>"${run_err}" &
+JAIPH_DOCKER_ENABLED=true JAIPH_DOCKER_IMAGE="${E2E_DOCKER_TEST_IMAGE}" jaiph run "${TEST_DIR}/live_out_docker.jh" 2>"${run_err}" &
 run_pid=$!
 
 out_file=""
