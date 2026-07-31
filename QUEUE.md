@@ -14,22 +14,6 @@ Process rules:
 
 ***
 
-## Broaden and canonicalise credential redaction #dev-ready
-
-Context: ASI-06, MEDIUM, confidence 0.85. Finding M-5 — redaction misses common secret names and is literal-substring only.
-
-Problem: `redactCredentials` fires only for env keys ending in one of four suffixes (`CREDENTIAL_KEY_SUFFIXES = ["_API_KEY","_TOKEN","_SECRET","_API_TOKEN"]`, `redact.ts:9`, `:11-14`), so it silently misses `AWS_SECRET_ACCESS_KEY` (ends `_ACCESS_KEY`), `AWS_ACCESS_KEY_ID`, `*_SECRET_KEY`/`STRIPE_SECRET_KEY`, `*_PASSWORD`/`PASSWORD`, `PASSPHRASE`, `*_PRIVATE_KEY`, `*_CREDENTIALS`, and password-bearing `DATABASE_URL`. Even for matched keys it is an exact-literal substring replace with a `< 8` char floor (`:17-24`), so base64/URL-encoding/hex/JSON-escaping or a secret split across chunks evades it, and short secrets are never redacted. The same `redactCredentials` feeds the journal, OTLP (`otlp.ts`), Sentry (`sentry.ts`), and `/v1/runs/{id}/events` (`handler.ts`) — exactly where operators are told to expect `[REDACTED]`.
-
-Location: `src/runtime/kernel/redact.ts:9`, `:11-14`, `:17-24`.
-
-Remediation: Broaden detection well beyond four suffixes (`_ACCESS_KEY`, `_SECRET_KEY`, `PASSWORD`, `PASSPHRASE`, `PRIVATE_KEY`, `CREDENTIAL(S)`, `_PAT`, `_DSN`, and substring `SECRET`/`PASSWORD`/`TOKEN`), add canonicalisation passes for base64/hex/url-encoded forms of known values, drop or lower the 8-char floor, and document the literal-substring limit as an explicit non-guarantee.
-
-### Acceptance criteria
-- `isCredentialKey` matches `AWS_SECRET_ACCESS_KEY`, `AWS_ACCESS_KEY_ID`, `STRIPE_SECRET_KEY`, `DB_PASSWORD`, `PASSPHRASE`, `SSH_PRIVATE_KEY`, and `SERVICE_CREDENTIALS`; a test asserts each is detected.
-- A base64-encoded form of a known secret value is redacted in output; a test asserts the encoded form is caught.
-- The 8-char floor is removed or lowered so short secrets are redacted; a test asserts a short known secret is redacted.
-- Redaction improvements apply uniformly across journal, OTLP, Sentry, and `/events`; a test asserts a newly-detected secret is redacted on at least the `/events` path.
-
 ## Self-host Swagger UI for `jaiph serve` (no CDN) #dev-ready
 
 Context: Feature — `/docs` already serves a Swagger UI shell, but it loads `swagger-ui-dist` from a pinned CDN with SRI (`src/cli/serve/docs.ts`). Air-gapped and hardened deployments get a blank page; only `/openapi.json` remains usable offline. The serve design doc deferred embedding (~1.5 MB) until air-gapped demand; that demand is now explicit.

@@ -10,6 +10,7 @@ import { join } from "node:path";
 import { createHttpServer, listen, readBody } from "./server";
 import { ServeHandler } from "./handler";
 import { CHAIN_GENESIS, chainHmac, writeChainKey } from "../../runtime/kernel/emit";
+import { RuntimeEventEmitter } from "../../runtime/kernel/runtime-event-emitter";
 import type { McpToolSpec } from "../mcp/tools";
 import type { WorkflowCallResult } from "../exec/call";
 
@@ -164,6 +165,48 @@ test("GET /v1/runs/{id}/events hard-fails (409) on a tampered journal, streams a
       await closeServer(server);
     }
   } finally {
+    rmSync(runDir, { recursive: true, force: true });
+  }
+});
+
+// AC4 (Broaden credential redaction): a newly-detected credential — a key the
+// original four-suffix rule missed — is served as [REDACTED] on the /events
+// path. The journal is written through the real RuntimeEventEmitter so this
+// exercises the production redaction boundary end-to-end, not a hand-built line.
+test("GET /v1/runs/{id}/events serves a newly-detected credential as [REDACTED]", async () => {
+  const runDir = mkdtempSync(join(tmpdir(), "jaiph-srv-redact-"));
+  const secret = "sk_live_super_secret_value_123";
+  const prevSummaryFile = process.env.JAIPH_RUN_SUMMARY_FILE;
+  try {
+    process.env.JAIPH_RUN_SUMMARY_FILE = join(runDir, "run_summary.jsonl");
+    const emitter = new RuntimeEventEmitter({
+      runId: "run-redact",
+      runDir,
+      // STRIPE_SECRET_KEY ends in _KEY, not one of the original four suffixes.
+      env: { STRIPE_SECRET_KEY: secret },
+      getFrameStack: () => [],
+      getAsyncIndices: () => [],
+      suppressLiveEvents: true,
+    });
+    emitter.emitStep({ type: "STEP_END", out_content: `token leaked: ${secret}`, err_content: "" });
+
+    const handler = makeHandler(async () => ({ text: "ok", isError: false, exitStatus: 0, runDir }));
+    const server = createHttpServer(handler, () => {});
+    const port = await listen(server, "127.0.0.1", 0);
+    try {
+      const create = await fetch(`http://127.0.0.1:${port}/v1/workflows/ping/runs?wait=true`, { method: "POST" });
+      const runId = ((await create.json()) as { run_id: string }).run_id;
+      const res = await fetch(`http://127.0.0.1:${port}/v1/runs/${runId}/events`);
+      assert.equal(res.status, 200);
+      const body = await res.text();
+      assert.ok(!body.includes(secret), "the secret must not appear in the served journal");
+      assert.match(body, /\[REDACTED\]/, "the redaction marker must be present on the /events path");
+    } finally {
+      await closeServer(server);
+    }
+  } finally {
+    if (prevSummaryFile === undefined) delete process.env.JAIPH_RUN_SUMMARY_FILE;
+    else process.env.JAIPH_RUN_SUMMARY_FILE = prevSummaryFile;
     rmSync(runDir, { recursive: true, force: true });
   }
 });
