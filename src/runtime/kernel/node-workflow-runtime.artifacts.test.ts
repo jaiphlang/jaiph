@@ -1280,6 +1280,61 @@ test("NodeWorkflowRuntime: ANTHROPIC_API_KEY value in prompt text is redacted in
   }
 });
 
+test("NodeWorkflowRuntime: credential values in log/logwarn/logerr are redacted in run summary", async () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-log-redact-"));
+  // Distinct, distinctive secrets per level so each durable path is checked independently.
+  const logSecret = "sk-ant-logredact-1234567890abcdef";
+  const warnSecret = "sk-ant-warnredact-1234567890abcdef";
+  const errSecret = "sk-ant-errredact-1234567890abcdef";
+  try {
+    const jh = join(root, "log_redact.jh");
+    writeFileSync(
+      jh,
+      [
+        "workflow default() {",
+        // Embed the literal secret in each message so the durable write path must redact it.
+        `  log "log token ${logSecret}"`,
+        `  logwarn "warn token ${warnSecret}"`,
+        `  logerr "err token ${errSecret}"`,
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const graph = buildRuntimeGraph(jh);
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      JAIPH_TEST_MODE: "1",
+      JAIPH_RUNS_DIR: join(root, ".jaiph", "runs"),
+      // Credential-named keys so redactCredentials targets these values.
+      ANTHROPIC_API_KEY: logSecret,
+      SOME_WARN_TOKEN: warnSecret,
+      SOME_ERR_SECRET: errSecret,
+    };
+    const runtime = new NodeWorkflowRuntime(graph, { env, cwd: root, suppressLiveEvents: true });
+    const prevSummaryEnv = process.env.JAIPH_RUN_SUMMARY_FILE;
+    process.env.JAIPH_RUN_SUMMARY_FILE = runtime.getSummaryFile();
+    try {
+      await runtime.runDefault([]);
+    } finally {
+      if (prevSummaryEnv === undefined) delete process.env.JAIPH_RUN_SUMMARY_FILE;
+      else process.env.JAIPH_RUN_SUMMARY_FILE = prevSummaryEnv;
+    }
+    const summaryText = readFileSync(runtime.getSummaryFile(), "utf8");
+    // No raw secret survives on any level's durable payload.
+    assert.ok(!summaryText.includes(logSecret), "log credential value must not appear in run summary");
+    assert.ok(!summaryText.includes(warnSecret), "logwarn credential value must not appear in run summary");
+    assert.ok(!summaryText.includes(errSecret), "logerr credential value must not appear in run summary");
+    // Each durable log line carries the redaction placeholder in place of the secret.
+    const lines = summaryText.trim().split("\n").map((l) => JSON.parse(l) as Record<string, unknown>);
+    const byType = (t: string) => lines.find((l) => l.type === t);
+    assert.equal(byType("LOG")?.message, "log token [REDACTED]");
+    assert.equal(byType("LOGWARN")?.message, "warn token [REDACTED]");
+    assert.equal(byType("LOGERR")?.message, "err token [REDACTED]");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("NodeWorkflowRuntime: imported module cannot override agent.command by default (IMPORT_UNLOCK opts in)", async () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-node-import-cmd-lock-"));
   try {

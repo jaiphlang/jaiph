@@ -225,15 +225,19 @@ export class RuntimeEventEmitter {
     const indices = this.getAsyncIndices();
     const liveBase: Record<string, unknown> = { type, message, depth };
     if (indices.length > 0) liveBase.async_indices = indices;
+    if (!this.suppressLiveEvents) {
+      process.stderr.write(`__JAIPH_EVENT__ ${JSON.stringify(liveBase)}\n`);
+    }
+    // Redact credential values from the durable log message so the persisted
+    // journal shares the same boundary as step capture (`emitStep`). The live
+    // event mirrors step behaviour and is left as authored.
     const payload = {
       ...liveBase,
+      message: redactCredentials(message, this.env),
       ts: nowIso(),
       run_id: this.runId,
       event_version: 1,
     };
-    if (!this.suppressLiveEvents) {
-      process.stderr.write(`__JAIPH_EVENT__ ${JSON.stringify(liveBase)}\n`);
-    }
     this.serializeAndAppend(payload);
   }
 }
