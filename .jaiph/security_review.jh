@@ -26,7 +26,7 @@ import "jaiphlang/queue" as queue
 
 config {
   agent.backend = "claude"
-  agent.model = "opus"
+  agent.model = "fable"
   agent.claude_flags = "--permission-mode bypassPermissions"
 }
 
