@@ -14,21 +14,6 @@ Process rules:
 
 ***
 
-## Reject or distinctly identify OIDC tokens lacking `sub` #dev-ready
-
-Context: ASI-07/ASI-04, MEDIUM, confidence 0.72. Finding M-9 — `sub`-less OIDC tokens collapse to one shared `unknown` principal.
-
-Problem: `auth.ts:228` sets `const subject = typeof payload.sub === "string" && payload.sub.length > 0 ? payload.sub : "unknown";`. Per-principal isolation keys entirely on `principal.subject` (`handler.ts` `lookupRun`/`listRuns` and the idempotency composite key). OIDC principals are scoped (`ownsAllRuns:false`) and may inspect/cancel only their own runs — but any two callers whose verified tokens omit `sub` (common for OAuth2 client-credentials / machine tokens) both authenticate as `subject === "unknown"` and share one run-visibility bucket. Two services on the same issuer with `sub`-less tokens let client B enumerate and cancel client A's runs and collide on A's `Idempotency-Key`.
-
-Location: `src/cli/serve/auth.ts:228`; `src/cli/serve/handler.ts` (`lookupRun`/`listRuns`, idempotency key).
-
-Remediation: Reject a verified token that lacks a non-empty `sub` (401), or derive identity from `sub` else `client_id` else fail — never a shared constant.
-
-### Acceptance criteria
-- A verified OIDC token with no `sub` (and no fallback identity claim) is rejected with 401, or maps to a distinct per-caller identity rather than the shared `"unknown"` constant.
-- Two distinct `sub`-less tokens never share a run-visibility bucket or idempotency namespace; a test asserts client B cannot enumerate/cancel client A's runs.
-- A test asserts no principal is ever assigned the literal `subject === "unknown"` for isolation purposes.
-
 ## Gate project-local `.jaiph/hooks.json` behind a workspace-trust decision #dev-ready
 
 Context: ASI-03/ASI-05, MEDIUM, confidence 0.80. Finding M-10 — project hooks execute on the host with no trust gate.

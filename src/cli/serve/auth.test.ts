@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   createAuthenticator,
   capabilitiesFromClaims,
+  principalSubject,
   openPrincipal,
   ALL_CAPABILITIES,
   type Capability,
@@ -75,6 +76,23 @@ test("capabilitiesFromClaims: maps from the scp array claim and ignores unknown 
 test("capabilitiesFromClaims: a token with no jaiph scopes yields no capabilities (insufficient scope)", () => {
   assert.deepEqual(sortedCaps(capabilitiesFromClaims({ scope: "openid profile" })), []);
   assert.deepEqual(sortedCaps(capabilitiesFromClaims({})), []);
+});
+
+// === principal identity (finding M-9) ===
+
+test("principalSubject: prefers sub, falls back to client_id, else null — never a shared constant", () => {
+  assert.equal(principalSubject({ sub: "alice" }), "alice");
+  // sub-less machine token (OAuth2 client-credentials) → distinct per-client identity.
+  assert.equal(principalSubject({ client_id: "service-a" } as Record<string, unknown>), "service-a");
+  assert.equal(principalSubject({ client_id: "service-b" } as Record<string, unknown>), "service-b");
+  // sub wins when both are present.
+  assert.equal(principalSubject({ sub: "alice", client_id: "svc" } as Record<string, unknown>), "alice");
+  // Neither claim → no identity; the caller is rejected, never bucketed together.
+  assert.equal(principalSubject({}), null);
+  assert.equal(principalSubject({ sub: "" }), null);
+  assert.equal(principalSubject({ sub: "", client_id: "" } as Record<string, unknown>), null);
+  // The removed shared fallback must never come back for isolation purposes.
+  assert.notEqual(principalSubject({}), "unknown");
 });
 
 // === mode selection ===
