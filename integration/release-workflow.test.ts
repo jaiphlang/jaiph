@@ -243,13 +243,48 @@ test("Dockerfile does not pipe curl output directly to bash or sh", () => {
   );
 });
 
-test("Dockerfile uses download-to-file + optional hash verify for each remote installer", () => {
-  // Each install ARG must appear once and must be paired with sha256sum usage.
-  for (const argName of ["UV_INSTALL_SHA256", "RUSTUP_INIT_SHA256", "BUN_INSTALL_SHA256"]) {
-    assert.match(DOCKERFILE, new RegExp(`ARG ${argName}`), `ARG ${argName} declared`);
-    assert.match(DOCKERFILE, new RegExp(argName), `${argName} referenced in verification step`);
+test("Dockerfile pins every toolchain fetch through fetch-verify.sh with a required checksum", () => {
+  // Every toolchain checksum ARG must default to a non-empty 64-hex sha256, so a
+  // plain `docker build` cannot degrade to an unverified fetch (finding M-11).
+  const ARGS = [
+    "UV_INSTALL_SHA256",
+    "RUSTUP_INIT_SHA256",
+    "BUN_INSTALL_SHA256",
+    "CURSOR_INSTALL_SHA256",
+    "GO_SHA256_AMD64",
+    "GO_SHA256_ARM64",
+    "YQ_SHA256_AMD64",
+    "YQ_SHA256_ARM64",
+    "KUBECTL_SHA256_AMD64",
+    "KUBECTL_SHA256_ARM64",
+    "AWSCLI_SHA256_X86_64",
+    "AWSCLI_SHA256_AARCH64",
+    "TASK_SHA256_AMD64",
+    "TASK_SHA256_ARM64",
+  ];
+  for (const argName of ARGS) {
+    assert.match(
+      DOCKERFILE,
+      new RegExp(`^ARG ${argName}=[0-9a-f]{64}$`, "m"),
+      `ARG ${argName} defaults to a non-empty 64-hex sha256`,
+    );
   }
-  assert.match(DOCKERFILE, /sha256sum -c/, "Dockerfile uses sha256sum -c for verification");
+
+  // No toolchain may be fetched with a bare curl/wget download; each goes
+  // through the shared verify seam.
+  const stray = DOCKERFILE.split("\n").filter((l) =>
+    /^\s*(curl|wget)[^|]*(astral\.sh|rustup|bun\.sh|cursor\.com|go\.dev\/dl|mikefarah\/yq|dl\.k8s\.io|awscli\.amazonaws\.com|go-task\/task)/.test(
+      l,
+    ),
+  );
+  assert.deepEqual(stray, [], `unverified toolchain fetch(es) in Dockerfile:\n${stray.join("\n")}`);
+  assert.match(DOCKERFILE, /fetch-verify\.sh/, "Dockerfile calls the fetch-verify.sh seam");
+
+  // The seam itself fails closed on an empty checksum and verifies the download.
+  const HELPER = readFileSync(join(REPO_ROOT, "runtime/fetch-verify.sh"), "utf8");
+  assert.match(HELPER, /checksum is required/, "fetch-verify refuses an empty checksum");
+  assert.match(HELPER, /sha256sum|shasum/, "fetch-verify computes a sha256 of the download");
+  assert.match(HELPER, /sha256 mismatch/, "fetch-verify aborts on a checksum mismatch");
 });
 
 test("bash installer requires SHA256SUMS.minisig and fails closed when absent", () => {

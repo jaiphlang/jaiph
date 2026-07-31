@@ -14,22 +14,6 @@ Process rules:
 
 ***
 
-## Make release-install and runtime-image toolchain verification fail-closed #dev-ready
-
-Context: ASI-09, MEDIUM, confidence 0.80. Finding M-11 — release-install verification is fail-open and the runtime image pulls toolchains without checksums.
-
-Problem: The release binary's minisign signature is checked only when `minisign` is on PATH; otherwise the installer warns and continues (`docs/install:242-256`), so a default host with no minisign degrades to checksum-only — and the checksum arrives from the same channel as the binary. `JAIPH_RELEASE_BASE_URL` / `JAIPH_MINISIGN_PUBLIC_KEY` are overridable and an empty key silently skips verification (`docs/install:213,242-243`). The bootstrap pipes an unsigned script to `bash` with an env-overridable origin (`use.ts:37-42`, `docs/run`). The runtime image fetches/executes toolchain installers (uv/rustup/bun/cursor-agent checksum ARGs default to `""` → skip; go/yq/kubectl/aws-cli/go-task fetched with no checksum) in `runtime/Dockerfile`. An attacker compromising the GitHub Release (or the channel via `JAIPH_RELEASE_BASE_URL`) can replace the binary and `SHA256SUMS` consistently and pass the checksum without the signature ever being checked; a compromised toolchain CDN poisons default runtime-image builds.
-
-Location: `docs/install:213`, `:242-256`; `src/cli/commands/use.ts:37-42`; `runtime/Dockerfile`.
-
-Remediation: Make signature verification mandatory for non-CI installs (bootstrap a pinned verifier, or treat "minisign unavailable" as fail-closed); publish and check a hash/signature of the install script itself; treat an empty `JAIPH_MINISIGN_PUBLIC_KEY` as fail-closed, not skip; populate and require the Dockerfile SHA-256 ARGs and add `sha256sum -c` for go/yq/kubectl/aws/task.
-
-### Acceptance criteria
-- A non-CI install with `minisign` unavailable fails closed rather than continuing on checksum-only; a test/harness asserts the installer aborts.
-- An empty `JAIPH_MINISIGN_PUBLIC_KEY` causes verification to fail closed, not skip; a test asserts the abort.
-- The runtime `Dockerfile` requires a non-empty SHA-256 for each toolchain fetch (uv/rustup/bun/cursor-agent and go/yq/kubectl/aws-cli/go-task) and runs `sha256sum -c`; a build with a mismatched/empty checksum fails.
-- The install/bootstrap script's own integrity is verified before execution (hash/signature check); a test/harness asserts a tampered script is rejected.
-
 ## Broaden and canonicalise credential redaction #dev-ready
 
 Context: ASI-06, MEDIUM, confidence 0.85. Finding M-5 — redaction misses common secret names and is literal-substring only.

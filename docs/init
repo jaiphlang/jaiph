@@ -9,6 +9,39 @@ set -euo pipefail
 
 JAIPH_SITE="${JAIPH_SITE:-https://jaiph.org}"
 
+# Fetch the install script and verify it against its published sha256 before
+# running it, instead of piping `curl … | bash` (finding M-11). Mirrors docs/run.
+install_jaiph_verified() {
+  local d expected actual status
+  d="$(mktemp -d "${TMPDIR:-/tmp}/jaiph-install-XXXXXX")"
+  if ! curl -fsSL "${JAIPH_SITE}/install" -o "${d}/install"; then
+    echo "Error: failed to download ${JAIPH_SITE}/install" >&2
+    rm -rf "${d}"; return 1
+  fi
+  if ! curl -fsSL "${JAIPH_SITE}/install.sha256" -o "${d}/install.sha256"; then
+    echo "Error: failed to download ${JAIPH_SITE}/install.sha256 — refusing to run an unverified install script." >&2
+    rm -rf "${d}"; return 1
+  fi
+  expected="$(awk '{print $1; exit}' "${d}/install.sha256")"
+  if command -v sha256sum >/dev/null 2>&1; then
+    actual="$(sha256sum "${d}/install" | awk '{print $1}')"
+  elif command -v shasum >/dev/null 2>&1; then
+    actual="$(shasum -a 256 "${d}/install" | awk '{print $1}')"
+  else
+    echo "Error: no sha256sum/shasum available to verify the install script." >&2
+    rm -rf "${d}"; return 1
+  fi
+  if [ -z "${expected}" ] || [ "${expected}" != "${actual}" ]; then
+    echo "Error: install script integrity check failed (expected ${expected:-<none>}, got ${actual})." >&2
+    echo "The bootstrap script does not match its published checksum; aborting." >&2
+    rm -rf "${d}"; return 1
+  fi
+  status=0
+  bash "${d}/install" || status=$?
+  rm -rf "${d}"
+  return "${status}"
+}
+
 if ! command -v node >/dev/null 2>&1; then
   echo "Error: node is required but not found in \$PATH." >&2
   echo "Install Node.js (https://nodejs.org) and try again." >&2
@@ -17,7 +50,10 @@ fi
 
 if ! command -v jaiph >/dev/null 2>&1; then
   echo "Jaiph not found — installing..."
-  curl -fsSL "${JAIPH_SITE}/install" | bash
+  if ! install_jaiph_verified; then
+    echo "Error: jaiph installation failed." >&2
+    exit 1
+  fi
   export PATH="$HOME/.local/bin:$PATH"
   if ! command -v jaiph >/dev/null 2>&1; then
     echo "Error: jaiph was not found after installation." >&2

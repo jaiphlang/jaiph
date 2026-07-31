@@ -64,7 +64,7 @@ jaiph use nightly      # rolling nightly prerelease
 jaiph use 0.12.0       # reinstalls the v0.12.0 release binary
 ```
 
-`jaiph use` runs the same installer as step 1 again, with `JAIPH_REPO_REF` set to `nightly` or `v<version>`. The installer command comes from `JAIPH_INSTALL_COMMAND`, which defaults to `curl -fsSL https://jaiph.org/install | bash`. `jaiph use` then replaces the binary at `~/.local/bin/jaiph`, or at the location set by `JAIPH_BIN_DIR`. Override `JAIPH_INSTALL_COMMAND` for forks, offline bundles, or local scripts.
+`jaiph use` runs the same installer as step 1 again, with `JAIPH_REPO_REF` set to `nightly` or `v<version>`. By default it does not pipe `curl … | bash`. It downloads the install script from `${JAIPH_SITE}/install` (default `https://jaiph.org`), verifies it against the published `${JAIPH_SITE}/install.sha256`, and runs it only when the checksum matches. A missing or mismatched checksum fails closed. `jaiph use` then replaces the binary at `~/.local/bin/jaiph`, or at the location set by `JAIPH_BIN_DIR`. Set `JAIPH_INSTALL_COMMAND` to run a verbatim command instead for forks, offline bundles, or local scripts.
 
 ## Verification
 
@@ -76,7 +76,7 @@ The command prints `jaiph <version>`, taken from the installed release at build 
 
 ## Verify the release signature
 
-Every release includes `SHA256SUMS` and a detached [minisign](https://jedisct1.github.io/minisign/) signature `SHA256SUMS.minisig`. The installer downloads both files, and it verifies the signature when `minisign` is on `PATH`.
+Every release includes `SHA256SUMS` and a detached [minisign](https://jedisct1.github.io/minisign/) signature `SHA256SUMS.minisig`. The installer downloads both files and **requires** a valid signature: on a normal (non-CI) host, a missing `minisign` aborts the install rather than degrading to checksum-only (the checksum ships over the same channel as the binary, so it is not an independent defense). CI hosts (`CI` set) may proceed on checksum-only; for a deliberate non-CI checksum-only install, set `JAIPH_ALLOW_UNSIGNED=1`. An explicitly empty `JAIPH_MINISIGN_PUBLIC_KEY` is a misconfiguration and also fails closed.
 
 From a checkout of this repo:
 

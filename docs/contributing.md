@@ -48,7 +48,7 @@ Set **`JAIPH_SKIP_DOCKER_BUILD=1`** only to skip the image build (installer acce
 
 For day-to-day work on the compiler and CLI you usually stay inside the clone: install dev dependencies once, then build and run tests from npm scripts.
 
-**Prerequisites:** Node.js **20.x** and **`npm`** (matching `.github/workflows/ci.yml`). **[Bun](https://bun.sh)** is also required for `npm run build:standalone` and `./docs/install-from-local.sh`; standalone cross-compiles run in `.github/workflows/release.yml` via `oven-sh/setup-bun`, not in the main `ci.yml` unit/E2E jobs. End-user installs from `docs/install` need only `curl` and `shasum` / `sha256sum`. The installers also expect `bash`. End-to-end tests are written in bash and are run by `e2e/test_all.sh`.
+**Prerequisites:** Node.js **20.x** and **`npm`** (matching `.github/workflows/ci.yml`). **[Bun](https://bun.sh)** is also required for `npm run build:standalone` and `./docs/install-from-local.sh`; standalone cross-compiles run in `.github/workflows/release.yml` via `oven-sh/setup-bun`, not in the main `ci.yml` unit/E2E jobs. End-user installs from `docs/install` need `curl`, `shasum` / `sha256sum`, and [`minisign`](https://jedisct1.github.io/minisign/) to verify the release signature. The installers also expect `bash`. On a CI host (`CI` set), or with `JAIPH_ALLOW_UNSIGNED=1`, the install proceeds on checksum only and `minisign` is not required. End-to-end tests are written in bash and are run by `e2e/test_all.sh`.
 
 **Typical commands** (from the repo root):
 
@@ -249,7 +249,9 @@ Bun has no `bun-windows-arm64` target, so Windows ships x64 only. Every release 
 
 #### Release signing
 
-Releases sign `SHA256SUMS` with [minisign](https://jedisct1.github.io/minisign/), publishing a detached `SHA256SUMS.minisig`. Installers always download that file and verify it when `minisign` is on `PATH` (public key embedded in both installers; canonical copy in `jaiph.pub`).
+Releases sign `SHA256SUMS` with [minisign](https://jedisct1.github.io/minisign/), publishing a detached `SHA256SUMS.minisig`. Both installers download that file and require a valid signature before installing (public key embedded in both installers; canonical copy in `jaiph.pub`). The checksum ships over the same channel as the binary, so the signature is the only independent defense, and verification is fail-closed. On a normal (non-CI) host a missing `minisign` aborts the install rather than degrading to checksum-only. A CI host (`CI` set) may proceed on checksum only, and a deliberate non-CI checksum-only install must opt in with `JAIPH_ALLOW_UNSIGNED=1`. An explicitly empty `JAIPH_MINISIGN_PUBLIC_KEY` is a misconfiguration and also fails closed.
+
+**Install-script integrity.** The bootstrap entry points that fetch and run the installer (`docs/run`, `docs/init`, and `jaiph use`) do not pipe `curl … | bash`. They download `docs/install` and its published checksum `docs/install.sha256`, compare them, and run the script only when they match. A missing or mismatched checksum fails closed. Keep `docs/install.sha256` in sync whenever you edit `docs/install`, regenerating it with `printf '%s  install\n' "$(shasum -a 256 docs/install | awk '{print $1}')" > docs/install.sha256`. The `e2e/tests/06_bootstrap_integrity.sh` test pins the committed checksum to the current `docs/install` and fails the build if they drift.
 
 **Maintainers:** generate once with `minisign -G -W -p jaiph.pub -s jaiph.key -f` (no passphrase; `-W` still labels the file "encrypted secret key" but uses an empty password). Store **`jaiph.key`** (not `jaiph.pub`) as the `MINISIGN_SECRET_KEY` GitHub Actions secret — paste both lines, or `base64 -w0 jaiph.key` as a single line. Commit `jaiph.pub` and keep installer defaults in sync.
 
@@ -268,7 +270,7 @@ minisign -S -s jaiph.key -m docs/registry -x docs/registry.minisig
 
 Without a valid `registry.minisig`, remote `jaiph install <name>` by design fails closed; local development can point `JAIPH_REGISTRY` at a file path to bypass the network entirely. Registry entries may additionally pin a `commit` (the cloned HEAD must match) and carry a per-library `signature`/`publicKey` (a detached minisign signature over the commit SHA, verified fail-closed) — see [CLI — `jaiph install`](cli.md#jaiph-install).
 
-**Dockerfile toolchain verification.** `runtime/Dockerfile` pins each remote installer script via build ARGs (`UV_INSTALL_SHA256`, `RUSTUP_INIT_SHA256`, `BUN_INSTALL_SHA256`, `CURSOR_INSTALL_SHA256`). ARGs default to empty (skip verification) for development; CI/release builds should populate them with the SHA256 of each installer script at the pinned version. The NodeSource APT block uses GPG-signed packages directly — no installer script execution.
+**Dockerfile toolchain verification.** Every remote toolchain fetch in `runtime/Dockerfile` goes through `runtime/fetch-verify.sh`, which downloads the URL and aborts unless the bytes match a required SHA-256. Each fetch pins its checksum through a build ARG: the installer scripts (`UV_INSTALL_SHA256`, `RUSTUP_INIT_SHA256`, `BUN_INSTALL_SHA256`, `CURSOR_INSTALL_SHA256`) and the downloaded binaries and archives (per-architecture `GO_SHA256_*`, `YQ_SHA256_*`, `KUBECTL_SHA256_*`, `AWSCLI_SHA256_*`, and `TASK_SHA256_*`). The ARGs default to the pinned hashes for the current versions, and an empty or mismatched value fails the build instead of installing unverified bytes. Some upstream URLs are rolling, such as `https://astral.sh/uv/install.sh` and `https://sh.rustup.rs`, so refresh the matching pin when you bump a version or upstream changes the installer. The NodeSource APT block uses GPG-signed packages directly, so it needs no checksum ARG.
 
 ### Local docs site (Jekyll)
 
