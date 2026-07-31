@@ -204,12 +204,21 @@ bad_status=0
 # which would otherwise trigger the local-source branch instead of download.
 # JAIPH_ALLOW_UNSIGNED=1: harmless when minisign is present (the real signature
 # is verified regardless); required when absent so the run reaches the checksum.
+# JAIPH_MINISIGN_PUBLIC_KEY: only overridden when minisign produced a real
+# throwaway key above. When minisign is absent, TEST_PUBKEY is empty — passing
+# that explicitly would trip the installer's empty-key fail-closed guard (AC2)
+# before the checksum step is ever reached, so leave the variable unset and let
+# JAIPH_ALLOW_UNSIGNED=1 carry the run past the (skipped) signature step instead.
 bad_output="$(
   unset JAIPH_REPO_URL
+  if [ -n "${TEST_PUBKEY}" ]; then
+    export JAIPH_MINISIGN_PUBLIC_KEY="${TEST_PUBKEY}"
+  else
+    unset JAIPH_MINISIGN_PUBLIC_KEY
+  fi
   JAIPH_ALLOW_UNSIGNED=1 \
   JAIPH_RELEASE_BASE_URL="file://${RELEASE_DIR}" \
   JAIPH_BIN_DIR="${BIN_DIR_BAD}" \
-  JAIPH_MINISIGN_PUBLIC_KEY="${TEST_PUBKEY}" \
   bash "${INSTALL_SCRIPT}" 2>&1
 )" || bad_status=$?
 e2e::assert_equals "${bad_status}" "1" "checksum mismatch exits non-zero"
