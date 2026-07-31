@@ -41,6 +41,7 @@ import { resolveInterpreterFromShebang } from "../../parse/script-bash";
 import { resolveShell } from "./portability";
 import { RuntimeEventEmitter, type Frame } from "./runtime-event-emitter";
 import { createStepIdleOutputWarn } from "./step-idle-warn";
+import { parseMaxSteps, maxStepsTrippedMessage } from "./max-steps";
 import { executeMockBodyDef, type MockBodyDef, type StepResult } from "./runtime-mock";
 import { resetMockResponses } from "./mock";
 import {
@@ -148,6 +149,14 @@ export class NodeWorkflowRuntime {
   private handleRegistry = new Map<string, AsyncHandle>();
   private handleIdCounter = 0;
   private readonly abortController = new AbortController();
+  /**
+   * Optional max-step circuit breaker (`JAIPH_MAX_STEPS`, `0` = disabled).
+   * `stepsExecuted` counts every executed non-trivia step across the whole run
+   * (loop iterations and nested/recursive calls included); once it exceeds
+   * `maxSteps` the run is aborted. See `max-steps.ts`.
+   */
+  private readonly maxSteps: number;
+  private stepsExecuted = 0;
   private readonly sleep: (ms: number, signal: AbortSignal) => Promise<void>;
   /**
    * Retry schedule for transport-failure backoff in `runPromptStep`. Resolved
@@ -289,6 +298,7 @@ export class NodeWorkflowRuntime {
     // Pristine env captured once at process start: `trusted_envs` keys resolve
     // against this snapshot, never against a calling workflow's scope env.
     this.trustedEnvSnapshot = { ...this.env };
+    this.maxSteps = parseMaxSteps(this.env);
     this.declaredTrustedEnvKeys = collectDeclaredTrustedEnvKeys(graph);
     this.cwd = opts.cwd ?? process.cwd();
     this.mockBodies = opts.mockBodies ?? new Map();
@@ -781,6 +791,18 @@ export class NodeWorkflowRuntime {
     let asyncCounter = 0;
     for (const step of steps) {
       if (step.type === "trivia") continue;
+      // Max-step circuit breaker: count every executed step across the whole run
+      // (loop iterations and nested/recursive calls share this counter). Once the
+      // cap is exceeded, abort so a runaway workflow stops without a manual signal.
+      if (this.maxSteps > 0) {
+        this.stepsExecuted += 1;
+        if (this.stepsExecuted > this.maxSteps) {
+          const msg = maxStepsTrippedMessage(this.maxSteps);
+          this.emitter.emitLog("LOGERR", msg);
+          this.abort();
+          return this.mergeStepResult(accOut, accErr, { status: 1, output: "", error: msg });
+        }
+      }
       if (step.type === "say") {
         let message: string;
         if (step.message.kind === "inline_script") {

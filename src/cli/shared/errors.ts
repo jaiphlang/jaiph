@@ -44,6 +44,10 @@ export function formatDockerTimeoutMessage(timeoutSeconds: number): string {
   return `E_TIMEOUT container execution exceeded ${timeoutSeconds}s — increase runtime.docker_timeout_seconds or JAIPH_DOCKER_TIMEOUT`;
 }
 
+export function formatRunTimeoutMessage(timeoutSeconds: number): string {
+  return `E_RUN_TIMEOUT host run exceeded ${timeoutSeconds}s wall-clock — increase or unset JAIPH_RUN_TIMEOUT`;
+}
+
 export type FailureDetails = {
   summary: string;
   failedStepOutput: string | null;

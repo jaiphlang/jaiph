@@ -41,6 +41,65 @@ export function cancelRunProcess(
   child.once("exit", () => clearTimeout(forceKillTimer));
 }
 
+/**
+ * Parse the parent-enforced host-mode wall-clock run timeout
+ * (`JAIPH_RUN_TIMEOUT`, seconds). Unset / empty / non-numeric / `<= 0` disables
+ * it (returns `0`), preserving the prior host behaviour where only a manual
+ * SIGINT/SIGTERM stops a run. Docker mode uses its own `JAIPH_DOCKER_TIMEOUT`
+ * enforced inside `spawnDockerProcess`; this covers the host spawn.
+ */
+export function parseRunTimeoutSeconds(
+  env: Record<string, string | undefined>,
+): number {
+  const raw = env.JAIPH_RUN_TIMEOUT;
+  if (raw === undefined || raw === "") return 0;
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+}
+
+/**
+ * Arm a parent-enforced wall-clock timeout on a host run child. On expiry it
+ * terminates the whole process group with SIGTERM and escalates to SIGKILL
+ * after a grace period — the same escalation `setupRunSignalHandlers` applies to
+ * CLI signals — so a host/`--unsafe` run that exceeds the budget is stopped
+ * without a manual Ctrl-C.
+ *
+ * `timeoutSeconds <= 0` (disabled) returns an inert handle. The timer is cleared
+ * automatically once the child exits, and `cancel()` clears both timers so a
+ * completed run leaves nothing pending.
+ */
+export function armRunTimeout(
+  child: ChildProcess,
+  timeoutSeconds: number,
+  opts?: { forceKillAfterMs?: number; onTimeout?: () => void },
+): { cancel: () => void; timedOut: () => boolean } {
+  if (!Number.isFinite(timeoutSeconds) || timeoutSeconds <= 0) {
+    return { cancel: () => {}, timedOut: () => false };
+  }
+  const forceKillAfterMs = opts?.forceKillAfterMs ?? 1500;
+  let didTimeout = false;
+  let forceKillTimer: NodeJS.Timeout | undefined;
+  const timer = setTimeout(() => {
+    didTimeout = true;
+    terminateRunProcessGroup(child, "SIGTERM");
+    opts?.onTimeout?.();
+    forceKillTimer = setTimeout(() => {
+      terminateRunProcessGroup(child, "SIGKILL");
+      forceKillTimer = undefined;
+    }, forceKillAfterMs);
+    forceKillTimer.unref?.();
+  }, timeoutSeconds * 1000);
+  const cancel = (): void => {
+    clearTimeout(timer);
+    if (forceKillTimer) {
+      clearTimeout(forceKillTimer);
+      forceKillTimer = undefined;
+    }
+  };
+  child.once("exit", cancel);
+  return { cancel, timedOut: () => didTimeout };
+}
+
 export function setupRunSignalHandlers(
   child: ChildProcess,
   opts?: { forceKillAfterMs?: number; onSignalCleanup?: () => void },

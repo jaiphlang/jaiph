@@ -2,7 +2,13 @@ import { join } from "node:path";
 import type { ChildProcess } from "node:child_process";
 import type { JaiphConfig } from "../../config";
 import type { jaiphModule } from "../../types";
-import { spawnRunProcess, waitForRunExit, cancelRunProcess } from "../run/lifecycle";
+import {
+  spawnRunProcess,
+  waitForRunExit,
+  cancelRunProcess,
+  armRunTimeout,
+  parseRunTimeoutSeconds,
+} from "../run/lifecycle";
 import { resolveRuntimeEnv, applySandboxFlags, type SandboxFlags } from "../run/env";
 import { collectEntryBackends } from "../run/preflight-credentials";
 import { parseLogEvent, parseStepEvent, type StepEvent } from "../run/events";
@@ -298,8 +304,14 @@ async function callWorkflowHost(
     env: runtimeEnv,
   });
   ctx?.onCancelHandle?.(() => cancelRunProcess(child));
+  // Parent-enforced wall-clock timeout shared with `jaiph run` host mode
+  // (`JAIPH_RUN_TIMEOUT`, `0`/unset disables): the same host spawn used by
+  // `jaiph serve` / `jaiph mcp` calls, so an over-budget call is terminated
+  // without a manual signal.
+  const runTimeout = armRunTimeout(child, parseRunTimeoutSeconds(runtimeEnv));
   const collector = attachOutputCollector(child, buildStepEventHandler(env, ctx), caps);
   const exit = await waitForRunExit(child);
+  runTimeout.cancel();
   collector.drain();
 
   const runDir = readMetaFields(metaFile, ["run_dir"]).run_dir;

@@ -313,6 +313,15 @@ Set any variable to `0` to disable that layer. The idle timer resets on every ch
 
 The completion-grace layer specifically addresses the known `claude -p` failure mode where the CLI streams its final answer (and the terminal `result` event) but the process never exits — often because a descendant it spawned is still holding the output pipe open. When a watchdog fires it terminates the backend's whole process tree (via `killProcessTree`; see [Architecture](architecture.md)) with `SIGTERM`, escalating to `SIGKILL` after 5s, and tears down the runtime's handles on the child's stdio so a lingering descendant cannot keep the run alive. On Windows the tree is force-killed with `taskkill /T` on the first signal, so the `SIGKILL` escalation is a no-op. Under Docker, `runtime.docker_timeout_seconds` remains the outer backstop for the whole container.
 
+## Overall run timeout and step cap
+{: #overall-run-timeout-and-step-cap}
+
+The prompt watchdogs above bound a single backend call. Jaiph also has two controls that bound the whole run, and both are off by default, so existing runs behave as before.
+
+`JAIPH_RUN_TIMEOUT` sets a parent-enforced wall-clock cap, in seconds, for a host-mode run. Host mode means a `jaiph run --unsafe` or host-only run, and the host spawn that a `jaiph serve` or `jaiph mcp` call uses. Without this cap, the only automatic stop for a host run is a manual Ctrl-C, because the host spawn installs only SIGINT and SIGTERM handlers and the prompt watchdogs cover a single backend call. When the cap is reached, the parent terminates the run child's whole process group with `SIGTERM` and escalates to `SIGKILL` after a short grace period (via `killProcessTree`; see [Architecture](architecture.md)), so the run stops without a manual Ctrl-C, and the failure footer shows `E_RUN_TIMEOUT`. Set it to `0`, leave it empty, or give it an invalid value to disable it, which restores the earlier behaviour where only a manual SIGINT or SIGTERM stops a host run. Docker mode does not use this variable, because a Docker run is already bounded by `runtime.docker_timeout_seconds` (`JAIPH_DOCKER_TIMEOUT`) inside the container.
+
+`JAIPH_MAX_STEPS` sets an optional max-step circuit breaker in the runtime. When you set it to a positive integer, the runtime counts every executed step across the whole run, and it counts loop iterations and nested or recursive calls but skips trivia. Once the count goes past the cap, the runtime logs `E_MAX_STEPS`, aborts the run, and returns a failure, so a runaway workflow stops on its own without a manual signal. Set it to `0`, leave it empty, or give it an invalid value to disable the breaker.
+
 ## Custom agent commands
 
 `agent.command` is consumed by the **cursor** backend only. For `claude` and `codex`, Jaiph always invokes the Claude CLI or the codex HTTP path, regardless of `agent.command`.
