@@ -20,6 +20,20 @@ export function projectHooksPath(workspaceRoot: string): string {
   return join(workspaceRoot, ".jaiph", HOOKS_FILENAME);
 }
 
+/**
+ * Operator opt-in (`JAIPH_TRUST_PROJECT_HOOKS=1|true`) that trusts the current
+ * workspace's project-local `.jaiph/hooks.json`. Absent it, the project file is
+ * ignored (finding M-10): its commands run on the *host* CLI — before and
+ * outside any Docker sandbox — so a cloned/untrusted repo must not execute
+ * arbitrary host commands on `jaiph run` without an explicit trust decision.
+ * The global `~/.jaiph/hooks.json` is the operator's own and stays trusted.
+ * Read from the host env only, never from workflow config — the file must not
+ * be able to trust itself.
+ */
+export function isProjectHooksTrusted(env: Record<string, string | undefined>): boolean {
+  return env.JAIPH_TRUST_PROJECT_HOOKS === "1" || env.JAIPH_TRUST_PROJECT_HOOKS === "true";
+}
+
 /** Validate and normalize raw JSON to HookConfig. Returns null if invalid. */
 export function parseHookConfig(raw: string, sourceLabel: string): HookConfig | null {
   try {
@@ -92,14 +106,33 @@ function emptyMerged(): MergedHookConfig {
  * Load global and project hook configs and merge with precedence:
  * project-local entries override global for each event (per-event override).
  * Returns merged config; if both files absent or invalid, returns empty arrays for all events.
+ *
+ * `trustProjectHooks` gates the project-local file behind an explicit
+ * per-workspace trust decision (finding M-10). When false, a present-and-valid
+ * `<workspace>/.jaiph/hooks.json` is ignored (with a one-line stderr notice) so
+ * its host commands never run without operator consent; the global
+ * `~/.jaiph/hooks.json` is unaffected either way.
  */
-export function loadMergedHooks(workspaceRoot: string): MergedHookConfig {
+export function loadMergedHooks(
+  workspaceRoot: string,
+  trustProjectHooks: boolean,
+): MergedHookConfig {
   const merged = emptyMerged();
   const globalPath = globalHooksPath();
   const projectPath = projectHooksPath(workspaceRoot);
 
   const globalConfig = loadHookConfig(globalPath);
-  const projectConfig = loadHookConfig(projectPath);
+  const rawProjectConfig = loadHookConfig(projectPath);
+  const projectHasCommands =
+    rawProjectConfig !== null && Object.keys(rawProjectConfig).length > 0;
+  if (projectHasCommands && !trustProjectHooks) {
+    process.stderr.write(
+      `jaiph hooks: project-local hooks at ${projectPath} are ignored (untrusted workspace) — ` +
+        `they run host commands outside the Docker sandbox. Set JAIPH_TRUST_PROJECT_HOOKS=1 to trust ` +
+        `this workspace. Global ~/.jaiph/hooks.json still runs.\n`,
+    );
+  }
+  const projectConfig = trustProjectHooks ? rawProjectConfig : null;
 
   const events: HookEventName[] = [
     "workflow_start",

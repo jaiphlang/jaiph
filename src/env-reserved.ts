@@ -32,6 +32,10 @@ export const RESERVED_ENV_KEYS = new Set<string>([
   // sandbox allowlist. It is the operator's consent, not the file's, so the
   // file must not be able to name it via `--env` / `trusted_envs`.
   "JAIPH_TRUSTED_ENVS",
+  // Operator opt-in that trusts the workspace's project-local `.jaiph/hooks.json`
+  // (finding M-10). It is the operator's per-workspace consent, not the file's,
+  // so a `.jh` file must not be able to name it via `--env` / `trusted_envs`.
+  "JAIPH_TRUST_PROJECT_HOOKS",
   // Selects the inner run's root symbol in a Docker MCP call; managed via the
   // container spawn wiring, not user env.
   "JAIPH_RUN_WORKFLOW",
