@@ -21,6 +21,7 @@ import { errText } from "../../errors";
 import { basename, join } from "node:path";
 import { VERSION } from "../../version";
 import { postWithTimeout } from "./http";
+import { verifyRunJournal } from "../../runtime/kernel/emit";
 import type { ExportOutcome, ExportRunTelemetryOptions } from "./otlp";
 
 /** Default hard cap on the envelope POST when no flush budget is supplied. */
@@ -203,6 +204,13 @@ export async function reportRunFailureToSentry(
   if (!runDir) return "skipped";
   const summaryFile = join(runDir, "run_summary.jsonl");
   if (!existsSync(summaryFile)) return "skipped";
+  // Hard-fail on a tampered journal (finding H-3): never report a run whose
+  // keyed chain does not verify. Unverifiable (unkeyed/legacy) runs pass through.
+  const integrity = verifyRunJournal(runDir);
+  if (integrity.verified && !integrity.ok) {
+    warn(`jaiph: Sentry error report skipped — run journal failed integrity verification (${integrity.error})\n`);
+    return "failed";
+  }
   let lines: string[];
   try {
     lines = readFileSync(summaryFile, "utf8").split("\n");

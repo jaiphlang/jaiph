@@ -1,5 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   parseSentryDsn,
   buildSentryEvent,
@@ -7,6 +10,7 @@ import {
   reportRunFailureToSentry,
   type SentryEventMeta,
 } from "./sentry";
+import { writeChainKey } from "../../runtime/kernel/emit";
 import { VERSION } from "../../version";
 
 const RUN_ID = "11111111-2222-3333-4444-555555555555";
@@ -171,6 +175,28 @@ test("reportRunFailureToSentry: a failed run without SENTRY_DSN sends nothing an
     reportRunFailureToSentry({ runDir: "/nonexistent", workflow: "default", exitStatus: 1, signal: null, env: {} }),
   );
   assert.equal(out.length, 0);
+});
+
+// Finding H-3: a failed run whose journal chain fails verification is never
+// reported — the tampered capture must not become a Sentry event.
+test("reportRunFailureToSentry: hard-fails and does not send when the journal chain fails verification", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "jaiph-sentry-tamper-"));
+  try {
+    // Journal with no valid keyed chain + a persisted key → verifiable → fails.
+    writeFileSync(join(dir, "run_summary.jsonl"), '{"type":"WORKFLOW_START","prev_hash":"deadbeef"}\n');
+    writeChainKey(dir, "k".repeat(64));
+    const warnings: string[] = [];
+    const outcome = await reportRunFailureToSentry(
+      { runDir: dir, workflow: "default", exitStatus: 1, signal: null, env: { SENTRY_DSN: "https://key@127.0.0.1:1/1" } },
+      1000,
+      (m) => warnings.push(m),
+    );
+    assert.equal(outcome, "failed");
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0], /integrity verification/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test("reportRunFailureToSentry: a failed run with a malformed DSN warns exactly once and does not send", async () => {

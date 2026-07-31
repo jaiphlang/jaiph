@@ -2,6 +2,7 @@
 // the Docker sandbox (`buildDockerArgs` in ../docker.ts) and prompt backend
 // subprocesses (`runBackend` in ./prompt.ts). Trusted `run` steps keep the
 // full workflow env; only what crosses to an agent is filtered here.
+import { CHAIN_KEY_ENV } from "./emit";
 
 /** Agent backends the runtime can execute prompts against. */
 export type AgentBackend = "cursor" | "claude" | "codex";
@@ -132,6 +133,10 @@ export function scrubPromptEnv(execEnv: NodeJS.ProcessEnv, backend: string): Nod
   const out: NodeJS.ProcessEnv = {};
   for (const [key, value] of Object.entries(execEnv)) {
     if (value === undefined) continue;
+    // The audit-chain HMAC key is forwarded into the Docker container (the
+    // in-container kernel needs it) via the JAIPH_ prefix allowlist, but it
+    // must never reach the agent itself — drop it here regardless (finding H-3).
+    if (key === CHAIN_KEY_ENV) continue;
     if (isEnvAllowed(key, backends) || isPromptBaseEnv(key)) {
       out[key] = value;
     }

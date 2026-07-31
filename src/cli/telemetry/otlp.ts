@@ -18,6 +18,7 @@ import { join } from "node:path";
 import { createHash } from "node:crypto";
 import { VERSION } from "../../version";
 import { postWithTimeout } from "./http";
+import { verifyRunJournal } from "../../runtime/kernel/emit";
 import { reportRunFailureToSentry } from "./sentry";
 
 /** Metadata the pure mapper needs beyond the journal lines themselves. */
@@ -460,6 +461,14 @@ export async function exportOtlpTraces(
   if (!runDir) return "skipped";
   const summaryFile = join(runDir, "run_summary.jsonl");
   if (!existsSync(summaryFile)) return "skipped";
+  // Hard-fail on a tampered journal (finding H-3): never export a run whose
+  // keyed chain does not verify. Unkeyed/legacy runs (no persisted key) are
+  // not blocked — they simply cannot be verified.
+  const integrity = verifyRunJournal(runDir);
+  if (integrity.verified && !integrity.ok) {
+    warn(`jaiph: OTLP trace export skipped — run journal failed integrity verification (${integrity.error})\n`);
+    return "failed";
+  }
   let lines: string[];
   try {
     lines = readFileSync(summaryFile, "utf8").split("\n");

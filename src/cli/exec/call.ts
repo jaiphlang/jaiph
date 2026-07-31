@@ -24,6 +24,7 @@ import { discoverDockerRunDir } from "../shared/errors";
 import { readMetaFields, readReturnValue } from "../shared/run-meta";
 import { deliverRunTelemetryDetached } from "../telemetry/otlp";
 import { redactCredentials } from "../../runtime/kernel/redact";
+import { CHAIN_KEY_ENV, generateChainKey, writeChainKey } from "../../runtime/kernel/emit";
 
 /**
  * Result of executing one workflow call. `text` is the same content an MCP
@@ -195,6 +196,11 @@ export async function callWorkflow(
   runtimeEnv.JAIPH_SOURCE_ABS = env.inputAbs;
   runtimeEnv.JAIPH_RUN_ID = runId;
   runtimeEnv.JAIPH_SCRIPTS = env.scriptsDir;
+  // Per-run audit-chain key (finding H-3): forwarded to the trusted runner,
+  // scrubbed from script/agent subprocess envs, and persisted beside the
+  // journal below so read/export boundaries can verify integrity.
+  const chainKey = generateChainKey();
+  runtimeEnv[CHAIN_KEY_ENV] = chainKey;
   // Same env normalization as `jaiph run --inplace/--unsafe/--yes`: the child
   // observes identical JAIPH_* posture vars in every invocation mode. Never
   // throws here — a flag/env conflict already failed server startup.
@@ -233,6 +239,7 @@ export async function callWorkflow(
   // before best-effort delivery, so an unreachable backend can never delay a
   // terminal result or hold a slot. Delivery failures are tracked as bounded
   // metrics; never changes the call result.
+  if (result.runDir) writeChainKey(result.runDir, chainKey);
   deliverRunTelemetryDetached({
     runDir: result.runDir,
     workflow: workflowSymbol,

@@ -17,6 +17,7 @@ import {
   telemetryDeliveryMetrics,
   type OtlpMeta,
 } from "./otlp";
+import { writeChainKey } from "../../runtime/kernel/emit";
 
 const RUN_ID = "11111111-2222-3333-4444-555555555555";
 
@@ -315,6 +316,26 @@ function writeFailedJournal(dir: string): void {
   ];
   writeFileSync(join(dir, "run_summary.jsonl"), lines.map((l) => JSON.stringify(l)).join("\n"));
 }
+
+// Finding H-3: a tampered journal is never exported — verification runs before
+// any POST, so a broken chain returns "failed" without touching the network.
+test("exportOtlpTraces: hard-fails without POSTing when the journal chain fails verification", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "jaiph-otlp-tamper-"));
+  try {
+    writeFailedJournal(dir); // no valid keyed chain
+    writeChainKey(dir, "k".repeat(64)); // key present → verifiable → fails
+    const warnings: string[] = [];
+    const outcome = await exportOtlpTraces(
+      { runDir: dir, workflow: "default", exitStatus: 1, signal: null, env: { OTEL_EXPORTER_OTLP_ENDPOINT: "http://127.0.0.1:1" } },
+      1000,
+      (m) => warnings.push(m),
+    );
+    assert.equal(outcome, "failed");
+    assert.ok(warnings.some((w) => w.includes("integrity verification")), `expected an integrity warning, got: ${warnings.join("")}`);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
 
 test("exportRunTelemetry: OTLP + Sentry run concurrently under one shared flush budget", async () => {
   const hole = await startBlackHole();

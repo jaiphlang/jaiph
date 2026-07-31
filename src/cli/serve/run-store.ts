@@ -3,6 +3,11 @@ import { readFileSync, readdirSync, renameSync, statSync, writeFileSync } from "
 import { join } from "node:path";
 import type { RunRecord, RunStatus } from "./handler";
 import { RUN_SUMMARY } from "./runfiles";
+import { verifyRunJournal } from "../../runtime/kernel/emit";
+
+/** Result text stamped on a run whose journal chain failed integrity verification. */
+export const TAMPERED_RESULT_TEXT =
+  "run journal failed integrity verification: the audit chain is broken, truncated, or forged";
 
 /**
  * The public run record persisted beside a run's journal, so `jaiph serve` can
@@ -103,7 +108,16 @@ export function loadPersistedRuns(runsRoot: string, nowIso: string): RunRecord[]
   const records: Array<{ dir: string; record: RunRecord }> = [];
   for (const runDir of scanRunDirs(runsRoot)) {
     const record = reloadRun(runDir) ?? reconcileRun(runDir, nowIso);
-    if (record) records.push({ dir: runDir, record });
+    if (!record) continue;
+    // Hard-fail a tampered journal (finding H-3): a run whose keyed chain does
+    // not verify is surfaced as failed with an explicit tamper message rather
+    // than silently trusted. Unverifiable (unkeyed/legacy) runs are unchanged.
+    const integrity = verifyRunJournal(runDir);
+    if (integrity.verified && !integrity.ok) {
+      record.status = "failed";
+      record.result_text = TAMPERED_RESULT_TEXT;
+    }
+    records.push({ dir: runDir, record });
   }
   // Oldest-first: the run dir name is a sortable UTC date/time, so the scan
   // order already reflects chronology once reversed back to ascending.

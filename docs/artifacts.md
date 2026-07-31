@@ -84,26 +84,29 @@ Replace `<runs_root>` with `.jaiph/runs` when `JAIPH_RUNS_DIR` is unset, or with
 
 ## Verify a run's integrity chain
 
-Every line the runtime appends to `run_summary.jsonl` carries a `prev_hash` field. The field holds the SHA-256 of the previous raw line, or 64 zeroes for the first line. Rewriting or truncating any line breaks the hash of every line after it, so you can detect tampering with a run's audit trail. See [Architecture — Hash chain](architecture.md#hash-chain) for the format.
+Every line the runtime appends to `run_summary.jsonl` carries a `prev_hash` field. The field holds a **keyed** HMAC-SHA256 of the previous raw line (keyed genesis for the first line), computed under a per-run secret the audited workflow never sees. Rewriting a line, or dropping a line and re-linking the survivors, breaks the chain and cannot be re-forged without the key, so you can detect tampering with a run's audit trail. The key is persisted beside the journal as `.chain-key` once the run is terminal. See [Architecture — Keyed hash chain](architecture.md#hash-chain) for the full contract, including the key-isolation and read/export-boundary guarantees.
 
-To check a run directory, run this self-contained Node script against its `run_summary.jsonl`. You do not need a jaiph build, because the script recomputes the chain the same way the runtime does:
+To check a run directory, run this self-contained Node script. It reads the run's `.chain-key` and recomputes the keyed chain the same way the runtime does — no jaiph build required:
 
 ```bash
 node -e '
-  const fs = require("fs"), crypto = require("crypto");
-  const lines = fs.readFileSync(process.argv[1], "utf8").split("\n").filter(l => l.trim());
-  let expected = "0".repeat(64);
+  const fs = require("fs"), crypto = require("crypto"), path = require("path");
+  const dir = process.argv[1];
+  const key = fs.readFileSync(path.join(dir, ".chain-key"), "utf8").trim();
+  const hmac = (s) => crypto.createHmac("sha256", key).update(s, "utf8").digest("hex");
+  const lines = fs.readFileSync(path.join(dir, "run_summary.jsonl"), "utf8").split("\n").filter(l => l.trim());
+  let expected = hmac("0".repeat(64));
   for (let i = 0; i < lines.length; i++) {
     if (JSON.parse(lines[i]).prev_hash !== expected) {
       console.error(`line ${i + 1}: chain broken`); process.exit(1);
     }
-    expected = crypto.createHash("sha256").update(lines[i], "utf8").digest("hex");
+    expected = hmac(lines[i]);
   }
   console.log(`chain intact (${lines.length} lines)`);
-' <runs_root>/<YYYY-MM-DD>/<HH-MM-SS>-<source>/run_summary.jsonl
+' <runs_root>/<YYYY-MM-DD>/<HH-MM-SS>-<source>/
 ```
 
-A clean chain prints `chain intact (N lines)` and exits `0`. A rewritten or truncated file prints the first broken line number and exits `1`. Inside the repo you can call the exported `verifyRunSummaryChain(filePath)` helper (`src/runtime/kernel/emit.ts`) instead, which returns `{ ok, error }`.
+A clean chain prints `chain intact (N lines)` and exits `0`. A rewritten file prints the first broken line number and exits `1`. Inside the repo you can call the exported `verifyRunSummaryChain(filePath, key)` helper (`src/runtime/kernel/emit.ts`) directly, or `verifyRunJournal(runDir)`, which loads `.chain-key` for you and returns `{ verified, ok, error }`. A run with no `.chain-key` (an unkeyed/legacy run) cannot be verified and is never blocked.
 
 ## Related
 
