@@ -41,10 +41,11 @@ export workflow docs_parity() {
   run docs_mod.default()
 }
 
-# Implement the first #dev-ready QUEUE.md task end-to-end: code, CI, docs, commit patch.
-# Optional role name (e.g. "engineer"); "" lets the workflow classify the role.
-export workflow engineer(role) {
-  return run eng_mod.default(role)
+# Implement a task end-to-end: code, CI, docs, commit patch. Pass the full task
+# markdown (must start with a ## header). Does not read or write QUEUE.md —
+# queue-driven overnight runs use `.jaiph/engineer.jh` directly instead.
+export workflow engineer(task) {
+  return run eng_mod.implement_from_task(task)
 }
 
 # Run npm run test:ci and loop with an agent until it passes (or recover_limit).

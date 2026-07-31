@@ -1,8 +1,14 @@
 #!/usr/bin/env jaiph
 
 #
-# Picks the first pending task from QUEUE.md, implements it, verifies CI,
-# updates docs, removes from queue, and publishes a workspace patch artifact.
+# Implement a task: code, CI, docs, commit patch.
+#
+# CLI / overnight (queue-driven):
+#   jaiph run .jaiph/engineer.jh
+#   → default → implement_from_queue (first #dev-ready QUEUE.md task).
+#
+# Hub / serve / mcp (task parameter, no QUEUE.md):
+#   export workflow implement_from_task(task) — used by .jaiph/main.jh engineer(task)
 #
 import "jaiphlang/artifacts" as artifacts
 import "jaiphlang/claude" as claude
@@ -33,15 +39,17 @@ const safety_constraints = """
     Nested sessions share runtime resources and can crash active sessions.
   - Do not attempt to bypass nested-session guards (for example by unsetting
     environment variables such as CLAUDECODE).
+  - Do not modify QUEUE.md. Queue updates (if any) are handled by the
+    orchestration workflow, not by you.
   - Any violation of these constraints is an immediate task failure; stop and report.
 """
 
 const definition_of_done = """
-  Definition of done (QUEUE.md rule 7, verbatim):
-  "Acceptance criteria are non-negotiable. A task is not done until every
+  Definition of done:
+  Acceptance criteria are non-negotiable. A task is not done until every
   acceptance bullet is verified by a test that fails when the contract is
-  violated. 'It works on my machine' or 'the existing tests pass' is not
-  acceptance."
+  violated. "It works on my machine" or "the existing tests pass" is not
+  acceptance.
 """
 
 const code_philosophy = """
@@ -207,7 +215,6 @@ workflow classify_role(task) {
   config {
     agent.model = "sonnet"
   }
-
   const result = prompt """
     ${classification_prompt}
 
@@ -236,7 +243,6 @@ workflow implement(task, role_name) {
   config {
     agent.model = "opus"
   }
-
   run task_text_has_header(task) catch (err) {
     fail "Provided task does not contain a '## [text]' header"
   }
@@ -300,27 +306,58 @@ workflow implement(task, role_name) {
   """
 }
 
-workflow default(name) {
-  # ensure git.is_clean
+# Shared post-implement path: CI, docs parity from the task text, commit, artifact.
+# Callers that touch QUEUE.md must do so before this (so the commit includes it).
+workflow verify_docs_and_commit(task) {
+  run ci.ensure_ci_passes()
+  run docs.update_from_task(task)
+  const patch_file = run git.commit(task)
+  run artifacts.save(patch_file)
+  return patch_file
+}
+
+# Task-parameter entry for serve/mcp hub. Does not read or write QUEUE.md.
+export workflow implement_from_task(task) {
+  run common.arg_nonempty(task) catch (err) {
+    fail "engineer.implement_from_task requires a non-empty task parameter (markdown with a ## header)"
+  }
+
   run claude.ensure_usage()
-  const task = run queue.get_first_task()
+
   const task_header = run first_line_task(task)
-  ensure queue.task_is_dev_ready(task)
   log "Implementing task: ${task_header}"
 
-  const role_name = match name {
-    "" => run classify_role(task)
-    _ => name
-  }
+  const role_name = run classify_role(task)
   log "Role: ${role_name}"
 
   run implement(task, role_name)
 
-  run ci.ensure_ci_passes()
-  run docs.update_from_task(task)
+  const patch_file = run verify_docs_and_commit(task)
+  log "Patch file: ${patch_file}"
+  return patch_file
+}
+
+# Queue-driven entry for CLI / overnight loops. Always auto-classifies the role.
+export workflow implement_from_queue() {
+  run claude.ensure_usage()
+
+  const task = run queue.get_first_task()
+  ensure queue.task_is_dev_ready(task)
+  const task_header = run first_line_task(task)
+  log "Implementing task: ${task_header}"
+
+  const role_name = run classify_role(task)
+  log "Role: ${role_name}"
+
+  run implement(task, role_name)
+
   run queue.remove_completed_task(task_header)
 
-  const patch_file = run git.commit(task)
-  run artifacts.save(patch_file)
+  const patch_file = run verify_docs_and_commit(task)
+  log "Patch file: ${patch_file}"
   return patch_file
+}
+
+workflow default() {
+  return run implement_from_queue()
 }

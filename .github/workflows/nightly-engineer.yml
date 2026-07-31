@@ -2,18 +2,6 @@ name: Nightly Engineer Run
 
 on:
   workflow_dispatch:
-    inputs:
-      engineer_type:
-        description: "Engineer role (auto uses task classification)"
-        required: false
-        default: "auto"
-        type: choice
-        options:
-          - auto
-          - surgical
-          - reductionist
-          - optimizer
-          - stabilizer
 
 permissions:
   contents: write
@@ -83,13 +71,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
-          engineer_type="${{ inputs.engineer_type }}"
-          if [ "${engineer_type}" = "auto" ]; then
-            ./.jaiph/engineer.jh
-          else
-            ./.jaiph/engineer.jh -- "${engineer_type}"
-          fi
+          # Queue-driven entry: picks first #dev-ready QUEUE.md task and
+          # auto-classifies the engineer role (no role CLI arg).
+          ./.jaiph/engineer.jh
 
       - name: Create worktree patch artifact
         if: always()
@@ -190,6 +174,6 @@ jobs:
           Automated engineer run from workflow dispatch.
 
           - Base branch: `nightly`
-          - Engineer type: `${{ inputs.engineer_type }}`
+          - Entry: queue-driven `.jaiph/engineer.jh` (auto-classified role)
           EOF
           )" --head "${branch_name}" --base nightly
