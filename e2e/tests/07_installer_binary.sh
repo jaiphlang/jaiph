@@ -80,6 +80,97 @@ if [ -e "${BIN_DIR_NOSIG}/jaiph" ]; then
 fi
 e2e::pass "missing signature file is non-recoverable and leaves no binary"
 
+# ── Empty JAIPH_MINISIGN_PUBLIC_KEY fails closed (AC2) ────────────────────────
+#
+# An explicitly empty key is a misconfiguration: the installer must abort rather
+# than fall back to the bundled key or skip verification. The check fires before
+# the minisign-availability branch, so it holds regardless of minisign/CI.
+
+e2e::section "empty JAIPH_MINISIGN_PUBLIC_KEY fails closed"
+
+RELEASE_DIR_EK="${TEST_DIR}/release-emptykey"
+BIN_DIR_EK="${TEST_DIR}/bin-emptykey"
+mkdir -p "${RELEASE_DIR_EK}" "${BIN_DIR_EK}"
+printf 'real-binary-bytes' > "${RELEASE_DIR_EK}/${HOST_BIN_NAME}"
+ek_sum="$(host_sha256 "${RELEASE_DIR_EK}/${HOST_BIN_NAME}")"
+printf '%s  %s\n' "${ek_sum}" "${HOST_BIN_NAME}" > "${RELEASE_DIR_EK}/SHA256SUMS"
+printf 'placeholder-sig\n' > "${RELEASE_DIR_EK}/SHA256SUMS.minisig"
+
+ek_status=0
+ek_output="$(
+  unset JAIPH_REPO_URL
+  JAIPH_RELEASE_BASE_URL="file://${RELEASE_DIR_EK}" \
+  JAIPH_BIN_DIR="${BIN_DIR_EK}" \
+  JAIPH_MINISIGN_PUBLIC_KEY="" \
+  bash "${INSTALL_SCRIPT}" 2>&1
+)" || ek_status=$?
+e2e::assert_equals "${ek_status}" "1" "empty minisign key exits non-zero"
+# assert_contains: output carries ANSI color codes around the message
+e2e::assert_contains "${ek_output}" "JAIPH_MINISIGN_PUBLIC_KEY is empty" "reports the empty-key misconfiguration"
+if [ -e "${BIN_DIR_EK}/jaiph" ]; then
+  e2e::fail "installer left a binary when the signing key was empty"
+fi
+e2e::pass "empty minisign key is fail-closed"
+
+# ── minisign unavailable on a non-CI host fails closed (AC1) ──────────────────
+#
+# With minisign absent and no CI/opt-out signal, checksum-only is not acceptable
+# (the checksum ships over the same channel as the binary), so the installer
+# must abort. We force "minisign unavailable" via a restricted PATH.
+
+e2e::section "minisign unavailable on a non-CI host fails closed"
+
+RESTRICTED_PATH="/usr/bin:/bin"
+if PATH="${RESTRICTED_PATH}" command -v minisign >/dev/null 2>&1; then
+  e2e::skip "minisign resolvable on the restricted PATH — cannot force it unavailable"
+else
+  RELEASE_DIR_NM="${TEST_DIR}/release-nominisign"
+  BIN_DIR_NM="${TEST_DIR}/bin-nominisign"
+  mkdir -p "${RELEASE_DIR_NM}" "${BIN_DIR_NM}"
+  printf 'real-binary-bytes' > "${RELEASE_DIR_NM}/${HOST_BIN_NAME}"
+  nm_sum="$(host_sha256 "${RELEASE_DIR_NM}/${HOST_BIN_NAME}")"
+  printf '%s  %s\n' "${nm_sum}" "${HOST_BIN_NAME}" > "${RELEASE_DIR_NM}/SHA256SUMS"
+  printf 'placeholder-sig\n' > "${RELEASE_DIR_NM}/SHA256SUMS.minisig"
+
+  nm_status=0
+  nm_output="$(
+    unset JAIPH_REPO_URL
+    env -u CI -u JAIPH_ALLOW_UNSIGNED \
+      PATH="${RESTRICTED_PATH}" \
+      JAIPH_RELEASE_BASE_URL="file://${RELEASE_DIR_NM}" \
+      JAIPH_BIN_DIR="${BIN_DIR_NM}" \
+      bash "${INSTALL_SCRIPT}" 2>&1
+  )" || nm_status=$?
+  e2e::assert_equals "${nm_status}" "1" "non-CI install without minisign exits non-zero"
+  # assert_contains: output carries ANSI color codes around the message
+  e2e::assert_contains "${nm_output}" "minisign is required" "reports mandatory signature verification"
+  if [ -e "${BIN_DIR_NM}/jaiph" ]; then
+    e2e::fail "installer left a binary when signature verification was impossible"
+  fi
+  e2e::pass "minisign unavailable on a non-CI host is fail-closed"
+
+  # The same host with JAIPH_ALLOW_UNSIGNED=1 opts back into checksum-only and
+  # proceeds past the signature step (reaching the checksum, which matches here).
+  e2e::section "JAIPH_ALLOW_UNSIGNED=1 opts back into checksum-only"
+  BIN_DIR_OPT="${TEST_DIR}/bin-optout"
+  mkdir -p "${BIN_DIR_OPT}"
+  opt_status=0
+  opt_output="$(
+    unset JAIPH_REPO_URL
+    env -u CI \
+      PATH="${RESTRICTED_PATH}" \
+      JAIPH_ALLOW_UNSIGNED=1 \
+      JAIPH_RELEASE_BASE_URL="file://${RELEASE_DIR_NM}" \
+      JAIPH_BIN_DIR="${BIN_DIR_OPT}" \
+      bash "${INSTALL_SCRIPT}" 2>&1
+  )" || opt_status=$?
+  # The staged "binary" is not a real jaiph, so `--version` fails at the very
+  # end — but signature/checksum verification is passed (that is what we assert).
+  # assert_contains: verifies the checksum-only warning surfaced.
+  e2e::assert_contains "${opt_output}" "proceeding on checksum only" "opt-out warning is shown"
+  e2e::pass "JAIPH_ALLOW_UNSIGNED=1 bypasses the mandatory-signature abort"
+fi
+
 # ── Checksum mismatch ────────────────────────────────────────────────────────
 
 e2e::section "Checksum mismatch fails and installs nothing"
@@ -96,8 +187,9 @@ printf '%s  %s\n' "0000000000000000000000000000000000000000000000000000000000000
 # The installer verifies the detached signature BEFORE the checksum, so a bogus
 # signature would fail first and never reach the checksum step. To exercise the
 # checksum path, sign the (tampered) SHA256SUMS with a throwaway key and hand the
-# installer its matching public key. When minisign is absent the installer skips
-# signature verification, so a placeholder sig is enough to reach the checksum.
+# installer its matching public key. When minisign is absent, signature
+# verification is now mandatory (fail-closed), so JAIPH_ALLOW_UNSIGNED=1 opts
+# into checksum-only and lets the mismatch below be the failure under test.
 TEST_PUBKEY=""
 if command -v minisign >/dev/null 2>&1; then
   minisign -G -W -p "${RELEASE_DIR}/test.pub" -s "${RELEASE_DIR}/test.key" >/dev/null 2>&1
@@ -110,8 +202,11 @@ fi
 bad_status=0
 # Unset JAIPH_REPO_URL: the shared e2e context points it at this repo root,
 # which would otherwise trigger the local-source branch instead of download.
+# JAIPH_ALLOW_UNSIGNED=1: harmless when minisign is present (the real signature
+# is verified regardless); required when absent so the run reaches the checksum.
 bad_output="$(
   unset JAIPH_REPO_URL
+  JAIPH_ALLOW_UNSIGNED=1 \
   JAIPH_RELEASE_BASE_URL="file://${RELEASE_DIR}" \
   JAIPH_BIN_DIR="${BIN_DIR_BAD}" \
   JAIPH_MINISIGN_PUBLIC_KEY="${TEST_PUBKEY}" \

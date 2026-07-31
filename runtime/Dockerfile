@@ -55,6 +55,12 @@ RUN apt-get update && \
       rsync && \
     rm -rf /var/lib/apt/lists/*
 
+# Single fail-closed download+verify seam for every toolchain fetch below
+# (finding M-11). Installed early so every subsequent RUN — including the ones
+# that run as the non-root `jaiph` user — can call it by name.
+COPY runtime/fetch-verify.sh /usr/local/bin/fetch-verify.sh
+RUN chmod 0755 /usr/local/bin/fetch-verify.sh
+
 # JAVA_HOME must work on both amd64 and arm64 publish targets.
 RUN ARCH="$(dpkg --print-architecture)" && \
     ln -sfn "/usr/lib/jvm/java-21-openjdk-${ARCH}" /usr/lib/jvm/java-21-openjdk-jaiph
@@ -85,109 +91,116 @@ RUN curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key \
 RUN npm install -g pnpm yarn && corepack enable
 
 # Fast Python env/deps (common alternative to raw pip in modern repos).
-# ARG UV_INSTALL_SHA256: sha256 of https://astral.sh/uv/install.sh at build time.
-# Leave empty for dev builds; CI/release builds should populate this to pin the script.
-ARG UV_INSTALL_SHA256=""
+# UV_INSTALL_SHA256: sha256 of https://astral.sh/uv/install.sh. This is a rolling
+# URL — refresh the pin when upstream changes the installer. Empty fails closed.
+ARG UV_INSTALL_SHA256=b67e385074fddc9b99cd152b838fd91046d9fbc261b2c45f448a983ad23b8764
 RUN set -eux; \
-    curl -LsSf https://astral.sh/uv/install.sh -o /tmp/uv-install.sh; \
-    if [ -n "${UV_INSTALL_SHA256}" ]; then \
-      printf '%s  /tmp/uv-install.sh\n' "${UV_INSTALL_SHA256}" | sha256sum -c -; \
-    fi; \
+    fetch-verify.sh https://astral.sh/uv/install.sh /tmp/uv-install.sh "${UV_INSTALL_SHA256}"; \
     env UV_INSTALL_DIR=/usr/local/bin sh /tmp/uv-install.sh; \
     rm -f /tmp/uv-install.sh
 
 # Go — single stable release; matches go.dev "current stable" at image build time.
 ARG GO_VERSION=1.26.5
+ARG GO_SHA256_AMD64=5c2c3b16caefa1d968a94c1daca04a7ca301a496d9b086e17ad77bb81393f053
+ARG GO_SHA256_ARM64=fe4789e92b1f33358680864bbe8704289e7bb5fc207d80623c308935bd696d49
 RUN set -eux; \
     arch="$(dpkg --print-architecture)"; \
     case "${arch}" in \
-      amd64) goarch=amd64 ;; \
-      arm64) goarch=arm64 ;; \
+      amd64) goarch=amd64; gosha="${GO_SHA256_AMD64}" ;; \
+      arm64) goarch=arm64; gosha="${GO_SHA256_ARM64}" ;; \
       *) echo "unsupported arch: ${arch}" >&2; exit 1 ;; \
     esac; \
-    curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-${goarch}.tar.gz" | tar -C /usr/local -xz
+    fetch-verify.sh "https://go.dev/dl/go${GO_VERSION}.linux-${goarch}.tar.gz" /tmp/go.tar.gz "${gosha}"; \
+    tar -C /usr/local -xzf /tmp/go.tar.gz; \
+    rm -f /tmp/go.tar.gz
 ENV PATH="/usr/local/go/bin:${PATH}"
 
 # Rust — minimal stable toolchain (rustc + cargo + std); enough for most crates.
 ENV RUSTUP_HOME=/usr/local/rustup
 ENV CARGO_HOME=/usr/local/cargo
 ENV PATH="/usr/local/cargo/bin:${PATH}"
-# ARG RUSTUP_INIT_SHA256: sha256 of https://sh.rustup.rs at build time.
-# Leave empty for dev builds; CI/release builds should populate this to pin the script.
-ARG RUSTUP_INIT_SHA256=""
+# RUSTUP_INIT_SHA256: sha256 of https://sh.rustup.rs. Rolling URL — refresh the
+# pin when upstream changes the installer. Empty fails closed.
+ARG RUSTUP_INIT_SHA256=6c30b75a75b28a96fd913a037c8581b580080b6ee9b8169a3c0feb1af7fe8caf
 RUN set -eux; \
-    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs -o /tmp/rustup-init.sh; \
-    if [ -n "${RUSTUP_INIT_SHA256}" ]; then \
-      printf '%s  /tmp/rustup-init.sh\n' "${RUSTUP_INIT_SHA256}" | sha256sum -c -; \
-    fi; \
+    fetch-verify.sh https://sh.rustup.rs /tmp/rustup-init.sh "${RUSTUP_INIT_SHA256}"; \
     sh /tmp/rustup-init.sh -y --default-toolchain stable --profile minimal --no-modify-path; \
     rm -f /tmp/rustup-init.sh; \
     chmod -R a+rx /usr/local/rustup /usr/local/cargo
 
 # YAML CLI (mikefarah/yq — distinct from the Python yq package).
 ARG YQ_VERSION=4.45.4
+ARG YQ_SHA256_AMD64=b96de04645707e14a12f52c37e6266832e03c29e95b9b139cddcae7314466e69
+ARG YQ_SHA256_ARM64=a02cc637409db44a9f9cb55ea92c40019582ba88083c4d930a727ec4b59ed439
 RUN set -eux; \
     arch="$(dpkg --print-architecture)"; \
     case "${arch}" in \
-      amd64) yqarch=amd64 ;; \
-      arm64) yqarch=arm64 ;; \
+      amd64) yqarch=amd64; yqsha="${YQ_SHA256_AMD64}" ;; \
+      arm64) yqarch=arm64; yqsha="${YQ_SHA256_ARM64}" ;; \
       *) echo "unsupported arch: ${arch}" >&2; exit 1 ;; \
     esac; \
-    curl -fsSL "https://github.com/mikefarah/yq/releases/download/v${YQ_VERSION}/yq_linux_${yqarch}" \
-      -o /usr/local/bin/yq && \
+    fetch-verify.sh "https://github.com/mikefarah/yq/releases/download/v${YQ_VERSION}/yq_linux_${yqarch}" \
+      /usr/local/bin/yq "${yqsha}"; \
     chmod +x /usr/local/bin/yq
 
 # Bun — fast JS runtime used by many modern repos (and Jaiph's own build).
 ENV BUN_INSTALL=/usr/local/bun
-# ARG BUN_INSTALL_SHA256: sha256 of https://bun.sh/install at build time.
-# Leave empty for dev builds; CI/release builds should populate this to pin the script.
-ARG BUN_INSTALL_SHA256=""
+# BUN_INSTALL_SHA256: sha256 of https://bun.sh/install. Rolling URL — refresh the
+# pin when upstream changes the installer. Empty fails closed.
+ARG BUN_INSTALL_SHA256=bab8acfb046aac8c72407bdcce903957665d655d7acaa3e11c7c4616beae68dd
 RUN set -eux; \
-    curl -fsSL https://bun.sh/install -o /tmp/bun-install.sh; \
-    if [ -n "${BUN_INSTALL_SHA256}" ]; then \
-      printf '%s  /tmp/bun-install.sh\n' "${BUN_INSTALL_SHA256}" | sha256sum -c -; \
-    fi; \
+    fetch-verify.sh https://bun.sh/install /tmp/bun-install.sh "${BUN_INSTALL_SHA256}"; \
     env BUN_INSTALL="${BUN_INSTALL}" bash /tmp/bun-install.sh; \
     rm -f /tmp/bun-install.sh
 ENV PATH="${BUN_INSTALL}/bin:${PATH}"
 
 # kubectl — Kubernetes cluster automation.
 ARG KUBECTL_VERSION=1.36.2
+ARG KUBECTL_SHA256_AMD64=1e9045ec32bea85da43de85f0065358529ea7c7a152eca78154fba5b58c27d82
+ARG KUBECTL_SHA256_ARM64=c957eb8c4bea27a3bb35b269edd9082e27f027f7b76b20b5bf4afebc726c6d3e
 RUN set -eux; \
     arch="$(dpkg --print-architecture)"; \
     case "${arch}" in \
-      amd64) karch=amd64 ;; \
-      arm64) karch=arm64 ;; \
+      amd64) karch=amd64; ksha="${KUBECTL_SHA256_AMD64}" ;; \
+      arm64) karch=arm64; ksha="${KUBECTL_SHA256_ARM64}" ;; \
       *) echo "unsupported arch: ${arch}" >&2; exit 1 ;; \
     esac; \
-    curl -fsSL "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/${karch}/kubectl" \
-      -o /usr/local/bin/kubectl && \
+    fetch-verify.sh "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/${karch}/kubectl" \
+      /usr/local/bin/kubectl "${ksha}"; \
     chmod +x /usr/local/bin/kubectl
 
-# AWS CLI v2 — cloud automation scripts.
+# AWS CLI v2 — cloud automation scripts. The download URL is unversioned
+# ("latest"), so these pins must be refreshed when AWS ships a new CLI build.
+# Empty fails closed.
+ARG AWSCLI_SHA256_X86_64=a9ac6e52bbdf0bba62e410f7f62aa1a5f5615edb90b126c04cb5e4e3b2984bfc
+ARG AWSCLI_SHA256_AARCH64=422843769149f90b28df93750a86df1bb85018667102015f35078d8507cc49a5
 RUN set -eux; \
     arch="$(uname -m)"; \
     case "${arch}" in \
-      x86_64) awsarch=x86_64 ;; \
-      aarch64) awsarch=aarch64 ;; \
+      x86_64) awsarch=x86_64; awssha="${AWSCLI_SHA256_X86_64}" ;; \
+      aarch64) awsarch=aarch64; awssha="${AWSCLI_SHA256_AARCH64}" ;; \
       *) echo "unsupported arch: ${arch}" >&2; exit 1 ;; \
     esac; \
-    curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-${awsarch}.zip" -o /tmp/awscliv2.zip && \
-    unzip -q /tmp/awscliv2.zip -d /tmp && \
-    /tmp/aws/install && \
+    fetch-verify.sh "https://awscli.amazonaws.com/awscli-exe-linux-${awsarch}.zip" /tmp/awscliv2.zip "${awssha}"; \
+    unzip -q /tmp/awscliv2.zip -d /tmp; \
+    /tmp/aws/install; \
     rm -rf /tmp/aws /tmp/awscliv2.zip
 
 # Task (go-task) — Makefile-style task runner used in many repos.
 ARG TASK_VERSION=3.44.1
+ARG TASK_SHA256_AMD64=62969d22bee5ea8950cc64a30cc7eb278f89ad67683132e728841457aae523c1
+ARG TASK_SHA256_ARM64=06f390bbc1545997bc08920b51741dd2142713cfdef748e5b17e9f68aa042bbd
 RUN set -eux; \
     arch="$(dpkg --print-architecture)"; \
     case "${arch}" in \
-      amd64) taskarch=amd64 ;; \
-      arm64) taskarch=arm64 ;; \
+      amd64) taskarch=amd64; tasksha="${TASK_SHA256_AMD64}" ;; \
+      arm64) taskarch=arm64; tasksha="${TASK_SHA256_ARM64}" ;; \
       *) echo "unsupported arch: ${arch}" >&2; exit 1 ;; \
     esac; \
-    curl -fsSL "https://github.com/go-task/task/releases/download/v${TASK_VERSION}/task_linux_${taskarch}.tar.gz" \
-      | tar -xz -C /usr/local/bin task && \
+    fetch-verify.sh "https://github.com/go-task/task/releases/download/v${TASK_VERSION}/task_linux_${taskarch}.tar.gz" \
+      /tmp/task.tar.gz "${tasksha}"; \
+    tar -xzf /tmp/task.tar.gz -C /usr/local/bin task; \
+    rm -f /tmp/task.tar.gz; \
     chmod +x /usr/local/bin/task
 
 # Non-root user for agent CLIs and default shell behavior. The workspace and
@@ -212,14 +225,12 @@ ENV PATH="/home/jaiph/.local/bin:/usr/local/bun/bin:/usr/local/cargo/bin:/usr/lo
 # cursor-agent (Cursor) — install as the runtime user so the binary is
 # reachable after switching away from root. The installer currently places
 # the CLI in ~/.local/bin and may name it "agent" or "cursor".
-# ARG CURSOR_INSTALL_SHA256: sha256 of https://cursor.com/install at build time.
-# Cursor does not publish checksums publicly; set this ARG when the hash is known.
-ARG CURSOR_INSTALL_SHA256=""
+# CURSOR_INSTALL_SHA256: sha256 of https://cursor.com/install. Cursor does not
+# publish checksums, and the URL is rolling — refresh this pin when upstream
+# changes the installer. Empty fails closed.
+ARG CURSOR_INSTALL_SHA256=905a5e6896f526ea24358372cd0983a19e0d262ccd779c317d256771ed84c850
 RUN mkdir -p "$HOME/.local/bin" && \
-    curl -fsSL https://cursor.com/install -o /tmp/install-cursor-agent.sh && \
-    if [ -n "${CURSOR_INSTALL_SHA256}" ]; then \
-      printf '%s  /tmp/install-cursor-agent.sh\n' "${CURSOR_INSTALL_SHA256}" | sha256sum -c -; \
-    fi && \
+    fetch-verify.sh https://cursor.com/install /tmp/install-cursor-agent.sh "${CURSOR_INSTALL_SHA256}" && \
     bash /tmp/install-cursor-agent.sh && \
     export PATH="$HOME/.local/bin:$PATH" && \
     if command -v cursor-agent >/dev/null 2>&1; then \

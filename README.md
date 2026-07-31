@@ -86,7 +86,7 @@ In GitHub Actions, install a pinned CLI with the [`setup-jaiph`](actions/setup-j
 
 Verify: `jaiph --version`. Switch versions: `jaiph use nightly` or `jaiph use 0.12.0`.
 
-Releases ship a `SHA256SUMS` file plus a detached [minisign](https://jedisct1.github.io/minisign/) signature (`SHA256SUMS.minisig`); the installer verifies the checksum and, when `minisign` and the project public key are available, the signature — see [Verify the release signature](docs/setup.md#verify-the-release-signature).
+Releases ship a `SHA256SUMS` file plus a detached [minisign](https://jedisct1.github.io/minisign/) signature (`SHA256SUMS.minisig`). The installer verifies the checksum and requires a valid signature: on a normal host a missing `minisign` aborts the install rather than degrading to checksum-only (set `JAIPH_ALLOW_UNSIGNED=1`, or run in CI, to opt into checksum-only). See [Verify the release signature](docs/setup.md#verify-the-release-signature).
 
 Initialize a project (optional): `jaiph init` writes `.jaiph/` with bootstrap workflow, gitignore entries for runs/tmp, and **`SKILL.md`**. The CLI resolves the skill body in this order — `JAIPH_SKILL_PATH`, install-relative `jaiph-skill.md`, `docs/jaiph-skill.md` under cwd, then an **embedded copy baked into the binary** as the final fallback — so `jaiph init` always writes `SKILL.md` (see [Install & switch versions](docs/setup.md)). Canonical skill text for agents: `https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md`.
 

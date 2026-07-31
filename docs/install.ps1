@@ -105,13 +105,23 @@ try {
   # Releases are signed with: minisign -S -s jaiph.key -m SHA256SUMS
   # Verify manually:          minisign -V -P <pubkey> -m SHA256SUMS
   # Key generation/rotation:  see docs/contributing.md -> "Release signing"
-  $JaiphMinisignKey = if ($env:JAIPH_MINISIGN_PUBLIC_KEY) {
+  # Fail-closed policy (finding M-11), mirroring docs/install: the detached
+  # signature is mandatory. An env key that is set but empty aborts instead of
+  # falling back to the bundled key; minisign missing aborts on a normal host
+  # and proceeds on checksum only under CI (or JAIPH_ALLOW_UNSIGNED=1).
+  $keyIsSet = Test-Path Env:\JAIPH_MINISIGN_PUBLIC_KEY
+  $JaiphMinisignKey = if ($keyIsSet) {
     $env:JAIPH_MINISIGN_PUBLIC_KEY
   } else {
     "RWSSXpVKgVIX79jsA5r833g6yWwkO+Ka5HAtSjrN1V7t4+qP4zSOIlWy"
   }
+  if (-not $JaiphMinisignKey) {
+    Print-Error "JAIPH_MINISIGN_PUBLIC_KEY is empty — refusing to install without signature verification"
+    Write-Host "Unset JAIPH_MINISIGN_PUBLIC_KEY to use the bundled release key, or set a valid minisign public key."
+    exit 1
+  }
   $minisignCmd = Get-Command "minisign" -ErrorAction SilentlyContinue
-  if ($JaiphMinisignKey -and $minisignCmd) {
+  if ($minisignCmd) {
     Print-Step "Verifying release signature..."
     $verifyResult = & minisign -V -P $JaiphMinisignKey `
         -m (Join-Path $tmpDir "SHA256SUMS") `
@@ -123,9 +133,14 @@ try {
       exit 1
     }
     Print-Success "Release signature verified"
-  } else {
-    Print-Warning "Skipping detached-signature verification (minisign not installed)"
+  } elseif ($env:CI -or $env:JAIPH_ALLOW_UNSIGNED -eq "1") {
+    Print-Warning "minisign not installed — proceeding on checksum only (CI/JAIPH_ALLOW_UNSIGNED opt-out)"
     Write-Host "  Install minisign for full verification: https://jedisct1.github.io/minisign/"
+  } else {
+    Print-Error "minisign is required to verify the release signature but was not found"
+    Write-Host "Install minisign, then re-run: https://jedisct1.github.io/minisign/"
+    Write-Host "On a trusted CI host set CI=1 (or JAIPH_ALLOW_UNSIGNED=1) to proceed on checksum only."
+    exit 1
   }
 
   Print-Step "Verifying checksum..."

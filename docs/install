@@ -239,8 +239,23 @@ else
   # Releases are signed with: minisign -S -s jaiph.key -m SHA256SUMS
   # Verify manually:          minisign -V -P "${JAIPH_MINISIGN_PUBLIC_KEY}" -m SHA256SUMS
   # Key generation/rotation:  see docs/contributing.md → "Release signing"
-  JAIPH_MINISIGN_PUBLIC_KEY="${JAIPH_MINISIGN_PUBLIC_KEY:-RWSSXpVKgVIX79jsA5r833g6yWwkO+Ka5HAtSjrN1V7t4+qP4zSOIlWy}"
-  if [ -n "${JAIPH_MINISIGN_PUBLIC_KEY}" ] && command -v minisign >/dev/null 2>&1; then
+  #
+  # Fail-closed policy (finding M-11): the detached signature is the only
+  # defense that does not travel over the same channel as the binary and its
+  # SHA256SUMS, so verification is mandatory rather than best-effort.
+  #  - The bundled key is used only when JAIPH_MINISIGN_PUBLIC_KEY is UNSET
+  #    (`${VAR-default}`, not `${VAR:-default}`). An explicitly empty value is a
+  #    misconfiguration and aborts instead of silently falling back or skipping.
+  #  - minisign missing on a normal (non-CI) host aborts. CI hosts (CI set) pin
+  #    their toolchain out of band and may proceed on checksum only; a deliberate
+  #    non-CI checksum-only install must opt in with JAIPH_ALLOW_UNSIGNED=1.
+  JAIPH_MINISIGN_PUBLIC_KEY="${JAIPH_MINISIGN_PUBLIC_KEY-RWSSXpVKgVIX79jsA5r833g6yWwkO+Ka5HAtSjrN1V7t4+qP4zSOIlWy}"
+  if [ -z "${JAIPH_MINISIGN_PUBLIC_KEY}" ]; then
+    print_error "JAIPH_MINISIGN_PUBLIC_KEY is empty — refusing to install without signature verification"
+    echo "Unset JAIPH_MINISIGN_PUBLIC_KEY to use the bundled release key, or set a valid minisign public key." >&2
+    exit 1
+  fi
+  if command -v minisign >/dev/null 2>&1; then
     print_step "Verifying release signature..."
     if ! minisign -V -P "${JAIPH_MINISIGN_PUBLIC_KEY}" -m "${tmp_dir}/SHA256SUMS" \
         -x "${tmp_dir}/SHA256SUMS.minisig" >/dev/null 2>&1; then
@@ -250,9 +265,15 @@ else
       exit 1
     fi
     print_success "Release signature verified"
-  else
-    print_warning "Skipping detached-signature verification (minisign not installed)"
+  elif [ -n "${CI:-}" ] || [ "${JAIPH_ALLOW_UNSIGNED:-}" = "1" ]; then
+    print_warning "minisign not installed — proceeding on checksum only (CI/JAIPH_ALLOW_UNSIGNED opt-out)"
     echo "  Install minisign for full verification: https://jedisct1.github.io/minisign/" >&2
+  else
+    print_error "minisign is required to verify the release signature but was not found"
+    echo "Install minisign, then re-run: https://jedisct1.github.io/minisign/" >&2
+    echo "On a trusted CI host (or for a deliberate checksum-only install) set" >&2
+    echo "CI=1 or JAIPH_ALLOW_UNSIGNED=1 to proceed without signature verification." >&2
+    exit 1
   fi
 
   print_step "Verifying checksum..."
