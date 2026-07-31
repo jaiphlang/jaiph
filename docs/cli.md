@@ -234,11 +234,12 @@ Missing libraries are cloned with bounded concurrency (default **4 in flight**).
 
 | Aspect | Value |
 |---|---|
-| Source | `JAIPH_REGISTRY` (default `https://jaiph.org/registry`). |
+| Source | `JAIPH_REGISTRY` (default `https://jaiph.org/registry`). Remote sources must satisfy the [scheme allowlist](#scheme-allowlist). |
 | Loading | Loaded once per invocation when at least one positional argument is a bare name. URL-form installs and restore-from-lock never read the registry. |
-| Disk paths | Values without a `://` scheme, or starting with `file://`, are read from disk. Everything else is fetched via global `fetch`. |
-| Index format | `{ "libs": { "<name>": { "url": "<git-url>", "description": "<string>" } } }`. Each key must match `^[A-Za-z0-9_-]+$`. Unknown per-entry keys are accepted and ignored. |
-| Lookup errors | `lib "<name>" not found in registry <source>`, `failed to read registry <source>: <cause>`, `failed to fetch registry <source>: HTTP <status>`, `failed to parse registry <source>: <cause>`, `failed to parse registry <source>: invalid name "<name>"`. |
+| Disk paths | Values without a `://` scheme, or starting with `file://`, are read from disk (trusted-local, no signature check). Everything else is fetched via global `fetch`. |
+| Signature verification | A remotely fetched index is verified against a detached `<source>.minisig` (minisign, `jaiph.pub` embedded as the trust anchor) before use. A missing, unsigned, or tampered index is rejected — the fetch fails closed. `jaiph.org` therefore serves `registry.minisig` alongside `registry`; see [Contributing](contributing.md#library-registry-signing). |
+| Index format | `{ "libs": { "<name>": { "url": "<git-url>", "description": "<string>", "commit"?: "<40-hex>", "signature"?: "<minisig>", "publicKey"?: "<minisign pubkey>" } } }`. Each key must match `^[A-Za-z0-9_-]+$`. `commit` (when present) pins the install; `signature`/`publicKey` add a per-library detached-signature check. Other per-entry keys are accepted and ignored. |
+| Lookup errors | `lib "<name>" not found in registry <source>`, `failed to read registry <source>: <cause>`, `failed to fetch registry <source>: HTTP <status>`, `failed to fetch registry signature <source>.minisig: <cause>`, `failed to verify registry <source>: signature check failed against <source>.minisig`, `failed to parse registry <source>: <cause>`, `... uses disallowed scheme "<scheme>://" ...`. |
 
 ### Lockfile
 

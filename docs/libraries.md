@@ -45,6 +45,8 @@ Registry names install into `.jaiph/libs/<name>/` using the registry key. Git UR
 
 `jaiph install` shallow-clones (`git clone --depth 1`) each missing library, removes the nested `.git` directory, and writes a `.jaiph/libs.lock` entry recording the resolved URL, optional version, and the 40-char commit captured before `.git` was removed. Existing directories are skipped unless you pass `--force`. Commit the lockfile.
 
+Remote library URLs must use `https://` or `ssh://`. An `http://` URL, or any other disallowed scheme, is rejected before Jaiph clones anything. When you install by registry name, the registry entry can pin the exact commit and include a signature. If it does, the first install checks that the cloned commit matches the pinned one and that the signature is valid, and the install fails if either check does not pass. See [CLI — `jaiph install`](cli.md#jaiph-install) for the full list of post-clone checks and their error messages.
+
 ### 2. Restore from the lockfile
 
 ```bash
@@ -131,7 +133,9 @@ To let consumers install by bare name, open a PR against [`jaiphlang/registry`](
 }
 ```
 
-The key is the import prefix consumers will write (`import "<your-name>/…"`). After the PR merges upstream, maintainers of the Jaiph repo run `npm run registry:build`, commit the updated `docs/registry`, and push. GitHub Pages then serves the index at `https://jaiph.org/registry`.
+An entry may also pin a `commit` (a 40-character hex SHA) and include a detached minisign `signature` over that commit SHA, with an optional `publicKey` to verify the signature against. When these fields are present, `jaiph install` checks the cloned commit against the pinned `commit` and verifies the `signature`, and it fails the install if either check does not pass.
+
+The key is the import prefix consumers will write (`import "<your-name>/…"`). After the PR merges upstream, maintainers of the Jaiph repo run `npm run registry:build`, sign the built index with minisign so that `docs/registry.minisig` is committed beside `docs/registry`, and push. GitHub Pages then serves both files, the index at `https://jaiph.org/registry` and its signature at `https://jaiph.org/registry.minisig`. A remote `jaiph install` verifies the index against that signature and fails closed when the signature is missing or does not match, so publishing `docs/registry.minisig` is required for remote installs to work. See [Contributing — Library registry signing](contributing.md#library-registry-signing).
 
 ## Verification
 
