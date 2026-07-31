@@ -208,12 +208,18 @@ jaiph install [--force]                  # restore from lockfile
 | Bare registry name matching `^[A-Za-z0-9_-]+(@[A-Za-z0-9._+/-]+)?$` (no `/`, no `:`) | Looked up in the registry index. Examples: `jaiphlang`, `mylib@v1.2`. |
 | Anything else | Parsed as a git URL with optional trailing `@<version>`. Examples: `https://github.com/you/queue-lib.git`, `git@github.com:org/repo.git@main`. |
 
+### Scheme allowlist
+
+Remote registry and library URLs must use an allowed scheme. A value with an explicit URL scheme is accepted only for `https://`, `ssh://`, or `file://`; scheme-less paths and scp-style `git@host:path` remotes (which are SSH) are treated as local/SSH and accepted. `http://`, `git://`, and any other scheme are rejected before any fetch or clone with `... "<url>" uses disallowed scheme "<scheme>://" — only https:// and ssh:// are permitted for remote sources`.
+
 ### Post-clone hygiene
 
-Each successful clone runs three checks before the lib counts as installed:
+Each successful clone runs these checks before the lib counts as installed:
 
 - **`.jh` module check** — at least one `*.jh` file must exist under the clone (recursive, `.git` skipped). Failure removes the directory and aborts with `lib "<name>" contains no .jh modules — not a jaiph library?`. No lock entry written.
 - **Commit capture** — `git rev-parse HEAD` is recorded as the 40-char `commit` on the lock entry.
+- **Pinned-commit check** — when the registry entry (or lock entry) carries a `commit`, the cloned HEAD must equal it, or the directory is removed and the install fails with the locked vs cloned SHAs and the remedy. This makes the *first* install from the registry authenticated, not just restore.
+- **Detached signature check** — when the registry entry carries a `signature` (a detached minisign signature over the ASCII commit SHA), it is verified against the entry's `publicKey` (or the embedded `jaiph.pub` when absent). An invalid or unverifiable signature removes the directory and fails the install closed with `lib "<name>" signature verification failed for commit <sha>`.
 - **`.git` strip** — `<libDir>/.git` is removed recursively.
 
 ### Restore-from-lockfile mode
