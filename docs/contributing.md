@@ -38,7 +38,7 @@ jaiph --version
 jaiph --help
 ```
 
-The script builds the self-contained standalone binary via `docs/install` (`npm install` + `npm run build:standalone`, including uncommitted changes) and installs `dist/jaiph` to `~/.local/bin` by default (or `JAIPH_BIN_DIR` if set). It then builds `runtime/Dockerfile` from the same checkout and **retags it as the default sandbox image** — `ghcr.io/jaiphlang/jaiph-runtime:<version>` plus `:nightly` — so Docker runs use your local build without setting `JAIPH_DOCKER_IMAGE`. The image build is **required** (the script exits if Docker is missing, the daemon is down, or the build fails).
+The script builds the self-contained standalone binary via `docs/install` (`npm ci` when a lockfile is present, else `npm install`, plus `npm run build:standalone`, including uncommitted changes) and installs `dist/jaiph` to `~/.local/bin` by default (or `JAIPH_BIN_DIR` if set). It then builds `runtime/Dockerfile` from the same checkout and **retags it as the default sandbox image** — `ghcr.io/jaiphlang/jaiph-runtime:<version>` plus `:nightly` — so Docker runs use your local build without setting `JAIPH_DOCKER_IMAGE`. The image build is **required** (the script exits if Docker is missing, the daemon is down, or the build fails).
 
 Set **`JAIPH_SKIP_DOCKER_BUILD=1`** only to skip the image build (installer acceptance tests).
 
