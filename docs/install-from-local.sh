@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Install Jaiph from a local clone (no network download). Builds the
-# standalone binary from the repo with `npm install` + `npm run build:standalone`
+# standalone binary from the repo with `npm ci` + `npm run build:standalone`
 # (requires bun) and installs it to ${JAIPH_BIN_DIR:-$HOME/.local/bin}/jaiph.
 # Also builds runtime/Dockerfile and tags it as the default sandbox image
 # (ghcr.io/jaiphlang/jaiph-runtime:<version>, plus :nightly for older binaries)

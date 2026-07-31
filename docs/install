@@ -150,8 +150,15 @@ if [ -n "${JAIPH_FROM_LOCAL}" ]; then
   cp -R "${JAIPH_REPO_URL}" "${tmp_dir}/src"
   rm -rf "${tmp_dir}/src/.git" "${tmp_dir}/src/node_modules"
 
-  print_step "Installing dependencies..."
-  (cd "${tmp_dir}/src" && npm install >/dev/null 2>&1)
+  # Prefer a clean-room `npm ci` for exact lockfile enforcement. Fall back to
+  # `npm install` only when the checkout has no package-lock.json to honor.
+  if [ -f "${tmp_dir}/src/package-lock.json" ]; then
+    print_step "Installing dependencies (npm ci)..."
+    (cd "${tmp_dir}/src" && npm ci >/dev/null 2>&1)
+  else
+    print_step "Installing dependencies (npm install)..."
+    (cd "${tmp_dir}/src" && npm install >/dev/null 2>&1)
+  fi
 
   print_step "Building standalone binary..."
   (cd "${tmp_dir}/src" && npm run build:standalone >/dev/null 2>&1)

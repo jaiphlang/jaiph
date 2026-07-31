@@ -41,6 +41,32 @@ committed_sum="$(awk '{print $1; exit}' "${ROOT_DIR}/docs/install.sha256")"
 real_sum="$(host_sha256 "${ROOT_DIR}/docs/install")"
 e2e::assert_equals "${committed_sum}" "${real_sum}" "docs/install.sha256 is in sync with docs/install"
 
+# ── Local-source install path uses `npm ci` under a lockfile guard ────────────
+#
+# Clean-room lockfile enforcement (finding L-4): the local-source build must run
+# `npm ci` when a package-lock.json is present rather than a bare `npm install`.
+
+e2e::section "local-source install path prefers npm ci when a lockfile is present"
+
+install_body="$(cat "${ROOT_DIR}/docs/install")"
+# assert_contains: matching the exact guarded command line, not full file bytes
+e2e::assert_contains "${install_body}" 'if [ -f "${tmp_dir}/src/package-lock.json" ]; then' \
+  "install script guards on a present package-lock.json"
+e2e::assert_contains "${install_body}" 'cd "${tmp_dir}/src" && npm ci' \
+  "install script runs npm ci in the lockfile branch"
+
+# ── Runtime dependency `jose` is exact-pinned (no range operator) ─────────────
+
+e2e::section "package.json pins jose to an exact version"
+
+jose_version="$(node -e 'process.stdout.write(require("'"${ROOT_DIR}"'/package.json").dependencies.jose)')"
+case "${jose_version}" in
+  *[\^\~\*\ \|xX]* | ">"* | "<"* | "="* )
+    e2e::fail "jose must be exact-pinned in package.json (got '${jose_version}')"
+    ;;
+esac
+e2e::assert_equals "${jose_version}" "5.10.0" "jose is exact-pinned in package.json"
+
 # ── Build a fake PATH with the tools docs/run needs, but no jaiph ─────────────
 #
 # docs/run's preflight requires node; install_jaiph_verified needs curl, awk,
