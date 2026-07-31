@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { execSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { parseUrlAndVersion, runInstall, type CloneRunner, type CloneOutcome, type InstallSpec } from "./install";
+import { makeMinisignFixture } from "./minisign-fixture";
 
 /**
  * Run a body with JAIPH_REGISTRY set to `value`. Restore the prior value
@@ -594,6 +595,114 @@ test("install: legacy lockfile without commit field still restores", async () =>
     const libDir = join(dir, ".jaiph", "libs", "remote-gamma");
     assert.ok(existsSync(libDir), "lib dir should be present after restore");
     assert.ok(!existsSync(join(libDir, ".git")), ".git directory must still be stripped on restore");
+  } finally {
+    cleanup(dir);
+  }
+});
+
+/** Write a registry index file with arbitrary entry fields (for pinned-commit / signature cases). */
+function writeRawRegistryFile(dir: string, libs: Record<string, Record<string, unknown>>): string {
+  const path = join(dir, "registry.json");
+  writeFileSync(path, JSON.stringify({ libs }), "utf8");
+  return path;
+}
+
+test("install: registry-pinned commit mismatch fails the install and locks nothing", async () => {
+  const dir = makeTempProject();
+  try {
+    const remote = makeFixtureRepo(dir, "remote-pin");
+    const wrongSha = "0".repeat(40);
+    const registryPath = writeRawRegistryFile(dir, {
+      pinned: { url: remote, description: "demo", commit: wrongSha },
+    });
+
+    const { result: code, stderr } = await captureStderr(() =>
+      withRegistry(registryPath, () => runInstall(["pinned"], { cwd: dir })),
+    );
+
+    assert.notEqual(code, 0, "pinned-commit mismatch must exit non-zero");
+    assert.ok(stderr.includes(wrongSha), `expected locked SHA in stderr; got: ${stderr}`);
+    assert.ok(stderr.includes("commit mismatch"), `expected commit-mismatch message; got: ${stderr}`);
+    assert.ok(!existsSync(join(dir, ".jaiph", "libs", "pinned")), "lib dir must be removed on mismatch");
+    const lock = JSON.parse(readFileSync(join(dir, ".jaiph", "libs.lock"), "utf8")) as { libs: unknown[] };
+    assert.equal(lock.libs.length, 0, "mismatch must not produce a lock entry");
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test("install: registry-pinned commit that matches the cloned HEAD succeeds", async () => {
+  const dir = makeTempProject();
+  try {
+    const remote = makeFixtureRepo(dir, "remote-pin-ok");
+    const registryPath = writeRawRegistryFile(dir, {
+      pinned: { url: remote, description: "demo", commit: gitHead(remote) },
+    });
+
+    const code = await withRegistry(registryPath, () => runInstall(["pinned"], { cwd: dir }));
+    assert.equal(code, 0, "matching pinned commit must install");
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test("install: http:// URL argument is rejected before any clone", async () => {
+  const dir = makeTempProject();
+  try {
+    let called = false;
+    const cloneRunner: CloneRunner = async (spec) => {
+      called = true;
+      return { spec, ok: true };
+    };
+    const { result: code, stderr } = await captureStderr(() =>
+      runInstall(["http://example.com/x.git"], { cwd: dir, cloneRunner }),
+    );
+    assert.notEqual(code, 0, "http:// source must exit non-zero");
+    assert.ok(stderr.includes('disallowed scheme "http://"'), `expected scheme rejection; got: ${stderr}`);
+    assert.equal(called, false, "clone must not run for a disallowed scheme");
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test("install: invalid detached library signature fails the install closed", async () => {
+  const dir = makeTempProject();
+  try {
+    const remote = makeFixtureRepo(dir, "remote-sig");
+    const fx = makeMinisignFixture();
+    // Sign the WRONG message so verification of the cloned commit SHA fails closed.
+    const badSignature = fx.sign(Buffer.from("not the commit sha"));
+    const registryPath = writeRawRegistryFile(dir, {
+      signed: { url: remote, description: "demo", commit: gitHead(remote), signature: badSignature, publicKey: fx.publicKey },
+    });
+
+    const { result: code, stderr } = await captureStderr(() =>
+      withRegistry(registryPath, () => runInstall(["signed"], { cwd: dir })),
+    );
+
+    assert.notEqual(code, 0, "invalid signature must exit non-zero");
+    assert.ok(stderr.includes("signature verification failed"), `expected signature failure; got: ${stderr}`);
+    assert.ok(!existsSync(join(dir, ".jaiph", "libs", "signed")), "lib dir must be removed on signature failure");
+    const lock = JSON.parse(readFileSync(join(dir, ".jaiph", "libs.lock"), "utf8")) as { libs: unknown[] };
+    assert.equal(lock.libs.length, 0, "signature failure must not produce a lock entry");
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test("install: valid detached library signature over the cloned commit installs", async () => {
+  const dir = makeTempProject();
+  try {
+    const remote = makeFixtureRepo(dir, "remote-sig-ok");
+    const fx = makeMinisignFixture();
+    const goodSignature = fx.sign(Buffer.from(gitHead(remote), "utf8"));
+    const registryPath = writeRawRegistryFile(dir, {
+      signed: { url: remote, description: "demo", commit: gitHead(remote), signature: goodSignature, publicKey: fx.publicKey },
+    });
+
+    const code = await withRegistry(registryPath, () => runInstall(["signed"], { cwd: dir }));
+    assert.equal(code, 0, "valid signature must install");
+    assert.ok(existsSync(join(dir, ".jaiph", "libs", "signed", "main.jh")), "signed lib must land on disk");
   } finally {
     cleanup(dir);
   }

@@ -5,11 +5,14 @@ import { colorPalette } from "../shared/errors";
 import { detectWorkspaceRoot } from "../shared/paths";
 import { hasHelpFlag } from "../shared/usage";
 import {
+  assertAllowedRemoteScheme,
   DEFAULT_REGISTRY_URL,
+  EMBEDDED_REGISTRY_PUBKEY,
   isRegistryNameArg,
   loadRegistryIndex,
   parseNameArg,
   registrySource,
+  verifyMinisign,
   type RegistryIndex,
 } from "./registry";
 
@@ -49,6 +52,10 @@ export interface InstallSpec {
   version?: string;
   libDir: string;
   expectedCommit?: string;
+  /** Optional detached minisign signature over the cloned commit SHA; verified post-clone, fails closed. */
+  signature?: string;
+  /** Minisign public key the `signature` verifies against; defaults to the embedded project key. */
+  signaturePublicKey?: string;
 }
 
 export interface CloneOutcome {
@@ -189,6 +196,16 @@ function postCloneHygiene(spec: InstallSpec): PostCloneResult {
         `explicitly to accept the new commit`,
     };
   }
+  if (spec.signature) {
+    const pubkey = spec.signaturePublicKey ?? EMBEDDED_REGISTRY_PUBKEY;
+    if (!commit || !verifyMinisign(Buffer.from(commit, "utf8"), spec.signature, pubkey)) {
+      rmSync(spec.libDir, { recursive: true, force: true });
+      return {
+        ok: false,
+        message: `lib "${spec.name}" signature verification failed for commit ${commit ?? "<unknown>"}`,
+      };
+    }
+  }
   return { ok: true, commit };
 }
 
@@ -256,10 +273,20 @@ async function resolveInstallSpecs(args: string[], libsDir: string): Promise<Ins
       if (!entry) {
         throw new Error(`lib "${name}" not found in registry ${source}`);
       }
-      specs.push({ name, url: entry.url, version, libDir: join(libsDir, name) });
+      assertAllowedRemoteScheme(entry.url, `lib "${name}" url`);
+      specs.push({
+        name,
+        url: entry.url,
+        version,
+        libDir: join(libsDir, name),
+        expectedCommit: entry.commit,
+        signature: entry.signature,
+        signaturePublicKey: entry.publicKey,
+      });
     } else {
       const { url, version } = parseUrlAndVersion(arg);
       const name = deriveLibName(url);
+      assertAllowedRemoteScheme(url, `lib "${name}" url`);
       specs.push({ name, url, version, libDir: join(libsDir, name) });
     }
   }
