@@ -2,7 +2,11 @@
 
 ## Summary
 
+- **Shell steps no longer splice untrusted values into `sh -c`:** every value interpolated into a workflow shell step is shell-quoted first, so a workflow parameter, capture, `for` iterator, or channel payload that contains shell metacharacters is passed to the shell as data and cannot inject a command, including when the value is bound through `jaiph mcp` or `jaiph serve`.
+
 ## All changes
+
+- **Security — shell-quote every value interpolated into a workflow shell step (finding H-1):** a free-form workflow body line runs via `sh -c` after Jaiph substitutes `${var}` references, and it used to substitute the raw value, so a caller-controlled value such as `name = "$(id)"` or `name = "; rm -rf ~ #"` could inject a command. `jaiph mcp` and `jaiph serve` bind request arguments to workflow parameters positionally, so an untrusted caller reached this sink directly. The runtime now passes every interpolated value through `shellQuote` (the single canonical `printf %q`-style escaper in `src/runtime/kernel/prompt.ts`) before it reaches `sh -c`, covering parameters, `const` values, prompt and other captures, `for` loop iterators, channel payloads, and inline `${run …}` / `${ensure …}` capture results. A value like `$(id)` is now echoed literally and never evaluated. Non-shell string positions (`const` / `return` / `send` / `say` / `prompt`) keep the raw value. The compile-time `W_PROMPT_IN_SHELL` diagnostic still fires for prompt captures and steers you to the safer argv path (`run my_script(x)` → `$1`), which passes the value unchanged.
 
 # 0.12.0
 

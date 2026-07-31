@@ -15,6 +15,7 @@ import {
   resolveModel,
   resolvePromptConfig,
   resolvePromptStepName,
+  shellQuote,
 } from "./prompt";
 import { appendRunSummaryLine } from "./emit";
 import { buildStepDisplayParamPairs } from "../../cli/commands/format-params.js";
@@ -610,20 +611,26 @@ export class NodeWorkflowRuntime {
   private static readonly INLINE_CAPTURE_RE = /\$\{(run|ensure)\s+([^}]+)\}/g;
 
   /**
-   * Interpolate string with inline captures: ${run ref [args]} / ${ensure ref [args]}.
-   * Executes each capture, replaces with output, then does regular ${var} interpolation.
-   * Returns { ok: true, value } on success or { ok: false, result } on failure.
+   * Interpolate `${var}` refs and inline `${run ref [args]}` / `${ensure ref [args]}`
+   * captures: each capture is executed and replaced with its output, then regular
+   * `${var}` interpolation runs. Returns { ok: true, value } or { ok: false, result }.
+   *
+   * `quoteValue` (only passed for shell-fallthrough lines — `shellQuote`) escapes
+   * every substituted value, both `${var}` refs and inline-capture results, so no
+   * caller-controlled value can be re-evaluated by `sh -c`. All other value
+   * positions omit it and interpolate raw.
    */
   private async interpolateWithCaptures(
     input: string,
     scope: Scope,
+    quoteValue?: (s: string) => string,
   ): Promise<{ ok: true; value: string } | { ok: false; result: StepResult }> {
     // Resolve any handle-valued vars referenced in the input before interpolating.
     const handleErr = await this.resolveHandlesInInput(scope, input);
     if (handleErr) return { ok: false, result: handleErr };
     const re = new RegExp(NodeWorkflowRuntime.INLINE_CAPTURE_RE.source, "g");
     if (!re.test(input)) {
-      return { ok: true, value: interpolate(input, scope.vars, scope.env) };
+      return { ok: true, value: interpolate(input, scope.vars, scope.env, quoteValue) };
     }
     re.lastIndex = 0;
     let result = "";
@@ -636,11 +643,12 @@ export class NodeWorkflowRuntime {
         ? await this.executeRunRef(scope, ref, argsRaw)
         : await this.executeEnsureRef(scope, ref, argsRaw, undefined);
       if (r.status !== 0) return { ok: false, result: r };
-      result += r.returnValue ?? r.output.trim();
+      const captured = r.returnValue ?? r.output.trim();
+      result += quoteValue ? quoteValue(captured) : captured;
       lastIndex = m.index + m[0].length;
     }
     result += input.slice(lastIndex);
-    return { ok: true, value: interpolate(result, scope.vars, scope.env) };
+    return { ok: true, value: interpolate(result, scope.vars, scope.env, quoteValue) };
   }
 
   private async evaluateMatch(
@@ -1074,7 +1082,11 @@ export class NodeWorkflowRuntime {
           continue;
         }
         if (body.kind === "shell") {
-          const cmdIr = await this.interpolateWithCaptures(body.command, scope);
+          // Shell-fallthrough lines are the one `sh -c` interpolation sink, so
+          // every interpolated value is shell-quoted (H-1): a caller-controlled
+          // param/capture/iterator/channel value can never inject command
+          // substitution or a metacharacter breakout.
+          const cmdIr = await this.interpolateWithCaptures(body.command, scope, shellQuote);
           if (!cmdIr.ok) return this.mergeStepResult(accOut, accErr, cmdIr.result);
           const stepName = `sh_line_${body.loc.line}`;
           const result = await this.executeManagedStep(

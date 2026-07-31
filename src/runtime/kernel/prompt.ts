@@ -166,8 +166,12 @@ function isTestMode(env: NodeJS.ProcessEnv = process.env): boolean {
 /**
  * Escape a string the way bash `printf "%q"` does (backslash-escaping).
  * Matches jaiph::format_shell_command output exactly.
+ *
+ * Exported so the workflow runtime can shell-quote every value it interpolates
+ * into a `sh -c` shell-fallthrough line (see `interpolateWithCaptures` in
+ * `node-workflow-runtime.ts`), keeping the single canonical escaper here.
  */
-function shellQuote(s: string): string {
+export function shellQuote(s: string): string {
   if (s.length === 0) return "''";
   // If the string contains only safe chars, return as-is
   if (/^[a-zA-Z0-9_./:@=,+%-]+$/.test(s)) return s;

@@ -118,9 +118,11 @@ Jaiph lists these limits because a sandbox that claims too much is worse than on
 
 ## Prompt captures in shell steps {#prompt-in-shell}
 
-A workflow can receive free-form text from an agent through a `prompt` step and then use that value in later steps. The value is controlled by the agent or user by design, and how it reaches later steps affects how much damage it can do.
+A workflow can receive free-form text from an agent through a `prompt` step and then use that value in later steps. The value is controlled by the agent or user by design, so a shell step has to treat it as data and never as a command to run.
 
-The hazard is this. Workflow shell steps, which are free-form lines in a workflow body, run through `sh -c` after Jaiph substitutes `${varName}` references. If `varName` holds a prompt capture, which is text written by an agent or entered interactively, that text is placed directly into the shell command string. A value like `` `id` `` or `; rm -rf .` can then be read by the shell as commands rather than as data:
+Workflow shell steps, which are free-form lines in a workflow body, run through `sh -c` after Jaiph substitutes `${varName}` references. Before the runtime substitutes a value into a shell step, it shell-quotes the value, so a value like `` `id` `` or `; rm -rf .` reaches the shell as literal data and is never read as commands. The quoting covers every value a shell step can interpolate, including workflow parameters, `const` values, prompt and other captures, `for` loop iterators, channel payloads, and inline `${run …}` / `${ensure …}` capture results. A caller who reaches a shell step through `jaiph mcp` or `jaiph serve`, where request arguments bind to workflow parameters, cannot inject a command this way.
+
+The compiler adds a second layer for prompt captures. It emits a `W_PROMPT_IN_SHELL` diagnostic when a prompt capture is interpolated into a shell step:
 
 ```jaiph
 workflow default() {
@@ -129,7 +131,7 @@ workflow default() {
 }
 ```
 
-The compiler emits a `W_PROMPT_IN_SHELL` diagnostic for any shell step that substitutes a prompt capture. The diagnostic fails the build. `jaiph compile` exits non-zero and `jaiph run` refuses to start, through the same recoverable-error channel every other `E_` or `W_` diagnostic uses, because Jaiph has no separate non-fatal warning level today. Inside the default Docker sandbox the damage is limited, but under `--unsafe` (host-only mode) or `--inplace`, the host is affected directly.
+The diagnostic fails the build. `jaiph compile` exits non-zero and `jaiph run` refuses to start, through the same recoverable-error channel every other `E_` or `W_` diagnostic uses, because Jaiph has no separate non-fatal warning level today. It steers you toward the argv path below, which keeps an agent-controlled value out of the shell command string in the first place.
 
 The safe pattern is to pass prompt captures as named arguments to a `script` step. Scripts receive arguments through `$1 $2 …` as argv, not as shell-expanded strings, so there is no substitution step between the capture value and the script's argument.
 
@@ -162,7 +164,7 @@ When the diagnostic fires and when it does not:
 
 To resolve the diagnostic, remove the prompt capture from the shell line. There is no inline suppress comment and no non-fatal-warning mode. The intended fix is the argv path above. Move the shell line into a named or inline `script` that receives the value as `$1`, which is both the safe form and the form the compiler accepts. Rewriting the substitution with your own shell quoting inside the same shell step does not clear the diagnostic, because the check flags the data flow of a prompt capture reaching a shell step, not the specific escaping.
 
-Under `--unsafe` or `--inplace`, the host filesystem is fully exposed, so the hazard is real even for a shell step that looks harmless. The compile-time diagnostic is the main defense. Runtime quoting is a second layer, and the named-script argv path provides it automatically.
+Under `--unsafe` or `--inplace`, the host filesystem is fully exposed, so any command a shell step runs takes effect directly on the host. Runtime shell-quoting keeps an interpolated value from injecting extra commands, whatever its source, and the compile-time diagnostic steers prompt captures onto the argv path. The argv path is still the form to prefer, because passing a value as `$1` hands the script the exact bytes with no quoting applied. Shell-quoting a value that contains shell metacharacters changes how it prints. For example, a value of `$(id)` interpolated into `echo "${name}"` prints as the literal `$\(id\)`, because the runtime escaped it. A script that reads the value as `$1` receives `$(id)` unchanged.
 
 ## Why opt-out, not opt-in
 

@@ -157,7 +157,7 @@ The server shuts down when stdin closes or on `SIGINT` or `SIGTERM`. Either way 
 
 ## Safety posture
 
-An exposed workflow is arbitrary shell that the connected agent can run, which is the point of the feature. Treat every exposed workflow as code the client may run at any time, and limit the exposed set with `export`.
+An exposed workflow is arbitrary shell that the connected agent can run, which is the point of the feature. Treat every exposed workflow as code the client may run at any time, and limit the exposed set with `export`. A tool-call argument that binds to a workflow parameter is shell-quoted before it reaches any shell step, so an argument value cannot inject extra shell commands, though the client can still run whatever the exposed workflow itself does.
 
 Tool calls use the same env-driven Docker sandbox as `jaiph run` (see [Sandboxing](sandboxing.md)). Docker is on by default on macOS and Linux. It is off under `JAIPH_UNSAFE=true` and on Windows, where calls run on the host. Jaiph prepares the image once when the server starts, not per call.
 

