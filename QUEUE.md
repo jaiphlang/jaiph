@@ -14,22 +14,6 @@ Process rules:
 
 ***
 
-## Exclude host-only `JAIPH_SERVE_*` keys from the sandbox env forward #dev-ready
-
-Context: ASI-08/ASI-05, HIGH, confidence 0.80. Finding H-2 — the serve operator bearer token crosses the sandbox boundary.
-
-Problem: The env allowlist forwards every `JAIPH_*` variable into the container and the agent subprocess, excluding only `JAIPH_DOCKER_*`, `JAIPH_INPLACE*`, and `JAIPH_RUN_WORKFLOW` (`env-allowlist.ts:64-71`, `ENV_ALLOW_PREFIXES = ["JAIPH_"]` at `:31`; Docker forwarding loop `docker.ts:849-856`; `scrubPromptEnv` at `:114-124`). `JAIPH_SERVE_TOKEN` — the single-operator bearer secret authorising the entire HTTP API (`serve.ts:152`) — starts with `JAIPH_` and is not excluded, though the in-container runtime never consumes it. So every workflow the server invokes inherits `-e JAIPH_SERVE_TOKEN=<secret>` (plus `JAIPH_SERVE_OIDC_*` and other host-only server keys). A malicious or H-1-injectable workflow reads the token, exfiltrates it over the default-on network, and authenticates back to the server as the operator (full invoke/inspect/cancel).
-
-Location: `src/runtime/kernel/env-allowlist.ts:31`, `:64-71`, `:114-124`; `src/runtime/docker.ts:849-856`; `src/cli/commands/serve.ts:152`; `src/cli/run/env.ts`.
-
-Remediation: Stop blanket-forwarding `JAIPH_*`. Add a `JAIPH_SERVE_` exclusion mirroring the existing `ENV_ALLOW_EXCLUDE_PREFIX = "JAIPH_DOCKER_"`, or — safer — invert to an explicit allowlist of the specific runtime-consumed `JAIPH_*` names. Apply the same scrub in `scrubPromptEnv` so the token never reaches an agent/LLM subprocess.
-
-### Acceptance criteria
-- With `JAIPH_SERVE_TOKEN` set in the host environment, a Docker run does not receive `-e JAIPH_SERVE_TOKEN` (a test asserts the token key is absent from the forwarded Docker env args).
-- `isEnvAllowed("JAIPH_SERVE_TOKEN")` returns false, and the same holds for `JAIPH_SERVE_OIDC_*` and other host-only `JAIPH_SERVE_*` keys.
-- `scrubPromptEnv` removes `JAIPH_SERVE_*` keys so they never reach an agent subprocess (a test asserts absence).
-- Runtime-consumed `JAIPH_*` variables that workflows legitimately need still cross the boundary (a test asserts they are retained).
-
 ## Make the run audit journal tamper-resistant and actually verified #dev-ready
 
 Context: ASI-06, HIGH, confidence 0.85. Finding H-3 — the audit journal is written by the audited party behind an unkeyed chain that no production code path verifies.

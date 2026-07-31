@@ -34,6 +34,22 @@ export const ENV_ALLOW_PREFIXES = ["JAIPH_"] as const;
 export const ENV_ALLOW_EXCLUDE_PREFIX = "JAIPH_DOCKER_";
 
 /**
+ * Host-only `jaiph serve` server keys (bearer token, OIDC config, run limits)
+ * excluded from the allowlist. They start with `JAIPH_` but the in-container
+ * runtime never consumes them, and `JAIPH_SERVE_TOKEN` is the single-operator
+ * secret authorising the whole HTTP API (`src/cli/commands/serve.ts`).
+ * Forwarding it would let a workflow read the operator token and authenticate
+ * back to the server, so the entire family stays host-side.
+ */
+export const ENV_ALLOW_EXCLUDE_SERVE_PREFIX = "JAIPH_SERVE_";
+
+/** All JAIPH_ prefixes carved out of the forwarding allowlist. */
+export const ENV_ALLOW_EXCLUDE_PREFIXES = [
+  ENV_ALLOW_EXCLUDE_PREFIX,
+  ENV_ALLOW_EXCLUDE_SERVE_PREFIX,
+] as const;
+
+/**
  * Container env var naming the workflow symbol the inner `jaiph run --raw`
  * should execute. Emitted explicitly from `DockerSpawnOptions.workflowSymbol`
  * (see `buildDockerArgs`), never auto-forwarded from the host env — so it is
@@ -62,7 +78,7 @@ export const ENV_ALLOW_EXCLUDE_NAMES = new Set<string>([
  * forwards no credentials — fail-closed.
  */
 export function isEnvAllowed(key: string, backends: readonly AgentBackend[]): boolean {
-  if (key.startsWith(ENV_ALLOW_EXCLUDE_PREFIX)) return false;
+  if (ENV_ALLOW_EXCLUDE_PREFIXES.some((prefix) => key.startsWith(prefix))) return false;
   if (ENV_ALLOW_EXCLUDE_NAMES.has(key)) return false;
   if (ENV_ALLOW_PREFIXES.some((prefix) => key.startsWith(prefix))) return true;
   // Guard the lookup: `backends` may carry an unrecognized JAIPH_AGENT_BACKEND
