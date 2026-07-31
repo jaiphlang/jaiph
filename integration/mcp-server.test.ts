@@ -408,16 +408,18 @@ test("jaiph mcp --env with a reserved key aborts with E_ENV_RESERVED", () => {
   }
 });
 
-test("jaiph mcp with JAIPH_UNSAFE=true runs tool calls host-only (no sandbox)", async () => {
+test("jaiph mcp --unsafe runs tool calls host-only (no sandbox), with explicit consent", async () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-mcp-unsafe-"));
   const jh = join(root, "tools.jh");
   writeFileSync(jh, TWO_WORKFLOW_FIXTURE);
   // Drop JAIPH_DOCKER_ENABLED and rely on JAIPH_UNSAFE to force host-only —
-  // this pins the unsafe host-fallback branch of the Docker-parity path.
+  // this pins the unsafe host-fallback branch of the Docker-parity path. The
+  // server refuses an ambient JAIPH_UNSAFE without explicit consent (finding
+  // M-1), so pass --unsafe on the command line as the consent.
   const env = mcpEnv(join(root, ".jaiph/runs"));
   delete env.JAIPH_DOCKER_ENABLED;
   env.JAIPH_UNSAFE = "true";
-  const client = startMcp(jh, root, env);
+  const client = startMcp(jh, root, env, false, ["--unsafe"]);
   try {
     await initialize(client);
     client.send({
@@ -432,6 +434,30 @@ test("jaiph mcp with JAIPH_UNSAFE=true runs tool calls host-only (no sandbox)", 
     assert.deepEqual(result.content, [{ type: "text", text: "hello world" }]);
   } finally {
     await client.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("jaiph mcp refuses an inherited JAIPH_UNSAFE=true with no explicit flag (finding M-1)", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-mcp-unsafe-refuse-"));
+  try {
+    const jh = join(root, "tools.jh");
+    writeFileSync(jh, TWO_WORKFLOW_FIXTURE);
+    // Ambient unsafe env, no --unsafe / --yes on the command line: the server
+    // must exit 1 at startup (not start host-only) and emit nothing on stdout.
+    const env = mcpEnv(join(root, ".jaiph/runs"));
+    delete env.JAIPH_DOCKER_ENABLED;
+    env.JAIPH_UNSAFE = "true";
+    const result = spawnSync("node", [CLI_PATH, "mcp", jh], {
+      encoding: "utf8",
+      cwd: root,
+      env,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    assert.equal(result.status, 1, `expected exit 1, got ${result.status}\n${result.stderr}`);
+    assert.equal(result.stdout, "", `stdout must be empty, got: ${JSON.stringify(result.stdout)}`);
+    assert.match(result.stderr, /E_UNSAFE_NO_CONSENT/);
+  } finally {
     rmSync(root, { recursive: true, force: true });
   }
 });

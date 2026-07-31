@@ -264,14 +264,21 @@ export const _uidDetect = {
 // ---------------------------------------------------------------------------
 
 /**
- * Test seam for the container-indicator probe. `/.dockerenv` (Docker) and
- * `/run/.containerenv` (Podman / CRI runtimes) mark that the current process is
- * already running inside a container. Injectable so the container-detection
- * error path can be unit-tested without a real container.
+ * Test seam for the container-indicator probe. A process reveals it is already
+ * running inside a container through one of: `/.dockerenv` (Docker),
+ * `/run/.containerenv` (Podman / CRI runtimes), or — in a Kubernetes pod, where
+ * containerd / CRI-O create neither marker file — the kubelet-injected
+ * `KUBERNETES_SERVICE_HOST` (present in every pod, never left over in a host
+ * shell). Injectable so the container-detection paths can be unit-tested
+ * without a real container.
  */
 export const _containerIndicator = {
   present(): boolean {
-    return existsSync("/.dockerenv") || existsSync("/run/.containerenv");
+    return (
+      existsSync("/.dockerenv") ||
+      existsSync("/run/.containerenv") ||
+      (process.env.KUBERNETES_SERVICE_HOST ?? "") !== ""
+    );
   },
 };
 

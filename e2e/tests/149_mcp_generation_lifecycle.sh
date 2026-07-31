@@ -117,7 +117,10 @@ err1="${TEST_DIR}/mcp1.err"
   printf '%s\n' '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"slow","arguments":{}}}'
   for _ in $(seq 1 600); do [[ -f "${reload_ack}" ]] && break; sleep 0.1; done
   printf '%s\n' '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"slow","arguments":{}}}'
-) | jaiph mcp "${TEST_DIR}/tools.jh" >"${out1}" 2>"${err1}" &
+  # Host-mode legs export JAIPH_UNSAFE=true; server modes refuse an inherited
+  # unsafe env without an explicit flag (finding M-1), so forward --unsafe as the
+  # consent. Docker legs leave JAIPH_UNSAFE unset → no flag → sandboxed default.
+) | jaiph mcp ${JAIPH_UNSAFE:+--unsafe} "${TEST_DIR}/tools.jh" >"${out1}" 2>"${err1}" &
 E2E_SERVER_PID="$!"
 
 # The first call is provably in flight (its first script step wrote the pid
@@ -171,7 +174,7 @@ err2="${TEST_DIR}/mcp2.err"
   printf '%s\n' "${INIT_REQ}"
   printf '%s\n' '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"slow","arguments":{}}}'
   for _ in $(seq 1 300); do [[ -f "${done2}" ]] && break; sleep 0.2; done
-) | jaiph mcp "${TEST_DIR}/tools_drain.jh" >"${out2}" 2>"${err2}" &
+) | jaiph mcp ${JAIPH_UNSAFE:+--unsafe} "${TEST_DIR}/tools_drain.jh" >"${out2}" 2>"${err2}" &
 E2E_SERVER_PID="$!"
 
 wait_for "drain call started" "${pid2}" "[0-9]"
@@ -221,7 +224,7 @@ err3="${TEST_DIR}/mcp3.err"
   printf '%s\n' "${INIT_REQ}"
   printf '%s\n' '{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"hang","arguments":{}}}'
   for _ in $(seq 1 300); do [[ -f "${done3}" ]] && break; sleep 0.2; done
-) | jaiph mcp "${TEST_DIR}/tools_cancel.jh" >"${out3}" 2>"${err3}" &
+) | jaiph mcp ${JAIPH_UNSAFE:+--unsafe} "${TEST_DIR}/tools_cancel.jh" >"${out3}" 2>"${err3}" &
 E2E_SERVER_PID="$!"
 
 wait_for "hanging call started" "${pid3}" "[0-9]"

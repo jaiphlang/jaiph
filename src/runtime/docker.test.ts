@@ -29,6 +29,7 @@ import {
   spawnDockerProcess,
   withDockerExitGuard,
   checkDockerAvailable,
+  isRunningInContainer,
   _containerIndicator,
   _dockerExec,
   _dockerSpawn,
@@ -385,6 +386,22 @@ test("checkDockerAvailable: no container indicator → existing error unchanged"
   } finally {
     _dockerExec.run = origExec;
     _containerIndicator.present = origPresent;
+  }
+});
+
+test("isRunningInContainer: a Kubernetes pod is detected via KUBERNETES_SERVICE_HOST (no marker file)", () => {
+  // containerd / CRI-O pods create neither `/.dockerenv` nor
+  // `/run/.containerenv`; the kubelet-injected KUBERNETES_SERVICE_HOST is the
+  // in-pod signal that the container boundary is the sandbox.
+  const saved = process.env.KUBERNETES_SERVICE_HOST;
+  try {
+    delete process.env.KUBERNETES_SERVICE_HOST;
+    assert.equal(isRunningInContainer(), false, "no marker file and no k8s env → not a container");
+    process.env.KUBERNETES_SERVICE_HOST = "10.96.0.1";
+    assert.equal(isRunningInContainer(), true, "KUBERNETES_SERVICE_HOST set → inside a k8s pod");
+  } finally {
+    if (saved === undefined) delete process.env.KUBERNETES_SERVICE_HOST;
+    else process.env.KUBERNETES_SERVICE_HOST = saved;
   }
 });
 

@@ -159,7 +159,7 @@ The server shuts down when stdin closes or on `SIGINT` or `SIGTERM`. Either way 
 
 An exposed workflow is arbitrary shell that the connected agent can run, which is the point of the feature. Treat every exposed workflow as code the client may run at any time, and limit the exposed set with `export`. A tool-call argument that binds to a workflow parameter is shell-quoted before it reaches any shell step, so an argument value cannot inject extra shell commands, though the client can still run whatever the exposed workflow itself does.
 
-Tool calls use the same env-driven Docker sandbox as `jaiph run` (see [Sandboxing](sandboxing.md)). Docker is on by default on macOS and Linux. It is off under `JAIPH_UNSAFE=true` and on Windows, where calls run on the host. Jaiph prepares the image once when the server starts, not per call.
+Tool calls use the same env-driven Docker sandbox as `jaiph run` (see [Sandboxing](sandboxing.md)). Docker is on by default on macOS and Linux. It is off on Windows, where calls run on the host. Host-only execution under `JAIPH_UNSAFE=true` additionally requires explicit consent on the command line (see below). Jaiph prepares the image once when the server starts, not per call.
 
 The workspace is isolated by default, the same as `jaiph run`. Each tool call's container works on its own writable point-in-time snapshot of the workspace. Jaiph discards the edits when the container exits, and the host workspace is untouched. Concurrent calls each get their own run id and run directory.
 
@@ -167,10 +167,10 @@ To opt into live writes, pass `--inplace` (or set `JAIPH_INPLACE=1`) when starti
 
 Other sandbox controls:
 
-- `--unsafe` (or `JAIPH_UNSAFE=true`) runs every call on the host with no sandbox.
-- `--yes` or `-y` (or `JAIPH_INPLACE_YES=1`) records auto-consent for the posture. The server has no interactive prompt, so this flag has no extra effect in MCP mode, but it is accepted for consistency with `jaiph run`.
+- `--unsafe` runs every call on the host with no sandbox. Because the server has no interactive prompt, this host-only posture requires the explicit flag: `--unsafe` (or `--yes`) on the command line. An ambient `JAIPH_UNSAFE=true` inherited from the environment, with no such flag, is refused at startup (`E_UNSAFE_NO_CONSENT`) so a stray value cannot silently switch the server to host-only. When consent is given, the server prints a prominent SANDBOXING DISABLED banner at startup.
+- `--yes` or `-y` (or `JAIPH_INPLACE_YES=1`) records auto-consent for the posture. The server has no interactive prompt, but for an ambient `JAIPH_UNSAFE=true` it counts as the explicit host-only consent, the same as `--unsafe`.
 
-The sandbox flags are the shared execution-policy surface of `jaiph run`, `jaiph serve`, and `jaiph mcp`. The precedence is CLI flags, then `JAIPH_*` env vars, then workflow config metadata, then defaults. Passing both `--inplace` and `--unsafe` fails with `E_FLAG_CONFLICT` at startup. The server resolves the posture once at startup, prints it, and applies it to every call. There is no interactive confirmation, because launching the server with the flag or env var is the consent. See [Environment variables, precedence](env-vars.md#precedence).
+The sandbox flags are the shared execution-policy surface of `jaiph run`, `jaiph serve`, and `jaiph mcp`. The precedence is CLI flags, then `JAIPH_*` env vars, then workflow config metadata, then defaults. Passing both `--inplace` and `--unsafe` fails with `E_FLAG_CONFLICT` at startup. The server resolves the posture once at startup, prints it, and applies it to every call. There is no interactive confirmation: for inplace and the default sandbox, launching the server with the flag or env var is the consent; for unsafe host-only the consent must be the explicit flag (see above). Inside a container the container is the sandbox, so an inherited `JAIPH_UNSAFE=true` proceeds without the flag. See [Environment variables, precedence](env-vars.md#precedence).
 
 The agent-credential pre-flight check runs once at startup. In MCP mode, the server reports its findings as warnings even in Docker mode, because the server can outlive a credential fix and a per-call failure still surfaces to the client. Set credentials on the host so the allowlist forwards them into the container.
 

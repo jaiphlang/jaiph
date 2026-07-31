@@ -95,12 +95,37 @@ test("startup posture: env JAIPH_INPLACE=1 resolves identically to --inplace (en
   assert.equal(viaEnv.posture.sandboxMode, viaFlag.posture.sandboxMode);
 });
 
-test("startup posture: --unsafe turns Docker off as the unsafe opt-in, printed once", () => {
+test("startup posture: --unsafe turns Docker off and emits the loud SANDBOXING DISABLED banner", () => {
   const { posture, lines } = postureFor({ unsafe: true });
   assert.equal(posture.dockerConfig.enabled, false);
   assert.equal(posture.unsafeHostOnly, true);
-  assert.equal(lines.length, 1);
-  assert.ok(lines[0].includes("on the host with no sandbox (unsafe opt-in"), lines[0]);
+  const banner = lines.join("\n");
+  assert.ok(banner.includes("UNSAFE MODE — SANDBOXING DISABLED"), banner);
+  assert.ok(banner.includes("no sandbox"), banner);
+  // The banner is a multi-line block, not a single suppressible log line.
+  assert.ok(lines.length > 1, banner);
+});
+
+test("startup posture: --yes is explicit consent for an ambient JAIPH_UNSAFE=true (no refusal)", () => {
+  const { posture, lines } = postureFor({ yes: true }, { JAIPH_UNSAFE: "true" });
+  assert.equal(posture.unsafeHostOnly, true);
+  assert.ok(lines.join("\n").includes("SANDBOXING DISABLED"), lines.join("\n"));
+});
+
+test("startup posture: an inherited JAIPH_UNSAFE=true without an explicit flag is refused (finding M-1)", () => {
+  const gen = makeGeneration({});
+  try {
+    withCleanEnv({ JAIPH_UNSAFE: "true" }, () =>
+      withDockerStub(() => {
+        assert.throws(
+          () => resolveStartupPosture(gen.state, gen.state.callEnv.inputAbs, gen.workspaceRoot, () => {}),
+          /E_UNSAFE_NO_CONSENT/,
+        );
+      }),
+    );
+  } finally {
+    gen.cleanup();
+  }
 });
 
 test("startup posture: Docker off by explicit config is not the unsafe opt-in", () => {

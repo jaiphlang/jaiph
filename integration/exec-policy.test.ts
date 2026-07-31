@@ -219,9 +219,11 @@ const POLICY_CASES: PolicyCase[] = [
   {
     name: "--unsafe --yes (unsafe opt-in turns Docker off; consent recorded)",
     flags: ["--unsafe", "--yes"],
+    // Server modes print the loud SANDBOXING DISABLED banner on the explicit
+    // unsafe consent (finding M-1); `jaiph run` has no banner (probed separately).
     env: {},
     expectProbe: "unset|unset|true|unset",
-    expectPosture: "execute on the host with no sandbox (unsafe opt-in",
+    expectPosture: "UNSAFE MODE — SANDBOXING DISABLED",
   },
   {
     // With Docker off by config the inplace *mount* is moot, but the flag's

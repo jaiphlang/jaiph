@@ -43,9 +43,11 @@ const MCP_USAGE =
   "jaiph serve. Precedence: CLI flags > JAIPH_* env vars > workflow config metadata > defaults.\n" +
   "--inplace and --unsafe conflict (E_FLAG_CONFLICT, at startup before anything is spawned).\n" +
   "The effective sandbox posture is resolved and printed once at startup and applied to every\n" +
-  "tool call; launching the server with the flag or env var is the consent (no interactive\n" +
-  "prompt). Inside a container the container itself is the sandbox (the runtime image bakes\n" +
-  "JAIPH_UNSAFE=true), so host-only execution there is the documented standalone posture.\n\n" +
+  "tool call (no interactive prompt). Host-only (unsafe) mode requires explicit consent on the\n" +
+  "command line: pass --unsafe (or --yes). An inherited JAIPH_UNSAFE=true with no such flag is\n" +
+  "refused at startup (E_UNSAFE_NO_CONSENT). Inside a container the container itself is the\n" +
+  "sandbox (the runtime image bakes JAIPH_UNSAFE=true), so host-only execution there is the\n" +
+  "documented standalone posture and needs no flag.\n\n" +
   "Example:\n" +
   "  claude mcp add mytools -- jaiph mcp ./tools.jh\n";
 
