@@ -10,7 +10,7 @@ import {
   prepareImage,
   isEnvAllowed,
   ENV_ALLOW_PREFIXES,
-  ENV_ALLOW_EXCLUDE_PREFIX,
+  ENV_ALLOW_EXCLUDE_PREFIXES,
   BACKEND_CREDENTIAL_KEYS,
   GHCR_IMAGE_REPO,
   selectSandboxMode,
@@ -430,6 +430,30 @@ test("buildDockerArgs: forwards JAIPH_ env vars, excludes JAIPH_DOCKER_*", () =>
   assert.ok(args.includes("JAIPH_DEBUG=true"));
   assert.ok(!args.some((a) => a.includes("JAIPH_DOCKER_IMAGE")));
   assert.ok(!args.some((a) => a.includes("OTHER_VAR")));
+});
+
+test("buildDockerArgs: excludes host-only JAIPH_SERVE_* server keys (operator token stays host-side)", () => {
+  const opts = defaultOpts({
+    env: {
+      JAIPH_DEBUG: "true",
+      JAIPH_SERVE_TOKEN: "s3cret-operator-bearer",
+      JAIPH_SERVE_OIDC_ISSUER: "https://issuer.example",
+    },
+  });
+  const args = buildDockerArgs(opts);
+  assert.ok(args.includes("JAIPH_DEBUG=true"));
+  assert.ok(!args.some((a) => a.includes("JAIPH_SERVE_TOKEN")));
+  assert.ok(!args.some((a) => a.includes("JAIPH_SERVE_OIDC_ISSUER")));
+});
+
+test("isEnvAllowed: excludes host-only JAIPH_SERVE_* server keys", () => {
+  assert.equal(isEnvAllowed("JAIPH_SERVE_TOKEN", ["claude"]), false);
+  assert.equal(isEnvAllowed("JAIPH_SERVE_OIDC_ISSUER", ["claude"]), false);
+  assert.equal(isEnvAllowed("JAIPH_SERVE_OIDC_AUDIENCE", []), false);
+  assert.equal(isEnvAllowed("JAIPH_SERVE_MAX_CONCURRENT", []), false);
+  // Runtime-consumed JAIPH_ control keys workflows legitimately need still cross.
+  assert.equal(isEnvAllowed("JAIPH_DEBUG", []), true);
+  assert.equal(isEnvAllowed("JAIPH_WORKSPACE", []), true);
 });
 
 test("buildDockerArgs: always marks the inner run as the sandbox so it does not re-export telemetry", () => {
@@ -860,11 +884,13 @@ test("docs/env-vars.md lists ENV_ALLOW_PREFIXES and the exclude prefix verbatim"
     const token = `\`${prefix}*\``;
     assert.ok(doc.includes(token), `env-vars.md missing forwarding prefix ${token}`);
   }
-  const excludeToken = `\`${ENV_ALLOW_EXCLUDE_PREFIX}*\``;
-  assert.ok(
-    doc.includes(excludeToken),
-    `env-vars.md missing forwarding exclusion ${excludeToken}`,
-  );
+  for (const prefix of ENV_ALLOW_EXCLUDE_PREFIXES) {
+    const excludeToken = `\`${prefix}*\``;
+    assert.ok(
+      doc.includes(excludeToken),
+      `env-vars.md missing forwarding exclusion ${excludeToken}`,
+    );
+  }
 });
 
 test("docs/env-vars.md lists every per-backend credential key on the forwarding allowlist", () => {

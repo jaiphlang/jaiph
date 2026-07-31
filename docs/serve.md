@@ -95,7 +95,7 @@ Open `http://127.0.0.1:5247/docs` in a browser to get a live form for every work
 
 `jaiph serve` has two production authentication modes, plus an open default meant for loopback development. Credentials come from the environment, never from argv, because argv leaks into process listings. In every mode, `/healthz` stays open and needs no credentials. `/docs` and `/openapi.json` also stay open, unless `JAIPH_SERVE_EXPOSE_DOCS=false` hides them behind a `404`.
 
-**Static single-operator token.** `JAIPH_SERVE_TOKEN` is a shared secret required on every `/v1/*` and `/mcp` request, sent as `Authorization: Bearer <token>` and compared in constant time. It is a fail-closed gate for one operator. There is no per-user identity, no revocation, and no per-action authorization, so the one operator holds every capability and sees every run. Use it for a single trusted caller, not for several people in a company.
+**Static single-operator token.** `JAIPH_SERVE_TOKEN` is a shared secret required on every `/v1/*` and `/mcp` request, sent as `Authorization: Bearer <token>` and compared in constant time. It is a fail-closed gate for one operator. There is no per-user identity, no revocation, and no per-action authorization, so the one operator holds every capability and sees every run. Use it for a single trusted caller, not for several people in a company. The token stays on the host and never crosses into a workflow sandbox, so a workflow the server runs cannot read it and use it to call the API back as the operator.
 
 ```bash
 JAIPH_SERVE_TOKEN=secret jaiph serve --host 0.0.0.0 --port 8080 ./tools.jh

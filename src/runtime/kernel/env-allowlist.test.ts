@@ -97,6 +97,23 @@ test("scrubPromptEnv: JAIPH_ control keys pass, JAIPH_DOCKER_/inplace exclusions
   assert.equal(env["JAIPH_RUN_WORKFLOW"], undefined);
 });
 
+test("scrubPromptEnv: host-only JAIPH_SERVE_* server keys never reach a prompt backend", () => {
+  const env = scrubPromptEnv(
+    {
+      JAIPH_SERVE_TOKEN: "s3cret-operator-bearer",
+      JAIPH_SERVE_OIDC_ISSUER: "https://issuer.example",
+      JAIPH_SERVE_MAX_CONCURRENT: "4",
+      // A runtime-consumed control key the workflow legitimately needs still passes.
+      JAIPH_TEST_MODE: "1",
+    },
+    "claude",
+  );
+  assert.equal(env.JAIPH_SERVE_TOKEN, undefined);
+  assert.equal(env.JAIPH_SERVE_OIDC_ISSUER, undefined);
+  assert.equal(env.JAIPH_SERVE_MAX_CONCURRENT, undefined);
+  assert.equal(env.JAIPH_TEST_MODE, "1");
+});
+
 test("scrubPromptEnv: CLAUDE_CONFIG_DIR passes as base env (needed by the Claude CLI)", () => {
   const env = scrubPromptEnv({ CLAUDE_CONFIG_DIR: "/cfg/claude" }, "claude");
   assert.equal(env.CLAUDE_CONFIG_DIR, "/cfg/claude");
