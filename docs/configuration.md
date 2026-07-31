@@ -127,11 +127,11 @@ These configure the Docker sandbox. Allowed in **module-level** config only. The
 
 | Key | Type | Default | Env equivalent | Notes |
 |---|---|---|---|---|
-| `runtime.docker_image` | string | `ghcr.io/jaiphlang/jaiph-runtime:<version>` | `JAIPH_DOCKER_IMAGE` | Container image. Must already contain `jaiph` (`E_DOCKER_NO_JAIPH` otherwise). |
-| `runtime.docker_network` | string | `default` | `JAIPH_DOCKER_NETWORK` | `docker run --network` value. `none` disables egress. |
+| `runtime.docker_image` | string | `ghcr.io/jaiphlang/jaiph-runtime:<version>` | `JAIPH_DOCKER_IMAGE` | Container image. Must already contain `jaiph` (`E_DOCKER_NO_JAIPH` otherwise). **Host-controlled:** an in-file value is rejected (`E_DOCKER_IMAGE_HOST_ONLY`) when Docker is the active sandbox; set a non-default image only through `JAIPH_DOCKER_IMAGE`. |
+| `runtime.docker_network` | string | `default` | `JAIPH_DOCKER_NETWORK` | `docker run --network` value. `none` disables egress. **Host-controlled for isolation-breaking values:** an in-file `host`, `container:*`, or `ns:*` is rejected (`E_DOCKER_NETWORK_HOST_ONLY`) when Docker is the active sandbox — these dissolve the sandbox network boundary. Host-safe in-file values (`default`, `none`, a named bridge network) are honoured; the operator may still select any value, including `host`, through `JAIPH_DOCKER_NETWORK`. |
 | `runtime.docker_timeout_seconds` | integer | `14400` | `JAIPH_DOCKER_TIMEOUT` | Container execution timeout in seconds. `0` disables. Negative or invalid env value produces `E_DOCKER_TIMEOUT`. |
 
-In-file `runtime.docker_enabled` is not supported (`E_PARSE`); use the env-only enablement below.
+In-file `runtime.docker_enabled` is not supported (`E_PARSE`); use the env-only enablement below. In the same spirit, `runtime.docker_image` and isolation-breaking `runtime.docker_network` values are host-controlled: a repo- or model-supplied entry file cannot point the sandbox at an arbitrary image or gut its network isolation (finding M-6). When Docker is off (host / `JAIPH_UNSAFE` mode) these keys are inert and not enforced.
 
 ## Docker enablement
 

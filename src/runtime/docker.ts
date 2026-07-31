@@ -11,10 +11,31 @@ import { isEnvAllowed, RUN_WORKFLOW_ENV, type AgentBackend } from "./kernel/env-
 export interface DockerRunConfig {
   enabled: boolean;
   image: string;
-  /** True when image was explicitly set via env or in-file config (not the default). */
+  /**
+   * True when the image was explicitly set by the operator via
+   * `JAIPH_DOCKER_IMAGE` (not the default). In-file `runtime.docker_image` is
+   * host-controlled and never selects the image (see `resolveDockerConfig`).
+   */
   imageExplicit: boolean;
   network: string;
   timeoutSeconds: number;
+}
+
+/**
+ * Whether a file-declared `runtime.docker_network` value is safe to honour.
+ *
+ * An entry file is repo- or model-supplied and therefore untrusted: it must not
+ * be able to dissolve the container's network isolation (finding M-6). `host`
+ * shares the host network namespace (reaching loopback-only services and binding
+ * host ports); `container:<name>` and `ns:<path>` join another namespace. Those
+ * are host-controlled only — the operator may still opt in through
+ * `JAIPH_DOCKER_NETWORK` (trusted, used verbatim).
+ *
+ * Safe in-file values are `default`, `none`, and plain named (bridge) networks:
+ * a bare identifier with no namespace-join `:` / path syntax, and never `host`.
+ */
+export function isHostSafeInFileNetwork(value: string): boolean {
+  return /^[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(value) && value !== "host";
 }
 
 /**
@@ -141,18 +162,40 @@ export function resolveDockerConfig(
     enabled = env.JAIPH_UNSAFE !== "true";
   }
 
-  // image: env > in-file > default
-  const imageExplicit = env.JAIPH_DOCKER_IMAGE !== undefined || inFile?.dockerImage !== undefined;
-  const image =
-    env.JAIPH_DOCKER_IMAGE ??
-    inFile?.dockerImage ??
-    DEFAULTS.image;
+  // image: host-controlled (env) only when Docker is the active sandbox. A
+  // repo- or model-supplied entry file must not point the sandbox at an
+  // arbitrary image (finding M-6), so a file-declared runtime.docker_image is
+  // rejected unless the operator set JAIPH_DOCKER_IMAGE (trusted). When Docker
+  // is off (host / unsafe mode) the image is inert, so resolution stays lenient
+  // to preserve host-mode parity.
+  if (enabled && env.JAIPH_DOCKER_IMAGE === undefined && inFile?.dockerImage !== undefined) {
+    throw new Error(
+      `E_DOCKER_IMAGE_HOST_ONLY runtime.docker_image is host-controlled and cannot be set from the entry file; ` +
+        `set the image via the JAIPH_DOCKER_IMAGE environment variable (operator-controlled).`,
+    );
+  }
+  const imageExplicit = env.JAIPH_DOCKER_IMAGE !== undefined;
+  const image = env.JAIPH_DOCKER_IMAGE ?? inFile?.dockerImage ?? DEFAULTS.image;
 
-  // network: env > in-file > default
-  const network =
-    env.JAIPH_DOCKER_NETWORK ??
-    inFile?.dockerNetwork ??
-    DEFAULTS.network;
+  // network: host-controlled (env) > host-safe in-file value > default, enforced
+  // only when Docker is the active sandbox. The operator's JAIPH_DOCKER_NETWORK
+  // is trusted and used verbatim (it may even be `host`). A file-declared value
+  // is untrusted: `host` / `container:*` / `ns:*` would gut the sandbox network
+  // isolation and are rejected unless the operator opted in via env. Inert (and
+  // therefore left lenient) when Docker is off.
+  if (
+    enabled &&
+    env.JAIPH_DOCKER_NETWORK === undefined &&
+    inFile?.dockerNetwork !== undefined &&
+    !isHostSafeInFileNetwork(inFile.dockerNetwork)
+  ) {
+    throw new Error(
+      `E_DOCKER_NETWORK_HOST_ONLY runtime.docker_network "${inFile.dockerNetwork}" is not permitted from the entry file ` +
+        `(host / container:* / ns:* dissolve the sandbox network isolation); ` +
+        `set it via the JAIPH_DOCKER_NETWORK environment variable (operator-controlled) if you truly need it.`,
+    );
+  }
+  const network = env.JAIPH_DOCKER_NETWORK ?? inFile?.dockerNetwork ?? DEFAULTS.network;
 
   // timeout: env > in-file > default
   let timeoutSeconds: number;

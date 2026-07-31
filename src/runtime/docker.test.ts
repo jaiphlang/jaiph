@@ -118,23 +118,82 @@ test("resolveDefaultDockerImageTag: falls back to embedded VERSION when no packa
   assert.equal(resolveDefaultDockerImageTag(runtimeDir), VERSION);
 });
 
-test("resolveDockerConfig: in-file image/timeout overrides defaults (dockerEnabled removed)", () => {
-  const cfg = resolveDockerConfig(
-    { dockerImage: "alpine:3.19", dockerTimeoutSeconds: 60 },
-    {},
-  );
+test("resolveDockerConfig: in-file timeout still overrides default (host-controlled image aside)", () => {
+  const cfg = resolveDockerConfig({ dockerTimeoutSeconds: 60 }, {});
   assert.equal(cfg.enabled, true, "enabled defaults to true (no JAIPH_UNSAFE)");
-  assert.equal(cfg.image, "alpine:3.19");
+  assert.ok(cfg.image.startsWith(GHCR_IMAGE_REPO + ":"), "image stays the trusted default");
   assert.equal(cfg.timeoutSeconds, 60);
 });
 
-test("resolveDockerConfig: env overrides in-file image", () => {
+// AC3: a file-declared runtime.docker_image is host-controlled — it must NOT be
+// honoured. With no operator JAIPH_DOCKER_IMAGE, an in-file image is rejected.
+test("resolveDockerConfig: file-declared docker_image is rejected (host-controlled)", () => {
+  assert.throws(
+    () => resolveDockerConfig({ dockerImage: "alpine:3.19" }, {}),
+    /E_DOCKER_IMAGE_HOST_ONLY/,
+  );
+});
+
+// AC4: operator-supplied JAIPH_DOCKER_IMAGE takes effect and overrides any
+// in-file value without error (env is the trusted, host-controlled path).
+test("resolveDockerConfig: env image is honoured and overrides in-file image", () => {
   const cfg = resolveDockerConfig(
     { dockerImage: "alpine:3.19" },
     { JAIPH_DOCKER_ENABLED: "false", JAIPH_DOCKER_IMAGE: "debian:12" },
   );
   assert.equal(cfg.enabled, false);
   assert.equal(cfg.image, "debian:12");
+  assert.equal(cfg.imageExplicit, true);
+});
+
+// AC1: a file-declared docker_network = "host" must not select host networking.
+test("resolveDockerConfig: file-declared docker_network host is rejected", () => {
+  assert.throws(
+    () => resolveDockerConfig({ dockerNetwork: "host" }, {}),
+    /E_DOCKER_NETWORK_HOST_ONLY/,
+  );
+});
+
+// AC2: namespace-joining file-declared networks are rejected.
+test("resolveDockerConfig: file-declared docker_network container:* is rejected", () => {
+  assert.throws(
+    () => resolveDockerConfig({ dockerNetwork: "container:other" }, {}),
+    /E_DOCKER_NETWORK_HOST_ONLY/,
+  );
+});
+
+test("resolveDockerConfig: file-declared docker_network ns:* is rejected", () => {
+  assert.throws(
+    () => resolveDockerConfig({ dockerNetwork: "ns:/proc/1/ns/net" }, {}),
+    /E_DOCKER_NETWORK_HOST_ONLY/,
+  );
+});
+
+// Host-safe in-file networks are still honoured (default / none / named bridge).
+test("resolveDockerConfig: host-safe in-file docker_network values are honoured", () => {
+  assert.equal(resolveDockerConfig({ dockerNetwork: "none" }, {}).network, "none");
+  assert.equal(resolveDockerConfig({ dockerNetwork: "default" }, {}).network, "default");
+  assert.equal(resolveDockerConfig({ dockerNetwork: "my-bridge_1" }, {}).network, "my-bridge_1");
+});
+
+// AC1/AC4: the operator may still select host networking via env, even when the
+// file also declares it — env is trusted and used verbatim (no rejection).
+test("resolveDockerConfig: operator JAIPH_DOCKER_NETWORK=host takes effect over file value", () => {
+  const cfg = resolveDockerConfig(
+    { dockerNetwork: "host" },
+    { JAIPH_DOCKER_NETWORK: "host" },
+  );
+  assert.equal(cfg.network, "host");
+});
+
+// Host-mode parity: when Docker is off (JAIPH_UNSAFE), the network/image config
+// is inert — a file declaring unsafe values must NOT break the host-mode run.
+test("resolveDockerConfig: file-declared docker_network host is inert (no throw) when Docker off", () => {
+  const cfg = resolveDockerConfig(
+    { dockerNetwork: "host", dockerImage: "alpine:3.19" },
+    { JAIPH_UNSAFE: "true" },
+  );
+  assert.equal(cfg.enabled, false);
 });
 
 test("resolveDockerConfig: CI=true does NOT disable Docker (CI runs the real sandbox path)", () => {
@@ -728,10 +787,13 @@ test("resolveDockerConfig: imageExplicit is true when env sets image", () => {
   assert.equal(cfg.image, "alpine:3.19");
 });
 
-test("resolveDockerConfig: imageExplicit is true when in-file sets image", () => {
-  const cfg = resolveDockerConfig({ dockerImage: "alpine:3.19" }, {});
-  assert.equal(cfg.imageExplicit, true);
-  assert.equal(cfg.image, "alpine:3.19");
+test("resolveDockerConfig: in-file image does not set imageExplicit (it is rejected)", () => {
+  // In-file docker_image is host-controlled: it never selects the image, so it
+  // can never make imageExplicit true — it is rejected outright instead.
+  assert.throws(
+    () => resolveDockerConfig({ dockerImage: "alpine:3.19" }, {}),
+    /E_DOCKER_IMAGE_HOST_ONLY/,
+  );
 });
 
 // ---------------------------------------------------------------------------

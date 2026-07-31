@@ -14,22 +14,6 @@ Process rules:
 
 ***
 
-## Restrict `docker_network` / `docker_image` to host control #dev-ready
-
-Context: ASI-03/ASI-08, MEDIUM, confidence 0.80. Finding M-6 — a workflow file can gut the sandbox it runs in.
-
-Problem: When the operator has not set `JAIPH_DOCKER_NETWORK`, the entry file's `runtime.docker_network` wins over `default` and is emitted verbatim as `--network <value>` (`docker.ts:151-155`, `:828-830`); the in-file value from `config { runtime { … } }` (`config.ts:104-112`) is never content-validated (`validate-config.ts` checks only `${}` interpolation identifiers). `docker_network = "host"` launches the container in the host network namespace — reaching loopback-only services (a local DB, another `jaiph serve` on 127.0.0.1, a metadata endpoint) and binding host ports; `container:<name>`/`ns:*` join another namespace. `runtime.docker_image` likewise points the sandbox at an arbitrary image. A repo-supplied or model-edited workflow shipping `config { runtime { docker_network = "host" } }` runs with host networking while still appearing "sandboxed."
-
-Location: `src/runtime/docker.ts:151-155`, `:828-830`; `src/config.ts:104-112`; `src/transpile/validate-config.ts`.
-
-Remediation: Treat `runtime.docker_network` and `runtime.docker_image` as host-controlled only (the way `runtime.docker_enabled` is already parse-rejected), or validate against an allowlist (`default`, `none`, named bridge networks) and reject `host` / `container:*` / `ns:*` unless supplied via operator env/flag.
-
-### Acceptance criteria
-- An entry file declaring `config { runtime { docker_network = "host" } }` does not produce `--network host` unless the operator supplied it via env/flag; a test asserts the file-declared value is rejected or overridden.
-- File-declared `docker_network` values of `container:*` and `ns:*` are rejected (a test asserts rejection).
-- A file-declared `docker_image` is not honoured unless host-controlled (or is validated against the intended policy); a test asserts the behaviour.
-- Operator-supplied `JAIPH_DOCKER_NETWORK` / image (env/flag) still takes effect (a test asserts the host-controlled path works).
-
 ## Require operator opt-in before honouring entry-file `trusted_envs` #dev-ready
 
 Context: ASI-08, MEDIUM, confidence 0.75. Finding M-7 — a file-declared `trusted_envs` injects arbitrary host secrets into the sandbox, bypassing the allowlist.
