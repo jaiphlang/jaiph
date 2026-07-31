@@ -393,7 +393,8 @@ The **Cap.** column names the capability an authenticated principal must hold to
 | `GET /` | none | `302` → `/docs`. |
 | `GET /healthz` | none | `200 {status, version, tools, in_flight}`. Always open and credential-free. |
 | `GET /openapi.json` | none | OpenAPI 3.1 document, regenerated per request (hot reload needs no cache invalidation). `404` when `JAIPH_SERVE_EXPOSE_DOCS=false`. |
-| `GET /docs` | none | Swagger UI shell (loads `swagger-ui-dist` from a pinned, SRI-verified CDN). `404` when `JAIPH_SERVE_EXPOSE_DOCS=false`. |
+| `GET /docs` | none | Self-contained Swagger UI shell. The pinned `swagger-ui-dist` assets are embedded in the binary and served from same-origin `/docs/*` paths, so it needs no browser internet access. `404` when `JAIPH_SERVE_EXPOSE_DOCS=false`. |
+| `GET /docs/swagger-ui-bundle.js`, `GET /docs/swagger-ui.css` | none | The embedded Swagger UI assets, each stamped with a `sha384` Subresource Integrity hash over the served bytes. `404` when `JAIPH_SERVE_EXPOSE_DOCS=false`. |
 | `GET /v1/workflows` | `inspect` | `{workflows: [{name, description, params}]}`. |
 | `POST /v1/workflows/{name}/runs` | `invoke` | Start a run. Default `202` + `Location: /v1/runs/{id}`; `?wait=true` blocks for the terminal `200`. Send an `Idempotency-Key` header (scoped to the authenticated principal + workflow) to make retries safe: an identical repeat returns the original run (`200`, no second spawn); a reused key with different arguments is `409 E_IDEMPOTENCY_CONFLICT` and spawns nothing. |
 | `GET /v1/runs` | `inspect` | Runs started by this process **plus runs reconstructed from disk on restart**, newest first, scoped to the caller's own runs (all runs for a static/open principal). Paginated: `?limit` (default `100`, clamped to `1000`), `?offset` (default `0`). Response is `{runs, total, limit, offset}` and never unbounded. |

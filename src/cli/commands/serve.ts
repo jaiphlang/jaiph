@@ -57,7 +57,8 @@ const SERVE_USAGE =
   "every top-level workflow except channel route targets; `default` is exposed only\n" +
   "when it is the only workflow, named after the file's basename. Descriptions come\n" +
   "from the `#` comment lines above each workflow. Sources are re-validated on change.\n\n" +
-  "Endpoints: GET /docs (Swagger UI), GET /openapi.json, GET /healthz, GET /v1/workflows,\n" +
+  "Endpoints: GET /docs (self-contained Swagger UI — assets embedded, no browser internet\n" +
+  "access needed), GET /openapi.json, GET /healthz, GET /v1/workflows,\n" +
   "POST /v1/workflows/{name}/runs (async 202 or ?wait=true for 200), GET /v1/runs,\n" +
   "GET /v1/runs/{id}, GET /v1/runs/{id}/events (NDJSON, or SSE with Accept: text/event-stream),\n" +
   "GET /v1/runs/{id}/artifacts, GET /v1/runs/{id}/artifacts/{path}, POST /v1/runs/{id}/cancel.\n" +

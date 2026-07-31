@@ -7,7 +7,13 @@ import type { McpToolSpec } from "../mcp/tools";
 import { McpServer, type McpCallContext } from "../mcp/server";
 import type { WorkflowCallResult, WorkflowCallContext } from "../exec/call";
 import { buildOpenApi } from "./openapi";
-import { DOCS_HTML } from "./docs";
+import {
+  DOCS_HTML,
+  SWAGGER_UI_BUNDLE_JS,
+  SWAGGER_UI_CSS,
+  SWAGGER_UI_BUNDLE_PATH,
+  SWAGGER_UI_CSS_PATH,
+} from "./docs";
 import {
   listArtifacts,
   resolveArtifactPath,
@@ -231,6 +237,21 @@ export class ServeHandler {
       if (method !== "GET") return this.methodNotAllowed();
       if (!this.exposeDocs) return this.error(404, "E_NOT_FOUND", `not found: ${path}`);
       return { status: 200, headers: { "content-type": "text/html; charset=utf-8" }, body: DOCS_HTML };
+    }
+    // Self-hosted Swagger UI assets (embedded in the binary, same-origin), so
+    // /docs needs no browser internet access. Gated by exposeDocs like /docs.
+    if (path === SWAGGER_UI_BUNDLE_PATH || path === SWAGGER_UI_CSS_PATH) {
+      if (method !== "GET") return this.methodNotAllowed();
+      if (!this.exposeDocs) return this.error(404, "E_NOT_FOUND", `not found: ${path}`);
+      const isJs = path === SWAGGER_UI_BUNDLE_PATH;
+      return {
+        status: 200,
+        headers: {
+          "content-type": isJs ? "application/javascript; charset=utf-8" : "text/css; charset=utf-8",
+          "cache-control": "public, max-age=31536000, immutable",
+        },
+        body: isJs ? SWAGGER_UI_BUNDLE_JS : SWAGGER_UI_CSS,
+      };
     }
 
     // The MCP Streamable HTTP endpoint and everything under /v1 share one

@@ -1,25 +1,45 @@
-// Swagger UI is loaded from a CDN with a pinned exact version, Subresource
-// Integrity (SRI) hashes, and crossorigin — never vendored/embedded, so the
-// jaiph binary stays lean (embedding swagger-ui is ~1.5 MB for one page). The
-// consequence, documented in docs/serve.md and the design doc: `/docs` needs
-// internet access in the browser; air-gapped operators still have
-// `/openapi.json`, which any locally-hosted Swagger/Redoc/Scalar renders.
+// Swagger UI is self-hosted: the pinned `swagger-ui-dist` assets are embedded
+// into the jaiph binary (via tools/embed-assets.js) and served from same-origin
+// paths under `/docs`. `/docs` therefore renders a working Swagger UI with no
+// browser internet access — air-gapped operators and CSP-locked deployments
+// that block third-party hosts can invoke and inspect workflows offline. The
+// assets are first-party once embedded, so each tag still carries a Subresource
+// Integrity hash computed from the embedded bytes (rejecting a proxy/cache that
+// mutates them in flight), but no `crossorigin` is needed for same-origin.
 //
-// To bump the version: change SWAGGER_UI_VERSION and regenerate both hashes:
-//   curl -s https://cdn.jsdelivr.net/npm/swagger-ui-dist@<v>/swagger-ui-bundle.js \
-//     | openssl dgst -sha384 -binary | openssl base64 -A
-//   curl -s https://cdn.jsdelivr.net/npm/swagger-ui-dist@<v>/swagger-ui.css \
-//     | openssl dgst -sha384 -binary | openssl base64 -A
+// To bump the version: change the pinned `swagger-ui-dist` devDependency in
+// package.json, update SWAGGER_UI_VERSION to match, and rerun `npm run build`
+// (which regenerates the embedded bytes via `npm run embed-assets`).
+import { createHash } from "node:crypto";
+import {
+  SWAGGER_UI_BUNDLE_JS_BASE64,
+  SWAGGER_UI_CSS_BASE64,
+  decodeEmbeddedAsset,
+} from "../../runtime/embedded-assets";
+
 export const SWAGGER_UI_VERSION = "5.17.14";
-const CDN_BASE = `https://cdn.jsdelivr.net/npm/swagger-ui-dist@${SWAGGER_UI_VERSION}`;
-const BUNDLE_SRI = "sha384-wmyclcVGX/WhUkdkATwhaK1X1JtiNrr2EoYJ+diV3vj4v6OC5yCeSu+yW13SYJep";
-const CSS_SRI = "sha384-wxLW6kwyHktdDGr6Pv1zgm/VGJh99lfUbzSn6HNHBENZlCN7W602k9VkGdxuFvPn";
+
+/** Same-origin paths the shell loads its embedded assets from. */
+export const SWAGGER_UI_BUNDLE_PATH = "/docs/swagger-ui-bundle.js";
+export const SWAGGER_UI_CSS_PATH = "/docs/swagger-ui.css";
+
+/** Embedded first-party asset bytes, decoded once at module load. */
+export const SWAGGER_UI_BUNDLE_JS = decodeEmbeddedAsset(SWAGGER_UI_BUNDLE_JS_BASE64);
+export const SWAGGER_UI_CSS = decodeEmbeddedAsset(SWAGGER_UI_CSS_BASE64);
+
+// SRI over the exact UTF-8 bytes the same-origin server sends (see handler.ts).
+function sri(content: string): string {
+  return "sha384-" + createHash("sha384").update(Buffer.from(content, "utf8")).digest("base64");
+}
+export const SWAGGER_UI_BUNDLE_SRI = sri(SWAGGER_UI_BUNDLE_JS);
+export const SWAGGER_UI_CSS_SRI = sri(SWAGGER_UI_CSS);
 
 /**
- * Static Swagger UI HTML shell. Loads `swagger-ui-dist` from the CDN (pinned +
- * SRI + crossorigin) and points it at `/openapi.json`. `persistAuthorization`
- * keeps the bearer token entered in the Authorize box across reloads, since a
- * browser cannot attach headers to the initial `/docs` navigation.
+ * Static Swagger UI HTML shell. Loads the embedded `swagger-ui-dist` from
+ * same-origin `/docs/*` paths (integrity-checked, no third-party host) and
+ * points it at `/openapi.json`. `persistAuthorization` keeps the bearer token
+ * entered in the Authorize box across reloads, since a browser cannot attach
+ * headers to the initial `/docs` navigation.
  */
 export const DOCS_HTML = `<!DOCTYPE html>
 <html lang="en">
@@ -29,17 +49,15 @@ export const DOCS_HTML = `<!DOCTYPE html>
     <title>jaiph serve — API</title>
     <link
       rel="stylesheet"
-      href="${CDN_BASE}/swagger-ui.css"
-      integrity="${CSS_SRI}"
-      crossorigin="anonymous"
+      href="${SWAGGER_UI_CSS_PATH}"
+      integrity="${SWAGGER_UI_CSS_SRI}"
     />
   </head>
   <body>
     <div id="swagger-ui"></div>
     <script
-      src="${CDN_BASE}/swagger-ui-bundle.js"
-      integrity="${BUNDLE_SRI}"
-      crossorigin="anonymous"
+      src="${SWAGGER_UI_BUNDLE_PATH}"
+      integrity="${SWAGGER_UI_BUNDLE_SRI}"
     ></script>
     <script>
       window.onload = function () {

@@ -15,8 +15,14 @@ const { join, resolve } = require("node:path");
 
 const ROOT = resolve(__dirname, "..");
 
+// swagger-ui-dist is a pinned devDependency (package.json). Embedding its two
+// assets lets `jaiph serve` render Swagger UI from same-origin /docs paths with
+// no browser internet access (air-gapped / CSP-locked deployments). The pinned
+// version is asserted against src/cli/serve/docs.ts by docs.test.ts.
 const ASSETS = [
   { name: "JAIPH_SKILL_MD", path: "docs/jaiph-skill.md" },
+  { name: "SWAGGER_UI_BUNDLE_JS", path: "node_modules/swagger-ui-dist/swagger-ui-bundle.js" },
+  { name: "SWAGGER_UI_CSS", path: "node_modules/swagger-ui-dist/swagger-ui.css" },
 ];
 
 const entries = ASSETS.map((asset) => {

@@ -124,6 +124,32 @@ test("GET /openapi.json and /docs answer 200 unauthenticated even with a token s
   assert.match(docs.headers["content-type"], /text\/html/);
 });
 
+test("GET /docs serves self-hosted Swagger UI assets from same-origin paths (no CDN)", async () => {
+  const h = makeHandler();
+  const docs = await h.handleRequest(req("GET", "/docs"));
+  assert.equal(docs.status, 200);
+  assert.ok(!docs.body.includes("cdn.jsdelivr.net"), "no third-party CDN in /docs HTML");
+
+  const js = await h.handleRequest(req("GET", "/docs/swagger-ui-bundle.js"));
+  assert.equal(js.status, 200);
+  assert.match(js.headers["content-type"], /javascript/);
+  assert.match(js.body, /SwaggerUIBundle/);
+
+  const css = await h.handleRequest(req("GET", "/docs/swagger-ui.css"));
+  assert.equal(css.status, 200);
+  assert.match(css.headers["content-type"], /text\/css/);
+  assert.match(css.body, /\.swagger-ui/);
+});
+
+test("JAIPH_SERVE_EXPOSE_DOCS=false 404s /docs, /openapi.json, and the embedded assets", async () => {
+  const h = makeHandler({ exposeDocs: false });
+  for (const path of ["/docs", "/openapi.json", "/docs/swagger-ui-bundle.js", "/docs/swagger-ui.css"]) {
+    const res = await h.handleRequest(req("GET", path));
+    assert.equal(res.status, 404, `${path} is hidden when docs are not exposed`);
+    assert.equal(bodyJson(res).error.code, "E_NOT_FOUND");
+  }
+});
+
 test("wrong method on a known path is 405", async () => {
   const res = await makeHandler().handleRequest(req("POST", "/healthz"));
   assert.equal(res.status, 405);
