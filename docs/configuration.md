@@ -119,7 +119,7 @@ Semantics:
 - Declaring a key anywhere in the file (or an imported module) also **scrubs** it from every workflow's ambient scope env, so only the declaring workflow's `run` steps see it.
 - Pre-flight: a declared key with no value on the host (and no `--env` override) aborts before anything is spawned (`E_ENV_MISSING`). Reserved keys (the `--env` `E_ENV_RESERVED` set, including `JAIPH_DOCKER_*`) are rejected at parse time.
 - `--env KEY=VALUE` remains the imperative override: it wins over the host-snapshot value for the same key.
-- Docker: the entry file's resolved keys cross the sandbox boundary through the same explicit `-e` channel as `--env` pairs — the in-file declaration is the per-key consent.
+- Docker: the entry file's resolved keys cross the sandbox boundary through the same explicit `-e` channel as `--env` pairs — **but only when the operator opts in** with `JAIPH_TRUSTED_ENVS=1`. **Authoring the entry file is a trust boundary equal to `--env`:** an untrusted or model-edited entry could name arbitrary host secrets (`AWS_SECRET_ACCESS_KEY`, `GITHUB_TOKEN`) and pull them across the allowlist the sandbox exists to enforce (finding M-7). Absent the opt-in, the entry file's `trusted_envs` is ignored under Docker (with a pre-flight warning) and nothing is forwarded. Host modes have no allowlist to bypass (the runner inherits the host env directly), so they honour the declaration regardless. See [`JAIPH_TRUSTED_ENVS`](env-vars.md).
 
 ## Runtime (Docker) keys
 

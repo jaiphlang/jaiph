@@ -14,21 +14,6 @@ Process rules:
 
 ***
 
-## Require operator opt-in before honouring entry-file `trusted_envs` #dev-ready
-
-Context: ASI-08, MEDIUM, confidence 0.75. Finding M-7 — a file-declared `trusted_envs` injects arbitrary host secrets into the sandbox, bypassing the allowlist.
-
-Problem: The entry file's `config { trusted_envs = "…" }` is resolved from the operator's host environment (`trusted-envs.ts:55-63`), merged into `extraEnv` (`run.ts:270`), and forwarded verbatim — bypassing `isEnvAllowed` (`docker.ts:859-861`). The reserved-key filter `isReservedEnvKey` (`env-reserved.ts:19-40`) blocks only `JAIPH_*`, not arbitrary secret names. So an untrusted/model-edited entry `.jh` declaring `config { trusted_envs = "AWS_SECRET_ACCESS_KEY GITHUB_TOKEN" }` pulls those host secrets from the operator's environment into the sandbox, where a `run` step exfiltrates them over the default network. The allowlist meant to keep host secrets out is defeated by a declaration in the file the sandbox is meant to contain. (Imported modules are correctly blocked from declaring `trusted_envs`; the entry file is not.)
-
-Location: `src/cli/run/trusted-envs.ts:55-63`; `src/cli/commands/run.ts:270`; `src/runtime/docker.ts:859-861`; `src/env-reserved.ts:19-40`.
-
-Remediation: Require a host-side opt-in (env/flag) before any entry-file `trusted_envs` value is honoured — so the operator, not the file, consents to which host secrets cross — and document that authoring the entry file is a trust boundary equal to `--env`.
-
-### Acceptance criteria
-- An entry file declaring `config { trusted_envs = "AWS_SECRET_ACCESS_KEY" }` does not forward that host secret into the sandbox absent an operator opt-in; a test asserts the key is absent from forwarded env.
-- With the operator opt-in (env/flag) present, the declared `trusted_envs` keys are forwarded; a test asserts the opt-in path works.
-- The behaviour holds for arbitrary non-`JAIPH_` secret names (a test covers at least one such name).
-
 ## Harden the image `jaiph`-presence probe and drop its login shell #dev-ready
 
 Context: ASI-05, MEDIUM, confidence 0.72. Finding M-8 — the image probe runs a workflow-selected image with none of the run hardening.
