@@ -257,6 +257,17 @@ Releases sign `SHA256SUMS` with [minisign](https://jedisct1.github.io/minisign/)
 
 Manual verification: [Install & switch versions — Verify the release signature](setup.md#verify-the-release-signature).
 
+#### Library registry signing
+
+`jaiph install <name>` fetches the registry index from `JAIPH_REGISTRY` (default `https://jaiph.org/registry`) and, for remote sources, fail-closed verifies it against a detached `<source>.minisig` using the same `jaiph.pub` trust anchor (embedded in the CLI as `EMBEDDED_REGISTRY_PUBKEY` — a parity test keeps it in sync with `jaiph.pub`). Local `file://`/path sources are read as trusted-local and skip the check. So publishing or regenerating `docs/registry` (served at `https://jaiph.org/registry`) requires committing a matching `docs/registry.minisig` beside it:
+
+```bash
+npm run registry:build                              # regenerate docs/registry
+minisign -S -s jaiph.key -m docs/registry -x docs/registry.minisig
+```
+
+Without a valid `registry.minisig`, remote `jaiph install <name>` by design fails closed; local development can point `JAIPH_REGISTRY` at a file path to bypass the network entirely. Registry entries may additionally pin a `commit` (the cloned HEAD must match) and carry a per-library `signature`/`publicKey` (a detached minisign signature over the commit SHA, verified fail-closed) — see [CLI — `jaiph install`](cli.md#jaiph-install).
+
 **Dockerfile toolchain verification.** `runtime/Dockerfile` pins each remote installer script via build ARGs (`UV_INSTALL_SHA256`, `RUSTUP_INIT_SHA256`, `BUN_INSTALL_SHA256`, `CURSOR_INSTALL_SHA256`). ARGs default to empty (skip verification) for development; CI/release builds should populate them with the SHA256 of each installer script at the pinned version. The NodeSource APT block uses GPG-signed packages directly — no installer script execution.
 
 ### Local docs site (Jekyll)

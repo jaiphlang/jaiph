@@ -14,22 +14,6 @@ Process rules:
 
 ***
 
-## Add integrity verification to `jaiph install` and the library registry #dev-ready
-
-Context: ASI-09, HIGH, confidence 0.85. Finding H-4 — library installs are trust-on-first-use with no signature, checksum, or pin.
-
-Problem: A library install is `git clone --depth 1 [--branch <ref>] <url> <libDir>` and nothing more — no SHA-256, no signature, no use of `jaiph.pub` (`install.ts:196-203`; post-clone check only verifies a `.jh` exists and strips `.git` at `:167-193`). Registry entries map a name to a `url`+`description` with no pinned commit (`registry.ts:105-113`) and no URL-scheme restriction (only `typeof url === "string" && url.length > 0`). The registry index is fetched over a bare `fetch(source)` with no signature (`registry.ts:57-79`), and `JAIPH_REGISTRY` (`:34-38`) can repoint it to any URL including plain `http://` (only presence of `://` is checked). The commit is pinned in a lockfile only after the first clone — the initial install is unauthenticated, and library code executes at `jaiph run` time. An attacker who compromises an upstream repo, moves a tag, compromises/MITMs the registry host, or sets `JAIPH_REGISTRY` achieves end-to-end code substitution.
-
-Location: `src/cli/commands/install.ts:167-193`, `:196-203`; `src/cli/commands/registry.ts:34-38`, `:57-79`, `:105-113`.
-
-Remediation: Resolve each ref to a commit SHA and pin it in the registry entry (not just the post-hoc lockfile); sign the registry index (reuse the minisign key + `jaiph.pub`) and verify it; require `https://`/`ssh://` for remote sources and enforce a URL-scheme allowlist; support an optional detached signature per library and fail closed on mismatch.
-
-### Acceptance criteria
-- The registry index is signature-verified after fetch; a tampered/unsigned index is rejected (a test asserts fail-closed).
-- Remote registry/library sources must use an allowed scheme (`https://`/`ssh://`); a `http://` or otherwise disallowed URL is rejected (a test asserts rejection).
-- Registry entries carry a pinned commit SHA and the install verifies the cloned HEAD matches it; a mismatch fails the install (a test asserts rejection).
-- When an optional detached library signature is present, an invalid signature fails the install closed (a test asserts rejection).
-
 ## Restrict `docker_network` / `docker_image` to host control #dev-ready
 
 Context: ASI-03/ASI-08, MEDIUM, confidence 0.80. Finding M-6 — a workflow file can gut the sandbox it runs in.

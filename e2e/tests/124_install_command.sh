@@ -91,3 +91,19 @@ bad_exit=0
 (cd "${proj_c}" && jaiph install "/nonexistent/path/to/repo.git" >/dev/null 2>&1) || bad_exit=$?
 e2e::assert_equals "${bad_exit}" "1" "bad URL exits 1"
 e2e::pass "invalid URL fails"
+
+# ── Disallowed scheme (http://) is rejected before any clone ────────────────────
+
+e2e::section "jaiph install rejects http:// scheme"
+
+proj_d="${TEST_DIR}/d"
+mkdir -p "${proj_d}"
+(cd "${proj_d}" && e2e::git_init)
+
+scheme_exit=0
+scheme_out="$(cd "${proj_d}" && jaiph install "http://example.com/x.git" 2>&1)" || scheme_exit=$?
+e2e::assert_equals "${scheme_exit}" "1" "http:// scheme exits 1"
+# assert_contains: message is embedded in a longer diagnostic line
+e2e::assert_contains "${scheme_out}" 'disallowed scheme "http://"' "http:// rejected with scheme message"
+[[ ! -e "${proj_d}/.jaiph/libs/x" ]] || e2e::fail "no lib dir should be created for a rejected scheme"
+e2e::pass "http:// scheme rejected"
