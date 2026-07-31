@@ -7,11 +7,13 @@ import type { RunRecord } from "./handler";
 import {
   INTERRUPTED_RESULT_TEXT,
   PUBLIC_RUN_FILE,
+  TAMPERED_RESULT_TEXT,
   hashArgs,
   loadPersistedRuns,
   persistRunRecord,
 } from "./run-store";
 import { RUN_SUMMARY } from "./runfiles";
+import { writeChainKey } from "../../runtime/kernel/emit";
 
 const NOW = "2026-07-27T12:00:00.000Z";
 
@@ -125,6 +127,40 @@ test("loadPersistedRuns returns records oldest-first and skips dirs without a jo
 
     const recs = loadPersistedRuns(root, NOW);
     assert.deepEqual(recs.map((r) => r.run_id), ["old", "new"]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// Finding H-3: run listing must not silently trust a broken/forged journal.
+test("a run with a persisted key whose journal fails keyed verification is surfaced as failed", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-runstore-"));
+  try {
+    const dir = makeRunDir(root, "2026-07-27/12-00-00-tools");
+    // Journal carries no valid keyed chain (the pre-fix / tampered shape).
+    writeJournal(dir, "run-t", "build", true);
+    persistRunRecord(terminalRecord("run-t", dir)); // run.json says "succeeded"
+    // The host persisted a key for this run, so the listing boundary can verify.
+    writeChainKey(dir, "k".repeat(64));
+
+    const [rec] = loadPersistedRuns(root, NOW);
+    assert.equal(rec.status, "failed", "a run that fails integrity verification is not served as succeeded");
+    assert.equal(rec.result_text, TAMPERED_RESULT_TEXT);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("the same journal loads unchanged when no key was persisted (cannot verify → do not block)", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-runstore-"));
+  try {
+    const dir = makeRunDir(root, "2026-07-27/12-05-00-tools");
+    writeJournal(dir, "run-u", "build", true);
+    persistRunRecord(terminalRecord("run-u", dir));
+    // No writeChainKey → unverifiable legacy run stays as recorded.
+    const [rec] = loadPersistedRuns(root, NOW);
+    assert.equal(rec.status, "succeeded");
+    assert.equal(rec.result_text, "built");
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

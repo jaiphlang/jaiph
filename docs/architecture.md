@@ -158,18 +158,16 @@ The runtime persists step captures and the event timeline under a UTC-dated hier
 
 Step sequence numbers are monotonic and unique per run: `RuntimeEventEmitter` allocates them in memory (`allocStepSeq`) when opening each step's capture files (`%06d-<safe_name>.out|.err`). There is no `.seq` file in the run directory.
 
-#### Hash chain
+#### Keyed hash chain (tamper-evident audit journal)
+{: #hash-chain}
 
-Every line written to `run_summary.jsonl` by `RuntimeEventEmitter` carries a `prev_hash` field. The field holds the SHA-256 hash (in hex) of the previous raw JSON line, or `"000…000"` (64 zeroes, `CHAIN_GENESIS`) for the first line. Rewriting or truncating any line invalidates every later hash, so you can detect tampering.
+Every line written to `run_summary.jsonl` by `RuntimeEventEmitter` carries a `prev_hash` field. The field holds a **keyed** HMAC-SHA256 (in hex) of the previous raw JSON line — `chainHmac(key, previousLine)` — with `chainHmac(key, CHAIN_GENESIS)` for the first line. The key is a per-run 256-bit secret (`generateChainKey`), so the chain is not reproducible from the public algorithm alone: rewriting a line, or dropping a line and re-linking the survivors, invalidates the chain and cannot be re-forged without the key.
 
-To verify a run's chain:
+**Key isolation (finding H-3).** The journal is written by the trusted kernel process, but the audited workflow — its `script` steps and prompt/agent subprocesses — must not be able to forge the chain. The key travels in the kernel process env under `JAIPH_CHAIN_KEY` (`CHAIN_KEY_ENV`) and is scrubbed from **every** subprocess env: `scrubTrustedKeys` (`node-workflow-runtime.ts`) removes it — along with the journal path `JAIPH_RUN_SUMMARY_FILE` — from every script scope, and `scrubPromptEnv` (`env-allowlist.ts`) drops it at the agent boundary even though the `JAIPH_` prefix otherwise forwards run-control keys into the Docker container (the in-container kernel legitimately needs it). The host (`src/cli/commands/run.ts`, `src/cli/exec/call.ts`) generates the key, forwards it to the runner, and — once the run is terminal — persists it beside the journal as `.chain-key` (`writeChainKey`) so read/export boundaries can verify it.
 
-```ts
-import { verifyRunSummaryChain } from "src/runtime/kernel/emit";
-const { ok, error } = verifyRunSummaryChain(".jaiph/runs/<date>/<run>/run_summary.jsonl");
-```
+**Verification at read/export boundaries.** `verifyRunSummaryChain(filePath, key)` walks each line, checks `prev_hash` against the recomputed keyed digest, and returns `{ ok: false, error }` at the first broken link (a missing/unreadable journal is a failure, not a silent pass). `verifyRunJournal(runDir)` wraps it: it loads the persisted `.chain-key` and returns `{ verified: false, ok: true }` when no key exists (an unkeyed/legacy run that cannot be verified — never blocked) or `{ verified: true, ok }` otherwise. Every read/export boundary hard-fails when `verified && !ok`: run listing (`loadPersistedRuns` marks the run `failed` with `TAMPERED_RESULT_TEXT`), `GET /v1/runs/{id}/events` (`409 E_TAMPERED`), and OTLP/Sentry export (skip + warn, never POST a tampered journal).
 
-`verifyRunSummaryChain` reads each line, checks that `prev_hash` matches `sha256hex(previousLine)`, and returns `{ ok: false, error }` at the first broken link. The chain is defined over the full raw JSON string as written (including the `prev_hash` field itself).
+**Scope of the guarantee.** A workflow script step cannot read the key or the journal path from its env, and cannot alter the journal in any way that verifies — any rewrite or omitted line is rejected, and any truncation *during* the run is caught because the kernel keeps appending under the pre-truncation head. Because a `.jh` host run and its `script` steps execute under the same OS user, a hash chain cannot defend against a post-run same-user process that both deletes the `.chain-key` (making the run unverifiable) or clean-truncates a completed journal's tail. Under Docker sandboxing the key never enters the container, so an in-sandbox workflow has neither the key nor host access to it.
 
 #### Secret redaction
 

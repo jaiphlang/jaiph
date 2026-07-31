@@ -79,6 +79,7 @@ import { planTrustedEnvs } from "../run/trusted-envs";
 import { colorize, formatJaiphRunningBannerLines } from "../run/display";
 import { createRunEmitter } from "../run/emitter";
 import { exportRunTelemetry } from "../telemetry/otlp";
+import { CHAIN_KEY_ENV, generateChainKey, writeChainKey } from "../../runtime/kernel/emit";
 import {
   createStderrParser,
   createRunState,
@@ -154,6 +155,12 @@ export async function runWorkflow(rest: string[]): Promise<number> {
     runtimeEnv.JAIPH_SOURCE_ABS = inputAbs;
     const runId = randomUUID();
     runtimeEnv.JAIPH_RUN_ID = runId;
+    // Per-run audit-chain key: generated host-side, forwarded to the trusted
+    // runner (and, under Docker, into the container via the JAIPH_ allowlist),
+    // scrubbed from every script/agent subprocess env, and persisted beside the
+    // journal after the run so read/export boundaries can verify it (finding H-3).
+    const chainKey = generateChainKey();
+    runtimeEnv[CHAIN_KEY_ENV] = chainKey;
     try {
       applySandboxFlags(runtimeEnv, sandboxFlags);
     } catch (err) {
@@ -325,7 +332,7 @@ export async function runWorkflow(rest: string[]): Promise<number> {
     return await reportResult(
       runState.capturedStderr, childExit.status, childExit.signal, startedAt, runtimeEnv,
       emitter, runState.workflowRunId, inputAbs, workspaceRoot, metaFile,
-      dockerResult?.sandboxRunDir, runId,
+      dockerResult?.sandboxRunDir, runId, chainKey,
     );
   } finally {
     if (shouldCleanup) {
@@ -356,6 +363,11 @@ async function runWorkflowRaw(
   try {
     const runtimeEnv = resolveRuntimeEnv(effectiveConfig, workspaceRoot, inputAbs);
     runtimeEnv.JAIPH_SOURCE_ABS = inputAbs;
+    // As the Docker inner entrypoint the host already forwarded a chain key —
+    // reuse it so the parent's persisted key matches. A standalone `--raw` run
+    // has none and generates its own.
+    const chainKey = runtimeEnv[CHAIN_KEY_ENV] ?? generateChainKey();
+    runtimeEnv[CHAIN_KEY_ENV] = chainKey;
     try {
       applySandboxFlags(runtimeEnv, sandboxFlags);
     } catch (err) {
@@ -384,8 +396,13 @@ async function runWorkflowRaw(
     // DOCKER_SANDBOX_ENV and skips here — the outer host process exports that run
     // exactly once. Best-effort; never affects the exit status below.
     if (shouldExportRawTelemetry(process.env)) {
+      // Standalone `jaiph run --raw` owns its journal, so it persists the chain
+      // key. The inner raw run of a Docker orchestration skips here — the outer
+      // host process persists the key beside the discovered run dir instead.
+      const rawRunDir = readRunDirFromMeta(metaFile);
+      if (rawRunDir) writeChainKey(rawRunDir, chainKey);
       await exportRunTelemetry({
-        runDir: readRunDirFromMeta(metaFile),
+        runDir: rawRunDir,
         workflow: workflowSymbol,
         exitStatus: childExit.status,
         signal: childExit.signal,
@@ -581,6 +598,7 @@ async function reportResult(
   metaFile: string,
   sandboxRunDir?: string,
   expectedRunId?: string,
+  chainKey?: string,
 ): Promise<number> {
   const elapsedMs = Date.now() - startedAt;
   const elapsedLabel = formatElapsedDuration(elapsedMs);
@@ -594,6 +612,9 @@ async function reportResult(
     runDir = discovered.runDir;
     summaryFile = discovered.summaryFile;
   }
+  // Persist the audit-chain key beside the (now terminal) journal so every
+  // read/export boundary — including this export call — can verify integrity.
+  if (runDir && chainKey) writeChainKey(runDir, chainKey);
   // Export a trace to an OTLP collector when configured (standard OTEL env).
   // Best-effort: never affects the exit code, output, or journal below.
   await exportRunTelemetry({ runDir, workflow: "default", exitStatus, signal, env: process.env });

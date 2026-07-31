@@ -9,6 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHttpServer, listen, readBody } from "./server";
 import { ServeHandler } from "./handler";
+import { CHAIN_GENESIS, chainHmac, writeChainKey } from "../../runtime/kernel/emit";
 import type { McpToolSpec } from "../mcp/tools";
 import type { WorkflowCallResult } from "../exec/call";
 
@@ -130,6 +131,42 @@ async function serveArtifact(payloadPath: string, payload: Buffer | null): Promi
   const runId = ((await res.json()) as { run_id: string }).run_id;
   return { server, port, runId, runDir };
 }
+
+// Finding H-3: the events endpoint must not stream a run whose keyed journal
+// chain fails verification.
+test("GET /v1/runs/{id}/events hard-fails (409) on a tampered journal, streams a clean one", async () => {
+  const runDir = mkdtempSync(join(tmpdir(), "jaiph-srv-events-"));
+  try {
+    // A journal with no valid keyed chain, plus a persisted key → verifiable.
+    writeFileSync(join(runDir, "run_summary.jsonl"), '{"type":"WORKFLOW_START","prev_hash":"deadbeef"}\n');
+    writeChainKey(runDir, "k".repeat(64));
+    const handler = makeHandler(async () => ({ text: "ok", isError: false, exitStatus: 0, runDir }));
+    const server = createHttpServer(handler, () => {});
+    const port = await listen(server, "127.0.0.1", 0);
+    try {
+      const create = await fetch(`http://127.0.0.1:${port}/v1/workflows/ping/runs?wait=true`, { method: "POST" });
+      const runId = ((await create.json()) as { run_id: string }).run_id;
+
+      const tampered = await fetch(`http://127.0.0.1:${port}/v1/runs/${runId}/events`);
+      assert.equal(tampered.status, 409, "a tampered journal is rejected, not served");
+      assert.equal(((await tampered.json()) as { error: { code: string } }).error.code, "E_TAMPERED");
+
+      // Replace with a journal that verifies under the same key: keyed genesis
+      // for the single line's prev_hash.
+      writeFileSync(
+        join(runDir, "run_summary.jsonl"),
+        JSON.stringify({ type: "WORKFLOW_START", prev_hash: chainHmac("k".repeat(64), CHAIN_GENESIS) }) + "\n",
+      );
+      const clean = await fetch(`http://127.0.0.1:${port}/v1/runs/${runId}/events`);
+      assert.equal(clean.status, 200, "a verifying journal streams normally");
+      assert.match(clean.headers.get("content-type") ?? "", /application\/x-ndjson/);
+    } finally {
+      await closeServer(server);
+    }
+  } finally {
+    rmSync(runDir, { recursive: true, force: true });
+  }
+});
 
 test("an artifact download round-trips byte-identically through a real socket with content-length", async () => {
   // A deterministic non-trivial payload, bigger than one stream chunk.

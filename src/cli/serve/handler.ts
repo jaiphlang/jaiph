@@ -16,6 +16,7 @@ import {
   type StreamTarget,
 } from "./runfiles";
 import { hashArgs } from "./run-store";
+import { verifyRunJournal } from "../../runtime/kernel/emit";
 import { createAuthenticator, openPrincipal, type Authenticator, type Capability, type Principal } from "./auth";
 import { safeJsonObject, isJsonContentType, clampInt } from "./http-util";
 import type { RunStatus, RunRecord, ServeRequest, ServeResponse, ServeHandlerOptions } from "./types";
@@ -636,6 +637,14 @@ export class ServeHandler {
     const resolveRunDir = (): string | null => this.runDirFor(record);
     if (!wantsSse) {
       const dir = resolveRunDir();
+      // Hard-fail on a tampered journal (finding H-3): never serve the raw
+      // ndjson snapshot of a run whose keyed chain does not verify.
+      if (dir) {
+        const integrity = verifyRunJournal(dir);
+        if (integrity.verified && !integrity.ok) {
+          return this.error(409, "E_TAMPERED", `run journal failed integrity verification: ${integrity.error}`);
+        }
+      }
       const file = dir ? join(dir, RUN_SUMMARY) : null;
       let size = 0;
       if (file) {

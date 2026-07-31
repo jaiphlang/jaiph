@@ -17,7 +17,7 @@ import {
   resolvePromptStepName,
   shellQuote,
 } from "./prompt";
-import { appendRunSummaryLine } from "./emit";
+import { appendRunSummaryLine, CHAIN_KEY_ENV } from "./emit";
 import { buildStepDisplayParamPairs } from "../../cli/commands/format-params.js";
 import { resolveRuleRef, resolveScriptRef, resolveWorkflowRef, type RuntimeGraph } from "./graph";
 import type { WorkflowMetadata } from "../../types";
@@ -1739,6 +1739,14 @@ export class NodeWorkflowRuntime {
     for (const key of this.declaredTrustedEnvKeys) {
       delete env[key];
     }
+    // The audit-chain key and the journal path must never reach a script (or,
+    // via this scoped env, a prompt-agent) subprocess: without the key the
+    // audited workflow cannot forge a run_summary.jsonl chain that verifies,
+    // and without the path it is not even handed the file to overwrite
+    // (finding H-3). `this.env` keeps both — the trusted kernel writes the
+    // journal and `appendRunSummaryLine` reads the path from `process.env`.
+    delete env[CHAIN_KEY_ENV];
+    delete env.JAIPH_RUN_SUMMARY_FILE;
     return env;
   }
 

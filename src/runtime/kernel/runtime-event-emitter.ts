@@ -7,7 +7,7 @@
  */
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { appendRunSummaryLine, CHAIN_GENESIS, sha256hex } from "./emit";
+import { appendRunSummaryLine, chainHmac, CHAIN_GENESIS, CHAIN_KEY_ENV } from "./emit";
 import { redactCredentials } from "./redact";
 import { MAX_EMBED, nowIso, sanitizeName, stripOuterQuotes } from "./runtime-arg-parser";
 
@@ -50,9 +50,16 @@ export class RuntimeEventEmitter {
   private readonly getFrameStack: () => Frame[];
   private readonly getAsyncIndices: () => number[];
   private readonly suppressLiveEvents: boolean;
+  /**
+   * Per-run HMAC key for the journal chain, taken from the kernel process env.
+   * Never forwarded to a script/agent subprocess. Empty only for in-process
+   * runs with no host-provided key (e.g. `jaiph test`), where the chain is
+   * still self-consistent but no boundary verifies it.
+   */
+  private readonly chainKey: string;
   private stepSeq = 0;
   private promptSeq = 0;
-  private prevHash = CHAIN_GENESIS;
+  private prevHash: string;
 
   constructor(deps: RuntimeEventEmitterDeps) {
     this.runId = deps.runId;
@@ -61,11 +68,14 @@ export class RuntimeEventEmitter {
     this.getFrameStack = deps.getFrameStack;
     this.getAsyncIndices = deps.getAsyncIndices;
     this.suppressLiveEvents = deps.suppressLiveEvents ?? false;
+    this.chainKey = deps.env[CHAIN_KEY_ENV] ?? "";
+    // Keyed genesis: even a single forged line requires the key to reproduce.
+    this.prevHash = chainHmac(this.chainKey, CHAIN_GENESIS);
   }
 
   private serializeAndAppend(obj: Record<string, unknown>): void {
     const line = JSON.stringify({ ...obj, prev_hash: this.prevHash });
-    this.prevHash = sha256hex(line);
+    this.prevHash = chainHmac(this.chainKey, line);
     appendRunSummaryLine(line);
   }
 

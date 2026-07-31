@@ -115,6 +115,14 @@ exit code, output, and journal are unchanged. There are no retries and no queue.
 run takes minutes, so batching the export at the end of the run is the normal OTLP
 pattern.
 
+Jaiph also skips an export when the run's journal fails its keyed integrity
+chain. Each exporter verifies the chain before it reads `run_summary.jsonl`.
+When the chain does not verify, because the journal was rewritten, truncated, or
+forged, Jaiph writes one warning line and skips the export, so a tampered
+timeline is never posted to the collector or to Sentry. A run with no persisted
+key cannot be verified and is exported normally. See
+[Architecture — Keyed hash chain](architecture.md#hash-chain).
+
 The OTLP-trace exporter and the Sentry exporter run concurrently under one total
 flush budget, set by `JAIPH_TELEMETRY_FLUSH_MS` with a default of 10 seconds, so
 the whole post-run flush is bounded by that budget rather than by the sum of two

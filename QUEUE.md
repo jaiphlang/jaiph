@@ -14,22 +14,6 @@ Process rules:
 
 ***
 
-## Make the run audit journal tamper-resistant and actually verified #dev-ready
-
-Context: ASI-06, HIGH, confidence 0.85. Finding H-3 — the audit journal is written by the audited party behind an unkeyed chain that no production code path verifies.
-
-Problem: Each `run_summary.jsonl` line carries `prev_hash`, an unkeyed SHA-256 over a public genesis constant maintained only in process memory (`CHAIN_GENESIS` and `sha256hex` in `emit.ts:9-14`; append in `runtime-event-emitter.ts:66-70`, `emit.ts:53-58`). The journal is written into `.jaiph/runs/…` under the workflow's own `cwd`, exported to every script step as `JAIPH_RUN_DIR` (`node-workflow-runtime.ts:302-311`). So the audited subject can write its own audit trail. Because the chain is unkeyed with a public algorithm, a workflow can rewrite the file with a fully recomputed, internally valid chain that omits incriminating lines (e.g. a script step running `rm -f "$JAIPH_RUN_DIR/run_summary.jsonl"`, or a rewrite). And `verifyRunSummaryChain` (`emit.ts:24-44`) is never invoked outside `emit.test.ts` — `jaiph run`, `serve`, `mcp`, telemetry export, and run listing all silently accept a broken/truncated chain. Per-step `.out`/`.err` files are likewise deletable.
-
-Location: `src/runtime/kernel/runtime-event-emitter.ts:66-70`; `src/runtime/kernel/emit.ts:9-14`, `:24-44`, `:53-58`; `src/runtime/kernel/node-workflow-runtime.ts:302-311`.
-
-Remediation: Move the journal out of the workflow's write scope (a host/parent-owned append-only sink, or an external collector — the host already tails the `__JAIPH_EVENT__` stream and can persist that copy). Replace the unkeyed chain with an HMAC or signature under a key the workflow process never sees, hold the running head hash in the parent, and actually call `verifyRunSummaryChain` (hard-fail on `ok:false`) at every read/export boundary.
-
-### Acceptance criteria
-- The journal is written to a location (or via a mechanism) the workflow's own script steps cannot write to; a test demonstrates a script step cannot alter or delete the authoritative journal.
-- The chain integrity value is keyed (HMAC/signature) under a key not present in the workflow/agent subprocess environment; a test confirms the key is absent from the forwarded env.
-- `verifyRunSummaryChain` (or its equivalent) is invoked at each read/export boundary (run listing, `/v1/runs/{id}/events`, OTLP/Sentry export) and hard-fails on `ok:false`; a test feeds a tampered chain and asserts the read/export path rejects it.
-- A recomputed-but-forged chain (valid under the public SHA-256 algorithm, without the key) is rejected by verification.
-
 ## Add integrity verification to `jaiph install` and the library registry #dev-ready
 
 Context: ASI-09, HIGH, confidence 0.85. Finding H-4 — library installs are trust-on-first-use with no signature, checksum, or pin.
@@ -153,6 +137,22 @@ Remediation: Broaden detection well beyond four suffixes (`_ACCESS_KEY`, `_SECRE
 - A base64-encoded form of a known secret value is redacted in output; a test asserts the encoded form is caught.
 - The 8-char floor is removed or lowered so short secrets are redacted; a test asserts a short known secret is redacted.
 - Redaction improvements apply uniformly across journal, OTLP, Sentry, and `/events`; a test asserts a newly-detected secret is redacted on at least the `/events` path.
+
+## Self-host Swagger UI for `jaiph serve` (no CDN) #dev-ready
+
+Context: Feature — `/docs` already serves a Swagger UI shell, but it loads `swagger-ui-dist` from a pinned CDN with SRI (`src/cli/serve/docs.ts`). Air-gapped and hardened deployments get a blank page; only `/openapi.json` remains usable offline. The serve design doc deferred embedding (~1.5 MB) until air-gapped demand; that demand is now explicit.
+
+Problem: `GET /docs` requires the browser to fetch JS/CSS from `cdn.jsdelivr.net`. With no egress, or with a CSP that blocks that host, operators cannot invoke or inspect workflows from the built-in UI even though the HTTP API is healthy.
+
+Location: `src/cli/serve/docs.ts`; `tools/embed-assets.js` (existing embed pipeline); `docs/serve.md` § Swagger UI; `src/cli/serve/docs.test.ts`.
+
+Remediation: Embed the pinned `swagger-ui-dist` assets (or an equivalent minimal OpenAPI renderer) into the jaiph binary via the existing embed-assets mechanism, serve them from same-origin paths under `/docs`, and keep SRI or integrity checks appropriate for first-party assets. Preserve `JAIPH_SERVE_EXPOSE_DOCS` and the Authorize / `persistAuthorization` behaviour. Document that `/docs` no longer needs browser internet access.
+
+### Acceptance criteria
+- With network egress blocked in the browser (or CDN unreachable), `GET /docs` still renders a working Swagger UI that loads `/openapi.json` and can invoke a workflow (Authorize + try-it-out) when a token is configured.
+- No `cdn.jsdelivr.net` (or other third-party host) references remain in the `/docs` HTML or its loaded assets; a test asserts same-origin asset URLs only.
+- `JAIPH_SERVE_EXPOSE_DOCS=false` still returns `404` for `/docs` and `/openapi.json`.
+- Docs (`docs/serve.md`, CLI help) state that `/docs` is self-contained and does not require browser internet access.
 
 ## Redact credentials in durable `log` / `logwarn` / `logerr` journal lines #dev-ready
 
