@@ -14,21 +14,6 @@ Process rules:
 
 ***
 
-## Redact credentials in durable `log` / `logwarn` / `logerr` journal lines #dev-ready
-
-Context: ASI-06, LOW, confidence 0.75. Finding L-1 — `log()` messages persisted to the journal are not credential-redacted.
-
-Problem: `emitLog` appends the durable LOG/LOGWARN/LOGERR payload without `redactCredentials`, unlike `emitStep`/`emitPromptEvent` (`runtime-event-emitter.ts:213-228`). A workflow that does `log("…${SOME_TOKEN}…")` persists the raw value into `run_summary.jsonl` (and streams it unredacted on the live `__JAIPH_EVENT__` stderr that hooks consume), whereas the same value inside a step's captured output would be `[REDACTED]` — an inconsistent redaction boundary, not a documented exception.
-
-Location: `src/runtime/kernel/runtime-event-emitter.ts:213-228`.
-
-Remediation: run `redactCredentials(message, this.env)` on `LOG`/`LOGWARN`/`LOGERR` durable payloads so all persisted fields share one boundary.
-
-### Acceptance criteria
-- A workflow that `log`s a value matching a credential env var persists `[REDACTED]` (not the raw secret) in `run_summary.jsonl`; a test asserts the journal line is redacted.
-- The same redaction applies to `logwarn` and `logerr` durable payloads; a test covers at least one of those paths.
-- Step/prompt redaction behaviour is unchanged; a regression test still asserts step capture redaction.
-
 ## Add a host-mode wall-clock timeout and optional max-step circuit breaker #dev-ready
 
 Context: ASI-10, LOW, confidence 0.85. Finding L-2 — no host-mode wall-clock timeout, step cap, or circuit breaker (kill-switch control absent).
