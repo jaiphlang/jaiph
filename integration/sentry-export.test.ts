@@ -9,6 +9,14 @@ import { dirname, join } from "node:path";
 
 const CLI_PATH = join(process.cwd(), "dist/src/cli.js");
 
+/** Close an HTTP server without waiting forever on keep-alive sockets. */
+function closeServer(server: Server): Promise<void> {
+  return new Promise((resolve) => {
+    server.closeAllConnections();
+    server.close(() => resolve());
+  });
+}
+
 interface CapturedRequest {
   method: string;
   url: string;
@@ -37,7 +45,7 @@ function startSentry(status = 200): Promise<FakeSentry> {
     });
     server.listen(0, "127.0.0.1", () => {
       const port = (server.address() as AddressInfo).port;
-      resolve({ port, requests, close: () => new Promise((r) => server.close(() => r())) });
+      resolve({ port, requests, close: () => closeServer(server) });
     });
   });
 }
@@ -71,9 +79,16 @@ interface ServeProc {
   close: () => Promise<void>;
 }
 
+/** Token so serve starts whether or not anonymous loopback is still allowed. */
+const SERVE_TOKEN = "sentry-export-integration-token";
+
 /** Spawn `jaiph serve --port 0`, resolving once it logs its bound listen URL. */
 function startServe(fixture: string, cwd: string, env: NodeJS.ProcessEnv): Promise<ServeProc> {
-  const child = spawn("node", [CLI_PATH, "serve", "--port", "0", fixture], { cwd, env, stdio: ["ignore", "pipe", "pipe"] });
+  const child = spawn("node", [CLI_PATH, "serve", "--port", "0", fixture], {
+    cwd,
+    env: { ...env, JAIPH_SERVE_TOKEN: env.JAIPH_SERVE_TOKEN || SERVE_TOKEN },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
   let stderrBuf = "";
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error(`serve did not start\nstderr:\n${stderrBuf}`)), 20_000);
@@ -87,9 +102,13 @@ function startServe(fixture: string, cwd: string, env: NodeJS.ProcessEnv): Promi
           baseUrl: m[1],
           close: () =>
             new Promise<void>((res) => {
-              child.on("exit", () => res());
+              if (child.exitCode !== null || child.signalCode !== null) return res();
+              child.once("exit", () => res());
               child.kill("SIGTERM");
-              setTimeout(() => child.kill("SIGKILL"), 8_000).unref();
+              setTimeout(() => {
+                child.kill("SIGKILL");
+                res();
+              }, 8_000).unref();
             }),
         });
       }
@@ -241,26 +260,29 @@ test("jaiph run --raw: a failed standalone raw run delivers exactly one Sentry e
 test("jaiph serve: a failed HTTP run delivers exactly one Sentry event via the shared call layer", async () => {
   const sentry = await startSentry(200);
   const root = mkdtempSync(join(tmpdir(), "jaiph-sentry-serve-"));
-  const jh = join(root, "tools.jh");
-  // A named workflow (serve requires named tools) whose one step fails.
-  writeFileSync(jh, ['script boom = `echo "step output"; exit 3`', "# Fails on purpose.", "workflow crash() {", "  run boom()", "}", ""].join("\n"));
-  const serve = await startServe(jh, root, { ...baseEnv(join(root, ".jaiph/runs")), SENTRY_DSN: dsn(sentry.port) });
   try {
-    const res = await fetch(`${serve.baseUrl}/v1/workflows/crash/runs?wait=true`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: "{}",
-    });
-    const run = (await res.json()) as { status: string };
-    assert.equal(run.status, "failed", JSON.stringify(run));
-    // Detached: the terminal result returns before delivery, so poll for the envelope.
-    await waitForRequests(sentry, 1, "one Sentry event per failed HTTP run");
-    assert.equal(sentry.requests.length, 1, "exactly one Sentry event per failed HTTP run");
-    const event = JSON.parse(sentry.requests[0].body.split("\n")[2]) as { message: { formatted: string }; tags: Record<string, string> };
-    assert.equal(event.message.formatted, "workflow crash failed (exit 3)");
-    assert.equal(event.tags["jaiph.workflow"], "crash");
+    const jh = join(root, "tools.jh");
+    // A named workflow (serve requires named tools) whose one step fails.
+    writeFileSync(jh, ['script boom = `echo "step output"; exit 3`', "# Fails on purpose.", "workflow crash() {", "  run boom()", "}", ""].join("\n"));
+    const serve = await startServe(jh, root, { ...baseEnv(join(root, ".jaiph/runs")), SENTRY_DSN: dsn(sentry.port) });
+    try {
+      const res = await fetch(`${serve.baseUrl}/v1/workflows/crash/runs?wait=true`, {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${SERVE_TOKEN}` },
+        body: "{}",
+      });
+      const run = (await res.json()) as { status: string };
+      assert.equal(run.status, "failed", JSON.stringify(run));
+      // Detached: the terminal result returns before delivery, so poll for the envelope.
+      await waitForRequests(sentry, 1, "one Sentry event per failed HTTP run");
+      assert.equal(sentry.requests.length, 1, "exactly one Sentry event per failed HTTP run");
+      const event = JSON.parse(sentry.requests[0].body.split("\n")[2]) as { message: { formatted: string }; tags: Record<string, string> };
+      assert.equal(event.message.formatted, "workflow crash failed (exit 3)");
+      assert.equal(event.tags["jaiph.workflow"], "crash");
+    } finally {
+      await serve.close();
+    }
   } finally {
-    await serve.close();
     await sentry.close();
     rmSync(root, { recursive: true, force: true });
   }

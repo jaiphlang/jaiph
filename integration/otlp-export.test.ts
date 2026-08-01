@@ -9,6 +9,14 @@ import { dirname, join } from "node:path";
 
 const CLI_PATH = join(process.cwd(), "dist/src/cli.js");
 
+/** Close an HTTP server without waiting forever on keep-alive sockets. */
+function closeServer(server: Server): Promise<void> {
+  return new Promise((resolve) => {
+    server.closeAllConnections();
+    server.close(() => resolve());
+  });
+}
+
 interface CapturedRequest {
   method: string;
   url: string;
@@ -40,7 +48,7 @@ function startCollector(status = 200): Promise<FakeCollector> {
       resolve({
         port,
         requests,
-        close: () => new Promise((r) => server.close(() => r())),
+        close: () => closeServer(server),
       });
     });
   });
@@ -78,23 +86,14 @@ function reservedClosedPort(): Promise<number> {
  */
 function startBlackHole(): Promise<{ port: number; close: () => Promise<void> }> {
   return new Promise((resolve) => {
-    const sockets = new Set<import("node:net").Socket>();
     const server: Server = createServer((req) => {
       req.resume(); // drain the body; never call res.end()
-    });
-    server.on("connection", (s) => {
-      sockets.add(s);
-      s.on("close", () => sockets.delete(s));
     });
     server.listen(0, "127.0.0.1", () => {
       const port = (server.address() as AddressInfo).port;
       resolve({
         port,
-        close: () =>
-          new Promise<void>((r) => {
-            for (const s of sockets) s.destroy();
-            server.close(() => r());
-          }),
+        close: () => closeServer(server),
       });
     });
   });
@@ -105,9 +104,16 @@ interface ServeProc {
   close: () => Promise<void>;
 }
 
+/** Token so serve starts whether or not anonymous loopback is still allowed. */
+const SERVE_TOKEN = "otlp-export-integration-token";
+
 /** Spawn `jaiph serve --port 0`, resolving once it logs its bound listen URL. */
 function startServe(fixture: string, cwd: string, env: NodeJS.ProcessEnv): Promise<ServeProc> {
-  const child = spawn("node", [CLI_PATH, "serve", "--port", "0", fixture], { cwd, env, stdio: ["ignore", "pipe", "pipe"] });
+  const child = spawn("node", [CLI_PATH, "serve", "--port", "0", fixture], {
+    cwd,
+    env: { ...env, JAIPH_SERVE_TOKEN: env.JAIPH_SERVE_TOKEN || SERVE_TOKEN },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
   let stderrBuf = "";
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error(`serve did not start\nstderr:\n${stderrBuf}`)), 20_000);
@@ -121,9 +127,13 @@ function startServe(fixture: string, cwd: string, env: NodeJS.ProcessEnv): Promi
           baseUrl: m[1],
           close: () =>
             new Promise<void>((res) => {
-              child.on("exit", () => res());
+              if (child.exitCode !== null || child.signalCode !== null) return res();
+              child.once("exit", () => res());
               child.kill("SIGTERM");
-              setTimeout(() => child.kill("SIGKILL"), 8_000).unref();
+              setTimeout(() => {
+                child.kill("SIGKILL");
+                res();
+              }, 8_000).unref();
             }),
         });
       }
@@ -503,31 +513,34 @@ const GREET_SERVE_FIXTURE = ["# Greets.", "workflow greet(name) {", '  return "h
 test("jaiph serve: an HTTP run exports exactly one trace via the shared call layer", async () => {
   const collector = await startCollector(200);
   const root = mkdtempSync(join(tmpdir(), "jaiph-otlp-serve-"));
-  const jh = join(root, "tools.jh");
-  writeFileSync(jh, GREET_SERVE_FIXTURE);
-  const serve = await startServe(jh, root, {
-    ...baseEnv(join(root, ".jaiph/runs")),
-    OTEL_EXPORTER_OTLP_ENDPOINT: `http://127.0.0.1:${collector.port}`,
-  });
   try {
-    const res = await fetch(`${serve.baseUrl}/v1/workflows/greet/runs?wait=true`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name: "x" }),
+    const jh = join(root, "tools.jh");
+    writeFileSync(jh, GREET_SERVE_FIXTURE);
+    const serve = await startServe(jh, root, {
+      ...baseEnv(join(root, ".jaiph/runs")),
+      OTEL_EXPORTER_OTLP_ENDPOINT: `http://127.0.0.1:${collector.port}`,
     });
-    const run = (await res.json()) as { status: string };
-    assert.equal(run.status, "succeeded", JSON.stringify(run));
+    try {
+      const res = await fetch(`${serve.baseUrl}/v1/workflows/greet/runs?wait=true`, {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${SERVE_TOKEN}` },
+        body: JSON.stringify({ name: "x" }),
+      });
+      const run = (await res.json()) as { status: string };
+      assert.equal(run.status, "succeeded", JSON.stringify(run));
 
-    await waitForCollector(collector, 1, "one export per HTTP run");
-    assert.equal(collector.requests.length, 1, "exactly one export per HTTP run");
-    assert.equal(collector.requests[0].url, "/v1/traces");
-    const payload = JSON.parse(collector.requests[0].body) as {
-      resourceSpans: Array<{ resource: { attributes: Array<{ key: string; value: { stringValue?: string } }> } }>;
-    };
-    const wf = payload.resourceSpans[0].resource.attributes.find((a) => a.key === "jaiph.workflow");
-    assert.equal(wf?.value.stringValue, "greet", "the workflow symbol is on the resource");
+      await waitForCollector(collector, 1, "one export per HTTP run");
+      assert.equal(collector.requests.length, 1, "exactly one export per HTTP run");
+      assert.equal(collector.requests[0].url, "/v1/traces");
+      const payload = JSON.parse(collector.requests[0].body) as {
+        resourceSpans: Array<{ resource: { attributes: Array<{ key: string; value: { stringValue?: string } }> } }>;
+      };
+      const wf = payload.resourceSpans[0].resource.attributes.find((a) => a.key === "jaiph.workflow");
+      assert.equal(wf?.value.stringValue, "greet", "the workflow symbol is on the resource");
+    } finally {
+      await serve.close();
+    }
   } finally {
-    await serve.close();
     await collector.close();
     rmSync(root, { recursive: true, force: true });
   }
@@ -536,28 +549,31 @@ test("jaiph serve: an HTTP run exports exactly one trace via the shared call lay
 test("jaiph serve: an unreachable collector cannot delay a terminal ?wait=true result", async () => {
   const hole = await startBlackHole();
   const root = mkdtempSync(join(tmpdir(), "jaiph-otlp-serve-hole-"));
-  const jh = join(root, "tools.jh");
-  writeFileSync(jh, GREET_SERVE_FIXTURE);
-  const serve = await startServe(jh, root, {
-    ...baseEnv(join(root, ".jaiph/runs")),
-    OTEL_EXPORTER_OTLP_ENDPOINT: `http://127.0.0.1:${hole.port}`,
-    // Budget >> the asserted bound: an awaited export would block the terminal
-    // result and its concurrency slot for ~8 s.
-    JAIPH_TELEMETRY_FLUSH_MS: "8000",
-  });
   try {
-    const started = Date.now();
-    const res = await fetch(`${serve.baseUrl}/v1/workflows/greet/runs?wait=true`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name: "x" }),
+    const jh = join(root, "tools.jh");
+    writeFileSync(jh, GREET_SERVE_FIXTURE);
+    const serve = await startServe(jh, root, {
+      ...baseEnv(join(root, ".jaiph/runs")),
+      OTEL_EXPORTER_OTLP_ENDPOINT: `http://127.0.0.1:${hole.port}`,
+      // Budget >> the asserted bound: an awaited export would block the terminal
+      // result and its concurrency slot for ~8 s.
+      JAIPH_TELEMETRY_FLUSH_MS: "8000",
     });
-    const run = (await res.json()) as { status: string };
-    const elapsed = Date.now() - started;
-    assert.equal(run.status, "succeeded", JSON.stringify(run));
-    assert.ok(elapsed < 4_000, `terminal result / slot must release before delivery (took ${elapsed}ms)`);
+    try {
+      const started = Date.now();
+      const res = await fetch(`${serve.baseUrl}/v1/workflows/greet/runs?wait=true`, {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${SERVE_TOKEN}` },
+        body: JSON.stringify({ name: "x" }),
+      });
+      const run = (await res.json()) as { status: string };
+      const elapsed = Date.now() - started;
+      assert.equal(run.status, "succeeded", JSON.stringify(run));
+      assert.ok(elapsed < 4_000, `terminal result / slot must release before delivery (took ${elapsed}ms)`);
+    } finally {
+      await serve.close();
+    }
   } finally {
-    await serve.close();
     await hole.close();
     rmSync(root, { recursive: true, force: true });
   }
