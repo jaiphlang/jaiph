@@ -427,7 +427,7 @@ Each run's public record is persisted beside its journal as `run.json` when it f
 See [Environment variables](env-vars.md) for the complete inventory. The variables most relevant to CLI behaviour:
 
 - `JAIPH_DOCKER_ENABLED`, `JAIPH_UNSAFE`, `JAIPH_INPLACE`, `JAIPH_INPLACE_YES` — sandbox enablement and mode.
-- `JAIPH_DOCKER_IMAGE`, `JAIPH_DOCKER_NETWORK`, `JAIPH_DOCKER_TIMEOUT` — Docker mode parameters.
+- `JAIPH_DOCKER_IMAGE`, `JAIPH_DOCKER_IMAGE_DIGEST`, `JAIPH_DOCKER_NETWORK`, `JAIPH_DOCKER_TIMEOUT` — Docker mode parameters.
 - `JAIPH_NON_TTY_HEARTBEAT_FIRST_SEC`, `JAIPH_NON_TTY_HEARTBEAT_INTERVAL_MS` — non-TTY progress cadence.
 - `JAIPH_RUNS_DIR`, `JAIPH_WORKSPACE`, `JAIPH_SOURCE_FILE` — run-layout inputs.
 - `JAIPH_INSTALL_COMMAND`, `JAIPH_REGISTRY`, `JAIPH_SKILL_PATH` — install / init inputs.

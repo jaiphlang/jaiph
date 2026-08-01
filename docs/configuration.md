@@ -133,6 +133,8 @@ These configure the Docker sandbox. Allowed in **module-level** config only. The
 
 In-file `runtime.docker_enabled` is not supported (`E_PARSE`); use the env-only enablement below. In the same spirit, `runtime.docker_image` and isolation-breaking `runtime.docker_network` values are host-controlled: a repo- or model-supplied entry file cannot point the sandbox at an arbitrary image or gut its network isolation (finding M-6). When Docker is off (host / `JAIPH_UNSAFE` mode) these keys are inert and not enforced.
 
+The default official image is also pinned by manifest digest. The expected digest ships with the release, and every run verifies the local image against it and fails closed on a mismatch. There is no config-file key for the digest, so set or override it with the [`JAIPH_DOCKER_IMAGE_DIGEST`](env-vars.md) environment variable, which also lets you pin a custom `JAIPH_DOCKER_IMAGE`.
+
 ## Docker enablement
 
 Checks are applied top to bottom; the first match wins.
