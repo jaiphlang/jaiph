@@ -84,15 +84,17 @@ Replace `<runs_root>` with `.jaiph/runs` when `JAIPH_RUNS_DIR` is unset, or with
 
 ## Verify a run's integrity chain
 
-Every line the runtime appends to `run_summary.jsonl` carries a `prev_hash` field. The field holds a **keyed** HMAC-SHA256 of the previous raw line (keyed genesis for the first line), computed under a per-run secret the audited workflow never sees. Rewriting a line, or dropping a line and re-linking the survivors, breaks the chain and cannot be re-forged without the key, so you can detect tampering with a run's audit trail. The key is persisted beside the journal as `.chain-key` once the run is terminal. See [Architecture — Keyed hash chain](architecture.md#hash-chain) for the full contract, including the key-isolation and read/export-boundary guarantees.
+Every line the runtime appends to `run_summary.jsonl` carries a `prev_hash` field. The field holds a **keyed** HMAC-SHA256 of the previous raw line (keyed genesis for the first line), computed under a per-run secret the audited workflow never sees. Rewriting a line, or dropping a line and re-linking the survivors, breaks the chain and cannot be re-forged without the key, so you can detect tampering with a run's audit trail. The key is persisted once the run is terminal — **not** in the run directory (which the workflow can write to), but in an operator-side store outside every sandbox mount (`~/.jaiph/audit-keys` by default, override `JAIPH_AUDIT_KEY_DIR`), keyed by run-directory identity (finding M-3). See [Architecture — Keyed hash chain](architecture.md#hash-chain) for the full contract, including the key-isolation and read/export-boundary guarantees.
 
-To check a run directory, run this self-contained Node script. It reads the run's `.chain-key` and recomputes the keyed chain the same way the runtime does — no jaiph build required:
+To check a run directory, run this self-contained Node script. It resolves the run's key from the operator store, where the `sha256` of the run directory's canonical path names its entry. It then recomputes the keyed chain the same way the runtime does and confirms the journal still ends with its `WORKFLOW_END` terminal marker. No jaiph build is required:
 
 ```bash
 node -e '
-  const fs = require("fs"), crypto = require("crypto"), path = require("path");
-  const dir = process.argv[1];
-  const key = fs.readFileSync(path.join(dir, ".chain-key"), "utf8").trim();
+  const fs = require("fs"), crypto = require("crypto"), path = require("path"), os = require("os");
+  const dir = fs.realpathSync(process.argv[1]);
+  const store = process.env.JAIPH_AUDIT_KEY_DIR || path.join(os.homedir(), ".jaiph", "audit-keys");
+  const id = crypto.createHash("sha256").update(dir, "utf8").digest("hex");
+  const key = fs.readFileSync(path.join(store, id, "key"), "utf8").trim();
   const hmac = (s) => crypto.createHmac("sha256", key).update(s, "utf8").digest("hex");
   const lines = fs.readFileSync(path.join(dir, "run_summary.jsonl"), "utf8").split("\n").filter(l => l.trim());
   let expected = hmac("0".repeat(64));
@@ -102,11 +104,15 @@ node -e '
     }
     expected = hmac(lines[i]);
   }
-  console.log(`chain intact (${lines.length} lines)`);
+  const lastType = lines.length ? JSON.parse(lines[lines.length - 1]).type : null;
+  if (lastType !== "WORKFLOW_END") {
+    console.error(`journal not terminal: last event is ${lastType} (truncated after run end?)`); process.exit(1);
+  }
+  console.log(`chain intact and terminal (${lines.length} lines)`);
 ' <runs_root>/<YYYY-MM-DD>/<HH-MM-SS>-<source>/
 ```
 
-A clean chain prints `chain intact (N lines)` and exits `0`. A rewritten file prints the first broken line number and exits `1`. Inside the repo you can call the exported `verifyRunSummaryChain(filePath, key)` helper (`src/runtime/kernel/emit.ts`) directly, or `verifyRunJournal(runDir)`, which loads `.chain-key` for you and returns `{ verified, ok, error }`. A run with no `.chain-key` (an unkeyed/legacy run) cannot be verified and is never blocked.
+A clean, complete journal prints `chain intact and terminal (N lines)` and exits `0`. A rewritten file prints the first broken line number and exits `1`. A completed journal whose last lines were deleted after the run ended prints that it is not terminal and exits `1`. The chain commits to prefix integrity but not to length, so a shorter journal that still links correctly is caught only by the missing `WORKFLOW_END` marker (finding L-3). Inside the repo you can call the exported `verifyRunSummaryChain(filePath, key, opts?)` helper (`src/runtime/kernel/emit.ts`) directly, or `verifyRunJournal(runDir)`, which resolves the key from the store for you, requires the terminal marker, and returns `{ verified, ok, error }`. A run with no store entry (an unkeyed/legacy run) cannot be verified and is never blocked; a run that **was** keyed but whose key is missing fails closed (`verified: true, ok: false`).
 
 ## Related
 

@@ -36,6 +36,7 @@ const WF = [
 const TOUCHED = [
   CHAIN_KEY_ENV, "JAIPH_TEST_MODE", "JAIPH_RUNS_DIR", "JAIPH_SCRIPTS", "JAIPH_WORKSPACE",
   "JAIPH_RUN_DIR", "JAIPH_RUN_SUMMARY_FILE", "JAIPH_ARTIFACTS_DIR", "JAIPH_RUN_ID", "JAIPH_SOURCE_FILE",
+  "JAIPH_AUDIT_KEY_DIR",
 ];
 
 async function runWorkflow(
@@ -55,6 +56,9 @@ async function runWorkflow(
   process.env.JAIPH_RUNS_DIR = join(root, ".jaiph", "runs");
   process.env.JAIPH_SCRIPTS = scriptsDir;
   process.env.JAIPH_WORKSPACE = root;
+  // Isolate the operator-side key store to this workspace (outside the run dir)
+  // so the test never touches the real home store (finding M-3).
+  process.env.JAIPH_AUDIT_KEY_DIR = join(root, ".jaiph", "audit-keys");
 
   const runtime = new NodeWorkflowRuntime(graph, { env: process.env, cwd: root, suppressLiveEvents: true });
   const status = await runtime.runRoot(symbol, []);
