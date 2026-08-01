@@ -80,6 +80,7 @@ Inside a container the container is the sandbox, so unsafe host-only mode procee
 | `JAIPH_MODULE_GRAPH_FILE` | internal | path | — | — | Absolute path to the serialized `ModuleGraph` JSON. Set by the CLI only on the default local (non-Docker, non-`--raw`) `jaiph run` path. |
 | `JAIPH_NON_TTY_HEARTBEAT_FIRST_SEC` | host | int (seconds) | `60` | — | Seconds before the first non-TTY heartbeat line. |
 | `JAIPH_NON_TTY_HEARTBEAT_INTERVAL_MS` | host | int (ms; floor `250`) | `30000` | — | Minimum interval between subsequent non-TTY heartbeat lines. |
+| `JAIPH_STEP_IDLE_KILL_SEC` | runtime | int (seconds) | `3600` (1h) | — | Seconds without stdout/stderr from a leaf `script` step before the runtime emits a `LOGERR` naming the step and idle duration, terminates the step's subprocess (SIGTERM → SIGKILL), and fails the step, so a stuck leaf that stopped producing output cannot hold the run open indefinitely. Resets on any new output, the same as the warn cadence. `0` disables the kill and leaves warn-only behaviour; an empty or invalid value falls back to the default. Independent of `JAIPH_STEP_IDLE_WARN_SEC`. |
 | `JAIPH_STEP_IDLE_WARN_SEC` | runtime | int (seconds) | `180` | — | Seconds without stdout/stderr from a leaf script or prompt step before emitting a `LOGWARN` idle warning (`0` disables). |
 | `JAIPH_STEP_IDLE_WARN_CHECK_MS` | runtime | int (ms; floor `250`) | `5000` | — | Poll interval for leaf-step idle warnings. |
 | `JAIPH_PRECEDING_FILES` | host | string | — | — | Removed from the product. Stripped from the launched env. |

@@ -38,7 +38,7 @@ import {
   type PromptSchemaField,
 } from "./runtime-arg-parser";
 import { resolveInterpreterFromShebang } from "../../parse/script-bash";
-import { resolveShell } from "./portability";
+import { killProcessTreeEscalating, resolveShell } from "./portability";
 import { RuntimeEventEmitter, type Frame } from "./runtime-event-emitter";
 import { createStepIdleOutputWarn } from "./step-idle-warn";
 import { parseMaxSteps, maxStepsTrippedMessage } from "./max-steps";
@@ -115,6 +115,12 @@ type Scope = {
 type StepIO = {
   appendOut: (chunk: string) => void;
   appendErr: (chunk: string) => void;
+  /**
+   * When set, aborting this signal terminates the leaf-step subprocess spawned
+   * in `spawnAndCapture` (SIGTERM → SIGKILL) so the idle-output kill watchdog
+   * can stop a step that has gone silent. Only wired for `script` steps.
+   */
+  killSignal?: AbortSignal;
 };
 
 type InboxMsg = {
@@ -1613,6 +1619,43 @@ export class NodeWorkflowRuntime {
       const child = _scriptSpawn.spawn(command, args, { cwd, env, stdio: ["ignore", "pipe", "pipe"] });
       let output = "";
       let error = "";
+      const killSignal = io?.killSignal;
+      // Single-settle guard shared by the normal close/error paths and the
+      // idle-output kill watchdog, so the step resolves exactly once.
+      let settled = false;
+      const settle = (result: StepResult): void => {
+        if (settled) return;
+        settled = true;
+        killSignal?.removeEventListener("abort", onIdleKill);
+        resolve(result);
+      };
+      // Idle-output kill watchdog: when the step's kill signal fires the leaf
+      // has produced no output for JAIPH_STEP_IDLE_KILL_SEC. Terminate the child
+      // (SIGTERM → SIGKILL) and settle a failure immediately. We do NOT wait for
+      // `close`: a descendant that outlived the child while holding the stdout
+      // write end (the classic hung-subtree case) would otherwise keep the pipe
+      // open — and the run stuck — indefinitely. Destroying the pipes here
+      // releases Node's handles so the runtime moves on regardless (mirrors the
+      // prompt watchdog settle in prompt.ts).
+      let idleKilled = false;
+      function onIdleKill(): void {
+        if (idleKilled || settled) return;
+        idleKilled = true;
+        if (typeof child.pid === "number") killProcessTreeEscalating(child.pid);
+        try {
+          child.stdout?.destroy();
+          child.stderr?.destroy();
+        } catch {
+          // best-effort cleanup
+        }
+        const msg =
+          "step terminated: no new output within the idle-output kill timeout (JAIPH_STEP_IDLE_KILL_SEC)";
+        settle({ status: 1, output, error: error ? `${error}\n${msg}` : msg });
+      }
+      if (killSignal) {
+        if (killSignal.aborted) onIdleKill();
+        else killSignal.addEventListener("abort", onIdleKill, { once: true });
+      }
       child.stdout?.setEncoding("utf8");
       child.stderr?.setEncoding("utf8");
       child.stdout?.on("data", (chunk: string) => {
@@ -1630,11 +1673,11 @@ export class NodeWorkflowRuntime {
           : errText(err);
         error += msg;
         io?.appendErr(msg);
-        resolve({ status: 1, output, error });
+        settle({ status: 1, output, error });
       });
       child.on("close", (code) => {
         const status = typeof code === "number" ? code : 1;
-        resolve({
+        settle({
           status,
           output,
           error,
@@ -1876,17 +1919,26 @@ export class NodeWorkflowRuntime {
         if (chunk.length > 0) appendFileSync(errFile, chunk);
       },
     };
-    const idleWarn = kind === "script" ? createStepIdleOutputWarn(this.emitter, kind, name, this.env) : null;
-    const stepIo: StepIO = idleWarn
+    // Leaf-step idle watchdog: warn periodically while silent, and (default on)
+    // terminate the step after a long idle window so a stuck leaf cannot hold
+    // the run indefinitely. Only `script` steps drive a subprocess to kill.
+    const killController = kind === "script" ? new AbortController() : null;
+    const idleWarn = kind === "script"
+      ? createStepIdleOutputWarn(this.emitter, kind, name, this.env, {
+          onIdleKill: killController ? () => killController.abort() : undefined,
+        })
+      : null;
+    const stepIo: StepIO = idleWarn || killController
       ? {
           appendOut: (chunk: string) => {
             io.appendOut(chunk);
-            if (chunk.length > 0) idleWarn.bump();
+            if (chunk.length > 0) idleWarn?.bump();
           },
           appendErr: (chunk: string) => {
             io.appendErr(chunk);
-            if (chunk.length > 0) idleWarn.bump();
+            if (chunk.length > 0) idleWarn?.bump();
           },
+          killSignal: killController?.signal,
         }
       : io;
     this.emitter.emitStep({

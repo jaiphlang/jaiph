@@ -322,6 +322,15 @@ The prompt watchdogs above bound a single backend call. Jaiph also has two contr
 
 `JAIPH_MAX_STEPS` sets an optional max-step circuit breaker in the runtime. When you set it to a positive integer, the runtime counts every executed step across the whole run, and it counts loop iterations and nested or recursive calls but skips trivia. Once the count goes past the cap, the runtime logs `E_MAX_STEPS`, aborts the run, and returns a failure, so a runaway workflow stops on its own without a manual signal. Set it to `0`, leave it empty, or give it an invalid value to disable the breaker.
 
+## Leaf step idle output
+{: #leaf-step-idle-output}
+
+The prompt watchdogs bound a single backend call, and the run timeout and step cap bound the whole run. A separate watchdog bounds one leaf step by how long it stays silent. A leaf step is a `script` step or a `prompt` step, and the watchdog watches its stdout and stderr. It catches a `script` step that the prompt watchdogs never see, such as an overnight `npm run test:ci` that stops producing output but never exits. The runtime checks for silence on a poll interval set by `JAIPH_STEP_IDLE_WARN_CHECK_MS` (default 5000 milliseconds, floor 250).
+
+`JAIPH_STEP_IDLE_WARN_SEC` (default 180 seconds; `0` disables) sets how long a leaf step can go without any stdout or stderr before the runtime emits a `LOGWARN`. The warning repeats on the same cadence while the step stays silent, so at 180 seconds, then 360, then 540, and so on. Any new output resets the clock. The warning does not fail the step, and it only surfaces a stalled backend or a long-running command.
+
+`JAIPH_STEP_IDLE_KILL_SEC` (default 3600 seconds, one hour; `0` disables) sets a hard limit for a `script` step. When a `script` step goes that long without any stdout or stderr, the runtime emits a `LOGERR` naming the step and how long it was silent, terminates the step's subprocess with `SIGTERM` and then `SIGKILL` (via `killProcessTreeEscalating`; see [Architecture](architecture.md)), and fails the step. Any new output resets this clock too. The warn cadence and the kill limit run off the same idle clock but fire independently. The kill applies to `script` steps only, because a `prompt` step's backend is already bounded by the prompt watchdogs above, so a `prompt` step still gets the idle warnings but is never killed by this limit.
+
 ## Custom agent commands
 
 `agent.command` is consumed by the **cursor** backend only. For `claude` and `codex`, Jaiph always invokes the Claude CLI or the codex HTTP path, regardless of `agent.command`.
