@@ -103,7 +103,7 @@ RUN npm install -g "pnpm@${PNPM_VERSION}" "yarn@${YARN_VERSION}" && corepack ena
 # Fast Python env/deps (common alternative to raw pip in modern repos).
 # UV_INSTALL_SHA256: sha256 of https://astral.sh/uv/install.sh. This is a rolling
 # URL — refresh the pin when upstream changes the installer. Empty fails closed.
-ARG UV_INSTALL_SHA256=b67e385074fddc9b99cd152b838fd91046d9fbc261b2c45f448a983ad23b8764
+ARG UV_INSTALL_SHA256=d3f5412d38c99f9d024901843bf98206f0d2c6dbe64df40d0b740e2751ca62c1
 RUN set -eux; \
     fetch-verify.sh https://astral.sh/uv/install.sh /tmp/uv-install.sh "${UV_INSTALL_SHA256}"; \
     env UV_INSTALL_DIR=/usr/local/bin sh /tmp/uv-install.sh; \
