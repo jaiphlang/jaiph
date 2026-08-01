@@ -55,7 +55,8 @@ export async function buildRegistry({ source, outPath, loadRegistryIndex }) {
   const tmpPath = `${outPath}.tmp-build-${process.pid}-${Date.now()}`;
   writeFileSync(tmpPath, text);
   try {
-    await loadRegistryIndex(tmpPath);
+    // requireCommit: every shipped entry must carry an integrity pin before it goes out.
+    await loadRegistryIndex(tmpPath, { requireCommit: true });
     renameSync(tmpPath, outPath);
   } catch (err) {
     try { unlinkSync(tmpPath); } catch {}
@@ -91,7 +92,7 @@ export async function buildRegistryOrKeepShipped({
     if (!isUpstreamFetchFailure(err, source, defaultSource) || !existsSync(outPath)) {
       throw err;
     }
-    await loadRegistryIndex(outPath);
+    await loadRegistryIndex(outPath, { requireCommit: true });
     return {
       source: outPath,
       outPath,

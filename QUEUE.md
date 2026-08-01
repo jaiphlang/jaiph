@@ -46,22 +46,6 @@ Remediation: Store the chain key outside the agent-writable run directory (a hos
 - A failure to persist the chain key surfaces as a hard error, verified by a test that forces the write to fail.
 - For a run that was launched with a chain key, `verifyRunJournal` (and the OTLP/Sentry/serve export boundaries) reports an integrity failure when the key is missing at verification time, verified by a test.
 
-## Pin registry stdlib entry to a commit and enforce the pin on install #dev-ready
-
-Context: Security review 2026-07-31, finding M-4 (ASI-09 Supply Chain), severity MEDIUM, confidence 0.75. `jaiph install jaiphlang` executes whatever the mutable branch HEAD points at.
-
-Problem: The registry schema makes `commit` and `signature` optional, and the shipped `jaiphlang` entry has neither, so `jaiph install` runs `git clone --depth 1 --branch <ref>` against a mutable ref with no integrity gate before the cloned `.jh` modules become importable, executable code. Anyone able to move the `jaiphlang` repo's default branch — repo compromise, maintainer-account takeover, malicious force-push — gains code execution in every consumer that installs or updates the stdlib afterward.
-
-Location: `docs/registry` (the `jaiphlang` entry lacks `commit`/`signature`); `src/cli/commands/registry.ts:29-34` (both fields optional); `src/cli/commands/install.ts:213-219` (clone by branch) and `src/cli/commands/install.ts:188` (commit match enforced only when `expectedCommit` is set).
-
-Remediation: Require a pinned `commit` (and ideally a `signature` over it against the embedded registry key) for every shipped registry entry including the stdlib; make `postCloneHygiene` enforce the commit match unconditionally; treat an entry with no pin as untrusted — warn or refuse to install it.
-
-### Acceptance criteria
-- The shipped registry index pins the `jaiphlang` entry to an exact commit, and registry build/validation rejects shipped entries without a `commit`.
-- `jaiph install` fails (or requires an explicit override with a warning) for a registry entry that has no pinned commit, verified by a test.
-- A test where the cloned HEAD does not match the pinned commit shows the install failing and leaving no importable modules behind.
-- Installing an entry whose clone matches the pinned commit succeeds, verified by a test.
-
 ## Require signature verification in CI installer and setup-jaiph action #dev-ready
 
 Context: Security review 2026-07-31, finding M-5 (ASI-09 Supply Chain), severity MEDIUM, confidence 0.75. The entire CI install population currently skips the only out-of-band integrity check.

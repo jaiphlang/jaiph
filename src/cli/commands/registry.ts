@@ -115,10 +115,15 @@ export function verifyMinisign(message: Buffer, signatureText: string, pubkeyTex
  * sources must use an allowed scheme, are fetched via global `fetch`, and are
  * signature-verified against a detached `<source>.minisig` before use — a
  * missing, unsigned, or tampered index is rejected (fail closed). `opts.publicKey`
- * overrides the embedded trust anchor (tests). Throws `Error` naming the source
- * on any read/fetch/verify/parse/shape failure.
+ * overrides the embedded trust anchor (tests). `opts.requireCommit` rejects any
+ * entry that lacks a pinned `commit` — the strict mode used when building/validating
+ * the shipped index so no shipped entry can ship without an integrity pin. Throws
+ * `Error` naming the source on any read/fetch/verify/parse/shape failure.
  */
-export async function loadRegistryIndex(source: string, opts: { publicKey?: string } = {}): Promise<RegistryIndex> {
+export async function loadRegistryIndex(
+  source: string,
+  opts: { publicKey?: string; requireCommit?: boolean } = {},
+): Promise<RegistryIndex> {
   const text = await readRegistrySource(source, opts.publicKey ?? EMBEDDED_REGISTRY_PUBKEY);
   let parsed: unknown;
   try {
@@ -126,7 +131,7 @@ export async function loadRegistryIndex(source: string, opts: { publicKey?: stri
   } catch (err) {
     throw new Error(`failed to parse registry ${source}: ${(err as Error).message}`);
   }
-  return validateRegistryIndex(parsed, source);
+  return validateRegistryIndex(parsed, source, opts.requireCommit ?? false);
 }
 
 async function readRegistrySource(source: string, publicKey: string): Promise<string> {
@@ -171,7 +176,7 @@ function readDisk(path: string, source: string): string {
   }
 }
 
-function validateRegistryIndex(parsed: unknown, source: string): RegistryIndex {
+function validateRegistryIndex(parsed: unknown, source: string, requireCommit: boolean): RegistryIndex {
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
     throw new Error(`failed to parse registry ${source}: top-level must be an object`);
   }
@@ -205,6 +210,12 @@ function validateRegistryIndex(parsed: unknown, source: string): RegistryIndex {
     }
     if (commit !== undefined && (typeof commit !== "string" || !COMMIT_SHA_REGEX.test(commit))) {
       throw new Error(`failed to parse registry ${source}: entry "${name}" "commit" must be a 40-char hex SHA`);
+    }
+    if (requireCommit && commit === undefined) {
+      throw new Error(
+        `failed to parse registry ${source}: entry "${name}" must pin a "commit" (40-char hex SHA) — ` +
+          `shipped registry entries require an integrity pin`,
+      );
     }
     if (signature !== undefined && typeof signature !== "string") {
       throw new Error(`failed to parse registry ${source}: entry "${name}" "signature" must be a string`);

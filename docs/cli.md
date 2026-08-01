@@ -202,6 +202,7 @@ jaiph install [--force]                  # restore from lockfile
 | Flag | Effect |
 |---|---|
 | `--force` | Delete and re-clone existing libraries. Accepted anywhere in the argument list. |
+| `--allow-unpinned` | Install a registry entry that has no pinned `commit`. Without it, an unpinned registry entry is refused before any clone; with it, the install proceeds after a stderr warning. Does not affect git-URL installs. Accepted anywhere in the argument list. |
 
 ### Argument classification
 
@@ -241,6 +242,7 @@ Missing libraries are cloned with bounded concurrency (default **4 in flight**).
 | Disk paths | Values without a `://` scheme, or starting with `file://`, are read from disk (trusted-local, no signature check). Everything else is fetched via global `fetch`. |
 | Signature verification | A remotely fetched index is verified against a detached `<source>.minisig` (minisign, `jaiph.pub` embedded as the trust anchor) before use. A missing, unsigned, or tampered index is rejected — the fetch fails closed. `jaiph.org` therefore serves `registry.minisig` alongside `registry`; see [Contributing](contributing.md#library-registry-signing). |
 | Index format | `{ "libs": { "<name>": { "url": "<git-url>", "description": "<string>", "commit"?: "<40-hex>", "signature"?: "<minisig>", "publicKey"?: "<minisign pubkey>" } } }`. Each key must match `^[A-Za-z0-9_-]+$`. `commit` (when present) pins the install; `signature`/`publicKey` add a per-library detached-signature check. Other per-entry keys are accepted and ignored. |
+| Pin requirement | Installing a bare registry name whose entry has **no `commit`** is refused before any clone (`lib "<name>" has no pinned commit in registry <source> — ...; re-run with --allow-unpinned to override`). This closes the supply-chain gap where a moved ref would run arbitrary code. Pass `--allow-unpinned` to install anyway after a stderr warning. The **shipped `docs/registry` index** pins every entry, and `npm run registry:build` (strict `requireCommit` validation) refuses to write an index whose entries are not all pinned. |
 | Lookup errors | `lib "<name>" not found in registry <source>`, `failed to read registry <source>: <cause>`, `failed to fetch registry <source>: HTTP <status>`, `failed to fetch registry signature <source>.minisig: <cause>`, `failed to verify registry <source>: signature check failed against <source>.minisig`, `failed to parse registry <source>: <cause>`, `... uses disallowed scheme "<scheme>://" ...`. |
 
 ### Lockfile

@@ -25,6 +25,7 @@ const INSTALL_USAGE =
   "recorded in .jaiph/libs.lock. With no args, restore every library listed in\n" +
   "the lockfile (the registry is never read on restore).\n\n" +
   "  --force         delete existing clone and re-clone\n" +
+  "  --allow-unpinned  install a registry entry that has no pinned commit (prints a warning)\n" +
   "  -h, --help      show this help\n\n" +
   "Environment:\n" +
   "  JAIPH_REGISTRY  path or URL of the registry index (default: " +
@@ -256,8 +257,17 @@ async function runWithConcurrency<T, R>(items: T[], limit: number, fn: (item: T)
  * names (no `/`, no `:`) are resolved through the registry — loaded at most
  * once, only when at least one bare-name arg is present. Everything else is
  * treated as a git clone URL with optional `@version`, matching prior behavior.
+ *
+ * A registry entry with no pinned `commit` is refused (supply-chain integrity
+ * gate: without a pin, `git clone` runs whatever the mutable ref HEAD points at).
+ * `allowUnpinned` downgrades that refusal to a stderr warning so an operator can
+ * opt into an unpinned third-party entry deliberately.
  */
-async function resolveInstallSpecs(args: string[], libsDir: string): Promise<InstallSpec[]> {
+async function resolveInstallSpecs(
+  args: string[],
+  libsDir: string,
+  allowUnpinned: boolean,
+): Promise<InstallSpec[]> {
   const hasName = args.some(isRegistryNameArg);
   let index: RegistryIndex | undefined;
   let source: string | undefined;
@@ -272,6 +282,18 @@ async function resolveInstallSpecs(args: string[], libsDir: string): Promise<Ins
       const entry = index!.libs[name];
       if (!entry) {
         throw new Error(`lib "${name}" not found in registry ${source}`);
+      }
+      if (!entry.commit) {
+        if (!allowUnpinned) {
+          throw new Error(
+            `lib "${name}" has no pinned commit in registry ${source} — refusing to install an ` +
+              `unpinned registry entry (its ref could move to arbitrary code); re-run with ` +
+              `--allow-unpinned to override`,
+          );
+        }
+        process.stderr.write(
+          `warning: installing "${name}" from registry ${source} without a pinned commit (--allow-unpinned)\n`,
+        );
       }
       assertAllowedRemoteScheme(entry.url, `lib "${name}" url`);
       specs.push({
@@ -300,7 +322,8 @@ export async function runInstall(rest: string[], opts: RunInstallOptions = {}): 
   }
   const palette = colorPalette();
   const force = rest.includes("--force");
-  const args = rest.filter((a) => a !== "--force");
+  const allowUnpinned = rest.includes("--allow-unpinned");
+  const args = rest.filter((a) => a !== "--force" && a !== "--allow-unpinned");
   const cwd = opts.cwd ?? process.cwd();
   const workspaceRoot = detectWorkspaceRoot(cwd);
   const libsDir = join(workspaceRoot, ".jaiph", "libs");
@@ -332,7 +355,7 @@ export async function runInstall(rest: string[], opts: RunInstallOptions = {}): 
     process.stdout.write("\n");
     lock = readLockFile(lockPath);
     try {
-      specs = await resolveInstallSpecs(args, libsDir);
+      specs = await resolveInstallSpecs(args, libsDir, allowUnpinned);
     } catch (err) {
       process.stderr.write(`${(err as Error).message}\n`);
       return 1;
