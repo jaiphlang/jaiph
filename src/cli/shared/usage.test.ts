@@ -255,6 +255,16 @@ test("parseArgs: --unsafe and -y are accepted by serve and mcp", () => {
   }
 });
 
+test("parseArgs: --allow-anonymous is a serve-only boolean flag", () => {
+  const r = parseArgs(["--allow-anonymous", "flow.jh"], "serve");
+  assert.equal(r.allowAnonymous, true);
+  assert.deepEqual(r.positional, ["flow.jh"]);
+  // Not accepted by run or mcp, and it takes no value.
+  assert.throws(() => parseArgs(["--allow-anonymous", "flow.jh"], "run"), /--allow-anonymous is not a jaiph run flag.*jaiph serve/);
+  assert.throws(() => parseArgs(["--allow-anonymous", "flow.jh"], "mcp"), /--allow-anonymous is not a jaiph mcp flag.*jaiph serve/);
+  assert.throws(() => parseArgs(["--allow-anonymous=1", "flow.jh"], "serve"), /--allow-anonymous does not take a value/);
+});
+
 test("parseArgs: run rejects serve's transport flags, naming the owning command", () => {
   assert.throws(() => parseArgs(["--host", "0.0.0.0", "flow.jh"], "run"), /--host is not a jaiph run flag.*jaiph serve/);
   assert.throws(() => parseArgs(["--port", "8080", "flow.jh"], "run"), /--port is not a jaiph run flag.*jaiph serve/);

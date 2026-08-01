@@ -152,12 +152,13 @@ test("GET /v1/runs/{id}/events hard-fails (409) on a tampered journal, streams a
       assert.equal(tampered.status, 409, "a tampered journal is rejected, not served");
       assert.equal(((await tampered.json()) as { error: { code: string } }).error.code, "E_TAMPERED");
 
-      // Replace with a journal that verifies under the same key: keyed genesis
-      // for the single line's prev_hash.
-      writeFileSync(
-        join(runDir, "run_summary.jsonl"),
-        JSON.stringify({ type: "WORKFLOW_START", prev_hash: chainHmac("k".repeat(64), CHAIN_GENESIS) }) + "\n",
-      );
+      // Replace with a journal that verifies under the same key: a COMPLETE
+      // terminal chain (keyed genesis for line 1, then a WORKFLOW_END whose
+      // prev_hash links to it). A keyed run is only persisted once terminal, so
+      // the verify boundary requires the WORKFLOW_END marker (finding L-3).
+      const l0 = JSON.stringify({ type: "WORKFLOW_START", prev_hash: chainHmac("k".repeat(64), CHAIN_GENESIS) });
+      const l1 = JSON.stringify({ type: "WORKFLOW_END", prev_hash: chainHmac("k".repeat(64), l0) });
+      writeFileSync(join(runDir, "run_summary.jsonl"), `${l0}\n${l1}\n`);
       const clean = await fetch(`http://127.0.0.1:${port}/v1/runs/${runId}/events`);
       assert.equal(clean.status, 200, "a verifying journal streams normally");
       assert.match(clean.headers.get("content-type") ?? "", /application\/x-ndjson/);
