@@ -10,7 +10,10 @@
 #
 # It also asserts every toolchain fetch in the Dockerfile routes through the
 # helper with a non-empty pinned checksum, so a future edit that reintroduces an
-# unverified or empty-default fetch fails here.
+# unverified or empty-default fetch fails here. Finally (finding L-4) it asserts
+# every base image is pinned by @sha256: digest and every global npm install
+# pins an exact version, so a future edit reintroducing a bare mutable tag or an
+# unpinned `npm install -g <pkg>` fails here too.
 
 set -euo pipefail
 
@@ -106,3 +109,37 @@ for arg in UV_INSTALL_SHA256 RUSTUP_INIT_SHA256 BUN_INSTALL_SHA256 CURSOR_INSTAL
   fi
 done
 e2e::pass "all toolchain checksum ARGs carry a pinned non-empty default"
+
+# ── Every base image is pinned by digest ──────────────────────────────────────
+
+e2e::section "runtime/Dockerfile pins every base image by @sha256: digest"
+
+# A bare mutable tag (e.g. `FROM ubuntu:24.04`) is not reproducible; every FROM
+# must pin an @sha256: digest so the registry-sourced base layers are attested
+# (finding L-4).
+unpinned_from="$(grep -nE '^FROM ' "${DOCKERFILE}" | grep -vE '@sha256:[0-9a-f]{64}' || true)"
+if [ -n "${unpinned_from}" ]; then
+  printf 'FROM line(s) without an @sha256: digest pin:\n%s\n' "${unpinned_from}" >&2
+  e2e::fail "every FROM must pin an @sha256: digest (no bare mutable tags)"
+fi
+e2e::pass "all base images pinned by digest"
+
+# ── Global npm installs pin exact versions ────────────────────────────────────
+
+e2e::section "runtime/Dockerfile pins global npm installs to exact versions"
+
+for arg in PNPM_VERSION YARN_VERSION CLAUDE_CODE_VERSION; do
+  if ! grep -qE "^ARG ${arg}=[^[:space:]]+\$" "${DOCKERFILE}"; then
+    e2e::fail "Dockerfile ARG ${arg} must default to a non-empty version"
+  fi
+done
+
+# A registry package installed with `npm install -g <name>` and no `@version` is
+# a bare, mutable install (the pattern the finding flagged). Local tarball
+# installs (paths like /tmp/jaiph.tgz) are inherently pinned and excluded.
+bare_npm="$(grep -nE 'npm install -g[^&|]*["[:space:]](pnpm|yarn|@anthropic-ai/claude-code)(["[:space:]]|\$)' "${DOCKERFILE}" || true)"
+if [ -n "${bare_npm}" ]; then
+  printf 'Unpinned global npm install(s) in Dockerfile:\n%s\n' "${bare_npm}" >&2
+  e2e::fail "global npm install -g of a registry package must pin an exact @version"
+fi
+e2e::pass "all global npm installs pin exact versions"

@@ -289,6 +289,32 @@ test("Dockerfile pins every toolchain fetch through fetch-verify.sh with a requi
   assert.match(HELPER, /sha256 mismatch/, "fetch-verify aborts on a checksum mismatch");
 });
 
+test("Dockerfile pins every base image by digest (no bare mutable tags)", () => {
+  // Every FROM must reference an image by @sha256: digest so the built runtime
+  // image is reproducible and its registry-sourced layers are attested
+  // (finding L-4). A bare `FROM node:22-bookworm-slim` would fail here.
+  const fromLines = DOCKERFILE.split("\n").filter((l) => /^FROM\s/.test(l));
+  assert.ok(fromLines.length >= 2, "expected at least the builder and runtime FROM stages");
+  const unpinned = fromLines.filter((l) => !/@sha256:[0-9a-f]{64}\b/.test(l));
+  assert.deepEqual(unpinned, [], `FROM line(s) without an @sha256: digest pin:\n${unpinned.join("\n")}`);
+});
+
+test("Dockerfile pins global npm installs to exact versions", () => {
+  // The registry-sourced global installs must pin exact versions (finding L-4),
+  // declared as bump-in-one-place ARGs.
+  for (const argName of ["PNPM_VERSION", "YARN_VERSION", "CLAUDE_CODE_VERSION"]) {
+    assert.match(DOCKERFILE, new RegExp(`^ARG ${argName}=\\S+$`, "m"), `ARG ${argName} carries a version default`);
+  }
+
+  // A registry package installed with `npm install -g <name>` and no `@version`
+  // is a bare, mutable install — the pattern the finding flagged. Local tarball
+  // installs (paths like /tmp/jaiph.tgz) are inherently pinned and excluded.
+  const bare = DOCKERFILE.split("\n").filter((l) =>
+    /npm install -g[^&|]*["\s](pnpm|yarn|@anthropic-ai\/claude-code)(["\s]|$)/.test(l),
+  );
+  assert.deepEqual(bare, [], `unpinned global npm install(s) in Dockerfile:\n${bare.join("\n")}`);
+});
+
 test("bash installer requires SHA256SUMS.minisig and fails closed when absent", () => {
   assert.match(INSTALLER, /SHA256SUMS\.minisig/, "downloads SHA256SUMS.minisig");
   assert.match(INSTALLER, /Failed to download.*SHA256SUMS\.minisig/, "fails with message when sig file is missing");
