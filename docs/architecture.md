@@ -177,6 +177,7 @@ Before `RuntimeEventEmitter` writes an event line to `run_summary.jsonl`, it red
 - the reconstructed prompt body (`prompt_text`) and the resolved values of `${var}` references persisted alongside it (`emitPromptStepStart`),
 - the `preview` field of `PROMPT_START` / `PROMPT_END` events (`emitPromptEvent`),
 - the embedded stdout/stderr excerpts (`out_content` / `err_content`) of every `STEP_END` — script and prompt steps alike (`emitStep`),
+- the `params` key/value pairs of every `STEP_END`, which hold the positional or named arguments passed to a `run`, tool, or `script` step, so a secret passed as an argument is redacted the same way as the step's captured output (`emitStep`),
 - the `message` field of every durable `LOG`, `LOGWARN`, and `LOGERR` event, so a value a workflow passes to `log`, `logwarn`, or `logerr` is redacted in the journal the same way as a step's captured output (`emitLog`).
 
 The rule covers backend API keys such as `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, and `CURSOR_API_KEY` (the same names on the [Docker env allowlist](sandboxing.md)).
