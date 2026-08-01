@@ -169,6 +169,33 @@ else
   # assert_contains: verifies the checksum-only warning surfaced.
   e2e::assert_contains "${opt_output}" "proceeding on checksum only" "opt-out warning is shown"
   e2e::pass "JAIPH_ALLOW_UNSIGNED=1 bypasses the mandatory-signature abort"
+
+  # ── CI=true no longer downgrades to checksum-only (AC1, finding M-5) ─────────
+  #
+  # The whole point of M-5: with CI set (the state of every GitHub runner) but
+  # no JAIPH_ALLOW_UNSIGNED opt-in, a missing minisign must abort — not fall back
+  # to checksum-only. This is the regression test that fails if `CI` is ever
+  # re-added as a silent opt-out.
+  e2e::section "CI=true with no JAIPH_ALLOW_UNSIGNED fails closed (no checksum-only downgrade)"
+  BIN_DIR_CI="${TEST_DIR}/bin-ci"
+  mkdir -p "${BIN_DIR_CI}"
+  ci_status=0
+  ci_output="$(
+    unset JAIPH_REPO_URL
+    env -u JAIPH_ALLOW_UNSIGNED \
+      CI=true \
+      PATH="${RESTRICTED_PATH}" \
+      JAIPH_RELEASE_BASE_URL="file://${RELEASE_DIR_NM}" \
+      JAIPH_BIN_DIR="${BIN_DIR_CI}" \
+      bash "${INSTALL_SCRIPT}" 2>&1
+  )" || ci_status=$?
+  e2e::assert_equals "${ci_status}" "1" "CI install without minisign exits non-zero"
+  # assert_contains: output carries ANSI color codes around the message
+  e2e::assert_contains "${ci_output}" "minisign is required" "reports mandatory signature verification under CI"
+  if [ -e "${BIN_DIR_CI}/jaiph" ]; then
+    e2e::fail "installer left a binary under CI when signature verification was impossible"
+  fi
+  e2e::pass "CI=true is not a checksum-only opt-out"
 fi
 
 # ── Checksum mismatch ────────────────────────────────────────────────────────

@@ -46,23 +46,6 @@ Remediation: Store the chain key outside the agent-writable run directory (a hos
 - A failure to persist the chain key surfaces as a hard error, verified by a test that forces the write to fail.
 - For a run that was launched with a chain key, `verifyRunJournal` (and the OTLP/Sentry/serve export boundaries) reports an integrity failure when the key is missing at verification time, verified by a test.
 
-## Require signature verification in CI installer and setup-jaiph action #dev-ready
-
-Context: Security review 2026-07-31, finding M-5 (ASI-09 Supply Chain), severity MEDIUM, confidence 0.75. The entire CI install population currently skips the only out-of-band integrity check.
-
-Problem: The installer downgrades to checksum-only when `CI` is set and `minisign` is absent — exactly the state of the official `setup-jaiph` action, which never installs minisign. An attacker who can write release assets or MITM the download serves a malicious binary plus a matching `SHA256SUMS`; the checksum passes (it was computed over the malicious bytes) and the signature step is silently skipped for the entire CI population. The release workflow compounds this by publishing unsigned artifacts when the signing secret is unset.
-
-Location: `docs/install:275-284` (the `[ -n "${CI:-}" ]` checksum-only branch), mirrored in `docs/install.ps1`; `actions/setup-jaiph/setup.sh:48-51` (never installs minisign); `.github/workflows/release.yml:204-208` (skips `.minisig` when the signing secret is unset).
-
-Remediation: Make the `setup-jaiph` action install `minisign` (or a vendored verifier) and require signature verification even under `CI`. Reserve checksum-only for an explicit, loudly-logged `JAIPH_ALLOW_UNSIGNED=1` opt-in instead of defaulting into it whenever `CI` is set (apply to both `docs/install` and `docs/install.ps1`). Fail the release build if the signing secret is unset rather than publishing unsigned.
-
-### Acceptance criteria
-- With `CI=true` and no `JAIPH_ALLOW_UNSIGNED`, the installer fails when minisign verification cannot be performed (missing tool or missing `.minisig`) instead of falling back to checksum-only, verified by an e2e installer test.
-- With `JAIPH_ALLOW_UNSIGNED=1`, the installer proceeds checksum-only and prints a prominent warning, verified by a test.
-- `actions/setup-jaiph/setup.sh` installs or vendors a minisign verifier so the action path performs signature verification, verified by the action e2e test.
-- `.github/workflows/release.yml` fails when the signing secret is unset instead of publishing unsigned artifacts.
-- `docs/env-vars.md` documents `JAIPH_ALLOW_UNSIGNED`.
-
 ## Pin sandbox runtime image by digest and verify on every run #dev-ready
 
 Context: Security review 2026-07-31, finding M-6 (ASI-09/ASI-05), severity MEDIUM, confidence 0.8. The sandbox image is the load-bearing boundary between untrusted workflows and the host, but its integrity is never verified.

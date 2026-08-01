@@ -202,10 +202,11 @@ jobs:
           set -euo pipefail
           rm -f SHA256SUMS.minisig
           if [ -z "${MINISIGN_SECRET_KEY}" ]; then
-            echo "MINISIGN_SECRET_KEY secret is not set — skipping detached signature." >&2
-            echo "Set the secret to enable signed releases (see docs/contributing.md)." >&2
-            echo "Installers fail closed without SHA256SUMS.minisig; do not upload an empty stub" >&2
-            echo "(GitHub rejects 0-byte release assets with HTTP 400 Bad Content-Length)." >&2
+            echo "MINISIGN_SECRET_KEY secret is not set — refusing to publish an unsigned release." >&2
+            echo "Installers fail closed without SHA256SUMS.minisig (finding M-5): publishing" >&2
+            echo "unsigned would strip the only out-of-band integrity check for every consumer." >&2
+            echo "Set the MINISIGN_SECRET_KEY secret to enable signed releases (docs/contributing.md)." >&2
+            exit 1
           else
             command -v minisign >/dev/null
             key_file="$(mktemp)"

@@ -105,10 +105,11 @@ try {
   # Releases are signed with: minisign -S -s jaiph.key -m SHA256SUMS
   # Verify manually:          minisign -V -P <pubkey> -m SHA256SUMS
   # Key generation/rotation:  see docs/contributing.md -> "Release signing"
-  # Fail-closed policy (finding M-11), mirroring docs/install: the detached
+  # Fail-closed policy (finding M-11 + M-5), mirroring docs/install: the detached
   # signature is mandatory. An env key that is set but empty aborts instead of
-  # falling back to the bundled key; minisign missing aborts on a normal host
-  # and proceeds on checksum only under CI (or JAIPH_ALLOW_UNSIGNED=1).
+  # falling back to the bundled key. minisign missing aborts on EVERY host, CI
+  # included — `CI` no longer downgrades to checksum-only; only an explicit,
+  # loudly-warned JAIPH_ALLOW_UNSIGNED=1 opts into a checksum-only install.
   $keyIsSet = Test-Path Env:\JAIPH_MINISIGN_PUBLIC_KEY
   $JaiphMinisignKey = if ($keyIsSet) {
     $env:JAIPH_MINISIGN_PUBLIC_KEY
@@ -133,13 +134,17 @@ try {
       exit 1
     }
     Print-Success "Release signature verified"
-  } elseif ($env:CI -or $env:JAIPH_ALLOW_UNSIGNED -eq "1") {
-    Print-Warning "minisign not installed — proceeding on checksum only (CI/JAIPH_ALLOW_UNSIGNED opt-out)"
-    Write-Host "  Install minisign for full verification: https://jedisct1.github.io/minisign/"
+  } elseif ($env:JAIPH_ALLOW_UNSIGNED -eq "1") {
+    Print-Warning "!!! JAIPH_ALLOW_UNSIGNED=1 — SKIPPING SIGNATURE VERIFICATION !!!"
+    Print-Warning "minisign not installed — proceeding on checksum only"
+    Write-Host "  The checksum ships over the same channel as the binary, so this is NOT"
+    Write-Host "  an out-of-band integrity check. Install minisign for full verification:"
+    Write-Host "  https://jedisct1.github.io/minisign/"
   } else {
     Print-Error "minisign is required to verify the release signature but was not found"
     Write-Host "Install minisign, then re-run: https://jedisct1.github.io/minisign/"
-    Write-Host "On a trusted CI host set CI=1 (or JAIPH_ALLOW_UNSIGNED=1) to proceed on checksum only."
+    Write-Host "CI is no longer an opt-out (finding M-5): make minisign available, or for a"
+    Write-Host "deliberate checksum-only install set JAIPH_ALLOW_UNSIGNED=1."
     exit 1
   }
 

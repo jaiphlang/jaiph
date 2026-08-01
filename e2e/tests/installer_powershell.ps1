@@ -49,6 +49,12 @@ New-Item -ItemType Directory -Path $Work -Force | Out-Null
 try {
   $BinName = "jaiph-windows-x64.exe"
 
+  # The mock releases carry placeholder signatures and the test host has no
+  # minisign. CI is no longer a checksum-only opt-out (finding M-5), so opt in
+  # explicitly with JAIPH_ALLOW_UNSIGNED=1 to reach the checksum step. Fail-closed
+  # signature behaviour is covered by the bash test (07_installer_binary.sh).
+  $env:JAIPH_ALLOW_UNSIGNED = "1"
+
   # ── Checksum mismatch ───────────────────────────────────────────────────────
   Write-Host "`n== Checksum mismatch fails and installs nothing =="
   $relBad = Join-Path $Work "release-mismatch"
@@ -136,6 +142,7 @@ try {
   $env:PROCESSOR_ARCHITECTURE = $OrigArch
   Remove-Item Env:\JAIPH_RELEASE_BASE_URL -ErrorAction SilentlyContinue
   Remove-Item Env:\JAIPH_BIN_DIR -ErrorAction SilentlyContinue
+  Remove-Item Env:\JAIPH_ALLOW_UNSIGNED -ErrorAction SilentlyContinue
   Remove-Item -LiteralPath $Work -Recurse -Force -ErrorAction SilentlyContinue
 }
 

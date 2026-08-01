@@ -10,11 +10,20 @@
 #
 # Network-free: the action's entrypoint runs the real docs/install pointed at a
 # `file://` mock release via JAIPH_RELEASE_BASE_URL, with a fake `jaiph` binary
-# that answers `--version`. When minisign is on the host, SHA256SUMS is signed
-# with a throwaway key whose public key is handed to the installer (docs/install
-# resolves an empty key back to the real project key, so it cannot be blanked);
-# without minisign a placeholder signature is enough. Fail-closed on a missing
-# .minisig is already covered by 07_installer_binary.sh.
+# that answers `--version`.
+#
+# Signature verification (finding M-5). GitHub runners set CI=true, and CI is no
+# longer a checksum-only opt-out, so the action MUST provide a minisign verifier
+# or the fail-closed installer aborts. setup.sh's ensure_minisign does that; this
+# test drives every case with CI=true (the runner's state) and NO
+# JAIPH_ALLOW_UNSIGNED, so signature verification is always exercised on the
+# action path. When minisign is on the host, SHA256SUMS is signed with a
+# throwaway key whose public key is handed to the installer. When it is absent,
+# setup.sh "installs" a fake verifier through the JAIPH_MINISIGN_INSTALL override
+# and releases carry a marker signature the fake accepts — so verification runs
+# deterministically either way. Fail-closed on a missing .minisig is covered by
+# 07_installer_binary.sh; this file adds the fail-closed-when-minisign-cannot-be-
+# installed case for the action path.
 
 set -euo pipefail
 
@@ -49,23 +58,57 @@ HOST_BIN_NAME="jaiph-${HOST_OS}-${HOST_ARCH}"
 
 FAKE_VERSION="jaiph 9.9.9-e2e"
 
-# Sign a release's SHA256SUMS so docs/install's signature step passes. The
-# installer verifies the detached signature BEFORE the checksum, so both the
-# valid and tampered-checksum releases must be signed to reach later steps.
-# Sets REL_PUBKEY to the matching public key (empty when minisign is absent,
-# in which case the installer skips verification against a placeholder sig).
+# Pick a verifier strategy once: use the host's real minisign when present, else
+# a deterministic fake that setup.sh "installs" via the JAIPH_MINISIGN_INSTALL
+# override. The fake accepts a signature whose body is FAKE_MARKER and rejects
+# anything else, so a tampered signature still fails verification.
+FAKE_MARKER="E2E-VALID-SIGNATURE"
+TOOLS_DIR="${TEST_DIR}/tools"
+FAKE_MINISIGN="${TEST_DIR}/fake-minisign"
+USE_FAKE_MINISIGN=""
+mkdir -p "${TOOLS_DIR}"
+if ! command -v minisign >/dev/null 2>&1; then
+  USE_FAKE_MINISIGN=1
+  cat > "${FAKE_MINISIGN}" <<'FAKE'
+#!/usr/bin/env bash
+# Fake minisign for e2e: verify (-V) succeeds only when the detached signature
+# (-x) body is the expected marker. Mirrors the args docs/install passes.
+sig=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -x) sig="$2"; shift 2 ;;
+    -P|-m) shift 2 ;;
+    *) shift ;;
+  esac
+done
+[ -n "${sig}" ] && [ -f "${sig}" ] && grep -q 'E2E-VALID-SIGNATURE' "${sig}"
+FAKE
+  chmod +x "${FAKE_MINISIGN}"
+fi
+
+# Sign a release's SHA256SUMS so docs/install's signature step verifies. The
+# installer verifies the detached signature BEFORE the checksum, so every
+# release must carry a valid signature to reach later steps. Sets REL_PUBKEY to
+# the matching public key when the host has real minisign; empty for the fake.
 REL_PUBKEY=""
 sign_release() {
   local dir="$1"
-  if command -v minisign >/dev/null 2>&1; then
+  if [ -n "${USE_FAKE_MINISIGN}" ]; then
+    printf '%s\n' "${FAKE_MARKER}" > "${dir}/SHA256SUMS.minisig"
+    REL_PUBKEY=""
+  else
     rm -f "${dir}/test.pub" "${dir}/test.key"
     minisign -G -W -p "${dir}/test.pub" -s "${dir}/test.key" >/dev/null 2>&1
     minisign -S -s "${dir}/test.key" -m "${dir}/SHA256SUMS" >/dev/null 2>&1
     REL_PUBKEY="$(tail -n 1 "${dir}/test.pub")"
-  else
-    printf 'placeholder-sig\n' > "${dir}/SHA256SUMS.minisig"
-    REL_PUBKEY=""
   fi
+}
+
+# Write a release whose signature does NOT verify (tampered): a marker mismatch
+# for the fake, corrupted bytes for real minisign.
+tamper_signature() {
+  local dir="$1"
+  printf 'not-a-valid-signature\n' > "${dir}/SHA256SUMS.minisig"
 }
 
 # Build a mock release: a fake `jaiph` binary that answers --version, a correct
@@ -83,24 +126,33 @@ EOF
   sign_release "${dir}"
 }
 
-# Run the action entrypoint against a mock release, using REL_PUBKEY for the
-# signature key. Args: version, bin_dir, release_dir, github_path, github_output.
+# Run the action entrypoint against a mock release under CI=true (the runner's
+# state) and no JAIPH_ALLOW_UNSIGNED, so signature verification is always on the
+# path. Args: version, bin_dir, release_dir, github_path, github_output.
 # Echoes combined output; returns the entrypoint's exit status.
-# REL_PUBKEY is only set when minisign produced a real throwaway key above. When
-# minisign is absent it's empty — passing that explicitly would trip the
-# installer's empty-key fail-closed guard, so leave the variable unset instead.
+# When the host lacks minisign, setup.sh installs the fake through
+# JAIPH_MINISIGN_INSTALL; TOOLS_DIR is prepended to PATH so both setup.sh and the
+# installer subprocess resolve it. REL_PUBKEY is only set for real throwaway keys.
 run_setup() {
   local version="$1" bin_dir="$2" release_dir="$3" gh_path="$4" gh_out="$5"
-  if [ -n "${REL_PUBKEY}" ]; then
+  local install_hook=""
+  if [ -n "${USE_FAKE_MINISIGN}" ]; then
+    install_hook="cp '${FAKE_MINISIGN}' '${TOOLS_DIR}/minisign' && chmod +x '${TOOLS_DIR}/minisign'"
+    unset JAIPH_MINISIGN_PUBLIC_KEY
+  elif [ -n "${REL_PUBKEY}" ]; then
     export JAIPH_MINISIGN_PUBLIC_KEY="${REL_PUBKEY}"
   else
     unset JAIPH_MINISIGN_PUBLIC_KEY
   fi
   INPUT_VERSION="${version}" \
+  CI=true \
+  JAIPH_ALLOW_UNSIGNED="" \
   JAIPH_BIN_DIR="${bin_dir}" \
   JAIPH_RELEASE_BASE_URL="file://${release_dir}" \
+  JAIPH_MINISIGN_INSTALL="${install_hook}" \
   GITHUB_PATH="${gh_path}" \
   GITHUB_OUTPUT="${gh_out}" \
+  PATH="${TOOLS_DIR}:${PATH}" \
   bash "${SETUP_SCRIPT}" 2>&1
 }
 
@@ -122,6 +174,10 @@ e2e::assert_equals "${ok_status}" "0" "setup entrypoint succeeds for a valid rel
 # assert_contains: full output includes the installer's ANSI-colored progress.
 e2e::assert_contains "${ok_output}" "resolved version '0.11.0' to release ref 'v0.11.0'" \
   "bare semver resolves to a v-prefixed release tag"
+# AC3: the action path performs signature verification (CI=true, no opt-out).
+# assert_contains: full output includes the installer's ANSI-colored progress.
+e2e::assert_contains "${ok_output}" "Release signature verified" \
+  "action path verifies the release signature under CI"
 
 e2e::assert_file_executable "${BIN_OK}/jaiph" "installed jaiph is executable"
 installed_version="$("${BIN_OK}/jaiph" --version)"
@@ -150,6 +206,70 @@ e2e::assert_equals "${nightly_status}" "0" "nightly input succeeds"
 e2e::assert_contains "${nightly_output}" "resolved version 'nightly' to release ref 'nightly'" \
   "nightly stays on the nightly ref"
 e2e::pass "version input maps to the expected release refs"
+
+# ── Fail closed: tampered signature (AC3) ─────────────────────────────────────
+
+e2e::section "a tampered release signature fails the action path"
+
+RELEASE_TAMPER="${TEST_DIR}/release-tamper"
+BIN_TAMPER="${TEST_DIR}/bin-tamper"
+GH_PATH_TAMPER="${TEST_DIR}/github_path_tamper"
+: > "${GH_PATH_TAMPER}"
+make_release "${RELEASE_TAMPER}"
+tamper_signature "${RELEASE_TAMPER}"
+
+tamper_status=0
+tamper_output="$(run_setup "0.11.0" "${BIN_TAMPER}" "${RELEASE_TAMPER}" "${GH_PATH_TAMPER}" "${TEST_DIR}/gh_out_tamper")" || tamper_status=$?
+e2e::assert_equals "${tamper_status}" "1" "tampered signature exits non-zero"
+# assert_contains: full message includes ANSI colors.
+e2e::assert_contains "${tamper_output}" "signature verification failed" \
+  "signature verification failure is reported"
+if [ -e "${BIN_TAMPER}/jaiph" ]; then
+  e2e::fail "tampered signature left a binary in ${BIN_TAMPER}"
+fi
+e2e::assert_equals "$(<"${GH_PATH_TAMPER}")" "" "GITHUB_PATH is untouched on signature failure"
+e2e::pass "tampered signature is non-recoverable and touches nothing"
+
+# ── Fail closed: minisign cannot be provided under CI (AC3, finding M-5) ───────
+#
+# Proves the action does not silently downgrade to checksum-only under CI: when
+# ensure_minisign cannot install a verifier and none is on PATH, the fail-closed
+# installer aborts. Only meaningful when the host itself lacks minisign (so it
+# can be forced unavailable); skipped otherwise.
+
+e2e::section "action fails closed under CI when minisign cannot be provided"
+
+if [ -z "${USE_FAKE_MINISIGN}" ]; then
+  e2e::skip "host has minisign — cannot force it unavailable for the fail-closed case"
+else
+  RELEASE_FC="${TEST_DIR}/release-failclosed"
+  BIN_FC="${TEST_DIR}/bin-failclosed"
+  GH_PATH_FC="${TEST_DIR}/github_path_failclosed"
+  : > "${GH_PATH_FC}"
+  make_release "${RELEASE_FC}"
+
+  fc_status=0
+  fc_output="$(
+    INPUT_VERSION="0.11.0" \
+    CI=true \
+    JAIPH_BIN_DIR="${BIN_FC}" \
+    JAIPH_RELEASE_BASE_URL="file://${RELEASE_FC}" \
+    JAIPH_MINISIGN_INSTALL=":" \
+    GITHUB_PATH="${GH_PATH_FC}" \
+    GITHUB_OUTPUT="${TEST_DIR}/gh_out_failclosed" \
+    env -u JAIPH_ALLOW_UNSIGNED -u JAIPH_MINISIGN_PUBLIC_KEY \
+      PATH="/usr/bin:/bin" \
+      bash "${SETUP_SCRIPT}" 2>&1
+  )" || fc_status=$?
+  e2e::assert_equals "${fc_status}" "1" "action fails when minisign cannot be installed under CI"
+  # assert_contains: full message includes ANSI colors.
+  e2e::assert_contains "${fc_output}" "minisign is required" "reports mandatory signature verification"
+  if [ -e "${BIN_FC}/jaiph" ]; then
+    e2e::fail "action left a binary when signature verification was impossible"
+  fi
+  e2e::assert_equals "$(<"${GH_PATH_FC}")" "" "GITHUB_PATH is untouched when fail-closed"
+  e2e::pass "action path enforces signature verification under CI (no checksum-only downgrade)"
+fi
 
 # ── Fail closed: checksum mismatch ────────────────────────────────────────────
 
