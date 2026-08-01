@@ -1,4 +1,7 @@
-FROM node:22-bookworm-slim AS builder
+# Base images are pinned by digest (not just a mutable tag) so the built image
+# is reproducible and its registry-sourced layers are attested (finding L-4,
+# ASI-09). Refresh the @sha256: digest when intentionally bumping the tag.
+FROM node:22-bookworm-slim@sha256:f32b81066cde10a75dbac96646099533316d94bac4150c55da1636e1f0ffdc46 AS builder
 
 WORKDIR /src
 COPY package.json package-lock.json tsconfig.json ./
@@ -10,7 +13,9 @@ COPY tools ./tools
 COPY docs/jaiph-skill.md ./docs/jaiph-skill.md
 RUN npm ci && npm run build && npm pack --pack-destination /tmp >/dev/null && mv /tmp/jaiph-*.tgz /tmp/jaiph.tgz
 
-FROM ubuntu:24.04
+# Pinned by digest for the same reproducibility/provenance reason as the builder
+# base above (finding L-4). Refresh the @sha256: digest when bumping the tag.
+FROM ubuntu:24.04@sha256:4fbb8e6a8395de5a7550b33509421a2bafbc0aab6c06ba2cef9ebffbc7092d90
 
 # Broad workflow toolchain for the sandbox runtime.
 # Curated for generic engineering: VCS, shell, JS/Python, Go, Java, Rust,
@@ -88,7 +93,12 @@ RUN curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key \
 
 # JS package managers (pnpm is not on GitHub-hosted runners either — workflows
 # install it explicitly; we preinstall the common trio for sandbox scripts).
-RUN npm install -g pnpm yarn && corepack enable
+# Versions are pinned exactly so the registry-sourced install is reproducible
+# (finding L-4); npm verifies each pinned version's tarball integrity against the
+# registry. Bump these deliberately. Empty would let npm resolve a mutable tag.
+ARG PNPM_VERSION=11.18.0
+ARG YARN_VERSION=1.22.22
+RUN npm install -g "pnpm@${PNPM_VERSION}" "yarn@${YARN_VERSION}" && corepack enable
 
 # Fast Python env/deps (common alternative to raw pip in modern repos).
 # UV_INSTALL_SHA256: sha256 of https://astral.sh/uv/install.sh. This is a rolling
@@ -211,8 +221,10 @@ RUN useradd --create-home --uid 10001 --shell /bin/bash jaiph && \
     chown -R jaiph:jaiph /jaiph && \
     chmod 755 /home/jaiph
 
-# Claude Code CLI (Anthropic) — global install for all users
-RUN npm install -g @anthropic-ai/claude-code
+# Claude Code CLI (Anthropic) — global install for all users. Pinned exactly for
+# reproducible, integrity-checked provenance (finding L-4); bump deliberately.
+ARG CLAUDE_CODE_VERSION=2.1.220
+RUN npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"
 
 # Install jaiph built from repository source (builder stage).
 COPY --from=builder /tmp/jaiph.tgz /tmp/jaiph.tgz

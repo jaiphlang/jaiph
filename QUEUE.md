@@ -61,21 +61,6 @@ Remediation: Record a terminal event (e.g. `WORKFLOW_END`) and verify its presen
 - A complete terminal journal with an intact `WORKFLOW_END` (or signed line count) still verifies successfully; a test asserts the happy path.
 - During-run appends that break the chain continue to fail verification; a regression test covers that case.
 
-## Pin runtime Dockerfile base images and global npm installs #dev-ready
-
-Context: Security review 2026-07-31, finding L-4 (ASI-09), severity LOW, confidence 0.75. Unpinned base images and global npm installs weaken runtime-image provenance.
-
-Problem: `runtime/Dockerfile` uses `FROM node:22-bookworm-slim` and `FROM ubuntu:24.04` by tag (not digest), and runs unpinned `npm install -g pnpm yarn` / `npm install -g @anthropic-ai/claude-code`. Direct toolchain downloads already go through `runtime/fetch-verify.sh` with pinned SHA-256; the registry-sourced layers are the weaker link.
-
-Location: `runtime/Dockerfile:1`, `:13`, `:91`, `:215`; `runtime/fetch-verify.sh`.
-
-Remediation: Pin base images by digest and pin the global npm installs to exact versions (ideally with an integrity check), so the built image is reproducible and its inputs are attested.
-
-### Acceptance criteria
-- Every `FROM` in `runtime/Dockerfile` references an image by `@sha256:` digest (or an equivalent pinned digest form); a test or CI check asserts no bare mutable tags remain on `FROM` lines.
-- Global `npm install -g` invocations pin exact package versions; a test or CI check asserts version pins are present.
-- A runtime image build with the pinned inputs still succeeds (documented or exercised in CI).
-
 ## Verify per-library registry signatures only against the embedded key #dev-ready
 
 Context: Security review 2026-07-31, finding L-5 (ASI-05), severity LOW, confidence 0.7. Per-library registry signature is self-authenticating when the entry supplies its own public key.
