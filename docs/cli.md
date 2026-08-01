@@ -98,7 +98,7 @@ When `workflow default` returns a value (success only), the runtime writes `retu
 
 ### Run artifacts
 
-Each run directory is `<JAIPH_RUNS_DIR>/<YYYY-MM-DD>/<HH-MM-SS>-<source>/`, UTC. `<source>` is `JAIPH_SOURCE_FILE` if set, otherwise the entry-file basename. Layout pinned in [Architecture — Durable artifact layout](architecture.md#durable-artifact-layout).
+Each run directory is `<JAIPH_RUNS_DIR>/<YYYY-MM-DD>/<HH-MM-SS>-<source>/`, UTC. `<source>` is `JAIPH_SOURCE_FILE` if set, otherwise the entry-file basename. A same-second collision against the same source (e.g. two concurrent `jaiph mcp`/`jaiph serve` calls) appends a short `-<run id prefix>` suffix instead of reusing the first run's directory. Layout pinned in [Architecture — Durable artifact layout](architecture.md#durable-artifact-layout).
 
 Step `.out` files are written incrementally; consumers may `tail -f` them. `.out` / `.err` pairs are allocated at `STEP_START` with monotonic per-run sequence numbers (`%06d-<safe_name>.out|.err`).
 

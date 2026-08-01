@@ -157,6 +157,12 @@ The runtime persists step captures and the event timeline under a UTC-dated hier
       run_summary.jsonl                # durable event timeline
 ```
 
+Two runs of the same source landing in the same UTC second (e.g. concurrent
+`jaiph mcp` / `jaiph serve` calls) would otherwise collide on this directory
+name and clobber each other's artifacts; when that happens the second run's
+directory gets an `-<run id prefix>` suffix appended instead of reusing the
+first run's directory.
+
 Step sequence numbers are monotonic and unique per run: `RuntimeEventEmitter` allocates them in memory (`allocStepSeq`) when opening each step's capture files (`%06d-<safe_name>.out|.err`). There is no `.seq` file in the run directory.
 
 #### Keyed hash chain (tamper-evident audit journal)
