@@ -182,8 +182,8 @@ RUN set -eux; \
 # AWS CLI v2 — cloud automation scripts. The download URL is unversioned
 # ("latest"), so these pins must be refreshed when AWS ships a new CLI build.
 # Empty fails closed.
-ARG AWSCLI_SHA256_X86_64=a9ac6e52bbdf0bba62e410f7f62aa1a5f5615edb90b126c04cb5e4e3b2984bfc
-ARG AWSCLI_SHA256_AARCH64=422843769149f90b28df93750a86df1bb85018667102015f35078d8507cc49a5
+ARG AWSCLI_SHA256_X86_64=43b34875482244039716cc3725d1f60e7d47ef3cfb2a19e114759a46db24dc30
+ARG AWSCLI_SHA256_AARCH64=61e2fb72b36dc0ad98912b3a7b7469c886b90ea703f1096428a152ab09babd8a
 RUN set -eux; \
     arch="$(uname -m)"; \
     case "${arch}" in \
