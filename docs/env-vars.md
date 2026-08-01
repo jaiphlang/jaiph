@@ -59,6 +59,7 @@ Inside a container the container is the sandbox, so unsafe host-only mode procee
 | `JAIPH_AGENT_TRUSTED_WORKSPACE` | host, runtime | path | workspace root | `agent.trusted_workspace` | Directory passed to Cursor as `--trust`. Rewritten to `/jaiph/workspace`-relative on Docker forwarding when inside the workspace. |
 | `JAIPH_AGENT_TRUSTED_WORKSPACE_LOCKED` | internal | bool | — | — | Lock flag for `JAIPH_AGENT_TRUSTED_WORKSPACE`. |
 | `JAIPH_ARTIFACTS_DIR` | runtime | path | `<run_dir>/artifacts` | — | Absolute path to the writable artifacts directory for the current run. Set by the runtime; read by `jaiphlang/artifacts` and user scripts. |
+| `JAIPH_AUDIT_KEY_DIR` | host | path | `~/.jaiph/audit-keys` | — | Operator-side directory that holds per-run audit-chain HMAC keys, keyed by run-directory identity. Lives outside the agent-writable run directory (and is never mounted into a container) so a workflow cannot squat the key path or delete its own tamper evidence (finding M-3). Read host-side only, when persisting the key after a run and when verifying a journal at a read/export boundary. |
 | `JAIPH_CODEX_API_URL` | runtime | string | `https://api.openai.com/v1/chat/completions` | — | Chat-completions endpoint for the `codex` backend. |
 | `JAIPH_DEBUG` | host, runtime | bool (exact `"true"`) | `false` | `run.debug` | Enable debug tracing for the run. |
 | `JAIPH_DEBUG_LOCKED` | internal | bool | — | — | Lock flag for `JAIPH_DEBUG`. |
