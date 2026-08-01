@@ -282,8 +282,10 @@ test("install: unknown ref failure exits non-zero and does not lock the failed l
 test("install: bare registry name installs into .jaiph/libs/<name>/ regardless of url last segment", async () => {
   const dir = makeTempProject();
   try {
-    const registryPath = writeRegistryFile(dir, {
-      mylib: { url: "https://example.com/some-other-repo-name.git", description: "demo" },
+    // Registry entries must pin a commit now; the stub cloner materializes no .git
+    // so post-clone commit capture is undefined and the pin is not cross-checked.
+    const registryPath = writeRawRegistryFile(dir, {
+      mylib: { url: "https://example.com/some-other-repo-name.git", description: "demo", commit: "a".repeat(40) },
     });
 
     const seen: InstallSpec[] = [];
@@ -319,8 +321,8 @@ test("install: bare registry name installs into .jaiph/libs/<name>/ regardless o
 test("install: name@version forwards version to clone runner and records it in lock", async () => {
   const dir = makeTempProject();
   try {
-    const registryPath = writeRegistryFile(dir, {
-      mylib: { url: "https://example.com/mylib.git", description: "demo" },
+    const registryPath = writeRawRegistryFile(dir, {
+      mylib: { url: "https://example.com/mylib.git", description: "demo", commit: "a".repeat(40) },
     });
 
     let observed: InstallSpec | undefined;
@@ -641,6 +643,55 @@ test("install: registry-pinned commit that matches the cloned HEAD succeeds", as
 
     const code = await withRegistry(registryPath, () => runInstall(["pinned"], { cwd: dir }));
     assert.equal(code, 0, "matching pinned commit must install");
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test("install: registry entry with no pinned commit is refused and clones nothing", async () => {
+  const dir = makeTempProject();
+  try {
+    const registryPath = writeRawRegistryFile(dir, {
+      unpinned: { url: "https://example.com/unpinned.git", description: "demo" },
+    });
+
+    let called = false;
+    const cloneRunner: CloneRunner = async (spec) => {
+      called = true;
+      return { spec, ok: true };
+    };
+
+    const { result: code, stderr } = await captureStderr(() =>
+      withRegistry(registryPath, () => runInstall(["unpinned"], { cwd: dir, cloneRunner })),
+    );
+
+    assert.notEqual(code, 0, "unpinned registry entry must exit non-zero");
+    assert.ok(stderr.includes("has no pinned commit"), `expected unpinned refusal; got: ${stderr}`);
+    assert.ok(stderr.includes("--allow-unpinned"), `expected override hint; got: ${stderr}`);
+    assert.equal(called, false, "clone must not run for a refused unpinned entry");
+    assert.ok(!existsSync(join(dir, ".jaiph", "libs", "unpinned")), "no lib dir for a refused entry");
+    // The refusal happens in the resolve phase, before any lockfile is written.
+    assert.ok(!existsSync(join(dir, ".jaiph", "libs.lock")), "refused entry must not write a lockfile");
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test("install: --allow-unpinned installs an unpinned registry entry with a warning", async () => {
+  const dir = makeTempProject();
+  try {
+    const remote = makeFixtureRepo(dir, "remote-unpinned");
+    const registryPath = writeRawRegistryFile(dir, {
+      unpinned: { url: remote, description: "demo" },
+    });
+
+    const { result: code, stderr } = await captureStderr(() =>
+      withRegistry(registryPath, () => runInstall(["unpinned", "--allow-unpinned"], { cwd: dir })),
+    );
+
+    assert.equal(code, 0, "--allow-unpinned must install the unpinned entry");
+    assert.ok(stderr.includes("without a pinned commit"), `expected unpinned warning; got: ${stderr}`);
+    assert.ok(existsSync(join(dir, ".jaiph", "libs", "unpinned", "main.jh")), "unpinned lib must land on disk");
   } finally {
     cleanup(dir);
   }

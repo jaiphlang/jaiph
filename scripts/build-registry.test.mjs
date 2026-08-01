@@ -19,7 +19,8 @@ test("build-registry: valid local source produces byte-identical docs/registry",
   await withTmp(async (dir) => {
     const srcText = JSON.stringify({
       libs: {
-        mylib: { url: "https://example.com/mylib.git", description: "demo" },
+        // Shipped entries must pin a commit (requireCommit is enforced by buildRegistry).
+        mylib: { url: "https://example.com/mylib.git", description: "demo", commit: "a".repeat(40) },
       },
     }, null, 2) + "\n";
     const srcPath = join(dir, "registry.json");
@@ -61,6 +62,22 @@ test("build-registry: schema mismatch leaves previous output untouched", async (
   });
 });
 
+test("build-registry: entry without a pinned commit rejects and leaves previous output untouched", async () => {
+  await withTmp(async (dir) => {
+    const outPath = join(dir, "registry");
+    const previousText = '{"libs":{"prev":{"url":"https://example.com/prev.git","description":"prev","commit":"' + "b".repeat(40) + '"}}}\n';
+    writeFileSync(outPath, previousText);
+    const srcPath = join(dir, "registry.json");
+    // Valid JSON and shape, but no `commit` — the build must refuse to ship it.
+    writeFileSync(srcPath, JSON.stringify({ libs: { nopin: { url: "https://example.com/x.git", description: "d" } } }));
+    await assert.rejects(
+      () => buildRegistry({ source: srcPath, outPath, loadRegistryIndex }),
+      /entry "nopin" must pin a "commit"/,
+    );
+    assert.equal(readFileSync(outPath, "utf8"), previousText, "previous output must be untouched");
+  });
+});
+
 test("build-registry: missing source rejects and leaves previous output untouched", async () => {
   await withTmp(async (dir) => {
     const outPath = join(dir, "registry");
@@ -94,7 +111,7 @@ test("build-registry: upstream fetch failure keeps a valid shipped outPath", asy
     const outPath = join(dir, "registry");
     const shipped = JSON.stringify({
       libs: {
-        mylib: { url: "https://example.com/mylib.git", description: "demo" },
+        mylib: { url: "https://example.com/mylib.git", description: "demo", commit: "a".repeat(40) },
       },
     }, null, 2) + "\n";
     writeFileSync(outPath, shipped);

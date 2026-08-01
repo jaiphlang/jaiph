@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { resolve, join } from "node:path";
+import { tmpdir } from "node:os";
 import {
   assertAllowedRemoteScheme,
   EMBEDDED_REGISTRY_PUBKEY,
@@ -17,6 +18,35 @@ const REPO_ROOT = resolve(__dirname, "../../../..");
 test("shipped docs/registry parses through loadRegistryIndex", async () => {
   const index = await loadRegistryIndex(SHIPPED_REGISTRY);
   assert.ok(Object.keys(index.libs).length > 0, "shipped registry must list at least one lib");
+});
+
+test("shipped docs/registry pins every entry (passes requireCommit) and pins jaiphlang", async () => {
+  // requireCommit rejects any shipped entry lacking a `commit` — the supply-chain
+  // integrity gate. The shipped index must satisfy it, and the stdlib entry must pin.
+  const index = await loadRegistryIndex(SHIPPED_REGISTRY, { requireCommit: true });
+  assert.ok(index.libs.jaiphlang, "shipped registry must list the jaiphlang stdlib");
+  assert.match(
+    index.libs.jaiphlang!.commit ?? "",
+    /^[0-9a-f]{40}$/,
+    "jaiphlang entry must pin a 40-char commit",
+  );
+});
+
+test("loadRegistryIndex with requireCommit rejects an entry that has no commit", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "registry-requirecommit-"));
+  try {
+    const path = join(dir, "registry.json");
+    writeFileSync(path, '{"libs":{"nopin":{"url":"https://example.com/x.git","description":"d"}}}', "utf8");
+    await assert.rejects(
+      () => loadRegistryIndex(path, { requireCommit: true }),
+      /entry "nopin" must pin a "commit"/,
+    );
+    // Without requireCommit the same unpinned entry still loads (pin is optional in general).
+    const index = await loadRegistryIndex(path);
+    assert.ok(index.libs.nopin, "unpinned entry loads when requireCommit is off");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test("shipped docs/registry has no Jekyll front matter and parses as JSON", () => {
