@@ -3,7 +3,7 @@ import { mkdirSync, readFileSync, readdirSync, rmSync, existsSync } from "node:f
 import { randomBytes } from "node:crypto";
 import { join, resolve, relative, sep, dirname } from "node:path";
 import type { RuntimeConfig } from "../types";
-import { VERSION } from "../version";
+import { VERSION, RUNTIME_IMAGE_DIGEST } from "../version";
 import { killProcessTreeEscalating } from "./kernel/portability";
 import { isEnvAllowed, RUN_WORKFLOW_ENV, type AgentBackend } from "./kernel/env-allowlist";
 
@@ -19,6 +19,16 @@ export interface DockerRunConfig {
   imageExplicit: boolean;
   network: string;
   timeoutSeconds: number;
+  /**
+   * Expected manifest digest (`sha256:<64 hex>`) the resolved local image must
+   * match on every run, including cache hits (finding M-6). The runtime image
+   * is the boundary between untrusted workflows and the host, so a re-pointed
+   * tag or a poisoned local cache under the same tag must fail closed rather
+   * than silently substitute the sandbox rootfs. `undefined` disables digest
+   * enforcement — a custom operator image with no pin, or the default image
+   * before the release pipeline bakes its digest (see `resolveExpectedDigest`).
+   */
+  expectedDigest?: string;
 }
 
 /**
@@ -132,6 +142,73 @@ function emitWin32HostOnlyNotice(): void {
 }
 
 /**
+ * Strip any `:tag` and/or `@sha256:…` suffix, returning the bare repository.
+ *
+ * A `:` after the last `/` is a tag separator; a `:` inside the registry host
+ * (e.g. `localhost:5000/x`) is a port and is preserved.
+ */
+export function imageRepoName(image: string): string {
+  const at = image.indexOf("@");
+  const noDigest = at === -1 ? image : image.slice(0, at);
+  const lastSlash = noDigest.lastIndexOf("/");
+  const colon = noDigest.indexOf(":", lastSlash + 1);
+  return colon === -1 ? noDigest : noDigest.slice(0, colon);
+}
+
+/**
+ * Normalize a manifest digest to canonical `sha256:<64 hex>` form, or return
+ * `undefined` for an empty/malformed value. Accepts a bare 64-hex digest and
+ * prepends the `sha256:` algorithm prefix.
+ */
+export function normalizeImageDigest(raw: string | undefined): string | undefined {
+  if (!raw) return undefined;
+  const v = raw.trim().toLowerCase();
+  if (/^sha256:[0-9a-f]{64}$/.test(v)) return v;
+  if (/^[0-9a-f]{64}$/.test(v)) return `sha256:${v}`;
+  return undefined;
+}
+
+/**
+ * Resolve the manifest digest the resolved image must match, or `undefined`
+ * when digest enforcement does not apply (finding M-6).
+ *
+ * Precedence:
+ *  1. `JAIPH_DOCKER_IMAGE_DIGEST` (operator, trusted) — a malformed value is a
+ *     hard error, never silently ignored, so a typo cannot fail *open*.
+ *  2. A digest embedded in the image reference itself (`repo@sha256:…`).
+ *  3. The release-baked `RUNTIME_IMAGE_DIGEST`, but only for the default
+ *     official image the operator did not override. A custom operator image
+ *     (`JAIPH_DOCKER_IMAGE`) is that operator's supply-chain responsibility;
+ *     they pin it via the digest env var or an `@sha256:` reference.
+ */
+export function resolveExpectedDigest(
+  image: string,
+  imageExplicit: boolean,
+  env: Record<string, string | undefined>,
+): string | undefined {
+  const override = env.JAIPH_DOCKER_IMAGE_DIGEST;
+  if (override !== undefined && override.trim().length > 0) {
+    const d = normalizeImageDigest(override);
+    if (!d) {
+      throw new Error(
+        `E_DOCKER_DIGEST JAIPH_DOCKER_IMAGE_DIGEST must be a sha256 digest ` +
+          `('sha256:<64 hex>' or a bare 64-hex digest), got "${override}"`,
+      );
+    }
+    return d;
+  }
+  const at = image.indexOf("@");
+  if (at !== -1) {
+    const embedded = normalizeImageDigest(image.slice(at + 1));
+    if (embedded) return embedded;
+  }
+  if (!imageExplicit && imageRepoName(image) === GHCR_IMAGE_REPO) {
+    return normalizeImageDigest(RUNTIME_IMAGE_DIGEST);
+  }
+  return undefined;
+}
+
+/**
  * Resolve effective Docker config.
  * Precedence: platform > env vars (`JAIPH_DOCKER_*`) > unsafe default rule.
  *
@@ -216,7 +293,12 @@ export function resolveDockerConfig(
     }
   }
 
-  return { enabled, image, imageExplicit, network, timeoutSeconds };
+  // digest: enforced only when Docker is the active sandbox. Inert (and left
+  // unresolved, so a malformed override cannot throw) in host / unsafe mode, to
+  // preserve host-mode parity with the image/network keys above.
+  const expectedDigest = enabled ? resolveExpectedDigest(image, imageExplicit, env) : undefined;
+
+  return { enabled, image, imageExplicit, network, timeoutSeconds, expectedDigest };
 }
 
 // ---------------------------------------------------------------------------
@@ -226,6 +308,10 @@ export function resolveDockerConfig(
 export const _dockerExec = {
   run(args: string[], opts: object): void {
     execFileSync("docker", args, opts as any);
+  },
+  /** Run docker and return its stdout as a UTF-8 string (used for digest inspection). */
+  capture(args: string[], opts: object): string {
+    return execFileSync("docker", args, { encoding: "utf8", ...(opts as object) }) as string;
   },
 };
 
@@ -337,6 +423,73 @@ export function pullImageIfNeeded(image: string): void {
 }
 
 /**
+ * Pull the digest-pinned reference (`repo@sha256:…`) — content-addressed, so
+ * Docker itself rejects any registry response whose bytes do not hash to the
+ * digest — then tag it locally as `image` so the run and the presence probe,
+ * which reference the image by tag, resolve the exact pinned content.
+ */
+function pullPinnedImage(image: string, expectedDigest: string): void {
+  const pinned = `${imageRepoName(image)}@${expectedDigest}`;
+  pullImage(pinned);
+  try {
+    _dockerExec.run(["tag", pinned, image], { stdio: "ignore", timeout: 30_000 });
+  } catch {
+    throw new Error(`E_DOCKER_PULL failed to tag pulled image "${pinned}" as "${image}"`);
+  }
+}
+
+/**
+ * Registry manifest digests recorded for a local image (`repo@sha256:…` list),
+ * read from `docker image inspect`. Empty when the image carries no registry
+ * digest — never pulled from a registry (locally built or `docker tag`'d) — or
+ * when the image is absent / inspect fails; the caller treats an empty list as
+ * "cannot prove a match" and fails closed.
+ */
+function localImageRepoDigests(image: string): string[] {
+  let out: string;
+  try {
+    out = _dockerExec.capture(
+      ["image", "inspect", "--format", "{{json .RepoDigests}}", image],
+      { stdio: ["ignore", "pipe", "ignore"], timeout: 30_000 },
+    );
+  } catch {
+    return [];
+  }
+  try {
+    const parsed = JSON.parse(out.trim());
+    return Array.isArray(parsed) ? parsed.filter((d): d is string => typeof d === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Verify the local image's registry digest matches `expectedDigest`, failing
+ * closed otherwise (finding M-6). Runs on every use, including cache hits, so a
+ * re-pointed tag or a poisoned local cache under the same tag cannot substitute
+ * the sandbox rootfs. A no-op when no digest is pinned.
+ */
+export function verifyImageDigest(image: string, expectedDigest: string | undefined): void {
+  if (!expectedDigest) return;
+  const digests = localImageRepoDigests(image);
+  const matched = digests.some((d) => {
+    const at = d.lastIndexOf("@");
+    return at !== -1 && d.slice(at + 1) === expectedDigest;
+  });
+  if (!matched) {
+    const pinned = `${imageRepoName(image)}@${expectedDigest}`;
+    const found = digests.length ? digests.join(", ") : "none (image not pulled from a registry)";
+    throw new Error(
+      `E_DOCKER_DIGEST_MISMATCH the local Docker image "${image}" does not match the expected pinned ` +
+        `digest ${expectedDigest} (resolved registry digests: ${found}). A re-pointed tag or a poisoned ` +
+        `local image cache can swap the sandbox rootfs, so the run is refused. Recover by re-pulling the ` +
+        `pinned image: docker rmi "${image}" && docker pull ${pinned} && docker tag ${pinned} "${image}" — ` +
+        `or set JAIPH_DOCKER_IMAGE_DIGEST to the digest you trust. See https://jaiph.org/sandboxing for details.`,
+    );
+  }
+}
+
+/**
  * Fixed non-root UID:GID for the presence probe (`nobody:nogroup`).
  *
  * The probe has no bind mounts, so — unlike a real run (`buildDockerArgs`) — it
@@ -416,13 +569,24 @@ export function verifyImageHasJaiph(image: string): void {
  */
 export function prepareImage(config: DockerRunConfig): string {
   const image = config.image;
+  const expectedDigest = config.expectedDigest;
 
   if (!imageExistsLocally(image)) {
     process.stderr.write(`pulling image ${image}…\n`);
-    pullImage(image);
+    // Resolve/pull by digest when one is pinned: content-addressed, so a
+    // compromised registry or a re-pointed tag cannot substitute the rootfs.
+    if (expectedDigest) {
+      pullPinnedImage(image, expectedDigest);
+    } else {
+      pullImage(image);
+    }
     process.stderr.write(`pulled\n`);
   }
 
+  // Verify the resolved local digest on every run, including the cache-hit path
+  // above (finding M-6). Fail closed before the image is used as the sandbox
+  // boundary; the presence probe below then runs image-baked code.
+  verifyImageDigest(image, expectedDigest);
   verifyImageHasJaiph(image);
   return image;
 }

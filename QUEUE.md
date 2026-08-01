@@ -46,22 +46,6 @@ Remediation: Store the chain key outside the agent-writable run directory (a hos
 - A failure to persist the chain key surfaces as a hard error, verified by a test that forces the write to fail.
 - For a run that was launched with a chain key, `verifyRunJournal` (and the OTLP/Sentry/serve export boundaries) reports an integrity failure when the key is missing at verification time, verified by a test.
 
-## Pin sandbox runtime image by digest and verify on every run #dev-ready
-
-Context: Security review 2026-07-31, finding M-6 (ASI-09/ASI-05), severity MEDIUM, confidence 0.8. The sandbox image is the load-bearing boundary between untrusted workflows and the host, but its integrity is never verified.
-
-Problem: The runtime image is referenced as `ghcr.io/jaiphlang/jaiph-runtime:<version>` — a mutable tag — pulled with no digest check, and the pull is skipped entirely whenever an image with that tag already exists locally, with no re-verification. A registry compromise or tag re-point substitutes the sandbox rootfs, or a local attacker poisons the cached image under the same tag once, after which every subsequent run reuses it verbatim; a malicious rootfs means the sandbox provides no isolation at all.
-
-Location: `src/runtime/docker.ts:104,108` (image reference by tag), `src/runtime/docker.ts:320-326` (`docker pull --quiet` with no digest check), `src/runtime/docker.ts:328-330` (`pullImageIfNeeded` skips the pull if the tag exists locally); `verifyImageHasJaiph` at `src/runtime/docker.ts:392` checks only that a `jaiph` binary exists.
-
-Remediation: Pin the runtime image by `@sha256:` digest baked into the release and verify the resolved local image digest on every run, including cache hits (or verify a cosign/notation signature on the image before use). Fail closed when the resolved digest does not match the expected one.
-
-### Acceptance criteria
-- The expected runtime image digest ships with the release, and container runs resolve/pull the image by that digest rather than by mutable tag alone.
-- A run using a locally-cached image whose digest does not match the expected digest fails closed with a clear error, verified by a test (e.g. tagging a different image with the runtime tag).
-- A run with a matching digest proceeds normally, including the cache-hit path, verified by a test.
-- The digest-mismatch error message tells the operator how to recover (e.g. re-pull the pinned image).
-
 ## Redact credentials in generic step params in the run journal #dev-ready
 
 Context: Security review 2026-07-31, finding L-2 (ASI-06), severity LOW, confidence 0.7. Generic step params are persisted and served unredacted, inconsistent with prompt params.

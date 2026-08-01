@@ -7,6 +7,10 @@ import {
   remapDockerEnv,
   resolveDockerHostRunsRoot,
   verifyImageHasJaiph,
+  verifyImageDigest,
+  imageRepoName,
+  normalizeImageDigest,
+  resolveExpectedDigest,
   buildImageProbeArgs,
   PROBE_USER,
   prepareImage,
@@ -2055,6 +2059,240 @@ test("pullImageIfNeeded: semicolon image passed verbatim to docker pull on inspe
     assert.deepStrictEqual(captured[1], ["pull", "--quiet", "alpine; echo pwned"]);
   } finally {
     _dockerExec.run = original;
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Image digest pinning + verification (finding M-6)
+// ---------------------------------------------------------------------------
+
+const DIGEST_A = `sha256:${"a".repeat(64)}`;
+const DIGEST_B = `sha256:${"b".repeat(64)}`;
+
+test("imageRepoName: strips tag and digest, preserves registry port", () => {
+  assert.equal(imageRepoName("ghcr.io/jaiphlang/jaiph-runtime:0.12.0"), "ghcr.io/jaiphlang/jaiph-runtime");
+  assert.equal(imageRepoName(`ghcr.io/jaiphlang/jaiph-runtime@${DIGEST_A}`), "ghcr.io/jaiphlang/jaiph-runtime");
+  assert.equal(imageRepoName(`ghcr.io/jaiphlang/jaiph-runtime:0.12.0@${DIGEST_A}`), "ghcr.io/jaiphlang/jaiph-runtime");
+  assert.equal(imageRepoName("localhost:5000/x:tag"), "localhost:5000/x");
+  assert.equal(imageRepoName("localhost:5000/x"), "localhost:5000/x");
+});
+
+test("normalizeImageDigest: canonicalizes valid, rejects malformed", () => {
+  assert.equal(normalizeImageDigest(DIGEST_A), DIGEST_A);
+  assert.equal(normalizeImageDigest("a".repeat(64)), DIGEST_A); // bare hex gets sha256: prefix
+  assert.equal(normalizeImageDigest(`  SHA256:${"A".repeat(64)}  `), DIGEST_A); // trim + lowercase
+  assert.equal(normalizeImageDigest(""), undefined);
+  assert.equal(normalizeImageDigest(undefined), undefined);
+  assert.equal(normalizeImageDigest("sha256:tooshort"), undefined);
+  assert.equal(normalizeImageDigest("md5:" + "a".repeat(32)), undefined);
+});
+
+test("resolveExpectedDigest: env override wins and is normalized", () => {
+  assert.equal(
+    resolveExpectedDigest("ghcr.io/jaiphlang/jaiph-runtime:0.12.0", false, {
+      JAIPH_DOCKER_IMAGE_DIGEST: "a".repeat(64),
+    }),
+    DIGEST_A,
+  );
+});
+
+test("resolveExpectedDigest: malformed env override fails closed (throws, never ignored)", () => {
+  assert.throws(
+    () =>
+      resolveExpectedDigest("ghcr.io/jaiphlang/jaiph-runtime:0.12.0", false, {
+        JAIPH_DOCKER_IMAGE_DIGEST: "not-a-digest",
+      }),
+    /E_DOCKER_DIGEST/,
+  );
+});
+
+test("resolveExpectedDigest: honours an @sha256 digest embedded in the image ref", () => {
+  assert.equal(
+    resolveExpectedDigest(`registry.example/custom@${DIGEST_B}`, true, {}),
+    DIGEST_B,
+  );
+});
+
+test("resolveExpectedDigest: custom operator image with no pin is not enforced", () => {
+  // A non-default image the operator selected, with no digest env and no
+  // @sha256: the operator owns that image's supply chain.
+  assert.equal(resolveExpectedDigest("registry.example/custom:tag", true, {}), undefined);
+});
+
+test("resolveExpectedDigest: unpinned default image (empty baked digest) yields no enforcement", () => {
+  // RUNTIME_IMAGE_DIGEST is empty in a working tree; the default official image
+  // therefore resolves to no expected digest until the release bakes it.
+  assert.equal(resolveExpectedDigest("ghcr.io/jaiphlang/jaiph-runtime:0.12.0", false, {}), undefined);
+});
+
+test("resolveDockerConfig: JAIPH_DOCKER_IMAGE_DIGEST populates expectedDigest", () => {
+  const cfg = resolveDockerConfig(undefined, { JAIPH_DOCKER_IMAGE_DIGEST: DIGEST_A });
+  assert.equal(cfg.expectedDigest, DIGEST_A);
+});
+
+test("resolveDockerConfig: digest is inert when Docker is off (no throw on malformed override)", () => {
+  const cfg = resolveDockerConfig(undefined, {
+    JAIPH_UNSAFE: "true",
+    JAIPH_DOCKER_IMAGE_DIGEST: "not-a-digest",
+  });
+  assert.equal(cfg.enabled, false);
+  assert.equal(cfg.expectedDigest, undefined);
+});
+
+test("verifyImageDigest: no-op and no docker calls when no digest is pinned", () => {
+  const original = _dockerExec.capture;
+  let called = false;
+  _dockerExec.capture = () => {
+    called = true;
+    return "[]";
+  };
+  try {
+    assert.doesNotThrow(() => verifyImageDigest("test:latest", undefined));
+    assert.equal(called, false, "must not inspect when no expected digest");
+  } finally {
+    _dockerExec.capture = original;
+  }
+});
+
+test("verifyImageDigest: passes when a local registry digest matches", () => {
+  const original = _dockerExec.capture;
+  _dockerExec.capture = () => JSON.stringify([`ghcr.io/jaiphlang/jaiph-runtime@${DIGEST_A}`]);
+  try {
+    assert.doesNotThrow(() =>
+      verifyImageDigest("ghcr.io/jaiphlang/jaiph-runtime:0.12.0", DIGEST_A),
+    );
+  } finally {
+    _dockerExec.capture = original;
+  }
+});
+
+test("verifyImageDigest: fails closed on a mismatching cached image with recovery guidance", () => {
+  const original = _dockerExec.capture;
+  // Simulates `docker tag <different-image> ghcr.io/...:0.12.0`: the mistagged
+  // image's registry digest is B, not the expected A.
+  _dockerExec.capture = () => JSON.stringify([`ghcr.io/jaiphlang/jaiph-runtime@${DIGEST_B}`]);
+  try {
+    assert.throws(
+      () => verifyImageDigest("ghcr.io/jaiphlang/jaiph-runtime:0.12.0", DIGEST_A),
+      (err: Error) => {
+        assert.match(err.message, /E_DOCKER_DIGEST_MISMATCH/);
+        assert.match(err.message, /docker pull ghcr\.io\/jaiphlang\/jaiph-runtime@sha256:a{64}/, "tells operator to re-pull the pinned image");
+        assert.match(err.message, /JAIPH_DOCKER_IMAGE_DIGEST/, "offers the trust-override escape hatch");
+        return true;
+      },
+    );
+  } finally {
+    _dockerExec.capture = original;
+  }
+});
+
+test("verifyImageDigest: fails closed when the local image carries no registry digest", () => {
+  const original = _dockerExec.capture;
+  // Locally-built / `docker tag`'d image: RepoDigests is empty — unverifiable.
+  _dockerExec.capture = () => "[]";
+  try {
+    assert.throws(
+      () => verifyImageDigest("ghcr.io/jaiphlang/jaiph-runtime:0.12.0", DIGEST_A),
+      /E_DOCKER_DIGEST_MISMATCH/,
+    );
+  } finally {
+    _dockerExec.capture = original;
+  }
+});
+
+test("prepareImage: cache-hit with a matching digest proceeds normally", () => {
+  const calls: string[][] = [];
+  const origRun = _dockerExec.run;
+  const origCap = _dockerExec.capture;
+  _dockerExec.run = (args: string[]) => {
+    calls.push([...args]);
+    // image inspect (existence) succeeds; jaiph presence probe (`run`) succeeds.
+  };
+  _dockerExec.capture = () => JSON.stringify([`ghcr.io/jaiphlang/jaiph-runtime@${DIGEST_A}`]);
+  try {
+    const config: DockerRunConfig = {
+      enabled: true,
+      image: "ghcr.io/jaiphlang/jaiph-runtime:0.12.0",
+      imageExplicit: false,
+      network: "default",
+      timeoutSeconds: 300,
+      expectedDigest: DIGEST_A,
+    };
+    assert.equal(prepareImage(config), "ghcr.io/jaiphlang/jaiph-runtime:0.12.0");
+    assert.ok(!calls.some((a) => a[0] === "pull"), "cache hit must not pull");
+    assert.ok(calls.some((a) => a[0] === "run"), "still runs the jaiph presence probe");
+  } finally {
+    _dockerExec.run = origRun;
+    _dockerExec.capture = origCap;
+  }
+});
+
+test("prepareImage: cache-hit with a mismatching digest fails closed before the jaiph probe", () => {
+  const calls: string[][] = [];
+  const origRun = _dockerExec.run;
+  const origCap = _dockerExec.capture;
+  _dockerExec.run = (args: string[]) => {
+    calls.push([...args]);
+    // image inspect (existence) succeeds.
+  };
+  _dockerExec.capture = () => JSON.stringify([`ghcr.io/jaiphlang/jaiph-runtime@${DIGEST_B}`]);
+  try {
+    const config: DockerRunConfig = {
+      enabled: true,
+      image: "ghcr.io/jaiphlang/jaiph-runtime:0.12.0",
+      imageExplicit: false,
+      network: "default",
+      timeoutSeconds: 300,
+      expectedDigest: DIGEST_A,
+    };
+    assert.throws(() => prepareImage(config), /E_DOCKER_DIGEST_MISMATCH/);
+    // The jaiph presence probe runs the image (image-baked code); it must not
+    // fire once the digest check has failed closed.
+    assert.ok(
+      !calls.some((a) => a[0] === "run" && a.includes("--entrypoint")),
+      "presence probe must not run after a digest mismatch",
+    );
+  } finally {
+    _dockerExec.run = origRun;
+    _dockerExec.capture = origCap;
+  }
+});
+
+test("prepareImage: cold pull with a pinned digest pulls by digest then tags", () => {
+  const calls: string[][] = [];
+  const origRun = _dockerExec.run;
+  const origCap = _dockerExec.capture;
+  const origWrite = process.stderr.write;
+  _dockerExec.run = (args: string[]) => {
+    calls.push([...args]);
+    if (args[0] === "image" && args[1] === "inspect") throw new Error("not local");
+    // pull / tag / run (probe) all succeed.
+  };
+  _dockerExec.capture = () => JSON.stringify([`ghcr.io/jaiphlang/jaiph-runtime@${DIGEST_A}`]);
+  process.stderr.write = (() => true) as typeof process.stderr.write;
+  try {
+    const config: DockerRunConfig = {
+      enabled: true,
+      image: "ghcr.io/jaiphlang/jaiph-runtime:0.12.0",
+      imageExplicit: false,
+      network: "default",
+      timeoutSeconds: 300,
+      expectedDigest: DIGEST_A,
+    };
+    prepareImage(config);
+    const pinned = `ghcr.io/jaiphlang/jaiph-runtime@${DIGEST_A}`;
+    assert.ok(
+      calls.some((a) => a[0] === "pull" && a.includes(pinned)),
+      "cold pull must resolve the digest-pinned reference",
+    );
+    assert.ok(
+      calls.some((a) => a[0] === "tag" && a[1] === pinned && a[2] === "ghcr.io/jaiphlang/jaiph-runtime:0.12.0"),
+      "pulled digest must be tagged back to the run reference",
+    );
+  } finally {
+    _dockerExec.run = origRun;
+    _dockerExec.capture = origCap;
+    process.stderr.write = origWrite;
   }
 });
 
