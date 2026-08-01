@@ -316,8 +316,24 @@ export class NodeWorkflowRuntime {
     const datePart = `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}-${String(date.getUTCDate()).padStart(2, "0")}`;
     const timePart = `${String(date.getUTCHours()).padStart(2, "0")}-${String(date.getUTCMinutes()).padStart(2, "0")}-${String(date.getUTCSeconds()).padStart(2, "0")}`;
     const runsRoot = this.resolveRunsRoot();
-    this.runDir = join(runsRoot, datePart, `${timePart}-${source}`);
-    mkdirSync(this.runDir, { recursive: true });
+    const dateDir = join(runsRoot, datePart);
+    mkdirSync(dateDir, { recursive: true });
+    this.runDir = join(dateDir, `${timePart}-${source}`);
+    try {
+      // Not recursive: an existing leaf directory must throw EEXIST here, not
+      // succeed silently, so a same-second collision is detected below.
+      mkdirSync(this.runDir, { recursive: false });
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
+      // Two runs of the same source landed in the same UTC second — e.g.
+      // concurrent `jaiph mcp`/`jaiph serve` calls hitting the same workflow
+      // file. Reusing the colliding directory would let one run's
+      // run_summary.jsonl / return_value.txt / step artifacts overwrite the
+      // other's mid-flight, so disambiguate with this run's own id.
+      const suffix = this.runId.replace(/-/g, "").slice(0, 8);
+      this.runDir = join(dateDir, `${timePart}-${source}-${suffix}`);
+      mkdirSync(this.runDir, { recursive: true });
+    }
     const artifactsDir = join(this.runDir, "artifacts");
     mkdirSync(artifactsDir, { recursive: true });
     this.summaryFile = join(this.runDir, "run_summary.jsonl");
