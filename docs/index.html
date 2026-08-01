@@ -593,8 +593,9 @@ Jaiph: Running async.jh<span class="run-banner-meta"> (Docker sandbox, snapshot)
                     <a href="https://github.com/jaiphlang/jaiph/tree/main/actions/setup-jaiph" target="_blank"
                         rel="noopener noreferrer"><code>setup-jaiph</code></a> composite action installs a pinned
                     <code>jaiph</code> CLI onto <code>PATH</code> for GitHub-hosted Linux and macOS runners in one step
-                    &mdash; the same release binaries as the curl installer, so no Node is required on the runner, and
-                    fail-closed on a bad checksum or missing artifact. See
+                    &mdash; the same release binaries as the curl installer, so no Node is required on the runner. It
+                    installs <code>minisign</code> so the release signature is verified, and fails closed on a missing
+                    or invalid signature, a bad checksum, or a missing artifact. See
                     <a href="/how-to/install#install-in-github-actions-ci">Install in GitHub Actions (CI)</a>.</p>
 
                 <h3>Samples</h3>

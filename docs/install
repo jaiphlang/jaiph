@@ -253,9 +253,12 @@ else
   #  - The bundled key is used only when JAIPH_MINISIGN_PUBLIC_KEY is UNSET
   #    (`${VAR-default}`, not `${VAR:-default}`). An explicitly empty value is a
   #    misconfiguration and aborts instead of silently falling back or skipping.
-  #  - minisign missing on a normal (non-CI) host aborts. CI hosts (CI set) pin
-  #    their toolchain out of band and may proceed on checksum only; a deliberate
-  #    non-CI checksum-only install must opt in with JAIPH_ALLOW_UNSIGNED=1.
+  #  - minisign missing aborts on EVERY host, CI included (finding M-5): CI is
+  #    exactly where the whole install population would otherwise skip the only
+  #    out-of-band integrity check, so `CI` no longer downgrades to checksum-only.
+  #    A deliberate checksum-only install must opt in explicitly with
+  #    JAIPH_ALLOW_UNSIGNED=1 (loudly warned). CI that needs signed installs must
+  #    make minisign available (the setup-jaiph action installs it).
   JAIPH_MINISIGN_PUBLIC_KEY="${JAIPH_MINISIGN_PUBLIC_KEY-RWSSXpVKgVIX79jsA5r833g6yWwkO+Ka5HAtSjrN1V7t4+qP4zSOIlWy}"
   if [ -z "${JAIPH_MINISIGN_PUBLIC_KEY}" ]; then
     print_error "JAIPH_MINISIGN_PUBLIC_KEY is empty — refusing to install without signature verification"
@@ -272,14 +275,18 @@ else
       exit 1
     fi
     print_success "Release signature verified"
-  elif [ -n "${CI:-}" ] || [ "${JAIPH_ALLOW_UNSIGNED:-}" = "1" ]; then
-    print_warning "minisign not installed — proceeding on checksum only (CI/JAIPH_ALLOW_UNSIGNED opt-out)"
-    echo "  Install minisign for full verification: https://jedisct1.github.io/minisign/" >&2
+  elif [ "${JAIPH_ALLOW_UNSIGNED:-}" = "1" ]; then
+    print_warning "!!! JAIPH_ALLOW_UNSIGNED=1 — SKIPPING SIGNATURE VERIFICATION !!!"
+    print_warning "minisign not installed — proceeding on checksum only"
+    echo "  The checksum ships over the same channel as the binary, so this is NOT" >&2
+    echo "  an out-of-band integrity check. Install minisign for full verification:" >&2
+    echo "  https://jedisct1.github.io/minisign/" >&2
   else
     print_error "minisign is required to verify the release signature but was not found"
     echo "Install minisign, then re-run: https://jedisct1.github.io/minisign/" >&2
-    echo "On a trusted CI host (or for a deliberate checksum-only install) set" >&2
-    echo "CI=1 or JAIPH_ALLOW_UNSIGNED=1 to proceed without signature verification." >&2
+    echo "CI is no longer an opt-out (finding M-5): make minisign available on the" >&2
+    echo "runner (the setup-jaiph action does this), or for a deliberate" >&2
+    echo "checksum-only install set JAIPH_ALLOW_UNSIGNED=1." >&2
     exit 1
   fi
 

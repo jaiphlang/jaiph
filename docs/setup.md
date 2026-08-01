@@ -76,7 +76,7 @@ The command prints `jaiph <version>`, taken from the installed release at build 
 
 ## Verify the release signature
 
-Every release includes `SHA256SUMS` and a detached [minisign](https://jedisct1.github.io/minisign/) signature `SHA256SUMS.minisig`. The installer downloads both files and **requires** a valid signature: on a normal (non-CI) host, a missing `minisign` aborts the install rather than degrading to checksum-only (the checksum ships over the same channel as the binary, so it is not an independent defense). CI hosts (`CI` set) may proceed on checksum-only; for a deliberate non-CI checksum-only install, set `JAIPH_ALLOW_UNSIGNED=1`. An explicitly empty `JAIPH_MINISIGN_PUBLIC_KEY` is a misconfiguration and also fails closed.
+Every release includes `SHA256SUMS` and a detached [minisign](https://jedisct1.github.io/minisign/) signature `SHA256SUMS.minisig`. The installer downloads both files and **requires** a valid signature. A missing `minisign`, or a missing `SHA256SUMS.minisig`, aborts the install on every host, including CI, rather than degrading to checksum-only. The checksum ships over the same channel as the binary, so it is not an independent defense. Setting `CI` no longer opts into a checksum-only install (finding M-5), because a CI job is exactly where the whole install population would otherwise skip the signature check. A CI job that needs a signed install must make `minisign` available on the runner, and the [`setup-jaiph`](#install-in-github-actions-ci) action installs `minisign` for you. For a deliberate checksum-only install, set `JAIPH_ALLOW_UNSIGNED=1`, which prints a prominent warning and proceeds without signature verification. An explicitly empty `JAIPH_MINISIGN_PUBLIC_KEY` is a misconfiguration and also fails closed.
 
 From a checkout of this repo:
 
@@ -102,7 +102,7 @@ steps:
 
 Pin both the action ref (`@v0.12.0`) and the `version` input to an exact release for reproducible CI. Use `nightly` to track the rolling prerelease. The action supports GitHub-hosted Linux and macOS runners on arm64 and x64, which are the platforms that have release artifacts.
 
-The action follows the installer's [fail-closed policy](#1-install-the-binary). The step fails and installs nothing when there is a checksum mismatch, a missing signature file, or a missing release artifact. It also verifies the signature when [`minisign`](https://jedisct1.github.io/minisign/) is on the runner's `PATH`. For the full list of inputs and outputs, see the [action README](https://github.com/jaiphlang/jaiph/tree/main/actions/setup-jaiph).
+The action follows the installer's [fail-closed policy](#verify-the-release-signature), and it installs [`minisign`](https://jedisct1.github.io/minisign/) on the runner before running the installer so the release signature is always verified. GitHub-hosted runners set `CI`, and `CI` is no longer a checksum-only opt-out (finding M-5), so the action installs `minisign` to keep the install signed rather than falling back to checksum-only. The step fails and installs nothing when the signature is missing or invalid, when there is a checksum mismatch, or when a release artifact is missing. For the full list of inputs and outputs, see the [action README](https://github.com/jaiphlang/jaiph/tree/main/actions/setup-jaiph).
 
 ## Related
 

@@ -24,6 +24,8 @@ const REPO_ROOT = process.cwd();
 const RELEASE_YML = readFileSync(join(REPO_ROOT, ".github/workflows/release.yml"), "utf8");
 const CONTRIBUTING = readFileSync(join(REPO_ROOT, "docs/contributing.md"), "utf8");
 const INSTALLER = readFileSync(join(REPO_ROOT, "docs/install"), "utf8");
+const INSTALLER_PS = readFileSync(join(REPO_ROOT, "docs/install.ps1"), "utf8");
+const ENV_VARS = readFileSync(join(REPO_ROOT, "docs/env-vars.md"), "utf8");
 const INSTALLER_TEST = readFileSync(join(REPO_ROOT, "e2e/tests/07_installer_binary.sh"), "utf8");
 const DOCKERFILE = readFileSync(join(REPO_ROOT, "runtime/Dockerfile"), "utf8");
 const VERSION_CHECK = join(REPO_ROOT, "scripts/release-version-check.sh");
@@ -294,4 +296,49 @@ test("bash installer requires SHA256SUMS.minisig and fails closed when absent", 
   const sigIdx = INSTALLER.indexOf("SHA256SUMS.minisig");
   const csumIdx = INSTALLER.indexOf("Verifying checksum");
   assert.ok(sigIdx !== -1 && csumIdx !== -1 && sigIdx < csumIdx, "sig file download precedes checksum verification");
+});
+
+// ── Finding M-5: CI is no longer a checksum-only opt-out ──────────────────────
+
+test("both installers reserve checksum-only for an explicit JAIPH_ALLOW_UNSIGNED opt-in (CI is not an opt-out)", () => {
+  // The checksum-only branch must key on JAIPH_ALLOW_UNSIGNED, never on `CI`.
+  assert.match(
+    INSTALLER,
+    /elif \[ "\$\{JAIPH_ALLOW_UNSIGNED:-\}" = "1" \]; then/,
+    "bash checksum-only opt-in is JAIPH_ALLOW_UNSIGNED=1",
+  );
+  assert.match(
+    INSTALLER_PS,
+    /elseif \(\$env:JAIPH_ALLOW_UNSIGNED -eq "1"\)/,
+    "PowerShell checksum-only opt-in is JAIPH_ALLOW_UNSIGNED=1",
+  );
+  // No CI-based downgrade in the signature gate of either installer.
+  const bashGate = INSTALLER.slice(
+    INSTALLER.indexOf("if command -v minisign"),
+    INSTALLER.indexOf("Verifying checksum"),
+  );
+  assert.doesNotMatch(bashGate, /\[ -n "\$\{CI:-\}" \]/, "bash: CI is no longer a checksum-only opt-out");
+  const psGate = INSTALLER_PS.slice(
+    INSTALLER_PS.indexOf("if ($minisignCmd)"),
+    INSTALLER_PS.indexOf("Verifying checksum"),
+  );
+  assert.doesNotMatch(psGate, /\$env:CI/, "PowerShell: CI is no longer a checksum-only opt-out");
+});
+
+test("env-vars.md documents JAIPH_ALLOW_UNSIGNED and that CI no longer downgrades to checksum-only (M-5)", () => {
+  const row = ENV_VARS.split("\n").find((l) => l.includes("`JAIPH_ALLOW_UNSIGNED`"));
+  assert.ok(row, "env-vars.md has a JAIPH_ALLOW_UNSIGNED row");
+  assert.match(row!, /CI/, "the row explains the CI behaviour");
+  assert.match(row!, /every|no longer/i, "the row states minisign missing aborts even under CI");
+});
+
+test("release fails closed instead of publishing unsigned when MINISIGN_SECRET_KEY is unset", () => {
+  const signStep = sliceBetween(
+    RELEASE_YML,
+    "Sign SHA256SUMS with minisign",
+    "Sanity gate (linux-x64 --version)",
+  );
+  assert.match(signStep, /if \[ -z "\$\{MINISIGN_SECRET_KEY\}" \]/, "guards on an unset secret");
+  assert.match(signStep, /\n\s*exit 1\n/, "aborts the release job when the secret is unset");
+  assert.doesNotMatch(signStep, /skipping detached signature/i, "no silent skip that would publish unsigned");
 });

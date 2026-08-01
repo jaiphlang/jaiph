@@ -197,7 +197,7 @@ The installer shell script (`docs/install`) reads these variables, and `jaiph us
 | `JAIPH_BIN_DIR` | path | `$HOME/.local/bin` | Target bin directory for the installed `jaiph` binary. |
 | `JAIPH_RELEASE_BASE_URL` | string | `https://github.com/jaiphlang/jaiph/releases/download/<ref>` | Override the GitHub Release base URL the installer downloads from. |
 | `JAIPH_MINISIGN_PUBLIC_KEY` | string | bundled release key | minisign public key used to verify `SHA256SUMS.minisig`. Unset uses the bundled key. An explicitly empty value fails closed (the installer refuses to install rather than skipping signature verification). |
-| `JAIPH_ALLOW_UNSIGNED` | bool (`1`) | — | Opt in to a checksum-only install on a normal host when `minisign` is not available. Without it (and outside CI), a missing `minisign` aborts the install. CI hosts (`CI` set) already proceed on checksum only. |
+| `JAIPH_ALLOW_UNSIGNED` | bool (`1`) | — | Opt in to a checksum-only install when `minisign` cannot verify the release signature (tool missing). Set it and the installer proceeds on checksum only with a prominent warning. Unset, a missing `minisign` aborts the install on **every** host, CI included — `CI` is no longer a checksum-only opt-out (finding M-5), so CI that needs signed installs must make `minisign` available (the `setup-jaiph` action installs it). A missing `SHA256SUMS.minisig` always aborts regardless of this flag. |
 | `JAIPH_REPO_URL` | path | — | Local repo path (directory containing `package.json`) for the from-source installer branch (`docs/install-from-local.sh`). Ignored on the binary-download path. |
 
 ## Docker sandbox failure modes
