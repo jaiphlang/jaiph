@@ -37,9 +37,13 @@ interface ServeProc {
   stderr: () => string;
 }
 
-/** Spawn `jaiph serve --port 0` and resolve once it logs its bound URL. */
+/**
+ * Spawn `jaiph serve --port 0` and resolve once it logs its bound URL.
+ * `--allow-anonymous` opts into the no-auth loopback default, which is now a
+ * startup error without the flag (finding M-2).
+ */
 function startServe(fixture: string, cwd: string, env: NodeJS.ProcessEnv): Promise<ServeProc> {
-  const child = spawn("node", [CLI_PATH, "serve", "--port", "0", fixture], { cwd, env, stdio: ["ignore", "pipe", "pipe"] });
+  const child = spawn("node", [CLI_PATH, "serve", "--port", "0", "--allow-anonymous", fixture], { cwd, env, stdio: ["ignore", "pipe", "pipe"] });
   let stderrBuf = "";
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error(`serve did not start\nstderr:\n${stderrBuf}`)), 20_000);

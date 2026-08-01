@@ -15,7 +15,7 @@ export function printUsage(): void {
       "  jaiph format [--check] [--indent <n>] <file.jh ...>",
       "  jaiph compile [--json] [--workspace <dir>] <file.jh | directory> ...",
       "  jaiph mcp [--workspace <dir>] [--inplace] [--unsafe] [--yes|-y] [--env KEY[=VALUE]]... <file.jh>  # serve the file's workflows as MCP tools over stdio (alias: jaiph --mcp)",
-      "  jaiph serve [--host <addr>] [--port <n>] [--workspace <dir>] [--inplace] [--unsafe] [--yes|-y] [--env KEY[=VALUE]]... <file.jh>  # serve workflows as an HTTP API + OpenAPI + Swagger UI",
+      "  jaiph serve [--host <addr>] [--port <n>] [--workspace <dir>] [--allow-anonymous] [--inplace] [--unsafe] [--yes|-y] [--env KEY[=VALUE]]... <file.jh>  # serve workflows as an HTTP API + OpenAPI + Swagger UI",
       "",
       "Global options:",
       "  -h, --help     show this usage (jaiph --help) — each subcommand also accepts -h / --help",
@@ -94,9 +94,14 @@ export function printUsage(): void {
       "  (NDJSON or SSE) via GET /v1/runs/{id}/events, and list/download published files via",
       "  GET /v1/runs/{id}/artifacts[/{path}]. Set JAIPH_SERVE_TOKEN to",
       "  require a bearer token on /v1/*; binding a non-loopback --host without it is a",
-      "  startup error. JAIPH_SERVE_MAX_CONCURRENT (default 4) caps simultaneous runs.",
+      "  startup error. With no JAIPH_SERVE_TOKEN and no OIDC, even a loopback bind is a",
+      "  startup error unless --allow-anonymous is passed (single-user workstation only).",
+      "  JAIPH_SERVE_MAX_CONCURRENT (default 4) caps simultaneous runs.",
       "  --host <addr>      listen address (default: 127.0.0.1)",
       "  --port <n>         listen port (default: 5247)",
+      "  --allow-anonymous  run open with no auth on loopback (single-user workstation only;",
+      "                     every local user gets all capabilities over all runs). Ignored when",
+      "                     JAIPH_SERVE_TOKEN or OIDC is set.",
       "  --workspace <dir>  workspace root for import resolution (default: auto-detect).",
       "  --env KEY=VALUE    define KEY in every run's env (repeatable); --env KEY forwards the host value.",
       "  --inplace          Docker sandbox with the host workspace bind-mounted rw for every run (JAIPH_INPLACE=1).",
@@ -198,6 +203,8 @@ export interface ParsedArgs {
   inplace?: boolean;
   unsafe?: boolean;
   yes?: boolean;
+  /** `jaiph serve` explicit opt-in to run open (anonymous) with no configured auth. */
+  allowAnonymous?: boolean;
   /** `jaiph serve` listen host. */
   host?: string;
   /** `jaiph serve` listen port (kept as raw string; the command validates it). */
@@ -226,6 +233,7 @@ const FLAG_COMMANDS: Record<string, CliCommand[]> = {
   "-y": ["run", "serve", "mcp"],
   "--target": ["run"],
   "--raw": ["run"],
+  "--allow-anonymous": ["serve"],
   "--host": ["serve"],
   "--port": ["serve"],
 };
@@ -256,6 +264,7 @@ export function parseArgs(args: string[], command: CliCommand = "run"): ParsedAr
   let inplace: boolean | undefined;
   let unsafe: boolean | undefined;
   let yes: boolean | undefined;
+  let allowAnonymous: boolean | undefined;
   let host: string | undefined;
   let port: string | undefined;
   const env: EnvSpec[] = [];
@@ -336,18 +345,26 @@ export function parseArgs(args: string[], command: CliCommand = "run"): ParsedAr
     }
 
     // Boolean flags: do not accept an `=value` form.
-    if (name === "--raw" || name === "--inplace" || name === "--unsafe" || name === "--yes" || arg === "-y") {
+    if (
+      name === "--raw" ||
+      name === "--inplace" ||
+      name === "--unsafe" ||
+      name === "--yes" ||
+      name === "--allow-anonymous" ||
+      arg === "-y"
+    ) {
       if (inlineValue !== undefined) {
         throw new Error(`${name} does not take a value`);
       }
       if (name === "--raw") raw = true;
       else if (name === "--inplace") inplace = true;
       else if (name === "--unsafe") unsafe = true;
+      else if (name === "--allow-anonymous") allowAnonymous = true;
       else yes = true;
       continue;
     }
 
     positional.push(arg);
   }
-  return { target, raw, workspace, inplace, unsafe, yes, host, port, env, positional };
+  return { target, raw, workspace, inplace, unsafe, yes, allowAnonymous, host, port, env, positional };
 }

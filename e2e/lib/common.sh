@@ -432,6 +432,11 @@ e2e::prepare_shared_context() {
   export JAIPH_BIN_DIR="${JAIPH_E2E_BIN_DIR}"
   # Docker sandbox is opt-in (beta); keep it disabled for e2e tests.
   export JAIPH_DOCKER_ENABLED="${JAIPH_DOCKER_ENABLED:-false}"
+  # Redirect the operator-side audit-chain key store (finding M-3) into the E2E
+  # work area so runs never write keys into the real home `.jaiph/audit-keys`.
+  # JAIPH_E2E_WORK_DIR is always set above; run dirs live under per-test subdirs,
+  # so this store dir is safely outside every run directory.
+  export JAIPH_AUDIT_KEY_DIR="${JAIPH_E2E_WORK_DIR}/audit-keys"
   # The host pre-flight credential check (src/cli/run/preflight-credentials.ts)
   # warns when an explicit `agent.backend` is declared but no credential env is
   # set. E2E uses mock agent binaries that don't need real keys, so seed dummy
