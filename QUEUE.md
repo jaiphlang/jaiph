@@ -46,21 +46,6 @@ Remediation: Store the chain key outside the agent-writable run directory (a hos
 - A failure to persist the chain key surfaces as a hard error, verified by a test that forces the write to fail.
 - For a run that was launched with a chain key, `verifyRunJournal` (and the OTLP/Sentry/serve export boundaries) reports an integrity failure when the key is missing at verification time, verified by a test.
 
-## Redact credentials in generic step params in the run journal #dev-ready
-
-Context: Security review 2026-07-31, finding L-2 (ASI-06), severity LOW, confidence 0.7. Generic step params are persisted and served unredacted, inconsistent with prompt params.
-
-Problem: `emitStep` redacts only `out_content` and `err_content` (`runtime-event-emitter.ts:98-113`). Params built by `format-params.ts:40-52` and attached at `node-workflow-runtime.ts:1907,1934` land verbatim in `run_summary.jsonl` and are served by `GET /v1/runs/{id}/events`. Prompt-step params are already redacted (`runtime-event-emitter.ts:169`). A secret passed as a positional argument to a `run`/tool step therefore bypasses the journal scrub.
-
-Location: `src/runtime/kernel/runtime-event-emitter.ts:98-113`, `:169`; `src/cli/commands/format-params.ts:40-52`; `src/runtime/kernel/node-workflow-runtime.ts:1907,1934`.
-
-Remediation: Run `redactCredentials` over generic step `params` in `emitStep`, matching the treatment prompt params already receive.
-
-### Acceptance criteria
-- A workflow step that receives a credential-named env value as a param persists `[REDACTED]` (not the raw secret) in the journal `params` field; a test asserts the durable line is redacted.
-- Prompt-step param redaction behaviour is unchanged; a regression test still asserts prompt params are redacted.
-- `GET /v1/runs/{id}/events` (or the journal read path) does not expose the raw secret in step params; a test covers at least one of those paths.
-
 ## Commit journal length or terminality so truncated chains fail verification #dev-ready
 
 Context: Security review 2026-07-31, finding L-3 (ASI-06), severity LOW, confidence 0.7. The hash chain commits to prefix integrity but not to length or terminality. Complements M-3 (chain-key squat / fail-open).

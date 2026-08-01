@@ -47,6 +47,17 @@ const BASE_FIXTURE = [
   "  run leak_fail()",
   "}",
   "",
+  "# Relays its argument to a sub-workflow so the value lands in generic step params.",
+  "workflow relay(token) {",
+  '  return "relayed"',
+  "}",
+  "# Passes a caller-supplied credential as a positional param to a run step, to",
+  "# exercise redaction of generic step params in the served event stream.",
+  "workflow leak_param(token) {",
+  "  run relay(token)",
+  '  return "done"',
+  "}",
+  "",
   'script publish = `printf \'artifact-payload\' > "$JAIPH_ARTIFACTS_DIR/result.txt"`',
   "# Publishes a file into the run's artifacts dir.",
   "workflow make_artifact() {",
@@ -394,6 +405,31 @@ test("jaiph serve: a credential echoed by a run is [REDACTED] in the event strea
     const ev = await fetch(`${srv.baseUrl}/v1/runs/${run.run_id}/events`);
     const journal = await ev.text();
     assert.ok(!journal.includes(secret), "the raw credential value must not appear in the event stream");
+    assert.ok(journal.includes("[REDACTED]"), "the redaction marker is present where the value was");
+  } finally {
+    await srv.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("jaiph serve: a credential passed as a step param is [REDACTED] in the event stream", async () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-serve-redact-param-"));
+  const jh = join(root, "tools.jh");
+  writeFileSync(jh, BASE_FIXTURE);
+  const secret = "supersecretparamvalue123";
+  const srv = await startServe(jh, root, serveEnv(join(root, ".jaiph/runs")), ["--env", `LEAK_API_KEY=${secret}`]);
+  try {
+    const runRes = await fetch(`${srv.baseUrl}/v1/workflows/leak_param/runs?wait=true`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ token: secret }),
+    });
+    const run = await runRes.json();
+    assert.equal(run.status, "succeeded", `run failed: ${JSON.stringify(run)}`);
+
+    const ev = await fetch(`${srv.baseUrl}/v1/runs/${run.run_id}/events`);
+    const journal = await ev.text();
+    assert.ok(!journal.includes(secret), "the raw credential value must not appear in step params in the event stream");
     assert.ok(journal.includes("[REDACTED]"), "the redaction marker is present where the value was");
   } finally {
     await srv.close();

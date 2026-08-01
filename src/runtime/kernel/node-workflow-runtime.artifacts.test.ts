@@ -1280,6 +1280,63 @@ test("NodeWorkflowRuntime: ANTHROPIC_API_KEY value in prompt text is redacted in
   }
 });
 
+test("NodeWorkflowRuntime: credential value passed as a generic step param is redacted in run summary", async () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-param-redact-"));
+  // Long, distinctive secret so it cannot collide with ordinary output tokens.
+  const secret = "sk-ant-paramredact-1234567890abcdef";
+  try {
+    const jh = join(root, "param_redact.jh");
+    writeFileSync(
+      jh,
+      [
+        "workflow producer(token) {",
+        '  log "producing"',
+        "}",
+        "",
+        "workflow default() {",
+        // Pass the literal secret as a positional argument to a `run` step. The
+        // arg lands in the step `params` pairs and must be scrubbed before the
+        // durable journal write.
+        `  run producer("${secret}")`,
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const graph = buildRuntimeGraph(jh);
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      JAIPH_TEST_MODE: "1",
+      JAIPH_RUNS_DIR: join(root, ".jaiph", "runs"),
+      // Credential-named key so redactCredentials targets this value.
+      SOME_API_TOKEN: secret,
+    };
+    const runtime = new NodeWorkflowRuntime(graph, { env, cwd: root, suppressLiveEvents: true });
+    const prevSummaryEnv = process.env.JAIPH_RUN_SUMMARY_FILE;
+    process.env.JAIPH_RUN_SUMMARY_FILE = runtime.getSummaryFile();
+    try {
+      const status = await runtime.runDefault([]);
+      assert.equal(status, 0);
+    } finally {
+      if (prevSummaryEnv === undefined) delete process.env.JAIPH_RUN_SUMMARY_FILE;
+      else process.env.JAIPH_RUN_SUMMARY_FILE = prevSummaryEnv;
+    }
+    const summaryText = readFileSync(runtime.getSummaryFile(), "utf8");
+    assert.ok(!summaryText.includes(secret), "credential value must not appear in run summary params");
+    // The producer step params carry the redaction placeholder in place of the secret.
+    const lines = summaryText.trim().split("\n").map((l) => JSON.parse(l) as Record<string, unknown>);
+    const producerStart = lines.find(
+      (e) => e.type === "STEP_START" && e.kind === "workflow" && e.name === "producer",
+    );
+    assert.ok(producerStart, "expected a STEP_START event for the producer run step");
+    const params = producerStart!.params as Array<[string, string]>;
+    const tokenEntry = params.find(([k]) => k === "token");
+    assert.ok(tokenEntry, `expected 'token' param, got keys: ${params.map(([k]) => k).join(", ")}`);
+    assert.equal(tokenEntry![1], "[REDACTED]", "generic step param must be redacted in the durable journal");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("NodeWorkflowRuntime: credential values in log/logwarn/logerr are redacted in run summary", async () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-log-redact-"));
   // Distinct, distinctive secrets per level so each durable path is checked independently.
