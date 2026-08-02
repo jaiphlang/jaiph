@@ -118,6 +118,7 @@ test("Diagnostics: throwing call-sites match the documented fatal allowlist", ()
   const allowlist = new Set([
     "src/diagnostics.ts",                          // legacy bridge
     "src/parse/core.ts",                           // parser fail()
+    "src/parse/validate-string-content.ts",        // leaf helper (captured)
     "src/cli/commands/test.ts",                    // test-file shape fatal
     "src/transpile/module-graph.ts",               // loader fatal
     "src/transpile/validate-string.ts",            // leaf helper (captured)

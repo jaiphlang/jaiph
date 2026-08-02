@@ -1,20 +1,6 @@
 [
   {
     "type": "dependency",
-    "from": "src/parse/metadata.ts",
-    "to": "src/transpile/validate-string.ts",
-    "unresolvedTo": "../transpile/validate-string",
-    "dependencyTypes": [
-      "local",
-      "import"
-    ],
-    "rule": {
-      "severity": "error",
-      "name": "layer1-parse-format-no-upward"
-    }
-  },
-  {
-    "type": "dependency",
     "from": "src/parse/parse-error-snapshot.test.ts",
     "to": "src/transpile/module-graph.ts",
     "unresolvedTo": "../transpile/module-graph",
@@ -648,20 +634,6 @@
   },
   {
     "type": "dependency",
-    "from": "src/transpile/validate-string.ts",
-    "to": "src/parse/core.ts",
-    "unresolvedTo": "../parse/core",
-    "dependencyTypes": [
-      "local",
-      "import"
-    ],
-    "rule": {
-      "severity": "error",
-      "name": "no-deep-imports-into-parse"
-    }
-  },
-  {
-    "type": "dependency",
     "from": "src/cli/commands/run.test.ts",
     "to": "src/runtime/docker-inplace.ts",
     "unresolvedTo": "../../runtime/docker-inplace",
@@ -816,20 +788,6 @@
   },
   {
     "type": "dependency",
-    "from": "src/config.ts",
-    "to": "src/runtime/kernel/runtime-arg-parser.ts",
-    "unresolvedTo": "./runtime/kernel/runtime-arg-parser",
-    "dependencyTypes": [
-      "local",
-      "import"
-    ],
-    "rule": {
-      "severity": "error",
-      "name": "no-deep-imports-into-runtime"
-    }
-  },
-  {
-    "type": "dependency",
     "from": "src/transpile/module-graph.test.ts",
     "to": "src/runtime/kernel/graph.ts",
     "unresolvedTo": "../runtime/kernel/graph",
@@ -840,20 +798,6 @@
     "rule": {
       "severity": "error",
       "name": "no-deep-imports-into-runtime"
-    }
-  },
-  {
-    "type": "dependency",
-    "from": "src/parse/metadata.ts",
-    "to": "src/transpile/validate-string.ts",
-    "unresolvedTo": "../transpile/validate-string",
-    "dependencyTypes": [
-      "local",
-      "import"
-    ],
-    "rule": {
-      "severity": "error",
-      "name": "no-deep-imports-into-transpile"
     }
   }
 ]
