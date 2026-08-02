@@ -14,20 +14,6 @@ Process rules:
 
 ***
 
-## Clear layer-violation baselines (parse/transpile/config) #dev-ready
-
-Context: `docs/agent-analyzability.md` layer table. Known structural leaks include `src/parse/metadata.ts` → `src/transpile/validate-string`, and `src/config.ts` → `src/runtime/kernel/runtime-arg-parser`. These may sit on the dependency-cruiser baseline from earlier tasks.
-
-Problem: Baselined upward imports permanently weaken the analyzability invariant for those edges.
-
-Remediation: Remove the leaks by moving shared helpers to the correct lower layer (e.g. string validation needed at parse time belongs under parse or shared; config parsing helpers used at layer 0 must not live under runtime). Update call sites. Delete the corresponding entries from `.dependency-cruiser-known-violations.json` (or regenerate a smaller baseline). Do not weaken rules. Preserve behaviour; add/adjust unit tests for moved helpers.
-
-### Acceptance criteria
-- Test/grep: no production import from `src/parse/` to `src/transpile/`.
-- Test/grep: `src/config.ts` does not import from `src/runtime/`.
-- `npm run arch:check` passes with those edges absent from the baseline file (baseline file may remain for unrelated leftovers, or be deleted if empty).
-- `npm run build` and `npm test` pass.
-
 ## Enforce docs summary-first and page size guard #dev-ready
 
 Context: `docs/agent-analyzability.md` applies the same context budget to documentation: one topic per file, summary up front, size cap, nav as entry manifest. `integration/docs-structure.test.ts` already enforces Diátaxis front matter, nav bijection, and link resolution.

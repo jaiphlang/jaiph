@@ -1,6 +1,40 @@
 import type { EnvDeclDef, WorkflowMetadata } from "./types";
-import { interpolate } from "./runtime/kernel/runtime-arg-parser";
 import { configValueHasInterpolation } from "./parser";
+
+/**
+ * Substitute `${var}` / `${var.field}` references with their resolved values.
+ *
+ * When `quoteValue` is supplied, every substituted value is passed through it
+ * first. Shell-fallthrough lines pass `shellQuote` here so caller-controlled
+ * values (params, captures, `for_lines` iterators, channel payloads) are
+ * escaped before they reach `sh -c`, and can never introduce command
+ * substitution or shell metacharacter breakouts. Non-shell positions
+ * (const/return/send/say/prompt) omit it and keep the raw value.
+ *
+ * Lives here (config layer) rather than under `runtime/` so config resolution
+ * can reuse it without importing upward into the runtime; the runtime imports
+ * it downward through `runtime-arg-parser`.
+ */
+export function interpolate(
+  input: string,
+  vars: Map<string, string>,
+  env?: NodeJS.ProcessEnv,
+  quoteValue?: (s: string) => string,
+): string {
+  const lookup = (key: string): string => vars.get(key) ?? env?.[key] ?? "";
+  const q = quoteValue ?? ((s: string) => s);
+  return input.replace(/\$\{([a-zA-Z_][a-zA-Z0-9_]*)(?:\.([a-zA-Z_][a-zA-Z0-9_]*))?\}/g, (_m, base, field) => {
+    if (!field) return q(lookup(String(base)));
+    // Dot field access: parse JSON stored in the base variable and extract the field.
+    const raw = lookup(String(base));
+    try {
+      const obj = JSON.parse(raw);
+      return q(obj != null && typeof obj === "object" && field in obj ? String(obj[field]) : "");
+    } catch {
+      return q("");
+    }
+  });
+}
 
 export type JaiphConfig = {
   agent?: {

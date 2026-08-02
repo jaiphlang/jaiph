@@ -29,6 +29,11 @@ export {
 } from "./parse/script-bash";
 export { langToShebang } from "./parse/scripts";
 export { canonicalizeTripleQuotedString } from "./parse/triple-quote";
+export {
+  validateJaiphStringContent,
+  extractInlineCaptures,
+} from "./parse/validate-string-content";
+export type { InlineCapture } from "./parse/validate-string-content";
 
 export interface ParseResult {
   ast: jaiphModule;

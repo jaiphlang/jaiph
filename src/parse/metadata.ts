@@ -8,7 +8,7 @@ import {
   SINGLE_QUOTE_MESSAGE,
   unescapeConfigInner,
 } from "./core";
-import { validateJaiphStringContent } from "../transpile/validate-string";
+import { validateJaiphStringContent } from "./validate-string-content";
 import { ENV_KEY_RE, isReservedEnvKey } from "../env-reserved";
 
 const CONFIG_INTERPOLATION_RE = /\$\{[a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)?\}/;
