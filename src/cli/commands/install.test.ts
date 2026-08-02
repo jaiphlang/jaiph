@@ -721,14 +721,15 @@ test("install: invalid detached library signature fails the install closed", asy
   try {
     const remote = makeFixtureRepo(dir, "remote-sig");
     const fx = makeMinisignFixture();
-    // Sign the WRONG message so verification of the cloned commit SHA fails closed.
+    // Sign the WRONG message so verification of the cloned commit SHA fails closed,
+    // even though the trusted registry key is the one that signed it.
     const badSignature = fx.sign(Buffer.from("not the commit sha"));
     const registryPath = writeRawRegistryFile(dir, {
-      signed: { url: remote, description: "demo", commit: gitHead(remote), signature: badSignature, publicKey: fx.publicKey },
+      signed: { url: remote, description: "demo", commit: gitHead(remote), signature: badSignature },
     });
 
     const { result: code, stderr } = await captureStderr(() =>
-      withRegistry(registryPath, () => runInstall(["signed"], { cwd: dir })),
+      withRegistry(registryPath, () => runInstall(["signed"], { cwd: dir, registryPublicKey: fx.publicKey })),
     );
 
     assert.notEqual(code, 0, "invalid signature must exit non-zero");
@@ -741,19 +742,58 @@ test("install: invalid detached library signature fails the install closed", asy
   }
 });
 
-test("install: valid detached library signature over the cloned commit installs", async () => {
+test("install: detached library signature that verifies against the trusted registry key installs", async () => {
   const dir = makeTempProject();
   try {
     const remote = makeFixtureRepo(dir, "remote-sig-ok");
-    const fx = makeMinisignFixture();
-    const goodSignature = fx.sign(Buffer.from(gitHead(remote), "utf8"));
+    const trusted = makeMinisignFixture();
+    const goodSignature = trusted.sign(Buffer.from(gitHead(remote), "utf8"));
     const registryPath = writeRawRegistryFile(dir, {
-      signed: { url: remote, description: "demo", commit: gitHead(remote), signature: goodSignature, publicKey: fx.publicKey },
+      signed: { url: remote, description: "demo", commit: gitHead(remote), signature: goodSignature },
     });
 
-    const code = await withRegistry(registryPath, () => runInstall(["signed"], { cwd: dir }));
-    assert.equal(code, 0, "valid signature must install");
+    // The trusted key is supplied by the caller, not by the entry (happy path).
+    const code = await withRegistry(registryPath, () =>
+      runInstall(["signed"], { cwd: dir, registryPublicKey: trusted.publicKey }),
+    );
+    assert.equal(code, 0, "signature under the trusted key must install");
     assert.ok(existsSync(join(dir, ".jaiph", "libs", "signed", "main.jh")), "signed lib must land on disk");
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test("install: entry-supplied publicKey cannot authenticate its own signature (verifies against embedded key only)", async () => {
+  const dir = makeTempProject();
+  try {
+    const remote = makeFixtureRepo(dir, "remote-evil");
+    // Attacker controls the entry: they forge a VALID signature over the real
+    // commit under their OWN key and supply that key in the entry. Verification
+    // must use the embedded trusted key (the default), so the forgery is rejected.
+    const attacker = makeMinisignFixture();
+    const forged = attacker.sign(Buffer.from(gitHead(remote), "utf8"));
+    const registryPath = writeRawRegistryFile(dir, {
+      signed: {
+        url: remote,
+        description: "demo",
+        commit: gitHead(remote),
+        signature: forged,
+        publicKey: attacker.publicKey,
+      },
+    });
+
+    // No registryPublicKey override => the embedded project key is used, which
+    // did not sign `forged`; a valid signature under the entry's own key is not
+    // enough to install.
+    const { result: code, stderr } = await captureStderr(() =>
+      withRegistry(registryPath, () => runInstall(["signed"], { cwd: dir })),
+    );
+
+    assert.notEqual(code, 0, "entry-supplied key must not authenticate its own signature");
+    assert.ok(stderr.includes("signature verification failed"), `expected signature failure; got: ${stderr}`);
+    assert.ok(!existsSync(join(dir, ".jaiph", "libs", "signed")), "lib dir must be removed on signature failure");
+    const lock = JSON.parse(readFileSync(join(dir, ".jaiph", "libs.lock"), "utf8")) as { libs: unknown[] };
+    assert.equal(lock.libs.length, 0, "rejected forgery must not produce a lock entry");
   } finally {
     cleanup(dir);
   }
