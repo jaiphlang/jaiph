@@ -88,7 +88,7 @@ Cross-slice reuse goes through `src/cli/shared` (or layer 3/0 public entries). S
 | Runtime imports per file | ≤ 8 | ESLint `import/max-dependencies` (`ignoreTypeImports: true`) |
 | Lines per file | ≤ 400 | ESLint `max-lines` (`skipBlankLines`, `skipComments`) |
 
-Raise a cap only with an inline disable **and** a one-line justification. Prefer split over raise.
+Turn a cap off for a file only with a per-file override in `eslint.config.mjs` (or an inline disable) **and** a one-line justification. Prefer split over raise.
 
 ### Cycles
 
@@ -110,21 +110,22 @@ These are **guardrails**, not conventions. Violations fail CI.
 | Mechanism | What it enforces |
 |-----------|------------------|
 | `dependency-cruiser` (`npm run arch:check`) | no cycles; the layer DAG (cross-CLI-slice private imports and deep imports past public entries are still queued) |
-| ESLint | `import/max-dependencies`, `max-lines` |
+| ESLint (`npm run lint`) | `import/max-dependencies` and `max-lines` on `src/**/*.ts`, with a grandfather list of existing violators in `eslint.config.mjs` |
 | Existing grep/shape tests | e.g. transpile ↛ runtime, trivia isolation, file-size caps on specific hot files |
 | Docs structure tests | Diátaxis front matter, nav bijection, link resolution; plus future summary/size guards |
 
 **Baseline policy.** If the tree already violates a new rule, do **not** weaken the rule. Commit a dependency-cruiser known-violations baseline (and an explicit ESLint grandfather list) so **new** violations fail while old ones are tracked. Follow-up work removes baseline entries; it does not relax severity.
 
-**Landed today.** `.dependency-cruiser.cjs` and `npm run arch:check` now enforce `no-circular` and the layer DAG, meaning each layer's rule against upward imports, including the exception that lets runtime reuse only the transpile public module-graph API. Orphan modules are reported as a warning. Pre-existing violations are grandfathered in `.dependency-cruiser-known-violations.json` and passed to the check with `--ignore-known`, so a new cycle or upward import fails the build while the tracked ones do not. Cross-CLI-slice isolation, the deep-import-past-public-entry rule, and the ESLint caps below are still queued in `QUEUE.md`.
+**Landed today.** `.dependency-cruiser.cjs` and `npm run arch:check` now enforce `no-circular` and the layer DAG, meaning each layer's rule against upward imports, including the exception that lets runtime reuse only the transpile public module-graph API. Orphan modules are reported as a warning. Pre-existing violations are grandfathered in `.dependency-cruiser-known-violations.json` and passed to the check with `--ignore-known`, so a new cycle or upward import fails the build while the tracked ones do not. `eslint.config.mjs` and `npm run lint` now enforce the two caps below on `src/**/*.ts`: `import/max-dependencies` at 8 (type imports ignored) and `max-lines` at 400 (blank and comment lines skipped). Test files are out of scope, because they legitimately import many modules and run long. Files that already exceed a cap are grandfathered by a per-file override in `eslint.config.mjs` that turns off only the rule they break, each with a one-line reason, and the global cap is never raised, so any new violation still fails. Cross-CLI-slice isolation and the deep-import-past-public-entry rule are still queued in `QUEUE.md`.
 
-**Scripts.** The import-graph gate is live and wired to the committed config and baseline:
+**Scripts.** The import-graph gate and the ESLint caps gate are both live and wired to their committed configs:
 
 ```jsonc
 "arch:check": "depcruise src --config .dependency-cruiser.cjs --ignore-known",
+"lint": "eslint src --max-warnings 0",
 ```
 
-Two scripts are planned but not added yet: an optional `arch:graph` (`depcruise … --output-type dot | dot -T svg > docs/dependency-graph.svg`, needs Graphviz) and `lint` (`eslint src --max-warnings 0`). `arch:check` is a required CI step today; `lint` becomes required when the ESLint caps task lands.
+Both `arch:check` and `lint` are required CI steps on the Compiler and unit tests job. One script is still planned but not added yet: an optional `arch:graph` (`depcruise … --output-type dot | dot -T svg > docs/dependency-graph.svg`, needs Graphviz).
 
 ## How agents should navigate
 
@@ -143,4 +144,4 @@ Two scripts are planned but not added yet: an optional `arch:graph` (`depcruise 
 
 ## Status
 
-**Accepted** (2026-08-02). Implementation is phased via `QUEUE.md` tasks. The dependency-cruiser gate (`npm run arch:check`) for no cycles and the layer DAG has landed and runs in CI. The ESLint fan-out and file-size caps, cross-CLI-slice isolation, and the deep-import rules are still queued, so existing grep tests and docs remain the partial enforcement set for those.
+**Accepted** (2026-08-02). Implementation is phased via `QUEUE.md` tasks. The dependency-cruiser gate (`npm run arch:check`) for no cycles and the layer DAG has landed and runs in CI. The ESLint fan-out and file-size caps (`npm run lint`) have also landed and run in CI, with existing violators grandfathered in `eslint.config.mjs`. Cross-CLI-slice isolation and the deep-import rules are still queued, so existing grep tests and docs remain the partial enforcement set for those.

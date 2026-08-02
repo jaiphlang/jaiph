@@ -14,21 +14,6 @@ Process rules:
 
 ***
 
-## Add ESLint max-dependencies and max-lines caps #dev-ready
-
-Context: `docs/agent-analyzability.md` caps each production file at ≤8 runtime imports and ≤400 lines (skip blank/comment lines) so agents are not forced to load oversized units. The repo currently has no ESLint config. Several existing files already exceed both caps.
-
-Problem: Without ESLint in CI, new god-files and high fan-out modules can land unchecked.
-
-Remediation: Add `eslint` and `eslint-plugin-import` (and TypeScript-aware config as needed for this CommonJS/TS tree) as devDependencies. Add a flat or legacy ESLint config that lint `src/**/*.{ts,tsx}` (exclude or loosen tests if necessary) with `import/max-dependencies: ["error", { "max": 8, "ignoreTypeImports": true }]` and `max-lines: ["error", { "max": 400, "skipBlankLines": true, "skipComments": true }]`. Grandfather existing violators with the minimal per-file override or inline disable **plus** a short justification comment — do not raise the global max. Add `package.json` script `lint` that runs eslint with `--max-warnings 0`. Wire `npm run lint` into `.github/workflows/ci.yml` on the Compiler and unit tests job. Do not split oversized files in this task unless required to make the config parse; grandfathering is in scope.
-
-### Acceptance criteria
-- `npm run lint` exits 0 on the committed tree with grandfathering applied.
-- A test (or eslint fixture test) asserts that a temporary file with 9 distinct runtime `import` lines fails `import/max-dependencies` when linted under the committed config.
-- A test asserts that a temporary file with >400 non-blank, non-comment lines fails `max-lines` under the committed config.
-- `.github/workflows/ci.yml` invokes `npm run lint` on the unit-test job; a grep/integration test fails if that step disappears.
-- Every grandfathered file has an explicit override or disable with a one-line justification; a test or checklist in the PR notes lists the grandfathered paths.
-
 ## Add parse deep-module public entry and ban deep imports #dev-ready
 
 Context: `docs/agent-analyzability.md` requires each package to be a deep module: outsiders import only the public entry. Today callers reach into `src/parse/**` freely. `src/parser.ts` is the intended parse facade for many call sites.
