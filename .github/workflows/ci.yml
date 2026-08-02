@@ -23,6 +23,9 @@ jobs:
       - name: Enforce agent-analyzability import graph (layer DAG, no cycles)
         run: npm run arch:check
 
+      - name: Enforce agent-analyzability caps (max-dependencies, max-lines)
+        run: npm run lint
+
       - name: Run core test suite (unit and acceptance)
         run: npm test
 
