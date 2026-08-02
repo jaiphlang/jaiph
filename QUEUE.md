@@ -28,3 +28,143 @@ Remediation: Verify per-library signatures only against the embedded registry ke
 - A registry entry with a valid signature under an entry-supplied `publicKey` that is not the embedded key is rejected (or the entry key is ignored and verification uses the embedded key only); a test asserts fail-closed or embedded-key-only behaviour.
 - A registry entry whose signature verifies against the embedded key still installs successfully; a test asserts the happy path.
 - Docs/registry schema no longer imply that a per-entry `publicKey` is a trust anchor for that entry's signature.
+
+## Configure dependency-cruiser for layer DAG and no-circular #dev-ready
+
+Context: `docs/agent-analyzability.md` (Accepted) defines agent analyzability as a CI-enforced invariant: understanding any `src/` file must require only that file plus the public interfaces of its direct dependencies. The import graph must stay an acyclic layered DAG. This repo uses npm (`package-lock.json`), TypeScript under `src/`, and `tsconfig.json` without path aliases. There is no dependency-cruiser config yet.
+
+Problem: Layer and cycle rules exist only as scattered grep tests (e.g. `src/transpile/no-runtime-imports.test.ts`). New upward imports and cycles can land without failing CI.
+
+Remediation: Install `dependency-cruiser` as a devDependency. Add `.dependency-cruiser.cjs` with at least: `no-circular` (error); layer rules matching the table in `docs/agent-analyzability.md` (shared leaf must not import parse/format/transpile/runtime/cli; parse/format must not import transpile/runtime/cli; transpile must not import runtime/cli; runtime must not import cli — with an explicit allow for runtime → transpile **public** module-graph only if already expressible; otherwise forbid runtime→transpile internals and leave the module-graph edge on the baseline); `no-orphans` as warn. Wire `package.json` script `arch:check` → `depcruise src --config .dependency-cruiser.cjs`. If the clean tree fails, generate and commit `.dependency-cruiser-known-violations.json` via depcruise baseline output and reference it from config — do **not** weaken rule severity. Add `npm run arch:check` as a required step on the Compiler and unit tests job in `.github/workflows/ci.yml` (after `npm ci`, can run before or after `npm test`). Add a short subsection under `docs/architecture.md` (or ensure the existing link) that states the layer table is authoritative in `docs/agent-analyzability.md` and that `npm run arch:check` enforces it. Do not refactor production code to clear violations in this task.
+
+### Acceptance criteria
+- `npm run arch:check` exits 0 on the committed tree (clean or with committed baseline); a colocated or integration test invokes the same check (or asserts the script + config exist and runs depcruise) so CI fails if the script is removed.
+- A test creates a temporary synthetic circular import between two files under a fixture or temp dir scanned by the config (or patches a copy) and asserts the check exits non-zero; the synthetic cycle is not left in `src/`.
+- A test asserts that an upward layer violation (e.g. a fixture file under a path matching `src/parse` importing a path matching `src/cli`) is reported as an error by the committed rules (fixture-based or config-rule unit test).
+- `.github/workflows/ci.yml` runs `npm run arch:check` on the unit-test job; a test or workflow assertion documents this (grep test on `ci.yml` is acceptable).
+- Known violation count from the baseline (if any) is reported in the PR/commit message body; baseline file is committed when used.
+
+## Add ESLint max-dependencies and max-lines caps #dev-ready
+
+Context: `docs/agent-analyzability.md` caps each production file at ≤8 runtime imports and ≤400 lines (skip blank/comment lines) so agents are not forced to load oversized units. The repo currently has no ESLint config. Several existing files already exceed both caps.
+
+Problem: Without ESLint in CI, new god-files and high fan-out modules can land unchecked.
+
+Remediation: Add `eslint` and `eslint-plugin-import` (and TypeScript-aware config as needed for this CommonJS/TS tree) as devDependencies. Add a flat or legacy ESLint config that lint `src/**/*.{ts,tsx}` (exclude or loosen tests if necessary) with `import/max-dependencies: ["error", { "max": 8, "ignoreTypeImports": true }]` and `max-lines: ["error", { "max": 400, "skipBlankLines": true, "skipComments": true }]`. Grandfather existing violators with the minimal per-file override or inline disable **plus** a short justification comment — do not raise the global max. Add `package.json` script `lint` that runs eslint with `--max-warnings 0`. Wire `npm run lint` into `.github/workflows/ci.yml` on the Compiler and unit tests job. Do not split oversized files in this task unless required to make the config parse; grandfathering is in scope.
+
+### Acceptance criteria
+- `npm run lint` exits 0 on the committed tree with grandfathering applied.
+- A test (or eslint fixture test) asserts that a temporary file with 9 distinct runtime `import` lines fails `import/max-dependencies` when linted under the committed config.
+- A test asserts that a temporary file with >400 non-blank, non-comment lines fails `max-lines` under the committed config.
+- `.github/workflows/ci.yml` invokes `npm run lint` on the unit-test job; a grep/integration test fails if that step disappears.
+- Every grandfathered file has an explicit override or disable with a one-line justification; a test or checklist in the PR notes lists the grandfathered paths.
+
+## Add parse deep-module public entry and ban deep imports #dev-ready
+
+Context: `docs/agent-analyzability.md` requires each package to be a deep module: outsiders import only the public entry. Today callers reach into `src/parse/**` freely. `src/parser.ts` is the intended parse facade for many call sites.
+
+Problem: Deep imports into parse force agents to load private parser internals to understand a caller.
+
+Remediation: Establish the public parse contract as `src/parser.ts` and/or `src/parse/index.ts` (choose one external entry; re-export only the intentional public API — no `export *` barrels of the whole tree). Retarget every import from **outside** `src/parse/` that currently points at `src/parse/<private>` so it goes through that public entry (add named exports as needed). Extend `.dependency-cruiser.cjs` (create the minimal config from `docs/agent-analyzability.md` if missing) with a `no-deep-imports-into-parse` error rule: from `pathNot` parse package, to parse paths other than the public entry. Baseline only remaining violations you cannot fix without out-of-scope moves; prefer fixing call sites. Keep `npm run arch:check` green. Do not redesign parser internals beyond what the public API surface requires.
+
+### Acceptance criteria
+- A dependency-cruiser (or equivalent) test fails when a file outside `src/parse/` imports `src/parse/<non-entry>` and passes when it imports only the public entry.
+- `rg`/AST test (or depcruise) asserts zero production deep imports into parse from outside the package remain (or only paths listed in the committed baseline, with count reported).
+- `npm run build` and `npm test` pass; public entry does not use `export *` from every parse file (test greps the entry for forbidden star-export of the whole directory or asserts an allowlisted export set).
+- `docs/agent-analyzability.md` parse row matches the entry path you chose (update the table if the path differs).
+
+## Add transpile deep-module public entry and ban deep imports #dev-ready
+
+Context: `docs/agent-analyzability.md` — transpile is layer 2; outsiders must use its public entry (`src/transpiler.ts` plus explicit graph API). Runtime is allowlisted to use the public module-graph API only. Callers today import `src/transpile/validate-*.ts`, `emit-*`, etc. directly.
+
+Problem: Deep imports into transpile couple CLI/runtime/parse callers to validator internals and inflate agent context.
+
+Remediation: Define the public transpile entry (`src/transpiler.ts` and/or `src/transpile/index.ts`) exporting the intentional compile/graph API (`buildScripts*`, `loadModuleGraph` / `readModuleGraph` / `ModuleGraph` types, `collectDiagnostics` / `validateReferences` as needed by current external callers — curate, do not star-export). Retarget all imports from outside `src/transpile/` to that entry. Add dependency-cruiser `no-deep-imports-into-transpile`. Preserve the existing invariant that transpile production sources must not import `src/runtime/` (`src/transpile/no-runtime-imports.test.ts` must keep passing). Keep `arch:check` green with baseline only for true leftovers.
+
+### Acceptance criteria
+- Test: outside-package import of a transpile private path fails `arch:check` / depcruise rule; import via public entry succeeds.
+- Test: no production file outside `src/transpile/` imports a non-entry transpile path except baseline-listed leftovers; baseline count reported if non-zero.
+- `src/transpile/no-runtime-imports.test.ts` still passes.
+- `npm run build` and `npm test` pass.
+
+## Add runtime deep-module public entry; stop runtime importing CLI #dev-ready
+
+Context: `docs/agent-analyzability.md` — runtime is layer 3 and must not import CLI (layer 4). Known leak: `src/runtime/kernel/node-workflow-runtime.ts` imports `src/cli/commands/format-params`. CLI may import runtime’s public entry, not the reverse.
+
+Problem: Runtime → CLI inverts the layer DAG and pulls CLI command modules into kernel analysis.
+
+Remediation: Create `src/runtime/index.ts` (or equivalent) as the public runtime entry for CLI and other outsiders (launch, docker helpers, runner, `buildRuntimeGraph`, emit/redact helpers that CLI legitimately needs — curate). Move or duplicate the minimal `buildStepDisplayParamPairs` (or equivalent) dependency out of `src/cli/commands/` into a layer ≤3 module (shared leaf or runtime-private helper re-exported only if needed), and change runtime to stop importing anything under `src/cli/`. Retarget external deep imports into `src/runtime/**` to the public entry. Add dependency-cruiser rules: `runtime-must-not-import-cli` (error) and `no-deep-imports-into-runtime` (error). Remove these edges from the known-violations baseline when fixed.
+
+### Acceptance criteria
+- Test fails if any production file under `src/runtime/` imports a path under `src/cli/`.
+- Test fails if a file outside `src/runtime/` deep-imports a non-entry runtime path (baseline only for documented leftovers).
+- `npm run arch:check` reports zero `runtime→cli` violations (not merely baselined).
+- `npm run build`, `npm test`, and relevant e2e for run/progress display still pass (display param formatting behaviour preserved).
+
+## Add format deep-module public entry and ban deep imports #dev-ready
+
+Context: `docs/agent-analyzability.md` — format is layer 1 beside parse. External callers should use one public entry.
+
+Problem: Deep imports into `src/format/**` bypass the format contract.
+
+Remediation: Add `src/format/index.ts` (or designate a single existing file as the sole public entry) exporting the intentional formatter API. Retarget outside imports. Add `no-deep-imports-into-format` to dependency-cruiser. Keep format → parse/types only (no transpile/runtime/cli).
+
+### Acceptance criteria
+- Test: deep import into format from outside fails arch check; public-entry import passes.
+- Test: format production sources do not import `src/cli`, `src/runtime`, or `src/transpile` (grep or depcruise).
+- `npm run build` and formatter round-trip tests pass.
+
+## Enforce CLI slice isolation in dependency-cruiser #dev-ready
+
+Context: `docs/agent-analyzability.md` — CLI slices `commands`, `run`, `serve`, `mcp`, `exec`, `telemetry` must not import each other’s private files; cross-slice reuse goes through `src/cli/shared` (or lower-layer public entries).
+
+Problem: Cross-slice imports couple unrelated CLI features and force agents to load multiple slices for one command change.
+
+Remediation: Add dependency-cruiser rules so a file under `src/cli/<slice>/` cannot import `src/cli/<other-slice>/` (use path group backreferences if supported by the installed dependency-cruiser version; otherwise one explicit rule per slice pair). Allow imports of `src/cli/shared/**` and the CLI package entry `src/cli/index.ts`. Retarget violating imports by moving shared helpers into `src/cli/shared` or going through lower layers. Baseline only what cannot be moved in this task; prefer fixes. Keep `arch:check` green.
+
+### Acceptance criteria
+- Test: a fixture or synthetic import from `src/cli/commands/` to `src/cli/serve/` (private) fails the arch check under committed rules.
+- Test: imports from a slice into `src/cli/shared/` still allowed.
+- Production cross-slice private imports are zero or only baseline-listed; baseline count reported.
+- `npm run build` and `npm test` pass.
+
+## Clear layer-violation baselines (parse/transpile/config) #dev-ready
+
+Context: `docs/agent-analyzability.md` layer table. Known structural leaks include `src/parse/metadata.ts` → `src/transpile/validate-string`, and `src/config.ts` → `src/runtime/kernel/runtime-arg-parser`. These may sit on the dependency-cruiser baseline from earlier tasks.
+
+Problem: Baselined upward imports permanently weaken the analyzability invariant for those edges.
+
+Remediation: Remove the leaks by moving shared helpers to the correct lower layer (e.g. string validation needed at parse time belongs under parse or shared; config parsing helpers used at layer 0 must not live under runtime). Update call sites. Delete the corresponding entries from `.dependency-cruiser-known-violations.json` (or regenerate a smaller baseline). Do not weaken rules. Preserve behaviour; add/adjust unit tests for moved helpers.
+
+### Acceptance criteria
+- Test/grep: no production import from `src/parse/` to `src/transpile/`.
+- Test/grep: `src/config.ts` does not import from `src/runtime/`.
+- `npm run arch:check` passes with those edges absent from the baseline file (baseline file may remain for unrelated leftovers, or be deleted if empty).
+- `npm run build` and `npm test` pass.
+
+## Enforce docs summary-first and page size guard #dev-ready
+
+Context: `docs/agent-analyzability.md` applies the same context budget to documentation: one topic per file, summary up front, size cap, nav as entry manifest. `integration/docs-structure.test.ts` already enforces Diátaxis front matter, nav bijection, and link resolution.
+
+Problem: Long docs without a leading summary force agents to ingest whole pages to decide relevance.
+
+Remediation: Extend docs structure tests (or add a sibling integration test) so every published `docs/*.md` page either (a) has an explicit **Summary** section / bold summary paragraph within the first ~20 lines of body after the H1, or (b) meets a documented alternate pattern used by existing pages — pick one enforceable rule and apply it consistently; update pages that fail. Add a soft or hard max body-line cap (choose a single number, e.g. 500 body lines, justified in the test comment) that fails CI when exceeded unless the page is on an explicit allowlist with justification. Do not merge unrelated topics into one file to dodge the cap — split instead if needed. Keep nav bijection green.
+
+### Acceptance criteria
+- Integration test fails when a published doc lacks the required summary pattern.
+- Integration test fails when a non-allowlisted published doc exceeds the chosen body-line cap.
+- All current published docs pass; allowlist entries (if any) include a one-line justification in the test file.
+- `npm test` (or the docs-structure integration tests) fail if `docs/agent-analyzability.md` is removed from nav or loses its summary.
+
+## Sync factory code_philosophy with agent-analyzability ADR #dev-ready
+
+Context: `.jaiph/engineer.jh` embeds `code_philosophy` used by overnight implementers. `docs/agent-analyzability.md` is now the ADR for layering, deep modules, and CI arch checks. Agents that only see `code_philosophy` can miss the import-graph rules.
+
+Problem: Factory instructions and the ADR can drift; implementers may add cross-layer or deep imports while following only the short philosophy list.
+
+Remediation: Update `code_philosophy` in `.jaiph/engineer.jh` to require: (1) read `docs/agent-analyzability.md` before changing `src/` import structure; (2) import only via package public entries; (3) respect the layer DAG; (4) keep files ≤ ~400 lines and low fan-out; (5) run `npm run arch:check` and `npm run lint` when those scripts exist, in addition to build/test. Update `.jaiph/architect_review.jh` and/or `AGENT.md` only if needed for the same pointers. Add a small test (grep or workflow test) that fails if `code_philosophy` no longer mentions `agent-analyzability` / `arch:check`.
+
+### Acceptance criteria
+- Test greps `.jaiph/engineer.jh` (or the embedded philosophy string) for `agent-analyzability` and `arch:check` and fails if absent.
+- `AGENT.md` still points at `docs/agent-analyzability.md` (test or assert file contains the link).
+- No behaviour change to engineer workflows beyond prompt text; existing engineer tests (if any) still pass.

@@ -5,7 +5,9 @@ This document defines how coding agents should work in this repository.
 ## Architecture Source of Truth
 
 - `docs/architecture.md` is the source of truth for system architecture and execution flow.
+- `docs/agent-analyzability.md` is the source of truth for import-graph layering, deep-module public entries, fan-out/file-size caps, and CI architecture checks.
 - Before changing parser/transpiler/runtime/CLI boundaries, read `docs/architecture.md` and keep changes aligned.
+- Before adding cross-package imports or new `src/` modules, read `docs/agent-analyzability.md` and import only through public entry points, downward through layers.
 - Preserve the documented contracts:
   - runtime -> CLI live events via `__JAIPH_EVENT__`,
   - runtime -> durable artifacts via `.jaiph/runs` and `run_summary.jsonl`,
