@@ -270,4 +270,155 @@ describe("arch:check dependency-cruiser guard", () => {
       "the Parse row must name src/parser.ts as the public entry",
     );
   });
+
+  it("AC9: a deep import into transpile from outside the package is an error; the public entry and the module-graph API pass", () => {
+    // Failing case: an outsider (cli) reaches into a transpile validator internal.
+    const bad = makeFixture({
+      "src/cli/x.ts":
+        'import { y } from "../transpile/validate-internal";\nexport const x = y;\n',
+      "src/transpile/validate-internal.ts": "export const y = 1;\n",
+    });
+    try {
+      const { status, output } = depcruise(bad, [
+        "src",
+        "--config",
+        configPath,
+        "--output-type",
+        "err",
+      ]);
+      assert.notEqual(status, 0, "a deep import into transpile must fail");
+      assert.match(output, /no-deep-imports-into-transpile/);
+    } finally {
+      rmSync(bad, { recursive: true, force: true });
+    }
+
+    // Passing case: the same outsider goes through the public entry instead.
+    const good = makeFixture({
+      "src/cli/x.ts":
+        'import { y } from "../transpiler";\nexport const x = y;\n',
+      "src/transpiler.ts": 'export { y } from "./transpile/validate-internal";\n',
+      "src/transpile/validate-internal.ts": "export const y = 1;\n",
+    });
+    try {
+      const { status, output } = depcruise(good, [
+        "src",
+        "--config",
+        configPath,
+        "--output-type",
+        "err",
+      ]);
+      assert.equal(
+        status,
+        0,
+        "importing only the transpile public entry must pass",
+      );
+      assert.doesNotMatch(output, /no-deep-imports-into-transpile/);
+    } finally {
+      rmSync(good, { recursive: true, force: true });
+    }
+
+    // Allowlisted case: the public module-graph API stays importable from outside
+    // (runtime reuses it), so the rule must not flag src/transpile/module-graph.ts.
+    const graph = makeFixture({
+      "src/runtime/x.ts":
+        'import { y } from "../transpile/module-graph";\nexport const x = y;\n',
+      "src/transpile/module-graph.ts": "export const y = 1;\n",
+    });
+    try {
+      const { status, output } = depcruise(graph, [
+        "src",
+        "--config",
+        configPath,
+        "--output-type",
+        "err",
+      ]);
+      assert.equal(
+        status,
+        0,
+        "importing the public module-graph API must pass",
+      );
+      assert.doesNotMatch(output, /no-deep-imports-into-transpile/);
+    } finally {
+      rmSync(graph, { recursive: true, force: true });
+    }
+  });
+
+  it("AC10: no production file outside the transpile package deep-imports src/transpile/** (except module-graph.ts and the committed baseline)", () => {
+    // Baseline is authoritative for the deep imports we knowingly tolerate.
+    const baseline = JSON.parse(readFileSync(baselinePath, "utf8")) as Array<{
+      rule: { name: string };
+      from: string;
+    }>;
+    const baselined = new Set(
+      baseline
+        .filter((v) => v.rule.name === "no-deep-imports-into-transpile")
+        .map((v) => v.from),
+    );
+
+    const srcDir = join(repoRoot, "src");
+    const files: string[] = [];
+    const walk = (dir: string): void => {
+      for (const name of readdirSync(dir)) {
+        const abs = join(dir, name);
+        if (statSync(abs).isDirectory()) {
+          walk(abs);
+        } else if (abs.endsWith(".ts")) {
+          files.push(abs);
+        }
+      }
+    };
+    walk(srcDir);
+
+    // Deep import into transpile that is NOT the public module-graph entry.
+    const deepImport =
+      /from\s+["'](?:\.\.?\/)+transpile\/(?!module-graph["'])[^"']+["']/;
+    const offenders: string[] = [];
+    for (const abs of files) {
+      const rel = abs.slice(repoRoot.length + 1);
+      // Scope: production files OUTSIDE transpile (transpiler.ts is the entry).
+      if (rel.startsWith("src/transpile/")) continue;
+      if (rel === "src/transpiler.ts") continue;
+      if (rel.endsWith(".test.ts") || rel.endsWith(".acceptance.test.ts")) {
+        continue;
+      }
+      if (deepImport.test(readFileSync(abs, "utf8")) && !baselined.has(rel)) {
+        offenders.push(rel);
+      }
+    }
+
+    // Report the tolerated count so a growing baseline is visible in test output.
+    console.log(
+      `transpile deep-import baseline: ${baselined.size} tolerated (${[...baselined].join(", ")})`,
+    );
+    assert.deepEqual(
+      offenders,
+      [],
+      `these production files deep-import transpile but are not baselined: ${offenders.join(", ")}`,
+    );
+  });
+
+  it("AC11: the transpile public entry (src/transpiler.ts) uses no `export *` barrel", () => {
+    const entry = readFileSync(join(repoRoot, "src/transpiler.ts"), "utf8");
+    assert.doesNotMatch(
+      entry,
+      /export\s+\*\s+from/,
+      "src/transpiler.ts must re-export a curated API, never `export * from` a private file",
+    );
+  });
+
+  it("AC12: docs/agent-analyzability.md transpile row names src/transpiler.ts as the public entry", () => {
+    const doc = readFileSync(
+      join(repoRoot, "docs/agent-analyzability.md"),
+      "utf8",
+    );
+    const transpileRow = doc
+      .split("\n")
+      .find((l) => /^\|\s*Transpile\s*\|/.test(l));
+    assert.ok(transpileRow, "the deep-modules table must have a Transpile row");
+    assert.match(
+      transpileRow as string,
+      /`src\/transpiler\.ts`/,
+      "the Transpile row must name src/transpiler.ts as the public entry",
+    );
+  });
 });
