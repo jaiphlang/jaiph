@@ -922,18 +922,69 @@ test("imageHasJaiph: verifyImageHasJaiph probes with the hardened, non-login arg
   // uses buildImageProbeArgs (hardening + non-login shell) end to end.
   const origExec = _dockerExec.run;
   let probeArgs: string[] | undefined;
+  const otherCalls: string[][] = [];
   _dockerExec.run = (args: string[]) => {
     if (args[0] === "run") probeArgs = args;
+    else otherCalls.push(args);
   };
   try {
     assert.doesNotThrow(() => verifyImageHasJaiph("attacker/img:tag"));
   } finally {
     _dockerExec.run = origExec;
   }
+  assert.ok(probeArgs, "expected a docker run probe");
+  const nameIdx = probeArgs!.indexOf("--name");
+  assert.ok(nameIdx >= 0, "probe must pass --name so a Created container can be rm -f'd");
+  const name = probeArgs![nameIdx + 1];
+  assert.match(name, /^jaiph-probe-[0-9a-f]+$/);
   assert.deepEqual(
     probeArgs,
-    buildImageProbeArgs("attacker/img:tag"),
+    buildImageProbeArgs("attacker/img:tag", name),
     "verifyImageHasJaiph must probe via buildImageProbeArgs",
+  );
+  // Always best-effort clean up the named probe (success and failure paths).
+  assert.ok(
+    otherCalls.some((a) => a[0] === "rm" && a.includes("-f") && a.includes(name)),
+    "imageHasJaiph must docker rm -f the named probe container in finally",
+  );
+});
+
+test("imageHasJaiph: still rm -f the named probe when the docker run throws", () => {
+  const origExec = _dockerExec.run;
+  let probeName: string | undefined;
+  const rms: string[][] = [];
+  _dockerExec.run = (args: string[]) => {
+    if (args[0] === "run") {
+      const i = args.indexOf("--name");
+      probeName = i >= 0 ? args[i + 1] : undefined;
+      throw new Error("simulated docker hang/timeout");
+    }
+    if (args[0] === "rm") rms.push(args);
+  };
+  try {
+    assert.throws(() => verifyImageHasJaiph("attacker/img:tag"), /E_DOCKER_NO_JAIPH/);
+  } finally {
+    _dockerExec.run = origExec;
+  }
+  assert.ok(probeName, "probe must be named before docker run");
+  assert.ok(
+    rms.some((a) => a.includes("-f") && a.includes(probeName!)),
+    "failed probe must still docker rm -f the named container",
+  );
+});
+
+test("docker exec seam: timed calls default to killSignal SIGKILL (probe hang fix)", () => {
+  // Contract test: execFileSync must not use the default SIGTERM — Docker
+  // Desktop's CLI can ignore SIGTERM while a container sits in Created, and
+  // Node then waits forever past `timeout`.
+  const src = readFileSync(join(__dirname, "docker.ts"), "utf8");
+  assert.ok(
+    /killSignal:\s*["']SIGKILL["']/.test(src),
+    "_dockerExec must default killSignal to SIGKILL",
+  );
+  assert.ok(
+    src.includes("IMAGE_PROBE_TIMEOUT_MS"),
+    "probe timeout must be a named constant so it stays bounded",
   );
 });
 
