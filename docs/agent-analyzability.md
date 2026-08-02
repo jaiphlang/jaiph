@@ -61,7 +61,7 @@ Each package is a **deep module**: narrow public surface, large private capabili
 | Package | Public entry (contract) | Private |
 |---------|-------------------------|---------|
 | Shared (0) | the listed `src/*.ts` leaf files themselves | n/a |
-| Parse | `src/parser.ts` (and, once introduced, `src/parse/index.ts` if used as the sole external entry) | `src/parse/**` except the entry |
+| Parse | `src/parser.ts` (sole external entry; re-exports the intentional public API — no `export *` barrel) | `src/parse/**` |
 | Format | `src/format/index.ts` (or a single documented emit entry) | other `src/format/**` |
 | Transpile | `src/transpiler.ts` + explicit graph exports on the public entry | `validate-*.ts`, emit internals, etc. |
 | Runtime | `src/runtime/index.ts` (launch, docker, runner, `buildRuntimeGraph`, shared types/helpers intended for CLI) | `src/runtime/kernel/**` and other internals |
@@ -109,14 +109,14 @@ These are **guardrails**, not conventions. Violations fail CI.
 
 | Mechanism | What it enforces |
 |-----------|------------------|
-| `dependency-cruiser` (`npm run arch:check`) | no cycles; the layer DAG (cross-CLI-slice private imports and deep imports past public entries are still queued) |
+| `dependency-cruiser` (`npm run arch:check`) | no cycles; the layer DAG; deep imports past the parse public entry (`no-deep-imports-into-parse`); cross-CLI-slice private imports and deep imports into the other packages are still queued |
 | ESLint (`npm run lint`) | `import/max-dependencies` and `max-lines` on `src/**/*.ts`, with a grandfather list of existing violators in `eslint.config.mjs` |
 | Existing grep/shape tests | e.g. transpile ↛ runtime, trivia isolation, file-size caps on specific hot files |
 | Docs structure tests | Diátaxis front matter, nav bijection, link resolution; plus future summary/size guards |
 
 **Baseline policy.** If the tree already violates a new rule, do **not** weaken the rule. Commit a dependency-cruiser known-violations baseline (and an explicit ESLint grandfather list) so **new** violations fail while old ones are tracked. Follow-up work removes baseline entries; it does not relax severity.
 
-**Landed today.** `.dependency-cruiser.cjs` and `npm run arch:check` now enforce `no-circular` and the layer DAG, meaning each layer's rule against upward imports, including the exception that lets runtime reuse only the transpile public module-graph API. Orphan modules are reported as a warning. Pre-existing violations are grandfathered in `.dependency-cruiser-known-violations.json` and passed to the check with `--ignore-known`, so a new cycle or upward import fails the build while the tracked ones do not. `eslint.config.mjs` and `npm run lint` now enforce the two caps below on `src/**/*.ts`: `import/max-dependencies` at 8 (type imports ignored) and `max-lines` at 400 (blank and comment lines skipped). Test files are out of scope, because they legitimately import many modules and run long. Files that already exceed a cap are grandfathered by a per-file override in `eslint.config.mjs` that turns off only the rule they break, each with a one-line reason, and the global cap is never raised, so any new violation still fails. Cross-CLI-slice isolation and the deep-import-past-public-entry rule are still queued in `QUEUE.md`.
+**Landed today.** `.dependency-cruiser.cjs` and `npm run arch:check` now enforce `no-circular` and the layer DAG, meaning each layer's rule against upward imports, including the exception that lets runtime reuse only the transpile public module-graph API. Orphan modules are reported as a warning. Pre-existing violations are grandfathered in `.dependency-cruiser-known-violations.json` and passed to the check with `--ignore-known`, so a new cycle or upward import fails the build while the tracked ones do not. `eslint.config.mjs` and `npm run lint` now enforce the two caps below on `src/**/*.ts`: `import/max-dependencies` at 8 (type imports ignored) and `max-lines` at 400 (blank and comment lines skipped). Test files are out of scope, because they legitimately import many modules and run long. Files that already exceed a cap are grandfathered by a per-file override in `eslint.config.mjs` that turns off only the rule they break, each with a one-line reason, and the global cap is never raised, so any new violation still fails. Deep imports past the parse public entry (`src/parser.ts`) are now enforced by the `no-deep-imports-into-parse` rule; the one call site that cannot route through the entry without an out-of-scope move (`validate-string.ts` → `parse/core.ts`, blocked by the tracked `metadata` → `validate-string` edge) is baselined. Cross-CLI-slice isolation and the deep-import rules for the other packages are still queued in `QUEUE.md`.
 
 **Scripts.** The import-graph gate and the ESLint caps gate are both live and wired to their committed configs:
 
@@ -144,4 +144,4 @@ Both `arch:check` and `lint` are required CI steps on the Compiler and unit test
 
 ## Status
 
-**Accepted** (2026-08-02). Implementation is phased via `QUEUE.md` tasks. The dependency-cruiser gate (`npm run arch:check`) for no cycles and the layer DAG has landed and runs in CI. The ESLint fan-out and file-size caps (`npm run lint`) have also landed and run in CI, with existing violators grandfathered in `eslint.config.mjs`. Cross-CLI-slice isolation and the deep-import rules are still queued, so existing grep tests and docs remain the partial enforcement set for those.
+**Accepted** (2026-08-02). Implementation is phased via `QUEUE.md` tasks. The dependency-cruiser gate (`npm run arch:check`) for no cycles and the layer DAG has landed and runs in CI. The ESLint fan-out and file-size caps (`npm run lint`) have also landed and run in CI, with existing violators grandfathered in `eslint.config.mjs`. The `no-deep-imports-into-parse` rule now guards the parse public entry. Cross-CLI-slice isolation and the deep-import rules for the remaining packages are still queued, so existing grep tests and docs remain the partial enforcement set for those.

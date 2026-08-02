@@ -10,6 +10,26 @@ import { parseScriptBlock } from "./parse/scripts";
 import { parseWorkflowBlock } from "./parse/workflows";
 import { parseTestBlock } from "./parse/tests";
 
+// Public parse API for code OUTSIDE the parse package. Per
+// docs/agent-analyzability.md, outsiders import the parse slice only through
+// this entry (src/parser.ts), never src/parse/** internals. The surface is
+// re-exported explicitly — no `export *` barrel of the whole tree.
+export { configValueHasInterpolation } from "./parse/metadata";
+export {
+  parseCallRef,
+  matchSendOperator,
+  isJaiphInterpolationRef,
+  argsToRuntimeString,
+} from "./parse/core";
+export { createTrivia } from "./parse/trivia";
+export type { NodeTrivia, Trivia } from "./parse/trivia";
+export {
+  scriptShebangIsBash,
+  resolveInterpreterFromShebang,
+} from "./parse/script-bash";
+export { langToShebang } from "./parse/scripts";
+export { canonicalizeTripleQuotedString } from "./parse/triple-quote";
+
 export interface ParseResult {
   ast: jaiphModule;
   trivia: Trivia;

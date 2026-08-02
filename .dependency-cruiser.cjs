@@ -67,6 +67,14 @@ module.exports = {
       to: { path: "^src/transpile/", pathNot: "^src/transpile/module-graph\\.ts$" },
     },
     {
+      name: "no-deep-imports-into-parse",
+      comment:
+        "Parse is a deep module: code OUTSIDE the parse package imports only its public entry (src/parser.ts), never src/parse/** internals. Add a named re-export to src/parser.ts instead of reaching in.",
+      severity: "error",
+      from: { pathNot: "^src/(parse/|parser\\.ts$)" },
+      to: { path: "^src/parse/" },
+    },
+    {
       name: "no-orphans",
       comment:
         "Orphan modules (no incoming or outgoing deps) are usually dead code or a missing wiring.",

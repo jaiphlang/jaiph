@@ -160,5 +160,19 @@
         ]
       }
     ]
+  },
+  {
+    "type": "dependency",
+    "from": "src/transpile/validate-string.ts",
+    "to": "src/parse/core.ts",
+    "unresolvedTo": "../parse/core",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "no-deep-imports-into-parse"
+    }
   }
 ]

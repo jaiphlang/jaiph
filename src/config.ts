@@ -1,6 +1,6 @@
 import type { EnvDeclDef, WorkflowMetadata } from "./types";
 import { interpolate } from "./runtime/kernel/runtime-arg-parser";
-import { configValueHasInterpolation } from "./parse/metadata";
+import { configValueHasInterpolation } from "./parser";
 
 export type JaiphConfig = {
   agent?: {

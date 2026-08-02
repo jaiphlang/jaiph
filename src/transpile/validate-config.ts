@@ -1,5 +1,5 @@
 import type { jaiphModule, WorkflowMetadata } from "../types";
-import { configValueHasInterpolation } from "../parse/metadata";
+import { configValueHasInterpolation } from "../parser";
 import { Diagnostics } from "../diagnostics";
 import { validateSimpleInterpolationIdentifiers } from "./validate-string";
 
