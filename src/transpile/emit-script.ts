@@ -1,7 +1,6 @@
 import { inlineScriptName } from "../inline-script-name";
 import type { Expr, jaiphModule, ScriptImportDef, WorkflowStepDef } from "../types";
-import { scriptShebangIsBash } from "../parse/script-bash";
-import { langToShebang } from "../parse/scripts";
+import { scriptShebangIsBash, langToShebang } from "../parser";
 
 /**
  * Replace `alias.name` patterns in shell commands with

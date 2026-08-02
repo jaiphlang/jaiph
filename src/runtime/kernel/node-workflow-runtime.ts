@@ -6,7 +6,11 @@ import { PassThrough } from "node:stream";
 import { randomUUID } from "node:crypto";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { inlineScriptName } from "../../inline-script-name";
-import { argsToRuntimeString } from "../../parse/core";
+import {
+  argsToRuntimeString,
+  canonicalizeTripleQuotedString,
+  resolveInterpreterFromShebang,
+} from "../../parser";
 import type { CatchBody, Expr, MatchExprDef, MatchPatternDef, WorkflowStepDef } from "../../types";
 import {
   executePrompt,
@@ -23,7 +27,6 @@ import { resolveRuleRef, resolveScriptRef, resolveWorkflowRef, type RuntimeGraph
 import type { WorkflowMetadata } from "../../types";
 import { interpolateWorkflowMetadata } from "../../config";
 import { extractJson, validateFields } from "./schema";
-import { canonicalizeTripleQuotedString } from "../../parse/triple-quote";
 import {
   commaArgsToInterpolated,
   interpolate,
@@ -37,7 +40,6 @@ import {
   stripOuterQuotes,
   type PromptSchemaField,
 } from "./runtime-arg-parser";
-import { resolveInterpreterFromShebang } from "../../parse/script-bash";
 import { killProcessTreeEscalating, resolveShell } from "./portability";
 import { RuntimeEventEmitter, type Frame } from "./runtime-event-emitter";
 import { createStepIdleOutputWarn } from "./step-idle-warn";

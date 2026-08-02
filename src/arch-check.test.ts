@@ -5,8 +5,10 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -143,5 +145,129 @@ describe("arch:check dependency-cruiser guard", () => {
       "utf8",
     );
     assert.match(ci, /npm run arch:check/);
+  });
+
+  it("AC5: a deep import into parse from outside the package is an error; the public entry passes", () => {
+    // Failing case: an outsider (transpile) reaches into a parse internal.
+    const bad = makeFixture({
+      "src/transpile/x.ts":
+        'import { y } from "../parse/internal";\nexport const x = y;\n',
+      "src/parse/internal.ts": "export const y = 1;\n",
+    });
+    try {
+      const { status, output } = depcruise(bad, [
+        "src",
+        "--config",
+        configPath,
+        "--output-type",
+        "err",
+      ]);
+      assert.notEqual(status, 0, "a deep import into parse must fail");
+      assert.match(output, /no-deep-imports-into-parse/);
+    } finally {
+      rmSync(bad, { recursive: true, force: true });
+    }
+
+    // Passing case: the same outsider goes through the public entry instead.
+    const good = makeFixture({
+      "src/transpile/x.ts":
+        'import { y } from "../parser";\nexport const x = y;\n',
+      "src/parser.ts": 'export { y } from "./parse/internal";\n',
+      "src/parse/internal.ts": "export const y = 1;\n",
+    });
+    try {
+      const { status, output } = depcruise(good, [
+        "src",
+        "--config",
+        configPath,
+        "--output-type",
+        "err",
+      ]);
+      assert.equal(
+        status,
+        0,
+        "importing only the parse public entry must pass",
+      );
+      assert.doesNotMatch(output, /no-deep-imports-into-parse/);
+    } finally {
+      rmSync(good, { recursive: true, force: true });
+    }
+  });
+
+  it("AC6: no production file outside the parse package deep-imports src/parse/** except the committed baseline", () => {
+    // Baseline is authoritative for the deep imports we knowingly tolerate.
+    const baseline = JSON.parse(readFileSync(baselinePath, "utf8")) as Array<{
+      rule: { name: string };
+      from: string;
+    }>;
+    const baselined = new Set(
+      baseline
+        .filter((v) => v.rule.name === "no-deep-imports-into-parse")
+        .map((v) => v.from),
+    );
+
+    const srcDir = join(repoRoot, "src");
+    const files: string[] = [];
+    const walk = (dir: string): void => {
+      for (const name of readdirSync(dir)) {
+        const abs = join(dir, name);
+        if (statSync(abs).isDirectory()) {
+          walk(abs);
+        } else if (abs.endsWith(".ts")) {
+          files.push(abs);
+        }
+      }
+    };
+    walk(srcDir);
+
+    const deepImport = /from\s+["'](?:\.\.?\/)+parse\/[^"']+["']/;
+    const offenders: string[] = [];
+    for (const abs of files) {
+      const rel = abs.slice(repoRoot.length + 1);
+      // Scope: production files OUTSIDE the parse package (parser.ts is the entry).
+      if (rel.startsWith("src/parse/")) continue;
+      if (rel === "src/parser.ts") continue;
+      if (rel.endsWith(".test.ts") || rel.endsWith(".acceptance.test.ts")) {
+        continue;
+      }
+      if (deepImport.test(readFileSync(abs, "utf8")) && !baselined.has(rel)) {
+        offenders.push(rel);
+      }
+    }
+
+    // Report the tolerated count so a growing baseline is visible in test output.
+    console.log(
+      `parse deep-import baseline: ${baselined.size} tolerated (${[...baselined].join(", ")})`,
+    );
+    assert.deepEqual(
+      offenders,
+      [],
+      `these production files deep-import parse but are not baselined: ${offenders.join(", ")}`,
+    );
+  });
+
+  it("AC7: the parse public entry (src/parser.ts) uses no `export *` barrel", () => {
+    const entry = readFileSync(join(repoRoot, "src/parser.ts"), "utf8");
+    assert.doesNotMatch(
+      entry,
+      /export\s+\*\s+from/,
+      "src/parser.ts must re-export a curated API, never `export * from` a private file",
+    );
+  });
+
+  it("AC8: docs/agent-analyzability.md parse row names src/parser.ts as the public entry", () => {
+    const doc = readFileSync(
+      join(repoRoot, "docs/agent-analyzability.md"),
+      "utf8",
+    );
+    const parseRow = doc
+      .split("\n")
+      .find((l) => /^\|\s*Parse\s*\|/.test(l));
+    assert.ok(parseRow, "the deep-modules table must have a Parse row");
+    assert.match(
+      parseRow as string,
+      /`src\/parser\.ts`/,
+      "the Parse row must name src/parser.ts as the public entry",
+    );
   });
 });

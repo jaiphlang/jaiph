@@ -10,6 +10,11 @@
  */
 
 import { jaiphError } from "../errors";
+// Deep import into parse (baselined in .dependency-cruiser-known-violations.json):
+// routing this through the parser.ts public entry would form a cycle, because
+// parse/metadata.ts already imports this file (a separate tracked layer
+// violation). Fixing it needs the out-of-scope removal of that parse->transpile
+// edge, so the deep import stays until then.
 import { parseCallRef } from "../parse/core";
 import type { Arg } from "../types";
 

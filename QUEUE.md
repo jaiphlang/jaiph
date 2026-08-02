@@ -14,20 +14,6 @@ Process rules:
 
 ***
 
-## Add parse deep-module public entry and ban deep imports #dev-ready
-
-Context: `docs/agent-analyzability.md` requires each package to be a deep module: outsiders import only the public entry. Today callers reach into `src/parse/**` freely. `src/parser.ts` is the intended parse facade for many call sites.
-
-Problem: Deep imports into parse force agents to load private parser internals to understand a caller.
-
-Remediation: Establish the public parse contract as `src/parser.ts` and/or `src/parse/index.ts` (choose one external entry; re-export only the intentional public API — no `export *` barrels of the whole tree). Retarget every import from **outside** `src/parse/` that currently points at `src/parse/<private>` so it goes through that public entry (add named exports as needed). Extend `.dependency-cruiser.cjs` (create the minimal config from `docs/agent-analyzability.md` if missing) with a `no-deep-imports-into-parse` error rule: from `pathNot` parse package, to parse paths other than the public entry. Baseline only remaining violations you cannot fix without out-of-scope moves; prefer fixing call sites. Keep `npm run arch:check` green. Do not redesign parser internals beyond what the public API surface requires.
-
-### Acceptance criteria
-- A dependency-cruiser (or equivalent) test fails when a file outside `src/parse/` imports `src/parse/<non-entry>` and passes when it imports only the public entry.
-- `rg`/AST test (or depcruise) asserts zero production deep imports into parse from outside the package remain (or only paths listed in the committed baseline, with count reported).
-- `npm run build` and `npm test` pass; public entry does not use `export *` from every parse file (test greps the entry for forbidden star-export of the whole directory or asserts an allowlisted export set).
-- `docs/agent-analyzability.md` parse row matches the entry path you chose (update the table if the path differs).
-
 ## Add transpile deep-module public entry and ban deep imports #dev-ready
 
 Context: `docs/agent-analyzability.md` — transpile is layer 2; outsiders must use its public entry (`src/transpiler.ts` plus explicit graph API). Runtime is allowlisted to use the public module-graph API only. Callers today import `src/transpile/validate-*.ts`, `emit-*`, etc. directly.

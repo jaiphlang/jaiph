@@ -5,7 +5,7 @@
  * resolve interpolated strings, parse call argument lists (including managed
  * `run`/`ensure` and inline-script forms), and validate prompt return schemas.
  */
-import { argsToRuntimeString, parseCallRef } from "../../parse/core";
+import { argsToRuntimeString, parseCallRef } from "../../parser";
 import { formatUtcTimestamp } from "./emit";
 
 export const BARE_IDENT_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;

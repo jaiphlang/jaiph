@@ -13,7 +13,7 @@ import type {
   WorkflowMetadata,
   TopLevelEmitOrder,
 } from "../types";
-import { createTrivia, type NodeTrivia, type Trivia } from "../parse/trivia";
+import { createTrivia, type NodeTrivia, type Trivia } from "../parser";
 
 export interface EmitOptions {
   indent: number;

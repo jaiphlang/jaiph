@@ -6,9 +6,9 @@
  * is scope-aware via the `ValidatorCtx`.
  */
 import { Diagnostics } from "../diagnostics";
-import { matchSendOperator, isJaiphInterpolationRef } from "../parse/core";
+import { matchSendOperator, isJaiphInterpolationRef } from "../parser";
 import type { Arg, Expr, jaiphModule, MatchExprDef, MatchPatternDef, WorkflowStepDef } from "../types";
-import { canonicalizeTripleQuotedString } from "../parse/triple-quote";
+import { canonicalizeTripleQuotedString } from "../parser";
 import {
   BARE_SEND_REF_MSG,
   lookupKind,
