@@ -55,8 +55,6 @@ export interface InstallSpec {
   expectedCommit?: string;
   /** Optional detached minisign signature over the cloned commit SHA; verified post-clone, fails closed. */
   signature?: string;
-  /** Minisign public key the `signature` verifies against; defaults to the embedded project key. */
-  signaturePublicKey?: string;
 }
 
 export interface CloneOutcome {
@@ -71,6 +69,13 @@ export interface RunInstallOptions {
   cwd?: string;
   cloneRunner?: CloneRunner;
   concurrency?: number;
+  /**
+   * Trust anchor for per-library detached signatures. Defaults to the embedded
+   * project key. This is set by trusted callers (the CLI, or a test), never
+   * derived from the registry entry — an entry cannot supply the key that
+   * authenticates its own signature (finding L-5 / ASI-05).
+   */
+  registryPublicKey?: string;
 }
 
 const DEFAULT_CONCURRENCY = 4;
@@ -172,7 +177,7 @@ interface PostCloneResult {
  * if the cloned commit differs from the recorded one. On any failure the
  * lib directory is removed so callers never write a lock entry for it.
  */
-function postCloneHygiene(spec: InstallSpec): PostCloneResult {
+function postCloneHygiene(spec: InstallSpec, registryPublicKey: string): PostCloneResult {
   if (!hasJhFileRecursive(spec.libDir)) {
     rmSync(spec.libDir, { recursive: true, force: true });
     return {
@@ -198,8 +203,9 @@ function postCloneHygiene(spec: InstallSpec): PostCloneResult {
     };
   }
   if (spec.signature) {
-    const pubkey = spec.signaturePublicKey ?? EMBEDDED_REGISTRY_PUBKEY;
-    if (!commit || !verifyMinisign(Buffer.from(commit, "utf8"), spec.signature, pubkey)) {
+    // Verify only against the trusted registry key, never a key supplied by the
+    // same entry — a self-supplied key attests nothing (finding L-5 / ASI-05).
+    if (!commit || !verifyMinisign(Buffer.from(commit, "utf8"), spec.signature, registryPublicKey)) {
       rmSync(spec.libDir, { recursive: true, force: true });
       return {
         ok: false,
@@ -303,7 +309,6 @@ async function resolveInstallSpecs(
         libDir: join(libsDir, name),
         expectedCommit: entry.commit,
         signature: entry.signature,
-        signaturePublicKey: entry.publicKey,
       });
     } else {
       const { url, version } = parseUrlAndVersion(arg);
@@ -330,6 +335,7 @@ export async function runInstall(rest: string[], opts: RunInstallOptions = {}): 
   const lockPath = join(workspaceRoot, ".jaiph", "libs.lock");
   const cloneRunner = opts.cloneRunner ?? gitCloneRunner;
   const concurrency = Math.max(1, opts.concurrency ?? DEFAULT_CONCURRENCY);
+  const registryPublicKey = opts.registryPublicKey ?? EMBEDDED_REGISTRY_PUBKEY;
 
   mkdirSync(libsDir, { recursive: true });
 
@@ -383,7 +389,7 @@ export async function runInstall(rest: string[], opts: RunInstallOptions = {}): 
   const wrappedRunner: CloneRunner = async (spec) => {
     const out = await cloneRunner(spec);
     if (!out.ok) return out;
-    const post = postCloneHygiene(spec);
+    const post = postCloneHygiene(spec, registryPublicKey);
     if (!post.ok) {
       return { spec, ok: false, message: post.message };
     }

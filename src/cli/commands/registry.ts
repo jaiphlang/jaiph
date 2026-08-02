@@ -28,10 +28,12 @@ export interface RegistryEntry {
   description: string;
   /** Pinned 40-char commit the cloned HEAD must match (integrity pin, not just a post-hoc lock). */
   commit?: string;
-  /** Optional detached minisign signature (over the ASCII commit SHA) attesting the release. */
+  /**
+   * Optional detached minisign signature (over the ASCII commit SHA) attesting
+   * the release. Verified only against the embedded project key — an entry
+   * cannot supply the key that authenticates its own signature.
+   */
   signature?: string;
-  /** Optional per-library minisign public key the `signature` verifies against (else the embedded key). */
-  publicKey?: string;
 }
 
 export interface RegistryIndex {
@@ -196,7 +198,6 @@ function validateRegistryIndex(parsed: unknown, source: string, requireCommit: b
     const description = (raw as { description?: unknown }).description;
     const commit = (raw as { commit?: unknown }).commit;
     const signature = (raw as { signature?: unknown }).signature;
-    const publicKey = (raw as { publicKey?: unknown }).publicKey;
     if (typeof url !== "string" || url.length === 0) {
       throw new Error(`failed to parse registry ${source}: entry "${name}" missing string "url"`);
     }
@@ -220,15 +221,11 @@ function validateRegistryIndex(parsed: unknown, source: string, requireCommit: b
     if (signature !== undefined && typeof signature !== "string") {
       throw new Error(`failed to parse registry ${source}: entry "${name}" "signature" must be a string`);
     }
-    if (publicKey !== undefined && typeof publicKey !== "string") {
-      throw new Error(`failed to parse registry ${source}: entry "${name}" "publicKey" must be a string`);
-    }
     out[name] = {
       url,
       description,
       ...(commit ? { commit } : {}),
       ...(signature ? { signature } : {}),
-      ...(publicKey ? { publicKey } : {}),
     };
   }
   return { libs: out };
