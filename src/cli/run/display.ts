@@ -1,4 +1,4 @@
-import { formatNamedParamsForDisplay, isInternalParamValue } from "../commands/format-params.js";
+import { formatNamedParamsForDisplay, isInternalParamValue } from "../shared/format-params.js";
 import type { SandboxMode } from "../../runtime";
 
 const PROMPT_PREVIEW_MAX = 24;
