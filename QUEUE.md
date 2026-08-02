@@ -14,20 +14,6 @@ Process rules:
 
 ***
 
-## Enforce CLI slice isolation in dependency-cruiser #dev-ready
-
-Context: `docs/agent-analyzability.md` — CLI slices `commands`, `run`, `serve`, `mcp`, `exec`, `telemetry` must not import each other’s private files; cross-slice reuse goes through `src/cli/shared` (or lower-layer public entries).
-
-Problem: Cross-slice imports couple unrelated CLI features and force agents to load multiple slices for one command change.
-
-Remediation: Add dependency-cruiser rules so a file under `src/cli/<slice>/` cannot import `src/cli/<other-slice>/` (use path group backreferences if supported by the installed dependency-cruiser version; otherwise one explicit rule per slice pair). Allow imports of `src/cli/shared/**` and the CLI package entry `src/cli/index.ts`. Retarget violating imports by moving shared helpers into `src/cli/shared` or going through lower layers. Baseline only what cannot be moved in this task; prefer fixes. Keep `arch:check` green.
-
-### Acceptance criteria
-- Test: a fixture or synthetic import from `src/cli/commands/` to `src/cli/serve/` (private) fails the arch check under committed rules.
-- Test: imports from a slice into `src/cli/shared/` still allowed.
-- Production cross-slice private imports are zero or only baseline-listed; baseline count reported.
-- `npm run build` and `npm test` pass.
-
 ## Clear layer-violation baselines (parse/transpile/config) #dev-ready
 
 Context: `docs/agent-analyzability.md` layer table. Known structural leaks include `src/parse/metadata.ts` → `src/transpile/validate-string`, and `src/config.ts` → `src/runtime/kernel/runtime-arg-parser`. These may sit on the dependency-cruiser baseline from earlier tasks.

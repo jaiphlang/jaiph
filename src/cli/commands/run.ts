@@ -15,7 +15,7 @@ import { buildScripts, buildScriptsFromGraph } from "../../transpiler";
 import { loadModuleGraph, writeModuleGraph } from "../../transpile/module-graph";
 import { canUseAnsi } from "../../runtime";
 import { resolveModuleMetadata, metadataToConfig } from "../../config";
-import { buildStepDisplayParamPairs, formatNamedParamsForDisplay } from "./format-params.js";
+import { buildStepDisplayParamPairs, formatNamedParamsForDisplay } from "../shared/format-params.js";
 import {
   colorPalette,
   resolveFailureDetails,

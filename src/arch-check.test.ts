@@ -755,4 +755,106 @@ describe("arch:check dependency-cruiser guard", () => {
       "the Format row must name src/format/index.ts as the public entry",
     );
   });
+
+  it("AC24: a cross-CLI-slice private import (commands -> serve) is an error; same-slice and slice -> shared pass", () => {
+    // Failing case: a file in the commands slice reaches into serve's private tree.
+    const bad = makeFixture({
+      "src/cli/commands/x.ts":
+        'import { y } from "../serve/handler";\nexport const x = y;\n',
+      "src/cli/serve/handler.ts": "export const y = 1;\n",
+    });
+    try {
+      const { status, output } = depcruise(bad, [
+        "src",
+        "--config",
+        configPath,
+        "--output-type",
+        "err",
+      ]);
+      assert.notEqual(status, 0, "a cross-slice private import must fail");
+      assert.match(output, /no-cross-cli-slice-imports/);
+    } finally {
+      rmSync(bad, { recursive: true, force: true });
+    }
+
+    // Passing case: same-slice imports and imports of src/cli/shared/** stay allowed.
+    const good = makeFixture({
+      "src/cli/commands/x.ts":
+        'import { y } from "./sibling";\nimport { s } from "../shared/util";\nexport const x = y + s;\n',
+      "src/cli/commands/sibling.ts": "export const y = 1;\n",
+      "src/cli/shared/util.ts": "export const s = 2;\n",
+    });
+    try {
+      const { status, output } = depcruise(good, [
+        "src",
+        "--config",
+        configPath,
+        "--output-type",
+        "err",
+      ]);
+      assert.equal(
+        status,
+        0,
+        "same-slice and slice -> shared imports must pass",
+      );
+      assert.doesNotMatch(output, /no-cross-cli-slice-imports/);
+    } finally {
+      rmSync(good, { recursive: true, force: true });
+    }
+  });
+
+  it("AC25: no production file cross-imports another CLI slice's private tree except the committed baseline", () => {
+    // Baseline is authoritative for the cross-slice edges we knowingly tolerate.
+    const baseline = JSON.parse(readFileSync(baselinePath, "utf8")) as Array<{
+      rule: { name: string };
+      from: string;
+    }>;
+    const baselined = new Set(
+      baseline
+        .filter((v) => v.rule.name === "no-cross-cli-slice-imports")
+        .map((v) => v.from),
+    );
+
+    const slices = ["commands", "run", "serve", "mcp", "exec", "telemetry"];
+    const srcDir = join(repoRoot, "src");
+    const files: string[] = [];
+    const walk = (dir: string): void => {
+      for (const name of readdirSync(dir)) {
+        const abs = join(dir, name);
+        if (statSync(abs).isDirectory()) {
+          walk(abs);
+        } else if (abs.endsWith(".ts")) {
+          files.push(abs);
+        }
+      }
+    };
+    walk(join(srcDir, "cli"));
+
+    // A cross-slice import from a file in slice X is `from "../<Y>/..."` with
+    // Y a different slice. Imports of ../shared/** or ./same-slice are allowed.
+    const offenders: string[] = [];
+    for (const abs of files) {
+      const rel = abs.slice(repoRoot.length + 1);
+      if (rel.endsWith(".test.ts") || rel.endsWith(".acceptance.test.ts")) {
+        continue;
+      }
+      const fromSlice = rel.match(/^src\/cli\/([^/]+)\//)?.[1];
+      if (!fromSlice || !slices.includes(fromSlice)) continue;
+      const text = readFileSync(abs, "utf8");
+      const crossSlice = new RegExp(
+        `from\\s+["']\\.\\.\\/(${slices.filter((s) => s !== fromSlice).join("|")})\\/[^"']+["']`,
+      );
+      if (crossSlice.test(text) && !baselined.has(rel)) offenders.push(rel);
+    }
+
+    // Report the tolerated count so a growing baseline is visible in test output.
+    console.log(
+      `cross-CLI-slice baseline: ${baselined.size} tolerated (${[...baselined].join(", ")})`,
+    );
+    assert.deepEqual(
+      offenders,
+      [],
+      `these production files cross-import another CLI slice but are not baselined: ${offenders.join(", ")}`,
+    );
+  });
 });
