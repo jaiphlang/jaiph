@@ -23,14 +23,16 @@ import {
   stopDockerContainer,
   withDockerExitGuard,
   resolveDockerHostRunsRoot,
+  redactCredentials,
+  CHAIN_KEY_ENV,
+  generateChainKey,
+  writeChainKey,
   type DockerRunConfig,
   type SandboxMode,
-} from "../../runtime/docker";
+} from "../../runtime";
 import { discoverDockerRunDir } from "../shared/errors";
 import { readMetaFields, readReturnValue } from "../shared/run-meta";
 import { deliverRunTelemetryDetached } from "../telemetry/otlp";
-import { redactCredentials } from "../../runtime/kernel/redact";
-import { CHAIN_KEY_ENV, generateChainKey, writeChainKey } from "../../runtime/kernel/emit";
 
 /**
  * Result of executing one workflow call. `text` is the same content an MCP

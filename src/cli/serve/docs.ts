@@ -15,7 +15,7 @@ import {
   SWAGGER_UI_BUNDLE_JS_BASE64,
   SWAGGER_UI_CSS_BASE64,
   decodeEmbeddedAsset,
-} from "../../runtime/embedded-assets";
+} from "../../runtime";
 
 export const SWAGGER_UI_VERSION = "5.17.14";
 

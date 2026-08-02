@@ -14,8 +14,6 @@ import { join } from "node:path";
 import { buildRuntimeGraph } from "./graph";
 import { NodeWorkflowRuntime, _scriptSpawn } from "./node-workflow-runtime";
 import { buildDockerArgs } from "../docker";
-import { loadModuleGraph } from "../../transpile/module-graph";
-import { planTrustedEnvs } from "../../cli/run/trusted-envs";
 
 /** Minimal fake ChildProcess that emits `close(0)` on the next tick. */
 function fakeChild(): EventEmitter {
@@ -269,11 +267,12 @@ test("trusted_envs: docker copy mode — declared key crosses as -e, reaches the
       '  prompt "say hi"',
       "}",
     ]);
-    // Host side: the CLI resolves the entry file's declaration from the host
-    // env and threads it through DockerSpawnOptions.extraEnv (run.ts merge,
-    // `--env` pairs winning).
-    const plan = planTrustedEnvs(loadModuleGraph(jh, wsDir), {}, { GH_TOKEN: "host-secret" });
-    assert.deepEqual(plan.resolved, { GH_TOKEN: "host-secret" });
+    // Host side: the CLI's planTrustedEnvs resolves the entry file's declaration
+    // from the host env and threads it through DockerSpawnOptions.extraEnv (run.ts
+    // merge, `--env` pairs winning). That resolution is a layer-4 concern covered
+    // in cli/run/trusted-envs.test.ts; inline the resolved map here so this
+    // runtime test stays within the runtime layer and imports no CLI module.
+    const resolvedTrustedEnv = { GH_TOKEN: "host-secret" };
     const args = buildDockerArgs({
       config: { enabled: true, image: "ubuntu:24.04", imageExplicit: false, network: "default", timeoutSeconds: 300 },
       sourceAbs: jh,
@@ -285,7 +284,7 @@ test("trusted_envs: docker copy mode — declared key crosses as -e, reaches the
       sandboxMode: "snapshot",
       sandboxWorkspaceDir: cloneDir,
       backends: ["cursor"],
-      extraEnv: { ...plan.resolved },
+      extraEnv: { ...resolvedTrustedEnv },
     });
     // Reconstruct the env the containerized runner sees: image base + the
     // emitted `-e` pairs (docker.ts owns which keys cross the boundary).

@@ -18,7 +18,7 @@ import { join } from "node:path";
 import { createHash } from "node:crypto";
 import { VERSION } from "../../version";
 import { postWithTimeout } from "./http";
-import { verifyRunJournal } from "../../runtime/kernel/emit";
+import { verifyRunJournal } from "../../runtime";
 import { reportRunFailureToSentry } from "./sentry";
 
 /** Metadata the pure mapper needs beyond the journal lines themselves. */

@@ -1,5 +1,5 @@
 import { formatNamedParamsForDisplay, isInternalParamValue } from "../commands/format-params.js";
-import type { SandboxMode } from "../../runtime/docker";
+import type { SandboxMode } from "../../runtime";
 
 const PROMPT_PREVIEW_MAX = 24;
 const PROMPT_ARGS_DISPLAY_MAX = 96;

@@ -42,34 +42,6 @@
     }
   },
   {
-    "type": "dependency",
-    "from": "src/runtime/kernel/node-workflow-runtime.trusted-env.test.ts",
-    "to": "src/cli/run/trusted-envs.ts",
-    "unresolvedTo": "../../cli/run/trusted-envs",
-    "dependencyTypes": [
-      "local",
-      "import"
-    ],
-    "rule": {
-      "severity": "error",
-      "name": "layer3-runtime-no-cli"
-    }
-  },
-  {
-    "type": "dependency",
-    "from": "src/runtime/kernel/node-workflow-runtime.ts",
-    "to": "src/cli/commands/format-params.ts",
-    "unresolvedTo": "../../cli/commands/format-params.js",
-    "dependencyTypes": [
-      "local",
-      "import"
-    ],
-    "rule": {
-      "severity": "error",
-      "name": "layer3-runtime-no-cli"
-    }
-  },
-  {
     "type": "cycle",
     "from": "src/cli/serve/handler.ts",
     "to": "src/cli/serve/run-store.ts",
@@ -173,6 +145,188 @@
     "rule": {
       "severity": "error",
       "name": "no-deep-imports-into-parse"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/cli/commands/run.test.ts",
+    "to": "src/runtime/docker-inplace.ts",
+    "unresolvedTo": "../../runtime/docker-inplace",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "no-deep-imports-into-runtime"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/cli/commands/run.test.ts",
+    "to": "src/runtime/docker.ts",
+    "unresolvedTo": "../../runtime/docker",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "no-deep-imports-into-runtime"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/cli/index.test.ts",
+    "to": "src/runtime/kernel/node-workflow-runner.ts",
+    "unresolvedTo": "../runtime/kernel/node-workflow-runner",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "no-deep-imports-into-runtime"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/cli/run/sandbox-flags.test.ts",
+    "to": "src/runtime/docker-inplace.ts",
+    "unresolvedTo": "../../runtime/docker-inplace",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "no-deep-imports-into-runtime"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/cli/run/sandbox-flags.test.ts",
+    "to": "src/runtime/docker.ts",
+    "unresolvedTo": "../../runtime/docker",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "no-deep-imports-into-runtime"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/cli/serve/run-store.test.ts",
+    "to": "src/runtime/kernel/emit.ts",
+    "unresolvedTo": "../../runtime/kernel/emit",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "no-deep-imports-into-runtime"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/cli/serve/server.test.ts",
+    "to": "src/runtime/kernel/emit.ts",
+    "unresolvedTo": "../../runtime/kernel/emit",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "no-deep-imports-into-runtime"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/cli/serve/server.test.ts",
+    "to": "src/runtime/kernel/runtime-event-emitter.ts",
+    "unresolvedTo": "../../runtime/kernel/runtime-event-emitter",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "no-deep-imports-into-runtime"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/cli/shared/generation-posture.test.ts",
+    "to": "src/runtime/docker.ts",
+    "unresolvedTo": "../../runtime/docker",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "no-deep-imports-into-runtime"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/cli/telemetry/otlp.test.ts",
+    "to": "src/runtime/kernel/emit.ts",
+    "unresolvedTo": "../../runtime/kernel/emit",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "no-deep-imports-into-runtime"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/cli/telemetry/sentry.test.ts",
+    "to": "src/runtime/kernel/emit.ts",
+    "unresolvedTo": "../../runtime/kernel/emit",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "no-deep-imports-into-runtime"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/config.ts",
+    "to": "src/runtime/kernel/runtime-arg-parser.ts",
+    "unresolvedTo": "./runtime/kernel/runtime-arg-parser",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "no-deep-imports-into-runtime"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/transpile/module-graph.test.ts",
+    "to": "src/runtime/kernel/graph.ts",
+    "unresolvedTo": "../runtime/kernel/graph",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "no-deep-imports-into-runtime"
     }
   },
   {

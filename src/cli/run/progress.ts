@@ -1,7 +1,7 @@
 import { resolve } from "node:path";
 import { jaiphModule, type Expr, type WorkflowStepDef } from "../../types";
 import { workflowSymbolForFile } from "../../transpiler";
-import { canUseAnsi } from "../../runtime/kernel/portability";
+import { canUseAnsi } from "../../runtime";
 
 export type TreeRow = {
   rawLabel: string;

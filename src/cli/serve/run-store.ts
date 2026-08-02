@@ -3,7 +3,7 @@ import { readFileSync, readdirSync, renameSync, statSync, writeFileSync } from "
 import { join } from "node:path";
 import type { RunRecord, RunStatus } from "./handler";
 import { RUN_SUMMARY } from "./runfiles";
-import { verifyRunJournal } from "../../runtime/kernel/emit";
+import { verifyRunJournal } from "../../runtime";
 
 /** Result text stamped on a run whose journal chain failed integrity verification. */
 export const TAMPERED_RESULT_TEXT =

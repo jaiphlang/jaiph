@@ -4,7 +4,7 @@ import type {
   jaiphModule,
   WorkflowStepDef,
 } from "../../types";
-import { isEnvAllowed, type AgentBackend } from "../../runtime/docker";
+import { isEnvAllowed, type AgentBackend } from "../../runtime";
 
 export const E_AGENT_CREDENTIALS = "E_AGENT_CREDENTIALS";
 

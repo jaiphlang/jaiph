@@ -22,7 +22,7 @@ import {
   shellQuote,
 } from "./prompt";
 import { appendRunSummaryLine, CHAIN_KEY_ENV } from "./emit";
-import { buildStepDisplayParamPairs } from "../../cli/commands/format-params.js";
+import { buildStepDisplayParamPairs } from "./format-params";
 import { resolveRuleRef, resolveScriptRef, resolveWorkflowRef, type RuntimeGraph } from "./graph";
 import type { WorkflowMetadata } from "../../types";
 import { interpolateWorkflowMetadata } from "../../config";

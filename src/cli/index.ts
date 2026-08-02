@@ -10,7 +10,7 @@ import { runFormat } from "./commands/format";
 import { runInstall } from "./commands/install";
 import { runCompile } from "./commands/compile";
 import { runMcp } from "./commands/mcp";
-import { runWorkflowRunner, WORKFLOW_RUNNER_ARG } from "../runtime/kernel/node-workflow-runner";
+import { runWorkflowRunner, WORKFLOW_RUNNER_ARG } from "../runtime";
 import { VERSION } from "../version";
 
 export async function main(argv: string[]): Promise<number> {

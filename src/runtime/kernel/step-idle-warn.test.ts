@@ -131,6 +131,38 @@ test("createStepIdleOutputWarn: bump before kill threshold prevents the kill", a
   warn!.stop();
 });
 
+// Regression: event-loop starvation must not be counted as idle time. Under a
+// heavily-loaded CI process (many concurrent subprocesses + sync writes) the
+// watchdog tick can fire long after schedule, seeing a stale `lastOutputAt`
+// before the pending stdout `bump()` runs. A step that WAS producing output
+// would then be spuriously killed. The tick credits the starved gap instead.
+test("createStepIdleOutputWarn: event-loop starvation is credited, not counted as idle", async () => {
+  const { emitter, messages } = makeEmitter();
+  let killCalls = 0;
+  const warn = createStepIdleOutputWarn(
+    emitter,
+    "script",
+    "starved_impl",
+    { JAIPH_STEP_IDLE_WARN_SEC: "0", JAIPH_STEP_IDLE_KILL_SEC: "1" },
+    { checkIntervalMs: 100, onIdleKill: () => (killCalls += 1) },
+  );
+  assert.ok(warn);
+
+  // Block the event loop synchronously past the kill threshold: neither the
+  // watchdog tick nor bump() can run during the block. Then yield so the
+  // delayed tick fires (with a stale baseline) before the next bump lands.
+  const until = Date.now() + 1500;
+  while (Date.now() < until) { /* busy-wait blocks the event loop */ }
+  await new Promise((r) => setTimeout(r, 0));
+  warn!.bump();
+  await new Promise((r) => setTimeout(r, 0));
+
+  assert.equal(killCalls, 0, "starvation gap is credited back, not counted as idle");
+  assert.equal(messages.filter((m) => m.type === "LOGERR").length, 0);
+
+  warn!.stop();
+});
+
 // AC3: JAIPH_STEP_IDLE_KILL_SEC=0 leaves warn-only behaviour (no kill).
 test("createStepIdleOutputWarn: kill disabled keeps warn-only behaviour", async () => {
   const { emitter, messages } = makeEmitter();

@@ -22,7 +22,7 @@ import {
   type StreamTarget,
 } from "./runfiles";
 import { hashArgs } from "./run-store";
-import { verifyRunJournal } from "../../runtime/kernel/emit";
+import { verifyRunJournal } from "../../runtime";
 import { createAuthenticator, openPrincipal, type Authenticator, type Capability, type Principal } from "./auth";
 import { safeJsonObject, isJsonContentType, clampInt } from "./http-util";
 import type { RunStatus, RunRecord, ServeRequest, ServeResponse, ServeHandlerOptions } from "./types";

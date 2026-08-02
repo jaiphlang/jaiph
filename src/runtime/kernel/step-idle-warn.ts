@@ -72,11 +72,21 @@ export function createStepIdleOutputWarn(
   if (!warnEnabled && !killEnabled) return null;
 
   let lastOutputAt = Date.now();
+  let lastTickAt = lastOutputAt;
   let nextWarnAtSec = idleWarnSec;
   let killed = false;
   const tickMs = checkIntervalMs(env, opts?.checkIntervalMs);
   const timer = setInterval(() => {
-    const idleSec = Math.floor((Date.now() - lastOutputAt) / 1000);
+    const now = Date.now();
+    // Event-loop starvation guard: if this tick fired far later than scheduled
+    // (>= two intervals late), the process was blocked and could observe
+    // neither output nor `bump()` during that gap — a step that WAS producing
+    // output would otherwise be spuriously killed. Credit the starved excess
+    // back to the idle baseline so only truly-unobserved silence accrues.
+    const tickGap = now - lastTickAt;
+    lastTickAt = now;
+    if (tickGap > 2 * tickMs) lastOutputAt += tickGap - tickMs;
+    const idleSec = Math.floor((now - lastOutputAt) / 1000);
     // Kill takes precedence: once the hard threshold is crossed the step is
     // going away, so emit the LOGERR, hand off to the caller, and stop ticking.
     if (killEnabled && !killed && idleSec >= idleKillSec) {
