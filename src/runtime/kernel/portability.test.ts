@@ -373,7 +373,18 @@ const SRC_ROOT = join(REPO_ROOT, "src");
 /** Non-test production source files (excludes *.test.ts / *.acceptance.test.ts). */
 function walkProductionTsFiles(dir: string): string[] {
   const out: string[] = [];
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+  // Sibling suites (e.g. eslint-caps.test.ts) create and remove throwaway
+  // fixture dirs under src/ concurrently. A dir listed by the parent readdir
+  // can vanish before we descend into it; those temp dirs are never production
+  // source, so treat a mid-walk disappearance as an empty dir.
+  let entries;
+  try {
+    entries = readdirSync(dir, { withFileTypes: true });
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === "ENOENT") return out;
+    throw e;
+  }
+  for (const entry of entries) {
     const full = join(dir, entry.name);
     if (entry.isDirectory()) {
       out.push(...walkProductionTsFiles(full));

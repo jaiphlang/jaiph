@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { errText } from "../../errors";
 import { resolve } from "node:path";
 import { parsejaiphWithTrivia } from "../../parser";
-import { emitModule } from "../../format/emit";
+import { emitModule } from "../../format";
 import { hasHelpFlag } from "../shared/usage";
 
 const FORMAT_USAGE =

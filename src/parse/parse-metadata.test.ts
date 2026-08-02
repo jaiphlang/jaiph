@@ -322,7 +322,7 @@ test("module keys round-trip through formatter", () => {
   assert.equal(mod.metadata?.module?.description, "Does things");
 
   // Verify formatter round-trip produces valid source that re-parses identically
-  const { emitModule } = require("../format/emit");
+  const { emitModule } = require("../format");
   const emitted = emitModule(mod);
   const reparsed = parsejaiph(emitted, "test.jh");
   assert.equal(reparsed.metadata?.module?.name, "my-tool");
@@ -522,7 +522,7 @@ test("trusted_envs round-trips through formatter", () => {
     "}",
   ].join("\n");
   const mod = parsejaiph(src, "test.jh");
-  const { emitModule } = require("../format/emit");
+  const { emitModule } = require("../format");
   const emitted = emitModule(mod);
   const reparsed = parsejaiph(emitted, "test.jh");
   assert.deepEqual(reparsed.metadata?.trustedEnvs, ["GITHUB_TOKEN", "NPM_TOKEN"]);

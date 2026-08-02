@@ -633,4 +633,126 @@ describe("arch:check dependency-cruiser guard", () => {
       "the Runtime row must name src/runtime/index.ts as the public entry",
     );
   });
+
+  it("AC20: a deep import into format from outside the package is an error; the public entry passes", () => {
+    // Failing case: an outsider (cli) reaches into a format internal (emit.ts).
+    const bad = makeFixture({
+      "src/cli/x.ts":
+        'import { y } from "../format/emit";\nexport const x = y;\n',
+      "src/format/emit.ts": "export const y = 1;\n",
+    });
+    try {
+      const { status, output } = depcruise(bad, [
+        "src",
+        "--config",
+        configPath,
+        "--output-type",
+        "err",
+      ]);
+      assert.notEqual(status, 0, "a deep import into format must fail");
+      assert.match(output, /no-deep-imports-into-format/);
+    } finally {
+      rmSync(bad, { recursive: true, force: true });
+    }
+
+    // Passing case: the same outsider goes through the public entry instead.
+    const good = makeFixture({
+      "src/cli/x.ts": 'import { y } from "../format";\nexport const x = y;\n',
+      "src/format/index.ts": 'export { y } from "./emit";\n',
+      "src/format/emit.ts": "export const y = 1;\n",
+    });
+    try {
+      const { status, output } = depcruise(good, [
+        "src",
+        "--config",
+        configPath,
+        "--output-type",
+        "err",
+      ]);
+      assert.equal(status, 0, "importing only the format public entry must pass");
+      assert.doesNotMatch(output, /no-deep-imports-into-format/);
+    } finally {
+      rmSync(good, { recursive: true, force: true });
+    }
+  });
+
+  it("AC21: no production file outside the format package deep-imports src/format/**, and format sources import no upward layer", () => {
+    const srcDir = join(repoRoot, "src");
+    const files: string[] = [];
+    const walk = (dir: string): void => {
+      for (const name of readdirSync(dir)) {
+        const abs = join(dir, name);
+        if (statSync(abs).isDirectory()) {
+          walk(abs);
+        } else if (abs.endsWith(".ts")) {
+          files.push(abs);
+        }
+      }
+    };
+    walk(srcDir);
+
+    // Deep import into format: a `format/<path>` target. The public entry is
+    // imported as `../format` (no trailing slash), so it never matches here.
+    const deepImport = /from\s+["'](?:\.\.?\/)+format\/[^"']+["']/;
+    const offenders: string[] = [];
+    for (const abs of files) {
+      const rel = abs.slice(repoRoot.length + 1);
+      // Scope: production files OUTSIDE format (index.ts is the entry).
+      if (rel.startsWith("src/format/")) continue;
+      if (rel.endsWith(".test.ts") || rel.endsWith(".acceptance.test.ts")) {
+        continue;
+      }
+      if (deepImport.test(readFileSync(abs, "utf8"))) offenders.push(rel);
+    }
+    assert.deepEqual(
+      offenders,
+      [],
+      `these production files deep-import format: ${offenders.join(", ")}`,
+    );
+
+    // Format is layer 1: its production sources must not import cli, runtime,
+    // or transpile (upward layers). Guards the "format -> parse/types only" rule.
+    const upward = /from\s+["'](?:\.\.\/)+(cli|runtime|transpile|transpiler)[/"']/;
+    const upwardOffenders: string[] = [];
+    for (const abs of files) {
+      const rel = abs.slice(repoRoot.length + 1);
+      if (!rel.startsWith("src/format/")) continue;
+      if (rel.endsWith(".test.ts") || rel.endsWith(".acceptance.test.ts")) {
+        continue;
+      }
+      if (upward.test(readFileSync(abs, "utf8"))) upwardOffenders.push(rel);
+    }
+    assert.deepEqual(
+      upwardOffenders,
+      [],
+      `these format sources import an upward layer (cli/runtime/transpile): ${upwardOffenders.join(", ")}`,
+    );
+  });
+
+  it("AC22: the format public entry (src/format/index.ts) exists and uses no `export *` barrel", () => {
+    const entryPath = join(repoRoot, "src/format/index.ts");
+    assert.ok(existsSync(entryPath), "src/format/index.ts must exist");
+    const entry = readFileSync(entryPath, "utf8");
+    assert.doesNotMatch(
+      entry,
+      /export\s+\*\s+from/,
+      "src/format/index.ts must re-export a curated API, never `export * from` a private file",
+    );
+  });
+
+  it("AC23: docs/agent-analyzability.md format row names src/format/index.ts as the public entry", () => {
+    const doc = readFileSync(
+      join(repoRoot, "docs/agent-analyzability.md"),
+      "utf8",
+    );
+    const formatRow = doc
+      .split("\n")
+      .find((l) => /^\|\s*Format\s*\|/.test(l));
+    assert.ok(formatRow, "the deep-modules table must have a Format row");
+    assert.match(
+      formatRow as string,
+      /`src\/format\/index\.ts`/,
+      "the Format row must name src/format/index.ts as the public entry",
+    );
+  });
 });
