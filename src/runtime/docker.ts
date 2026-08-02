@@ -306,12 +306,22 @@ export function resolveDockerConfig(
 // ---------------------------------------------------------------------------
 
 export const _dockerExec = {
+  /**
+   * Run `docker` synchronously. Timed calls default to `killSignal: SIGKILL`
+   * because Docker Desktop's CLI can ignore SIGTERM while a container sits in
+   * `Created` — Node's execFileSync then waits forever past `timeout`, which
+   * hung local `test:ci` / e2e on the jaiph-presence probe.
+   */
   run(args: string[], opts: object): void {
-    execFileSync("docker", args, opts as any);
+    execFileSync("docker", args, { killSignal: "SIGKILL", ...(opts as object) } as any);
   },
   /** Run docker and return its stdout as a UTF-8 string (used for digest inspection). */
   capture(args: string[], opts: object): string {
-    return execFileSync("docker", args, { encoding: "utf8", ...(opts as object) }) as string;
+    return execFileSync("docker", args, {
+      encoding: "utf8",
+      killSignal: "SIGKILL",
+      ...(opts as object),
+    }) as string;
   },
 };
 
@@ -515,11 +525,18 @@ export const PROBE_USER = "65534:65534";
  * runtime. `command -v jaiph` needs only PATH resolution, which a non-login
  * shell provides, so nothing image-controlled is sourced or executed beyond the
  * bare PATH lookup.
+ *
+ * When `containerName` is set, the probe is addressable so a timed-out or
+ * wedged client can still `docker rm -f` a container stuck in `Created`
+ * (Docker Desktop on macOS has been observed to leave these behind, which
+ * then blocks subsequent probes).
  */
-export function buildImageProbeArgs(image: string): string[] {
-  return [
-    "run",
-    "--rm",
+export function buildImageProbeArgs(image: string, containerName?: string): string[] {
+  const args = ["run", "--rm"];
+  if (containerName) {
+    args.push("--name", containerName);
+  }
+  args.push(
     "--cap-drop",
     "ALL",
     "--security-opt",
@@ -533,15 +550,31 @@ export function buildImageProbeArgs(image: string): string[] {
     image,
     "-c",
     "command -v jaiph >/dev/null 2>&1",
-  ];
+  );
+  return args;
 }
 
+/** Probe timeout — must stay bounded; see `_dockerExec` killSignal note. */
+export const IMAGE_PROBE_TIMEOUT_MS = 30_000;
+
 function imageHasJaiph(image: string): boolean {
+  // Named so a hung Docker Desktop client cannot leave an anonymous Created
+  // container behind after SIGKILL of the CLI — we always best-effort rm -f.
+  const containerName = `jaiph-probe-${randomBytes(6).toString("hex")}`;
   try {
-    _dockerExec.run(buildImageProbeArgs(image), { stdio: "ignore", timeout: 30_000 });
+    _dockerExec.run(buildImageProbeArgs(image, containerName), {
+      stdio: "ignore",
+      timeout: IMAGE_PROBE_TIMEOUT_MS,
+    });
     return true;
   } catch {
     return false;
+  } finally {
+    try {
+      _dockerExec.run(["rm", "-f", containerName], { stdio: "ignore", timeout: 10_000 });
+    } catch {
+      // Best-effort: container may already be gone (--rm) or docker unavailable.
+    }
   }
 }
 
