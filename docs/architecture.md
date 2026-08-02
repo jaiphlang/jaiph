@@ -13,7 +13,7 @@ redirect_from:
 
 Jaiph is a workflow system with a TypeScript CLI and a JavaScript kernel (`src/runtime/kernel/`) that interprets the workflow AST in process. There is no separate "workflow shell" emitted for execution.
 
-This page describes how Jaiph is built: the repository layout of the major subsystems, the core components, the compile and run pipelines, and the runtime contracts (events, artifacts on disk, and distribution). It stays on the implementation boundaries. For workflow syntax and semantics, see the [Language](language.md) guide.
+This page describes how Jaiph is built: the repository layout of the major subsystems, the core components, the compile and run pipelines, and the runtime contracts (events, artifacts on disk, and distribution). It stays on the implementation boundaries. For workflow syntax and semantics, see the [Language](language.md) guide. For the CI-enforced import-graph and deep-module rules that keep `src/` analyzable by AI agents (and humans) under a bounded context budget, see [Agent analyzability](agent-analyzability.md).
 
 Jaiph separates script-file emission from workflow execution on purpose. The transpiler turns each `script` block, and each inline script body, into real files under `scripts/` with a stable layout and the `JAIPH_SCRIPTS` variable. `NodeWorkflowRuntime` still always executes from the AST through `buildRuntimeGraph`. Writing the script files this way keeps the bash entrypoints predictable for subprocesses, and it avoids duplicating workflow logic in a second language.
 
