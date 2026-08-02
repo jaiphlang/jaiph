@@ -99,8 +99,8 @@ No circular dependencies anywhere under `src/`. Cycles destroy the “direct dep
 Docs obey the same budget discipline:
 
 1. **One topic per file** (aligned with Diátaxis page types already in use).
-2. **Size cap** — prefer pages agents can load whole; split when a page outgrows a single topic (enforced when the docs-guard task lands).
-3. **Summary first** — every page opens with a short summary so an agent can skip the body from the header alone.
+2. **Size cap** — prefer pages agents can load whole; split when a page outgrows a single topic. Enforced: `integration/docs-structure.test.ts` fails any non-allowlisted `docs/*.md` whose body exceeds 500 lines (front matter excluded); an oversized single-topic page goes on the test's `DOC_SIZE_ALLOWLIST` with a justification rather than merging topics.
+3. **Summary first** — every page opens with a short summary so an agent can skip the body from the header alone. Enforced: the same test requires the first body line after the H1 to be a prose lead paragraph (this page labels its lead `**Summary.**`), not a subheading, list, or table.
 4. **Entry-point manifest** — nav in `docs/_layouts/docs.html` plus this page and [Architecture](architecture.md) as the structural maps; do not bury contracts only in chat history or `QUEUE.md`.
 
 ## Enforcement (CI)
@@ -112,7 +112,7 @@ These are **guardrails**, not conventions. Violations fail CI.
 | `dependency-cruiser` (`npm run arch:check`) | no cycles; the layer DAG (including `runtime` ↛ `cli`); deep imports past the parse public entry (`no-deep-imports-into-parse`), the transpile public entry (`no-deep-imports-into-transpile`), the runtime public entry (`no-deep-imports-into-runtime`), and the format public entry (`no-deep-imports-into-format`); cross-CLI-slice private imports (`no-cross-cli-slice-imports`); deep imports into the remaining packages are still queued |
 | ESLint (`npm run lint`) | `import/max-dependencies` and `max-lines` on `src/**/*.ts`, with a grandfather list of existing violators in `eslint.config.mjs` |
 | Existing grep/shape tests | e.g. transpile ↛ runtime, trivia isolation, file-size caps on specific hot files |
-| Docs structure tests | Diátaxis front matter, nav bijection, link resolution; plus future summary/size guards |
+| Docs structure tests | Diátaxis front matter, nav bijection, link resolution, summary-first lead, and a 500-line body cap (`integration/docs-structure.test.ts`) |
 
 **Baseline policy.** If the tree already violates a new rule, do **not** weaken the rule. Commit a dependency-cruiser known-violations baseline (and an explicit ESLint grandfather list) so **new** violations fail while old ones are tracked. Follow-up work removes baseline entries; it does not relax severity.
 

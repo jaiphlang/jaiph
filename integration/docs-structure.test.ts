@@ -16,6 +16,33 @@ const VALID_DIATAXIS = new Set([
   "contributor",
 ]);
 
+// Context-budget guard for docs (docs/agent-analyzability.md, "Documentation
+// structure"): every published page must be summary-first and small enough for
+// an agent to load whole.
+//
+// Summary-first: the first non-blank body line after the H1 must be a prose
+// lead paragraph (the summary) — not a subheading, list, table, blockquote, or
+// code fence — and it must appear within the first SUMMARY_WINDOW lines after
+// the H1. This is the pattern every current page already follows (a lead
+// paragraph directly under the H1; docs/agent-analyzability.md labels its lead
+// `**Summary.**`). We enforce that documented pattern rather than mandating the
+// literal word "Summary", so no existing page has to be rewritten.
+const SUMMARY_WINDOW = 20;
+
+// Body-line cap: keep pages loadable in one shot. 500 body lines (front matter
+// excluded) is chosen because the largest current authoritative-reference page
+// (contributing.md) is ~481 body lines, so 500 fits every page today while
+// still failing a page that grows past a single loadable topic. Splitting a
+// page is preferred over merging unrelated topics to dodge the cap. A page that
+// legitimately must exceed the cap goes on DOC_SIZE_ALLOWLIST with a one-line
+// justification instead of relaxing the number.
+const BODY_LINE_CAP = 500;
+
+// filename -> justification. Empty today: every published page fits the cap.
+// Add an entry only for a page whose single topic genuinely cannot fit (never
+// to merge topics into an oversized file).
+const DOC_SIZE_ALLOWLIST: Record<string, string> = {};
+
 interface PageInfo {
   name: string;
   body: string;
@@ -142,6 +169,92 @@ function loadPages(): PageInfo[] {
     });
   }
   return pages;
+}
+
+function bodyContentLines(body: string): string[] {
+  return body.replace(/\r\n/g, "\n").split("\n");
+}
+
+// Index of the page H1 (`# Title`), skipping any `# ...` that is a shell
+// comment inside a fenced code block. -1 if the body has no H1.
+function findH1Index(lines: string[]): number {
+  let inFence = false;
+  for (let i = 0; i < lines.length; i++) {
+    if (/^```/.test(lines[i])) {
+      inFence = !inFence;
+      continue;
+    }
+    if (inFence) continue;
+    if (/^#\s+/.test(lines[i])) return i;
+  }
+  return -1;
+}
+
+// First non-blank body line after the H1, with its distance (in lines) from the
+// H1. null if the body ends right after the H1.
+function leadLineAfterH1(
+  lines: string[],
+  h1: number,
+): { text: string; offset: number } | null {
+  for (let i = h1 + 1; i < lines.length; i++) {
+    if (lines[i].trim() === "") continue;
+    return { text: lines[i], offset: i - h1 };
+  }
+  return null;
+}
+
+// A summary lead is prose: not a subheading, list item, table row, blockquote,
+// code fence, or HTML comment. `**Summary.**`-style bold leads count as prose
+// (a bold run `**` is not a `* ` bullet).
+function isProseLead(line: string): boolean {
+  const t = line.trim();
+  if (t === "") return false;
+  if (/^#{1,6}\s/.test(t)) return false; // heading / subheading
+  if (/^[-*+]\s/.test(t)) return false; // bullet list
+  if (/^\d+[.)]\s/.test(t)) return false; // ordered list
+  if (/^\|/.test(t)) return false; // table row
+  if (/^>/.test(t)) return false; // blockquote
+  if (/^```/.test(t)) return false; // code fence
+  if (/^<!--/.test(t)) return false; // HTML comment
+  return true;
+}
+
+// Returns an error string if the page is not summary-first, else null.
+function summaryFirstError(name: string, body: string): string | null {
+  const lines = bodyContentLines(body);
+  const h1 = findH1Index(lines);
+  if (h1 === -1) return `${name}: no H1 heading found`;
+  const lead = leadLineAfterH1(lines, h1);
+  if (!lead) return `${name}: no body content after the H1`;
+  if (lead.offset > SUMMARY_WINDOW) {
+    return `${name}: summary must start within ${SUMMARY_WINDOW} lines after the H1 (found at +${lead.offset})`;
+  }
+  if (!isProseLead(lead.text)) {
+    return `${name}: first body block after the H1 must be a prose summary paragraph, not "${lead.text.trim().slice(0, 40)}…"`;
+  }
+  return null;
+}
+
+// Body-line count, excluding front matter (already stripped) and leading/
+// trailing blank lines so a single trailing newline does not inflate the count.
+function countBodyLines(body: string): number {
+  const lines = bodyContentLines(body);
+  while (lines.length && lines[0].trim() === "") lines.shift();
+  while (lines.length && lines[lines.length - 1].trim() === "") lines.pop();
+  return lines.length;
+}
+
+// Returns an error string if the page exceeds the cap and is not allowlisted.
+function bodySizeError(
+  name: string,
+  body: string,
+  cap: number,
+  allowlist: Record<string, string>,
+): string | null {
+  const n = countBodyLines(body);
+  if (n <= cap) return null;
+  if (name in allowlist) return null;
+  return `${name}: body has ${n} lines, over the ${cap}-line cap — split the page or add it to DOC_SIZE_ALLOWLIST with a justification`;
 }
 
 function extractNavPermalinks(navHtml: string): string[] {
@@ -345,4 +458,82 @@ test("docs-lint: docs/_legacy/ no longer exists (post-redesign cleanup)", () => 
     !readdirSync(DOCS_DIR).includes("_legacy"),
     `docs/_legacy/ must be removed after the Diátaxis redesign; found ${legacy}`,
   );
+});
+
+test("docs-lint: every published docs/*.md opens with a summary-first lead paragraph", () => {
+  const pages = loadPages();
+  assert.ok(pages.length > 0, "expected at least one published doc under docs/");
+  for (const p of pages) {
+    const err = summaryFirstError(p.name, p.body);
+    assert.equal(err, null, err ?? "");
+  }
+});
+
+test("docs-lint: no non-allowlisted published doc exceeds the body-line cap", () => {
+  const pages = loadPages();
+  for (const p of pages) {
+    const err = bodySizeError(p.name, p.body, BODY_LINE_CAP, DOC_SIZE_ALLOWLIST);
+    assert.equal(err, null, err ?? "");
+  }
+  // Every allowlist entry must carry a non-empty justification.
+  for (const [name, why] of Object.entries(DOC_SIZE_ALLOWLIST)) {
+    assert.ok(
+      typeof why === "string" && why.trim().length > 0,
+      `DOC_SIZE_ALLOWLIST['${name}'] must include a one-line justification`,
+    );
+  }
+});
+
+// docs/agent-analyzability.md is the page that defines the context-budget
+// convention, so AC pins both of its guarantees directly: it stays in nav and
+// it keeps its explicit **Summary** lead.
+test("docs-lint: agent-analyzability.md stays in nav and keeps its Summary lead", () => {
+  const pages = loadPages();
+  const page = pages.find((p) => p.name === "agent-analyzability.md");
+  assert.ok(page, "docs/agent-analyzability.md must remain a published page");
+
+  const nav = readFileSync(NAV_LAYOUT, "utf8");
+  const links = extractNavPermalinks(nav);
+  assert.ok(
+    page!.permalink && links.includes(page!.permalink!),
+    "docs/agent-analyzability.md must stay linked from the docs nav",
+  );
+
+  const lines = bodyContentLines(page!.body);
+  const lead = leadLineAfterH1(lines, findH1Index(lines));
+  assert.ok(
+    lead && /^\*\*Summary\b/.test(lead.text.trim()),
+    "docs/agent-analyzability.md must keep its explicit **Summary** lead paragraph",
+  );
+});
+
+// Contract self-tests: prove the guards actually fail on a violating page,
+// independent of whether the real docs happen to comply today.
+test("docs-lint: summary-first guard rejects a page whose first block is a heading", () => {
+  const bad = "# Title\n\n## Section\n\nbody text\n";
+  assert.notEqual(summaryFirstError("bad.md", bad), null);
+
+  const badList = "# Title\n\n- item one\n- item two\n";
+  assert.notEqual(summaryFirstError("bad-list.md", badList), null);
+
+  const good = "# Title\n\n**Summary.** A prose lead.\n\n## Section\n";
+  assert.equal(summaryFirstError("good.md", good), null);
+
+  const goodPlain = "# Title\n\nA plain prose lead paragraph.\n\n## Section\n";
+  assert.equal(summaryFirstError("good-plain.md", goodPlain), null);
+});
+
+test("docs-lint: body-line cap guard fails an over-cap page unless allowlisted", () => {
+  const big = Array.from({ length: BODY_LINE_CAP + 1 }, (_, i) => `line ${i}`).join(
+    "\n",
+  );
+  assert.ok(countBodyLines(big) > BODY_LINE_CAP);
+  assert.notEqual(bodySizeError("big.md", big, BODY_LINE_CAP, {}), null);
+  assert.equal(
+    bodySizeError("big.md", big, BODY_LINE_CAP, { "big.md": "justified" }),
+    null,
+  );
+
+  const small = "line 1\nline 2\n";
+  assert.equal(bodySizeError("small.md", small, BODY_LINE_CAP, {}), null);
 });
