@@ -38,7 +38,7 @@
     "@seriousme/openapi-schema-validator": "^2.4.1",
     "@types/node": "^24.5.2",
     "@typescript-eslint/parser": "^8.65.0",
-    "dependency-cruiser": "^18.1.0",
+    "dependency-cruiser": "17.4.3",
     "eslint": "^9.39.5",
     "eslint-plugin-import": "^2.32.0",
     "swagger-ui-dist": "5.17.14",
