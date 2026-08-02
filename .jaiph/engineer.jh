@@ -79,6 +79,17 @@ const code_philosophy = """
      logs, or platform-dependent text) and add an inline comment explaining why.
   9. Source code and docs/architecture.md are the single source of truth. Don't trust
      documentation blindly.
+  10. Agent analyzability (import graph). Before changing any src/ import
+     structure, read docs/agent-analyzability.md. Import a package only through
+     its public entry point (e.g. src/parser.ts, src/format/index.ts,
+     src/transpiler.ts, src/runtime/index.ts, src/cli/index.ts) — never reach
+     into another package's private files. Respect the layer DAG: imports point
+     only downward (CLI → Runtime → Compile → Parse/format → Shared leaf); lower
+     layers never import higher ones. Keep files ≤ ~400 lines and low fan-out
+     (≤ 8 runtime imports per file); prefer splitting into sibling files over
+     raising a cap. When package.json defines them, run npm run arch:check and
+     npm run lint in addition to npm run build and npm test; fix any new
+     violations before continuing.
 """
 
 const output_criteria = """
@@ -268,8 +279,9 @@ workflow implement(task, role_name) {
     - Following the codebase's existing style and conventions precisely.
     - Following the code philosophy above for all new and modified code.
     - Adding or updating tests as needed for acceptance criteria.
-    - Running npm run build, npm test, and npm run test:e2e; fix any failures
-      before continuing.
+    - Running npm run build, npm test, and npm run test:e2e; and, when
+      package.json defines them, npm run arch:check and npm run lint; fix any
+      failures before continuing.
     - Ensuring all acceptance criteria in the task are met.
 
     ${definition_of_done}
