@@ -9,6 +9,9 @@ export type { ScriptArtifact } from "./transpile/emit-script";
 export type { ModuleGraph, ModuleNode } from "./transpile/module-graph";
 export { loadModuleGraph } from "./transpile/module-graph";
 export { emitScriptsForModuleFromGraph } from "./transpile/emit-from-graph";
+// Compile/validate surface used by outside callers (CLI); curated, not a barrel.
+export { collectDiagnostics, validateReferences } from "./transpile/validate";
+export { walkjhFiles } from "./transpile/build";
 
 /**
  * Path-based wrapper for callers that don't already have a graph (tests and

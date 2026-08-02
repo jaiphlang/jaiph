@@ -174,5 +174,19 @@
       "severity": "error",
       "name": "no-deep-imports-into-parse"
     }
+  },
+  {
+    "type": "dependency",
+    "from": "src/parse/metadata.ts",
+    "to": "src/transpile/validate-string.ts",
+    "unresolvedTo": "../transpile/validate-string",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "no-deep-imports-into-transpile"
+    }
   }
 ]

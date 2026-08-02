@@ -14,20 +14,6 @@ Process rules:
 
 ***
 
-## Add transpile deep-module public entry and ban deep imports #dev-ready
-
-Context: `docs/agent-analyzability.md` — transpile is layer 2; outsiders must use its public entry (`src/transpiler.ts` plus explicit graph API). Runtime is allowlisted to use the public module-graph API only. Callers today import `src/transpile/validate-*.ts`, `emit-*`, etc. directly.
-
-Problem: Deep imports into transpile couple CLI/runtime/parse callers to validator internals and inflate agent context.
-
-Remediation: Define the public transpile entry (`src/transpiler.ts` and/or `src/transpile/index.ts`) exporting the intentional compile/graph API (`buildScripts*`, `loadModuleGraph` / `readModuleGraph` / `ModuleGraph` types, `collectDiagnostics` / `validateReferences` as needed by current external callers — curate, do not star-export). Retarget all imports from outside `src/transpile/` to that entry. Add dependency-cruiser `no-deep-imports-into-transpile`. Preserve the existing invariant that transpile production sources must not import `src/runtime/` (`src/transpile/no-runtime-imports.test.ts` must keep passing). Keep `arch:check` green with baseline only for true leftovers.
-
-### Acceptance criteria
-- Test: outside-package import of a transpile private path fails `arch:check` / depcruise rule; import via public entry succeeds.
-- Test: no production file outside `src/transpile/` imports a non-entry transpile path except baseline-listed leftovers; baseline count reported if non-zero.
-- `src/transpile/no-runtime-imports.test.ts` still passes.
-- `npm run build` and `npm test` pass.
-
 ## Add runtime deep-module public entry; stop runtime importing CLI #dev-ready
 
 Context: `docs/agent-analyzability.md` — runtime is layer 3 and must not import CLI (layer 4). Known leak: `src/runtime/kernel/node-workflow-runtime.ts` imports `src/cli/commands/format-params`. CLI may import runtime’s public entry, not the reverse.
