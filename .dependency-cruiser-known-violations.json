@@ -1,0 +1,164 @@
+[
+  {
+    "type": "dependency",
+    "from": "src/parse/metadata.ts",
+    "to": "src/transpile/validate-string.ts",
+    "unresolvedTo": "../transpile/validate-string",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "layer1-parse-format-no-upward"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/parse/parse-error-snapshot.test.ts",
+    "to": "src/transpile/module-graph.ts",
+    "unresolvedTo": "../transpile/module-graph",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "layer1-parse-format-no-upward"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/transpile/module-graph.test.ts",
+    "to": "src/runtime/kernel/graph.ts",
+    "unresolvedTo": "../runtime/kernel/graph",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "layer2-transpile-no-upward"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/runtime/kernel/node-workflow-runtime.trusted-env.test.ts",
+    "to": "src/cli/run/trusted-envs.ts",
+    "unresolvedTo": "../../cli/run/trusted-envs",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "layer3-runtime-no-cli"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/runtime/kernel/node-workflow-runtime.ts",
+    "to": "src/cli/commands/format-params.ts",
+    "unresolvedTo": "../../cli/commands/format-params.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "layer3-runtime-no-cli"
+    }
+  },
+  {
+    "type": "cycle",
+    "from": "src/cli/serve/handler.ts",
+    "to": "src/cli/serve/run-store.ts",
+    "unresolvedTo": "./run-store",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "no-circular"
+    },
+    "cycle": [
+      {
+        "name": "src/cli/serve/run-store.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "src/cli/serve/handler.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "src/cli/telemetry/otlp.ts",
+    "to": "src/cli/telemetry/sentry.ts",
+    "unresolvedTo": "./sentry",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "no-circular"
+    },
+    "cycle": [
+      {
+        "name": "src/cli/telemetry/sentry.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "src/cli/telemetry/otlp.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "src/parse/steps.ts",
+    "to": "src/parse/workflow-brace.ts",
+    "unresolvedTo": "./workflow-brace",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "no-circular"
+    },
+    "cycle": [
+      {
+        "name": "src/parse/workflow-brace.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "src/parse/steps.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      }
+    ]
+  }
+]

@@ -16,6 +16,7 @@
   },
   "scripts": {
     "clean": "rm -rf dist",
+    "arch:check": "depcruise src --config .dependency-cruiser.cjs --ignore-known",
     "prepare": "node tools/embed-assets.js",
     "embed-assets": "node tools/embed-assets.js",
     "build": "npm run embed-assets && tsc -p tsconfig.json && node -e \"require('node:fs').cpSync('src/runtime','dist/src/runtime',{recursive:true})\"",
@@ -35,6 +36,7 @@
     "@playwright/test": "^1.58.2",
     "@seriousme/openapi-schema-validator": "^2.4.1",
     "@types/node": "^24.5.2",
+    "dependency-cruiser": "^18.1.0",
     "swagger-ui-dist": "5.17.14",
     "typescript": "^5.9.2"
   },

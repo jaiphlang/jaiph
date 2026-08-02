@@ -20,6 +20,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Enforce agent-analyzability import graph (layer DAG, no cycles)
+        run: npm run arch:check
+
       - name: Run core test suite (unit and acceptance)
         run: npm test
 
