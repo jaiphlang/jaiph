@@ -14,19 +14,6 @@ Process rules:
 
 ***
 
-## Add format deep-module public entry and ban deep imports #dev-ready
-
-Context: `docs/agent-analyzability.md` — format is layer 1 beside parse. External callers should use one public entry.
-
-Problem: Deep imports into `src/format/**` bypass the format contract.
-
-Remediation: Add `src/format/index.ts` (or designate a single existing file as the sole public entry) exporting the intentional formatter API. Retarget outside imports. Add `no-deep-imports-into-format` to dependency-cruiser. Keep format → parse/types only (no transpile/runtime/cli).
-
-### Acceptance criteria
-- Test: deep import into format from outside fails arch check; public-entry import passes.
-- Test: format production sources do not import `src/cli`, `src/runtime`, or `src/transpile` (grep or depcruise).
-- `npm run build` and formatter round-trip tests pass.
-
 ## Enforce CLI slice isolation in dependency-cruiser #dev-ready
 
 Context: `docs/agent-analyzability.md` — CLI slices `commands`, `run`, `serve`, `mcp`, `exec`, `telemetry` must not import each other’s private files; cross-slice reuse goes through `src/cli/shared` (or lower-layer public entries).

@@ -91,6 +91,14 @@ module.exports = {
       to: { path: "^src/runtime/", pathNot: "^src/runtime/index\\.ts$" },
     },
     {
+      name: "no-deep-imports-into-format",
+      comment:
+        "Format is a deep module: code OUTSIDE the format package imports only its public entry (src/format/index.ts), never src/format/** internals (emit.ts). Add a named re-export to src/format/index.ts instead of reaching in.",
+      severity: "error",
+      from: { pathNot: "^src/format/" },
+      to: { path: "^src/format/", pathNot: "^src/format/index\\.ts$" },
+    },
+    {
       name: "no-orphans",
       comment:
         "Orphan modules (no incoming or outgoing deps) are usually dead code or a missing wiring.",
