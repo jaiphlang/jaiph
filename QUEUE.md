@@ -14,21 +14,6 @@ Process rules:
 
 ***
 
-## Configure dependency-cruiser for layer DAG and no-circular #dev-ready
-
-Context: `docs/agent-analyzability.md` (Accepted) defines agent analyzability as a CI-enforced invariant: understanding any `src/` file must require only that file plus the public interfaces of its direct dependencies. The import graph must stay an acyclic layered DAG. This repo uses npm (`package-lock.json`), TypeScript under `src/`, and `tsconfig.json` without path aliases. There is no dependency-cruiser config yet.
-
-Problem: Layer and cycle rules exist only as scattered grep tests (e.g. `src/transpile/no-runtime-imports.test.ts`). New upward imports and cycles can land without failing CI.
-
-Remediation: Install `dependency-cruiser` as a devDependency. Add `.dependency-cruiser.cjs` with at least: `no-circular` (error); layer rules matching the table in `docs/agent-analyzability.md` (shared leaf must not import parse/format/transpile/runtime/cli; parse/format must not import transpile/runtime/cli; transpile must not import runtime/cli; runtime must not import cli — with an explicit allow for runtime → transpile **public** module-graph only if already expressible; otherwise forbid runtime→transpile internals and leave the module-graph edge on the baseline); `no-orphans` as warn. Wire `package.json` script `arch:check` → `depcruise src --config .dependency-cruiser.cjs`. If the clean tree fails, generate and commit `.dependency-cruiser-known-violations.json` via depcruise baseline output and reference it from config — do **not** weaken rule severity. Add `npm run arch:check` as a required step on the Compiler and unit tests job in `.github/workflows/ci.yml` (after `npm ci`, can run before or after `npm test`). Add a short subsection under `docs/architecture.md` (or ensure the existing link) that states the layer table is authoritative in `docs/agent-analyzability.md` and that `npm run arch:check` enforces it. Do not refactor production code to clear violations in this task.
-
-### Acceptance criteria
-- `npm run arch:check` exits 0 on the committed tree (clean or with committed baseline); a colocated or integration test invokes the same check (or asserts the script + config exist and runs depcruise) so CI fails if the script is removed.
-- A test creates a temporary synthetic circular import between two files under a fixture or temp dir scanned by the config (or patches a copy) and asserts the check exits non-zero; the synthetic cycle is not left in `src/`.
-- A test asserts that an upward layer violation (e.g. a fixture file under a path matching `src/parse` importing a path matching `src/cli`) is reported as an error by the committed rules (fixture-based or config-rule unit test).
-- `.github/workflows/ci.yml` runs `npm run arch:check` on the unit-test job; a test or workflow assertion documents this (grep test on `ci.yml` is acceptable).
-- Known violation count from the baseline (if any) is reported in the PR/commit message body; baseline file is committed when used.
-
 ## Add ESLint max-dependencies and max-lines caps #dev-ready
 
 Context: `docs/agent-analyzability.md` caps each production file at ≤8 runtime imports and ≤400 lines (skip blank/comment lines) so agents are not forced to load oversized units. The repo currently has no ESLint config. Several existing files already exceed both caps.

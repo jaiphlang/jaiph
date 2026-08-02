@@ -32,6 +32,10 @@ Interactive **`jaiph run`** parses **`__JAIPH_EVENT__`** lines from the runner's
 
 All orchestration uses the Node workflow runtime, which is the AST interpreter, whether you run local `jaiph run`, `jaiph test`, or **Docker `jaiph run`**. Docker containers run the same **`jaiph run --raw`** / **`__workflow-runner`** dispatch with the compiled JS source tree and scripts mounted read-only.
 
+### Import-graph layering
+
+The `src/` import graph is an acyclic layered DAG: parse/format → transpile → runtime → CLI, over a shared leaf. The **layer table in [Agent analyzability](agent-analyzability.md) is authoritative** for which paths belong to each layer and what each may import. `npm run arch:check` (dependency-cruiser, `.dependency-cruiser.cjs`) enforces it in CI — `no-circular` plus the per-layer "no upward import" rules, including the runtime-only-uses-the-transpile-public-module-graph exception. Pre-existing violations are grandfathered in `.dependency-cruiser-known-violations.json`; new cycles or upward imports fail the build.
+
 ## Core components
 
 - **CLI (`src/cli`, invoked via compiled `src/cli.ts` → `dist/src/cli.js`)**

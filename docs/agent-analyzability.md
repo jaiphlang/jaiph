@@ -50,7 +50,7 @@ Imports may point only **downward**. Lower layers never import higher ones.
 | **1** Parse / format | `src/parse/**`, `src/parser.ts`, `src/format/**` | 0 only |
 | **0** Shared leaf | `src/types.ts`, `src/errors.ts`, `src/diagnostics.ts`, `src/version.ts`, `src/env-reserved.ts`, `src/inline-script-name.ts` | other layer-0 files only |
 
-**Already pinned today:** compile-time must not import runtime (`src/transpile/no-runtime-imports.test.ts`). The layer table generalizes that rule.
+**Already pinned today:** compile-time must not import runtime (`src/transpile/no-runtime-imports.test.ts`). The layer table generalizes that rule, and `npm run arch:check` now enforces the whole table (see [Enforcement (CI)](#enforcement-ci)).
 
 **Allowlisted exception.** Runtime may depend on the **public** module-graph API from compile (today `loadModuleGraph` / `ModuleGraph` in `module-graph.ts`) because the runner reuses the same graph. That dependency must go through transpile’s public entry, not through validator/emit internals.
 
@@ -109,22 +109,22 @@ These are **guardrails**, not conventions. Violations fail CI.
 
 | Mechanism | What it enforces |
 |-----------|------------------|
-| `dependency-cruiser` (`npm run arch:check`) | no cycles; layer DAG; no cross-CLI-slice private imports; no deep imports past public entries |
+| `dependency-cruiser` (`npm run arch:check`) | no cycles; the layer DAG (cross-CLI-slice private imports and deep imports past public entries are still queued) |
 | ESLint | `import/max-dependencies`, `max-lines` |
 | Existing grep/shape tests | e.g. transpile ↛ runtime, trivia isolation, file-size caps on specific hot files |
 | Docs structure tests | Diátaxis front matter, nav bijection, link resolution; plus future summary/size guards |
 
 **Baseline policy.** If the tree already violates a new rule, do **not** weaken the rule. Commit a dependency-cruiser known-violations baseline (and an explicit ESLint grandfather list) so **new** violations fail while old ones are tracked. Follow-up work removes baseline entries; it does not relax severity.
 
-**Scripts (target state).**
+**Landed today.** `.dependency-cruiser.cjs` and `npm run arch:check` now enforce `no-circular` and the layer DAG, meaning each layer's rule against upward imports, including the exception that lets runtime reuse only the transpile public module-graph API. Orphan modules are reported as a warning. Pre-existing violations are grandfathered in `.dependency-cruiser-known-violations.json` and passed to the check with `--ignore-known`, so a new cycle or upward import fails the build while the tracked ones do not. Cross-CLI-slice isolation, the deep-import-past-public-entry rule, and the ESLint caps below are still queued in `QUEUE.md`.
+
+**Scripts.** The import-graph gate is live and wired to the committed config and baseline:
 
 ```jsonc
-"arch:check": "depcruise src --config .dependency-cruiser.cjs",
-"arch:graph": "depcruise src --config .dependency-cruiser.cjs --output-type dot | dot -T svg > docs/dependency-graph.svg",
-"lint": "eslint src --max-warnings 0"
+"arch:check": "depcruise src --config .dependency-cruiser.cjs --ignore-known",
 ```
 
-`arch:graph` is optional (needs Graphviz). `arch:check` and `lint` are required CI steps.
+Two scripts are planned but not added yet: an optional `arch:graph` (`depcruise … --output-type dot | dot -T svg > docs/dependency-graph.svg`, needs Graphviz) and `lint` (`eslint src --max-warnings 0`). `arch:check` is a required CI step today; `lint` becomes required when the ESLint caps task lands.
 
 ## How agents should navigate
 
@@ -143,4 +143,4 @@ These are **guardrails**, not conventions. Violations fail CI.
 
 ## Status
 
-**Accepted** (2026-08-02). Implementation is phased via `QUEUE.md` tasks; until those land, existing grep tests and docs remain the partial enforcement set.
+**Accepted** (2026-08-02). Implementation is phased via `QUEUE.md` tasks. The dependency-cruiser gate (`npm run arch:check`) for no cycles and the layer DAG has landed and runs in CI. The ESLint fan-out and file-size caps, cross-CLI-slice isolation, and the deep-import rules are still queued, so existing grep tests and docs remain the partial enforcement set for those.
