@@ -3,7 +3,7 @@ import { basename, dirname, join, resolve, sep } from "node:path";
 import { parsejaiph } from "../../parser";
 import { resolveImportPath } from "../../transpiler";
 import { jaiphModule } from "../../types";
-import { JAIPH_SKILL_MD_BASE64, decodeEmbeddedAsset } from "../../runtime/embedded-assets";
+import { JAIPH_SKILL_MD_BASE64, decodeEmbeddedAsset } from "../../runtime";
 
 /**
  * When TMPDIR (or other tooling) places temp projects under `<repo>/.jaiph/tmp/...`,

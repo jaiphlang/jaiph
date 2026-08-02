@@ -3,7 +3,7 @@ import { errText } from "../../errors";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
-import { resolveShell } from "../../runtime/kernel/portability";
+import { resolveShell } from "../../runtime";
 import type { HookConfig, HookEventName, HookPayload } from "../../types";
 import type { RunEmitter } from "./emitter";
 import type { StepEvent } from "./events";

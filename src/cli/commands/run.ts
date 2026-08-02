@@ -13,7 +13,7 @@ import { basename } from "node:path";
 import { parsejaiph } from "../../parser";
 import { buildScripts, buildScriptsFromGraph } from "../../transpiler";
 import { loadModuleGraph, writeModuleGraph } from "../../transpile/module-graph";
-import { canUseAnsi } from "../../runtime/kernel/portability";
+import { canUseAnsi } from "../../runtime";
 import { resolveModuleMetadata, metadataToConfig } from "../../config";
 import { buildStepDisplayParamPairs, formatNamedParamsForDisplay } from "./format-params.js";
 import {
@@ -68,8 +68,10 @@ import {
   selectSandboxMode,
   RUN_WORKFLOW_ENV,
   DOCKER_SANDBOX_ENV,
-} from "../../runtime/docker";
-import { confirmInplaceRun, confirmUnsafeRun, UNSAFE_RUN_LOGWARN_MESSAGE } from "../../runtime/docker-inplace";
+  confirmInplaceRun,
+  confirmUnsafeRun,
+  UNSAFE_RUN_LOGWARN_MESSAGE,
+} from "../../runtime";
 import {
   styleKeywordLabel,
   formatElapsedDuration,
@@ -82,7 +84,7 @@ import { planTrustedEnvs, isTrustedEnvsOptIn } from "../run/trusted-envs";
 import { colorize, formatJaiphRunningBannerLines } from "../run/display";
 import { createRunEmitter } from "../run/emitter";
 import { exportRunTelemetry } from "../telemetry/otlp";
-import { CHAIN_KEY_ENV, generateChainKey, writeChainKey } from "../../runtime/kernel/emit";
+import { CHAIN_KEY_ENV, generateChainKey, writeChainKey } from "../../runtime";
 import {
   createStderrParser,
   createRunState,

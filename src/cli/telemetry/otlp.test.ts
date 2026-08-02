@@ -344,6 +344,14 @@ test("exportRunTelemetry: OTLP + Sentry run concurrently under one shared flush 
   (process.stderr as unknown as { write: (s: string) => boolean }).write = () => true;
   try {
     writeFailedJournal(dir);
+    // Budget is sized to dominate event-loop lag: node:test runs files in
+    // parallel processes, so a loaded suite can starve this loop and delay the
+    // socket-timeout timers. Both exporters hang until their shared timeout, so
+    // concurrent-under-one-budget finishes near 1x the budget while a sequential
+    // await would need 2x. The gap between the two is exactly one budget
+    // regardless of lag, so a ceiling strictly below 2x proves concurrency; a
+    // large budget keeps that gap wide relative to lag so it does not flake.
+    const budgetMs = 1500;
     const started = Date.now();
     await exportRunTelemetry({
       runDir: dir,
@@ -353,13 +361,14 @@ test("exportRunTelemetry: OTLP + Sentry run concurrently under one shared flush 
       env: {
         OTEL_EXPORTER_OTLP_ENDPOINT: `http://127.0.0.1:${hole.port}`,
         SENTRY_DSN: `http://key@127.0.0.1:${hole.port}/1`,
-        JAIPH_TELEMETRY_FLUSH_MS: "400",
+        JAIPH_TELEMETRY_FLUSH_MS: String(budgetMs),
       },
     });
     const elapsed = Date.now() - started;
-    // Both exporters hang; concurrent-under-one-budget finishes near one budget
-    // (~400ms), well under the sequential 2x (~800ms+).
-    assert.ok(elapsed < 750, `concurrent flush should be ~one budget, took ${elapsed}ms`);
+    assert.ok(
+      elapsed < budgetMs * 1.8,
+      `concurrent flush should be under ~one budget, took ${elapsed}ms (budget ${budgetMs}ms)`,
+    );
   } finally {
     (process.stderr as unknown as { write: typeof original }).write = original;
     await hole.close();

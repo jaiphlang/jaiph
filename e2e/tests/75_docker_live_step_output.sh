@@ -55,7 +55,14 @@ run_pid=$!
 
 out_file=""
 err_file=""
-for _ in $(seq 1 50); do
+# Docker cold-start (snapshot, container create, first-run image work) can take
+# well over five seconds on a fresh CI runner before the in-container step runs
+# and its host-mounted .out/.err files first appear. A fixed ~5s poll window
+# therefore gives up before the files exist and spuriously reports them as never
+# having appeared. Bound the wait on the run process still being alive instead:
+# slow_writer sleeps between lines, so the run stays up long enough to sample
+# the files live once they do appear, however slow the container start was.
+while kill -0 "$run_pid" 2>/dev/null; do
   sleep 0.1
   shopt -s nullglob
   out_candidates=( "${TEST_DIR}/.jaiph/runs/"*/*"live_out_docker.jh/"*slow_writer_impl.out )

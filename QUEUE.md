@@ -14,20 +14,6 @@ Process rules:
 
 ***
 
-## Add runtime deep-module public entry; stop runtime importing CLI #dev-ready
-
-Context: `docs/agent-analyzability.md` — runtime is layer 3 and must not import CLI (layer 4). Known leak: `src/runtime/kernel/node-workflow-runtime.ts` imports `src/cli/commands/format-params`. CLI may import runtime’s public entry, not the reverse.
-
-Problem: Runtime → CLI inverts the layer DAG and pulls CLI command modules into kernel analysis.
-
-Remediation: Create `src/runtime/index.ts` (or equivalent) as the public runtime entry for CLI and other outsiders (launch, docker helpers, runner, `buildRuntimeGraph`, emit/redact helpers that CLI legitimately needs — curate). Move or duplicate the minimal `buildStepDisplayParamPairs` (or equivalent) dependency out of `src/cli/commands/` into a layer ≤3 module (shared leaf or runtime-private helper re-exported only if needed), and change runtime to stop importing anything under `src/cli/`. Retarget external deep imports into `src/runtime/**` to the public entry. Add dependency-cruiser rules: `runtime-must-not-import-cli` (error) and `no-deep-imports-into-runtime` (error). Remove these edges from the known-violations baseline when fixed.
-
-### Acceptance criteria
-- Test fails if any production file under `src/runtime/` imports a path under `src/cli/`.
-- Test fails if a file outside `src/runtime/` deep-imports a non-entry runtime path (baseline only for documented leftovers).
-- `npm run arch:check` reports zero `runtime→cli` violations (not merely baselined).
-- `npm run build`, `npm test`, and relevant e2e for run/progress display still pass (display param formatting behaviour preserved).
-
 ## Add format deep-module public entry and ban deep imports #dev-ready
 
 Context: `docs/agent-analyzability.md` — format is layer 1 beside parse. External callers should use one public entry.

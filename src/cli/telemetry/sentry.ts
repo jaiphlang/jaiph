@@ -21,7 +21,7 @@ import { errText } from "../../errors";
 import { basename, join } from "node:path";
 import { VERSION } from "../../version";
 import { postWithTimeout } from "./http";
-import { verifyRunJournal } from "../../runtime/kernel/emit";
+import { verifyRunJournal } from "../../runtime";
 import type { ExportOutcome, ExportRunTelemetryOptions } from "./otlp";
 
 /** Default hard cap on the envelope POST when no flush budget is supplied. */

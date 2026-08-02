@@ -83,6 +83,14 @@ module.exports = {
       to: { path: "^src/transpile/", pathNot: "^src/transpile/module-graph\\.ts$" },
     },
     {
+      name: "no-deep-imports-into-runtime",
+      comment:
+        "Runtime is a deep module: code OUTSIDE the runtime package imports only its public entry (src/runtime/index.ts), never src/runtime/** internals (docker, docker-inplace, embedded-assets, kernel/*). Add a named re-export to src/runtime/index.ts instead of reaching in. Test seams (_dockerExec, RuntimeEventEmitter, ...) reached by cross-package tests are tracked in the baseline, not on the public surface.",
+      severity: "error",
+      from: { pathNot: "^src/runtime/" },
+      to: { path: "^src/runtime/", pathNot: "^src/runtime/index\\.ts$" },
+    },
+    {
       name: "no-orphans",
       comment:
         "Orphan modules (no incoming or outgoing deps) are usually dead code or a missing wiring.",

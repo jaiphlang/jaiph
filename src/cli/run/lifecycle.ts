@@ -1,7 +1,6 @@
 import { ChildProcess } from "node:child_process";
 
-import { spawnJaiphWorkflowProcess } from "../../runtime/kernel/workflow-launch";
-import { killProcessTree } from "../../runtime/kernel/portability";
+import { spawnJaiphWorkflowProcess, killProcessTree } from "../../runtime";
 
 export function spawnRunProcess(
   args: string[],

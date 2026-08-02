@@ -100,6 +100,12 @@ export default [
     rules: { "import/max-dependencies": "off" },
   },
   {
+    // High fan-out: index.ts is the runtime slice public entry (re-exports the
+    // curated CLI-facing surface: graph, launch/runner, docker, emit, ...).
+    files: ["src/runtime/index.ts"],
+    rules: { "import/max-dependencies": "off" },
+  },
+  {
     // 717 lines: docker driver (build/run/sandbox config) not yet split.
     files: ["src/runtime/docker.ts"],
     rules: { "max-lines": "off" },

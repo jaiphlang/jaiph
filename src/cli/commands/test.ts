@@ -11,7 +11,7 @@ import { loadModuleGraph } from "../../transpile/module-graph";
 import { jaiphError } from "../../errors";
 import { detectWorkspaceRoot } from "../shared/paths";
 import { hasHelpFlag, parseArgs } from "../shared/usage";
-import { runTestFile } from "../../runtime/kernel/node-test-runner";
+import { runTestFile } from "../../runtime";
 
 const TEST_USAGE =
   "Usage: jaiph test [path]\n\n" +

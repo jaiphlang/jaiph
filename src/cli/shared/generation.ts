@@ -12,7 +12,7 @@ import {
   isRunningInContainer,
   type DockerRunConfig,
   type SandboxMode,
-} from "../../runtime/docker";
+} from "../../runtime";
 import { resolveRuntimeEnv, applySandboxFlags, isUnsafeHostOnly, type SandboxFlags } from "../run/env";
 import { preflightAgentCredentials } from "../run/preflight-credentials";
 import { loadMergedHooks, isProjectHooksTrusted } from "../run/hooks";
