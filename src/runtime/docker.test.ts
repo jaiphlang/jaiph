@@ -1123,6 +1123,90 @@ test("docs/env-vars.md lists every per-backend credential key on the forwarding 
   }
 });
 
+// ---------------------------------------------------------------------------
+// Docker-daemon e2e hardening guards (see e2e/tests/72, 74b and test_all.sh).
+// Flaky Docker Desktop e2e can fail GH CI; these guards pin the anti-flake
+// contracts so a future edit can't silently reintroduce the failure modes.
+// ---------------------------------------------------------------------------
+
+test("e2e/72: docker abs/rel run-artifact cases surface stderr (no silent >/dev/null 2>&1)", () => {
+  const src = readFileSync(
+    join(REPO_ROOT, "e2e", "tests", "72_docker_run_artifacts.sh"),
+    "utf8",
+  );
+  // The success-expected runs whose artifacts are asserted downstream must not
+  // be silenced — a Docker daemon flake there hid behind "artifact missing".
+  const silent =
+    /jaiph run[^\n]*docker_(abs|rel)_runs\.jh[^\n]*>\/dev\/null 2>&1/;
+  assert.ok(
+    !silent.test(src),
+    "72_docker_run_artifacts.sh reintroduced a silent `jaiph run … >/dev/null 2>&1` " +
+      "for the abs/rel runs case; route it through e2e::run_logged so stderr surfaces on failure",
+  );
+  // And they must go through the logging helper (abs + rel + happy path).
+  const runLoggedCount = (src.match(/e2e::run_logged/g) ?? []).length;
+  assert.ok(
+    runLoggedCount >= 3,
+    `expected the three success-expected docker runs in 72 to use e2e::run_logged, saw ${runLoggedCount}`,
+  );
+});
+
+test("e2e/74b: signal-cleanup waits on the named jaiph-run container (Created counts)", () => {
+  const src = readFileSync(
+    join(REPO_ROOT, "e2e", "tests", "74b_docker_signal_cleanup.sh"),
+    "utf8",
+  );
+  // Must detect the scenario container by name (not an image ancestor filter)
+  // via the shared helper, which uses `docker ps -a` so `Created` counts.
+  assert.ok(
+    src.includes("e2e::wait_for_jaiph_run_container"),
+    "74b must wait on the named jaiph-run container via e2e::wait_for_jaiph_run_container",
+  );
+  assert.ok(
+    !/--filter[^\n]*ancestor=/.test(src),
+    "74b must not use a `docker ps --filter ancestor=` filter (it latches onto the pre-run image probe)",
+  );
+});
+
+test("e2e/common.sh: jaiph-run container helper uses `docker ps -a` so Created counts", () => {
+  const src = readFileSync(join(REPO_ROOT, "e2e", "lib", "common.sh"), "utf8");
+  assert.ok(
+    /e2e::jaiph_run_container_ids\(\)\s*\{[^}]*docker ps -aq/.test(src),
+    "e2e::jaiph_run_container_ids must use `docker ps -aq` (include Created/Exited)",
+  );
+});
+
+test("test_all.sh: E2E_DOCKER_DAEMON_SCRIPTS covers every daemon script lacking `docker` in its basename", () => {
+  const testAll = readFileSync(join(REPO_ROOT, "e2e", "test_all.sh"), "utf8");
+  const listMatch = testAll.match(
+    /E2E_DOCKER_DAEMON_SCRIPTS=\(([^)]*)\)/,
+  );
+  assert.ok(listMatch, "could not find E2E_DOCKER_DAEMON_SCRIPTS in test_all.sh");
+  const listed = new Set(
+    Array.from(listMatch[1].matchAll(/"([^"]+)"/g), (m) => m[1]),
+  );
+
+  // A daemon script gates on `docker info`. If its basename already carries the
+  // docker token the basename filter skips it, so only the others need listing.
+  const isDockerBasename = (name: string) =>
+    /docker_|_docker$|^docker_/.test(name);
+  const testsDir = join(REPO_ROOT, "e2e", "tests");
+  const missing: string[] = [];
+  for (const file of readdirSync(testsDir)) {
+    if (!file.endsWith(".sh")) continue;
+    const name = file.slice(0, -3);
+    if (isDockerBasename(name)) continue;
+    const body = readFileSync(join(testsDir, file), "utf8");
+    if (!body.includes("docker info")) continue;
+    if (!listed.has(name)) missing.push(name);
+  }
+  assert.deepStrictEqual(
+    missing,
+    [],
+    `E2E_DOCKER_DAEMON_SCRIPTS is missing daemon scripts: ${missing.join(", ")}`,
+  );
+});
+
 test("buildDockerArgs: only forwards env vars matching allowlist", () => {
   const opts = defaultOpts({
     env: {

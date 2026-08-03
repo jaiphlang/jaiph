@@ -23,7 +23,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 source "${ROOT_DIR}/e2e/lib/common.sh"
-trap e2e::cleanup EXIT
+trap e2e::docker_cleanup EXIT
 
 e2e::prepare_test_env "docker_signal_cleanup"
 TEST_DIR="${JAIPH_E2E_TEST_DIR}"
@@ -45,43 +45,45 @@ fi
 runs_root="${TEST_DIR}/.jaiph/runs"
 mkdir -p "${runs_root}"
 
-# List container ids for this test's image (the ancestor filter matches by image).
-container_ids() {
-  docker ps -q --filter "ancestor=${E2E_DOCKER_TEST_IMAGE}" 2>/dev/null || true
-}
-
 # Run one signal-cleanup scenario against $1 (a .jh fixture basename under TEST_DIR).
 # Asserts: container appears, SIGINT stops it within 15s, and no snapshot remains.
+#
+# Container detection is by NAME (`jaiph-run-*`, set by spawnDockerProcess) in
+# ANY state including `Created`: on a loaded Docker Desktop the container can sit
+# in `Created` for a beat before it flips to `Running`, and a plain `docker ps`
+# (Running-only) would miss it and spuriously report "container never appeared".
+# `e2e::jaiph_run_container_ids` uses `docker ps -a`, so `Created` counts as
+# appeared. The image-`ancestor=` filter is deliberately avoided: the pre-run
+# image-presence probe runs a short-lived container from the same image, and an
+# ancestor filter could latch onto that probe instead of the run container.
 run_signal_scenario() {
   local flow="$1"
+
+  # No leftover run containers from a prior scenario may be present, or the
+  # appear-wait below would match the stale one and skip straight to SIGINT.
+  e2e::rm_jaiph_run_containers
 
   # Start the workflow in the background, then send SIGINT after a short delay.
   JAIPH_DOCKER_ENABLED=true JAIPH_DOCKER_IMAGE="${E2E_DOCKER_TEST_IMAGE}" \
     jaiph run "${TEST_DIR}/${flow}" >/dev/null 2>&1 &
   local bg_pid=$!
 
-  # Wait (up to ~10s) for the container to start.
-  local started="" i
-  for ((i = 0; i < 20; i++)); do
-    if [[ -n "$(container_ids)" ]]; then
-      started="yes"
-      break
-    fi
-    sleep 0.5
-  done
-  if [[ -z "${started}" ]]; then
+  # Wait (up to ~15s) for the named run container to appear (Created counts).
+  if [[ -z "$(e2e::wait_for_jaiph_run_container 15)" ]]; then
     kill -INT "${bg_pid}" 2>/dev/null || true
     wait "${bg_pid}" 2>/dev/null || true
-    e2e::fail "docker signal cleanup [${flow}]: container never appeared in docker ps"
+    e2e::fail "docker signal cleanup [${flow}]: jaiph-run container never appeared"
   fi
 
   # Send SIGINT to the jaiph process (mimics Ctrl-C).
   kill -INT "${bg_pid}" 2>/dev/null || true
 
-  # The container must disappear from `docker ps` within 15s.
+  # The container must be stopped AND removed (the SIGINT teardown runs
+  # `docker kill` then `docker rm -f`) within 15s — so no jaiph-run-* container
+  # remains in any state.
   local gone="" waited=0
   while (( waited < 15 )); do
-    if [[ -z "$(container_ids)" ]]; then
+    if [[ -z "$(e2e::jaiph_run_container_ids)" ]]; then
       gone="yes"
       break
     fi
@@ -96,8 +98,8 @@ run_signal_scenario() {
 
   if [[ -z "${gone}" ]]; then
     # Best-effort teardown so a failure here doesn't leave a live container.
-    for cid in $(container_ids); do docker rm -f "${cid}" >/dev/null 2>&1 || true; done
-    e2e::fail "docker signal cleanup [${flow}]: container still running 15s after SIGINT (orphaned)"
+    e2e::rm_jaiph_run_containers
+    e2e::fail "docker signal cleanup [${flow}]: container still present 15s after SIGINT (orphaned)"
   fi
   e2e::pass "docker signal cleanup [${flow}]: container gone from docker ps within 15s of SIGINT"
 

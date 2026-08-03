@@ -524,6 +524,87 @@ e2e::ensure_docker_test_image() {
   [[ -n "${E2E_DOCKER_TEST_IMAGE}" ]]
 }
 
+# ---------------------------------------------------------------------------
+# Docker-daemon e2e helpers.
+#
+# Docker Desktop under concurrent load is flaky: leftover `Created` containers,
+# "unable to upgrade to tcp, received 500", and signal-cleanup races. These
+# helpers make the Docker-daemon scripts (1) observable on failure — a `jaiph
+# run` that dies mid-flight surfaces its stderr instead of a bare "artifact
+# missing" — and (2) self-cleaning, so a leftover `jaiph-run-*` container from
+# one case can't fail the next case (or a back-to-back run of the whole script).
+#
+# Every Docker-backed run gets a deterministic `--name jaiph-run-<hex>` from
+# spawnDockerProcess (src/runtime/docker.ts), so we can wait on / remove the
+# scenario container by name rather than an image-wide `ancestor=` filter that
+# would also latch onto the short-lived image-probe container.
+# ---------------------------------------------------------------------------
+
+# IDs of jaiph-run-* containers in ANY state — Created, Running, or Exited.
+# Plain `docker ps` hides Created/Exited; `-a` includes them, so a container
+# that is still mid-create counts as "appeared" for wait purposes, and a
+# stopped-but-not-removed leftover counts for cleanup/gone assertions.
+e2e::jaiph_run_container_ids() {
+  command -v docker >/dev/null 2>&1 || return 0
+  docker ps -aq --filter "name=jaiph-run-" 2>/dev/null || true
+}
+
+# Bounded wait for at least one jaiph-run-* container to APPEAR (Created counts).
+# $1 = max seconds (default 15). Prints "yes" and returns 0 on appearance;
+# returns 1 if none appeared within the window (no output).
+e2e::wait_for_jaiph_run_container() {
+  local max="${1:-15}" i
+  for ((i = 0; i < max * 2; i++)); do
+    if [[ -n "$(e2e::jaiph_run_container_ids)" ]]; then
+      printf "yes"
+      return 0
+    fi
+    sleep 0.5
+  done
+  return 1
+}
+
+# Force-remove any leftover jaiph-run-* containers (best-effort). Call between
+# cases and from the EXIT trap so a flake can't leave live/created state for the
+# next case or the next back-to-back run of the script.
+e2e::rm_jaiph_run_containers() {
+  command -v docker >/dev/null 2>&1 || return 0
+  local cid
+  for cid in $(e2e::jaiph_run_container_ids); do
+    docker rm -f "${cid}" >/dev/null 2>&1 || true
+  done
+}
+
+# EXIT trap for Docker-daemon scripts: remove leftover jaiph-run-* containers,
+# then run the standard cleanup. Docker-daemon scripts should
+# `trap e2e::docker_cleanup EXIT` instead of `trap e2e::cleanup EXIT`.
+e2e::docker_cleanup() {
+  e2e::rm_jaiph_run_containers
+  e2e::cleanup
+}
+
+# Run a command with stdout+stderr captured to a log; on non-zero exit, dump the
+# log to stderr and fail with $label. Replaces the silent
+# `jaiph run … >/dev/null 2>&1` then file-assert pattern that hid the real error
+# (a Docker daemon flake) behind a downstream "artifact missing" failure.
+# Usage: e2e::run_logged "<label>" <command> [args…]
+#   e.g. e2e::run_logged "docker: abs runs" env JAIPH_DOCKER_ENABLED=true jaiph run flow.jh
+e2e::run_logged() {
+  local label="$1"
+  shift
+  local log
+  log="$(mktemp)"
+  if ! "$@" >"${log}" 2>&1; then
+    printf "command failed: %s\n" "$*" >&2
+    printf -- "---- captured output ----\n" >&2
+    cat "${log}" >&2
+    printf -- "-------------------------\n" >&2
+    rm -f "${log}"
+    e2e::fail "${label}"
+  fi
+  rm -f "${log}"
+}
+
 e2e::prepare_test_env() {
   local test_name="$1"
   e2e::prepare_shared_context

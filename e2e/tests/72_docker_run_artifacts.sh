@@ -4,7 +4,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 source "${ROOT_DIR}/e2e/lib/common.sh"
-trap e2e::cleanup EXIT
+trap e2e::docker_cleanup EXIT
 
 e2e::prepare_test_env "docker_run_artifacts"
 TEST_DIR="${JAIPH_E2E_TEST_DIR}"
@@ -39,11 +39,12 @@ workflow default() {
 }
 EOF
 
-# When: run with Docker enabled using the E2E test image
-if ! JAIPH_DOCKER_ENABLED=true JAIPH_DOCKER_IMAGE="${E2E_DOCKER_TEST_IMAGE}" jaiph run "${TEST_DIR}/docker_artifacts.jh" >/dev/null 2>&1; then
-  JAIPH_DOCKER_ENABLED=true JAIPH_DOCKER_IMAGE="${E2E_DOCKER_TEST_IMAGE}" jaiph run "${TEST_DIR}/docker_artifacts.jh"
-  e2e::fail "docker: jaiph run docker_artifacts.jh failed"
-fi
+# When: run with Docker enabled using the E2E test image. e2e::run_logged
+# captures stdout+stderr and dumps them on failure — a Docker daemon flake must
+# surface its own error, never hide behind a downstream "artifact missing".
+e2e::run_logged "docker: jaiph run docker_artifacts.jh" \
+  env JAIPH_DOCKER_ENABLED=true JAIPH_DOCKER_IMAGE="${E2E_DOCKER_TEST_IMAGE}" \
+  jaiph run "${TEST_DIR}/docker_artifacts.jh"
 
 # Then: artifacts should exist on the host under .jaiph/runs
 run_dir="$(e2e::run_dir "docker_artifacts.jh")"
@@ -82,9 +83,13 @@ workflow default() {
 EOF
 
 rm -rf "${TEST_DIR}/custom_runs"
+e2e::rm_jaiph_run_containers
 
-# When: run with Docker and relative JAIPH_RUNS_DIR
-(cd "${TEST_DIR}" && JAIPH_DOCKER_ENABLED=true JAIPH_DOCKER_IMAGE="${E2E_DOCKER_TEST_IMAGE}" JAIPH_RUNS_DIR="custom_runs" jaiph run "${TEST_DIR}/docker_rel_runs.jh" >/dev/null 2>&1)
+# When: run with Docker and relative JAIPH_RUNS_DIR. The relative dir is resolved
+# from cwd, so the run must happen under `cd`; wrap it in bash -c so run_logged
+# still captures and surfaces stderr on failure.
+e2e::run_logged "docker: jaiph run docker_rel_runs.jh" \
+  bash -c "cd '${TEST_DIR}' && JAIPH_DOCKER_ENABLED=true JAIPH_DOCKER_IMAGE='${E2E_DOCKER_TEST_IMAGE}' JAIPH_RUNS_DIR='custom_runs' jaiph run '${TEST_DIR}/docker_rel_runs.jh'"
 
 # Then: artifacts should be under the relative dir on host
 rel_run_dir="$(e2e::run_dir_at "${TEST_DIR}/custom_runs" "docker_rel_runs.jh")"
@@ -110,9 +115,15 @@ EOF
 
 abs_runs_dir="${TEST_DIR}/abs_runs"
 rm -rf "${abs_runs_dir}"
+e2e::rm_jaiph_run_containers
 
-# When: run with absolute JAIPH_RUNS_DIR inside workspace
-JAIPH_DOCKER_ENABLED=true JAIPH_DOCKER_IMAGE="${E2E_DOCKER_TEST_IMAGE}" JAIPH_RUNS_DIR="${abs_runs_dir}" jaiph run "${TEST_DIR}/docker_abs_runs.jh" >/dev/null 2>&1
+# When: run with absolute JAIPH_RUNS_DIR inside workspace. Previously this run
+# was silenced with `>/dev/null 2>&1` and then file-asserted — a Docker flake
+# here surfaced only as "summary missing". run_logged dumps the run's stderr on
+# failure so the real cause is visible.
+e2e::run_logged "docker: jaiph run docker_abs_runs.jh" \
+  env JAIPH_DOCKER_ENABLED=true JAIPH_DOCKER_IMAGE="${E2E_DOCKER_TEST_IMAGE}" JAIPH_RUNS_DIR="${abs_runs_dir}" \
+  jaiph run "${TEST_DIR}/docker_abs_runs.jh"
 
 # Then: artifacts should be under the absolute path on host
 abs_run_dir="$(e2e::run_dir_at "${abs_runs_dir}" "docker_abs_runs.jh")"
