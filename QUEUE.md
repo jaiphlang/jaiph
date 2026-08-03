@@ -14,27 +14,32 @@ Process rules:
 
 ***
 
-## Allow commands→slice wiring; ban peer CLI slice imports #dev-ready
+## Fix flaky Docker Desktop e2e (may block CI) #dev-ready
 
-Context: `docs/agent-analyzability.md` isolates CLI slices `commands`, `run`, `serve`, `mcp`, `exec`, `telemetry`. The rule `no-cross-cli-slice-imports` in `.dependency-cruiser.cjs` forbids any cross-slice private import. In practice most of the 36 baselined hits are composition-root wiring: `src/cli/commands/*` launching `run` / `serve` / `mcp` / `exec` / `telemetry`. Peer-slice coupling (e.g. `serve` → `mcp`, `exec` → `run`) is the real analyzability problem.
+Context: Docker-daemon e2e on Docker Desktop is load-flaky (`72_docker_*`, `74b`–`74g`, `75`/`76`, `141_mcp_docker_*`, `148_standalone_image`, `151_serve_transports_docker`, `153_docker_*`, plus any script that `docker run`s without `docker` in its basename). Overnight engineer loops were trapped for hours: unit tests green, rotating Docker FAILs (`Created` leftovers, `unable to upgrade to tcp, received 500`, signal-cleanup races). Mitigation already landed: `.jaiph/ensure_ci_passes.jh` sets `JAIPH_E2E_SKIP_DOCKER=1` and `e2e/test_all.sh` skips Docker-daemon scripts (basename `*docker_*` / `*_docker` / `docker_*`, plus an explicit daemon-script list for names like `148_standalone_image`). **GitHub Actions does not set the skip** — full Docker e2e still runs there and can fail CI.
 
-Problem: The rule treats command orchestration the same as peer-feature coupling, so CI ignores 36 edges and the ratchet does not bite where it should.
+Problem: The skip is a quarantine. Flaky scripts can still fail GH CI and any local `npm run test:e2e` without the skip. Agents previously “fixed” flakes by patching `src/runtime/docker.ts` with probe retries — that is the wrong fix.
 
-Remediation: Change `.dependency-cruiser.cjs` so that:
+**Agent instructions (mandatory):**
+- You **may temporarily keep or widen** `JAIPH_E2E_SKIP_DOCKER` / the daemon-script skip list so overnight `ensure_ci_passes` stays unblocked while you work — that is allowed CI blocking / quarantine, not a substitute for fixing the tests.
+- Do **not** paper over flakes in production `docker.ts` without a unit test that proves a real product bug.
+- After hardening, **run the Docker e2e scripts several times** (at least **3** consecutive green passes of the previously flaky set on a quiet Docker Desktop — e.g. loop `72`, `74b`, `74c`, `74d`, `75`, `148_standalone_image`, or an equivalent focused runner). One green run is not enough. Document the command and pass count in the commit message.
+- Only then remove or narrow the engineer skip if the suite is stable enough; otherwise leave the skip and say why in the commit.
 
-1. Imports from `src/cli/commands/` into other slices remain allowed (commands is the composition root).
-2. Peer-slice private imports among `run`, `serve`, `mcp`, `exec`, `telemetry` remain forbidden (same-slice and `src/cli/shared/**` still allowed).
-3. Fix or relocate remaining peer edges that are not composition-root (move shared types/helpers into `src/cli/shared`, or route through lower-layer public entries). Remove cleared edges from `.dependency-cruiser-known-violations.json`.
-4. Update `docs/agent-analyzability.md` CLI-slice section to state that `commands` may import slices, but slices must not import each other.
+Remediation: Harden the Docker-daemon e2e scripts and helpers:
 
-Do not delete the isolation rule; reshape it.
+1. On failure, always surface `jaiph run` / `docker` stderr (never assert artifacts after a silent `>/dev/null 2>&1` without dumping the log).
+2. Wait for the named `jaiph-run-*` container (include `Created`→`Running`), not a shared `ancestor=` filter alone.
+3. Between cases (and on EXIT), `docker rm -f` leftover `jaiph-run-*` / probe containers from that test.
+4. Replace brittle wall-clock-only assertions (prepull line, live-sample race) with bounded retries or event-based waits; keep the SIGINT orphan-container contract.
+5. Keep the explicit daemon-script skip list complete for any script that needs the Docker daemon but lacks `docker` in its basename.
 
 ### Acceptance criteria
-- A test asserts `src/cli/commands/` → `src/cli/run/` (or similar) is allowed under the committed rules.
-- A test asserts a peer-slice import (e.g. fixture `src/cli/serve/` → `src/cli/mcp/` private path, or an existing peer edge if still forbidden until fixed) fails `arch:check` / depcruise when not baselined.
-- After this task, `.dependency-cruiser-known-violations.json` contains zero `no-cross-cli-slice-imports` entries that originate from `src/cli/commands/`; remaining baseline entries (if any) are only true peer-slice leftovers with count reported in the commit message.
-- `docs/agent-analyzability.md` documents the commands-as-composition-root exception.
-- `npm run arch:check`, `npm run build`, and `npm test` pass.
+- Previously silent `jaiph run … >/dev/null 2>&1` then file-assert paths (e.g. abs-runs in `72`) print stderr on failure; a test fails if that silent pattern is reintroduced for those cases.
+- `74b_docker_signal_cleanup.sh` waits on the scenario container by name (or equivalent) and treats `Created` as appeared.
+- EXIT/trap cleanup removes `jaiph-run-*` leftovers for the test; running the hardened scripts twice back-to-back on a quiet daemon does not fail on leftover state.
+- **Evidence:** at least **3** consecutive green runs of the hardened Docker e2e set on Docker Desktop (commands + counts in the commit message).
+- `npm run build` and `npm test` pass. Full `npm run test:e2e` with Docker available either passes or still uses a documented, minimal skip with rationale.
 
 ## Clear peer CLI slice baseline edges #dev-ready
 
@@ -150,26 +155,3 @@ Remediation — design (implement exactly this; do **not** add winston/pino/buny
 - Default (workflow mirror off): workflow `log "hi"` does not appear on the operator sink; with the documented env opt-in, it does appear, colorized by level when `colorEnabled`, and includes async subscript indent when `async_indices` is non-empty; tests cover both.
 - Mirrored / operator lines never contain a fixture credential value that journal redaction would strip (reuse or extend an existing redaction test pattern).
 - `npm run build` and `npm test` pass; `npm run arch:check` still exits 0 (shared logger lives under `src/cli/shared`, no new peer-slice edges).
-
-## Harden Docker Desktop e2e (72/74*/75) reliability #dev-ready
-
-Context: Overnight `ensure_ci_passes` was trapped for hours by load-flaky Docker e2e on Docker Desktop (`72_docker_run_artifacts`, `74b`–`74d`, `74c` prepull, `75_docker_live_step_output`): unit tests green, rotating Docker FAILs, `jaiph-run-*` containers left in `Created`, agents patching `src/runtime/docker.ts` with probe retries. Mitigation already landed: `.jaiph/ensure_ci_passes.jh` exports `JAIPH_E2E_SKIP_DOCKER=1` and `e2e/test_all.sh` skips scripts whose basename contains `docker`. GitHub Actions still runs the full Docker suite.
-
-Problem: The skip is a quarantine, not a fix. The Docker e2e scripts remain unreliable on a busy Docker Desktop VM: they swallow stderr (`>/dev/null 2>&1` then assert files), race on `docker ps` (misses `Created`), share ancestor image filters, and use tight wall-clock contracts.
-
-Remediation: Harden the Docker-named e2e scripts (and helpers) so they are deterministic enough to re-enable under engineer CI later:
-
-1. On failure, always surface `jaiph run` / `docker` stderr (never assert artifacts after a silent redirect without dumping the log).
-2. Wait for the named `jaiph-run-*` container (include `Created`→`Running`), not a shared `ancestor=` filter alone.
-3. Between cases (and on EXIT), `docker rm -f` leftover `jaiph-run-*` / probe containers from that test.
-4. Replace brittle wall-clock-only assertions (prepull line, live-sample race) with bounded retries or event-based waits; keep SIGINT orphan-container contract.
-5. Do **not** paper over flakes by lengthening production probe timeouts in `docker.ts` without a failing unit test that proves a product bug.
-6. When green cold + under moderate load, optionally stop setting `JAIPH_E2E_SKIP_DOCKER` in `ensure_ci_passes.jh` (or document why GH-only remains correct).
-
-### Acceptance criteria
-- `72_docker_run_artifacts.sh` (and any sibling still using silent `jaiph run … >/dev/null 2>&1` before file asserts) prints the run's stderr on failure; a colocated/e2e assertion fails if that path is reintroduced for the abs-runs case.
-- `74b_docker_signal_cleanup.sh` waits on the scenario's container by name (or equivalent) and treats `Created` as "appeared"; "never appeared" cannot fire solely because the container was not yet `Running`.
-- A test helper or trap removes `jaiph-run-*` leftovers for the current test image/name prefix on EXIT; running the signal-cleanup script twice back-to-back on a quiet Docker Desktop does not fail on leftover state from the first run.
-- `npm run test:e2e` with Docker available passes `72`, `74b`, `74c`, `74d`, `75` on a quiet machine (document any intentional remaining skip).
-- No unexplained production probe-retry sprawl in `docker.ts` without a unit test that fails when the bug returns.
-- `npm run build` and `npm test` pass.
