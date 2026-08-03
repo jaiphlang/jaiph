@@ -31,7 +31,7 @@ export function formatJaiphRunningBannerLines(
 
 export function colorize(
   text: string,
-  code: "dim" | "bold" | "green" | "red" | "yellow",
+  code: "dim" | "bold" | "green" | "red" | "yellow" | "blue",
   colorEnabled: boolean,
 ): string {
   if (!colorEnabled) return text;
@@ -40,6 +40,7 @@ export function colorize(
     : code === "bold" ? "\u001b[1m"
     : code === "green" ? "\u001b[32m"
     : code === "yellow" ? "\u001b[33m"
+    : code === "blue" ? "\u001b[34m"
     : "\u001b[31m";
   return `${prefix}${text}\u001b[0m`;
 }
