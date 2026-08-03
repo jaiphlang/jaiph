@@ -135,9 +135,16 @@ SKIP_COUNT=0
 # A few Docker-daemon scripts don't carry "docker" in their basename (e.g.
 # 148_standalone_image builds and runs a real container); list them explicitly
 # so they skip too instead of trapping the recover agent on daemon flakes.
+# This list must stay complete: it is exactly the set of e2e scripts that gate
+# on `docker info` (i.e. need the daemon) but lack docker in their basename.
+# The test `docs/env-vars` sibling guard in src/runtime/docker.test.ts
+# ("E2E_DOCKER_DAEMON_SCRIPTS covers every daemon script …") fails if a new
+# daemon script is added without being listed here.
 E2E_DOCKER_DAEMON_SCRIPTS=(
   "140_env_passthrough"
+  "146_trusted_envs"
   "148_standalone_image"
+  "150_k8s_deploy"
 )
 e2e::skip_docker_script() {
   case "${JAIPH_E2E_SKIP_DOCKER:-}" in

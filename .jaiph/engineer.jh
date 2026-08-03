@@ -39,8 +39,11 @@ const safety_constraints = """
     Nested sessions share runtime resources and can crash active sessions.
   - Do not attempt to bypass nested-session guards (for example by unsetting
     environment variables such as CLAUDECODE).
-  - Do not modify QUEUE.md. Queue updates (if any) are handled by the
-    orchestration workflow, not by you.
+  - Do not modify QUEUE.md in any way (no deleting the current task, no
+    rewriting headers/bodies, no reordering). QUEUE.md process rule 4 is
+    for orchestration only: after a successful implement, the workflow calls
+    queue.remove_completed_task. If you believe a task is done, finish
+    acceptance work and stop — do not edit the queue file yourself.
   - Any violation of these constraints is an immediate task failure; stop and report.
 """
 

@@ -5,7 +5,7 @@ Process rules:
 1. Tasks are executed top-to-bottom.
 2. The first `##` section is always the current task.
 3. Task that is ready for implementation is marked with `#dev-ready` at the end of the header.
-4. When a task is completed, remove that section entirely.
+4. When a task is completed, **orchestration** removes that section (`queue.remove_completed_task` in `.jaiph/engineer.jh`). Agents and humans implementing a task must **not** edit `QUEUE.md` to delete or rewrite the current task — leave queue updates to the workflow.
 5. Every task must be standalone: no hidden assumptions, no "read prior task" dependency.
 6. This queue assumes **hard rewrite semantics**:
    * breaking changes are allowed,
@@ -14,17 +14,17 @@ Process rules:
 
 ***
 
-## Fix flaky Docker Desktop e2e (may block CI) #dev-ready
+## Make Docker Desktop e2e reliable and drop the engineer skip #dev-ready
 
-Context: Docker-daemon e2e on Docker Desktop is load-flaky (`72_docker_*`, `74b`–`74g`, `75`/`76`, `141_mcp_docker_*`, `148_standalone_image`, `151_serve_transports_docker`, `153_docker_*`, plus any script that `docker run`s without `docker` in its basename). Overnight engineer loops were trapped for hours: unit tests green, rotating Docker FAILs (`Created` leftovers, `unable to upgrade to tcp, received 500`, signal-cleanup races). Mitigation already landed: `.jaiph/ensure_ci_passes.jh` sets `JAIPH_E2E_SKIP_DOCKER=1` and `e2e/test_all.sh` skips Docker-daemon scripts (basename `*docker_*` / `*_docker` / `docker_*`, plus an explicit daemon-script list for names like `148_standalone_image`). **GitHub Actions does not set the skip** — full Docker e2e still runs there and can fail CI.
+Context: Docker-daemon e2e is **required product coverage** (GitHub Actions runs the full suite). Scripts include `72_docker_*`, `74b`–`74g`, `75`/`76`, `141_mcp_docker_*`, `148_standalone_image`, `151_serve_transports_docker`, `153_docker_*`, and any other script that talks to the Docker daemon. Overnight engineer loops were trapped by load-flaky failures on a busy Docker Desktop (`Created` leftovers, `unable to upgrade to tcp, received 500`, signal-cleanup races). A temporary quarantine already exists: `.jaiph/ensure_ci_passes.jh` sets `JAIPH_E2E_SKIP_DOCKER=1` and `e2e/test_all.sh` skips Docker-daemon scripts (basename `*docker_*` / `*_docker` / `docker_*`, plus `E2E_DOCKER_DAEMON_SCRIPTS` for names like `148_standalone_image`). That skip is **not** an acceptable end state.
 
-Problem: The skip is a quarantine. Flaky scripts can still fail GH CI and any local `npm run test:e2e` without the skip. Agents previously “fixed” flakes by patching `src/runtime/docker.ts` with probe retries — that is the wrong fix.
+Problem: The e2e harness is brittle under normal Desktop load (silent `>/dev/null` redirects, `ancestor=` filters that miss `Created`, no EXIT cleanup of `jaiph-run-*`). Agents must fix the **tests/helpers**, not paper over flakes in production `docker.ts` with probe retries. Host contention (orphan processes, pegged Docker VM) can amplify failures — clean the machine, then prove the suite is deterministic.
 
 **Agent instructions (mandatory):**
-- You **may temporarily keep or widen** `JAIPH_E2E_SKIP_DOCKER` / the daemon-script skip list so overnight `ensure_ci_passes` stays unblocked while you work — that is allowed CI blocking / quarantine, not a substitute for fixing the tests.
-- Do **not** paper over flakes in production `docker.ts` without a unit test that proves a real product bug.
-- After hardening, **run the Docker e2e scripts several times** (at least **3** consecutive green passes of the previously flaky set on a quiet Docker Desktop — e.g. loop `72`, `74b`, `74c`, `74d`, `75`, `148_standalone_image`, or an equivalent focused runner). One green run is not enough. Document the command and pass count in the commit message.
-- Only then remove or narrow the engineer skip if the suite is stable enough; otherwise leave the skip and say why in the commit.
+- Goal: Docker e2e **works**. Do not treat the skip as the deliverable.
+- Do **not** weaken or remove assertions to make CI green. Do **not** lengthen production probe timeouts in `docker.ts` without a unit test that proves a real product bug.
+- While iterating, you may leave `JAIPH_E2E_SKIP_DOCKER` in place so overnight recover does not thrash — but the task is **not done** until that export is removed from `.jaiph/ensure_ci_passes.jh` (and docs updated).
+- After hardening, run the Docker e2e set **at least 3 consecutive times** green on a quiet Docker Desktop (e.g. loop `72`, `74b`–`74d`, `75`, `148_standalone_image`, or full `npm run test:e2e` with Docker available). One green run is not enough. Put the exact command and pass count in the commit message.
 
 Remediation: Harden the Docker-daemon e2e scripts and helpers:
 
@@ -32,14 +32,15 @@ Remediation: Harden the Docker-daemon e2e scripts and helpers:
 2. Wait for the named `jaiph-run-*` container (include `Created`→`Running`), not a shared `ancestor=` filter alone.
 3. Between cases (and on EXIT), `docker rm -f` leftover `jaiph-run-*` / probe containers from that test.
 4. Replace brittle wall-clock-only assertions (prepull line, live-sample race) with bounded retries or event-based waits; keep the SIGINT orphan-container contract.
-5. Keep the explicit daemon-script skip list complete for any script that needs the Docker daemon but lacks `docker` in its basename.
+5. Keep `E2E_DOCKER_DAEMON_SCRIPTS` complete for any daemon script that lacks `docker` in its basename (needed for the skip *while* you work; still required for accurate skip targeting).
 
 ### Acceptance criteria
 - Previously silent `jaiph run … >/dev/null 2>&1` then file-assert paths (e.g. abs-runs in `72`) print stderr on failure; a test fails if that silent pattern is reintroduced for those cases.
 - `74b_docker_signal_cleanup.sh` waits on the scenario container by name (or equivalent) and treats `Created` as appeared.
 - EXIT/trap cleanup removes `jaiph-run-*` leftovers for the test; running the hardened scripts twice back-to-back on a quiet daemon does not fail on leftover state.
-- **Evidence:** at least **3** consecutive green runs of the hardened Docker e2e set on Docker Desktop (commands + counts in the commit message).
-- `npm run build` and `npm test` pass. Full `npm run test:e2e` with Docker available either passes or still uses a documented, minimal skip with rationale.
+- **`.jaiph/ensure_ci_passes.jh` no longer exports `JAIPH_E2E_SKIP_DOCKER=1`**; `docs/contributing.md` no longer describes overnight engineer as permanently skipping Docker e2e.
+- **Evidence:** at least **3** consecutive green runs of the Docker e2e set (or full `npm run test:e2e` with Docker) on a quiet Desktop; commands + counts in the commit message.
+- `npm run build` and `npm test` pass.
 
 ## Clear peer CLI slice baseline edges #dev-ready
 
