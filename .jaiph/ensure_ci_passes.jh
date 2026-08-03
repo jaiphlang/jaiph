@@ -11,11 +11,13 @@ script npm_run_test_ci = ```
 while IFS= read -r _v; do
   unset "$_v" 2>/dev/null || true
 done < <(compgen -e | grep '^JAIPH_' || true)
-# Engineer/overnight loops run on Docker Desktop under host load; the Docker
-# e2e cluster (72/74*/75/…) is load-flaky there and traps the recover agent in
-# speculative docker.ts patches. Skip those scripts locally — GH Actions still
-# runs the full suite (does not set this). See e2e/test_all.sh.
-export JAIPH_E2E_SKIP_DOCKER=1
+# The Docker-daemon e2e cluster (72/74*/75/148/…) is now hardened against
+# Docker Desktop load flakes (named-container waits, EXIT cleanup of leftover
+# jaiph-run-* containers, stderr surfaced on failure — see e2e/lib/common.sh
+# and the guards in src/runtime/docker.test.ts), so the overnight loop runs the
+# full suite. Do NOT re-add JAIPH_E2E_SKIP_DOCKER here to dodge a flake; fix the
+# harness (waits/cleanup) instead. The JAIPH_E2E_SKIP_DOCKER escape hatch still
+# exists in e2e/test_all.sh for ad-hoc no-Docker local runs.
 exec npm run test:ci
 ```
 
@@ -53,9 +55,11 @@ workflow ensure_ci_passes() {
           expectations, or removal of obsolete features.
         - Any test change must be minimal with a clear rationale.
         - Do NOT add speculative fixes. Fix only what the log shows is broken.
-        - Do NOT patch src/runtime/docker.ts or Docker e2e scripts to paper
-          over load flakes; this loop sets JAIPH_E2E_SKIP_DOCKER=1 and skips
-          Docker-named e2e. Full Docker e2e is owned by GitHub Actions.
+        - Do NOT lengthen src/runtime/docker.ts probe timeouts to paper over
+          Docker Desktop load flakes; fix the e2e harness instead (named
+          jaiph-run container waits, EXIT cleanup of leftover containers,
+          surface stderr on failure). Full Docker e2e is required here and in
+          GitHub Actions.
       </task>
     """
   }

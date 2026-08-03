@@ -1207,6 +1207,22 @@ test("test_all.sh: E2E_DOCKER_DAEMON_SCRIPTS covers every daemon script lacking 
   );
 });
 
+test("ensure_ci_passes.jh: overnight loop does not skip Docker e2e (no JAIPH_E2E_SKIP_DOCKER export)", () => {
+  // The Docker-daemon e2e scripts are hardened (named-container waits, EXIT
+  // cleanup, stderr surfacing), so the overnight engineer loop must run the
+  // full suite. A reintroduced `export JAIPH_E2E_SKIP_DOCKER=…` here would
+  // silently re-quarantine required Docker coverage from the recover loop.
+  const src = readFileSync(
+    join(REPO_ROOT, ".jaiph", "ensure_ci_passes.jh"),
+    "utf8",
+  );
+  assert.ok(
+    !/export\s+JAIPH_E2E_SKIP_DOCKER\b/.test(src),
+    ".jaiph/ensure_ci_passes.jh must NOT export JAIPH_E2E_SKIP_DOCKER — the " +
+      "overnight loop runs the hardened Docker e2e suite, not a skip",
+  );
+});
+
 test("buildDockerArgs: only forwards env vars matching allowlist", () => {
   const opts = defaultOpts({
     env: {
