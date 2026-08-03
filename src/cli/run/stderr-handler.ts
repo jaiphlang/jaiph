@@ -225,7 +225,7 @@ export function registerTTYSubscriber(emitter: RunEmitter, ctx: TTYContext): voi
       ? `${dimPrefix}${colorize(`! ${safeMessage}`, "red", ctx.colorEnabled)}`
       : logEvent.type === "LOGWARN"
         ? `${dimPrefix}${colorize(`\u26a0 ${safeMessage}`, "yellow", ctx.colorEnabled)}`
-        : `${dimPrefix}${colorize("ℹ", "dim", ctx.colorEnabled)} ${safeMessage}`;
+        : `${dimPrefix}${colorize(`ℹ ${safeMessage}`, "blue", ctx.colorEnabled)}`;
     writeTTYLine(logLabel, ctx);
   });
 

@@ -79,6 +79,16 @@ test("colorize: wraps text with red ANSI code when enabled", () => {
   assert.equal(result, "\u001b[31mhello\u001b[0m");
 });
 
+test("colorize: wraps text with yellow ANSI code when enabled", () => {
+  const result = colorize("hello", "yellow", true);
+  assert.equal(result, "\u001b[33mhello\u001b[0m");
+});
+
+test("colorize: wraps text with blue ANSI code when enabled", () => {
+  const result = colorize("hello", "blue", true);
+  assert.equal(result, "\u001b[34mhello\u001b[0m");
+});
+
 // === formatCompletedLine ===
 
 test("formatCompletedLine: shows green checkmark for success (no color)", () => {

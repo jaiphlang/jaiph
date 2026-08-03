@@ -84,3 +84,35 @@ test("registerTTYSubscriber: stderr_line renders immediately in TTY mode", () =>
   const output = writes.join("");
   assert.equal(output, "jaiph docker: taking a point-in-time snapshot of the workspace before startup\n");
 });
+
+test("registerTTYSubscriber: LOG is blue, LOGWARN yellow, LOGERR red when color enabled", () => {
+  const emitter = createRunEmitter();
+  const ctx: TTYContext = {
+    isTTY: true,
+    colorEnabled: true,
+    startedAt: Date.now(),
+    runningInterval: undefined,
+    nonTTYHeartbeatInterval: undefined,
+    nonTTYHeartbeatStep: null,
+  };
+  const writes: string[] = [];
+  const originalWrite = process.stdout.write.bind(process.stdout);
+  (process.stdout.write as unknown as (chunk: string) => boolean) = ((chunk: string | Uint8Array) => {
+    writes.push(typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf8"));
+    return true;
+  }) as unknown as typeof process.stdout.write;
+
+  try {
+    registerTTYSubscriber(emitter, ctx);
+    emitter.emit("log", { type: "LOG", message: "info", depth: 1, async_indices: [] });
+    emitter.emit("log", { type: "LOGWARN", message: "warn", depth: 1, async_indices: [] });
+    emitter.emit("log", { type: "LOGERR", message: "err", depth: 1, async_indices: [] });
+  } finally {
+    (process.stdout.write as unknown as typeof process.stdout.write) = originalWrite as typeof process.stdout.write;
+  }
+
+  const output = writes.join("");
+  assert.match(output, /\u001b\[34mℹ info\u001b\[0m/);
+  assert.match(output, /\u001b\[33m⚠ warn\u001b\[0m/);
+  assert.match(output, /\u001b\[31m! err\u001b\[0m/);
+});
