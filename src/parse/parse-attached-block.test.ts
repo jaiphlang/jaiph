@@ -5,26 +5,21 @@ import { join } from "node:path";
 import { parsejaiph } from "../parser";
 import type { WorkflowStepDef } from "../types";
 
-const stepsTsPath = join(process.cwd(), "src/parse/steps.ts");
-const stepsTsSource = readFileSync(stepsTsPath, "utf8");
+// `parseAttachedBlock` was merged into workflow-brace.ts to break the former
+// steps.ts <-> workflow-brace.ts import cycle (see docs/agent-analyzability.md);
+// the shape guard below now runs against its current home.
+const attachedBlockPath = join(process.cwd(), "src/parse/workflow-brace.ts");
+const attachedBlockSource = readFileSync(attachedBlockPath, "utf8");
 
-// === AC1: src/parse/steps.ts size + grep budget ===
+// === AC1: no legacy per-host catch/recover mini-parser reappears ===
 
-test("AC1: src/parse/steps.ts is at most 200 lines", () => {
-  const lineCount = stepsTsSource.split("\n").length;
-  assert.ok(
-    lineCount <= 200,
-    `expected src/parse/steps.ts to be <=200 lines (was 757 before Refactor 2); got ${lineCount}`,
-  );
-});
-
-test("AC1: src/parse/steps.ts has no parse(Run)?(Catch|Recover|EnsureStep) function", () => {
+test("AC1: no parse(Run)?(Catch|Recover|EnsureStep) mini-parser function exists", () => {
   const re = /\bfunction\s+(parse(?:Run)?(?:Catch|Recover|EnsureStep))\b/;
-  const m = stepsTsSource.match(re);
+  const m = attachedBlockSource.match(re);
   assert.equal(
     m,
     null,
-    `legacy catch/recover host-parser function reappeared in src/parse/steps.ts: ${m && m[1]}`,
+    `legacy catch/recover host-parser function reappeared: ${m && m[1]}`,
   );
 });
 

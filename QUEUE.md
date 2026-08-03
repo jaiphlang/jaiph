@@ -14,24 +14,6 @@ Process rules:
 
 ***
 
-## Break the three baselined circular dependencies #dev-ready
-
-Context: `docs/agent-analyzability.md` requires an acyclic import graph. `npm run arch:check` (dependency-cruiser, `.dependency-cruiser.cjs`) enforces `no-circular` as error, but three cycles are grandfathered in `.dependency-cruiser-known-violations.json` and ignored via `--ignore-known`. Cycles force agents to load both sides' implementations and break the "file + direct deps' interfaces" invariant.
-
-Problem: These production cycles are still live:
-
-- `src/cli/serve/handler.ts` ↔ `src/cli/serve/run-store.ts`
-- `src/cli/telemetry/otlp.ts` ↔ `src/cli/telemetry/sentry.ts`
-- `src/parse/steps.ts` ↔ `src/parse/workflow-brace.ts`
-
-Remediation: Break each cycle by extracting a shared helper, inverting a dependency, or moving the shared type/function into a third module that both may import. Do not weaken `no-circular`. After the cycles are gone, remove those three entries from `.dependency-cruiser-known-violations.json` (or regenerate a smaller baseline). Prefer the smallest structural change that preserves behaviour.
-
-### Acceptance criteria
-- `npm run arch:check` with `--no-ignore-known` (or an equivalent depcruise invocation that does not use the baseline) reports zero `no-circular` violations among the three former cycle pairs; a colocated/integration test fails if any of those three edges reappear as a cycle.
-- Those three cycle entries are absent from `.dependency-cruiser-known-violations.json`.
-- `npm run arch:check` (normal CI script) still exits 0.
-- `npm run build` and `npm test` pass; serve/telemetry/parse behaviour covered by existing tests remains green.
-
 ## Allow commands→slice wiring; ban peer CLI slice imports #dev-ready
 
 Context: `docs/agent-analyzability.md` isolates CLI slices `commands`, `run`, `serve`, `mcp`, `exec`, `telemetry`. The rule `no-cross-cli-slice-imports` in `.dependency-cruiser.cjs` forbids any cross-slice private import. In practice most of the 36 baselined hits are composition-root wiring: `src/cli/commands/*` launching `run` / `serve` / `mcp` / `exec` / `telemetry`. Peer-slice coupling (e.g. `serve` → `mcp`, `exec` → `run`) is the real analyzability problem.
@@ -168,3 +150,26 @@ Remediation — design (implement exactly this; do **not** add winston/pino/buny
 - Default (workflow mirror off): workflow `log "hi"` does not appear on the operator sink; with the documented env opt-in, it does appear, colorized by level when `colorEnabled`, and includes async subscript indent when `async_indices` is non-empty; tests cover both.
 - Mirrored / operator lines never contain a fixture credential value that journal redaction would strip (reuse or extend an existing redaction test pattern).
 - `npm run build` and `npm test` pass; `npm run arch:check` still exits 0 (shared logger lives under `src/cli/shared`, no new peer-slice edges).
+
+## Harden Docker Desktop e2e (72/74*/75) reliability #dev-ready
+
+Context: Overnight `ensure_ci_passes` was trapped for hours by load-flaky Docker e2e on Docker Desktop (`72_docker_run_artifacts`, `74b`–`74d`, `74c` prepull, `75_docker_live_step_output`): unit tests green, rotating Docker FAILs, `jaiph-run-*` containers left in `Created`, agents patching `src/runtime/docker.ts` with probe retries. Mitigation already landed: `.jaiph/ensure_ci_passes.jh` exports `JAIPH_E2E_SKIP_DOCKER=1` and `e2e/test_all.sh` skips scripts whose basename contains `docker`. GitHub Actions still runs the full Docker suite.
+
+Problem: The skip is a quarantine, not a fix. The Docker e2e scripts remain unreliable on a busy Docker Desktop VM: they swallow stderr (`>/dev/null 2>&1` then assert files), race on `docker ps` (misses `Created`), share ancestor image filters, and use tight wall-clock contracts.
+
+Remediation: Harden the Docker-named e2e scripts (and helpers) so they are deterministic enough to re-enable under engineer CI later:
+
+1. On failure, always surface `jaiph run` / `docker` stderr (never assert artifacts after a silent redirect without dumping the log).
+2. Wait for the named `jaiph-run-*` container (include `Created`→`Running`), not a shared `ancestor=` filter alone.
+3. Between cases (and on EXIT), `docker rm -f` leftover `jaiph-run-*` / probe containers from that test.
+4. Replace brittle wall-clock-only assertions (prepull line, live-sample race) with bounded retries or event-based waits; keep SIGINT orphan-container contract.
+5. Do **not** paper over flakes by lengthening production probe timeouts in `docker.ts` without a failing unit test that proves a product bug.
+6. When green cold + under moderate load, optionally stop setting `JAIPH_E2E_SKIP_DOCKER` in `ensure_ci_passes.jh` (or document why GH-only remains correct).
+
+### Acceptance criteria
+- `72_docker_run_artifacts.sh` (and any sibling still using silent `jaiph run … >/dev/null 2>&1` before file asserts) prints the run's stderr on failure; a colocated/e2e assertion fails if that path is reintroduced for the abs-runs case.
+- `74b_docker_signal_cleanup.sh` waits on the scenario's container by name (or equivalent) and treats `Created` as "appeared"; "never appeared" cannot fire solely because the container was not yet `Running`.
+- A test helper or trap removes `jaiph-run-*` leftovers for the current test image/name prefix on EXIT; running the signal-cleanup script twice back-to-back on a quiet Docker Desktop does not fail on leftover state from the first run.
+- `npm run test:e2e` with Docker available passes `72`, `74b`, `74c`, `74d`, `75` on a quiet machine (document any intentional remaining skip).
+- No unexplained production probe-retry sprawl in `docker.ts` without a unit test that fails when the bug returns.
+- `npm run build` and `npm test` pass.

@@ -20,6 +20,7 @@ import { VERSION } from "../../version";
 import { postWithTimeout } from "./http";
 import { verifyRunJournal } from "../../runtime";
 import { reportRunFailureToSentry } from "./sentry";
+import type { ExportRunTelemetryOptions, ExportOutcome } from "./types";
 
 /** Metadata the pure mapper needs beyond the journal lines themselves. */
 export interface OtlpMeta {
@@ -307,25 +308,8 @@ function postOtlp(
   );
 }
 
-/** Options for the shared post-run export hook. */
-export interface ExportRunTelemetryOptions {
-  /** Absolute host run directory; its `run_summary.jsonl` is the export source. */
-  runDir?: string;
-  workflow: string;
-  exitStatus: number;
-  signal: string | null;
-  env: NodeJS.ProcessEnv;
-  /**
-   * Authenticated caller identity for a `jaiph serve` run: surfaced as OTLP
-   * resource attributes (`jaiph.principal`, `jaiph.correlation_id`) and Sentry
-   * tags. Absent for `jaiph run` / anonymous callers. Never a token or a
-   * secret-bearing claim.
-   */
-  identity?: { principal?: string; correlationId?: string };
-}
-
-/** Per-exporter delivery result — `sent`, `skipped` (disabled/no data), or `failed`. */
-export type ExportOutcome = "sent" | "skipped" | "failed";
+// The shared export-hook types live in a leaf module so `sentry.ts` can import
+// them without cycling back through `otlp.ts` (which imports sentry's value).
 
 /** Default total flush budget (ms) shared by the concurrent exporters. */
 const DEFAULT_FLUSH_BUDGET_MS = 10_000;
