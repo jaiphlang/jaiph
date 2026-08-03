@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFileSync, readdirSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { RunRecord, RunStatus } from "./handler";
+import type { RunRecord, RunStatus } from "./types";
 import { RUN_SUMMARY } from "./runfiles";
 import { verifyRunJournal } from "../../runtime";
 

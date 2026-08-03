@@ -857,4 +857,39 @@ describe("arch:check dependency-cruiser guard", () => {
       `these production files cross-import another CLI slice but are not baselined: ${offenders.join(", ")}`,
     );
   });
+
+  it("AC26: the three former cycles are gone from src/ and no no-circular edge is baselined", () => {
+    // Run the committed config on the real tree WITHOUT the baseline, so every
+    // real cycle surfaces (the `--ignore-known` CI script would hide them). The
+    // three former pairs — serve handler<->run-store, telemetry otlp<->sentry,
+    // parse steps<->workflow-brace — must produce zero `no-circular` violations.
+    const { output } = depcruise(repoRoot, [
+      "src",
+      "--config",
+      configPath,
+      "--output-type",
+      "err",
+    ]);
+    assert.doesNotMatch(
+      output,
+      /no-circular/,
+      `a circular dependency is present in src/:\n${output}`,
+    );
+
+    // The remediation removes the entries, not just the runtime edges: a cycle
+    // must never be merely tracked in the baseline again.
+    const baseline = JSON.parse(readFileSync(baselinePath, "utf8")) as Array<{
+      rule: { name: string };
+      from: string;
+      to: string;
+    }>;
+    const cycles = baseline.filter((v) => v.rule.name === "no-circular");
+    assert.deepEqual(
+      cycles,
+      [],
+      `no-circular violations must be fixed, not baselined: ${cycles
+        .map((v) => `${v.from} -> ${v.to}`)
+        .join(", ")}`,
+    );
+  });
 });

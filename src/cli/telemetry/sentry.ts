@@ -22,7 +22,7 @@ import { basename, join } from "node:path";
 import { VERSION } from "../../version";
 import { postWithTimeout } from "./http";
 import { verifyRunJournal } from "../../runtime";
-import type { ExportOutcome, ExportRunTelemetryOptions } from "./otlp";
+import type { ExportOutcome, ExportRunTelemetryOptions } from "./types";
 
 /** Default hard cap on the envelope POST when no flush budget is supplied. */
 const SEND_TIMEOUT_MS = 10_000;
