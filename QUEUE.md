@@ -13,3 +13,158 @@ Process rules:
 7. **Acceptance criteria are non-negotiable.** A task is not done until every acceptance bullet is verified by a test that fails when the contract is violated. "It works on my machine" or "the existing tests pass" is not acceptance.
 
 ***
+
+## Break the three baselined circular dependencies #dev-ready
+
+Context: `docs/agent-analyzability.md` requires an acyclic import graph. `npm run arch:check` (dependency-cruiser, `.dependency-cruiser.cjs`) enforces `no-circular` as error, but three cycles are grandfathered in `.dependency-cruiser-known-violations.json` and ignored via `--ignore-known`. Cycles force agents to load both sides' implementations and break the "file + direct deps' interfaces" invariant.
+
+Problem: These production cycles are still live:
+
+- `src/cli/serve/handler.ts` ↔ `src/cli/serve/run-store.ts`
+- `src/cli/telemetry/otlp.ts` ↔ `src/cli/telemetry/sentry.ts`
+- `src/parse/steps.ts` ↔ `src/parse/workflow-brace.ts`
+
+Remediation: Break each cycle by extracting a shared helper, inverting a dependency, or moving the shared type/function into a third module that both may import. Do not weaken `no-circular`. After the cycles are gone, remove those three entries from `.dependency-cruiser-known-violations.json` (or regenerate a smaller baseline). Prefer the smallest structural change that preserves behaviour.
+
+### Acceptance criteria
+- `npm run arch:check` with `--no-ignore-known` (or an equivalent depcruise invocation that does not use the baseline) reports zero `no-circular` violations among the three former cycle pairs; a colocated/integration test fails if any of those three edges reappear as a cycle.
+- Those three cycle entries are absent from `.dependency-cruiser-known-violations.json`.
+- `npm run arch:check` (normal CI script) still exits 0.
+- `npm run build` and `npm test` pass; serve/telemetry/parse behaviour covered by existing tests remains green.
+
+## Allow commands→slice wiring; ban peer CLI slice imports #dev-ready
+
+Context: `docs/agent-analyzability.md` isolates CLI slices `commands`, `run`, `serve`, `mcp`, `exec`, `telemetry`. The rule `no-cross-cli-slice-imports` in `.dependency-cruiser.cjs` forbids any cross-slice private import. In practice most of the 36 baselined hits are composition-root wiring: `src/cli/commands/*` launching `run` / `serve` / `mcp` / `exec` / `telemetry`. Peer-slice coupling (e.g. `serve` → `mcp`, `exec` → `run`) is the real analyzability problem.
+
+Problem: The rule treats command orchestration the same as peer-feature coupling, so CI ignores 36 edges and the ratchet does not bite where it should.
+
+Remediation: Change `.dependency-cruiser.cjs` so that:
+
+1. Imports from `src/cli/commands/` into other slices remain allowed (commands is the composition root).
+2. Peer-slice private imports among `run`, `serve`, `mcp`, `exec`, `telemetry` remain forbidden (same-slice and `src/cli/shared/**` still allowed).
+3. Fix or relocate remaining peer edges that are not composition-root (move shared types/helpers into `src/cli/shared`, or route through lower-layer public entries). Remove cleared edges from `.dependency-cruiser-known-violations.json`.
+4. Update `docs/agent-analyzability.md` CLI-slice section to state that `commands` may import slices, but slices must not import each other.
+
+Do not delete the isolation rule; reshape it.
+
+### Acceptance criteria
+- A test asserts `src/cli/commands/` → `src/cli/run/` (or similar) is allowed under the committed rules.
+- A test asserts a peer-slice import (e.g. fixture `src/cli/serve/` → `src/cli/mcp/` private path, or an existing peer edge if still forbidden until fixed) fails `arch:check` / depcruise when not baselined.
+- After this task, `.dependency-cruiser-known-violations.json` contains zero `no-cross-cli-slice-imports` entries that originate from `src/cli/commands/`; remaining baseline entries (if any) are only true peer-slice leftovers with count reported in the commit message.
+- `docs/agent-analyzability.md` documents the commands-as-composition-root exception.
+- `npm run arch:check`, `npm run build`, and `npm test` pass.
+
+## Clear peer CLI slice baseline edges #dev-ready
+
+Context: After reshaping CLI slice rules (or under the current `no-cross-cli-slice-imports` rule), peer-slice imports remain among `run`, `serve`, `mcp`, `exec`, `telemetry` and may still sit on `.dependency-cruiser-known-violations.json`. Known production peer edges include `serve/handler|server|openapi|types` → `mcp/*` and `exec/call` → `run/*` / `telemetry/*`.
+
+Problem: Baselined peer-slice imports permanently couple features and force agents to load multiple CLI folders for one change.
+
+Remediation: Eliminate peer-slice private imports by moving shared contracts into `src/cli/shared` (or lower layers) and retargeting call sites. Prefer extracting small shared modules over widening public barrels. Remove the corresponding baseline entries. Do not weaken severity. If the composition-root exception for `commands/` is not yet in the depcruise config, implement that exception as part of this task so command→slice edges are not mistaken for peer edges.
+
+### Acceptance criteria
+- `npm run arch:check --` equivalent with `--no-ignore-known` reports zero `no-cross-cli-slice-imports` violations (or only edges explicitly allowed by the commands-composition-root rule).
+- `.dependency-cruiser-known-violations.json` has zero `no-cross-cli-slice-imports` entries.
+- A regression test fails if a new peer-slice private import is introduced (e.g. synthetic `serve` → `mcp` fixture).
+- `npm run build` and `npm test` pass.
+
+## Expose runtime test seams on the public entry; clear deep-runtime baseline #dev-ready
+
+Context: `no-deep-imports-into-runtime` bans imports of `src/runtime/**` other than `src/runtime/index.ts` from outside the package. Twelve leftover violations in `.dependency-cruiser-known-violations.json` are all **test** files piercing internals (`_dockerExec`, `docker-inplace`, `emit`, `RuntimeEventEmitter`, `node-workflow-runner`, `graph`). Production call sites already use the public entry.
+
+Problem: Agents debugging via tests still load private runtime paths; the baseline hides ongoing deep imports.
+
+Remediation: Re-export the minimal test seams needed by cross-package tests from `src/runtime/index.ts` (or a dedicated `src/runtime/testing.ts` that is itself allowlisted as a second public entry in `.dependency-cruiser.cjs` — prefer one documented entry). Retarget every baselined test import to that surface. Remove all `no-deep-imports-into-runtime` entries from the baseline. Do not put production-only internals on the public surface without need; keep the seam set small and named.
+
+Also clear the two layer-violation test edges if still present: `src/parse/parse-error-snapshot.test.ts` → `src/transpile/module-graph.ts` and `src/transpile/module-graph.test.ts` → `src/runtime/kernel/graph.ts` (retarget through public entries or move assertions so tests do not import upward).
+
+### Acceptance criteria
+- `.dependency-cruiser-known-violations.json` has zero `no-deep-imports-into-runtime` entries.
+- Zero production or test files outside `src/runtime/` import `src/runtime/**` except the documented public entry path(s); enforced by depcruise (not only by baseline).
+- The two upward test layer violations above are gone from the baseline and do not recur under `--no-ignore-known`.
+- `npm run arch:check`, `npm run build`, and `npm test` pass.
+
+## Collapse transpile to a single public entry #dev-ready
+
+Context: `docs/agent-analyzability.md` and `.dependency-cruiser.cjs` currently allow two external doors into compile: `src/transpiler.ts` and `src/transpile/module-graph.ts` (runtime allowlist). Dual entries weaken the "one contract per package" mental model for agents.
+
+Problem: Callers can bypass `src/transpiler.ts` and import `module-graph.ts` directly; deep-import rules special-case that path.
+
+Remediation: Re-export the full module-graph API (`loadModuleGraph`, `readModuleGraph`, `writeModuleGraph`, `ModuleGraph` types, etc.) from `src/transpiler.ts` if not already complete. Retarget every outside import of `src/transpile/module-graph.ts` (including runtime) to `src/transpiler.ts`. Tighten `.dependency-cruiser.cjs`: remove the `module-graph.ts` `pathNot` exceptions from `no-deep-imports-into-transpile` and `layer3-runtime-only-transpile-public-graph` so runtime may import only `src/transpiler.ts` from the transpile package. Update the ADR table/allowlisted-exception prose to match. Do not star-export the whole transpile tree.
+
+### Acceptance criteria
+- No file outside `src/transpile/` imports `src/transpile/module-graph.ts` (grep or depcruise test).
+- Runtime → transpile edges only target `src/transpiler.ts`; a test fails if runtime imports any other `src/transpile/**` path.
+- `docs/agent-analyzability.md` states a single transpile public entry (`src/transpiler.ts`).
+- `npm run arch:check`, `npm run build`, and `npm test` pass.
+
+## Split hotspot files and drop ESLint grandfather overrides #dev-ready
+
+Context: `docs/agent-analyzability.md` caps production files at ≤8 runtime imports and ≤400 lines (`eslint.config.mjs`, `npm run lint`). The hottest units are grandfathered with per-file overrides — including `src/runtime/kernel/node-workflow-runtime.ts`, `src/transpile/validate-step.ts`, `src/runtime/docker.ts`, `src/runtime/kernel/prompt.ts`, `src/cli/commands/run.ts`, `src/cli/serve/handler.ts`, `src/parse/workflow-brace.ts`, `src/format/emit.ts`, and others listed in `eslint.config.mjs`.
+
+Problem: Caps do not apply where agents pay the most context cost. The ADR invariant stays aspirational for the hot path.
+
+Remediation: Split the grandfathered files into sibling modules in the same directory (per factory `code_philosophy`: prefer siblings, not deeper trees). After each file meets both caps without an override, delete its override block from `eslint.config.mjs`. Do not raise global max. You may land this as multiple commits within the task, but the task is not done until every override under the "Grandfathered violators" section is removed or the commit message lists any remaining override with a fresh justification and a follow-up is explicitly out of scope — prefer removing all of them. Keep public entries curated (no `export *` of the whole package).
+
+### Acceptance criteria
+- `eslint.config.mjs` contains no per-file override that turns off `import/max-dependencies` or `max-lines` for the previously grandfathered paths (or a test enumerates the grandfather section and asserts it is empty / absent).
+- `npm run lint` exits 0.
+- Every former grandfathered production file is ≤400 non-blank/non-comment lines and ≤8 runtime imports under the global rules (spot-checked by lint).
+- `npm run build` and `npm test` pass; behaviour preserved.
+
+## Refresh agent-analyzability ADR to match landed enforcement #dev-ready
+
+Context: `docs/agent-analyzability.md` still contains stale "queued in QUEUE.md" / "still planned" wording from the rollout (e.g. deep-import work described as queued; `arch:graph` called planned). Enforcement status has moved on: parse/transpile/format/runtime deep imports, CLI slice rules, docs summary/size guards, and factory `code_philosophy` are live. `QUEUE.md` may be empty or hold only newer follow-ups.
+
+Problem: Agents reading the ADR get a wrong picture of what CI already enforces versus what remains open.
+
+Remediation: Edit `docs/agent-analyzability.md` so Status / Enforcement / Landed sections accurately describe current CI scripts, rules, baseline policy, and remaining known gaps (cycles, CLI peer slices, ESLint hotspots, dual transpile entry — only those still true at edit time). Remove claims that work is "queued in QUEUE.md" unless a matching task header still exists. Keep the summary-first lead. Do not invent new rules in this task; documentation parity only. Optionally add `arch:graph` script if Graphviz is acceptable as optional/dev-only; otherwise document it as optional and skip wiring.
+
+### Acceptance criteria
+- A test (grep or docs-structure sibling) fails if `docs/agent-analyzability.md` still claims deep-import enforcement is merely "queued in QUEUE.md" while the corresponding depcruise rules already exist in `.dependency-cruiser.cjs`.
+- The ADR Enforcement table matches the scripts in `package.json` (`arch:check`, `lint`) and does not promise unbuilt gates.
+- `integration/docs-structure.test.ts` summary/size guards still pass for this page.
+- No behaviour/code changes beyond docs (and optional `arch:graph` script).
+
+## Operator logging for mcp / serve (no winston) #dev-ready
+
+Context: `jaiph run` prints a TTY banner (`Jaiph: Running <file> (<sandbox>)`) and colorizes workflow `log` / `logwarn` / `logerr` with depth indent and parallel subscripts (`buildAsyncIndent`). `jaiph mcp` and `jaiph serve` already have an ad-hoc `log: (line: string) => void` that writes to **stderr** (startup posture via `logStartupPosture`, serve invoke/cancel lines, crashes). They do **not** emit a per-call "Running … rundir=…" line, do not mirror workflow log events to the operator channel, and do not share level/color formatting. Protocol channels must stay clean: MCP **stdout** is JSON-RPC only; HTTP response bodies are API payloads.
+
+Problem: An operator watching `jaiph mcp` / `jaiph serve` cannot see which workflow started, under which sandbox posture, or where artifacts live, without digging into `.jaiph/runs`. Adding winston/pino would pull a logging framework into a package that deliberately has one runtime dependency (`jose`) and already solved "write a line to stderr."
+
+Remediation — design (implement exactly this; do **not** add winston/pino/bunyan):
+
+1. **Two channels, never mixed into protocol**
+   - **Operator log** → stderr only (existing sink). Lifecycle + per-call banners + optional workflow-log mirror.
+   - **Workflow log events** (`LOG` / `LOGWARN` / `LOGERR`) stay in `run_summary.jsonl` and in `callWorkflow`'s collected result text (unchanged contract). Mirroring them to the operator log is opt-in.
+   - Never write operator diagnostics to MCP stdout or into HTTP JSON/SSE payloads.
+
+2. **Tiny shared logger in `src/cli/shared/`** (e.g. `server-log.ts`), not a new dependency
+   - API shape roughly: `createServerLog({ label: "jaiph mcp" | "jaiph serve", write, colorEnabled })` with `info` / `warn` / `error` (and `debug` gated by `JAIPH_SERVER_LOG=debug` or equivalent).
+   - Default format: one line, grep-friendly `key=value` tails — e.g. `jaiph serve: Running engineer (Docker sandbox, unsafe) run_id=… rundir=…`.
+   - Colors only when the sink is a TTY and `NO_COLOR` is unset; reuse `colorize` (move to `src/cli/shared/` if needed so `run` / mcp / serve do not create a peer-slice import). Levels: info→blue (or plain), warn→yellow, error→red. No colors in non-TTY / CI.
+   - Replace bare `(line) => process.stderr.write(...)` wiring in `commands/mcp.ts` and `commands/serve.ts` with this helper; keep the injectable `log` seam for tests.
+
+3. **Per-call operator lines (required)**
+   - On every `callWorkflow` start (mcp tool call and serve run): one info line naming workflow (or entry basename), effective sandbox label (same vocabulary as `formatJaiphRunningBannerLines` / `logStartupPosture`: snapshot / in-place / unsafe / no sandbox), `run_id=…`, and `rundir=…` when known.
+   - Under Docker, rundir may appear only after discovery — emit start without rundir (or `rundir=pending`), then one follow-up info line when `runDir` is resolved; do not spam.
+   - On call end: one line with terminal status (`ok` / `failed` / `cancelled`), `exit=…`, `elapsed_ms=…`, and `rundir=…` when known.
+   - Serve may keep principal/correlation on these lines (already partially logged at invoke/cancel); mcp omits principal or uses `-`. Collapse duplicate invoke lines so start is not logged twice.
+
+4. **Optional workflow-log mirror (verbosity)**
+   - Default: do **not** mirror every workflow `log` to stderr (avoids drowning MCP hosts and duplicating tool-result text).
+   - When `JAIPH_SERVER_LOG_WORKFLOW=1` (name may be adjusted but must be documented in `docs/env-vars.md`): mirror LOG/LOGWARN/LOGERR to the operator log with level colors, `run_id=`, and the same depth / `async_indices` subscript indent as TTY (`buildAsyncIndent` — move or share from a place both `run` and `exec` may use without peer-slice violations).
+   - Credential redaction: mirrored lines must use the same redaction boundary as durable journal / call results (never print raw secrets on stderr).
+
+5. **Docs**
+   - Document the operator-log contract and env knobs in `docs/cli.md` (mcp/serve sections) and `docs/env-vars.md`.
+   - Explicitly state: not winston; stderr-only; protocol channels untouched.
+
+### Acceptance criteria
+- No new npm dependency for logging (package.json `dependencies` still only what was there aside from unrelated changes); a test or review note fails the task if winston/pino/etc. is added for this feature.
+- With a captured stderr `log` sink, starting a mcp or serve workflow call emits a line matching `/Running .*\(.*\).*run_id=/` (sandbox label present) and a terminal end line with status + elapsed; a unit/integration test fails if either line is missing.
+- When rundir is known by end of call, the end line (or a dedicated follow-up) includes `rundir=`; test covers host mode at minimum.
+- MCP stdout under a tool call contains only JSON-RPC (no `Running` / ANSI banner leakage); test asserts operator lines appear on the log sink, not on the write/stdout channel.
+- Default (workflow mirror off): workflow `log "hi"` does not appear on the operator sink; with the documented env opt-in, it does appear, colorized by level when `colorEnabled`, and includes async subscript indent when `async_indices` is non-empty; tests cover both.
+- Mirrored / operator lines never contain a fixture credential value that journal redaction would strip (reuse or extend an existing redaction test pattern).
+- `npm run build` and `npm test` pass; `npm run arch:check` still exits 0 (shared logger lives under `src/cli/shared`, no new peer-slice edges).
