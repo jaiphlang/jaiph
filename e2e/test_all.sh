@@ -132,13 +132,27 @@ SKIP_COUNT=0
 # recover agent. GitHub Actions does not set this; full Docker e2e remains
 # required there. Match `*_docker_*` / `*_docker` / `docker_*` basenames so
 # static Dockerfile checks (e.g. 09_dockerfile_fetch_verify) still run.
+# A few Docker-daemon scripts don't carry "docker" in their basename (e.g.
+# 148_standalone_image builds and runs a real container); list them explicitly
+# so they skip too instead of trapping the recover agent on daemon flakes.
+E2E_DOCKER_DAEMON_SCRIPTS=(
+  "140_env_passthrough"
+  "148_standalone_image"
+)
 e2e::skip_docker_script() {
   case "${JAIPH_E2E_SKIP_DOCKER:-}" in
     1|true|TRUE|yes|YES) ;;
     *) return 1 ;;
   esac
   local script_name="$1"
-  [[ "${script_name}" == *docker_* || "${script_name}" == *_docker || "${script_name}" == docker_* ]]
+  if [[ "${script_name}" == *docker_* || "${script_name}" == *_docker || "${script_name}" == docker_* ]]; then
+    return 0
+  fi
+  local daemon_script
+  for daemon_script in "${E2E_DOCKER_DAEMON_SCRIPTS[@]}"; do
+    [[ "${script_name}" == "${daemon_script}" ]] && return 0
+  done
+  return 1
 }
 
 e2e::section "Suite setup"

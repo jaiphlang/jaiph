@@ -20,7 +20,12 @@ const LAYER4 = "^src/(cli/|cli\\.ts$)";
 // CLI slice isolation: these vertical slices must not import each other's
 // private files. Cross-slice reuse goes through src/cli/shared/** or lower-layer
 // public entries. See docs/agent-analyzability.md "CLI slice isolation".
+// `commands` is the composition root: it wires the other slices together, so it
+// is allowed to import them. CLI_PEER_SLICE (commands excluded) is the set of
+// slices that must NOT import each other — peer coupling is the real
+// analyzability problem the rule targets.
 const CLI_SLICE = "^src/cli/(commands|run|serve|mcp|exec|telemetry)/";
+const CLI_PEER_SLICE = "^src/cli/(run|serve|mcp|exec|telemetry)/";
 
 module.exports = {
   forbidden: [
@@ -106,9 +111,9 @@ module.exports = {
     {
       name: "no-cross-cli-slice-imports",
       comment:
-        "CLI slices (commands/run/serve/mcp/exec/telemetry) are vertical features that must not import each other's private files. Cross-slice reuse goes through src/cli/shared/** or a lower-layer public entry. The $1 backreference lets same-slice imports through: to.pathNot excludes the slice captured in from.path.",
+        "Peer CLI slices (run/serve/mcp/exec/telemetry) are vertical features that must not import each other's private files. Cross-slice reuse goes through src/cli/shared/** or a lower-layer public entry. `commands` is the composition root and is deliberately absent from `from` (CLI_PEER_SLICE): it may import any slice to wire them together. The $1 backreference lets same-slice imports through: to.pathNot excludes the slice captured in from.path.",
       severity: "error",
-      from: { path: CLI_SLICE },
+      from: { path: CLI_PEER_SLICE },
       to: { path: CLI_SLICE, pathNot: "^src/cli/$1/" },
     },
     {

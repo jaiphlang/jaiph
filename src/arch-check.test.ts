@@ -756,12 +756,13 @@ describe("arch:check dependency-cruiser guard", () => {
     );
   });
 
-  it("AC24: a cross-CLI-slice private import (commands -> serve) is an error; same-slice and slice -> shared pass", () => {
-    // Failing case: a file in the commands slice reaches into serve's private tree.
+  it("AC24: a peer-slice private import (serve -> mcp) is an error; commands -> a slice, same-slice, and slice -> shared pass", () => {
+    // Failing case: a peer slice (serve) reaches into another peer's (mcp)
+    // private tree. Peer coupling is the analyzability problem the rule targets.
     const bad = makeFixture({
-      "src/cli/commands/x.ts":
-        'import { y } from "../serve/handler";\nexport const x = y;\n',
-      "src/cli/serve/handler.ts": "export const y = 1;\n",
+      "src/cli/serve/x.ts":
+        'import { y } from "../mcp/server";\nexport const x = y;\n',
+      "src/cli/mcp/server.ts": "export const y = 1;\n",
     });
     try {
       const { status, output } = depcruise(bad, [
@@ -771,17 +772,42 @@ describe("arch:check dependency-cruiser guard", () => {
         "--output-type",
         "err",
       ]);
-      assert.notEqual(status, 0, "a cross-slice private import must fail");
+      assert.notEqual(status, 0, "a peer-slice private import must fail");
       assert.match(output, /no-cross-cli-slice-imports/);
     } finally {
       rmSync(bad, { recursive: true, force: true });
     }
 
+    // Passing case: `commands` is the composition root, so it may import another
+    // slice's private tree to wire it up. This must NOT fail the rule.
+    const root = makeFixture({
+      "src/cli/commands/x.ts":
+        'import { y } from "../run/lifecycle";\nexport const x = y;\n',
+      "src/cli/run/lifecycle.ts": "export const y = 1;\n",
+    });
+    try {
+      const { status, output } = depcruise(root, [
+        "src",
+        "--config",
+        configPath,
+        "--output-type",
+        "err",
+      ]);
+      assert.equal(
+        status,
+        0,
+        "commands -> another slice (composition root) must pass",
+      );
+      assert.doesNotMatch(output, /no-cross-cli-slice-imports/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+
     // Passing case: same-slice imports and imports of src/cli/shared/** stay allowed.
     const good = makeFixture({
-      "src/cli/commands/x.ts":
+      "src/cli/serve/x.ts":
         'import { y } from "./sibling";\nimport { s } from "../shared/util";\nexport const x = y + s;\n',
-      "src/cli/commands/sibling.ts": "export const y = 1;\n",
+      "src/cli/serve/sibling.ts": "export const y = 1;\n",
       "src/cli/shared/util.ts": "export const s = 2;\n",
     });
     try {
@@ -816,6 +842,10 @@ describe("arch:check dependency-cruiser guard", () => {
     );
 
     const slices = ["commands", "run", "serve", "mcp", "exec", "telemetry"];
+    // `commands` is the composition root: it wires the peer slices together, so
+    // it may import any of them. Only peer slices are barred from importing each
+    // other (matches CLI_PEER_SLICE in .dependency-cruiser.cjs).
+    const peerSlices = slices.filter((s) => s !== "commands");
     const srcDir = join(repoRoot, "src");
     const files: string[] = [];
     const walk = (dir: string): void => {
@@ -830,8 +860,9 @@ describe("arch:check dependency-cruiser guard", () => {
     };
     walk(join(srcDir, "cli"));
 
-    // A cross-slice import from a file in slice X is `from "../<Y>/..."` with
-    // Y a different slice. Imports of ../shared/** or ./same-slice are allowed.
+    // A cross-slice import from a file in peer slice X is `from "../<Y>/..."`
+    // with Y a different slice. Imports of ../shared/** or ./same-slice are
+    // allowed; imports from `commands` (the composition root) are always allowed.
     const offenders: string[] = [];
     for (const abs of files) {
       const rel = abs.slice(repoRoot.length + 1);
@@ -839,7 +870,7 @@ describe("arch:check dependency-cruiser guard", () => {
         continue;
       }
       const fromSlice = rel.match(/^src\/cli\/([^/]+)\//)?.[1];
-      if (!fromSlice || !slices.includes(fromSlice)) continue;
+      if (!fromSlice || !peerSlices.includes(fromSlice)) continue;
       const text = readFileSync(abs, "utf8");
       const crossSlice = new RegExp(
         `from\\s+["']\\.\\.\\/(${slices.filter((s) => s !== fromSlice).join("|")})\\/[^"']+["']`,
@@ -890,6 +921,36 @@ describe("arch:check dependency-cruiser guard", () => {
       `no-circular violations must be fixed, not baselined: ${cycles
         .map((v) => `${v.from} -> ${v.to}`)
         .join(", ")}`,
+    );
+  });
+
+  it("AC27: no no-cross-cli-slice-imports baseline entry originates from src/cli/commands/ (commands is the composition root)", () => {
+    const baseline = JSON.parse(readFileSync(baselinePath, "utf8")) as Array<{
+      rule: { name: string };
+      from: string;
+      to: string;
+    }>;
+    const slice = baseline.filter(
+      (v) => v.rule.name === "no-cross-cli-slice-imports",
+    );
+    const fromCommands = slice.filter((v) =>
+      v.from.startsWith("src/cli/commands/"),
+    );
+    assert.deepEqual(
+      fromCommands,
+      [],
+      `commands is the composition root and may import any slice, so no such edge should be baselined: ${fromCommands
+        .map((v) => `${v.from} -> ${v.to}`)
+        .join(", ")}`,
+    );
+
+    // The remaining baselined edges are genuine peer-slice feature composition
+    // (serve mounts mcp/exec; exec reuses run/telemetry). Report the count so a
+    // growing set of peer leftovers stays visible in test output.
+    console.log(
+      `cross-CLI-slice peer leftovers: ${slice.length} (${slice
+        .map((v) => `${v.from} -> ${v.to}`)
+        .join(", ")})`,
     );
   });
 });
