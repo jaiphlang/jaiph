@@ -8,7 +8,7 @@ import {
   parseRunTimeoutSeconds,
 } from "../run/lifecycle";
 import { collectEntryBackends } from "../run/preflight-credentials";
-import { parseLogEvent, parseStepEvent, type StepEvent } from "../run/events";
+import { parseLogEvent, parseStepEvent, type StepEvent, type LogEvent } from "../run/events";
 import {
   spawnDockerProcess,
   stopDockerContainer,
@@ -40,6 +40,7 @@ export async function callWorkflowHost(
   caps: OutputCaps,
   onStepEvent: (event: StepEvent) => void,
   ctx?: WorkflowCallContext,
+  onLogEvent?: (event: LogEvent) => void,
 ): Promise<WorkflowCallResult> {
   runtimeEnv.JAIPH_MODULE_GRAPH_FILE = env.graphFile;
   // `--env` passthrough defines the workflow process's env, overriding
@@ -59,7 +60,7 @@ export async function callWorkflowHost(
   // `jaiph serve` / `jaiph mcp` calls, so an over-budget call is terminated
   // without a manual signal.
   const runTimeout = armRunTimeout(child, parseRunTimeoutSeconds(runtimeEnv));
-  const collector = attachOutputCollector(child, onStepEvent, caps);
+  const collector = attachOutputCollector(child, onStepEvent, caps, onLogEvent);
   const exit = await waitForRunExit(child);
   runTimeout.cancel();
   collector.drain();
@@ -85,6 +86,7 @@ export async function callWorkflowDocker(
   caps: OutputCaps,
   onStepEvent: (event: StepEvent) => void,
   ctx?: WorkflowCallContext,
+  onLogEvent?: (event: LogEvent) => void,
 ): Promise<WorkflowCallResult> {
   // Posture (Docker enablement + sandbox mode) was resolved once at server
   // startup; the call applies it verbatim rather than re-deriving from env.
@@ -109,7 +111,7 @@ export async function callWorkflowDocker(
     stopDockerContainer(dockerResult.containerName);
     cancelRunProcess(dockerResult.child);
   });
-  const collector = attachOutputCollector(dockerResult.child, onStepEvent, caps);
+  const collector = attachOutputCollector(dockerResult.child, onStepEvent, caps, onLogEvent);
   return withDockerExitGuard(dockerResult, async () => {
     const exit = await waitForRunExit(dockerResult.child);
     collector.drain();
@@ -133,12 +135,16 @@ export async function callWorkflowDocker(
  * `__JAIPH_EVENT__` log/step lines from stderr (child stdout is captured but
  * never forwarded). `onStepEvent` (when given) fires once per parsed
  * `STEP_START`/`STEP_END` event with the full event so the caller can stream
- * progress and dispatch hooks. `drain()` flushes any trailing partial stderr line.
+ * progress and dispatch hooks. `onLogEvent` (when given) fires once per parsed
+ * LOG/LOGWARN/LOGERR event so the operator log can mirror it — independent of
+ * the byte-capped `data.logs` accumulation below. `drain()` flushes any trailing
+ * partial stderr line.
  */
 export function attachOutputCollector(
   child: ChildProcess,
   onStepEvent: ((event: StepEvent) => void) | undefined,
   caps: OutputCaps,
+  onLogEvent?: (event: LogEvent) => void,
 ): { data: CollectedOutput; drain: () => void } {
   const data: CollectedOutput = { logs: [], rawStderr: "", rawStdout: "" };
   // Per-stream byte counters + one-shot "cut" flags so accumulation stops at the
@@ -154,6 +160,7 @@ export function attachOutputCollector(
   const onStderrLine = (line: string): void => {
     const logEvent = parseLogEvent(line);
     if (logEvent) {
+      onLogEvent?.(logEvent);
       if (!logsCut) {
         const b = Buffer.byteLength(logEvent.message);
         if (logsBytes + b <= caps.logs) {

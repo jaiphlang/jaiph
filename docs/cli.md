@@ -316,6 +316,17 @@ Flags that belong to another command (for example `--raw` or `--port`) are usage
 
 From the moment the server starts, **stdout carries only newline-delimited JSON-RPC**. Every banner, warning, workflow-exclusion notice, reload message, Docker notice, and credential-pre-flight warning goes to **stderr**. Each outbound protocol message is a single atomic write of `JSON.stringify(msg) + "\n"`.
 
+### Operator log (stderr)
+
+`jaiph mcp` and `jaiph serve` write an **operator log to stderr only**. They never write it to the protocol channel, so MCP stdout stays JSON-RPC and HTTP response bodies stay API payloads. The operator log is **not** a logging framework, and Jaiph adds no winston, pino, or bunyan for it. It is a thin labelled writer that prints one line at a time to stderr and reuses the same level and color formatting as the `jaiph run` progress tree. Colors are used only when the stderr sink is a terminal and `NO_COLOR` is unset.
+
+On every tool call or run the operator log writes two lines. The start line names the workflow, the sandbox label, and the run id, for example `jaiph mcp: Running <workflow> (<sandbox label>) run_id=…`. The sandbox label uses the same words as the startup banner, which are snapshot, in-place, unsafe, and no sandbox. The end line reports the terminal status, the exit code, the elapsed time, and the run dir when it is known, for example `jaiph mcp: Finished <workflow> status=ok exit=0 elapsed_ms=… rundir=…`. On `jaiph serve` both lines also carry `principal=` and `correlation=`.
+
+You can change how much the operator log prints with two environment variables, both documented in [Environment variables](env-vars.md):
+
+- `JAIPH_SERVER_LOG=debug` prints the servers' extra `debug` diagnostic lines.
+- `JAIPH_SERVER_LOG_WORKFLOW=1` mirrors each workflow `log`, `logwarn`, and `logerr` event to the operator log. Each mirrored line is colored by level and carries `run_id=` and the same depth and async-branch subscript indent as the run tree. Mirroring is off by default, so an MCP host is not flooded and the tool-result text is not repeated. Mirrored lines go through the same credential redaction as the durable run journal, so a secret is never printed to stderr.
+
 ### Protocol subset
 
 Newline-delimited JSON-RPC 2.0. Requests are handled concurrently (a long `tools/call` never stalls `ping` or further calls).
@@ -387,7 +398,7 @@ jaiph serve [--host <addr>] [--port <n>] [--workspace <dir>] [--allow-anonymous]
 
 Flags that belong to another command (for example `--raw` or `--target`) are usage errors naming the owning command — never silently ignored. Precedence across layers is the shared execution-policy order: CLI flags > `JAIPH_*` env vars > workflow config metadata > defaults (see [Environment variables — Precedence](env-vars.md#precedence)).
 
-Startup mirrors `jaiph mcp`: graph load + `collectDiagnostics` (diagnostics to stderr, exit `1`), one-time Docker image preparation, credential pre-flight as warnings, and a sandbox-posture notice. All logs go to stderr; one startup line prints the listen URL and the `/docs` URL.
+Startup mirrors `jaiph mcp`: graph load + `collectDiagnostics` (diagnostics to stderr, exit `1`), one-time Docker image preparation, credential pre-flight as warnings, and a sandbox-posture notice. All logs go to stderr; one startup line prints the listen URL and the `/docs` URL. Per-run operator lines (a start line `Running … run_id=` and an end line `Finished … status=… elapsed_ms=…`) and the optional workflow-log mirror follow the same stderr-only operator-log contract as `jaiph mcp`, and HTTP response bodies stay API payloads. See [Operator log (stderr)](#operator-log-stderr) above, and `JAIPH_SERVER_LOG` and `JAIPH_SERVER_LOG_WORKFLOW` in [Environment variables](env-vars.md).
 
 ### Endpoints
 

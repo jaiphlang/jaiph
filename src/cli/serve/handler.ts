@@ -165,9 +165,9 @@ export class ServeHandler {
       correlation_id: correlationId || undefined,
     };
     this.runs.set(runId, record);
-    this.opts.log?.(
-      `jaiph serve: run ${runId} invoked — principal=${principal.subject} correlation=${correlationId || "-"} workflow=${spec.workflow}`,
-    );
+    // The per-call start banner (workflow, sandbox posture, run_id, principal,
+    // correlation) is emitted once by `callWorkflow` through the operator log,
+    // so it is not logged again here — otherwise the start would appear twice.
     const ctx: WorkflowCallContext = {
       onStep: extra?.onStep,
       // Identity for the detached telemetry export (OTLP resource attrs + Sentry

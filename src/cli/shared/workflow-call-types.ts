@@ -3,6 +3,7 @@ import type { jaiphModule } from "../../types";
 import type { SandboxFlags } from "../run/env";
 import type { MergedHookConfig } from "../run/hooks";
 import type { DockerRunConfig, SandboxMode } from "../../runtime";
+import type { OperatorLog } from "./server-log";
 
 // Shared type surface and output-cap primitives for the workflow-call executor.
 // Kept in a dependency-free leaf so the orchestrator (`workflow-call.ts`) and
@@ -44,6 +45,12 @@ export interface WorkflowCallContext {
   principal?: string;
   /** Request/correlation id, attached to the run's telemetry identity. */
   correlationId?: string;
+  /**
+   * Operator-log wiring for per-call banner lines + the optional workflow-log
+   * mirror. Injected by the command layer (`jaiph mcp` / `jaiph serve`); the
+   * run handler and MCP engine never see it.
+   */
+  operator?: OperatorLog;
 }
 
 /**

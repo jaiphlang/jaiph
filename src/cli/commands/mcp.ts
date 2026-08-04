@@ -4,6 +4,7 @@ import { createInterface } from "node:readline";
 import { McpServer } from "../shared/mcp-server";
 import { callWorkflow } from "../shared/workflow-call";
 import { parseServerArgs, startGeneration, startReloadWatcher } from "../shared/serve-bootstrap";
+import { createOperatorLog } from "../shared/server-log";
 import { VERSION } from "../../version";
 
 const MCP_USAGE =
@@ -44,6 +45,17 @@ export async function runMcp(rest: string[]): Promise<number> {
   const ctx = started.ctx;
   const { generations, posture, inputAbs, log } = ctx;
 
+  // Operator log (stderr only, never MCP stdout): per-call banners + optional
+  // workflow-log mirror, over the same injectable `log` sink used for lifecycle
+  // lines. The sandbox label is resolved once from the startup posture.
+  const operator = createOperatorLog({
+    label: "jaiph mcp",
+    write: log,
+    dockerEnabled: posture.dockerConfig.enabled,
+    sandboxMode: posture.sandboxMode,
+    unsafeHostOnly: posture.unsafeHostOnly,
+  });
+
   const server = new McpServer({
     serverVersion: VERSION,
     getTools: () => generations.current().tools,
@@ -57,7 +69,7 @@ export async function runMcp(rest: string[]): Promise<number> {
         spec.workflow,
         spec.params.map((p) => args[p] ?? ""),
         randomUUID(),
-        callCtx,
+        { ...callCtx, operator },
       ).finally(() => lease.release());
     },
     write: (message) => {

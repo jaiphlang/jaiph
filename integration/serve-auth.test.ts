@@ -281,9 +281,11 @@ test("jaiph serve OIDC: capabilities are separate, runs are per-principal, and i
     assert.equal(cancelDenied.status, 403);
     assert.equal((await cancelDenied.json()).error.code, "E_FORBIDDEN");
 
-    // Audit: invoke is logged with the principal, and the raw JWT never appears.
+    // Audit: invoke is logged with the principal on the operator start banner
+    // (the collapsed per-call line: `Running <wf> (<sandbox>) run_id=… principal=…`),
+    // and the raw JWT never appears.
     const logged = srv.stderr();
-    assert.match(logged, /invoked — principal=alice/, "invoke is audited with the acting principal");
+    assert.match(logged, /Running .*\(.*\).*run_id=.*principal=alice/, "invoke is audited with the acting principal");
     assert.ok(!logged.includes(aliceTok), "the audit log never contains the bearer token");
   } finally {
     await srv.close();
