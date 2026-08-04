@@ -12,7 +12,7 @@ import {
   TRUNCATION_MARKER,
   type CollectedOutput,
   type OutputCaps,
-} from "./call";
+} from "./workflow-call";
 
 const SECRET = "supersecretvalue123";
 const ENV: NodeJS.ProcessEnv = { LEAK_API_KEY: SECRET };

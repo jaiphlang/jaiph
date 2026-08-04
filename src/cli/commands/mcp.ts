@@ -7,8 +7,8 @@ import { createInterface } from "node:readline";
 import { detectWorkspaceRoot } from "../shared/paths";
 import { hasHelpFlag, parseArgs } from "../shared/usage";
 import { resolveEnvPairs } from "../run/env";
-import { McpServer } from "../mcp/server";
-import { callWorkflow } from "../exec/call";
+import { McpServer } from "../shared/mcp-server";
+import { callWorkflow } from "../shared/workflow-call";
 import {
   loadGeneration,
   createGenerationTracker,

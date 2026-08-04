@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { Validator } from "@seriousme/openapi-schema-validator";
 import { parsejaiph } from "../../parser";
-import { deriveTools, type McpToolSpec } from "../mcp/tools";
+import { deriveTools, type McpToolSpec } from "../shared/mcp-tools";
 import { buildOpenApi } from "./openapi";
 
 const FILE = "/ws/tools.jh";

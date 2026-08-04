@@ -1,4 +1,4 @@
-import type { McpToolSpec } from "../mcp/tools";
+import type { McpToolSpec } from "../shared/mcp-tools";
 
 /** Identity of the server, embedded in `info`. */
 export interface OpenApiServerInfo {

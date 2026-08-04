@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { errText } from "../../errors";
-import type { McpToolSpec } from "./tools";
+import type { McpToolSpec } from "./mcp-tools";
 
 /**
  * Minimal MCP server over newline-delimited JSON-RPC 2.0.

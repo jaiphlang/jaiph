@@ -6,7 +6,7 @@ import { detectWorkspaceRoot } from "../shared/paths";
 import { findRunDir } from "../shared/errors";
 import { hasHelpFlag, parseArgs } from "../shared/usage";
 import { resolveEnvPairs } from "../run/env";
-import { callWorkflow, type OutputCaps } from "../exec/call";
+import { callWorkflow, type OutputCaps } from "../shared/workflow-call";
 import {
   loadGeneration,
   createGenerationTracker,

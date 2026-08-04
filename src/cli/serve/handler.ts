@@ -3,9 +3,9 @@ import { errText } from "../../errors";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { statSync } from "node:fs";
 import { basename, join } from "node:path";
-import type { McpToolSpec } from "../mcp/tools";
-import { McpServer, type McpCallContext } from "../mcp/server";
-import type { WorkflowCallResult, WorkflowCallContext } from "../exec/call";
+import type { McpToolSpec } from "../shared/mcp-tools";
+import { McpServer, type McpCallContext } from "../shared/mcp-server";
+import type { WorkflowCallResult, WorkflowCallContext } from "../shared/workflow-call";
 import { buildOpenApi } from "./openapi";
 import {
   DOCS_HTML,

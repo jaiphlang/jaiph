@@ -4,8 +4,8 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
-import { loadGeneration } from "../shared/generation";
-import { callWorkflow, type ExecutionPosture } from "./call";
+import { loadGeneration } from "./generation";
+import { callWorkflow, type ExecutionPosture } from "./workflow-call";
 
 /**
  * AC2: the parent-enforced wall-clock timeout (`JAIPH_RUN_TIMEOUT`) shared with

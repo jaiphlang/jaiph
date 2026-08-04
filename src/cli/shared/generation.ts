@@ -16,8 +16,8 @@ import {
 import { resolveRuntimeEnv, applySandboxFlags, isUnsafeHostOnly, type SandboxFlags } from "../run/env";
 import { preflightAgentCredentials } from "../run/preflight-credentials";
 import { loadMergedHooks, isProjectHooksTrusted } from "../run/hooks";
-import { deriveTools, type McpToolSpec } from "../mcp/tools";
-import type { WorkflowCallEnvironment } from "../exec/call";
+import { deriveTools, type McpToolSpec } from "./mcp-tools";
+import type { WorkflowCallEnvironment } from "./workflow-call";
 
 /** How often `watchFile` polls module sources for hot reload (ms). */
 export const WATCH_INTERVAL_MS = 750;

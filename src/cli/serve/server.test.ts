@@ -11,8 +11,8 @@ import { createHttpServer, listen, readBody } from "./server";
 import { ServeHandler } from "./handler";
 import { CHAIN_GENESIS, chainHmac, writeChainKey } from "../../runtime/kernel/emit";
 import { RuntimeEventEmitter } from "../../runtime/kernel/runtime-event-emitter";
-import type { McpToolSpec } from "../mcp/tools";
-import type { WorkflowCallResult } from "../exec/call";
+import type { McpToolSpec } from "../shared/mcp-tools";
+import type { WorkflowCallResult } from "../shared/workflow-call";
 
 const NOARG_TOOL: McpToolSpec = {
   name: "ping",

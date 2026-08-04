@@ -65,8 +65,8 @@ export default [
     rules: { "import/max-dependencies": "off" },
   },
   {
-    // High fan-out: exec/call spans transpile + runtime graph APIs.
-    files: ["src/cli/exec/call.ts"],
+    // High fan-out: the workflow-call executor spans transpile + runtime graph APIs.
+    files: ["src/cli/shared/workflow-call.ts"],
     rules: { "import/max-dependencies": "off" },
   },
   {
