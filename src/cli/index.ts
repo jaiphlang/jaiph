@@ -2,14 +2,16 @@ import { existsSync } from "node:fs";
 import { errText } from "../errors";
 import { resolve } from "node:path";
 import { printUsage } from "./shared/usage";
-import { runWorkflow } from "./commands/run";
-import { runTest } from "./commands/test";
-import { runInit } from "./commands/init";
-import { runUse } from "./commands/use";
-import { runFormat } from "./commands/format";
-import { runInstall } from "./commands/install";
-import { runCompile } from "./commands/compile";
-import { runMcp } from "./commands/mcp";
+import {
+  runWorkflow,
+  runTest,
+  runInit,
+  runUse,
+  runFormat,
+  runInstall,
+  runCompile,
+  runMcp,
+} from "./commands/entries";
 import { runWorkflowRunner, WORKFLOW_RUNNER_ARG } from "../runtime";
 import { VERSION } from "../version";
 

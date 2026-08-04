@@ -51,6 +51,18 @@ import { tmpdir } from "node:os";
 import { join, resolve, relative } from "node:path";
 import { execFileSync } from "node:child_process";
 
+/**
+ * The Docker driver source. `docker.ts` is a facade re-exporting four sibling
+ * modules (docker-config / docker-image / docker-sandbox / docker-run), so the
+ * source-contract assertions below read the whole driver rather than just the
+ * facade.
+ */
+function dockerDriverSource(): string {
+  return ["docker.ts", "docker-config.ts", "docker-image.ts", "docker-sandbox.ts", "docker-run.ts"]
+    .map((f) => readFileSync(join(__dirname, f), "utf8"))
+    .join("\n");
+}
+
 /** Shared temp workspace for buildDockerArgs tests. */
 const TEST_WS = mkdtempSync(join(tmpdir(), "jaiph-test-ws-"));
 const TEST_SANDBOX = mkdtempSync(join(tmpdir(), "jaiph-test-sandbox-"));
@@ -340,7 +352,7 @@ test("resolveDockerConfig: win32 forces host-only mode, notice once, zero docker
 });
 
 test("checkDockerAvailable: E_DOCKER_NOT_FOUND message mentions JAIPH_UNSAFE", () => {
-  const src = readFileSync(join(__dirname, "docker.ts"), "utf8");
+  const src = dockerDriverSource();
   assert.ok(
     src.includes("JAIPH_UNSAFE=true to run on the host"),
     "E_DOCKER_NOT_FOUND must mention JAIPH_UNSAFE escape hatch",
@@ -789,7 +801,7 @@ test("resolveDockerHostRunsRoot: rejects absolute path outside workspace", () =>
 // ---------------------------------------------------------------------------
 
 test("spawnDockerProcess: stdin ignored, stdout+stderr piped for events", () => {
-  const src = readFileSync(join(__dirname, "docker.ts"), "utf8");
+  const src = dockerDriverSource();
   assert.ok(
     src.includes('["ignore", "pipe", "pipe"]'),
     "spawnDockerProcess must use stdio: [\"ignore\", \"pipe\", \"pipe\"]",
@@ -833,7 +845,7 @@ test("GHCR_IMAGE_REPO: points to official registry", () => {
 // ---------------------------------------------------------------------------
 
 test("docker.ts: no auto-build or npm-pack bootstrap code", () => {
-  const src = readFileSync(join(__dirname, "docker.ts"), "utf8");
+  const src = dockerDriverSource();
   assert.ok(!src.includes("npm pack"), "docker.ts must not contain npm pack");
   assert.ok(!src.includes("npm install -g"), "docker.ts must not contain npm install -g");
   assert.ok(!src.includes("jaiph-runtime-auto"), "docker.ts must not reference auto-derived image tag");
@@ -851,7 +863,7 @@ test("verifyImageHasJaiph: throws E_DOCKER_NO_JAIPH with guidance for missing ja
   // Unit-test the error message structure without running Docker.
   // verifyImageHasJaiph uses imageHasJaiph internally which spawns Docker,
   // so we test the error message format by checking the source contract.
-  const src = readFileSync(join(__dirname, "docker.ts"), "utf8");
+  const src = dockerDriverSource();
   assert.ok(src.includes("E_DOCKER_NO_JAIPH"), "verifyImageHasJaiph must use E_DOCKER_NO_JAIPH error code");
   assert.ok(src.includes(GHCR_IMAGE_REPO), "error message must reference official GHCR image");
 });
@@ -1045,7 +1057,7 @@ test("docker exec seam: timed calls default to killSignal SIGKILL (probe hang fi
   // Contract test: execFileSync must not use the default SIGTERM — Docker
   // Desktop's CLI can ignore SIGTERM while a container sits in Created, and
   // Node then waits forever past `timeout`.
-  const src = readFileSync(join(__dirname, "docker.ts"), "utf8");
+  const src = dockerDriverSource();
   assert.ok(
     /killSignal:\s*["']SIGKILL["']/.test(src),
     "_dockerExec must default killSignal to SIGKILL",
