@@ -1,26 +1,17 @@
-import { existsSync, mkdtempSync, rmSync, statSync } from "node:fs";
+import { basename } from "node:path";
 import { errText } from "../../errors";
-import { tmpdir } from "node:os";
-import { basename, dirname, extname, join, resolve } from "node:path";
-import { detectWorkspaceRoot } from "../shared/paths";
 import { findRunDir } from "../shared/errors";
-import { hasHelpFlag, parseArgs } from "../shared/usage";
-import { resolveEnvPairs } from "../run/env";
 import { callWorkflow, type OutputCaps } from "../shared/workflow-call";
+import { parseServerArgs, startGeneration, startReloadWatcher } from "../shared/serve-bootstrap";
 import {
-  loadGeneration,
-  createGenerationTracker,
-  createSourceWatcher,
-  resolveStartupPosture,
-  logStartupPosture,
-  WATCH_INTERVAL_MS,
-  type GenerationTracker,
-  type StartupPosture,
-} from "../shared/generation";
-import { ServeHandler } from "../serve/handler";
-import { createAuthenticator, type AuthConfig } from "../serve/auth";
-import { loadPersistedRuns, persistRunRecord } from "../serve/run-store";
-import { createHttpServer, listen } from "../serve/server";
+  ServeHandler,
+  createAuthenticator,
+  loadPersistedRuns,
+  persistRunRecord,
+  createHttpServer,
+  listen,
+  type AuthConfig,
+} from "../serve";
 import { VERSION } from "../../version";
 
 const DEFAULT_HOST = "127.0.0.1";
@@ -111,41 +102,10 @@ function isLoopbackHost(host: string): boolean {
 }
 
 export async function runServe(rest: string[]): Promise<number> {
-  if (hasHelpFlag(rest)) {
-    process.stdout.write(SERVE_USAGE);
-    return 0;
-  }
-  let parsed: ReturnType<typeof parseArgs>;
-  try {
-    parsed = parseArgs(rest, "serve");
-  } catch (err) {
-    process.stderr.write(`${errText(err)}\n`);
-    return 1;
-  }
-  const { workspace, env, positional, host: hostArg, port: portArg, inplace, unsafe, yes, allowAnonymous } = parsed;
-  const sandboxFlags = { inplace, unsafe, yes };
-  const input = positional[0];
-  if (!input) {
-    process.stderr.write("jaiph serve requires a .jh file path\n");
-    return 1;
-  }
-  let extraEnv: Record<string, string>;
-  try {
-    extraEnv = resolveEnvPairs(env, process.env);
-  } catch (err) {
-    process.stderr.write(`${errText(err)}\n`);
-    return 1;
-  }
-  const inputAbs = resolve(input);
-  if (!existsSync(inputAbs) || !statSync(inputAbs).isFile() || extname(inputAbs) !== ".jh") {
-    process.stderr.write("jaiph serve expects a single .jh file\n");
-    return 1;
-  }
-  const workspaceRoot = workspace ? resolve(workspace) : detectWorkspaceRoot(dirname(inputAbs));
-  if (workspace && (!existsSync(workspaceRoot) || !statSync(workspaceRoot).isDirectory())) {
-    process.stderr.write(`--workspace path is not a directory: ${workspaceRoot}\n`);
-    return 1;
-  }
+  const pre = parseServerArgs("serve", rest, SERVE_USAGE);
+  if ("code" in pre) return pre.code;
+  const { parsed, log } = pre.args;
+  const { host: hostArg, port: portArg, allowAnonymous } = parsed;
 
   const host = hostArg ?? DEFAULT_HOST;
   const port = portArg === undefined ? DEFAULT_PORT : Number(portArg);
@@ -246,39 +206,14 @@ export async function runServe(rest: string[]): Promise<number> {
     resultText: maxOutputBytes,
   };
 
-  // All logs go to stderr — stdout stays clean for scripting.
-  const log = (line: string): void => {
-    process.stderr.write(`${line}\n`);
-  };
-
-  const tempRoot = mkdtempSync(join(tmpdir(), "jaiph-serve-"));
-  let generation = 0;
-  let generations: GenerationTracker;
-  try {
-    const loaded = loadGeneration(inputAbs, workspaceRoot, tempRoot, generation, extraEnv, log, "jaiph serve", sandboxFlags);
-    if (!loaded.state) {
-      for (const f of loaded.failures) log(f);
-      rmSync(tempRoot, { recursive: true, force: true });
-      return 1;
-    }
-    generations = createGenerationTracker(loaded.state);
-  } catch (err) {
-    log(errText(err));
-    rmSync(tempRoot, { recursive: true, force: true });
-    return 1;
-  }
-
-  let posture: StartupPosture;
-  let hostRunsRoot: string;
-  try {
-    posture = resolveStartupPosture(generations.current(), inputAbs, workspaceRoot, log);
-    hostRunsRoot = posture.hostRunsRoot;
-    logStartupPosture("jaiph serve", "runs", posture, workspaceRoot, log);
-  } catch (err) {
-    log(errText(err));
-    rmSync(tempRoot, { recursive: true, force: true });
-    return 1;
-  }
+  // Load generation 0 into a temp root and resolve the startup sandbox posture
+  // (the shared server prefix; auth/host/port/bounds above run first so an
+  // invalid config fails before any image is pulled).
+  const started = startGeneration(pre.args, "runs");
+  if ("code" in started) return started.code;
+  const ctx = started.ctx;
+  const { generations, posture, inputAbs, cleanup } = ctx;
+  const hostRunsRoot = posture.hostRunsRoot;
 
   // Track in-flight run promises so shutdown can drain them.
   const inFlightRuns = new Set<Promise<unknown>>();
@@ -344,29 +279,7 @@ export async function runServe(rest: string[]): Promise<number> {
 
   // Hot reload: swap the current generation; per-request OpenAPI + tool reads
   // pick it up with no cache to invalidate. Validation failures keep serving.
-  let reloading = false;
-  const onSourceChange = (): void => {
-    if (reloading) return;
-    reloading = true;
-    try {
-      generation += 1;
-      const loaded = loadGeneration(inputAbs, workspaceRoot, tempRoot, generation, extraEnv, log, "jaiph serve", sandboxFlags);
-      if (!loaded.state) {
-        log("jaiph serve: reload failed; keeping the previous workflows:");
-        for (const f of loaded.failures) log(`  ${f}`);
-        return;
-      }
-      generations.swap(loaded.state);
-      watcher.rewatch([...loaded.state.graph.modules.keys()]);
-      log(`jaiph serve: sources reloaded (${loaded.state.tools.length} workflow(s))`);
-    } catch (err) {
-      log(`jaiph serve: reload failed; keeping the previous workflows: ${errText(err)}`);
-    } finally {
-      reloading = false;
-    }
-  };
-  const watcher = createSourceWatcher(WATCH_INTERVAL_MS, onSourceChange);
-  watcher.rewatch([...generations.current().graph.modules.keys()]);
+  const watcher = startReloadWatcher(ctx, { reloaded: "workflow(s)", keepPrevious: "workflows" });
 
   const httpServer = createHttpServer(handler, log);
   let boundPort: number;
@@ -375,7 +288,7 @@ export async function runServe(rest: string[]): Promise<number> {
   } catch (err) {
     log(`jaiph serve: failed to listen on ${host}:${port}: ${errText(err)}`);
     watcher.stop();
-    rmSync(tempRoot, { recursive: true, force: true });
+    cleanup();
     return 1;
   }
 
@@ -405,7 +318,7 @@ export async function runServe(rest: string[]): Promise<number> {
       process.removeListener("SIGTERM", onSignal);
       watcher.stop();
       httpServer.close();
-      rmSync(tempRoot, { recursive: true, force: true });
+      cleanup();
       resolveExit(code);
     };
     const onSignal = (): void => {

@@ -1,24 +1,9 @@
-import { existsSync, mkdtempSync, rmSync, statSync } from "node:fs";
 import { errText } from "../../errors";
 import { randomUUID } from "node:crypto";
-import { tmpdir } from "node:os";
-import { dirname, extname, join, resolve } from "node:path";
 import { createInterface } from "node:readline";
-import { detectWorkspaceRoot } from "../shared/paths";
-import { hasHelpFlag, parseArgs } from "../shared/usage";
-import { resolveEnvPairs } from "../run/env";
 import { McpServer } from "../shared/mcp-server";
 import { callWorkflow } from "../shared/workflow-call";
-import {
-  loadGeneration,
-  createGenerationTracker,
-  createSourceWatcher,
-  resolveStartupPosture,
-  logStartupPosture,
-  WATCH_INTERVAL_MS,
-  type GenerationTracker,
-  type StartupPosture,
-} from "../shared/generation";
+import { parseServerArgs, startGeneration, startReloadWatcher } from "../shared/serve-bootstrap";
 import { VERSION } from "../../version";
 
 const MCP_USAGE =
@@ -52,83 +37,17 @@ const MCP_USAGE =
   "  claude mcp add mytools -- jaiph mcp ./tools.jh\n";
 
 export async function runMcp(rest: string[]): Promise<number> {
-  if (hasHelpFlag(rest)) {
-    process.stdout.write(MCP_USAGE);
-    return 0;
-  }
-  let parsed: ReturnType<typeof parseArgs>;
-  try {
-    parsed = parseArgs(rest, "mcp");
-  } catch (err) {
-    process.stderr.write(`${errText(err)}\n`);
-    return 1;
-  }
-  const { workspace, env, positional, inplace, unsafe, yes } = parsed;
-  const sandboxFlags = { inplace, unsafe, yes };
-  const input = positional[0];
-  if (!input) {
-    process.stderr.write("jaiph mcp requires a .jh file path\n");
-    return 1;
-  }
-  // `--env` pairs apply to every tool call for the server's lifetime; resolve
-  // (and bare-form host lookup / E_ENV_MISSING) once before the server starts.
-  let extraEnv: Record<string, string>;
-  try {
-    extraEnv = resolveEnvPairs(env, process.env);
-  } catch (err) {
-    process.stderr.write(`${errText(err)}\n`);
-    return 1;
-  }
-  const inputAbs = resolve(input);
-  if (!existsSync(inputAbs) || !statSync(inputAbs).isFile() || extname(inputAbs) !== ".jh") {
-    process.stderr.write("jaiph mcp expects a single .jh file\n");
-    return 1;
-  }
-  const workspaceRoot = workspace ? resolve(workspace) : detectWorkspaceRoot(dirname(inputAbs));
-  if (workspace && (!existsSync(workspaceRoot) || !statSync(workspaceRoot).isDirectory())) {
-    process.stderr.write(`--workspace path is not a directory: ${workspaceRoot}\n`);
-    return 1;
-  }
-
-  // stdout is the protocol channel from here on; every diagnostic goes to stderr.
-  const log = (line: string): void => {
-    process.stderr.write(`${line}\n`);
-  };
-
-  const tempRoot = mkdtempSync(join(tmpdir(), "jaiph-mcp-"));
-  let generation = 0;
-  let generations: GenerationTracker;
-  try {
-    const loaded = loadGeneration(inputAbs, workspaceRoot, tempRoot, generation, extraEnv, log, "jaiph mcp", sandboxFlags);
-    if (!loaded.state) {
-      for (const f of loaded.failures) log(f);
-      rmSync(tempRoot, { recursive: true, force: true });
-      return 1;
-    }
-    generations = createGenerationTracker(loaded.state);
-  } catch (err) {
-    log(errText(err));
-    rmSync(tempRoot, { recursive: true, force: true });
-    return 1;
-  }
-
-  // Resolve the sandbox posture once at startup (flags + env, `jaiph run`
-  // semantics: isolated snapshot by default, inplace/unsafe as explicit
-  // opt-ins). Every tool call applies this posture verbatim.
-  let posture: StartupPosture;
-  try {
-    posture = resolveStartupPosture(generations.current(), inputAbs, workspaceRoot, log);
-    logStartupPosture("jaiph mcp", "tool calls", posture, workspaceRoot, log);
-  } catch (err) {
-    log(errText(err));
-    rmSync(tempRoot, { recursive: true, force: true });
-    return 1;
-  }
+  const parsed = parseServerArgs("mcp", rest, MCP_USAGE);
+  if ("code" in parsed) return parsed.code;
+  const started = startGeneration(parsed.args, "tool calls");
+  if ("code" in started) return started.code;
+  const ctx = started.ctx;
+  const { generations, posture, inputAbs, log } = ctx;
 
   const server = new McpServer({
     serverVersion: VERSION,
     getTools: () => generations.current().tools,
-    callTool: (spec, args, ctx) => {
+    callTool: (spec, args, callCtx) => {
       // Bind the call to the generation live at start; the lease keeps its
       // scripts dir alive until the call settles (deleted then if superseded).
       const lease = generations.acquire();
@@ -138,7 +57,7 @@ export async function runMcp(rest: string[]): Promise<number> {
         spec.workflow,
         spec.params.map((p) => args[p] ?? ""),
         randomUUID(),
-        ctx,
+        callCtx,
       ).finally(() => lease.release());
     },
     write: (message) => {
@@ -152,30 +71,11 @@ export async function runMcp(rest: string[]): Promise<number> {
   // tracker deletes the superseded generation's scripts dir only once its last
   // in-flight call settles — a call started just before the reload still runs
   // its remaining script steps from the generation it captured at start.
-  let reloading = false;
-  const onSourceChange = (): void => {
-    if (reloading) return;
-    reloading = true;
-    try {
-      generation += 1;
-      const loaded = loadGeneration(inputAbs, workspaceRoot, tempRoot, generation, extraEnv, log, "jaiph mcp", sandboxFlags);
-      if (!loaded.state) {
-        log("jaiph mcp: reload failed; keeping the previous tool set:");
-        for (const f of loaded.failures) log(`  ${f}`);
-        return;
-      }
-      generations.swap(loaded.state);
-      watcher.rewatch([...loaded.state.graph.modules.keys()]);
-      server.notifyToolsChanged();
-      log(`jaiph mcp: sources reloaded (${loaded.state.tools.length} tool(s))`);
-    } catch (err) {
-      log(`jaiph mcp: reload failed; keeping the previous tool set: ${errText(err)}`);
-    } finally {
-      reloading = false;
-    }
-  };
-  const watcher = createSourceWatcher(WATCH_INTERVAL_MS, onSourceChange);
-  watcher.rewatch([...generations.current().graph.modules.keys()]);
+  const watcher = startReloadWatcher(
+    ctx,
+    { reloaded: "tool(s)", keepPrevious: "tool set" },
+    () => server.notifyToolsChanged(),
+  );
 
   log(`jaiph mcp: serving ${generations.current().tools.length} tool(s) from ${inputAbs} over stdio`);
 
@@ -188,7 +88,7 @@ export async function runMcp(rest: string[]): Promise<number> {
       process.removeListener("SIGINT", onSignal);
       process.removeListener("SIGTERM", onSignal);
       watcher.stop();
-      rmSync(tempRoot, { recursive: true, force: true });
+      ctx.cleanup();
       resolveExit(code);
     };
     // Handle requests concurrently: a long tools/call must not stall pings or

@@ -43,86 +43,42 @@ export default [
 
   // --- Grandfathered violators (pre-existing; split is queued, do not extend) ---
   // Each override below turns off ONLY the cap the file breaks today, with a
-  // one-line reason. Fixing (splitting) these files is queued follow-up work.
+  // one-line reason. Twelve of the original sixteen grandfathered files were
+  // split into sibling modules and de-grandfathered in this task (mcp, serve,
+  // generation, cli/index, workflow-call, parser, runtime/index, validate,
+  // validate-step, format/emit, runtime/docker, kernel/prompt). The four below
+  // remain: each is an exceptionally large / tightly-coupled unit whose split
+  // needs a multi-file decomposition of its own, and is explicit follow-up work
+  // out of scope for this change (see fresh per-file reasons below).
   {
-    // High fan-out: mcp command wires transport, runtime, and serve slices.
-    files: ["src/cli/commands/mcp.ts"],
-    rules: { "import/max-dependencies": "off" },
-  },
-  {
-    // 602 lines + high fan-out: run orchestration (launch/progress/hooks).
+    // 608 lines + 24 distinct runtime imports: the `jaiph run` orchestrator
+    // wires parse/transpile/runtime + ~9 run-slice helpers. Reaching <= 8 needs
+    // the run command decomposed into per-phase modules (a change of its own),
+    // beyond grouping — deferred as explicit follow-up.
     files: ["src/cli/commands/run.ts"],
     rules: { "import/max-dependencies": "off", "max-lines": "off" },
   },
   {
-    // High fan-out: serve command wires server, telemetry, and runtime slices.
-    files: ["src/cli/commands/serve.ts"],
-    rules: { "import/max-dependencies": "off" },
-  },
-  {
-    // High fan-out: the workflow-call executor spans transpile + runtime graph APIs.
-    files: ["src/cli/shared/workflow-call.ts"],
-    rules: { "import/max-dependencies": "off" },
-  },
-  {
-    // High fan-out: cli/index is the command dispatch table (imports each command).
-    files: ["src/cli/index.ts"],
-    rules: { "import/max-dependencies": "off" },
-  },
-  {
-    // 586 lines + high fan-out: HTTP handler, routes not yet split per-route.
+    // 586 lines + high fan-out: the HTTP handler dispatches every /v1 + /mcp
+    // route inline; a clean split is per-route handler modules behind a small
+    // router — deferred as explicit follow-up.
     files: ["src/cli/serve/handler.ts"],
     rules: { "import/max-dependencies": "off", "max-lines": "off" },
   },
   {
-    // High fan-out: shared generation helper spans parse/transpile/runtime.
-    files: ["src/cli/shared/generation.ts"],
-    rules: { "import/max-dependencies": "off" },
-  },
-  {
-    // 721 lines: bash emitter, emit passes not yet split into sibling files.
-    files: ["src/format/emit.ts"],
-    rules: { "max-lines": "off" },
-  },
-  {
-    // 701 lines + high fan-out: brace/parse concerns not yet separated.
+    // 812 lines + 12 imports: the statement parser is a dispatch table whose
+    // handlers are mutually recursive with the block-body / attached-block
+    // structural parsers, so a file split needs care to avoid an import cycle
+    // (dependency-cruiser `no-circular`) — deferred as explicit follow-up.
     files: ["src/parse/workflow-brace.ts"],
     rules: { "import/max-dependencies": "off", "max-lines": "off" },
   },
   {
-    // High fan-out: parser.ts is the parse slice public entry (many sub-parsers).
-    files: ["src/parser.ts"],
-    rules: { "import/max-dependencies": "off" },
-  },
-  {
-    // High fan-out: index.ts is the runtime slice public entry (re-exports the
-    // curated CLI-facing surface: graph, launch/runner, docker, emit, ...).
-    files: ["src/runtime/index.ts"],
-    rules: { "import/max-dependencies": "off" },
-  },
-  {
-    // 717 lines: docker driver (build/run/sandbox config) not yet split.
-    files: ["src/runtime/docker.ts"],
-    rules: { "max-lines": "off" },
-  },
-  {
-    // 1696 lines + high fan-out: the workflow kernel, largest queued split.
+    // 1698 lines + high fan-out: the workflow kernel interpreter, the single
+    // largest unit in the tree. Splitting it into cohesive step-executor
+    // siblings is the biggest queued decomposition — deferred as explicit
+    // follow-up.
     files: ["src/runtime/kernel/node-workflow-runtime.ts"],
     rules: { "import/max-dependencies": "off", "max-lines": "off" },
-  },
-  {
-    // 648 lines + high fan-out: prompt backend dispatch not yet split.
-    files: ["src/runtime/kernel/prompt.ts"],
-    rules: { "import/max-dependencies": "off", "max-lines": "off" },
-  },
-  {
-    // 1015 lines: step validator, per-step-kind checks not yet split.
-    files: ["src/transpile/validate-step.ts"],
-    rules: { "max-lines": "off" },
-  },
-  {
-    // 405 lines, just over the cap; trim or split is queued.
-    files: ["src/transpile/validate.ts"],
-    rules: { "max-lines": "off" },
   },
 ];

@@ -14,20 +14,6 @@ Process rules:
 
 ***
 
-## Split hotspot files and drop ESLint grandfather overrides #dev-ready
-
-Context: `docs/agent-analyzability.md` caps production files at ≤8 runtime imports and ≤400 lines (`eslint.config.mjs`, `npm run lint`). The hottest units are grandfathered with per-file overrides — including `src/runtime/kernel/node-workflow-runtime.ts`, `src/transpile/validate-step.ts`, `src/runtime/docker.ts`, `src/runtime/kernel/prompt.ts`, `src/cli/commands/run.ts`, `src/cli/serve/handler.ts`, `src/parse/workflow-brace.ts`, `src/format/emit.ts`, and others listed in `eslint.config.mjs`.
-
-Problem: Caps do not apply where agents pay the most context cost. The ADR invariant stays aspirational for the hot path.
-
-Remediation: Split the grandfathered files into sibling modules in the same directory (per factory `code_philosophy`: prefer siblings, not deeper trees). After each file meets both caps without an override, delete its override block from `eslint.config.mjs`. Do not raise global max. You may land this as multiple commits within the task, but the task is not done until every override under the "Grandfathered violators" section is removed or the commit message lists any remaining override with a fresh justification and a follow-up is explicitly out of scope — prefer removing all of them. Keep public entries curated (no `export *` of the whole package).
-
-### Acceptance criteria
-- `eslint.config.mjs` contains no per-file override that turns off `import/max-dependencies` or `max-lines` for the previously grandfathered paths (or a test enumerates the grandfather section and asserts it is empty / absent).
-- `npm run lint` exits 0.
-- Every former grandfathered production file is ≤400 non-blank/non-comment lines and ≤8 runtime imports under the global rules (spot-checked by lint).
-- `npm run build` and `npm test` pass; behaviour preserved.
-
 ## Refresh agent-analyzability ADR to match landed enforcement #dev-ready
 
 Context: `docs/agent-analyzability.md` still contains stale "queued in QUEUE.md" / "still planned" wording from the rollout (e.g. deep-import work described as queued; `arch:graph` called planned). Enforcement status has moved on: parse/transpile/format/runtime deep imports, CLI slice rules, docs summary/size guards, and factory `code_philosophy` are live. `QUEUE.md` may be empty or hold only newer follow-ups.
