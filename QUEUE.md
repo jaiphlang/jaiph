@@ -14,20 +14,6 @@ Process rules:
 
 ***
 
-## Clear peer CLI slice baseline edges #dev-ready
-
-Context: After reshaping CLI slice rules (or under the current `no-cross-cli-slice-imports` rule), peer-slice imports remain among `run`, `serve`, `mcp`, `exec`, `telemetry` and may still sit on `.dependency-cruiser-known-violations.json`. Known production peer edges include `serve/handler|server|openapi|types` → `mcp/*` and `exec/call` → `run/*` / `telemetry/*`.
-
-Problem: Baselined peer-slice imports permanently couple features and force agents to load multiple CLI folders for one change.
-
-Remediation: Eliminate peer-slice private imports by moving shared contracts into `src/cli/shared` (or lower layers) and retargeting call sites. Prefer extracting small shared modules over widening public barrels. Remove the corresponding baseline entries. Do not weaken severity. If the composition-root exception for `commands/` is not yet in the depcruise config, implement that exception as part of this task so command→slice edges are not mistaken for peer edges.
-
-### Acceptance criteria
-- `npm run arch:check --` equivalent with `--no-ignore-known` reports zero `no-cross-cli-slice-imports` violations (or only edges explicitly allowed by the commands-composition-root rule).
-- `.dependency-cruiser-known-violations.json` has zero `no-cross-cli-slice-imports` entries.
-- A regression test fails if a new peer-slice private import is introduced (e.g. synthetic `serve` → `mcp` fixture).
-- `npm run build` and `npm test` pass.
-
 ## Expose runtime test seams on the public entry; clear deep-runtime baseline #dev-ready
 
 Context: `no-deep-imports-into-runtime` bans imports of `src/runtime/**` other than `src/runtime/index.ts` from outside the package. Twelve leftover violations in `.dependency-cruiser-known-violations.json` are all **test** files piercing internals (`_dockerExec`, `docker-inplace`, `emit`, `RuntimeEventEmitter`, `node-workflow-runner`, `graph`). Production call sites already use the public entry.
