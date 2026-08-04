@@ -14,20 +14,6 @@ Process rules:
 
 ***
 
-## Collapse transpile to a single public entry #dev-ready
-
-Context: `docs/agent-analyzability.md` and `.dependency-cruiser.cjs` currently allow two external doors into compile: `src/transpiler.ts` and `src/transpile/module-graph.ts` (runtime allowlist). Dual entries weaken the "one contract per package" mental model for agents.
-
-Problem: Callers can bypass `src/transpiler.ts` and import `module-graph.ts` directly; deep-import rules special-case that path.
-
-Remediation: Re-export the full module-graph API (`loadModuleGraph`, `readModuleGraph`, `writeModuleGraph`, `ModuleGraph` types, etc.) from `src/transpiler.ts` if not already complete. Retarget every outside import of `src/transpile/module-graph.ts` (including runtime) to `src/transpiler.ts`. Tighten `.dependency-cruiser.cjs`: remove the `module-graph.ts` `pathNot` exceptions from `no-deep-imports-into-transpile` and `layer3-runtime-only-transpile-public-graph` so runtime may import only `src/transpiler.ts` from the transpile package. Update the ADR table/allowlisted-exception prose to match. Do not star-export the whole transpile tree.
-
-### Acceptance criteria
-- No file outside `src/transpile/` imports `src/transpile/module-graph.ts` (grep or depcruise test).
-- Runtime → transpile edges only target `src/transpiler.ts`; a test fails if runtime imports any other `src/transpile/**` path.
-- `docs/agent-analyzability.md` states a single transpile public entry (`src/transpiler.ts`).
-- `npm run arch:check`, `npm run build`, and `npm test` pass.
-
 ## Split hotspot files and drop ESLint grandfather overrides #dev-ready
 
 Context: `docs/agent-analyzability.md` caps production files at ≤8 runtime imports and ≤400 lines (`eslint.config.mjs`, `npm run lint`). The hottest units are grandfathered with per-file overrides — including `src/runtime/kernel/node-workflow-runtime.ts`, `src/transpile/validate-step.ts`, `src/runtime/docker.ts`, `src/runtime/kernel/prompt.ts`, `src/cli/commands/run.ts`, `src/cli/serve/handler.ts`, `src/parse/workflow-brace.ts`, `src/format/emit.ts`, and others listed in `eslint.config.mjs`.

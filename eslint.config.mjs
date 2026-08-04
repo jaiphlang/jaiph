@@ -60,11 +60,6 @@ export default [
     rules: { "import/max-dependencies": "off" },
   },
   {
-    // High fan-out: test command wires the runtime testing lane end to end.
-    files: ["src/cli/commands/test.ts"],
-    rules: { "import/max-dependencies": "off" },
-  },
-  {
     // High fan-out: the workflow-call executor spans transpile + runtime graph APIs.
     files: ["src/cli/shared/workflow-call.ts"],
     rules: { "import/max-dependencies": "off" },

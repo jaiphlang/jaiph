@@ -10,7 +10,7 @@ import {
   loadModuleGraph,
   serializeModuleGraph,
   deserializeModuleGraph,
-} from "../transpile/module-graph";
+} from "../transpiler";
 
 function write(filePath: string, content: string): void {
   writeFileSync(filePath, content, "utf8");

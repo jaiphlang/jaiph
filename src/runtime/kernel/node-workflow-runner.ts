@@ -1,7 +1,7 @@
 import { basename, dirname, join } from "node:path";
 import { errText } from "../../errors";
 import { writeFileSync } from "node:fs";
-import { loadModuleGraph, readModuleGraph } from "../../transpile/module-graph";
+import { loadModuleGraph, readModuleGraph } from "../../transpiler";
 import { buildRuntimeGraph } from "./graph";
 import { NodeWorkflowRuntime } from "./node-workflow-runtime";
 

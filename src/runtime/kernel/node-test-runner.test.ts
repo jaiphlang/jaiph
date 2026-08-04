@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { runTestFile } from "./node-test-runner";
-import { loadModuleGraph } from "../../transpile/module-graph";
+import { loadModuleGraph } from "../../transpiler";
 import type { SourceLoc } from "../../types";
 
 const loc: SourceLoc = { line: 1, col: 1 };

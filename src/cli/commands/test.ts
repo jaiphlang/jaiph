@@ -6,8 +6,7 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join, resolve, extname } from "node:path";
 import { basename } from "node:path";
-import { buildScriptsFromGraph, walkTestFiles } from "../../transpiler";
-import { loadModuleGraph } from "../../transpile/module-graph";
+import { buildScriptsFromGraph, walkTestFiles, loadModuleGraph } from "../../transpiler";
 import { jaiphError } from "../../errors";
 import { detectWorkspaceRoot } from "../shared/paths";
 import { hasHelpFlag, parseArgs } from "../shared/usage";

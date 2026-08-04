@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildRuntimeGraph } from "./graph";
 import { NodeWorkflowRuntime } from "./node-workflow-runtime";
-import { loadModuleGraph } from "../../transpile/module-graph";
+import { loadModuleGraph } from "../../transpiler";
 import { buildScriptsFromGraph } from "../../transpiler";
 import { CHAIN_KEY_ENV, generateChainKey, verifyRunJournal, writeChainKey } from "./emit";
 import { scrubPromptEnv } from "./env-allowlist";

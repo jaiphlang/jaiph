@@ -7,7 +7,16 @@ import type { ScriptArtifact } from "./transpile/emit-script";
 export { resolveImportPath, workflowSymbolForFile } from "./transpile/resolve";
 export type { ScriptArtifact } from "./transpile/emit-script";
 export type { ModuleGraph, ModuleNode } from "./transpile/module-graph";
-export { loadModuleGraph } from "./transpile/module-graph";
+// Full public module-graph API. Runtime reuses the same graph and must reach it
+// only through this entry (see docs/agent-analyzability.md, "single public entry").
+export {
+  loadModuleGraph,
+  readModuleGraph,
+  writeModuleGraph,
+  moduleGraphFromAsts,
+  serializeModuleGraph,
+  deserializeModuleGraph,
+} from "./transpile/module-graph";
 export { emitScriptsForModuleFromGraph } from "./transpile/emit-from-graph";
 // Compile/validate surface used by outside callers (CLI); curated, not a barrel.
 export { collectDiagnostics, validateReferences } from "./transpile/validate";

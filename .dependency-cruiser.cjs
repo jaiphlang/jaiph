@@ -2,8 +2,8 @@
 // invariant from docs/agent-analyzability.md. `npm run arch:check` runs this.
 // Layer paths (downward-only imports):
 //   4 CLI       src/cli/**, src/cli.ts
-//   3 Runtime   src/runtime/**            (may reuse only the transpile public
-//                                          module-graph API)
+//   3 Runtime   src/runtime/**            (may reuse compile only through the
+//                                          single public entry src/transpiler.ts)
 //   2 Compile   src/transpile/**, src/transpiler.ts
 //   1 Parse/fmt src/parse/**, src/parser.ts, src/format/**
 //   0 Shared    src/types.ts, src/errors.ts, src/diagnostics.ts, src/version.ts,
@@ -71,10 +71,10 @@ module.exports = {
     {
       name: "layer3-runtime-only-transpile-public-graph",
       comment:
-        "Runtime may reuse only the transpile public module-graph API (src/transpile/module-graph.ts, src/transpiler.ts), never transpile internals (validators, emit, etc.).",
+        "Runtime may reuse the transpile package only through its single public entry (src/transpiler.ts, which re-exports the module-graph API), never src/transpile/** internals (validators, emit, module-graph.ts, etc.).",
       severity: "error",
       from: { path: LAYER3 },
-      to: { path: "^src/transpile/", pathNot: "^src/transpile/module-graph\\.ts$" },
+      to: { path: "^src/transpile/" },
     },
     {
       name: "no-deep-imports-into-parse",
@@ -87,10 +87,10 @@ module.exports = {
     {
       name: "no-deep-imports-into-transpile",
       comment:
-        "Transpile is a deep module: code OUTSIDE the transpile package imports only its public entry (src/transpiler.ts, plus the public module-graph API src/transpile/module-graph.ts), never validator/emit/build internals. Add a named re-export to src/transpiler.ts instead of reaching in.",
+        "Transpile is a deep module: code OUTSIDE the transpile package imports only its single public entry (src/transpiler.ts, which re-exports the module-graph API), never module-graph/validator/emit/build internals. Add a named re-export to src/transpiler.ts instead of reaching in.",
       severity: "error",
       from: { pathNot: "^src/(transpile/|transpiler\\.ts$)" },
-      to: { path: "^src/transpile/", pathNot: "^src/transpile/module-graph\\.ts$" },
+      to: { path: "^src/transpile/" },
     },
     {
       name: "no-deep-imports-into-runtime",

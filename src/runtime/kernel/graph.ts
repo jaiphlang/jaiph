@@ -1,5 +1,5 @@
 import { resolve } from "node:path";
-import { loadModuleGraph, type ModuleGraph, type ModuleNode } from "../../transpile/module-graph";
+import { loadModuleGraph, type ModuleGraph, type ModuleNode } from "../../transpiler";
 import type { RuleDef, ScriptDef, WorkflowDef, WorkflowRefDef, RuleRefDef, jaiphModule } from "../../types";
 
 export type RuntimeModuleNode = ModuleNode;
