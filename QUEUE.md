@@ -14,20 +14,6 @@ Process rules:
 
 ***
 
-## Refresh agent-analyzability ADR to match landed enforcement #dev-ready
-
-Context: `docs/agent-analyzability.md` still contains stale "queued in QUEUE.md" / "still planned" wording from the rollout (e.g. deep-import work described as queued; `arch:graph` called planned). Enforcement status has moved on: parse/transpile/format/runtime deep imports, CLI slice rules, docs summary/size guards, and factory `code_philosophy` are live. `QUEUE.md` may be empty or hold only newer follow-ups.
-
-Problem: Agents reading the ADR get a wrong picture of what CI already enforces versus what remains open.
-
-Remediation: Edit `docs/agent-analyzability.md` so Status / Enforcement / Landed sections accurately describe current CI scripts, rules, baseline policy, and remaining known gaps (cycles, CLI peer slices, ESLint hotspots, dual transpile entry — only those still true at edit time). Remove claims that work is "queued in QUEUE.md" unless a matching task header still exists. Keep the summary-first lead. Do not invent new rules in this task; documentation parity only. Optionally add `arch:graph` script if Graphviz is acceptable as optional/dev-only; otherwise document it as optional and skip wiring.
-
-### Acceptance criteria
-- A test (grep or docs-structure sibling) fails if `docs/agent-analyzability.md` still claims deep-import enforcement is merely "queued in QUEUE.md" while the corresponding depcruise rules already exist in `.dependency-cruiser.cjs`.
-- The ADR Enforcement table matches the scripts in `package.json` (`arch:check`, `lint`) and does not promise unbuilt gates.
-- `integration/docs-structure.test.ts` summary/size guards still pass for this page.
-- No behaviour/code changes beyond docs (and optional `arch:graph` script).
-
 ## Operator logging for mcp / serve (no winston) #dev-ready
 
 Context: `jaiph run` prints a TTY banner (`Jaiph: Running <file> (<sandbox>)`) and colorizes workflow `log` / `logwarn` / `logerr` with depth indent and parallel subscripts (`buildAsyncIndent`). `jaiph mcp` and `jaiph serve` already have an ad-hoc `log: (line: string) => void` that writes to **stderr** (startup posture via `logStartupPosture`, serve invoke/cancel lines, crashes). They do **not** emit a per-call "Running … rundir=…" line, do not mirror workflow log events to the operator channel, and do not share level/color formatting. Protocol channels must stay clean: MCP **stdout** is JSON-RPC only; HTTP response bodies are API payloads.
