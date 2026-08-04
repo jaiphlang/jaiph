@@ -4,7 +4,7 @@
  * `RuntimeEventEmitter` — which the OTLP export (`otlp.ts`), the Sentry export
  * (`sentry.ts`), and `GET /v1/runs/{id}/events` (`handler.ts`) all read back
  * verbatim — and the call-result text composed for `jaiph serve` and
- * `jaiph mcp` (`src/cli/exec/call.ts`). One definition of "credential" keeps the
+ * `jaiph mcp` (`src/cli/shared/workflow-call.ts`). One definition of "credential" keeps the
  * journal, telemetry, HTTP, and MCP surfaces in agreement.
  *
  * Detection is name-based: a value is redacted only when its env key looks like

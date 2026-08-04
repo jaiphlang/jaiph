@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { McpServer, type McpCallResult, type McpCallContext } from "./server";
-import type { McpToolSpec } from "./tools";
+import { McpServer, type McpCallResult, type McpCallContext } from "./mcp-server";
+import type { McpToolSpec } from "./mcp-tools";
 
 /** A promise plus its resolver, so a fake `callTool` can settle on command. */
 function deferred(): { promise: Promise<McpCallResult>; resolve: (r: McpCallResult) => void } {

@@ -1,5 +1,5 @@
-import type { McpToolSpec } from "../mcp/tools";
-import type { WorkflowCallResult, WorkflowCallContext } from "../exec/call";
+import type { McpToolSpec } from "../shared/mcp-tools";
+import type { WorkflowCallResult, WorkflowCallContext } from "../shared/workflow-call";
 import type { StreamTarget } from "./runfiles";
 import type { Authenticator } from "./auth";
 

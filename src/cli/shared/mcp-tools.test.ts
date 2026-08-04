@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { parsejaiph } from "../../parser";
-import { deriveTools, toolNameFromFile } from "./tools";
+import { deriveTools, toolNameFromFile } from "./mcp-tools";
 
 const FILE = "/ws/deploy-tools.jh";
 

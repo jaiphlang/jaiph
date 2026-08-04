@@ -30,8 +30,8 @@ import {
   type DockerRunConfig,
   type SandboxMode,
 } from "../../runtime";
-import { discoverDockerRunDir } from "../shared/errors";
-import { readMetaFields, readReturnValue } from "../shared/run-meta";
+import { discoverDockerRunDir } from "./errors";
+import { readMetaFields, readReturnValue } from "./run-meta";
 import { deliverRunTelemetryDetached } from "../telemetry/otlp";
 
 /**

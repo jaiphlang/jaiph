@@ -944,13 +944,19 @@ describe("arch:check dependency-cruiser guard", () => {
         .join(", ")}`,
     );
 
-    // The remaining baselined edges are genuine peer-slice feature composition
-    // (serve mounts mcp/exec; exec reuses run/telemetry). Report the count so a
-    // growing set of peer leftovers stays visible in test output.
-    console.log(
-      `cross-CLI-slice peer leftovers: ${slice.length} (${slice
+    // The former peer feature-composition edges (serve mounting mcp/exec; exec
+    // reusing run/telemetry) are gone: the shared MCP-protocol engine
+    // (`shared/mcp-server`, `shared/mcp-tools`) and the workflow-call executor
+    // (`shared/workflow-call`) now live in `src/cli/shared`, so no peer slice
+    // imports another peer's private tree. The baseline must therefore carry
+    // zero `no-cross-cli-slice-imports` entries — a nonzero count means a peer
+    // edge was re-baselined instead of relocated.
+    assert.deepEqual(
+      slice,
+      [],
+      `no-cross-cli-slice-imports edges must be relocated into src/cli/shared, not baselined: ${slice
         .map((v) => `${v.from} -> ${v.to}`)
-        .join(", ")})`,
+        .join(", ")}`,
     );
   });
 });

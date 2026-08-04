@@ -7,8 +7,8 @@ import { ServeHandler, type RunRecord, type ServeRequest, type ServeResponse } f
 import { hashArgs } from "./run-store";
 import type { Authenticator, Capability, Principal } from "./auth";
 import type { StreamTarget } from "./runfiles";
-import type { McpToolSpec } from "../mcp/tools";
-import type { WorkflowCallResult, WorkflowCallContext } from "../exec/call";
+import type { McpToolSpec } from "../shared/mcp-tools";
+import type { WorkflowCallResult, WorkflowCallContext } from "../shared/workflow-call";
 
 const BUILD_TOOL: McpToolSpec = {
   name: "build",
