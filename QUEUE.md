@@ -14,28 +14,6 @@ Process rules:
 
 ***
 
-## Make Docker Desktop e2e reliable and drop the engineer skip #dev-ready
-
-Context: Docker-daemon e2e is **required product coverage** on GitHub Actions. Scripts include `72_docker_*`, `74b`–`74g`, `75`/`76`, `141_mcp_docker_*`, `148_standalone_image`, **`150_k8s_deploy` (kind)**, `151_serve_transports_docker`, `153_docker_*`, and every other script that needs the Docker daemon. Helpers in `e2e/lib/common.sh` (named `jaiph-run-*` waits, `e2e::docker_cleanup`, `e2e::run_logged`) already landed for several scripts. An overnight agent then **prematurely** removed `JAIPH_E2E_SKIP_DOCKER` from `.jaiph/ensure_ci_passes.jh` after a **subset** loop (`72`/`74*`/`148` ×3) — overnight `test:ci` immediately hung for hours on **`kind load docker-image`** in `150_k8s_deploy` and melted the Docker Desktop VM (~20GB+ qemu RSS). The skip has been restored.
-
-Problem: Subset evidence ≠ full suite. Kind image import and other heavy daemon scripts are still unsafe under Desktop load. Agents must not declare done or delete this QUEUE section themselves.
-
-**Agent instructions (mandatory):**
-- Goal: full Docker e2e **works** on Desktop. The skip is temporary quarantine, not the deliverable.
-- Do **not** remove `export JAIPH_E2E_SKIP_DOCKER=1` from `.jaiph/ensure_ci_passes.jh` until acceptance below is met. A unit test requires that export while this task is open — update the test only in the same commit that drops the skip.
-- Do **not** treat a green loop of only `72`/`74*`/`75`/`148` as evidence. **Required evidence is full `npm run test:e2e`** (or equivalent that includes **`150_k8s_deploy`**) **3 consecutive times** green on a quiet Docker Desktop.
-- Do **not** lengthen production probe timeouts in `docker.ts` without a unit test proving a product bug. Do **not** edit `QUEUE.md` to remove this task (orchestration owns removal).
-- While iterating, leave the skip in place so overnight recover does not thrash.
-
-Remediation: Finish hardening every daemon/kind e2e path (timeouts, cleanup, heartbeats, bounded waits) so full `test:e2e` is deterministic on Desktop; then drop the overnight skip.
-
-### Acceptance criteria
-- Existing guards remain: no silent `jaiph run … >/dev/null 2>&1` on success-asserted docker runs in `72`; `74b` waits via `e2e::wait_for_jaiph_run_container`; `e2e::jaiph_run_container_ids` uses `docker ps -a`.
-- **`150_k8s_deploy.sh`** completes reliably on Docker Desktop (bounded waits; no multi-hour hang on `kind load` / image import); document any remaining intentional skip.
-- **Evidence:** at least **3** consecutive green **full** `npm run test:e2e` runs with Docker available (must exercise kind/`150_k8s_deploy` or an explicit documented equivalent). Commands + pass counts in the commit message. Subset loops of `72`/`74`/`148` alone are **rejected**.
-- Only then: remove `export JAIPH_E2E_SKIP_DOCKER=1` from `.jaiph/ensure_ci_passes.jh`, flip the `docker.test.ts` guard that currently requires the export, update `docs/contributing.md`.
-- `npm run build` and `npm test` pass.
-
 ## Clear peer CLI slice baseline edges #dev-ready
 
 Context: After reshaping CLI slice rules (or under the current `no-cross-cli-slice-imports` rule), peer-slice imports remain among `run`, `serve`, `mcp`, `exec`, `telemetry` and may still sit on `.dependency-cruiser-known-violations.json`. Known production peer edges include `serve/handler|server|openapi|types` → `mcp/*` and `exec/call` → `run/*` / `telemetry/*`.

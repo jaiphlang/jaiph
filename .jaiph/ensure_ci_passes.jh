@@ -11,16 +11,11 @@ script npm_run_test_ci = ```
 while IFS= read -r _v; do
   unset "$_v" 2>/dev/null || true
 done < <(compgen -e | grep '^JAIPH_' || true)
-# TEMPORARY quarantine: Docker Desktop overnight loops still melt on full
-# daemon e2e (especially kind / 150_k8s_deploy image import). Helpers for
-# 72/74*/148 help but do NOT prove the full suite. Keep this export until
-# QUEUE.md "Make Docker Desktop e2e reliable…" is completed with evidence of
-# 3 consecutive green full `npm run test:e2e` runs (including kind). GH Actions
-# does not set this — full Docker e2e remains required there.
-export JAIPH_E2E_SKIP_DOCKER=1
+# Full Docker e2e (incl. kind) is required here — same as GitHub Actions.
+# Do NOT re-add JAIPH_E2E_SKIP_DOCKER to dodge a flake; fix the harness
+# (named waits, EXIT cleanup, probe flake classification, kind heartbeats).
 # Heartbeat so JAIPH_STEP_IDLE_KILL_SEC cannot kill a long-but-live test:ci
 # when individual e2e scripts go quiet (kind pulls, large docker builds).
-# Prints every 30s to stdout/stderr of this script step.
 (
   elapsed=0
   while true; do
@@ -74,11 +69,9 @@ workflow ensure_ci_passes() {
         - Do NOT lengthen src/runtime/docker.ts probe timeouts to paper over
           Docker Desktop load flakes; fix the e2e harness instead (named
           jaiph-run container waits, EXIT cleanup of leftover containers,
-          surface stderr on failure).
-        - Do NOT remove export JAIPH_E2E_SKIP_DOCKER=1 from this workflow to
-          "finish" the Docker e2e queue task. That skip is intentional overnight
-          quarantine until QUEUE acceptance (full test:e2e ×3 including kind)
-          is met. GitHub Actions still runs the full suite.
+          surface stderr on failure, probe flake retries / E_DOCKER_PROBE_FAILED).
+        - Do NOT re-export JAIPH_E2E_SKIP_DOCKER here — overnight runs the full
+          suite like GitHub Actions.
       </task>
     """
   }

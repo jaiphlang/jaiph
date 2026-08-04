@@ -323,12 +323,9 @@ Docker-daemon e2e helpers in **`e2e/lib/common.sh`** reduce Desktop flakes for n
 - **`e2e::docker_cleanup`** on EXIT force-removes leftover **`jaiph-run-*`** containers.
 - **`e2e::run_logged`** surfaces `jaiph run` stderr on failure instead of a bare "artifact missing".
 
-That is **not** enough to claim the full suite is overnight-safe. Kind (**`150_k8s_deploy`**) and other heavy daemon scripts still melt Docker Desktop under load. Until the QUEUE task to make Docker e2e reliable is finished with evidence of **3 consecutive green full `npm run test:e2e`** runs:
+Both GitHub Actions and the overnight engineer loop (**`.jaiph/ensure_ci_passes.jh`**) run the **full** Docker e2e suite (including kind / **`150_k8s_deploy`**). Reliability rests on named `jaiph-run-*` waits, EXIT cleanup (including `jaiph-probe-*`), logged runs, probe flake classification (`E_DOCKER_PROBE_FAILED` vs `E_DOCKER_NO_JAIPH`), and kind heartbeats / wall timeouts.
 
-- **`.jaiph/ensure_ci_passes.jh`** exports **`JAIPH_E2E_SKIP_DOCKER=1`** so overnight recover cannot trap on daemon/kind flakes.
-- **GitHub Actions does not set the skip** — full Docker e2e remains required there.
-
-When **`JAIPH_E2E_SKIP_DOCKER=1`** is set, **`e2e/test_all.sh`** skips scripts whose basename matches `*docker_*` / `*_docker` / `docker_*`, plus **`E2E_DOCKER_DAEMON_SCRIPTS`** (e.g. `148_standalone_image`, `150_k8s_deploy`). Static Dockerfile checks such as **`09_dockerfile_fetch_verify`** still run.
+You can set **`JAIPH_E2E_SKIP_DOCKER=1`** locally to skip daemon scripts (basename `*docker_*` / `*_docker` / `docker_*`, plus **`E2E_DOCKER_DAEMON_SCRIPTS`** such as `148_standalone_image` and `150_k8s_deploy`). Static Dockerfile checks such as **`09_dockerfile_fetch_verify`** still run. Nothing sets this variable by default.
 
 Some scripts are **contract** tests: they validate persisted machine-readable output (for example `e2e/tests/88_run_summary_event_contract.sh` and `run_summary.jsonl`) in addition to or instead of golden CLI trees.
 

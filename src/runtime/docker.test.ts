@@ -1294,19 +1294,16 @@ test("test_all.sh: E2E_DOCKER_DAEMON_SCRIPTS covers every daemon script lacking 
   );
 });
 
-test("ensure_ci_passes.jh: overnight loop keeps JAIPH_E2E_SKIP_DOCKER until full suite is proven", () => {
-  // Partial harden of 72/74/148 is not enough — kind (150_k8s_deploy) still
-  // melts Docker Desktop overnight. Keep the quarantine until QUEUE evidence
-  // is full `npm run test:e2e` ×3. Flip this test only when removing the export.
+test("ensure_ci_passes.jh: overnight loop does not skip Docker e2e", () => {
+  // Full suite (incl. kind) proven green ×3 on Desktop; overnight must match GH.
   const src = readFileSync(
     join(REPO_ROOT, ".jaiph", "ensure_ci_passes.jh"),
     "utf8",
   );
   assert.ok(
-    /export\s+JAIPH_E2E_SKIP_DOCKER=1\b/.test(src),
-    ".jaiph/ensure_ci_passes.jh must export JAIPH_E2E_SKIP_DOCKER=1 while the " +
-      "Docker Desktop e2e QUEUE task is open (do not drop the skip after a " +
-      "subset loop of 72/74/148)",
+    !/export\s+JAIPH_E2E_SKIP_DOCKER\b/.test(src),
+    ".jaiph/ensure_ci_passes.jh must NOT export JAIPH_E2E_SKIP_DOCKER — " +
+      "overnight runs the full Docker e2e suite",
   );
 });
 
