@@ -70,7 +70,7 @@ workflow ensure_ci_passes() {
           Docker Desktop load flakes; fix the e2e harness instead (named
           jaiph-run container waits, EXIT cleanup of leftover containers,
           surface stderr on failure, probe flake retries / E_DOCKER_PROBE_FAILED).
-        - Do NOT re-export JAIPH_E2E_SKIP_DOCKER here — overnight runs the full
+        - Do NOT set JAIPH_E2E_SKIP_DOCKER here — overnight runs the full
           suite like GitHub Actions.
       </task>
     """
