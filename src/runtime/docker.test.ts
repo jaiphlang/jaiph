@@ -12,6 +12,7 @@ import {
   normalizeImageDigest,
   resolveExpectedDigest,
   buildImageProbeArgs,
+  isTransientDockerProbeError,
   PROBE_USER,
   prepareImage,
   isEnvAllowed,
@@ -953,11 +954,17 @@ test("imageHasJaiph: still rm -f the named probe when the docker run throws", ()
   const origExec = _dockerExec.run;
   let probeName: string | undefined;
   const rms: string[][] = [];
+  // Non-transient failure (clean container exit) → E_DOCKER_NO_JAIPH, still rm -f.
+  const missing = Object.assign(new Error("Command failed: docker"), {
+    status: 1,
+    signal: null,
+    killed: false,
+  });
   _dockerExec.run = (args: string[]) => {
     if (args[0] === "run") {
       const i = args.indexOf("--name");
       probeName = i >= 0 ? args[i + 1] : undefined;
-      throw new Error("simulated docker hang/timeout");
+      throw missing;
     }
     if (args[0] === "rm") rms.push(args);
   };
@@ -970,6 +977,67 @@ test("imageHasJaiph: still rm -f the named probe when the docker run throws", ()
   assert.ok(
     rms.some((a) => a.includes("-f") && a.includes(probeName!)),
     "failed probe must still docker rm -f the named container",
+  );
+});
+
+test("imageHasJaiph: daemon timeout/flake retries then E_DOCKER_PROBE_FAILED (not NO_JAIPH)", () => {
+  const origExec = _dockerExec.run;
+  let runs = 0;
+  const transient = Object.assign(new Error("unable to upgrade to tcp, received 500"), {
+    status: null,
+    signal: "SIGKILL",
+    killed: true,
+  });
+  _dockerExec.run = (args: string[]) => {
+    if (args[0] === "run") {
+      runs++;
+      throw transient;
+    }
+  };
+  try {
+    assert.throws(() => verifyImageHasJaiph("attacker/img:tag"), /E_DOCKER_PROBE_FAILED/);
+    assert.equal(runs, 3, "must retry IMAGE_PROBE_ATTEMPTS times on transient flake");
+  } finally {
+    _dockerExec.run = origExec;
+  }
+});
+
+test("isTransientDockerProbeError: timeout/500 vs clean exit 1", () => {
+  assert.equal(
+    isTransientDockerProbeError(
+      Object.assign(new Error("x"), { killed: true, signal: "SIGKILL", status: null }),
+    ),
+    true,
+  );
+  assert.equal(
+    isTransientDockerProbeError(
+      Object.assign(new Error("unable to upgrade to tcp, received 500"), { status: 1 }),
+    ),
+    true,
+  );
+  assert.equal(
+    isTransientDockerProbeError(
+      Object.assign(new Error("Command failed"), { status: 1, killed: false, signal: null }),
+    ),
+    false,
+  );
+  // Container exit 127 must NOT be treated as a daemon flake — that broke the
+  // 72 e2e missing-jaiph assertion (false E_DOCKER_PROBE_FAILED).
+  assert.equal(
+    isTransientDockerProbeError(
+      Object.assign(new Error("Command failed: docker run …"), {
+        status: 127,
+        killed: false,
+        signal: null,
+      }),
+    ),
+    false,
+  );
+  assert.equal(
+    isTransientDockerProbeError(
+      Object.assign(new Error("docker"), { status: 125, killed: false, signal: null }),
+    ),
+    true,
   );
 });
 
@@ -1165,6 +1233,25 @@ test("e2e/74b: signal-cleanup waits on the named jaiph-run container (Created co
   assert.ok(
     !/--filter[^\n]*ancestor=/.test(src),
     "74b must not use a `docker ps --filter ancestor=` filter (it latches onto the pre-run image probe)",
+  );
+});
+
+test("e2e/74d: snapshot isolation clears leftovers and waits via shared helper", () => {
+  const src = readFileSync(
+    join(REPO_ROOT, "e2e", "tests", "74d_docker_snapshot_isolation.sh"),
+    "utf8",
+  );
+  assert.ok(
+    src.includes("e2e::rm_jaiph_run_containers"),
+    "74d must clear leftover jaiph-run-* before starting (stale Running defeats the mid-run edit timing)",
+  );
+  assert.ok(
+    src.includes("e2e::wait_for_jaiph_run_container"),
+    "74d must wait via e2e::wait_for_jaiph_run_container",
+  );
+  assert.ok(
+    !/docker ps -q --filter "name=jaiph-run"/.test(src),
+    "74d must not use bare docker ps -q name=jaiph-run (races with leftovers)",
   );
 });
 

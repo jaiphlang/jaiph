@@ -68,31 +68,26 @@ workflow default() {
 }
 EOF
 
+# Clear leftover jaiph-run-* from prior cases/scripts. A stale Running container
+# made the wait below succeed immediately, so the host mutation ran BEFORE this
+# run's snapshot clone — the container then saw "mutated-mid-run" and the
+# isolation assert failed under looped e2e (the Aug 2026 flake).
+e2e::rm_jaiph_run_containers
+e2e::rm_jaiph_probe_containers
+
 # Start the Docker-backed run in the background (default = snapshot mode).
 JAIPH_DOCKER_ENABLED=true JAIPH_DOCKER_IMAGE="${E2E_DOCKER_TEST_IMAGE}" \
   jaiph run "${TEST_DIR}/snap.jh" >/dev/null 2>&1 &
 bg_pid=$!
 
-# Wait (up to ~15s) for the WORKFLOW container to come up. Match on the
-# deterministic run-container name (`jaiph-run-<hex>`, set by spawnDockerProcess)
-# rather than the image ancestor: image preparation runs a short-lived
-# `verifyImageHasJaiph` probe container from the same image *before* the snapshot
-# is taken, and an ancestor filter would latch onto that probe — editing the host
-# file pre-snapshot and defeating the test. The snapshot clone completes
-# synchronously right before the named container launches, so any host edit after
-# this point is strictly post-snapshot.
-started=""
-for ((i = 0; i < 30; i++)); do
-  if [[ -n "$(docker ps -q --filter "name=jaiph-run" 2>/dev/null)" ]]; then
-    started="yes"
-    break
-  fi
-  sleep 0.5
-done
-if [[ -z "${started}" ]]; then
+# Wait for THIS run's named container (`jaiph-run-<hex>`). Use the shared helper
+# (`docker ps -a`, Created counts) — not a bare `docker ps` ancestor filter.
+# Snapshot clone finishes synchronously just before the named container is
+# created, so a host edit after appearance is strictly post-snapshot.
+if [[ -z "$(e2e::wait_for_jaiph_run_container 15)" ]]; then
   kill "${bg_pid}" 2>/dev/null || true
   wait "${bg_pid}" 2>/dev/null || true
-  e2e::fail "docker snapshot isolation: container never started"
+  e2e::fail "docker snapshot isolation: jaiph-run container never appeared"
 fi
 
 # Mutate the host workspace file mid-run. The container's script is still
