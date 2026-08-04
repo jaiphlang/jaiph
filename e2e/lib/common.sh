@@ -575,11 +575,22 @@ e2e::rm_jaiph_run_containers() {
   done
 }
 
-# EXIT trap for Docker-daemon scripts: remove leftover jaiph-run-* containers,
-# then run the standard cleanup. Docker-daemon scripts should
+# Presence probes use jaiph-probe-<hex> (src/runtime/docker.ts). A SIGKILL'd
+# Docker Desktop client can leave them in Created; clean those too.
+e2e::rm_jaiph_probe_containers() {
+  command -v docker >/dev/null 2>&1 || return 0
+  local cid
+  for cid in $(docker ps -aq --filter "name=jaiph-probe-" 2>/dev/null || true); do
+    docker rm -f "${cid}" >/dev/null 2>&1 || true
+  done
+}
+
+# EXIT trap for Docker-daemon scripts: remove leftover jaiph-run-* / probe
+# containers, then run the standard cleanup. Docker-daemon scripts should
 # `trap e2e::docker_cleanup EXIT` instead of `trap e2e::cleanup EXIT`.
 e2e::docker_cleanup() {
   e2e::rm_jaiph_run_containers
+  e2e::rm_jaiph_probe_containers
   e2e::cleanup
 }
 
@@ -603,6 +614,56 @@ e2e::run_logged() {
     e2e::fail "${label}"
   fi
   rm -f "${log}"
+}
+
+# Run a long, output-silent command while emitting a periodic heartbeat so an
+# outer idle-output watchdog (JAIPH_STEP_IDLE_KILL_SEC — the whole e2e suite runs
+# as one leaf step under `jaiph ensure_ci_passes`) does not mistake a slow-but-
+# live step for a hang. The trigger case: `kind create cluster` / `kind load
+# docker-image` handle the ~1GB kindest/node image and, in non-TTY mode, kind
+# prints one line then goes silent for the entire pull/transfer — long enough to
+# trip the watchdog. The command runs in the foreground (its own output and exit
+# status pass straight through); a background heartbeat prints "<label>: still
+# working (<n>s elapsed)" every E2E_HEARTBEAT_SEC (default 15s) until it exits.
+# Usage: e2e::run_with_heartbeat "<label>" <command> [args…]
+e2e::run_with_heartbeat() {
+  local label="$1"
+  shift
+  local interval="${E2E_HEARTBEAT_SEC:-15}"
+  local max_sec="${E2E_CMD_TIMEOUT_SEC:-0}"
+  (
+    hb_elapsed=0
+    while true; do
+      sleep "${interval}"
+      hb_elapsed=$((hb_elapsed + interval))
+      printf '%s: still working (%ds elapsed)\n' "${label}" "${hb_elapsed}"
+    done
+  ) &
+  local hb_pid=$!
+  local rc=0
+  local cmd_pid=""
+  if [[ "${max_sec}" =~ ^[1-9][0-9]*$ ]]; then
+    "$@" &
+    cmd_pid=$!
+    (
+      sleep "${max_sec}"
+      if kill -0 "${cmd_pid}" 2>/dev/null; then
+        printf '%s: timed out after %ss — killing\n' "${label}" "${max_sec}" >&2
+        kill -TERM "${cmd_pid}" 2>/dev/null || true
+        sleep 2
+        kill -KILL "${cmd_pid}" 2>/dev/null || true
+      fi
+    ) &
+    local wd_pid=$!
+    wait "${cmd_pid}" || rc=$?
+    kill "${wd_pid}" >/dev/null 2>&1 || true
+    wait "${wd_pid}" 2>/dev/null || true
+  else
+    "$@" || rc=$?
+  fi
+  kill "${hb_pid}" >/dev/null 2>&1 || true
+  wait "${hb_pid}" 2>/dev/null || true
+  return "${rc}"
 }
 
 e2e::prepare_test_env() {

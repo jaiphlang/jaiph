@@ -90,9 +90,20 @@ if [[ -n "${K8S_CLUSTER}" ]]; then
 else
   K8S_CLUSTER="jaiph-e2e-$$"
   K8S_OWNS_CLUSTER=1
-  kind create cluster --name "${K8S_CLUSTER}" --kubeconfig "${KUBECONFIG}" --wait 120s >/dev/null
+  # kind pulls the ~1GB kindest/node image here and, in non-TTY mode, prints one
+  # line then goes silent for the whole pull — long enough to trip the suite's
+  # idle-output watchdog. A heartbeat keeps output flowing so a live pull is not
+  # mistaken for a hang.
+  # Bound wall clock: a wedged Docker Desktop must not hold overnight CI open.
+  E2E_CMD_TIMEOUT_SEC="${E2E_KIND_CREATE_TIMEOUT_SEC:-600}" \
+    e2e::run_with_heartbeat "kind create cluster" \
+      kind create cluster --name "${K8S_CLUSTER}" --kubeconfig "${KUBECONFIG}" --wait 120s
 fi
-kind load docker-image "${E2E_DOCKER_TEST_IMAGE}" --name "${K8S_CLUSTER}" >/dev/null
+# Loading the app image into the node is the same silent large-image transfer;
+# keep the heartbeat so it can't stall the watchdog either.
+E2E_CMD_TIMEOUT_SEC="${E2E_KIND_LOAD_TIMEOUT_SEC:-600}" \
+  e2e::run_with_heartbeat "kind load docker-image" \
+    kind load docker-image "${E2E_DOCKER_TEST_IMAGE}" --name "${K8S_CLUSTER}"
 e2e::pass "cluster ${K8S_CLUSTER} ready with ${E2E_DOCKER_TEST_IMAGE} loaded"
 
 kubectl create namespace "${K8S_NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f - >/dev/null

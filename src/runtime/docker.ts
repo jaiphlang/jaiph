@@ -557,30 +557,97 @@ export function buildImageProbeArgs(image: string, containerName?: string): stri
 /** Probe timeout — must stay bounded; see `_dockerExec` killSignal note. */
 export const IMAGE_PROBE_TIMEOUT_MS = 30_000;
 
-function imageHasJaiph(image: string): boolean {
-  // Named so a hung Docker Desktop client cannot leave an anonymous Created
-  // container behind after SIGKILL of the CLI — we always best-effort rm -f.
-  const containerName = `jaiph-probe-${randomBytes(6).toString("hex")}`;
+/** How many times to retry the presence probe on Docker Desktop daemon flakes. */
+export const IMAGE_PROBE_ATTEMPTS = 3;
+
+/**
+ * True when a failed probe looks like Docker Desktop / daemon flake rather than
+ * "jaiph binary missing in the image". Mapping every failure to missing-jaiph
+ * was the Aug 2026 overnight regression: a wedged `Created` probe or
+ * `unable to upgrade to tcp, received 500` became a false E_DOCKER_NO_JAIPH
+ * and agents "fixed" it by thrashing docker.ts.
+ */
+export function isTransientDockerProbeError(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  const e = err as NodeJS.ErrnoException & {
+    status?: number | null;
+    signal?: NodeJS.Signals | null;
+    killed?: boolean;
+    stderr?: string | Buffer;
+  };
+  // Node kills the docker CLI on timeout — not a "jaiph missing" signal.
+  if (e.code === "ETIMEDOUT" || e.code === "EAGAIN") return true;
+  if (e.killed || e.signal === "SIGKILL" || e.signal === "SIGTERM") return true;
+  // Docker CLI reserved: 125 = daemon/client error. Do NOT treat container
+  // exit 126/127 as transient — `command -v jaiph` missing often surfaces as
+  // a normal non-zero status, and a too-broad 127 rule turned the 72 e2e
+  // "missing jaiph" case into E_DOCKER_PROBE_FAILED after three retries.
+  if (e.status === 125) return true;
+  const msg = `${(e as Error).message ?? ""}\n${e.stderr?.toString() ?? ""}`;
+  return /unable to upgrade to tcp|Cannot connect to the Docker|connection reset|received 500|context deadline exceeded/i.test(
+    msg,
+  );
+}
+
+function sleepMs(ms: number): void {
+  // Sync sleep without adding a dependency: sleep(1) is always available on
+  // macOS/Linux hosts where Docker sandboxing runs.
   try {
-    _dockerExec.run(buildImageProbeArgs(image, containerName), {
-      stdio: "ignore",
-      timeout: IMAGE_PROBE_TIMEOUT_MS,
-    });
-    return true;
+    execFileSync("sleep", [String(ms / 1000)], { stdio: "ignore" });
   } catch {
-    return false;
-  } finally {
-    try {
-      _dockerExec.run(["rm", "-f", containerName], { stdio: "ignore", timeout: 10_000 });
-    } catch {
-      // Best-effort: container may already be gone (--rm) or docker unavailable.
-    }
+    // ignore
   }
+}
+
+/**
+ * Probe whether `image` contains a `jaiph` binary on PATH.
+ * Returns true/false for a definitive container exit. Throws
+ * `E_DOCKER_PROBE_FAILED` when Docker Desktop flakes across all attempts.
+ */
+function imageHasJaiph(image: string): boolean {
+  let lastTransient: unknown;
+  for (let attempt = 1; attempt <= IMAGE_PROBE_ATTEMPTS; attempt++) {
+    // Named so a hung Docker Desktop client cannot leave an anonymous Created
+    // container behind after SIGKILL of the CLI — we always best-effort rm -f.
+    const containerName = `jaiph-probe-${randomBytes(6).toString("hex")}`;
+    try {
+      // Keep stderr so daemon flakes ("unable to upgrade to tcp, received 500")
+      // are classifiable; stdout stays ignored.
+      _dockerExec.run(buildImageProbeArgs(image, containerName), {
+        stdio: ["ignore", "ignore", "pipe"],
+        encoding: "utf8",
+        timeout: IMAGE_PROBE_TIMEOUT_MS,
+      });
+      return true;
+    } catch (err) {
+      if (isTransientDockerProbeError(err)) {
+        lastTransient = err;
+      } else {
+        // Clean non-zero exit from `command -v jaiph` → binary really missing.
+        return false;
+      }
+    } finally {
+      try {
+        _dockerExec.run(["rm", "-f", containerName], { stdio: "ignore", timeout: 10_000 });
+      } catch {
+        // Best-effort: container may already be gone (--rm) or docker unavailable.
+      }
+    }
+    if (attempt < IMAGE_PROBE_ATTEMPTS) sleepMs(500 * attempt);
+  }
+  const detail =
+    lastTransient instanceof Error ? lastTransient.message : String(lastTransient ?? "unknown");
+  throw new Error(
+    `E_DOCKER_PROBE_FAILED presence probe for "${image}" failed after ` +
+      `${IMAGE_PROBE_ATTEMPTS} attempts (Docker daemon flake or timeout), not a missing jaiph binary. ` +
+      `Last error: ${detail}. Retry when Docker Desktop is healthy; do not lengthen probe timeouts in docker.ts.`,
+  );
 }
 
 /**
  * Verify that the selected Docker image contains `jaiph`.
  * Fails fast with an actionable error when the binary is missing.
+ * Distinguishes daemon flakes (`E_DOCKER_PROBE_FAILED`) from a bad image.
  */
 export function verifyImageHasJaiph(image: string): void {
   if (!imageHasJaiph(image)) {

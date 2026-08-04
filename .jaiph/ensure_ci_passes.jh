@@ -18,7 +18,23 @@ done < <(compgen -e | grep '^JAIPH_' || true)
 # 3 consecutive green full `npm run test:e2e` runs (including kind). GH Actions
 # does not set this — full Docker e2e remains required there.
 export JAIPH_E2E_SKIP_DOCKER=1
-exec npm run test:ci
+# Heartbeat so JAIPH_STEP_IDLE_KILL_SEC cannot kill a long-but-live test:ci
+# when individual e2e scripts go quiet (kind pulls, large docker builds).
+# Prints every 30s to stdout/stderr of this script step.
+(
+  elapsed=0
+  while true; do
+    sleep 30
+    elapsed=$((elapsed + 30))
+    printf 'ensure_ci_passes: test:ci still running (%ds elapsed)\n' "${elapsed}"
+  done
+) &
+hb_pid=$!
+trap 'kill "${hb_pid}" >/dev/null 2>&1 || true' EXIT
+npm run test:ci
+rc=$?
+kill "${hb_pid}" >/dev/null 2>&1 || true
+exit "${rc}"
 ```
 
 script assert_nonempty_file_or_fail = ```
