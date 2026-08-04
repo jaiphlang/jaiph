@@ -3,6 +3,7 @@ import { errText } from "../../errors";
 import { findRunDir } from "../shared/errors";
 import { callWorkflow, type OutputCaps } from "../shared/workflow-call";
 import { parseServerArgs, startGeneration, startReloadWatcher } from "../shared/serve-bootstrap";
+import { createOperatorLog } from "../shared/server-log";
 import {
   ServeHandler,
   createAuthenticator,
@@ -215,6 +216,17 @@ export async function runServe(rest: string[]): Promise<number> {
   const { generations, posture, inputAbs, cleanup } = ctx;
   const hostRunsRoot = posture.hostRunsRoot;
 
+  // Operator log (stderr only, never an HTTP response body): per-call banners +
+  // optional workflow-log mirror, over the same injectable `log` sink used for
+  // lifecycle lines. The sandbox label is resolved once from the startup posture.
+  const operator = createOperatorLog({
+    label: "jaiph serve",
+    write: log,
+    dockerEnabled: posture.dockerConfig.enabled,
+    sandboxMode: posture.sandboxMode,
+    unsafeHostOnly: posture.unsafeHostOnly,
+  });
+
   // Track in-flight run promises so shutdown can drain them.
   const inFlightRuns = new Set<Promise<unknown>>();
 
@@ -264,7 +276,7 @@ export async function runServe(rest: string[]): Promise<number> {
         spec.workflow,
         spec.params.map((pp) => args[pp] ?? ""),
         runId,
-        ctx,
+        { ...ctx, operator },
         outputCaps,
       ).finally(() => lease.release());
       const tracked = p.then(

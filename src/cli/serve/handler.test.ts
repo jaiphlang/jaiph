@@ -295,8 +295,12 @@ test("audit: invoke and cancel log the principal + correlation, never the bearer
   await h.handleRequest(req("POST", `/v1/runs/${start.run_id}/cancel`, { headers: { authorization: `Bearer ${TOKEN}` } }));
   await runPromise.catch(() => {});
 
+  // Invoke audit rides the operator start banner emitted by the executor
+  // (`callWorkflow`), which is stubbed here — so at the handler level the invoke
+  // audit surfaces on the public run object (principal + correlation, asserted
+  // above). The banner audit itself is covered by the server-log call test and
+  // the serve-auth integration test. The handler still emits the cancel line.
   const joined = logs.join("\n");
-  assert.match(joined, /invoked — principal=alice correlation=cid-1/, "invoke is audited with who + correlation");
   assert.match(joined, /cancelled — principal=alice/, "cancel is audited with who");
   assert.ok(!joined.includes(TOKEN), "the audit log never contains the bearer token");
 });

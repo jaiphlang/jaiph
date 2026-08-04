@@ -4,9 +4,10 @@ import {
   stepStartHookPayload,
   stepEndHookPayload,
 } from "../run/hooks";
-import { CHAIN_KEY_ENV, generateChainKey, writeChainKey } from "../../runtime";
+import { CHAIN_KEY_ENV, generateChainKey, writeChainKey, redactCredentials } from "../../runtime";
 import { deliverRunTelemetryDetached } from "../telemetry/otlp";
-import type { StepEvent } from "../run/events";
+import type { StepEvent, LogEvent } from "../run/events";
+import { formatCallStartLine, formatCallEndLine } from "./server-log";
 import { callWorkflowHost, callWorkflowDocker } from "./workflow-call-exec";
 import { DEFAULT_OUTPUT_CAPS } from "./workflow-call-types";
 import type {
@@ -86,10 +87,40 @@ export async function callWorkflow(
     });
   }
 
+  // Operator log (stderr only): per-call start banner + optional workflow-log
+  // mirror. The run dir is not yet known at start (host reads it from the meta
+  // file, Docker discovers it, both after exit), so it lands on the end line.
+  const operator = ctx?.operator;
+  operator?.log.info(
+    formatCallStartLine({
+      workflow: workflowSymbol,
+      sandboxLabel: operator.sandboxLabel,
+      runId,
+      principal: ctx?.principal,
+      correlationId: ctx?.correlationId,
+    }),
+  );
+  const onLogEvent = buildLogMirrorHandler(operator, runId, runtimeEnv, env.extraEnv);
+
   const onStepEvent = buildStepEventHandler(env, ctx);
   const result = posture.dockerConfig.enabled
-    ? await callWorkflowDocker(env, posture, workflowSymbol, positionalArgs, runtimeEnv, runId, caps, onStepEvent, ctx)
-    : await callWorkflowHost(env, workflowSymbol, positionalArgs, runtimeEnv, runId, caps, onStepEvent, ctx);
+    ? await callWorkflowDocker(env, posture, workflowSymbol, positionalArgs, runtimeEnv, runId, caps, onStepEvent, ctx, onLogEvent)
+    : await callWorkflowHost(env, workflowSymbol, positionalArgs, runtimeEnv, runId, caps, onStepEvent, ctx, onLogEvent);
+
+  if (operator) {
+    const status = result.signal ? "cancelled" : result.isError ? "failed" : "ok";
+    operator.log.info(
+      formatCallEndLine({
+        workflow: workflowSymbol,
+        status,
+        exit: result.exitStatus ?? 0,
+        elapsedMs: Date.now() - startedAt,
+        rundir: result.runDir,
+        principal: ctx?.principal,
+        correlationId: ctx?.correlationId,
+      }),
+    );
+  }
 
   if (env.hooks) {
     runHooksForEvent(env.hooks, "workflow_end", {
@@ -142,5 +173,32 @@ function buildStepEventHandler(
       }
     }
     ctx?.onStep?.(ev.kind, ev.name);
+  };
+}
+
+/**
+ * Build the workflow-log mirror handler for one call, or `undefined` when
+ * mirroring is off (the default) or there is no operator log. When on, every
+ * workflow LOG/LOGWARN/LOGERR event is mirrored to the operator log (stderr),
+ * colorized by level with the same depth / async-branch subscript indent as the
+ * interactive tree. The message is credential-redacted through the same
+ * boundary as the durable journal / call-result text — redaction uses both the
+ * runtime env and the Docker `--env` passthrough so a secret can never leak to
+ * stderr regardless of which env layer carried it.
+ */
+function buildLogMirrorHandler(
+  operator: WorkflowCallContext["operator"],
+  runId: string,
+  runtimeEnv: Record<string, string | undefined>,
+  extraEnv: Record<string, string>,
+): ((ev: LogEvent) => void) | undefined {
+  if (!operator || !operator.log.mirrorWorkflowLog) return undefined;
+  const redactEnv = { ...runtimeEnv, ...extraEnv };
+  return (ev) => {
+    operator.log.mirror(ev.type, redactCredentials(ev.message, redactEnv), {
+      runId,
+      depth: ev.depth,
+      asyncIndices: ev.async_indices,
+    });
   };
 }

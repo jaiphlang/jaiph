@@ -1,5 +1,11 @@
 import { formatNamedParamsForDisplay, isInternalParamValue } from "../shared/format-params.js";
+import { colorize, sandboxParenLabel } from "../shared/log-format";
 import type { SandboxMode } from "../../runtime";
+
+// `colorize` is a pure presentation helper shared with the operator log
+// (`shared/server-log.ts`); it lives under `src/cli/shared/log-format.ts` and is
+// re-exported here so this slice's existing importers keep one import site.
+export { colorize } from "../shared/log-format";
 
 const PROMPT_PREVIEW_MAX = 24;
 const PROMPT_ARGS_DISPLAY_MAX = 96;
@@ -17,32 +23,9 @@ export function formatJaiphRunningBannerLines(
   /** True when the user opted into `--unsafe` / `JAIPH_UNSAFE=true` (not win32 / explicit Docker off). */
   unsafeMode = false,
 ): string {
-  let parenInner: string;
-  if (!dockerEnabled) {
-    parenInner = unsafeMode ? "Docker sandbox, unsafe" : "no sandbox";
-  } else if (sandboxMode === "inplace") {
-    parenInner = "Docker sandbox, in-place";
-  } else {
-    parenInner = "Docker sandbox, snapshot";
-  }
+  const parenInner = sandboxParenLabel(dockerEnabled, sandboxMode, unsafeMode);
   const dimParen = colorize(` (${parenInner})`, "dim", colorEnabled);
   return `\nJaiph: Running ${fileBasename}${dimParen}\n\n`;
-}
-
-export function colorize(
-  text: string,
-  code: "dim" | "bold" | "green" | "red" | "yellow" | "blue",
-  colorEnabled: boolean,
-): string {
-  if (!colorEnabled) return text;
-  const prefix =
-    code === "dim" ? "\u001b[2m"
-    : code === "bold" ? "\u001b[1m"
-    : code === "green" ? "\u001b[32m"
-    : code === "yellow" ? "\u001b[33m"
-    : code === "blue" ? "\u001b[34m"
-    : "\u001b[31m";
-  return `${prefix}${text}\u001b[0m`;
 }
 
 /**

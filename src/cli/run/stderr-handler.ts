@@ -7,6 +7,7 @@ import {
   sanitizeMultilineLogForTerminal,
 } from "./display";
 import { formatRunningBottomLine } from "./progress";
+import { buildAsyncIndent } from "../shared/log-format";
 import type { RunEmitter } from "./emitter";
 
 // ── Parser state (internal to stderr line parsing) ──
@@ -111,32 +112,6 @@ export function registerStateSubscriber(emitter: RunEmitter, state: RunState): v
   emitter.on("stderr_line", (data) => {
     state.capturedStderr += `${data.line}\n`;
   });
-}
-
-// ── Async branch subscript-number helpers ──
-
-/** Unicode subscript number ₁₂₃… (U+2080–U+2089 per digit). */
-function subscriptNumber(n: number): string {
-  let result = "";
-  for (const d of String(n)) {
-    result += String.fromCodePoint(0x2080 + Number(d));
-  }
-  return result;
-}
-
-/**
- * Build an indent string with subscript async-branch numbers embedded.
- * Each depth level is one `"  · "` segment (4 chars). For levels that have
- * an async index, the leading `"  "` is replaced with `" {subscript}"`.
- */
-function buildAsyncIndent(depth: number, asyncIndices: number[]): string {
-  if (asyncIndices.length === 0) return "  · ".repeat(depth);
-  let result = "";
-  for (let i = 0; i < depth; i++) {
-    const head = i < asyncIndices.length ? ` ${subscriptNumber(asyncIndices[i])}` : "  ";
-    result += `${head}· `;
-  }
-  return result;
 }
 
 // ── Subscriber: TTY rendering ──
