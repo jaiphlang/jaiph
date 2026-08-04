@@ -9,8 +9,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHttpServer, listen, readBody } from "./server";
 import { ServeHandler } from "./handler";
-import { CHAIN_GENESIS, chainHmac, writeChainKey } from "../../runtime/kernel/emit";
-import { RuntimeEventEmitter } from "../../runtime/kernel/runtime-event-emitter";
+import { writeChainKey } from "../../runtime";
+import { CHAIN_GENESIS, chainHmac, RuntimeEventEmitter } from "../../runtime/testing";
 import type { McpToolSpec } from "../shared/mcp-tools";
 import type { WorkflowCallResult } from "../shared/workflow-call";
 

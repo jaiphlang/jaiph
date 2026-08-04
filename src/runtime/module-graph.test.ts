@@ -5,12 +5,12 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { buildScriptsFromGraph } from "../transpiler";
-import { buildRuntimeGraph, resolveScriptRef, resolveWorkflowRef } from "../runtime/kernel/graph";
+import { buildRuntimeGraph, resolveScriptRef, resolveWorkflowRef } from "./kernel/graph";
 import {
   loadModuleGraph,
   serializeModuleGraph,
   deserializeModuleGraph,
-} from "./module-graph";
+} from "../transpile/module-graph";
 
 function write(filePath: string, content: string): void {
   writeFileSync(filePath, content, "utf8");

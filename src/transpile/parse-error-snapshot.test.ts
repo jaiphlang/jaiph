@@ -20,7 +20,7 @@ import {
 } from "node:fs";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
-import { loadModuleGraph } from "../transpile/module-graph";
+import { loadModuleGraph } from "./module-graph";
 
 // Tests run from `dist/src/parse/...`; walk up to repo root.
 const repoRoot = resolve(__dirname, "../../..");

@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadGeneration, resolveStartupPosture, logStartupPosture, type GenerationState } from "./generation";
 import type { SandboxFlags } from "../run/env";
-import { _dockerExec } from "../../runtime/docker";
+import { _dockerExec } from "../../runtime/testing";
 
 /**
  * `resolveStartupPosture` reads the server's process env; these tests pin the

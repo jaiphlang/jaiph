@@ -13,7 +13,7 @@ import {
   persistRunRecord,
 } from "./run-store";
 import { RUN_SUMMARY } from "./runfiles";
-import { writeChainKey } from "../../runtime/kernel/emit";
+import { writeChainKey } from "../../runtime";
 
 const NOW = "2026-07-27T12:00:00.000Z";
 
