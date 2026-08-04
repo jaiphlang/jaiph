@@ -959,4 +959,102 @@ describe("arch:check dependency-cruiser guard", () => {
         .join(", ")}`,
     );
   });
+
+  it("AC28: no deep-runtime or upward-test edge is baselined, and none recur under --no-ignore-known", () => {
+    // Task contract: every `no-deep-imports-into-runtime` leftover (all test-seam
+    // imports) is cleared, plus the two upward test layer edges. The baseline
+    // must carry zero of these — a nonzero count means an edge was re-tracked
+    // instead of retargeted to a public entry (src/runtime/index.ts / testing.ts)
+    // or moved out of the wrong layer.
+    const baseline = JSON.parse(readFileSync(baselinePath, "utf8")) as Array<{
+      rule: { name: string };
+      from: string;
+      to: string;
+    }>;
+    for (const rule of [
+      "no-deep-imports-into-runtime",
+      "layer1-parse-format-no-upward",
+      "layer2-transpile-no-upward",
+    ]) {
+      const edges = baseline.filter((v) => v.rule.name === rule);
+      assert.deepEqual(
+        edges,
+        [],
+        `${rule} edges must be fixed, not baselined: ${edges
+          .map((v) => `${v.from} -> ${v.to}`)
+          .join(", ")}`,
+      );
+    }
+
+    // Run the committed config on the real tree WITHOUT the baseline, so every
+    // real deep-runtime/upward edge surfaces (the `--ignore-known` CI script would
+    // hide any that were merely tracked). None of these rules may appear.
+    const { output } = depcruise(repoRoot, [
+      "src",
+      "--config",
+      configPath,
+      "--output-type",
+      "err",
+    ]);
+    for (const rule of [
+      "no-deep-imports-into-runtime",
+      "layer1-parse-format-no-upward",
+      "layer2-transpile-no-upward",
+    ]) {
+      assert.doesNotMatch(
+        output,
+        new RegExp(rule),
+        `a ${rule} violation is present in src/:\n${output}`,
+      );
+    }
+  });
+
+  it("AC29: the runtime test-seam entry (src/runtime/testing.ts) is allowlisted; a raw internal import still fails", () => {
+    // Passing case: a cross-package test reaches a seam through the documented
+    // test-seam entry (src/runtime/testing.ts), not a raw src/runtime/** path.
+    const good = makeFixture({
+      "src/cli/x.test.ts":
+        'import { y } from "../runtime/testing";\nexport const x = y;\n',
+      "src/runtime/testing.ts": 'export { y } from "./kernel/emit";\n',
+      "src/runtime/kernel/emit.ts": "export const y = 1;\n",
+    });
+    try {
+      const { status, output } = depcruise(good, [
+        "src",
+        "--config",
+        configPath,
+        "--output-type",
+        "err",
+      ]);
+      assert.equal(
+        status,
+        0,
+        "importing the runtime test-seam entry must pass",
+      );
+      assert.doesNotMatch(output, /no-deep-imports-into-runtime/);
+    } finally {
+      rmSync(good, { recursive: true, force: true });
+    }
+
+    // Failing case: reaching a runtime internal directly still fails, even from a
+    // test file — the seam surface is the ONLY sanctioned deep path.
+    const bad = makeFixture({
+      "src/cli/x.test.ts":
+        'import { y } from "../runtime/kernel/emit";\nexport const x = y;\n',
+      "src/runtime/kernel/emit.ts": "export const y = 1;\n",
+    });
+    try {
+      const { status, output } = depcruise(bad, [
+        "src",
+        "--config",
+        configPath,
+        "--output-type",
+        "err",
+      ]);
+      assert.notEqual(status, 0, "a raw runtime internal import must fail");
+      assert.match(output, /no-deep-imports-into-runtime/);
+    } finally {
+      rmSync(bad, { recursive: true, force: true });
+    }
+  });
 });

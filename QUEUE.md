@@ -14,22 +14,6 @@ Process rules:
 
 ***
 
-## Expose runtime test seams on the public entry; clear deep-runtime baseline #dev-ready
-
-Context: `no-deep-imports-into-runtime` bans imports of `src/runtime/**` other than `src/runtime/index.ts` from outside the package. Twelve leftover violations in `.dependency-cruiser-known-violations.json` are all **test** files piercing internals (`_dockerExec`, `docker-inplace`, `emit`, `RuntimeEventEmitter`, `node-workflow-runner`, `graph`). Production call sites already use the public entry.
-
-Problem: Agents debugging via tests still load private runtime paths; the baseline hides ongoing deep imports.
-
-Remediation: Re-export the minimal test seams needed by cross-package tests from `src/runtime/index.ts` (or a dedicated `src/runtime/testing.ts` that is itself allowlisted as a second public entry in `.dependency-cruiser.cjs` — prefer one documented entry). Retarget every baselined test import to that surface. Remove all `no-deep-imports-into-runtime` entries from the baseline. Do not put production-only internals on the public surface without need; keep the seam set small and named.
-
-Also clear the two layer-violation test edges if still present: `src/parse/parse-error-snapshot.test.ts` → `src/transpile/module-graph.ts` and `src/transpile/module-graph.test.ts` → `src/runtime/kernel/graph.ts` (retarget through public entries or move assertions so tests do not import upward).
-
-### Acceptance criteria
-- `.dependency-cruiser-known-violations.json` has zero `no-deep-imports-into-runtime` entries.
-- Zero production or test files outside `src/runtime/` import `src/runtime/**` except the documented public entry path(s); enforced by depcruise (not only by baseline).
-- The two upward test layer violations above are gone from the baseline and do not recur under `--no-ignore-known`.
-- `npm run arch:check`, `npm run build`, and `npm test` pass.
-
 ## Collapse transpile to a single public entry #dev-ready
 
 Context: `docs/agent-analyzability.md` and `.dependency-cruiser.cjs` currently allow two external doors into compile: `src/transpiler.ts` and `src/transpile/module-graph.ts` (runtime allowlist). Dual entries weaken the "one contract per package" mental model for agents.

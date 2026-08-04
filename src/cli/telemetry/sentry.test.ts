@@ -10,7 +10,7 @@ import {
   reportRunFailureToSentry,
   type SentryEventMeta,
 } from "./sentry";
-import { writeChainKey } from "../../runtime/kernel/emit";
+import { writeChainKey } from "../../runtime";
 import { VERSION } from "../../version";
 
 const RUN_ID = "11111111-2222-3333-4444-555555555555";

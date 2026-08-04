@@ -17,7 +17,7 @@ import {
   telemetryDeliveryMetrics,
   type OtlpMeta,
 } from "./otlp";
-import { writeChainKey } from "../../runtime/kernel/emit";
+import { writeChainKey } from "../../runtime";
 
 const RUN_ID = "11111111-2222-3333-4444-555555555555";
 

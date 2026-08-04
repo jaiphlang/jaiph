@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { applySandboxFlags } from "./env";
-import { resolveDockerConfig, selectSandboxMode } from "../../runtime/docker";
-import { confirmInplaceRun, _inplacePrompt } from "../../runtime/docker-inplace";
+import { resolveDockerConfig, selectSandboxMode, confirmInplaceRun } from "../../runtime";
+import { _inplacePrompt } from "../../runtime/testing";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";

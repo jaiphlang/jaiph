@@ -4,8 +4,8 @@ import { mkdtempSync, writeFileSync, rmSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runWorkflow, shouldExportRawTelemetry } from "./run";
-import { _dockerExec, _dockerSpawn, DOCKER_SANDBOX_ENV } from "../../runtime/docker";
-import { UNSAFE_RUN_LOGWARN_MESSAGE } from "../../runtime/docker-inplace";
+import { DOCKER_SANDBOX_ENV, UNSAFE_RUN_LOGWARN_MESSAGE } from "../../runtime";
+import { _dockerExec, _dockerSpawn } from "../../runtime/testing";
 
 const MIN_WORKFLOW = `workflow default() {\n  log "hi"\n}\n`;
 

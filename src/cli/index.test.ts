@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { main } from "./index";
-import { WORKFLOW_RUNNER_ARG } from "../runtime/kernel/node-workflow-runner";
+import { WORKFLOW_RUNNER_ARG } from "../runtime";
 import { printUsage } from "./shared/usage";
 import { VERSION } from "../version";
 
