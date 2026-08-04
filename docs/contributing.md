@@ -317,15 +317,18 @@ Samples whose rendered output embeds nondeterministic model or agent transcripts
 
 The E2E test suite (`e2e/tests/*.sh`) drives the toolchain from outside the TypeScript harness: **`e2e::prepare_test_env`** in **`e2e/lib/common.sh`** calls **`e2e::prepare_shared_context`** (sanitizes stray **`JAIPH_*`** vars, prepends **`JAIPH_E2E_BIN_DIR`** to **`PATH`**, wires **`JAIPH_REPO_URL`** to the cloned tree, exports **`JAIPH_DOCKER_ENABLED=false`** by default) and **`e2e::ensure_local_install`** (builds a **`jaiph` shim** that prefers **`dist/src/cli.js`** when present). Each script then invokes **`jaiph run`**; Docker-specific assertions set **`JAIPH_DOCKER_ENABLED=true`** and usually call **`e2e::ensure_docker_test_image`** first, then pass **`JAIPH_DOCKER_IMAGE="${E2E_DOCKER_TEST_IMAGE}"`** ( **`jaiph-e2e-runtime:local`** when the harness builds it). Scripts assert on both the CLI tree (**`e2e::expect_stdout`**) and **`*.out` / `.err`** / **`run_summary.jsonl`** under **`.jaiph/runs/`** — see also [Architecture — Durable artifact layout](architecture.md#durable-artifact-layout).
 
-The Docker-daemon e2e scripts are hardened against flakes caused by Docker Desktop load. Three changes in **`e2e/lib/common.sh`** make them reliable.
+Docker-daemon e2e helpers in **`e2e/lib/common.sh`** reduce Desktop flakes for named `jaiph-run-*` containers:
 
-- Each Docker-backed run waits for its own **`jaiph-run-*`** container by name, through **`e2e::wait_for_jaiph_run_container`**. This helper uses `docker ps -a`, so a container in the `Created` state counts as appeared. It does not rely on a shared `ancestor=` image filter, which can miss a container that has not started yet.
-- The EXIT trap **`e2e::docker_cleanup`** force-removes any leftover **`jaiph-run-*`** container, so running a script twice back-to-back starts from clean state.
-- Runs that are expected to succeed go through **`e2e::run_logged`**. When the Docker daemon flakes, the helper prints the run's own stderr, instead of failing later with a confusing "artifact missing" error.
+- **`e2e::wait_for_jaiph_run_container`** waits by name via `docker ps -a` (`Created` counts).
+- **`e2e::docker_cleanup`** on EXIT force-removes leftover **`jaiph-run-*`** containers.
+- **`e2e::run_logged`** surfaces `jaiph run` stderr on failure instead of a bare "artifact missing".
 
-Because the scripts are hardened, both GitHub Actions and the overnight engineer loop (**`.jaiph/ensure_ci_passes.jh`**) run the full Docker e2e suite. The suite is required, not skipped.
+That is **not** enough to claim the full suite is overnight-safe. Kind (**`150_k8s_deploy`**) and other heavy daemon scripts still melt Docker Desktop under load. Until the QUEUE task to make Docker e2e reliable is finished with evidence of **3 consecutive green full `npm run test:e2e`** runs:
 
-You can set **`JAIPH_E2E_SKIP_DOCKER=1`** to run the suite locally without Docker. When it is set, **`e2e/test_all.sh`** skips every script whose basename matches `*docker_*`, `*_docker`, or `docker_*`. It also skips the daemon scripts listed in **`E2E_DOCKER_DAEMON_SCRIPTS`**, such as `148_standalone_image`, because those scripts need the Docker daemon but do not have `docker` in their basename. Static Dockerfile checks that do not need the daemon, such as **`09_dockerfile_fetch_verify`**, still run. Nothing sets this variable by default.
+- **`.jaiph/ensure_ci_passes.jh`** exports **`JAIPH_E2E_SKIP_DOCKER=1`** so overnight recover cannot trap on daemon/kind flakes.
+- **GitHub Actions does not set the skip** — full Docker e2e remains required there.
+
+When **`JAIPH_E2E_SKIP_DOCKER=1`** is set, **`e2e/test_all.sh`** skips scripts whose basename matches `*docker_*` / `*_docker` / `docker_*`, plus **`E2E_DOCKER_DAEMON_SCRIPTS`** (e.g. `148_standalone_image`, `150_k8s_deploy`). Static Dockerfile checks such as **`09_dockerfile_fetch_verify`** still run.
 
 Some scripts are **contract** tests: they validate persisted machine-readable output (for example `e2e/tests/88_run_summary_event_contract.sh` and `run_summary.jsonl`) in addition to or instead of golden CLI trees.
 
