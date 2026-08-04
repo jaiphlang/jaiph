@@ -507,6 +507,47 @@ test("docs-lint: agent-analyzability.md stays in nav and keeps its Summary lead"
   );
 });
 
+// Docs-parity guard: the ADR must not describe deep-import enforcement as
+// merely "queued in QUEUE.md" once the corresponding dependency-cruiser rules
+// already exist. Agents trust the ADR to say what CI enforces; a stale "still
+// queued" claim gives them a wrong picture of the open vs. landed set. This
+// test fails whenever a deep-import rule is live in .dependency-cruiser.cjs but
+// the ADR still calls that work queued.
+test("docs-lint: agent-analyzability.md does not call landed deep-import rules 'queued'", () => {
+  const adr = readFileSync(join(DOCS_DIR, "agent-analyzability.md"), "utf8");
+  const cruiser = readFileSync(
+    join(REPO_ROOT, ".dependency-cruiser.cjs"),
+    "utf8",
+  );
+
+  const DEEP_IMPORT_RULES = [
+    "no-deep-imports-into-parse",
+    "no-deep-imports-into-transpile",
+    "no-deep-imports-into-runtime",
+    "no-deep-imports-into-format",
+  ];
+  const landed = DEEP_IMPORT_RULES.filter((r) => cruiser.includes(r));
+  assert.ok(
+    landed.length > 0,
+    "expected deep-import rules to exist in .dependency-cruiser.cjs",
+  );
+
+  // Stale phrasings from the rollout that describe deep-import enforcement as
+  // not-yet-built. If the depcruise rules above are live, none of these may
+  // survive in the ADR.
+  const stalePatterns = [
+    /deep[- ]imports?[\s\S]{0,120}?still queued in `?QUEUE\.md`?/i,
+    /deep[- ]import rules for the remaining packages are still queued/i,
+    /deep imports into the remaining packages are still queued/i,
+  ];
+  for (const re of stalePatterns) {
+    assert.ok(
+      !re.test(adr),
+      `docs/agent-analyzability.md still describes deep-import enforcement as queued (matched ${re}) even though .dependency-cruiser.cjs already defines ${landed.join(", ")}`,
+    );
+  }
+});
+
 // Contract self-tests: prove the guards actually fail on a violating page,
 // independent of whether the real docs happen to comply today.
 test("docs-lint: summary-first guard rejects a page whose first block is a heading", () => {
