@@ -1,4 +1,4 @@
-import type { ModuleGraph } from "../../transpile/module-graph";
+import type { ModuleGraph } from "../../transpiler";
 import type { jaiphModule } from "../../types";
 
 /**

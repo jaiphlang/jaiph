@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, readdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { buildRuntimeGraph, resolveWorkflowRef, resolveRuleRef, resolveScriptRef, type RuntimeGraph } from "./graph";
-import type { ModuleGraph } from "../../transpile/module-graph";
+import type { ModuleGraph } from "../../transpiler";
 import { NodeWorkflowRuntime, type MockBodyDef } from "./node-workflow-runtime";
 import type { MockPromptArm } from "./mock";
 import type { TestBlockDef, TestStepDef } from "../../types";

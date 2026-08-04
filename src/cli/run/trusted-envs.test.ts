@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { loadModuleGraph } from "../../transpile/module-graph";
+import { loadModuleGraph } from "../../transpiler";
 import { planTrustedEnvs, isTrustedEnvsOptIn } from "./trusted-envs";
 
 function writeFlow(root: string, name: string, lines: string[]): string {

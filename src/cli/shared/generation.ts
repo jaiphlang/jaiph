@@ -1,7 +1,12 @@
 import { mkdirSync, rmSync, unwatchFile, watchFile } from "node:fs";
 import { join } from "node:path";
-import { loadModuleGraph, writeModuleGraph, type ModuleGraph } from "../../transpile/module-graph";
-import { buildScriptsFromGraph, collectDiagnostics } from "../../transpiler";
+import {
+  loadModuleGraph,
+  writeModuleGraph,
+  buildScriptsFromGraph,
+  collectDiagnostics,
+  type ModuleGraph,
+} from "../../transpiler";
 import { resolveModuleMetadata, metadataToConfig } from "../../config";
 import {
   resolveDockerConfig,

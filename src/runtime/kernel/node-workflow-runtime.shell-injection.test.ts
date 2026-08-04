@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildRuntimeGraph } from "./graph";
 import { NodeWorkflowRuntime } from "./node-workflow-runtime";
-import { loadModuleGraph } from "../../transpile/module-graph";
+import { loadModuleGraph } from "../../transpiler";
 import { buildScriptsFromGraph } from "../../transpiler";
 
 // Security regression for finding H-1: caller-controlled workflow values must

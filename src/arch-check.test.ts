@@ -271,7 +271,7 @@ describe("arch:check dependency-cruiser guard", () => {
     );
   });
 
-  it("AC9: a deep import into transpile from outside the package is an error; the public entry and the module-graph API pass", () => {
+  it("AC9: a deep import into transpile from outside the package is an error; only the public entry passes", () => {
     // Failing case: an outsider (cli) reaches into a transpile validator internal.
     const bad = makeFixture({
       "src/cli/x.ts":
@@ -317,8 +317,9 @@ describe("arch:check dependency-cruiser guard", () => {
       rmSync(good, { recursive: true, force: true });
     }
 
-    // Allowlisted case: the public module-graph API stays importable from outside
-    // (runtime reuses it), so the rule must not flag src/transpile/module-graph.ts.
+    // Collapsed entry: module-graph.ts is no longer a second public door. A
+    // runtime deep import of it must now fail; runtime reaches the module-graph
+    // API only through src/transpiler.ts (which re-exports it).
     const graph = makeFixture({
       "src/runtime/x.ts":
         'import { y } from "../transpile/module-graph";\nexport const x = y;\n',
@@ -332,18 +333,22 @@ describe("arch:check dependency-cruiser guard", () => {
         "--output-type",
         "err",
       ]);
-      assert.equal(
+      assert.notEqual(
         status,
         0,
-        "importing the public module-graph API must pass",
+        "a runtime deep import of module-graph.ts must now fail",
       );
-      assert.doesNotMatch(output, /no-deep-imports-into-transpile/);
+      // Both the deep-import rule and the layer-3 rule guard this edge.
+      assert.match(
+        output,
+        /no-deep-imports-into-transpile|layer3-runtime-only-transpile-public-graph/,
+      );
     } finally {
       rmSync(graph, { recursive: true, force: true });
     }
   });
 
-  it("AC10: no production file outside the transpile package deep-imports src/transpile/** (except module-graph.ts and the committed baseline)", () => {
+  it("AC10: no production file outside the transpile package deep-imports src/transpile/** (single entry src/transpiler.ts, except the committed baseline)", () => {
     // Baseline is authoritative for the deep imports we knowingly tolerate.
     const baseline = JSON.parse(readFileSync(baselinePath, "utf8")) as Array<{
       rule: { name: string };
@@ -369,9 +374,9 @@ describe("arch:check dependency-cruiser guard", () => {
     };
     walk(srcDir);
 
-    // Deep import into transpile that is NOT the public module-graph entry.
-    const deepImport =
-      /from\s+["'](?:\.\.?\/)+transpile\/(?!module-graph["'])[^"']+["']/;
+    // Any deep import into src/transpile/** — the sole public entry is the
+    // sibling src/transpiler.ts, so nothing under transpile/ is importable.
+    const deepImport = /from\s+["'](?:\.\.?\/)+transpile\/[^"']+["']/;
     const offenders: string[] = [];
     for (const abs of files) {
       const rel = abs.slice(repoRoot.length + 1);

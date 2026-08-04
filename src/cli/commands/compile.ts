@@ -1,8 +1,7 @@
 import { existsSync, statSync } from "node:fs";
 import { errText } from "../../errors";
 import { dirname, resolve } from "node:path";
-import { loadModuleGraph } from "../../transpile/module-graph";
-import { collectDiagnostics, walkjhFiles } from "../../transpiler";
+import { loadModuleGraph, collectDiagnostics, walkjhFiles } from "../../transpiler";
 import { detectWorkspaceRoot } from "../shared/paths";
 import {
   diagnosticFromThrown as parseThrownDiagnostic,

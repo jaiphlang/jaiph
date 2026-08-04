@@ -11,8 +11,12 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve, extname } from "node:path";
 import { basename } from "node:path";
 import { parsejaiph } from "../../parser";
-import { buildScripts, buildScriptsFromGraph } from "../../transpiler";
-import { loadModuleGraph, writeModuleGraph } from "../../transpile/module-graph";
+import {
+  buildScripts,
+  buildScriptsFromGraph,
+  loadModuleGraph,
+  writeModuleGraph,
+} from "../../transpiler";
 import { canUseAnsi } from "../../runtime";
 import { resolveModuleMetadata, metadataToConfig } from "../../config";
 import { buildStepDisplayParamPairs, formatNamedParamsForDisplay } from "../shared/format-params.js";
