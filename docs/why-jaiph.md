@@ -10,11 +10,12 @@ Jaiph is a small language and runtime for AI-assisted automation. This page expl
 
 ## The problem
 
-An automation pipeline often has to do three different kinds of work in the same flow:
+An automation pipeline often has to do four different kinds of work in the same flow:
 
 - **Deterministic checks** — does this file exist, does the build pass, does the schema match.
 - **Real shell** — running a build tool, calling a CLI, changing files.
 - **AI steps that vary from run to run** — asking an agent to summarize a diff, write a fix, or classify a finding.
+- **Isolating sensitive data** — tokens and credentials a script needs must not reach the agent, the run journal, or an untrusted workspace snapshot.
 
 You can wire these together in any general-purpose language, but you pay for it in extra code. For each tool you write the argument handling, and for each agent call you write the structured-output handling. Every time, you also decide how to capture stdout, where to put logs, when to retry on failure, and how to fail clearly when the output does not match the structure you expected.
 
@@ -33,13 +34,15 @@ Every value in a workflow is a string, every step is logged, and every run leave
 
 ## Design commitments
 
-The design makes three commitments, and each one settles many smaller questions:
+The design makes four commitments, and each one settles many smaller questions:
 
 1. **Strict structure around AI steps.** An agent's response can vary from run to run, so the language gives you the surrounding pieces that do not. With `rule` and `ensure` you can check conditions before and after a prompt in the same pipeline. With `prompt … returns "{ … }"` you require the agent's output to match a JSON shape, and the step fails if it does not. With `recover` you retry a failed `run` after a repair body runs, up to `run.recover_limit` times, which helps when an agent's output needs a fix before the pipeline can go on.
 
 2. **Sandbox by default.** `jaiph run` runs inside a Docker container with capabilities dropped, mounts allowlisted, and host environment variables stripped down to an explicit allowlist (`JAIPH_*` run-control keys plus the credential keys for the selected backend). The host can turn the sandbox off with `JAIPH_UNSAFE=true` or `jaiph run --unsafe`, but a workflow file cannot disable it from inside. Jaiph does not claim Docker is impenetrable. The [Sandboxing](sandboxing.md) page states what the sandbox does and does not protect, and how it makes the safe path the easy default for a workflow you got from somewhere else.
 
-3. **No vendor lock-in.** You choose a backend with `agent.backend`, which can be `cursor`, `claude`, or `codex`. The cursor and claude backends call their own command-line tools, and the codex backend calls an HTTP chat-completions endpoint. On the cursor backend, `agent.command` can name any program that reads stdin and writes stdout, so a wrapper around a local model or a self-hosted endpoint works without implementing Jaiph's stream-json format. A workflow author does not need a proprietary agent protocol.
+3. **Isolating sensitive data.** Secrets and agent access are kept apart on purpose. Injected host keys (`--env`, [`trusted_envs`](configuration.md#trusted-envs)) reach trusted `run` steps only; a second fail-closed scrub keeps them out of every `prompt` backend subprocess, in every sandbox mode. The default Docker snapshot is git-defined, so gitignored files such as `.env` and token-bearing `.npmrc` never enter the container. Credential-shaped values are redacted from the run journal and from returned call diagnostics. The sanctioned path for a secret is explicit injection into a trusted step, not ambient host env or a file that happened to sit next to the workflow.
+
+4. **No vendor lock-in.** You choose a backend with `agent.backend`, which can be `cursor`, `claude`, or `codex`. The cursor and claude backends call their own command-line tools, and the codex backend calls an HTTP chat-completions endpoint. On the cursor backend, `agent.command` can name any program that reads stdin and writes stdout, so a wrapper around a local model or a self-hosted endpoint works without implementing Jaiph's stream-json format. A workflow author does not need a proprietary agent protocol.
 
 ## What Jaiph is not
 
