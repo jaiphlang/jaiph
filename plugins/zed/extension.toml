@@ -1,7 +1,7 @@
 id = "jaiph"
 name = "Jaiph"
 description = "Jaiph orchestration language support for Zed (Tree-sitter syntax highlighting)."
-version = "0.12.0"
+version = "0.13.0"
 schema_version = 1
 authors = ["Jaiph contributors"]
 repository = "https://github.com/jaiphlang/jaiph"

@@ -218,7 +218,7 @@ The project uses GitHub Actions (`.github/workflows/ci.yml`). The workflow defin
 The supported release-prep path is the **`.jaiph/prepare_release.jh`** workflow. Run it as:
 
 ```bash
-jaiph run .jaiph/prepare_release.jh -- 0.12.0    # explicit X.Y.Z
+jaiph run .jaiph/prepare_release.jh -- 0.13.0    # explicit X.Y.Z
 jaiph run .jaiph/prepare_release.jh             # next patch from package.json
 ```
 

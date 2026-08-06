@@ -78,13 +78,13 @@ npm install -g jaiph
 In GitHub Actions, install a pinned CLI with the [`setup-jaiph`](actions/setup-jaiph/) composite action (same release binaries, no Node required on the runner):
 
 ```yaml
-- uses: jaiphlang/jaiph/actions/setup-jaiph@v0.12.0
+- uses: jaiphlang/jaiph/actions/setup-jaiph@v0.13.0
   with:
-    version: 0.12.0        # semver, a release tag, or 'nightly'
+    version: 0.13.0        # semver, a release tag, or 'nightly'
 - run: jaiph --version     # jaiph is now on PATH for later steps
 ```
 
-Verify: `jaiph --version`. Switch versions: `jaiph use nightly` or `jaiph use 0.12.0`.
+Verify: `jaiph --version`. Switch versions: `jaiph use nightly` or `jaiph use 0.13.0`.
 
 Releases ship a `SHA256SUMS` file plus a detached [minisign](https://jedisct1.github.io/minisign/) signature (`SHA256SUMS.minisig`). The installer verifies the checksum and requires a valid signature. A missing `minisign` aborts the install on every host, including CI, rather than degrading to checksum-only. The `setup-jaiph` action installs `minisign` on the runner so CI installs stay signed. For a deliberate checksum-only install, set `JAIPH_ALLOW_UNSIGNED=1`. See [Verify the release signature](docs/setup.md#verify-the-release-signature).
 
