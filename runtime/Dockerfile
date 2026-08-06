@@ -240,7 +240,7 @@ ENV PATH="/home/jaiph/.local/bin:/usr/local/bun/bin:/usr/local/cargo/bin:/usr/lo
 # CURSOR_INSTALL_SHA256: sha256 of https://cursor.com/install. Cursor does not
 # publish checksums, and the URL is rolling — refresh this pin when upstream
 # changes the installer. Empty fails closed.
-ARG CURSOR_INSTALL_SHA256=905a5e6896f526ea24358372cd0983a19e0d262ccd779c317d256771ed84c850
+ARG CURSOR_INSTALL_SHA256=a51ebedf2a13bc073d994a6f2defbd1f4d976a6cf116ad678d071c6a363bf3e4
 RUN mkdir -p "$HOME/.local/bin" && \
     fetch-verify.sh https://cursor.com/install /tmp/install-cursor-agent.sh "${CURSOR_INSTALL_SHA256}" && \
     bash /tmp/install-cursor-agent.sh && \
