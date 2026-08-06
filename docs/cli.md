@@ -280,7 +280,7 @@ jaiph use <version|nightly>
 | Argument | Effect |
 |---|---|
 | `nightly` | Reinstalls from the rolling `nightly` prerelease. |
-| `<version>` (e.g. `0.12.0`) | Reinstalls the release binary for tag `v<version>`. |
+| `<version>` (e.g. `0.13.0`) | Reinstalls the release binary for tag `v<version>`. |
 
 Implementation: with no `JAIPH_INSTALL_COMMAND` override, `jaiph use` downloads the install script from `${JAIPH_SITE}/install` (default `https://jaiph.org`), verifies it against the published `${JAIPH_SITE}/install.sha256`, and only then runs it with `JAIPH_REPO_REF` set to `nightly` or `v<version>`. A mismatched or missing checksum fails closed rather than piping an unverified script to `bash`. Setting `JAIPH_INSTALL_COMMAND` overrides this with a verbatim command (forks, offline bundles, local scripts). The installer then downloads the matching per-platform binary plus `SHA256SUMS` (and its signature), verifies them, and replaces `~/.local/bin/jaiph` (or `JAIPH_BIN_DIR`).
 

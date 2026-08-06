@@ -197,7 +197,7 @@ The installer shell script (`docs/install`) reads these variables, and `jaiph us
 
 | Variable | Type | Default | Role |
 |---|---|---|---|
-| `JAIPH_REPO_REF` | string | `v0.12.0` (installer default when unset) | Release ref the installer downloads (`v0.12.0`, `nightly`, …). `jaiph use <version>` sets this to `v<version>` or `nightly`. |
+| `JAIPH_REPO_REF` | string | `v0.13.0` (installer default when unset) | Release ref the installer downloads (`v0.13.0`, `nightly`, …). `jaiph use <version>` sets this to `v<version>` or `nightly`. |
 | `JAIPH_BIN_DIR` | path | `$HOME/.local/bin` | Target bin directory for the installed `jaiph` binary. |
 | `JAIPH_RELEASE_BASE_URL` | string | `https://github.com/jaiphlang/jaiph/releases/download/<ref>` | Override the GitHub Release base URL the installer downloads from. |
 | `JAIPH_MINISIGN_PUBLIC_KEY` | string | bundled release key | minisign public key used to verify `SHA256SUMS.minisig`. Unset uses the bundled key. An explicitly empty value fails closed (the installer refuses to install rather than skipping signature verification). |

@@ -12,13 +12,13 @@ release artifacts.
 
 ```yaml
 steps:
-  - uses: jaiphlang/jaiph/actions/setup-jaiph@v0.12.0
+  - uses: jaiphlang/jaiph/actions/setup-jaiph@v0.13.0
     with:
-      version: 0.12.0        # semver, a release tag (v0.12.0), or 'nightly'
+      version: 0.13.0        # semver, a release tag (v0.13.0), or 'nightly'
   - run: jaiph --version     # jaiph is now on PATH for every later step
 ```
 
-Pin both the action (`@v0.12.0`) and the `version` input to an exact release for
+Pin both the action (`@v0.13.0`) and the `version` input to an exact release for
 reproducible CI. Use `nightly` to track the rolling prerelease:
 
 ```yaml
@@ -31,7 +31,7 @@ reproducible CI. Use `nightly` to track the rolling prerelease:
 
 | Input     | Required | Default   | Description |
 |-----------|----------|-----------|-------------|
-| `version` | no       | `nightly` | Version to install: a bare semver (`0.12.0`), a release tag (`v0.12.0`), or `nightly`. |
+| `version` | no       | `nightly` | Version to install: a bare semver (`0.13.0`), a release tag (`v0.13.0`), or `nightly`. |
 
 ## Outputs
 
