@@ -348,30 +348,6 @@ function lookupCalleeParams(
 
 // -- Misc small helpers -----------------------------------------------------
 
-export function hasUnquotedSendArrow(line: string): boolean {
-  let inSingleQuote = false;
-  let inDoubleQuote = false;
-  for (let i = 0; i < line.length; i += 1) {
-    const ch = line[i];
-    if (ch === "\\" && (inDoubleQuote || inSingleQuote)) {
-      i += 1;
-      continue;
-    }
-    if (ch === "'" && !inDoubleQuote) {
-      inSingleQuote = !inSingleQuote;
-      continue;
-    }
-    if (ch === '"' && !inSingleQuote) {
-      inDoubleQuote = !inDoubleQuote;
-      continue;
-    }
-    if (!inSingleQuote && !inDoubleQuote && ch === "<" && line[i + 1] === "-") {
-      return true;
-    }
-  }
-  return false;
-}
-
 export function extractConstScriptName(rhs: string): string | undefined {
   const trimmed = rhs.trim();
   if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(trimmed)) return trimmed;

@@ -627,7 +627,7 @@ test("ACCEPTANCE: route with rule ref fails E_VALIDATE", () => {
         "",
       ].join("\n"),
     );
-    assert.throws(() => buildScripts(root, join(root, "out")), /inbox route target "check" must declare exactly 3 parameters/);
+    assert.throws(() => buildScripts(root, join(root, "out")), /inbox route target "check" must declare 1 to 3 parameters/);
   });
 });
 
@@ -653,14 +653,13 @@ test("ACCEPTANCE: capture + send is parse error", () => {
       join(root, "main.jh"),
       [
         "export def main() {",
-        "  name = channel <- echo hello",
+        "  findings <- \"hello\"",
         "}",
         "",
       ].join("\n"),
     );
-    // "name = channel <- echo hello" parses as a shell line with `<-` that
-    // is not a well-formed `channel <- rhs` send.
-    assert.throws(() => buildScripts(root, join(root, "out")), /invalid send: channel must be a single name or/);
+    // `channel <- payload` is removed; use `send <payload> -> <channel>`.
+    assert.throws(() => buildScripts(root, join(root, "out")), /use 'send <payload> -> <channel>'/);
   });
 });
 
@@ -680,7 +679,7 @@ test("ACCEPTANCE: inbox.jh fixture builds successfully", () => {
         'script review_summary = `echo "[reviewed] $1"`',
         "",
         "def researcher() {",
-        "  findings <- run emit_findings()",
+        "  send run emit_findings() -> findings",
         "}",
         "",
         'script write_findings_file = `echo "$1" > findings_file.md`',
@@ -688,11 +687,11 @@ test("ACCEPTANCE: inbox.jh fixture builds successfully", () => {
         "def analyst(message, chan, sender) {",
         '  run write_findings_file(message)',
         '  const summary = run summarize_findings()',
-        '  summary <- "${summary}"',
+        '  send "${summary}" -> summary',
         "}",
         "",
         "def reviewer(message, chan, sender) {",
-        '  final_summary <- run review_summary(message)',
+        '  send run review_summary(message) -> final_summary',
         "}",
         "",
         "export def main() {",

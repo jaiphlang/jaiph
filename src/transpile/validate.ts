@@ -336,13 +336,13 @@ export function validateModuleInto(
       diag.capture(() => {
         validateRef(wfRef, ast, refCtx, { mode: "expect", expect: ROUTE_REF_EXPECT });
         const targetParams = resolveRouteTargetParams(wfRef.value, ast, refCtx);
-        if (targetParams !== undefined && targetParams !== 3) {
+        if (targetParams !== undefined && (targetParams < 1 || targetParams > 3)) {
           diag.error(
             ast.filePath,
             wfRef.loc.line,
             wfRef.loc.col,
             "E_VALIDATE",
-            `inbox route target "${wfRef.value}" must declare exactly 3 parameters (message, channel, sender), but declares ${targetParams}`,
+            `inbox route target "${wfRef.value}" must declare 1 to 3 parameters (message, channel, sender), but declares ${targetParams}`,
           );
         }
       });

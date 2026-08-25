@@ -6,13 +6,15 @@ import {
   hasUnescapedClosingQuote,
   indexOfClosingDoubleQuote,
   isJaiphInterpolationRef,
+  matchLegacySendOperator,
   matchSendOperator,
+  parseSendChannelArrow,
   parseCallRef,
   parseLogMessageRhs,
   rejectTrailingContent,
   SINGLE_QUOTE_MESSAGE,
 } from "./core";
-import { consumeTripleQuotedArg, dedentTripleQuotedBody, tripleQuoteBodyToRaw } from "./triple-quote";
+import { consumeTripleQuotedArg, dedentTripleQuotedBody, parseTripleQuoteBlock, tripleQuoteBodyToRaw } from "./triple-quote";
 import { parseCallRefMultiline } from "./call-args";
 import { parseConstRhs } from "./const-rhs";
 import { parseAnonymousInlineScript } from "./inline-script";
@@ -105,10 +107,11 @@ export function parseBraceBlockBody(
       continue;
     }
     // Reject route declarations at body level: routes belong at the top of the file.
+    // `send … -> channel` is a send statement, not a route.
     const routeMatch = inner.match(
       /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)\s+->\s+(.+)$/,
     );
-    if (routeMatch) {
+    if (routeMatch && routeMatch[1] !== "send") {
       fail(
         filePath,
         `route declarations belong at the top level: channel ${routeMatch[1]} -> ${routeMatch[2].trim()}`,
@@ -693,6 +696,7 @@ export const STATEMENT: Record<string, BlockHandler> = {
   logwarn: tryParseLogwarn,
   return: tryParseReturn,
   match: tryParseStandaloneMatch,
+  send: tryParseSend,
 };
 
 /** Error guards for assignment-shape lines. Emit a fail() or no-op; never return a step. */
@@ -715,6 +719,14 @@ function applyAssignmentGuards(c: BlockCtx): void {
   ) {
     const captureName = generic[1];
     const rest = generic[2].trim();
+    if (rest.startsWith("send ") || rest === "send") {
+      fail(
+        c.filePath,
+        "use 'send <payload> -> <channel>'",
+        c.innerNo,
+        c.innerRaw.indexOf(captureName) + 1,
+      );
+    }
     if (rest.startsWith("run ") || rest.startsWith("ensure ")) {
       fail(
         c.filePath,
@@ -726,11 +738,30 @@ function applyAssignmentGuards(c: BlockCtx): void {
   }
 }
 
-function trySend(c: BlockCtx): BlockResult | null {
+function tryParseSend(c: BlockCtx): BlockResult | null {
+  if (c.inner !== "send" && !c.inner.startsWith("send ")) return null;
+  const rest = c.inner.slice("send".length).trimStart();
+  if (rest.startsWith('"""')) {
+    const tqLines = [...c.lines];
+    tqLines[c.idx] = rest;
+    const { body, nextIdx, afterClose } = parseTripleQuoteBlock(c.filePath, tqLines, c.idx);
+    const channel = parseSendChannelArrow(afterClose);
+    if (!channel) {
+      fail(c.filePath, "use 'send <payload> -> <channel>'", c.innerNo);
+    }
+    const value: Expr = { kind: "literal", raw: tripleQuoteBodyToRaw(dedentTripleQuotedBody(body)) };
+    c.trivia.setNode(value, { tripleQuoted: true, rawBody: body });
+    return {
+      step: { type: "send", channel, value, loc: { line: c.innerNo, col: 1 } },
+      nextIdx,
+    };
+  }
   const sendMatch = matchSendOperator(c.inner);
-  if (!sendMatch) return null;
-  const arrowIdx = c.inner.indexOf("<-");
-  const rhsCol = arrowIdx >= 0 ? arrowIdx + 3 : 1;
+  if (!sendMatch) {
+    fail(c.filePath, "use 'send <payload> -> <channel>'", c.innerNo);
+  }
+  const sendKw = c.innerRaw.match(/^\s*send\s+/);
+  const rhsCol = sendKw ? sendKw[0].length + 1 : colFromRaw(c.innerRaw);
   const { value, nextIdx } = parseSendRhs(
     c.filePath, sendMatch.rhsText, c.innerNo, rhsCol, c.lines, c.idx, c.trivia,
   );
@@ -738,6 +769,11 @@ function trySend(c: BlockCtx): BlockResult | null {
     step: { type: "send", channel: sendMatch.channel, value, loc: { line: c.innerNo, col: 1 } },
     nextIdx,
   };
+}
+
+function tryLegacySend(c: BlockCtx): BlockResult | null {
+  if (!matchLegacySendOperator(c.inner)) return null;
+  fail(c.filePath, "use 'send <payload> -> <channel>'", c.innerNo);
 }
 
 function shellFallthrough(c: BlockCtx): BlockResult {
@@ -748,7 +784,7 @@ function shellFallthrough(c: BlockCtx): BlockResult {
 /**
  * One workflow statement inside `{ … }` (catch body, etc.).
  *
- * Dispatches by leading keyword through `STATEMENT`; falls through to send /
+ * Dispatches by leading keyword through `STATEMENT`; falls through to
  * shell for non-keyword lines.
  */
 export function parseBlockStatement(
@@ -783,7 +819,7 @@ export function parseBlockStatement(
     }
   }
 
-  return trySend(c) ?? shellFallthrough(c);
+  return tryLegacySend(c) ?? shellFallthrough(c);
 }
 
 const KEYWORD_EXAMPLE = {

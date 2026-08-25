@@ -82,7 +82,7 @@ import_script_stmt = "import" "script" string "as" IDENT ;
 channel_decl = "channel" IDENT [ "->" REF { "," REF } ] ;
 ```
 
-One channel per line. A `->` route declaration inside a def body is `E_PARSE`. Routes are stored on `ChannelDef`. Route targets must be defs declaring exactly **three** named parameters (message, channel, sender). Multiple routes drain sequentially.
+One channel per line. A `->` route declaration inside a def body is `E_PARSE`. Routes are stored on `ChannelDef`. Route targets must be defs declaring **1 to 3** named parameters (message, channel, sender). Multiple routes drain sequentially.
 
 ## Config blocks
 
@@ -280,7 +280,7 @@ return_value = double_quoted_string | triple_quoted_block | "$" IDENT | "${" IDE
 ### `send`
 
 ```ebnf
-send_stmt = IDENT "<-" send_rhs ;
+send_stmt = "send" send_rhs "->" (IDENT | IDENT "." IDENT) ;
 send_rhs  = double_quoted_string | triple_quoted_block | "$" IDENT | "${" … "}"
           | "run" call_ref
           | shell_fragment ;
@@ -288,8 +288,8 @@ send_rhs  = double_quoted_string | triple_quoted_block | "$" IDENT | "${" … "}
 
 | Rule | Behaviour |
 |---|---|
-| RHS required | Bare `channel <-` is `E_PARSE`. |
-| Shell fragment RHS | A raw shell expression (for example `findings <- echo "$payload"`) parses as a managed shell payload; allowed only on `send` (`E_VALIDATE` elsewhere). |
+| Payload required | `send -> channel` is `E_PARSE`. |
+| Shell fragment payload | A raw shell expression (for example `send echo "$payload" -> findings`) parses as a managed shell payload; allowed only on `send` (`E_VALIDATE` elsewhere). |
 | Bare ref RHS | A bare `ref`-shaped word that names a def / script is `E_VALIDATE`. Use `run ref()` or a string. |
 | `run` without `()` | Does not parse as a managed send RHS. |
 | Allowed in | Defs. |
@@ -437,7 +437,7 @@ Validator entry points (`src/transpile/validate.ts` for the outer layer; `src/tr
 3. Import aliases must be unique. Import targets must exist.
 4. Unified per-module namespace: channels, defs, scripts, script-import aliases, and top-level `const` share one namespace. Duplicate top-level names fail at parse time (`E_PARSE`); duplicate import aliases fail in validation (`E_VALIDATE`).
 5. `run` targets a def or a script. Same rules apply to `return run` and `${run …}`. `recover` is legal on every `run`.
-6. Channel references in `send` must resolve to declared channels. Route targets must be defs with exactly three parameters. Inline routes in def bodies are `E_PARSE`.
+6. Channel references in `send` must resolve to declared channels. Route targets must be defs with 1 to 3 parameters (message, channel, sender). Inline routes in def bodies are `E_PARSE`.
 7. `catch` / `recover` argument ordering — all call args appear before `catch` / `recover`.
 8. Shell redirection (`>`, `>>`, `|`, `&`) on `run` is rejected — trailing operators are `E_PARSE`; operators in unquoted call-argument text are `E_VALIDATE`.
 9. Type crossings produce specific `E_VALIDATE` messages (see [Types](#types)).

@@ -7,8 +7,8 @@ const SEND_RHS_HINT =
   'send right-hand side must be a quoted string ("..."), a variable ($name or ${...}), or "run <ref> [args]" — not raw shell; use a script or use const';
 
 /**
- * Parse RHS after `<-` for the send operator. Returns the parsed RHS as an `Expr`
- * (replaces the legacy `SendRhsDef` union) plus the next line index.
+ * Parse the payload of `send <payload> -> channel`. Returns the parsed payload
+ * as an `Expr` plus the next line index.
  */
 export function parseSendRhs(
   filePath: string,
@@ -22,7 +22,7 @@ export function parseSendRhs(
   const t = rhs.trim();
   const defaultNext = (idx ?? lineNo - 1) + 1;
   if (t === "") {
-    fail(filePath, 'send requires an explicit payload: channel <- "message" — bare forward syntax (channel <-) has been removed', lineNo, col);
+    fail(filePath, "use 'send <payload> -> <channel>'", lineNo, col);
   }
   if (t.startsWith('"""') && lines && idx !== undefined) {
     const tqLines = [...lines];
@@ -35,7 +35,7 @@ export function parseSendRhs(
   }
   if (t.startsWith('"')) {
     if (!hasUnescapedClosingQuote(t, 1)) {
-      fail(filePath, 'multiline strings use triple quotes: channel <- """..."""', lineNo, col);
+      fail(filePath, 'multiline strings use triple quotes: send """...""" -> channel', lineNo, col);
     }
     const close = indexOfClosingDoubleQuote(t, 1);
     if (close === -1) {

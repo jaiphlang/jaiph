@@ -92,10 +92,12 @@ test("test-block keywords highlight in current.test.jh", () => {
   }
 });
 
-test("stale `wait` surface is not a keyword", () => {
+test("stale removed keywords are not highlighted as @keyword", () => {
   const caps = runQuery("highlights.scm", "regression.jh");
-  assert.ok(!has(caps, "keyword", "wait"), "`wait` was removed; must not be @keyword");
-  assert.ok(has(caps, "variable", "wait"), "`wait` should highlight as a plain @variable");
+  for (const stale of ["wait", "local", "rule", "workflow", "ensure", "inbox"]) {
+    assert.ok(!has(caps, "keyword", stale), `\`${stale}\` was removed; must not be @keyword`);
+    assert.ok(has(caps, "variable", stale), `\`${stale}\` should highlight as a plain @variable`);
+  }
 });
 
 test("injections resolve embedded script languages", () => {

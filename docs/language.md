@@ -35,7 +35,7 @@ Crossings produce specific `E_VALIDATE` messages identifying the violated rule.
 | `import "path" as alias` | Loads another module. `.jh` is appended unless the path already ends in `.jh`. Resolution: relative-first; then, for paths containing a `/` (and when a workspace root is known), library fallback (`<workspace>/.jaiph/libs/<name>/...`). |
 | `import script "path" as name` | Loads an external script file (no `.jh` appended). Path is relative-only. Treated as a `script` symbol. |
 | `export def` / `export script` | Marks a definition public. Names are private by default: same-file code can call any name; `import` can only call names listed in `mod.exports`. Zero exports means nothing is public. |
-| `channel name [-> target [, target …]]` | Declares a named queue. Inline routes target defs with exactly three parameters (message, channel, sender). |
+| `channel name [-> target [, target …]]` | Declares a named queue. Inline routes target defs with 1 to 3 parameters (message, channel, sender). |
 | `const NAME = value` | Module-scoped immutable string. Values: double-quoted, triple-quoted, or bare token. Stored verbatim. |
 | `config { … }` | Module-level configuration block (`agent.*`, `run.*`, `runtime.*`, `module.*`). See [Configuration](configuration.md). |
 | `script name = …` | Executable definition. Invoked with `run`. |
@@ -54,7 +54,7 @@ There are eight `StepDef` variants. Every body line that does not match a manage
 | `exec` | `run` / `prompt` / standalone `match` / inline shell | Side-effecting managed call statement. The discriminator (call / inline_script / prompt / match / shell) lives in `body.kind`. Carries optional `catch` or `recover`. |
 | `const` | `const NAME = <expr>` | Bind a value expression to a name. |
 | `return` | `return <expr>` | Set the managed return value. |
-| `send` | `channel <- <expr>` | Enqueue a payload on a channel for the current workflow context. |
+| `send` | `send <expr> -> channel` | Enqueue a payload on a channel for the current workflow context. |
 | `say` | `log` / `logerr` / `logwarn` / `fail` | `level: "log"` / `"logerr"` / `"logwarn"` / `"fail"`. `level: "fail"` aborts with the message. |
 | `if` | `if <subject> <op> <operand> { … } [ else if … { … } ]* [ else { … } ]` | Conditional block. |
 | `for_lines` | `for <iter> in <source> { … }` | Iterate lines of a string variable. |
@@ -71,7 +71,7 @@ Every value position (`const` RHS, `return`, `send` RHS, `log` / `logerr` / `fai
 | `inline_script` | `` `body`(args) `` / `` ```lang...body...```(args) `` | Inline script body emitted as `scripts/__inline_<hash>`. |
 | `prompt` | `prompt body [returns "<schema>"]` | Sends body to the agent backend; JSON-quoted in transport. |
 | `match` | `match <subject> { … }` | Walks arms top-to-bottom; first match wins. |
-| `shell` | Free-form workflow body line; raw shell fragment on a `send` RHS | An unparsed line becomes an inline-shell `exec` step. Send: a raw shell fragment (e.g. `findings <- echo "$payload"`) is a valid managed shell payload. `send` is the only position that accepts `shell`; it is `E_VALIDATE` anywhere else. |
+| `shell` | Free-form workflow body line; raw shell fragment on a `send` payload | An unparsed line becomes an inline-shell `exec` step. Send: a raw shell fragment (e.g. `send echo "$payload" -> findings`) is a valid managed shell payload. `send` is the only position that accepts `shell`; it is `E_VALIDATE` anywhere else. |
 | `bare_ref` | A bare symbol on a `send` RHS | Always rejected by the validator; preserved so the error can name the symbol. |
 
 ## `run` — execute a def or script
@@ -259,21 +259,21 @@ return run `cat report.txt`()
 ## `send` — channel message
 
 ```jaiph
-alerts <- "Build started"
-reports <- ${output}
-results <- run build_message(data)
-alerts <- """
+send "Build started" -> alerts
+send ${output} -> reports
+send run build_message(data) -> results
+send """
   Build report for ${project}
-"""
+""" -> alerts
 ```
 
 | Rule | Behaviour |
 |---|---|
-| RHS required | Bare `channel <-` is `E_PARSE`. |
-| Allowed RHS | Double-quoted string, triple-quoted block, `${ident}` / `${…}`, `run ref(args)` (with parens). |
-| Shell fragment RHS | A raw shell fragment (e.g. `findings <- echo "$payload"`) is a managed shell payload — allowed only on `send`. |
-| Bare ref RHS | A bare def / script name is `E_VALIDATE`. |
-| Combined capture | `name = channel <- …` is `E_VALIDATE` (`invalid send: channel must be a single name or …`). |
+| Payload required | `send -> channel` is `E_PARSE`. |
+| Allowed payload | Double-quoted string, triple-quoted block, `${ident}` / `${…}`, `run ref(args)` (with parens). |
+| Shell fragment payload | A raw shell fragment (e.g. `send echo "$payload" -> findings`) is a managed shell payload — allowed only on `send`. |
+| Bare ref payload | A bare def / script name is `E_VALIDATE`. |
+| Combined capture | `name = send …` is `E_PARSE`. |
 | Allowed in | Defs. |
 | Dispatch | `send` enqueues on the active workflow context. After that workflow's steps complete successfully, the runtime drains the queue sequentially and runs each route target. Sends from nested workflows bubble to the nearest ancestor context that declares routes for the channel. See [Inbox & Dispatch](inbox.md). |
 

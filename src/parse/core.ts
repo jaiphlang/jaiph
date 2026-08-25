@@ -303,10 +303,9 @@ export function parseParenArgs(s: string): { args?: Arg[]; rest: string } | null
   return { args: result.args, rest: result.rest };
 }
 
-/**
- * Match `channel <- command` when `<-` appears outside quoted strings.
- */
-export function matchSendOperator(line: string): { rhsText: string; channel: string } | null {
+const CHANNEL_REF = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)$/;
+
+function scanUnquoted(line: string, onHit: (i: number) => boolean): void {
   let inSingleQuote = false;
   let inDoubleQuote = false;
   for (let i = 0; i < line.length; i += 1) {
@@ -323,16 +322,49 @@ export function matchSendOperator(line: string): { rhsText: string; channel: str
       inDoubleQuote = !inDoubleQuote;
       continue;
     }
-    if (!inSingleQuote && !inDoubleQuote && ch === "<" && line[i + 1] === "-") {
-      const before = line.slice(0, i).trimEnd();
-      const after = line.slice(i + 2).trimStart();
-      const channelMatch = before.match(
-        /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)$/,
-      );
-      if (channelMatch) {
-        return { rhsText: after, channel: channelMatch[1] };
-      }
-    }
+    if (!inSingleQuote && !inDoubleQuote && onHit(i)) return;
   }
-  return null;
+}
+
+/**
+ * Match `send <payload> -> channel` when `->` appears outside quoted strings.
+ */
+export function matchSendOperator(line: string): { rhsText: string; channel: string } | null {
+  const trimmed = line.trim();
+  if (!trimmed.startsWith("send ")) return null;
+  const rest = trimmed.slice("send ".length);
+  let found: { rhsText: string; channel: string } | null = null;
+  scanUnquoted(rest, (i) => {
+    if (rest[i] !== "-" || rest[i + 1] !== ">") return false;
+    const before = rest.slice(0, i).trimEnd();
+    const after = rest.slice(i + 2).trimStart();
+    const channelMatch = after.match(CHANNEL_REF);
+    if (channelMatch && before.length > 0) {
+      found = { rhsText: before, channel: channelMatch[1] };
+      return true;
+    }
+    return false;
+  });
+  return found;
+}
+
+/** True when `channel <- payload` (removed send form) appears outside quotes. */
+export function matchLegacySendOperator(line: string): boolean {
+  let matched = false;
+  scanUnquoted(line, (i) => {
+    if (line[i] !== "<" || line[i + 1] !== "-") return false;
+    const before = line.slice(0, i).trimEnd();
+    if (/[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*$/.test(before)) {
+      matched = true;
+      return true;
+    }
+    return false;
+  });
+  return matched;
+}
+
+/** Parse `-> channel` after a triple-quoted send payload. */
+export function parseSendChannelArrow(text: string): string | null {
+  const m = text.trim().match(/^->\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)$/);
+  return m ? m[1] : null;
 }

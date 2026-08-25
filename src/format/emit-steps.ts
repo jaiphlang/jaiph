@@ -83,7 +83,7 @@ export function emitMatchArm(arm: MatchArmDef, armIndent: string, bodyIndent: st
 }
 
 /**
- * Emit an `Expr` as it would appear after a `=` / `<-` / `return` / `log` etc.
+ * Emit an `Expr` as it would appear after a `=` / `send` / `return` / `log` etc.
  * Multi-line value forms (inline-script fenced bodies, triple-quoted literals,
  * match arm blocks, triple-quoted prompts) return additional lines via the
  * `tail` array so the caller can append them at the right indent level.
@@ -321,8 +321,14 @@ function emitStep(step: StepDef, pad: string, currentIndent: string, trivia: Tri
 
   if (step.type === "send") {
     const { head, tail } = emitExprFirstLine(step.value, trivia, ci, pad);
-    lines.push(`${ci}${step.channel} <- ${head}`);
-    lines.push(...tail);
+    if (tail.length === 0) {
+      lines.push(`${ci}send ${head} -> ${step.channel}`);
+    } else {
+      lines.push(`${ci}send ${head}`);
+      const last = tail[tail.length - 1]!;
+      tail[tail.length - 1] = `${last} -> ${step.channel}`;
+      lines.push(...tail);
+    }
     return lines;
   }
 

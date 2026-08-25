@@ -86,43 +86,43 @@ script emit_m9 = `echo "m9"`
 script emit_m10 = `echo "m10"`
 
 def s1() {
-  data <- run emit_m1()
+  send run emit_m1() -> data
 }
 
 def s2() {
-  data <- run emit_m2()
+  send run emit_m2() -> data
 }
 
 def s3() {
-  data <- run emit_m3()
+  send run emit_m3() -> data
 }
 
 def s4() {
-  data <- run emit_m4()
+  send run emit_m4() -> data
 }
 
 def s5() {
-  data <- run emit_m5()
+  send run emit_m5() -> data
 }
 
 def s6() {
-  data <- run emit_m6()
+  send run emit_m6() -> data
 }
 
 def s7() {
-  data <- run emit_m7()
+  send run emit_m7() -> data
 }
 
 def s8() {
-  data <- run emit_m8()
+  send run emit_m8() -> data
 }
 
 def s9() {
-  data <- run emit_m9()
+  send run emit_m9() -> data
 }
 
 def s10() {
-  data <- run emit_m10()
+  send run emit_m10() -> data
 }
 
 script sink_impl = `echo "$1" >> sink_all.txt`
@@ -175,15 +175,15 @@ script emit_pb = `echo "pb"`
 script emit_pc = `echo "pc"`
 
 def producer_a() {
-  ch <- run emit_pa()
+  send run emit_pa() -> ch
 }
 
 def producer_b() {
-  ch <- run emit_pb()
+  send run emit_pb() -> ch
 }
 
 def producer_c() {
-  ch <- run emit_pc()
+  send run emit_pc() -> ch
 }
 
 script target_x_impl = `echo "x:$1" >> fanout_log.txt`
@@ -255,11 +255,11 @@ script emit_raw = `echo "raw-data"`
 script emit_processed = `echo "processed:$1"`
 
 def sender() {
-  ch_raw <- run emit_raw()
+  send run emit_raw() -> ch_raw
 }
 
 def processor(message, chan, sender) {
-  ch_processed <- run emit_processed(message)
+  send run emit_processed(message) -> ch_processed
 }
 
 script nested_sink_impl = `echo "$1" > nested_result.txt`
@@ -297,7 +297,7 @@ channel ch -> good, fail_a, fail_b
 script emit_msg = `echo "msg"`
 
 def producer() {
-  ch <- run emit_msg()
+  send run emit_msg() -> ch
 }
 
 script fail_a_impl = ```
@@ -357,23 +357,23 @@ script emit_e4 = `echo "e4"`
 script emit_e5 = `echo "e5"`
 
 def s1() {
-  ev <- run emit_e1()
+  send run emit_e1() -> ev
 }
 
 def s2() {
-  ev <- run emit_e2()
+  send run emit_e2() -> ev
 }
 
 def s3() {
-  ev <- run emit_e3()
+  send run emit_e3() -> ev
 }
 
 def s4() {
-  ev <- run emit_e4()
+  send run emit_e4() -> ev
 }
 
 def s5() {
-  ev <- run emit_e5()
+  send run emit_e5() -> ev
 }
 
 script t1_impl = `echo "t1:$1" >> artifact_log.txt`
@@ -433,15 +433,15 @@ script soak_emit_i2 = `echo "i2"`
 script soak_emit_i3 = `echo "i3"`
 
 def s1() {
-  ch <- run soak_emit_i1()
+  send run soak_emit_i1() -> ch
 }
 
 def s2() {
-  ch <- run soak_emit_i2()
+  send run soak_emit_i2() -> ch
 }
 
 def s3() {
-  ch <- run soak_emit_i3()
+  send run soak_emit_i3() -> ch
 }
 
 script soak_t1_impl = `echo "t1:$1" >> soak_log.txt`
@@ -524,43 +524,43 @@ script seq_emit_m9 = `echo "m9"`
 script seq_emit_m10 = `echo "m10"`
 
 def s1() {
-  data <- run seq_emit_m1()
+  send run seq_emit_m1() -> data
 }
 
 def s2() {
-  data <- run seq_emit_m2()
+  send run seq_emit_m2() -> data
 }
 
 def s3() {
-  data <- run seq_emit_m3()
+  send run seq_emit_m3() -> data
 }
 
 def s4() {
-  data <- run seq_emit_m4()
+  send run seq_emit_m4() -> data
 }
 
 def s5() {
-  data <- run seq_emit_m5()
+  send run seq_emit_m5() -> data
 }
 
 def s6() {
-  data <- run seq_emit_m6()
+  send run seq_emit_m6() -> data
 }
 
 def s7() {
-  data <- run seq_emit_m7()
+  send run seq_emit_m7() -> data
 }
 
 def s8() {
-  data <- run seq_emit_m8()
+  send run seq_emit_m8() -> data
 }
 
 def s9() {
-  data <- run seq_emit_m9()
+  send run seq_emit_m9() -> data
 }
 
 def s10() {
-  data <- run seq_emit_m10()
+  send run seq_emit_m10() -> data
 }
 
 script seq_sink_impl = `echo "$1" >> seq_sink_all.txt`

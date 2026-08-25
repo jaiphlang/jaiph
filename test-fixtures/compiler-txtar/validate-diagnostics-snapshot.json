@@ -67,7 +67,7 @@
     {
       "file": "input.jh",
       "line": 7,
-      "col": 5,
+      "col": 8,
       "code": "E_VALIDATE",
       "message": "def \"w\" must be called with run"
     }
@@ -97,7 +97,7 @@
       "line": 1,
       "col": 21,
       "code": "E_VALIDATE",
-      "message": "inbox route target \"check\" must declare exactly 3 parameters (message, channel, sender), but declares 0"
+      "message": "inbox route target \"check\" must declare 1 to 3 parameters (message, channel, sender), but declares 0"
     }
   ],
   "validate-errors.txt > route inside workflow body is parse error": [
@@ -239,7 +239,7 @@
       "line": 2,
       "col": 21,
       "code": "E_VALIDATE",
-      "message": "inbox route target \"lib.check\" must declare exactly 3 parameters (message, channel, sender), but declares 0"
+      "message": "inbox route target \"lib.check\" must declare 1 to 3 parameters (message, channel, sender), but declares 0"
     }
   ],
   "validate-errors.txt > arity mismatch: too few args to workflow": [
@@ -284,7 +284,7 @@
       "line": 1,
       "col": 21,
       "code": "E_VALIDATE",
-      "message": "inbox route target \"handler\" must declare exactly 3 parameters (message, channel, sender), but declares 1"
+      "message": "inbox route target \"handler\" must declare 1 to 3 parameters (message, channel, sender), but declares 4"
     }
   ],
   "validate-errors.txt > route target with zero parameters": [
@@ -293,7 +293,7 @@
       "line": 1,
       "col": 21,
       "code": "E_VALIDATE",
-      "message": "inbox route target \"handler\" must declare exactly 3 parameters (message, channel, sender), but declares 0"
+      "message": "inbox route target \"handler\" must declare 1 to 3 parameters (message, channel, sender), but declares 0"
     }
   ],
   "validate-errors.txt > inline run ref with unknown rule": [
@@ -318,7 +318,7 @@
     {
       "file": "input.jh",
       "line": 6,
-      "col": 5,
+      "col": 8,
       "code": "E_VALIDATE",
       "message": "def \"check\" must be called with run"
     }
@@ -356,7 +356,7 @@
       "line": 2,
       "col": 21,
       "code": "E_VALIDATE",
-      "message": "inbox route target \"lib.handler\" must declare exactly 3 parameters (message, channel, sender), but declares 1"
+      "message": "inbox route target \"lib.handler\" must declare 1 to 3 parameters (message, channel, sender), but declares 4"
     }
   ],
   "validate-errors.txt > const run of string variable in rule rejected": [
@@ -372,16 +372,16 @@
     {
       "file": "input.jh",
       "line": 2,
-      "col": 3,
+      "col": 1,
       "code": "E_VALIDATE",
-      "message": "invalid send: channel must be a single name or `alias.name` (at most one dot in the channel part)"
+      "message": "Channel \"a.b.c\" is not defined"
     }
   ],
   "validate-errors.txt > command substitution invokes workflow in send shell RHS": [
     {
       "file": "input.jh",
       "line": 6,
-      "col": 5,
+      "col": 8,
       "code": "E_VALIDATE",
       "message": "command substitution cannot invoke def \"helper\"; use run helper ... in a def step"
     }
@@ -390,7 +390,7 @@
     {
       "file": "input.jh",
       "line": 4,
-      "col": 5,
+      "col": 8,
       "code": "E_VALIDATE",
       "message": "command substitution cannot invoke script \"helper\"; use run helper ... for managed calls (or use pure shell inside $(...))"
     }
@@ -498,7 +498,7 @@
     {
       "file": "input.jh",
       "line": 4,
-      "col": 5,
+      "col": 8,
       "code": "E_VALIDATE",
       "message": "script \"helper\" must be called with run"
     }
@@ -689,7 +689,7 @@
     {
       "file": "input.jh",
       "line": 6,
-      "col": 5,
+      "col": 8,
       "code": "E_VALIDATE",
       "message": "command substitution cannot invoke def \"check\"; use run check ... in a def step"
     }
@@ -698,7 +698,7 @@
     {
       "file": "input.jh",
       "line": 4,
-      "col": 5,
+      "col": 8,
       "code": "E_VALIDATE",
       "message": "command substitution cannot contain channel send (<-); use a workflow send step instead"
     }
@@ -868,7 +868,7 @@
     {
       "file": "main.jh",
       "line": 4,
-      "col": 5,
+      "col": 8,
       "code": "E_VALIDATE",
       "message": "unknown symbol \"lib.nonexistent\" in send right-hand side"
     }
@@ -923,7 +923,7 @@
     {
       "file": "main.jh",
       "line": 4,
-      "col": 5,
+      "col": 8,
       "code": "E_VALIDATE",
       "message": "\"helper\" is not exported from module \"lib\""
     }
@@ -932,7 +932,7 @@
     {
       "file": "main.jh",
       "line": 4,
-      "col": 5,
+      "col": 8,
       "code": "E_VALIDATE",
       "message": "def \"lib.check\" must be called with run"
     }
@@ -986,7 +986,7 @@
     {
       "file": "main.jh",
       "line": 4,
-      "col": 5,
+      "col": 8,
       "code": "E_VALIDATE",
       "message": "\"private_wf\" is not exported from module \"lib\""
     }
@@ -1004,7 +1004,7 @@
     {
       "file": "main.jh",
       "line": 4,
-      "col": 5,
+      "col": 8,
       "code": "E_VALIDATE",
       "message": "\"private_script\" is not exported from module \"lib\""
     }

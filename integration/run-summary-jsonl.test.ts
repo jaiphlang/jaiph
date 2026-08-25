@@ -58,7 +58,7 @@ test("run_summary.jsonl: workflow, steps, log, inbox dispatch stream", () => {
         "def sender() {",
         "  log \"sending\"",
         "  logerr \"warn-line\"",
-        "  greetings <- run emit_greeting()",
+        "  send run emit_greeting() -> greetings",
         "}",
         "",
         'script write_received_file = `echo "$1" > received.txt`',

@@ -144,11 +144,11 @@ test("collectDefChildren: collects send step", () => {
   const mod = modFor([
     "channel ch",
     "export def main() {",
-    '  ch <- "hi"',
+    '  send "hi" -> ch',
     "}",
   ].join("\n"));
   const items = collectDefChildren(mod, "main");
-  assert.ok(items.some((i) => i.label === "ch <- send"));
+  assert.ok(items.some((i) => i.label === "send -> ch"));
 });
 
 test("collectDefChildren: collects const and return rows", () => {

@@ -1205,7 +1205,6 @@ export class NodeWorkflowRuntime {
       cursor += 1;
       const targets = ctx.routes.get(msg.channel) ?? [];
       if (targets.length === 0) continue;
-      const inboxArgs = [msg.content, msg.channel, msg.sender];
       for (const target of targets) {
         appendRunSummaryLine(
           JSON.stringify({
@@ -1220,6 +1219,9 @@ export class NodeWorkflowRuntime {
           }),
         );
         const t0 = Date.now();
+        const resolved = resolveDefRef(this.graph, scope.filePath, { value: target, loc: { line: 1, col: 1 } });
+        const n = resolved?.def.params.length ?? 0;
+        const inboxArgs = [msg.content, msg.channel, msg.sender].slice(0, n);
         const dispatch = await this.executeRunRef(
           this.buildInboxDispatchScope(scope, target, msg),
           target,

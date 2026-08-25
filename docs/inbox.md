@@ -23,7 +23,7 @@ Channels give workflows a way to publish and subscribe without leaving the proce
 
 ## When messages are delivered
 
-A `send` does not run the route targets the moment the `<-` line executes. Instead, each workflow frame has its own in-memory queue. When the runtime runs a `send`, it adds the message to a queue and drains the queue later.
+A `send` does not run the route targets the moment the line executes. Instead, each workflow frame has its own in-memory queue. When the runtime runs a `send`, it adds the message to a queue and drains the queue later.
 
 The runtime picks the queue by walking outward from the sender through the stack of running workflows. It uses the nearest frame that declares routes for the channel. When no frame declares routes, it uses the sender's own frame (see [Routed and unrouted sends](#routed-and-unrouted-sends)).
 
@@ -47,7 +47,7 @@ channel findings -> analyst, reviewer
 
 Routes are top-level data on `ChannelDef`, not statements inside a workflow body. Declaring routes on the channel has the following effects:
 
-1. **There is one list of subscribers per channel.** The compiler checks every target when it compiles the module. Each target must be a `def` that declares exactly three parameters. A script is rejected, and so is a def with the wrong number of parameters. An unknown name fails with `E_VALIDATE` at compile time, not at dispatch time.
+1. **There is one list of subscribers per channel.** The compiler checks every target when it compiles the module. Each target must be a `def` that declares 1 to 3 parameters (message, then channel, then sender). A script is rejected, and so is a def with 0 or more than 3 parameters. An unknown name fails with `E_VALIDATE` at compile time, not at dispatch time.
 2. **The routes are visible at the top of the module.** You can see which workflows listen on `findings` without reading through workflow bodies to find the connections. The list of listeners is next to the channel it belongs to.
 
 The runtime registers routes only on the entry workflow frame, which is the first workflow the run starts. When that frame starts, the runtime reads the `channel … ->` declarations from that workflow's module. A nested `run` frame always keeps an empty route map. Because of this, a `send` from a nested workflow walks the stack outward until it reaches the entry frame that registered the channel.
@@ -72,7 +72,7 @@ When you need concurrency inside dispatch, use `run async` inside a target's bod
 
 ## Routed and unrouted sends
 
-The `<-` operator behaves in one of two ways, depending on whether any running workflow declares a route for the channel:
+A `send` behaves in one of two ways, depending on whether any running workflow declares a route for the channel:
 
 - **Routed.** Some running workflow has a route for the channel under its bare name. If the channel is written with an imported `alias.` prefix, the runtime strips the prefix before it looks up the route. The runtime walks outward from the sender until it finds that workflow's frame and adds the message to that frame's queue. It also writes an audit copy of the message to `inbox/NNN-<channel>.txt` under the run directory.
 - **Unrouted.** No running workflow has a route for the channel. The runtime still adds the message to the sender's own queue and still writes an `INBOX_ENQUEUE` event to `run_summary.jsonl`. It does not write an audit file, and the sender's drain pass skips the message because there are no targets to run.
@@ -81,15 +81,15 @@ An unrouted send is dropped on purpose, and it is not an error. Subscribers can 
 
 ## How a receiver workflow is called
 
-A receiver workflow is a normal workflow. The runtime calls it with three positional arguments, bound in order to the three parameters it declares:
+A receiver is a normal def. Dispatch binds a prefix of three positional arguments:
 
 | Position | Meaning |
 |---|---|
-| 1st parameter | The message payload (the string sent on `<-`) |
+| 1st parameter | The message payload |
 | 2nd parameter | The channel name (bare, e.g. `findings`) |
-| 3rd parameter | The sender, which is the name of the workflow that ran the send |
+| 3rd parameter | The sender, which is the name of the def that ran the send |
 
-The receiver chooses its own parameter names. The three arguments are the whole contract. There are no environment variables to read, no special global values, and no hidden context object. A workflow that declares a different number of parameters is rejected at compile time, so a receiver cannot get out of step with the three-argument call.
+The receiver chooses its own parameter names and may declare 1, 2, or 3 parameters. Extra args are not passed.
 
 ## Summary
 

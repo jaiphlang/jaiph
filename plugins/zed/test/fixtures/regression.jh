@@ -1,7 +1,11 @@
 # Regression fixture: stale surface the grammar must NOT highlight as keywords.
 
 export def main() {
-  # `wait` was removed from the language (E_PARSE). It is a plain identifier,
-  # never a command keyword. If the grammar re-adds it, the test fails.
+  # Removed keywords must highlight as plain identifiers, not @keyword.
   wait for_something
+  local
+  rule
+  workflow
+  ensure
+  inbox
 }

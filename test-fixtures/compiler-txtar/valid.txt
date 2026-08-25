@@ -449,12 +449,12 @@ export def main() {
   const ans = prompt "type here"
 }
 
-=== send operator parses channel <- literal
+=== send operator parses send payload -> channel
 # @expect ok
 --- input.jh
 channel findings
 export def main() {
-  findings <- "hello"
+  send "hello" -> findings
 }
 
 === top-level channel declarations parse
@@ -466,7 +466,18 @@ def analyst(message, chan, sender) {
   log "ok"
 }
 export def main() {
-  findings <- "hi"
+  send "hi" -> findings
+}
+
+=== route target with one parameter
+# @expect ok
+--- input.jh
+channel findings -> analyst
+def analyst(msg) {
+  log "${msg}"
+}
+export def main() {
+  send "hi" -> findings
 }
 
 === arrow inside quotes is not a send
@@ -853,7 +864,7 @@ script summarize_findings = `echo "Summary of findings"`
 script review_summary = `echo "[reviewed] $1"`
 
 def researcher() {
-  findings <- run emit_findings()
+  send run emit_findings() -> findings
 }
 
 script write_findings_file = `echo "$1" > findings_file.md`
@@ -861,11 +872,11 @@ script write_findings_file = `echo "$1" > findings_file.md`
 def analyst(message, chan, sender) {
   run write_findings_file(message)
   const summary = run summarize_findings()
-  summary <- "${summary}"
+  send "${summary}" -> summary
 }
 
 def reviewer(message, chan, sender) {
-  final_summary <- run review_summary(message)
+  send run review_summary(message) -> final_summary
 }
 
 export def main() {

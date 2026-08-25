@@ -143,7 +143,7 @@ describe("emitModule", () => {
       "channel findings",
       "",
       "export def main() {",
-      '  findings <- echo "hello"',
+      '  send echo "hello" -> findings',
       "}",
       "",
     ].join("\n");

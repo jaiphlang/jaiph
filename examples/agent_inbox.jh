@@ -5,17 +5,15 @@ channel report -> reviewer
 
 def scanner() {
   log "Scanning for issues..."
-  findings <- "Found 3 issues in auth module"
+  send "Found 3 issues in auth module" -> findings
 }
 
-def analyst(message, chan, sender) {
-  log "Analyzing message from ${sender} on channel ${chan}..."
-  report <- "Summary: ${message}"
+def analyst(msg) {
+  send "Summary: ${msg}" -> report
 }
 
-def reviewer(message, chan, sender) {
-  log "Reviewing message from ${sender} on channel ${chan}..."
-  logerr "Critical issue: ${message}"
+def reviewer(msg) {
+  logerr "Critical issue: ${msg}"
 }
 
 export def main() {

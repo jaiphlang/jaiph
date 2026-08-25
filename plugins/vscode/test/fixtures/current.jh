@@ -53,8 +53,8 @@ export def main(task) {
   const answer = prompt "Summarize ${task}" returns "{ risk: string }"
   log "risk: ${answer.risk}"
 
-  alerts <- "started"
-  findings <- run setup_env()
+  send "started" -> alerts
+  send run setup_env() -> findings
 
   const label = match status {
     "ok" => "pass"

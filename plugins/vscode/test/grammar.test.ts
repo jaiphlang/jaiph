@@ -31,8 +31,10 @@ test("current .jh constructs highlight with the expected scopes", async () => {
     ["=>", "keyword.operator.arrow.jaiph"],
     ["_", "constant.language.wildcard.jaiph"],
     // Channels
-    ["<-", "keyword.operator.send.jaiph"],
+    ["send", "keyword.control.command.jaiph"],
+    ["->", "keyword.operator.send.jaiph"],
     ["->", "keyword.operator.route.jaiph"],
+    ["handler", "entity.name.function.def.jaiph"],
     // Current config keys
     ["agent.model", "variable.other.property.jaiph"],
     ["run.recover_limit", "variable.other.property.jaiph"],
@@ -64,10 +66,27 @@ test("stale surface from the old extension is not highlighted", async () => {
   // Regression: keys/keywords the old extension assumed no longer exist. If the
   // grammar re-adds any of them, these fail.
   const t = await tokenizeFixture("regression.jh");
-  // `wait` was removed from the language (E_PARSE).
+  for (const stale of ["wait", "local", "rule", "workflow", "ensure", "inbox"]) {
+    assert.ok(
+      !hasScope(t, stale, "keyword.control.command.jaiph"),
+      `\`${stale}\` must not be scoped as a command keyword`,
+    );
+    assert.ok(
+      !hasScope(t, stale, "storage.type.def.jaiph"),
+      `\`${stale}\` must not be scoped as a def keyword`,
+    );
+    assert.ok(
+      !hasScope(t, stale, "storage.modifier.jaiph"),
+      `\`${stale}\` must not be scoped as a modifier`,
+    );
+  }
   assert.ok(
-    !hasScope(t, "wait", "keyword.control.command.jaiph"),
-    "`wait` must not be scoped as a command keyword",
+    !hasScope(t, "inbox", "keyword.control.inbox.jaiph"),
+    "`inbox` is a channel name, not a send keyword",
+  );
+  assert.ok(
+    hasScope(t, "inbox", "variable.other.channel.jaiph"),
+    "`send … -> inbox` should highlight inbox as a channel",
   );
   // Stale config keys must not be scoped as config properties.
   for (const stale of [

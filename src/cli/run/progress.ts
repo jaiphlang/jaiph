@@ -129,7 +129,7 @@ export function collectDefChildren(
       return [{ label: `fail ${msg}` }];
     }
     if (s.type === "send") {
-      return [{ label: `${s.channel} <- send` }];
+      return [{ label: `send -> ${s.channel}` }];
     }
     if (s.type === "const") {
       const constItems: Array<{ label: string; nested?: string; stepFunc?: string }> = [
