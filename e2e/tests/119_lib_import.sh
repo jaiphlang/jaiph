@@ -18,7 +18,7 @@ mkdir -p "${TEST_DIR}/.jaiph/libs/mylib"
 cat > "${TEST_DIR}/.jaiph/libs/mylib/greet.jh" <<'EOF'
 export script hello = `echo "hello from lib"`
 
-export workflow say_hello() {
+export def say_hello() {
   run hello()
 }
 EOF
@@ -27,7 +27,7 @@ EOF
 e2e::file "main_lib.jh" <<'EOF'
 import "mylib/greet" as greet
 
-workflow default() {
+export def main() {
   run greet.hello()
 }
 EOF
@@ -40,11 +40,11 @@ e2e::expect_stdout "${main_out}" <<'EOF'
 
 Jaiph: Running main_lib.jh
 
-workflow default
+export def main
   ▸ script greet.hello
   ✓ script greet.hello (<time>)
 
-✓ PASS workflow default (<time>)
+✓ PASS export def main (<time>)
 EOF
 
 # Then — run artifacts
@@ -59,7 +59,7 @@ e2e::section "lib import: exported workflow from lib"
 e2e::file "main_lib_wf.jh" <<'EOF'
 import "mylib/greet" as greet
 
-workflow default() {
+export def main() {
   run greet.say_hello()
 }
 EOF
@@ -72,13 +72,13 @@ e2e::expect_stdout "${wf_out}" <<'EOF'
 
 Jaiph: Running main_lib_wf.jh
 
-workflow default
-  ▸ workflow say_hello
+export def main
+  ▸ def say_hello
   ·   ▸ script hello
   ·   ✓ script hello (<time>)
-  ✓ workflow say_hello (<time>)
+  ✓ def say_hello(<time>)
 
-✓ PASS workflow default (<time>)
+✓ PASS export def main (<time>)
 EOF
 
 e2e::pass "lib import: exported workflow from lib"
@@ -90,7 +90,7 @@ e2e::section "lib import: relative imports still work"
 # Given — a relative import (should resolve before lib fallback)
 e2e::file "local_lib.jh" <<'EOF'
 export script local_msg = `echo "local module"`
-workflow dummy() {
+def dummy() {
   log "ok"
 }
 EOF
@@ -98,7 +98,7 @@ EOF
 e2e::file "main_relative.jh" <<'EOF'
 import "local_lib" as loc
 
-workflow default() {
+export def main() {
   run loc.local_msg()
 }
 EOF
@@ -111,11 +111,11 @@ e2e::expect_stdout "${rel_out}" <<'EOF'
 
 Jaiph: Running main_relative.jh
 
-workflow default
+export def main
   ▸ script loc.local_msg
   ✓ script loc.local_msg (<time>)
 
-✓ PASS workflow default (<time>)
+✓ PASS export def main (<time>)
 EOF
 
 e2e::pass "lib import: relative imports still work"
@@ -128,7 +128,7 @@ e2e::section "export script: parse and format round-trip"
 e2e::file "export_script.jh" <<'EOF'
 export script greet = `echo "hi"`
 
-workflow default() {
+export def main() {
   run greet()
 }
 EOF

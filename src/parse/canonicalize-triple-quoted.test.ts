@@ -8,7 +8,7 @@ import {
   tripleQuoteBodyToRaw,
 } from "./triple-quote";
 import { dedentCommonLeadingWhitespace } from "./dedent";
-import type { Expr, WorkflowStepDef } from "../types";
+import type { Expr, StepDef } from "../types";
 
 // Tests run from dist/src/parse/, so repo root is three levels up.
 const repoRoot = resolve(__dirname, "../../..");
@@ -46,7 +46,7 @@ function collectTripleQuotedArmBodies(expr: Expr, bodies: string[]): void {
   }
 }
 
-function walkSteps(steps: WorkflowStepDef[], bodies: string[]): void {
+function walkSteps(steps: StepDef[], bodies: string[]): void {
   for (const s of steps) {
     if (s.type === "const" || s.type === "return") {
       collectTripleQuotedArmBodies(s.value, bodies);
@@ -87,8 +87,7 @@ test("AC2: canonicalizeTripleQuotedString matches pre-move tripleQuotedRawForRun
       continue;
     }
     const bodies: string[] = [];
-    for (const w of ast.workflows) walkSteps(w.steps, bodies);
-    for (const r of ast.rules) walkSteps(r.steps, bodies);
+    for (const w of ast.defs) walkSteps(w.steps, bodies);
     for (const body of bodies) {
       armCount += 1;
       assert.equal(

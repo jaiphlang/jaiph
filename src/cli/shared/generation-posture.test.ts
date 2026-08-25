@@ -9,7 +9,7 @@ function makeGeneration(): { state: GenerationState; workspaceRoot: string; clea
   const workspaceRoot = mkdtempSync(join(tmpdir(), "jaiph-posture-ws-"));
   mkdirSync(join(workspaceRoot, ".jaiph"), { recursive: true });
   const inputAbs = join(workspaceRoot, "tools.jh");
-  writeFileSync(inputAbs, ["# Greets.", "workflow greet() {", '  return "hi"', "}", ""].join("\n"));
+  writeFileSync(inputAbs, ["# Greets.", "export def greet() {", '  return "hi"', "}", ""].join("\n"));
   const tempRoot = mkdtempSync(join(tmpdir(), "jaiph-posture-tmp-"));
   const loaded = loadGeneration(inputAbs, workspaceRoot, tempRoot, 0, {}, () => {}, "test");
   assert.ok(loaded.state, `fixture must validate: ${loaded.failures.join("; ")}`);
@@ -40,7 +40,7 @@ test("loadGeneration threads the merged hook config into the call environment", 
   const gen = makeGeneration();
   try {
     assert.ok(gen.state.callEnv.hooks, "hooks config is loaded per generation");
-    assert.deepEqual(gen.state.callEnv.hooks!.workflow_start, [], "empty workspace has no hook commands");
+    assert.deepEqual(gen.state.callEnv.hooks!.run_start, [], "empty workspace has no hook commands");
   } finally {
     gen.cleanup();
   }

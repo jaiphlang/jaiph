@@ -32,7 +32,7 @@ sys.exit(0)
 
 script bash_marker = `echo bash-script-ran`
 
-workflow default() {
+export def main() {
   run py_echo_ok()
   run bash_marker()
 }
@@ -43,12 +43,12 @@ EOF
 
 Jaiph: Running polyglot.jh
 
-workflow default
+export def main
   ▸ script py_echo_ok
   ✓ script py_echo_ok (<time>)
   ▸ script bash_marker
   ✓ script bash_marker (<time>)
-✓ PASS workflow default (<time>)
+✓ PASS export def main (<time>)
 EOF
 
   e2e::expect_out_files "polyglot.jh" 3
@@ -76,7 +76,7 @@ process.exit(0);
 
 script bash_marker = `echo bash-script-ran`
 
-workflow default() {
+export def main() {
   run node_echo_ok()
   run bash_marker()
 }
@@ -87,12 +87,12 @@ EOF
 
 Jaiph: Running polyglot_node.jh
 
-workflow default
+export def main
   ▸ script node_echo_ok
   ✓ script node_echo_ok (<time>)
   ▸ script bash_marker
   ✓ script bash_marker (<time>)
-✓ PASS workflow default (<time>)
+✓ PASS export def main (<time>)
 EOF
 
   e2e::expect_out_files "polyglot_node.jh" 3

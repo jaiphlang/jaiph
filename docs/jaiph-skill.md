@@ -16,11 +16,10 @@ Jaiph is a small workflow language. A `.jh` file declares:
 
 | Construct | What it is | How it runs |
 |---|---|---|
-| `workflow` | A named sequence of steps — the orchestration layer | Interpreted in-process by the runtime |
-| `rule` | A non-mutating check (preconditions, verifications) | Interpreted in-process; called with `ensure` |
+| `def` | A named sequence of steps — the orchestration layer | Interpreted in-process by the runtime |
 | `script` | Real shell (or Python, Node, …) — the only place for shell code | Spawned as a subprocess; called with `run` |
 | `prompt` | A task delegated to an AI agent (Cursor / Claude / Codex backend) | Backend CLI or API call; you capture the answer |
-| `channel` | A message queue with declared workflow listeners | Drained after the sending workflow finishes |
+| `channel` | A message queue with declared def listeners | Drained after the sending workflow finishes |
 
 Everything is **strings**. Every step is logged. Every run leaves durable artifacts under `.jaiph/runs/` (per-step `.out`/`.err` files and an append-only `run_summary.jsonl`). Compared with ad-hoc shell scripts, a Jaiph run is repeatable, inspectable, and testable.
 
@@ -32,14 +31,14 @@ Everything is **strings**. Every step is logged. Every run leaves durable artifa
 script list_todos = `grep -rn "TODO" src/ || true`
 script worktree_clean = `test -z "$(git status --porcelain)"`
 
-rule git_clean() {
+def git_clean() {
   run worktree_clean() catch (err) {
     fail "working tree is not clean"
   }
 }
 
-workflow default(task) {
-  ensure git_clean()
+export def main(task) {
+  run git_clean()
   const todos = run list_todos()
   prompt """
   Address the following request: ${task}
@@ -50,7 +49,7 @@ workflow default(task) {
 }
 ```
 
-Run it: `jaiph run ./flow.jh "clean up the auth module"`. The CLI executes `workflow default` and binds `"clean up the auth module"` to the `task` parameter. **Every runnable file must define `workflow default`.**
+Run it: `jaiph run ./flow.jh "clean up the auth module"`. The CLI executes `export def main` and binds `"clean up the auth module"` to the `task` parameter. **`jaiph run` requires `export def main` in the input file.** A library module can omit `main`; `jaiph compile` succeeds without it.
 
 ## Your authoring loop
 
@@ -66,7 +65,7 @@ CLI quick reference:
 
 | Command | Purpose |
 |---|---|
-| `jaiph run [--target <dir>] [--raw] <file.jh> [--] [args…]` | Execute `workflow default`; args bind to its named parameters |
+| `jaiph run [--target <dir>] [--raw] <file.jh> [--] [args…]` | Execute `export def main`; args bind to its named parameters |
 | `jaiph test [path]` | Run `*.test.jh` files (workspace, dir, or single file) |
 | `jaiph compile [--json] [--workspace <dir>] <paths…>` | Validate only — no execution, no side effects |
 | `jaiph format [--check] <file.jh …>` | Reformat (or verify formatting in CI) |
@@ -81,12 +80,12 @@ Shorthand: `jaiph ./file.jh` routes by extension (`*.test.jh` → test, other `.
 
 Most compile errors come from breaking one of these six rules:
 
-1. **Parentheses everywhere.** Definitions and call sites both require `()`, even with zero arguments: `workflow default() { … }`, `run setup()`, `ensure check()`. Bare `run setup` is a parse error.
+1. **Parentheses everywhere.** Definitions and call sites both require `()`, even with zero arguments: `export def main() { … }`, `run setup()`, `run check()`. Bare `run setup` is a parse error.
 2. **All captures use `const`, and all bindings are immutable.** `const x = run foo()` — never `x = run foo()`, never rebind `x` later, never shadow a parameter with a `const` of the same name.
-3. **Call keyword must match callee type.** `ensure` → rules only. `run` → workflows and scripts (inside a workflow); scripts **only** (inside a rule). Mixing them is `E_VALIDATE`.
-4. **Shell lives in scripts.** Rules reject raw shell lines entirely. Workflows technically allow inline shell lines, but you should not write them — use a named `script` or an inline script (`` run `cmd`() ``). Shell operators next to managed calls (`run foo() | grep x`, `run foo() > file`, `run foo() &`) are parse errors. Interpolating a `prompt` capture into a shell line (`const x = prompt …` then `echo "${x}"`) is `W_PROMPT_IN_SHELL` and fails the build: the agent-controlled value would be spliced into `sh -c`. Pass it as a script argument (`run my_script(x)` → `$1`, argv, not shell-expanded).
+3. **One call verb.** `run` targets a def or a script. Mixing a bare call without `run` is `E_PARSE` / `E_VALIDATE`.
+4. **Shell lives in scripts.** Defs technically allow inline shell lines, but you should not write them — use a named `script` or an inline script (`` run `cmd`() ``). Shell operators next to managed calls (`run foo() | grep x`, `run foo() > file`, `run foo() &`) are parse errors. Interpolating a `prompt` capture into a shell line (`const x = prompt …` then `echo "${x}"`) is `W_PROMPT_IN_SHELL` and fails the build: the agent-controlled value would be spliced into `sh -c`. Pass it as a script argument (`run my_script(x)` → `$1`, argv, not shell-expanded).
 5. **Interpolation is `${name}` only.** In an orchestration string, `$name`, `$(…)`, and shell fallback forms like `${var:-default}` are compile errors. Other shell parameter forms like `${var//x/y}` are not caught, so they pass through as literal text, which is almost never what you want. Keep all of these in a `script` body, where they run as normal shell.
-6. **Arguments are not forwarded implicitly.** If `workflow default(task)` calls `run implement()`, the implement workflow does not see `task`. Pass it: `run implement(task)`.
+6. **Arguments are not forwarded implicitly.** If `export def main(task)` calls `run implement()`, the implement workflow does not see `task`. Pass it: `run implement(task)`.
 
 ## Syntax reference
 
@@ -101,8 +100,8 @@ config { agent.backend = "claude" }     # optional, at most one per file
 channel findings -> analyst             # channels + optional routes, top level only
 const VERSION = "1.0"                   # module-scoped immutable string
 script build = `npm run build`          # shell definitions
-rule tests_pass() { run run_tests() }   # checks
-workflow default() { … }                # orchestration; default = the entrypoint
+def tests_pass() { run run_tests() }   # checks
+export def main() { … }                # orchestration; default = the entrypoint
 ```
 
 Channels, rules, workflows, scripts, script-import aliases, and module `const` share **one namespace per module** — duplicate top-level names are `E_PARSE`; duplicate import aliases are `E_VALIDATE`. Comments are full-line `#` only.
@@ -121,7 +120,7 @@ Inside any orchestration string:
 |---|---|
 | `${name}` | Value of a `const`, capture, or parameter in scope (unknown names are compile errors) |
 | `${name.field}` | Field of a typed-prompt capture (compile-checked against the schema) |
-| `${run ref(args)}` / `${ensure ref(args)}` | Inline managed call; its output is spliced in. No nesting. |
+| `${run ref(args)}` / `${run ref(args)}` | Inline managed call; its output is spliced in. No nesting. |
 
 Environment variables are **not** readable via `${…}` here: an unknown name in an orchestration string is a compile error (`E_VALIDATE unknown identifier`), so `${JAIPH_WORKSPACE}` does not resolve. Read env vars inside a `script` body as normal shell (`$JAIPH_WORKSPACE`) and capture the result.
 
@@ -147,7 +146,7 @@ print(json.load(open(sys.argv[1]))["version"])
 
 Script semantics:
 
-- Bodies are **opaque** to Jaiph orchestration — full shell/Python/whatever, heredocs included. The compiler strips the block's common leading whitespace at parse time (same idea as triple-quoted prompts); `jaiph format` re-adds one indent level for readability. The one check: do not call Jaiph symbols (`run`, `ensure`, workflow names) from inside a script body or `$(…)`.
+- Bodies are **opaque** to Jaiph orchestration — full shell/Python/whatever, heredocs included. The compiler strips the block's common leading whitespace at parse time (same idea as triple-quoted prompts); `jaiph format` re-adds one indent level for readability. The one check: do not call Jaiph symbols (`run`, def names) from inside a script body or `$(…)`.
 - **Capture = stdout.** `const v = run parse_json("pkg.json")` binds the script's stdout. Use `echo`/`printf` to return data; use exit codes (`return N` / `exit N`) for pass/fail.
 - **Arguments arrive as `$1`, `$2`, …** Module `const` values and workflow bindings are *not* exported into the subprocess environment — pass them explicitly as arguments.
 - Alternatively a manual `#!` shebang as the first body line selects the interpreter (mutually exclusive with a fence tag).
@@ -168,8 +167,8 @@ Inline scripts work in `run`, `const … = run`, `return run`, and `log run` pos
 ### Workflow steps
 
 ```jaiph
-workflow release(version) {
-  ensure git_clean()                        # run a rule
+def release(version) {
+  run git_clean()                        # run a def
   const notes = run gen_notes(version)      # run a script/workflow, capture
   run publish(version, notes)               # args: bare identifiers for variables
   log "published ${version}"                # info line in the progress tree (stdout)
@@ -180,27 +179,25 @@ workflow release(version) {
 }
 ```
 
-- **Call arguments:** quoted literals (`"main"`), bare identifiers for in-scope variables (`version` — preferred style), bare `IDENT.IDENT` for typed-prompt fields (`result.role`), quoted strings that embed interpolation (`"${version}"`, `"v${version}"`), or explicit nested calls (`run outer(run inner())`, `run outer(ensure check())`). Unquoted `${…}` outside a string (`run greet(${name})`, `run to_lower(${result.role})`) is `E_VALIDATE` — use the bare form instead. Bare call shapes like `run outer(inner())` are rejected.
-- **Arity is checked** when the callee declares parameters: `run greet("a","b")` against `workflow greet(name)` is `E_VALIDATE`.
-- **`fail "reason"`** aborts with a non-zero exit. **`return`** accepts `"string"`, `"""…"""`, a bare identifier, `run ref()` / `ensure ref()`, an inline script, or a `match` expression.
+- **Call arguments:** quoted literals (`"main"`), bare identifiers for in-scope variables (`version` — preferred style), bare `IDENT.IDENT` for typed-prompt fields (`result.role`), quoted strings that embed interpolation (`"${version}"`, `"v${version}"`), or explicit nested calls (`run outer(run inner())`, `run outer(run check())`). Unquoted `${…}` outside a string (`run greet(${name})`, `run to_lower(${result.role})`) is `E_VALIDATE` — use the bare form instead. Bare call shapes like `run outer(inner())` are rejected.
+- **Arity is checked** when the callee declares parameters: `run greet("a","b")` against `def greet(name)` is `E_VALIDATE`.
+- **`fail "reason"`** aborts with a non-zero exit. **`return`** accepts `"string"`, `"""…"""`, a bare identifier, `run ref()` / `run ref()`, an inline script, or a `match` expression.
 - **`log` / `logerr` / `logwarn`** accept `"string"`, `"""…"""`, a bare identifier (`log status` ≡ `log "${status}"`), or `log run \`cmd\`()`. `logerr` writes a red line and `logwarn` a yellow warning line; both also appear on stderr.
 
 ### Rules — checks only
 
 ```jaiph
-rule branch_is(expected) {
+def branch_is(expected) {
   run `test "$(git branch --show-current)" = "$1"`(expected)
 }
 
-rule preconditions() {
-  ensure branch_is("main")
-  ensure git_clean()
+def preconditions() {
+  run branch_is("main")
+  run git_clean()
 }
 ```
 
-Allowed in rule bodies: `ensure`, `run` (**scripts only**), `const`, `if`, `match`, `for`, `log`/`logerr`, `fail`, `return`, `catch`/`recover` suffixes. **Not allowed:** `prompt`, channel sends, `run async`, `run` to a workflow, raw shell lines. A rule passes when it exits 0. Treat rules as read-only: do mutations in workflows and scripts.
-
-A rule that `return`s a value can both check its input and return a cleaned version of it, and the caller captures that value with `const x = ensure rule()`, the same capture form as `run`. For example `const name = ensure valid_name(input)` fails the workflow if the rule fails, and otherwise binds the rule's returned (cleaned) value.
+A def that `return`s a value can both check its input and return a cleaned version of it, and the caller captures that value with `const x = run valid_name()`, the same capture form as any other `run`. For example `const name = run valid_name(input)` fails the caller if the def fails, and otherwise binds the returned (cleaned) value.
 
 ### Prompts — delegating to an agent
 
@@ -255,8 +252,8 @@ run tests() recover (err) {
 ```
 
 - The binding (`err`) receives the merged stdout+stderr of the failed execution. Exactly one binding, always in parentheses — bare `catch {` is a parse error.
-- `catch` works on `ensure` and `run`; `recover` works on `run` (and `run async`) only. They are mutually exclusive on one step.
-- `recover` retries until success or `run.recover_limit` (default **10**; workflow-level config overrides module-level).
+- `catch` and `recover` attach to `run` (including `run async`). They are mutually exclusive on one step.
+- `recover` retries until success or `run.recover_limit` (default **10**; def-level config overrides module-level).
 - A common pattern: a `catch` whose body is the "else branch" — note `return` inside a catch body returns from the **enclosing workflow**.
 
 A `recover` step with a `prompt` body is the core loop for repetitive agent work. It runs a check, asks the agent to fix the code when the check fails, then runs the check again, all without a human.
@@ -280,7 +277,7 @@ for path in paths {                       # iterates LINES of the string `paths`
 
 - Subjects for `if` and `match` are bare identifiers (`if status == …`, `match status {`) or `IDENT.IDENT` reading a field from a typed prompt capture (`if r.verdict == "ok"`, `match r.verdict { … }`). `$status` / `${status}` as subject is still a parse error. Dot subjects on a non-typed-capture variable, or a field not in the prompt's `returns` schema, get the same `E_VALIDATE` errors as `${var.field}` interpolation. `for` iterators stay bare identifiers (`for x in lines`).
 - `if` supports optional `} else if <cond> {` arms and a final `} else {` branch — each keyword must be on **the same line** as the closing `}` of the preceding block. `else if` is sugar that desugars to nested `if`/`else` at parse time and chains to any depth (`if a == "x" { … } else if a == "y" { … } else { … }`); each arm uses the same condition grammar as `if`. `if` stays statement-only (no value production) — use `match` for value branching. An `else if` split onto its own line, without a condition, or with an empty body is `E_PARSE`.
-- `match`: arms are newline-separated (no commas), first match wins, exactly one `_` arm required. A pattern may be pipe-separated **alternation** (`"" | "check" => …`, `/^a/ | /^b/ => …`) that matches if any alternand matches; string and regex alternands may be mixed, `_` cannot join an alternation, and a trailing `|` is `E_PARSE`. Arm bodies: string, `"""…"""`, in-scope identifier, `${var}`, `fail "…"`, `run ref()`, `ensure ref()`. **Not** allowed in arms: `return` (write `return match x { … }`), `log`/`logerr`, inline scripts — capture the match result into a `const` and act on it after.
+- `match`: arms are newline-separated (no commas), first match wins, exactly one `_` arm required. A pattern may be pipe-separated **alternation** (`"" | "check" => …`, `/^a/ | /^b/ => …`) that matches if any alternand matches; string and regex alternands may be mixed, `_` cannot join an alternation, and a trailing `|` is `E_PARSE`. Arm bodies: string, `"""…"""`, in-scope identifier, `${var}`, `fail "…"`, `run ref()`, `run ref()`. **Not** allowed in arms: `return` (write `return match x { … }`), `log`/`logerr`, inline scripts — capture the match result into a `const` and act on it after.
 - `for` splits the source string on newlines (a trailing final newline does not produce an empty iteration). There is no numeric/while loop — iterate lines, use `recover`, or use recursive workflows (depth limit 256).
 
 ### Channels — fan-out between workflows
@@ -288,15 +285,15 @@ for path in paths {                       # iterates LINES of the string `paths`
 ```jaiph
 channel findings -> analyst, reviewer     # routes declared at TOP LEVEL only
 
-workflow scanner() {
+def scanner() {
   findings <- "Found 3 issues in auth"    # RHS: "literal", """block""", ${var}, or run ref()
 }
 
-workflow analyst(message, chan, sender) { # route targets declare EXACTLY 3 params
+def analyst(message, chan, sender) { # route targets declare EXACTLY 3 params
   log "from ${sender}: ${message}"
 }
 
-workflow default() {
+export def main() {
   run scanner()                           # dispatch happens AFTER steps finish
 }
 ```
@@ -306,7 +303,7 @@ Sends enqueue in memory; the queue drains after the owning workflow's steps comp
 ### Concurrency: `run async`
 
 ```jaiph
-workflow default() {
+export def main() {
   const a = run async lint()             # returns a handle immediately
   const b = run async unit_tests()
   log "lint: ${a}"                       # first real read blocks + resolves
@@ -322,23 +319,20 @@ Workflows only (rejected in rules); not combinable with inline scripts. `catch`/
 config {
   agent.backend = "claude"               # cursor | claude | codex
   agent.model = "claude-sonnet-4-6"
-  run.recover_limit = 5                  # workflow-level config also honored
+  run.recover_limit = 5                  # def-level config also honored
   run.logs_dir = ".jaiph/runs"
 }
 ```
 
-Precedence: **environment > workflow-level config > module-level config > defaults**. A workflow body may open with its own `config { … }` (before any steps; `agent.*`/`run.*` keys only) to override the model or backend for just that workflow.
+Precedence: **environment > def-level config > module-level config > defaults**. A workflow body may open with its own `config { … }` (before any steps; `agent.*`/`run.*` keys only) to override the model or backend for just that workflow.
 
 ## Compile errors you will see, and the fix
 
 | Error (abridged) | Fix |
 |---|---|
-| `E_PARSE` missing `()` on definition/call | Add parentheses: `workflow default()`, `run setup()` |
+| `E_PARSE` missing `()` on definition/call | Add parentheses: `export def main()`, `run setup()` |
 | `E_PARSE` assignment without `const` | `const x = run foo()` |
 | `E_VALIDATE` cannot rebind immutable name | Rename the new binding — nothing is reassignable |
-| `E_VALIDATE` `ensure` on non-rule / `run` on rule | Match keyword to callee: rules→`ensure`, scripts/workflows→`run` |
-| `E_VALIDATE` `run` to workflow inside rule | Rules may `run` scripts only; restructure or move to a workflow |
-| `E_VALIDATE` inline shell forbidden in rules | Wrap the shell in a `script` (named or inline) and `run` it |
 | `W_PROMPT_IN_SHELL` prompt capture in a shell line | Pass it as a script argument (`run my_script(x)` → `$1`), not `echo "${x}"` |
 | `E_PARSE` `${…}` in single-backtick script | Use `$1`/`$2` args, or switch to a fenced ``` block |
 | `E_VALIDATE` unknown identifier / unknown `${name}` | Declare it (`const`/param) before use; check spelling |
@@ -354,10 +348,10 @@ Precedence: **environment > workflow-level config > module-level config > defaul
 
 ## Runtime model (what happens when it runs)
 
-- `jaiph run file.jh args…` validates the import closure, emits script bodies as executable files, then interprets `workflow default` with the args bound to its named parameters. Scripts additionally see positional args as `$1`, `$2`.
-- **Run directory:** `.jaiph/runs/<UTC-date>/<UTC-time>-<file>/` with numbered `NNNNNN-<step>.out`/`.err` per step (written incrementally — `tail -f` works) and `run_summary.jsonl`, one JSON event per line (`WORKFLOW_START/END`, `STEP_START/END`, `LOG`, `INBOX_*`, `PROMPT_*`). When debugging a failed run, read the failure footer the CLI prints, then the referenced `.err`/`.out` files.
-- **Return value:** if `default` returns a string, the CLI prints it to stdout after the PASS line.
-- **Capture sources:** workflow/rule → its explicit `return` value; script → stdout; prompt → the agent's answer.
+- `jaiph run file.jh args…` validates the import closure, emits script bodies as executable files, then interprets `export def main` with the args bound to its named parameters. Scripts additionally see positional args as `$1`, `$2`.
+- **Run directory:** `.jaiph/runs/<UTC-date>/<UTC-time>-<file>/` with numbered `NNNNNN-<step>.out`/`.err` per step (written incrementally — `tail -f` works) and `run_summary.jsonl`, one JSON event per line (`RUN_START/END`, `STEP_START/END`, `LOG`, `INBOX_*`, `PROMPT_*`). When debugging a failed run, read the failure footer the CLI prints, then the referenced `.err`/`.out` files.
+- **Return value:** if `main` returns a string, the CLI prints it to stdout after the PASS line.
+- **Capture sources:** def → its explicit `return` value; script → stdout; prompt → the agent's answer.
 - Step environment: scripts inherit the runner's environment plus `JAIPH_WORKSPACE`, `JAIPH_SCRIPTS`, `JAIPH_RUN_DIR`, `JAIPH_ARTIFACTS_DIR`, etc. Workflow variables are **not** auto-exported — pass them as arguments.
 
 ## Testing your workflows
@@ -369,7 +363,7 @@ import "main.jh" as app
 
 test "happy path" {
   mock prompt "LGTM — implemented"
-  const out = run app.default("add logging")
+  const out = run app.main("add logging")
   expect_contain out "LGTM"
 }
 
@@ -382,12 +376,12 @@ test "failure path is handled" {
   mock script app.run_tests() {
     exit 1
   }
-  const out = run app.default("x") allow_failure   # non-zero exit doesn't fail the test
+  const out = run app.main("x") allow_failure   # non-zero exit doesn't fail the test
   expect_contain out "rollback"
 }
 ```
 
-- Mocks: `mock prompt "…"` (queued, one per prompt call), a `mock prompt { … }` block with content-based arms (`/regex/ => "…"` matches when the pattern appears anywhere in the prompt, `"exact" => "…"` matches the whole prompt text, `_ => "…"` is the default; each arm on its own line, like a `match`), `mock workflow ref() { … }`, `mock rule ref() { … }`, `mock script ref() { shell lines }`. All mock refs need `()`.
+- Mocks: `mock prompt "…"` (queued, one per prompt call), a `mock prompt { … }` block with content-based arms (`/regex/ => "…"` matches when the pattern appears anywhere in the prompt, `"exact" => "…"` matches the whole prompt text, `_ => "…"` is the default; each arm on its own line, like a `match`), `mock def ref() { … }`, `mock def ref() { … }`, `mock script ref() { shell lines }`. All mock refs need `()`.
 - Assertions: `expect_contain`, `expect_not_contain`, `expect_equal` — `expect_* <captureVar> "literal"` or a test-block `const` name.
 - For typed prompts, the mock text must be one line of valid JSON matching the schema.
 - Mixing queued `mock prompt "…"` / `mock prompt <const>` and a `mock prompt { … }` block in one test is rejected at compile time (`E_VALIDATE`: `cannot mix "mock prompt { … }" with queued "mock prompt …" in one test block; choose one style`). Use one style per block; separate tests in the same file may use different styles.
@@ -399,8 +393,8 @@ Write at least one test per workflow you author when the repo uses tests; mock e
 **Gate → do → verify** (the standard delivery shape):
 
 ```jaiph
-workflow default(task) {
-  ensure preconditions()          # fast checks first
+export def main(task) {
+  run preconditions()          # fast checks first
   run implement(task)             # prompt-driven work
   run verify() recover (err) {    # verification with self-repair
     prompt "Verification failed — fix it. Output: ${err}"
@@ -411,7 +405,7 @@ workflow default(task) {
 **Process a queue of items** (line-oriented `for`):
 
 ```jaiph
-workflow default() {
+export def main() {
   const items = run `ls inbox/*.md 2>/dev/null || true`()
   for item in items {
     run handle(item)
@@ -422,7 +416,7 @@ workflow default() {
 **Review-then-act with a typed verdict:**
 
 ```jaiph
-workflow triage(item) {
+def triage(item) {
   const r = prompt "Is this ready to implement? Item: ${item}" returns "{ verdict: string, reason: string }"
   const outcome = match r.verdict {
     "ready" => run implement(item)
@@ -438,9 +432,9 @@ workflow triage(item) {
 
 When asked to scaffold Jaiph automation (e.g. after `jaiph init`), build a small composable set under `.jaiph/`:
 
-- `.jaiph/readiness.jh` — preflight rules (required tools, clean git) + `workflow default` running them.
-- `.jaiph/verification.jh` — lint/test/build rules + `workflow default`.
-- `.jaiph/main.jh` — imports both, defines the prompt-driven `implement` workflow, and a `workflow default(task)` wiring **preflight → implement → verification**.
+- `.jaiph/readiness.jh` — preflight rules (required tools, clean git) + `export def main` running them.
+- `.jaiph/verification.jh` — lint/test/build rules + `export def main`.
+- `.jaiph/main.jh` — imports both, defines the prompt-driven `implement` workflow, and a `export def main(task)` wiring **preflight → implement → verification**.
 - Optional: a review workflow gating a task queue, `*.test.jh` tests for the workflows.
 
 Keep workflows short; put expensive checks after cheap ones; pass data explicitly. Always finish with format + compile:

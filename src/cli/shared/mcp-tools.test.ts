@@ -23,28 +23,29 @@ test("toolNameFromFile: truncates the slug to 128 characters", () => {
 
 // === deriveTools: exposure rules ===
 
-test("deriveTools: exposes all top-level workflows when nothing is exported", () => {
+test("deriveTools: zero exports exposes no tools and warns", () => {
   const m = mod(
     [
-      "workflow build(target) {",
+      "def build(target) {",
       "  log target",
       "}",
-      "workflow lint() {",
+      "def lint() {",
       '  log "lint"',
       "}",
     ].join("\n"),
   );
-  const { tools } = deriveTools(m, FILE);
-  assert.deepEqual(tools.map((t) => t.name).sort(), ["build", "lint"]);
+  const { tools, warnings } = deriveTools(m, FILE);
+  assert.deepEqual(tools, []);
+  assert.ok(warnings.some((w) => w.includes("no exported defs")));
 });
 
-test("deriveTools: export workflow narrows exposure to exported ones", () => {
+test("deriveTools: export def narrows exposure to exported ones", () => {
   const m = mod(
     [
-      "export workflow build(target) {",
+      "export def build(target) {",
       "  log target",
       "}",
-      "workflow helper() {",
+      "def helper() {",
       '  log "internal"',
       "}",
     ].join("\n"),
@@ -53,46 +54,44 @@ test("deriveTools: export workflow narrows exposure to exported ones", () => {
   assert.deepEqual(tools.map((t) => t.name), ["build"]);
 });
 
-test("deriveTools: channel route targets are excluded with a warning", () => {
+test("deriveTools: an exported route handler is a tool; unexported helpers are not", () => {
   const m = mod(
     [
       "channel alerts -> on_alert",
-      "workflow on_alert(message, chan, sender) {",
+      "export def on_alert(message, chan, sender) {",
       "  log message",
       "}",
-      "workflow build() {",
-      '  log "build"',
+      "def helper() {",
+      '  log "internal"',
       "}",
     ].join("\n"),
   );
-  const { tools, warnings } = deriveTools(m, FILE);
-  assert.deepEqual(tools.map((t) => t.name), ["build"]);
-  assert.equal(warnings.length, 1);
-  assert.match(warnings[0], /on_alert/);
+  const { tools } = deriveTools(m, FILE);
+  assert.deepEqual(tools.map((t) => t.name), ["on_alert"]);
 });
 
-test("deriveTools: lone default workflow is exposed under the file basename", () => {
-  const m = mod(["workflow default(task) {", "  log task", "}"].join("\n"));
+test("deriveTools: lone export def main is exposed under the file basename", () => {
+  const m = mod(["export def main(task) {", "  log task", "}"].join("\n"));
   const { tools } = deriveTools(m, FILE);
   assert.equal(tools.length, 1);
   assert.equal(tools[0].name, "deploy-tools");
-  assert.equal(tools[0].workflow, "default");
+  assert.equal(tools[0].def, "main");
 });
 
-test("deriveTools: default is skipped (with warning) when other workflows exist", () => {
+test("deriveTools: main is skipped (with warning) when other exports exist", () => {
   const m = mod(
     [
-      "workflow default() {",
+      "export def main() {",
       '  log "entry"',
       "}",
-      "workflow build() {",
+      "export def build() {",
       '  log "build"',
       "}",
     ].join("\n"),
   );
   const { tools, warnings } = deriveTools(m, FILE);
   assert.deepEqual(tools.map((t) => t.name), ["build"]);
-  assert.ok(warnings.some((w) => w.includes('"default"')));
+  assert.ok(warnings.some((w) => w.includes('"main"')));
 });
 
 // === deriveTools: descriptions and schema ===
@@ -103,7 +102,7 @@ test("deriveTools: description comes from leading # comments, shebang dropped", 
       "#!/usr/bin/env jaiph",
       "# Builds the target and runs the smoke suite.",
       "# Retries flaky steps once.",
-      "workflow build(target) {",
+      "export def build(target) {",
       "  log target",
       "}",
     ].join("\n"),
@@ -113,14 +112,14 @@ test("deriveTools: description comes from leading # comments, shebang dropped", 
 });
 
 test("deriveTools: fallback description names the workflow and file", () => {
-  const m = mod(["workflow build() {", '  log "x"', "}"].join("\n"));
+  const m = mod(["export def build() {", '  log "x"', "}"].join("\n"));
   const { tools } = deriveTools(m, FILE);
   assert.match(tools[0].description, /"build"/);
   assert.match(tools[0].description, /deploy-tools\.jh/);
 });
 
 test("deriveTools: params map to required string properties", () => {
-  const m = mod(["workflow build(target, mode) {", "  log target", "}"].join("\n"));
+  const m = mod(["export def build(target, mode) {", "  log target", "}"].join("\n"));
   const { tools } = deriveTools(m, FILE);
   assert.deepEqual(tools[0].inputSchema, {
     type: "object",
@@ -131,7 +130,7 @@ test("deriveTools: params map to required string properties", () => {
 });
 
 test("deriveTools: zero params produce an object schema without required", () => {
-  const m = mod(["workflow build() {", '  log "x"', "}"].join("\n"));
+  const m = mod(["export def build() {", '  log "x"', "}"].join("\n"));
   const { tools } = deriveTools(m, FILE);
   assert.deepEqual(tools[0].inputSchema, {
     type: "object",

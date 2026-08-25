@@ -67,8 +67,8 @@ test("formatCompletedLine: shows red cross for failure (no color)", () => {
 });
 
 test("formatCompletedLine: success with workflow kind and name (no color)", () => {
-  const result = formatCompletedLine("  ", 0, 0, false, "workflow", "scanner");
-  assert.equal(result, "✓ workflow scanner (0s)");
+  const result = formatCompletedLine("  ", 0, 0, false, "def", "scanner");
+  assert.equal(result, "✓ def scanner (0s)");
 });
 
 test("formatCompletedLine: success with rule kind and name (no color)", () => {
@@ -107,22 +107,22 @@ test("formatCompletedLine: custom command basename plus model (no color)", () =>
 });
 
 test("formatCompletedLine: failure with workflow kind and name (no color)", () => {
-  const result = formatCompletedLine("  ", 1, 2, false, "workflow", "reviewer");
-  assert.equal(result, "✗ workflow reviewer (2s)");
+  const result = formatCompletedLine("  ", 1, 2, false, "def", "reviewer");
+  assert.equal(result, "✗ def reviewer (2s)");
 });
 
 test("formatCompletedLine: success with kind/name has green marker and dim label (color enabled)", () => {
-  const result = formatCompletedLine("  ", 0, 0, true, "workflow", "scanner");
+  const result = formatCompletedLine("  ", 0, 0, true, "def", "scanner");
   // Green checkmark
   assert.ok(result.includes("\u001b[32m✓\u001b[0m"));
   // Dim label with kind + name + elapsed
-  assert.ok(result.includes("\u001b[2mworkflow scanner (0s)\u001b[0m"));
+  assert.ok(result.includes("\u001b[2mdef scanner (0s)\u001b[0m"));
 });
 
 test("formatCompletedLine: failure with kind/name has red marker and label (color enabled)", () => {
-  const result = formatCompletedLine("  ", 1, 2, true, "workflow", "reviewer");
+  const result = formatCompletedLine("  ", 1, 2, true, "def", "reviewer");
   // Red failure line
-  assert.ok(result.includes("\u001b[31m✗ workflow reviewer (2s)\u001b[0m"));
+  assert.ok(result.includes("\u001b[31m✗ def reviewer (2s)\u001b[0m"));
 });
 
 test("formatCompletedLine: failure carries the model token in the label (no color)", () => {
@@ -150,8 +150,8 @@ test("formatCompletedLine: nested indent preserved with kind/name (no color)", (
 // === formatStartLine ===
 
 test("formatStartLine: formats workflow kind with name", () => {
-  const result = formatStartLine("  ", "workflow", "deploy", false);
-  assert.ok(result.includes("workflow"));
+  const result = formatStartLine("  ", "def", "deploy", false);
+  assert.ok(result.includes("def"));
   assert.ok(result.includes("deploy"));
 });
 
@@ -244,20 +244,20 @@ test("sanitizeMultilineLogForTerminal: normalizes CR and strips embedded SGR", (
 // === formatStartLine (color enabled) ===
 
 test("formatStartLine: color enabled wraps marker with dim ANSI", () => {
-  const result = formatStartLine("  ", "workflow", "deploy", true);
+  const result = formatStartLine("  ", "def", "deploy", true);
   assert.ok(result.includes("\u001b[2m▸\u001b[0m"), "marker should be dim");
 });
 
 test("formatStartLine: color enabled wraps kind with bold ANSI", () => {
-  const result = formatStartLine("  ", "workflow", "deploy", true);
-  assert.ok(result.includes("\u001b[1mworkflow\u001b[0m"), "kind should be bold");
+  const result = formatStartLine("  ", "def", "deploy", true);
+  assert.ok(result.includes("\u001b[1mdef\u001b[0m"), "kind should be bold");
 });
 
 test("formatStartLine: non-prompt kind with params shows dim param suffix", () => {
   const params: Array<[string, string]> = [
     ["repo", "/tmp/project"],
   ];
-  const result = formatStartLine("  ", "workflow", "deploy", false, params);
+  const result = formatStartLine("  ", "def", "deploy", false, params);
   assert.ok(result.includes("deploy"));
   assert.ok(result.includes("repo"), "param key should appear");
 });
@@ -401,8 +401,8 @@ test("formatStartLine: prompt with whitespace-only preview shows no quoted text"
 // === formatStartLine: indent edge cases ===
 
 test("formatStartLine: empty indent produces valid output", () => {
-  const result = formatStartLine("", "workflow", "deploy", false);
-  assert.ok(result.includes("workflow"), "kind should be present");
+  const result = formatStartLine("", "def", "deploy", false);
+  assert.ok(result.includes("def"), "kind should be present");
   assert.ok(result.includes("deploy"), "name should be present");
 });
 
@@ -437,9 +437,9 @@ test("formatStartLine: prompt kind with undefined params and different name", ()
 // === formatCompletedLine: indent edge ===
 
 test("formatCompletedLine: empty indent produces valid output", () => {
-  const result = formatCompletedLine("", 0, 1, false, "workflow", "test");
+  const result = formatCompletedLine("", 0, 1, false, "def", "test");
   assert.ok(result.includes("✓"), "success marker should be present");
-  assert.ok(result.includes("workflow test"), "kind and name should be present");
+  assert.ok(result.includes("def test"), "kind and name should be present");
 });
 
 // === formatHeartbeatLine: empty indent ===
@@ -488,15 +488,15 @@ test("formatStartLine: prompt with many params gets suffix truncated", () => {
 
 test("formatStartLine: workflow with params shows param suffix (no color)", () => {
   const params: Array<[string, string]> = [["repo", "/home/user/project"]];
-  const result = formatStartLine("  ", "workflow", "deploy", false, params);
-  assert.ok(result.includes("workflow deploy"), "label present");
+  const result = formatStartLine("  ", "def", "deploy", false, params);
+  assert.ok(result.includes("def deploy"), "label present");
   assert.ok(result.includes("repo"), "param name in suffix");
 });
 
-test("formatStartLine: rule with params shows param suffix (no color)", () => {
+test("formatStartLine: def with params shows param suffix (no color)", () => {
   const params: Array<[string, string]> = [["threshold", "90"]];
-  const result = formatStartLine("  ", "rule", "check_coverage", false, params);
-  assert.ok(result.includes("rule check_coverage"), "label present");
+  const result = formatStartLine("  ", "def", "check_coverage", false, params);
+  assert.ok(result.includes("def check_coverage"), "label present");
   assert.ok(result.includes("threshold"), "param name in suffix");
 });
 

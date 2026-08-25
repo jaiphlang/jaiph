@@ -62,7 +62,7 @@ For day-to-day work on the compiler and CLI you usually stay inside the clone: i
 | `npm run test:compiler` | **`npm run build`**, then **`node --test`** on `dist/test-infra/compiler-test-runner.js` — runs txtar-based compiler test fixtures from `test-fixtures/compiler-txtar/`. |
 | `npm run test:golden-ast` | **`npm run build`**, then **`node --test`** on `dist/test-infra/golden-ast-runner.js` — runs golden AST tests from `test-fixtures/golden-ast/`. Use `UPDATE_GOLDEN=1 npm run test:golden-ast` to regenerate goldens after intentional parser changes. |
 | `npm run test:acceptance:compiler` | **`npm run build`**, then **`node --test`** with only `*.acceptance.test.js` files under **`dist/src/`** — compiler acceptance tests without the full unit suite or E2E. |
-| `npm run test:acceptance:runtime` | **`bash ./e2e/test_all.sh`** only — same E2E driver as below **without** an implicit rebuild; ensure `dist/` is up to date before running. |
+| `npm run test:acceptance:runtime` | **`bash ./e2e/test_all.sh`** only — same E2E driver as below **without** an implicit rebuild; run `dist/` is up to date before running. |
 | `npm run test:acceptance` | **`npm run test:acceptance:compiler`** then **`npm run test:acceptance:runtime`**. |
 | `npm run test:e2e` | **`npm run build`**, then **`bash ./e2e/test_all.sh`**. Prefer this when you want a fresh `dist/` before E2E. **`e2e::prepare_shared_context`** in `e2e/lib/common.sh` clears most inherited **`JAIPH_*`** variables before each test. Host-only. See [E2E testing](#e2e-testing). |
 | `npm run test:samples` | **`npx playwright test`** — Playwright suite for the docs landing page (`e2e/playwright/`). Uses `http://127.0.0.1:4000` (see `playwright.config.ts`); starts Jekyll via `webServer` or reuses one already on that port. Requires Playwright (`npx playwright install chromium` once). |
@@ -110,11 +110,11 @@ Jaiph uses several test layers. Each layer catches a different class of bug. Use
 | **Compiler golden tests** | `src/transpile/compiler-golden.test.ts` (colocated) | Regressions in the parser, validation messages, and scripts-only extraction (`buildScriptFiles` in `emit-script.ts`) — expectations are inline in the test file | You changed the parser, validator, or script extraction and need to lock an exact error string, extracted script shape, or corpus behavior |
 | **Trivia / formatter round-trip** | `src/parse/trivia-ast-shape.test.ts`, `src/parse/trivia-grep.test.ts`, `src/format/roundtrip.test.ts` | Source-fidelity invariants: no trivia fields on semantic AST types (compile-time), validator/emitter sources do not reference `Trivia`, and `parse → format → parse → format` is bit-for-bit on every fixture under `examples/` and `test-fixtures/golden-ast/fixtures/` | You changed the parser, formatter, AST types, or anything that touches source-fidelity round-trip (see [Architecture — Trivia (CST layer)](architecture.md#trivia-cst-layer)) |
 | **Call-args AST shape** | `src/parse/arg-ast-shape.test.ts`, `src/parse/arg-grep.test.ts` | Pins the typed-`Arg[]` invariant: no `bareIdentifierArgs` field on any call-bearing AST type (compile-time), no `args.split(",")` or `bareIdentifierArgs` text in production `src/parse/` or `src/transpile/` sources, and no `validateBareIdentifierArgs` helper in the validator | You changed how call arguments flow through the parser, validator, or emitter |
-| **`Expr` / step-variant shape** | `src/types-shape.test.ts` | Pins exactly 8 `WorkflowStepDef` variants and 8 `Expr` kinds, no AST placeholder strings (`"__match__"`, `"run inline_script"`, `"__JAIPH_MANAGED__"`) anywhere under `src/`, and `ConstRhs` / `SendRhsDef` no longer exported from `src/types.ts` | You added or renamed a step variant or `Expr` kind |
+| **`Expr` / step-variant shape** | `src/types-shape.test.ts` | Pins exactly 8 `StepDef` variants and 8 `Expr` kinds, no AST placeholder strings (`"__match__"`, `"run inline_script"`, `"__JAIPH_MANAGED__"`) anywhere under `src/`, and `ConstRhs` / `SendRhsDef` no longer exported from `src/types.ts` | You added or renamed a step variant or `Expr` kind |
 | **Validator single-walk shape** | `src/transpile/validate-single-walk.test.ts` | Pins the validator's "one descent per workflow / rule" invariant | You touched `walkStepTree` or added a new pre-pass over workflow steps |
 | **Validator visitor-table shape** | `src/transpile/validate-visitor.test.ts` | Caps `validate.ts` at **≤700 lines**; snapshot-pins `{ code, line, col, message }` from `validate-errors.txt` and `validate-errors-multi-module.txt` into `test-fixtures/compiler-txtar/validate-diagnostics-snapshot.json`; asserts unknown step types produce exactly one `internal: no validator for step type "…"` diagnostic | You touched the `VALIDATORS` table or changed `E_VALIDATE` message wording — refresh snapshots with `UPDATE_SNAPSHOTS=1` only after confirming the change is intentional |
 | **Statement-dispatch-table shape** | `src/parse/parse-synthetic-keyword.test.ts`, `src/parse/parse-error-snapshot.test.ts` | Pins the `STATEMENT` keyword-dispatch refactor of `parseBlockStatement`; snapshot-pins every parse error in `test-fixtures/compiler-txtar/parse-errors.txt` into `test-fixtures/compiler-txtar/parse-errors-snapshot.json` | You added a top-level keyword or changed any `E_PARSE` message — refresh snapshots with `UPDATE_SNAPSHOTS=1` only after confirming the change is intentional |
-| **Attached-block parser shape** | `src/parse/parse-attached-block.test.ts` | Caps `src/parse/steps.ts` at **≤200 lines**; asserts `catch` / `recover` bodies share `parseBlockStatement` | You touched `parseAttachedBlock` / `parseRunOrEnsure` |
+| **Attached-block parser shape** | `src/parse/parse-attached-block.test.ts` | Caps `src/parse/steps.ts` at **≤200 lines**; asserts `catch` / `recover` bodies share `parseBlockStatement` | You touched `parseAttachedBlock` / `parseRun` |
 | **Compile-time / runtime layering** | `src/transpile/no-runtime-imports.test.ts`, `src/parse/canonicalize-triple-quoted.test.ts` | No `from "…/runtime/…"` imports under `src/transpile/`; triple-quoted match-arm bodies match `canonicalizeTripleQuotedString` bit-for-bit | You added a helper used by both validator and runtime (it belongs in `src/parse/`) |
 | **Diagnostics collector shape** | `src/transpile/diagnostics-collector.test.ts` | `collectDiagnostics(graph)` returns all recoverable errors; `validate.ts` and `validate-step.ts` have zero `throw jaiphError(` sites; `jaiph compile --json` returns the full diagnostic array | You migrated checks to the collector or changed `jaiph compile` output |
 | **Compiler tests (txtar)** | `test-fixtures/compiler-txtar/*.txt` | Parse and validate outcomes using language-agnostic txtar fixtures | Portable test cases reusable by alternative compiler implementations |
@@ -350,7 +350,7 @@ e2e::section "Feature under test"
 # Given — create the workflow file inline (script + workflow; same shape as e2e/tests/10_basic_workflows.sh)
 e2e::file "hello.jh" <<'EOF'
 script hello_impl = `echo "hello-jh"`
-workflow default() {
+export def main() {
   const msg = run hello_impl()
   return "${msg}"
 }
@@ -364,10 +364,10 @@ e2e::expect_stdout "${hello_out}" <<'EOF'
 
 Jaiph: Running hello.jh
 
-workflow default
+export def main
   ▸ script hello_impl
   ✓ script hello_impl (<time>)
-✓ PASS workflow default (<time>)
+✓ PASS export def main (<time>)
 
 hello-jh
 EOF
@@ -397,7 +397,7 @@ All helpers are defined in `e2e/lib/common.sh`.
 |--------|-------------|
 | `e2e::file "name" <<'EOF' ... EOF` | Write a workflow file into the test directory from a heredoc. Creates parent directories as needed. |
 | `e2e::run "file" [args...]` | Run `jaiph run` on a file in the test directory. Capture stdout with `out="$(e2e::run …)"`. |
-| `e2e::expect_fail "file" [args...]` | Assert that running the workflow fails (non-zero exit). |
+| `e2e::expect_fail "file" [args...]` | Assert that running the def fails(non-zero exit). |
 | `e2e::run_dir "file"` | Return the path of the single run directory for `file` under `.jaiph/runs/`. Fails if zero or more than one match. |
 | `e2e::run_dir_at "base" "file"` | Same as `e2e::run_dir` but searches under a custom base directory. |
 | `e2e::latest_run_dir_at "base" "file"` | Return the path of the most recent run directory for `file` under a custom base. Useful when a file may have been run multiple times. |
@@ -418,8 +418,7 @@ After a workflow runs, its step outputs are written as sequenced artifact files 
 | Helper | Description |
 |--------|-------------|
 | `e2e::expect_out_files "file" N` | Assert that the run directory for `file` contains exactly `N` `.out` files. Use `0` for steps with no stdout (e.g. `touch`, `test`, redirected output). |
-| `e2e::expect_out "file" "step" "expected"` | Assert that the `.out` file for the named step (script, rule, or `default` workflow bucket) matches `expected` exactly. |
-| `e2e::expect_rule_out "file" "rule" "expected"` | Assert that the `.out` file for a rule step matches `expected` exactly. Dot-separated rule names are normalized (e.g. `lib.ready` → `lib__ready`). |
+| `e2e::expect_out "file" "step" "expected"` | Assert that the `.out` file for the named step (script or `def__<name>` def bucket) matches `expected` exactly. |
 | `e2e::expect_run_file "file" "name" "expected"` | Assert that a specific named file (e.g. `000002-module__step.out`) in the run directory for `file` matches `expected` exactly. Use when you need to assert on a file by its sequence-prefixed name. |
 | `e2e::expect_run_file_at "base" "file" "name" "expected"` | Same as `e2e::expect_run_file` but searches under a custom base directory instead of `.jaiph/runs/`. Use for tests with custom `run.logs_dir` or `JAIPH_RUNS_DIR`. |
 | `e2e::expect_run_file_count "file" N` | Assert that the run directory for `file` contains exactly `N` artifact files (`.out` + `.err` combined). |

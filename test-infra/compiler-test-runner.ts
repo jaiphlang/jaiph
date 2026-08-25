@@ -204,7 +204,7 @@ test("meta: wrong expectation is detected as failure", () => {
   const wrongCase: TxtarTestCase = {
     name: "meta-wrong",
     expect: { kind: "error", code: "E_PARSE", substring: "this will not match anything" },
-    files: new Map([["input.jh", 'workflow default() {\n  log "hello"\n}\n']]),
+    files: new Map([["input.jh", 'export def main() {\n  log "hello"\n}\n']]),
   };
   assert.ok(
     expectFailure(wrongCase),
@@ -215,8 +215,8 @@ test("meta: wrong expectation is detected as failure", () => {
 test("meta: wrong @line is detected as failure", () => {
   const wrongLine: TxtarTestCase = {
     name: "meta-wrong-line",
-    expect: { kind: "error", code: "E_PARSE", substring: "unterminated workflow block", line: 999 },
-    files: new Map([["input.jh", "workflow default() {\n  log \"hello\"\n"]]),
+    expect: { kind: "error", code: "E_PARSE", substring: "unterminated block", line: 999 },
+    files: new Map([["input.jh", "export def main() {\n  log \"hello\"\n"]]),
   };
   assert.ok(
     expectFailure(wrongLine),
@@ -227,8 +227,8 @@ test("meta: wrong @line is detected as failure", () => {
 test("meta: wrong @col is detected as failure", () => {
   const wrongCol: TxtarTestCase = {
     name: "meta-wrong-col",
-    expect: { kind: "error", code: "E_PARSE", substring: "unterminated workflow block", line: 1, col: 999 },
-    files: new Map([["input.jh", "workflow default() {\n  log \"hello\"\n"]]),
+    expect: { kind: "error", code: "E_PARSE", substring: "unterminated block", line: 1, col: 999 },
+    files: new Map([["input.jh", "export def main() {\n  log \"hello\"\n"]]),
   };
   assert.ok(
     expectFailure(wrongCol),
@@ -240,7 +240,7 @@ test("meta: wrong ok expectation on broken input is detected", () => {
   const wrongCase: TxtarTestCase = {
     name: "meta-wrong-ok",
     expect: { kind: "ok" },
-    files: new Map([["input.jh", "workflow default() {\n  log \"hello\"\n"]]),
+    files: new Map([["input.jh", "export def main() {\n  log \"hello\"\n"]]),
   };
   assert.ok(
     expectFailure(wrongCase),

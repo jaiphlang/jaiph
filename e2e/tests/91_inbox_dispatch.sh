@@ -16,16 +16,16 @@ e2e::file "basic_inbox.jh" <<'EOF'
 channel greetings -> receiver
 
 script emit_hello = `echo "hello from sender"`
-workflow sender() {
+def sender() {
   greetings <- run emit_hello()
 }
 
 script write_received = `echo "$1" > received.txt`
-workflow receiver(message, chan, sender) {
+def receiver(message, chan, sender) {
   run write_received(message)
 }
 
-workflow default() {
+export def main() {
   run sender()
 }
 EOF
@@ -48,21 +48,21 @@ e2e::file "multi_target.jh" <<'EOF'
 channel results -> consumer_a, consumer_b
 
 script emit_payload = `echo "data-payload"`
-workflow producer() {
+def producer() {
   results <- run emit_payload()
 }
 
 script write_consumer_a = `echo "A got: $1" > consumer_a.txt`
-workflow consumer_a(message, chan, sender) {
+def consumer_a(message, chan, sender) {
   run write_consumer_a(message)
 }
 
 script write_consumer_b = `echo "B got: $1" > consumer_b.txt`
-workflow consumer_b(message, chan, sender) {
+def consumer_b(message, chan, sender) {
   run write_consumer_b(message)
 }
 
-workflow default() {
+export def main() {
   run producer()
 }
 EOF
@@ -83,16 +83,16 @@ e2e::file "undefined_channel.jh" <<'EOF'
 channel some_channel -> dummy
 
 script emit_dropped = `echo "dropped"`
-workflow sender() {
+def sender() {
   unknown_channel <- run emit_dropped()
 }
 
 script never_called_impl = `echo "never called" > dummy.txt`
-workflow dummy(message, chan, sender) {
+def dummy(message, chan, sender) {
   run never_called_impl()
 }
 
-workflow default() {
+export def main() {
   run sender()
 }
 EOF
@@ -120,16 +120,16 @@ e2e::file "inbox_file.jh" <<'EOF'
 channel audit -> auditor
 
 script emit_inbox_content = `echo "inbox-content-check"`
-workflow writer() {
+def writer() {
   audit <- run emit_inbox_content()
 }
 
 script write_audited = `echo "$1" > audited.txt`
-workflow auditor(message, chan, sender) {
+def auditor(message, chan, sender) {
   run write_audited(message)
 }
 
-workflow default() {
+export def main() {
   run writer()
 }
 EOF
@@ -153,21 +153,21 @@ channel findings -> analyst
 channel report -> reviewer
 
 script emit_findings = `echo "Found 3 issues in auth module"`
-workflow scanner() {
+def scanner() {
   findings <- run emit_findings()
 }
 
 script emit_summary = `echo "Summary: $1"`
-workflow analyst(message, chan, sender) {
+def analyst(message, chan, sender) {
   report <- run emit_summary(message)
 }
 
 script print_reviewed = `echo "[reviewed] $1"`
-workflow reviewer(message, chan, sender) {
+def reviewer(message, chan, sender) {
   run print_reviewed(message)
 }
 
-workflow default() {
+export def main() {
   run scanner()
 }
 EOF
@@ -180,21 +180,21 @@ e2e::expect_stdout "${display_out}" <<'EXPECTED'
 
 Jaiph: Running display_inbox.jh
 
-workflow default
-  ▸ workflow scanner
+export def main
+  ▸ def scanner
   ·   ▸ script emit_findings
   ·   ✓ script emit_findings (<time>)
-  ✓ workflow scanner (<time>)
-  ▸ workflow analyst (message="Found 3 issues in auth module", chan="findings", sender="scanner")
+  ✓ def scanner(<time>)
+  ▸ def analyst(message="Found 3 issues in auth module", chan="findings", sender="scanner")
   ·   ▸ script emit_summary (1="Found 3 issues in auth module")
   ·   ✓ script emit_summary (<time>)
-  ✓ workflow analyst (<time>)
-  ▸ workflow reviewer (message="Summary: Found 3 issues in auth ...", chan="report", sender="analyst")
+  ✓ def analyst(<time>)
+  ▸ def reviewer(message="Summary: Found 3 issues in auth ...", chan="report", sender="analyst")
   ·   ▸ script print_reviewed (1="Summary: Found 3 issues in auth ...")
   ·   ✓ script print_reviewed (<time>)
-  ✓ workflow reviewer (<time>)
+  ✓ def reviewer(<time>)
 
-✓ PASS workflow default (<time>)
+✓ PASS export def main (<time>)
 EXPECTED
 e2e::expect_out_files "display_inbox.jh" 7
 e2e::expect_file "*script__print_reviewed.out" <<'EOF'
@@ -208,7 +208,7 @@ e2e::file "receiver_args.jh" <<'EOF'
 channel events -> consumer
 
 script emit_payload = `echo "payload-data"`
-workflow producer() {
+def producer() {
   events <- run emit_payload()
 }
 
@@ -217,11 +217,11 @@ echo "msg=$1" > args.txt
 echo "channel=$2" >> args.txt
 echo "sender=$3" >> args.txt
 ```
-workflow consumer(message, chan, sender) {
+def consumer(message, chan, sender) {
   run write_receiver_args(message, chan, sender)
 }
 
-workflow default() {
+export def main() {
   run producer()
 }
 EOF
@@ -241,21 +241,21 @@ e2e::file "parallel_multi.jh" <<'EOF'
 channel results -> consumer_a, consumer_b
 
 script emit_parallel_payload = `echo "parallel-payload"`
-workflow producer() {
+def producer() {
   results <- run emit_parallel_payload()
 }
 
 script write_consumer_a_par = `echo "A got: $1" > consumer_a_par.txt`
-workflow consumer_a(message, chan, sender) {
+def consumer_a(message, chan, sender) {
   run write_consumer_a_par(message)
 }
 
 script write_consumer_b_par = `echo "B got: $1" > consumer_b_par.txt`
-workflow consumer_b(message, chan, sender) {
+def consumer_b(message, chan, sender) {
   run write_consumer_b_par(message)
 }
 
-workflow default() {
+export def main() {
   run producer()
 }
 EOF
@@ -276,21 +276,21 @@ e2e::file "parallel_seq.jh" <<'EOF'
 channel data -> sink
 
 script emit_from_a = `echo "from-a"`
-workflow sender_a() {
+def sender_a() {
   data <- run emit_from_a()
 }
 
 script emit_from_b = `echo "from-b"`
-workflow sender_b() {
+def sender_b() {
   data <- run emit_from_b()
 }
 
 script append_sink_log = `echo "$1" >> sink_log.txt`
-workflow sink(message, chan, sender) {
+def sink(message, chan, sender) {
   run append_sink_log(message)
 }
 
-workflow default() {
+export def main() {
   run sender_a()
   run sender_b()
 }
@@ -322,21 +322,21 @@ e2e::file "parallel_fail.jh" <<'EOF'
 channel ch -> good_target, bad_target
 
 script emit_msg = `echo "msg"`
-workflow producer() {
+def producer() {
   ch <- run emit_msg()
 }
 
 script fail_target_impl = `exit 1`
-workflow bad_target(message, chan, sender) {
+def bad_target(message, chan, sender) {
   run fail_target_impl()
 }
 
 script write_good_par = `echo "ok" > good_par.txt`
-workflow good_target(message, chan, sender) {
+def good_target(message, chan, sender) {
   run write_good_par()
 }
 
-workflow default() {
+export def main() {
   run producer()
 }
 EOF
@@ -358,21 +358,21 @@ e2e::file "parallel_summary.jh" <<'EOF'
 channel events -> handler_a, handler_b
 
 script emit_e1 = `echo "e1"`
-workflow sender() {
+def sender() {
   events <- run emit_e1()
 }
 
 script handle_a_impl = `echo "handled-a"`
-workflow handler_a(message, chan, sender) {
+def handler_a(message, chan, sender) {
   run handle_a_impl()
 }
 
 script handle_b_impl = `echo "handled-b"`
-workflow handler_b(message, chan, sender) {
+def handler_b(message, chan, sender) {
   run handle_b_impl()
 }
 
-workflow default() {
+export def main() {
   run sender()
 }
 EOF
@@ -409,11 +409,11 @@ import "lib_inbox.jh" as lib
 channel topic -> handler
 
 script write_imported_received = `echo "$1" > imported_received.txt`
-workflow handler(message, chan, sender) {
+def handler(message, chan, sender) {
   run write_imported_received(message)
 }
 
-workflow default() {
+export def main() {
   lib.topic <- "x"
 }
 EOF

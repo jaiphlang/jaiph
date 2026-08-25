@@ -1,8 +1,6 @@
 {
   "channels": [],
-  "exports": [],
-  "imports": [],
-  "rules": [
+  "defs": [
     {
       "comments": [],
       "name": "check",
@@ -18,19 +16,10 @@
           "type": "exec"
         }
       ]
-    }
-  ],
-  "scripts": [
-    {
-      "body": "true",
-      "comments": [],
-      "name": "validator"
-    }
-  ],
-  "workflows": [
+    },
     {
       "comments": [],
-      "name": "default",
+      "name": "main",
       "params": [],
       "steps": [
         {
@@ -38,7 +27,7 @@
             "callee": {
               "value": "check"
             },
-            "kind": "ensure_call"
+            "kind": "call"
           },
           "type": "exec"
         },
@@ -67,6 +56,17 @@
           "type": "say"
         }
       ]
+    }
+  ],
+  "exports": [
+    "main"
+  ],
+  "imports": [],
+  "scripts": [
+    {
+      "body": "true",
+      "comments": [],
+      "name": "validator"
     }
   ]
 }

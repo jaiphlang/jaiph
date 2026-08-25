@@ -10,21 +10,21 @@ e2e::prepare_test_env "ensure_recover_value"
 TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 
 # ===================================================================
-e2e::section "ensure capture = return value from successful rule"
+e2e::section "run capture = return value from successful rule"
 # ===================================================================
 
 e2e::file "capture_success.jh" <<'EOF'
 script check_ready_impl = ```
 echo "rule-stdout-check"
 ```
-rule check_ready() {
+def check_ready() {
   run check_ready_impl()
   return "ready-value"
 }
 
 script echo_captured = `echo "captured=$1"`
-workflow default() {
-  const val = ensure check_ready()
+export def main() {
+  const val = run check_ready()
   run echo_captured(val)
 }
 EOF
@@ -46,7 +46,7 @@ e2e::assert_equals "${cap_content}" "captured=ready-value" "ensure...recover cap
 if [[ "${cap_content}" == *"rule-stdout-check"* ]]; then
   e2e::fail "rule stdout must NOT leak into capture variable"
 fi
-e2e::pass "ensure capture: return value only"
+e2e::pass "run capture: return value only"
 
 # ===================================================================
 e2e::section "ensure...recover: catch block receives merged stdout+stderr from failed rule"
@@ -59,13 +59,13 @@ script analyze_impl = ```
 echo "analysis-stdout-log"
 exit 1
 ```
-rule analyze() {
+def analyze() {
   run analyze_impl()
 }
 
 script recover_handler = `echo "$1" > recover_received.txt`
-workflow default() {
-  ensure analyze() catch (failure) {
+export def main() {
+  run analyze() catch (failure) {
     run recover_handler(failure)
   }
 }

@@ -13,7 +13,7 @@ test("jaiph test runs workflow with mocked prompts", () => {
     writeFileSync(
       join(root, "hello.jh"),
       [
-        "workflow default() {",
+        "export def main() {",
         '  prompt "Please greet the user"',
         "}",
         "",
@@ -24,9 +24,9 @@ test("jaiph test runs workflow with mocked prompts", () => {
       [
         'import "hello.jh" as h',
         "",
-        'test "workflow default" {',
+        'test "export def main" {',
         '  mock prompt "Mocked greeting output"',
-        "  const response = run h.default()",
+        "  const response = run h.main()",
         '  expect_contain response "Mocked greeting output"',
         "}",
         "",
@@ -42,7 +42,7 @@ test("jaiph test runs workflow with mocked prompts", () => {
 
     assert.equal(testResult.status, 0, testResult.stderr);
     assert.match(testResult.stdout, /test\(s\) passed|PASS/);
-    assert.match(testResult.stdout, /test happy path|workflow default/);
+    assert.match(testResult.stdout, /test happy path|export def main/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -54,7 +54,7 @@ test("jaiph test fails when no mock matches prompt", () => {
     writeFileSync(
       join(root, "hello.jh"),
       [
-        "workflow default() {",
+        "export def main() {",
         '  prompt "Please greet the user"',
         "}",
         "",
@@ -66,7 +66,7 @@ test("jaiph test fails when no mock matches prompt", () => {
         'import "hello.jh" as h',
         "",
         'test "no mock for prompt" {',
-        "  const response = run h.default()",
+        "  const response = run h.main()",
         '  expect_contain response "no mock"',
         "}",
         "",
@@ -96,7 +96,7 @@ test("jaiph test fails when non-test file is passed", () => {
     writeFileSync(
       join(root, "hello.jh"),
       [
-        "workflow default() {",
+        "export def main() {",
         '  prompt "hello"',
         "}",
         "",
@@ -121,7 +121,7 @@ test("jaiph test captures mock response into variable and variable is available 
     writeFileSync(
       join(root, "capture.jh"),
       [
-        "workflow default() {",
+        "export def main() {",
         '  const result = prompt "Please greet the user"',
         '  return "${result}"',
         "}",
@@ -135,7 +135,7 @@ test("jaiph test captures mock response into variable and variable is available 
         "",
         'test "capture mock" {',
         '  mock prompt "CAPTURED_MOCK_OUTPUT"',
-        "  const response = run c.default()",
+        "  const response = run c.main()",
         '  expect_contain response "CAPTURED_MOCK_OUTPUT"',
         "}",
         "",
@@ -162,7 +162,7 @@ test("jaiph test inline mock prompt block with if/elif/else and first-match", ()
     writeFileSync(
       join(root, "multi_prompt.jh"),
       [
-        "workflow default() {",
+        "export def main() {",
         '  const a = prompt "greet"',
         '  const b = prompt "bye"',
         '  return "${a} ${b}"',
@@ -181,7 +181,7 @@ test("jaiph test inline mock prompt block with if/elif/else and first-match", ()
         '    /bye/ => "goodbye"',
         '    _ => "default"',
         "  }",
-        "  const out = run m.default()",
+        "  const out = run m.main()",
         '  expect_contain out "hello"',
         '  expect_contain out "goodbye"',
         "}",
@@ -209,7 +209,7 @@ test("jaiph test fails when no mock branch matches and no wildcard", () => {
     writeFileSync(
       join(root, "single.jh"),
       [
-        "workflow default() {",
+        "export def main() {",
         '  const result = prompt "unmatched prompt text"',
         '  return "${result}"',
         "}",
@@ -225,7 +225,7 @@ test("jaiph test fails when no mock branch matches and no wildcard", () => {
         "  mock prompt {",
         '    /other/ => "never"',
         "  }",
-        "  const out = run s.default()",
+        "  const out = run s.main()",
         '  expect_contain out "x"',
         "}",
         "",
@@ -245,7 +245,7 @@ test("jaiph test fails when no mock branch matches and no wildcard", () => {
     assert.equal(testResult.status, 1, "expected test to fail when no branch matches, no wildcard, and no backend in PATH");
     assert.match(
       testResult.stderr + testResult.stdout,
-      /workflow exited with status|no mock matched|no branch matched|expect_contain failed|FAIL|not found|command not found/,
+      /def exited with status|workflow exited with status|no mock matched|no branch matched|expect_contain failed|FAIL|not found|command not found/,
     );
   } finally {
     rmSync(root, { recursive: true, force: true });

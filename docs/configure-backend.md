@@ -25,7 +25,7 @@ config {
   agent.model = "sonnet-4"
 }
 
-workflow default() {
+export def main() {
   const answer = prompt "Summarize this codebase"
   log "${answer}"
 }
@@ -35,19 +35,19 @@ The valid backend values are `"cursor"` (the default), `"claude"`, and `"codex"`
 
 ## 2. Override per-workflow
 
-To use a different backend for one workflow in the same file, add a workflow-level `config { … }` block (it must be the first non-comment construct in the body):
+To use a different backend for one workflow in the same file, add a def-level `config { … }` block (it must be the first non-comment construct in the body):
 
 ```jh
-workflow fast_check() {
+def fast_check() {
   config {
     agent.backend = "cursor"
     agent.model = "gpt-3.5"
   }
-  ensure some_rule()
+  run some_rule()
 }
 ```
 
-A workflow-level block can set `agent.*` and `run.*` keys. The `runtime.*` and `module.*` keys are module-only, so a workflow-level block cannot set them.
+A def-level block can set `agent.*` and `run.*` keys. The `runtime.*` and `module.*` keys are module-only, so a def-level block cannot set them.
 
 ## 3. Override from the environment
 

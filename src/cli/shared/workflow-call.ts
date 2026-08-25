@@ -8,13 +8,13 @@ import { CHAIN_KEY_ENV, generateChainKey, writeChainKey, redactCredentials } fro
 import { deliverRunTelemetryDetached } from "../telemetry/otlp";
 import type { StepEvent, LogEvent } from "../run/events";
 import { formatCallStartLine, formatCallEndLine } from "./server-log";
-import { callWorkflowHost } from "./workflow-call-exec";
+import { callDefHost } from "./workflow-call-exec";
 import { DEFAULT_OUTPUT_CAPS } from "./workflow-call-types";
 import type {
   OutputCaps,
-  WorkflowCallContext,
-  WorkflowCallEnvironment,
-  WorkflowCallResult,
+  DefCallContext,
+  DefCallEnvironment,
+  DefCallResult,
 } from "./workflow-call-types";
 
 // Public surface of the workflow-call slice. The heavy execution + result
@@ -34,9 +34,9 @@ export {
 export type {
   CollectedOutput,
   OutputCaps,
-  WorkflowCallContext,
-  WorkflowCallEnvironment,
-  WorkflowCallResult,
+  DefCallContext,
+  DefCallEnvironment,
+  DefCallResult,
 } from "./workflow-call-types";
 
 /**
@@ -48,14 +48,14 @@ export type {
  * Success text, in order of preference: the workflow's return value
  * (`return_value.txt`), collected `log` output, or a completion note.
  */
-export async function callWorkflow(
-  env: WorkflowCallEnvironment,
-  workflowSymbol: string,
+export async function callDef(
+  env: DefCallEnvironment,
+  defSymbol: string,
   positionalArgs: string[],
   runId: string,
-  ctx?: WorkflowCallContext,
+  ctx?: DefCallContext,
   caps: OutputCaps = DEFAULT_OUTPUT_CAPS,
-): Promise<WorkflowCallResult> {
+): Promise<DefCallResult> {
   const runtimeEnv = resolveRuntimeEnv(env.effectiveConfig, env.workspaceRoot, env.inputAbs);
   runtimeEnv.JAIPH_SOURCE_ABS = env.inputAbs;
   runtimeEnv.JAIPH_RUN_ID = runId;
@@ -68,9 +68,9 @@ export async function callWorkflow(
 
   const startedAt = Date.now();
   if (env.hooks) {
-    runHooksForEvent(env.hooks, "workflow_start", {
-      event: "workflow_start",
-      workflow_id: runId,
+    runHooksForEvent(env.hooks, "run_start", {
+      event: "run_start",
+      run_id: runId,
       timestamp: new Date().toISOString(),
       run_path: env.inputAbs,
       workspace: env.workspaceRoot,
@@ -83,7 +83,7 @@ export async function callWorkflow(
   const operator = ctx?.operator;
   operator?.log.info(
     formatCallStartLine({
-      workflow: workflowSymbol,
+      def: defSymbol,
       runId,
       principal: ctx?.principal,
       correlationId: ctx?.correlationId,
@@ -92,13 +92,13 @@ export async function callWorkflow(
   const onLogEvent = buildLogMirrorHandler(operator, runId, runtimeEnv, env.extraEnv);
 
   const onStepEvent = buildStepEventHandler(env, ctx);
-  const result = await callWorkflowHost(env, workflowSymbol, positionalArgs, runtimeEnv, runId, caps, onStepEvent, ctx, onLogEvent);
+  const result = await callDefHost(env, defSymbol, positionalArgs, runtimeEnv, runId, caps, onStepEvent, ctx, onLogEvent);
 
   if (operator) {
     const status = result.signal ? "cancelled" : result.isError ? "failed" : "ok";
     operator.log.info(
       formatCallEndLine({
-        workflow: workflowSymbol,
+        def: defSymbol,
         status,
         exit: result.exitStatus ?? 0,
         elapsedMs: Date.now() - startedAt,
@@ -110,9 +110,9 @@ export async function callWorkflow(
   }
 
   if (env.hooks) {
-    runHooksForEvent(env.hooks, "workflow_end", {
-      event: "workflow_end",
-      workflow_id: runId,
+    runHooksForEvent(env.hooks, "run_end", {
+      event: "run_end",
+      run_id: runId,
       status: result.isError ? (result.exitStatus || 1) : 0,
       elapsed_ms: Date.now() - startedAt,
       timestamp: new Date().toISOString(),
@@ -130,7 +130,7 @@ export async function callWorkflow(
   if (result.runDir) writeChainKey(result.runDir, chainKey);
   deliverRunTelemetryDetached({
     runDir: result.runDir,
-    workflow: workflowSymbol,
+    def: defSymbol,
     exitStatus: result.exitStatus ?? 0,
     signal: result.signal ?? null,
     env: process.env,
@@ -146,8 +146,8 @@ export async function callWorkflow(
  * (when configured) and forwards the caller's progress callback.
  */
 function buildStepEventHandler(
-  env: WorkflowCallEnvironment,
-  ctx: WorkflowCallContext | undefined,
+  env: DefCallEnvironment,
+  ctx: DefCallContext | undefined,
 ): (ev: StepEvent) => void {
   return (ev) => {
     if (env.hooks) {
@@ -171,7 +171,7 @@ function buildStepEventHandler(
  * runtime env plus `--env` passthrough so a secret can never leak to stderr.
  */
 function buildLogMirrorHandler(
-  operator: WorkflowCallContext["operator"],
+  operator: DefCallContext["operator"],
   runId: string,
   runtimeEnv: Record<string, string | undefined>,
   extraEnv: Record<string, string>,

@@ -1,4 +1,4 @@
-workflow default() {
+export def main() {
   log "hello"
   return "done"
 }

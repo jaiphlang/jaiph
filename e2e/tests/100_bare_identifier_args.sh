@@ -14,7 +14,7 @@ e2e::section "run script with bare identifier arg (const)"
 e2e::file "bare_const.jh" <<'EOF'
 script greet = `echo "hello $1"`
 
-workflow default() {
+export def main() {
   const name = "world"
   run greet(name)
 }
@@ -24,30 +24,30 @@ rm -rf "${TEST_DIR}/runs_bare"
 out="$(JAIPH_RUNS_DIR="runs_bare" e2e::run "bare_const.jh" 2>&1)"
 e2e::pass "run script with bare identifier const arg compiles and runs"
 
-e2e::section "ensure rule with bare identifier arg"
+e2e::section "run rule with bare identifier arg"
 
 e2e::file "bare_ensure.jh" <<'EOF'
 script check_impl = `true`
 
-rule check(value) {
+def check(value) {
   run check_impl($1)
 }
 
-workflow default() {
+export def main() {
   const status = "ok"
-  ensure check(status)
+  run check(status)
 }
 EOF
 
 out="$(JAIPH_RUNS_DIR="runs_bare" e2e::run "bare_ensure.jh" 2>&1)"
-e2e::pass "ensure rule with bare identifier arg"
+e2e::pass "run rule with bare identifier arg"
 
 e2e::section "mixed bare and quoted args"
 
 e2e::file "bare_mixed.jh" <<'EOF'
 script combine = `echo "$1 $2"`
 
-workflow default() {
+export def main() {
   const tag = "v1"
   run combine(tag, "release")
 }
@@ -61,7 +61,7 @@ e2e::section "unknown bare identifier fails validation"
 e2e::file "bare_unknown.jh" <<'EOF'
 script greet = `echo "hello $1"`
 
-workflow default() {
+export def main() {
   run greet(unknown_var)
 }
 EOF

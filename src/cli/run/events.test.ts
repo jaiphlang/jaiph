@@ -79,7 +79,7 @@ test("parseStepEvent: returns undefined for LOG type", () => {
 });
 
 test("parseStepEvent: returns undefined when required string fields are missing", () => {
-  const line = '__JAIPH_EVENT__ {"type":"STEP_START","kind":"rule"}';
+  const line = '__JAIPH_EVENT__ {"type":"STEP_START","kind":"def"}';
   assert.equal(parseStepEvent(line), undefined);
 });
 
@@ -87,7 +87,7 @@ test("parseStepEvent: parses minimal valid STEP_START event", () => {
   const event = {
     type: "STEP_START",
     func: "entry::ok",
-    kind: "rule",
+    kind: "def",
     name: "entry::ok",
     ts: "2024-01-01T00:00:00Z",
     id: "abc123",
@@ -98,7 +98,7 @@ test("parseStepEvent: parses minimal valid STEP_START event", () => {
   assert.ok(result);
   assert.equal(result!.type, "STEP_START");
   assert.equal(result!.func, "entry::ok");
-  assert.equal(result!.kind, "rule");
+  assert.equal(result!.kind, "def");
   assert.equal(result!.name, "entry::ok");
   assert.equal(result!.id, "abc123");
   assert.equal(result!.run_id, "run1");
@@ -118,7 +118,7 @@ test("parseStepEvent: parses STEP_END with status and elapsed_ms", () => {
   const event = {
     type: "STEP_END",
     func: "entry::default",
-    kind: "workflow",
+    kind: "def",
     name: "entry::default",
     ts: "2024-01-01T00:00:01Z",
     status: 0,
@@ -156,7 +156,7 @@ test("parseStepEvent: parses params as array of [key, value] pairs", () => {
   const event = {
     type: "STEP_START",
     func: "entry::ok",
-    kind: "rule",
+    kind: "def",
     name: "entry::ok",
     params: [["key1", "val1"], ["key2", "val2"]],
   };
@@ -170,7 +170,7 @@ test("parseStepEvent: filters invalid params entries", () => {
   const event = {
     type: "STEP_START",
     func: "entry::ok",
-    kind: "rule",
+    kind: "def",
     name: "entry::ok",
     params: [["valid", "pair"], "not-an-array", [123, "bad-key"], ["only-one"]],
   };
@@ -184,7 +184,7 @@ test("parseStepEvent: defaults params to empty array when not provided", () => {
   const event = {
     type: "STEP_START",
     func: "entry::ok",
-    kind: "rule",
+    kind: "def",
     name: "entry::ok",
   };
   const line = `__JAIPH_EVENT__ ${JSON.stringify(event)}`;
@@ -200,7 +200,7 @@ test("parseStepEvent: STEP_END with tabs and ANSI in out_content via JS kernel e
   const event = {
     type: "STEP_END",
     func: "f",
-    kind: "rule",
+    kind: "def",
     name: "n",
     ts: "t",
     status: 1,

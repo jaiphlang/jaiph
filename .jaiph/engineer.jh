@@ -8,7 +8,7 @@
 #   → default → implement_from_queue (first #dev-ready QUEUE.md task).
 #
 # Hub / serve / mcp (task parameter, no QUEUE.md):
-#   export workflow implement_from_task(task) — used by .jaiph/main.jh engineer(task)
+#   export def implement_from_task(task) — used by .jaiph/main.jh engineer(task)
 #
 import "jaiphlang/artifacts" as artifacts
 import "jaiphlang/claude" as claude
@@ -205,7 +205,7 @@ const classification_prompt = """
   ${role_stabilizer}
 """
 
-workflow select_role(role_name) {
+def select_role(role_name) {
   return match role_name {
     "surgical" => role_surgical
     "reductionist" => role_reductionist
@@ -225,7 +225,7 @@ script first_line_task = ```
   printf '%s\n' "$line"
 ```
 
-workflow classify_role(task) {
+def classify_role(task) {
   config {
     agent.model = "sonnet"
   }
@@ -253,7 +253,7 @@ workflow classify_role(task) {
   }
 }
 
-workflow implement(task, role_name) {
+def implement(task, role_name) {
   config {
     agent.model = "opus"
   }
@@ -307,7 +307,7 @@ workflow implement(task, role_name) {
       in the task/PR notes.
 
     Architecture invariants to preserve by default:
-    - Runtime owns workflow semantics (including channels/inbox dispatch).
+    - Runtime owns def semantics(including channels/inbox dispatch).
     - CLI owns orchestration/observation (compile, launch, progress, hooks).
     - Runtime -> CLI live contract is __JAIPH_EVENT__.
     - Runtime durable contract is .jaiph/runs + run_summary.jsonl artifacts.
@@ -323,7 +323,7 @@ workflow implement(task, role_name) {
 
 # Shared post-implement path: CI, docs parity from the task text, commit, artifact.
 # Callers that touch QUEUE.md must do so before this (so the commit includes it).
-workflow verify_docs_and_commit(task) {
+def verify_docs_and_commit(task) {
   run ci.ensure_ci_passes()
   run docs.update_from_task(task)
   const patch_file = run git.commit(task)
@@ -332,7 +332,7 @@ workflow verify_docs_and_commit(task) {
 }
 
 # Task-parameter entry for serve/mcp hub. Does not read or write QUEUE.md.
-export workflow implement_from_task(task) {
+export def implement_from_task(task) {
   run common.arg_nonempty(task) catch (err) {
     fail "engineer.implement_from_task requires a non-empty task parameter (markdown with a ## header)"
   }
@@ -353,11 +353,11 @@ export workflow implement_from_task(task) {
 }
 
 # Queue-driven entry for CLI / overnight loops. Always auto-classifies the role.
-export workflow implement_from_queue() {
+export def implement_from_queue() {
   run claude.ensure_usage()
 
   const task = run queue.get_first_task()
-  ensure queue.task_is_dev_ready(task)
+  run queue.task_is_dev_ready(task)
   const task_header = run first_line_task(task)
   log "Implementing task: ${task_header}"
 
@@ -373,6 +373,6 @@ export workflow implement_from_queue() {
   return patch_file
 }
 
-workflow default() {
+export def main() {
   return run implement_from_queue()
 }

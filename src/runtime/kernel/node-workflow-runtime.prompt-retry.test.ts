@@ -74,7 +74,7 @@ test("prompt retry: success on attempt N+1 returns { ok: true } with successful 
     writeFileSync(
       jh,
       [
-        "workflow default() {",
+        "export def main() {",
         '  const r = prompt "x"',
         "  return r",
         "}",
@@ -109,7 +109,7 @@ test("prompt retry: success on attempt N+1 returns { ok: true } with successful 
         sleepCalls.push(ms);
       },
     });
-    const status = await runtime.runDefault([]);
+    const status = await runtime.runMain([]);
     assert.equal(status, 0, "workflow should succeed once prompt succeeds on retry");
 
     const returnFile = join(runtime.getRunDir(), "return_value.txt");
@@ -131,7 +131,7 @@ test("prompt retry: exhausting retries on default-length schedule makes exactly 
     writeFileSync(
       jh,
       [
-        "workflow default() {",
+        "export def main() {",
         '  prompt "x"',
         "}",
         "",
@@ -166,7 +166,7 @@ test("prompt retry: exhausting retries on default-length schedule makes exactly 
         sleepCalls.push(ms);
       },
     });
-    const status = await runtime.runDefault([]);
+    const status = await runtime.runMain([]);
     assert.equal(status, 1, "workflow should fail after retries exhausted");
 
     const calls = readFileSync(callsLog, "utf8").split("\n").filter(Boolean);
@@ -184,7 +184,7 @@ test("prompt retry: default schedule values are passed to sleep in order", async
     writeFileSync(
       jh,
       [
-        "workflow default() {",
+        "export def main() {",
         '  prompt "x"',
         "}",
         "",
@@ -218,7 +218,7 @@ test("prompt retry: default schedule values are passed to sleep in order", async
         sleepCalls.push(ms);
       },
     });
-    const status = await runtime.runDefault([]);
+    const status = await runtime.runMain([]);
     assert.equal(status, 1);
     assert.deepEqual(
       sleepCalls,
@@ -239,11 +239,11 @@ test("prompt retry: enclosing run+catch fires after retries are exhausted (compo
     writeFileSync(
       jh,
       [
-        "workflow inner() {",
+        "def inner() {",
         '  prompt "x"',
         "}",
         "",
-        "workflow default() {",
+        "export def main() {",
         "  run inner() catch (failure) {",
         '    return "recovered"',
         "  }",
@@ -279,7 +279,7 @@ test("prompt retry: enclosing run+catch fires after retries are exhausted (compo
         sleepCalls.push(ms);
       },
     });
-    const status = await runtime.runDefault([]);
+    const status = await runtime.runMain([]);
     assert.equal(status, 0, "catch branch should recover and the workflow should succeed");
 
     const calls = readFileSync(callsLog, "utf8").split("\n").filter(Boolean);
@@ -301,7 +301,7 @@ test("prompt retry: invalid JSON from prompt with returns schema is NOT retried"
     writeFileSync(
       jh,
       [
-        "workflow default() {",
+        "export def main() {",
         '  const r = prompt "x" returns "{ verdict: string }"',
         "}",
         "",
@@ -336,7 +336,7 @@ test("prompt retry: invalid JSON from prompt with returns schema is NOT retried"
         sleepCalls.push(ms);
       },
     });
-    const status = await runtime.runDefault([]);
+    const status = await runtime.runMain([]);
     assert.equal(status, 1, "invalid JSON should fail the step");
 
     const calls = readFileSync(callsLog, "utf8").split("\n").filter(Boolean);
@@ -354,7 +354,7 @@ test("prompt retry: every failed attempt and the final termination emit LOGERR w
     writeFileSync(
       jh,
       [
-        "workflow default() {",
+        "export def main() {",
         '  prompt "x"',
         "}",
         "",
@@ -385,7 +385,7 @@ test("prompt retry: every failed attempt and the final termination emit LOGERR w
       promptRetryDelays: [10, 20],
       sleep: async () => {},
     });
-    const status = await withSummaryEnv(runtime.getSummaryFile(), () => runtime.runDefault([]));
+    const status = await withSummaryEnv(runtime.getSummaryFile(), () => runtime.runMain([]));
     assert.equal(status, 1);
 
     const events = readSummaryEvents(runtime.getSummaryFile());
@@ -411,7 +411,7 @@ test("prompt retry: LOGERR is emitted even when no recover/catch is present", as
     writeFileSync(
       jh,
       [
-        "workflow default() {",
+        "export def main() {",
         '  prompt "x"',
         "}",
         "",
@@ -442,7 +442,7 @@ test("prompt retry: LOGERR is emitted even when no recover/catch is present", as
       promptRetryDelays: [1],
       sleep: async () => {},
     });
-    await withSummaryEnv(runtime.getSummaryFile(), () => runtime.runDefault([]));
+    await withSummaryEnv(runtime.getSummaryFile(), () => runtime.runMain([]));
     const events = readSummaryEvents(runtime.getSummaryFile());
     const logerrs = events.filter((e) => e.type === "LOGERR");
     assert.ok(logerrs.length >= 1, "at least one LOGERR even without recover/catch");
@@ -458,7 +458,7 @@ test("prompt retry: JAIPH_PROMPT_RETRY=0 disables retry — 1 attempt, sleep nev
     writeFileSync(
       jh,
       [
-        "workflow default() {",
+        "export def main() {",
         '  prompt "x"',
         "}",
         "",
@@ -493,7 +493,7 @@ test("prompt retry: JAIPH_PROMPT_RETRY=0 disables retry — 1 attempt, sleep nev
         sleepCalls.push(ms);
       },
     });
-    const status = await runtime.runDefault([]);
+    const status = await runtime.runMain([]);
     assert.equal(status, 1);
     const calls = readFileSync(callsLog, "utf8").split("\n").filter(Boolean);
     assert.equal(calls.length, 1, "exactly 1 attempt with retries disabled");
@@ -510,7 +510,7 @@ test("prompt retry: JAIPH_PROMPT_RETRY_DELAYS overrides the default schedule", a
     writeFileSync(
       jh,
       [
-        "workflow default() {",
+        "export def main() {",
         '  prompt "x"',
         "}",
         "",
@@ -544,7 +544,7 @@ test("prompt retry: JAIPH_PROMPT_RETRY_DELAYS overrides the default schedule", a
         sleepCalls.push(ms);
       },
     });
-    const status = await runtime.runDefault([]);
+    const status = await runtime.runMain([]);
     assert.equal(status, 1);
     const calls = readFileSync(callsLog, "utf8").split("\n").filter(Boolean);
     assert.equal(calls.length, 4, "1 initial + 3 retries");
@@ -561,7 +561,7 @@ test("prompt retry: invalid JAIPH_PROMPT_RETRY_DELAYS errors clearly without sil
     writeFileSync(
       jh,
       [
-        "workflow default() {",
+        "export def main() {",
         '  prompt "x"',
         "}",
         "",
@@ -595,7 +595,7 @@ test("prompt retry: invalid JAIPH_PROMPT_RETRY_DELAYS errors clearly without sil
         sleepCalls.push(ms);
       },
     });
-    const status = await withSummaryEnv(runtime.getSummaryFile(), () => runtime.runDefault([]));
+    const status = await withSummaryEnv(runtime.getSummaryFile(), () => runtime.runMain([]));
     assert.equal(status, 1, "workflow should fail with invalid config");
     // Step fails before executePrompt is called.
     const calls = existsSync(callsLog) ? readFileSync(callsLog, "utf8").split("\n").filter(Boolean) : [];
@@ -616,7 +616,7 @@ test("prompt retry: abort during backoff sleep halts further executePrompt calls
     writeFileSync(
       jh,
       [
-        "workflow default() {",
+        "export def main() {",
         '  prompt "x"',
         "}",
         "",
@@ -668,7 +668,7 @@ test("prompt retry: abort during backoff sleep halts further executePrompt calls
       promptRetryDelays: [10, 20, 30, 40, 50],
       sleep,
     });
-    const status = await runtime.runDefault([]);
+    const status = await runtime.runMain([]);
     assert.equal(status, 1);
     const calls = readFileSync(callsLog, "utf8").split("\n").filter(Boolean);
     assert.equal(calls.length, 1, "after abort fires during the first backoff, no second attempt should run");

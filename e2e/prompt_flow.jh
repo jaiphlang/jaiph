@@ -1,5 +1,5 @@
 #!/usr/bin/env jaiph
 # E2E fixture: prompt step for jaiph test with mock.
-workflow default() {
+export def main() {
   prompt "e2e-prompt-please-return-mock"
 }

@@ -1,8 +1,6 @@
 {
   "channels": [],
-  "exports": [],
-  "imports": [],
-  "rules": [
+  "defs": [
     {
       "comments": [],
       "name": "ok",
@@ -18,24 +16,10 @@
           "type": "exec"
         }
       ]
-    }
-  ],
-  "scripts": [
-    {
-      "body": "true",
-      "comments": [],
-      "name": "ok_impl"
     },
     {
-      "body": "printf '%s' \"$1\" > \"$2\"",
       "comments": [],
-      "name": "save"
-    }
-  ],
-  "workflows": [
-    {
-      "comments": [],
-      "name": "default",
+      "name": "main",
       "params": [],
       "steps": [
         {
@@ -43,7 +27,7 @@
             "callee": {
               "value": "ok"
             },
-            "kind": "ensure_call"
+            "kind": "call"
           },
           "catch": {
             "bindings": {
@@ -74,6 +58,22 @@
           "type": "exec"
         }
       ]
+    }
+  ],
+  "exports": [
+    "main"
+  ],
+  "imports": [],
+  "scripts": [
+    {
+      "body": "true",
+      "comments": [],
+      "name": "ok_impl"
+    },
+    {
+      "body": "printf '%s' \"$1\" > \"$2\"",
+      "comments": [],
+      "name": "save"
     }
   ]
 }

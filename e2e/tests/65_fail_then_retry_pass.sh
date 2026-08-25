@@ -13,45 +13,45 @@ TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 # - first call fails gate1 -> remediate1 -> recurse
 # - second call fails gate2 -> remediate2 -> recurse
 # Tree should reflect nested recursion depth.
-e2e::section "ensure catch supports multi-gate recursive nesting"
+e2e::section "run catch supports multi-gate recursive nesting"
 rm -f "${TEST_DIR}/.gate1_passed" "${TEST_DIR}/.gate2_passed"
 
 # Given
 e2e::file "make_pass.jh" <<'EOF'
 script gate1_impl = `test -f .gate1_passed`
-rule gate1() {
+def gate1() {
   run gate1_impl()
 }
 
 script gate2_impl = `test -f .gate2_passed`
-rule gate2() {
+def gate2() {
   run gate2_impl()
 }
 
 script remediate1_impl = `touch .gate1_passed`
-workflow remediate1() {
+def remediate1() {
   run remediate1_impl()
 }
 
 script remediate2_impl = `touch .gate2_passed`
-workflow remediate2() {
+def remediate2() {
   run remediate2_impl()
 }
 
-workflow make_pass() {
-  ensure gate1() catch (err) {
+def make_pass() {
+  run gate1() catch (err) {
     run remediate1()
     run make_pass()
     return
   }
-  ensure gate2() catch (err) {
+  run gate2() catch (err) {
     run remediate2()
     run make_pass()
     return
   }
 }
 
-workflow default() {
+export def main() {
   run make_pass()
 }
 EOF
@@ -66,66 +66,66 @@ e2e::expect_stdout "${out}" <<'EOF'
 
 Jaiph: Running make_pass.jh
 
-workflow default
-  ▸ workflow make_pass
-  ·   ▸ rule gate1
+export def main
+  ▸ def make_pass
+  ·   ▸ def gate1
   ·   ·   ▸ script gate1_impl
   ·   ·   ✗ script gate1_impl (<time>)
-  ·   ✗ rule gate1 (<time>)
-  ·   ▸ workflow remediate1
+  ·   ✗ def gate1(<time>)
+  ·   ▸ def remediate1
   ·   ·   ▸ script remediate1_impl
   ·   ·   ✓ script remediate1_impl (<time>)
-  ·   ✓ workflow remediate1 (<time>)
-  ·   ▸ workflow make_pass
-  ·   ·   ▸ rule gate1
+  ·   ✓ def remediate1(<time>)
+  ·   ▸ def make_pass
+  ·   ·   ▸ def gate1
   ·   ·   ·   ▸ script gate1_impl
   ·   ·   ·   ✓ script gate1_impl (<time>)
-  ·   ·   ✓ rule gate1 (<time>)
-  ·   ·   ▸ rule gate2
+  ·   ·   ✓ def gate1(<time>)
+  ·   ·   ▸ def gate2
   ·   ·   ·   ▸ script gate2_impl
   ·   ·   ·   ✗ script gate2_impl (<time>)
-  ·   ·   ✗ rule gate2 (<time>)
-  ·   ·   ▸ workflow remediate2
+  ·   ·   ✗ def gate2(<time>)
+  ·   ·   ▸ def remediate2
   ·   ·   ·   ▸ script remediate2_impl
   ·   ·   ·   ✓ script remediate2_impl (<time>)
-  ·   ·   ✓ workflow remediate2 (<time>)
-  ·   ·   ▸ workflow make_pass
-  ·   ·   ·   ▸ rule gate1
+  ·   ·   ✓ def remediate2(<time>)
+  ·   ·   ▸ def make_pass
+  ·   ·   ·   ▸ def gate1
   ·   ·   ·   ·   ▸ script gate1_impl
   ·   ·   ·   ·   ✓ script gate1_impl (<time>)
-  ·   ·   ·   ✓ rule gate1 (<time>)
-  ·   ·   ·   ▸ rule gate2
+  ·   ·   ·   ✓ def gate1(<time>)
+  ·   ·   ·   ▸ def gate2
   ·   ·   ·   ·   ▸ script gate2_impl
   ·   ·   ·   ·   ✓ script gate2_impl (<time>)
-  ·   ·   ·   ✓ rule gate2 (<time>)
-  ·   ·   ✓ workflow make_pass (<time>)
-  ·   ✓ workflow make_pass (<time>)
-  ✓ workflow make_pass (<time>)
-✓ PASS workflow default (<time>)
+  ·   ·   ·   ✓ def gate2(<time>)
+  ·   ·   ✓ def make_pass(<time>)
+  ·   ✓ def make_pass(<time>)
+  ✓ def make_pass(<time>)
+✓ PASS export def main (<time>)
 EOF
 
-e2e::pass "ensure catch with two recursive gates: fail gate1 then gate2, pass on nested retries"
+e2e::pass "run catch with two recursive gates: fail gate1 then gate2, pass on nested retries"
 
-# Same scenario but with a single ensure gate.
+# Same scenario but with a single run gate.
 e2e::section "single-gate recursive retry: fail first, pass on retry"
 rm -f "${TEST_DIR}/.gate_passed"
 
 # Given
 e2e::file "make_pass_bash.jh" <<'EOF'
-rule gate() {
+def gate() {
   run check_gate()
 }
 script check_gate = `test -f .gate_passed`
 script mark_gate = `touch .gate_passed`
-workflow make_pass() {
-  ensure gate() catch (err) {
+def make_pass() {
+  run gate() catch (err) {
     run mark_gate()
     run make_pass()
     return
   }
 }
 
-workflow default() {
+export def main() {
   run make_pass()
 }
 EOF
@@ -139,21 +139,21 @@ e2e::expect_stdout "${out_bash}" <<'EOF'
 
 Jaiph: Running make_pass_bash.jh
 
-workflow default
-  ▸ workflow make_pass
-  ·   ▸ rule gate
+export def main
+  ▸ def make_pass
+  ·   ▸ def gate
   ·   ·   ▸ script check_gate
   ·   ·   ✗ script check_gate (<time>)
-  ·   ✗ rule gate (<time>)
+  ·   ✗ def gate(<time>)
   ·   ▸ script mark_gate
   ·   ✓ script mark_gate (<time>)
-  ·   ▸ workflow make_pass
-  ·   ·   ▸ rule gate
+  ·   ▸ def make_pass
+  ·   ·   ▸ def gate
   ·   ·   ·   ▸ script check_gate
   ·   ·   ·   ✓ script check_gate (<time>)
-  ·   ·   ✓ rule gate (<time>)
-  ·   ✓ workflow make_pass (<time>)
-  ✓ workflow make_pass (<time>)
-✓ PASS workflow default (<time>)
+  ·   ·   ✓ def gate(<time>)
+  ·   ✓ def make_pass(<time>)
+  ✓ def make_pass(<time>)
+✓ PASS export def main (<time>)
 EOF
 e2e::pass "single-gate retry flow: fail first time, pass on retry"

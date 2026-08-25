@@ -2,18 +2,17 @@ import { errText } from "../../errors";
 import { randomUUID } from "node:crypto";
 import { createInterface } from "node:readline";
 import { McpServer } from "../shared/mcp-server";
-import { callWorkflow } from "../shared/workflow-call";
+import { callDef } from "../shared/workflow-call";
 import { parseServerArgs, startGeneration, startReloadWatcher } from "../shared/serve-bootstrap";
 import { createOperatorLog } from "../shared/server-log";
 import { VERSION } from "../../version";
 
 const MCP_USAGE =
   "Usage: jaiph mcp [--workspace <dir>] [--env KEY[=VALUE]]... <file.jh>\n\n" +
-  "Serve the file's workflows as MCP tools over stdio (newline-delimited JSON-RPC).\n" +
-  "Exposure: `export workflow` declarations if any exist, otherwise every top-level\n" +
-  "workflow except channel route targets. `default` is exposed only when it is the\n" +
-  "only workflow, under a tool name derived from the file's basename.\n" +
-  "Tool descriptions come from the `#` comment lines directly above each workflow.\n" +
+  "Serve the file's exported defs as MCP tools over stdio (newline-delimited JSON-RPC).\n" +
+  "Exposure: exported defs only. `main` is exposed only when it is the only export,\n" +
+  "under a tool name derived from the file's basename.\n" +
+  "Tool descriptions come from the `#` comment lines directly above each def.\n" +
   "Sources are re-validated on change and clients get notifications/tools/list_changed.\n\n" +
   "  --workspace <dir>  workspace root for import resolution (default: auto-detect)\n" +
   "  --env KEY=VALUE    define KEY in every tool call's env (repeatable); --env KEY forwards the host value\n" +
@@ -44,9 +43,9 @@ export async function runMcp(rest: string[]): Promise<number> {
       // Bind the call to the generation live at start; the lease keeps its
       // scripts dir alive until the call settles (deleted then if superseded).
       const lease = generations.acquire();
-      return callWorkflow(
+      return callDef(
         lease.state.callEnv,
-        spec.workflow,
+        spec.def,
         spec.params.map((p) => args[p] ?? ""),
         randomUUID(),
         { ...callCtx, operator },

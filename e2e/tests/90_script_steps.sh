@@ -17,7 +17,7 @@ script changed_files = ```
 echo "fn-called" > script_called.txt
 ```
 
-workflow default() {
+export def main() {
   run changed_files()
 }
 EOF
@@ -33,10 +33,10 @@ e2e::expect_stdout "${script_out}" <<'EOF'
 
 Jaiph: Running scripts.jh
 
-workflow default
+export def main
   ▸ script changed_files
   ✓ script changed_files (<time>)
-✓ PASS workflow default (<time>)
+✓ PASS export def main (<time>)
 EOF
 
 e2e::expect_out_files "scripts.jh" 2
@@ -47,7 +47,7 @@ e2e::section "run, ensure, and script argument forwarding"
 e2e::file "args_forwarding.jh" <<'EOF'
 script expect_args_impl = `return 0`
 
-rule expect_args(a, b) {
+def expect_args(a, b) {
   run expect_args_impl()
 }
 
@@ -59,13 +59,13 @@ script write_workflow_args = ```
 printf "%s|%s\n" "$1" "$2" > workflow_args.txt
 ```
 
-workflow called(a, b) {
-  ensure expect_args(a, b)
+def called(a, b) {
+  run expect_args(a, b)
   run write_args(a, b)
   run write_workflow_args(a, b)
 }
 
-workflow default() {
+export def main() {
   run called("one", "two words")
 }
 EOF
@@ -84,18 +84,18 @@ e2e::expect_stdout "${args_out}" <<'EOF'
 
 Jaiph: Running args_forwarding.jh
 
-workflow default
-  ▸ workflow called (a="one", b="two words")
-  ·   ▸ rule expect_args (a="one", b="two words")
+export def main
+  ▸ def called(a="one", b="two words")
+  ·   ▸ def expect_args(a="one", b="two words")
   ·   ·   ▸ script expect_args_impl
   ·   ·   ✓ script expect_args_impl (<time>)
-  ·   ✓ rule expect_args (<time>)
+  ·   ✓ def expect_args(<time>)
   ·   ▸ script write_args (1="one", 2="two words")
   ·   ✓ script write_args (<time>)
   ·   ▸ script write_workflow_args (1="one", 2="two words")
   ·   ✓ script write_workflow_args (<time>)
-  ✓ workflow called (<time>)
-✓ PASS workflow default (<time>)
+  ✓ def called(<time>)
+✓ PASS export def main (<time>)
 EOF
 
 e2e::expect_out_files "args_forwarding.jh" 6

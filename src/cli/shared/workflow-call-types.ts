@@ -14,7 +14,7 @@ import type { OperatorLog } from "./server-log";
  * The `runDir` / `exitStatus` / `signal` fields let HTTP callers (`jaiph serve`)
  * populate a durable run object — MCP ignores them.
  */
-export interface WorkflowCallResult {
+export interface DefCallResult {
   /** Text returned to the caller as the call result. */
   text: string;
   /** True when the workflow failed; surfaces as `isError` on the result. */
@@ -28,11 +28,11 @@ export interface WorkflowCallResult {
 }
 
 /**
- * Live hooks handed to `callWorkflow` for one in-flight call. `onStep` fires per
+ * Live hooks handed to `callDef` for one in-flight call. `onStep` fires per
  * `STEP_START`/`STEP_END` event; the executor registers its child-termination
  * function via `onCancelHandle` so a cancellation can kill the run.
  */
-export interface WorkflowCallContext {
+export interface DefCallContext {
   onStep?: (kind: string, name: string) => void;
   onCancelHandle?: (cancel: () => void) => void;
   /**
@@ -56,7 +56,7 @@ export interface WorkflowCallContext {
  * module-graph generation (startup and each hot reload) — scripts and the
  * serialized graph are read-only, so concurrent calls can share them.
  */
-export interface WorkflowCallEnvironment {
+export interface DefCallEnvironment {
   inputAbs: string;
   workspaceRoot: string;
   /** Entry module AST for this generation. */
@@ -76,8 +76,8 @@ export interface WorkflowCallEnvironment {
   /**
    * Merged lifecycle-hook config (`hooks.json`), loaded once per generation.
    * When present, every call dispatches the same four hook events as
-   * interactive `jaiph run` (`workflow_start`, `step_start`, `step_end`,
-   * `workflow_end`) with the same payload shapes.
+   * interactive `jaiph run` (`run_start`, `step_start`, `step_end`,
+   * `run_end`) with the same payload shapes.
    */
   hooks?: MergedHookConfig;
 }

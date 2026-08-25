@@ -1,8 +1,6 @@
 {
   "channels": [],
-  "exports": [],
-  "imports": [],
-  "rules": [
+  "defs": [
     {
       "comments": [],
       "name": "classify",
@@ -61,13 +59,10 @@
           "type": "if"
         }
       ]
-    }
-  ],
-  "scripts": [],
-  "workflows": [
+    },
     {
       "comments": [],
-      "name": "default",
+      "name": "main",
       "params": [
         "status"
       ],
@@ -145,5 +140,10 @@
         }
       ]
     }
-  ]
+  ],
+  "exports": [
+    "main"
+  ],
+  "imports": [],
+  "scripts": []
 }

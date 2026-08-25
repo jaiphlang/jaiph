@@ -208,9 +208,8 @@ e2e::expect_out() {
   shopt -s nullglob
   local matches=(
     "${dir}"*"${file%.*}__${workflow}.out"
-    "${dir}"*"workflow__${workflow}.out"
+    "${dir}"*"def__${workflow}.out"
     "${dir}"*"script__${workflow}.out"
-    "${dir}"*"rule__${workflow}.out"
   )
   shopt -u nullglob
 
@@ -220,32 +219,6 @@ e2e::expect_out() {
   content="$(<"${matches[0]}")"
 
   e2e::assert_equals "${content}" "${expected}" "${file} ${workflow} .out"
-}
-
-e2e::expect_rule_out() {
-  local file="$1"
-  local rule="$2"
-  local expected="$3"
-
-  local dir
-  dir="$(e2e::run_dir "${file}")"
-
-  local normalized="${rule//./__}"
-  local short_rule="${rule##*.}"
-
-  shopt -s nullglob
-  local matches=(
-    "${dir}"*"${normalized}.out"
-    "${dir}"*"rule__${short_rule}.out"
-  )
-  shopt -u nullglob
-
-  [[ ${#matches[@]} -ge 1 ]] || e2e::fail "missing ${rule} .out for ${file}"
-
-  local content
-  content="$(<"${matches[0]}")"
-
-  e2e::assert_equals "${content}" "${expected}" "${file} ${rule} .out"
 }
 
 e2e::expect_stdout() {

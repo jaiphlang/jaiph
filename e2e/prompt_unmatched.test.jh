@@ -3,6 +3,6 @@
 import "prompt_unmatched.jh" as p
 
 test "when no mock, backend runs" {
-  const response = run p.default()
+  const response = run p.main()
   expect_contain response "e2e-backend-no-mock-output"
 }

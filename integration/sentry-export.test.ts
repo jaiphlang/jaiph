@@ -152,10 +152,10 @@ function baseEnv(runsRoot: string): NodeJS.ProcessEnv {
 }
 
 /** A workflow whose one step fails with a nonzero exit, so the run fails. */
-const FAIL_FIXTURE = ['script boom = `echo "step output"; exit 3`', "workflow default() {", "  run boom()", "}", ""].join("\n");
+const FAIL_FIXTURE = ['script boom = `echo "step output"; exit 3`', "export def main() {", "  run boom()", "}", ""].join("\n");
 
 /** A workflow that succeeds. */
-const OK_FIXTURE = ['script ok = `echo "hi"`', "workflow default() {", "  run ok()", '  return "done"', "}", ""].join("\n");
+const OK_FIXTURE = ['script ok = `echo "hi"`', "export def main() {", "  run ok()", '  return "done"', "}", ""].join("\n");
 
 function sentryWarnings(stderr: string): string[] {
   return stderr.split("\n").filter((l) => l.includes("Sentry error report"));
@@ -201,14 +201,14 @@ test("jaiph run: a failed run with SENTRY_DSN delivers exactly one envelope carr
     };
     assert.equal(event.event_id, header.event_id);
     assert.equal(event.level, "error");
-    assert.equal(event.message.formatted, "workflow default failed (exit 3)");
-    assert.equal(event.tags["jaiph.workflow"], "default");
+    assert.equal(event.message.formatted, "run main failed (exit 3)");
+    assert.equal(event.tags["jaiph.def"], "main");
     assert.equal(event.tags["jaiph.source"], "app.jh");
     assert.equal(event.tags["jaiph.step.name"], "boom", "failing step tag present");
     assert.equal(event.tags["jaiph.step.kind"], "script");
     assert.equal(event.extra.failing_step_detail, "step output", "the failing step's redacted excerpt");
     assert.ok(event.extra.run_dir && event.extra.run_dir.length > 0, "run dir pointer present");
-    assert.deepEqual(event.fingerprint, ["jaiph", "default", "boom"]);
+    assert.deepEqual(event.fingerprint, ["jaiph", "main", "boom"]);
     assert.equal(event.environment, "ci");
   } finally {
     await sentry.close();
@@ -249,7 +249,7 @@ test("jaiph run --raw: a failed standalone raw run delivers exactly one Sentry e
     // A one-shot raw run awaits delivery before exit, so the envelope has landed.
     assert.equal(sentry.requests.length, 1, "standalone --raw delivers exactly one Sentry event");
     const event = JSON.parse(sentry.requests[0].body.split("\n")[2]) as { message: { formatted: string } };
-    assert.equal(event.message.formatted, "workflow default failed (exit 3)");
+    assert.equal(event.message.formatted, "run main failed (exit 3)");
   } finally {
     await sentry.close();
     rmSync(root, { recursive: true, force: true });
@@ -262,10 +262,10 @@ test("jaiph serve: a failed HTTP run delivers exactly one Sentry event via the s
   try {
     const jh = join(root, "tools.jh");
     // A named workflow (serve requires named tools) whose one step fails.
-    writeFileSync(jh, ['script boom = `echo "step output"; exit 3`', "# Fails on purpose.", "workflow crash() {", "  run boom()", "}", ""].join("\n"));
+    writeFileSync(jh, ['script boom = `echo "step output"; exit 3`', "# Fails on purpose.", "export def crash() {", "  run boom()", "}", ""].join("\n"));
     const serve = await startServe(jh, root, { ...baseEnv(join(root, ".jaiph/runs")), SENTRY_DSN: dsn(sentry.port) });
     try {
-      const res = await fetch(`${serve.baseUrl}/v1/workflows/crash/runs?wait=true`, {
+      const res = await fetch(`${serve.baseUrl}/v1/defs/crash/runs?wait=true`, {
         method: "POST",
         headers: { "content-type": "application/json", authorization: `Bearer ${SERVE_TOKEN}` },
         body: "{}",
@@ -276,8 +276,8 @@ test("jaiph serve: a failed HTTP run delivers exactly one Sentry event via the s
       await waitForRequests(sentry, 1, "one Sentry event per failed HTTP run");
       assert.equal(sentry.requests.length, 1, "exactly one Sentry event per failed HTTP run");
       const event = JSON.parse(sentry.requests[0].body.split("\n")[2]) as { message: { formatted: string }; tags: Record<string, string> };
-      assert.equal(event.message.formatted, "workflow crash failed (exit 3)");
-      assert.equal(event.tags["jaiph.workflow"], "crash");
+      assert.equal(event.message.formatted, "run crash failed (exit 3)");
+      assert.equal(event.tags["jaiph.def"], "crash");
     } finally {
       await serve.close();
     }
@@ -367,7 +367,7 @@ test("redaction: a credential in the failing step's output reaches the event onl
     const jh = join(root, "app.jh");
     writeFileSync(
       jh,
-      ['script leak = `printf %s "$SECRET_API_KEY"; exit 1`', "workflow default() {", "  run leak()", "}", ""].join("\n"),
+      ['script leak = `printf %s "$SECRET_API_KEY"; exit 1`', "export def main() {", "  run leak()", "}", ""].join("\n"),
     );
     const result = await runCli(["run", jh], {
       cwd: root,

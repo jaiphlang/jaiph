@@ -14,7 +14,7 @@ e2e::section "log/logerr run artifacts"
 # Given
 e2e::file "log_artifacts.jh" <<'EOF'
 script done_impl = `echo "done"`
-workflow default() {
+export def main() {
   log "artifact-stdout"
   logerr "artifact-stderr"
   run done_impl()

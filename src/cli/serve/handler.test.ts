@@ -8,11 +8,11 @@ import { hashArgs } from "./run-store";
 import type { Authenticator, Capability, Principal } from "./auth";
 import type { StreamTarget } from "./runfiles";
 import type { McpToolSpec } from "../shared/mcp-tools";
-import type { WorkflowCallResult, WorkflowCallContext } from "../shared/workflow-call";
+import type { DefCallResult, DefCallContext } from "../shared/workflow-call";
 
 const BUILD_TOOL: McpToolSpec = {
   name: "build",
-  workflow: "build",
+  def: "build",
   description: "Builds the target.",
   params: ["target"],
   inputSchema: {
@@ -25,7 +25,7 @@ const BUILD_TOOL: McpToolSpec = {
 
 const NOARG_TOOL: McpToolSpec = {
   name: "ping",
-  workflow: "ping",
+  def: "ping",
   description: "Pings.",
   params: [],
   inputSchema: { type: "object", properties: {}, additionalProperties: false },
@@ -35,8 +35,8 @@ type CallTool = (
   spec: McpToolSpec,
   args: Record<string, string>,
   runId: string,
-  ctx: WorkflowCallContext,
-) => Promise<WorkflowCallResult>;
+  ctx: DefCallContext,
+) => Promise<DefCallResult>;
 
 function makeHandler(overrides?: {
   callTool?: CallTool;
@@ -160,20 +160,20 @@ test("wrong method on a known path is 405", async () => {
 
 test("auth matrix: /v1/* requires the bearer token when JAIPH_SERVE_TOKEN is set", async () => {
   const h = makeHandler({ token: "secret" });
-  const none = await h.handleRequest(req("GET", "/v1/workflows"));
+  const none = await h.handleRequest(req("GET", "/v1/defs"));
   assert.equal(none.status, 401);
   assert.equal(bodyJson(none).error.code, "E_UNAUTHORIZED");
 
-  const wrong = await h.handleRequest(req("GET", "/v1/workflows", { headers: { authorization: "Bearer nope" } }));
+  const wrong = await h.handleRequest(req("GET", "/v1/defs", { headers: { authorization: "Bearer nope" } }));
   assert.equal(wrong.status, 401);
 
-  const right = await h.handleRequest(req("GET", "/v1/workflows", { headers: { authorization: "Bearer secret" } }));
+  const right = await h.handleRequest(req("GET", "/v1/defs", { headers: { authorization: "Bearer secret" } }));
   assert.equal(right.status, 200);
-  assert.deepEqual(bodyJson(right).workflows, [{ name: "build", description: "Builds the target.", params: ["target"] }]);
+  assert.deepEqual(bodyJson(right).defs, [{ name: "build", description: "Builds the target.", params: ["target"] }]);
 });
 
 test("with no token configured, /v1/* is open (loopback default)", async () => {
-  const res = await makeHandler().handleRequest(req("GET", "/v1/workflows"));
+  const res = await makeHandler().handleRequest(req("GET", "/v1/defs"));
   assert.equal(res.status, 200);
 });
 
@@ -210,7 +210,7 @@ function tokenAuth(map: Record<string, Principal>): Authenticator {
 test("authz: a principal without the invoke capability cannot create a run (403)", async () => {
   const h = makeHandler({ authenticator: principalAuth(principal("alice", ["inspect", "cancel"])) });
   const res = await h.handleRequest(
-    req("POST", "/v1/workflows/build/runs", { headers: { "content-type": "application/json" }, body: JSON.stringify({ target: "x" }) }),
+    req("POST", "/v1/defs/build/runs", { headers: { "content-type": "application/json" }, body: JSON.stringify({ target: "x" }) }),
   );
   assert.equal(res.status, 403);
   assert.equal(bodyJson(res).error.code, "E_FORBIDDEN");
@@ -219,7 +219,7 @@ test("authz: a principal without the invoke capability cannot create a run (403)
 test("authz: a principal without the inspect capability cannot list or read runs (403)", async () => {
   const h = makeHandler({ authenticator: principalAuth(principal("alice", ["invoke"])) });
   assert.equal((await h.handleRequest(req("GET", "/v1/runs"))).status, 403);
-  assert.equal((await h.handleRequest(req("GET", "/v1/workflows"))).status, 403);
+  assert.equal((await h.handleRequest(req("GET", "/v1/defs"))).status, 403);
   assert.equal((await h.handleRequest(req("GET", "/v1/runs/whatever"))).status, 403);
 });
 
@@ -228,9 +228,9 @@ test("authz: a principal without the cancel capability cannot cancel a run it ow
   const h = makeHandler({
     tools: [NOARG_TOOL],
     authenticator: principalAuth(p),
-    callTool: () => new Promise<WorkflowCallResult>(() => {}),
+    callTool: () => new Promise<DefCallResult>(() => {}),
   });
-  const start = bodyJson(await h.handleRequest(req("POST", "/v1/workflows/ping/runs")));
+  const start = bodyJson(await h.handleRequest(req("POST", "/v1/defs/ping/runs")));
   assert.equal(start.status, "running");
   const cancel = await h.handleRequest(req("POST", `/v1/runs/${start.run_id}/cancel`));
   assert.equal(cancel.status, 403);
@@ -247,7 +247,7 @@ test("authz: a principal cannot inspect or cancel another principal's runs (404,
   });
   const aliceHdr = { authorization: "Bearer alice-tok" };
   const bobHdr = { authorization: "Bearer bob-tok" };
-  const run = bodyJson(await h.handleRequest(req("POST", "/v1/workflows/ping/runs?wait=true", { headers: aliceHdr })));
+  const run = bodyJson(await h.handleRequest(req("POST", "/v1/defs/ping/runs?wait=true", { headers: aliceHdr })));
   assert.equal(run.principal, "alice", "the run records its creating principal");
 
   // Bob cannot see or cancel Alice's run — indistinguishable from nonexistent.
@@ -275,20 +275,20 @@ test("audit: invoke and cancel log the principal + correlation, never the bearer
   const logs: string[] = [];
   const alice = principal("alice", ["invoke", "inspect", "cancel"]);
   const TOKEN = "super-secret-jwt-value";
-  let runPromise!: Promise<WorkflowCallResult>;
+  let runPromise!: Promise<DefCallResult>;
   const h = makeHandler({
     tools: [NOARG_TOOL],
     authenticator: tokenAuth({ [TOKEN]: alice }),
     log: (l) => logs.push(l),
     callTool: (_spec, _args, _runId, ctx) => {
-      runPromise = new Promise<WorkflowCallResult>((resolve) => {
+      runPromise = new Promise<DefCallResult>((resolve) => {
         ctx.onCancelHandle?.(() => resolve({ text: "t", isError: true, exitStatus: 1, signal: "SIGINT" }));
       });
       return runPromise;
     },
   });
   const hdr = { authorization: `Bearer ${TOKEN}`, "x-correlation-id": "cid-1" };
-  const start = bodyJson(await h.handleRequest(req("POST", "/v1/workflows/ping/runs", { headers: hdr })));
+  const start = bodyJson(await h.handleRequest(req("POST", "/v1/defs/ping/runs", { headers: hdr })));
   assert.equal(start.principal, "alice", "the public run object carries the audit principal");
   assert.equal(start.correlation_id, "cid-1");
 
@@ -296,7 +296,7 @@ test("audit: invoke and cancel log the principal + correlation, never the bearer
   await runPromise.catch(() => {});
 
   // Invoke audit rides the operator start banner emitted by the executor
-  // (`callWorkflow`), which is stubbed here — so at the handler level the invoke
+  // (`callDef`), which is stubbed here — so at the handler level the invoke
   // audit surfaces on the public run object (principal + correlation, asserted
   // above). The banner audit itself is covered by the server-log call test and
   // the serve-auth integration test. The handler still emits the cancel line.
@@ -354,9 +354,9 @@ test("authz: MCP tools/call without invoke is a JSON-RPC authorization error and
 
 // === POST run: validation ===
 
-test("POST run for an unknown workflow is 404", async () => {
+test("POST run for an unknown def is 404", async () => {
   const res = await makeHandler().handleRequest(
-    req("POST", "/v1/workflows/nope/runs", { headers: { "content-type": "application/json" }, body: "{}" }),
+    req("POST", "/v1/defs/nope/runs", { headers: { "content-type": "application/json" }, body: "{}" }),
   );
   assert.equal(res.status, 404);
   assert.equal(bodyJson(res).error.code, "E_NOT_FOUND");
@@ -364,7 +364,7 @@ test("POST run for an unknown workflow is 404", async () => {
 
 test("POST run with a missing required param is 400", async () => {
   const res = await makeHandler().handleRequest(
-    req("POST", "/v1/workflows/build/runs", { headers: { "content-type": "application/json" }, body: "{}" }),
+    req("POST", "/v1/defs/build/runs", { headers: { "content-type": "application/json" }, body: "{}" }),
   );
   assert.equal(res.status, 400);
   assert.equal(bodyJson(res).error.code, "E_BAD_ARGS");
@@ -373,7 +373,7 @@ test("POST run with a missing required param is 400", async () => {
 
 test("POST run with a non-string param is 400", async () => {
   const res = await makeHandler().handleRequest(
-    req("POST", "/v1/workflows/build/runs", { headers: { "content-type": "application/json" }, body: JSON.stringify({ target: 5 }) }),
+    req("POST", "/v1/defs/build/runs", { headers: { "content-type": "application/json" }, body: JSON.stringify({ target: 5 }) }),
   );
   assert.equal(res.status, 400);
   assert.match(bodyJson(res).error.message, /target/);
@@ -381,7 +381,7 @@ test("POST run with a non-string param is 400", async () => {
 
 test("POST run with an unexpected param key is 400", async () => {
   const res = await makeHandler().handleRequest(
-    req("POST", "/v1/workflows/build/runs", {
+    req("POST", "/v1/defs/build/runs", {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ target: "x", bogus: "y" }),
     }),
@@ -392,7 +392,7 @@ test("POST run with an unexpected param key is 400", async () => {
 
 test("POST run with a non-JSON content type is 415", async () => {
   const res = await makeHandler().handleRequest(
-    req("POST", "/v1/workflows/build/runs", { headers: { "content-type": "text/plain" }, body: "target=x" }),
+    req("POST", "/v1/defs/build/runs", { headers: { "content-type": "text/plain" }, body: "target=x" }),
   );
   assert.equal(res.status, 415);
   assert.equal(bodyJson(res).error.code, "E_UNSUPPORTED_MEDIA_TYPE");
@@ -400,7 +400,7 @@ test("POST run with a non-JSON content type is 415", async () => {
 
 test("POST run past the body cap is 413", async () => {
   const res = await makeHandler().handleRequest(
-    req("POST", "/v1/workflows/build/runs", { headers: { "content-type": "application/json" }, bodyTooLarge: true }),
+    req("POST", "/v1/defs/build/runs", { headers: { "content-type": "application/json" }, bodyTooLarge: true }),
   );
   assert.equal(res.status, 413);
   assert.equal(bodyJson(res).error.code, "E_BODY_TOO_LARGE");
@@ -409,13 +409,13 @@ test("POST run past the body cap is 413", async () => {
 test("concurrency cap returns 429 beyond the limit", async () => {
   // callTool never resolves, so the first run stays in-flight and the second is
   // rejected by the cap of 1.
-  const h = makeHandler({ maxConcurrent: 1, callTool: () => new Promise<WorkflowCallResult>(() => {}) });
-  const first = await h.handleRequest(req("POST", "/v1/workflows/ping/runs"));
+  const h = makeHandler({ maxConcurrent: 1, callTool: () => new Promise<DefCallResult>(() => {}) });
+  const first = await h.handleRequest(req("POST", "/v1/defs/ping/runs"));
   // ping has no params; empty body is fine.
-  const hp = makeHandler({ maxConcurrent: 1, tools: [NOARG_TOOL], callTool: () => new Promise<WorkflowCallResult>(() => {}) });
-  const a = await hp.handleRequest(req("POST", "/v1/workflows/ping/runs"));
+  const hp = makeHandler({ maxConcurrent: 1, tools: [NOARG_TOOL], callTool: () => new Promise<DefCallResult>(() => {}) });
+  const a = await hp.handleRequest(req("POST", "/v1/defs/ping/runs"));
   assert.equal(a.status, 202);
-  const b = await hp.handleRequest(req("POST", "/v1/workflows/ping/runs"));
+  const b = await hp.handleRequest(req("POST", "/v1/defs/ping/runs"));
   assert.equal(b.status, 429);
   assert.equal(bodyJson(b).error.code, "E_TOO_MANY_RUNS");
   void first;
@@ -424,8 +424,8 @@ test("concurrency cap returns 429 beyond the limit", async () => {
 // === async vs wait ===
 
 test("async POST returns 202 with a Location header and a running run object", async () => {
-  const h = makeHandler({ tools: [NOARG_TOOL], callTool: () => new Promise<WorkflowCallResult>(() => {}) });
-  const res = await h.handleRequest(req("POST", "/v1/workflows/ping/runs"));
+  const h = makeHandler({ tools: [NOARG_TOOL], callTool: () => new Promise<DefCallResult>(() => {}) });
+  const res = await h.handleRequest(req("POST", "/v1/defs/ping/runs"));
   assert.equal(res.status, 202);
   const body = bodyJson(res);
   assert.equal(body.status, "running");
@@ -437,7 +437,7 @@ test("?wait=true returns 200 with the terminal run object and result_text", asyn
     tools: [NOARG_TOOL],
     callTool: async () => ({ text: "hello world", isError: false, exitStatus: 0, runDir: "/runs/x" }),
   });
-  const res = await h.handleRequest(req("POST", "/v1/workflows/ping/runs?wait=true"));
+  const res = await h.handleRequest(req("POST", "/v1/defs/ping/runs?wait=true"));
   assert.equal(res.status, 200);
   const body = bodyJson(res);
   assert.equal(body.status, "succeeded");
@@ -450,7 +450,7 @@ test("a workflow failure is not an HTTP error: 200 with status failed and exit_s
     tools: [NOARG_TOOL],
     callTool: async () => ({ text: "workflow ping failed (exit 1)\n\nrun dir: /runs/x", isError: true, exitStatus: 1, runDir: "/runs/x" }),
   });
-  const res = await h.handleRequest(req("POST", "/v1/workflows/ping/runs?wait=true"));
+  const res = await h.handleRequest(req("POST", "/v1/defs/ping/runs?wait=true"));
   assert.equal(res.status, 200);
   const body = bodyJson(res);
   assert.equal(body.status, "failed");
@@ -462,7 +462,7 @@ test("a workflow failure is not an HTTP error: 200 with status failed and exit_s
 
 /** A create request carrying an Idempotency-Key header and JSON args. */
 function idemReq(target: string, key: string, headers?: Record<string, string>): ServeRequest {
-  return req("POST", "/v1/workflows/build/runs?wait=true", {
+  return req("POST", "/v1/defs/build/runs?wait=true", {
     headers: { "content-type": "application/json", "idempotency-key": key, ...headers },
     body: JSON.stringify({ target }),
   });
@@ -502,7 +502,7 @@ test("idempotency: the same key with different arguments is 409 and never spawns
 test("idempotency: distinct keys, workflows, and principals are independent", async () => {
   const h = makeHandler({
     token: "secret",
-    tools: [BUILD_TOOL, { ...BUILD_TOOL, name: "other_wf", workflow: "other_wf" }],
+    tools: [BUILD_TOOL, { ...BUILD_TOOL, name: "other_wf", def: "other_wf" }],
     callTool: async () => ({ text: "built", isError: false, exitStatus: 0, runDir: "/runs/x" }),
   });
   const auth = { authorization: "Bearer secret" };
@@ -511,7 +511,7 @@ test("idempotency: distinct keys, workflows, and principals are independent", as
   const r2 = bodyJson(await h.handleRequest(idemReq("app", "k2", auth)));
   assert.notEqual(r2.run_id, r1.run_id);
   // Same key but different workflow → new run (scope includes the workflow).
-  const otherWf = req("POST", "/v1/workflows/other_wf/runs?wait=true", {
+  const otherWf = req("POST", "/v1/defs/other_wf/runs?wait=true", {
     headers: { "content-type": "application/json", "idempotency-key": "k", ...auth },
     body: JSON.stringify({ target: "app" }),
   });
@@ -539,7 +539,7 @@ test("idempotency: an evicted original spawns fresh instead of returning a dangl
 test("initialRuns seed the registry so a restarted server serves prior terminal runs and their idempotency keys", async () => {
   const seeded: RunRecord = {
     run_id: "prior-1",
-    workflow: "build",
+    def: "build",
     status: "succeeded",
     started_at: "2026-07-23T00:00:00.000Z",
     ended_at: "2026-07-23T00:00:01.000Z",
@@ -574,7 +574,7 @@ test("persistRun fires with the terminal record at finalize", async () => {
     persistRun: (r) => persisted.push({ ...r }),
     callTool: async () => ({ text: "ok", isError: false, exitStatus: 0, runDir: "/runs/x" }),
   });
-  await h.handleRequest(req("POST", "/v1/workflows/ping/runs?wait=true"));
+  await h.handleRequest(req("POST", "/v1/defs/ping/runs?wait=true"));
   assert.equal(persisted.length, 1);
   assert.equal(persisted[0].status, "succeeded");
   assert.equal(persisted[0].run_dir, "/runs/x");
@@ -587,8 +587,8 @@ test("GET /v1/runs/{id} for an unknown id is 404, and lists newest first", async
   const notFound = await h.handleRequest(req("GET", "/v1/runs/does-not-exist"));
   assert.equal(notFound.status, 404);
 
-  await h.handleRequest(req("POST", "/v1/workflows/ping/runs?wait=true"));
-  await h.handleRequest(req("POST", "/v1/workflows/ping/runs?wait=true"));
+  await h.handleRequest(req("POST", "/v1/defs/ping/runs?wait=true"));
+  await h.handleRequest(req("POST", "/v1/defs/ping/runs?wait=true"));
   const list = bodyJson(await h.handleRequest(req("GET", "/v1/runs")));
   assert.equal(list.runs.length, 2);
   // newest first: run-1 then run-0
@@ -601,7 +601,7 @@ test("GET /v1/runs/{id} for an unknown id is 404, and lists newest first", async
 test("count retention evicts only the oldest terminal records, keeping the newest", async () => {
   const h = makeHandler({ tools: [NOARG_TOOL], retainRuns: 2, callTool: async () => ({ text: "ok", isError: false, exitStatus: 0 }) });
   for (let i = 0; i < 5; i += 1) {
-    await h.handleRequest(req("POST", "/v1/workflows/ping/runs?wait=true"));
+    await h.handleRequest(req("POST", "/v1/defs/ping/runs?wait=true"));
   }
   // 5 completed, retain 2 → only run-3 and run-4 (newest) survive.
   const ids = [...h.runs.keys()].sort();
@@ -611,7 +611,7 @@ test("count retention evicts only the oldest terminal records, keeping the newes
 });
 
 test("retention never evicts an active run even when the terminal budget is exceeded", async () => {
-  let releaseActive!: (r: WorkflowCallResult) => void;
+  let releaseActive!: (r: DefCallResult) => void;
   let calls = 0;
   const h = makeHandler({
     tools: [NOARG_TOOL],
@@ -619,16 +619,16 @@ test("retention never evicts an active run even when the terminal budget is exce
     callTool: () => {
       calls += 1;
       // The first call stays in-flight; later calls resolve immediately.
-      if (calls === 1) return new Promise<WorkflowCallResult>((r) => (releaseActive = r));
+      if (calls === 1) return new Promise<DefCallResult>((r) => (releaseActive = r));
       return Promise.resolve({ text: "ok", isError: false, exitStatus: 0 });
     },
   });
-  const active = bodyJson(await h.handleRequest(req("POST", "/v1/workflows/ping/runs")));
+  const active = bodyJson(await h.handleRequest(req("POST", "/v1/defs/ping/runs")));
   assert.equal(active.status, "running");
   // Complete three more runs; with retainRuns=1 they churn, but the active run
   // must never be evicted.
   for (let i = 0; i < 3; i += 1) {
-    await h.handleRequest(req("POST", "/v1/workflows/ping/runs?wait=true"));
+    await h.handleRequest(req("POST", "/v1/defs/ping/runs?wait=true"));
   }
   assert.ok(h.runs.has(active.run_id), "the running run survives eviction");
   releaseActive({ text: "ok", isError: false, exitStatus: 0 });
@@ -644,12 +644,12 @@ test("age retention evicts a completed run once it is older than the window", as
     callTool: async () => ({ text: "ok", isError: false, exitStatus: 0 }),
   });
   // First run ends at T0.
-  const first = bodyJson(await h.handleRequest(req("POST", "/v1/workflows/ping/runs?wait=true")));
+  const first = bodyJson(await h.handleRequest(req("POST", "/v1/defs/ping/runs?wait=true")));
   assert.ok(h.runs.has(first.run_id));
   // Advance the clock 2 minutes; a new completion triggers age eviction of the
   // now-stale first run (ended > 60s ago).
   clock = "2026-07-24T00:02:00.000Z";
-  await h.handleRequest(req("POST", "/v1/workflows/ping/runs?wait=true"));
+  await h.handleRequest(req("POST", "/v1/defs/ping/runs?wait=true"));
   assert.ok(!h.runs.has(first.run_id), "the stale completed run was evicted");
 });
 
@@ -658,7 +658,7 @@ test("age retention evicts a completed run once it is older than the window", as
 test("GET /v1/runs paginates: bounded default, stable newest-first order, total count", async () => {
   const h = makeHandler({ tools: [NOARG_TOOL], callTool: async () => ({ text: "ok", isError: false, exitStatus: 0 }) });
   for (let i = 0; i < 5; i += 1) {
-    await h.handleRequest(req("POST", "/v1/workflows/ping/runs?wait=true"));
+    await h.handleRequest(req("POST", "/v1/defs/ping/runs?wait=true"));
   }
   const page = bodyJson(await h.handleRequest(req("GET", "/v1/runs?limit=2")));
   assert.equal(page.total, 5, "total reflects the full registry");
@@ -672,7 +672,7 @@ test("GET /v1/runs paginates: bounded default, stable newest-first order, total 
 
 test("GET /v1/runs clamps limit to the maximum and cannot return an unbounded response", async () => {
   const h = makeHandler({ tools: [NOARG_TOOL], callTool: async () => ({ text: "ok", isError: false, exitStatus: 0 }) });
-  await h.handleRequest(req("POST", "/v1/workflows/ping/runs?wait=true"));
+  await h.handleRequest(req("POST", "/v1/defs/ping/runs?wait=true"));
   const page = bodyJson(await h.handleRequest(req("GET", "/v1/runs?limit=999999")));
   assert.equal(page.limit, 1000, "limit clamped to MAX_RUNS_PAGE");
 
@@ -686,11 +686,11 @@ test("GET /v1/runs clamps limit to the maximum and cannot return an unbounded re
 test("cancel: 202 then terminal cancelled, invoking child + container teardown", async () => {
   let childKilled = false;
   let containerStopped = false;
-  let runPromise!: Promise<WorkflowCallResult>;
+  let runPromise!: Promise<DefCallResult>;
   const h = makeHandler({
     tools: [NOARG_TOOL],
     callTool: (_spec, _args, _runId, ctx) => {
-      runPromise = new Promise<WorkflowCallResult>((resolve) => {
+      runPromise = new Promise<DefCallResult>((resolve) => {
         ctx.onCancelHandle?.(() => {
           childKilled = true;
           containerStopped = true;
@@ -700,7 +700,7 @@ test("cancel: 202 then terminal cancelled, invoking child + container teardown",
       return runPromise;
     },
   });
-  const start = await h.handleRequest(req("POST", "/v1/workflows/ping/runs"));
+  const start = await h.handleRequest(req("POST", "/v1/defs/ping/runs"));
   assert.equal(start.status, 202);
   const runId = bodyJson(start).run_id;
 
@@ -720,7 +720,7 @@ test("cancel on an unknown run is 404; cancel on a terminal run is 409", async (
   const missing = await h.handleRequest(req("POST", "/v1/runs/nope/cancel"));
   assert.equal(missing.status, 404);
 
-  const start = bodyJson(await h.handleRequest(req("POST", "/v1/workflows/ping/runs?wait=true")));
+  const start = bodyJson(await h.handleRequest(req("POST", "/v1/defs/ping/runs?wait=true")));
   const again = await h.handleRequest(req("POST", `/v1/runs/${start.run_id}/cancel`));
   assert.equal(again.status, 409);
   assert.equal(bodyJson(again).error.code, "E_RUN_TERMINAL");
@@ -734,7 +734,7 @@ async function runWithDir(runDir: string): Promise<{ h: ServeHandler; runId: str
     tools: [NOARG_TOOL],
     callTool: async () => ({ text: "ok", isError: false, exitStatus: 0, runDir }),
   });
-  const started = bodyJson(await h.handleRequest(req("POST", "/v1/workflows/ping/runs?wait=true")));
+  const started = bodyJson(await h.handleRequest(req("POST", "/v1/defs/ping/runs?wait=true")));
   return { h, runId: started.run_id };
 }
 
@@ -767,7 +767,7 @@ test("events + artifacts require the bearer token when one is configured", async
 test("NDJSON events on a terminal run stream the run_summary.jsonl file itself", async () => {
   const runDir = mkdtempSync(join(tmpdir(), "jaiph-h-ndjson-"));
   try {
-    const journal = '{"type":"WORKFLOW_START","run_id":"r"}\n{"type":"WORKFLOW_END","run_id":"r"}\n';
+    const journal = '{"type":"RUN_START","run_id":"r"}\n{"type":"RUN_END","run_id":"r"}\n';
     writeFileSync(join(runDir, "run_summary.jsonl"), journal);
     const { h, runId } = await runWithDir(runDir);
     const res = await h.handleRequest(req("GET", `/v1/runs/${runId}/events`));
@@ -785,7 +785,7 @@ test("NDJSON events on a terminal run stream the run_summary.jsonl file itself",
 test("SSE events on a terminal run replay the journal then close with event: end", async () => {
   const runDir = mkdtempSync(join(tmpdir(), "jaiph-h-sse-"));
   try {
-    const lines = ['{"type":"WORKFLOW_START","run_id":"r"}', '{"type":"WORKFLOW_END","run_id":"r"}'];
+    const lines = ['{"type":"RUN_START","run_id":"r"}', '{"type":"RUN_END","run_id":"r"}'];
     writeFileSync(join(runDir, "run_summary.jsonl"), lines.map((l) => `${l}\n`).join(""));
     const { h, runId } = await runWithDir(runDir);
     const res = await h.handleRequest(req("GET", `/v1/runs/${runId}/events`, { headers: { accept: "text/event-stream" } }));
@@ -867,20 +867,20 @@ test("a live SSE connection resolves the run dir with at most one scan", async (
   const runDir = mkdtempSync(join(tmpdir(), "jaiph-h-scan-"));
   try {
     const journal = join(runDir, "run_summary.jsonl");
-    writeFileSync(journal, '{"type":"WORKFLOW_START","run_id":"r"}\n');
+    writeFileSync(journal, '{"type":"RUN_START","run_id":"r"}\n');
     let scans = 0;
     const h = makeHandler({
       tools: [NOARG_TOOL],
       // The run never finishes, so `run_dir` is never set on the record and
       // every poll must go through the resolver.
-      callTool: () => new Promise<WorkflowCallResult>(() => {}),
+      callTool: () => new Promise<DefCallResult>(() => {}),
       resolveRunDir: () => {
         scans += 1;
         return runDir;
       },
       ssePollMs: 5,
     });
-    const started = bodyJson(await h.handleRequest(req("POST", "/v1/workflows/ping/runs")));
+    const started = bodyJson(await h.handleRequest(req("POST", "/v1/defs/ping/runs")));
     const res = await h.handleRequest(req("GET", `/v1/runs/${started.run_id}/events`, { headers: { accept: "text/event-stream" } }));
     assert.ok(res.stream);
     const target = abortableTarget();
@@ -910,7 +910,7 @@ test("an artifact past maxArtifactBytes is 413 while a smaller one still streams
       maxArtifactBytes: 4,
       callTool: async () => ({ text: "ok", isError: false, exitStatus: 0, runDir }),
     });
-    const started = bodyJson(await h.handleRequest(req("POST", "/v1/workflows/ping/runs?wait=true")));
+    const started = bodyJson(await h.handleRequest(req("POST", "/v1/defs/ping/runs?wait=true")));
 
     const big = await h.handleRequest(req("GET", `/v1/runs/${started.run_id}/artifacts/big.bin`));
     assert.equal(big.status, 413);
@@ -969,10 +969,10 @@ test("POST /mcp tools/list returns the same tools as the REST surface", async ()
 });
 
 test("POST /mcp tools/call runs the workflow and registers it in the same run registry", async () => {
-  const seen: Array<{ workflow: string; runId: string }> = [];
+  const seen: Array<{ def: string; runId: string }> = [];
   const h = makeHandler({
     callTool: async (spec, _args, runId) => {
-      seen.push({ workflow: spec.workflow, runId });
+      seen.push({ def: spec.def, runId });
       return { text: "built ok", isError: false, exitStatus: 0, runDir: "/runs/x" };
     },
   });
@@ -986,7 +986,7 @@ test("POST /mcp tools/call runs the workflow and registers it in the same run re
   // The MCP call is now a first-class run: it appears in the REST registry,
   // succeeded, and reused the injected executor exactly once.
   assert.equal(seen.length, 1);
-  assert.equal(seen[0].workflow, "build");
+  assert.equal(seen[0].def, "build");
   const listed = bodyJson(await h.handleRequest(req("GET", "/v1/runs")));
   assert.equal(listed.total, 1);
   assert.equal(listed.runs[0].run_id, seen[0].runId);
@@ -1014,7 +1014,7 @@ test("POST /mcp tools/call obeys the shared concurrency cap (MCP analogue of 429
     maxConcurrent: 1,
     callTool: () => {
       started += 1;
-      return new Promise<WorkflowCallResult>(() => {});
+      return new Promise<DefCallResult>(() => {});
     },
   });
   void h.handleRequest(
@@ -1058,7 +1058,7 @@ test("POST /mcp tools/call streams progress as SSE when the client accepts it", 
   const h = makeHandler({
     tools: [NOARG_TOOL],
     callTool: async (_spec, _args, _runId, ctx) => {
-      ctx.onStep?.("workflow", "ping");
+      ctx.onStep?.("def", "ping");
       ctx.onStep?.("script", "ping_sh");
       return { text: "pong", isError: false, exitStatus: 0 };
     },
@@ -1087,11 +1087,11 @@ test("POST /mcp tools/call streams progress as SSE when the client accepts it", 
 test("POST /mcp cancel (notifications/cancelled) marks the shared run cancelled, not failed", async () => {
   // MCP cancel must share the REST cancel contract: the run registry records
   // `cancelled`, not a generic `failed` from the killed child's nonzero exit.
-  let runPromise!: Promise<WorkflowCallResult>;
+  let runPromise!: Promise<DefCallResult>;
   const h = makeHandler({
     tools: [NOARG_TOOL],
     callTool: (_spec, _args, _runId, ctx) => {
-      runPromise = new Promise<WorkflowCallResult>((resolve) => {
+      runPromise = new Promise<DefCallResult>((resolve) => {
         ctx.onCancelHandle?.(() => {
           resolve({ text: "terminated by signal SIGINT", isError: true, exitStatus: 1, signal: "SIGINT" });
         });
@@ -1121,11 +1121,11 @@ test("POST /mcp cancel (notifications/cancelled) marks the shared run cancelled,
 
 test("POST /v1/runs/{id}/cancel cancels an MCP-initiated run in the shared registry", async () => {
   let childKilled = false;
-  let runPromise!: Promise<WorkflowCallResult>;
+  let runPromise!: Promise<DefCallResult>;
   const h = makeHandler({
     tools: [NOARG_TOOL],
     callTool: (_spec, _args, _runId, ctx) => {
-      runPromise = new Promise<WorkflowCallResult>((resolve) => {
+      runPromise = new Promise<DefCallResult>((resolve) => {
         ctx.onCancelHandle?.(() => {
           childKilled = true;
           resolve({ text: "terminated by signal SIGINT", isError: true, exitStatus: 1, signal: "SIGINT" });
@@ -1149,11 +1149,11 @@ test("POST /v1/runs/{id}/cancel cancels an MCP-initiated run in the shared regis
 });
 
 test("POST /mcp SSE hangup cancels the run through the shared cancel path", async () => {
-  let runPromise!: Promise<WorkflowCallResult>;
+  let runPromise!: Promise<DefCallResult>;
   const h = makeHandler({
     tools: [NOARG_TOOL],
     callTool: (_spec, _args, _runId, ctx) => {
-      runPromise = new Promise<WorkflowCallResult>((resolve) => {
+      runPromise = new Promise<DefCallResult>((resolve) => {
         ctx.onCancelHandle?.(() => {
           resolve({ text: "terminated by signal SIGINT", isError: true, exitStatus: 1, signal: "SIGINT" });
         });

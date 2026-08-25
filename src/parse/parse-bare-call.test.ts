@@ -6,24 +6,24 @@ import { parsejaiph } from "../parser";
 
 test("run bare identifier is rejected — parentheses required", () => {
   assert.throws(
-    () => parsejaiph(`workflow default() {\n  run setup\n}`, "test.jh"),
+    () => parsejaiph(`export def main() {\n  run setup\n}`, "test.jh"),
     /parentheses are required/,
   );
 });
 
 test("run bare dotted identifier is rejected — parentheses required", () => {
   assert.throws(
-    () => parsejaiph(`workflow default() {\n  run lib.setup\n}`, "test.jh"),
+    () => parsejaiph(`export def main() {\n  run lib.setup\n}`, "test.jh"),
     /parentheses are required/,
   );
 });
 
 test("run with args and parens still works", () => {
   const mod = parsejaiph(
-    `workflow default() {\n  run deploy("prod", "v1")\n}`,
+    `export def main() {\n  run deploy("prod", "v1")\n}`,
     "test.jh",
   );
-  const step = mod.workflows[0].steps[0];
+  const step = mod.defs[0].steps[0];
   assert.equal(step.type, "exec");
   if (step.type === "exec" && step.body.kind === "call") {
     assert.equal(step.body.callee.value, "deploy");
@@ -34,12 +34,12 @@ test("run with args and parens still works", () => {
   }
 });
 
-// === ensure bare identifier (no parens) is now rejected ===
+// === run bare identifier (no parens) is now rejected ===
 
-test("ensure bare identifier is rejected — parentheses required", () => {
+test("run bare identifier is rejected — parentheses required", () => {
   assert.throws(
     () => parsejaiph(
-      `rule check() {\n  return "ok"\n}\nworkflow default() {\n  ensure check\n}`,
+      `def check() {\n  return "ok"\n}\nexport def main() {\n  run check\n}`,
       "test.jh",
     ),
     /parentheses are required/,
@@ -53,7 +53,7 @@ test("if keyword with old syntax produces E_PARSE error", () => {
     () =>
       parsejaiph(
         [
-          "workflow default() {",
+          "export def main() {",
           "  if not run exists {",
           '    log "missing"',
           "  }",
@@ -69,45 +69,46 @@ test("if keyword with old syntax produces E_PARSE error", () => {
 
 test("const x = run bare identifier is rejected — parentheses required", () => {
   assert.throws(
-    () => parsejaiph(`workflow default() {\n  const x = run helper\n}`, "test.jh"),
+    () => parsejaiph(`export def main() {\n  const x = run helper\n}`, "test.jh"),
     /must target a valid reference/,
   );
 });
 
-test("const x = ensure bare identifier is rejected — parentheses required", () => {
+test("const x = run bare identifier is rejected — parentheses required", () => {
   assert.throws(
     () => parsejaiph(
-      `rule check() {\n  return "ok"\n}\nworkflow default() {\n  const x = ensure check\n}`,
+      `def check() {\n  return "ok"\n}\nexport def main() {\n  const x = run check\n}`,
       "test.jh",
     ),
     /must target a valid reference/,
   );
 });
 
-// === return run/ensure bare identifier (no parens) now falls through ===
+// === return run/run bare identifier (no parens) now falls through ===
 
 test("return run bare identifier falls through to exec/shell", () => {
   // Without parens, "return run helper" is not recognized as a managed return
   // and falls through to a shell exec step
   const mod = parsejaiph(
-    `workflow default() {\n  return run helper\n}`,
+    `export def main() {\n  return run helper\n}`,
     "test.jh",
   );
-  const step = mod.workflows[0].steps[0];
+  const step = mod.defs[0].steps[0];
   assert.equal(step.type, "exec");
   if (step.type === "exec") {
     assert.equal(step.body.kind, "shell");
   }
 });
 
-test("return ensure bare identifier falls through to exec/shell", () => {
-  // Without parens, "return ensure check" is not recognized as a managed return
+test("return run bare identifier falls through to exec/shell", () => {
+  // Without parens, "return run check" is not recognized as a managed return
   // and falls through to a shell exec step
   const mod = parsejaiph(
-    `rule check() {\n  return "ok"\n}\nworkflow default() {\n  return ensure check\n}`,
+    `def check() {\n  return "ok"\n}\nexport def main() {\n  return run check\n}`,
     "test.jh",
   );
-  const step = mod.workflows[0].steps[0];
+  const main = mod.defs.find((w) => w.name === "main")!;
+  const step = main.steps[0];
   assert.equal(step.type, "exec");
   if (step.type === "exec") {
     assert.equal(step.body.kind, "shell");
@@ -121,13 +122,13 @@ test("channel <- run bare identifier does not parse as send with call value", ()
   const mod = parsejaiph(
     [
       "channel alerts",
-      "workflow default() {",
+      "export def main() {",
       "  alerts <- run get_msg",
       "}",
     ].join("\n"),
     "test.jh",
   );
-  const step = mod.workflows[0].steps[0];
+  const step = mod.defs[0].steps[0];
   assert.equal(step.type, "send");
   if (step.type === "send") {
     assert.equal(step.channel, "alerts");
@@ -139,7 +140,7 @@ test("channel <- run bare identifier does not parse as send with call value", ()
 
 test("run async bare identifier is rejected — parentheses required", () => {
   assert.throws(
-    () => parsejaiph(`workflow default() {\n  run async bg_task\n}`, "test.jh"),
+    () => parsejaiph(`export def main() {\n  run async bg_task\n}`, "test.jh"),
     /parentheses are required/,
   );
 });
@@ -148,20 +149,20 @@ test("run async bare identifier is rejected — parentheses required", () => {
 
 test("x = run bare identifier is rejected — const required", () => {
   assert.throws(
-    () => parsejaiph(`workflow default() {\n  x = run helper\n}`, "test.jh"),
+    () => parsejaiph(`export def main() {\n  x = run helper\n}`, "test.jh"),
     /assignment without "const" is no longer supported/,
   );
 });
 
-test("x = ensure bare identifier is rejected — const required", () => {
+test("x = run bare identifier is rejected — const required", () => {
   assert.throws(
     () => parsejaiph(
       [
-        "rule check() {",
+        "def check() {",
         '  return "ok"',
         "}",
-        "workflow default() {",
-        "  x = ensure check",
+        "export def main() {",
+        "  x = run check",
         "}",
       ].join("\n"),
       "test.jh",
@@ -174,29 +175,29 @@ test("x = ensure bare identifier is rejected — const required", () => {
 
 test("workflow definition without () is a parse error", () => {
   assert.throws(
-    () => parsejaiph(`workflow setup {\n  log "hi"\n}`, "test.jh"),
+    () => parsejaiph(`def setup{\n  log "hi"\n}`, "test.jh"),
     (err: any) => err.message.includes("require parentheses"),
   );
 });
 
 test("rule definition without () is a parse error", () => {
   assert.throws(
-    () => parsejaiph(`rule check {\n  return "ok"\n}`, "test.jh"),
+    () => parsejaiph(`def check{\n  return "ok"\n}`, "test.jh"),
     (err: any) => err.message.includes("require parentheses"),
   );
 });
 
-// === ensure with recover + bare identifier (no parens) is now rejected ===
+// === run with recover + bare identifier (no parens) is now rejected ===
 
-test("ensure bare identifier with recover is rejected — parentheses required", () => {
+test("run bare identifier with recover is rejected — parentheses required", () => {
   assert.throws(
     () => parsejaiph(
       [
-        "rule check() {",
+        "def check() {",
         '  return "ok"',
         "}",
-        "workflow default() {",
-        '  ensure check catch (failure) { log "retrying" }',
+        "export def main() {",
+        '  run check catch (failure) { log "retrying" }',
         "}",
       ].join("\n"),
       "test.jh",

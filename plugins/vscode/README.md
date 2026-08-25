@@ -10,7 +10,7 @@ Syntax highlighting, compiler diagnostics, and formatting for Jaiph (`.jh` and
 
 - Highlights the current Jaiph surface for `.jh` / `*.test.jh`: `import`,
   `config`, `channel` (`->` routes, `<-` sends), `script` (backtick and fenced),
-  `rule`, `workflow`, `run` / `run async`, `ensure`, `catch` / `recover`,
+  `def`, `run` / `run async`, `catch` / `recover`,
   `prompt … returns`, `match`, `if` / `else if`, `for … in`, `const`,
   `log` / `logerr` / `logwarn`, `fail`, `return`, and `test` blocks
   (`mock …`, `allow_failure`, `expect_contain` / `expect_not_contain` /

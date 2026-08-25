@@ -2,7 +2,7 @@
 
 #
 # Project orchestration hub — the serve/mcp entrypoint for Jaiph's own
-# maintenance workflows. Exposes only the `export workflow` surface below;
+# maintenance workflows. Exposes only the `export def` surface below;
 # helpers in the imported modules stay hidden.
 #
 # Serve (HTTP + MCP Streamable HTTP on the same port):
@@ -11,7 +11,7 @@
 # MCP over stdio:
 #   jaiph mcp --env ANTHROPIC_API_KEY --env GITHUB_TOKEN .jaiph/main.jh
 #
-# Optional args use "" for the workflow default (MCP/HTTP require every
+# Optional args use "" for the export def main (MCP/HTTP require every
 # declared parameter as a string). gh_ci_passes needs GITHUB_TOKEN or GH_TOKEN.
 #
 import "./architect_review.jh" as arch_mod
@@ -31,53 +31,53 @@ config {
 
 # Review every QUEUE.md task for clarity, architecture fit, and #dev-ready.
 # Marks ready tasks; fails if any still need work.
-export workflow architect_review() {
-  run arch_mod.default()
+export def architect_review() {
+  run arch_mod.main()
 }
 
 # Bring docs/ and CLI usage strings in line with the current TypeScript/Bash source.
 # Requires a clean worktree; edits docs and related usage surfaces only.
-export workflow docs_parity() {
-  run docs_mod.default()
+export def docs_parity() {
+  run docs_mod.main()
 }
 
 # Implement a task end-to-end: code, CI, docs, commit patch. Pass the full task
 # markdown (must start with a ## header). Does not read or write QUEUE.md —
 # queue-driven overnight runs use `.jaiph/engineer.jh` directly instead.
-export workflow engineer(task) {
+export def engineer(task) {
   return run eng_mod.implement_from_task(task)
 }
 
 # Run npm run test:ci and loop with an agent until it passes (or recover_limit).
-export workflow ensure_ci_passes() {
-  run ci_mod.default()
+export def ensure_ci_passes() {
+  run ci_mod.main()
 }
 
 # Wait for GitHub Actions CI on the branch, pull failure logs, and repair until green.
 # branch="" uses the current branch; workflow_name="" defaults to "CI". Needs GITHUB_TOKEN.
-export workflow gh_ci_passes(branch, workflow_name) {
-  run gh_ci_mod.default(branch, workflow_name)
+export def gh_ci_passes(branch, workflow_name) {
+  run gh_ci_mod.main(branch, workflow_name)
 }
 
 # OWASP ASI Top 10 security review; report under .jaiph/tmp/, HIGH/MEDIUM →
 # #dev-ready QUEUE.md tasks (committed when the queue changes). Overnight-safe.
 # scope: ""|"codebase"|"full" for whole tree, "diff" for uncommitted, or a git range.
-export workflow security_review(scope) {
-  run sec_mod.default(scope)
+export def security_review(scope) {
+  run sec_mod.main(scope)
 }
 
 # Find and apply safe simplifications (no test/e2e edits), CI, commit if changed.
-export workflow simplifier() {
-  run simp_mod.default()
+export def simplifier() {
+  run simp_mod.main()
 }
 
 # Stage a release: CHANGELOG review, version bump, installer ref, rebuild, registry.
 # version="" bumps the next patch from package.json; otherwise pass X.Y.Z. No tag/push.
-export workflow prepare_release(version) {
-  return run rel_mod.default(version)
+export def prepare_release(version) {
+  return run rel_mod.main(version)
 }
 
 # Find test-coverage gaps, write missing tests, CI, commit if changed.
-export workflow qa() {
-  run qa_mod.default()
+export def qa() {
+  run qa_mod.main()
 }

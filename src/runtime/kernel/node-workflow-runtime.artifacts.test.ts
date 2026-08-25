@@ -6,14 +6,14 @@ import { join } from "node:path";
 import { buildRuntimeGraph } from "./graph";
 import { NodeWorkflowRuntime } from "./node-workflow-runtime";
 
-test("NodeWorkflowRuntime: runDefault writes return_value.txt with the workflow's return value", async () => {
+test("NodeWorkflowRuntime: runMain writes return_value.txt with the workflow's return value", async () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-node-wf-return-"));
   try {
     const jh = join(root, "returns.jh");
     writeFileSync(
       jh,
       [
-        "workflow default(name) {",
+        "export def main(name) {",
         '  return "hello ${name}"',
         "}",
         "",
@@ -26,7 +26,7 @@ test("NodeWorkflowRuntime: runDefault writes return_value.txt with the workflow'
       JAIPH_RUNS_DIR: join(root, ".jaiph", "runs"),
     };
     const runtime = new NodeWorkflowRuntime(graph, { env, cwd: root, suppressLiveEvents: true });
-    const status = await runtime.runDefault(["world"]);
+    const status = await runtime.runMain(["world"]);
     assert.equal(status, 0);
 
     const returnValueFile = join(runtime.getRunDir(), "return_value.txt");
@@ -37,14 +37,14 @@ test("NodeWorkflowRuntime: runDefault writes return_value.txt with the workflow'
   }
 });
 
-test("NodeWorkflowRuntime: runDefault does not write return_value.txt when workflow has no return", async () => {
+test("NodeWorkflowRuntime: runMain does not write return_value.txt when workflow has no return", async () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-node-wf-noreturn-"));
   try {
     const jh = join(root, "noreturn.jh");
     writeFileSync(
       jh,
       [
-        "workflow default() {",
+        "export def main() {",
         '  log "side effect only"',
         "}",
         "",
@@ -57,7 +57,7 @@ test("NodeWorkflowRuntime: runDefault does not write return_value.txt when workf
       JAIPH_RUNS_DIR: join(root, ".jaiph", "runs"),
     };
     const runtime = new NodeWorkflowRuntime(graph, { env, cwd: root, suppressLiveEvents: true });
-    const status = await runtime.runDefault([]);
+    const status = await runtime.runMain([]);
     assert.equal(status, 0);
 
     const returnValueFile = join(runtime.getRunDir(), "return_value.txt");
@@ -74,7 +74,7 @@ test("NodeWorkflowRuntime: prompt step preview preserves authored ${var} placeho
     writeFileSync(
       jh,
       [
-        "workflow default(name) {",
+        "export def main(name) {",
         '  prompt "Say hello to ${name} and stop."',
         "}",
         "",
@@ -94,7 +94,7 @@ test("NodeWorkflowRuntime: prompt step preview preserves authored ${var} placeho
     process.env.JAIPH_RUN_SUMMARY_FILE = runtime.getSummaryFile();
     let status: number;
     try {
-      status = await runtime.runDefault(["Adam"]);
+      status = await runtime.runMain(["Adam"]);
     } finally {
       if (prevSummaryEnv === undefined) delete process.env.JAIPH_RUN_SUMMARY_FILE;
       else process.env.JAIPH_RUN_SUMMARY_FILE = prevSummaryEnv;
@@ -130,7 +130,7 @@ test("NodeWorkflowRuntime: prompt STEP_START/STEP_END carry the effective model 
         "config {",
         '  agent.model = "sonnet"',
         "}",
-        "workflow default() {",
+        "export def main() {",
         '  prompt "Classify this task"',
         "}",
         "",
@@ -151,7 +151,7 @@ test("NodeWorkflowRuntime: prompt STEP_START/STEP_END carry the effective model 
     const prevSummaryEnv = process.env.JAIPH_RUN_SUMMARY_FILE;
     process.env.JAIPH_RUN_SUMMARY_FILE = runtime.getSummaryFile();
     try {
-      const status = await runtime.runDefault([]);
+      const status = await runtime.runMain([]);
       assert.equal(status, 0);
     } finally {
       if (prevSummaryEnv === undefined) delete process.env.JAIPH_RUN_SUMMARY_FILE;
@@ -183,7 +183,7 @@ test("NodeWorkflowRuntime: prompt STEP_START uses default label when backend aut
     const jh = join(root, "prompt_default_step.jh");
     writeFileSync(
       jh,
-      ['workflow default() {', '  prompt "hello"', "}", ""].join("\n"),
+      ['export def main() {', '  prompt "hello"', "}", ""].join("\n"),
     );
     const mockJson = JSON.stringify(["ok"]);
 
@@ -199,7 +199,7 @@ test("NodeWorkflowRuntime: prompt STEP_START uses default label when backend aut
     const prevSummaryEnv = process.env.JAIPH_RUN_SUMMARY_FILE;
     process.env.JAIPH_RUN_SUMMARY_FILE = runtime.getSummaryFile();
     try {
-      const status = await runtime.runDefault([]);
+      const status = await runtime.runMain([]);
       assert.equal(status, 0);
     } finally {
       if (prevSummaryEnv === undefined) delete process.env.JAIPH_RUN_SUMMARY_FILE;
@@ -225,7 +225,7 @@ test("NodeWorkflowRuntime: workflow step .out accumulates Command:/Prompt: and l
     writeFileSync(
       jh,
       [
-        "workflow default() {",
+        "export def main() {",
         '  const response = prompt "hello-mock"',
         '  log response',
         "}",
@@ -242,14 +242,14 @@ test("NodeWorkflowRuntime: workflow step .out accumulates Command:/Prompt: and l
       JAIPH_RUNS_DIR: join(root, ".jaiph", "runs"),
     };
     const runtime = new NodeWorkflowRuntime(graph, { env, cwd: root, suppressLiveEvents: true });
-    const status = await runtime.runDefault([]);
+    const status = await runtime.runMain([]);
     assert.equal(status, 0);
 
     const runDir = runtime.getRunDir();
     const outs = readdirSync(runDir).filter((f) => f.endsWith(".out"));
     assert.ok(outs.length >= 1, `expected .out artifacts in ${runDir}`);
-    const defaultOut = outs.find((f) => f.includes("workflow__default"));
-    assert.ok(defaultOut, `expected workflow__default.out, got ${outs.join(", ")}`);
+    const defaultOut = outs.find((f) => f.includes("def__main"));
+    assert.ok(defaultOut, `expected def__main.out, got ${outs.join(", ")}`);
     const content = readFileSync(join(runDir, defaultOut), "utf8");
     assert.match(content, /^Command:\n/);
     assert.match(content, /Prompt:\n"hello-mock"/);
@@ -266,7 +266,7 @@ test("NodeWorkflowRuntime: failed prompt preserves backend stderr in artifacts a
     writeFileSync(
       jh,
       [
-        "workflow default() {",
+        "export def main() {",
         '  prompt "hello-fail"',
         "}",
         "",
@@ -302,7 +302,7 @@ test("NodeWorkflowRuntime: failed prompt preserves backend stderr in artifacts a
     process.env.JAIPH_RUN_SUMMARY_FILE = runtime.getSummaryFile();
     let status: number;
     try {
-      status = await runtime.runDefault([]);
+      status = await runtime.runMain([]);
     } finally {
       if (prevSummaryEnv === undefined) delete process.env.JAIPH_RUN_SUMMARY_FILE;
       else process.env.JAIPH_RUN_SUMMARY_FILE = prevSummaryEnv;
@@ -323,7 +323,7 @@ test("NodeWorkflowRuntime: failed prompt preserves backend stderr in artifacts a
   }
 });
 
-test("NodeWorkflowRuntime: ensure catch receives failure payload in catch scope (explicit binding)", async () => {
+test("NodeWorkflowRuntime: run catch receives failure payload in catch scope (explicit binding)", async () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-node-wf-ensure-catch-"));
   try {
     const jh = join(root, "ensure_catch_payload.jh");
@@ -336,7 +336,7 @@ test("NodeWorkflowRuntime: ensure catch receives failure payload in catch scope 
         "test -f ready.txt",
         "```",
         "",
-        "rule check_ready() {",
+        "def check_ready() {",
         "  run check_ready_impl()",
         "}",
         "",
@@ -346,8 +346,8 @@ test("NodeWorkflowRuntime: ensure catch receives failure payload in catch scope 
         "",
         'script mark_ready = `touch ready.txt`',
         "",
-        "workflow default(name, extra) {",
-        "  ensure check_ready() catch (failure) {",
+        "export def main(name, extra) {",
+        "  run check_ready() catch (failure) {",
         '    run write_catch_received(failure)',
         '    run write_catch_arg2(extra)',
         "    run mark_ready()",
@@ -382,7 +382,7 @@ test("NodeWorkflowRuntime: ensure catch receives failure payload in catch scope 
       JAIPH_WORKSPACE: root,
     };
     const runtime = new NodeWorkflowRuntime(graph, { env, cwd: root, suppressLiveEvents: true });
-    const status = await runtime.runDefault(["original-arg1", "preserved-arg2"]);
+    const status = await runtime.runMain(["original-arg1", "preserved-arg2"]);
     assert.equal(status, 0);
 
     const catchPayload = readFileSync(join(root, "catch_received.txt"), "utf8");
@@ -409,7 +409,7 @@ test("NodeWorkflowRuntime: nested cross-module run applies callee module config 
         '  agent.model = "model-b"',
         "}",
         'script log_model = `printf \'%s:%s\\n\' "$1" "$JAIPH_AGENT_MODEL" >> "$JAIPH_META_SCOPE_FILE"`',
-        "workflow show() {",
+        "def show() {",
         '  run log_model("child")',
         "}",
         "",
@@ -424,7 +424,7 @@ test("NodeWorkflowRuntime: nested cross-module run applies callee module config 
         '  agent.model = "model-a"',
         "}",
         'script log_model = `printf \'%s:%s\\n\' "$1" "$JAIPH_AGENT_MODEL" >> "$JAIPH_META_SCOPE_FILE"`',
-        "workflow default() {",
+        "export def main() {",
         '  run log_model("parent_before")',
         "  run child.show()",
         '  run log_model("parent_after")',
@@ -456,7 +456,7 @@ test("NodeWorkflowRuntime: nested cross-module run applies callee module config 
     delete env.JAIPH_AGENT_MODEL_LOCKED;
 
     const runtime = new NodeWorkflowRuntime(graph, { env, cwd: root, suppressLiveEvents: true });
-    const status = await runtime.runDefault([]);
+    const status = await runtime.runMain([]);
     assert.equal(status, 0);
 
     const actual = readFileSync(metaFile, "utf8");
@@ -480,7 +480,7 @@ test("NodeWorkflowRuntime: config agent.model applies to prompt only via PROMPT_
         "}",
         'script log_model = `printf \'script:%s\\n\' "$JAIPH_AGENT_MODEL" >> "$JAIPH_SCOPE_LOG"`',
         "",
-        "workflow with_prompt(model) {",
+        "def with_prompt(model) {",
         "  config {",
         "    agent.model = model",
         "  }",
@@ -488,7 +488,7 @@ test("NodeWorkflowRuntime: config agent.model applies to prompt only via PROMPT_
         '  const answer = prompt "hello"',
         "}",
         "",
-        "workflow default() {",
+        "export def main() {",
         '  run with_prompt("workflow-model")',
         "}",
         "",
@@ -523,7 +523,7 @@ test("NodeWorkflowRuntime: config agent.model applies to prompt only via PROMPT_
     const prevSummaryEnv = process.env.JAIPH_RUN_SUMMARY_FILE;
     process.env.JAIPH_RUN_SUMMARY_FILE = runtime.getSummaryFile();
     try {
-      const status = await runtime.runDefault([]);
+      const status = await runtime.runMain([]);
       assert.equal(status, 0);
     } finally {
       if (prevSummaryEnv === undefined) delete process.env.JAIPH_RUN_SUMMARY_FILE;
@@ -546,7 +546,7 @@ test("NodeWorkflowRuntime: config agent.model applies to prompt only via PROMPT_
   }
 });
 
-test("NodeWorkflowRuntime: nested cross-module run applies callee workflow-level config over callee module-level config", async () => {
+test("NodeWorkflowRuntime: nested cross-module run applies callee def-level config over callee module-level config", async () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-node-meta-nested-wf-"));
   try {
     const childJh = join(root, "child.jh");
@@ -559,7 +559,7 @@ test("NodeWorkflowRuntime: nested cross-module run applies callee workflow-level
         '  agent.model = "child-module-model"',
         "}",
         'script log_model = `printf \'%s:%s\\n\' "$1" "$JAIPH_AGENT_MODEL" >> "$JAIPH_META_SCOPE_FILE"`',
-        "workflow show() {",
+        "def show() {",
         '  config {',
         '    agent.model = "child-workflow-model"',
         "  }",
@@ -576,7 +576,7 @@ test("NodeWorkflowRuntime: nested cross-module run applies callee workflow-level
         'config {',
         '  agent.model = "model-a"',
         "}",
-        "workflow default() {",
+        "export def main() {",
         "  run child.show()",
         "}",
         "",
@@ -606,7 +606,7 @@ test("NodeWorkflowRuntime: nested cross-module run applies callee workflow-level
     delete env.JAIPH_AGENT_MODEL_LOCKED;
 
     const runtime = new NodeWorkflowRuntime(graph, { env, cwd: root, suppressLiveEvents: true });
-    const status = await runtime.runDefault([]);
+    const status = await runtime.runMain([]);
     assert.equal(status, 0);
 
     const actual = readFileSync(metaFile, "utf8");
@@ -629,7 +629,7 @@ test("NodeWorkflowRuntime: nested cross-module run honors locked JAIPH_AGENT_MOD
         '  agent.model = "model-b"',
         "}",
         'script log_model = `printf \'%s:%s\\n\' "$1" "$JAIPH_AGENT_MODEL" >> "$JAIPH_META_SCOPE_FILE"`',
-        "workflow show() {",
+        "def show() {",
         '  config {',
         '    agent.model = "child-workflow-model"',
         "  }",
@@ -646,7 +646,7 @@ test("NodeWorkflowRuntime: nested cross-module run honors locked JAIPH_AGENT_MOD
         'config {',
         '  agent.model = "model-a"',
         "}",
-        "workflow default() {",
+        "export def main() {",
         "  run child.show()",
         "}",
         "",
@@ -676,7 +676,7 @@ test("NodeWorkflowRuntime: nested cross-module run honors locked JAIPH_AGENT_MOD
     };
 
     const runtime = new NodeWorkflowRuntime(graph, { env, cwd: root, suppressLiveEvents: true });
-    const status = await runtime.runDefault([]);
+    const status = await runtime.runMain([]);
     assert.equal(status, 0);
 
     const actual = readFileSync(metaFile, "utf8");
@@ -699,7 +699,7 @@ test("NodeWorkflowRuntime: nested cross-module preserves locked JAIPH_AGENT_BACK
         '  agent.backend = "claude"',
         "}",
         'script log_backend = `printf \'%s:%s\\n\' "$1" "$JAIPH_AGENT_BACKEND" >> "$JAIPH_META_SCOPE_FILE"`',
-        "workflow default() {",
+        "export def main() {",
         '  run log_backend("child")',
         "}",
         "",
@@ -714,9 +714,9 @@ test("NodeWorkflowRuntime: nested cross-module preserves locked JAIPH_AGENT_BACK
         '  agent.backend = "cursor"',
         "}",
         'script log_backend = `printf \'%s:%s\\n\' "$1" "$JAIPH_AGENT_BACKEND" >> "$JAIPH_META_SCOPE_FILE"`',
-        "workflow default() {",
+        "export def main() {",
         '  run log_backend("parent_before")',
-        "  run child.default()",
+        "  run child.main()",
         '  run log_backend("parent_after")',
         "}",
         "",
@@ -746,7 +746,7 @@ test("NodeWorkflowRuntime: nested cross-module preserves locked JAIPH_AGENT_BACK
     };
 
     const runtime = new NodeWorkflowRuntime(graph, { env, cwd: root, suppressLiveEvents: true });
-    const status = await runtime.runDefault([]);
+    const status = await runtime.runMain([]);
     assert.equal(status, 0);
 
     const actual = readFileSync(metaFile, "utf8");
@@ -772,7 +772,7 @@ test("NodeWorkflowRuntime: sibling workflows do not inherit each other's metadat
         "",
         'script log_env = `printf \'%s:model=%s,backend=%s\\n\' "$1" "$JAIPH_AGENT_MODEL" "$JAIPH_AGENT_BACKEND" >> "$JAIPH_SIBLING_LOG"`',
         "",
-        "workflow alpha() {",
+        "def alpha() {",
         "  config {",
         '    agent.model = "alpha-model"',
         '    agent.backend = "claude"',
@@ -780,14 +780,14 @@ test("NodeWorkflowRuntime: sibling workflows do not inherit each other's metadat
         '  run log_env("alpha")',
         "}",
         "",
-        "workflow beta() {",
+        "def beta() {",
         "  config {",
         '    agent.model = "beta-model"',
         "  }",
         '  run log_env("beta")',
         "}",
         "",
-        "workflow default() {",
+        "export def main() {",
         "  run alpha()",
         "  run beta()",
         "}",
@@ -820,7 +820,7 @@ test("NodeWorkflowRuntime: sibling workflows do not inherit each other's metadat
     delete env.JAIPH_AGENT_BACKEND_LOCKED;
 
     const runtime = new NodeWorkflowRuntime(graph, { env, cwd: root, suppressLiveEvents: true });
-    const status = await runtime.runDefault([]);
+    const status = await runtime.runMain([]);
     assert.equal(status, 0);
 
     const actual = readFileSync(metaFile, "utf8");
@@ -838,14 +838,14 @@ test("NodeWorkflowRuntime: workflow config interpolates workflow parameters into
     writeFileSync(
       jh,
       [
-        "workflow implement(model) {",
+        "def implement(model) {",
         "  config {",
         "    agent.model = model",
         "  }",
         '  const answer = prompt "hello"',
         "}",
         "",
-        "workflow default() {",
+        "export def main() {",
         '  run implement("workflow-model")',
         "}",
         "",
@@ -867,7 +867,7 @@ test("NodeWorkflowRuntime: workflow config interpolates workflow parameters into
     const prevSummaryEnv = process.env.JAIPH_RUN_SUMMARY_FILE;
     process.env.JAIPH_RUN_SUMMARY_FILE = runtime.getSummaryFile();
     try {
-      const status = await runtime.runDefault([]);
+      const status = await runtime.runMain([]);
       assert.equal(status, 0);
     } finally {
       if (prevSummaryEnv === undefined) delete process.env.JAIPH_RUN_SUMMARY_FILE;
@@ -894,7 +894,7 @@ test("NodeWorkflowRuntime: prompt STEP_START params include named vars reference
     writeFileSync(
       jh,
       [
-        "workflow default() {",
+        "export def main() {",
         '  const dataset = "users"',
         '  const response = prompt "Analyze the ${dataset} table"',
         '  log response',
@@ -917,7 +917,7 @@ test("NodeWorkflowRuntime: prompt STEP_START params include named vars reference
     const prevSummaryEnv = process.env.JAIPH_RUN_SUMMARY_FILE;
     process.env.JAIPH_RUN_SUMMARY_FILE = runtime.getSummaryFile();
     try {
-      const status = await runtime.runDefault([]);
+      const status = await runtime.runMain([]);
       assert.equal(status, 0);
     } finally {
       if (prevSummaryEnv === undefined) delete process.env.JAIPH_RUN_SUMMARY_FILE;
@@ -945,7 +945,7 @@ test("NodeWorkflowRuntime: JAIPH_ARTIFACTS_DIR is set and points at writable art
   const root = mkdtempSync(join(tmpdir(), "jaiph-node-wf-artifacts-dir-"));
   try {
     const jh = join(root, "artifacts_env.jh");
-    writeFileSync(jh, 'workflow default() {\n  log "ok"\n}\n');
+    writeFileSync(jh, 'export def main() {\n  log "ok"\n}\n');
 
     const graph = buildRuntimeGraph(jh);
     const runsDir = join(root, ".jaiph", "runs");
@@ -980,7 +980,7 @@ test("NodeWorkflowRuntime: JAIPH_ARTIFACTS_DIR resolves under .jaiph/runs when J
   const root = mkdtempSync(join(tmpdir(), "jaiph-node-wf-artifacts-default-"));
   try {
     const jh = join(root, "artifacts_default.jh");
-    writeFileSync(jh, 'workflow default() {\n  log "ok"\n}\n');
+    writeFileSync(jh, 'export def main() {\n  log "ok"\n}\n');
 
     const graph = buildRuntimeGraph(jh);
     const env: NodeJS.ProcessEnv = { ...process.env, JAIPH_TEST_MODE: "1" };
@@ -1003,7 +1003,7 @@ test("NodeWorkflowRuntime: heartbeat file created at construction, removed on st
   const root = mkdtempSync(join(tmpdir(), "jaiph-node-wf-heartbeat-"));
   try {
     const jh = join(root, "heartbeat.jh");
-    writeFileSync(jh, 'workflow default() {\n  log "ok"\n}\n');
+    writeFileSync(jh, 'export def main() {\n  log "ok"\n}\n');
     const mockJson = JSON.stringify([""]);
 
     const graph = buildRuntimeGraph(jh);
@@ -1021,7 +1021,7 @@ test("NodeWorkflowRuntime: heartbeat file created at construction, removed on st
     const ts = parseInt(readFileSync(heartbeatPath, "utf8"), 10);
     assert.ok(ts > 0 && ts <= Date.now(), "heartbeat should contain a valid epoch ms timestamp");
 
-    await runtime.runDefault([]);
+    await runtime.runMain([]);
     runtime.stopHeartbeat();
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -1045,19 +1045,19 @@ test("NodeWorkflowRuntime: JAIPH_INBOX_PARALLEL has no effect on inbox dispatch 
   const src = [
     "channel results -> consumer_a, consumer_b",
     "",
-    "workflow producer() {",
+    "def producer() {",
     '  results <- "dispatch-order-payload"',
     "}",
     "",
-    "workflow consumer_a(message, chan, sender) {",
+    "def consumer_a(message, chan, sender) {",
     '  log "consumer_a"',
     "}",
     "",
-    "workflow consumer_b(message, chan, sender) {",
+    "def consumer_b(message, chan, sender) {",
     '  log "consumer_b"',
     "}",
     "",
-    "workflow default() {",
+    "export def main() {",
     "  run producer()",
     "}",
     "",
@@ -1083,7 +1083,7 @@ test("NodeWorkflowRuntime: JAIPH_INBOX_PARALLEL has no effect on inbox dispatch 
       process.env.JAIPH_RUN_SUMMARY_FILE = runtime.getSummaryFile();
       let status: number;
       try {
-        status = await runtime.runDefault([]);
+        status = await runtime.runMain([]);
       } finally {
         if (prevSummary === undefined) delete process.env.JAIPH_RUN_SUMMARY_FILE;
         else process.env.JAIPH_RUN_SUMMARY_FILE = prevSummary;
@@ -1127,7 +1127,7 @@ async function runInboxCapScenario(opts: {
     process.env.JAIPH_RUN_SUMMARY_FILE = runtime.getSummaryFile();
     let status: number;
     try {
-      status = await runtime.runDefault([]);
+      status = await runtime.runMain([]);
     } finally {
       if (prevSummary === undefined) delete process.env.JAIPH_RUN_SUMMARY_FILE;
       else process.env.JAIPH_RUN_SUMMARY_FILE = prevSummary;
@@ -1149,15 +1149,15 @@ test("NodeWorkflowRuntime: circular inbox sends fail with E_INBOX_DISPATCH_LIMIT
       "channel ping -> on_ping",
       "channel pong -> on_pong",
       "",
-      "workflow on_ping(message, chan, sender) {",
+      "def on_ping(message, chan, sender) {",
       '  pong <- "p"',
       "}",
       "",
-      "workflow on_pong(message, chan, sender) {",
+      "def on_pong(message, chan, sender) {",
       '  ping <- "p"',
       "}",
       "",
-      "workflow default() {",
+      "export def main() {",
       '  ping <- "start"',
       "}",
       "",
@@ -1179,11 +1179,11 @@ test("NodeWorkflowRuntime: JAIPH_INBOX_MAX_DISPATCH=5 triggers the cap after 5 m
     source: [
       "channel loop -> on_loop",
       "",
-      "workflow on_loop(message, chan, sender) {",
+      "def on_loop(message, chan, sender) {",
       '  loop <- "again"',
       "}",
       "",
-      "workflow default() {",
+      "export def main() {",
       '  loop <- "start"',
       "}",
       "",
@@ -1210,25 +1210,25 @@ test("NodeWorkflowRuntime: multi-message fan-out below the cap is unaffected", a
     source: [
       "channel ch -> sink_a, sink_b, sink_c",
       "",
-      "workflow producer() {",
+      "def producer() {",
       '  ch <- "m1"',
       '  ch <- "m2"',
       '  ch <- "m3"',
       "}",
       "",
-      "workflow sink_a(message, chan, sender) {",
+      "def sink_a(message, chan, sender) {",
       '  log "a"',
       "}",
       "",
-      "workflow sink_b(message, chan, sender) {",
+      "def sink_b(message, chan, sender) {",
       '  log "b"',
       "}",
       "",
-      "workflow sink_c(message, chan, sender) {",
+      "def sink_c(message, chan, sender) {",
       '  log "c"',
       "}",
       "",
-      "workflow default() {",
+      "export def main() {",
       "  run producer()",
       "}",
       "",
@@ -1247,7 +1247,7 @@ test("NodeWorkflowRuntime: ANTHROPIC_API_KEY value in prompt text is redacted in
     writeFileSync(
       jh,
       [
-        "workflow default() {",
+        "export def main() {",
         // Embed the literal secret in the prompt source so the write path must redact it.
         `  prompt "Call endpoint with token ${secret} and return result"`,
         "}",
@@ -1267,7 +1267,7 @@ test("NodeWorkflowRuntime: ANTHROPIC_API_KEY value in prompt text is redacted in
     const prevSummaryEnv = process.env.JAIPH_RUN_SUMMARY_FILE;
     process.env.JAIPH_RUN_SUMMARY_FILE = runtime.getSummaryFile();
     try {
-      await runtime.runDefault([]);
+      await runtime.runMain([]);
     } finally {
       if (prevSummaryEnv === undefined) delete process.env.JAIPH_RUN_SUMMARY_FILE;
       else process.env.JAIPH_RUN_SUMMARY_FILE = prevSummaryEnv;
@@ -1289,11 +1289,11 @@ test("NodeWorkflowRuntime: credential value passed as a generic step param is re
     writeFileSync(
       jh,
       [
-        "workflow producer(token) {",
+        "def producer(token) {",
         '  log "producing"',
         "}",
         "",
-        "workflow default() {",
+        "export def main() {",
         // Pass the literal secret as a positional argument to a `run` step. The
         // arg lands in the step `params` pairs and must be scrubbed before the
         // durable journal write.
@@ -1314,7 +1314,7 @@ test("NodeWorkflowRuntime: credential value passed as a generic step param is re
     const prevSummaryEnv = process.env.JAIPH_RUN_SUMMARY_FILE;
     process.env.JAIPH_RUN_SUMMARY_FILE = runtime.getSummaryFile();
     try {
-      const status = await runtime.runDefault([]);
+      const status = await runtime.runMain([]);
       assert.equal(status, 0);
     } finally {
       if (prevSummaryEnv === undefined) delete process.env.JAIPH_RUN_SUMMARY_FILE;
@@ -1325,7 +1325,7 @@ test("NodeWorkflowRuntime: credential value passed as a generic step param is re
     // The producer step params carry the redaction placeholder in place of the secret.
     const lines = summaryText.trim().split("\n").map((l) => JSON.parse(l) as Record<string, unknown>);
     const producerStart = lines.find(
-      (e) => e.type === "STEP_START" && e.kind === "workflow" && e.name === "producer",
+      (e) => e.type === "STEP_START" && e.kind === "def" && e.name === "producer",
     );
     assert.ok(producerStart, "expected a STEP_START event for the producer run step");
     const params = producerStart!.params as Array<[string, string]>;
@@ -1348,7 +1348,7 @@ test("NodeWorkflowRuntime: credential values in log/logwarn/logerr are redacted 
     writeFileSync(
       jh,
       [
-        "workflow default() {",
+        "export def main() {",
         // Embed the literal secret in each message so the durable write path must redact it.
         `  log "log token ${logSecret}"`,
         `  logwarn "warn token ${warnSecret}"`,
@@ -1371,7 +1371,7 @@ test("NodeWorkflowRuntime: credential values in log/logwarn/logerr are redacted 
     const prevSummaryEnv = process.env.JAIPH_RUN_SUMMARY_FILE;
     process.env.JAIPH_RUN_SUMMARY_FILE = runtime.getSummaryFile();
     try {
-      await runtime.runDefault([]);
+      await runtime.runMain([]);
     } finally {
       if (prevSummaryEnv === undefined) delete process.env.JAIPH_RUN_SUMMARY_FILE;
       else process.env.JAIPH_RUN_SUMMARY_FILE = prevSummaryEnv;
@@ -1405,7 +1405,7 @@ test("NodeWorkflowRuntime: imported module cannot override agent.command by defa
         '  agent.command = "injected-agent"',
         "}",
         'script log_cmd = `printf \'%s:%s\\n\' "$1" "$JAIPH_AGENT_COMMAND" >> "$JAIPH_META_SCOPE_FILE"`',
-        "workflow default() {",
+        "export def main() {",
         '  run log_cmd("child")',
         "}",
         "",
@@ -1417,9 +1417,9 @@ test("NodeWorkflowRuntime: imported module cannot override agent.command by defa
         'import "child.jh" as child',
         "",
         'script log_cmd = `printf \'%s:%s\\n\' "$1" "$JAIPH_AGENT_COMMAND" >> "$JAIPH_META_SCOPE_FILE"`',
-        "workflow default() {",
+        "export def main() {",
         '  run log_cmd("parent")',
-        "  run child.default()",
+        "  run child.main()",
         "}",
         "",
       ].join("\n"),
@@ -1450,7 +1450,7 @@ test("NodeWorkflowRuntime: imported module cannot override agent.command by defa
     delete env1.JAIPH_AGENT_COMMAND_IMPORT_UNLOCK;
 
     const runtime1 = new NodeWorkflowRuntime(graph, { env: env1, cwd: root, suppressLiveEvents: true });
-    assert.equal(await runtime1.runDefault([]), 0);
+    assert.equal(await runtime1.runMain([]), 0);
 
     const actual1 = readFileSync(cmdFile, "utf8");
     // child sees empty (not "injected-agent") because imported module's command is blocked
@@ -1470,7 +1470,7 @@ test("NodeWorkflowRuntime: imported module cannot override agent.command by defa
     delete env2.JAIPH_AGENT_COMMAND_LOCKED;
 
     const runtime2 = new NodeWorkflowRuntime(graph, { env: env2, cwd: root, suppressLiveEvents: true });
-    assert.equal(await runtime2.runDefault([]), 0);
+    assert.equal(await runtime2.runMain([]), 0);
 
     const actual2 = readFileSync(cmdFile, "utf8");
     // child sees "injected-agent" because IMPORT_UNLOCK is set
@@ -1492,7 +1492,7 @@ test("NodeWorkflowRuntime: entry module agent.command config is applied", async 
         '  agent.command = "my-custom-agent"',
         "}",
         'script log_cmd = `printf \'cmd:%s\\n\' "$JAIPH_AGENT_COMMAND" >> "$JAIPH_CMD_LOG"`',
-        "workflow default() {",
+        "export def main() {",
         "  run log_cmd()",
         "}",
         "",
@@ -1522,7 +1522,7 @@ test("NodeWorkflowRuntime: entry module agent.command config is applied", async 
     delete env.JAIPH_AGENT_COMMAND_LOCKED;
 
     const runtime = new NodeWorkflowRuntime(graph, { env, cwd: root, suppressLiveEvents: true });
-    assert.equal(await runtime.runDefault([]), 0);
+    assert.equal(await runtime.runMain([]), 0);
 
     assert.equal(readFileSync(cmdFile, "utf8"), "cmd:my-custom-agent\n");
   } finally {

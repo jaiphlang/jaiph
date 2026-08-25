@@ -15,16 +15,16 @@ rm -f "${TEST_DIR}/.gate_passed"
 
 e2e::file "recover_repair.jh" <<'EOF'
 script check_gate = `test -f .gate_passed`
-workflow check() {
+def check() {
   run check_gate()
 }
 
 script do_fix = `touch .gate_passed`
-workflow fix() {
+def fix() {
   run do_fix()
 }
 
-workflow default() {
+export def main() {
   run check() recover(err) {
     run fix()
   }
@@ -38,20 +38,20 @@ e2e::expect_stdout "${out}" <<'EOF'
 
 Jaiph: Running recover_repair.jh
 
-workflow default
-  ▸ workflow check
+export def main
+  ▸ def check
   ·   ▸ script check_gate
   ·   ✗ script check_gate (<time>)
-  ✗ workflow check (<time>)
-  ▸ workflow fix
+  ✗ def check(<time>)
+  ▸ def fix
   ·   ▸ script do_fix
   ·   ✓ script do_fix (<time>)
-  ✓ workflow fix (<time>)
-  ▸ workflow check
+  ✓ def fix(<time>)
+  ▸ def check
   ·   ▸ script check_gate
   ·   ✓ script check_gate (<time>)
-  ✓ workflow check (<time>)
-✓ PASS workflow default (<time>)
+  ✓ def check(<time>)
+✓ PASS export def main (<time>)
 EOF
 e2e::pass "recover loop: repair and retry succeeded"
 
@@ -64,11 +64,11 @@ config {
 }
 
 script always_fail = `exit 1`
-workflow failing() {
+def failing() {
   run always_fail()
 }
 
-workflow default() {
+export def main() {
   run failing() recover(err) {
     log "repair attempt"
   }
@@ -87,11 +87,11 @@ e2e::section "recover loop: success on first attempt skips body"
 
 e2e::file "recover_pass.jh" <<'EOF'
 script ok_impl = `echo ok`
-workflow ok() {
+def ok() {
   run ok_impl()
 }
 
-workflow default() {
+export def main() {
   run ok() recover(err) {
     log "should not appear"
   }
@@ -103,11 +103,11 @@ e2e::expect_stdout "${out_pass}" <<'EOF'
 
 Jaiph: Running recover_pass.jh
 
-workflow default
-  ▸ workflow ok
+export def main
+  ▸ def ok
   ·   ▸ script ok_impl
   ·   ✓ script ok_impl (<time>)
-  ✓ workflow ok (<time>)
-✓ PASS workflow default (<time>)
+  ✓ def ok(<time>)
+✓ PASS export def main (<time>)
 EOF
 e2e::pass "recover: success on first attempt, body never runs"

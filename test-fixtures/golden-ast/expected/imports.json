@@ -1,18 +1,9 @@
 {
   "channels": [],
-  "exports": [],
-  "imports": [
-    {
-      "alias": "lib",
-      "path": "lib.jh"
-    }
-  ],
-  "rules": [],
-  "scripts": [],
-  "workflows": [
+  "defs": [
     {
       "comments": [],
-      "name": "default",
+      "name": "main",
       "params": [],
       "steps": [
         {
@@ -29,11 +20,21 @@
             "callee": {
               "value": "lib.check"
             },
-            "kind": "ensure_call"
+            "kind": "call"
           },
           "type": "exec"
         }
       ]
     }
-  ]
+  ],
+  "exports": [
+    "main"
+  ],
+  "imports": [
+    {
+      "alias": "lib",
+      "path": "lib.jh"
+    }
+  ],
+  "scripts": []
 }

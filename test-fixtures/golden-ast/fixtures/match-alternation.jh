@@ -1,4 +1,4 @@
-workflow default(cmd) {
+export def main(cmd) {
   return match cmd {
     "" | "check" => "verify"
     "run" | "start" => "go"

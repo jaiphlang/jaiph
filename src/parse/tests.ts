@@ -1,4 +1,4 @@
-import type { MatchArmDef, TestBlockDef, WorkflowStepDef } from "../types";
+import type { MatchArmDef, TestBlockDef, StepDef } from "../types";
 import { createTrivia, type Trivia } from "./trivia";
 import {
   colFromRaw,
@@ -86,7 +86,7 @@ function parseMockHeader(
   return { ref, params, hasBlock: true };
 }
 
-/** Reject old mock syntax without parens: `mock workflow ref {` */
+/** Reject old mock syntax without parens: `mock def ref{` */
 function rejectOldMockSyntax(
   filePath: string,
   inner: string,
@@ -185,24 +185,18 @@ export function parseTestBlock(
       continue;
     }
 
-    // --- mock workflow (new: requires parens, body is Jaiph steps) ---
-    rejectOldMockSyntax(filePath, inner, "workflow", innerNo, col);
-    const mockWfHeader = parseMockHeader(filePath, inner, "mock workflow ", innerNo, col);
+    // --- mock def (requires parens, body is Jaiph steps) ---
+    rejectOldMockSyntax(filePath, inner, "def", innerNo, col);
+    const mockWfHeader = parseMockHeader(filePath, inner, "mock def ", innerNo, col);
     if (mockWfHeader) {
-      const { steps, nextIdx } = parseBraceBlockBody(filePath, lines, i + 1, innerNo, trivia, { forRule: false });
-      testBlock.steps.push({ type: "test_mock_workflow", ref: mockWfHeader.ref, params: mockWfHeader.params, steps, loc });
+      const { steps, nextIdx } = parseBraceBlockBody(filePath, lines, i + 1, innerNo, trivia);
+      testBlock.steps.push({ type: "test_mock_def", ref: mockWfHeader.ref, params: mockWfHeader.params, steps, loc });
       i = nextIdx - 1;
       continue;
     }
 
-    // --- mock rule (new: requires parens, body is Jaiph steps) ---
-    rejectOldMockSyntax(filePath, inner, "rule", innerNo, col);
-    const mockRuleHeader = parseMockHeader(filePath, inner, "mock rule ", innerNo, col);
-    if (mockRuleHeader) {
-      const { steps, nextIdx } = parseBraceBlockBody(filePath, lines, i + 1, innerNo, trivia, { forRule: true });
-      testBlock.steps.push({ type: "test_mock_rule", ref: mockRuleHeader.ref, params: mockRuleHeader.params, steps, loc });
-      i = nextIdx - 1;
-      continue;
+    if (/^mock\s+(workflow|rule)\s/.test(inner)) {
+      fail(filePath, `'${inner.match(/^mock\s+(workflow|rule)/)?.[1]}' is not a keyword; use 'mock def'`, innerNo, col);
     }
 
     // --- mock script (new: requires parens, body stays shell) ---
@@ -320,17 +314,17 @@ export function parseTestBlock(
     );
     if (constRunMatch) {
       const captureName = constRunMatch[1];
-      const workflowRef = constRunMatch[2];
-      if (!isRef(workflowRef)) {
+      const defRef = constRunMatch[2];
+      if (!isRef(defRef)) {
         fail(filePath, "const ... = run must target a valid reference: const name = run ref(args)", innerNo, col);
       }
       const argsRaw = constRunMatch[3].trim();
       const args: string[] = argsRaw ? parseTestCallArgs(argsRaw) : [];
       const allowFailure = constRunMatch[4] === "allow_failure";
       testBlock.steps.push({
-        type: "test_run_workflow",
+        type: "test_run_def",
         captureName,
-        workflowRef,
+        defRef,
         args: args.length > 0 ? args : undefined,
         allowFailure: allowFailure || undefined,
         loc,
@@ -343,16 +337,16 @@ export function parseTestBlock(
       /^run\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)\s*\(([^)]*)\)(?:\s+(allow_failure))?\s*$/,
     );
     if (runMatch) {
-      const workflowRef = runMatch[1];
-      if (!isRef(workflowRef)) {
+      const defRef = runMatch[1];
+      if (!isRef(defRef)) {
         fail(filePath, "run in test must target a valid reference: run ref(args)", innerNo, col);
       }
       const argsRaw = runMatch[2].trim();
       const args: string[] = argsRaw ? parseTestCallArgs(argsRaw) : [];
       const allowFailure = runMatch[3] === "allow_failure";
       testBlock.steps.push({
-        type: "test_run_workflow",
-        workflowRef,
+        type: "test_run_def",
+        defRef,
         args: args.length > 0 ? args : undefined,
         allowFailure: allowFailure || undefined,
         loc,

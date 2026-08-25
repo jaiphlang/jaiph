@@ -58,7 +58,7 @@ e2e::assert_contains "${compile_missing_msg}" "no such file or directory" "compi
 e2e::section "jaiph test on a regular .jh file"
 
 e2e::file "not_a_test.jh" <<'EOF'
-workflow default() {
+export def main() {
   log "hello"
 }
 EOF
@@ -79,10 +79,10 @@ e2e::assert_contains "${test_jh_msg}" "test.jh" "jaiph test on .jh file shows gu
 e2e::section "jaiph compile catches arity mismatch"
 
 e2e::file "arity_bad.jh" <<'EOF'
-workflow helper(a, b) {
+def helper(a, b) {
   log "ok"
 }
-workflow default() {
+export def main() {
   run helper("one")
 }
 EOF

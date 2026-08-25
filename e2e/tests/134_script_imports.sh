@@ -24,7 +24,7 @@ chmod +x "${JAIPH_E2E_TEST_DIR}/greet.sh"
 e2e::file "main_shell.jh" <<'EOF'
 import script "./greet.sh" as greet
 
-workflow default() {
+export def main() {
   run greet()
 }
 EOF
@@ -35,10 +35,10 @@ e2e::expect_stdout "${shell_out}" <<'EOF'
 
 Jaiph: Running main_shell.jh
 
-workflow default
+export def main
   ▸ script greet
   ✓ script greet (<time>)
-✓ PASS workflow default (<time>)
+✓ PASS export def main (<time>)
 EOF
 
 e2e::expect_out "main_shell.jh" "greet" "hello from imported shell"
@@ -62,7 +62,7 @@ import script "./emit.sh" as emit
 
 script consume = `echo "consumed: $1"`
 
-workflow default() {
+export def main() {
   const val = run emit()
   run consume(val)
 }
@@ -74,13 +74,13 @@ e2e::expect_stdout "${cap_out}" <<'EOF'
 
 Jaiph: Running main_capture.jh
 
-workflow default
+export def main
   ▸ script emit
   ✓ script emit (<time>)
   ▸ script consume (1="captured-from-shell")
   ✓ script consume (<time>)
 
-✓ PASS workflow default (<time>)
+✓ PASS export def main (<time>)
 EOF
 
 e2e::expect_out "main_capture.jh" "consume" "consumed: captured-from-shell"
@@ -96,7 +96,7 @@ e2e::prepare_test_env "script_import_missing"
 e2e::file "main_missing.jh" <<'EOF'
 import script "./does_not_exist.py" as ghost
 
-workflow default() {
+export def main() {
   run ghost()
 }
 EOF
@@ -126,7 +126,7 @@ EOF
   e2e::file "main_python.jh" <<'EOF'
 import script "./queue.py" as queue
 
-workflow default() {
+export def main() {
   run queue()
 }
 EOF
@@ -137,10 +137,10 @@ EOF
 
 Jaiph: Running main_python.jh
 
-workflow default
+export def main
   ▸ script queue
   ✓ script queue (<time>)
-✓ PASS workflow default (<time>)
+✓ PASS export def main (<time>)
 EOF
 
   e2e::expect_out "main_python.jh" "queue" "hello-from-imported-python"

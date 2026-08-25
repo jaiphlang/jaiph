@@ -10,7 +10,7 @@ export interface StartupPosture {
 }
 
 /**
- * Resolve the shared startup posture for a workflow server (`jaiph mcp` and
+ * Resolve the shared startup posture for a def server(`jaiph mcp` and
  * `jaiph serve`): runtime env, credential pre-flight (demoted to warnings —
  * the server may outlive a credential fix), and the host-visible runs root.
  */

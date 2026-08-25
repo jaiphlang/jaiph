@@ -15,12 +15,12 @@ test("compiler: extracts script bodies for a simple module", () => {
       [
         'script f_ok = `echo ok`',
         "",
-        "rule ok() {",
+        "def ok() {",
         "  run f_ok()",
         "}",
         "",
-        "workflow default() {",
-        "  ensure ok()",
+        "export def main() {",
+        "  run ok()",
         "  log \"done\"",
         "}",
         "",
@@ -51,7 +51,7 @@ test("compiler golden: prompt substitution guard reports E_PARSE", () => {
     writeFileSync(
       input,
       [
-        "workflow default() {",
+        "export def main() {",
         '  prompt "Show host $(uname)"',
         "}",
         "",
@@ -96,23 +96,24 @@ test("parser: assignment capture parses for ensure, run, and const run capture",
   const source = [
     'script say_hello = `echo hello`',
     "",
-    "rule tests_pass() {",
+    "def tests_pass() {",
     "  return \"ok\"",
     "}",
-    "workflow default() {",
-    "  const response = ensure tests_pass()",
+    "export def main() {",
+    "  const response = run tests_pass()",
     "  const out = run say_hello()",
     "}",
   ].join("\n");
   const mod = parsejaiph(source, "/fake/entry.jh");
-  assert.equal(mod.workflows.length, 1);
-  const steps = mod.workflows[0].steps;
+  const main = mod.defs.find((w) => w.name === "main");
+  assert.ok(main);
+  const steps = main.steps;
   assert.equal(steps.length, 2);
   assert.equal(steps[0].type, "const");
   const c0 = steps[0];
   if (c0.type === "const") {
     assert.equal(c0.name, "response");
-    assert.equal(c0.value.kind, "ensure_call");
+    assert.equal(c0.value.kind, "call");
   }
   assert.equal(steps[1].type, "const");
   const c1 = steps[1];
@@ -128,7 +129,7 @@ test("parser: config block parses and populates mod.metadata", () => {
     '  agent.model = "gpt-4"',
     '  run.logs_dir = ".jaiph/runs"',
     "}",
-    "workflow default() {",
+    "export def main() {",
     "  log \"ok\"",
     "}",
   ].join("\n");
@@ -143,7 +144,7 @@ test("parser: config agent.backend parses cursor and claude", () => {
     "config {",
     '  agent.backend = "cursor"',
     "}",
-    "workflow default() {",
+    "export def main() {",
     "  log \"ok\"",
     "}",
   ].join("\n");
@@ -154,7 +155,7 @@ test("parser: config agent.backend parses cursor and claude", () => {
     "config {",
     '  agent.backend = "claude"',
     "}",
-    "workflow default() {",
+    "export def main() {",
     "  log \"ok\"",
     "}",
   ].join("\n");
@@ -167,7 +168,7 @@ test("parser: config agent.trusted_workspace parses string", () => {
     "config {",
     '  agent.trusted_workspace = ".jaiph/.."',
     "}",
-    "workflow default() {",
+    "export def main() {",
     "  log \"ok\"",
     "}",
   ].join("\n");
@@ -181,7 +182,7 @@ test("parser: config backend flag strings parse", () => {
     '  agent.cursor_flags = "--force --sandbox enabled"',
     '  agent.claude_flags = "--model sonnet-4"',
     "}",
-    "workflow default() {",
+    "export def main() {",
     "  log \"ok\"",
     "}",
   ].join("\n");
@@ -195,7 +196,7 @@ test("parser: invalid agent.backend value throws E_PARSE", () => {
     "config {",
     '  agent.backend = "foo"',
     "}",
-    "workflow default() {",
+    "export def main() {",
     "  log \"ok\"",
     "}",
   ].join("\n");
@@ -210,7 +211,7 @@ test("parser: unknown config key throws E_PARSE with file location", () => {
     "config {",
     '  unknown.key = "x"',
     "}",
-    "workflow default() {",
+    "export def main() {",
     "  log \"ok\"",
     "}",
   ].join("\n");
@@ -225,7 +226,7 @@ test("parser: unquoted ${name} in config is accepted as interpolation ref", () =
     "config {",
     "  agent.model = ${model}",
     "}",
-    "workflow default(model) {",
+    "export def main(model) {",
     "  log \"ok\"",
     "}",
   ].join("\n");
@@ -238,7 +239,7 @@ test("parser: unquoted ${name.field} in config is accepted as interpolation ref"
     "config {",
     "  agent.model = ${cfg.model}",
     "}",
-    "workflow default() {",
+    "export def main() {",
     "  log \"ok\"",
     "}",
   ].join("\n");
@@ -251,7 +252,7 @@ test("parser: invalid config value throws E_PARSE", () => {
     "config {",
     "  agent.model = gpt-4",
     "}",
-    "workflow default() {",
+    "export def main() {",
     "  log \"ok\"",
     "}",
   ].join("\n");
@@ -269,7 +270,7 @@ test("parser: duplicate config block throws E_PARSE", () => {
     "config {",
     '  run.logs_dir = "y"',
     "}",
-    "workflow default() {",
+    "export def main() {",
     "  log \"ok\"",
     "}",
   ].join("\n");
@@ -284,7 +285,7 @@ test("parser: config integer value parses as number", () => {
     "config {",
     "  run.recover_limit = 300",
     "}",
-    "workflow default() {",
+    "export def main() {",
     "  log \"ok\"",
     "}",
   ].join("\n");
@@ -299,7 +300,7 @@ test("parser: config integer key rejects string value with E_PARSE", () => {
     "config {",
     '  run.recover_limit = "fast"',
     "}",
-    "workflow default() {",
+    "export def main() {",
     "  log \"ok\"",
     "}",
   ].join("\n");
@@ -314,7 +315,7 @@ test("parser: unknown runtime.docker_* keys are rejected", () => {
     "config {",
     '  runtime.docker_image = "ubuntu:24.04"',
     "}",
-    "workflow default() {",
+    "export def main() {",
     "  log \"ok\"",
     "}",
   ].join("\n");
@@ -329,7 +330,7 @@ test("parser: unknown runtime key throws E_PARSE", () => {
     "config {",
     '  runtime.unknown_key = "x"',
     "}",
-    "workflow default() {",
+    "export def main() {",
     "  log \"ok\"",
     "}",
   ].join("\n");
@@ -344,11 +345,11 @@ test("parser: if keyword with old syntax produces E_PARSE", () => {
     () =>
       parsejaiph(
         [
-          "rule check() {",
+          "def check() {",
           "  return \"ok\"",
           "}",
-          "workflow default() {",
-          "  if ensure check(foo=bar baz) {",
+          "export def main() {",
+          "  if run check(foo=bar baz) {",
           "    log \"ok\"",
           "  }",
           "}",
@@ -362,14 +363,14 @@ test("parser: if keyword with old syntax produces E_PARSE", () => {
 test("parser: run ... catch parses correctly", () => {
   const source = [
     'script helper = `echo ok`',
-    "workflow default() {",
+    "export def main() {",
     "  run helper() catch (err) {",
     '    log "failed"',
     "  }",
     "}",
   ].join("\n");
   const mod = parsejaiph(source, "/fake/entry.jh");
-  const step = mod.workflows[0].steps[0];
+  const step = mod.defs[0].steps[0];
   assert.equal(step.type, "exec");
   if (step.type === "exec" && step.body.kind === "call") {
     assert.ok(step.catch);
@@ -382,12 +383,12 @@ test("parser: run ... catch parses correctly", () => {
 
 test("parser: fail step parses quoted message", () => {
   const source = [
-    "workflow default() {",
+    "export def main() {",
     '  fail "expected reason"',
     "}",
   ].join("\n");
   const mod = parsejaiph(source, "/fake/entry.jh");
-  const step = mod.workflows[0].steps[0];
+  const step = mod.defs[0].steps[0];
   assert.equal(step.type, "say");
   if (step.type === "say") {
     assert.equal(step.level, "fail");
@@ -400,13 +401,13 @@ test("parser: fail step parses quoted message", () => {
 test("parser: const string expr and const run capture parse", () => {
   const source = [
     'script noop = `:`',
-    "workflow default() {",
+    "export def main() {",
     '  const msg = "hi"',
     "  const out = run noop()",
     "}",
   ].join("\n");
   const mod = parsejaiph(source, "/fake/entry.jh");
-  const steps = mod.workflows[0].steps;
+  const steps = mod.defs[0].steps;
   assert.equal(steps.length, 2);
   const c0 = steps[0];
   const c1 = steps[1];
@@ -426,7 +427,7 @@ test("parser: const string expr and const run capture parse", () => {
 test("parser: const rejects bare call-like rhs without run", () => {
   const source = [
     'script some_script = `echo "$1"`',
-    "workflow default() {",
+    "export def main() {",
     '  const x = some_script("${arg}")',
     "}",
   ].join("\n");
@@ -439,12 +440,12 @@ test("parser: const rejects bare call-like rhs without run", () => {
 test("parser: const allows run-wrapped script call with args", () => {
   const source = [
     'script some_script = `echo "$1"`',
-    "workflow default() {",
+    "export def main() {",
     '  const x = run some_script(arg1)',
     "}",
   ].join("\n");
   const mod = parsejaiph(source, "/fake/entry.jh");
-  const step = mod.workflows[0].steps[0];
+  const step = mod.defs[0].steps[0];
   assert.equal(step.type, "const");
   if (step.type === "const" && step.value.kind === "call") {
     assert.equal(step.name, "x");
@@ -455,12 +456,12 @@ test("parser: const allows run-wrapped script call with args", () => {
 
 test("parser: const prompt capture parses", () => {
   const source = [
-    "workflow default() {",
+    "export def main() {",
     '  const ans = prompt "type here"',
     "}",
   ].join("\n");
   const mod = parsejaiph(source, "/fake/entry.jh");
-  const step = mod.workflows[0].steps[0];
+  const step = mod.defs[0].steps[0];
   assert.equal(step.type, "const");
   if (step.type === "const") {
     assert.equal(step.name, "ans");
@@ -468,9 +469,9 @@ test("parser: const prompt capture parses", () => {
   }
 });
 
-test("parser: wait parses as workflow step (not shell)", () => {
+test("parser: wait parses as def step(not shell)", () => {
   const source = [
-    "workflow default() {",
+    "export def main() {",
     "  wait",
     "}",
   ].join("\n");
@@ -482,12 +483,12 @@ test("parser: wait parses as workflow step (not shell)", () => {
 
 test("parser: brace-style if with old syntax produces E_PARSE", () => {
   const source = [
-    "rule ok() {",
+    "def ok() {",
     "  return \"ok\"",
     "}",
     'script check = `true`',
-    "workflow default() {",
-    "  if not ensure ok() {",
+    "export def main() {",
+    "  if not run ok() {",
     "    log \"neg\"",
     "  }",
     "}",
@@ -500,13 +501,13 @@ test("parser: brace-style if with old syntax produces E_PARSE", () => {
 
 test("parser: send operator parses channel <- \"literal\"", () => {
   const source = [
-    "workflow default() {",
+    "export def main() {",
     `  findings <- "hello"`,
     "}",
   ].join("\n");
   const mod = parsejaiph(source, "/fake/entry.jh");
-  assert.equal(mod.workflows[0].steps.length, 1);
-  const step = mod.workflows[0].steps[0];
+  assert.equal(mod.defs[0].steps.length, 1);
+  const step = mod.defs[0].steps[0];
   assert.equal(step.type, "send");
   if (step.type !== "send") throw new Error("expected send");
   assert.equal(step.value.kind, "literal");
@@ -520,10 +521,10 @@ test("parser: top-level channel declarations parse and are stored", () => {
   const source = [
     "channel findings",
     "channel report -> analyst",
-    "workflow analyst() {",
+    "def analyst() {",
     "  log \"ok\"",
     "}",
-    "workflow default() {",
+    "export def main() {",
     `  findings <- "hi"`,
     "}",
   ].join("\n");
@@ -533,7 +534,7 @@ test("parser: top-level channel declarations parse and are stored", () => {
   assert.ok(reportCh.routes);
   assert.equal(reportCh.routes!.length, 1);
   assert.equal(reportCh.routes![0].value, "analyst");
-  const defaultWf = mod.workflows.find((w) => w.name === "default")!;
+  const defaultWf = mod.defs.find((w) => w.name === "main")!;
   assert.equal(defaultWf.steps.length, 1);
   assert.equal(defaultWf.steps[0].type, "send");
 });
@@ -541,7 +542,7 @@ test("parser: top-level channel declarations parse and are stored", () => {
 test("parser: channel declaration must be single per line", () => {
   const source = [
     "channel findings, report",
-    "workflow default() {",
+    "export def main() {",
     `  findings <- "hi"`,
     "}",
   ].join("\n");
@@ -558,10 +559,10 @@ test("validator: unknown local channel fails with required message", () => {
     writeFileSync(
       input,
       [
-        "workflow analyst() {",
+        "def analyst() {",
         "  log \"ok\"",
         "}",
-        "workflow default() {",
+        "export def main() {",
         `  typo <- "x"`,
         "}",
         "",
@@ -584,7 +585,7 @@ test("validator: missing channel import fails with required message", () => {
       shared,
       [
         "channel findings",
-        "workflow analyst() {",
+        "def analyst() {",
         "  log \"ok\"",
         "}",
         "",
@@ -595,7 +596,7 @@ test("validator: missing channel import fails with required message", () => {
       input,
       [
         'import "shared.jh" as shared',
-        "workflow default() {",
+        "export def main() {",
         `  shared.typo <- "x"`,
         "}",
         "",
@@ -612,7 +613,7 @@ test("validator: missing channel import fails with required message", () => {
 
 test("parser: standalone channel <- forwards $1", () => {
   const source = [
-    "workflow default() {",
+    "export def main() {",
     "  findings <-",
     "}",
   ].join("\n");
@@ -624,22 +625,22 @@ test("parser: standalone channel <- forwards $1", () => {
 
 test("parser: <- inside quotes is not a send", () => {
   const source = [
-    "workflow default() {",
+    "export def main() {",
     '  log "a <- b"',
     "}",
   ].join("\n");
   const mod = parsejaiph(source, "/fake/entry.jh");
-  assert.equal(mod.workflows[0].steps.length, 1);
-  assert.equal(mod.workflows[0].steps[0].type, "say");
+  assert.equal(mod.defs[0].steps.length, 1);
+  assert.equal(mod.defs[0].steps[0].type, "say");
 });
 
 test("parser: channel route declaration parses into ChannelDef.routes", () => {
   const source = [
     "channel findings -> analyst",
-    "workflow analyst() {",
+    "def analyst() {",
     "  log \"ok\"",
     "}",
-    "workflow default() {",
+    "export def main() {",
     "  log \"ok\"",
     "}",
   ].join("\n");
@@ -653,13 +654,13 @@ test("parser: channel route declaration parses into ChannelDef.routes", () => {
 test("parser: channel route with multiple targets", () => {
   const source = [
     "channel findings -> a, b",
-    "workflow a() {",
+    "def a() {",
     "  log \"ok\"",
     "}",
-    "workflow b() {",
+    "def b() {",
     "  log \"ok\"",
     "}",
-    "workflow default() {",
+    "export def main() {",
     "  log \"ok\"",
     "}",
   ].join("\n");
@@ -673,7 +674,7 @@ test("parser: channel route with multiple targets", () => {
 
 test("parser: route inside workflow body is a hard parse error", () => {
   const source = [
-    "workflow default() {",
+    "export def main() {",
     "  findings -> analyst",
     "}",
   ].join("\n");
@@ -687,13 +688,13 @@ test("parser: capture + send is E_PARSE", () => {
   // With assignment-without-const removed, "name = channel <- ..." falls through
   // to a shell step; the inline-shell ban then rejects it at validation time.
   const source = [
-    "workflow default() {",
+    "export def main() {",
     `  name = channel <- "hello"`,
     "}",
   ].join("\n");
   const mod = parsejaiph(source, "/fake/entry.jh");
   // Parsed as an exec step with shell body; validation will reject it later
-  const step = mod.workflows[0].steps[0];
+  const step = mod.defs[0].steps[0];
   assert.equal(step.type, "exec");
   if (step.type === "exec") {
     assert.equal(step.body.kind, "shell");
@@ -705,7 +706,7 @@ test("parser: capture + send is E_PARSE", () => {
 test("parser: top-level const declaration parses single-line string", () => {
   const source = [
     'const greeting = "hello world"',
-    "workflow default() {",
+    "export def main() {",
     "  log \"${greeting}\"",
     "}",
   ].join("\n");
@@ -723,7 +724,7 @@ test("parser: top-level const declaration parses multi-line string", () => {
     "    1. You write clearly",
     "    2. You are concise",
     '"""',
-    "workflow default() {",
+    "export def main() {",
     "  log \"${role}\"",
     "}",
   ].join("\n");
@@ -738,7 +739,7 @@ test("parser: top-level const declaration parses multi-line string", () => {
 test("parser: top-level const declaration parses bare value", () => {
   const source = [
     "const count = 42",
-    "workflow default() {",
+    "export def main() {",
     "  log \"${count}\"",
     "}",
   ].join("\n");
@@ -751,29 +752,29 @@ test("parser: top-level const declaration parses bare value", () => {
 test("parser: top-level const name collision with rule is E_PARSE", () => {
   const source = [
     'const foo = "bar"',
-    "rule foo() {",
+    "def foo() {",
     "  return \"ok\"",
     "}",
-    "workflow default() {",
-    "  ensure foo()",
+    "export def main() {",
+    "  run foo()",
     "}",
   ].join("\n");
   assert.throws(
     () => parsejaiph(source, "/fake/entry.jh"),
-    /duplicate name "foo".*variable name collides with rule/,
+    /duplicate name "foo".*variable name collides with def/,
   );
 });
 
 test("parser: top-level const name collision with workflow is E_PARSE", () => {
   const source = [
-    'const default = "val"',
-    "workflow default() {",
+    'const main = "val"',
+    "export def main() {",
     "  log \"ok\"",
     "}",
   ].join("\n");
   assert.throws(
     () => parsejaiph(source, "/fake/entry.jh"),
-    /duplicate name "default".*variable name collides with workflow/,
+    /duplicate name "main".*variable name collides with def/,
   );
 });
 
@@ -781,7 +782,7 @@ test("parser: top-level const name collision with script is E_PARSE", () => {
   const source = [
     'const helper = "val"',
     'script helper = `echo ok`',
-    "workflow default() {",
+    "export def main() {",
     "  run helper()",
     "}",
   ].join("\n");
@@ -805,7 +806,7 @@ test("compiler golden: standalone script file has no env shims (isolation)", () 
         "",
         'script helper = `echo $greeting`',
         "",
-        "workflow default() {",
+        "export def main() {",
         "  run helper()",
         "}",
         "",
@@ -837,7 +838,7 @@ test("compiler golden: multiline double-quoted strings are not corrupted by emit
         'b"',
         "```",
         "",
-        "workflow default() {",
+        "export def main() {",
         "  run multiline_str()",
         "}",
         "",
@@ -868,7 +869,7 @@ test("compiler golden: script bodies are opaque bash (cross-script name compiles
         "",
         'script caller = `helper`',
         "",
-        "workflow default() {",
+        "export def main() {",
         "  run caller()",
         "}",
         "",
@@ -892,7 +893,7 @@ test("compiler golden: script calling itself is allowed", () => {
       [
         'script recurse = `recurse`',
         "",
-        "workflow default() {",
+        "export def main() {",
         "  run recurse()",
         "}",
         "",
@@ -919,7 +920,7 @@ test("compiler: import script emits external file verbatim as script artifact", 
       [
         'import script "./helper.py" as helper',
         "",
-        "workflow default() {",
+        "export def main() {",
         '  run helper("arg")',
         "}",
         "",
@@ -943,7 +944,7 @@ test("compiler: import script fails when target file is missing", () => {
       [
         'import script "./nonexistent.py" as helper',
         "",
-        "workflow default() {",
+        "export def main() {",
         '  run helper("arg")',
         "}",
         "",

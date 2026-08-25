@@ -15,7 +15,7 @@ e2e::section "double-dash passes positional args to workflow"
 # Given — a workflow that echoes its positional parameter
 e2e::file "greet.jh" <<'EOF'
 script greet_impl = `echo "hello $1"`
-workflow default(name) {
+export def main(name) {
   run greet_impl(name)
 }
 EOF
@@ -28,11 +28,11 @@ e2e::expect_stdout "${greet_out}" <<'EOF'
 
 Jaiph: Running greet.jh
 
-workflow default (name="world")
+export def main (name="world")
   ▸ script greet_impl (1="world")
   ✓ script greet_impl (<time>)
 
-✓ PASS workflow default (<time>)
+✓ PASS export def main (<time>)
 EOF
 
 # Then — run artifacts

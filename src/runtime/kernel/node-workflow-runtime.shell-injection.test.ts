@@ -40,13 +40,13 @@ function makeRuntime(root: string, jh: string): NodeWorkflowRuntime {
 
 const TOOLS = [
   // Quoted shell body — the flagship AC example.
-  "workflow greet(name) {",
+  "def greet(name) {",
   '  echo "Hello ${name}" > greeting.txt',
   "}",
   "",
   // Unquoted shell body — where a `;`/`#` payload could actually break out of
   // word boundaries if the value were not escaped.
-  "workflow greet_bare(name) {",
+  "def greet_bare(name) {",
   "  echo Hello ${name} > greeting_bare.txt",
   "}",
   "",
@@ -54,7 +54,7 @@ const TOOLS = [
   // also caller-influenced and must be shell-quoted (the old warn-only guard
   // inspected prompt captures only and missed this provenance).
   "script emit_danger = `printf '$(id)'`",
-  "workflow cap() {",
+  "def cap() {",
   '  echo "captured ${run emit_danger()}" > cap.txt',
   "}",
   "",

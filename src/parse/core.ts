@@ -110,9 +110,9 @@ export function braceDepthDelta(line: string): number {
 
 /** Jaiph keywords that cannot be used as bare identifier arguments. */
 const JAIPH_KEYWORDS = new Set([
-  "run", "ensure", "prompt", "return", "fail", "log", "logerr", "logwarn",
+  "run", "prompt", "return", "fail", "log", "logerr", "logwarn",
   "if", "else", "not", "const", "match", "import", "export",
-  "workflow", "rule", "script", "channel", "config", "catch", "async",
+  "def", "script", "channel", "config", "catch", "async",
   "returns", "send", "true", "false", "for", "in",
 ]);
 
@@ -205,7 +205,7 @@ export function parseParamList(filePath: string, content: string, lineNo: number
  * - bare identifier (and not a Jaiph keyword): `{ kind: "var", name }`
  * - bare `IDENT.IDENT` (typed-prompt field access): `{ kind: "var", name: "base.field" }`
  *   — sugar for `${base.field}`; runtime expands via the same JSON field path
- * - anything else (quoted string, ${…}, nested `run …` / `ensure …` call, inline-script
+ * - anything else (quoted string, ${…}, nested `run …` call, inline-script
  *   form, etc.): `{ kind: "literal", raw }`, stored as authored.
  *
  * Commas inside quoted strings are preserved (the scanner tracks quote state).

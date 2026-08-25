@@ -14,7 +14,7 @@ TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 e2e::section "if/else workflow: then branch runs when condition true"
 
 e2e::file "if_else_wf.jh" <<'EOF'
-workflow default(status) {
+export def main(status) {
   if status == "ok" {
     log "healthy"
   } else {
@@ -29,11 +29,11 @@ e2e::expect_stdout "${then_out}" <<'EOF'
 
 Jaiph: Running if_else_wf.jh
 
-workflow default (status="ok")
+export def main (status="ok")
   ℹ healthy
   ℹ done
 
-✓ PASS workflow default (<time>)
+✓ PASS export def main (<time>)
 EOF
 e2e::pass "if/else workflow: only then-branch runs when condition is true"
 
@@ -46,11 +46,11 @@ e2e::expect_stdout "${else_out}" <<'EOF'
 
 Jaiph: Running if_else_wf.jh
 
-workflow default (status="bad")
+export def main (status="bad")
   ℹ unhealthy: bad
   ℹ done
 
-✓ PASS workflow default (<time>)
+✓ PASS export def main (<time>)
 EOF
 e2e::pass "if/else workflow: only else-branch runs when condition is false"
 
@@ -59,7 +59,7 @@ e2e::pass "if/else workflow: only else-branch runs when condition is false"
 e2e::section "if/else rule: then branch runs when condition true"
 
 e2e::file "if_else_rule.jh" <<'EOF'
-rule check(value) {
+def check(value) {
   if value == "" {
     fail "value was empty"
   } else {
@@ -67,8 +67,8 @@ rule check(value) {
   }
 }
 
-workflow default(value) {
-  ensure check(value)
+export def main(value) {
+  run check(value)
   log "validated"
 }
 EOF
@@ -78,13 +78,13 @@ e2e::expect_stdout "${rule_ok_out}" <<'EOF'
 
 Jaiph: Running if_else_rule.jh
 
-workflow default (value="hello")
-  ▸ rule check (value="hello")
+export def main (value="hello")
+  ▸ def check(value="hello")
   ·   ℹ value: hello
-  ✓ rule check (<time>)
+  ✓ def check(<time>)
   ℹ validated
 
-✓ PASS workflow default (<time>)
+✓ PASS export def main (<time>)
 EOF
 e2e::pass "if/else rule: else branch runs and rule passes when value non-empty"
 

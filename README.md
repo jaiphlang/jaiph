@@ -13,15 +13,15 @@
 
 ## What is Jaiph?
 
-**Jaiph** is a composable scripting language and runtime for defining and orchestrating AI agent workflows. You write **`.jh`** files that combine prompts, rules, scripts, and workflows into executable pipelines. The CLI parses source into an AST, validates references at compile time, and the Node workflow runtime interprets the AST directly.
+**Jaiph** is a composable scripting language and runtime for defining and orchestrating AI agent workflows. You write **`.jh`** files that combine `def`, `script`, and `prompt` into executable pipelines. The CLI parses source into an AST, validates references at compile time, and the Node workflow runtime interprets the AST directly.
 
 > [!WARNING]
 > Jaiph is still in an early stage. Expect breaking changes.
 
 ## Features
 
-- **Workflows** — Compose `prompt`, `run`, `ensure`, channel sends, conditionals, `run async` with implicit join, `catch`, and repair-and-retry `recover`.
-- **Rules and scripts** — Rules stay structured (no raw shell lines); **`script`** steps run bash or polyglot code as subprocesses.
+- **Defs** — Compose `prompt`, `run`, channel sends, conditionals, `run async` with implicit join, `catch`, and repair-and-retry `recover`. `jaiph run` enters at `export def main`.
+- **Scripts** — **`script`** steps run bash or polyglot code as subprocesses.
 - **Agents** — Backends include Cursor, Claude, Codex (HTTP), or a custom `agent.command`.
 - **Testing** — `*.test.jh` files run in-process (`jaiph test`) with mocks and `expect_*` assertions ([Write & run tests](docs/testing.md)).
 - **Safety and inspectability** — live **`__JAIPH_EVENT__`** on stderr and durable **`.jaiph/runs/`** artifacts ([Architecture](docs/architecture.md)). Isolation of the process from the rest of the machine is an outer concern: wrap `jaiph` in your own container, pod, or CI runner if you want a sandbox ([Deploy jaiph](docs/deploy.md)).
@@ -33,10 +33,10 @@
 
 ## Core components
 
-- **CLI** (`src/cli`) — `jaiph run` / `test` / `compile` / `format` / `init` / `install` / `use` / `mcp` / `serve`; prepares scripts, spawns the workflow runner (or in-process test runner), parses `__JAIPH_EVENT__` on stderr, runs hooks on `jaiph run` only.
+- **CLI** (`src/cli`) — `jaiph run` / `test` / `compile` / `format` / `init` / `install` / `use` / `mcp` / `serve`; prepares scripts, spawns the def runner(or in-process test runner), parses `__JAIPH_EVENT__` on stderr, runs hooks on `jaiph run` only.
 - **Parser** (`src/parser.ts`, `src/parse/*`) — `.jh` / `.test.jh` → AST.
 - **Validator** (`src/transpile/validate.ts`) — imports and symbol references at compile time.
-- **Transpiler** (`src/transpile/*`) — emits atomic `script` files under `scripts/` only (no workflow-level shell).
+- **Transpiler** (`src/transpile/*`) — emits atomic `script` files under `scripts/` only (no def-level shell).
 - **Node workflow runtime** (`src/runtime/kernel/node-workflow-runtime.ts`, `graph.ts`) — interprets the AST; `buildRuntimeGraph(graph)` consumes the `ModuleGraph` produced by `loadModuleGraph` (no filesystem reads).
 - **Node test runner** (`src/runtime/kernel/node-test-runner.ts`) — `*.test.jh` blocks with mocks.
 - **JS kernel** (`src/runtime/kernel/`) — prompts, managed scripts, `__JAIPH_EVENT__`, inbox, mocks.
@@ -48,7 +48,7 @@ Run a sample workflow without installing anything first:
 
 ```bash
 curl -fsSL https://jaiph.org/run | bash -s '
-workflow default() {
+export def main() {
   const response = prompt "Say: Hello I'\''m [model name]!"
   log response
 }'
@@ -105,14 +105,14 @@ Full flags and environment variables: [CLI](docs/cli.md), [Environment variables
 
 script check_deps = `test -f "package.json"`
 
-rule deps_exist() {
+def deps_exist() {
   run check_deps() catch (err) {
     fail "Missing package.json"
   }
 }
 
-workflow default(task) {
-  ensure deps_exist()
+export def main(task) {
+  run deps_exist()
   const ts = run `date +%s`()
   prompt "Build the application: ${task}"
 }

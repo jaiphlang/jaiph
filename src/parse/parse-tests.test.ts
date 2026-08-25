@@ -108,51 +108,51 @@ test("parseTestBlock: parses mock prompt block with regex and multiple arms", ()
 
 // === parseTestBlock: mock symbol blocks ===
 
-test("parseTestBlock: parses mock workflow block with parens", () => {
+test("parseTestBlock: parses mock def block with parens", () => {
   const lines = [
     'test "t1" {',
-    '  mock workflow lib.greet() {',
+    '  mock def lib.greet() {',
     '    return "mocked"',
     '  }',
     '}',
   ];
   const { testBlock } = parseTestBlock("test.jh", lines, 0);
   assert.equal(testBlock.steps.length, 1);
-  assert.equal(testBlock.steps[0].type, "test_mock_workflow");
-  if (testBlock.steps[0].type === "test_mock_workflow") {
+  assert.equal(testBlock.steps[0].type, "test_mock_def");
+  if (testBlock.steps[0].type === "test_mock_def") {
     assert.equal(testBlock.steps[0].ref, "lib.greet");
     assert.deepEqual(testBlock.steps[0].params, []);
     assert.equal(testBlock.steps[0].steps.length, 1);
   }
 });
 
-test("parseTestBlock: parses mock workflow with named params", () => {
+test("parseTestBlock: parses mock def with named params", () => {
   const lines = [
     'test "t1" {',
-    '  mock workflow lib.deploy(target, version) {',
+    '  mock def lib.deploy(target, version) {',
     '    log "mock deploy"',
     '    return "deployed"',
     '  }',
     '}',
   ];
   const { testBlock } = parseTestBlock("test.jh", lines, 0);
-  if (testBlock.steps[0].type === "test_mock_workflow") {
+  if (testBlock.steps[0].type === "test_mock_def") {
     assert.deepEqual(testBlock.steps[0].params, ["target", "version"]);
     assert.equal(testBlock.steps[0].steps.length, 2);
   }
 });
 
-test("parseTestBlock: parses mock rule block with parens", () => {
+test("parseTestBlock: parses mock def block with parens", () => {
   const lines = [
     'test "t1" {',
-    '  mock rule lib.check() {',
+    '  mock def lib.check() {',
     '    return "ok"',
     '  }',
     '}',
   ];
   const { testBlock } = parseTestBlock("test.jh", lines, 0);
-  assert.equal(testBlock.steps[0].type, "test_mock_rule");
-  if (testBlock.steps[0].type === "test_mock_rule") {
+  assert.equal(testBlock.steps[0].type, "test_mock_def");
+  if (testBlock.steps[0].type === "test_mock_def") {
     assert.deepEqual(testBlock.steps[0].params, []);
   }
 });
@@ -200,31 +200,31 @@ test("parseTestBlock: rejects mock function (legacy)", () => {
   );
 });
 
-test("parseTestBlock: rejects mock workflow without parens", () => {
+test("parseTestBlock: rejects mock def without parens", () => {
   const lines = [
     'test "t1" {',
-    '  mock workflow lib.greet {',
+    '  mock def lib.greet {',
     '    return "mocked"',
     '  }',
     '}',
   ];
   assert.throws(
     () => parseTestBlock("test.jh", lines, 0),
-    /mock workflow requires parentheses/,
+    /mock def requires parentheses/,
   );
 });
 
-test("parseTestBlock: rejects mock rule without parens", () => {
+test("parseTestBlock: rejects mock def without parens", () => {
   const lines = [
     'test "t1" {',
-    '  mock rule lib.check {',
+    '  mock def lib.check {',
     '    return "ok"',
     '  }',
     '}',
   ];
   assert.throws(
     () => parseTestBlock("test.jh", lines, 0),
-    /mock rule requires parentheses/,
+    /mock def requires parentheses/,
   );
 });
 
@@ -374,7 +374,7 @@ test("parseTestBlock: rejects old camelCase expectEqual", () => {
   );
 });
 
-// === parseTestBlock: workflow execution (new syntax) ===
+// === parseTestBlock: def execution(new syntax) ===
 
 test("parseTestBlock: parses const capture with run", () => {
   const lines = [
@@ -383,10 +383,10 @@ test("parseTestBlock: parses const capture with run", () => {
     '}',
   ];
   const { testBlock } = parseTestBlock("test.jh", lines, 0);
-  assert.equal(testBlock.steps[0].type, "test_run_workflow");
-  if (testBlock.steps[0].type === "test_run_workflow") {
+  assert.equal(testBlock.steps[0].type, "test_run_def");
+  if (testBlock.steps[0].type === "test_run_def") {
     assert.equal(testBlock.steps[0].captureName, "result");
-    assert.equal(testBlock.steps[0].workflowRef, "lib.greet");
+    assert.equal(testBlock.steps[0].defRef, "lib.greet");
   }
 });
 
@@ -397,7 +397,7 @@ test("parseTestBlock: parses const capture with run and args", () => {
     '}',
   ];
   const { testBlock } = parseTestBlock("test.jh", lines, 0);
-  if (testBlock.steps[0].type === "test_run_workflow") {
+  if (testBlock.steps[0].type === "test_run_def") {
     assert.deepEqual(testBlock.steps[0].args, ["world"]);
   }
 });
@@ -409,7 +409,7 @@ test("parseTestBlock: parses const capture with allow_failure", () => {
     '}',
   ];
   const { testBlock } = parseTestBlock("test.jh", lines, 0);
-  if (testBlock.steps[0].type === "test_run_workflow") {
+  if (testBlock.steps[0].type === "test_run_def") {
     assert.equal(testBlock.steps[0].allowFailure, true);
   }
 });
@@ -421,9 +421,9 @@ test("parseTestBlock: parses run without capture", () => {
     '}',
   ];
   const { testBlock } = parseTestBlock("test.jh", lines, 0);
-  assert.equal(testBlock.steps[0].type, "test_run_workflow");
-  if (testBlock.steps[0].type === "test_run_workflow") {
-    assert.equal(testBlock.steps[0].workflowRef, "lib.greet");
+  assert.equal(testBlock.steps[0].type, "test_run_def");
+  if (testBlock.steps[0].type === "test_run_def") {
+    assert.equal(testBlock.steps[0].defRef, "lib.greet");
     assert.equal(testBlock.steps[0].captureName, undefined);
   }
 });
@@ -435,7 +435,7 @@ test("parseTestBlock: parses run with args", () => {
     '}',
   ];
   const { testBlock } = parseTestBlock("test.jh", lines, 0);
-  if (testBlock.steps[0].type === "test_run_workflow") {
+  if (testBlock.steps[0].type === "test_run_def") {
     assert.deepEqual(testBlock.steps[0].args, ["Alice"]);
   }
 });
@@ -447,7 +447,7 @@ test("parseTestBlock: parses run with multiple args", () => {
     '}',
   ];
   const { testBlock } = parseTestBlock("test.jh", lines, 0);
-  if (testBlock.steps[0].type === "test_run_workflow") {
+  if (testBlock.steps[0].type === "test_run_def") {
     assert.deepEqual(testBlock.steps[0].args, ["prod", "v2"]);
   }
 });
@@ -504,7 +504,7 @@ test("parseTestBlock: preserves comments and blank lines as steps", () => {
   const { testBlock } = parseTestBlock("test.jh", lines, 0);
   assert.equal(testBlock.steps.length, 3);
   assert.equal(testBlock.steps[0].type, "comment");
-  assert.equal(testBlock.steps[1].type, "test_run_workflow");
+  assert.equal(testBlock.steps[1].type, "test_run_def");
   assert.equal(testBlock.steps[2].type, "blank_line");
 });
 
@@ -521,7 +521,7 @@ test("parseTestBlock: parses multiple steps", () => {
   const { testBlock, nextIndex } = parseTestBlock("test.jh", lines, 0);
   assert.equal(testBlock.steps.length, 3);
   assert.equal(testBlock.steps[0].type, "test_mock_prompt");
-  assert.equal(testBlock.steps[1].type, "test_run_workflow");
+  assert.equal(testBlock.steps[1].type, "test_run_def");
   assert.equal(testBlock.steps[2].type, "test_expect_contain");
   assert.equal(nextIndex, 5);
 });

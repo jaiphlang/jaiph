@@ -179,16 +179,16 @@
     "named": false
   },
   {
+    "type": "def",
+    "named": false
+  },
+  {
     "type": "else",
     "named": false
   },
   {
     "type": "embedded",
     "named": true
-  },
-  {
-    "type": "ensure",
-    "named": false
   },
   {
     "type": "expect_contain",
@@ -291,10 +291,6 @@
     "named": false
   },
   {
-    "type": "rule",
-    "named": false
-  },
-  {
     "type": "run",
     "named": false
   },
@@ -320,10 +316,6 @@
   },
   {
     "type": "true",
-    "named": false
-  },
-  {
-    "type": "workflow",
     "named": false
   },
   {

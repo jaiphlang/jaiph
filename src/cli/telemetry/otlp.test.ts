@@ -47,8 +47,8 @@ const T = {
 function fixtureLines(): string[] {
   const runId = RUN_ID;
   const events: Record<string, unknown>[] = [
-    { type: "WORKFLOW_START", workflow: "default", source: "fib.jh", ts: T.wfStart, run_id: runId },
-    { type: "STEP_START", func: "default", kind: "workflow", name: "default", ts: T.wfStart, id: "R:1", parent_id: null, seq: 1, depth: 0, run_id: runId },
+    { type: "RUN_START", def: "main", source: "fib.jh", ts: T.wfStart, run_id: runId },
+    { type: "STEP_START", func: "main", kind: "def", name: "main", ts: T.wfStart, id: "R:1", parent_id: null, seq: 1, depth: 0, run_id: runId },
     { type: "STEP_START", func: "fib", kind: "script", name: "fib", ts: T.fibStart, id: "R:2", parent_id: "R:1", seq: 2, depth: 1, run_id: runId },
     { type: "STEP_END", func: "fib", kind: "script", name: "fib", ts: T.fibEnd, status: 0, elapsed_ms: 100, id: "R:2", parent_id: "R:1", seq: 2, depth: 1, run_id: runId, out_content: "ok\n", err_content: "" },
     { type: "STEP_START", func: "prompt", kind: "prompt", name: "claude", ts: T.promptStart, id: "R:p1", parent_id: "R:1", seq: 3, depth: 1, run_id: runId },
@@ -59,13 +59,13 @@ function fixtureLines(): string[] {
     { type: "STEP_END", func: "boom", kind: "script", name: "boom", ts: T.boomEnd, status: 1, elapsed_ms: 5, id: "R:3", parent_id: "R:1", seq: 4, depth: 1, run_id: runId, out_content: "", err_content: "bad\n" },
     { type: "STEP_START", func: "hang", kind: "script", name: "hang", ts: T.hangStart, id: "R:4", parent_id: "R:1", seq: 5, depth: 1, run_id: runId },
     { type: "LOGERR", message: "warn-line", depth: 1, ts: T.log, run_id: runId },
-    { type: "WORKFLOW_END", workflow: "default", source: "fib.jh", ts: T.wfEnd, run_id: runId },
+    { type: "RUN_END", def: "main", source: "fib.jh", ts: T.wfEnd, run_id: runId },
   ];
   return events.map((e) => JSON.stringify(e));
 }
 
 const META: OtlpMeta = {
-  workflow: "default",
+  def: "main",
   exitStatus: 1,
   signal: null,
   serviceName: "jaiph",
@@ -107,7 +107,7 @@ test("runSummaryToOtlp: trace id is the run id UUID with dashes stripped", () =>
 });
 
 test("runSummaryToOtlp: root span carries workflow name and OK/ERROR from run exit", () => {
-  const root = spansOf(runSummaryToOtlp(fixtureLines(), META)).find((s) => s.name === "workflow default")!;
+  const root = spansOf(runSummaryToOtlp(fixtureLines(), META)).find((s) => s.name === "run main")!;
   assert.ok(root, "root span present");
   assert.equal(root.parentSpanId, undefined, "root has no parent");
   assert.equal(root.spanId, spanIdFor(RUN_ID));
@@ -116,10 +116,10 @@ test("runSummaryToOtlp: root span carries workflow name and OK/ERROR from run ex
   // nonzero run exit → root status 2
   assert.equal(root.status.code, 2);
 
-  const ok = spansOf(runSummaryToOtlp(fixtureLines(), { ...META, exitStatus: 0 })).find((s) => s.name === "workflow default")!;
+  const ok = spansOf(runSummaryToOtlp(fixtureLines(), { ...META, exitStatus: 0 })).find((s) => s.name === "run main")!;
   assert.equal(ok.status.code, 1);
 
-  const sig = spansOf(runSummaryToOtlp(fixtureLines(), { ...META, exitStatus: 0, signal: "SIGKILL" })).find((s) => s.name === "workflow default")!;
+  const sig = spansOf(runSummaryToOtlp(fixtureLines(), { ...META, exitStatus: 0, signal: "SIGKILL" })).find((s) => s.name === "run main")!;
   assert.equal(sig.status.code, 2, "a terminating signal marks the root ERROR even at exit 0");
 });
 
@@ -170,7 +170,7 @@ test("runSummaryToOtlp: unmatched STEP_START closes with ERROR at the last event
 });
 
 test("runSummaryToOtlp: LOGERR becomes a span event on the root span", () => {
-  const root = spansOf(runSummaryToOtlp(fixtureLines(), META)).find((s) => s.name === "workflow default")!;
+  const root = spansOf(runSummaryToOtlp(fixtureLines(), META)).find((s) => s.name === "run main")!;
   assert.equal(root.events?.length, 1);
   const ev = root.events![0];
   assert.equal(ev.timeUnixNano, nano(T.log));
@@ -187,7 +187,7 @@ test("runSummaryToOtlp: resource carries service.name, OTEL pairs, and jaiph.* a
   assert.equal(byKey.get("jaiph.version"), "9.9.9");
   assert.equal(byKey.get("deployment.environment"), "ci");
   assert.equal(byKey.get("jaiph.run_id"), RUN_ID);
-  assert.equal(byKey.get("jaiph.workflow"), "default");
+  assert.equal(byKey.get("jaiph.def"), "main");
   assert.equal(byKey.get("jaiph.source"), "fib.jh");
 });
 
@@ -244,7 +244,7 @@ test("exportRunTelemetry: warns and skips when the protocol is not http/json", a
   try {
     await exportRunTelemetry({
       runDir: "/nonexistent",
-      workflow: "default",
+      def: "main",
       exitStatus: 0,
       signal: null,
       env: {
@@ -268,7 +268,7 @@ test("exportRunTelemetry: no OTLP endpoint → no-op, no output", async () => {
     return true;
   };
   try {
-    await exportRunTelemetry({ runDir: "/nonexistent", workflow: "default", exitStatus: 0, signal: null, env: {} });
+    await exportRunTelemetry({ runDir: "/nonexistent", def: "main", exitStatus: 0, signal: null, env: {} });
   } finally {
     (process.stderr as unknown as { write: typeof original }).write = original;
   }
@@ -310,9 +310,9 @@ function startBlackHole(): Promise<{ port: number; close: () => Promise<void> }>
 function writeFailedJournal(dir: string): void {
   const runId = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
   const lines = [
-    { type: "WORKFLOW_START", workflow: "default", source: "x.jh", ts: "2026-04-21T16:02:00Z", run_id: runId },
+    { type: "RUN_START", def: "main", source: "x.jh", ts: "2026-04-21T16:02:00Z", run_id: runId },
     { type: "STEP_END", func: "boom", kind: "script", name: "boom", ts: "2026-04-21T16:02:01Z", status: 1, id: "R:2", run_id: runId, out_content: "", err_content: "bad\n" },
-    { type: "WORKFLOW_END", workflow: "default", source: "x.jh", ts: "2026-04-21T16:02:02Z", run_id: runId },
+    { type: "RUN_END", def: "main", source: "x.jh", ts: "2026-04-21T16:02:02Z", run_id: runId },
   ];
   writeFileSync(join(dir, "run_summary.jsonl"), lines.map((l) => JSON.stringify(l)).join("\n"));
 }
@@ -326,7 +326,7 @@ test("exportOtlpTraces: hard-fails without POSTing when the journal chain fails 
     writeChainKey(dir, "k".repeat(64)); // key present → verifiable → fails
     const warnings: string[] = [];
     const outcome = await exportOtlpTraces(
-      { runDir: dir, workflow: "default", exitStatus: 1, signal: null, env: { OTEL_EXPORTER_OTLP_ENDPOINT: "http://127.0.0.1:1" } },
+      { runDir: dir, def: "main", exitStatus: 1, signal: null, env: { OTEL_EXPORTER_OTLP_ENDPOINT: "http://127.0.0.1:1" } },
       1000,
       (m) => warnings.push(m),
     );
@@ -355,7 +355,7 @@ test("exportRunTelemetry: OTLP + Sentry run concurrently under one shared flush 
     const started = Date.now();
     await exportRunTelemetry({
       runDir: dir,
-      workflow: "default",
+      def: "main",
       exitStatus: 1,
       signal: null,
       env: {
@@ -396,7 +396,7 @@ test("exportOtlpTraces: identity is exported as jaiph.principal / jaiph.correlat
     const outcome = await exportOtlpTraces(
       {
         runDir: dir,
-        workflow: "default",
+        def: "main",
         exitStatus: 1,
         signal: null,
         env: { OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: `http://127.0.0.1:${port}/v1/traces` },
@@ -434,7 +434,7 @@ test("deliverRunTelemetryDetached: failures are tracked in bounded metrics, neve
     });
     deliverRunTelemetryDetached({
       runDir: dir,
-      workflow: "default",
+      def: "main",
       exitStatus: 1,
       signal: null,
       env: {

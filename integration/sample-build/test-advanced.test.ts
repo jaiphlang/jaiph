@@ -35,7 +35,7 @@ test("jaiph run prompt capture: variable accessible in subsequent shell step", (
         "script print_captured = \`\`\`",
         "printf 'captured:%s\\n' \"$1\"",
         "\`\`\`",
-        "workflow default() {",
+        "export def main() {",
         '  const result = prompt "Summarize"',
         '  run print_captured(result)',
         "}",
@@ -89,7 +89,7 @@ test("jaiph run prompt capture stores only final answer in assigned variable", (
         "script print_captured = \`\`\`",
         "printf 'captured:%s\\n' \"$1\"",
         "\`\`\`",
-        "workflow default() {",
+        "export def main() {",
         '  const result = prompt "Summarize"',
         '  run print_captured(result)',
         "}",
@@ -134,7 +134,7 @@ test("jaiph test with agent.backend = claude uses mock and does not invoke claud
         "config {",
         '  agent.backend = "claude"',
         "}",
-        "workflow default() {",
+        "export def main() {",
         '  const result = prompt "ask"',
         '  run print_got(result)',
         "}",
@@ -148,7 +148,7 @@ test("jaiph test with agent.backend = claude uses mock and does not invoke claud
         "",
         'test "mock overrides backend" {',
         '  mock prompt "mock-response"',
-        "  const out = run w.default()",
+        "  const out = run w.main()",
         '  expect_contain out "mock-response"',
         '  expect_contain out "got:"',
         "}",
@@ -195,7 +195,7 @@ test("jaiph test when prompt is not mocked runs selected backend", () => {
         "config {",
         '  agent.backend = "cursor"',
         "}",
-        "workflow default() {",
+        "export def main() {",
         '  const result = prompt "ask"',
         '  run print_got(result)',
         "}",
@@ -208,7 +208,7 @@ test("jaiph test when prompt is not mocked runs selected backend", () => {
         'import "flow.jh" as w',
         "",
         'test "no mock uses backend" {',
-        "  const out = run w.default()",
+        "  const out = run w.main()",
         '  expect_contain out "backend-ran"',
         '  expect_contain out "got:"',
         "}",
@@ -233,19 +233,19 @@ test("jaiph test when prompt is not mocked runs selected backend", () => {
   }
 });
 
-test("jaiph test passes for workflow using ensure only with mocks", () => {
+test("jaiph test passes for workflow using run only with mocks", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-test-ensure-only-"));
   try {
     writeFileSync(
       join(root, "ensure_only.jh"),
       [
         "script ready_impl = `echo ok`",
-        "rule ready() {",
+        "def ready() {",
         "  run ready_impl()",
         "}",
         "",
-        "workflow default() {",
-        "  ensure ready()",
+        "export def main() {",
+        "  run ready()",
         '  return "ready-ok"',
         "}",
         "",
@@ -256,8 +256,8 @@ test("jaiph test passes for workflow using ensure only with mocks", () => {
       [
         'import "ensure_only.jh" as e',
         "",
-        'test "workflow default" {',
-        "  const response = run e.default()",
+        'test "export def main" {',
+        "  const response = run e.main()",
         '  expect_contain response "ready-ok"',
         "}",
         "",
@@ -273,7 +273,7 @@ test("jaiph test passes for workflow using ensure only with mocks", () => {
 
     assert.equal(testResult.status, 0, testResult.stderr);
     assert.match(testResult.stdout, /test\(s\) passed|PASS/);
-    assert.match(testResult.stdout, /workflow default/);
+    assert.match(testResult.stdout, /def main/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -284,7 +284,7 @@ test("parser parses test blocks in *.test.jh file", () => {
     'import "workflow.jh" as w',
     '',
     'test "runs default" {',
-    '  const response = run w.default()',
+    '  const response = run w.main()',
     '  expect_contain response "PASS"',
     "}",
     "",
@@ -294,10 +294,10 @@ test("parser parses test blocks in *.test.jh file", () => {
   assert.equal(mod.tests!.length, 1);
   assert.equal(mod.tests![0].description, "runs default");
   assert.equal(mod.tests![0].steps.length, 2);
-  assert.equal(mod.tests![0].steps[0].type, "test_run_workflow");
-  if (mod.tests![0].steps[0].type === "test_run_workflow") {
+  assert.equal(mod.tests![0].steps[0].type, "test_run_def");
+  if (mod.tests![0].steps[0].type === "test_run_def") {
     assert.equal(mod.tests![0].steps[0].captureName, "response");
-    assert.equal(mod.tests![0].steps[0].workflowRef, "w.default");
+    assert.equal(mod.tests![0].steps[0].defRef, "w.main");
   }
   assert.equal(mod.tests![0].steps[1].type, "test_expect_contain");
   if (mod.tests![0].steps[1].type === "test_expect_contain") {
@@ -306,17 +306,17 @@ test("parser parses test blocks in *.test.jh file", () => {
   }
 });
 
-test("parser parses mock workflow, rule, and script in test block", () => {
+test("parser parses mock def and script in test block", () => {
   const source = [
     'import "app.jh" as app',
     "",
     'test "isolated orchestration" {',
-    "  mock workflow app.build() {",
+    "  mock def app.build() {",
     '    log "build ok"',
     '    return "done"',
     "  }",
     "",
-    "  mock rule app.policy_check() {",
+    "  mock def app.policy_check() {",
     '    return "blocked"',
     "  }",
     "",
@@ -325,7 +325,7 @@ test("parser parses mock workflow, rule, and script in test block", () => {
     '    echo "b.ts"',
     "  }",
     "",
-    "  const out = run app.default()",
+    "  const out = run app.main()",
     '  expect_contain out "blocked"',
     "}",
     "",
@@ -335,15 +335,15 @@ test("parser parses mock workflow, rule, and script in test block", () => {
   assert.equal(mod.tests!.length, 1);
   assert.equal(mod.tests![0].description, "isolated orchestration");
   const steps = mod.tests![0].steps;
-  assert.equal(steps[0].type, "test_mock_workflow");
-  if (steps[0].type === "test_mock_workflow") {
+  assert.equal(steps[0].type, "test_mock_def");
+  if (steps[0].type === "test_mock_def") {
     assert.equal(steps[0].ref, "app.build");
     assert.deepEqual(steps[0].params, []);
     assert.equal(steps[0].steps.length, 2);
   }
   assert.equal(steps[1].type, "blank_line");
-  assert.equal(steps[2].type, "test_mock_rule");
-  if (steps[2].type === "test_mock_rule") {
+  assert.equal(steps[2].type, "test_mock_def");
+  if (steps[2].type === "test_mock_def") {
     assert.equal(steps[2].ref, "app.policy_check");
     assert.deepEqual(steps[2].params, []);
     assert.equal(steps[2].steps.length, 1);
@@ -355,13 +355,13 @@ test("parser parses mock workflow, rule, and script in test block", () => {
     assert.ok(steps[4].body.includes('echo "a.ts"'));
   }
   assert.equal(steps[5].type, "blank_line");
-  assert.equal(steps[6].type, "test_run_workflow");
+  assert.equal(steps[6].type, "test_run_def");
   assert.equal(steps[7].type, "test_expect_contain");
 });
 
 test("parser ignores test keyword in non-test file", () => {
   const source = [
-    "workflow default() {",
+    "export def main() {",
     '  echo "hello"',
     "}",
     "",
@@ -370,25 +370,25 @@ test("parser ignores test keyword in non-test file", () => {
   assert.equal(mod.tests, undefined);
 });
 
-test("jaiph test runs *.test.jh with mock workflow, rule, and script", () => {
+test("jaiph test runs *.test.jh with mock def, rule, and script", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-test-mock-symbols-"));
   try {
     writeFileSync(
       join(root, "app.jh"),
       [
         "script policy_check_impl = `echo real-policy`",
-        "rule policy_check() {",
+        "def policy_check() {",
         "  run policy_check_impl()",
         "}",
         "script changed_files = `echo real_files`",
         "script build_impl = \`\`\`",
         'echo "real build"',
         "\`\`\`",
-        "workflow build() {",
+        "def build() {",
         "  run build_impl()",
         "}",
-        "workflow default() {",
-        "  ensure policy_check()",
+        "export def main() {",
+        "  run policy_check()",
         "  run build()",
         "}",
         "",
@@ -400,12 +400,12 @@ test("jaiph test runs *.test.jh with mock workflow, rule, and script", () => {
         'import "app.jh" as app',
         "",
         'test "isolated orchestration" {',
-        "  mock workflow app.build() {",
+        "  mock def app.build() {",
         '    log "build ok"',
         '    return "build ok"',
         "  }",
         "",
-        "  mock rule app.policy_check() {",
+        "  mock def app.policy_check() {",
         '    return "policy ok"',
         "  }",
         "",
@@ -414,7 +414,7 @@ test("jaiph test runs *.test.jh with mock workflow, rule, and script", () => {
         '    echo "b.ts"',
         "  }",
         "",
-        "  const out = run app.default()",
+        "  const out = run app.main()",
         '  expect_contain out "build ok"',
         "}",
         "",
@@ -440,7 +440,7 @@ test("jaiph test runs *.test.jh file with mocks", () => {
     writeFileSync(
       join(root, "flow.jh"),
       [
-        "workflow default() {",
+        "export def main() {",
         '  prompt "please greet"',
         '  return "done"',
         "}",
@@ -454,7 +454,7 @@ test("jaiph test runs *.test.jh file with mocks", () => {
         "",
         'test "captures output" {',
         '  mock prompt "mocked"',
-        "  const out = run f.default()",
+        "  const out = run f.main()",
         '  expect_contain out "done"',
         "}",
         "",
@@ -478,7 +478,7 @@ test("walkTestFiles discovers *.test.jh in directory", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-walk-test-"));
   try {
     writeFileSync(join(root, "a.test.jh"), "test \"t\" { }\n");
-    writeFileSync(join(root, "b.jh"), "workflow default() { }\n");
+    writeFileSync(join(root, "b.jh"), "export def main() { }\n");
     const files = walkTestFiles(root);
     assert.equal(files.length, 1);
     assert.ok(files.some((f) => f.endsWith("a.test.jh")));

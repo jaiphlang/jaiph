@@ -1,8 +1,24 @@
 {
   "channels": [],
-  "exports": [],
-  "imports": [],
-  "rules": [
+  "defs": [
+    {
+      "comments": [],
+      "name": "greet",
+      "params": [
+        "name",
+        "greeting"
+      ],
+      "steps": [
+        {
+          "level": "log",
+          "message": {
+            "kind": "literal",
+            "raw": "${greeting}, ${name}!"
+          },
+          "type": "say"
+        }
+      ]
+    },
     {
       "comments": [],
       "name": "validate",
@@ -22,31 +38,13 @@
       ]
     }
   ],
+  "exports": [],
+  "imports": [],
   "scripts": [
     {
       "body": "echo ok",
       "comments": [],
       "name": "checker"
-    }
-  ],
-  "workflows": [
-    {
-      "comments": [],
-      "name": "greet",
-      "params": [
-        "name",
-        "greeting"
-      ],
-      "steps": [
-        {
-          "level": "log",
-          "message": {
-            "kind": "literal",
-            "raw": "${greeting}, ${name}!"
-          },
-          "type": "say"
-        }
-      ]
     }
   ]
 }

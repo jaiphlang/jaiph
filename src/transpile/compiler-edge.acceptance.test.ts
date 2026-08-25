@@ -22,7 +22,7 @@ test("ACCEPTANCE: duplicate import alias fails with E_VALIDATE", () => {
       join(root, "a.jh"),
       [
         'script one_impl = `echo one`',
-        "rule one() {",
+        "def one() {",
         "  run one_impl()",
         "}",
         "",
@@ -32,7 +32,7 @@ test("ACCEPTANCE: duplicate import alias fails with E_VALIDATE", () => {
       join(root, "b.jh"),
       [
         'script two_impl = `echo two`',
-        "rule two() {",
+        "def two() {",
         "  run two_impl()",
         "}",
         "",
@@ -44,8 +44,8 @@ test("ACCEPTANCE: duplicate import alias fails with E_VALIDATE", () => {
         'import "a.jh" as mod',
         'import "b.jh" as mod',
         "",
-        "workflow default() {",
-        "  ensure mod.one()",
+        "export def main() {",
+        "  run mod.one()",
         "}",
         "",
       ].join("\n"),
@@ -60,14 +60,14 @@ test("ACCEPTANCE: unknown local rule reference fails deterministically", () => {
     writeFileSync(
       join(root, "main.jh"),
       [
-        "workflow default() {",
-        "  ensure missing_rule()",
+        "export def main() {",
+        "  run missing_rule()",
         "}",
         "",
       ].join("\n"),
     );
 
-    assert.throws(() => buildScripts(root, join(root, "out")), /E_VALIDATE unknown local rule reference "missing_rule"/);
+    assert.throws(() => buildScripts(root, join(root, "out")), /E_VALIDATE unknown local def or script reference "missing_rule"/);
   });
 });
 
@@ -76,14 +76,14 @@ test("ACCEPTANCE: unknown import alias in rule reference fails deterministically
     writeFileSync(
       join(root, "main.jh"),
       [
-        "workflow default() {",
-        "  ensure ghost.guard()",
+        "export def main() {",
+        "  run ghost.guard()",
         "}",
         "",
       ].join("\n"),
     );
 
-    assert.throws(() => buildScripts(root, join(root, "out")), /E_VALIDATE unknown import alias "ghost" for rule reference "ghost\.guard"/);
+    assert.throws(() => buildScripts(root, join(root, "out")), /E_VALIDATE unknown import alias "ghost" for run target "ghost\.guard"/);
   });
 });
 
@@ -92,14 +92,14 @@ test("ACCEPTANCE: unknown local workflow reference in run fails deterministicall
     writeFileSync(
       join(root, "main.jh"),
       [
-        "workflow default() {",
+        "export def main() {",
         "  run missing_workflow()",
         "}",
         "",
       ].join("\n"),
     );
 
-    assert.throws(() => buildScripts(root, join(root, "out")), /E_VALIDATE unknown local workflow or script reference "missing_workflow"/);
+    assert.throws(() => buildScripts(root, join(root, "out")), /E_VALIDATE unknown local def or script reference "missing_workflow"/);
   });
 });
 
@@ -108,7 +108,7 @@ test("ACCEPTANCE: invalid workflow reference shape fails at parse stage", () => 
     writeFileSync(
       join(root, "main.jh"),
       [
-        "workflow default() {",
+        "export def main() {",
         "  run bad.ref.shape()",
         "}",
         "",
@@ -125,7 +125,7 @@ test("ACCEPTANCE: imported workflow missing fails with E_VALIDATE", () => {
       join(root, "lib.jh"),
       [
         'script existing_impl = `echo ok`',
-        "workflow existing() {",
+        "def existing() {",
         "  run existing_impl()",
         "}",
         "",
@@ -136,21 +136,21 @@ test("ACCEPTANCE: imported workflow missing fails with E_VALIDATE", () => {
       [
         'import "lib.jh" as lib',
         "",
-        "workflow default() {",
+        "export def main() {",
         "  run lib.missing()",
         "}",
         "",
       ].join("\n"),
     );
 
-    assert.throws(() => buildScripts(root, join(root, "out")), /E_VALIDATE imported workflow or script "lib\.missing" does not exist/);
+    assert.throws(() => buildScripts(root, join(root, "out")), /E_VALIDATE imported def or script "lib\.missing" does not exist/);
   });
 });
 
 test("ACCEPTANCE: unterminated rule block reports parse location and code", () => {
   assert.throws(
-    () => parsejaiph("rule bad() {\n  echo x\n", "/fake/main.jh"),
-    /\/fake\/main\.jh:1:1 E_PARSE unterminated rule block: bad/,
+    () => parsejaiph("def bad() {\n  echo x\n", "/fake/main.jh"),
+    /\/fake\/main\.jh:1:1 E_PARSE unterminated block/,
   );
 });
 
@@ -159,7 +159,7 @@ test("ACCEPTANCE: unterminated prompt string fails with E_PARSE", () => {
     writeFileSync(
       join(root, "main.jh"),
       [
-        "workflow default() {",
+        "export def main() {",
         '  prompt "this never closes',
         "}",
         "",
@@ -175,13 +175,13 @@ test("ACCEPTANCE: if keyword with old syntax produces E_PARSE error", () => {
     writeFileSync(
       join(root, "main.jh"),
       [
-        "rule gate() {",
+        "def gate() {",
         "  run gate_impl()",
         "}",
         'script gate_impl = `false`',
         "",
-        "workflow default() {",
-        "  if not ensure gate() {",
+        "export def main() {",
+        "  if not run gate() {",
         '    log "fallback"',
         "  }",
         "}",
@@ -193,22 +193,22 @@ test("ACCEPTANCE: if keyword with old syntax produces E_PARSE error", () => {
   });
 });
 
-test("ACCEPTANCE: ensure catch then-branch allows mixed prompt and run", () => {
+test("ACCEPTANCE: run catch then-branch allows mixed prompt and run", () => {
   withTempDir("jaiph-acc-catch-ensure-mixed-", (root) => {
     writeFileSync(
       join(root, "main.jh"),
       [
-        "rule gate() {",
+        "def gate() {",
         "  run gate_impl()",
         "}",
         'script gate_impl = `false`',
         "",
-        "workflow fix_build() {",
+        "def fix_build() {",
         '  const _ = prompt "fix build"',
         "}",
         "",
-        "workflow default() {",
-        "  ensure gate() catch (err) {",
+        "export def main() {",
+        "  run gate() catch (err) {",
         '    const _ = prompt "recover"',
         "    run fix_build()",
         "  }",
@@ -223,14 +223,14 @@ test("ACCEPTANCE: ensure catch then-branch allows mixed prompt and run", () => {
 
 test("ACCEPTANCE: malformed import syntax fails with E_PARSE", () => {
   assert.throws(
-    () => parsejaiph('import "lib.jh"\nworkflow default() {\n  echo ok\n}\n', "/fake/main.jh"),
+    () => parsejaiph('import "lib.jh"\nexport def main() {\n  echo ok\n}\n', "/fake/main.jh"),
     /\/fake\/main\.jh:1:1 E_PARSE import must match: import "<path>" as <alias>/,
   );
 });
 
 test("ACCEPTANCE: unsupported top-level statement fails with E_PARSE", () => {
   assert.throws(
-    () => parsejaiph('echo "not allowed at top level"\nworkflow default() {\n  echo ok\n}\n', "/fake/main.jh"),
+    () => parsejaiph('echo "not allowed at top level"\nexport def main() {\n  echo ok\n}\n', "/fake/main.jh"),
     /\/fake\/main\.jh:1:1 E_PARSE unsupported top-level statement/,
   );
 });
@@ -273,50 +273,41 @@ test("ACCEPTANCE: unterminated mock prompt block fails with E_PARSE", () => {
   );
 });
 
-test("ACCEPTANCE: rule with inline brace group cmd || { ... } fails under strict shell-step ban", () => {
+test("ACCEPTANCE: def with inline brace group cmd || { ... } compiles", () => {
   withTempDir("jaiph-acc-rule-or-brace-", (root) => {
     writeFileSync(
       join(root, "main.jh"),
       [
-        "rule example() {",
+        "def example() {",
         '  check_something || { echo "failed"; exit 1; }',
         "}",
         "",
-        "workflow default() {",
-        "  ensure example()",
+        "export def main() {",
+        "  run example()",
         "}",
         "",
       ].join("\n"),
     );
-    assert.throws(
-      () => buildScripts(join(root, "main.jh"), join(root, "out")),
-      /E_VALIDATE inline shell steps are forbidden in rules; use explicit script blocks/,
-    );
+    buildScripts(join(root, "main.jh"), join(root, "out"));
   });
 });
 
-test("ACCEPTANCE: rule with multi-line || { ... } fails under strict shell-step ban", () => {
-  withTempDir("jaiph-acc-rule-or-brace-multiline-", (root) => {
+test("ACCEPTANCE: def with single-line || { ... } compiles", () => {
+  withTempDir("jaiph-acc-def-or-brace-", (root) => {
     writeFileSync(
       join(root, "main.jh"),
       [
-        "rule example() {",
-        "  check_something || {",
-        '    echo "failed"',
-        "    exit 1",
-        "  }",
+        "def example() {",
+        '  check_something || { echo "failed"; exit 1; }',
         "}",
         "",
-        "workflow default() {",
-        "  ensure example()",
+        "export def main() {",
+        "  run example()",
         "}",
         "",
       ].join("\n"),
     );
-    assert.throws(
-      () => buildScripts(join(root, "main.jh"), join(root, "out")),
-      /E_VALIDATE inline shell steps are forbidden in rules; use explicit script blocks/,
-    );
+    buildScripts(join(root, "main.jh"), join(root, "out"));
   });
 });
 
@@ -325,7 +316,7 @@ test("ACCEPTANCE: workflow shell step with || { ... } is allowed and compiles", 
     writeFileSync(
       join(root, "main.jh"),
       [
-        "workflow default() {",
+        "export def main() {",
         '  cmd || { echo "failed"; exit 1; }',
         "}",
         "",
@@ -342,7 +333,7 @@ test("ACCEPTANCE: inline shell short-circuit in workflow compiles", () => {
       [
         'script gate_impl = `true`',
         "",
-        "workflow default() {",
+        "export def main() {",
         '  other || { echo "err"; exit 1; }',
         "}",
         "",
@@ -355,15 +346,15 @@ test("ACCEPTANCE: inline shell short-circuit in workflow compiles", () => {
 test("ACCEPTANCE: prompt with returns schema (single-line) parses and emits typed capture", () => {
   const mod = parsejaiph(
     [
-      "workflow default() {",
+      "export def main() {",
       '  const result = prompt "Analyse the diff" returns "{ type: string, risk: string }"',
       "}",
       "",
     ].join("\n"),
     "/fake/main.jh",
   );
-  assert.equal(mod.workflows.length, 1);
-  const step = mod.workflows[0].steps[0];
+  assert.equal(mod.defs.length, 1);
+  const step = mod.defs[0].steps[0];
   assert.equal(step.type, "const");
   assert.ok(step.type === "const" && step.name === "result");
   assert.ok(step.type === "const" && step.value.kind === "prompt");
@@ -376,7 +367,7 @@ test("ACCEPTANCE: prompt with returns schema (single-line) parses and emits type
     writeFileSync(
       join(root, "main.jh"),
       [
-        "workflow default() {",
+        "export def main() {",
         '  const result = prompt "Analyse" returns "{ type: string, risk: string }"',
         '  return "${result}"',
         "}",
@@ -390,15 +381,15 @@ test("ACCEPTANCE: prompt with returns schema (single-line) parses and emits type
 // Multiline returns: continuation with \ then returns "{ ... }" on next line.
 test("ACCEPTANCE: prompt with returns schema (multiline continuation) parses", () => {
   const src = [
-    "workflow default() {",
+    "export def main() {",
     '  const result = prompt "Analyse" \\',
     '    returns "{ type: string, risk: string }"',
     "}",
     "",
   ].join("\n");
   const mod = parsejaiph(src, "/fake/main.jh");
-  assert.equal(mod.workflows.length, 1);
-  const step = mod.workflows[0].steps[0];
+  assert.equal(mod.defs.length, 1);
+  const step = mod.defs[0].steps[0];
   assert.equal(step.type, "const");
   assert.ok(step.type === "const" && step.value.kind === "prompt");
   if (step.type === "const" && step.value.kind === "prompt") {
@@ -413,7 +404,7 @@ test("ACCEPTANCE: unsupported type in returns schema fails with E_SCHEMA", () =>
     writeFileSync(
       join(root, "main.jh"),
       [
-        "workflow default() {",
+        "export def main() {",
         '  const result = prompt "x" returns "{ foo: array }"',
         "}",
         "",
@@ -428,7 +419,7 @@ test("ACCEPTANCE: prompt with returns without capture name fails with E_PARSE", 
     writeFileSync(
       join(root, "main.jh"),
       [
-        "workflow default() {",
+        "export def main() {",
         '  prompt "x" returns "{ a: string }"',
         "}",
         "",
@@ -447,7 +438,7 @@ test("ACCEPTANCE: jaiph test typed prompt — valid JSON passes and raw result i
     writeFileSync(
       join(root, "flow.jh"),
       [
-        "workflow default() {",
+        "export def main() {",
         '  const result = prompt "classify" returns "{ type: string, risk: string }"',
         '  return "raw=${result}"',
         "}",
@@ -461,7 +452,7 @@ test("ACCEPTANCE: jaiph test typed prompt — valid JSON passes and raw result i
         "",
         'test "typed prompt accepts valid JSON" {',
         '  mock prompt "{\\"type\\":\\"fix\\",\\"risk\\":\\"low\\"}"',
-        "  const out = run w.default()",
+        "  const out = run w.main()",
         '  expect_contain out "raw={\\"type\\":\\"fix\\",\\"risk\\":\\"low\\"}"',
         "}",
         "",
@@ -486,7 +477,7 @@ test("ACCEPTANCE: jaiph test typed prompt — invalid JSON fails with parse erro
     writeFileSync(
       join(root, "flow.jh"),
       [
-        "workflow default() {",
+        "export def main() {",
         '  const result = prompt "classify" returns "{ type: string }"',
         '  log "done"',
         "}",
@@ -500,7 +491,7 @@ test("ACCEPTANCE: jaiph test typed prompt — invalid JSON fails with parse erro
         "",
         'test "invalid JSON fails" {',
         '  mock prompt "not valid json"',
-        "  const out = run w.default()",
+        "  const out = run w.main()",
         '  expect_contain out "done"',
         "}",
         "",
@@ -526,7 +517,7 @@ test("ACCEPTANCE: jaiph test typed prompt — missing field fails with schema er
     writeFileSync(
       join(root, "flow.jh"),
       [
-        "workflow default() {",
+        "export def main() {",
         '  const result = prompt "classify" returns "{ type: string, risk: string }"',
         '  log "done"',
         "}",
@@ -540,7 +531,7 @@ test("ACCEPTANCE: jaiph test typed prompt — missing field fails with schema er
         "",
         'test "missing field fails" {',
         '  mock prompt "{\\"type\\":\\"fix\\"}"',
-        "  const out = run w.default()",
+        "  const out = run w.main()",
         '  expect_contain out "done"',
         "}",
         "",
@@ -567,7 +558,7 @@ test("ACCEPTANCE: jaiph test typed prompt — wrong type fails", () => {
     writeFileSync(
       join(root, "flow.jh"),
       [
-        "workflow default() {",
+        "export def main() {",
         '  const result = prompt "classify" returns "{ type: string, risk: string }"',
         '  log "done"',
         "}",
@@ -581,7 +572,7 @@ test("ACCEPTANCE: jaiph test typed prompt — wrong type fails", () => {
         "",
         'test "type error fails" {',
         '  mock prompt "{\\"type\\":123,\\"risk\\":\\"low\\"}"',
-        "  const out = run w.default()",
+        "  const out = run w.main()",
         '  expect_contain out "done"',
         "}",
         "",
@@ -598,25 +589,25 @@ test("ACCEPTANCE: jaiph test typed prompt — wrong type fails", () => {
     });
     assert.notEqual(r.status, 0);
     const err = (r.stderr ?? "") + (r.stdout ?? "");
-    assert.match(err, /workflow exited with status|expected string|got number|type.*mismatch|FAIL/i);
+    assert.match(err, /def exited with status|expected string|got number|type.*mismatch|FAIL/i);
   });
 });
 
 // === Inbox / send operator / route acceptance tests ===
 
-test("ACCEPTANCE: route with unknown workflow fails E_VALIDATE", () => {
+test("ACCEPTANCE: route with unknown def fails E_VALIDATE", () => {
   withTempDir("jaiph-acc-route-unknown-wf-", (root) => {
     writeFileSync(
       join(root, "main.jh"),
       [
         "channel findings -> missing_wf",
-        "workflow default() {",
+        "export def main() {",
         "  log \"ok\"",
         "}",
         "",
       ].join("\n"),
     );
-    assert.throws(() => buildScripts(root, join(root, "out")), /E_VALIDATE unknown local workflow reference "missing_wf"/);
+    assert.throws(() => buildScripts(root, join(root, "out")), /E_VALIDATE unknown local def reference "missing_wf"/);
   });
 });
 
@@ -626,17 +617,17 @@ test("ACCEPTANCE: route with rule ref fails E_VALIDATE", () => {
       join(root, "main.jh"),
       [
         "channel findings -> check",
-        "rule check() {",
+        "def check() {",
         "  run check_impl()",
         "}",
         'script check_impl = `true`',
-        "workflow default() {",
+        "export def main() {",
         "  log \"ok\"",
         "}",
         "",
       ].join("\n"),
     );
-    assert.throws(() => buildScripts(root, join(root, "out")), /E_VALIDATE rule "check" must be called with ensure/);
+    assert.throws(() => buildScripts(root, join(root, "out")), /inbox route target "check" must declare exactly 3 parameters/);
   });
 });
 
@@ -646,7 +637,7 @@ test("ACCEPTANCE: route inside workflow body is E_PARSE", () => {
       join(root, "main.jh"),
       [
         "channel findings",
-        "workflow default() {",
+        "export def main() {",
         "  findings -> analyst",
         "}",
         "",
@@ -661,7 +652,7 @@ test("ACCEPTANCE: capture + send is parse error", () => {
     writeFileSync(
       join(root, "main.jh"),
       [
-        "workflow default() {",
+        "export def main() {",
         "  name = channel <- echo hello",
         "}",
         "",
@@ -688,23 +679,23 @@ test("ACCEPTANCE: inbox.jh fixture builds successfully", () => {
         "",
         'script review_summary = `echo "[reviewed] $1"`',
         "",
-        "workflow researcher() {",
+        "def researcher() {",
         "  findings <- run emit_findings()",
         "}",
         "",
         'script write_findings_file = `echo "$1" > findings_file.md`',
         "",
-        "workflow analyst(message, chan, sender) {",
+        "def analyst(message, chan, sender) {",
         '  run write_findings_file(message)',
         '  const summary = run summarize_findings()',
         '  summary <- "${summary}"',
         "}",
         "",
-        "workflow reviewer(message, chan, sender) {",
+        "def reviewer(message, chan, sender) {",
         '  final_summary <- run review_summary(message)',
         "}",
         "",
-        "workflow default() {",
+        "export def main() {",
         "  run researcher()",
         "}",
         "",
@@ -714,20 +705,20 @@ test("ACCEPTANCE: inbox.jh fixture builds successfully", () => {
   });
 });
 
-// === ensure ... catch validation ===
+// === run ... catch validation ===
 
-test("ACCEPTANCE: ensure catch with args after catch fails with E_PARSE", () => {
+test("ACCEPTANCE: run catch with args after catch fails with E_PARSE", () => {
   withTempDir("jaiph-acc-catch-args-after-", (root) => {
     writeFileSync(
       join(root, "main.jh"),
       [
-        "rule ci_passes() {",
+        "def ci_passes() {",
         "  run ci_passes_impl()",
         "}",
         'script ci_passes_impl = `true`',
         "",
-        "workflow default() {",
-        '  ensure ci_passes() catch "$repo_dir" {',
+        "export def main() {",
+        '  run ci_passes() catch "$repo_dir" {',
         '    prompt "Apply the smallest safe fix."',
         "  }",
         "}",
@@ -741,17 +732,17 @@ test("ACCEPTANCE: ensure catch with args after catch fails with E_PARSE", () => 
   });
 });
 
-test("ACCEPTANCE: ensure catch with multiple args after catch fails with E_PARSE", () => {
+test("ACCEPTANCE: run catch with multiple args after catch fails with E_PARSE", () => {
   withTempDir("jaiph-acc-catch-multi-args-", (root) => {
     writeFileSync(
       join(root, "main.jh"),
       [
-        "rule some_rule() {",
+        "def some_rule() {",
         "  true",
         "}",
         "",
-        "workflow default() {",
-        '  ensure some_rule("a") catch "b" {',
+        "export def main() {",
+        '  run some_rule("a") catch "b" {',
         '    log "should not parse"',
         "  }",
         "}",
@@ -765,17 +756,17 @@ test("ACCEPTANCE: ensure catch with multiple args after catch fails with E_PARSE
   });
 });
 
-test("ACCEPTANCE: ensure catch without block fails with E_PARSE", () => {
+test("ACCEPTANCE: run catch without block fails with E_PARSE", () => {
   assert.throws(
     () =>
       parsejaiph(
         [
-          "rule ci_passes() {",
+          "def ci_passes() {",
           "  true",
           "}",
           "",
-          "workflow default() {",
-          '  ensure ci_passes("$repo_dir") catch',
+          "export def main() {",
+          '  run ci_passes("$repo_dir") catch',
           "}",
           "",
         ].join("\n"),
@@ -785,22 +776,58 @@ test("ACCEPTANCE: ensure catch without block fails with E_PARSE", () => {
   );
 });
 
-test("ACCEPTANCE: valid ensure catch block still works", () => {
+test("ACCEPTANCE: unexported def main is E_VALIDATE", () => {
+  withTempDir("jaiph-acc-unexported-main-", (root) => {
+    writeFileSync(
+      join(root, "main.jh"),
+      ["def main() {", '  log "hi"', "}", ""].join("\n"),
+    );
+    assert.throws(
+      () => buildScripts(root, join(root, "out")),
+      /main.*must be exported/,
+    );
+  });
+});
+
+test("ACCEPTANCE: script named main is E_VALIDATE", () => {
+  withTempDir("jaiph-acc-script-main-", (root) => {
+    writeFileSync(
+      join(root, "lib.jh"),
+      ["script main = `echo hi`", ""].join("\n"),
+    );
+    assert.throws(
+      () => buildScripts(join(root, "lib.jh"), join(root, "out")),
+      /reserved as the run entry/,
+    );
+  });
+});
+
+test("ACCEPTANCE: a library with no main compiles", () => {
+  withTempDir("jaiph-acc-lib-no-main-", (root) => {
+    writeFileSync(
+      join(root, "lib.jh"),
+      ["export def greet(name) {", '  return "hi ${name}"', "}", ""].join("\n"),
+    );
+    buildScripts(join(root, "lib.jh"), join(root, "out"));
+  });
+});
+
+test("ACCEPTANCE: valid run catch block still works", () => {
   withTempDir("jaiph-acc-catch-valid-", (root) => {
     writeFileSync(
       join(root, "main.jh"),
       [
-        "rule ci_passes(repo_dir) {",
+        "def ci_passes(repo_dir) {",
         "  run ci_passes_impl()",
         "}",
         'script ci_passes_impl = `true`',
         "",
-        "workflow fix_it() {",
+        "def fix_it() {",
         '  prompt "fix"',
         "}",
         "",
-        "workflow default() {",
-        '  ensure ci_passes("$repo_dir") catch (failure) {',
+        "export def main() {",
+        '  run ci_passes("$repo_dir") catch (failure) {',
         "    run fix_it()",
         "  }",
         "}",

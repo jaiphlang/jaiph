@@ -23,12 +23,12 @@ exit 1
 
 script save_string_to_file = `printf '%s' "$1" > "$2"`
 
-rule simple_echo_rule() {
+def simple_echo_rule() {
   run simple_echo()
 }
 
-workflow default() {
-  ensure simple_echo_rule() catch (failure) {
+export def main() {
+  run simple_echo_rule() catch (failure) {
     run save_string_to_file(failure, "recover_simple.txt")
   }
 }
@@ -57,17 +57,17 @@ exit 1
 
 script save_string_to_file = `printf '%s' "$1" > "$2"`
 
-rule inner() {
+def inner() {
   run failing_script()
 }
 
-rule outer() {
+def outer() {
   log "outer start"
-  ensure inner()
+  run inner()
 }
 
-workflow default() {
-  ensure outer() catch (failure) {
+export def main() {
+  run outer() catch (failure) {
     run save_string_to_file(failure, "recover_nested.log")
   }
 }
@@ -98,12 +98,12 @@ exit 1
 
 script save_string_to_file = `printf '%s' "$1" > "$2"`
 
-rule ci_passes() {
+def ci_passes() {
   run npm_run_test_ci()
 }
 
-workflow default() {
-  ensure ci_passes() catch (failure) {
+export def main() {
+  run ci_passes() catch (failure) {
     run save_string_to_file(failure, "ci_failure.log")
   }
 }
@@ -131,12 +131,12 @@ exit 1
 
 script save_string_to_file = `printf '%s' "$1" > "$2"`
 
-rule check_rule() {
+def check_rule() {
   run emit_attempt()
 }
 
-workflow default() {
-  ensure check_rule() catch (failure) {
+export def main() {
+  run check_rule() catch (failure) {
     run save_string_to_file(failure, "payload_single.txt")
   }
 }
@@ -160,12 +160,12 @@ script say_ok = `echo "all good"`
 
 script save_string_to_file = `printf '%s' "$1" > "$2"`
 
-rule passes_first_try() {
+def passes_first_try() {
   run say_ok()
 }
 
-workflow default() {
-  ensure passes_first_try() catch (failure) {
+export def main() {
+  run passes_first_try() catch (failure) {
     run save_string_to_file(failure, "false_payload.txt")
   }
 }

@@ -60,14 +60,14 @@ export function validateMatchExpr(
         const after = bodyTrimmed.slice(ident.length);
         const startsCall = after.startsWith("(");
         const startsArgs = /^\s+\S/.test(after);
-        if ((startsCall || startsArgs) && ident !== "fail" && ident !== "run" && ident !== "ensure") {
+        if ((startsCall || startsArgs) && ident !== "fail" && ident !== "run") {
           const hint = ident === "error" ? ` did you mean "fail"?` : "";
           diag.error(
             filePath,
             expr.loc.line,
             expr.loc.col,
             "E_VALIDATE",
-            `unknown match arm verb "${ident}"; allowed: fail "...", run ref(...), ensure ref(...).${hint}`,
+            `unknown match arm verb "${ident}"; allowed: fail "...", run ref(...).${hint}`,
           );
         }
         if (!startsCall && !startsArgs && after.trim() === "" && !knownVars.has(ident)) {

@@ -32,12 +32,12 @@ export const CHAIN_GENESIS = "0".repeat(64);
 
 /**
  * Terminal journal marker. A run that reached its end emits exactly one
- * `WORKFLOW_END` as the LAST line of `run_summary.jsonl` (see
+ * `RUN_END` as the LAST line of `run_summary.jsonl` (see
  * `NodeWorkflowRuntime.runRoot`). Boundary verification requires this line so a
  * completed journal whose tail was truncated — a shorter-but-internally-valid
  * chain — is rejected (finding L-3).
  */
-export const TERMINAL_EVENT_TYPE = "WORKFLOW_END";
+export const TERMINAL_EVENT_TYPE = "RUN_END";
 
 /** Journal basename inside a run directory. */
 const RUN_SUMMARY = "run_summary.jsonl";
@@ -145,14 +145,14 @@ function isKeyedRun(runDir: string, env: NodeJS.ProcessEnv = process.env): boole
  * verify: the very first `prev_hash` already fails to match the keyed genesis.
  *
  * With `opts.requireTerminal`, the journal must additionally END with the
- * `WORKFLOW_END` terminal marker (finding L-3). The chain alone commits only to
+ * `RUN_END` terminal marker (finding L-3). The chain alone commits only to
  * prefix integrity, not to length or terminality: deleting the last K lines of
  * a completed journal leaves a shorter chain that still links correctly and
  * would otherwise verify `ok:true`. Requiring the terminal marker — always the
  * last line a completed run emits — rejects any post-terminal tail truncation.
  * Boundary callers (`verifyRunJournal`) set this because a persisted key is only
  * written once the run is terminal, so a keyed journal is always expected to end
- * with `WORKFLOW_END`.
+ * with `RUN_END`.
  */
 export function verifyRunSummaryChain(
   filePath: string,
@@ -218,7 +218,7 @@ export function verifyRunJournal(runDir: string, env: NodeJS.ProcessEnv = proces
     return { verified: true, ok: false, error: "audit chain key missing (fail closed)" };
   }
   // A keyed run is persisted only once terminal, so its journal must end with
-  // the WORKFLOW_END marker: reject a completed journal whose tail was truncated
+  // the RUN_END marker: reject a completed journal whose tail was truncated
   // to a shorter-but-valid chain (finding L-3).
   const res = verifyRunSummaryChain(join(runDir, RUN_SUMMARY), key, { requireTerminal: true });
   return { verified: true, ok: res.ok, error: res.error };

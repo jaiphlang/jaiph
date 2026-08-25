@@ -12,7 +12,7 @@ TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 e2e::section "logwarn run artifacts and tree event"
 
 e2e::file "logwarn.jh" <<'EOF'
-workflow default() {
+export def main() {
   logwarn "artifact-warn"
 }
 EOF

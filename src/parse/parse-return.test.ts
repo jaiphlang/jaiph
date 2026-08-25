@@ -4,10 +4,10 @@ import { parsejaiph } from "../parser";
 
 test("return run parses Expr.call", () => {
   const mod = parsejaiph(
-    `workflow default() {\n  return run helper()\n}`,
+    `export def main() {\n  return run helper()\n}`,
     "test.jh",
   );
-  const step = mod.workflows[0].steps[0];
+  const step = mod.defs[0].steps[0];
   assert.equal(step.type, "return");
   if (step.type === "return") {
     assert.equal(step.value.kind, "call");
@@ -20,10 +20,10 @@ test("return run parses Expr.call", () => {
 
 test("return run parses Expr.call with args", () => {
   const mod = parsejaiph(
-    `workflow default() {\n  return run helper("a", "b")\n}`,
+    `export def main() {\n  return run helper("a", "b")\n}`,
     "test.jh",
   );
-  const step = mod.workflows[0].steps[0];
+  const step = mod.defs[0].steps[0];
   assert.equal(step.type, "return");
   if (step.type === "return" && step.value.kind === "call") {
     assert.equal(step.value.callee.value, "helper");
@@ -36,75 +36,75 @@ test("return run parses Expr.call with args", () => {
 
 test("return run parses dotted ref", () => {
   const mod = parsejaiph(
-    `workflow default() {\n  return run lib.helper()\n}`,
+    `export def main() {\n  return run lib.helper()\n}`,
     "test.jh",
   );
-  const step = mod.workflows[0].steps[0];
+  const step = mod.defs[0].steps[0];
   assert.equal(step.type, "return");
   if (step.type === "return" && step.value.kind === "call") {
     assert.equal(step.value.callee.value, "lib.helper");
   }
 });
 
-test("return ensure parses Expr.ensure_call", () => {
+test("return run parses Expr.call", () => {
   const mod = parsejaiph(
-    `workflow default() {\n  return ensure check()\n}`,
+    `export def main() {\n  return run check()\n}`,
     "test.jh",
   );
-  const step = mod.workflows[0].steps[0];
+  const step = mod.defs[0].steps[0];
   assert.equal(step.type, "return");
   if (step.type === "return") {
-    assert.equal(step.value.kind, "ensure_call");
-    if (step.value.kind === "ensure_call") {
+    assert.equal(step.value.kind, "call");
+    if (step.value.kind === "call") {
       assert.equal(step.value.callee.value, "check");
       assert.equal(step.value.args, undefined);
     }
   }
 });
 
-test("return ensure parses Expr.ensure_call with args", () => {
+test("return run parses Expr.call with args", () => {
   const mod = parsejaiph(
-    `workflow default() {\n  return ensure check("x")\n}`,
+    `export def main() {\n  return run check("x")\n}`,
     "test.jh",
   );
-  const step = mod.workflows[0].steps[0];
+  const step = mod.defs[0].steps[0];
   assert.equal(step.type, "return");
-  if (step.type === "return" && step.value.kind === "ensure_call") {
+  if (step.type === "return" && step.value.kind === "call") {
     assert.deepEqual(step.value.args, [{ kind: "literal", raw: '"x"' }]);
   }
 });
 
 test("return run in rule parses Expr.call", () => {
   const mod = parsejaiph(
-    `script helper = \`echo "ok"\`\nrule my_rule() {\n  return run helper()\n}`,
+    `script helper = \`echo "ok"\`\ndef my_rule() {\n  return run helper()\n}`,
     "test.jh",
   );
-  const step = mod.rules[0].steps[0];
+  const step = mod.defs[0].steps[0];
   assert.equal(step.type, "return");
   if (step.type === "return" && step.value.kind === "call") {
     assert.equal(step.value.callee.value, "helper");
   }
 });
 
-test("return ensure in rule parses Expr.ensure_call", () => {
+test("return run in rule parses Expr.call", () => {
   const mod = parsejaiph(
-    `rule sub_rule() {\n  return "ok"\n}\nrule my_rule() {\n  return ensure sub_rule()\n}`,
+    `def sub_rule() {\n  return "ok"\n}\ndef my_rule() {\n  return run sub_rule()\n}`,
     "test.jh",
   );
-  const myRule = mod.rules.find(r => r.name === "my_rule")!;
+  const myRule = mod.defs.find(r => r.name === "my_rule")!;
   const retStep = myRule.steps[0];
   assert.equal(retStep.type, "return");
-  if (retStep.type === "return" && retStep.value.kind === "ensure_call") {
+  if (retStep.type === "return" && retStep.value.kind === "call") {
     assert.equal(retStep.value.callee.value, "sub_rule");
   }
 });
 
 test("return with string value is Expr.literal", () => {
   const mod = parsejaiph(
-    `workflow default() {\n  return "hello"\n}`,
+    `export def main() {\n  return "hello"\n}`,
     "test.jh",
   );
-  const step = mod.workflows[0].steps[0];
+  const step = mod.defs[0].steps[0];
   assert.equal(step.type, "return");
   if (step.type === "return") {
     assert.equal(step.value.kind, "literal");
@@ -116,10 +116,10 @@ test("return with string value is Expr.literal", () => {
 
 test("bare return is Expr.literal with empty string", () => {
   const mod = parsejaiph(
-    `workflow default() {\n  return\n}`,
+    `export def main() {\n  return\n}`,
     "test.jh",
   );
-  const step = mod.workflows[0].steps[0];
+  const step = mod.defs[0].steps[0];
   assert.equal(step.type, "return");
   if (step.type === "return") {
     assert.equal(step.value.kind, "literal");
@@ -131,10 +131,10 @@ test("bare return is Expr.literal with empty string", () => {
 
 test("return run inline script parses Expr.inline_script", () => {
   const mod = parsejaiph(
-    "workflow default() {\n  return run `cat report.txt`()\n}",
+    "export def main() {\n  return run `cat report.txt`()\n}",
     "test.jh",
   );
-  const step = mod.workflows[0].steps[0];
+  const step = mod.defs[0].steps[0];
   assert.equal(step.type, "return");
   if (step.type === "return" && step.value.kind === "inline_script") {
     assert.equal(step.value.body, "cat report.txt");
@@ -146,10 +146,10 @@ test("return run inline script parses Expr.inline_script", () => {
 
 test("return run inline script with args", () => {
   const mod = parsejaiph(
-    'workflow default() {\n  return run `echo $1`("x")\n}',
+    'export def main() {\n  return run `echo $1`("x")\n}',
     "test.jh",
   );
-  const step = mod.workflows[0].steps[0];
+  const step = mod.defs[0].steps[0];
   assert.equal(step.type, "return");
   if (step.type === "return" && step.value.kind === "inline_script") {
     assert.equal(step.value.body, "echo $1");
@@ -159,17 +159,17 @@ test("return run inline script with args", () => {
 
 test("return bare inline script is rejected", () => {
   assert.throws(
-    () => parsejaiph("workflow default() {\n  return `cat report.txt`()\n}", "test.jh"),
+    () => parsejaiph("export def main() {\n  return `cat report.txt`()\n}", "test.jh"),
     /bare inline scripts in return are not allowed/,
   );
 });
 
 test("log run inline script parses say with inline_script message", () => {
   const mod = parsejaiph(
-    "workflow default() {\n  log run `cat report.txt`()\n}",
+    "export def main() {\n  log run `cat report.txt`()\n}",
     "test.jh",
   );
-  const step = mod.workflows[0].steps[0];
+  const step = mod.defs[0].steps[0];
   assert.equal(step.type, "say");
   if (step.type === "say") {
     assert.equal(step.level, "log");
@@ -183,10 +183,10 @@ test("log run inline script parses say with inline_script message", () => {
 
 test("log run inline script with args", () => {
   const mod = parsejaiph(
-    'workflow default() {\n  log run `echo $1`("x")\n}',
+    'export def main() {\n  log run `echo $1`("x")\n}',
     "test.jh",
   );
-  const step = mod.workflows[0].steps[0];
+  const step = mod.defs[0].steps[0];
   assert.equal(step.type, "say");
   if (step.type === "say" && step.message.kind === "inline_script") {
     assert.equal(step.message.body, "echo $1");
@@ -196,24 +196,24 @@ test("log run inline script with args", () => {
 
 test("log bare inline script is rejected", () => {
   assert.throws(
-    () => parsejaiph("workflow default() {\n  log `cat report.txt`()\n}", "test.jh"),
+    () => parsejaiph("export def main() {\n  log `cat report.txt`()\n}", "test.jh"),
     /bare inline scripts in log are not allowed/,
   );
 });
 
 test("logerr bare inline script is rejected", () => {
   assert.throws(
-    () => parsejaiph("workflow default() {\n  logerr `cat report.txt`()\n}", "test.jh"),
+    () => parsejaiph("export def main() {\n  logerr `cat report.txt`()\n}", "test.jh"),
     /bare inline scripts in logerr are not allowed/,
   );
 });
 
 test("return bare identifier is sugar for interpolated literal", () => {
   const mod = parsejaiph(
-    `workflow default() {\n  const response = "hello"\n  return response\n}`,
+    `export def main() {\n  const response = "hello"\n  return response\n}`,
     "test.jh",
   );
-  const step = mod.workflows[0].steps[1];
+  const step = mod.defs[0].steps[1];
   assert.equal(step.type, "return");
   if (step.type === "return" && step.value.kind === "literal") {
     assert.equal(step.value.raw, '"${response}"');
@@ -223,7 +223,7 @@ test("return bare identifier is sugar for interpolated literal", () => {
 test("return bare identifier in brace block (if body)", () => {
   const mod = parsejaiph(
     [
-      "workflow default(name) {",
+      "export def main(name) {",
       '  const msg = "hi"',
       '  if name == "x" {',
       "    return msg",
@@ -232,7 +232,7 @@ test("return bare identifier in brace block (if body)", () => {
     ].join("\n"),
     "test.jh",
   );
-  const ifStep = mod.workflows[0].steps[1];
+  const ifStep = mod.defs[0].steps[1];
   assert.equal(ifStep.type, "if");
   if (ifStep.type === "if") {
     const retStep = ifStep.body[0];
@@ -246,20 +246,21 @@ test("return bare identifier in brace block (if body)", () => {
 test("return bare identifier in catch/recover block", () => {
   const mod = parsejaiph(
     [
-      "rule check() {",
+      "def check() {",
       '  return "yes"',
       "}",
-      "workflow default() {",
-      "  ensure check() catch (err) {",
+      "export def main() {",
+      "  run check() catch (err) {",
       "    return err",
       "  }",
       "}",
     ].join("\n"),
     "test.jh",
   );
-  const ensureStep = mod.workflows[0].steps[0];
+  const main = mod.defs.find((w) => w.name === "main")!;
+  const ensureStep = main.steps[0];
   assert.equal(ensureStep.type, "exec");
-  if (ensureStep.type === "exec" && ensureStep.body.kind === "ensure_call") {
+  if (ensureStep.type === "exec" && ensureStep.body.kind === "call") {
     assert.ok(ensureStep.catch);
     const recoverSteps = "block" in ensureStep.catch! ? ensureStep.catch!.block : [ensureStep.catch!.single];
     const retStep = recoverSteps[0];
@@ -270,24 +271,25 @@ test("return bare identifier in catch/recover block", () => {
   }
 });
 
-test("return run in ensure recover block", () => {
+test("return run in run recover block", () => {
   const mod = parsejaiph(
     [
       'script helper = `echo "ok"`',
-      "rule check() {",
+      "def check() {",
       '  return "yes"',
       "}",
-      "workflow default() {",
-      "  ensure check() catch (err) {",
+      "export def main() {",
+      "  run check() catch (err) {",
       "    return run helper()",
       "  }",
       "}",
     ].join("\n"),
     "test.jh",
   );
-  const ensureStep = mod.workflows[0].steps[0];
+  const main = mod.defs.find((w) => w.name === "main")!;
+  const ensureStep = main.steps[0];
   assert.equal(ensureStep.type, "exec");
-  if (ensureStep.type === "exec" && ensureStep.body.kind === "ensure_call") {
+  if (ensureStep.type === "exec" && ensureStep.body.kind === "call") {
     assert.ok(ensureStep.catch);
     const recoverSteps = "block" in ensureStep.catch! ? ensureStep.catch!.block : [ensureStep.catch!.single];
     const retStep = recoverSteps[0];

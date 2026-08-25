@@ -1,13 +1,9 @@
 {
   "channels": [],
-  "exports": [],
-  "imports": [],
-  "rules": [],
-  "scripts": [],
-  "workflows": [
+  "defs": [
     {
       "comments": [],
-      "name": "default",
+      "name": "main",
       "params": [],
       "steps": [
         {
@@ -51,5 +47,10 @@
         }
       ]
     }
-  ]
+  ],
+  "exports": [
+    "main"
+  ],
+  "imports": [],
+  "scripts": []
 }

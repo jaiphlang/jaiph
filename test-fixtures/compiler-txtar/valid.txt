@@ -1,28 +1,28 @@
 === minimal workflow
 # @expect ok
 --- input.jh
-workflow default() {
+export def main() {
   log "hello"
 }
 
 === workflow with rule and script
 # @expect ok
 --- input.jh
-rule check() {
+def check() {
   run checker()
 }
 
 script checker = `echo ok`
 
-workflow default() {
-  ensure check()
+export def main() {
+  run check()
   log "done"
 }
 
 === workflow with const
 # @expect ok
 --- input.jh
-workflow default() {
+export def main() {
   const msg = "hello"
   log "${msg}"
 }
@@ -30,7 +30,7 @@ workflow default() {
 === workflow with fail
 # @expect ok
 --- input.jh
-workflow default() {
+export def main() {
   fail "something broke"
 }
 
@@ -41,7 +41,7 @@ config {
   agent.backend = "codex"
 }
 
-workflow default() {
+export def main() {
   log "configured"
 }
 
@@ -50,11 +50,11 @@ workflow default() {
 --- main.jh
 import "lib.jh" as lib
 
-workflow default() {
-  ensure lib.check()
+export def main() {
+  run lib.check()
 }
 --- lib.jh
-rule check() {
+export def check() {
   run check_impl()
 }
 
@@ -65,32 +65,32 @@ script check_impl = `true`
 --- input.jh
 script noop = `:`
 
-workflow default() {
+export def main() {
   run async noop()
 }
 
 === multiple workflows
 # @expect ok
 --- input.jh
-workflow default() {
+export def main() {
   log "main"
 }
 
-workflow helper() {
+def helper() {
   log "helper"
 }
 
 === inline script
 # @expect ok
 --- input.jh
-workflow default() {
+export def main() {
   run `echo hello`()
 }
 
 === rule with empty braced body
 # @expect ok
 --- input.jh
-rule check() {
+def check() {
 }
 
 === script with empty braced body
@@ -101,25 +101,25 @@ script noop = ``
 === workflow with empty braced body
 # @expect ok
 --- input.jh
-workflow default() {
+export def main() {
 }
 
-=== export workflow with empty braced body
+=== export def with empty braced body
 # @expect ok
 --- input.jh
-export workflow main() {
+export def main() {
 }
 
-=== export rule with empty braced body
+=== export def with empty braced body
 # @expect ok
 --- input.jh
-export rule check() {
+export def check() {
 }
 
 === workflow config inside workflow
 # @expect ok
 --- input.jh
-workflow default() {
+export def main() {
   config {
     agent.backend = "claude"
   }
@@ -129,7 +129,7 @@ workflow default() {
 === workflow config with comment before config
 # @expect ok
 --- input.jh
-workflow default() {
+export def main() {
   # a comment
   config {
     agent.model = "gpt-4"
@@ -143,13 +143,13 @@ workflow default() {
 config {
   agent.backend = "cursor"
 }
-workflow a() {
+def a() {
   config {
     agent.backend = "claude"
   }
   log "a"
 }
-workflow b() {
+def b() {
   log "b"
 }
 
@@ -190,20 +190,20 @@ print('hi')
 === return run in workflow
 # @expect ok
 --- input.jh
-workflow helper() {
+def helper() {
   log "ok"
 }
-workflow default() {
+export def main() {
   return run helper()
 }
 
 === return run with args
 # @expect ok
 --- input.jh
-workflow helper(a, b) {
+def helper(a, b) {
   log "ok"
 }
-workflow default() {
+export def main() {
   return run helper("a", "b")
 }
 
@@ -211,83 +211,83 @@ workflow default() {
 # @expect ok
 --- main.jh
 import "lib.jh" as lib
-workflow default() {
+export def main() {
   return run lib.helper()
 }
 --- lib.jh
-export workflow helper() {
+export def helper() {
   log "ok"
 }
 
-=== return ensure in workflow
+=== return run in workflow
 # @expect ok
 --- input.jh
-rule check() {
+def check() {
   return "ok"
 }
-workflow default() {
-  return ensure check()
+export def main() {
+  return run check()
 }
 
-=== return ensure with args
+=== return run with args
 # @expect ok
 --- input.jh
-rule check(x) {
+def check(x) {
   return "ok"
 }
-workflow default() {
-  return ensure check("x")
+export def main() {
+  return run check("x")
 }
 
 === return run in rule
 # @expect ok
 --- input.jh
 script helper = `echo "ok"`
-rule my_rule() {
+def my_rule() {
   return run helper()
 }
 
-=== return ensure in rule
+=== return run in rule
 # @expect ok
 --- input.jh
-rule sub_rule() {
+def sub_rule() {
   return "ok"
 }
-rule my_rule() {
-  return ensure sub_rule()
+def my_rule() {
+  return run sub_rule()
 }
 
 === return with string value
 # @expect ok
 --- input.jh
-workflow default() {
+export def main() {
   return "hello"
 }
 
 === bare return
 # @expect ok
 --- input.jh
-workflow default() {
+export def main() {
   return
 }
 
 === run async in workflow
 # @expect ok
 --- input.jh
-workflow some_wf() {
+def some_wf() {
   log "ok"
 }
-workflow default() {
+export def main() {
   run async some_wf()
 }
 
 === run async with args
 # @expect ok
 --- input.jh
-workflow other_wf(a, b) {
+def other_wf(a, b) {
   log "ok"
 }
-workflow default() {
+export def main() {
   run async other_wf("hello", "$x")
 }
 
@@ -295,64 +295,64 @@ workflow default() {
 # @expect ok
 --- main.jh
 import "mod.jh" as mod
-workflow default() {
+export def main() {
   run async mod.some_wf()
 }
 --- mod.jh
-export workflow some_wf() {
+export def some_wf() {
   log "ok"
 }
 
 === regular run without async
 # @expect ok
 --- input.jh
-workflow some_wf() {
+def some_wf() {
   log "ok"
 }
-workflow default() {
+export def main() {
   run some_wf()
 }
 
 === inline script with args
 # @expect ok
 --- input.jh
-workflow default() {
+export def main() {
   run `echo $1`("arg1", "arg2")
 }
 
 === inline script with capture form
 # @expect ok
 --- input.jh
-workflow default() {
+export def main() {
   const x = run `echo hello`()
 }
 
 === inline script const capture form
 # @expect ok
 --- input.jh
-workflow default() {
+export def main() {
   const x = run `echo hello`()
 }
 
 === inline script with shebang
 # @expect ok
 --- input.jh
-workflow default() {
+export def main() {
   run ```python3
 print('hello')
 ```()
 }
 
-=== assignment capture parses for ensure and const run
+=== assignment capture parses for run and const run
 # @expect ok
 --- input.jh
 script say_hello = `echo hello`
 
-rule tests_pass() {
+def tests_pass() {
   return "ok"
 }
-workflow default() {
-  const response = ensure tests_pass()
+export def main() {
+  const response = run tests_pass()
   const out = run say_hello()
 }
 
@@ -363,7 +363,7 @@ config {
   agent.model = "gpt-4"
   run.logs_dir = ".jaiph/runs"
 }
-workflow default() {
+export def main() {
   log "ok"
 }
 
@@ -373,7 +373,7 @@ workflow default() {
 config {
   agent.backend = "cursor"
 }
-workflow default() {
+export def main() {
   log "ok"
 }
 
@@ -383,7 +383,7 @@ workflow default() {
 config {
   agent.backend = "claude"
 }
-workflow default() {
+export def main() {
   log "ok"
 }
 
@@ -393,7 +393,7 @@ workflow default() {
 config {
   agent.trusted_workspace = ".jaiph/.."
 }
-workflow default() {
+export def main() {
   log "ok"
 }
 
@@ -404,7 +404,7 @@ config {
   agent.cursor_flags = "--force --sandbox enabled"
   agent.claude_flags = "--model sonnet-4"
 }
-workflow default() {
+export def main() {
   log "ok"
 }
 
@@ -414,14 +414,14 @@ workflow default() {
 config {
   run.recover_limit = 3
 }
-workflow default() {
+export def main() {
   log "ok"
 }
 
 === fail step parses quoted message
 # @expect ok
 --- input.jh
-workflow default() {
+export def main() {
   fail "expected reason"
 }
 
@@ -429,7 +429,7 @@ workflow default() {
 # @expect ok
 --- input.jh
 script noop = `:`
-workflow default() {
+export def main() {
   const msg = "hi"
   const out = run noop()
 }
@@ -438,14 +438,14 @@ workflow default() {
 # @expect ok
 --- input.jh
 script some_script = `echo "$1"`
-workflow default(arg1) {
+export def main(arg1) {
   const x = run some_script(arg1)
 }
 
 === const prompt capture
 # @expect ok
 --- input.jh
-workflow default() {
+export def main() {
   const ans = prompt "type here"
 }
 
@@ -453,7 +453,7 @@ workflow default() {
 # @expect ok
 --- input.jh
 channel findings
-workflow default() {
+export def main() {
   findings <- "hello"
 }
 
@@ -462,17 +462,17 @@ workflow default() {
 --- input.jh
 channel findings
 channel report -> analyst
-workflow analyst(message, chan, sender) {
+def analyst(message, chan, sender) {
   log "ok"
 }
-workflow default() {
+export def main() {
   findings <- "hi"
 }
 
 === arrow inside quotes is not a send
 # @expect ok
 --- input.jh
-workflow default() {
+export def main() {
   log "a <- b"
 }
 
@@ -480,10 +480,10 @@ workflow default() {
 # @expect ok
 --- input.jh
 channel findings -> analyst
-workflow analyst(message, chan, sender) {
+def analyst(message, chan, sender) {
   log "ok"
 }
-workflow default() {
+export def main() {
   log "ok"
 }
 
@@ -491,13 +491,13 @@ workflow default() {
 # @expect ok
 --- input.jh
 channel findings -> a, b
-workflow a(message, chan, sender) {
+def a(message, chan, sender) {
   log "ok"
 }
-workflow b(message, chan, sender) {
+def b(message, chan, sender) {
   log "ok"
 }
-workflow default() {
+export def main() {
   log "ok"
 }
 
@@ -505,7 +505,7 @@ workflow default() {
 # @expect ok
 --- input.jh
 const greeting = "hello world"
-workflow default() {
+export def main() {
   log "${greeting}"
 }
 
@@ -517,7 +517,7 @@ You are an expert.
     1. You write clearly
     2. You are concise
 """
-workflow default() {
+export def main() {
   log "${role}"
 }
 
@@ -525,7 +525,7 @@ workflow default() {
 # @expect ok
 --- input.jh
 const count = 42
-workflow default() {
+export def main() {
   log "${count}"
 }
 
@@ -534,12 +534,12 @@ workflow default() {
 --- input.jh
 script f_ok = `echo ok`
 
-rule ok() {
+def ok() {
   run f_ok()
 }
 
-workflow default() {
-  ensure ok()
+export def main() {
+  run ok()
   log "done"
 }
 
@@ -550,7 +550,7 @@ script helper = `echo ok`
 
 script caller = `helper`
 
-workflow default() {
+export def main() {
   run caller()
 }
 
@@ -559,7 +559,7 @@ workflow default() {
 --- input.jh
 script recurse = `recurse`
 
-workflow default() {
+export def main() {
   run recurse()
 }
 
@@ -570,7 +570,7 @@ const greeting = "hello world"
 
 script helper = `echo $greeting`
 
-workflow default() {
+export def main() {
   run helper()
 }
 
@@ -582,14 +582,14 @@ local x="a
 b"
 ```
 
-workflow default() {
+export def main() {
   run multiline_str()
 }
 
 === prompt with returns schema single-line
 # @expect ok
 --- input.jh
-workflow default() {
+export def main() {
   const result = prompt "Analyse" returns "{ type: string, risk: string }"
   return "${result}"
 }
@@ -597,39 +597,39 @@ workflow default() {
 === prompt with returns schema multiline continuation
 # @expect ok
 --- input.jh
-workflow default() {
+export def main() {
   const result = prompt "Analyse" \
     returns "{ type: string, risk: string }"
 }
 
-=== valid ensure catch block
+=== valid run catch block
 # @expect ok
 --- input.jh
-rule ci_passes(repo_dir) {
+def ci_passes(repo_dir) {
   run ci_passes_impl()
 }
 script ci_passes_impl = `true`
 
-workflow fix_it() {
+def fix_it() {
   prompt "fix"
 }
 
-workflow default() {
-  ensure ci_passes("$repo_dir") catch (failure) {
+export def main() {
+  run ci_passes("$repo_dir") catch (failure) {
     run fix_it()
   }
 }
 
-=== ensure catch multiline triple-quoted prompt and hash comment
+=== run catch multiline triple-quoted prompt and hash comment
 # @expect ok
 --- input.jh
-rule gate() {
+def gate() {
   run noop()
 }
 script noop = `true`
 
-workflow default() {
-  ensure gate() catch (err) {
+export def main() {
+  run gate() catch (err) {
     prompt """
       fix the build
     """
@@ -638,40 +638,40 @@ workflow default() {
   }
 }
 
-=== ensure catch in rules is valid
+=== run catch in rules is valid
 # @expect ok
 --- input.jh
-rule sub_rule() {
+def sub_rule() {
   return "ok"
 }
 script fallback_impl = `echo "fallback"`
-rule check() {
-  ensure sub_rule() catch (err) {
+def check() {
+  run sub_rule() catch (err) {
     run fallback_impl()
   }
 }
-workflow default() {
-  ensure check()
+export def main() {
+  run check()
 }
 
 === valid ${name} interpolation in log
 # @expect ok
 --- input.jh
-workflow default(name) {
+export def main(name) {
   log "hello ${name}"
 }
 
 === valid ${arg1} positional in log
 # @expect ok
 --- input.jh
-workflow default(arg1) {
+export def main(arg1) {
   log "arg is ${arg1}"
 }
 
 === valid escaped backtick in prompt
 # @expect ok
 --- input.jh
-workflow default() {
+export def main() {
   const _ = prompt "escaped backtick: \`cmd\`"
 }
 
@@ -679,7 +679,7 @@ workflow default() {
 # @expect ok
 --- input.jh
 script greet = `echo "Hello $1"`
-workflow default() {
+export def main() {
   run greet("world")
 }
 
@@ -687,25 +687,25 @@ workflow default() {
 # @expect ok
 --- input.jh
 script greet = `echo "hello"`
-workflow default() {
+export def main() {
   log "got: ${run greet()}"
 }
 
-=== valid inline ensure capture in log
+=== valid inline run capture in log
 # @expect ok
 --- input.jh
-rule check() {
+def check() {
   return "ok"
 }
-workflow default() {
-  log "status: ${ensure check()}"
+export def main() {
+  log "status: ${run check()}"
 }
 
 === valid inline run capture with args
 # @expect ok
 --- input.jh
 script greet = `echo "hello $1"`
-workflow default() {
+export def main() {
   log "got: ${run greet(world)}"
 }
 
@@ -713,10 +713,10 @@ workflow default() {
 # @expect ok
 --- input.jh
 script greet = `echo "hello"`
-workflow helper() {
+def helper() {
   return "${run greet()}"
 }
-workflow default() {
+export def main() {
   run helper()
 }
 
@@ -724,17 +724,17 @@ workflow default() {
 # @expect ok
 --- input.jh
 script greet = `echo "hello"`
-rule check() {
+def check() {
   log "got: ${run greet()}"
 }
-workflow default() {
-  ensure check()
+export def main() {
+  run check()
 }
 
 === valid dot field ref in log compiles
 # @expect ok
 --- input.jh
-workflow default() {
+export def main() {
   const result = prompt "Analyse" returns "{ type: string, risk: string }"
   log "type is ${result.type}"
 }
@@ -743,7 +743,7 @@ workflow default() {
 # @expect ok
 --- input.jh
 script f = `printf '%s' 'ok'`
-workflow default() {
+export def main() {
   const x = run f()
   return "${x}"
 }
@@ -752,7 +752,7 @@ workflow default() {
 # @expect ok
 --- input.jh
 script greet = `echo "hello $1"`
-workflow default() {
+export def main() {
   const name = "world"
   run greet(name)
 }
@@ -762,7 +762,7 @@ workflow default() {
 --- input.jh
 script get_name = `echo "world"`
 script greet = `echo "hello $1"`
-workflow default() {
+export def main() {
   const result = run get_name()
   run greet(result)
 }
@@ -771,7 +771,7 @@ workflow default() {
 # @expect ok
 --- input.jh
 script greet = `echo "hello $1"`
-workflow default(arg1) {
+export def main(arg1) {
   run greet(arg1)
 }
 
@@ -780,34 +780,34 @@ workflow default(arg1) {
 --- input.jh
 const REPO = "my-project"
 script greet = `echo "hello $1"`
-workflow default() {
+export def main() {
   run greet(REPO)
 }
 
 === run async is accepted in workflows
 # @expect ok
 --- input.jh
-workflow helper() {
+def helper() {
   log "hi"
 }
-workflow default() {
+export def main() {
   run async helper()
 }
 
 === logerr step in workflow
 # @expect ok
 --- input.jh
-workflow default() {
+export def main() {
   logerr "something went wrong"
 }
 
 === workflow calling another workflow via run
 # @expect ok
 --- input.jh
-workflow helper() {
+def helper() {
   log "helping"
 }
-workflow default() {
+export def main() {
   run helper()
 }
 
@@ -816,25 +816,25 @@ workflow default() {
 --- input.jh
 script check_a = `true`
 script check_b = `true`
-rule validate() {
+def validate() {
   run check_a()
   run check_b()
 }
-workflow default() {
-  ensure validate()
+export def main() {
+  run validate()
 }
 
 === prompt step in workflow
 # @expect ok
 --- input.jh
-workflow default() {
+export def main() {
   const _ = prompt "What should I do?"
 }
 
 === prompt with capture variable
 # @expect ok
 --- input.jh
-workflow default() {
+export def main() {
   const answer = prompt "Tell me something"
   log "${answer}"
 }
@@ -852,30 +852,30 @@ script summarize_findings = `echo "Summary of findings"`
 
 script review_summary = `echo "[reviewed] $1"`
 
-workflow researcher() {
+def researcher() {
   findings <- run emit_findings()
 }
 
 script write_findings_file = `echo "$1" > findings_file.md`
 
-workflow analyst(message, chan, sender) {
+def analyst(message, chan, sender) {
   run write_findings_file(message)
   const summary = run summarize_findings()
   summary <- "${summary}"
 }
 
-workflow reviewer(message, chan, sender) {
+def reviewer(message, chan, sender) {
   final_summary <- run review_summary(message)
 }
 
-workflow default() {
+export def main() {
   run researcher()
 }
 
 === prompt with identifier body
 # @expect ok
 --- input.jh
-workflow default() {
+export def main() {
   const text = "Hello world"
   const _ = prompt text
 }
@@ -883,7 +883,7 @@ workflow default() {
 === prompt with identifier body and returns
 # @expect ok
 --- input.jh
-workflow default() {
+export def main() {
   const text = "Analyse this"
   const result = prompt text returns "{ type: string }"
   return "${result}"
@@ -892,7 +892,7 @@ workflow default() {
 === const prompt capture with identifier body
 # @expect ok
 --- input.jh
-workflow default() {
+export def main() {
   const text = "Hello world"
   const ans = prompt text
 }
@@ -900,7 +900,7 @@ workflow default() {
 === prompt with triple-quoted block body
 # @expect ok
 --- input.jh
-workflow default() {
+export def main() {
   const _ = prompt """
 You are a helpful assistant.
 Analyze the following.
@@ -910,7 +910,7 @@ Analyze the following.
 === const prompt capture with triple-quoted block
 # @expect ok
 --- input.jh
-workflow default() {
+export def main() {
   const ans = prompt """
 Analyze this input.
 """
@@ -919,7 +919,7 @@ Analyze this input.
 === prompt with triple-quoted block and interpolation
 # @expect ok
 --- input.jh
-workflow default() {
+export def main() {
   const input = "data"
   const _ = prompt """
 You are a helpful assistant.
@@ -930,13 +930,13 @@ Analyze: ${input}
 === valid run catch block in workflow
 # @expect ok
 --- input.jh
-workflow helper() {
+def helper() {
   log "ok"
 }
-workflow fallback() {
+def fallback() {
   log "fallback"
 }
-workflow default() {
+export def main() {
   run helper() catch (failure) {
     run fallback()
   }
@@ -945,7 +945,7 @@ workflow default() {
 === prompt triple-quoted block with returns clause
 # @expect ok
 --- input.jh
-workflow default() {
+export def main() {
   const result = prompt """
 Analyze this input.
 """ returns "{ type: string }"
@@ -955,17 +955,17 @@ Analyze this input.
 === buildRunTreeRows with custom root label
 # @expect ok
 --- input.jh
-workflow my_custom() {
+def my_custom() {
   log "testing custom root"
 }
-workflow default() {
+export def main() {
   run my_custom()
 }
 
 === workflow with logerr step
 # @expect ok
 --- input.jh
-workflow default() {
+export def main() {
   log "info message"
   logerr "error message"
 }
@@ -973,43 +973,43 @@ workflow default() {
 === run catch with log and fail in block
 # @expect ok
 --- input.jh
-workflow helper() {
+def helper() {
   log "ok"
 }
-workflow default() {
+export def main() {
   run helper() catch (err) {
     log "recovery: ${err}"
     fail "unrecoverable"
   }
 }
 
-=== inline ensure catch with single log statement
+=== inline run catch with single log statement
 # @expect ok
 --- input.jh
-rule check() {
+def check() {
   return "ok"
 }
-workflow default() {
-  ensure check() catch (err) log "recovered: ${err}"
+export def main() {
+  run check() catch (err) log "recovered: ${err}"
 }
 
-=== inline ensure catch with single fail statement
+=== inline run catch with single fail statement
 # @expect ok
 --- input.jh
-rule check() {
+def check() {
   return "ok"
 }
-workflow default() {
-  ensure check() catch (err) fail "unrecoverable: ${err}"
+export def main() {
+  run check() catch (err) fail "unrecoverable: ${err}"
 }
 
 === catch block with return string statement
 # @expect ok
 --- input.jh
-workflow helper() {
+def helper() {
   log "ok"
 }
-workflow default() {
+export def main() {
   run helper() catch (err) {
     return "fallback"
   }
@@ -1018,13 +1018,13 @@ workflow default() {
 === catch block with return run statement
 # @expect ok
 --- input.jh
-workflow helper() {
+def helper() {
   log "ok"
 }
-workflow fallback() {
+def fallback() {
   return "ok"
 }
-workflow default() {
+export def main() {
   run helper() catch (err) {
     return run fallback()
   }
@@ -1034,10 +1034,10 @@ workflow default() {
 # @expect ok
 --- input.jh
 script get_fix = `echo "fix applied"`
-workflow helper() {
+def helper() {
   log "ok"
 }
-workflow default() {
+export def main() {
   run helper() catch (err) {
     const fix = run get_fix()
     log "applied: ${fix}"
@@ -1048,51 +1048,51 @@ workflow default() {
 # @expect ok
 --- input.jh
 export script helper = `echo ok`
-workflow default() {
+export def main() {
   run helper()
 }
 
 === inline run catch with single log statement
 # @expect ok
 --- input.jh
-workflow helper() {
+def helper() {
   log "ok"
 }
-workflow default() {
+export def main() {
   run helper() catch (err) log "recovered: ${err}"
 }
 
 === catch block with bare return
 # @expect ok
 --- input.jh
-workflow helper() {
+def helper() {
   log "ok"
 }
-workflow default() {
+export def main() {
   run helper() catch (err) {
     return
   }
 }
 
-=== catch block with return ensure
+=== catch block with return run
 # @expect ok
 --- input.jh
-rule check() {
+def check() {
   return "ok"
 }
-workflow helper() {
+def helper() {
   log "ok"
 }
-workflow default() {
+export def main() {
   run helper() catch (err) {
-    return ensure check()
+    return run check()
   }
 }
 
 === match with regex pattern compiles
 # @expect ok
 --- input.jh
-workflow default() {
+export def main() {
   const x = "hello"
   return match x {
     /^hello$/ => "yes"
@@ -1104,7 +1104,7 @@ workflow default() {
 # @expect ok
 --- input.jh
 script get_val = `echo "matched"`
-workflow default() {
+export def main() {
   const x = "hello"
   const result = match x {
     "hello" => run get_val()
@@ -1116,11 +1116,11 @@ workflow default() {
 # @expect ok
 --- input.jh
 script fix = `echo "fixing $1"`
-rule check() {
+def check() {
   return "ok"
 }
-workflow default() {
-  ensure check() catch (failure) {
+export def main() {
+  run check() catch (failure) {
     run fix(failure)
   }
 }
@@ -1128,28 +1128,28 @@ workflow default() {
 === valid interpolation in logerr
 # @expect ok
 --- input.jh
-workflow default(name) {
+export def main(name) {
   logerr "error for ${name}"
 }
 
 === valid interpolation in fail
 # @expect ok
 --- input.jh
-workflow default(name) {
+export def main(name) {
   fail "error for ${name}"
 }
 
 === valid interpolation in return
 # @expect ok
 --- input.jh
-workflow default(name) {
+export def main(name) {
   return "result for ${name}"
 }
 
 === return bare identifier
 # @expect ok
 --- input.jh
-workflow default() {
+export def main() {
   const msg = "hello"
   return msg
 }
@@ -1157,14 +1157,14 @@ workflow default() {
 === return bare identifier from parameter
 # @expect ok
 --- input.jh
-workflow default(name) {
+export def main(name) {
   return name
 }
 
 === if/else in workflow
 # @expect ok
 --- input.jh
-workflow default(status) {
+export def main(status) {
   if status == "ok" {
     log "healthy"
   } else {
@@ -1175,7 +1175,7 @@ workflow default(status) {
 === if/else in rule
 # @expect ok
 --- input.jh
-rule check(value) {
+def check(value) {
   if value == "" {
     fail "value required"
   } else {
@@ -1183,14 +1183,14 @@ rule check(value) {
   }
 }
 
-workflow default(value) {
-  ensure check(value)
+export def main(value) {
+  run check(value)
 }
 
 === if/else nested if in else block
 # @expect ok
 --- input.jh
-workflow default(mode) {
+export def main(mode) {
   if mode == "fast" {
     log "fast path"
   } else {
@@ -1205,7 +1205,7 @@ workflow default(mode) {
 === inline script catch in workflow
 # @expect ok
 --- input.jh
-workflow default() {
+export def main() {
   run `false`() catch (err) {
     log "caught: ${err}"
   }
@@ -1214,7 +1214,7 @@ workflow default() {
 === inline script recover in workflow
 # @expect ok
 --- input.jh
-workflow default() {
+export def main() {
   run `test -f .gate`() recover(err) {
     run `touch .gate`()
   }
@@ -1224,32 +1224,32 @@ workflow default() {
 # @expect ok
 --- input.jh
 script noop = `true`
-rule check() {
+def check() {
   run `false`() catch (err) {
     run noop()
   }
 }
-workflow default() {
-  ensure check()
+export def main() {
+  run check()
 }
 
 === inline script recover in rule
 # @expect ok
 --- input.jh
 script noop = `true`
-rule check() {
+def check() {
   run `test -f .gate`() recover(err) {
     run noop()
   }
 }
-workflow default() {
-  ensure check()
+export def main() {
+  run check()
 }
 
 === fenced inline script catch in workflow
 # @expect ok
 --- input.jh
-workflow default() {
+export def main() {
   run ```
 exit 1
 ```() catch (err) {
@@ -1260,7 +1260,7 @@ exit 1
 === inline script with args and catch
 # @expect ok
 --- input.jh
-workflow default() {
+export def main() {
   run `false $1`("x") catch (err) {
     log "caught: ${err}"
   }
@@ -1269,14 +1269,14 @@ workflow default() {
 === inline script catch single-statement body
 # @expect ok
 --- input.jh
-workflow default() {
+export def main() {
   run `false`() catch (err) log "recovered: ${err}"
 }
 
 === if with dot-notation subject on typed prompt capture
 # @expect ok
 --- input.jh
-workflow default() {
+export def main() {
   const r = prompt "Classify" returns "{ verdict: string }"
   if r.verdict == "ok" {
     log "approved"
@@ -1286,7 +1286,7 @@ workflow default() {
 === match with dot-notation subject on typed prompt capture
 # @expect ok
 --- input.jh
-workflow default() {
+export def main() {
   const r = prompt "Classify" returns "{ verdict: string }"
   const x = match r.verdict {
     "ok" => "approved"
@@ -1299,7 +1299,7 @@ workflow default() {
 # @expect ok
 --- input.jh
 script to_lower = `printf '%s' "$1" | tr '[:upper:]' '[:lower:]'`
-workflow default() {
+export def main() {
   const result = prompt "Classify" returns "{ role: string }"
   const role_lc = run to_lower(result.role)
   return "${role_lc}"
@@ -1325,7 +1325,7 @@ test "uses queue-style mock" {
   expect_contain response "queued"
 }
 --- lib.jh
-workflow ask() {
+def ask() {
   const r = prompt "say hi"
   return r
 }
@@ -1333,7 +1333,7 @@ workflow ask() {
 === else if chain in workflow and rule
 # @expect ok
 --- input.jh
-rule classify(kind) {
+def classify(kind) {
   if kind == "a" {
     log "a"
   } else if kind == "b" {
@@ -1343,7 +1343,7 @@ rule classify(kind) {
   }
 }
 
-workflow default(status) {
+export def main(status) {
   if status == "ok" {
     log "healthy"
   } else if status == "warn" {

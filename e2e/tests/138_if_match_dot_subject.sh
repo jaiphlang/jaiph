@@ -15,7 +15,7 @@ e2e::section "if/match dot-notation subject on typed prompt capture"
 
 e2e::file "verdict.jh" <<'EOF'
 #!/usr/bin/env jaiph
-workflow classify() {
+def classify() {
   const r = prompt "Verdict?" returns "{ verdict: string }"
   if r.verdict == "ok" {
     log "approved"

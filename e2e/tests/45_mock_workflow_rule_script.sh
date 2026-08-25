@@ -15,18 +15,18 @@ e2e::section "Mock workflow, rule, and script in *.test.jh"
 e2e::file "app.jh" <<'EOF'
 #!/usr/bin/env jaiph
 script policy_check_impl = `echo real-policy`
-rule policy_check() {
+def policy_check() {
   run policy_check_impl()
 }
 script changed_files = `echo real_files`
 script build_impl = ```
 echo "real build"
 ```
-workflow build() {
+def build() {
   run build_impl()
 }
-workflow default() {
-  ensure policy_check()
+export def main() {
+  run policy_check()
   run build()
 }
 EOF
@@ -36,12 +36,12 @@ e2e::file "app.test.jh" <<'EOF'
 import "app.jh" as app
 
 test "isolated orchestration" {
-  mock workflow app.build() {
+  mock def app.build() {
     log "build ok"
     return "build ok"
   }
 
-  mock rule app.policy_check() {
+  mock def app.policy_check() {
     log "policy ok"
     return "policy ok"
   }
@@ -51,7 +51,7 @@ test "isolated orchestration" {
     echo "b.ts"
   }
 
-  const out = run app.default()
+  const out = run app.main()
   expect_contain out "policy ok"
   expect_contain out "build ok"
 }
@@ -69,4 +69,4 @@ if [[ "${test_out}" != *"isolated orchestration"* ]]; then
   printf "%s\n" "${test_out}" >&2
   e2e::fail "expected test case name in output"
 fi
-e2e::pass "mock workflow, rule, and script tests pass"
+e2e::pass "mock def, rule, and script tests pass"

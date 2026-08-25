@@ -3,8 +3,7 @@
 // analyzability cap. Each is a multi-line construct the dispatcher hands the raw
 // line window to. Explicit named re-exports only (docs/agent-analyzability.md).
 export { parseConfigBlock } from "./metadata";
-export { parseRuleBlock } from "./rules";
 export { parseScriptBlock } from "./scripts";
-export { parseWorkflowBlock } from "./workflows";
+export { parseDefBlock } from "./defs";
 export { parseTestBlock } from "./tests";
 export { parseEnvDecl } from "./env";

@@ -4,7 +4,7 @@ import {
   parseLabel,
   formatElapsedDuration,
   formatRunningBottomLine,
-  collectWorkflowChildren,
+  collectDefChildren,
   buildRunTreeRows,
   styleKeywordLabel,
   styleDim,
@@ -25,9 +25,9 @@ function modFor(source: string) {
 // --- parseLabel ---
 
 test("parseLabel: splits kind and name on first space", () => {
-  const { kind, name } = parseLabel("workflow default");
-  assert.equal(kind, "workflow");
-  assert.equal(name, "default");
+  const { kind, name } = parseLabel("def main");
+  assert.equal(kind, "def");
+  assert.equal(name, "main");
 });
 
 test("parseLabel: returns 'step' kind when no space", () => {
@@ -64,185 +64,185 @@ test("formatElapsedDuration: handles sub-second", () => {
   assert.equal(formatElapsedDuration(100), "0.1s");
 });
 
-// --- collectWorkflowChildren ---
+// --- collectDefChildren ---
 
-test("collectWorkflowChildren: returns empty for unknown workflow", () => {
-  const mod = modFor(`workflow default() {
+test("collectDefChildren: returns empty for unknown def", () => {
+  const mod = modFor(`export def main() {
   log "hi"
 }`);
-  assert.deepStrictEqual(collectWorkflowChildren(mod, "missing"), []);
+  assert.deepStrictEqual(collectDefChildren(mod, "missing"), []);
 });
 
-test("collectWorkflowChildren: collects run step as workflow row", () => {
+test("collectDefChildren: collects run step as workflow row", () => {
   const mod = modFor([
-    "workflow default() {",
+    "export def main() {",
     "  run deploy()",
     "}",
-    "workflow deploy() {",
+    "def deploy() {",
     "  log \"d\"",
     "}",
   ].join("\n"));
-  const items = collectWorkflowChildren(mod, "default");
+  const items = collectDefChildren(mod, "main");
   assert.equal(items.length, 1);
-  assert.equal(items[0].label, "workflow deploy");
+  assert.equal(items[0].label, "def deploy");
   assert.equal(items[0].nested, "deploy");
 });
 
-test("collectWorkflowChildren: collects async run with prefix", () => {
+test("collectDefChildren: collects async run with prefix", () => {
   const mod = modFor([
-    "workflow default() {",
+    "export def main() {",
     "  run async deploy()",
     "}",
-    "workflow deploy() {",
+    "def deploy() {",
     "  log \"d\"",
     "}",
   ].join("\n"));
-  const items = collectWorkflowChildren(mod, "default");
-  assert.equal(items[0].label, "async workflow deploy");
+  const items = collectDefChildren(mod, "main");
+  assert.equal(items[0].label, "async def deploy");
 });
 
-test("collectWorkflowChildren: collects ensure step as rule row", () => {
+test("collectDefChildren: collects run step as rule row", () => {
   const mod = modFor([
-    "rule gate() {",
+    "def gate() {",
     "  return \"ok\"",
     "}",
-    "workflow default() {",
-    "  ensure gate()",
+    "export def main() {",
+    "  run gate()",
     "}",
   ].join("\n"));
-  const items = collectWorkflowChildren(mod, "default");
-  assert.equal(items[0].label, "rule gate");
+  const items = collectDefChildren(mod, "main");
+  assert.equal(items[0].label, "def gate");
 });
 
-test("collectWorkflowChildren: collects prompt step with preview", () => {
+test("collectDefChildren: collects prompt step with preview", () => {
   const mod = modFor([
-    "workflow default() {",
+    "export def main() {",
     '  prompt "Pick one"',
     "}",
   ].join("\n"));
-  const items = collectWorkflowChildren(mod, "default");
+  const items = collectDefChildren(mod, "main");
   assert.equal(items[0].label, 'prompt "Pick one"');
 });
 
-test("collectWorkflowChildren: collects log / logerr / logwarn / fail (say) rows", () => {
+test("collectDefChildren: collects log / logerr / logwarn / fail (say) rows", () => {
   const mod = modFor([
-    "workflow default() {",
+    "export def main() {",
     '  log "ok"',
     '  logerr "err"',
     '  logwarn "warn"',
     '  fail "boom"',
     "}",
   ].join("\n"));
-  const items = collectWorkflowChildren(mod, "default");
+  const items = collectDefChildren(mod, "main");
   assert.ok(items.some((i) => i.label.startsWith("ℹ ")));
   assert.ok(items.some((i) => i.label.startsWith("! ")));
   assert.ok(items.some((i) => i.label.startsWith("\u26a0 ")));
   assert.ok(items.some((i) => i.label.startsWith("fail ")));
 });
 
-test("collectWorkflowChildren: collects send step", () => {
+test("collectDefChildren: collects send step", () => {
   const mod = modFor([
     "channel ch",
-    "workflow default() {",
+    "export def main() {",
     '  ch <- "hi"',
     "}",
   ].join("\n"));
-  const items = collectWorkflowChildren(mod, "default");
+  const items = collectDefChildren(mod, "main");
   assert.ok(items.some((i) => i.label === "ch <- send"));
 });
 
-test("collectWorkflowChildren: collects const and return rows", () => {
+test("collectDefChildren: collects const and return rows", () => {
   const mod = modFor([
-    "workflow default() {",
+    "export def main() {",
     '  const x = "hi"',
     "  return x",
     "}",
   ].join("\n"));
-  const items = collectWorkflowChildren(mod, "default");
+  const items = collectDefChildren(mod, "main");
   assert.ok(items.some((i) => i.label === "const x"));
   assert.ok(items.some((i) => i.label.startsWith("return ")));
 });
 
-test("collectWorkflowChildren: collects inline script as 'script (inline)'", () => {
+test("collectDefChildren: collects inline script as 'script (inline)'", () => {
   const mod = modFor([
-    "workflow default() {",
+    "export def main() {",
     "  run `echo hi`()",
     "}",
   ].join("\n"));
-  const items = collectWorkflowChildren(mod, "default");
+  const items = collectDefChildren(mod, "main");
   assert.ok(items.some((i) => i.label === "script (inline)"));
 });
 
-test("collectWorkflowChildren: collects shell step with $ prefix", () => {
+test("collectDefChildren: collects shell step with $ prefix", () => {
   const mod = modFor([
-    "workflow default() {",
+    "export def main() {",
     "  echo hello",
     "}",
   ].join("\n"));
-  const items = collectWorkflowChildren(mod, "default");
+  const items = collectDefChildren(mod, "main");
   assert.ok(items.some((i) => i.label.startsWith("$ ")));
 });
 
-test("collectWorkflowChildren: skips trivia (comments / blank lines)", () => {
+test("collectDefChildren: skips trivia (comments / blank lines)", () => {
   const mod = modFor([
-    "workflow default() {",
+    "export def main() {",
     "  # comment",
     "",
     '  log "hi"',
     "}",
   ].join("\n"));
-  const items = collectWorkflowChildren(mod, "default");
+  const items = collectDefChildren(mod, "main");
   assert.equal(items.length, 1);
   assert.ok(items[0].label.startsWith("ℹ "));
 });
 
-test("collectWorkflowChildren: const = match expression walks arms for run/ensure targets", () => {
+test("collectDefChildren: const = match expression walks arms for run/run targets", () => {
   const mod = modFor([
-    "rule gate() {",
+    "def gate() {",
     "  return \"ok\"",
     "}",
-    "workflow other() {",
+    "def other() {",
     "  log \"o\"",
     "}",
-    "workflow default(name) {",
+    "export def main(name) {",
     "  const result = match name {",
     '    "x" => run other()',
-    '    _ => ensure gate()',
+    '    _ => run gate()',
     "  }",
     "}",
   ].join("\n"));
-  const items = collectWorkflowChildren(mod, "default");
+  const items = collectDefChildren(mod, "main");
   // const row + workflow other row + rule gate row
   assert.ok(items.some((i) => i.label === "const result"));
-  assert.ok(items.some((i) => i.label.startsWith("workflow other")));
-  assert.ok(items.some((i) => i.label.startsWith("rule gate")));
+  assert.ok(items.some((i) => i.label.startsWith("def other")));
+  assert.ok(items.some((i) => i.label.startsWith("def gate")));
 });
 
 // --- buildRunTreeRows ---
 
 test("buildRunTreeRows: includes root and children", () => {
   const mod = modFor([
-    "workflow default() {",
+    "export def main() {",
     "  run deploy()",
     "}",
-    "workflow deploy() {",
+    "def deploy() {",
     "  log \"d\"",
     "}",
   ].join("\n"));
   const rows = buildRunTreeRows(mod);
   assert.ok(rows.length >= 2);
-  assert.equal(rows[0].rawLabel, "workflow default");
+  assert.equal(rows[0].rawLabel, "def main");
 });
 
 test("buildRunTreeRows: prefix indents 4 spaces per nesting level", () => {
   const mod = modFor([
-    "workflow default() {",
+    "export def main() {",
     "  run a()",
     "}",
-    "workflow a() {",
+    "def a() {",
     "  run b()",
     "}",
-    "workflow b() {",
+    "def b() {",
     "  log \"deep\"",
     "}",
   ].join("\n"));
@@ -250,17 +250,17 @@ test("buildRunTreeRows: prefix indents 4 spaces per nesting level", () => {
   // root's direct children sit at prefix 0; each deeper level adds 4 spaces.
   const byLabel = (label: string) => rows.find((r) => r.rawLabel === label);
   assert.equal(rows[0].prefix, ""); // root
-  assert.equal(byLabel("workflow a")?.prefix, ""); // default's child
-  assert.equal(byLabel("workflow b")?.prefix, "    "); // a's child (depth 1)
+  assert.equal(byLabel("def a")?.prefix, ""); // default's child
+  assert.equal(byLabel("def b")?.prefix, "    "); // a's child (depth 1)
   assert.equal(byLabel("ℹ deep")?.prefix, "        "); // b's child (depth 2)
 });
 
 test("buildRunTreeRows: self-recursive workflow expands exactly one level then stops", () => {
   const mod = modFor([
-    "workflow default() {",
+    "export def main() {",
     "  run rec()",
     "}",
-    "workflow rec() {",
+    "def rec() {",
     "  log \"x\"",
     "  run rec()",
     "}",
@@ -268,7 +268,7 @@ test("buildRunTreeRows: self-recursive workflow expands exactly one level then s
   const rows = buildRunTreeRows(mod);
   // rec renders once under default, its self-call expands one more level, then
   // the innermost self-call is gated off — bounded, not infinite.
-  const recRows = rows.filter((r) => r.rawLabel === "workflow rec");
+  const recRows = rows.filter((r) => r.rawLabel === "def rec");
   assert.equal(recRows.length, 2);
   assert.equal(recRows[0].prefix, ""); // rec called from default
   assert.equal(recRows[1].prefix, "    "); // expanded self-call one level deeper
@@ -280,23 +280,23 @@ test("buildRunTreeRows: imported workflow renders with alias label and stepFunc"
   const mainMod = parsejaiph(
     [
       'import "lib.jh" as lib',
-      "workflow default() {",
+      "export def main() {",
       "  run lib.helper()",
       "}",
     ].join("\n"),
     "/tmp/proj/main.jh",
   );
   const libMod = parsejaiph(
-    ["export workflow helper() {", '  log "from lib"', "}"].join("\n"),
+    ["export def helper() {", '  log "from lib"', "}"].join("\n"),
     "/tmp/proj/lib.jh",
   );
   const rows = buildRunTreeRows(
     mainMod,
-    "workflow default",
+    "def main",
     new Map([["lib", libMod]]),
     "/tmp/proj",
   );
-  const helper = rows.find((r) => r.rawLabel === "workflow lib.helper");
+  const helper = rows.find((r) => r.rawLabel === "def lib.helper");
   assert.ok(helper, "imported workflow row present");
   assert.equal(helper?.stepFunc, "lib::helper");
   assert.equal(helper?.prefix, ""); // default's direct child
@@ -307,13 +307,13 @@ test("buildRunTreeRows: imported workflow renders with alias label and stepFunc"
 
 test("buildRunTreeRows: mutual-reference cycle is bounded by the visited guard", () => {
   const mod = modFor([
-    "workflow default() {",
+    "export def main() {",
     "  run a()",
     "}",
-    "workflow a() {",
+    "def a() {",
     "  run b()",
     "}",
-    "workflow b() {",
+    "def b() {",
     "  run a()",
     "}",
   ].join("\n"));
@@ -322,90 +322,90 @@ test("buildRunTreeRows: mutual-reference cycle is bounded by the visited guard",
   // recurse forever; the guard leaves exactly one un-expanded trailing "a".
   assert.deepEqual(
     rows.map((r) => r.rawLabel),
-    ["workflow default", "workflow a", "workflow b", "workflow a"],
+    ["def main", "def a", "def b", "def a"],
   );
   assert.equal(rows[rows.length - 1].prefix, "        ");
 });
 
-test("collectWorkflowChildren: recover steps flatten as sibling rows", () => {
+test("collectDefChildren: recover steps flatten as sibling rows", () => {
   const mod = modFor([
-    "workflow default() {",
+    "export def main() {",
     "  run risky() recover(e) {",
     "    run fallback()",
     "  }",
     "}",
-    "workflow risky() {",
+    "def risky() {",
     '  log "r"',
     "}",
-    "workflow fallback() {",
+    "def fallback() {",
     '  log "f"',
     "}",
   ].join("\n"));
-  const items = collectWorkflowChildren(mod, "default");
-  assert.equal(items[0].label, "workflow risky");
+  const items = collectDefChildren(mod, "main");
+  assert.equal(items[0].label, "def risky");
   assert.equal(items[0].nested, "risky");
-  assert.equal(items[1].label, "workflow fallback");
+  assert.equal(items[1].label, "def fallback");
   assert.equal(items[1].nested, "fallback");
 });
 
-test("collectWorkflowChildren: catch steps flatten as sibling rows", () => {
+test("collectDefChildren: catch steps flatten as sibling rows", () => {
   const mod = modFor([
-    "workflow default() {",
+    "export def main() {",
     "  run risky() catch (e) {",
     '    log "caught"',
     "  }",
     "}",
-    "workflow risky() {",
+    "def risky() {",
     '  log "r"',
     "}",
   ].join("\n"));
-  const items = collectWorkflowChildren(mod, "default");
-  assert.equal(items[0].label, "workflow risky");
+  const items = collectDefChildren(mod, "main");
+  assert.equal(items[0].label, "def risky");
   assert.equal(items[1].label, "ℹ caught");
 });
 
-test("collectWorkflowChildren: long prompt preview is truncated with ellipsis", () => {
+test("collectDefChildren: long prompt preview is truncated with ellipsis", () => {
   const mod = modFor([
-    "workflow default() {",
+    "export def main() {",
     '  prompt "This is a very long prompt that should be truncated"',
     "}",
   ].join("\n"));
-  const items = collectWorkflowChildren(mod, "default");
+  const items = collectDefChildren(mod, "main");
   // 24-char preview + ellipsis
   assert.equal(items[0].label, 'prompt "This is a very long prom..."');
 });
 
-test("collectWorkflowChildren: prompt preview escapes embedded double-quotes", () => {
+test("collectDefChildren: prompt preview escapes embedded double-quotes", () => {
   const mod = modFor([
-    "workflow default() {",
+    "export def main() {",
     '  prompt "Say \\"hi\\" now"',
     "}",
   ].join("\n"));
-  const items = collectWorkflowChildren(mod, "default");
+  const items = collectDefChildren(mod, "main");
   assert.equal(items[0].label, 'prompt "Say \\"hi\\" now"');
 });
 
-test("collectWorkflowChildren: return run and return match label variants", () => {
+test("collectDefChildren: return run and return match label variants", () => {
   const mod = modFor([
-    "workflow other() {",
+    "def other() {",
     '  log "o"',
     "}",
-    "workflow default(name) {",
+    "export def main(name) {",
     "  return run other()",
     "}",
   ].join("\n"));
-  const items = collectWorkflowChildren(mod, "default");
+  const items = collectDefChildren(mod, "main");
   assert.ok(items.some((i) => i.label === "return run other(...)"));
 
   const matchMod = modFor([
-    "workflow default(name) {",
+    "export def main(name) {",
     "  return match name {",
     '    "x" => "yes"',
     '    _ => "no"',
     "  }",
     "}",
   ].join("\n"));
-  const matchItems = collectWorkflowChildren(matchMod, "default");
+  const matchItems = collectDefChildren(matchMod, "main");
   assert.ok(matchItems.some((i) => i.label === "return match name"));
 });
 
@@ -417,7 +417,7 @@ test("style helpers: emit ANSI escape codes when stdout is a TTY", () => {
   Object.defineProperty(process.stdout, "isTTY", { value: true, configurable: true });
   delete process.env.NO_COLOR;
   try {
-    assert.equal(styleKeywordLabel("workflow default"), "[1mworkflow[0m default");
+    assert.equal(styleKeywordLabel("def main"), "\u001b[1mdef\u001b[0m main");
     assert.equal(styleDim("x"), "[2mx[0m");
     assert.equal(styleYellow("x"), "[33mx[0m");
     assert.equal(styleBold("x"), "[1mx[0m");
@@ -434,7 +434,7 @@ test("style helpers: NO_COLOR disables ANSI even on a TTY", () => {
   Object.defineProperty(process.stdout, "isTTY", { value: true, configurable: true });
   process.env.NO_COLOR = "1";
   try {
-    assert.equal(styleKeywordLabel("workflow default"), "workflow default");
+    assert.equal(styleKeywordLabel("def main"), "def main");
     assert.equal(styleDim("x"), "x");
     assert.equal(styleYellow("x"), "x");
     assert.equal(styleBold("x"), "x");
@@ -451,7 +451,7 @@ test("styleKeywordLabel: returns plain text when no TTY", () => {
   const prev = process.stdout.isTTY;
   Object.defineProperty(process.stdout, "isTTY", { value: false, configurable: true });
   try {
-    assert.equal(styleKeywordLabel("workflow default"), "workflow default");
+    assert.equal(styleKeywordLabel("def main"), "def main");
   } finally {
     Object.defineProperty(process.stdout, "isTTY", { value: prev, configurable: true });
   }
@@ -470,8 +470,9 @@ test("styleDim / styleYellow / styleBold: no-color when not TTY", () => {
 });
 
 test("formatRunningBottomLine: renders status with elapsed", () => {
-  const line = formatRunningBottomLine("default", 1.5);
-  assert.ok(line.includes("default"));
+  const line = formatRunningBottomLine("main", 1.5);
+  assert.ok(line.includes("def"));
+  assert.ok(line.includes("main"));
   assert.ok(line.includes("1.5s"));
 });
 
@@ -479,10 +480,10 @@ test("formatRunningBottomLine: renders status with elapsed", () => {
 
 test("buildRunTreeRows: workflow with two self-recursive call sites expands bounded per-site", () => {
   const mod = modFor([
-    "workflow default() {",
+    "export def main() {",
     "  run rec()",
     "}",
-    "workflow rec() {",
+    "def rec() {",
     '  log "x"',
     "  run rec()",
     "  run rec()",
@@ -495,14 +496,14 @@ test("buildRunTreeRows: workflow with two self-recursive call sites expands boun
   assert.deepEqual(
     rows.map((r) => ({ label: r.rawLabel, prefix: r.prefix.length })),
     [
-      { label: "workflow default", prefix: 0 },
-      { label: "workflow rec", prefix: 0 },
+      { label: "def main", prefix: 0 },
+      { label: "def rec", prefix: 0 },
       { label: "ℹ x", prefix: 4 },
-      { label: "workflow rec", prefix: 4 },
+      { label: "def rec", prefix: 4 },
       { label: "ℹ x", prefix: 8 },
-      { label: "workflow rec", prefix: 8 },
+      { label: "def rec", prefix: 8 },
       { label: "ℹ x", prefix: 12 },
-      { label: "workflow rec", prefix: 4 },
+      { label: "def rec", prefix: 4 },
     ],
   );
   assert.equal(rows[0].isRoot, true);
@@ -510,47 +511,47 @@ test("buildRunTreeRows: workflow with two self-recursive call sites expands boun
 
 // --- channel route declarations as tree nodes ---
 
-test("collectWorkflowChildren: single-target channel route becomes a tree node", () => {
+test("collectDefChildren: single-target channel route becomes a tree node", () => {
   const mod = modFor([
     "channel findings -> analyst",
-    "workflow analyst(message, chan, sender) {",
+    "def analyst(message, chan, sender) {",
     '  log "a"',
     "}",
-    "workflow default() {",
+    "export def main() {",
     '  log "start"',
     "}",
   ].join("\n"));
-  const items = collectWorkflowChildren(mod, "default");
+  const items = collectDefChildren(mod, "main");
   assert.equal(items[0].label, "findings -> analyst");
 });
 
-test("collectWorkflowChildren: multi-target channel route joins targets with comma", () => {
+test("collectDefChildren: multi-target channel route joins targets with comma", () => {
   const mod = modFor([
     "channel findings -> analyst, reviewer",
-    "workflow analyst(message, chan, sender) {",
+    "def analyst(message, chan, sender) {",
     '  log "a"',
     "}",
-    "workflow reviewer(message, chan, sender) {",
+    "def reviewer(message, chan, sender) {",
     '  log "r"',
     "}",
-    "workflow default() {",
+    "export def main() {",
     '  log "start"',
     "}",
   ].join("\n"));
-  const items = collectWorkflowChildren(mod, "default");
+  const items = collectDefChildren(mod, "main");
   assert.equal(items[0].label, "findings -> analyst, reviewer");
 });
 
 test("buildRunTreeRows: channel route node renders as a top-level child row", () => {
   const mod = modFor([
     "channel findings -> analyst, reviewer",
-    "workflow analyst(message, chan, sender) {",
+    "def analyst(message, chan, sender) {",
     '  log "a"',
     "}",
-    "workflow reviewer(message, chan, sender) {",
+    "def reviewer(message, chan, sender) {",
     '  log "r"',
     "}",
-    "workflow default() {",
+    "export def main() {",
     '  log "start"',
     "}",
   ].join("\n"));
@@ -558,7 +559,7 @@ test("buildRunTreeRows: channel route node renders as a top-level child row", ()
   assert.deepEqual(
     rows.map((r) => ({ label: r.rawLabel, prefix: r.prefix.length })),
     [
-      { label: "workflow default", prefix: 0 },
+      { label: "def main", prefix: 0 },
       { label: "findings -> analyst, reviewer", prefix: 0 },
       { label: "ℹ start", prefix: 0 },
     ],
@@ -568,10 +569,10 @@ test("buildRunTreeRows: channel route node renders as a top-level child row", ()
 // --- buildRunTreeRows: empty / root-only workflow ---
 
 test("buildRunTreeRows: childless workflow yields exactly one root row", () => {
-  const mod = modFor("workflow default() {\n}");
+  const mod = modFor("export def main() {\n}");
   const rows = buildRunTreeRows(mod);
   assert.equal(rows.length, 1);
-  assert.equal(rows[0].rawLabel, "workflow default");
+  assert.equal(rows[0].rawLabel, "def main");
   assert.equal(rows[0].prefix, "");
   assert.equal(rows[0].isRoot, true);
 });

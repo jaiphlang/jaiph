@@ -24,7 +24,7 @@ config {
   agent.command = "./agents/echo-wc.sh"
 }
 
-workflow default() {
+export def main() {
   const response = prompt "one two three four five"
   log response
 }
@@ -37,11 +37,11 @@ e2e::expect_stdout "${out}" <<'EXPECTED'
 
 Jaiph: Running custom_agent.jh
 
-workflow default
+export def main
   ▸ prompt echo-wc.sh "one two three four five"
   ✓ prompt echo-wc.sh (<time>)
   ℹ words: 5
-✓ PASS workflow default (<time>)
+✓ PASS export def main (<time>)
 EXPECTED
 
 # No JSON parse errors in stderr

@@ -116,12 +116,12 @@ function mcpEnv(runsRoot: string): NodeJS.ProcessEnv {
 
 const TWO_WORKFLOW_FIXTURE = [
   "# Greets the given name.",
-  "workflow greet(name) {",
+  "export def greet(name) {",
   '  return "hello ${name}"',
   "}",
   "",
   "# Fails on purpose for tests.",
-  "workflow boom() {",
+  "export def boom() {",
   '  fail "boom went off"',
   "}",
   "",
@@ -209,7 +209,7 @@ test("jaiph mcp: hot reload adds a tool (list_changed) and a broken edit keeps t
     // Edit the fixture to add a third workflow → list_changed, then it lists.
     writeFileSync(
       jh,
-      `${TWO_WORKFLOW_FIXTURE}\n# A freshly added tool.\nworkflow extra() {\n  return "extra"\n}\n`,
+      `${TWO_WORKFLOW_FIXTURE}\n# A freshly added tool.\nexport def extra() {\n  return "extra"\n}\n`,
     );
     await client.waitFor(
       (m) => m.method === "notifications/tools/list_changed",
@@ -222,7 +222,7 @@ test("jaiph mcp: hot reload adds a tool (list_changed) and a broken edit keeps t
 
     // Break the fixture → reload fails; the previous tool set still serves and
     // a diagnostic appears on stderr.
-    writeFileSync(jh, "workflow greet(name) {\n  return \"broken\n}\n");
+    writeFileSync(jh, "export def greet(name) {\n  return \"broken\n}\n");
     await pollUntil(() => /reload failed/.test(client.stderr()), 20_000, "reload-failure diagnostic on stderr");
     client.send({ jsonrpc: "2.0", id: 11, method: "tools/list" });
     const stillList = await client.waitFor((m) => m.id === 11, "tools/list after a broken edit");
@@ -239,7 +239,7 @@ test("jaiph mcp: compile diagnostics go to stderr with exit 1 and nothing on std
   try {
     const jh = join(root, "broken.jh");
     // Reference to an undeclared workflow — a recoverable compile diagnostic.
-    writeFileSync(jh, ["workflow default() {", "  run nonexistent()", "}", ""].join("\n"));
+    writeFileSync(jh, ["export def main() {", "  run nonexistent()", "}", ""].join("\n"));
     const result = spawnSync("node", [CLI_PATH, "mcp", jh], {
       encoding: "utf8",
       cwd: root,
@@ -282,7 +282,7 @@ test("jaiph --mcp dispatches to the same command as jaiph mcp", async () => {
 const ENV_ECHO_FIXTURE = [
   'script echo_impl = `printf %s "$GREETING"`',
   "# Returns the GREETING env var the workflow process sees.",
-  "workflow show() {",
+  "export def show() {",
   "  const g = run echo_impl()",
   '  return "${g}"',
   "}",
@@ -317,7 +317,7 @@ test("jaiph mcp --env GREETING=hi: every tools/call sees the var in the result t
 const LEAK_FAIL_FIXTURE = [
   'script leak_fail = `echo "stdout token $LEAK_API_KEY"; echo "stderr token $LEAK_API_KEY" >&2; exit 1`',
   "# Echoes a credential to both streams then fails, to exercise tool-result redaction.",
-  "workflow leak_and_fail() {",
+  "export def leak_and_fail() {",
   "  run leak_fail()",
   "}",
   "",
@@ -411,7 +411,7 @@ test("jaiph run regression: a default workflow exits 0 and prints its return val
   const root = mkdtempSync(join(tmpdir(), "jaiph-run-regression-"));
   try {
     const jh = join(root, "app.jh");
-    writeFileSync(jh, ["workflow default() {", '  return "ran-ok"', "}", ""].join("\n"));
+    writeFileSync(jh, ["export def main() {", '  return "ran-ok"', "}", ""].join("\n"));
     const result = spawnSync("node", [CLI_PATH, "run", jh], {
       encoding: "utf8",
       cwd: root,
@@ -429,7 +429,7 @@ test("jaiph run regression: a default workflow exits 0 and prints its return val
 const MULTI_STEP_FIXTURE = [
   "script step_impl = `true`",
   "# Runs two steps so progress notifications can be observed.",
-  "workflow steps() {",
+  "export def steps() {",
   "  run step_impl()",
   "  run step_impl()",
   '  return "done"',
@@ -504,7 +504,7 @@ test("jaiph mcp: a call without a progressToken emits no progress notifications"
 const CANCEL_FIXTURE = [
   'script slow_impl = `sleep 3 && printf done > "$JAIPH_WORKSPACE/done.txt"`',
   "# Sleeps, then writes a completion marker (skipped when cancelled).",
-  "workflow slow() {",
+  "export def slow() {",
   "  run slow_impl()",
   '  return "woke"',
   "}",

@@ -13,12 +13,12 @@ e2e::section "return bare identifier propagates const value"
 
 # Given
 e2e::file "return_bare.jh" <<'EOF'
-workflow helper() {
+def helper() {
   const msg = "bare-id-ok"
   return msg
 }
 
-workflow default() {
+export def main() {
   const r = run helper()
   log "got: ${r}"
 }
@@ -32,22 +32,22 @@ e2e::expect_stdout "${return_bare_out}" <<'EOF'
 
 Jaiph: Running return_bare.jh
 
-workflow default
-  ▸ workflow helper
-  ✓ workflow helper (<time>)
+export def main
+  ▸ def helper
+  ✓ def helper(<time>)
   ℹ got: bare-id-ok
-✓ PASS workflow default (<time>)
+✓ PASS export def main (<time>)
 EOF
 
 e2e::section "return bare identifier from parameter"
 
 # Given
 e2e::file "return_param.jh" <<'EOF'
-workflow echo_back(val) {
+def echo_back(val) {
   return val
 }
 
-workflow default() {
+export def main() {
   const r = run echo_back("param-ok")
   log "got: ${r}"
 }
@@ -61,23 +61,23 @@ e2e::expect_stdout "${return_param_out}" <<'EOF'
 
 Jaiph: Running return_param.jh
 
-workflow default
-  ▸ workflow echo_back (val="param-ok")
-  ✓ workflow echo_back (<time>)
+export def main
+  ▸ def echo_back(val="param-ok")
+  ✓ def echo_back(<time>)
   ℹ got: param-ok
-✓ PASS workflow default (<time>)
+✓ PASS export def main (<time>)
 EOF
 
 e2e::section "return interpolated string still works"
 
 # Given
 e2e::file "return_interp.jh" <<'EOF'
-workflow helper() {
+def helper() {
   const msg = "interp-ok"
   return "${msg}"
 }
 
-workflow default() {
+export def main() {
   const r = run helper()
   log "got: ${r}"
 }
@@ -91,18 +91,18 @@ e2e::expect_stdout "${return_interp_out}" <<'EOF'
 
 Jaiph: Running return_interp.jh
 
-workflow default
-  ▸ workflow helper
-  ✓ workflow helper (<time>)
+export def main
+  ▸ def helper
+  ✓ def helper(<time>)
   ℹ got: interp-ok
-✓ PASS workflow default (<time>)
+✓ PASS export def main (<time>)
 EOF
 
 e2e::section "return unknown bare identifier fails with unknown-identifier error"
 
 # Given
 e2e::file "return_unknown.jh" <<'EOF'
-workflow default() {
+export def main() {
   const msg = "hello"
   return missing_name
 }

@@ -11,7 +11,7 @@ test("E_VALIDATE: const rebinding a workflow parameter is rejected", () => {
     writeFileSync(
       join(root, "m.jh"),
       [
-        "workflow default(name_arg) {",
+        "export def main(name_arg) {",
         '  const name_arg = "rebind"',
         '  return "${name_arg}"',
         "}",
@@ -33,12 +33,12 @@ test("E_VALIDATE: const rebinding a rule parameter is rejected", () => {
     writeFileSync(
       join(root, "m.jh"),
       [
-        "rule check(x) {",
+        "def check(x) {",
         '  const x = "rebind"',
         '  return "${x}"',
         "}",
-        "workflow default() {",
-        '  ensure check("ok")',
+        "export def main() {",
+        '  run check("ok")',
         "}",
         "",
       ].join("\n"),
@@ -58,7 +58,7 @@ test("E_VALIDATE: duplicate const declarations in the same scope are rejected", 
     writeFileSync(
       join(root, "m.jh"),
       [
-        "workflow default() {",
+        "export def main() {",
         '  const x = "first"',
         '  const x = "second"',
         '  return "${x}"',
@@ -85,7 +85,7 @@ test("E_PARSE: script name colliding with top-level const is rejected at parse t
         "",
         "script greet = `echo hi`",
         "",
-        "workflow default() {",
+        "export def main() {",
         '  return "${greet}"',
         "}",
         "",
@@ -110,7 +110,7 @@ test("E_PARSE: duplicate script declarations are rejected at parse time", () => 
         "",
         "script greet = `echo hello`",
         "",
-        "workflow default() {",
+        "export def main() {",
         "  run greet()",
         "}",
         "",
@@ -125,17 +125,17 @@ test("E_PARSE: duplicate script declarations are rejected at parse time", () => 
   }
 });
 
-test("E_VALIDATE: const rebinding parameter via ensure is rejected", () => {
+test("E_VALIDATE: const rebinding parameter via run is rejected", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-val-immut-ensure-"));
   try {
     writeFileSync(
       join(root, "m.jh"),
       [
-        "rule valid(v) {",
+        "def valid(v) {",
         '  return "${v}"',
         "}",
-        "workflow default(name_arg) {",
-        "  const name_arg = ensure valid(name_arg)",
+        "export def main(name_arg) {",
+        "  const name_arg = run valid(name_arg)",
         '  return "${name_arg}"',
         "}",
         "",
@@ -156,7 +156,7 @@ test("valid: distinct param and const names compile successfully", () => {
     writeFileSync(
       join(root, "m.jh"),
       [
-        "workflow default(input) {",
+        "export def main(input) {",
         '  const result = "processed ${input}"',
         '  return "${result}"',
         "}",

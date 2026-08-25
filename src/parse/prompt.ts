@@ -1,4 +1,4 @@
-import type { Expr, WorkflowStepDef } from "../types";
+import type { Expr, StepDef } from "../types";
 import { createTrivia, type Trivia } from "./trivia";
 import { fail, SINGLE_QUOTE_MESSAGE, hasUnescapedClosingQuote, indexOfClosingDoubleQuote, isJaiphInterpolationRef } from "./core";
 import { dedentTripleQuotedBody, parseTripleQuoteBlock, tripleQuoteBodyToRaw } from "./triple-quote";
@@ -184,7 +184,7 @@ export function parsePromptStep(
   promptCol: number,
   captureName?: string,
   trivia: Trivia = createTrivia(),
-): { step: WorkflowStepDef; nextLineIdx: number } {
+): { step: StepDef; nextLineIdx: number } {
   const lineNo = lineIdx + 1;
 
   // --- Reject triple-backtick fences for prompts ---
@@ -203,13 +203,13 @@ export function parsePromptStep(
     body: Expr,
     bodyTrivia: { bodyKind?: PromptBodyKind; bodyIdentifier?: string; rawBody?: string },
     nextLineIdx: number,
-  ): { step: WorkflowStepDef; nextLineIdx: number } => {
+  ): { step: StepDef; nextLineIdx: number } => {
     trivia.setNode(body, {
       ...(bodyTrivia.bodyKind ? { bodyKind: bodyTrivia.bodyKind } : {}),
       ...(bodyTrivia.bodyIdentifier ? { bodyIdentifier: bodyTrivia.bodyIdentifier } : {}),
       ...(bodyTrivia.rawBody !== undefined ? { rawBody: bodyTrivia.rawBody } : {}),
     });
-    const step: WorkflowStepDef = {
+    const step: StepDef = {
       type: "exec",
       body,
       ...(captureName ? { captureName } : {}),

@@ -14,7 +14,7 @@ This page is the authoritative inventory of Jaiph configuration keys: every key,
 Configuration sources, in priority order:
 
 1. **Environment variables** — locked once observed by the host CLI; see [Locked variables](#locked-variables).
-2. **Workflow-level `config { … }`** — applies for the duration of that workflow.
+2. **Def-level `config { … }`** — applies for the duration of that workflow.
 3. **Module-level `config { … }`** — applies to all workflows in that file unless overridden.
 4. **Built-in defaults** — lowest priority.
 
@@ -24,7 +24,7 @@ Configuration sources, in priority order:
 | Aspect | Rule |
 |---|---|
 | Module-level | At most one `config { … }` block per `.jh` file. May appear anywhere among top-level constructs. |
-| Workflow-level | At most one nested `config { … }` per workflow body. Must be the first non-comment construct in the body. |
+| Def-level | At most one nested `config { … }` per workflow body. Must be the first non-comment construct in the body. |
 | Allowed module keys | `agent.*`, `run.*`, `module.*`, and `trusted_envs`. |
 | Allowed workflow keys | `agent.*`, `run.*`, and `trusted_envs`. `runtime.*` and `module.*` are `E_PARSE`. |
 | Duplicate block | `E_PARSE duplicate config block (only one allowed per file)` / `E_PARSE duplicate config block inside workflow (only one allowed per workflow)`. |
@@ -58,9 +58,9 @@ String config values support the same `${identifier}` interpolation as orchestra
 | Config level | Available identifiers |
 |---|---|
 | Module-level | Module `const` values and environment variables |
-| Workflow-level | Module `const` values, environment variables, and that workflow's parameters |
+| Def-level | Module `const` values, environment variables, and that workflow's parameters |
 
-Interpolation runs when the config scope is applied (workflow entry for workflow-level keys; CLI startup for module-level keys). Environment variables still win over in-file config when locked.
+Interpolation runs when the config scope is applied (workflow entry for def-level keys; CLI startup for module-level keys). Environment variables still win over in-file config when locked.
 
 ## Agent keys
 
@@ -69,7 +69,7 @@ Interpolation runs when the config scope is applied (workflow entry for workflow
 | `agent.model` | string | — | `JAIPH_AGENT_MODEL` (env only) | Model for `prompt` steps in this scope. Resolved at each `prompt` invocation and passed as a per-call `--model` flag — it does **not** set `JAIPH_AGENT_MODEL` in the workflow environment, so scripts and other steps do not see it. Set `JAIPH_AGENT_MODEL` in the shell to override all prompts in a run. |
 | `agent.command` | string | `cursor-agent` | `JAIPH_AGENT_COMMAND` | Cursor backend command. Basename other than `cursor-agent` enables custom-command mode (stdin → command → stdout). **Entry module only** — imported modules cannot set this key by default (see [Import trust boundary](#import-trust-boundary)). |
 | `agent.backend` | string (`cursor` \| `claude` \| `codex`) | `cursor` | `JAIPH_AGENT_BACKEND` | Backend selector. **Entry module only** — imported modules cannot set this key by default (see [Import trust boundary](#import-trust-boundary)). |
-| `agent.trusted_workspace` | string (path) | workspace root | `JAIPH_AGENT_TRUSTED_WORKSPACE` | Directory passed to Cursor as `--trust`. When unset, defaults to `JAIPH_WORKSPACE`. A relative path in the **entry module's module-level** config is resolved against the workspace root to an absolute path at CLI startup. Values applied at runtime — a workflow-level block or an imported module — are assigned to the env var exactly as authored (not normalized). |
+| `agent.trusted_workspace` | string (path) | workspace root | `JAIPH_AGENT_TRUSTED_WORKSPACE` | Directory passed to Cursor as `--trust`. When unset, defaults to `JAIPH_WORKSPACE`. A relative path in the **entry module's module-level** config is resolved against the workspace root to an absolute path at CLI startup. Values applied at runtime — a def-level block or an imported module — are assigned to the env var exactly as authored (not normalized). |
 | `agent.cursor_flags` | string | — | `JAIPH_AGENT_CURSOR_FLAGS` | Extra flags appended to Cursor invocations (whitespace-split). |
 | `agent.claude_flags` | string | — | `JAIPH_AGENT_CLAUDE_FLAGS` | Extra flags appended to Claude invocations (whitespace-split). |
 
@@ -83,7 +83,7 @@ Interpolation runs when the config scope is applied (workflow entry for workflow
 
 ## Module keys
 
-Informational metadata only; does not affect execution. Allowed in module-level config only — any `module.*` key inside a workflow-level config is `E_PARSE`.
+Informational metadata only; does not affect execution. Allowed in module-level config only — any `module.*` key inside a def-level config is `E_PARSE`.
 
 | Key | Type | Default |
 |---|---|---|
@@ -99,13 +99,13 @@ Informational metadata only; does not affect execution. Allowed in module-level 
 | Scope | Effect |
 |---|---|
 | Module-level `config` | Sugar: applies to every workflow in the file. |
-| Workflow-level `config` | Scopes the keys to that workflow only. |
+| Def-level `config` | Scopes the keys to that workflow only. |
 | Imported (non-entry) module | **Ignored** (warned at pre-flight) — an imported module must not be able to pull arbitrary host secrets into its own steps. Mirrors the [import trust boundary](#import-trust-boundary) for `agent.command` / `agent.backend`. |
 
 ```jaiph
 config { trusted_envs = "NPM_TOKEN" }   # module-level: every workflow's run steps
 
-workflow publish {
+def publish{
   config { trusted_envs = "GITHUB_TOKEN" }   # only publish's run steps also see GITHUB_TOKEN
   run release()
 }
@@ -126,8 +126,8 @@ Semantics:
 
 | Layer | Effect |
 |---|---|
-| Environment (`JAIPH_AGENT_*`, `JAIPH_RUNS_DIR`, `JAIPH_DEBUG`) | Locked when present in the parent env; cannot be overridden by module- or workflow-level config. |
-| Workflow-level `config` | Applies for the workflow body; restored on exit. |
+| Environment (`JAIPH_AGENT_*`, `JAIPH_RUNS_DIR`, `JAIPH_DEBUG`) | Locked when present in the parent env; cannot be overridden by module- or def-level config. |
+| Def-level `config` | Applies for the workflow body; restored on exit. |
 | Module-level `config` | Applies to workflows without their own block. |
 | Built-in defaults | Lowest priority. |
 
@@ -136,10 +136,8 @@ Semantics:
 | Call type | Scope behaviour |
 |---|---|
 | Root entry (`jaiph run file.jh`) | Full module + workflow metadata applied with normal precedence. |
-| Same-module `run` | Callee's workflow-level `config` is layered on top of the caller's effective env. Module-level config is not re-applied. |
-| Cross-module `run` (e.g. `run alias.default()`) | Callee's module-level config is layered, then workflow-level on top — same as root-entry precedence, respecting `${NAME}_LOCKED`. **`agent.command` and `agent.backend` are not applied from imported modules** (see [Import trust boundary](#import-trust-boundary)). |
-| Same-module `ensure` | Caller's scope is reused verbatim. |
-| Cross-module `ensure` | Callee module's `agent.*` / `run.*` are merged on top of the current env (respecting locks). Workflow-level config does not apply to rules. |
+| Same-module `run` | Callee's def-level `config` is layered on top of the caller's effective env. Module-level config is not re-applied. |
+| Cross-module `run` (e.g. `run alias.main()`) | Callee's module-level config is layered, then def-level on top — same as root-entry precedence, respecting `${NAME}_LOCKED`. **`agent.command` and `agent.backend` are not applied from imported modules** (see [Import trust boundary](#import-trust-boundary)). |
 
 After any nested call returns, the caller's scope is restored exactly as before.
 
@@ -153,7 +151,7 @@ Locked names: `JAIPH_AGENT_BACKEND`, `JAIPH_AGENT_MODEL`, `JAIPH_AGENT_COMMAND`,
 ## Import trust boundary
 {: #import-trust-boundary}
 
-`agent.command` and `agent.backend` are **execution-binary keys** — they determine which process runs `prompt` steps. To prevent a third-party `.jh` library from silently redirecting execution to a different binary, these two keys may only be set from the **entry module's** `config {}` block (module-level or workflow-level). Imported modules that declare `agent.command` or `agent.backend` in their `config {}` are silently ignored for these keys.
+`agent.command` and `agent.backend` are **execution-binary keys** — they determine which process runs `prompt` steps. To prevent a third-party `.jh` library from silently redirecting execution to a different binary, these two keys may only be set from the **entry module's** `config {}` block (module-level or def-level). Imported modules that declare `agent.command` or `agent.backend` in their `config {}` are silently ignored for these keys.
 
 [`trusted_envs`](#trusted-envs) carries the same entry-only restriction: declarations in imported modules are ignored (with a pre-flight warning) so a library cannot pull host secrets into its own steps.
 
@@ -201,7 +199,7 @@ Backend-specific flags come from `agent.cursor_flags` / `agent.claude_flags` (or
 ### Credential pre-flight
 {: #credential-pre-flight}
 
-Before `jaiph run` spawns the workflow runner, the host CLI runs a credential pre-flight (`src/cli/run/preflight-credentials.ts`). It collects the distinct backend(s) declared in the entry file's module-level `config` block and each workflow-level block, plus the effective default (`JAIPH_AGENT_BACKEND` env, or `cursor` when unset). Deeper per-import overrides resolved at runtime are not followed.
+Before `jaiph run` spawns the workflow runner, the host CLI runs a credential pre-flight (`src/cli/run/preflight-credentials.ts`). It collects the distinct backend(s) declared in the entry file's module-level `config` block and each def-level block, plus the effective default (`JAIPH_AGENT_BACKEND` env, or `cursor` when unset). Deeper per-import overrides resolved at runtime are not followed.
 
 | Backend | Required credential | Host behaviour |
 |---|---|---|
@@ -221,7 +219,7 @@ Resolution order for a `prompt` step:
 | Step | Source | Notes |
 |---|---|---|
 | 1 | User env — `JAIPH_AGENT_MODEL` non-empty. | `model_reason: explicit`. Applies to every `prompt` in the run. |
-| 2 | In-file config — `agent.model` from workflow-level then module-level metadata (interpolated at prompt time). | `model_reason: explicit`. Applies to that `prompt` invocation only; passed as `--model` to the backend CLI without writing `JAIPH_AGENT_MODEL`. |
+| 2 | In-file config — `agent.model` from def-level then module-level metadata (interpolated at prompt time). | `model_reason: explicit`. Applies to that `prompt` invocation only; passed as `--model` to the backend CLI without writing `JAIPH_AGENT_MODEL`. |
 | 3 | Flags model — `--model <name>` inside `agent.cursor_flags` / `agent.claude_flags`. | `model_reason: flags`. Codex has no flag channel; this step does not apply. |
 | 4 | Backend default — Cursor/Claude binaries pick their own. Codex defaults to `gpt-4o` in code. | `model_reason: backend-default`. |
 

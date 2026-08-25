@@ -3,29 +3,28 @@ import assert from "node:assert/strict";
 import { preflightAgentCredentials, E_AGENT_CREDENTIALS } from "./preflight-credentials";
 import type {
   jaiphModule,
-  WorkflowDef,
-  WorkflowMetadata,
-  WorkflowStepDef,
+  Def,
+  DefMetadata,
+  StepDef,
 } from "../../types";
 
-function emptyModule(filePath: string, metadata?: WorkflowMetadata): jaiphModule {
+function emptyModule(filePath: string, metadata?: DefMetadata): jaiphModule {
   return {
     filePath,
     metadata,
     imports: [],
     channels: [],
     exports: [],
-    rules: [],
     scripts: [],
-    workflows: [],
+    defs: [],
   };
 }
 
 function workflow(
   name: string,
-  metadata?: WorkflowMetadata,
-  steps: WorkflowStepDef[] = [],
-): WorkflowDef {
+  metadata?: DefMetadata,
+  steps: StepDef[] = [],
+): Def {
   return {
     name,
     params: [],
@@ -36,7 +35,7 @@ function workflow(
   };
 }
 
-function promptStep(): WorkflowStepDef {
+function promptStep(): StepDef {
   return {
     type: "const",
     name: "r",
@@ -108,7 +107,7 @@ test("message contains backend, model, entry file path, and 'module config' scop
 
 test("message reports 'workflow <name>' scope when backend is set at workflow level", () => {
   const mod = emptyModule(ENTRY);
-  mod.workflows = [
+  mod.defs = [
     workflow("review", {
       agent: { backend: "claude", model: "opus-4" },
     }),
@@ -122,7 +121,7 @@ test("message reports 'workflow <name>' scope when backend is set at workflow le
   assert.ok(claudeWarn, "expected a claude warning");
   assert.ok(claudeWarn.includes("opus-4"));
   assert.ok(claudeWarn.includes(ENTRY));
-  assert.ok(claudeWarn.includes("workflow review"), `missing 'workflow review' scope: ${claudeWarn}`);
+  assert.ok(claudeWarn.includes("def review"), `missing 'workflow review' scope: ${claudeWarn}`);
 });
 
 test("claude with ANTHROPIC_API_KEY only → silent", () => {
@@ -187,7 +186,7 @@ test("no backend, no prompt — silent", () => {
 
 test("no agent.backend configured, cursor default, no CURSOR_API_KEY, prompt used → warn only", () => {
   const mod = emptyModule(ENTRY);
-  mod.workflows = [workflow("default", undefined, [promptStep()])];
+  mod.defs = [workflow("main", undefined, [promptStep()])];
   const r = preflightAgentCredentials({
     mod,
     inputAbs: ENTRY,
@@ -210,9 +209,9 @@ test("explicit backend in config but no prompt step → still checks", () => {
   assert.ok(r.warnings[0].includes("claude"));
 });
 
-test("module-level claude + workflow-level cursor → both warned", () => {
+test("module-level claude + def-level cursor → both warned", () => {
   const mod = emptyModule(ENTRY, { agent: { backend: "claude" } });
-  mod.workflows = [
+  mod.defs = [
     workflow("legacy", { agent: { backend: "cursor" } }),
   ];
   const r = preflightAgentCredentials({
@@ -223,7 +222,7 @@ test("module-level claude + workflow-level cursor → both warned", () => {
   assert.equal(r.warnings.length, 2);
   const joined = r.warnings.join("\n");
   assert.ok(joined.includes("claude") && joined.includes("module config"));
-  assert.ok(joined.includes("cursor") && joined.includes("workflow legacy"));
+  assert.ok(joined.includes("cursor") && joined.includes("def legacy"));
 });
 
 test("module config matches the effective env default → no duplicate check", () => {

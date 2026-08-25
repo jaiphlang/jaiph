@@ -71,7 +71,7 @@ export function formatStartLine(
     const showParams =
       params != null &&
       params.length > 0 &&
-      (kind === "workflow" || kind === "prompt" || kind === "script" || kind === "rule");
+      (kind === "def" || kind === "prompt" || kind === "script");
     paramSuffix = showParams
       ? colorize(formatNamedParamsForDisplay(params), "dim", colorEnabled)
       : "";

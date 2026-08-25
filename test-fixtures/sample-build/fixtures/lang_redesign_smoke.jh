@@ -1,6 +1,6 @@
 #!/usr/bin/env jaiph
 
-rule always_ok() {
+def always_ok() {
   run always_ok_impl()
 }
 
@@ -8,24 +8,24 @@ script always_ok_impl = `echo ok`
 
 script noop = `:`
 
-workflow wf_fail() {
+def wf_fail() {
   fail "expected failure"
 }
 
-workflow wf_const() {
+def wf_const() {
   const msg = "hello"
   log "${msg}"
 }
 
-workflow wf_async() {
+def wf_async() {
   run async noop()
 }
 
-workflow wf_brace_if() {
-  ensure always_ok()
+def wf_brace_if() {
+  run always_ok()
   log "then"
 }
 
-workflow default() {
-  ensure always_ok()
+export def main() {
+  run always_ok()
 }

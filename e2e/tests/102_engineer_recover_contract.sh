@@ -22,13 +22,13 @@ echo "details: expected 0 but got 1" >&2
 exit 1
 ```
 
-rule ci_passes() {
+def ci_passes() {
   run failing_ci_impl()
 }
 
-workflow implement(task, role) {
+def implement(task, role) {
   const the_task = "${task}"
-  ensure ci_passes() catch (failure) {
+  run ci_passes() catch (failure) {
     const ci_failure_log = "${failure}"
     const ci_log_file = ".jaiph/tmp/ensure_ci_passes.last.log"
     run mkdir_p_simple(".jaiph/tmp")
@@ -37,7 +37,7 @@ workflow implement(task, role) {
   }
 }
 
-workflow default() {
+export def main() {
   run implement("original-task", "surgical")
 }
 EOF
@@ -58,4 +58,4 @@ if [[ "${role}" != "surgical" ]]; then
   e2e::fail "recover \$2 preserves role argument"
 fi
 
-e2e::pass "engineer-style ensure catch contract holds"
+e2e::pass "engineer-style run catch contract holds"

@@ -1,5 +1,5 @@
 import { basename } from "node:path";
-import type { jaiphModule, WorkflowDef } from "../../types";
+import type { jaiphModule, Def } from "../../types";
 
 /** JSON Schema fragment for one MCP tool input (all Jaiph params are strings). */
 export interface McpInputSchema {
@@ -9,12 +9,12 @@ export interface McpInputSchema {
   additionalProperties: false;
 }
 
-/** One exposed workflow: MCP surface plus the workflow symbol to invoke. */
+/** One exposed def: MCP surface plus the def symbol to invoke. */
 export interface McpToolSpec {
   /** MCP tool name (`^[a-zA-Z0-9_-]{1,128}$`). */
   name: string;
-  /** Workflow symbol in the entry module (`default` may differ from `name`). */
-  workflow: string;
+  /** Def symbol in the entry module (`main` may differ from `name`). */
+  def: string;
   description: string;
   /** Declared parameter names, in call order. */
   params: string[];
@@ -23,7 +23,7 @@ export interface McpToolSpec {
 
 export interface DeriveToolsResult {
   tools: McpToolSpec[];
-  /** Human-readable notes about skipped workflows (stderr, never stdout). */
+  /** Human-readable notes about skipped defs (stderr, never stdout). */
   warnings: string[];
 }
 
@@ -34,20 +34,20 @@ export interface DeriveToolsResult {
 export function toolNameFromFile(inputAbs: string): string {
   const base = basename(inputAbs).replace(/\.jh$/, "");
   const slug = base.replace(/[^A-Za-z0-9_-]/g, "_");
-  return slug.length > 0 ? slug.slice(0, 128) : "workflow";
+  return slug.length > 0 ? slug.slice(0, 128) : "def";
 }
 
 /**
  * Build the tool description from the workflow's leading comments.
  * Comment lines are stored raw (including `#`); shebang lines are dropped.
  */
-function describeWorkflow(wf: WorkflowDef, inputAbs: string): string {
+function describeDef(wf: Def, inputAbs: string): string {
   const lines = wf.comments
     .filter((c) => !c.startsWith("#!"))
     .map((c) => c.replace(/^#\s?/, "").trimEnd())
     .filter((c) => c.length > 0);
   if (lines.length > 0) return lines.join("\n");
-  return `Run the "${wf.name}" workflow from ${basename(inputAbs)}.`;
+  return `Run the "${wf.name}" def from ${basename(inputAbs)}.`;
 }
 
 function schemaForParams(params: string[]): McpInputSchema {
@@ -61,68 +61,50 @@ function schemaForParams(params: string[]): McpInputSchema {
 /**
  * Derive the MCP tool list from the entry module.
  *
- * Exposure rules (documented in docs/mcp.md):
- * 1. If the module declares `export workflow …`, exactly those are exposed.
- * 2. Otherwise every top-level workflow is exposed, minus channel route
- *    targets (the three-param inbox handlers wired via `channel … -> wf`).
- * 3. `default` is exposed only when it is the only candidate, under a tool
- *    name derived from the file's basename (`deploy.jh` → `deploy`); with
- *    other candidates present it is skipped (it is the `jaiph run`
- *    entrypoint, not a public tool).
+ * 1. Candidates are exported defs only. Zero exports → no tools.
+ * 2. Skip `main` unless it is the only candidate; then expose it under the
+ *    file basename (`deploy.jh` → `deploy`). `main` stays the `jaiph run`
+ *    entrypoint, not a public tool next to other exports.
  */
 export function deriveTools(mod: jaiphModule, inputAbs: string): DeriveToolsResult {
   const warnings: string[] = [];
-  const routeTargets = new Set<string>();
-  for (const ch of mod.channels) {
-    for (const route of ch.routes ?? []) routeTargets.add(route.value);
-  }
-
-  const exportedWorkflows = mod.workflows.filter((w) => mod.exports.includes(w.name));
-  let candidates: WorkflowDef[];
-  if (exportedWorkflows.length > 0) {
-    candidates = exportedWorkflows;
-  } else {
-    candidates = mod.workflows.filter((w) => {
-      if (routeTargets.has(w.name)) {
-        warnings.push(`workflow "${w.name}" is a channel route target; not exposed as an MCP tool`);
-        return false;
-      }
-      return true;
-    });
+  const candidates = mod.defs.filter((w) => mod.exports.includes(w.name));
+  if (candidates.length === 0) {
+    warnings.push("no exported defs; nothing exposed as an MCP tool");
   }
 
   const tools: McpToolSpec[] = [];
   const taken = new Set<string>();
-  const defaultWf = candidates.find((w) => w.name === "default");
-  const named = candidates.filter((w) => w.name !== "default");
+  const mainWf = candidates.find((w) => w.name === "main");
+  const named = candidates.filter((w) => w.name !== "main");
 
   for (const wf of named) {
     tools.push({
       name: wf.name,
-      workflow: wf.name,
-      description: describeWorkflow(wf, inputAbs),
+      def: wf.name,
+      description: describeDef(wf, inputAbs),
       params: [...wf.params],
       inputSchema: schemaForParams(wf.params),
     });
     taken.add(wf.name);
   }
 
-  if (defaultWf) {
+  if (mainWf) {
     if (named.length > 0) {
       warnings.push(
-        'workflow "default" is not exposed as an MCP tool (other workflows exist; default stays the `jaiph run` entrypoint)',
+        'def "main" is not exposed as an MCP tool (other exported defs exist; main stays the `jaiph run` entrypoint)',
       );
     } else {
       const slug = toolNameFromFile(inputAbs);
       if (taken.has(slug)) {
-        warnings.push(`workflow "default" skipped: tool name "${slug}" already taken`);
+        warnings.push(`def "main" skipped: tool name "${slug}" already taken`);
       } else {
         tools.push({
           name: slug,
-          workflow: "default",
-          description: describeWorkflow(defaultWf, inputAbs),
-          params: [...defaultWf.params],
-          inputSchema: schemaForParams(defaultWf.params),
+          def: "main",
+          description: describeDef(mainWf, inputAbs),
+          params: [...mainWf.params],
+          inputSchema: schemaForParams(mainWf.params),
         });
       }
     }

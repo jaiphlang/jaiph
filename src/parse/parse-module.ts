@@ -5,9 +5,8 @@ import { parseChannelLine } from "./channels";
 import { parseImportLine, parseScriptImportLine } from "./imports";
 import {
   parseConfigBlock,
-  parseRuleBlock,
   parseScriptBlock,
-  parseWorkflowBlock,
+  parseDefBlock,
   parseTestBlock,
   parseEnvDecl,
 } from "./blocks";
@@ -34,9 +33,8 @@ export function parsejaiphWithTrivia(source: string, filePath: string): ParseRes
     imports: [],
     channels: [],
     exports: [],
-    rules: [],
     scripts: [],
-    workflows: [],
+    defs: [],
   };
   const topLevelOrder: TopLevelEmitOrder[] = [];
   let i = 0;
@@ -144,16 +142,9 @@ export function parsejaiphWithTrivia(source: string, filePath: string): ParseRes
       continue;
     }
 
-    if (/^(export\s+)?rule\s/.test(line)) {
-      const { rule, nextIndex, exported } = parseRuleBlock(filePath, lines, i - 1, pendingTopLevelComments, trivia);
-      pendingTopLevelComments = [];
-      if (exported) {
-        mod.exports.push(rule.name);
-      }
-      mod.rules.push(rule);
-      topLevelOrder.push({ kind: "rule", index: mod.rules.length - 1 });
-      i = nextIndex;
-      continue;
+    if (/^(export\s+)?(rule|workflow)\s/.test(line)) {
+      const kind = /(?:export\s+)?(rule|workflow)\s/.exec(line)?.[1] ?? "rule";
+      fail(filePath, `'${kind}' is not a keyword; use 'def'`, lineNo);
     }
 
     if (/^(export\s+)?script\s/.test(line)) {
@@ -168,14 +159,14 @@ export function parsejaiphWithTrivia(source: string, filePath: string): ParseRes
       continue;
     }
 
-    if (/^(export\s+)?workflow\s/.test(line)) {
-      const { workflow, nextIndex, exported } = parseWorkflowBlock(filePath, lines, i - 1, pendingTopLevelComments, trivia);
+    if (/^(export\s+)?def\s/.test(line)) {
+      const { def, nextIndex, exported } = parseDefBlock(filePath, lines, i - 1, pendingTopLevelComments, trivia);
       pendingTopLevelComments = [];
       if (exported) {
-        mod.exports.push(workflow.name);
+        mod.exports.push(def.name);
       }
-      mod.workflows.push(workflow);
-      topLevelOrder.push({ kind: "workflow", index: mod.workflows.length - 1 });
+      mod.defs.push(def);
+      topLevelOrder.push({ kind: "def", index: mod.defs.length - 1 });
       i = nextIndex;
       continue;
     }
@@ -188,14 +179,13 @@ export function parsejaiphWithTrivia(source: string, filePath: string): ParseRes
     trivia.setModule({ trailingTopLevelComments: [...pendingTopLevelComments] });
   }
 
-  // Unified namespace: imports, channels, rules, workflows, scripts, and consts all share one name space.
+  // Unified namespace: imports, channels, defs, scripts, and consts share one name space.
   const seen = new Map<string, string>();
   const groups: Array<{ items: Array<{ name: string; loc: { line: number; col: number } }>; kind: string }> = [
     { items: (mod.scriptImports ?? []).map((si) => ({ name: si.alias, loc: si.loc })), kind: "script import" },
     { items: mod.channels.map((c) => ({ name: c.name, loc: c.loc })), kind: "channel" },
-    { items: mod.rules.map((r) => ({ name: r.name, loc: r.loc })), kind: "rule" },
     { items: mod.scripts.map((s) => ({ name: s.name, loc: s.loc })), kind: "script" },
-    { items: mod.workflows.map((w) => ({ name: w.name, loc: w.loc })), kind: "workflow" },
+    { items: mod.defs.map((w) => ({ name: w.name, loc: w.loc })), kind: "def" },
     { items: (mod.envDecls ?? []).map((e) => ({ name: e.name, loc: e.loc })), kind: "const" },
   ];
   for (const { items, kind } of groups) {
@@ -204,7 +194,7 @@ export function parsejaiphWithTrivia(source: string, filePath: string): ParseRes
       if (prev) {
         const msg = kind === "const"
           ? `duplicate name "${name}" — variable name collides with ${prev} of the same name`
-          : `duplicate name "${name}" — channels, rules, workflows, and scripts share a single namespace (already declared as ${prev})`;
+          : `duplicate name "${name}" — channels, defs, and scripts share a single namespace (already declared as ${prev})`;
         fail(filePath, msg, loc.line, loc.col);
       }
       seen.set(name, kind);

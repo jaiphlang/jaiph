@@ -17,7 +17,7 @@ e2e::file "nested_inner.jh" <<'EOF'
 script nested_inner_impl = ```
 echo "e2e-nested-inner"
 ```
-workflow default() {
+export def main() {
   run nested_inner_impl()
 }
 EOF
@@ -28,8 +28,8 @@ import "nested_inner.jh" as inner
 script nested_outer_impl = ```
 echo "e2e-nested-outer"
 ```
-workflow default() {
-  run inner.default()
+export def main() {
+  run inner.main()
   run nested_outer_impl()
 }
 EOF
@@ -42,14 +42,14 @@ e2e::expect_stdout "${nested_out}" <<'EOF'
 
 Jaiph: Running nested_run.jh
 
-workflow default
-  ▸ workflow default
+export def main
+  ▸ export def main
   ·   ▸ script nested_inner_impl
   ·   ✓ script nested_inner_impl (<time>)
-  ✓ workflow default (<time>)
+  ✓ export def main (<time>)
   ▸ script nested_outer_impl
   ✓ script nested_outer_impl (<time>)
-✓ PASS workflow default (<time>)
+✓ PASS export def main (<time>)
 EOF
 
 e2e::expect_out_files "nested_run.jh" 4
@@ -68,7 +68,7 @@ e2e::file "workflow_greeting.jh" <<'EOF'
 script done_impl = ```
 echo "done"
 ```
-workflow default() {
+export def main() {
   prompt "e2e-greeting-prompt"
   run done_impl()
 }
@@ -83,7 +83,7 @@ test "runs happy path and prints PASS" {
   mock prompt "e2e-greeting-mock"
 
   # When
-  const response = run w.default()
+  const response = run w.main()
 
   # Then
   expect_contain response "e2e-greeting-mock"
@@ -109,7 +109,7 @@ e2e::file "unmatched_mock_block.jh" <<'EOF'
 script print_result = ```
 printf '%s' "$1"
 ```
-workflow default() {
+export def main() {
   const result = prompt "e2e-unmatched-prompt-never-mocked"
   run print_result("$result")
 }
@@ -123,7 +123,7 @@ test "unmatched prompt never mocked" {
   mock prompt {
     /other/ => "x"
   }
-  const response = run p.default()
+  const response = run p.main()
   expect_contain response "x"
 }
 EOF
@@ -139,7 +139,7 @@ if [[ $unmatched_exit -eq 0 ]]; then
   printf "%s\n" "${unmatched_out}" >&2
   e2e::fail "unmatched_mock_block.test.jh should exit 1 when no branch matches"
 fi
-if [[ "${unmatched_out}" != *"workflow exited with status"* ]] && [[ "${unmatched_out}" != *"expect_contain failed"*"0 chars"* ]]; then
+if [[ "${unmatched_out}" != *"def exited with status"* ]] && [[ "${unmatched_out}" != *"expect_contain failed"*"0 chars"* ]]; then
   printf "%s\n" "${unmatched_out}" >&2
   e2e::fail "unmatched prompt should report workflow failure or expect_contain failure"
 fi
@@ -155,15 +155,15 @@ e2e::expect_stdout "${fib_out}" <<'EOF'
 
 Jaiph: Running fibonacci.jh
 
-workflow default (n="3")
-  ▸ rule ensure_is_number (value="3")
+export def main (n="3")
+  ▸ def ensure_is_number(value="3")
   ·   ▸ script ensure_is_number_impl (1="3")
   ·   ✓ script ensure_is_number_impl (<time>)
-  ✓ rule ensure_is_number (<time>)
+  ✓ def ensure_is_number(<time>)
   ▸ script fib (1="3")
   ✓ script fib (<time>)
   ℹ 2
-✓ PASS workflow default (<time>)
+✓ PASS export def main (<time>)
 EOF
 
 # Assert .out file content for fibonacci.jh (run from e2e/ dir, workspace root is repo root)
@@ -186,11 +186,11 @@ script check_arg_impl = ```
 script echo_response = ```
 echo "$1"
 ```
-rule check_arg(name) {
+def check_arg(name) {
   run check_arg_impl(name)
 }
-workflow default(name) {
-  ensure check_arg(name)
+export def main(name) {
+  run check_arg(name)
   const response = prompt "e2e-param-prompt-text"
   run echo_response(response)
 }
@@ -202,7 +202,7 @@ import "param_demo.jh" as w
 
 test "parametrized workflow and rule show params in tree; prompt shows value only" {
   mock prompt "e2e-param-mock-response"
-  const response = run w.default("Alice")
+  const response = run w.main("Alice")
   expect_contain response "e2e-param-mock-response"
 }
 EOF
@@ -226,11 +226,11 @@ script need_one_impl = ```
 script param_done_impl = ```
 echo "e2e-param-done"
 ```
-rule need_one(name) {
+def need_one(name) {
   run need_one_impl(name)
 }
-workflow default(name) {
-  ensure need_one(name)
+export def main(name) {
+  run need_one(name)
   run param_done_impl()
 }
 EOF
@@ -243,14 +243,14 @@ e2e::expect_stdout "${param_run_out}" <<'EOF'
 
 Jaiph: Running param_run_only.jh
 
-workflow default (name="Bob")
-  ▸ rule need_one (name="Bob")
+export def main (name="Bob")
+  ▸ def need_one(name="Bob")
   ·   ▸ script need_one_impl (1="Bob")
   ·   ✓ script need_one_impl (<time>)
-  ✓ rule need_one (<time>)
+  ✓ def need_one(<time>)
   ▸ script param_done_impl
   ✓ script param_done_impl (<time>)
-✓ PASS workflow default (<time>)
+✓ PASS export def main (<time>)
 EOF
 
 e2e::expect_out_files "param_run_only.jh" 4

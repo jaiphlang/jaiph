@@ -3,7 +3,7 @@
 test "happy path" {
   mock prompt "canned answer"
 
-  const response = run helpers.default() allow_failure
+  const response = run helpers.main() allow_failure
 
   expect_contain response "canned answer"
   expect_not_contain response "error"

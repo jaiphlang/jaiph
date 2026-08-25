@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync, readdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { buildRuntimeGraph, resolveWorkflowRef, resolveRuleRef, resolveScriptRef, type RuntimeGraph } from "./graph";
+import { buildRuntimeGraph, resolveDefRef, resolveScriptRef, type RuntimeGraph } from "./graph";
 import type { ModuleGraph } from "../../transpiler";
 import { NodeWorkflowRuntime, type MockBodyDef } from "./node-workflow-runtime";
 import type { MockPromptArm } from "./mock";
@@ -9,7 +9,7 @@ import type { TestBlockDef, TestStepDef } from "../../types";
 
 type TestResult = { pass: boolean; error?: string };
 
-type MockRefStep = Extract<TestStepDef, { type: "test_mock_workflow" | "test_mock_rule" | "test_mock_script" }>;
+type MockRefStep = Extract<TestStepDef, { type: "test_mock_def" | "test_mock_script" }>;
 
 /**
  * Resolve the second argument of an `expect_*` step. Returns the literal value
@@ -40,12 +40,9 @@ function resolveMockBodies(
     const ref = step.ref;
     const loc = { line: 1, col: 1 };
     let key: string | null = null;
-    if (step.type === "test_mock_workflow") {
-      const resolved = resolveWorkflowRef(graph, entryFile, { value: ref, loc });
-      if (resolved) key = `${resolved.filePath}::${resolved.workflow.name}`;
-    } else if (step.type === "test_mock_rule") {
-      const resolved = resolveRuleRef(graph, entryFile, { value: ref, loc });
-      if (resolved) key = `${resolved.filePath}::${resolved.rule.name}`;
+    if (step.type === "test_mock_def") {
+      const resolved = resolveDefRef(graph, entryFile, { value: ref, loc });
+      if (resolved) key = `${resolved.filePath}::${resolved.def.name}`;
     } else if (step.type === "test_mock_script") {
       const resolved = resolveScriptRef(graph, entryFile, ref);
       if (resolved) key = `${resolved.filePath}::${resolved.script.name}`;
@@ -92,7 +89,7 @@ async function runTestBlock(
   try {
     const mockResponses: string[] = [];
     let mockArmsJson = "";
-    const mockRefs: Array<Extract<TestStepDef, { type: "test_mock_workflow" | "test_mock_rule" | "test_mock_script" }>> = [];
+    const mockRefs: Array<Extract<TestStepDef, { type: "test_mock_def" | "test_mock_script" }>> = [];
     const vars = new Map<string, string>();
 
     // Collect mock setup. Walk in source order so that `const` bindings declared
@@ -121,7 +118,7 @@ async function runTestBlock(
       if (step.type === "test_mock_prompt_block") {
         mockArmsJson = JSON.stringify(buildMockArms(step));
       }
-      if (step.type === "test_mock_workflow" || step.type === "test_mock_rule" || step.type === "test_mock_script") {
+      if (step.type === "test_mock_def" || step.type === "test_mock_script") {
         mockRefs.push(step);
       }
     }
@@ -137,13 +134,13 @@ async function runTestBlock(
         continue;
       }
       if (step.type === "test_mock_prompt" || step.type === "test_mock_prompt_block" ||
-          step.type === "test_mock_workflow" || step.type === "test_mock_rule" ||
+          step.type === "test_mock_def" ||
           step.type === "test_mock_script" ||
           step.type === "test_const") {
         continue; // Already processed above
       }
 
-      if (step.type === "test_run_workflow") {
+      if (step.type === "test_run_def") {
         const mockBodies = resolveMockBodies(graph, testFileAbs, mockRefs);
         const env: NodeJS.ProcessEnv = {
           ...process.env,
@@ -173,7 +170,7 @@ async function runTestBlock(
           mockBodies,
           suppressLiveEvents: true,
         });
-        const result = await runtime.runNamedWorkflow(step.workflowRef, step.args ?? []);
+        const result = await runtime.runNamedDef(step.defRef, step.args ?? []);
         // Resolve the captured value following production `run_capture` semantics.
         // Only an explicit `const X = run …` binding introduces a variable; there is no
         // implicit alias — `expect_*` must reference an explicitly-captured name.
@@ -204,7 +201,7 @@ async function runTestBlock(
           }
         }
         if (!step.allowFailure && result.status !== 0) {
-          return { pass: false, error: `workflow exited with status ${result.status}` };
+          return { pass: false, error: `def exited with status ${result.status}` };
         }
         continue;
       }

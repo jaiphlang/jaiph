@@ -1,6 +1,6 @@
 # Regression fixture: stale surface the grammar must NOT highlight as keywords.
 
-workflow default() {
+export def main() {
   # `wait` was removed from the language (E_PARSE). It is a plain identifier,
   # never a command keyword. If the grammar re-adds it, the test fails.
   wait for_something

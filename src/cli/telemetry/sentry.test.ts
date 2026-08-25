@@ -18,18 +18,18 @@ const RUN_ID = "11111111-2222-3333-4444-555555555555";
 /** A journal covering the root, a passing step, and a failing script step. */
 function fixtureLines(): string[] {
   const events: Record<string, unknown>[] = [
-    { type: "WORKFLOW_START", workflow: "default", source: "/abs/path/deploy.jh", ts: "2026-07-24T10:00:00Z", run_id: RUN_ID },
+    { type: "RUN_START", def: "main", source: "/abs/path/deploy.jh", ts: "2026-07-24T10:00:00Z", run_id: RUN_ID },
     { type: "STEP_START", func: "ok", kind: "script", name: "ok", ts: "2026-07-24T10:00:01Z", id: "R:2", run_id: RUN_ID },
     { type: "STEP_END", func: "ok", kind: "script", name: "ok", ts: "2026-07-24T10:00:02Z", status: 0, id: "R:2", run_id: RUN_ID, out_content: "fine\n", err_content: "" },
     { type: "STEP_START", func: "boom", kind: "script", name: "boom", ts: "2026-07-24T10:00:03Z", id: "R:3", run_id: RUN_ID },
     { type: "STEP_END", func: "boom", kind: "script", name: "boom", ts: "2026-07-24T10:00:04Z", status: 2, id: "R:3", run_id: RUN_ID, out_content: "", err_content: "kaboom\n" },
-    { type: "WORKFLOW_END", workflow: "default", source: "/abs/path/deploy.jh", ts: "2026-07-24T10:00:05Z", run_id: RUN_ID },
+    { type: "RUN_END", def: "main", source: "/abs/path/deploy.jh", ts: "2026-07-24T10:00:05Z", run_id: RUN_ID },
   ];
   return events.map((e) => JSON.stringify(e));
 }
 
 const META: SentryEventMeta = {
-  workflow: "default",
+  def: "main",
   exitStatus: 1,
   signal: null,
   runDir: "/abs/.jaiph/runs/2026-07-24/10-00-00-deploy",
@@ -83,13 +83,13 @@ test("buildSentryEvent: exit-code termination message + fingerprint + tags + red
   const event = buildSentryEvent(fixtureLines(), META);
   assert.equal(event.platform, "node");
   assert.equal(event.level, "error");
-  assert.deepEqual(event.message, { formatted: "workflow default failed (exit 1)" });
-  assert.deepEqual(event.fingerprint, ["jaiph", "default", "boom"]);
+  assert.deepEqual(event.message, { formatted: "run main failed (exit 1)" });
+  assert.deepEqual(event.fingerprint, ["jaiph", "main", "boom"]);
   assert.equal(event.release, `jaiph@${VERSION}`);
   assert.equal((event as { environment?: string }).environment, undefined, "no environment key when unset");
 
   const tags = event.tags as Record<string, string>;
-  assert.equal(tags["jaiph.workflow"], "default");
+  assert.equal(tags["jaiph.def"], "main");
   assert.equal(tags["jaiph.source"], "deploy.jh", "source tag is the basename");
   assert.equal(tags["jaiph.step.kind"], "script");
   assert.equal(tags["jaiph.step.name"], "boom");
@@ -101,7 +101,7 @@ test("buildSentryEvent: exit-code termination message + fingerprint + tags + red
 
 test("buildSentryEvent: signal termination wins over exit code in the message", () => {
   const event = buildSentryEvent(fixtureLines(), { ...META, exitStatus: 0, signal: "SIGKILL" });
-  assert.deepEqual(event.message, { formatted: "workflow default terminated by signal SIGKILL" });
+  assert.deepEqual(event.message, { formatted: "run main terminated by signal SIGKILL" });
 });
 
 test("buildSentryEvent: environment is included only when set", () => {
@@ -111,11 +111,11 @@ test("buildSentryEvent: environment is included only when set", () => {
 
 test("buildSentryEvent: no failing step → fingerprint tail is 'unknown', no step tags", () => {
   const lines = [
-    JSON.stringify({ type: "WORKFLOW_START", workflow: "default", source: "x.jh", ts: "2026-07-24T10:00:00Z", run_id: RUN_ID }),
-    JSON.stringify({ type: "WORKFLOW_END", workflow: "default", source: "x.jh", ts: "2026-07-24T10:00:01Z", run_id: RUN_ID }),
+    JSON.stringify({ type: "RUN_START", def: "main", source: "x.jh", ts: "2026-07-24T10:00:00Z", run_id: RUN_ID }),
+    JSON.stringify({ type: "RUN_END", def: "main", source: "x.jh", ts: "2026-07-24T10:00:01Z", run_id: RUN_ID }),
   ];
   const event = buildSentryEvent(lines, { ...META, signal: "SIGTERM", exitStatus: 0 });
-  assert.deepEqual(event.fingerprint, ["jaiph", "default", "unknown"]);
+  assert.deepEqual(event.fingerprint, ["jaiph", "main", "unknown"]);
   const tags = event.tags as Record<string, string>;
   assert.equal(tags["jaiph.step.name"], undefined);
   assert.equal(tags["jaiph.step.kind"], undefined);
@@ -161,7 +161,7 @@ test("reportRunFailureToSentry: a successful run sends nothing and warns nothing
   const out = await captureStderr(() =>
     reportRunFailureToSentry({
       runDir: "/nonexistent",
-      workflow: "default",
+      def: "main",
       exitStatus: 0,
       signal: null,
       env: { SENTRY_DSN: "https://key@host/1" },
@@ -172,7 +172,7 @@ test("reportRunFailureToSentry: a successful run sends nothing and warns nothing
 
 test("reportRunFailureToSentry: a failed run without SENTRY_DSN sends nothing and warns nothing", async () => {
   const out = await captureStderr(() =>
-    reportRunFailureToSentry({ runDir: "/nonexistent", workflow: "default", exitStatus: 1, signal: null, env: {} }),
+    reportRunFailureToSentry({ runDir: "/nonexistent", def: "main", exitStatus: 1, signal: null, env: {} }),
   );
   assert.equal(out.length, 0);
 });
@@ -183,11 +183,11 @@ test("reportRunFailureToSentry: hard-fails and does not send when the journal ch
   const dir = mkdtempSync(join(tmpdir(), "jaiph-sentry-tamper-"));
   try {
     // Journal with no valid keyed chain + a persisted key → verifiable → fails.
-    writeFileSync(join(dir, "run_summary.jsonl"), '{"type":"WORKFLOW_START","prev_hash":"deadbeef"}\n');
+    writeFileSync(join(dir, "run_summary.jsonl"), '{"type":"RUN_START","prev_hash":"deadbeef"}\n');
     writeChainKey(dir, "k".repeat(64));
     const warnings: string[] = [];
     const outcome = await reportRunFailureToSentry(
-      { runDir: dir, workflow: "default", exitStatus: 1, signal: null, env: { SENTRY_DSN: "https://key@127.0.0.1:1/1" } },
+      { runDir: dir, def: "main", exitStatus: 1, signal: null, env: { SENTRY_DSN: "https://key@127.0.0.1:1/1" } },
       1000,
       (m) => warnings.push(m),
     );
@@ -203,7 +203,7 @@ test("reportRunFailureToSentry: a failed run with a malformed DSN warns exactly 
   const out = await captureStderr(() =>
     reportRunFailureToSentry({
       runDir: "/nonexistent",
-      workflow: "default",
+      def: "main",
       exitStatus: 1,
       signal: null,
       env: { SENTRY_DSN: "https://host/1" },

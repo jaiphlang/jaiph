@@ -336,7 +336,7 @@ WORK_DIR="${TEST_DIR}/parity-work"
 mkdir -p "${WORK_DIR}"
 cat > "${WORK_DIR}/sample.jh" <<'EOF'
 script say_hello = `echo hello-from-local`
-workflow default() {
+export def main() {
   const msg = run say_hello()
   return "${msg}"
 }

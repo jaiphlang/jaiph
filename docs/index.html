@@ -56,7 +56,7 @@ layout: null
             <a href="https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md"
                 target="_blank" rel="noopener noreferrer" class="button button-dark">Agent skill</a>
         </div>
-        <p class="value-prop">Composable AI workflows you can trust.</p>
+        <p class="value-prop">Composable AI programs you can trust.</p>
         <div class="tagline">
             Open Source<span class="separator">&middot;</span>Powerful<span class="separator">&middot;</span>Friendly!
         </div>
@@ -81,7 +81,7 @@ layout: null
 
                 <div class="code-tab-panel is-active" data-panel="try-run-sample">
                     <div class="os-variant is-active" data-os="posix">
-                        <pre><code class="language-bash static-highlight"><span class="code-line">curl -fsSL https://jaiph.org/run | bash -s '</span><span class="code-line"><span class="ralph-keyword">workflow</span> <span class="ralph-definition">default</span>() {</span><span class="code-line">  <span class="ralph-keyword">const</span> <span class="ralph-variable">response</span> <span class="ralph-operator">=</span> <span class="ralph-keyword">prompt</span> <span class="ralph-string">"Say: Hello, I am [model name]!"</span></span><span class="code-line">  <span class="ralph-keyword">log</span> response</span><span class="code-line">}'</span></code></pre>
+                        <pre><code class="language-bash static-highlight"><span class="code-line">curl -fsSL https://jaiph.org/run | bash -s '</span><span class="code-line"><span class="ralph-keyword">export def</span> <span class="ralph-definition">main</span>() {</span><span class="code-line">  <span class="ralph-keyword">const</span> <span class="ralph-variable">response</span> <span class="ralph-operator">=</span> <span class="ralph-keyword">prompt</span> <span class="ralph-string">"Say: Hello, I am [model name]!"</span></span><span class="code-line">  <span class="ralph-keyword">log</span> response</span><span class="code-line">}'</span></code></pre>
                         <p class="small">Installs Jaiph <strong>v0.13.0</strong> to <strong>~/.local/bin</strong> (if not
                             already
                             installed), and runs the sample workflow with <a href="https://cursor.com/docs/cli/installation"
@@ -143,10 +143,10 @@ layout: null
         <section>
             <h2>What is Jaiph?</h2>
             <div class="card doc-content">
-                <p><strong>Jaiph</strong> is a language and runtime for defining and orchestrating AI agent workflows.
+                <p><strong>Jaiph</strong> is a language and runtime for defining and orchestrating AI agent programs.
                 </p>
-                <p>It allows you to combine agentic workflows with strict checks and script calls. It comes with
-                    host execution for agentic workflows, and a set of tooling to make your development
+                <p>It allows you to combine agentic defs with strict checks and script calls. It comes with
+                    host execution for those programs, and a set of tooling to make your development
                     faster and more efficient.</p>
             </div>
         </section>
@@ -195,16 +195,16 @@ layout: null
 
                 <div class="code-tab-panel is-active" data-panel="say-hello-jh" data-sample="say-hello"
                     data-sample-file="say_hello.jh">
-                    <p><strong>Jaiph</strong> workflows are typically executable <code>.jh</code> files with a shebang.
+                    <p><strong>Jaiph</strong> programs are typically executable <code>.jh</code> files with a shebang.
                     </p>
-                    <p>The core primitives are <strong>rule</strong> (read-only checks), <strong>prompt</strong>
-                        (calling agents), <strong>script</strong> (custom code or shell commands)
-                        and <strong>workflow</strong> (the main unit of orchestration).
+                    <p>The core primitives are <strong>def</strong> (interpreted procedures), <strong>prompt</strong>
+                        (calling agents), and <strong>script</strong> (custom code or shell commands).
+                        <code>jaiph run</code> enters at <code>export def main</code>.
                     </p>
                     <pre><code class="language-jaiph" data-sample-source>#!/usr/bin/env jaiph
 
-# rules are executed on readonly filesystem
-rule valid_name(name_arg) {
+# check the name before calling the agent
+def valid_name(name_arg) {
   return match name_arg {
     /[A-Z][a-z]+/ =&gt; name_arg
     "" =&gt; fail "You didn't provide your name :("
@@ -212,9 +212,9 @@ rule valid_name(name_arg) {
   }
 }
 
-# workflows are main unit of orchestration
-workflow default(name_arg) {
-  const name = ensure valid_name(name_arg)
+# export def main is the jaiph run entry
+export def main(name_arg) {
+  const name = run valid_name(name_arg)
 
   # prompts call agents - cursor by default, but it's configurable
   const response = prompt """
@@ -224,30 +224,30 @@ workflow default(name_arg) {
 
   return response
 }</code></pre>
-                    <p>Running the workflow:</p>
+                    <p>Running the file:</p>
                     <pre><code class="jaiph-run" data-sample-output="success"><span class="run-command">➜  ./say_hello.jh Adam</span>
 
 Jaiph: Running say_hello.jh
 
-<span class="run-keyword">workflow</span> default <span class="run-params">(name_arg="Adam")</span>
-  <span class="run-marker">▸</span> <span class="run-keyword">rule</span> valid_name <span class="run-params">(name_arg="Adam")</span>
-  <span class="run-pass">✓</span> <span class="run-time">rule valid_name (0s)</span>
+<span class="run-keyword">def</span> main <span class="run-params">(name_arg="Adam")</span>
+  <span class="run-marker">▸</span> <span class="run-keyword">def</span> valid_name <span class="run-params">(name_arg="Adam")</span>
+  <span class="run-pass">✓</span> <span class="run-time">def valid_name (0s)</span>
   <span class="run-marker">▸</span> <span class="run-keyword">prompt</span> cursor "Say hello to ${name} and..." <span class="run-params">(name="Adam")</span>
   <span class="run-pass">✓</span> <span class="run-time">prompt cursor (5s)</span>
 
-<span class="run-pass">✓ PASS</span> <span class="run-keyword">workflow</span> default <span class="run-time">(5.1s)</span>
+<span class="run-pass">✓ PASS</span> <span class="run-keyword">def</span> main <span class="run-time">(5.1s)</span>
 
 Hello, Adam—Adam Smith, the 18th-century Scottish economist and philosopher, is often called the father of modern economics for his landmark work *The Wealth of Nations*.</code></pre>
-                    <p>When you don't provide the name parameter, the workflow fails:</p>
+                    <p>When you don't provide the name parameter, the run fails:</p>
                     <pre><code class="jaiph-run" data-sample-output="failure"><span class="run-command">➜  ./say_hello.jh</span>
 
 Jaiph: Running say_hello.jh
 
-<span class="run-keyword">workflow</span> default
-  <span class="run-marker">▸</span> <span class="run-keyword">rule</span> valid_name
-  <span class="run-fail">✗ rule valid_name</span> <span class="run-time">(0s)</span>
+<span class="run-keyword">def</span> main
+  <span class="run-marker">▸</span> <span class="run-keyword">def</span> valid_name
+  <span class="run-fail">✗ def valid_name</span> <span class="run-time">(0s)</span>
 
-<span class="run-fail">✗ FAIL</span> <span class="run-keyword">workflow</span> default <span class="run-time">(0.4s)</span>
+<span class="run-fail">✗ FAIL</span> <span class="run-keyword">def</span> main <span class="run-time">(0.4s)</span>
   Logs: &lt;path&gt;
   Summary: &lt;path&gt;
     out: &lt;path&gt;
@@ -333,7 +333,7 @@ script check_report_exists = ```
   test -f report.txt
 ```
 
-workflow default() {
+export def main() {
   # Recovery in loop: when check_report_exists() fails, the recovery body
   # is executed to fix it, and then check_report_exists() is retried.
   # By default, the retry limit is 10.
@@ -355,7 +355,7 @@ workflow default() {
 
 Jaiph: Running recover_loop.jh
 
-<span class="run-keyword">workflow</span> default
+<span class="run-keyword">def</span> main
   <span class="run-marker">▸</span> <span class="run-keyword">script</span> check_report_exists
   <span class="run-fail">✗ script check_report_exists (0s)</span>
   <span class="run-fail">! Failed to check report.txt</span>
@@ -366,7 +366,7 @@ Jaiph: Running recover_loop.jh
   <span class="run-marker">▸</span> <span class="run-keyword">script</span> __inline_752d3a136cc9
   <span class="run-pass">✓</span> <span class="run-time">script __inline_752d3a136cc9 (0s)</span>
 
-<span class="run-pass">✓ PASS</span> <span class="run-keyword">workflow</span> default <span class="run-time">(6.1s)</span>
+<span class="run-pass">✓ PASS</span> <span class="run-keyword">def</span> main <span class="run-time">(6.1s)</span>
 
 Summary
 -------
@@ -396,42 +396,42 @@ this file; it exists only to satisfy tooling or documentation that expects
 channel findings -> analyst
 channel report -> reviewer
 
-workflow scanner() {
+def scanner() {
   log "Scanning for issues..."
   findings <- "Found 3 issues in auth module"
 }
 
-workflow analyst(message, chan, sender) {
+def analyst(message, chan, sender) {
   log "Analyzing message from ${sender} on channel ${chan}..."
   report <- "Summary: ${message}"
 }
 
-workflow reviewer(message, chan, sender) {
+def reviewer(message, chan, sender) {
   log "Reviewing message from ${sender} on channel ${chan}..."
   logerr "Critical issue: ${message}"
 }
 
-workflow default() {
+export def main() {
   run scanner()
 }</code></pre>
-                    <p>Running the workflow:</p>
+                    <p>Running the file:</p>
                     <pre><code class="jaiph-run" data-sample-output="run"><span class="run-command">➜  ./agent_inbox.jh</span>
 
 Jaiph: Running agent_inbox.jh
 
-<span class="run-keyword">workflow</span> default
-  <span class="run-marker">▸</span> <span class="run-keyword">workflow</span> scanner
+<span class="run-keyword">def</span> main
+  <span class="run-marker">▸</span> <span class="run-keyword">def</span> scanner
   <span class="run-marker">·</span>   <span class="run-marker">ℹ</span> Scanning for issues...
-  <span class="run-pass">✓</span> <span class="run-time">workflow scanner (0s)</span>
-  <span class="run-marker">▸</span> <span class="run-keyword">workflow</span> analyst <span class="run-params">(message="Found 3 issues in auth module", chan="findings", sender="scanner")</span>
+  <span class="run-pass">✓</span> <span class="run-time">def scanner (0s)</span>
+  <span class="run-marker">▸</span> <span class="run-keyword">def</span> analyst <span class="run-params">(message="Found 3 issues in auth module", chan="findings", sender="scanner")</span>
   <span class="run-marker">·</span>   <span class="run-marker">ℹ</span> Analyzing message from scanner on channel findings...
-  <span class="run-pass">✓</span> <span class="run-time">workflow analyst (0s)</span>
-  <span class="run-marker">▸</span> <span class="run-keyword">workflow</span> reviewer <span class="run-params">(message="Summary: Found 3 issues in auth ...", chan="report", sender="analyst")</span>
+  <span class="run-pass">✓</span> <span class="run-time">def analyst (0s)</span>
+  <span class="run-marker">▸</span> <span class="run-keyword">def</span> reviewer <span class="run-params">(message="Summary: Found 3 issues in auth ...", chan="report", sender="analyst")</span>
   <span class="run-marker">·</span>   <span class="run-marker">ℹ</span> Reviewing message from analyst on channel report...
   <span class="run-marker">·</span>   <span class="run-fail">! Critical issue: Summary: Found 3 issues in auth module</span>
-  <span class="run-pass">✓</span> <span class="run-time">workflow reviewer (0s)</span>
+  <span class="run-pass">✓</span> <span class="run-time">def reviewer (0s)</span>
 
-<span class="run-pass">✓ PASS</span> <span class="run-keyword">workflow</span> default <span class="run-time">(0s)</span></code></pre>
+<span class="run-pass">✓ PASS</span> <span class="run-keyword">def</span> main <span class="run-time">(0s)</span></code></pre>
                 </div>
 
                 <div class="code-tab-panel" data-panel="async-jh" data-sample="async" data-sample-file="async.jh">
@@ -444,41 +444,41 @@ Jaiph: Running agent_inbox.jh
 
 const prompt_text = "Say: Greetings! I am [model name]."
 
-workflow cursor_say_hello(name) {
+def cursor_say_hello(name) {
   config { agent.backend = "cursor" }
   const response = prompt "${prompt_text}"
   log response
 }
 
-workflow claude_say_hello(name) {
+def claude_say_hello(name) {
   config { agent.backend = "claude" }
   const response = prompt "${prompt_text}"
   log response
 }
 
-# surrounding workflow waits for all to complete
-workflow default(name) {
+# surrounding def waits for all to complete
+export def main(name) {
   run async cursor_say_hello(name)
   run async claude_say_hello(name)
 }</code></pre>
-                    <p>Running the workflow:</p>
+                    <p>Running the file:</p>
                     <pre><code class="jaiph-run" data-sample-output="run"><span class="run-command">➜  ./async.jh</span>
 
 Jaiph: Running async.jh
 
-<span class="run-keyword">workflow</span> default
- <span class="run-marker">₁</span><span class="run-marker">▸</span> <span class="run-keyword">workflow</span> cursor_say_hello
- <span class="run-marker">₂</span><span class="run-marker">▸</span> <span class="run-keyword">workflow</span> claude_say_hello
+<span class="run-keyword">def</span> main
+ <span class="run-marker">₁</span><span class="run-marker">▸</span> <span class="run-keyword">def</span> cursor_say_hello
+ <span class="run-marker">₂</span><span class="run-marker">▸</span> <span class="run-keyword">def</span> claude_say_hello
  <span class="run-marker">₁</span><span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">prompt</span> cursor "Say: Greetings! I am [mo..."
  <span class="run-marker">₂</span><span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">prompt</span> claude "Say: Greetings! I am [mo..."
  <span class="run-marker">₁</span><span class="run-marker">·</span>   <span class="run-pass">✓</span> <span class="run-time">prompt cursor (3s)</span>
  <span class="run-marker">₁</span><span class="run-marker">·</span>   <span class="run-marker">ℹ</span> Greetings! I am **Composer**, a language model trained by Cursor.
- <span class="run-marker">₁</span><span class="run-pass">✓</span> <span class="run-time">workflow cursor_say_hello (3s)</span>
+ <span class="run-marker">₁</span><span class="run-pass">✓</span> <span class="run-time">def cursor_say_hello (3s)</span>
  <span class="run-marker">₂</span><span class="run-marker">·</span>   <span class="run-pass">✓</span> <span class="run-time">prompt claude (4s)</span>
  <span class="run-marker">₂</span><span class="run-marker">·</span>   <span class="run-marker">ℹ</span> Greetings! I am Claude Opus 4.6.
- <span class="run-marker">₂</span><span class="run-pass">✓</span> <span class="run-time">workflow claude_say_hello (4s)</span>
+ <span class="run-marker">₂</span><span class="run-pass">✓</span> <span class="run-time">def claude_say_hello (4s)</span>
 
-<span class="run-pass">✓ PASS</span> <span class="run-keyword">workflow</span> default <span class="run-time">(4.6s)</span></code></pre>
+<span class="run-pass">✓ PASS</span> <span class="run-keyword">def</span> main <span class="run-time">(4.6s)</span></code></pre>
                     <p>Both workflows run in parallel, and in this case Cursor was faster than Claude.</p>
                 </div>
 
@@ -490,7 +490,7 @@ Jaiph: Running async.jh
             <div class="card doc-content">
                 <h3>Running a workflow</h3>
                 <pre><code class="language-bash">./path/to/main.jh "first" "second" "third"</code></pre>
-                <p>Jaiph runs the <code>default</code> workflow in the file and binds invocation arguments to its
+                <p>Jaiph runs <code>export def main</code> in the file and binds invocation arguments to its
                     parameters. Run artifacts and step output go under <code>.jaiph/runs/</code>.
                 </p>
                 <p><code>.jaiph/</code> is the Jaiph working directory in your project—the recommended place for
@@ -498,8 +498,8 @@ Jaiph: Running async.jh
                 </p>
 
                 <h3>Language</h3>
-                <p><strong>Combine prompts with strict checks.</strong> Compose <code>rule</code>,
-                    <code>script</code>, <code>ensure</code>, and <code>prompt</code> in one executable flow so checks
+                <p><strong>Combine prompts with strict checks.</strong> Compose <code>def</code>,
+                    <code>script</code>, <code>run</code>, and <code>prompt</code> in one executable flow so checks
                     and AI steps stay in the same pipeline. This way you can enforce structure over non-deterministic
                     agent responses.
                     See <a href="grammar">Grammar</a> and <a href="/tutorials/first-workflow">Your first workflow</a>
@@ -523,11 +523,11 @@ Jaiph: Running async.jh
                     (<code>channel_ref</code> can be local or imported, e.g. <code>shared.findings</code>).
                     See <a href="inbox">Inbox &amp; Dispatch</a>.
                 </p>
-                <p><strong>Failure recovery.</strong> <code>ensure … catch</code> and <code>run … catch</code>
-                    handle failures inline: when a rule or script fails, the recovery body runs <strong>once</strong>.
+                <p><strong>Failure recovery.</strong> <code>run … catch</code>
+                    handles failures inline: when a def or script fails, the recovery body runs <strong>once</strong>.
                     For automatic repair-and-retry, use <code>run … recover</code> — a loop that retries
                     the target after each repair attempt (configurable limit, default 10). Both <code>catch</code>
-                    and <code>recover</code> work in workflows. See <a href="grammar">Grammar</a>.
+                    and <code>recover</code> work on every <code>run</code>. See <a href="grammar">Grammar</a>.
                 </p>
 
                 <h3>Runtime</h3>
@@ -629,26 +629,24 @@ Jaiph: Running async.jh
                     </dt>
                     <dd>Import other modules and define module-scoped variables (prefer <code>const</code> for new code)
                         shared by
-                        rules, scripts, and workflows in the same file. Values can be single-line
+                        defs and scripts in the same file. Values can be single-line
                         <code>"..."</code> strings, triple-quoted <code>"""..."""</code> multiline strings,
                         or bare tokens.
                     </dd>
 
-                    <dt><code>rule name() { ... }</code> &middot; <code>rule name(params) { ... }</code> &middot;
-                        <code>workflow name() { ... }</code> &middot; <code>workflow name(params) { ... }</code>
+                    <dt><code>def name() { ... }</code> &middot; <code>def name(params) { ... }</code>
                         &middot;
                         <code>script name = `cmd`</code> &middot; <code>script name = ```[lang] ... ```</code>
                     </dt>
-                    <dd><code>rule</code> bodies use Jaiph structured steps only (with <code>ensure</code>) &mdash;
-                        raw shell lines are rejected; use <code>script</code> and <code>run</code> for bash.
-                        <code>workflow</code> mixes managed steps with optional <strong>inline shell</strong> lines when
-                        they do not parse as Jaiph keywords (prefer <code>script</code> + <code>run</code> for
+                    <dd><code>def</code> is the interpreted callable: prompts, sends, other defs, scripts, <code>run async</code>,
+                        <code>catch</code> / <code>recover</code>. Inline shell lines are allowed when they do not
+                        parse as Jaiph keywords (prefer <code>script</code> + <code>run</code> for
                         non-trivial shell). See <a href="grammar#workflow-body-statements">Grammar — Workflow body statements</a>.
                         <code>script</code> holds bash (or any
                         language via a fence lang tag like <code>```node</code>, <code>```python3</code>, or a custom
-                        shebang) invoked with <code>run</code>. Rules and workflows <strong>require parentheses</strong>
+                        shebang) invoked with <code>run</code>. Defs <strong>require parentheses</strong>
                         on every definition &mdash; even when parameterless (e.g.
-                        <code>workflow default() { &hellip; }</code>).
+                        <code>export def main() { &hellip; }</code>).
                         Named parameters go inside the parentheses; the compiler validates
                         call-site arity when the callee declares params. Any fence tag is valid &mdash; it maps directly
                         to
@@ -662,20 +660,18 @@ Jaiph: Running async.jh
                             href="cli">CLI reference</a>).
                     </dd>
 
-                    <dt><code>ensure ref()</code> &middot; <code>ensure ref(args) catch (name) { ... }</code> &middot;
-                        <code>run ref()</code> &middot; <code>run ref(args) catch (name) { ... }</code> &middot;
+                    <dt><code>run ref()</code> &middot; <code>run ref(args) catch (name) { ... }</code> &middot;
                         <code>run `body`(args)</code>
                     </dt>
-                    <dd><code>ensure</code> executes a rule (with optional args); <code>catch</code> handles
-                        failure inline (runs once); <code>run</code> calls another workflow or module script
-                        (managed step &mdash; same value/log contract as <code>ensure</code>). Parentheses are
+                    <dd><code>run</code> calls another def or named script
+                        (managed step). Parentheses are
                         <strong>required</strong> on all call sites &mdash; even when passing zero arguments
                         (e.g. <code>run setup()</code>).
                         Arguments can be quoted strings, <strong>bare identifiers</strong>, or triple-quoted
                         <code>"""…"""</code> multiline blocks:
                         <code>run greet(name)</code> is equivalent to <code>run greet("${name}")</code>.
                         A call's parentheses may span multiple lines; a line that starts a managed call
-                        (<code>run</code> / <code>ensure</code> / <code>return run</code> / <code>return ensure</code>)
+                        (<code>run</code> / <code>return run</code>)
                         but never closes its <code>(</code> is a compile error, <strong>never</strong> a silent shell line.
                         <code>run `body`(args)</code> embeds a one-off shell command directly
                         without a named <code>script</code> definition &mdash; supports arguments and capture.
@@ -690,17 +686,16 @@ Jaiph: Running async.jh
                         or a triple-quoted <code>"""</code> block for multiline text. Triple backticks are reserved for
                         scripts. Optionally validates structured JSON output and exposes captured variables.</dd>
 
-                    <dt><code>const name = …</code> &middot; <code>const name = ensure ref()</code> &middot;
-                        <code>const name = run ref()</code>
+                    <dt><code>const name = …</code> &middot; <code>const name = run ref()</code>
                     </dt>
                     <dd>Bind or capture step values. All captures require the <code>const</code> keyword.
                         All bindings are <strong>immutable</strong> &mdash; a name bound by a parameter,
                         <code>const</code>, capture, or <code>script</code> cannot be rebound in the same scope.
-                        For <code>ensure</code> / <code>run</code> to rules and workflows,
+                        For <code>run</code> to a def,
                         explicit
                         <code>return "value"</code>, <code>return identifier</code>
-                        (or <code>return run ref()</code> /
-                        <code>return ensure ref()</code>) feeds the variable; for <code>run</code> to a
+                        (or <code>return run ref()</code>)
+                        feeds the variable; for <code>run</code> to a
                         <strong>script</strong>, capture follows
                         stdout. <code>const</code> RHS has stricter rules (no <code>$(...)</code> &mdash; use
                         <code>run</code>
@@ -722,7 +717,7 @@ Jaiph: Running async.jh
                         does not force resolution. Unresolved handles are implicitly joined at workflow exit.
                         Supports <code>recover</code> (retry loop) and <code>catch</code> (single-shot) composition:
                         <code>run async foo() recover(err) { &hellip; }</code>.
-                        Workflows only. See <a href="grammar">Grammar</a> and
+                        See <a href="grammar">Grammar</a> and
                         <a href="spec-async-handles">Spec: Async Handles</a>.
                     </dd>
 
@@ -730,19 +725,18 @@ Jaiph: Running async.jh
                     <dd><code>fail</code> aborts with stderr + non-zero exit. Use triple quotes for multiline messages.
                     </dd>
 
-                    <dt><code>ensure ref() catch (err) { … }</code> &middot;
-                        <code>run ref() catch (err) { … }</code>
+                    <dt><code>run ref() catch (err) { … }</code>
                     </dt>
                     <dd>Failure recovery: when the target fails, the recovery body runs <strong>once</strong>
                         (like a <code>catch</code> clause). <code>catch</code> requires explicit bindings
-                        in parentheses. Works in both workflows and rules.
+                        in parentheses. Legal on every <code>run</code>.
                     </dd>
 
                     <dt><code>run ref() recover (err) { … }</code></dt>
                     <dd>Repair-and-retry loop: when the target fails, the repair body runs and the target
                         is retried automatically. Stops on success or when the retry limit is exhausted
                         (default 10, configurable via <code>run.recover_limit</code>). <code>recover</code>
-                        requires explicit bindings. Workflows only. See
+                        requires explicit bindings. Legal on every <code>run</code>. See
                         <a href="language#catch-and-recover">Language — catch and recover</a>.
                     </dd>
 
@@ -759,9 +753,9 @@ Jaiph: Running async.jh
                         or with <code>return</code> (<code>return match var { … }</code>).
                         Exactly one <code>_</code> wildcard arm is required.
                         Arm bodies support single-line strings, triple-quoted <code>"""…"""</code> multiline strings,
-                        <code>fail</code>, <code>run ref(…)</code>, and <code>ensure ref(…)</code>.
-                        These forms execute at runtime: <code>fail</code> aborts the workflow,
-                        <code>run</code>/<code>ensure</code> execute the target and capture its return value.
+                        <code>fail</code>, and <code>run ref(…)</code>.
+                        These forms execute at runtime: <code>fail</code> aborts the def,
+                        <code>run</code> executes the target and captures its return value.
                         The <code>return</code> keyword and inline scripts are forbidden inside arm bodies.
                     </dd>
 
@@ -799,15 +793,15 @@ Jaiph: Running async.jh
                     <dd>Stub prompt calls with fixed responses or pattern-based dispatch so tests stay deterministic.
                     </dd>
 
-                    <dt><code>mock workflow</code> &middot; <code>mock rule</code> &middot; <code>mock script</code>
+                    <dt><code>mock def</code> &middot; <code>mock script</code>
                     </dt>
-                    <dd>Replace workflow, rule, or script implementations in tests for isolation and targeted
+                    <dd>Replace def or script implementations in tests for isolation and targeted
                         assertions.
                     </dd>
 
-                    <dt><code>const name = run alias.workflow()</code> &middot; <code>run alias.workflow()</code>
+                    <dt><code>const name = run alias.main()</code> &middot; <code>run alias.main()</code>
                         &middot; <code>allow_failure</code></dt>
-                    <dd>Runs an imported workflow through the test harness with explicit <code>run</code> and
+                    <dd>Runs an imported def through the test harness with explicit <code>run</code> and
                         optional <code>const</code> capture (same managed semantics as <code>run</code>
                         in <code>.jh</code> files): capture prefers an explicit <code>return</code> from the callee,
                         otherwise combined output with internal event lines stripped. Add <code>allow_failure</code>

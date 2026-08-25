@@ -147,7 +147,7 @@ bounds delivery but never enables it. See
 | `OTEL_EXPORTER_OTLP_HEADERS` | string (`k=v,k=v`) | — | Comma-separated headers applied to the export POST (for example an auth token). |
 | `OTEL_EXPORTER_OTLP_PROTOCOL` | string (`http/json`) | `http/json` | Only `http/json` is spoken. Any other value (for example `grpc`) → warn on stderr and skip export. |
 | `OTEL_SERVICE_NAME` | string | `jaiph` | `service.name` resource attribute on every exported span. |
-| `OTEL_RESOURCE_ATTRIBUTES` | string (`k=v,k=v`) | — | Extra resource attributes. Jaiph also always adds `jaiph.version`, `jaiph.run_id`, `jaiph.workflow`, and `jaiph.source`; an authenticated `jaiph serve` run additionally adds `jaiph.principal` (audit subject) and `jaiph.correlation_id` (request id) — never a token or a secret-bearing claim. |
+| `OTEL_RESOURCE_ATTRIBUTES` | string (`k=v,k=v`) | — | Extra resource attributes. Jaiph also always adds `jaiph.version`, `jaiph.run_id`, `jaiph.def`, and `jaiph.source`; an authenticated `jaiph serve` run additionally adds `jaiph.principal` (audit subject) and `jaiph.correlation_id` (request id) — never a token or a secret-bearing claim. |
 
 Jaiph also reads the standard Sentry environment variables to report failed
 runs to a Sentry error tracker. As with the OpenTelemetry variables, no `JAIPH_*`

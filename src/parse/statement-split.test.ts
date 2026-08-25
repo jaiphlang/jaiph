@@ -38,7 +38,7 @@ test("shouldSkipSemicolonSplitForLine detects bash if/then/fi", () => {
 });
 
 test("findClosingBraceIndex finds matching close", () => {
-  const s = 'workflow x() { run a; run b }';
+  const s = 'def x() { run a; run b }';
   const open = s.indexOf("{");
   assert.equal(s[open], "{");
   const close = findClosingBraceIndex(s, open);

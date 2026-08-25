@@ -1,7 +1,7 @@
 #!/usr/bin/env jaiph
 
-# rules are executed on readonly filesystem
-rule valid_name(name_arg) {
+# check the name before calling the agent
+def valid_name(name_arg) {
   return match name_arg {
     /[A-Z][a-z]+/ => name_arg
     "" => fail "You didn't provide your name :("
@@ -9,9 +9,9 @@ rule valid_name(name_arg) {
   }
 }
 
-# workflows are main unit of orchestration
-workflow default(name_arg) {
-  const name = ensure valid_name(name_arg)
+# export def main is the jaiph run entry
+export def main(name_arg) {
+  const name = run valid_name(name_arg)
 
   # prompts call agents - cursor by default, but it's configurable
   const response = prompt """

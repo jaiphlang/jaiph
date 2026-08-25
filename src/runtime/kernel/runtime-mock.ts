@@ -7,12 +7,12 @@
  * the runtime's full step interpreter.
  */
 import { spawnSync } from "node:child_process";
-import type { WorkflowStepDef } from "../../types";
+import type { StepDef } from "../../types";
 
 /** Mock body definition: shell for script mocks, Jaiph steps for workflow/rule mocks. */
 export type MockBodyDef =
   | { kind: "shell"; body: string; params: string[] }
-  | { kind: "steps"; steps: WorkflowStepDef[]; params: string[] };
+  | { kind: "steps"; steps: StepDef[]; params: string[] };
 
 export type StepResult = {
   status: number;
@@ -30,7 +30,7 @@ export type StepResult = {
 export type ExecuteStepsBack = (
   params: string[],
   args: string[],
-  steps: WorkflowStepDef[],
+  steps: StepDef[],
 ) => Promise<StepResult>;
 
 export async function executeMockBodyDef(deps: {

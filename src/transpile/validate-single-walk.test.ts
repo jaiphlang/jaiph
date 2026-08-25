@@ -37,16 +37,16 @@ test("AC1: pre-pass helpers are deleted from validate.ts", () => {
 
 /**
  * AC2 — Exactly one recursive helper in validate.ts walks
- * `WorkflowStepDef[]`. A "helper" is any top-level or nested
+ * `StepDef[]`. A "helper" is any top-level or nested
  * function/arrow declaration whose parameter list mentions
- * `WorkflowStepDef[]`; it is "recursive" if its body calls its own name.
+ * `StepDef[]`; it is "recursive" if its body calls its own name.
  *
  * Before the refactor there were four such walkers (`collectKnownVars`'s
  * inner walk, `validateImmutableBindings`'s inner walk, the workflow's
  * `validateStep`, and the rule's `validateRuleStep`). After the refactor
  * only the single `descend` inside `walkStepTree` should remain.
  */
-test("AC2: at most one recursive helper walks WorkflowStepDef[] in validate.ts", () => {
+test("AC2: at most one recursive helper walks StepDef[] in validate.ts", () => {
   const text = readFileSync(validatePath, "utf8");
   const helpers = findStepArrayHelpers(text);
   const recursive = helpers.filter((h) =>
@@ -54,7 +54,7 @@ test("AC2: at most one recursive helper walks WorkflowStepDef[] in validate.ts",
   );
   assert.ok(
     recursive.length <= 1,
-    `expected at most 1 recursive helper walking WorkflowStepDef[] in validate.ts, ` +
+    `expected at most 1 recursive helper walking StepDef[] in validate.ts, ` +
       `found ${recursive.length}: ${recursive.map((h) => h.name).join(", ")}`,
   );
 });
@@ -66,7 +66,7 @@ interface Helper {
 
 /**
  * Locate every `function NAME(...)` or `const NAME = (...) => ...` declaration
- * whose parameter list textually contains `WorkflowStepDef[]`, and return its
+ * whose parameter list textually contains `StepDef[]`, and return its
  * name + body (text between the body's matching braces). Nested arrows count
  * — that's how we catch a helper redeclared inside another function.
  */
@@ -82,7 +82,7 @@ function findStepArrayHelpers(text: string): Helper[] {
     const closeParen = findMatching(text, openParen, "(", ")");
     if (closeParen < 0) continue;
     const params = text.slice(openParen, closeParen + 1);
-    if (!params.includes("WorkflowStepDef[]")) continue;
+    if (!params.includes("StepDef[]")) continue;
     const bodyOpen = text.indexOf("{", closeParen);
     if (bodyOpen < 0) continue;
     const bodyClose = findMatching(text, bodyOpen, "{", "}");

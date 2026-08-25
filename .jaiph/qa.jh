@@ -150,7 +150,7 @@ const analyze_gaps_prompt = """
   </role>
 """
 
-workflow analyze_gaps() {
+def analyze_gaps() {
   config {
     agent.model = "opus"
   }
@@ -167,7 +167,7 @@ workflow analyze_gaps() {
   log "Gap report saved to ${report_path}"
 }
 
-workflow write_tests() {
+def write_tests() {
   run gap_report_nonempty() catch (err) {
     fail "No gap report found (see .jaiph/tmp/qa_gap_report_active.txt). Run analyze_gaps first."
   }
@@ -240,8 +240,8 @@ const commit_task = """
   .jaiph/tmp/qa_gap_report_*.md. Production code unchanged.
 """
 
-workflow default() {
-  ensure git.is_clean()
+export def main() {
+  run git.is_clean()
   run mkdir_tmp_jaiph_qa()
   run analyze_gaps()
   run write_tests()

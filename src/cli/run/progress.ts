@@ -1,6 +1,6 @@
 import { resolve } from "node:path";
-import { jaiphModule, type Expr, type WorkflowStepDef } from "../../types";
-import { workflowSymbolForFile } from "../../transpiler";
+import { jaiphModule, type Expr, type StepDef } from "../../types";
+import { moduleSymbolForFile } from "../../transpiler";
 import { canUseAnsi } from "../../runtime";
 
 export type TreeRow = {
@@ -38,14 +38,14 @@ function formatPromptLabel(promptRaw: string): string {
   return `prompt "${escaped}"`;
 }
 
-function selfRecursiveRunSiteCount(mod: jaiphModule, workflowName: string): number {
-  const workflow = mod.workflows.find((item) => item.name === workflowName);
-  if (!workflow) {
+function selfRecursiveRunSiteCount(mod: jaiphModule, defName: string): number {
+  const def = mod.defs.find((item) => item.name === defName);
+  if (!def) {
     return 0;
   }
   let count = 0;
-  for (const step of workflow.steps) {
-    if (step.type === "exec" && step.body.kind === "call" && step.body.callee.value === workflowName) {
+  for (const step of def.steps) {
+    if (step.type === "exec" && step.body.kind === "call" && step.body.callee.value === defName) {
       count += 1;
       continue;
     }
@@ -57,7 +57,6 @@ function selfRecursiveRunSiteCount(mod: jaiphModule, workflowName: string): numb
 function exprLabel(expr: Expr): string {
   if (expr.kind === "literal") return expr.raw;
   if (expr.kind === "call") return `run ${expr.callee.value}(...)`;
-  if (expr.kind === "ensure_call") return `ensure ${expr.callee.value}(...)`;
   if (expr.kind === "inline_script") return "run `...`(...)";
   if (expr.kind === "prompt") return `prompt ${expr.raw}`;
   if (expr.kind === "match") return `match ${expr.match.subject}`;
@@ -65,14 +64,14 @@ function exprLabel(expr: Expr): string {
   return expr.ref.value;
 }
 
-export function collectWorkflowChildren(
+export function collectDefChildren(
   mod: jaiphModule,
-  workflowName: string,
+  defName: string,
   symbols?: Map<string, string>,
   currentSymbol?: string,
 ): Array<{ label: string; nested?: string; stepFunc?: string }> {
-  const workflow = mod.workflows.find((item) => item.name === workflowName);
-  if (!workflow) {
+  const def = mod.defs.find((item) => item.name === defName);
+  if (!def) {
     return [];
   }
   const items: Array<{ label: string; nested?: string; stepFunc?: string }> = [];
@@ -87,30 +86,19 @@ export function collectWorkflowChildren(
       : currentSymbol
         ? `${currentSymbol}::${ref}`
         : undefined;
-  const stepToItems = (s: WorkflowStepDef): Array<{ label: string; nested?: string; stepFunc?: string }> => {
+  const stepToItems = (s: StepDef): Array<{ label: string; nested?: string; stepFunc?: string }> => {
     if (s.type === "exec") {
       const body = s.body;
       if (body.kind === "call") {
         const wf = body.callee.value;
         const asyncPrefix = body.async ? "async " : "";
         const arr: Array<{ label: string; nested?: string; stepFunc?: string }> = [
-          { label: `${asyncPrefix}workflow ${wf}`, nested: wf, stepFunc: refStepFunc(wf) },
+          { label: `${asyncPrefix}def ${wf}`, nested: wf, stepFunc: refStepFunc(wf) },
         ];
         if (s.recover) {
           const steps = "single" in s.recover ? [s.recover.single] : s.recover.block;
           for (const r of steps) arr.push(...stepToItems(r));
         } else if (s.catch) {
-          const steps = "single" in s.catch ? [s.catch.single] : s.catch.block;
-          for (const r of steps) arr.push(...stepToItems(r));
-        }
-        return arr;
-      }
-      if (body.kind === "ensure_call") {
-        const ref = body.callee.value;
-        const arr: Array<{ label: string; nested?: string; stepFunc?: string }> = [
-          { label: `rule ${ref}`, stepFunc: refStepFunc(ref) },
-        ];
-        if (s.catch) {
           const steps = "single" in s.catch ? [s.catch.single] : s.catch.block;
           for (const r of steps) arr.push(...stepToItems(r));
         }
@@ -152,12 +140,7 @@ export function collectWorkflowChildren(
           const body = arm.body.trimStart();
           const runM = body.match(/^run\s+([A-Za-z_][A-Za-z0-9_.]*)\(/);
           if (runM) {
-            constItems.push({ label: `workflow ${runM[1]}`, nested: runM[1] });
-            continue;
-          }
-          const ensureM = body.match(/^ensure\s+([A-Za-z_][A-Za-z0-9_.]*)\(/);
-          if (ensureM) {
-            constItems.push({ label: `rule ${ensureM[1]}`, nested: ensureM[1] });
+            constItems.push({ label: `def ${runM[1]}`, nested: runM[1] });
           }
         }
       }
@@ -180,7 +163,7 @@ export function collectWorkflowChildren(
     }
   }
 
-  for (const step of workflow.steps) {
+  for (const step of def.steps) {
     items.push(...stepToItems(step));
   }
   return items;
@@ -188,7 +171,7 @@ export function collectWorkflowChildren(
 
 export function buildRunTreeRows(
   mod: jaiphModule,
-  rootLabel = "workflow default",
+  rootLabel = "def main",
   importedModules?: Map<string, jaiphModule>,
   rootDir?: string,
 ): TreeRow[] {
@@ -197,20 +180,20 @@ export function buildRunTreeRows(
   if (importedModules && rootDir) {
     const root = resolve(rootDir);
     for (const [alias, subMod] of importedModules) {
-      symbols.set(alias, workflowSymbolForFile(subMod.filePath, root));
+      symbols.set(alias, moduleSymbolForFile(subMod.filePath, root));
     }
   }
-  const mainSymbol = rootDir ? workflowSymbolForFile(mod.filePath, resolve(rootDir)) : undefined;
-  const visited = new Set<string>(["default"]);
+  const mainSymbol = rootDir ? moduleSymbolForFile(mod.filePath, resolve(rootDir)) : undefined;
+  const visited = new Set<string>(["main"]);
   const renderChildren = (
     currentMod: jaiphModule,
-    workflowName: string,
+    defName: string,
     prefix: string,
     currentSymbol?: string,
     recursionDepth = 0,
   ): void => {
-    const children = collectWorkflowChildren(currentMod, workflowName, symbols.size > 0 ? symbols : undefined, currentSymbol);
-    const selfRecursiveSites = selfRecursiveRunSiteCount(currentMod, workflowName);
+    const children = collectDefChildren(currentMod, defName, symbols.size > 0 ? symbols : undefined, currentSymbol);
+    const selfRecursiveSites = selfRecursiveRunSiteCount(currentMod, defName);
     const recursionSiteIndexForDepth = selfRecursiveSites > 0 ? Math.min(recursionDepth, selfRecursiveSites - 1) : -1;
     let currentSelfRecursiveSiteIndex = 0;
     for (let i = 0; i < children.length; i += 1) {
@@ -218,7 +201,7 @@ export function buildRunTreeRows(
       const childIsLocalSelfRecursion =
         child.nested !== undefined &&
         !child.nested.includes(".") &&
-        child.nested === workflowName;
+        child.nested === defName;
       if (childIsLocalSelfRecursion) {
         const shouldExpand = selfRecursiveSites > 0
           && recursionDepth < selfRecursiveSites
@@ -267,7 +250,7 @@ export function buildRunTreeRows(
       renderChildren(currentMod, nested, `${prefix}    `, currentSymbol);
     }
   };
-  renderChildren(mod, "default", "", mainSymbol);
+  renderChildren(mod, "main", "", mainSymbol);
   return rows;
 }
 
@@ -315,10 +298,10 @@ export function styleBold(text: string): string {
   return `\u001b[1m${text}\u001b[0m`;
 }
 
-/** Format the single TTY bottom status line: "  RUNNING workflow <name> (X.Xs)". Only this line is updated in place. */
-export function formatRunningBottomLine(workflowName: string, elapsedSec: number): string {
+/** Format the single TTY bottom status line: "  RUNNING def <name> (X.Xs)". Only this line is updated in place. */
+export function formatRunningBottomLine(defName: string, elapsedSec: number): string {
   const timeStr = `${elapsedSec.toFixed(1)}s`;
-  return `${styleYellow("▸ RUNNING")}${styleBold(" workflow")} ${workflowName} ${styleDim(`(${timeStr})`)}`;
+  return `${styleYellow("▸ RUNNING")}${styleBold(" def")} ${defName} ${styleDim(`(${timeStr})`)}`;
 }
 
 export function formatElapsedDuration(elapsedMs: number): string {

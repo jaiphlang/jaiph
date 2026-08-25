@@ -1,29 +1,9 @@
 {
   "channels": [],
-  "exports": [],
-  "imports": [],
-  "rules": [],
-  "scripts": [
-    {
-      "body": "echo hello",
-      "comments": [],
-      "name": "greet"
-    },
-    {
-      "body": "echo \"line 1\"\necho \"line 2\"",
-      "comments": [],
-      "name": "multiline"
-    },
-    {
-      "body": "echo \"Hello ${USER}\"\necho \"${PATH:-/usr/bin}\"",
-      "comments": [],
-      "name": "with_shell_expansion"
-    }
-  ],
-  "workflows": [
+  "defs": [
     {
       "comments": [],
-      "name": "default",
+      "name": "main",
       "params": [],
       "steps": [
         {
@@ -45,6 +25,27 @@
           "type": "exec"
         }
       ]
+    }
+  ],
+  "exports": [
+    "main"
+  ],
+  "imports": [],
+  "scripts": [
+    {
+      "body": "echo hello",
+      "comments": [],
+      "name": "greet"
+    },
+    {
+      "body": "echo \"line 1\"\necho \"line 2\"",
+      "comments": [],
+      "name": "multiline"
+    },
+    {
+      "body": "echo \"Hello ${USER}\"\necho \"${PATH:-/usr/bin}\"",
+      "comments": [],
+      "name": "with_shell_expansion"
     }
   ]
 }

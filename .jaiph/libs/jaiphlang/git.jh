@@ -25,31 +25,31 @@ script git_push_head = ```
   fi
 ```
 
-rule in_git_repo() {
+export def in_git_repo() {
   run git_mark_workspace_safe()
   run git_inside_worktree() catch (err) {
     fail "not inside a git repository"
   }
 }
 
-rule branch_clean() {
+export def branch_clean() {
   run git_porcelain_empty() catch (err) {
     fail "git working tree is not clean"
   }
 }
 
-rule has_changes() {
+export def has_changes() {
   run git_porcelain_nonempty() catch (err) {
     fail "git working tree has no changes"
   }
 }
 
-rule is_clean() {
-  ensure in_git_repo()
-  ensure branch_clean()
+export def is_clean() {
+  run in_git_repo()
+  run branch_clean()
 }
 
-workflow commit(task) {
+export def commit(task) {
   config {
     # agent.backend = "cursor"
     # agent.model = "composer-2"
@@ -58,8 +58,8 @@ workflow commit(task) {
     agent.claude_flags = "--permission-mode bypassPermissions"
   }
 
-  ensure in_git_repo()
-  ensure has_changes()
+  run in_git_repo()
+  run has_changes()
 
   const response = prompt """
     Please commit current changes and respond with a commit message and
@@ -91,8 +91,8 @@ workflow commit(task) {
 
 # Like commit(), but no-ops when the worktree is clean (overnight loops).
 # Deletes the generated .patch from the worktree so the next loop starts clean.
-workflow commit_if_changes(task) {
-  ensure has_changes() catch (err) {
+export def commit_if_changes(task) {
+  run has_changes() catch (err) {
     log "No changes to commit."
     return ""
   }
@@ -103,11 +103,11 @@ workflow commit_if_changes(task) {
 
 script git_rm_patch = `rm -f -- "$1"`
 
-workflow push(branch) {
-  ensure in_git_repo()
+export def push(branch) {
+  run in_git_repo()
   run git_push_head(branch)
 }
 
-workflow default(task) {
+export def main(task) {
   return run commit(task)
 }

@@ -14,7 +14,7 @@ function deferred(): { promise: Promise<McpCallResult>; resolve: (r: McpCallResu
 
 const BUILD_TOOL: McpToolSpec = {
   name: "build",
-  workflow: "build",
+  def: "build",
   description: "Builds the target.",
   params: ["target"],
   inputSchema: {
@@ -85,10 +85,10 @@ test("tools/list: returns name, description, inputSchema", async () => {
 // === tools/call ===
 
 test("tools/call: maps arguments by name and returns text content", async () => {
-  const calls: Array<{ workflow: string; args: Record<string, string> }> = [];
+  const calls: Array<{ def: string; args: Record<string, string> }> = [];
   const { server, written } = makeServer({
     callTool: async (spec, args) => {
-      calls.push({ workflow: spec.workflow, args });
+      calls.push({ def: spec.def, args });
       return { text: "built app", isError: false };
     },
   });
@@ -101,7 +101,7 @@ test("tools/call: maps arguments by name and returns text content", async () => 
       params: { name: "build", arguments: { target: "app" } },
     }),
   );
-  assert.deepEqual(calls, [{ workflow: "build", args: { target: "app" } }]);
+  assert.deepEqual(calls, [{ def: "build", args: { target: "app" } }]);
   const res = written[1] as { result: { content: unknown; isError: boolean } };
   assert.deepEqual(res.result.content, [{ type: "text", text: "built app" }]);
   assert.equal(res.result.isError, false);
@@ -415,9 +415,9 @@ test("handleLine(line, write): concurrent calls keep their progress + reply on t
   const { server } = makeServer({
     callTool: (spec, args, ctx) =>
       new Promise((resolve) => {
-        ctx.onStep?.("workflow", spec.workflow);
+        ctx.onStep?.("def", spec.def);
         gates[args.target] = () => {
-          ctx.onStep?.("script", spec.workflow);
+          ctx.onStep?.("script", spec.def);
           resolve({ text: `done ${args.target}`, isError: false });
         };
       }),

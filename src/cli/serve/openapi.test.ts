@@ -16,12 +16,12 @@ const SERVER_INFO = { title: "jaiph — tools.jh", version: "9.9.9" };
 // An export-narrowing fixture: only `alpha` is exported, so `beta` is not a tool.
 const EXPORT_NARROWED = [
   "# Alpha does A.",
-  "export workflow alpha(name) {",
+  "export def alpha(name) {",
   '  return "a ${name}"',
   "}",
   "",
   "# Beta does B (not exported).",
-  "workflow beta() {",
+  "def beta() {",
   '  return "b"',
   "}",
   "",
@@ -40,15 +40,15 @@ test("buildOpenApi emits one path per exposed workflow, honoring export narrowin
   assert.deepEqual(tools.map((t) => t.name), ["alpha"]);
 
   const doc = buildOpenApi(tools, SERVER_INFO) as any;
-  const workflowPaths = Object.keys(doc.paths).filter((p) => /^\/v1\/workflows\/[^/]+\/runs$/.test(p));
-  assert.deepEqual(workflowPaths, ["/v1/workflows/alpha/runs"], "exactly one workflow path; beta is not exposed");
-  assert.equal(doc.paths["/v1/workflows/beta/runs"], undefined);
+  const workflowPaths = Object.keys(doc.paths).filter((p) => /^\/v1\/defs\/[^/]+\/runs$/.test(p));
+  assert.deepEqual(workflowPaths, ["/v1/defs/alpha/runs"], "exactly one workflow path; beta is not exposed");
+  assert.equal(doc.paths["/v1/defs/beta/runs"], undefined);
 });
 
 test("each workflow path carries the exact MCP-derived input schema as its JSON request body", () => {
   const tools = toolsFrom(EXPORT_NARROWED);
   const doc = buildOpenApi(tools, SERVER_INFO) as any;
-  const op = doc.paths["/v1/workflows/alpha/runs"].post;
+  const op = doc.paths["/v1/defs/alpha/runs"].post;
   assert.equal(op.operationId, "run_alpha");
   assert.deepEqual(op.requestBody.content["application/json"].schema, tools[0].inputSchema);
   // Bearer security is applied to the workflow operation.
@@ -63,14 +63,14 @@ test("the document pins info + bearer scheme + run/error component schemas", () 
   assert.ok(doc.components.schemas.Run, "Run schema present");
   assert.ok(doc.components.schemas.Error, "Error schema present");
   // Static run-resource paths are present.
-  for (const p of ["/v1/workflows", "/v1/runs", "/v1/runs/{id}", "/v1/runs/{id}/cancel", "/healthz"]) {
+  for (const p of ["/v1/defs", "/v1/runs", "/v1/runs/{id}", "/v1/runs/{id}/cancel", "/healthz"]) {
     assert.ok(doc.paths[p], `path ${p} present`);
   }
 });
 
-test("buildOpenApi validates for a multi-tool (no-export) module too", async () => {
+test("buildOpenApi validates for a multi-tool exported module too", async () => {
   const tools = toolsFrom(
-    ["# Build.", "workflow build(target) {", '  return "${target}"', "}", "", "# Deploy.", "workflow deploy() {", '  return "ok"', "}", ""].join("\n"),
+    ["# Build.", "export def build(target) {", '  return "${target}"', "}", "", "# Deploy.", "export def deploy() {", '  return "ok"', "}", ""].join("\n"),
   );
   assert.deepEqual(tools.map((t) => t.name).sort(), ["build", "deploy"]);
   const doc = buildOpenApi(tools, SERVER_INFO);

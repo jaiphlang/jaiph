@@ -20,13 +20,13 @@ const FIXTURE = [
   "script env_probe = `printf '%s|%s' \"${PROBE_A:-unset}\" \"${PROBE_B:-unset}\"`",
   'script write_marker = `printf \'marker\' > "$JAIPH_WORKSPACE/written.txt"`',
   "# Writes a workspace marker, then reports probe env values.",
-  "workflow probe_and_write() {",
+  "export def probe_and_write() {",
   "  run write_marker()",
   "  const seen = run env_probe()",
   "  return seen",
   "}",
   "",
-  "workflow default() {",
+  "export def main() {",
   "  const seen = run probe_and_write()",
   "  return seen",
   "}",
@@ -93,7 +93,7 @@ async function runServeMode(ws: string, fixture: string, flags: string[], env: N
     return { exitCode: started.exitCode ?? 1, stderr: stderrBuf };
   }
   try {
-    const res = await fetch(`${started.baseUrl}/v1/workflows/probe_and_write/runs?wait=true`, {
+    const res = await fetch(`${started.baseUrl}/v1/defs/probe_and_write/runs?wait=true`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({}),
@@ -281,7 +281,7 @@ for (const c of WRONG_FLAG_CASES) {
 // three invocation modes (direct, HTTP, MCP)
 // ---------------------------------------------------------------------------
 
-const HOOK_EVENTS = ["workflow_start", "step_start", "step_end", "workflow_end"] as const;
+const HOOK_EVENTS = ["run_start", "step_start", "step_end", "run_end"] as const;
 
 function writeHooksConfig(ws: string): string {
   const hooksLog = join(ws, "hooks.log");
@@ -291,7 +291,7 @@ function writeHooksConfig(ws: string): string {
   const appender = ['p=$(cat); printf \'%s\\n\' "$p" >> "$HOOKS_LOG"'];
   writeFileSync(
     join(ws, ".jaiph", "hooks.json"),
-    JSON.stringify({ workflow_start: appender, step_start: appender, step_end: appender, workflow_end: appender }),
+    JSON.stringify({ run_start: appender, step_start: appender, step_end: appender, run_end: appender }),
   );
   return hooksLog;
 }
@@ -332,19 +332,19 @@ function assertHookContract(events: Array<Record<string, unknown>>, fixture: str
   for (const e of events) {
     assert.equal(e.run_path, fixture, `${mode}: run_path on every payload`);
     assert.equal(e.workspace, ws, `${mode}: workspace on every payload`);
-    assert.ok(typeof e.workflow_id === "string" && e.workflow_id.length > 0, `${mode}: non-empty workflow_id on ${e.event}`);
+    assert.ok(typeof e.run_id === "string" && e.run_id.length > 0, `${mode}: non-empty run_id on ${e.event}`);
     assert.ok(typeof e.timestamp === "string" && e.timestamp.length > 0, `${mode}: timestamp on ${e.event}`);
   }
-  assert.equal(new Set(events.map((e) => e.workflow_id)).size, 1, `${mode}: one run id across all events`);
+  assert.equal(new Set(events.map((e) => e.run_id)).size, 1, `${mode}: one run id across all events`);
   for (const e of [...byType("step_start"), ...byType("step_end")]) {
     assert.ok(typeof e.step_kind === "string" && (e.step_kind as string).length > 0, `${mode}: step_kind present`);
     assert.ok(typeof e.step_name === "string" && (e.step_name as string).length > 0, `${mode}: step_name present`);
   }
   const scriptSteps = byType("step_end").map((e) => `${e.step_kind} ${e.step_name}`);
   assert.ok(scriptSteps.includes("script env_probe"), `${mode}: script step_end observed (saw: ${scriptSteps.join(", ")})`);
-  const end = byType("workflow_end")[0];
-  assert.equal(end.status, 0, `${mode}: workflow_end status 0 on success`);
-  assert.ok(typeof end.elapsed_ms === "number", `${mode}: workflow_end elapsed_ms`);
+  const end = byType("run_end")[0];
+  assert.equal(end.status, 0, `${mode}: run_end status 0 on success`);
+  assert.ok(typeof end.elapsed_ms === "number", `${mode}: run_end elapsed_ms`);
 }
 
 test("hook contract: direct `jaiph run` dispatches all four events with the documented payloads", async () => {

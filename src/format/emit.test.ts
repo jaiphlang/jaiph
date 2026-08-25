@@ -11,7 +11,7 @@ function roundTrip(source: string, filePath = "test.jh"): string {
 describe("emitModule", () => {
   it("formats a minimal workflow", () => {
     const source = [
-      "workflow default() {",
+      "export def main() {",
       "  log \"hello\"",
       "}",
       "",
@@ -25,7 +25,7 @@ describe("emitModule", () => {
       "",
       "channel findings",
       "",
-      "workflow default() {",
+      "export def main() {",
       "  log \"ok\"",
       "}",
       "",
@@ -36,7 +36,7 @@ describe("emitModule", () => {
   it("formats rules with comments", () => {
     const source = [
       "# Validates prerequisites.",
-      "rule project_ready(name) {",
+      "def project_ready(name) {",
       '  run check(arg1)',
       "}",
       "",
@@ -70,7 +70,7 @@ describe("emitModule", () => {
       "  EOF",
       "```",
       "",
-      "workflow default() {",
+      "export def main() {",
       "  run ```bash",
       "  echo inline",
       "  ```()",
@@ -84,7 +84,7 @@ describe("emitModule", () => {
       "  EOF",
       "```",
       "",
-      "workflow default() {",
+      "export def main() {",
       "  run ```bash",
       "    echo inline",
       "  ```()",
@@ -96,7 +96,7 @@ describe("emitModule", () => {
 
   it("formats const with different RHS types", () => {
     const source = [
-      "workflow default(name) {",
+      "export def main(name) {",
       '  const n = "${arg1}"',
       '  const out = run helper(n)',
       "  log out",
@@ -106,10 +106,10 @@ describe("emitModule", () => {
     assert.equal(roundTrip(source), source);
   });
 
-  it("formats ensure with catch block", () => {
+  it("formats run with catch block", () => {
     const source = [
-      "workflow default() {",
-      "  ensure ci_passes() catch (failure) {",
+      "export def main() {",
+      "  run ci_passes() catch (failure) {",
       '    prompt "fix it"',
       "  }",
       "}",
@@ -120,7 +120,7 @@ describe("emitModule", () => {
 
   it("formats async run", () => {
     const source = [
-      "workflow default() {",
+      "export def main() {",
       "  run async worker()",
       "}",
       "",
@@ -130,7 +130,7 @@ describe("emitModule", () => {
 
   it("formats return statement", () => {
     const source = [
-      "workflow default() {",
+      "export def main() {",
       '  return "${result}"',
       "}",
       "",
@@ -142,7 +142,7 @@ describe("emitModule", () => {
     const source = [
       "channel findings",
       "",
-      "workflow default() {",
+      "export def main() {",
       '  findings <- echo "hello"',
       "}",
       "",
@@ -156,7 +156,7 @@ describe("emitModule", () => {
       '  agent.backend = "claude"',
       "}",
       "",
-      "workflow default() {",
+      "export def main() {",
       '  log "ok"',
       "}",
       "",
@@ -170,7 +170,7 @@ describe("emitModule", () => {
       "Say: \"Greetings! I am [model name].\"",
       '"""',
       "",
-      "workflow default() {",
+      "export def main() {",
       '  log "ok"',
       "}",
       "",
@@ -194,13 +194,13 @@ describe("emitModule", () => {
 
   it("respects custom indent", () => {
     const input = [
-      "workflow default() {",
+      "export def main() {",
       "  log \"hello\"",
       "}",
       "",
     ].join("\n");
     const expected = [
-      "workflow default() {",
+      "export def main() {",
       "    log \"hello\"",
       "}",
       "",
@@ -219,7 +219,7 @@ describe("emitModule", () => {
       "",
       "channel findings",
       "",
-      "workflow default() {",
+      "export def main() {",
       '  log "ok"',
       "}",
       "",
@@ -233,7 +233,7 @@ describe("emitModule", () => {
       "",
       "channel findings",
       "",
-      "workflow default() {",
+      "export def main() {",
       '  log "ok"',
       "}",
       "",
@@ -243,11 +243,11 @@ describe("emitModule", () => {
 
   it("preserves rule / workflow / script order from source", () => {
     const source = [
-      "workflow w() {",
+      "def w() {",
       '  log "hi"',
       "}",
       "",
-      "rule r() {",
+      "def r() {",
       "  run w()",
       "}",
       "",
@@ -261,11 +261,11 @@ describe("emitModule", () => {
     const source = [
       "# About this module",
       "",
-      "rule r() {",
+      "def r() {",
       "  run w()",
       "}",
       "",
-      "workflow w() {",
+      "def w() {",
       '  log "x"',
       "}",
       "",
@@ -273,11 +273,11 @@ describe("emitModule", () => {
     // Blank lines only between top-level sections; attached comments sit directly above their decl.
     const expected = [
       "# About this module",
-      "rule r() {",
+      "def r() {",
       "  run w()",
       "}",
       "",
-      "workflow w() {",
+      "def w() {",
       '  log "x"',
       "}",
       "",
@@ -288,12 +288,12 @@ describe("emitModule", () => {
   it("is idempotent", () => {
     const source = [
       "# A comment",
-      "rule check() {",
+      "def check() {",
       "  run impl()",
       "}",
       "",
-      "workflow default() {",
-      "  ensure check()",
+      "export def main() {",
+      "  run check()",
       '  log "done"',
       "}",
       "",
@@ -305,7 +305,7 @@ describe("emitModule", () => {
 
   it("formats fail step", () => {
     const source = [
-      "workflow default() {",
+      "export def main() {",
       '  fail "something went wrong"',
       "}",
       "",
@@ -320,7 +320,7 @@ describe("emitModule", () => {
       '  agent.backend = "cursor"',
       "}",
       "",
-      "workflow default() {",
+      "export def main() {",
       '  log "ok"',
       "}",
       "",
@@ -330,7 +330,7 @@ describe("emitModule", () => {
 
   it("preserves trailing top-level # comments at end of file", () => {
     const source = [
-      "workflow default() {",
+      "export def main() {",
       '  log "ok"',
       "}",
       "",
@@ -342,7 +342,7 @@ describe("emitModule", () => {
 
   it("emits bare log identifier as log name not quoted interpolation", () => {
     const source = [
-      "workflow default() {",
+      "export def main() {",
       "  log review",
       "}",
       "",
@@ -354,7 +354,7 @@ describe("emitModule", () => {
     const source = [
       "channel findings -> analyst",
       "",
-      "workflow default() {",
+      "export def main() {",
       "  run scanner()",
       "}",
       "",
@@ -364,7 +364,7 @@ describe("emitModule", () => {
 
   it("formats prompt with returns", () => {
     const source = [
-      "workflow default() {",
+      "export def main() {",
       "  const result = prompt \"classify\" returns \"{ role: string }\"",
       "  log result",
       "}",
@@ -375,8 +375,8 @@ describe("emitModule", () => {
 
   it("formats const captures", () => {
     const source = [
-      "workflow default() {",
-      "  const response = ensure check()",
+      "export def main() {",
+      "  const response = run check()",
       "  const out = run helper()",
       "  log response",
       "}",
@@ -387,7 +387,7 @@ describe("emitModule", () => {
 
   it("formats match with triple-quoted arm body", () => {
     const source = [
-      "workflow default() {",
+      "export def main() {",
       '  const x = "ok"',
       "  return match x {",
       '    "ok" => """',
@@ -404,17 +404,17 @@ describe("emitModule", () => {
 
   it("preserves mixed workflow/rule/script interleaved order", () => {
     const source = [
-      "workflow dispatch() {",
+      "def dispatch() {",
       '  log "dispatching"',
       "}",
       "",
-      "rule is_ready() {",
+      "def is_ready() {",
       "  run dispatch()",
       "}",
       "",
       "script helper = `echo ok`",
       "",
-      "workflow finalize() {",
+      "def finalize() {",
       '  log "done"',
       "}",
       "",
@@ -425,12 +425,12 @@ describe("emitModule", () => {
   it("preserves comments before each top-level declaration type", () => {
     const source = [
       "# A workflow",
-      "workflow w() {",
+      "def w() {",
       '  log "w"',
       "}",
       "",
       "# A rule",
-      "rule r() {",
+      "def r() {",
       "  run w()",
       "}",
       "",
@@ -446,7 +446,7 @@ describe("emitModule", () => {
       "# Project name",
       "const project = my-project",
       "",
-      "workflow default() {",
+      "export def main() {",
       "  log project",
       "}",
       "",
@@ -456,13 +456,13 @@ describe("emitModule", () => {
 
   it("hoists imports and channels while preserving non-hoisted order", () => {
     const source = [
-      "workflow first() {",
+      "def first() {",
       '  log "1"',
       "}",
       "",
       'import "lib.jh" as lib',
       "",
-      "rule middle() {",
+      "def middle() {",
       "  run first()",
       "}",
       "",
@@ -476,11 +476,11 @@ describe("emitModule", () => {
       "",
       "channel events",
       "",
-      "workflow first() {",
+      "def first() {",
       '  log "1"',
       "}",
       "",
-      "rule middle() {",
+      "def middle() {",
       "  run first()",
       "}",
       "",
@@ -492,7 +492,7 @@ describe("emitModule", () => {
 
   it("formats match with single-line arms round-trip", () => {
     const source = [
-      "workflow default() {",
+      "export def main() {",
       '  const x = "ok"',
       "  return match x {",
       '    "ok" => "yes"',
@@ -506,7 +506,7 @@ describe("emitModule", () => {
 
   it("round-trips run with single recover statement", () => {
     const source = [
-      "workflow default() {",
+      "export def main() {",
       '  run deploy() recover (err) log "fixing"',
       "}",
       "",
@@ -516,7 +516,7 @@ describe("emitModule", () => {
 
   it("round-trips run with multiline recover block", () => {
     const source = [
-      "workflow default() {",
+      "export def main() {",
       "  run deploy() recover (err) {",
       '    log "fixing"',
       "    run fix()",
@@ -533,7 +533,7 @@ describe("emitModule", () => {
       "  run.recover_limit = 5",
       "}",
       "",
-      "workflow default() {",
+      "export def main() {",
       '  log "ok"',
       "}",
       "",
@@ -543,7 +543,7 @@ describe("emitModule", () => {
 
   it("round-trips const capture with run async", () => {
     const source = [
-      "workflow default() {",
+      "export def main() {",
       "  const h = run async foo()",
       "}",
       "",
@@ -553,7 +553,7 @@ describe("emitModule", () => {
 
   it("round-trips run async with recover block", () => {
     const source = [
-      "workflow default() {",
+      "export def main() {",
       "  run async foo() recover (err) {",
       '    log "repair"',
       "  }",
@@ -565,7 +565,7 @@ describe("emitModule", () => {
 
   it("round-trips run async with multi-line recover block", () => {
     const source = [
-      "workflow default() {",
+      "export def main() {",
       "  run async foo() recover (err) {",
       '    log "repairing"',
       "    run fix_it()",
@@ -578,7 +578,7 @@ describe("emitModule", () => {
 
   it("preserves bare identifier return (does not rewrite as ${var} interpolation)", () => {
     const source = [
-      "workflow default() {",
+      "export def main() {",
       '  const response = "hi"',
       "  return response",
       "}",
@@ -589,7 +589,7 @@ describe("emitModule", () => {
 
   it("preserves bare dotted identifier return (does not rewrite as ${base.field})", () => {
     const source = [
-      "workflow default() {",
+      "export def main() {",
       '  const r = prompt "go" returns "{ ok: bool }"',
       "  return r.ok",
       "}",
@@ -600,7 +600,7 @@ describe("emitModule", () => {
 
   it('preserves explicit "${var}" return form when authored that way', () => {
     const source = [
-      "workflow default() {",
+      "export def main() {",
       '  const response = "hi"',
       '  return "${response}"',
       "}",
@@ -611,7 +611,7 @@ describe("emitModule", () => {
 
   it("formats if/else with canonical `} else {` on one line", () => {
     const source = [
-      "workflow default(status) {",
+      "export def main(status) {",
       '  if status == "ok" {',
       '    log "healthy"',
       "  } else {",
@@ -625,7 +625,7 @@ describe("emitModule", () => {
 
   it("preserves an `else if` chain instead of rewriting it as nested if/else", () => {
     const source = [
-      "workflow default(status) {",
+      "export def main(status) {",
       '  if status == "ok" {',
       '    log "healthy"',
       '  } else if status == "warn" {',
@@ -643,7 +643,7 @@ describe("emitModule", () => {
 
   it("if/else is idempotent across two format passes", () => {
     const source = [
-      "workflow default(status) {",
+      "export def main(status) {",
       '  if status == "ok" {',
       '    log "healthy"',
       "  } else {",
@@ -665,7 +665,7 @@ describe("emitModule", () => {
       "",
       "const MAX = 3",
       "",
-      "workflow default() {",
+      "export def main() {",
       "  log p",
       "}",
       "",
@@ -681,7 +681,7 @@ describe("emitModule", () => {
       "",
       "const MAX = 3",
       "",
-      "workflow default() {",
+      "export def main() {",
       "  log p",
       "}",
       "",
@@ -700,7 +700,7 @@ describe("emitModule", () => {
       "",
       "const MAX = 3",
       "",
-      "workflow default() {",
+      "export def main() {",
       '  log "${q}"',
       "}",
       "",

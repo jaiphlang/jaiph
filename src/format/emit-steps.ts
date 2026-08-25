@@ -1,7 +1,7 @@
 import type {
   Arg,
   Expr,
-  WorkflowStepDef,
+  StepDef,
   MatchPatternDef,
   MatchArmDef,
 } from "../types";
@@ -34,7 +34,7 @@ function emitLogLiteralRhs(message: string): string {
   return JSON.stringify(message);
 }
 
-export function emitSteps(steps: WorkflowStepDef[], pad: string, currentIndent: string, trivia: Trivia): string[] {
+export function emitSteps(steps: StepDef[], pad: string, currentIndent: string, trivia: Trivia): string[] {
   const lines: string[] = [];
   for (const step of steps) {
     lines.push(...emitStep(step, pad, currentIndent, trivia));
@@ -112,9 +112,6 @@ function emitExprFirstLine(
     const asyncMod = expr.async ? "async " : "";
     return { head: `run ${asyncMod}${emitRef(expr.callee, expr.args)}`, tail: [] };
   }
-  if (expr.kind === "ensure_call") {
-    return { head: `ensure ${emitRef(expr.callee, expr.args)}`, tail: [] };
-  }
   if (expr.kind === "inline_script") {
     if (expr.lang || expr.body.includes("\n")) {
       const langTag = expr.lang ?? "";
@@ -158,14 +155,14 @@ function emitExprFirstLine(
 }
 
 /** Render the `<subject> <op> <operand>` head shared by `if` and `else if`. */
-function ifHead(step: Extract<WorkflowStepDef, { type: "if" }>): string {
+function ifHead(step: Extract<StepDef, { type: "if" }>): string {
   const operandStr = step.operand.kind === "string_literal"
     ? `"${step.operand.value}"`
     : `/${step.operand.source}/`;
   return `${step.subject} ${step.operator} ${operandStr}`;
 }
 
-function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string, trivia: Trivia): string[] {
+function emitStep(step: StepDef, pad: string, currentIndent: string, trivia: Trivia): string[] {
   const lines: string[] = [];
   const ci = currentIndent;
 
@@ -268,25 +265,6 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string, tri
         }
       } else {
         lines.push(`${ci}${capture}run ${asyncPrefix}${ref}`);
-      }
-      return lines;
-    }
-    if (body.kind === "ensure_call") {
-      const ref = emitRef(body.callee, body.args);
-      if (step.catch) {
-        const b = step.catch.bindings;
-        const bindStr = `(${b.failure})`;
-        if ("single" in step.catch) {
-          const recoverLines = emitStep(step.catch.single, pad, "", trivia);
-          const recoverText = recoverLines.map((l) => l.trim()).join("\n");
-          lines.push(`${ci}${capture}ensure ${ref} catch ${bindStr} ${recoverText}`);
-        } else {
-          lines.push(`${ci}${capture}ensure ${ref} catch ${bindStr} {`);
-          lines.push(...emitSteps(step.catch.block, pad, ci + pad, trivia));
-          lines.push(`${ci}}`);
-        }
-      } else {
-        lines.push(`${ci}${capture}ensure ${ref}`);
       }
       return lines;
     }

@@ -40,7 +40,7 @@ async function withSpawnSpy(
 
 function makeRuntime(root: string): { runtime: NodeWorkflowRuntime; env: NodeJS.ProcessEnv; scriptsDir: string } {
   const jh = join(root, "flow.jh");
-  writeFileSync(jh, ["workflow default() {", '  log "noop"', "}", ""].join("\n"));
+  writeFileSync(jh, ["export def main() {", '  log "noop"', "}", ""].join("\n"));
   const scriptsDir = join(root, "scripts");
   mkdirSync(scriptsDir, { recursive: true });
   const graph = buildRuntimeGraph(jh);
@@ -106,7 +106,7 @@ test("executeScript: script with exec bit stripped (0o644) still executes throug
         'printf "ran-ok" > marker.txt',
         "```",
         "",
-        "workflow default() {",
+        "export def main() {",
         "  run write_marker()",
         "}",
         "",
@@ -131,7 +131,7 @@ test("executeScript: script with exec bit stripped (0o644) still executes throug
       JAIPH_WORKSPACE: root,
     };
     const runtime = new NodeWorkflowRuntime(graph, { env, cwd: root, suppressLiveEvents: true });
-    const status = await runtime.runDefault([]);
+    const status = await runtime.runMain([]);
     assert.equal(status, 0, "workflow succeeded despite stripped exec bit");
     assert.equal(readFileSync(join(root, "marker.txt"), "utf8"), "ran-ok");
   } finally {
@@ -153,7 +153,7 @@ test("executeScript: missing interpreter fails with a diagnosable error naming t
         'echo "unreachable"',
         "```",
         "",
-        "workflow default() {",
+        "export def main() {",
         "  run run_bad()",
         "}",
         "",
@@ -172,7 +172,7 @@ test("executeScript: missing interpreter fails with a diagnosable error naming t
       JAIPH_WORKSPACE: root,
     };
     const runtime = new NodeWorkflowRuntime(graph, { env, cwd: root, suppressLiveEvents: true });
-    const result = await runtime.runNamedWorkflow("default", []);
+    const result = await runtime.runNamedDef("main", []);
     assert.equal(result.status, 1, "workflow failed on missing interpreter");
     const message = `${result.output ?? ""}${result.error ?? ""}`;
     assert.match(message, new RegExp(missing), "error names the missing interpreter");
@@ -197,7 +197,7 @@ test("executeScript: a run script step still receives a --env-injected non-allow
       [
         'script show_token = `echo "token=$GITHUB_TOKEN"`',
         "",
-        "workflow default() {",
+        "export def main() {",
         "  const t = run show_token()",
         '  return "${t}"',
         "}",
@@ -218,7 +218,7 @@ test("executeScript: a run script step still receives a --env-injected non-allow
       GITHUB_TOKEN: "fake-gh-secret",
     };
     const runtime = new NodeWorkflowRuntime(graph, { env, cwd: root, suppressLiveEvents: true });
-    const status = await runtime.runDefault([]);
+    const status = await runtime.runMain([]);
     assert.equal(status, 0);
     const returnValue = readFileSync(join(runtime.getRunDir(), "return_value.txt"), "utf8");
     assert.equal(returnValue, "token=fake-gh-secret");

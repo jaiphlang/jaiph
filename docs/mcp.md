@@ -1,18 +1,18 @@
 ---
-title: Serve workflows as MCP tools
+title: Serve defs as MCP tools
 permalink: /how-to/mcp
 diataxis: how-to
 ---
 
-# Serve workflows as MCP tools
+# Serve defs as MCP tools
 
-This guide turns a `.jh` file into an [MCP](https://modelcontextprotocol.io/) server, so any MCP client (Claude Code, Claude Desktop, Cursor) can call the file's workflows as tools. A workflow is a tested procedure with several steps and built-in repair (`ensure`, `catch`, `recover`, and artifacts). When you expose that workflow as a tool, an agent can invoke the procedure instead of writing its own shell commands.
+This guide turns a `.jh` file into an [MCP](https://modelcontextprotocol.io/) server, so any MCP client (Claude Code, Claude Desktop, Cursor) can call the file's exported defs as tools. A def is a tested procedure with several steps and built-in repair (`catch`, `recover`, and artifacts). When you expose that def as a tool, an agent can invoke the procedure instead of writing its own shell commands.
 
 You don't need an SDK project or a build step. `jaiph mcp ./tools.jh` reuses the same compile-time validation, runner, and `.jaiph/runs/` artifacts as [`jaiph run`](cli.md#jaiph-run).
 
 ## Prerequisites
 
-- A `.jh` file with at least one workflow.
+- A `.jh` file with at least one exported def.
 - Agent credentials for any exposed workflow that uses `prompt`. See [Authenticate agent backends](agent-auth.md). Set the credentials on the host environment. Any other host variable a workflow needs, such as a `GITHUB_TOKEN` or an API base URL, forward with `--env` (described below).
 
 ## 1. Serve a file over stdio
@@ -58,11 +58,11 @@ Any client that launches a command and speaks the MCP stdio transport works the 
 
 Not every workflow in the file becomes a tool. `deriveTools` applies these rules to the entry file only, and never exposes imported modules:
 
-1. If the file declares one or more `export workflow` statements, Jaiph exposes exactly those workflows. `export` marks the module's public API. Use it to publish a deliberate set of tools and hide helper workflows.
-2. Otherwise Jaiph exposes every top-level workflow, except channel route targets. A channel route target is a workflow wired as an inbox handler through `channel name -> handler`. These workflows are message handlers rather than tools, so Jaiph skips them and logs a warning.
-3. Jaiph treats `default` specially. It exposes `default` only when it is the only candidate, under a tool name taken from the file's basename (`deploy.jh` becomes `deploy`). When other workflows exist, Jaiph skips `default`, so it stays the `jaiph run` entrypoint rather than a public tool.
+1. Candidates are exported defs only. Zero exports → no tools, plus a warning.
+2. Skip `main` unless it is the only export; then expose it under a tool name taken from the file's basename (`deploy.jh` becomes `deploy`). `main` stays the `jaiph run` entrypoint, not a public tool next to other exports.
+3. An exported channel-route handler is a tool, because the author exported it.
 
-The tool name for a named workflow is the workflow name itself. For a lone `default`, Jaiph builds the name from the file basename. It strips the `.jh` suffix, replaces any character outside `[A-Za-z0-9_-]` with `_`, and truncates the result to 128 characters.
+The tool name for a named def is the def name itself. For a lone `main`, Jaiph builds the name from the file basename. It strips the `.jh` suffix, replaces any character outside `[A-Za-z0-9_-]` with `_`, and truncates the result to 128 characters.
 
 Jaiph logs every skip and exclusion as a warning on stderr at load time, and never on stdout.
 
@@ -73,8 +73,8 @@ The description an agent reads when it decides whether to call a tool comes from
 ```jaiph
 # Deploy the application to the named environment.
 # Runs the test suite first and aborts the deploy if it fails.
-export workflow deploy(environment) {
-  ensure tests_pass()
+export def deploy(environment) {
+  run tests_pass()
   run `./deploy.sh ${environment}`()
   return "deployed to ${environment}"
 }
@@ -129,7 +129,7 @@ As the workflow runs, Jaiph sends a `notifications/progress` back to the client 
 ```
 
 - `progress` is a counter that only increases. It is a running count of the step events seen so far, not a fraction of a known total. There is no `total`, because Jaiph does not know a workflow's step count up front. Both the start and the end of a step send a notification, so the counter goes up by two per step, and the `message` repeats across the start and end pair (above, the `deploy_sh` script step).
-- `message` is the step's kind and name, one of `workflow <name>`, `script <name>`, or `rule <name>`. These are the same step events that `jaiph run` prints on stderr. The tool's own workflow is the first step (`workflow deploy` above), followed by its nested steps.
+- `message` is the step's kind and name, one of `workflow <name>` or `script <name>`. These are the same step events that `jaiph run` prints on stderr. The tool's own workflow is the first step (`workflow deploy` above), followed by its nested steps.
 - Notifications stop the moment the call's response is sent. No progress notification ever follows the result for that call.
 - A call without a `progressToken` receives no progress notifications at all, which is the same behavior as before you opted in.
 

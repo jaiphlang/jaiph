@@ -20,7 +20,7 @@ script leak_check = ```
 echo "secret=${secret:-EMPTY}"
 ```
 
-workflow default() {
+export def main() {
   run leak_check()
 }
 EOF
@@ -50,7 +50,7 @@ process.stdout.write('node-ok');
 "
 ```
 
-workflow default() {
+export def main() {
   run use_node()
 }
 EOF

@@ -118,7 +118,7 @@ good_status=0
 good_out="$(
   env -i PATH="${FAKE_BIN}" HOME="${HOME_GOOD}" TMPDIR="${TEST_DIR}" \
     JAIPH_SITE="file://${SITE_GOOD}" \
-    bash "${RUN_SCRIPT}" 'workflow default() { }' 2>&1
+    bash "${RUN_SCRIPT}" 'export def main() { }' 2>&1
 )" || good_status=$?
 e2e::assert_equals "${good_status}" "0" "verified install + run exits zero"
 e2e::assert_contains "${good_out}" "STUB-JAIPH run" "the installed jaiph stub ran the workflow"
@@ -142,7 +142,7 @@ bad_status=0
 bad_out="$(
   env -i PATH="${FAKE_BIN}" HOME="${HOME_BAD}" TMPDIR="${TEST_DIR}" \
     JAIPH_SITE="file://${SITE_BAD}" \
-    bash "${RUN_SCRIPT}" 'workflow default() { }' 2>&1
+    bash "${RUN_SCRIPT}" 'export def main() { }' 2>&1
 )" || bad_status=$?
 e2e::assert_equals "${bad_status}" "1" "tampered install script exits non-zero"
 e2e::assert_contains "${bad_out}" "integrity check failed" "reports the integrity failure"
@@ -165,7 +165,7 @@ nosha_status=0
 nosha_out="$(
   env -i PATH="${FAKE_BIN}" HOME="${HOME_NOSHA}" TMPDIR="${TEST_DIR}" \
     JAIPH_SITE="file://${SITE_NOSHA}" \
-    bash "${RUN_SCRIPT}" 'workflow default() { }' 2>&1
+    bash "${RUN_SCRIPT}" 'export def main() { }' 2>&1
 )" || nosha_status=$?
 e2e::assert_equals "${nosha_status}" "1" "missing checksum exits non-zero"
 e2e::assert_contains "${nosha_out}" "unverified install script" "refuses to run without a published checksum"

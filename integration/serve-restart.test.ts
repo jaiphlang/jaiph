@@ -9,13 +9,13 @@ const CLI_PATH = join(process.cwd(), "dist/src/cli.js");
 
 const FIXTURE = [
   "# Greets the given name.",
-  "workflow greet(name) {",
+  "export def greet(name) {",
   '  return "hi ${name}"',
   "}",
   "",
   "script long = `sleep 3`",
   "# Long enough to be caught mid-flight before a hard kill.",
-  "workflow longflow() {",
+  "export def longflow() {",
   "  run long()",
   '  return "done"',
   "}",
@@ -93,7 +93,7 @@ test("jaiph serve: recovery + idempotency survive a real process restart", async
   try {
     // 1) A completed run with an idempotency key — the record we expect to
     //    reconstruct after restart.
-    const created = await fetch(`${srv1.baseUrl}/v1/workflows/greet/runs?wait=true`, {
+    const created = await fetch(`${srv1.baseUrl}/v1/defs/greet/runs?wait=true`, {
       method: "POST",
       headers: { "content-type": "application/json", "idempotency-key": "idem-1" },
       body: JSON.stringify({ name: "world" }),
@@ -110,7 +110,7 @@ test("jaiph serve: recovery + idempotency survive a real process restart", async
     await delay(1200);
 
     // 2) A long run started async and left in flight, so a hard kill interrupts it.
-    const longRes = await fetch(`${srv1.baseUrl}/v1/workflows/longflow/runs`, {
+    const longRes = await fetch(`${srv1.baseUrl}/v1/defs/longflow/runs`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: "{}",
@@ -126,7 +126,7 @@ test("jaiph serve: recovery + idempotency survive a real process restart", async
       }
       // Confirm the journal exists via the events endpoint resolving a dir.
       const ev = await fetch(`${srv1.baseUrl}/v1/runs/${longId}/events`);
-      if (ev.status === 200 && (await ev.text()).includes("WORKFLOW_START")) break;
+      if (ev.status === 200 && (await ev.text()).includes("RUN_START")) break;
       await delay(100);
     }
   } finally {
@@ -160,7 +160,7 @@ test("jaiph serve: recovery + idempotency survive a real process restart", async
     // (c) Idempotency survives: same key + same args returns the ORIGINAL run,
     //     spawning nothing new.
     const before = (await (await fetch(`${srv2.baseUrl}/v1/runs`)).json()).total;
-    const replay = await fetch(`${srv2.baseUrl}/v1/workflows/greet/runs?wait=true`, {
+    const replay = await fetch(`${srv2.baseUrl}/v1/defs/greet/runs?wait=true`, {
       method: "POST",
       headers: { "content-type": "application/json", "idempotency-key": "idem-1" },
       body: JSON.stringify({ name: "world" }),
@@ -171,7 +171,7 @@ test("jaiph serve: recovery + idempotency survive a real process restart", async
     assert.equal(after, before, "no new run was spawned by the idempotent replay");
 
     // (d) Same key + changed args is a conflict that never spawns.
-    const conflict = await fetch(`${srv2.baseUrl}/v1/workflows/greet/runs?wait=true`, {
+    const conflict = await fetch(`${srv2.baseUrl}/v1/defs/greet/runs?wait=true`, {
       method: "POST",
       headers: { "content-type": "application/json", "idempotency-key": "idem-1" },
       body: JSON.stringify({ name: "changed" }),

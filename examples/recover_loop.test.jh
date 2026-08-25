@@ -6,5 +6,5 @@ test "report exists on first attempt skips catch" {
   mock script rl.check_report_exists() {
     exit 0
   }
-  run rl.default()
+  run rl.main()
 }

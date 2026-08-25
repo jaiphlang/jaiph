@@ -10,7 +10,7 @@ function toWorkflowSymbol(inputFile: string, rootDir: string): string {
   return [...dirParts, parsed.name].join("::");
 }
 
-export function workflowSymbolForFile(inputFile: string, rootDir: string): string {
+export function moduleSymbolForFile(inputFile: string, rootDir: string): string {
   return toWorkflowSymbol(resolve(inputFile), resolve(rootDir));
 }
 

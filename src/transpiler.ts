@@ -4,7 +4,7 @@ import { buildScripts as buildScriptsImpl, buildScriptsFromGraph as buildScripts
 import { emitScriptsForModuleFromGraph } from "./transpile/emit-from-graph";
 import type { ScriptArtifact } from "./transpile/emit-script";
 
-export { resolveImportPath, workflowSymbolForFile } from "./transpile/resolve";
+export { resolveImportPath, moduleSymbolForFile } from "./transpile/resolve";
 export type { ScriptArtifact } from "./transpile/emit-script";
 export type { ModuleGraph, ModuleNode } from "./transpile/module-graph";
 // Full public module-graph API. Runtime reuses the same graph and must reach it

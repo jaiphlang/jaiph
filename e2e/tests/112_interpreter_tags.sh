@@ -27,7 +27,7 @@ process.stdout.write("hello-from-node\n");
 
 script plain_bash = `echo bash-ok`
 
-workflow default() {
+export def main() {
   run greet()
   run plain_bash()
 }
@@ -38,12 +38,12 @@ EOF
 
 Jaiph: Running tag_node.jh
 
-workflow default
+export def main
   ▸ script greet
   ✓ script greet (<time>)
   ▸ script plain_bash
   ✓ script plain_bash (<time>)
-✓ PASS workflow default (<time>)
+✓ PASS export def main (<time>)
 EOF
 
   e2e::expect_out_files "tag_node.jh" 3
@@ -67,7 +67,7 @@ sys.stdout.write("hello-from-python\n")
 sys.exit(0)
 ```
 
-workflow default() {
+export def main() {
   run py_greet()
 }
 EOF
@@ -77,10 +77,10 @@ EOF
 
 Jaiph: Running tag_python.jh
 
-workflow default
+export def main
   ▸ script py_greet
   ✓ script py_greet (<time>)
-✓ PASS workflow default (<time>)
+✓ PASS export def main (<time>)
 EOF
 
   e2e::expect_out_files "tag_python.jh" 2
@@ -99,7 +99,7 @@ script:golang my_script {
   body
 }
 
-workflow default() {
+export def main() {
   run my_script()
 }
 EOF
@@ -123,7 +123,7 @@ script my_script = ```node
 console.log("hi");
 ```
 
-workflow default() {
+export def main() {
   run my_script()
 }
 EOF

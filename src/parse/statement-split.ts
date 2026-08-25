@@ -174,7 +174,7 @@ export function splitStatementsOnSemicolons(
 }
 
 /**
- * Expand a workflow/rule block line: unwrap Jaiph `{ ... }` wrappers, then split on `;`.
+ * Expand a def block line: unwrap Jaiph `{ ... }` wrappers, then split on `;`.
  */
 export function expandBlockLineStatements(line: string): string[] {
   const unwrapped = unwrapOuterBraceBlocks(line);
@@ -186,7 +186,7 @@ function looksLikeJaiphStep(stmt: string): boolean {
   const t = stmt.trim();
   if (!t) return false;
   if (
-    /^(run|ensure|prompt|const|fail|wait|log|logerr|logwarn|return|match|if|export|channel|config)\b/.test(
+    /^(run|prompt|const|fail|wait|log|logerr|logwarn|return|match|if|export|channel|config)\b/.test(
       t,
     )
   ) {
@@ -194,10 +194,8 @@ function looksLikeJaiphStep(stmt: string): boolean {
   }
   if (/^[A-Za-z_][A-Za-z0-9_]*\s*=\s*prompt\b/.test(t)) return true;
   if (/^[A-Za-z_][A-Za-z0-9_]*\s*=\s*run\b/.test(t)) return true;
-  if (/^[A-Za-z_][A-Za-z0-9_]*\s*=\s*ensure\b/.test(t)) return true;
   if (/^[A-Za-z_][A-Za-z0-9_]*\s*<-/.test(t)) return true;
   if (/^run\s/.test(t)) return true;
-  if (/^ensure\s/.test(t)) return true;
   if (/^run async\s/.test(t)) return true;
   return false;
 }

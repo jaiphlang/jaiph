@@ -47,7 +47,7 @@ channel findings -> analyst, reviewer
 
 Routes are top-level data on `ChannelDef`, not statements inside a workflow body. Declaring routes on the channel has the following effects:
 
-1. **There is one list of subscribers per channel.** The compiler checks every target when it compiles the module. Each target must be a workflow that declares exactly three parameters. A rule or a script is rejected, and so is a workflow with the wrong number of parameters. An unknown name fails with `E_VALIDATE` at compile time, not at dispatch time.
+1. **There is one list of subscribers per channel.** The compiler checks every target when it compiles the module. Each target must be a `def` that declares exactly three parameters. A script is rejected, and so is a def with the wrong number of parameters. An unknown name fails with `E_VALIDATE` at compile time, not at dispatch time.
 2. **The routes are visible at the top of the module.** You can see which workflows listen on `findings` without reading through workflow bodies to find the connections. The list of listeners is next to the channel it belongs to.
 
 The runtime registers routes only on the entry workflow frame, which is the first workflow the run starts. When that frame starts, the runtime reads the `channel … ->` declarations from that workflow's module. A nested `run` frame always keeps an empty route map. Because of this, a `send` from a nested workflow walks the stack outward until it reaches the entry frame that registered the channel.
@@ -77,7 +77,7 @@ The `<-` operator behaves in one of two ways, depending on whether any running w
 - **Routed.** Some running workflow has a route for the channel under its bare name. If the channel is written with an imported `alias.` prefix, the runtime strips the prefix before it looks up the route. The runtime walks outward from the sender until it finds that workflow's frame and adds the message to that frame's queue. It also writes an audit copy of the message to `inbox/NNN-<channel>.txt` under the run directory.
 - **Unrouted.** No running workflow has a route for the channel. The runtime still adds the message to the sender's own queue and still writes an `INBOX_ENQUEUE` event to `run_summary.jsonl`. It does not write an audit file, and the sender's drain pass skips the message because there are no targets to run.
 
-An unrouted send is dropped on purpose, and it is not an error. Subscribers can be optional this way. A workflow can send on `metrics` even when nothing listens today, and you can add a subscriber later without changing the producer. If a missing subscriber should be a hard failure, check for it in a test or a `rule`, not in the channel runtime.
+An unrouted send is dropped on purpose, and it is not an error. Subscribers can be optional this way. A workflow can send on `metrics` even when nothing listens today, and you can add a subscriber later without changing the producer. If a missing subscriber should be a hard failure, check for it in a test or a `def`, not in the channel runtime.
 
 ## How a receiver workflow is called
 

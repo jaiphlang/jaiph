@@ -14,67 +14,67 @@
 import script "./queue.py" as queue
 
 # Dispatches CLI arguments to the queue Python script.
-workflow default(cmd, arg1, arg2) {
+export def main(cmd, arg1, arg2) {
   const result = run queue(cmd, arg1, arg2)
   log result
 }
 
 # Append ## tasks from a markdown file into QUEUE.md. Titles already present
 # are skipped. Missing #dev-ready tags are added automatically.
-export workflow add_tasks_from_file(path) {
+export def add_tasks_from_file(path) {
   run queue("add_from_file", path)
 }
 
 # Returns the full text block (header + body) of the first task.
-export workflow get_first_task() {
+export def get_first_task() {
   return run queue("get")
 }
 
 # Returns the first task whose header carries the given tag.
-export workflow next_task(tag) {
+export def next_task(tag) {
   return run queue("get", tag)
 }
 
 # Returns the full text block of a task identified by its title.
 # Accepts both clean titles and titles with #tags — tags are stripped
 # before matching so callers don't need to know the exact tag set.
-export workflow get_task_by_header(header) {
+export def get_task_by_header(header) {
   return run queue("get_by_header", header)
 }
 
 # Returns all task titles as newline-separated text (without ## prefix).
 # Pass an optional tag to filter (e.g. "dev-ready").
-export workflow get_all_task_headers() {
+export def get_all_task_headers() {
   return run queue("headers")
 }
 
 # Adds #dev-ready to the header of the task matching the given title.
-export workflow mark_task_dev_ready(header) {
+export def mark_task_dev_ready(header) {
   run queue("mark", header, "dev-ready")
 }
 
 # Removes the task matching the given title from the queue file.
-export workflow remove_completed_task(header) {
+export def remove_completed_task(header) {
   run queue("complete_by_header", header)
 }
 
 # Replaces the body (markdown below the ## line) for the task matching the title.
 # `bodyPath` must be a UTF-8 file; header line and tags are unchanged.
-export workflow set_task_description_from_file(header, bodyPath) {
+export def set_task_description_from_file(header, bodyPath) {
   run queue("set_description", header, bodyPath)
 }
 
 # Passes when the queue has at least one task.
-export rule has_tasks() {
+export def has_tasks() {
   run queue("get")
 }
 
 # Passes when the task text has #dev-ready on its header line.
-export rule task_is_dev_ready(task) {
+export def task_is_dev_ready(task) {
   run queue("has_tag", task, "dev-ready")
 }
 
 # Passes only when every task in the queue carries #dev-ready.
-export rule all_dev_ready() {
+export def all_dev_ready() {
   run queue("check_all_tagged", "dev-ready")
 }

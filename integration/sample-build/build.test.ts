@@ -28,12 +28,12 @@ test("build validates imported rule references with deterministic errors", () =>
         'import "./mod.jh" as mod',
         "",
         "script local_impl = `echo ok`",
-        "rule local() {",
+        "def local() {",
         "  run local_impl()",
         "}",
         "",
-        "workflow main() {",
-        "  ensure mod.missing()",
+        "export def main() {",
+        "  run mod.missing()",
         "}",
         "",
       ].join("\n"),
@@ -42,18 +42,18 @@ test("build validates imported rule references with deterministic errors", () =>
       join(root, "mod.jh"),
       [
         "script existing_impl = `echo hi`",
-        "rule existing() {",
+        "def existing() {",
         "  run existing_impl()",
         "}",
         "",
-        "workflow mod() {",
-        "  ensure existing()",
+        "def mod() {",
+        "  run existing()",
         "}",
         "",
       ].join("\n"),
     );
 
-    assert.throws(() => buildScripts(root, join(root, "out")), /E_VALIDATE imported rule "mod\.missing" does not exist/);
+    assert.throws(() => buildScripts(root, join(root, "out")), /E_VALIDATE imported def or script "mod\.missing" does not exist/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -68,13 +68,13 @@ test("build fails on missing import file", () => {
       [
         'import "../missing/mod.jh" as mod',
         "",
-        "rule local() {",
+        "def local() {",
         "  echo ok",
         "}",
         "",
-        "workflow entry() {",
-        "  ensure local()",
-        "  ensure mod.anything()",
+        "def entry() {",
+        "  run local()",
+        "  run mod.anything()",
         "}",
         "",
       ].join("\n"),
@@ -92,7 +92,7 @@ test("build rejects command substitution in prompt text", () => {
     writeFileSync(
       join(rootSubshell, "main.jh"),
       [
-        "workflow default() {",
+        "export def main() {",
         '  prompt "literal command substitution: $(echo SHOULD_NOT_RUN)"',
         "}",
         "",
@@ -116,7 +116,7 @@ test("buildScripts accepts files with no workflows", () => {
       filePath,
       [
         "script only_rule_impl = `echo ok`",
-        "rule only_rule() {",
+        "def only_rule() {",
         "  run only_rule_impl()",
         "}",
         "",
@@ -142,12 +142,12 @@ test("buildScripts extracts scripts for ensure-with-args workflow", () => {
         "script check_branch_impl = \`\`\`",
         "test \"$1\" = \"main\"",
         "\`\`\`",
-        "rule check_branch(branch) {",
+        "def check_branch(branch) {",
         "  run check_branch_impl(branch)",
         "}",
         "",
-        "workflow default(name) {",
-        "  ensure check_branch(name)",
+        "export def main(name) {",
+        "  run check_branch(name)",
         "}",
         "",
       ].join("\n"),
@@ -174,7 +174,7 @@ test("buildScripts writes multiple script stubs", () => {
         "printf '%s\\n' \"$1\"",
         "\`\`\`",
         "",
-        "workflow default() {",
+        "export def main() {",
         "  const VALUE = run changed_files()",
         '  run print_value(VALUE)',
         "}",
@@ -199,12 +199,12 @@ test("build fails when run in rule references unknown symbol", () => {
     writeFileSync(
       filePath,
       [
-        "rule bad() {",
+        "def bad() {",
         "  run some_workflow()",
         "}",
         "",
-        "workflow default() {",
-        "  ensure bad()",
+        "export def main() {",
+        "  run bad()",
         "}",
         "",
       ].join("\n"),
@@ -212,7 +212,7 @@ test("build fails when run in rule references unknown symbol", () => {
 
     assert.throws(
       () => buildScripts(filePath, outDir),
-      /unknown local script reference.*run in rules must target a script/,
+      /unknown local def or script reference "some_workflow"/,
     );
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -220,7 +220,7 @@ test("build fails when run in rule references unknown symbol", () => {
   }
 });
 
-test("build fails when run in rule targets a workflow", () => {
+test("build allows run of another def", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-run-wf-in-rule-"));
   const outDir = mkdtempSync(join(tmpdir(), "jaiph-run-wf-in-rule-out-"));
   try {
@@ -228,32 +228,29 @@ test("build fails when run in rule targets a workflow", () => {
     writeFileSync(
       filePath,
       [
-        "workflow helper() {",
+        "def helper() {",
         '  log "hi"',
         "}",
         "",
-        "rule bad() {",
+        "def bad() {",
         "  run helper()",
         "}",
         "",
-        "workflow default() {",
-        "  ensure bad()",
+        "export def main() {",
+        "  run bad()",
         "}",
         "",
       ].join("\n"),
     );
 
-    assert.throws(
-      () => buildScripts(filePath, outDir),
-      /run inside a rule must target a script, not workflow/,
-    );
+    buildScripts(filePath, outDir);
   } finally {
     rmSync(root, { recursive: true, force: true });
     rmSync(outDir, { recursive: true, force: true });
   }
 });
 
-test("buildScripts accepts ensure inside a rule block", () => {
+test("buildScripts accepts run inside a rule block", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-ensure-in-rule-"));
   const outDir = mkdtempSync(join(tmpdir(), "jaiph-ensure-in-rule-out-"));
   try {
@@ -262,16 +259,12 @@ test("buildScripts accepts ensure inside a rule block", () => {
       filePath,
       [
         "script dep_impl = `echo dep`",
-        "rule dep() {",
+        "def dep() {",
         "  run dep_impl()",
         "}",
         "",
-        "rule main() {",
-        "  ensure dep()",
-        "}",
-        "",
-        "workflow default() {",
-        "  ensure main()",
+        "export def main() {",
+        "  run dep()",
         "}",
         "",
       ].join("\n"),
@@ -285,7 +278,7 @@ test("buildScripts accepts ensure inside a rule block", () => {
   }
 });
 
-test("buildScripts extracts scripts for ensure ... catch workflow", () => {
+test("buildScripts extracts scripts for run ... catch workflow", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-ensure-catch-"));
   const outDir = mkdtempSync(join(tmpdir(), "jaiph-ensure-catch-out-"));
   try {
@@ -294,18 +287,18 @@ test("buildScripts extracts scripts for ensure ... catch workflow", () => {
       filePath,
       [
         "script dep_impl = `test -f ready.txt`",
-        "rule dep() {",
+        "def dep() {",
         "  run dep_impl()",
         "}",
         "",
         "script install_deps_impl = `touch ready.txt`",
         "",
-        "workflow install_deps() {",
+        "def install_deps() {",
         "  run install_deps_impl()",
         "}",
         "",
-        "workflow default() {",
-        "  ensure dep() catch (failure) run install_deps()",
+        "export def main() {",
+        "  run dep() catch (failure) run install_deps()",
         "}",
         "",
       ].join("\n"),
@@ -319,7 +312,7 @@ test("buildScripts extracts scripts for ensure ... catch workflow", () => {
   }
 });
 
-test("build accepts ensure catch body with raw shell lines", () => {
+test("build accepts run catch body with raw shell lines", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-ensure-catch-block-"));
   const outDir = mkdtempSync(join(tmpdir(), "jaiph-ensure-catch-block-out-"));
   try {
@@ -328,12 +321,12 @@ test("build accepts ensure catch body with raw shell lines", () => {
       filePath,
       [
         "script ready_impl = `test -f ready.txt`",
-        "rule ready() {",
+        "def ready() {",
         "  run ready_impl()",
         "}",
         "",
-        "workflow default() {",
-        "  ensure ready() catch (failure) { echo fixing; touch ready.txt; }",
+        "export def main() {",
+        "  run ready() catch (failure) { echo fixing; touch ready.txt; }",
         "}",
         "",
       ].join("\n"),
@@ -354,7 +347,7 @@ test("buildScripts accepts multiline raw shell in workflow (assignment-style lin
     writeFileSync(
       filePath,
       [
-        "workflow default() {",
+        "export def main() {",
         "  out = false",
         "  echo done",
         "}",

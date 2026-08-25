@@ -9,7 +9,7 @@ import type { SourceLoc } from "../../types";
 
 const loc: SourceLoc = { line: 1, col: 1 };
 
-test("multiple test blocks with test_run_workflow share a single graph build", async () => {
+test("multiple test blocks with test_run_def share a single graph build", async () => {
   const dir = mkdtempSync(join(tmpdir(), "jaiph-cache-test-"));
   const scriptsDir = join(dir, "scripts");
   mkdirSync(scriptsDir, { recursive: true });
@@ -18,7 +18,7 @@ test("multiple test blocks with test_run_workflow share a single graph build", a
     const testFile = join(dir, "multi.test.jh");
     writeFileSync(
       testFile,
-      `workflow greet() {
+      `def greet() {
   log "hello"
 }
 
@@ -32,18 +32,18 @@ test "block B" {
 `,
     );
 
-    // Run two blocks that each invoke test_run_workflow.
+    // Run two blocks that each invoke test_run_def.
     // Before this change, buildRuntimeGraph would be called once per
-    // test_run_workflow step (2 calls). After caching, it is called once.
+    // test_run_def step (2 calls). After caching, it is called once.
     // We verify behavioral correctness: both blocks pass with the shared graph.
     const exitCode = await runTestFile(loadModuleGraph(testFile, dir), dir, scriptsDir, [
       {
         description: "block A", loc,
-        steps: [{ type: "test_run_workflow" as const, workflowRef: "greet", args: [], loc }],
+        steps: [{ type: "test_run_def" as const, defRef: "greet", args: [], loc }],
       },
       {
         description: "block B", loc,
-        steps: [{ type: "test_run_workflow" as const, workflowRef: "greet", args: [], loc }],
+        steps: [{ type: "test_run_def" as const, defRef: "greet", args: [], loc }],
       },
     ]);
 
@@ -62,7 +62,7 @@ test("test runner resolves `const` bindings inside `mock prompt <ident>` and `ex
     const testFile = join(dir, "consts.test.jh");
     writeFileSync(
       testFile,
-      `workflow ask() {
+      `def ask() {
   const r = prompt "say hi"
   return r
 }
@@ -82,7 +82,7 @@ test "const drives mock and expect" {
         steps: [
           { type: "test_const" as const, name: "expected", value: "Hello Alice!", loc },
           { type: "test_mock_prompt" as const, response: "", responseVar: "expected", loc },
-          { type: "test_run_workflow" as const, captureName: "response", workflowRef: "ask", args: [], loc },
+          { type: "test_run_def" as const, captureName: "response", defRef: "ask", args: [], loc },
           {
             type: "test_expect_equal" as const,
             variable: "response",
@@ -109,7 +109,7 @@ test("test runner reports a clear error when an expect_* step references an unde
     const testFile = join(dir, "missing.test.jh");
     writeFileSync(
       testFile,
-      `workflow noop() {
+      `def noop() {
   return "v"
 }
 
@@ -124,7 +124,7 @@ test "undefined const ref" {
       {
         description: "undefined const ref", loc,
         steps: [
-          { type: "test_run_workflow" as const, captureName: "response", workflowRef: "noop", args: [], loc },
+          { type: "test_run_def" as const, captureName: "response", defRef: "noop", args: [], loc },
           {
             type: "test_expect_equal" as const,
             variable: "response",
@@ -151,7 +151,7 @@ test("test runner rejects bare `response` reference when `run` was not captured 
     const testFile = join(dir, "no_implicit.test.jh");
     writeFileSync(
       testFile,
-      `workflow greet(name) {
+      `def greet(name) {
   return "hello \${name}"
 }
 
@@ -166,7 +166,7 @@ test "no implicit response" {
       {
         description: "no implicit response", loc,
         steps: [
-          { type: "test_run_workflow" as const, workflowRef: "greet", args: ["world"], loc },
+          { type: "test_run_def" as const, defRef: "greet", args: ["world"], loc },
           { type: "test_expect_equal" as const, variable: "response", expected: "hello world", loc },
         ],
       },

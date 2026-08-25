@@ -36,7 +36,7 @@ test("Diagnostics: collects 3 independent errors from one compile in source orde
   try {
     writeFileSync(
       join(root, "helper.jh"),
-      ["export rule check(x) {", '  return "ok"', "}", ""].join("\n"),
+      ["export def check(x) {", '  return "ok"', "}", ""].join("\n"),
     );
     writeFileSync(
       join(root, "m.jh"),
@@ -44,7 +44,7 @@ test("Diagnostics: collects 3 independent errors from one compile in source orde
         'import "./helper.jh" as helper',
         'import "./helper.jh" as helper',
         "",
-        "workflow default() {",
+        "export def main() {",
         '  log "hi"',
         '  notify <- "payload"',
         "  run do_thing()",
@@ -67,7 +67,7 @@ test("Diagnostics: collects 3 independent errors from one compile in source orde
     assert.equal(sorted[1].line, 6, "undefined channel should be on line 6");
     assert.match(sorted[1].message, /Channel "notify" is not defined/);
     assert.equal(sorted[2].line, 7, "unknown ref should be on line 7");
-    assert.match(sorted[2].message, /unknown local workflow or script reference "do_thing"/);
+    assert.match(sorted[2].message, /unknown local def or script reference "do_thing"/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -189,7 +189,7 @@ test("CLI: `jaiph compile --json` returns full set + non-zero exit on multiple e
   try {
     writeFileSync(
       join(root, "helper.jh"),
-      ["export rule check(x) {", '  return "ok"', "}", ""].join("\n"),
+      ["export def check(x) {", '  return "ok"', "}", ""].join("\n"),
     );
     writeFileSync(
       join(root, "m.jh"),
@@ -197,7 +197,7 @@ test("CLI: `jaiph compile --json` returns full set + non-zero exit on multiple e
         'import "./helper.jh" as helper',
         'import "./helper.jh" as helper',
         "",
-        "workflow default() {",
+        "export def main() {",
         '  log "hi"',
         '  notify <- "payload"',
         "  run do_thing()",

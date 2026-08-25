@@ -463,7 +463,7 @@ function makeFixtureRepo(
   execSync("git config user.email test@example.com", { cwd: repoDir, stdio: "pipe" });
   execSync("git config user.name test", { cwd: repoDir, stdio: "pipe" });
   if (opts.withJh !== false) {
-    writeFileSync(join(repoDir, "main.jh"), "workflow default { log \"hi\" }\n", "utf8");
+    writeFileSync(join(repoDir, "main.jh"), "export def main { log \"hi\" }\n", "utf8");
   } else {
     writeFileSync(join(repoDir, "README"), "no jh here\n", "utf8");
   }
@@ -527,7 +527,7 @@ test("install: restore detects moved tag and fails with both SHAs", async () => 
     assert.equal(lockAfterFirst.libs[0]!.commit, firstSha);
 
     // Move the tag to a new commit in the source repo.
-    writeFileSync(join(remote, "second.jh"), "workflow default { log \"two\" }\n", "utf8");
+    writeFileSync(join(remote, "second.jh"), "export def main { log \"two\" }\n", "utf8");
     execSync("git add -A", { cwd: remote, stdio: "pipe" });
     execSync("git commit -m second", { cwd: remote, stdio: "pipe" });
     execSync("git tag -d v1", { cwd: remote, stdio: "pipe" });

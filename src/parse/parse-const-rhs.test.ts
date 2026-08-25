@@ -92,7 +92,7 @@ test("validateConstBashExpr: rejects ${var:?message} fallback", () => {
 // === parseConstRhs ===
 
 test("parseConstRhs: parses literal expression", () => {
-  const result = parseConstRhs("test.jh", ['const x = "hello"'], 0, '"hello"', 1, 1, false, "x");
+  const result = parseConstRhs("test.jh", ['const x = "hello"'], 0, '"hello"', 1, 1, "x");
   assert.equal(result.value.kind, "literal");
   if (result.value.kind === "literal") {
     assert.equal(result.value.raw, '"hello"');
@@ -101,7 +101,7 @@ test("parseConstRhs: parses literal expression", () => {
 });
 
 test("parseConstRhs: bare identifier is sugar for interpolated literal", () => {
-  const result = parseConstRhs("test.jh", ["const x = response"], 0, "response", 1, 1, false, "x");
+  const result = parseConstRhs("test.jh", ["const x = response"], 0, "response", 1, 1, "x");
   assert.equal(result.value.kind, "literal");
   if (result.value.kind === "literal") {
     assert.equal(result.value.raw, '"${response}"');
@@ -109,7 +109,7 @@ test("parseConstRhs: bare identifier is sugar for interpolated literal", () => {
 });
 
 test("parseConstRhs: bare dotted identifier is sugar for interpolated literal", () => {
-  const result = parseConstRhs("test.jh", ["const x = response.message"], 0, "response.message", 1, 1, false, "x");
+  const result = parseConstRhs("test.jh", ["const x = response.message"], 0, "response.message", 1, 1, "x");
   assert.equal(result.value.kind, "literal");
   if (result.value.kind === "literal") {
     assert.equal(result.value.raw, '"${response.message}"');
@@ -117,7 +117,7 @@ test("parseConstRhs: bare dotted identifier is sugar for interpolated literal", 
 });
 
 test("parseConstRhs: parses run capture as Expr.call", () => {
-  const result = parseConstRhs("test.jh", ["const x = run my_script()"], 0, "run my_script()", 1, 1, false, "x");
+  const result = parseConstRhs("test.jh", ["const x = run my_script()"], 0, "run my_script()", 1, 1, "x");
   assert.equal(result.value.kind, "call");
   if (result.value.kind === "call") {
     assert.equal(result.value.callee.value, "my_script");
@@ -125,7 +125,7 @@ test("parseConstRhs: parses run capture as Expr.call", () => {
 });
 
 test("parseConstRhs: parses run capture with args as Expr.call", () => {
-  const result = parseConstRhs("test.jh", ['const x = run my_script("arg")'], 0, 'run my_script("arg")', 1, 1, false, "x");
+  const result = parseConstRhs("test.jh", ['const x = run my_script("arg")'], 0, 'run my_script("arg")', 1, 1, "x");
   assert.equal(result.value.kind, "call");
   if (result.value.kind === "call") {
     assert.equal(result.value.callee.value, "my_script");
@@ -135,50 +135,48 @@ test("parseConstRhs: parses run capture with args as Expr.call", () => {
 
 test("parseConstRhs: run without parens rejects (parens required)", () => {
   assert.throws(
-    () => parseConstRhs("test.jh", ["const x = run my_script"], 0, "run my_script", 1, 1, false, "x"),
+    () => parseConstRhs("test.jh", ["const x = run my_script"], 0, "run my_script", 1, 1, "x"),
     /must target a valid reference/,
   );
 });
 
-test("parseConstRhs: parses ensure capture as Expr.ensure_call", () => {
-  const result = parseConstRhs("test.jh", ["const x = ensure my_rule()"], 0, "ensure my_rule()", 1, 1, false, "x");
-  assert.equal(result.value.kind, "ensure_call");
-  if (result.value.kind === "ensure_call") {
+test("parseConstRhs: parses run capture as Expr.call", () => {
+  const result = parseConstRhs("test.jh", ["const x = run my_rule()"], 0, "run my_rule()", 1, 1, "x");
+  assert.equal(result.value.kind, "call");
+  if (result.value.kind === "call") {
     assert.equal(result.value.callee.value, "my_rule");
   }
 });
 
-test("parseConstRhs: ensure without parens rejects (parens required)", () => {
+test("parseConstRhs: run without parens rejects (parens required)", () => {
   assert.throws(
-    () => parseConstRhs("test.jh", ["const x = ensure my_rule"], 0, "ensure my_rule", 1, 1, false, "x"),
+    () => parseConstRhs("test.jh", ["const x = run my_rule"], 0, "run my_rule", 1, 1, "x"),
     /must target a valid reference/,
   );
 });
 
-test("parseConstRhs: ensure with catch throws", () => {
+test("parseConstRhs: run with catch throws", () => {
   assert.throws(
-    () => parseConstRhs("test.jh", ["const x = ensure my_rule() catch fail"], 0, "ensure my_rule() catch fail", 1, 1, false, "x"),
-    /cannot use catch/,
+    () => parseConstRhs("test.jh", ["const x = run my_rule() catch fail"], 0, "run my_rule() catch fail", 1, 1, "x"),
+    /unexpected content after run call/,
   );
 });
 
-test("parseConstRhs: prompt in rule throws", () => {
-  assert.throws(
-    () => parseConstRhs("test.jh", ['const x = prompt "hello"'], 0, 'prompt "hello"', 1, 1, true, "x"),
-    /not allowed in rules/,
-  );
+test("parseConstRhs: prompt capture is allowed in def", () => {
+  const result = parseConstRhs("test.jh", ['const x = prompt "hello"'], 0, 'prompt "hello"', 1, 1, "x");
+  assert.equal(result.value.kind, "prompt");
 });
 
 test("parseConstRhs: bare call without run suggests fix", () => {
   assert.throws(
-    () => parseConstRhs("test.jh", ["const x = my_script()"], 0, "my_script()", 1, 1, false, "x"),
+    () => parseConstRhs("test.jh", ["const x = my_script()"], 0, "my_script()", 1, 1, "x"),
     /must use run/,
   );
 });
 
 test("parseConstRhs: parses prompt capture as Expr.prompt", () => {
   const lines = ['  const x = prompt "What is your name?"'];
-  const result = parseConstRhs("test.jh", lines, 0, 'prompt "What is your name?"', 1, 1, false, "x");
+  const result = parseConstRhs("test.jh", lines, 0, 'prompt "What is your name?"', 1, 1, "x");
   assert.equal(result.value.kind, "prompt");
   if (result.value.kind === "prompt") {
     assert.equal(result.value.raw, '"What is your name?"');

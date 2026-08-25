@@ -4,13 +4,13 @@ import { parsejaiph } from "../parser";
 
 test("parser: run with backtick inline script", () => {
   const src = `
-workflow default() {
+export def main() {
   run \`echo hello\`()
 }
 `;
   const ast = parsejaiph(src, "test.jh");
-  assert.equal(ast.workflows.length, 1);
-  const step = ast.workflows[0].steps[0];
+  assert.equal(ast.defs.length, 1);
+  const step = ast.defs[0].steps[0];
   assert.equal(step.type, "exec");
   if (step.type === "exec" && step.body.kind === "inline_script") {
     assert.equal(step.body.body, "echo hello");
@@ -22,12 +22,12 @@ workflow default() {
 
 test("parser: run with backtick inline script and args", () => {
   const src = `
-workflow default() {
+export def main() {
   run \`echo $1\`("arg1", "arg2")
 }
 `;
   const ast = parsejaiph(src, "test.jh");
-  const step = ast.workflows[0].steps[0];
+  const step = ast.defs[0].steps[0];
   assert.equal(step.type, "exec");
   if (step.type === "exec" && step.body.kind === "inline_script") {
     assert.equal(step.body.body, "echo $1");
@@ -40,7 +40,7 @@ workflow default() {
 
 test("parser: capture form — x = run `body`() rejected without const", () => {
   const src = `
-workflow default() {
+export def main() {
   x = run \`echo hello\`()
 }
 `;
@@ -49,12 +49,12 @@ workflow default() {
 
 test("parser: const capture form — const x = run `body`()", () => {
   const src = `
-workflow default() {
+export def main() {
   const x = run \`echo hello\`()
 }
 `;
   const ast = parsejaiph(src, "test.jh");
-  const step = ast.workflows[0].steps[0];
+  const step = ast.defs[0].steps[0];
   assert.equal(step.type, "const");
   if (step.type === "const" && step.value.kind === "inline_script") {
     assert.equal(step.value.body, "echo hello");
@@ -63,14 +63,14 @@ workflow default() {
 
 test("parser: run script() with fenced block and lang tag", () => {
   const src = [
-    "workflow default() {",
+    "export def main() {",
     "  run ```python3",
     "print('hello')",
     "```()",
     "}",
   ].join("\n");
   const ast = parsejaiph(src, "test.jh");
-  const step = ast.workflows[0].steps[0];
+  const step = ast.defs[0].steps[0];
   assert.equal(step.type, "exec");
   if (step.type === "exec" && step.body.kind === "inline_script") {
     assert.equal(step.body.lang, "python3");
@@ -80,16 +80,16 @@ test("parser: run script() with fenced block and lang tag", () => {
 
 test("parser: run async with backtick inline script is rejected", () => {
   const src = `
-workflow default() {
+export def main() {
   run async \`echo hello\`()
 }
 `;
   assert.throws(() => parsejaiph(src, "test.jh"), /not supported with inline scripts/);
 });
 
-test("parser: rule body supports multiline fenced run ```", () => {
+test("parser: def body supports multiline fenced run ```", () => {
   const src = [
-    "rule check(name) {",
+    "def check(name) {",
     "  run ```",
     "    if [ -z \"$1\" ]; then",
     "      echo fail >&2",
@@ -97,13 +97,14 @@ test("parser: rule body supports multiline fenced run ```", () => {
     "    fi",
     "  ```(name)",
     "}",
-    "workflow default() {",
-    "  ensure check()",
+    "export def main() {",
+    "  run check()",
     "}",
   ].join("\n");
   const ast = parsejaiph(src, "test.jh");
-  assert.equal(ast.rules.length, 1);
-  const step = ast.rules[0].steps[0];
+  const check = ast.defs.find((w) => w.name === "check");
+  assert.ok(check);
+  const step = check.steps[0];
   assert.equal(step.type, "exec");
   if (step.type === "exec" && step.body.kind === "inline_script") {
     assert.ok(step.body.body.includes('if [ -z "$1" ]'));
@@ -111,18 +112,18 @@ test("parser: rule body supports multiline fenced run ```", () => {
   }
 });
 
-test("parser: if keyword with old syntax in rule produces E_PARSE", () => {
+test("parser: if keyword with old syntax in def produces E_PARSE", () => {
   const src = [
     'script ok = `true`',
-    "rule r() {",
+    "def r() {",
     "  if run ok() {",
     "    run ```",
     "echo in-branch",
     "```()",
     "  }",
     "}",
-    "workflow default() {",
-    "  ensure r()",
+    "export def main() {",
+    "  run r()",
     "}",
   ].join("\n");
   assert.throws(
@@ -133,7 +134,7 @@ test("parser: if keyword with old syntax in rule produces E_PARSE", () => {
 
 test("parser: old run script() syntax is rejected", () => {
   const src = `
-workflow default() {
+export def main() {
   run script()
 }
 `;

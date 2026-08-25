@@ -4,31 +4,31 @@
 import "a.jh" as mod
 import "b.jh" as mod
 
-workflow default() {
-  ensure mod.one()
+export def main() {
+  run mod.one()
 }
 --- a.jh
 script one_impl = `echo one`
-rule one() {
+def one() {
   run one_impl()
 }
 --- b.jh
 script two_impl = `echo two`
-rule two() {
+def two() {
   run two_impl()
 }
 
 === imported workflow missing
-# @expect error E_VALIDATE "does not exist" @4:3
+# @expect error E_VALIDATE "imported def or script" @4:3
 --- main.jh
 import "lib.jh" as lib
 
-workflow default() {
+export def main() {
   run lib.missing()
 }
 --- lib.jh
 script existing_impl = `echo ok`
-workflow existing() {
+def existing() {
   run existing_impl()
 }
 
@@ -37,11 +37,11 @@ workflow existing() {
 --- main.jh
 import "lib.jh" as lib
 channel c
-workflow default() {
+export def main() {
   c <- lib.nonexistent
 }
 --- lib.jh
-workflow dummy() {
+def dummy() {
   log "ok"
 }
 
@@ -49,221 +49,221 @@ workflow dummy() {
 # @expect error E_VALIDATE "is not defined" @3:1
 --- main.jh
 import "shared.jh" as shared
-workflow default() {
+export def main() {
   shared.typo <- "x"
 }
 --- shared.jh
 channel findings
-workflow analyst() {
+def analyst() {
   log "ok"
 }
 
 === unknown import alias in run reference
 # @expect error E_VALIDATE "unknown import alias" @2:3
 --- main.jh
-workflow default() {
+export def main() {
   run ghost.deploy()
 }
 
 === imported script does not exist
-# @expect error E_VALIDATE "does not exist" @3:3
+# @expect error E_VALIDATE "imported def or script" @3:3
 --- main.jh
 import "lib.jh" as lib
-workflow default() {
+export def main() {
   run lib.nonexistent()
 }
 --- lib.jh
 script existing = `echo "ok"`
-workflow dummy() {
+def dummy() {
   log "ok"
 }
 
 === run in rule targeting imported rule rejected
-# @expect error E_VALIDATE "must be called with ensure, not run" @3:3
+# @expect ok
 --- main.jh
 import "lib.jh" as lib
-rule local_check() {
+def local_check() {
   run lib.other_rule()
 }
-workflow default() {
-  ensure local_check()
+export def main() {
+  run local_check()
 }
 --- lib.jh
-export rule other_rule() {
+export def other_rule() {
   return "ok"
 }
 
 === import resolves to missing file
-# @expect error E_IMPORT_NOT_FOUND "resolves to missing file"
+# @expect error E_IMPORT_NOT_FOUND "resolves to missing file" @1:1
 --- main.jh
 import "nonexistent.jh" as lib
-workflow default() {
+export def main() {
   run lib.deploy()
 }
 
 === arity mismatch on imported workflow
-# @expect error E_VALIDATE "expects 2 argument(s)"
+# @expect error E_VALIDATE "expects 2 argument(s) (a, b), but got 1" @3:3
 --- main.jh
 import "lib.jh" as lib
-workflow default() {
+export def main() {
   run lib.helper("one")
 }
 --- lib.jh
-export workflow helper(a, b) {
+export def helper(a, b) {
   log "ok"
 }
 
 === send RHS with imported script bare ref
-# @expect error E_VALIDATE "must be called with run"
+# @expect error E_VALIDATE "is not exported from module" @4:5
 --- main.jh
 import "lib.jh" as lib
 channel c
-workflow default() {
+export def main() {
   c <- lib.helper
 }
 --- lib.jh
 script helper = `echo "ok"`
-workflow dummy() {
+def dummy() {
   log "ok"
 }
 
 === send RHS with imported rule bare ref
-# @expect error E_VALIDATE "must be called with ensure"
+# @expect error E_VALIDATE "must be called with run" @4:5
 --- main.jh
 import "lib.jh" as lib
 channel c
-workflow default() {
+export def main() {
   c <- lib.check
 }
 --- lib.jh
-export rule check() {
+export def check() {
   return "ok"
 }
-workflow dummy() {
+def dummy() {
   log "ok"
 }
 
 === imported channel name not found
-# @expect error E_VALIDATE "is not defined"
+# @expect error E_VALIDATE "lib.nonexistent_chan" @3:1
 --- main.jh
 import "lib.jh" as lib
-workflow default() {
+export def main() {
   lib.nonexistent_chan <- "data"
 }
 --- lib.jh
 channel other_chan
-workflow dummy() {
+def dummy() {
   log "ok"
 }
 
-=== ensure non-exported rule from module with exports
-# @expect error E_VALIDATE "is not exported from module"
+=== run non-exported rule from module with exports
+# @expect error E_VALIDATE "private_check" @3:3
 --- main.jh
 import "lib.jh" as lib
-workflow default() {
-  ensure lib.private_check()
+export def main() {
+  run lib.private_check()
 }
 --- lib.jh
-export rule public_check() {
+export def public_check() {
   return "ok"
 }
-rule private_check() {
+def private_check() {
   return "ok"
 }
 
 === run non-exported workflow from module with exports
-# @expect error E_VALIDATE "is not exported from module"
+# @expect error E_VALIDATE "is not exported from module" @3:3
 --- main.jh
 import "lib.jh" as lib
-workflow default() {
+export def main() {
   run lib.private_wf()
 }
 --- lib.jh
-export workflow public_wf() {
+export def public_wf() {
   log "ok"
 }
-workflow private_wf() {
+def private_wf() {
   log "private"
 }
 
 === shell line with unknown imported symbol in workflow
-# @expect error E_VALIDATE "imported workflow or script"
+# @expect error E_VALIDATE "imported def or script" @3:3
 --- main.jh
 import "lib.jh" as lib
-workflow default() {
+export def main() {
   lib.nonexistent_thing
 }
 --- lib.jh
 script helper = `echo ok`
-workflow dummy() {
+def dummy() {
   log "ok"
 }
 
 === run non-exported script from module with exports
-# @expect error E_VALIDATE "is not exported from module"
+# @expect error E_VALIDATE "private_script" @3:3
 --- main.jh
 import "lib.jh" as lib
-workflow default() {
+export def main() {
   run lib.private_script()
 }
 --- lib.jh
 export script public_script = `echo public`
 script private_script = `echo private`
-workflow dummy() {
+def dummy() {
   log "ok"
 }
 
 === send RHS with non-exported workflow bare ref
-# @expect error E_VALIDATE "is not exported from module"
+# @expect error E_VALIDATE "is not exported from module" @4:5
 --- main.jh
 import "lib.jh" as lib
 channel c
-workflow default() {
+export def main() {
   c <- lib.private_wf
 }
 --- lib.jh
-export workflow public_wf() {
+export def public_wf() {
   log "ok"
 }
-workflow private_wf() {
+def private_wf() {
   log "private"
 }
 
 === arity mismatch on imported rule
-# @expect error E_VALIDATE "expects 2 argument(s)"
+# @expect error E_VALIDATE "expects 2 argument(s) (a, b), but got 1" @3:3
 --- main.jh
 import "lib.jh" as lib
-workflow default() {
-  ensure lib.check("one")
+export def main() {
+  run lib.check("one")
 }
 --- lib.jh
-export rule check(a, b) {
+export def check(a, b) {
   return "ok"
 }
 
 === send RHS with non-exported script bare ref
-# @expect error E_VALIDATE "is not exported from module"
+# @expect error E_VALIDATE "private_script" @4:5
 --- main.jh
 import "lib.jh" as lib
 channel c
-workflow default() {
+export def main() {
   c <- lib.private_script
 }
 --- lib.jh
 export script public_script = `echo public`
 script private_script = `echo private`
-workflow dummy() {
+def dummy() {
   log "ok"
 }
 
-=== const ensure on imported workflow rejected
-# @expect error E_VALIDATE "must be called with run"
+=== const run on imported workflow rejected
+# @expect ok
 --- main.jh
 import "lib.jh" as lib
-workflow default() {
-  const x = ensure lib.deploy()
+export def main() {
+  const x = run lib.deploy()
 }
 --- lib.jh
-export workflow deploy() {
+export def deploy() {
   log "deploying"
 }

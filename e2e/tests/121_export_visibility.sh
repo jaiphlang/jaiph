@@ -15,11 +15,11 @@ e2e::section "referencing non-exported workflow from module with exports"
 
 # Given — a library with one exported and one non-exported workflow
 e2e::file "vis_lib.jh" <<'EOF'
-export workflow public_wf() {
+export def public_wf() {
   log "public"
 }
 
-workflow private_wf() {
+def private_wf() {
   log "private"
 }
 EOF
@@ -27,7 +27,7 @@ EOF
 e2e::file "vis_main.jh" <<'EOF'
 import "vis_lib.jh" as lib
 
-workflow default() {
+export def main() {
   run lib.private_wf()
 }
 EOF
@@ -56,11 +56,11 @@ e2e::section "referencing non-exported rule from module with exports"
 e2e::file "rule_lib.jh" <<'EOF'
 script check_impl = `true`
 
-export rule public_rule() {
+export def public_rule() {
   run check_impl()
 }
 
-rule private_rule() {
+def private_rule() {
   run check_impl()
 }
 EOF
@@ -68,8 +68,8 @@ EOF
 e2e::file "rule_main.jh" <<'EOF'
 import "rule_lib.jh" as lib
 
-workflow default() {
-  ensure lib.private_rule()
+export def main() {
+  run lib.private_rule()
 }
 EOF
 
@@ -98,7 +98,7 @@ e2e::file "script_lib.jh" <<'EOF'
 script public_script = `echo "public"`
 script private_script = `echo "private"`
 
-export workflow dummy() {
+export def dummy() {
   run public_script()
 }
 EOF
@@ -106,7 +106,7 @@ EOF
 e2e::file "script_main.jh" <<'EOF'
 import "script_lib.jh" as lib
 
-workflow default() {
+export def main() {
   run lib.private_script()
 }
 EOF
@@ -135,7 +135,7 @@ e2e::section "exported workflow is accessible across imports"
 e2e::file "vis_ok.jh" <<'EOF'
 import "vis_lib.jh" as lib
 
-workflow default() {
+export def main() {
   run lib.public_wf()
 }
 EOF
@@ -148,12 +148,12 @@ e2e::expect_stdout "${ok_out}" <<'EOF'
 
 Jaiph: Running vis_ok.jh
 
-workflow default
-  ▸ workflow public_wf
+export def main
+  ▸ def public_wf
   ·   ℹ public
-  ✓ workflow public_wf (<time>)
+  ✓ def public_wf(<time>)
 
-✓ PASS workflow default (<time>)
+✓ PASS export def main (<time>)
 EOF
 
 e2e::pass "exported workflow is accessible across imports"

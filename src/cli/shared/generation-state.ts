@@ -1,6 +1,6 @@
 import type { ModuleGraph } from "../../transpiler";
 import type { McpToolSpec } from "./mcp-tools";
-import type { WorkflowCallEnvironment } from "./workflow-call";
+import type { DefCallEnvironment } from "./workflow-call";
 
 /**
  * Everything one generation of a workflow server needs to serve + call.
@@ -13,5 +13,5 @@ import type { WorkflowCallEnvironment } from "./workflow-call";
 export interface GenerationState {
   graph: ModuleGraph;
   tools: McpToolSpec[];
-  callEnv: WorkflowCallEnvironment;
+  callEnv: DefCallEnvironment;
 }

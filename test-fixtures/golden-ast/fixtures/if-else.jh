@@ -1,4 +1,4 @@
-workflow default(status) {
+export def main(status) {
   if status == "ok" {
     log "healthy"
   } else {

@@ -31,7 +31,7 @@ function runResponse(description: string): Record<string, unknown> {
  * the same `(tools, serverInfo)` always yields the same document, so it can be
  * regenerated per request and picks up hot-reloaded tool sets for free.
  *
- * One concrete path per workflow (`/v1/workflows/<name>/runs`) carries that
+ * One concrete path per workflow (`/v1/defs/<name>/runs`) carries that
  * workflow's own `operationId`, `#`-comment description, and the exact
  * MCP-derived input schema as its JSON request body — which is what makes
  * Swagger UI render a usable per-workflow form. The static run-resource paths,
@@ -49,10 +49,10 @@ export function buildOpenApi(tools: McpToolSpec[], serverInfo: OpenApiServerInfo
             content: { "application/json": { schema: tool.inputSchema } },
           }
         : { required: false, content: { "application/json": { schema: tool.inputSchema } } };
-    paths[`/v1/workflows/${tool.name}/runs`] = {
+    paths[`/v1/defs/${tool.name}/runs`] = {
       post: {
         operationId: `run_${tool.name}`,
-        summary: `Run the ${tool.name} workflow`,
+        summary: `Run the ${tool.name} def`,
         description: tool.description,
         security: BEARER_SECURITY,
         parameters: [
@@ -115,20 +115,20 @@ export function buildOpenApi(tools: McpToolSpec[], serverInfo: OpenApiServerInfo
     },
   };
 
-  paths["/v1/workflows"] = {
+  paths["/v1/defs"] = {
     get: {
-      operationId: "listWorkflows",
-      summary: "List exposed workflows",
+      operationId: "listDefs",
+      summary: "List exposed defs",
       security: BEARER_SECURITY,
       responses: {
         "200": {
-          description: "The exposed workflows.",
+          description: "The exposed defs.",
           content: {
             "application/json": {
               schema: {
                 type: "object",
                 properties: {
-                  workflows: {
+                  defs: {
                     type: "array",
                     items: {
                       type: "object",
@@ -141,7 +141,7 @@ export function buildOpenApi(tools: McpToolSpec[], serverInfo: OpenApiServerInfo
                     },
                   },
                 },
-                required: ["workflows"],
+                required: ["defs"],
               },
             },
           },
@@ -318,7 +318,7 @@ export function buildOpenApi(tools: McpToolSpec[], serverInfo: OpenApiServerInfo
           type: "object",
           properties: {
             run_id: { type: "string" },
-            workflow: { type: "string" },
+            def: { type: "string" },
             status: { type: "string", enum: ["running", "succeeded", "failed", "cancelled", "interrupted"] },
             started_at: { type: "string" },
             ended_at: { type: ["string", "null"] },
@@ -327,7 +327,7 @@ export function buildOpenApi(tools: McpToolSpec[], serverInfo: OpenApiServerInfo
             result_text: { type: ["string", "null"] },
             run_dir: { type: ["string", "null"] },
           },
-          required: ["run_id", "workflow", "status", "started_at"],
+          required: ["run_id", "def", "status", "started_at"],
         },
         Error: {
           type: "object",

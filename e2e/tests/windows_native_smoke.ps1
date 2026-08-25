@@ -139,7 +139,7 @@ script node_step = ```node
 process.stdout.write("node-step-output\n");
 ```
 
-workflow default() {
+export def main() {
   const who = "Windows"
   echo "inline shell for ${who}"
   run node_step()
@@ -158,7 +158,7 @@ workflow default() {
   Assert-Equal $sample.ExitCode 0 "sample workflow exits 0"
   # Assert against stdout: the interpolated `log` line and the success footer.
   Assert-Contains $sampleStdout "smoke greeting for Windows" "log line (with interpolation) is on stdout"
-  Assert-Contains $sampleStdout "PASS workflow default" "success footer is on stdout"
+  Assert-Contains $sampleStdout "PASS def main" "success footer is on stdout"
   if ($script:Failures -gt 0) {
     Write-Host "sample stderr was:`n$sampleStderr"
   }
@@ -172,7 +172,7 @@ script long_sleep = ```node
 setInterval(() => {}, 1000);
 ```
 
-workflow default() {
+export def main() {
   run long_sleep()
 }
 '@
@@ -218,7 +218,7 @@ config {
   agent.backend = "codex"
 }
 
-workflow default() {
+export def main() {
   const answer = prompt "Say hello"
   log answer
 }

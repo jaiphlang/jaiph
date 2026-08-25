@@ -5,13 +5,12 @@
 
 import { jaiphError } from "../errors";
 
-export type SymbolKind = "rule" | "workflow" | "script";
+export type SymbolKind = "def" | "script";
 
 export type SubstitutionValidateEnv = {
   filePath: string;
   loc: { line: number; col: number };
-  localRules: Set<string>;
-  localWorkflows: Set<string>;
+  localDefs: Set<string>;
   localScripts: Set<string>;
   importsByAlias: Map<string, string>;
   lookupImported: (alias: string, name: string) => SymbolKind | undefined;
@@ -93,8 +92,7 @@ export function classifyJaiphShellRefToken(
   }
   if (parts.length === 1) {
     const name = parts[0];
-    if (env.localRules.has(name)) return "rule";
-    if (env.localWorkflows.has(name)) return "workflow";
+    if (env.localDefs.has(name)) return "def";
     if (env.localScripts.has(name)) return "script";
   }
   return "none";
@@ -105,10 +103,10 @@ export function classifyJaiphShellRefToken(
  */
 export function assertKeywordFirstShellFragment(inner: string, env: SubstitutionValidateEnv): void {
   const trimmed = inner.trim();
-  if (/^(?:run|ensure)\s/.test(trimmed)) {
+  if (/^run\s/.test(trimmed)) {
     throwJaiphInSubstitution(
       env,
-      'command substitution cannot use Jaiph keywords "run" or "ensure"; use managed steps outside $(...)',
+      'command substitution cannot use Jaiph keyword "run"; use managed steps outside $(...)',
     );
   }
   if (hasSendOperatorOutsideQuotes(inner)) {
@@ -119,16 +117,10 @@ export function assertKeywordFirstShellFragment(inner: string, env: Substitution
   }
   const word = firstCommandWord(inner);
   const cls = classifyJaiphShellRefToken(word, env);
-  if (cls === "rule") {
+  if (cls === "def") {
     throwJaiphInSubstitution(
       env,
-      `command substitution cannot invoke rule "${word}"; use ensure ${word} ... in a workflow step`,
-    );
-  }
-  if (cls === "workflow") {
-    throwJaiphInSubstitution(
-      env,
-      `command substitution cannot invoke workflow "${word}"; use run ${word} ... in a workflow step`,
+      `command substitution cannot invoke def "${word}"; use run ${word} ... in a def step`,
     );
   }
   if (cls === "script") {
@@ -148,24 +140,18 @@ export function assertKeywordFirstShellFragment(inner: string, env: Substitution
 /** Reject Jaiph rule/workflow/script used as the first command word of a shell line. */
 export function assertNoJaiphLeadCommandWord(fragment: string, env: SubstitutionValidateEnv): void {
   const trimmed = fragment.trim();
-  if (/^(?:run|ensure)\s/.test(trimmed)) {
+  if (/^run\s/.test(trimmed)) {
     throwJaiphInSubstitution(
       env,
-      'workflow shell cannot use Jaiph keywords "run" or "ensure" as the shell command; use managed steps',
+      'def shell cannot use Jaiph keyword "run" as the shell command; use managed steps',
     );
   }
   const word = firstCommandWord(trimmed);
   const cls = classifyJaiphShellRefToken(word, env);
-  if (cls === "rule") {
+  if (cls === "def") {
     throwJaiphInSubstitution(
       env,
-      `rule "${word}" must be called with ensure, not as a shell command`,
-    );
-  }
-  if (cls === "workflow") {
-    throwJaiphInSubstitution(
-      env,
-      `workflow "${word}" must be called with run, not as a shell command`,
+      `def "${word}" must be called with run, not as a shell command`,
     );
   }
   if (cls === "script") {

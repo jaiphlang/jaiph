@@ -1,6 +1,6 @@
 /**
  * Validate Jaiph string content (log, logerr, fail, prompt, return, send literal)
- * and extract inline `${run …}` / `${ensure …}` captures.
+ * and extract inline `${run …}` captures.
  *
  * These live in the parse layer because they need `parseCallRef` (a parse
  * primitive) to interpret inline captures, and because config parsing
@@ -99,21 +99,21 @@ function findBracedNumeric(s: string): { index: number; match: string; hint: str
   return null;
 }
 
-const INLINE_CAPTURE_RE = /\$\{(run|ensure)\s+([^}]+)\}/g;
+const INLINE_CAPTURE_RE = /\$\{(run)\s+([^}]+)\}/g;
 
 export interface InlineCapture {
-  kind: "run" | "ensure";
+  kind: "run";
   ref: string;
   args?: Arg[];
 }
 
-/** Extract ${run ref [args]} and ${ensure ref [args]} from string content (unquoted). */
+/** Extract ${run ref [args]} from string content (unquoted). */
 export function extractInlineCaptures(content: string): InlineCapture[] {
   const captures: InlineCapture[] = [];
   const re = new RegExp(INLINE_CAPTURE_RE.source, "g");
   let m: RegExpExecArray | null;
   while ((m = re.exec(content)) !== null) {
-    const kind = m[1] as "run" | "ensure";
+    const kind = m[1] as "run";
     const body = m[2].trim();
     const call = parseCallRef(body);
     if (!call) continue;
@@ -177,7 +177,7 @@ export function validateJaiphStringContent(
     );
   }
 
-  // Validate inline captures: ${run ref()} / ${ensure ref(args)}
+  // Validate inline captures: ${run ref()} / ${run ref(args)}
   const inlineRe = new RegExp(INLINE_CAPTURE_RE.source, "g");
   let icm: RegExpExecArray | null;
   while ((icm = inlineRe.exec(content)) !== null) {
@@ -192,7 +192,7 @@ export function validateJaiphStringContent(
       );
     }
 
-    if (call.args?.some((a) => a.kind === "literal" && /\$\{(?:run|ensure)\s/.test(a.raw))) {
+    if (call.args?.some((a) => a.kind === "literal" && /\$\{run\s/.test(a.raw))) {
       throw jaiphError(
         filePath, line, col, "E_PARSE",
         `${context} cannot contain nested inline captures; extract to a const variable`,

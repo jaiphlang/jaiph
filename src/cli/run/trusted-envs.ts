@@ -28,7 +28,7 @@ function collectEntryTrustedEnvKeys(entry: jaiphModule): string[] {
   for (const key of entry.metadata?.trustedEnvs ?? []) {
     if (!keys.includes(key)) keys.push(key);
   }
-  for (const wf of entry.workflows) {
+  for (const wf of entry.defs) {
     for (const key of wf.metadata?.trustedEnvs ?? []) {
       if (!keys.includes(key)) keys.push(key);
     }
@@ -38,7 +38,7 @@ function collectEntryTrustedEnvKeys(entry: jaiphModule): string[] {
 
 function moduleDeclaresTrustedEnvs(mod: jaiphModule): boolean {
   if (mod.metadata?.trustedEnvs?.length) return true;
-  return mod.workflows.some((wf) => Boolean(wf.metadata?.trustedEnvs?.length));
+  return mod.defs.some((wf) => Boolean(wf.metadata?.trustedEnvs?.length));
 }
 
 export function planTrustedEnvs(

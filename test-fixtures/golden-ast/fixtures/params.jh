@@ -1,8 +1,8 @@
-workflow greet(name, greeting) {
+def greet(name, greeting) {
   log "${greeting}, ${name}!"
 }
 
-rule validate(input) {
+def validate(input) {
   run checker()
 }
 

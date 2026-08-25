@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { resolve, sep } from "node:path";
-import { workflowSymbolForFile, resolveImportPath, toImportSource, JAIPH_EXT_REGEX } from "./resolve";
+import { moduleSymbolForFile, resolveImportPath, toImportSource, JAIPH_EXT_REGEX } from "./resolve";
 
 // --- JAIPH_EXT_REGEX ---
 
@@ -13,24 +13,24 @@ test("JAIPH_EXT_REGEX: does not match .jh in middle", () => {
   assert.ok(!JAIPH_EXT_REGEX.test("file.jh.bak"));
 });
 
-// --- workflowSymbolForFile ---
+// --- moduleSymbolForFile ---
 
-test("workflowSymbolForFile: simple file in root", () => {
+test("moduleSymbolForFile: simple file in root", () => {
   const root = "/project";
   const file = "/project/hello.jh";
-  assert.equal(workflowSymbolForFile(file, root), "hello");
+  assert.equal(moduleSymbolForFile(file, root), "hello");
 });
 
-test("workflowSymbolForFile: nested file", () => {
+test("moduleSymbolForFile: nested file", () => {
   const root = "/project";
   const file = "/project/lib/utils.jh";
-  assert.equal(workflowSymbolForFile(file, root), "lib::utils");
+  assert.equal(moduleSymbolForFile(file, root), "lib::utils");
 });
 
-test("workflowSymbolForFile: deeply nested file", () => {
+test("moduleSymbolForFile: deeply nested file", () => {
   const root = "/project";
   const file = "/project/a/b/c.jh";
-  assert.equal(workflowSymbolForFile(file, root), "a::b::c");
+  assert.equal(moduleSymbolForFile(file, root), "a::b::c");
 });
 
 // --- resolveImportPath ---

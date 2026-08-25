@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runWorkflow } from "./run";
 
-const MIN_WORKFLOW = `workflow default() {\n  log "hi"\n}\n`;
+const MIN_WORKFLOW = `export def main() {\n  log "hi"\n}\n`;
 
 function captureStreams(): { restore: () => void; stderr: () => string; stdout: () => string } {
   let err = "";

@@ -31,15 +31,16 @@ import {
 import { readMetaFields, readReturnValue } from "../shared/run-meta";
 import { detectWorkspaceRoot } from "../shared/paths";
 import { hasHelpFlag, parseArgs } from "../shared/usage";
+import type { jaiphModule } from "../../types";
 
 const RUN_USAGE =
   "Usage: jaiph run [--target <dir>] [--raw] [--workspace <dir>] [--env KEY[=VALUE]]... <file.jh> [--] [args...]\n\n" +
-  "Parse, validate, and run a Jaiph workflow file. Requires a `workflow default` entrypoint.\n\n" +
+  "Parse, validate, and run a Jaiph file. Requires `export def main` in the input file.\n\n" +
   "  --target <dir>     keep emitted scripts and run metadata under <dir>\n" +
   "  --raw              skip banner, progress tree, hooks, and failure footer; inherited stdio\n" +
   "  --workspace <dir>  workspace root for import resolution (default: auto-detect from the .jh file)\n" +
-  "  --env KEY=VALUE    define KEY=VALUE in the workflow env (repeatable); --env KEY forwards the host value\n" +
-  "  --                 end of jaiph flags; remaining args go to workflow default\n" +
+  "  --env KEY=VALUE    define KEY=VALUE in the def env(repeatable); --env KEY forwards the host value\n" +
+  "  --                 end of jaiph flags; remaining args go to def main\n" +
   "  -h, --help         show this help\n\n" +
   "Examples:\n" +
   "  jaiph run ./flows/review.jh \"review this diff\"\n" +
@@ -123,6 +124,10 @@ export async function runWorkflow(rest: string[]): Promise<number> {
   const hooksConfig = loadMergedHooks(workspaceRoot, isProjectHooksTrusted(process.env));
   const graph = loadModuleGraph(inputAbs, workspaceRoot);
   const mod = graph.modules.get(inputAbs)!.ast;
+  if (!hasExportedMain(mod)) {
+    process.stderr.write("jaiph run requires `export def main` in the input file\n");
+    return 1;
+  }
   const resolvedModuleMetadata = resolveModuleMetadata(mod, process.env);
   const effectiveConfig = metadataToConfig(resolvedModuleMetadata);
 
@@ -178,16 +183,16 @@ export async function runWorkflow(rest: string[]): Promise<number> {
 
     writeWorkflowRootLabel(mod, runArgs, colorEnabled, isTTY, startedAt);
 
-    emitter.emit("workflow_start", {
-      event: "workflow_start",
-      workflow_id: runId,
+    emitter.emit("run_start", {
+      event: "run_start",
+      run_id: runId,
       timestamp: new Date().toISOString(),
       run_path: inputAbs,
       workspace: workspaceRoot,
     });
 
     Object.assign(runtimeEnv, trustedPlan.resolved, extraEnv);
-    const execResult = spawnHostRun(runtimeEnv, outDir, workspaceRoot, metaFile, "default", runArgs);
+    const execResult = spawnHostRun(runtimeEnv, outDir, workspaceRoot, metaFile, "main", runArgs);
 
     const signalHandlers = setupRunSignalHandlers(execResult, {
       forceKillAfterMs: 1500,
@@ -201,7 +206,7 @@ export async function runWorkflow(rest: string[]): Promise<number> {
     if (isTTY) {
       ttyCtx.runningInterval = setInterval(() => {
         const elapsedSec = (Date.now() - startedAt) / 1000;
-        process.stdout.write("\r" + formatRunningBottomLine("default", elapsedSec) + "\u001b[K");
+        process.stdout.write("\r" + formatRunningBottomLine("main", elapsedSec) + "\u001b[K");
       }, 1000);
     } else {
       const hbMs = nonTTYHeartbeatTickMs();
@@ -234,7 +239,7 @@ export async function runWorkflow(rest: string[]): Promise<number> {
 
     return await reportResult(
       runState.capturedStderr, childExit.status, childExit.signal, startedAt, runtimeEnv,
-      emitter, runState.workflowRunId, inputAbs, workspaceRoot, metaFile,
+      emitter, runState.journalRunId, inputAbs, workspaceRoot, metaFile,
       chainKey,
     );
   } finally {
@@ -256,6 +261,10 @@ async function runWorkflowRaw(
   extraEnv: Record<string, string>,
 ): Promise<number> {
   const mod = parsejaiph(readFileSync(inputAbs, "utf8"), inputAbs);
+  if (!hasExportedMain(mod)) {
+    process.stderr.write("jaiph run requires `export def main` in the input file\n");
+    return 1;
+  }
   const resolvedModuleMetadata = resolveModuleMetadata(mod, process.env);
   const effectiveConfig = metadataToConfig(resolvedModuleMetadata);
   const outDir = target ? resolve(target) : mkdtempSync(join(tmpdir(), "jaiph-run-"));
@@ -271,9 +280,9 @@ async function runWorkflowRaw(
     const metaFile = join(outDir, `.jaiph-run-meta-${Date.now()}-${process.pid}.txt`);
 
     const dummyBuiltPath = join(outDir, "entry.sh");
-    const workflowSymbol = "default";
+    const defSymbol = "main";
     const execResult = spawnRunProcess(
-      [metaFile, dummyBuiltPath, workflowSymbol, ...runArgs],
+      [metaFile, dummyBuiltPath, defSymbol, ...runArgs],
       { cwd: workspaceRoot, env: runtimeEnv, stdio: "inherit" },
     );
 
@@ -282,7 +291,7 @@ async function runWorkflowRaw(
     if (rawRunDir) writeChainKey(rawRunDir, chainKey);
     await exportRunTelemetry({
       runDir: rawRunDir,
-      workflow: workflowSymbol,
+      def: defSymbol,
       exitStatus: childExit.status,
       signal: childExit.signal,
       env: process.env,
@@ -293,6 +302,10 @@ async function runWorkflowRaw(
       rmSync(outDir, { recursive: true, force: true });
     }
   }
+}
+
+function hasExportedMain(mod: jaiphModule): boolean {
+  return mod.defs.some((w) => w.name === "main") && mod.exports.includes("main");
 }
 
 /** Write an error's message to stderr and return exit code 1. */
@@ -327,13 +340,13 @@ function writeWorkflowRootLabel(
   isTTY: boolean,
   startedAt: number,
 ): void {
-  const rootLabel = "workflow default";
-  const defaultWf = mod.workflows.find((w) => w.name === "default");
+  const rootLabel = "def main";
+  const mainWf = mod.defs.find((w) => w.name === "main");
   const rootParamsSuffix =
     runArgs.length > 0
       ? colorize(
           formatNamedParamsForDisplay(
-            buildStepDisplayParamPairs(runArgs, defaultWf?.params, { positionalStyle: "numeric" }),
+            buildStepDisplayParamPairs(runArgs, mainWf?.params, { positionalStyle: "numeric" }),
           ),
           "dim",
           colorEnabled,
@@ -341,7 +354,7 @@ function writeWorkflowRootLabel(
       : "";
   process.stdout.write(`${styleKeywordLabel(rootLabel)}${rootParamsSuffix}\n`);
   if (isTTY) {
-    process.stdout.write("\n" + formatRunningBottomLine("default", 0));
+    process.stdout.write("\n" + formatRunningBottomLine("main", 0));
   }
 }
 
@@ -350,11 +363,11 @@ function spawnHostRun(
   outDir: string,
   workspaceRoot: string,
   metaFile: string,
-  workflowSymbol: string,
+  defSymbol: string,
   runArgs: string[],
 ): ReturnType<typeof spawnRunProcess> {
   const dummyBuiltPath = join(outDir, "entry.sh");
-  return spawnRunProcess([metaFile, dummyBuiltPath, workflowSymbol, ...runArgs], {
+  return spawnRunProcess([metaFile, dummyBuiltPath, defSymbol, ...runArgs], {
     cwd: workspaceRoot,
     env: runtimeEnv,
   });
@@ -419,7 +432,7 @@ function clearTTYBottomLine(ttyCtx: TTYContext): void {
 function redrawTTYBottomLine(ttyCtx: TTYContext): void {
   if (ttyCtx.isTTY && ttyCtx.runningInterval !== undefined) {
     const elapsedSec = (Date.now() - ttyCtx.startedAt) / 1000;
-    process.stdout.write(formatRunningBottomLine("default", elapsedSec));
+    process.stdout.write(formatRunningBottomLine("main", elapsedSec));
   }
 }
 
@@ -436,7 +449,7 @@ async function reportResult(
   startedAt: number,
   runtimeEnv: Record<string, string | undefined>,
   emitter: ReturnType<typeof createRunEmitter>,
-  workflowRunId: string,
+  journalRunId: string,
   inputAbs: string,
   workspaceRoot: string,
   metaFile: string,
@@ -448,14 +461,14 @@ async function reportResult(
   const runDir: string | undefined = metaFields.run_dir;
   const summaryFile: string | undefined = metaFields.summary_file;
   if (runDir && chainKey) writeChainKey(runDir, chainKey);
-  await exportRunTelemetry({ runDir, workflow: "default", exitStatus, signal, env: process.env });
+  await exportRunTelemetry({ runDir, def: "main", exitStatus, signal, env: process.env });
   const runtimeDebugEnabled = runtimeEnv.JAIPH_DEBUG === "true";
   const runtimeErrorPrinted = hasFatalRuntimeStderr(capturedStderr, runtimeDebugEnabled);
   const resolvedStatus = exitStatus !== 0 || runtimeErrorPrinted ? 1 : 0;
 
-  emitter.emit("workflow_end", {
-    event: "workflow_end",
-    workflow_id: workflowRunId,
+  emitter.emit("run_end", {
+    event: "run_end",
+    run_id: journalRunId,
     status: resolvedStatus,
     elapsed_ms: elapsedMs,
     timestamp: new Date().toISOString(),
@@ -470,10 +483,10 @@ async function reportResult(
     // Match TTY spacing: tree lines use double newlines between rows; non-TTY uses single `\n` per row.
     const passPrefix = process.stdout.isTTY ? "" : "\n";
     process.stdout.write(
-      `${passPrefix}${palette.green}\u2713 PASS${palette.reset} workflow default ${palette.dim}(${elapsedLabel})${palette.reset}\n`,
+      `${passPrefix}${palette.green}\u2713 PASS${palette.reset} def main ${palette.dim}(${elapsedLabel})${palette.reset}\n`,
     );
     // Print workflow return value (if any) on its own line, separated by a blank line.
-    // The runtime writes return_value.txt only when the default workflow returns a value.
+    // The runtime writes return_value.txt only when the entry def returns a value.
     const returnValue = readReturnValue(runDir);
     if (returnValue !== undefined && returnValue.length > 0) {
       const trimmed = returnValue.endsWith("\n") ? returnValue.slice(0, -1) : returnValue;
@@ -488,7 +501,7 @@ async function reportResult(
   });
   process.stderr.write("\n");
   process.stderr.write(
-    `${palette.red}\u2717 FAIL${palette.reset} workflow default ${palette.dim}(${elapsedLabel})${palette.reset}\n`,
+    `${palette.red}\u2717 FAIL${palette.reset} def main ${palette.dim}(${elapsedLabel})${palette.reset}\n`,
   );
   if (failureDetails.shouldPrintSummaryLine) {
     process.stderr.write(`  ${failureDetails.summary}\n`);

@@ -55,7 +55,7 @@ test("run_summary.jsonl: workflow, steps, log, inbox dispatch stream", () => {
         "",
         'script emit_greeting = `echo "hello-inbox"`',
         "",
-        "workflow sender() {",
+        "def sender() {",
         "  log \"sending\"",
         "  logerr \"warn-line\"",
         "  greetings <- run emit_greeting()",
@@ -63,11 +63,11 @@ test("run_summary.jsonl: workflow, steps, log, inbox dispatch stream", () => {
         "",
         'script write_received_file = `echo "$1" > received.txt`',
         "",
-        "workflow receiver(message, chan, sender) {",
+        "def receiver(message, chan, sender) {",
         "  run write_received_file(message)",
         "}",
         "",
-        "workflow default() {",
+        "export def main() {",
         "  run sender()",
         "}",
         "",
@@ -92,15 +92,15 @@ test("run_summary.jsonl: workflow, steps, log, inbox dispatch stream", () => {
     const events = parseJsonl(readFileSync(summaryPath, "utf8"));
 
     const types = events.map((e) => (e as { type: string }).type);
-    assert.ok(types.includes("WORKFLOW_START"), types.join(","));
-    assert.ok(types.includes("WORKFLOW_END"), types.join(","));
+    assert.ok(types.includes("RUN_START"), types.join(","));
+    assert.ok(types.includes("RUN_END"), types.join(","));
     assert.ok(types.includes("STEP_START"), types.join(","));
     assert.ok(types.includes("STEP_END"), types.join(","));
     assert.ok(types.includes("LOG"), types.join(","));
     assert.ok(types.includes("LOGERR"), types.join(","));
     assert.ok(types.includes("INBOX_ENQUEUE"), types.join(","));
 
-    const wfStarts = events.filter((e) => (e as { type: string }).type === "WORKFLOW_START");
+    const wfStarts = events.filter((e) => (e as { type: string }).type === "RUN_START");
     assert.ok(wfStarts.length >= 1);
     for (const e of events) {
       const o = e as Record<string, unknown>;
@@ -139,7 +139,7 @@ test("run_summary.jsonl: workflow, steps, log, inbox dispatch stream", () => {
 
     const order = types.join(",");
     const idx = (t: string) => types.indexOf(t);
-    assert.ok(idx("WORKFLOW_START") < idx("STEP_END"), order);
+    assert.ok(idx("RUN_START") < idx("STEP_END"), order);
     assert.ok(idx("LOG") < idx("INBOX_ENQUEUE"), order);
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -153,7 +153,7 @@ test("run_summary.jsonl: STEP_END remains parseable for legacy consumers (event_
     const jh = join(root, "t.jh");
     writeFileSync(
       jh,
-      ['script emit_x = `echo "x"`', "workflow default() {", "  run emit_x()", "}", ""].join("\n"),
+      ['script emit_x = `echo "x"`', "export def main() {", "  run emit_x()", "}", ""].join("\n"),
     );
     const runsRoot = join(root, ".jaiph/runs");
     const runResult = spawnSync("node", [cliPath, "run", jh], {

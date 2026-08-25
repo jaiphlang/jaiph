@@ -68,13 +68,13 @@ One run becomes one trace. The trace id is the run's UUID with the dashes remove
 Re-exporting the same run produces the same ids, so a retry never creates a second
 trace.
 
-- **Root span** (`workflow <name>`) covers the whole run, from `WORKFLOW_START` to
-  `WORKFLOW_END`. Its status is ERROR when the run exits nonzero or a signal
+- **Root span** (`run <name>`) covers the whole run, from `RUN_START` to
+  `RUN_END`. Its status is ERROR when the run exits nonzero or a signal
   terminated it, and OK otherwise. Each `logerr` and `logwarn` becomes a span event
   on this root span.
 - **Step spans**, one per step. Steps nest by the run tree, so a step's parent is
   the step that invoked it, and top-level steps hang off the root. Each step span
-  carries these attributes: `jaiph.step.kind` (`workflow`, `rule`, `script`, or
+  carries these attributes: `jaiph.step.kind` (`def`, `script`, or
   `prompt`), `jaiph.step.func`, `jaiph.step.name`, `jaiph.step.seq`,
   `jaiph.step.depth`, `jaiph.step.status`, `jaiph.step.elapsed_ms`, and the redacted
   `jaiph.step.out` and `jaiph.step.err` captures. A step with a nonzero status is an
@@ -88,7 +88,7 @@ credential-redacted, so a secret in step output arrives as `[REDACTED]`. Jaiph
 never reads the raw per-step capture files for the export.
 
 Beyond the service name, every trace carries `jaiph.version`, `jaiph.run_id`,
-`jaiph.workflow`, and `jaiph.source` as resource attributes. You can add your own
+`jaiph.def`, and `jaiph.source` as resource attributes. You can add your own
 with `OTEL_RESOURCE_ATTRIBUTES`, and you can set the service name with
 `OTEL_SERVICE_NAME` (the default is `jaiph`).
 
@@ -162,18 +162,18 @@ report.
 
 - **`event_id`** is the run's UUID with the dashes removed, so re-reporting the
   same run keeps the same id.
-- **`message`** is `workflow <name> failed (exit N)`, or `workflow <name>
+- **`message`** is `run <name> failed (exit N)`, or `run <name>
   terminated by signal S`.
 - **`level`** is `error`, and **`platform`** is `node`.
-- **`tags`** include `jaiph.workflow`, `jaiph.source` (the source file basename),
+- **`tags`** include `jaiph.def`, `jaiph.source` (the source file basename),
   and the failing step's `jaiph.step.kind` and `jaiph.step.name` when they are
   known. An authenticated `jaiph serve` run also tags `jaiph.principal` (the audit
   subject) and `jaiph.correlation_id` (the request id), never a token or any value
   that carries a secret.
 - **`extra`** holds `failing_step_detail` (the failing step's redacted `err` or
   `out` excerpt) and `run_dir` (a pointer to the run directory for triage).
-- **`fingerprint`** is `["jaiph", <workflow>, <failing step name or "unknown">]`,
-  so re-occurrences group by workflow and failing step.
+- **`fingerprint`** is `["jaiph", <def>, <failing step name or "unknown">]`,
+  so re-occurrences group by def and failing step.
 - **`release`** and **`environment`** come from `SENTRY_RELEASE` and
   `SENTRY_ENVIRONMENT`.
 

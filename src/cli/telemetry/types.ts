@@ -9,7 +9,7 @@
 export interface ExportRunTelemetryOptions {
   /** Absolute host run directory; its `run_summary.jsonl` is the export source. */
   runDir?: string;
-  workflow: string;
+  def: string;
   exitStatus: number;
   signal: string | null;
   env: NodeJS.ProcessEnv;

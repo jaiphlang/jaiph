@@ -2,7 +2,7 @@ import type {
   CatchBody,
   Expr,
   jaiphModule,
-  WorkflowStepDef,
+  StepDef,
 } from "../../types";
 import type { AgentBackend } from "../../runtime";
 
@@ -29,7 +29,7 @@ export interface PreflightArgs {
 
 /**
  * Collect each distinct backend declared in the entry file plus the effective
- * default backend. Order: module-level (if set), workflow-level (in source order,
+ * default backend. Order: module-level (if set), def-level (in source order,
  * skipping duplicates), then the effective default (skipped if already seen).
  *
  * Deeper per-import-module backend overrides resolved at runtime are out of scope
@@ -49,13 +49,13 @@ function collectBackendUsages(
       model: moduleModel,
     });
   }
-  for (const wf of mod.workflows) {
+  for (const wf of mod.defs) {
     const wfBackend = wf.metadata?.agent?.backend;
     if (!wfBackend || seen.has(wfBackend)) continue;
     const wfModel = wf.metadata?.agent?.model ?? moduleModel;
     seen.set(wfBackend, {
       backend: wfBackend,
-      scope: `workflow ${wf.name}`,
+      scope: `def ${wf.name}`,
       model: wfModel,
     });
   }
@@ -138,7 +138,7 @@ function catchBodyHasPrompt(c: CatchBody): boolean {
   return c.block.some(stepHasPrompt);
 }
 
-function stepHasPrompt(s: WorkflowStepDef): boolean {
+function stepHasPrompt(s: StepDef): boolean {
   switch (s.type) {
     case "exec":
       if (exprIsPrompt(s.body)) return true;
@@ -164,11 +164,8 @@ function stepHasPrompt(s: WorkflowStepDef): boolean {
 
 /** True when any workflow or rule in the entry file contains a `prompt` step. */
 function entryFileUsesPrompt(mod: jaiphModule): boolean {
-  for (const wf of mod.workflows) {
+  for (const wf of mod.defs) {
     if (wf.steps.some(stepHasPrompt)) return true;
-  }
-  for (const rule of mod.rules) {
-    if (rule.steps.some(stepHasPrompt)) return true;
   }
   return false;
 }
@@ -176,7 +173,7 @@ function entryFileUsesPrompt(mod: jaiphModule): boolean {
 /** True when the entry file declares an agent backend at any config scope. */
 function entryFileHasExplicitBackend(mod: jaiphModule): boolean {
   if (mod.metadata?.agent?.backend) return true;
-  return mod.workflows.some((wf) => Boolean(wf.metadata?.agent?.backend));
+  return mod.defs.some((wf) => Boolean(wf.metadata?.agent?.backend));
 }
 
 /**

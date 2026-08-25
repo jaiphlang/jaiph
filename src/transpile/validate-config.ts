@@ -1,11 +1,11 @@
-import type { jaiphModule, WorkflowMetadata } from "../types";
+import type { jaiphModule, DefMetadata } from "../types";
 import { configValueHasInterpolation } from "../parser";
 import { Diagnostics } from "../diagnostics";
 import { validateSimpleInterpolationIdentifiers } from "./validate-string";
 
 type StringField = {
   key: string;
-  read: (meta: WorkflowMetadata) => string | undefined;
+  read: (meta: DefMetadata) => string | undefined;
 };
 
 const STRING_FIELDS: StringField[] = [
@@ -24,9 +24,9 @@ const STRING_FIELDS: StringField[] = [
 function validateMetadataInterpolation(
   diag: Diagnostics,
   filePath: string,
-  meta: WorkflowMetadata | undefined,
+  meta: DefMetadata | undefined,
   knownVars: Set<string>,
-  scopeLabel: "workflow" | "rule",
+  scopeLabel: "def",
   line: number,
 ): void {
   if (!meta) return;
@@ -54,14 +54,14 @@ export function validateConfigInto(ast: jaiphModule, diag: Diagnostics): void {
   }
 
   diag.capture(() => {
-    validateMetadataInterpolation(diag, ast.filePath, ast.metadata, moduleVars, "rule", 1);
+    validateMetadataInterpolation(diag, ast.filePath, ast.metadata, moduleVars, "def", 1);
   });
 
-  for (const workflow of ast.workflows) {
+  for (const workflow of ast.defs) {
     const wfVars = new Set(moduleVars);
     for (const param of workflow.params) wfVars.add(param);
     diag.capture(() => {
-      validateMetadataInterpolation(diag, ast.filePath, workflow.metadata, wfVars, "workflow", workflow.loc.line);
+      validateMetadataInterpolation(diag, ast.filePath, workflow.metadata, wfVars, "def", workflow.loc.line);
     });
   }
 }

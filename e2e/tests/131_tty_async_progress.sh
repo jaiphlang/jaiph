@@ -21,21 +21,21 @@ script slow_a = `sleep 1 && echo "a-script-done"`
 
 script slow_b = `sleep 1 && echo "b-script-done"`
 
-workflow branch_a() {
+def branch_a() {
   log "a-start"
   run slow_a()
   log "a-end"
   return "result-a"
 }
 
-workflow branch_b() {
+def branch_b() {
   log "b-start"
   run slow_b()
   log "b-end"
   return "result-b"
 }
 
-workflow default() {
+export def main() {
   const ha = run async branch_a()
   const hb = run async branch_b()
   log ha
@@ -90,7 +90,7 @@ text = text.replace("\r", "\n")
 clean = re.sub(r"\x1b\[[0-9;]*[A-Za-z]", "", text)
 
 # Check that RUNNING frame was observed during live render
-running_seen = "RUNNING workflow default" in clean
+running_seen = "RUNNING export def main" in clean
 sys.stdout.write(f"__JAIPH_TTY_RUNNING_SEEN__={'1' if running_seen else '0'}\n")
 
 # Check for orphaned ANSI escape sequences after stripping known CSI patterns.
@@ -120,8 +120,8 @@ e2e::assert_contains "${normalized}" "__JAIPH_TTY_ANSI_CLEAN__=1" "No orphaned A
 # --- Per-branch progress events appear under correct branch nodes ---
 
 # assert_contains: async interleaving order is nondeterministic in live PTY output
-e2e::assert_contains "${normalized}" "workflow branch_a" "branch_a appears in progress tree"
-e2e::assert_contains "${normalized}" "workflow branch_b" "branch_b appears in progress tree"
+e2e::assert_contains "${normalized}" "def branch_a" "branch_a appears in progress tree"
+e2e::assert_contains "${normalized}" "def branch_b" "branch_b appears in progress tree"
 
 # Subscript ₁ prefixes branch_a events, ₂ prefixes branch_b events
 # assert_contains: PTY redraws make exact full-output match infeasible
@@ -148,28 +148,28 @@ e2e::assert_contains "${normalized}" "result-b" "handle hb resolved to result-b"
 
 # Both branches show completion markers
 # assert_contains: PTY redraws make exact match infeasible
-e2e::assert_contains "${normalized}" "workflow branch_a (<time>)" "branch_a completed with timing"
-e2e::assert_contains "${normalized}" "workflow branch_b (<time>)" "branch_b completed with timing"
+e2e::assert_contains "${normalized}" "def branch_a(<time>)" "branch_a completed with timing"
+e2e::assert_contains "${normalized}" "def branch_b(<time>)" "branch_b completed with timing"
 
 # Overall PASS
 # assert_contains: PTY redraws make exact match infeasible
-e2e::assert_contains "${normalized}" "PASS workflow default" "workflow default passed"
+e2e::assert_contains "${normalized}" "PASS export def main" "export def main passed"
 
 # Canonicalize dynamic TTY refreshes and verify stable tree structure.
 # Extract only the lines we can stably match regardless of async interleaving order.
 tree_projection="$(
   printf '%s\n' "${normalized}" | awk '
     /^Jaiph: Running tty_async\.jh$/ { print; next }
-    /^workflow default$/ { print; next }
+    /^export def main$/ { print; next }
     /^ .₁.+ workflow branch_a \(<time>\)$/ { print; next }
     /^ .₂.+ workflow branch_b \(<time>\)$/ { print; next }
-    /PASS workflow default/ { print; next }
+    /PASS export def main/ { print; next }
   '
 )"
 
 # assert_contains: we extract stable subset lines; the full projection order depends on async timing
 e2e::assert_contains "${tree_projection}" "Jaiph: Running tty_async.jh" "tree projection: header"
-e2e::assert_contains "${tree_projection}" "workflow default" "tree projection: root workflow"
-e2e::assert_contains "${tree_projection}" "PASS workflow default" "tree projection: final PASS"
+e2e::assert_contains "${tree_projection}" "export def main" "tree projection: root workflow"
+e2e::assert_contains "${tree_projection}" "PASS export def main" "tree projection: final PASS"
 
 e2e::pass "TTY async progress renders per-branch events correctly"

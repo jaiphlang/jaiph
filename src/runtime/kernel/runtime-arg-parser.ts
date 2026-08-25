@@ -3,7 +3,7 @@
  *
  * Pure functions only — no I/O, no class state. The runtime composes these to
  * resolve interpolated strings, parse call argument lists (including managed
- * `run`/`ensure` and inline-script forms), and validate prompt return schemas.
+ * `run` and inline-script forms), and validate prompt return schemas.
  */
 import { argsToRuntimeString, parseCallRef } from "../../parser";
 import { interpolate } from "../../config";
@@ -21,7 +21,7 @@ export const MAX_RECURSION_DEPTH = 256;
 
 export type ParsedArgToken =
   | { kind: "literal"; value: string }
-  | { kind: "managed"; managedKind: "run" | "ensure"; ref: string; argsRaw: string }
+  | { kind: "managed"; managedKind: "run"; ref: string; argsRaw: string }
   | { kind: "managed_inline_script"; body: string; lang?: string; argsRaw: string };
 
 export type PromptSchemaField = { name: string; type: "string" | "number" | "boolean" };
@@ -34,7 +34,7 @@ export function nowIso(): string {
   return formatUtcTimestamp();
 }
 
-/** Body after "run" / "ensure" in ${run ...} / ${ensure ...} (e.g. greet(), greet(x), or greet x). */
+/** Body after "run" in ${run ...} (e.g. greet(), greet(x), or greet x). */
 export function parseInlineCaptureCall(body: string): { ref: string; argsRaw: string } {
   const trimmed = body.trim();
   const paren = trimmed.match(/^([\w.]+)\s*\(([^)]*)\)\s*$/);
@@ -123,11 +123,7 @@ export function parseInlineScriptAt(s: string): { body: string; argsRaw: string;
 
 export function parseManagedArgAt(raw: string, start: number): { token: ParsedArgToken; next: number } | null {
   const tail = raw.slice(start);
-  const keyword = tail.startsWith("run ")
-    ? "run"
-    : tail.startsWith("ensure ")
-      ? "ensure"
-      : null;
+  const keyword = tail.startsWith("run ") ? "run" : null;
   if (!keyword) return null;
   const afterKeyword = raw.slice(start + keyword.length).trimStart();
   const skipped = raw.slice(start + keyword.length).length - afterKeyword.length;

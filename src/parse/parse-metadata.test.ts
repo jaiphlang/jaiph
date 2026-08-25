@@ -312,7 +312,7 @@ test("module keys round-trip through formatter", () => {
     '  module.description = "Does things"',
     '}',
     '',
-    'workflow default() {',
+    'export def main() {',
     '  log "ok"',
     '}',
   ].join("\n");
@@ -331,12 +331,12 @@ test("module keys round-trip through formatter", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Workflow-level config
+// Def-level config
 // ---------------------------------------------------------------------------
 
 test("workflow config: parses config inside workflow", () => {
   const src = [
-    "workflow default() {",
+    "export def main() {",
     "  config {",
     '    agent.backend = "claude"',
     "  }",
@@ -344,14 +344,14 @@ test("workflow config: parses config inside workflow", () => {
     "}",
   ].join("\n");
   const mod = parsejaiph(src, "test.jh");
-  assert.equal(mod.workflows[0].metadata?.agent?.backend, "claude");
-  assert.equal(mod.workflows[0].steps.length, 1);
-  assert.equal(mod.workflows[0].steps[0].type, "say");
+  assert.equal(mod.defs[0].metadata?.agent?.backend, "claude");
+  assert.equal(mod.defs[0].steps.length, 1);
+  assert.equal(mod.defs[0].steps[0].type, "say");
 });
 
 test("workflow config: allows comments before config", () => {
   const src = [
-    "workflow default() {",
+    "export def main() {",
     "  # a comment",
     "  config {",
     '    agent.model = "gpt-4"',
@@ -360,12 +360,12 @@ test("workflow config: allows comments before config", () => {
     "}",
   ].join("\n");
   const mod = parsejaiph(src, "test.jh");
-  assert.equal(mod.workflows[0].metadata?.agent?.model, "gpt-4");
+  assert.equal(mod.defs[0].metadata?.agent?.model, "gpt-4");
 });
 
 test("workflow config: rejects duplicate config in same workflow", () => {
   const src = [
-    "workflow default() {",
+    "export def main() {",
     "  config {",
     '    agent.backend = "claude"',
     "  }",
@@ -376,13 +376,13 @@ test("workflow config: rejects duplicate config in same workflow", () => {
   ].join("\n");
   assert.throws(
     () => parsejaiph(src, "test.jh"),
-    /duplicate config block inside workflow/,
+    /duplicate config block inside def/,
   );
 });
 
 test("workflow config: rejects config after steps", () => {
   const src = [
-    "workflow default() {",
+    "export def main() {",
     '  echo "step"',
     "  config {",
     '    agent.backend = "claude"',
@@ -391,13 +391,13 @@ test("workflow config: rejects config after steps", () => {
   ].join("\n");
   assert.throws(
     () => parsejaiph(src, "test.jh"),
-    /config block inside workflow must appear before any steps/,
+    /config block inside def must appear before any steps/,
   );
 });
 
 test("workflow config: rejects module.* keys", () => {
   const src = [
-    "workflow default() {",
+    "export def main() {",
     "  config {",
     '    module.name = "nope"',
     "  }",
@@ -405,13 +405,13 @@ test("workflow config: rejects module.* keys", () => {
   ].join("\n");
   assert.throws(
     () => parsejaiph(src, "test.jh"),
-    /module\.\* keys are not allowed in workflow-level config/,
+    /module\.\* keys are not allowed in def-level config/,
   );
 });
 
 test("workflow config: rejects unknown runtime.* keys", () => {
   const src = [
-    "workflow default() {",
+    "export def main() {",
     "  config {",
     "    runtime.docker_timeout_seconds = 300",
     "  }",
@@ -485,7 +485,7 @@ test("parseConfigBlock: trusted_envs must be a string", () => {
 
 test("workflow config: trusted_envs is accepted at workflow level", () => {
   const src = [
-    "workflow default() {",
+    "export def main() {",
     "  config {",
     '    trusted_envs = "GITHUB_TOKEN"',
     "  }",
@@ -493,7 +493,7 @@ test("workflow config: trusted_envs is accepted at workflow level", () => {
     "}",
   ].join("\n");
   const mod = parsejaiph(src, "test.jh");
-  assert.deepEqual(mod.workflows[0].metadata?.trustedEnvs, ["GITHUB_TOKEN"]);
+  assert.deepEqual(mod.defs[0].metadata?.trustedEnvs, ["GITHUB_TOKEN"]);
 });
 
 test("trusted_envs round-trips through formatter", () => {
@@ -502,7 +502,7 @@ test("trusted_envs round-trips through formatter", () => {
     '  trusted_envs = "GITHUB_TOKEN NPM_TOKEN"',
     "}",
     "",
-    "workflow default() {",
+    "export def main() {",
     "  config {",
     '    trusted_envs = "EXTRA_KEY"',
     "  }",
@@ -514,7 +514,7 @@ test("trusted_envs round-trips through formatter", () => {
   const emitted = emitModule(mod);
   const reparsed = parsejaiph(emitted, "test.jh");
   assert.deepEqual(reparsed.metadata?.trustedEnvs, ["GITHUB_TOKEN", "NPM_TOKEN"]);
-  assert.deepEqual(reparsed.workflows[0].metadata?.trustedEnvs, ["EXTRA_KEY"]);
+  assert.deepEqual(reparsed.defs[0].metadata?.trustedEnvs, ["EXTRA_KEY"]);
 });
 
 test("workflow config: coexists with module-level config", () => {
@@ -522,18 +522,18 @@ test("workflow config: coexists with module-level config", () => {
     "config {",
     '  agent.backend = "cursor"',
     "}",
-    "workflow a() {",
+    "def a() {",
     "  config {",
     '    agent.backend = "claude"',
     "  }",
     '  echo "a"',
     "}",
-    "workflow b() {",
+    "def b() {",
     '  echo "b"',
     "}",
   ].join("\n");
   const mod = parsejaiph(src, "test.jh");
   assert.equal(mod.metadata?.agent?.backend, "cursor");
-  assert.equal(mod.workflows[0].metadata?.agent?.backend, "claude");
-  assert.equal(mod.workflows[1].metadata, undefined);
+  assert.equal(mod.defs[0].metadata?.agent?.backend, "claude");
+  assert.equal(mod.defs[1].metadata, undefined);
 });

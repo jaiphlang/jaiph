@@ -24,12 +24,12 @@ function makeRunDir(root: string, dateTime: string): string {
   return dir;
 }
 
-function writeJournal(dir: string, runId: string, workflow: string, terminal: boolean): void {
+function writeJournal(dir: string, runId: string, def: string, terminal: boolean): void {
   const lines = [
-    JSON.stringify({ type: "WORKFLOW_START", workflow, run_id: runId, ts: "2026-07-27T11:00:00.000Z", event_version: 1 }),
+    JSON.stringify({ type: "RUN_START", def, run_id: runId, ts: "2026-07-27T11:00:00.000Z", event_version: 1 }),
   ];
   if (terminal) {
-    lines.push(JSON.stringify({ type: "WORKFLOW_END", workflow, run_id: runId, ts: "2026-07-27T11:00:05.000Z", event_version: 1 }));
+    lines.push(JSON.stringify({ type: "RUN_END", def, run_id: runId, ts: "2026-07-27T11:00:05.000Z", event_version: 1 }));
   }
   writeFileSync(join(dir, RUN_SUMMARY), lines.join("\n") + "\n");
 }
@@ -37,7 +37,7 @@ function writeJournal(dir: string, runId: string, workflow: string, terminal: bo
 function terminalRecord(runId: string, runDir: string, over?: Partial<RunRecord>): RunRecord {
   return {
     run_id: runId,
-    workflow: "build",
+    def: "build",
     status: "succeeded",
     started_at: "2026-07-27T11:00:00.000Z",
     ended_at: "2026-07-27T11:00:05.000Z",
@@ -86,7 +86,7 @@ test("a run with a journal but no run.json is reconciled to interrupted and pers
     const [rec] = loadPersistedRuns(root, NOW);
     assert.equal(rec.status, "interrupted", "no longer reported as running");
     assert.equal(rec.run_id, "run-b");
-    assert.equal(rec.workflow, "slow");
+    assert.equal(rec.def, "slow");
     assert.equal(rec.ended_at, NOW);
     assert.equal(rec.result_text, INTERRUPTED_RESULT_TEXT);
     // The reconciliation is durable: run.json now exists and a second load is stable.
@@ -101,7 +101,7 @@ test("a run with a journal but no run.json is reconciled to interrupted and pers
   }
 });
 
-test("even a run whose journal reached WORKFLOW_END is interrupted when no record was committed", () => {
+test("even a run whose journal reached RUN_END is interrupted when no record was committed", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-runstore-"));
   try {
     const dir = makeRunDir(root, "2026-07-27/11-45-00-tools");

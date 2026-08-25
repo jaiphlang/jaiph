@@ -1,7 +1,7 @@
 import { basename } from "node:path";
 import { errText } from "../../errors";
 import { findRunDir } from "../shared/errors";
-import { callWorkflow, type OutputCaps } from "../shared/workflow-call";
+import { callDef, type OutputCaps } from "../shared/workflow-call";
 import { parseServerArgs, startGeneration, startReloadWatcher } from "../shared/serve-bootstrap";
 import { createOperatorLog } from "../shared/server-log";
 import {
@@ -42,16 +42,15 @@ function intEnv(raw: string | undefined, name: string, fallback: number, min: nu
 
 const SERVE_USAGE =
   "Usage: jaiph serve [--host <addr>] [--port <n>] [--workspace <dir>] [--allow-anonymous] [--env KEY[=VALUE]]... <file.jh>\n\n" +
-  "Serve the file's workflows as an HTTP API with a generated OpenAPI 3.1 document\n" +
+  "Serve the file's defs as an HTTP API with a generated OpenAPI 3.1 document\n" +
   "and an embedded Swagger UI. Anything that speaks HTTP can invoke tested workflows\n" +
   "and inspect their runs.\n\n" +
-  "Exposure mirrors `jaiph mcp`: `export workflow` declarations if any exist, otherwise\n" +
-  "every top-level workflow except channel route targets; `default` is exposed only\n" +
-  "when it is the only workflow, named after the file's basename. Descriptions come\n" +
-  "from the `#` comment lines above each workflow. Sources are re-validated on change.\n\n" +
+  "Exposure mirrors `jaiph mcp`: exported defs only; `main` is exposed only\n" +
+  "when it is the only export, named after the file's basename. Descriptions come\n" +
+  "from the `#` comment lines above each def. Sources are re-validated on change.\n\n" +
   "Endpoints: GET /docs (self-contained Swagger UI — assets embedded, no browser internet\n" +
-  "access needed), GET /openapi.json, GET /healthz, GET /v1/workflows,\n" +
-  "POST /v1/workflows/{name}/runs (async 202 or ?wait=true for 200), GET /v1/runs,\n" +
+  "access needed), GET /openapi.json, GET /healthz, GET /v1/defs,\n" +
+  "POST /v1/defs/{name}/runs (async 202 or ?wait=true for 200), GET /v1/runs,\n" +
   "GET /v1/runs/{id}, GET /v1/runs/{id}/events (NDJSON, or SSE with Accept: text/event-stream),\n" +
   "GET /v1/runs/{id}/artifacts, GET /v1/runs/{id}/artifacts/{path}, POST /v1/runs/{id}/cancel.\n" +
   "MCP clients: POST /mcp speaks MCP Streamable HTTP over the same workflows, run\n" +
@@ -256,9 +255,9 @@ export async function runServe(rest: string[]): Promise<number> {
       // Bind the run to the generation live at start; the lease keeps its
       // scripts dir alive until the run finishes (deleted then if superseded).
       const lease = generations.acquire();
-      const p = callWorkflow(
+      const p = callDef(
         lease.state.callEnv,
-        spec.workflow,
+        spec.def,
         spec.params.map((pp) => args[pp] ?? ""),
         runId,
         { ...ctx, operator },
@@ -276,7 +275,7 @@ export async function runServe(rest: string[]): Promise<number> {
 
   // Hot reload: swap the current generation; per-request OpenAPI + tool reads
   // pick it up with no cache to invalidate. Validation failures keep serving.
-  const watcher = startReloadWatcher(ctx, { reloaded: "workflow(s)", keepPrevious: "workflows" });
+  const watcher = startReloadWatcher(ctx, { reloaded: "def(s)", keepPrevious: "defs" });
 
   const httpServer = createHttpServer(handler, log);
   let boundPort: number;
@@ -292,7 +291,7 @@ export async function runServe(rest: string[]): Promise<number> {
   const base = `http://${host}:${boundPort}`;
   log(
     `jaiph serve: listening on ${base} — API docs at ${base}/docs, MCP at ${base}/mcp ` +
-      `(${generations.current().tools.length} workflow(s))`,
+      `(${generations.current().tools.length} def(s))`,
   );
   log(
     `jaiph serve: auth mode ${authenticator.mode}` +
