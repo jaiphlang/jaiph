@@ -421,11 +421,9 @@ Jaiph: Running agent_inbox.jh
   <span class="run-marker">▸</span> <span class="run-keyword">def</span> scanner
   <span class="run-marker">·</span>   <span class="run-marker">ℹ</span> Scanning for issues...
   <span class="run-pass">✓</span> <span class="run-time">def scanner (0s)</span>
-  <span class="run-marker">▸</span> <span class="run-keyword">def</span> analyst <span class="run-params">(message="Found 3 issues in auth module", chan="findings", sender="scanner")</span>
-  <span class="run-marker">·</span>   <span class="run-marker">ℹ</span> Analyzing message from scanner on channel findings...
+  <span class="run-marker">▸</span> <span class="run-keyword">def</span> analyst <span class="run-params">(msg="Found 3 issues in auth module")</span>
   <span class="run-pass">✓</span> <span class="run-time">def analyst (0s)</span>
-  <span class="run-marker">▸</span> <span class="run-keyword">def</span> reviewer <span class="run-params">(message="Summary: Found 3 issues in auth ...", chan="report", sender="analyst")</span>
-  <span class="run-marker">·</span>   <span class="run-marker">ℹ</span> Reviewing message from analyst on channel report...
+  <span class="run-marker">▸</span> <span class="run-keyword">def</span> reviewer <span class="run-params">(msg="Summary: Found 3 issues in auth ...")</span>
   <span class="run-marker">·</span>   <span class="run-fail">! Critical issue: Summary: Found 3 issues in auth module</span>
   <span class="run-pass">✓</span> <span class="run-time">def reviewer (0s)</span>
 
