@@ -14,7 +14,7 @@ const INIT_USAGE =
 
 const BOOTSTRAP_TEMPLATE = `#!/usr/bin/env jaiph
 
-# Bootstraps Jaiph workflows for this repository.
+# Bootstraps Jaiph for this repository.
 export def main() {
   const bootstrap_summary = prompt """
     You are bootstrapping Jaiph for this repository.
@@ -24,11 +24,11 @@ export def main() {
     Perform these tasks in order:
     1) Analyze repository structure, languages, package manager, and build/test/lint commands.
     2) Detect existing contribution conventions (branching, commit style, CI checks).
-    3) Create or update Jaiph workflows under .jaiph/ for safe feature implementation, including:
+    3) Create or update Jaiph files under .jaiph/ for safe feature implementation, including:
        - preflight checks (clean git state, branch guards when relevant)
-       - implementation workflow
-       - verification workflow (tests/lint/build)
-    4) Keep workflows minimal, composable, and specific to this project.
+       - implementation def
+       - verification def (tests/lint/build)
+    4) Keep defs minimal, composable, and specific to this project.
     5) Print a short usage guide with exact jaiph run commands.
     6) End your response with:
        - WHAT CHANGED: files touched and key edits
@@ -39,7 +39,7 @@ export def main() {
 }
 `;
 
-/** Ignores ephemeral dirs under `.jaiph/`; kept in-repo so workflows and libs stay tracked. */
+/** Ignores ephemeral dirs under `.jaiph/`; kept in-repo so defs and libs stay tracked. */
 const JAIPH_DIR_GITIGNORE_TEMPLATE = "runs\ntmp\n";
 
 export function runInit(rest: string[]): number {
@@ -113,9 +113,9 @@ export function runInit(rest: string[]): number {
   process.stdout.write("Try:\n");
   process.stdout.write("  ./.jaiph/bootstrap.jh\n");
   process.stdout.write("\n");
-  process.stdout.write("This asks an agent to analyze the project and scaffold recommended workflows.\n");
+  process.stdout.write("This asks an agent to analyze the project and scaffold recommended files.\n");
   process.stdout.write(
-    "Ephemeral paths (`.jaiph/runs/`, `.jaiph/tmp/`) are ignored via `.jaiph/.gitignore`; commit workflows and the rest of `.jaiph/` as usual.\n",
+    "Ephemeral paths (`.jaiph/runs/`, `.jaiph/tmp/`) are ignored via `.jaiph/.gitignore`; commit `.jh` files and the rest of `.jaiph/` as usual.\n",
   );
   process.stdout.write("\n");
   return 0;

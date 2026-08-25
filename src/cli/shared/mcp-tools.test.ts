@@ -111,7 +111,7 @@ test("deriveTools: description comes from leading # comments, shebang dropped", 
   assert.equal(tools[0].description, "Builds the target and runs the smoke suite.\nRetries flaky steps once.");
 });
 
-test("deriveTools: fallback description names the workflow and file", () => {
+test("deriveTools: fallback description names the def and file", () => {
   const m = mod(["export def build() {", '  log "x"', "}"].join("\n"));
   const { tools } = deriveTools(m, FILE);
   assert.match(tools[0].description, /"build"/);

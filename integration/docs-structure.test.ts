@@ -392,7 +392,7 @@ test("docs-lint: every internal markdown link / permalink / redirect_from resolv
         // Relative file link. jekyll-relative-links rewrites it to the target
         // page's permalink, so resolve by the target FILE's declared permalink
         // (basename -> page -> permalink), not a naive "/basename" — pages may
-        // live at nested permalinks (e.g. /tutorials/first-workflow).
+        // live at nested permalinks (e.g. /tutorials/first-run).
         const targetName = path.split("/").pop()!;
         const target = byName.get(targetName);
         assert.ok(

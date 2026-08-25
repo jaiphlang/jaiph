@@ -1,8 +1,8 @@
 # ![Jaiph](docs/logo.png)
 
-[jaiph.org](https://jaiph.org) · [Your first workflow](docs/first-workflow.md) · [Your first agent run](docs/first-agent-run.md) · [Install & switch versions](docs/setup.md) · [Agent Skill](https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md) · [Architecture](docs/architecture.md) · [CLI](docs/cli.md) · [Contributing](docs/contributing.md)
+[jaiph.org](https://jaiph.org) · [Your first run](docs/first-run.md) · [Your first agent run](docs/first-agent-run.md) · [Install & switch versions](docs/setup.md) · [Agent Skill](https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md) · [Architecture](docs/architecture.md) · [CLI](docs/cli.md) · [Contributing](docs/contributing.md)
 
-> **Docs note:** The Jaiph documentation site follows the [Diátaxis](https://diataxis.fr/) framework. Tutorials: [Your first workflow](docs/first-workflow.md), [Your first agent run](docs/first-agent-run.md). How-to: [Install & switch versions](docs/setup.md), [Authenticate agent backends](docs/agent-auth.md), [Configure backend & model](docs/configure-backend.md), [Add a hook](docs/hooks.md), [Use & publish a library](docs/libraries.md), [Save artifacts](docs/artifacts.md), [Write & run tests](docs/testing.md), [Serve workflows as MCP tools](docs/mcp.md), [Serve workflows over HTTP](docs/serve.md), [Export traces to an OTLP collector](docs/observability.md), [Deploy jaiph](docs/deploy.md). Reference: [CLI](docs/cli.md), [Configuration](docs/configuration.md), [Grammar](docs/grammar.md), [Language](docs/language.md), [Environment variables](docs/env-vars.md). Explanation: [Why Jaiph](docs/why-jaiph.md), [Architecture](docs/architecture.md), [Inbox & Dispatch](docs/inbox.md), [Async Handles](docs/spec-async-handles.md). Contributor: [Contributing](docs/contributing.md), [Agent Skill](https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md).
+> **Docs note:** The Jaiph documentation site follows the [Diátaxis](https://diataxis.fr/) framework. Tutorials: [Your first run](docs/first-run.md), [Your first agent run](docs/first-agent-run.md). How-to: [Install & switch versions](docs/setup.md), [Authenticate agent backends](docs/agent-auth.md), [Configure backend & model](docs/configure-backend.md), [Add a hook](docs/hooks.md), [Use & publish a library](docs/libraries.md), [Save artifacts](docs/artifacts.md), [Write & run tests](docs/testing.md), [Serve defs as MCP tools](docs/mcp.md), [Serve defs over HTTP](docs/serve.md), [Export traces to an OTLP collector](docs/observability.md), [Deploy jaiph](docs/deploy.md). Reference: [CLI](docs/cli.md), [Configuration](docs/configuration.md), [Grammar](docs/grammar.md), [Language](docs/language.md), [Environment variables](docs/env-vars.md). Explanation: [Why Jaiph](docs/why-jaiph.md), [Architecture](docs/architecture.md), [Inbox & Dispatch](docs/inbox.md), [Async Handles](docs/spec-async-handles.md). Contributor: [Contributing](docs/contributing.md), [Agent Skill](https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md).
 
 ---
 
@@ -13,7 +13,7 @@
 
 ## What is Jaiph?
 
-**Jaiph** is a composable scripting language and runtime for defining and orchestrating AI agent workflows. You write **`.jh`** files that combine `def`, `script`, and `prompt` into executable pipelines. The CLI parses source into an AST, validates references at compile time, and the Node workflow runtime interprets the AST directly.
+**Jaiph** is a composable scripting language and runtime for defining and orchestrating AI agent programs. You write **`.jh`** files that combine `def`, `script`, and `prompt` into executable pipelines. The CLI parses source into an AST, validates references at compile time, and the Node runtime interprets the AST directly.
 
 > [!WARNING]
 > Jaiph is still in an early stage. Expect breaking changes.
@@ -26,10 +26,10 @@
 - **Testing** — `*.test.jh` files run in-process (`jaiph test`) with mocks and `expect_*` assertions ([Write & run tests](docs/testing.md)).
 - **Safety and inspectability** — live **`__JAIPH_EVENT__`** on stderr and durable **`.jaiph/runs/`** artifacts ([Architecture](docs/architecture.md)). Isolation of the process from the rest of the machine is an outer concern: wrap `jaiph` in your own container, pod, or CI runner if you want a sandbox ([Deploy jaiph](docs/deploy.md)).
 - **Tooling** — `jaiph compile`, `jaiph format`, `jaiph install` / `.jaiph/libs/` ([Use & publish a library](docs/libraries.md)), and optional `hooks.json` ([CLI](docs/cli.md), [Add a hook](docs/hooks.md)).
-- **MCP server** — `jaiph mcp ./tools.jh` serves a file's workflows as [MCP](https://modelcontextprotocol.io/) tools over stdio, so any MCP client (Claude Code, Cursor) can call tested Jaiph workflows as tools ([Serve workflows as MCP tools](docs/mcp.md)).
-- **HTTP API** — `jaiph serve ./tools.jh` serves the same workflows over HTTP with a generated OpenAPI 3.1 document and a browser Swagger UI at `/docs`, so any HTTP client (CI, Kubernetes, another service) can invoke them and inspect runs. Production auth is either a static single-operator bearer token or OIDC/JWT with per-user identity and `invoke` / `inspect` / `cancel` scope authorization, and every run is audit-attributed to its principal and correlation id ([Serve workflows over HTTP](docs/serve.md)).
-- **OpenTelemetry** — set the standard `OTEL_EXPORTER_OTLP_ENDPOINT` and each run exports one span tree (workflow → steps → prompts) to any OTLP collector — Grafana Tempo, Honeycomb, Datadog. Host-side, end-of-run, credential-redacted, zero new dependencies, never load-bearing ([Export traces to an OTLP collector](docs/observability.md)).
-- **Sentry error reporting** — set the standard `SENTRY_DSN` and every failed run (nonzero exit or a signal) is pushed to Sentry as one error event — workflow, failing step, a redacted output excerpt, and a run-dir pointer — so operators get alerting and grouping without scraping run dirs. Host-side, redacted, zero new dependencies, never load-bearing; successful runs send nothing ([Report failed runs to Sentry](docs/observability.md#report-failed-runs-to-sentry)).
+- **MCP server** — `jaiph mcp ./tools.jh` serves a file's exported defs as [MCP](https://modelcontextprotocol.io/) tools over stdio, so any MCP client (Claude Code, Cursor) can call tested Jaiph defs as tools ([Serve defs as MCP tools](docs/mcp.md)).
+- **HTTP API** — `jaiph serve ./tools.jh` serves the same defs over HTTP with a generated OpenAPI 3.1 document and a browser Swagger UI at `/docs`, so any HTTP client (CI, Kubernetes, another service) can invoke them and inspect runs. Production auth is either a static single-operator bearer token or OIDC/JWT with per-user identity and `invoke` / `inspect` / `cancel` scope authorization, and every run is audit-attributed to its principal and correlation id ([Serve defs over HTTP](docs/serve.md)).
+- **OpenTelemetry** — set the standard `OTEL_EXPORTER_OTLP_ENDPOINT` and each run exports one span tree (run → steps → prompts) to any OTLP collector — Grafana Tempo, Honeycomb, Datadog. Host-side, end-of-run, credential-redacted, zero new dependencies, never load-bearing ([Export traces to an OTLP collector](docs/observability.md)).
+- **Sentry error reporting** — set the standard `SENTRY_DSN` and every failed run (nonzero exit or a signal) is pushed to Sentry as one error event — def, failing step, a redacted output excerpt, and a run-dir pointer — so operators get alerting and grouping without scraping run dirs. Host-side, redacted, zero new dependencies, never load-bearing; successful runs send nothing ([Report failed runs to Sentry](docs/observability.md#report-failed-runs-to-sentry)).
 
 ## Core components
 
@@ -87,16 +87,16 @@ Verify: `jaiph --version`. Switch versions: `jaiph use nightly` or `jaiph use 0.
 
 Releases ship a `SHA256SUMS` file plus a detached [minisign](https://jedisct1.github.io/minisign/) signature (`SHA256SUMS.minisig`). The installer verifies the checksum and requires a valid signature. A missing `minisign` aborts the install on every host, including CI, rather than degrading to checksum-only. The `setup-jaiph` action installs `minisign` on the runner so CI installs stay signed. For a deliberate checksum-only install, set `JAIPH_ALLOW_UNSIGNED=1`. See [Verify the release signature](docs/setup.md#verify-the-release-signature).
 
-Initialize a project (optional): `jaiph init` writes `.jaiph/` with bootstrap workflow, gitignore entries for runs/tmp, and **`SKILL.md`**. The CLI resolves the skill body in this order — `JAIPH_SKILL_PATH`, install-relative `jaiph-skill.md`, `docs/jaiph-skill.md` under cwd, then an **embedded copy baked into the binary** as the final fallback — so `jaiph init` always writes `SKILL.md` (see [Install & switch versions](docs/setup.md)). Canonical skill text for agents: `https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md`.
+Initialize a project (optional): `jaiph init` writes `.jaiph/` with a bootstrap file, gitignore entries for runs/tmp, and **`SKILL.md`**. The CLI resolves the skill body in this order — `JAIPH_SKILL_PATH`, install-relative `jaiph-skill.md`, `docs/jaiph-skill.md` under cwd, then an **embedded copy baked into the binary** as the final fallback — so `jaiph init` always writes `SKILL.md` (see [Install & switch versions](docs/setup.md)). Canonical skill text for agents: `https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md`.
 
 ## Usage
 
-- Run the default workflow: `jaiph run path/to/main.jh [args...]` or `./main.jh [args...]` with a `#!/usr/bin/env jaiph` shebang.
+- Run `export def main`: `jaiph run path/to/main.jh [args...]` or `./main.jh [args...]` with a `#!/usr/bin/env jaiph` shebang.
 - Run tests: `jaiph test` (workspace), `jaiph test ./dir`, or `jaiph test path.test.jh`.
 - Validate without executing: `jaiph compile …` (runs the same compile-time validation as `jaiph run`, but collects every error at once instead of stopping at the first; no `scripts/` emission — see [Architecture](docs/architecture.md)).
 - Format sources: `jaiph format …` / `jaiph format --check …`.
 
-Full flags and environment variables: [CLI](docs/cli.md), [Environment variables](docs/env-vars.md). New here? Start with [Your first workflow](docs/first-workflow.md).
+Full flags and environment variables: [CLI](docs/cli.md), [Environment variables](docs/env-vars.md). New here? Start with [Your first run](docs/first-run.md).
 
 ## Example
 
@@ -122,12 +122,12 @@ export def main(task) {
 ./main.jh "add user authentication"
 ```
 
-For the full language reference, see [Grammar](docs/grammar.md) and [Language](docs/language.md). For install, libraries, hooks, testing, and artifacts, see the How-to quadrant: [Install & switch versions](docs/setup.md), [Use & publish a library](docs/libraries.md), [Add a hook](docs/hooks.md), [Write & run tests](docs/testing.md), [Save artifacts](docs/artifacts.md). New to Jaiph? Start with the tutorials: [Your first workflow](docs/first-workflow.md) and [Your first agent run](docs/first-agent-run.md). Or visit [jaiph.org](https://jaiph.org).
+For the full language reference, see [Grammar](docs/grammar.md) and [Language](docs/language.md). For install, libraries, hooks, testing, and artifacts, see the How-to quadrant: [Install & switch versions](docs/setup.md), [Use & publish a library](docs/libraries.md), [Add a hook](docs/hooks.md), [Write & run tests](docs/testing.md), [Save artifacts](docs/artifacts.md). New to Jaiph? Start with the tutorials: [Your first run](docs/first-run.md) and [Your first agent run](docs/first-agent-run.md). Or visit [jaiph.org](https://jaiph.org).
 
 ## Start here
 
-- **AI agent** who wants to work in a predictable, structured way? Read the [Agent Skill](https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md) — it teaches you how to author Jaiph workflows and makes your behavior verifiable and auditable.
-- **Human** who manages agents and wants reliable, repeatable automation? See the [Samples](https://github.com/jaiphlang/jaiph/tree/main/examples) and [Your first workflow](docs/first-workflow.md).
+- **AI agent** who wants to work in a predictable, structured way? Read the [Agent Skill](https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md) — it teaches you how to author Jaiph programs and makes your behavior verifiable and auditable.
+- **Human** who manages agents and wants reliable, repeatable automation? See the [Samples](https://github.com/jaiphlang/jaiph/tree/main/examples) and [Your first run](docs/first-run.md).
 - **Contributor** who wants to improve Jaiph itself? See [Contributing](docs/contributing.md).
 
 ## Contributing

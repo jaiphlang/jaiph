@@ -6,11 +6,11 @@ diataxis: tutorial
 
 # Your first agent run
 
-This tutorial builds on [Your first workflow](first-workflow.md). You already have the `jaiph` CLI on your `PATH`, you have run a workflow that used only script steps, and you have looked at the artifacts under `.jaiph/runs/`. Here you will add a `prompt` step that calls an agent backend. `jaiph run` executes on the host. If you want a process sandbox, wrap jaiph in your own container or CI runner — see [Deploy jaiph](deploy.md).
+This tutorial builds on [Your first run](first-run.md). You already have the `jaiph` CLI on your `PATH`, you have run a file that used only script steps, and you have looked at the artifacts under `.jaiph/runs/`. Here you will add a `prompt` step that calls an agent backend. `jaiph run` executes on the host. If you want a process sandbox, wrap jaiph in your own container or CI runner — see [Deploy jaiph](deploy.md).
 
 ## What you will build
 
-You will build a workflow with two steps. The first step runs a `def` that checks a name with `match`. The second step is a `prompt` that asks an agent to greet that name.
+You will build a file with two steps. The first step runs a `def` that checks a name with `match`. The second step is a `prompt` that asks an agent to greet that name.
 
 ## Credentials
 
@@ -35,7 +35,7 @@ For the full table of what each backend needs, see [Authenticate agent backends]
 
 ## 1. Configure the backend (optional)
 
-If you set `CURSOR_API_KEY` above, you can skip this step, because `cursor` is the default backend. Otherwise, add a module-level `config { … }` block at the top of your file so the workflow uses the backend you want.
+If you set `CURSOR_API_KEY` above, you can skip this step, because `cursor` is the default backend. Otherwise, add a module-level `config { … }` block at the top of your file so the run uses the backend you want.
 
 The full file you build in this tutorial is:
 
@@ -65,10 +65,10 @@ export def main(name_arg) {
 }
 ```
 
-The file uses some syntax that [Your first workflow](first-workflow.md) did not:
+The file uses some syntax that [Your first run](first-run.md) did not:
 
 - `config { agent.backend = "claude" }` selects the agent backend at module scope. Leave the block out to use the `cursor` default, or set `JAIPH_AGENT_BACKEND` in the environment to override either form. The environment value wins when both are set. See [Configure backend & model](configure-backend.md).
-- `def valid_name(name_arg) { … }` checks the shape of its input with `match`. `run valid_name(name_arg)` runs that def, and if any arm matches `fail`, it stops the workflow and prints the failure message. The `match` arms are tried from top to bottom, and the first one that matches wins. The regex `/[A-Z][a-z]+/` matches any name with an uppercase letter followed by lowercase letters, so `Adam` passes while `adam` and `ADAM` fall through to `_`. The `""` arm catches an empty name, and `_` catches everything else.
+- `def valid_name(name_arg) { … }` checks the shape of its input with `match`. `run valid_name(name_arg)` runs that def, and if any arm matches `fail`, it stops the run and prints the failure message. The `match` arms are tried from top to bottom, and the first one that matches wins. The regex `/[A-Z][a-z]+/` matches any name with an uppercase letter followed by lowercase letters, so `Adam` passes while `adam` and `ADAM` fall through to `_`. The `""` arm catches an empty name, and `_` catches everything else.
 - `prompt """ … """` is a managed agent call. The triple-quoted body is dedented when the file is parsed and then sent to the selected backend's CLI. The agent's stdout becomes the value of the step. The `${name}` reference is substituted before the prompt is sent.
 
 Save the file as `greet.jh`.
@@ -79,7 +79,7 @@ Save the file as `greet.jh`.
 jaiph run ./greet.jh "Adam"
 ```
 
-The CLI does a few things before any workflow step runs:
+The CLI does a few things before any step runs:
 
 1. **Loads the module graph.** It parses the entry file, which is the only file in this tutorial.
 2. **Runs the credential pre-flight** for the selected backend.
@@ -90,13 +90,13 @@ You should see the following, though timings, model output, and the exact step n
 ```text
 Jaiph: Running greet.jh
 
-export def main (name_arg="Adam")
-  ▸ def valid_name(name_arg="Adam")
-  ✓ def valid_name(0s)
+def main (name_arg="Adam")
+  ▸ def valid_name (name_arg="Adam")
+  ✓ def valid_name (0s)
   ▸ prompt claude sonnet "Say hello to ${name} and..." (name="Adam")
   ✓ prompt claude sonnet (5s)
 
-✓ PASS export def main (5.1s)
+✓ PASS def main (5.1s)
 
 Hello, Adam! Adam Smith, the 18th-century Scottish economist, is often called the father of modern economics.
 ```
@@ -118,9 +118,9 @@ The output ends with the failure footer:
 
 ```text
   ▸ def valid_name
-  ✗ def valid_name(0s)
+  ✗ def valid_name (0s)
 
-✗ FAIL export def main (0.3s)
+✗ FAIL def main (0.3s)
   Logs: …/.jaiph/runs/…
   Summary: …/run_summary.jsonl
     out: …/000002-def__valid_name.out
@@ -144,10 +144,10 @@ The record includes the resolved `backend`, the `model` (or `null` when the back
 
 ## Where to go next
 
-You now have a working agent workflow. Here are some directions to go next:
+You now have a working agent run. Here are some directions to go next:
 
 - [Language reference](language.md) covers every step type, including `run async`, `match`, `for_lines`, `send`, and `if`.
-- [Async handles](spec-async-handles.md) shows how to fan out two `prompt` steps in parallel and join them at the end of the workflow.
-- [Inbox and dispatch](inbox.md) explains how to route work between workflows without tight coupling.
+- [Async handles](spec-async-handles.md) shows how to fan out two `prompt` steps in parallel and join them at the end of the run.
+- [Inbox and dispatch](inbox.md) explains how to route work between defs without tight coupling.
 - [Deploy jaiph](deploy.md) shows how to wrap jaiph in your own image or Kubernetes pod if you want an outer sandbox.
-- [Write and run tests](testing.md) shows how to author a `*.test.jh` file with mock prompts so the workflow stays deterministic in CI.
+- [Write and run tests](testing.md) shows how to author a `*.test.jh` file with mock prompts so the program stays deterministic in CI.

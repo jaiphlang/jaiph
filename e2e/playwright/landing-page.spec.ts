@@ -54,12 +54,12 @@ function normalize(text: string): string {
     .trim();
 }
 
-/** Try it out: isolate workflow run block; only ℹ is non-deterministic. */
+/** Try it out: isolate the live run tree; only ℹ is non-deterministic. */
 function normalizeTryItOutForAssert(combined: string): string {
   const n = normalize(combined);
-  const idx = n.indexOf('export def main');
-  const fromWorkflow = idx >= 0 ? n.slice(idx) : n;
-  return fromWorkflow.replace(/^  ℹ .+$/gm, '  ℹ <model-response>').trim();
+  const idx = n.search(/^def main\b/m);
+  const fromTree = idx >= 0 ? n.slice(idx) : n;
+  return fromTree.replace(/^  ℹ .+$/gm, '  ℹ <model-response>').trim();
 }
 
 /** Remove the first line (➜ command) from a sample output block. */
@@ -137,7 +137,7 @@ test.describe.serial('docs landing page', () => {
       const actual = normalizeTryItOutForAssert(combined);
       const expected = normalizeTryItOutForAssert(
         [
-          'export def main',
+          'def main',
           '  ▸ prompt cursor default "Say: Hello, I am [model ..."',
           '  ✓ prompt cursor default (<time>)',
           '  ℹ Hello, I am Composer!',

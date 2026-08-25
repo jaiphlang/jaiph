@@ -38,7 +38,7 @@ export function toolNameFromFile(inputAbs: string): string {
 }
 
 /**
- * Build the tool description from the workflow's leading comments.
+ * Build the tool description from the def's leading comments.
  * Comment lines are stored raw (including `#`); shebang lines are dropped.
  */
 function describeDef(wf: Def, inputAbs: string): string {

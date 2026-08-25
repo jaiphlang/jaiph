@@ -67,7 +67,7 @@ kubectl apply -f docs/deploy/k8s.yaml
 
 The Deployment references the Secret as a required `envFrom`, so a missing Secret holds the pod in `CreateContainerConfigError` instead of ever starting an unauthenticated runner.
 
-The manifest runs `jaiph serve --host 0.0.0.0` as a long-lived HTTP runner (see [Serve workflows over HTTP](serve.md)), with `JAIPH_SERVE_TOKEN` sourced from the Secret and liveness and readiness probes on `GET /healthz`, which stays open and needs no bearer token. The same Service port serves both the REST and OpenAPI API and MCP Streamable HTTP at `POST /mcp`. The example sets:
+The manifest runs `jaiph serve --host 0.0.0.0` as a long-lived HTTP runner (see [Serve defs over HTTP](serve.md)), with `JAIPH_SERVE_TOKEN` sourced from the Secret and liveness and readiness probes on `GET /healthz`, which stays open and needs no bearer token. The same Service port serves both the REST and OpenAPI API and MCP Streamable HTTP at `POST /mcp`. The example sets:
 
 - **Pod hardening by default.** `runAsNonRoot`, `allowPrivilegeEscalation: false`, all capabilities dropped, the `RuntimeDefault` seccomp profile, `readOnlyRootFilesystem: true`, and `automountServiceAccountToken: false`. Workflows never talk to the Kubernetes API, so they get no API credential to leak. Set `runAsUser` / `runAsGroup` to match the user in **your** image.
 - **Writable mounts only where required.** Workflow sources stay read-only as a ConfigMap at `/work`. Run artifacts go to a dedicated `emptyDir` at `/jaiph/runs` set by `JAIPH_RUNS_DIR`. Two more `emptyDir` volumes cover `/tmp` and a writable `$HOME`.
@@ -79,5 +79,5 @@ Isolation is the pod boundary. There is no jaiph-managed sandbox inside.
 
 ## Related
 
-- [Serve workflows over HTTP](serve.md), the `jaiph serve` API that the Kubernetes manifest exposes.
+- [Serve defs over HTTP](serve.md), the `jaiph serve` API that the Kubernetes manifest exposes.
 - [Environment variables](env-vars.md), covering `JAIPH_SERVE_TOKEN` and the rest.

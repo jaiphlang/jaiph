@@ -7,7 +7,7 @@
     <meta name="theme-color" content="#6b7280" />
     <meta name="theme-color" content="#1f2a37" media="(prefers-color-scheme: dark)" />
     <meta name="description"
-        content="Jaiph — Open source AI workflow DSL. Powerful and friendly automation for AI-assisted development." />
+        content="Jaiph — Open source language for AI-assisted development." />
     <link rel="icon" href="{{ '/favicon.png' | relative_url }}" type="image/png" />
     <title>{{ page.title | default: site.title }} — Jaiph</title>
     <link rel="stylesheet" href="{{ '/assets/css/style.css' | relative_url }}" />
@@ -43,7 +43,7 @@
             <ul class="docs-nav-list">
                 <li><a href="{{ '/' | relative_url }}">jaiph.org</a></li>
                 <li class="docs-nav-group">Tutorials</li>
-                <li><a href="{{ '/tutorials/first-workflow' | relative_url }}"{% if page.permalink == '/tutorials/first-workflow' %} class="docs-nav-active" aria-current="page"{% endif %}>Your first workflow</a></li>
+                <li><a href="{{ '/tutorials/first-run' | relative_url }}"{% if page.permalink == '/tutorials/first-run' %} class="docs-nav-active" aria-current="page"{% endif %}>Your first run</a></li>
                 <li><a href="{{ '/tutorials/first-agent-run' | relative_url }}"{% if page.permalink == '/tutorials/first-agent-run' %} class="docs-nav-active" aria-current="page"{% endif %}>Your first agent run</a></li>
                 <li class="docs-nav-group">How-to guides</li>
                 <li><a href="{{ '/how-to/install' | relative_url }}"{% if page.permalink == '/how-to/install' %} class="docs-nav-active" aria-current="page"{% endif %}>Install &amp; switch versions</a></li>
@@ -53,8 +53,8 @@
                 <li><a href="{{ '/how-to/libraries' | relative_url }}"{% if page.permalink == '/how-to/libraries' %} class="docs-nav-active" aria-current="page"{% endif %}>Use &amp; publish a library</a></li>
                 <li><a href="{{ '/how-to/artifacts' | relative_url }}"{% if page.permalink == '/how-to/artifacts' %} class="docs-nav-active" aria-current="page"{% endif %}>Save artifacts</a></li>
                 <li><a href="{{ '/how-to/testing' | relative_url }}"{% if page.permalink == '/how-to/testing' %} class="docs-nav-active" aria-current="page"{% endif %}>Write &amp; run tests</a></li>
-                <li><a href="{{ '/how-to/mcp' | relative_url }}"{% if page.permalink == '/how-to/mcp' %} class="docs-nav-active" aria-current="page"{% endif %}>Serve workflows as MCP tools</a></li>
-                <li><a href="{{ '/how-to/serve' | relative_url }}"{% if page.permalink == '/how-to/serve' %} class="docs-nav-active" aria-current="page"{% endif %}>Serve workflows over HTTP</a></li>
+                <li><a href="{{ '/how-to/mcp' | relative_url }}"{% if page.permalink == '/how-to/mcp' %} class="docs-nav-active" aria-current="page"{% endif %}>Serve defs as MCP tools</a></li>
+                <li><a href="{{ '/how-to/serve' | relative_url }}"{% if page.permalink == '/how-to/serve' %} class="docs-nav-active" aria-current="page"{% endif %}>Serve defs over HTTP</a></li>
                 <li><a href="{{ '/how-to/observability' | relative_url }}"{% if page.permalink == '/how-to/observability' %} class="docs-nav-active" aria-current="page"{% endif %}>Export traces (OTLP)</a></li>
                 <li><a href="{{ '/how-to/deploy' | relative_url }}"{% if page.permalink == '/how-to/deploy' %} class="docs-nav-active" aria-current="page"{% endif %}>Deploy jaiph</a></li>
                 <li class="docs-nav-group">Reference</li>

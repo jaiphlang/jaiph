@@ -12,7 +12,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 // Task 6 acceptance: Tutorials quadrant pages exist, are wired into nav,
-// retire `/getting-started` via redirect_from, and the first-workflow
+// retire `/getting-started` via redirect_from, and the first-run
 // tutorial's `.jh` snippet is *executable* — extracting the first ```jh
 // fenced block and running it produces the documented output. This
 // guards against tutorials drifting into aspirational prose where the
@@ -24,7 +24,7 @@ const NAV_LAYOUT = join(DOCS_DIR, "_layouts", "docs.html");
 const JAIPH_BIN = join(REPO_ROOT, "dist", "src", "cli.js");
 
 const TUTORIAL_PAGES: Array<{ file: string; permalink: string }> = [
-  { file: "first-workflow.md", permalink: "/tutorials/first-workflow" },
+  { file: "first-run.md", permalink: "/tutorials/first-run" },
   { file: "first-agent-run.md", permalink: "/tutorials/first-agent-run" },
 ];
 
@@ -130,16 +130,20 @@ test("task-6: every tutorial is reachable from the nav exactly once", () => {
   );
 });
 
-test("task-6: '/getting-started' is absorbed by the first-workflow tutorial's redirect_from", () => {
+test("task-6: '/getting-started' is absorbed by the first-run tutorial's redirect_from", () => {
   // The retired permalink must be claimed by exactly one live page (the new
   // tutorial). Any other live page declaring 'permalink: /getting-started'
   // or duplicating the redirect_from would conflict with jekyll-redirect-from.
-  const fm = frontMatterBlock(readPage("first-workflow.md"));
-  assert.ok(fm, "first-workflow.md: missing front-matter block");
+  const fm = frontMatterBlock(readPage("first-run.md"));
+  assert.ok(fm, "first-run.md: missing front-matter block");
   const declared = frontMatterList(fm!, "redirect_from");
   assert.ok(
     declared.includes("/getting-started"),
-    `first-workflow.md: redirect_from must include '/getting-started' (declared: ${declared.join(", ") || "<none>"})`,
+    `first-run.md: redirect_from must include '/getting-started' (declared: ${declared.join(", ") || "<none>"})`,
+  );
+  assert.ok(
+    declared.includes("/tutorials/first-workflow"),
+    `first-run.md: redirect_from must include '/tutorials/first-workflow' (declared: ${declared.join(", ") || "<none>"})`,
   );
   // Defensive: architecture.md previously claimed /getting-started while no
   // tutorial existed. Once this tutorial owns the slug, the older entry must
@@ -153,17 +157,36 @@ test("task-6: '/getting-started' is absorbed by the first-workflow tutorial's re
   );
 });
 
-test("task-6: first-workflow tutorial's `.jh` snippet runs end-to-end and matches the documented output", () => {
-  const page = readPage("first-workflow.md");
+test("task-6: landing live tutorial href is /tutorials/first-run", () => {
+  const landing = readFileSync(join(DOCS_DIR, "index.html"), "utf8");
+  assert.match(
+    landing,
+    /href="\/tutorials\/first-run"/,
+    "docs/index.html must link to /tutorials/first-run",
+  );
+  assert.doesNotMatch(
+    landing,
+    /href="\/tutorials\/first-workflow"/,
+    "docs/index.html must not use /tutorials/first-workflow as a live href (redirect only)",
+  );
+  assert.match(
+    landing,
+    />Your first run</,
+    "docs/index.html must use the 'Your first run' link text",
+  );
+});
+
+test("task-6: first-run tutorial's `.jh` snippet runs end-to-end and matches the documented output", () => {
+  const page = readPage("first-run.md");
   const jhBlocks = extractFencedBlocks(page, "jh");
   assert.ok(
     jhBlocks.length >= 1,
-    "first-workflow.md: expected at least one ```jh fenced code block",
+    "first-run.md: expected at least one ```jh fenced code block",
   );
   const textBlocks = extractFencedBlocks(page, "text");
   assert.ok(
     textBlocks.length >= 1,
-    "first-workflow.md: expected at least one ```text fenced block (documented output)",
+    "first-run.md: expected at least one ```text fenced block (documented output)",
   );
 
   const snippet = jhBlocks[0];

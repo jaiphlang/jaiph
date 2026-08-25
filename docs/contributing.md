@@ -12,7 +12,7 @@ Contributor docs answer a narrow question: **where changes belong**, **how to ru
 
 At a high level, Jaiph is built as described in [Architecture](architecture.md) — **`loadModuleGraph`** → per-module **`validateModule`** + script emit via **`buildScriptsFromGraph`** / **`emitScriptsForModuleFromGraph`**, the same graph consumed by **`buildRuntimeGraph(graph)`**, validate-only **`jaiph compile`** (**`collectDiagnostics`**), **`NodeWorkflowRuntime`**, artifact layout. Treat that page as authoritative for pipelines and boundaries; if anything here diverges from it or from the implementation, prefer **architecture + source**.
 
-For workflow syntax, library usage, tooling setup, and grammar details, see [Language](language.md), [Install & switch versions](setup.md), [Grammar](grammar.md), and [Your first workflow](first-workflow.md). For the `*.test.jh` language and test blocks, see [Write & run tests](testing.md).
+For language syntax, library usage, tooling setup, and grammar details, see [Language](language.md), [Install & switch versions](setup.md), [Grammar](grammar.md), and [Your first run](first-run.md). For the `*.test.jh` language and test blocks, see [Write & run tests](testing.md).
 
 ## Branching and pull requests
 
@@ -170,7 +170,7 @@ Tests that span multiple modules, require subprocess/PTY harnesses, exercise pro
 | `integration/docs-explanation-task3.test.ts` | Integration | Three explanation pages (`why-jaiph`, `inbox`, `spec-async-handles`) — permalinks, nav placement |
 | `integration/docs-how-to-task4.test.ts` | Integration | How-to quadrant — permalinks, retired-path redirects, recipe shape, `agent-auth` credential / pre-flight error pinning |
 | `integration/docs-reference-task5.test.ts` | Integration | Reference quadrant — permalinks, nav placement, `env-vars.md` source parity against `src/`, anti-tutorial shape guards |
-| `integration/docs-tutorials-task6.test.ts` | Integration | Tutorial quadrant — permalinks, `/getting-started` redirect absorption, runnable `first-workflow` snippet with documented output |
+| `integration/docs-tutorials-task6.test.ts` | Integration | Tutorial quadrant — permalinks, `/getting-started` redirect absorption, runnable `first-run` snippet with documented output |
 | `integration/docs-nav-structure-task7.test.ts` | Integration | Nav spine — five Diátaxis section headings in documented order; every published page under its quadrant exactly once |
 | `integration/release-workflow.test.ts` | Integration | Release matrix / asset-naming contract — five-binary matrix (no windows-arm64), `SHA256SUMS` + upload lists include `jaiph-windows-x64.exe`, shared version-gate script, naming contract ↔ matrix ↔ installer parity |
 | `integration/installer-powershell.test.ts` | Integration | Windows PowerShell installer (`docs/install.ps1`) contract — download/verify/install steps, bash↔PowerShell lockstep release ref, and `docs/setup.md` / main-page one-liner parity |
@@ -347,7 +347,7 @@ TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 
 e2e::section "Feature under test"
 
-# Given — create the workflow file inline (script + workflow; same shape as e2e/tests/10_basic_workflows.sh)
+# Given — create the file inline (script + def; same shape as e2e/tests/10_basic_workflows.sh)
 e2e::file "hello.jh" <<'EOF'
 script hello_impl = `echo "hello-jh"`
 export def main() {
@@ -356,18 +356,18 @@ export def main() {
 }
 EOF
 
-# When — run workflow (`jaiph` transpiles and executes inside the shim)
+# When — run (`jaiph` transpiles and executes inside the shim)
 hello_out="$(e2e::run "hello.jh")"
 
-# Then — assert on CLI tree output (include workflow return value when default() returns one)
+# Then — assert on CLI tree output (include the return value when export def main returns one)
 e2e::expect_stdout "${hello_out}" <<'EOF'
 
 Jaiph: Running hello.jh
 
-export def main
+def main
   ▸ script hello_impl
   ✓ script hello_impl (<time>)
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 
 hello-jh
 EOF

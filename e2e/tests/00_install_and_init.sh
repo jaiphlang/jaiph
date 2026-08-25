@@ -36,7 +36,7 @@ e2e::assert_file_exists "${TEST_DIR}/.jaiph/SKILL.md" "SKILL.md exists"
 if ! cmp -s "${BOOTSTRAP_FILE}" <(cat <<'EOF'
 #!/usr/bin/env jaiph
 
-# Bootstraps Jaiph workflows for this repository.
+# Bootstraps Jaiph for this repository.
 export def main() {
   const bootstrap_summary = prompt """
     You are bootstrapping Jaiph for this repository.
@@ -46,11 +46,11 @@ export def main() {
     Perform these tasks in order:
     1) Analyze repository structure, languages, package manager, and build/test/lint commands.
     2) Detect existing contribution conventions (branching, commit style, CI checks).
-    3) Create or update Jaiph workflows under .jaiph/ for safe feature implementation, including:
+    3) Create or update Jaiph files under .jaiph/ for safe feature implementation, including:
        - preflight checks (clean git state, branch guards when relevant)
-       - implementation workflow
-       - verification workflow (tests/lint/build)
-    4) Keep workflows minimal, composable, and specific to this project.
+       - implementation def
+       - verification def (tests/lint/build)
+    4) Keep defs minimal, composable, and specific to this project.
     5) Print a short usage guide with exact jaiph run commands.
     6) End your response with:
        - WHAT CHANGED: files touched and key edits
@@ -66,7 +66,7 @@ fi
 e2e::pass "bootstrap template matches expected triple-quoted prompt content"
 
 jaiph compile "${BOOTSTRAP_FILE}"
-e2e::pass "generated bootstrap workflow compiles"
+e2e::pass "generated bootstrap file compiles"
 
 # Bash command substitution strips a trailing newline; compare bytes with cmp.
 if ! cmp -s "${TEST_DIR}/.jaiph/.gitignore" <(printf 'runs\ntmp\n'); then
