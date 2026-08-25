@@ -31,7 +31,7 @@ e2e::pass "match arm fail exits non-zero"
 # Capture output to verify no fake log line
 fail_out="$(e2e::run "match_fail.jh" 2>&1 || true)"
 # nondeterministic: run dir path contains timestamp
-e2e::assert_contains "${fail_out}" "FAIL export def main" "fail output shows FAIL"
+e2e::assert_contains "${fail_out}" "FAIL def main" "fail output shows FAIL"
 
 # The output must NOT contain a log line masquerading as the fail message
 if echo "${fail_out}" | grep -q 'ℹ fail'; then
@@ -61,12 +61,12 @@ e2e::expect_stdout "${run_out}" <<'EOF'
 
 Jaiph: Running match_run.jh
 
-export def main (name_param="some/name")
+def main (name_param="some/name")
   ▸ script safe_name (1="some/name")
   ✓ script safe_name (<time>)
   ℹ some-name
 
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 EOF
 
 e2e::expect_out "match_run.jh" "safe_name" "some-name"

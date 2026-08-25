@@ -52,18 +52,18 @@ e2e::expect_stdout "${inbox_out}" <<'EOF'
 
 Jaiph: Running agent_inbox.jh
 
-export def main
+def main
   ▸ def scanner
   ·   ℹ Scanning for issues...
-  ✓ def scanner(<time>)
-  ▸ def analyst(message="Found 3 issues in auth module", chan="findings", sender="scanner")
+  ✓ def scanner (<time>)
+  ▸ def analyst (message="Found 3 issues in auth module", chan="findings", sender="scanner")
   ·   ℹ Analyzing message from scanner on channel findings...
-  ✓ def analyst(<time>)
-  ▸ def reviewer(message="Summary: Found 3 issues in auth ...", chan="report", sender="analyst")
+  ✓ def analyst (<time>)
+  ▸ def reviewer (message="Summary: Found 3 issues in auth ...", chan="report", sender="analyst")
   ·   ℹ Reviewing message from analyst on channel report...
   ·   ! Critical issue: Summary: Found 3 issues in auth module
-  ✓ def reviewer(<time>)
-✓ PASS export def main (<time>)
+  ✓ def reviewer (<time>)
+✓ PASS def main (<time>)
 EOF
 
 e2e::expect_out "agent_inbox.jh" "scanner" "Scanning for issues..."
@@ -143,12 +143,12 @@ e2e::expect_stdout "${recover_out}" <<'EOF'
 
 Jaiph: Running recover_loop.jh
 
-export def main
+def main
   ▸ script check_report_exists
   ✓ script check_report_exists (<time>)
   ▸ script __inline_<id>
   ✓ script __inline_<id> (<time>)
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 EOF
 
 rm -f "${TEST_DIR}/report.txt"

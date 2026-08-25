@@ -32,10 +32,10 @@ e2e::expect_stdout "${match_out}" <<'EOF'
 
 Jaiph: Running match_string.jh
 
-export def main
+def main
   ▸ script get_status
   ✓ script get_status (<time>)
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 
 something broke
 EOF
@@ -66,10 +66,10 @@ e2e::expect_stdout "${wildcard_out}" <<'EOF'
 
 Jaiph: Running match_wildcard.jh
 
-export def main
+def main
   ▸ script get_mode
   ✓ script get_mode (<time>)
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 
 default
 EOF
@@ -100,10 +100,10 @@ e2e::expect_stdout "${regex_out}" <<'EOF'
 
 Jaiph: Running match_regex.jh
 
-export def main
+def main
   ▸ script get_input
   ✓ script get_input (<time>)
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 
 error
 EOF
@@ -134,10 +134,10 @@ e2e::expect_stdout "${return_out}" <<'EOF'
 
 Jaiph: Running match_return.jh
 
-export def main
+def main
   ▸ script get_code
   ✓ script get_code (<time>)
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 
 success
 EOF

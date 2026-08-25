@@ -66,42 +66,42 @@ e2e::expect_stdout "${out}" <<'EOF'
 
 Jaiph: Running make_pass.jh
 
-export def main
+def main
   ▸ def make_pass
   ·   ▸ def gate1
   ·   ·   ▸ script gate1_impl
   ·   ·   ✗ script gate1_impl (<time>)
-  ·   ✗ def gate1(<time>)
+  ·   ✗ def gate1 (<time>)
   ·   ▸ def remediate1
   ·   ·   ▸ script remediate1_impl
   ·   ·   ✓ script remediate1_impl (<time>)
-  ·   ✓ def remediate1(<time>)
+  ·   ✓ def remediate1 (<time>)
   ·   ▸ def make_pass
   ·   ·   ▸ def gate1
   ·   ·   ·   ▸ script gate1_impl
   ·   ·   ·   ✓ script gate1_impl (<time>)
-  ·   ·   ✓ def gate1(<time>)
+  ·   ·   ✓ def gate1 (<time>)
   ·   ·   ▸ def gate2
   ·   ·   ·   ▸ script gate2_impl
   ·   ·   ·   ✗ script gate2_impl (<time>)
-  ·   ·   ✗ def gate2(<time>)
+  ·   ·   ✗ def gate2 (<time>)
   ·   ·   ▸ def remediate2
   ·   ·   ·   ▸ script remediate2_impl
   ·   ·   ·   ✓ script remediate2_impl (<time>)
-  ·   ·   ✓ def remediate2(<time>)
+  ·   ·   ✓ def remediate2 (<time>)
   ·   ·   ▸ def make_pass
   ·   ·   ·   ▸ def gate1
   ·   ·   ·   ·   ▸ script gate1_impl
   ·   ·   ·   ·   ✓ script gate1_impl (<time>)
-  ·   ·   ·   ✓ def gate1(<time>)
+  ·   ·   ·   ✓ def gate1 (<time>)
   ·   ·   ·   ▸ def gate2
   ·   ·   ·   ·   ▸ script gate2_impl
   ·   ·   ·   ·   ✓ script gate2_impl (<time>)
-  ·   ·   ·   ✓ def gate2(<time>)
-  ·   ·   ✓ def make_pass(<time>)
-  ·   ✓ def make_pass(<time>)
-  ✓ def make_pass(<time>)
-✓ PASS export def main (<time>)
+  ·   ·   ·   ✓ def gate2 (<time>)
+  ·   ·   ✓ def make_pass (<time>)
+  ·   ✓ def make_pass (<time>)
+  ✓ def make_pass (<time>)
+✓ PASS def main (<time>)
 EOF
 
 e2e::pass "run catch with two recursive gates: fail gate1 then gate2, pass on nested retries"
@@ -139,21 +139,21 @@ e2e::expect_stdout "${out_bash}" <<'EOF'
 
 Jaiph: Running make_pass_bash.jh
 
-export def main
+def main
   ▸ def make_pass
   ·   ▸ def gate
   ·   ·   ▸ script check_gate
   ·   ·   ✗ script check_gate (<time>)
-  ·   ✗ def gate(<time>)
+  ·   ✗ def gate (<time>)
   ·   ▸ script mark_gate
   ·   ✓ script mark_gate (<time>)
   ·   ▸ def make_pass
   ·   ·   ▸ def gate
   ·   ·   ·   ▸ script check_gate
   ·   ·   ·   ✓ script check_gate (<time>)
-  ·   ·   ✓ def gate(<time>)
-  ·   ✓ def make_pass(<time>)
-  ✓ def make_pass(<time>)
-✓ PASS export def main (<time>)
+  ·   ·   ✓ def gate (<time>)
+  ·   ✓ def make_pass (<time>)
+  ✓ def make_pass (<time>)
+✓ PASS def main (<time>)
 EOF
 e2e::pass "single-gate retry flow: fail first time, pass on retry"

@@ -79,16 +79,16 @@ e2e::expect_stdout "${recovery_out}" <<'EOF'
 
 Jaiph: Running ensure_run_branch.jh
 
-export def main
+def main
   ▸ def always_fail
   ·   ▸ script always_fail_impl
   ·   ✗ script always_fail_impl (<time>)
-  ✗ def always_fail(<time>)
+  ✗ def always_fail (<time>)
   ▸ def recovery
   ·   ▸ script recovery_impl
   ·   ✓ script recovery_impl (<time>)
-  ✓ def recovery(<time>)
-✓ PASS export def main (<time>)
+  ✓ def recovery (<time>)
+✓ PASS def main (<time>)
 EOF
 
 e2e::expect_out_files "ensure_run_branch.jh" 5
@@ -99,14 +99,14 @@ e2e::expect_stdout "${shell_out}" <<'EOF'
 
 Jaiph: Running ensure_shell_branch.jh
 
-export def main
+def main
   ▸ def always_fail
   ·   ▸ script always_fail_impl
   ·   ✗ script always_fail_impl (<time>)
-  ✗ def always_fail(<time>)
+  ✗ def always_fail (<time>)
   ▸ script shell_ran_impl
   ✓ script shell_ran_impl (<time>)
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 EOF
 
 e2e::expect_out_files "ensure_shell_branch.jh" 4
@@ -115,12 +115,12 @@ e2e::expect_stdout "${skip_out}" <<'EOF'
 
 Jaiph: Running ensure_pass_branch.jh
 
-export def main
+def main
   ▸ def always_ok
   ·   ▸ script always_ok_impl
   ·   ✓ script always_ok_impl (<time>)
-  ✓ def always_ok(<time>)
-✓ PASS export def main (<time>)
+  ✓ def always_ok (<time>)
+✓ PASS def main (<time>)
 EOF
 
 e2e::expect_out_files "ensure_pass_branch.jh" 3

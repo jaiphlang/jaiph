@@ -27,10 +27,10 @@ e2e::expect_stdout "${out}" <<'EXPECTED'
 
 Jaiph: Running const_string.jh
 
-export def main
+def main
   ℹ hello-world
 
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 EXPECTED
 
 # ---------------------------------------------------------------------------
@@ -51,12 +51,12 @@ e2e::expect_stdout "${out}" <<'EXPECTED'
 
 Jaiph: Running const_run.jh
 
-export def main
+def main
   ▸ script greet
   ✓ script greet (<time>)
   ℹ hi from fn
 
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 EXPECTED
 
 # ---------------------------------------------------------------------------
@@ -79,12 +79,12 @@ e2e::expect_stdout "${out}" <<'EXPECTED'
 
 Jaiph: Running const_ensure.jh
 
-export def main
+def main
   ▸ def always_pass
-  ✓ def always_pass(<time>)
+  ✓ def always_pass (<time>)
   ℹ rule-val
 
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 EXPECTED
 
 # ---------------------------------------------------------------------------
@@ -130,14 +130,14 @@ e2e::expect_stdout "${out}" <<'EXPECTED'
 
 Jaiph: Running wait_step.jh
 
-export def main
+def main
  ₁▸ def bg_job
  ₁·   ▸ script write_marker
   ℹ wait-done
  ₁·   ✓ script write_marker (<time>)
- ₁✓ def bg_job(<time>)
+ ₁✓ def bg_job (<time>)
 
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 EXPECTED
 e2e::assert_file_exists "${TEST_DIR}/waited.txt" "async job wrote marker file"
 
@@ -166,15 +166,15 @@ e2e::expect_stdout "${out}" <<'EXPECTED'
 
 Jaiph: Running ensure_recover.jh
 
-export def main
+def main
   ▸ def always_fail
   ·   ▸ script always_fail_impl
   ·   ✗ script always_fail_impl (<time>)
-  ✗ def always_fail(<time>)
+  ✗ def always_fail (<time>)
   ℹ recovered
   ℹ continued
 
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 EXPECTED
 
 # ---------------------------------------------------------------------------
@@ -196,12 +196,12 @@ e2e::expect_stdout "${out}" <<'EXPECTED'
 
 Jaiph: Running run_recover.jh
 
-export def main
+def main
   ▸ script returns_false
   ✗ script returns_false (<time>)
   ℹ else-branch-ok
 
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 EXPECTED
 
 # ---------------------------------------------------------------------------
@@ -230,14 +230,14 @@ e2e::expect_stdout "${out}" <<'EXPECTED'
 
 Jaiph: Running structured_rule.jh
 
-export def main
+def main
   ▸ def require_name
   ·   ▸ script check_ok
   ·   ✓ script check_ok (<time>)
-  ✓ def require_name(<time>)
+  ✓ def require_name (<time>)
   ℹ passed
 
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 EXPECTED
 
 # ---------------------------------------------------------------------------
@@ -264,34 +264,8 @@ set -e
 
 [[ ${code} -ne 0 ]] || e2e::fail "structured rule should have failed"
 # Detailed failure excerpts suppress the generic summary line (resolveFailureDetails).
-e2e::assert_contains "${out}" "FAIL export def main" "structured rule failure footer"
+e2e::assert_contains "${out}" "FAIL def main" "structured rule failure footer"
 e2e::assert_contains "${out}" "name is required" "fail() output surfaces under failed step"
-
-# ---------------------------------------------------------------------------
-e2e::section "run targeting workflow inside rule is rejected"
-
-e2e::file "run_wf_in_rule.jh" <<'EOF'
-def helper() {
-  log "nope"
-}
-
-def bad() {
-  run helper()
-}
-
-export def main() {
-  run bad()
-}
-EOF
-
-set +e
-out="$(e2e::run "run_wf_in_rule.jh" 2>&1)"
-code=$?
-set -e
-
-[[ ${code} -ne 0 ]] || e2e::fail "run workflow inside rule should be rejected"
-# assert_contains: runtime validation error includes absolute source path which varies per invocation
-e2e::assert_contains "${out}" "script" "error guides toward script"
 
 # ---------------------------------------------------------------------------
 # module-level const
@@ -312,8 +286,8 @@ e2e::expect_stdout "${out}" <<'EXPECTED'
 
 Jaiph: Running module_const.jh
 
-export def main
+def main
   ℹ module-const-works
 
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 EXPECTED

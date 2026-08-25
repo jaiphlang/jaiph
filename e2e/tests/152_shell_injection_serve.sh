@@ -37,7 +37,7 @@ fi
 # redirects it into the run's artifacts dir so we can download the result.
 e2e::file "tools.jh" <<'EOF'
 # Echoes the greeting into an artifact via a shell line.
-def greet_shell(name) {
+export def greet_shell(name) {
   echo "Hello ${name}" > "$JAIPH_ARTIFACTS_DIR/greeting.txt"
 }
 EOF

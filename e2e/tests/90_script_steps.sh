@@ -33,10 +33,10 @@ e2e::expect_stdout "${script_out}" <<'EOF'
 
 Jaiph: Running scripts.jh
 
-export def main
+def main
   ▸ script changed_files
   ✓ script changed_files (<time>)
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 EOF
 
 e2e::expect_out_files "scripts.jh" 2
@@ -84,18 +84,18 @@ e2e::expect_stdout "${args_out}" <<'EOF'
 
 Jaiph: Running args_forwarding.jh
 
-export def main
-  ▸ def called(a="one", b="two words")
-  ·   ▸ def expect_args(a="one", b="two words")
+def main
+  ▸ def called (a="one", b="two words")
+  ·   ▸ def expect_args (a="one", b="two words")
   ·   ·   ▸ script expect_args_impl
   ·   ·   ✓ script expect_args_impl (<time>)
-  ·   ✓ def expect_args(<time>)
+  ·   ✓ def expect_args (<time>)
   ·   ▸ script write_args (1="one", 2="two words")
   ·   ✓ script write_args (<time>)
   ·   ▸ script write_workflow_args (1="one", 2="two words")
   ·   ✓ script write_workflow_args (<time>)
-  ✓ def called(<time>)
-✓ PASS export def main (<time>)
+  ✓ def called (<time>)
+✓ PASS def main (<time>)
 EOF
 
 e2e::expect_out_files "args_forwarding.jh" 6

@@ -38,12 +38,12 @@ EOF
 
 Jaiph: Running tag_node.jh
 
-export def main
+def main
   ▸ script greet
   ✓ script greet (<time>)
   ▸ script plain_bash
   ✓ script plain_bash (<time>)
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 EOF
 
   e2e::expect_out_files "tag_node.jh" 3
@@ -77,10 +77,10 @@ EOF
 
 Jaiph: Running tag_python.jh
 
-export def main
+def main
   ▸ script py_greet
   ✓ script py_greet (<time>)
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 EOF
 
   e2e::expect_out_files "tag_python.jh" 2

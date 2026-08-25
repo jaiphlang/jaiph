@@ -30,10 +30,10 @@ e2e::expect_stdout "${eq_out}" <<'EOF'
 
 Jaiph: Running if_eq.jh
 
-export def main (param="hello")
+def main (param="hello")
   ℹ param is hello
 
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 EOF
 e2e::pass "if == non-match skips body"
 
@@ -55,11 +55,11 @@ e2e::expect_stdout "${neq_out}" <<'EOF'
 
 Jaiph: Running if_neq.jh
 
-export def main (mode="staging")
+def main (mode="staging")
   ℹ non-production mode: staging
   ℹ done
 
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 EOF
 e2e::pass "if != triggers when values differ"
 
@@ -68,10 +68,10 @@ e2e::expect_stdout "${neq_prod_out}" <<'EOF'
 
 Jaiph: Running if_neq.jh
 
-export def main (mode="production")
+def main (mode="production")
   ℹ done
 
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 EOF
 e2e::pass "if != skips when values match"
 
@@ -93,11 +93,11 @@ e2e::expect_stdout "${regex_out}" <<'EOF'
 
 Jaiph: Running if_regex.jh
 
-export def main (name="feat-login")
+def main (name="feat-login")
   ℹ feature branch detected
   ℹ branch: feat-login
 
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 EOF
 e2e::pass "if =~ triggers on regex match"
 
@@ -106,10 +106,10 @@ e2e::expect_stdout "${regex_skip_out}" <<'EOF'
 
 Jaiph: Running if_regex.jh
 
-export def main (name="main")
+def main (name="main")
   ℹ branch: main
 
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 EOF
 e2e::pass "if =~ skips on regex non-match"
 
@@ -131,11 +131,11 @@ e2e::expect_stdout "${notregex_out}" <<'EOF'
 
 Jaiph: Running if_not_regex.jh
 
-export def main (branch="feat-x")
+def main (branch="feat-x")
   ℹ not a release branch
   ℹ branch: feat-x
 
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 EOF
 e2e::pass "if !~ triggers when regex does not match"
 
@@ -144,10 +144,10 @@ e2e::expect_stdout "${notregex_main_out}" <<'EOF'
 
 Jaiph: Running if_not_regex.jh
 
-export def main (branch="main")
+def main (branch="main")
   ℹ branch: main
 
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 EOF
 e2e::pass "if !~ skips when regex matches"
 
@@ -167,7 +167,7 @@ EOF
 e2e::expect_fail "if_fail.jh"
 # nondeterministic: run dir path contains timestamp
 fail_out="$(e2e::run "if_fail.jh" 2>&1 || true)"
-e2e::assert_contains "${fail_out}" "FAIL export def main" "fail output shows FAIL"
+e2e::assert_contains "${fail_out}" "FAIL def main" "fail output shows FAIL"
 e2e::pass "if + fail aborts workflow"
 
 ok_out="$(e2e::run "if_fail.jh" "data")"
@@ -175,10 +175,10 @@ e2e::expect_stdout "${ok_out}" <<'EOF'
 
 Jaiph: Running if_fail.jh
 
-export def main (input="data")
+def main (input="data")
   ℹ processing data
 
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 EOF
 e2e::pass "if condition false → body skipped, workflow continues"
 
@@ -201,10 +201,10 @@ e2e::expect_stdout "${ret_skip_out}" <<'EOF'
 
 Jaiph: Running if_return.jh
 
-export def main (skip="yes")
+def main (skip="yes")
   ℹ skipping
 
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 EOF
 e2e::pass "if body return exits workflow early"
 
@@ -213,10 +213,10 @@ e2e::expect_stdout "${ret_no_out}" <<'EOF'
 
 Jaiph: Running if_return.jh
 
-export def main (skip="no")
+def main (skip="no")
   ℹ not skipping
 
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 EOF
 e2e::pass "if body not taken → workflow continues"
 
@@ -246,12 +246,12 @@ e2e::expect_stdout "${rule_ok_out}" <<'EOF'
 
 Jaiph: Running if_rule.jh
 
-export def main (val="data")
-  ▸ def validate(input="data")
+def main (val="data")
+  ▸ def validate (input="data")
   ·   ℹ input ok: data
-  ✓ def validate(<time>)
+  ✓ def validate (<time>)
   ℹ validated
 
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 EOF
 e2e::pass "if in rule skips body when condition is false"

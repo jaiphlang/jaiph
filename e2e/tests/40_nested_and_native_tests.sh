@@ -42,14 +42,14 @@ e2e::expect_stdout "${nested_out}" <<'EOF'
 
 Jaiph: Running nested_run.jh
 
-export def main
-  ▸ export def main
+def main
+  ▸ def main
   ·   ▸ script nested_inner_impl
   ·   ✓ script nested_inner_impl (<time>)
-  ✓ export def main (<time>)
+  ✓ def main (<time>)
   ▸ script nested_outer_impl
   ✓ script nested_outer_impl (<time>)
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 EOF
 
 e2e::expect_out_files "nested_run.jh" 4
@@ -155,15 +155,15 @@ e2e::expect_stdout "${fib_out}" <<'EOF'
 
 Jaiph: Running fibonacci.jh
 
-export def main (n="3")
-  ▸ def ensure_is_number(value="3")
+def main (n="3")
+  ▸ def ensure_is_number (value="3")
   ·   ▸ script ensure_is_number_impl (1="3")
   ·   ✓ script ensure_is_number_impl (<time>)
-  ✓ def ensure_is_number(<time>)
+  ✓ def ensure_is_number (<time>)
   ▸ script fib (1="3")
   ✓ script fib (<time>)
   ℹ 2
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 EOF
 
 # Assert .out file content for fibonacci.jh (run from e2e/ dir, workspace root is repo root)
@@ -243,14 +243,14 @@ e2e::expect_stdout "${param_run_out}" <<'EOF'
 
 Jaiph: Running param_run_only.jh
 
-export def main (name="Bob")
-  ▸ def need_one(name="Bob")
+def main (name="Bob")
+  ▸ def need_one (name="Bob")
   ·   ▸ script need_one_impl (1="Bob")
   ·   ✓ script need_one_impl (<time>)
-  ✓ def need_one(<time>)
+  ✓ def need_one (<time>)
   ▸ script param_done_impl
   ✓ script param_done_impl (<time>)
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 EOF
 
 e2e::expect_out_files "param_run_only.jh" 4

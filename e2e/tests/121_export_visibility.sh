@@ -148,12 +148,12 @@ e2e::expect_stdout "${ok_out}" <<'EOF'
 
 Jaiph: Running vis_ok.jh
 
-export def main
+def main
   ▸ def public_wf
   ·   ℹ public
-  ✓ def public_wf(<time>)
+  ✓ def public_wf (<time>)
 
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 EOF
 
 e2e::pass "exported workflow is accessible across imports"

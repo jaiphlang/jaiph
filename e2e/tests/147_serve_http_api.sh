@@ -35,18 +35,18 @@ fi
 
 e2e::file "tools.jh" <<'EOF'
 # Greets the given name.
-def greet(name) {
+export def greet(name) {
   return "hello ${name}"
 }
 
 # Always fails so the run reports a failure.
-def boom() {
+export def boom() {
   fail "boom-failed"
 }
 
 script publish = `printf 'artifact-payload' > "$JAIPH_ARTIFACTS_DIR/result.txt"`
 # Publishes a file into the run's artifacts dir.
-def make_artifact() {
+export def make_artifact() {
   run publish()
   return "published"
 }

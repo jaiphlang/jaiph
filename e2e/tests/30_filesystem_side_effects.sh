@@ -34,10 +34,10 @@ e2e::expect_stdout "${workflow_write_out}" <<'EOF'
 
 Jaiph: Running fs_write_workflow.jh
 
-export def main
+def main
   ▸ script write_workflow_file
   ✓ script write_workflow_file (<time>)
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 EOF
 
 e2e::expect_out_files "fs_write_workflow.jh" 2
@@ -84,12 +84,12 @@ else
 
 Jaiph: Running fs_write_rule.jh
 
-export def main
+def main
   ▸ def write_attempt
   ·   ▸ script write_attempt_impl
   ·   ✓ script write_attempt_impl (<time>)
-  ✓ def write_attempt(<time>)
-✓ PASS export def main (<time>)
+  ✓ def write_attempt (<time>)
+✓ PASS def main (<time>)
 EOF
 
   e2e::expect_out_files "fs_write_rule.jh" 3

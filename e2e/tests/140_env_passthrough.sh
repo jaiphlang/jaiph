@@ -32,10 +32,10 @@ e2e::expect_stdout "${host_out}" <<'EOF'
 
 Jaiph: Running env_show.jh
 
-export def main
+def main
   ▸ script show_impl
   ✓ script show_impl (<time>)
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 
 hi
 EOF
@@ -47,10 +47,10 @@ e2e::expect_stdout "${bare_out}" <<'EOF'
 
 Jaiph: Running env_show.jh
 
-export def main
+def main
   ▸ script show_impl
   ✓ script show_impl (<time>)
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 
 from-host
 EOF

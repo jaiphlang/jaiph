@@ -37,14 +37,14 @@ e2e::expect_stdout "${then_out}" <<'EOF'
 
 Jaiph: Running ensure_fail_recover.jh
 
-export def main
+def main
   ▸ def fail_rule
   ·   ▸ script fail_impl
   ·   ✗ script fail_impl (<time>)
-  ✗ def fail_rule(<time>)
+  ✗ def fail_rule (<time>)
   ▸ script then_action
   ✓ script then_action (<time>)
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 EOF
 
 e2e::pass "run recover: run fails → catch body runs"
@@ -78,14 +78,14 @@ e2e::expect_stdout "${else_out}" <<'EOF'
 
 Jaiph: Running ensure_pass_no_recover.jh
 
-export def main
+def main
   ▸ def ok_rule
   ·   ▸ script ok_impl
   ·   ✓ script ok_impl (<time>)
-  ✓ def ok_rule(<time>)
+  ✓ def ok_rule (<time>)
   ▸ script else_action
   ✓ script else_action (<time>)
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 EOF
 
 e2e::pass "run recover: run passes → catch skipped"
@@ -127,19 +127,19 @@ e2e::expect_stdout "${chain_out}" <<'EOF'
 
 Jaiph: Running chained_recover.jh
 
-export def main
+def main
   ▸ def first_check
   ·   ▸ script fail_impl
   ·   ✗ script fail_impl (<time>)
-  ✗ def first_check(<time>)
+  ✗ def first_check (<time>)
   ℹ first-recovered
   ▸ def second_check
   ·   ▸ script ok_impl
   ·   ✓ script ok_impl (<time>)
-  ✓ def second_check(<time>)
+  ✓ def second_check (<time>)
   ▸ script second_action
   ✓ script second_action (<time>)
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 EOF
 
 e2e::pass "chained run recover: first fails, second passes"

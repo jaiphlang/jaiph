@@ -43,12 +43,12 @@ e2e::expect_stdout "${check_out}" <<'EOF'
 
 Jaiph: Running match_dispatch.jh
 
-export def main (cmd="check")
+def main (cmd="check")
   ▸ script foo
   ✓ script foo (<time>)
   ℹ ran-foo
 
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 EOF
 
 e2e::pass "alternation arm matches \"check\""
@@ -63,12 +63,12 @@ e2e::expect_stdout "${empty_out}" <<'EOF'
 
 Jaiph: Running match_dispatch.jh
 
-export def main
+def main
   ▸ script foo
   ✓ script foo (<time>)
   ℹ ran-foo
 
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 EOF
 
 e2e::pass "empty subject hits same arm as \"check\" (ran-foo)"
@@ -83,12 +83,12 @@ e2e::expect_stdout "${wait_out}" <<'EOF'
 
 Jaiph: Running match_dispatch.jh
 
-export def main (cmd="wait")
+def main (cmd="wait")
   ▸ script bar
   ✓ script bar (<time>)
   ℹ ran-bar
 
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 EOF
 
 e2e::pass "\"wait\" hits its own arm (ran-bar)"

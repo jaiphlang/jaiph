@@ -28,11 +28,11 @@ e2e::expect_stdout "${greet_out}" <<'EOF'
 
 Jaiph: Running greet.jh
 
-export def main (name="world")
+def main (name="world")
   ▸ script greet_impl (1="world")
   ✓ script greet_impl (<time>)
 
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 EOF
 
 # Then — run artifacts

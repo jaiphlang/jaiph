@@ -67,7 +67,7 @@ e2e::expect_stdout "${out}" <<'EXPECTED'
 
 Jaiph: Running ensure_recover_payload.jh
 
-export def main
+def main
   ▸ def top_rule
   ·   ▸ script emit_root_step
   ·   ✓ script emit_root_step (<time>)
@@ -77,15 +77,15 @@ export def main
   ·   ·   ▸ def deep_rule
   ·   ·   ·   ▸ script emit_deep_step_then_fail_until_recovered
   ·   ·   ·   ✗ script emit_deep_step_then_fail_until_recovered (<time>)
-  ·   ·   ✗ def deep_rule(<time>)
-  ·   ✗ def nested_rule(<time>)
-  ✗ def top_rule(<time>)
+  ·   ·   ✗ def deep_rule (<time>)
+  ·   ✗ def nested_rule (<time>)
+  ✗ def top_rule (<time>)
   ▸ script save_string_to_file (1="recovered-on-retry", 2="witness_failed_payload.txt")
   ✓ script save_string_to_file (<time>)
   ▸ script mark_recovered
   ✓ script mark_recovered (<time>)
 
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 EXPECTED
 
 e2e::assert_file_exists "${TEST_DIR}/witness_failed_payload.txt" "recover wrote failure payload witness"

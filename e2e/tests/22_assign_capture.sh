@@ -22,16 +22,16 @@ e2e::expect_stdout "${assign_out}" <<'EOF'
 
 Jaiph: Running assign_capture.jh
 
-export def main
+def main
   ▸ def echo_line
   ·   ▸ script echo_line_impl
   ·   ✓ script echo_line_impl (<time>)
-  ✓ def echo_line(<time>)
+  ✓ def echo_line (<time>)
   ▸ script shell_capture
   ✓ script shell_capture (<time>)
   ▸ script format_output (1="captured-value", 2="shell-capture")
   ✓ script format_output (<time>)
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 EOF
 
 e2e::expect_out_files "assign_capture.jh" 5

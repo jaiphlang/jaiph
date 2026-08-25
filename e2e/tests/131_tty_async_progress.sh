@@ -90,7 +90,7 @@ text = text.replace("\r", "\n")
 clean = re.sub(r"\x1b\[[0-9;]*[A-Za-z]", "", text)
 
 # Check that RUNNING frame was observed during live render
-running_seen = "RUNNING export def main" in clean
+running_seen = "RUNNING def main" in clean
 sys.stdout.write(f"__JAIPH_TTY_RUNNING_SEEN__={'1' if running_seen else '0'}\n")
 
 # Check for orphaned ANSI escape sequences after stripping known CSI patterns.
@@ -148,28 +148,28 @@ e2e::assert_contains "${normalized}" "result-b" "handle hb resolved to result-b"
 
 # Both branches show completion markers
 # assert_contains: PTY redraws make exact match infeasible
-e2e::assert_contains "${normalized}" "def branch_a(<time>)" "branch_a completed with timing"
-e2e::assert_contains "${normalized}" "def branch_b(<time>)" "branch_b completed with timing"
+e2e::assert_contains "${normalized}" "def branch_a (<time>)" "branch_a completed with timing"
+e2e::assert_contains "${normalized}" "def branch_b (<time>)" "branch_b completed with timing"
 
 # Overall PASS
 # assert_contains: PTY redraws make exact match infeasible
-e2e::assert_contains "${normalized}" "PASS export def main" "export def main passed"
+e2e::assert_contains "${normalized}" "PASS def main" "def main passed"
 
 # Canonicalize dynamic TTY refreshes and verify stable tree structure.
 # Extract only the lines we can stably match regardless of async interleaving order.
 tree_projection="$(
   printf '%s\n' "${normalized}" | awk '
     /^Jaiph: Running tty_async\.jh$/ { print; next }
-    /^export def main$/ { print; next }
-    /^ .₁.+ workflow branch_a \(<time>\)$/ { print; next }
-    /^ .₂.+ workflow branch_b \(<time>\)$/ { print; next }
-    /PASS export def main/ { print; next }
+    /^def main$/ { print; next }
+    /^ .₁.+ def branch_a \(<time>\)$/ { print; next }
+    /^ .₂.+ def branch_b \(<time>\)$/ { print; next }
+    /PASS def main/ { print; next }
   '
 )"
 
 # assert_contains: we extract stable subset lines; the full projection order depends on async timing
 e2e::assert_contains "${tree_projection}" "Jaiph: Running tty_async.jh" "tree projection: header"
-e2e::assert_contains "${tree_projection}" "export def main" "tree projection: root workflow"
-e2e::assert_contains "${tree_projection}" "PASS export def main" "tree projection: final PASS"
+e2e::assert_contains "${tree_projection}" "def main" "tree projection: root workflow"
+e2e::assert_contains "${tree_projection}" "PASS def main" "tree projection: final PASS"
 
 e2e::pass "TTY async progress renders per-branch events correctly"

@@ -84,7 +84,7 @@ script pause = \`echo \$\$ > "${pidfile}"; while [ ! -f "${gate}" ]; do sleep 0.
 script stamp = \`echo "${marker}"\`
 
 # Waits for the gate file, then reports its generation's marker.
-def slow() {
+export def slow() {
   run pause()
   const out = run stamp()
   return out
@@ -209,7 +209,7 @@ cat > "${TEST_DIR}/tools_cancel.jh" <<EOF
 script hang_forever = \`echo \$\$ > "${pid3}"; sleep 300\`
 
 # Hangs until cancelled.
-def hang() {
+export def hang() {
   run hang_forever()
   return "unreachable"
 }

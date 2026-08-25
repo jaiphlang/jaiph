@@ -25,7 +25,7 @@ basic_out="$(e2e::run "inline_basic.jh")"
 # nondeterministic: inline script name contains content hash
 e2e::assert_contains "${basic_out}" "script __inline_" "tree shows inline script step"
 # assert_contains: output includes dynamic timing and inline script hash name
-e2e::assert_contains "${basic_out}" "PASS export def main" "workflow passes"
+e2e::assert_contains "${basic_out}" "PASS def main" "workflow passes"
 
 # Verify artifact content
 rm -rf "${TEST_DIR}/runs_basic"
