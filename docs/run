@@ -87,9 +87,8 @@ fi
 
 # ── Write to a dedicated workspace and run ──
 #
-# A self-contained workdir (with a `.jaiph` marker) makes the Docker sandbox
-# bind-mount only this directory, not all of $TMPDIR. Mounting host /tmp would
-# expose unrelated files and breaks fuse-overlayfs reads inside the container.
+# A self-contained workdir (with a `.jaiph` marker) keeps the run isolated
+# from the rest of $TMPDIR.
 
 WORKDIR="$(mktemp -d "${TMPDIR:-/tmp}/jaiph-run-XXXXXX")"
 mkdir -p "${WORKDIR}/.jaiph"

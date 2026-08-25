@@ -9,20 +9,18 @@ import {
 import { resolveModuleMetadata, metadataToConfig } from "../../config";
 import { loadMergedHooks, isProjectHooksTrusted } from "../run/hooks";
 import { deriveTools } from "./mcp-tools";
-import type { SandboxFlags } from "../run/env";
 import type { GenerationState } from "./generation-state";
 
 // The generation "shape" lives in its own leaf so the posture module can read
 // it without importing back into this file; re-export it here so callers keep a
 // single import site for the generation surface.
 export type { GenerationState } from "./generation-state";
-// Sandbox-posture resolution is a sibling concern (Docker selection, consent
-// gate, credential pre-flight); re-exported so `jaiph mcp` / `jaiph serve` reach
-// the whole generation surface through this one module.
+// Startup posture (credential pre-flight, host runs root) is a sibling
+// concern; re-exported so `jaiph mcp` / `jaiph serve` reach the whole
+// generation surface through this one module.
 export {
   resolveStartupPosture,
   logStartupPosture,
-  formatUnsafeServerBanner,
   type StartupPosture,
 } from "./startup-posture";
 
@@ -41,7 +39,6 @@ export function loadGeneration(
   extraEnv: Record<string, string>,
   log: (line: string) => void,
   label: string,
-  sandboxFlags: SandboxFlags = {},
 ): { state?: GenerationState; failures: string[] } {
   const graph = loadModuleGraph(inputAbs, workspaceRoot);
   const diag = collectDiagnostics(graph);
@@ -74,7 +71,7 @@ export function loadGeneration(
     state: {
       graph,
       tools,
-      callEnv: { inputAbs, workspaceRoot, mod, effectiveConfig, scriptsDir, graphFile, outDir, extraEnv, sandboxFlags, hooks },
+      callEnv: { inputAbs, workspaceRoot, mod, effectiveConfig, scriptsDir, graphFile, outDir, extraEnv, hooks },
     },
     failures: [],
   };

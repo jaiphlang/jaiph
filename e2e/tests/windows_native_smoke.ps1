@@ -6,7 +6,7 @@
 # the POSIX shell and no WSL — works. It covers each acceptance bullet with a check
 # that fails when the contract is violated:
 #
-#   1. A sample workflow runs host-only (JAIPH_UNSAFE=true) covering an inline
+#   1. A sample workflow runs covering an inline
 #      shell line, a `script` step with a non-bash lang tag (```node), string
 #      interpolation, and `log` output. Assertions run against the real jaiph.exe
 #      stdout (exit code + expected `log` lines).
@@ -54,11 +54,7 @@ if (-not $Exe -or -not (Test-Path $Exe)) {
 }
 $Exe = (Resolve-Path $Exe).Path
 
-# Host-only: the Docker sandbox is out of scope on win32 (resolveDockerConfig
-# forces host mode), but be explicit so this never probes for a daemon.
-$env:JAIPH_UNSAFE = "true"
-$env:JAIPH_DOCKER_ENABLED = "false"
-
+# Git for Windows' sh.exe is the POSIX shell.
 $Work = Join-Path ([System.IO.Path]::GetTempPath()) ("jaiph-winsmoke-" + [System.IO.Path]::GetRandomFileName())
 New-Item -ItemType Directory -Path $Work -Force | Out-Null
 
@@ -228,15 +224,11 @@ workflow default() {
 }
 '@
 
-  # The credential pre-flight is skipped under JAIPH_UNSAFE (that flag means
-  # "trust my host env"), so drop it here — on win32 resolveDockerConfig already
-  # forces host-only mode, so the run stays host-only without it. codex has no
-  # login fallback: with OPENAI_API_KEY unset the pre-flight hard-fails before any
-  # backend call, so this fails fast with E_AGENT_CREDENTIALS instead of hanging.
+  # Codex has no login fallback: with OPENAI_API_KEY unset the pre-flight
+  # hard-fails before any backend call, so this fails fast with
+  # E_AGENT_CREDENTIALS instead of hanging.
   $origOpenAi = $env:OPENAI_API_KEY
-  $origUnsafe = $env:JAIPH_UNSAFE
   Remove-Item Env:\OPENAI_API_KEY -ErrorAction SilentlyContinue
-  Remove-Item Env:\JAIPH_UNSAFE -ErrorAction SilentlyContinue
   try {
     $promptOut = Join-Path $Work "prompt.out"
     $promptErr = Join-Path $Work "prompt.err"
@@ -255,7 +247,6 @@ workflow default() {
     }
   } finally {
     if ($null -ne $origOpenAi) { $env:OPENAI_API_KEY = $origOpenAi }
-    if ($null -ne $origUnsafe) { $env:JAIPH_UNSAFE = $origUnsafe }
   }
 } finally {
   # Defensive: if the cancellation contract regressed (or the harness threw mid-run),

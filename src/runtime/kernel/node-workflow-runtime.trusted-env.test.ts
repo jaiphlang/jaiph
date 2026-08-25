@@ -13,7 +13,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildRuntimeGraph } from "./graph";
 import { NodeWorkflowRuntime, _scriptSpawn } from "./node-workflow-runtime";
-import { buildDockerArgs } from "../docker";
 
 /** Minimal fake ChildProcess that emits `close(0)` on the next tick. */
 function fakeChild(): EventEmitter {
@@ -245,81 +244,6 @@ test("trusted_envs: host mode — the value never reaches a prompt agent subproc
     assert.ok(!dump.includes("GH_TOKEN"), `prompt agent env must not contain GH_TOKEN:\n${dump}`);
     assert.ok(!dump.includes("host-secret"), "prompt agent env must not contain the secret value");
     assert.match(dump, /^JAIPH_WORKSPACE=./m, "JAIPH_ control keys still pass to the agent");
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test("trusted_envs: docker copy mode — declared key crosses as -e, reaches the run step, never the prompt agent", { skip: process.platform === "win32" }, async () => {
-  const root = mkdtempSync(join(tmpdir(), "jaiph-trusted-env-docker-"));
-  try {
-    const wsDir = join(root, "ws");
-    const cloneDir = join(root, "clone");
-    const runDir = join(root, "run");
-    for (const d of [wsDir, cloneDir, runDir]) mkdirSync(d, { recursive: true });
-    const jh = writeFlow(wsDir, "main.jh", [
-      "config {",
-      '  trusted_envs = "GH_TOKEN"',
-      "}",
-      "script show = `echo x`",
-      "workflow default() {",
-      "  run show()",
-      '  prompt "say hi"',
-      "}",
-    ]);
-    // Host side: the CLI's planTrustedEnvs resolves the entry file's declaration
-    // from the host env and threads it through DockerSpawnOptions.extraEnv (run.ts
-    // merge, `--env` pairs winning). That resolution is a layer-4 concern covered
-    // in cli/run/trusted-envs.test.ts; inline the resolved map here so this
-    // runtime test stays within the runtime layer and imports no CLI module.
-    const resolvedTrustedEnv = { GH_TOKEN: "host-secret" };
-    const args = buildDockerArgs({
-      config: { enabled: true, image: "ubuntu:24.04", imageExplicit: false, network: "default", timeoutSeconds: 300 },
-      sourceAbs: jh,
-      workspaceRoot: wsDir,
-      sandboxRunDir: runDir,
-      runArgs: [],
-      env: { JAIPH_RUN_ID: "r1" },
-      isTTY: false,
-      sandboxMode: "snapshot",
-      sandboxWorkspaceDir: cloneDir,
-      backends: ["cursor"],
-      extraEnv: { ...resolvedTrustedEnv },
-    });
-    // Reconstruct the env the containerized runner sees: image base + the
-    // emitted `-e` pairs (docker.ts owns which keys cross the boundary).
-    const containerBase: NodeJS.ProcessEnv = { PATH: process.env.PATH, HOME: process.env.HOME };
-    for (let i = 0; i + 1 < args.length; i += 1) {
-      if (args[i] !== "-e") continue;
-      const eq = args[i + 1]!.indexOf("=");
-      containerBase[args[i + 1]!.slice(0, eq)] = args[i + 1]!.slice(eq + 1);
-    }
-    assert.equal(containerBase.GH_TOKEN, "host-secret", "declared key crosses the sandbox boundary like --env");
-
-    // Container side: same runtime semantics against the container env.
-    const scriptsDir = join(root, "scripts");
-    mkdirSync(scriptsDir, { recursive: true });
-    writeScriptFile(scriptsDir, "show");
-    const envDump = join(root, "agent-env.txt");
-    const fakeAgent = join(root, "fake-agent");
-    writeEnvDumpAgent(fakeAgent, envDump);
-    const containerEnv = {
-      ...containerBase,
-      JAIPH_RUNS_DIR: join(root, ".jaiph", "runs"),
-      JAIPH_SCRIPTS: scriptsDir,
-      JAIPH_WORKSPACE: wsDir,
-      JAIPH_AGENT_COMMAND: fakeAgent,
-    };
-    const runtime = new NodeWorkflowRuntime(buildRuntimeGraph(jh), { env: containerEnv, cwd: wsDir, suppressLiveEvents: true, promptRetryDelays: [] });
-    await withSpawnSpy(async (calls) => {
-      const status = await runtime.runDefault([]);
-      assert.equal(status, 0);
-      assert.equal(calls.length, 1);
-      assert.equal(calls[0]!.env.GH_TOKEN, "host-secret", "run step inside the container receives the declared key");
-    });
-    const dump = readFileSync(envDump, "utf8");
-    assert.ok(!dump.includes("GH_TOKEN"), `prompt agent env must not contain GH_TOKEN:\n${dump}`);
-    assert.ok(!dump.includes("host-secret"), "prompt agent env must not contain the secret value");
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

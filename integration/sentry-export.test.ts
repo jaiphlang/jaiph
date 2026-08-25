@@ -144,7 +144,6 @@ function runCli(
 function baseEnv(runsRoot: string): NodeJS.ProcessEnv {
   return {
     ...process.env,
-    JAIPH_DOCKER_ENABLED: "false",
     JAIPH_RUNS_DIR: runsRoot,
     PATH: `${dirname(process.execPath)}:${process.env.PATH ?? ""}`,
     // Ensure a stray host DSN never leaks into the no-DSN baseline cases.

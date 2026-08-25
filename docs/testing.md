@@ -11,7 +11,7 @@ redirect_from:
 
 This guide shows how to write a `*.test.jh` file with mocked prompts and stubbed dependencies, and then run it with `jaiph test`. Each test block runs the workflow under test in-process through `NodeWorkflowRuntime`, which is the same interpreter that `jaiph run` uses, and then checks the captured output.
 
-`jaiph test` runs on the host in-process. It does not start a Docker sandbox, it does not run the credential pre-flight, and it does not run hooks.
+`jaiph test` runs on the host in-process. It does not run the credential pre-flight, and it does not run hooks.
 
 Mock every `prompt` step, and stub external workflows, rules, or scripts when you need to. If you leave a prompt unmocked, or a queued list of `mock prompt "…"` responses runs out, the runtime falls through to a real, live `prompt` call against the configured agent backend, the same way `jaiph run` would. One difference is that `jaiph test` turns off prompt retries by default by setting `JAIPH_PROMPT_RETRY=0`, so a prompt that falls through and errors fails right away instead of retrying on the production schedule. Set `JAIPH_PROMPT_RETRY` yourself when you want to test the retry behavior.
 

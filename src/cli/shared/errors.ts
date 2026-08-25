@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { CONTAINER_RUN_DIR, canUseAnsi } from "../../runtime";
+import { canUseAnsi } from "../../runtime";
 
 export function colorPalette(): { green: string; red: string; dim: string; reset: string } {
   const enabled = canUseAnsi();
@@ -37,10 +37,6 @@ export function summarizeError(
     return `Workflow execution failed${codePart} with no error output${dirPart}`;
   }
   return fallback ?? "Workflow execution failed.";
-}
-
-export function formatDockerTimeoutMessage(timeoutSeconds: number): string {
-  return `E_TIMEOUT container execution exceeded ${timeoutSeconds}s — increase runtime.docker_timeout_seconds or JAIPH_DOCKER_TIMEOUT`;
 }
 
 export function formatRunTimeoutMessage(timeoutSeconds: number): string {
@@ -229,8 +225,7 @@ export function readFailedStepOutput(summaryPath: string): string | null {
  * Locate a run's host-side directory under `runsRoot` by matching `runId`
  * against the `WORKFLOW_START` line (always the first line) of each candidate
  * `run_summary.jsonl`. Works while the run is still executing (that line is
- * written at run start) and in every sandbox mode (the run dir is a host mount
- * even under Docker). Scans date/time directories newest-first; returns `null`
+ * written at run start). Scans date/time directories newest-first; returns `null`
  * when no run dir matches or `runsRoot` is unreadable.
  */
 export function findRunDir(runsRoot: string, runId: string): string | null {
@@ -265,27 +260,4 @@ export function findRunDir(runsRoot: string, runId: string): string | null {
     // ignore — runsRoot may not exist or be readable
   }
   return null;
-}
-
-/**
- * Discover run directory from the Docker sandbox runs mount.
- * In Docker mode the container's meta file is inaccessible from the host,
- * so we scan the bind-mounted sandboxRunDir for the matching run directory.
- */
-export function discoverDockerRunDir(sandboxRunDir: string, expectedRunId: string): { runDir?: string; summaryFile?: string } {
-  const runDir = findRunDir(sandboxRunDir, expectedRunId);
-  if (!runDir) return {};
-  return { runDir, summaryFile: join(runDir, "run_summary.jsonl") };
-}
-
-/** Remap a container-internal path to the equivalent host path. */
-export function remapContainerPath(containerPath: string, sandboxRunDir: string): string {
-  const prefix = CONTAINER_RUN_DIR + "/";
-  if (containerPath.startsWith(prefix)) {
-    return join(sandboxRunDir, containerPath.slice(CONTAINER_RUN_DIR.length));
-  }
-  if (containerPath === CONTAINER_RUN_DIR) {
-    return sandboxRunDir;
-  }
-  return containerPath;
 }

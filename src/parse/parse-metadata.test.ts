@@ -28,11 +28,11 @@ test("parseConfigBlock: parses boolean values", () => {
 test("parseConfigBlock: parses integer values", () => {
   const lines = [
     "config {",
-    "  runtime.docker_timeout_seconds = 300",
+    "  run.recover_limit = 3",
     "}",
   ];
   const { metadata } = parseConfigBlock("test.jh", lines, 0);
-  assert.equal(metadata.runtime?.dockerTimeoutSeconds, 300);
+  assert.equal(metadata.run?.recoverLimit, 3);
 });
 
 test("parseConfigBlock: fails on unknown config key", () => {
@@ -253,12 +253,12 @@ test("parseConfigBlock: handles escape sequences in string values", () => {
 test("parseConfigBlock: fails on type mismatch (number where string expected)", () => {
   const lines = [
     "config {",
-    "  runtime.docker_image = 123",
+    "  agent.model = 123",
     "}",
   ];
   assert.throws(
     () => parseConfigBlock("test.jh", lines, 0),
-    /runtime\.docker_image must be a string/,
+    /agent\.model must be a string/,
   );
 });
 
@@ -409,7 +409,7 @@ test("workflow config: rejects module.* keys", () => {
   );
 });
 
-test("workflow config: rejects runtime.* keys", () => {
+test("workflow config: rejects unknown runtime.* keys", () => {
   const src = [
     "workflow default() {",
     "  config {",
@@ -419,7 +419,7 @@ test("workflow config: rejects runtime.* keys", () => {
   ].join("\n");
   assert.throws(
     () => parsejaiph(src, "test.jh"),
-    /runtime\.\* keys are not allowed in workflow-level config/,
+    /unknown config key: runtime\.docker_timeout_seconds/,
   );
 });
 
@@ -468,18 +468,6 @@ test("parseConfigBlock: trusted_envs rejects reserved keys (same rule as --env)"
   assert.throws(
     () => parseConfigBlock("test.jh", lines, 0),
     /trusted_envs cannot declare reserved key "JAIPH_WORKSPACE".*E_ENV_RESERVED/,
-  );
-});
-
-test("parseConfigBlock: trusted_envs rejects JAIPH_DOCKER_* keys", () => {
-  const lines = [
-    "config {",
-    '  trusted_envs = "JAIPH_DOCKER_ENABLED"',
-    "}",
-  ];
-  assert.throws(
-    () => parseConfigBlock("test.jh", lines, 0),
-    /trusted_envs cannot declare reserved key "JAIPH_DOCKER_ENABLED"/,
   );
 });
 

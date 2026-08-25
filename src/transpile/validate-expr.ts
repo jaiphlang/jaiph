@@ -289,7 +289,7 @@ function warnPromptInShellLine(
         `prompt capture "${varName}" is interpolated into a shell line without quoting or validation; ` +
           `prefer passing it as a script argument: run my_script(${varName}) — ` +
           `scripts receive arguments as $1 $2 … (argv), which bypasses shell word-splitting. ` +
-          `See: sandboxing.md#prompt-in-shell`,
+          `See: language.md`,
       );
       return; // one diagnostic per shell step is enough
     }

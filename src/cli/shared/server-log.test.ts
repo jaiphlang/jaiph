@@ -90,24 +90,22 @@ test("mirror() carries the async subscript indent even when colors are off", () 
 
 // === per-call banner formatters ===
 
-test("formatCallStartLine matches the required Running…(sandbox)…run_id= shape", () => {
-  const line = formatCallStartLine({ workflow: "engineer", sandboxLabel: "Docker sandbox, unsafe", runId: "abc123" });
-  assert.match(line, /Running .*\(.*\).*run_id=/, "must satisfy the acceptance regex");
-  assert.equal(line, "Running engineer (Docker sandbox, unsafe) run_id=abc123");
+test("formatCallStartLine matches Running…run_id= shape", () => {
+  const line = formatCallStartLine({ workflow: "engineer", runId: "abc123" });
+  assert.equal(line, "Running engineer run_id=abc123");
 });
 
 test("formatCallStartLine appends rundir / principal / correlation only when present", () => {
-  const bare = formatCallStartLine({ workflow: "w", sandboxLabel: "no sandbox", runId: "r" });
-  assert.equal(bare, "Running w (no sandbox) run_id=r", "no optional tails when unset");
+  const bare = formatCallStartLine({ workflow: "w", runId: "r" });
+  assert.equal(bare, "Running w run_id=r", "no optional tails when unset");
   const full = formatCallStartLine({
     workflow: "w",
-    sandboxLabel: "no sandbox",
     runId: "r",
     rundir: "/runs/x",
     principal: "alice",
     correlationId: "cid-1",
   });
-  assert.equal(full, "Running w (no sandbox) run_id=r rundir=/runs/x principal=alice correlation=cid-1");
+  assert.equal(full, "Running w run_id=r rundir=/runs/x principal=alice correlation=cid-1");
 });
 
 test("formatCallEndLine carries status, exit, elapsed_ms, and rundir when known", () => {
@@ -117,16 +115,12 @@ test("formatCallEndLine carries status, exit, elapsed_ms, and rundir when known"
   assert.equal(failed, "Finished w status=failed exit=1 elapsed_ms=7", "rundir omitted when unknown");
 });
 
-test("createOperatorLog builds a server log + sandbox label from posture primitives", () => {
+test("createOperatorLog writes only to the injected sink", () => {
   const cap = capture();
   const op = createOperatorLog({
     label: "jaiph serve",
     write: cap.write,
-    dockerEnabled: true,
-    sandboxMode: "inplace",
-    unsafeHostOnly: false,
   });
-  assert.equal(op.sandboxLabel, "Docker sandbox, in-place");
   op.log.info("x");
   assert.equal(cap.lines[0], "jaiph serve: x", "the operator log writes only to the injected sink");
 });

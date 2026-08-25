@@ -135,15 +135,6 @@ export function interpolateWorkflowMetadata(
       out.run.logsDir = interpolateStringField(metadata.run.logsDir, vars, env);
     }
   }
-  if (metadata.runtime) {
-    out.runtime = { ...metadata.runtime };
-    if (metadata.runtime.dockerImage !== undefined) {
-      out.runtime.dockerImage = interpolateStringField(metadata.runtime.dockerImage, vars, env);
-    }
-    if (metadata.runtime.dockerNetwork !== undefined) {
-      out.runtime.dockerNetwork = interpolateStringField(metadata.runtime.dockerNetwork, vars, env);
-    }
-  }
   // trusted_envs keys are literal env var names — never interpolated.
   if (metadata.trustedEnvs) {
     out.trustedEnvs = [...metadata.trustedEnvs];

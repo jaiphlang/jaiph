@@ -1,6 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { remapContainerPath } from "./errors";
 
 /**
  * Read selected `key=value` fields from a runner meta file. Returns an empty
@@ -21,19 +20,10 @@ export function readMetaFields(metaFile: string, keys: readonly string[]): Recor
   return out;
 }
 
-/**
- * Read a run's `return_value.txt`. In Docker mode `runDir` is discovered from
- * the host-side sandbox runs mount, so `remapContainerPath` normalizes any
- * container-internal prefix to the host path before reading.
- */
-export function readReturnValue(
-  runDir: string | undefined,
-  sandboxRunDir: string | undefined,
-): string | undefined {
+/** Read a run's `return_value.txt`. */
+export function readReturnValue(runDir: string | undefined): string | undefined {
   if (!runDir) return undefined;
-  const candidate = sandboxRunDir
-    ? remapContainerPath(join(runDir, "return_value.txt"), sandboxRunDir)
-    : join(runDir, "return_value.txt");
+  const candidate = join(runDir, "return_value.txt");
   if (!existsSync(candidate)) return undefined;
   try {
     return readFileSync(candidate, "utf8");

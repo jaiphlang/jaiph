@@ -41,7 +41,7 @@ function intEnv(raw: string | undefined, name: string, fallback: number, min: nu
 }
 
 const SERVE_USAGE =
-  "Usage: jaiph serve [--host <addr>] [--port <n>] [--workspace <dir>] [--allow-anonymous] [--inplace] [--unsafe] [--yes|-y] [--env KEY[=VALUE]]... <file.jh>\n\n" +
+  "Usage: jaiph serve [--host <addr>] [--port <n>] [--workspace <dir>] [--allow-anonymous] [--env KEY[=VALUE]]... <file.jh>\n\n" +
   "Serve the file's workflows as an HTTP API with a generated OpenAPI 3.1 document\n" +
   "and an embedded Swagger UI. Anything that speaks HTTP can invoke tested workflows\n" +
   "and inspect their runs.\n\n" +
@@ -81,18 +81,7 @@ const SERVE_USAGE =
   "                     JAIPH_SERVE_TOKEN or OIDC is set.\n" +
   "  --workspace <dir>  workspace root for import resolution (default: auto-detect)\n" +
   "  --env KEY=VALUE    define KEY in every run's env (repeatable); --env KEY forwards the host value.\n" +
-  "  --inplace          Docker sandbox with the host workspace bind-mounted rw for every run (JAIPH_INPLACE=1)\n" +
-  "  --unsafe           every run executes on the host with no sandbox (JAIPH_UNSAFE=true)\n" +
-  "  -y, --yes          record auto-consent for the posture (JAIPH_INPLACE_YES=1)\n" +
   "  -h, --help         show this help\n\n" +
-  "Execution policy: --workspace/--env/--inplace/--unsafe/--yes are shared with jaiph run and\n" +
-  "jaiph mcp. Precedence: CLI flags > JAIPH_* env vars > workflow config metadata > defaults.\n" +
-  "--inplace and --unsafe conflict (E_FLAG_CONFLICT, at startup before anything is spawned).\n" +
-  "The effective sandbox posture is resolved and printed once at startup and applied to every\n" +
-  "run (no interactive prompt). Host-only (unsafe) mode requires explicit consent on the command\n" +
-  "line: pass --unsafe (or --yes). An inherited JAIPH_UNSAFE=true with no such flag is refused at\n" +
-  "startup (E_UNSAFE_NO_CONSENT). Inside a container the container itself is the sandbox (the\n" +
-  "runtime image bakes JAIPH_UNSAFE=true), so host-only execution there needs no flag.\n\n" +
   "Example:\n" +
   "  JAIPH_SERVE_TOKEN=secret jaiph serve --host 0.0.0.0 ./tools.jh\n";
 
@@ -207,9 +196,9 @@ export async function runServe(rest: string[]): Promise<number> {
     resultText: maxOutputBytes,
   };
 
-  // Load generation 0 into a temp root and resolve the startup sandbox posture
+  // Load generation 0 into a temp root and resolve the startup posture
   // (the shared server prefix; auth/host/port/bounds above run first so an
-  // invalid config fails before any image is pulled).
+  // invalid config fails before credential pre-flight).
   const started = startGeneration(pre.args, "runs");
   if ("code" in started) return started.code;
   const ctx = started.ctx;
@@ -218,13 +207,10 @@ export async function runServe(rest: string[]): Promise<number> {
 
   // Operator log (stderr only, never an HTTP response body): per-call banners +
   // optional workflow-log mirror, over the same injectable `log` sink used for
-  // lifecycle lines. The sandbox label is resolved once from the startup posture.
+  // lifecycle lines. Host execution is announced once at startup.
   const operator = createOperatorLog({
     label: "jaiph serve",
     write: log,
-    dockerEnabled: posture.dockerConfig.enabled,
-    sandboxMode: posture.sandboxMode,
-    unsafeHostOnly: posture.unsafeHostOnly,
   });
 
   // Track in-flight run promises so shutdown can drain them.
@@ -272,7 +258,6 @@ export async function runServe(rest: string[]): Promise<number> {
       const lease = generations.acquire();
       const p = callWorkflow(
         lease.state.callEnv,
-        posture,
         spec.workflow,
         spec.params.map((pp) => args[pp] ?? ""),
         runId,

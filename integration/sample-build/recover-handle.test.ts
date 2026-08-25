@@ -31,7 +31,7 @@ test("recover: success on first attempt skips recover body", () => {
     const r = spawnSync("node", [cliPath, "run", join(root, "main.jh")], {
       encoding: "utf8",
       cwd: root,
-      env: { ...process.env, JAIPH_DOCKER_ENABLED: "false" },
+      env: { ...process.env },
     });
     assert.equal(r.status, 0, r.stderr);
     assert.match(r.stdout, /PASS/);
@@ -67,7 +67,7 @@ test("recover: one repair loop before success", () => {
     const r = spawnSync("node", [cliPath, "run", join(root, "main.jh")], {
       encoding: "utf8",
       cwd: root,
-      env: { ...process.env, JAIPH_DOCKER_ENABLED: "false" },
+      env: { ...process.env },
     });
     assert.equal(r.status, 0, r.stderr);
     assert.match(r.stdout, /PASS/);
@@ -103,7 +103,7 @@ test("recover: retry limit exhaustion fails the workflow", () => {
     const r = spawnSync("node", [cliPath, "run", join(root, "main.jh")], {
       encoding: "utf8",
       cwd: root,
-      env: { ...process.env, JAIPH_DOCKER_ENABLED: "false" },
+      env: { ...process.env },
     });
     assert.notEqual(r.status, 0, "should fail after retry limit exhausted");
     const combined = r.stdout + r.stderr;
@@ -147,7 +147,7 @@ test("recover: workflow-level run.recover_limit overrides module-level", () => {
     const r = spawnSync("node", [cliPath, "run", join(root, "main.jh")], {
       encoding: "utf8",
       cwd: root,
-      env: { ...process.env, JAIPH_DOCKER_ENABLED: "false" },
+      env: { ...process.env },
     });
     assert.notEqual(r.status, 0, "should fail after retry limit exhausted");
     const combined = r.stdout + r.stderr;
@@ -199,7 +199,7 @@ test("recover: sibling workflow without own config uses module-level run.recover
     const r = spawnSync("node", [cliPath, "run", join(root, "main.jh")], {
       encoding: "utf8",
       cwd: root,
-      env: { ...process.env, JAIPH_DOCKER_ENABLED: "false" },
+      env: { ...process.env },
     });
     assert.notEqual(r.status, 0, "should fail after retry limit exhausted");
     const combined = r.stdout + r.stderr;
@@ -251,7 +251,7 @@ test("recover: retry limit configurable via config", () => {
     const r = spawnSync("node", [cliPath, "run", join(root, "main.jh")], {
       encoding: "utf8",
       cwd: root,
-      env: { ...process.env, JAIPH_DOCKER_ENABLED: "false" },
+      env: { ...process.env },
     });
     assert.equal(r.status, 0, r.stderr);
     assert.match(r.stdout, /PASS/);
@@ -284,7 +284,7 @@ test("handle: const capture run async creates handle that resolves on read", () 
     const r = spawnSync("node", [cliPath, "run", join(root, "main.jh")], {
       encoding: "utf8",
       cwd: root,
-      env: { ...process.env, JAIPH_DOCKER_ENABLED: "false" },
+      env: { ...process.env },
     });
     assert.equal(r.status, 0, r.stderr);
     assert.match(r.stdout, /PASS/);
@@ -316,7 +316,7 @@ test("handle: passing handle as arg to run forces resolution", () => {
     const r = spawnSync("node", [cliPath, "run", join(root, "main.jh")], {
       encoding: "utf8",
       cwd: root,
-      env: { ...process.env, JAIPH_DOCKER_ENABLED: "false" },
+      env: { ...process.env },
     });
     assert.equal(r.status, 0, r.stderr);
     assert.match(r.stdout, /PASS/);
@@ -352,7 +352,7 @@ test("handle: multi-handle join — multiple async handles passed into another c
     const r = spawnSync("node", [cliPath, "run", join(root, "main.jh")], {
       encoding: "utf8",
       cwd: root,
-      env: { ...process.env, JAIPH_DOCKER_ENABLED: "false" },
+      env: { ...process.env },
     });
     assert.equal(r.status, 0, r.stderr);
     assert.match(r.stdout, /PASS/);
@@ -383,7 +383,7 @@ test("handle: workflow exit joins unresolved handles without error", () => {
     const r = spawnSync("node", [cliPath, "run", join(root, "main.jh")], {
       encoding: "utf8",
       cwd: root,
-      env: { ...process.env, JAIPH_DOCKER_ENABLED: "false" },
+      env: { ...process.env },
     });
     assert.equal(r.status, 0, r.stderr);
     assert.match(r.stdout, /PASS/);
@@ -418,7 +418,7 @@ test("handle: handles stored in separate vars and resolved when read", () => {
     const r = spawnSync("node", [cliPath, "run", join(root, "main.jh")], {
       encoding: "utf8",
       cwd: root,
-      env: { ...process.env, JAIPH_DOCKER_ENABLED: "false" },
+      env: { ...process.env },
     });
     assert.equal(r.status, 0, r.stderr);
     assert.match(r.stdout, /PASS/);
@@ -453,7 +453,7 @@ test("handle: run async foo() recover — handle resolves to success after repai
     const r = spawnSync("node", [cliPath, "run", join(root, "main.jh")], {
       encoding: "utf8",
       cwd: root,
-      env: { ...process.env, JAIPH_DOCKER_ENABLED: "false" },
+      env: { ...process.env },
     });
     assert.equal(r.status, 0, r.stderr);
     assert.match(r.stdout, /PASS/);
@@ -489,7 +489,7 @@ test("handle: run async recover shares retry-limit semantics with non-async reco
     const r = spawnSync("node", [cliPath, "run", join(root, "main.jh")], {
       encoding: "utf8",
       cwd: root,
-      env: { ...process.env, JAIPH_DOCKER_ENABLED: "false" },
+      env: { ...process.env },
     });
     assert.notEqual(r.status, 0, "should fail after retry limit exhausted");
     const combined = r.stdout + r.stderr;

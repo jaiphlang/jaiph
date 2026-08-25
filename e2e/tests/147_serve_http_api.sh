@@ -58,12 +58,9 @@ serve_err="${TEST_DIR}/serve_stderr.txt"
 : >"${serve_err}"
 
 # `--port 0` binds a free port; the startup line on stderr carries it.
-# Host-mode legs export JAIPH_UNSAFE=true; server modes refuse an inherited
-# unsafe env without an explicit flag (finding M-1), so forward --unsafe as the
-# consent. Docker legs leave JAIPH_UNSAFE unset → no flag → sandboxed default.
 # No JAIPH_SERVE_TOKEN/OIDC here, so --allow-anonymous is required to bind even
 # loopback with no auth (finding M-2).
-jaiph serve --port 0 --allow-anonymous ${JAIPH_UNSAFE:+--unsafe} "${TEST_DIR}/tools.jh" >/dev/null 2>"${serve_err}" &
+jaiph serve --port 0 --allow-anonymous "${TEST_DIR}/tools.jh" >/dev/null 2>"${serve_err}" &
 # Reuse the harness's server-pid slot so e2e::cleanup tears the server down.
 E2E_SERVER_PID="$!"
 

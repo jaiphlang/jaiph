@@ -307,7 +307,6 @@ mkdir -p "${PARITY_BIN_DIR}"
 # install-from-local.sh execs docs/install with the repo path. Cap the bin dir
 # to a test-owned directory so we never touch ~/.local/bin.
 JAIPH_BIN_DIR="${PARITY_BIN_DIR}" \
-  JAIPH_SKIP_DOCKER_BUILD=1 \
   bash "${ROOT_DIR}/docs/install-from-local.sh" "${ROOT_DIR}" >/dev/null
 
 [ -x "${PARITY_BIN_DIR}/jaiph" ] || e2e::fail "install-from-local.sh did not produce ${PARITY_BIN_DIR}/jaiph"
@@ -352,8 +351,7 @@ else
   e2e::assert_contains "${version_out}" "jaiph " "jaiph --version prints a version banner"
 fi
 
-# Unsafe host-only runs now require consent; JAIPH_INPLACE_YES auto-confirms non-interactively.
-run_out="$(cd "${WORK_DIR}" && env -i PATH="${CLEAN_PATH}" HOME="${WORK_DIR}" JAIPH_UNSAFE=true JAIPH_INPLACE_YES=1 "${PARITY_BIN_DIR}/jaiph" run sample.jh)"
+run_out="$(cd "${WORK_DIR}" && env -i PATH="${CLEAN_PATH}" HOME="${WORK_DIR}" "${PARITY_BIN_DIR}/jaiph" run sample.jh)"
 case "${run_out}" in
   *"hello-from-local"*) e2e::pass "locally-built binary runs a workflow without node/npm/bun" ;;
   *) printf "%s\n" "${run_out}" >&2; e2e::fail "locally-built jaiph did not run sample.jh as expected" ;;
@@ -367,7 +365,6 @@ REINSTALL_BIN_DIR="${TEST_DIR}/bin-reinstall"
 mkdir -p "${REINSTALL_BIN_DIR}"
 
 JAIPH_BIN_DIR="${REINSTALL_BIN_DIR}" \
-  JAIPH_SKIP_DOCKER_BUILD=1 \
   bash "${ROOT_DIR}/docs/install-from-local.sh" "${ROOT_DIR}" >/dev/null
 
 [ -x "${REINSTALL_BIN_DIR}/jaiph" ] || e2e::fail "initial install did not produce ${REINSTALL_BIN_DIR}/jaiph"
@@ -378,7 +375,6 @@ held_pid=$!
 sleep 0.2
 
 JAIPH_BIN_DIR="${REINSTALL_BIN_DIR}" \
-  JAIPH_SKIP_DOCKER_BUILD=1 \
   bash "${ROOT_DIR}/docs/install-from-local.sh" "${ROOT_DIR}" >/dev/null
 
 wait "${held_pid}" 2>/dev/null || true
@@ -402,7 +398,6 @@ e2e::section "installer refuses system bin directories"
 system_status=0
 system_output="$(
   JAIPH_BIN_DIR="/usr/bin" \
-  JAIPH_SKIP_DOCKER_BUILD=1 \
   bash "${ROOT_DIR}/docs/install-from-local.sh" "${ROOT_DIR}" 2>&1
 )" || system_status=$?
 e2e::assert_equals "${system_status}" "1" "system bin dir exits non-zero"
@@ -421,7 +416,6 @@ mkdir -p "${DIR_TARGET_BIN}/jaiph"
 dir_status=0
 dir_output="$(
   JAIPH_BIN_DIR="${DIR_TARGET_BIN}" \
-  JAIPH_SKIP_DOCKER_BUILD=1 \
   bash "${ROOT_DIR}/docs/install-from-local.sh" "${ROOT_DIR}" 2>&1
 )" || dir_status=$?
 e2e::assert_equals "${dir_status}" "1" "directory target exits non-zero"

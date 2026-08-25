@@ -72,7 +72,7 @@ require_gh_token() {
     export GH_TOKEN="$GITHUB_TOKEN"
     return 0
   fi
-  die "GH_TOKEN or GITHUB_TOKEN is required; pass a token explicitly (e.g. jaiph run --unsafe --env GITHUB_TOKEN .jaiph/gh_ci_passes.jh)"
+  die "GH_TOKEN or GITHUB_TOKEN is required; pass a token explicitly (e.g. jaiph run --env GITHUB_TOKEN .jaiph/gh_ci_passes.jh)"
 }
 
 mark_git_workspace_safe() {

@@ -38,7 +38,7 @@ script security_review_tasks_path = `echo ".jaiph/tmp/security_review_queue_task
 
 const reviewer_role = """
   You are a senior security engineer reviewing Jaiph — a workflow DSL,
-  TypeScript CLI/runtime, Docker sandbox, and agent-backend runner that
+  TypeScript CLI/runtime, and agent-backend runner that
   executes tools and scripts on behalf of users.
 
   Methodology: follow OWASP Agentic Security Initiative (ASI) Top 10 as
@@ -50,14 +50,13 @@ const reviewer_role = """
   Jaiph attack surface to prioritize:
   - Prompt / agent backends (injection into tool/shell execution)
   - Script and shell step execution (command injection, unsafe spawn)
-  - Docker sandbox (mount allowlist, env allowlist, caps, isolation escape)
+  - Host execution of workflows (no jaiph-managed sandbox; outer wrap is the operator's)
   - Secrets and credentials in env, logs, artifacts, run summaries
-  - Privilege / --unsafe / permission-mode bypass paths
   - Supply chain of binaries, installers, skills, and libraries
   - Auditability of runs (events, artifacts, tamper resistance)
 
   Severity scale:
-  - HIGH: directly exploitable; leads to RCE, sandbox escape, secret
+  - HIGH: directly exploitable; leads to RCE, host compromise, secret
     exfiltration, or auth/policy bypass.
   - MEDIUM: exploitable under specific conditions, significant impact.
   - LOW: defense-in-depth gaps or low-impact weaknesses.
@@ -151,7 +150,7 @@ workflow review_scope(mode, scope_detail, report_file) {
 workflow review_codebase(report_file) {
   const scope_detail = """
     Review the ENTIRE repository against OWASP ASI Top 10. Explore agent
-    backends, prompt paths, script/shell execution, Docker sandbox,
+    backends, prompt paths, script/shell execution, host execution,
     env/secrets handling, artifacts/run logs, installers, and skills.
     Do not limit yourself to a diff — this is a full codebase scan.
   """

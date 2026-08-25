@@ -95,7 +95,7 @@ module.exports = {
     {
       name: "no-deep-imports-into-runtime",
       comment:
-        "Runtime is a deep module: code OUTSIDE the runtime package imports only its public entries — src/runtime/index.ts (production surface) or src/runtime/testing.ts (named test seams for cross-package *.test.ts) — never src/runtime/** internals (docker, docker-inplace, embedded-assets, kernel/*). Add a named re-export to src/runtime/index.ts (production) or src/runtime/testing.ts (test-only seams) instead of reaching in.",
+        "Runtime is a deep module: code OUTSIDE the runtime package imports only its public entries — src/runtime/index.ts (production surface) or src/runtime/testing.ts (named test seams for cross-package *.test.ts) — never src/runtime/** internals (embedded-assets, kernel/*). Add a named re-export to src/runtime/index.ts (production) or src/runtime/testing.ts (test-only seams) instead of reaching in.",
       severity: "error",
       from: { pathNot: "^src/runtime/" },
       to: { path: "^src/runtime/", pathNot: "^src/runtime/(index|testing)\\.ts$" },

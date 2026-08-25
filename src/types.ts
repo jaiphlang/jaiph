@@ -254,13 +254,6 @@ export interface jaiphModule {
   tests?: TestBlockDef[];
 }
 
-/** Docker sandbox runtime configuration. */
-export interface RuntimeConfig {
-  dockerImage?: string;
-  dockerNetwork?: string;
-  dockerTimeoutSeconds?: number;
-}
-
 /** In-file workflow metadata (replaces config file for V1). */
 export interface WorkflowMetadata {
   agent?: {
@@ -272,7 +265,6 @@ export interface WorkflowMetadata {
     claudeFlags?: string;
   };
   run?: { debug?: boolean; logsDir?: string; recoverLimit?: number };
-  runtime?: RuntimeConfig;
   module?: { name?: string; version?: string; description?: string };
   /**
    * Host env keys this scope's trusted `run` steps may receive

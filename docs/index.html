@@ -146,7 +146,7 @@ layout: null
                 <p><strong>Jaiph</strong> is a language and runtime for defining and orchestrating AI agent workflows.
                 </p>
                 <p>It allows you to combine agentic workflows with strict checks and script calls. It comes with
-                    built-in Docker sandboxing for agentic workflows, and a set of tooling to make your development
+                    host execution for agentic workflows, and a set of tooling to make your development
                     faster and more efficient.</p>
             </div>
         </section>
@@ -164,7 +164,7 @@ layout: null
                     </div>
                     <div class="comparison-col">
                         <h3>Tooling</h3>
-                        <p>Built-in Docker sandboxing</p>
+                        <p>Host execution; wrap jaiph for isolation</p>
                         <p>Built-in testing framework</p>
                         <p>Tracks and saves all agent responses</p>
                         <p>Default formatter and VSCode plugin</p>
@@ -227,7 +227,7 @@ workflow default(name_arg) {
                     <p>Running the workflow:</p>
                     <pre><code class="jaiph-run" data-sample-output="success"><span class="run-command">➜  ./say_hello.jh Adam</span>
 
-Jaiph: Running say_hello.jh<span class="run-banner-meta"> (Docker sandbox, snapshot)</span>
+Jaiph: Running say_hello.jh
 
 <span class="run-keyword">workflow</span> default <span class="run-params">(name_arg="Adam")</span>
   <span class="run-marker">▸</span> <span class="run-keyword">rule</span> valid_name <span class="run-params">(name_arg="Adam")</span>
@@ -241,7 +241,7 @@ Hello, Adam—Adam Smith, the 18th-century Scottish economist and philosopher, i
                     <p>When you don't provide the name parameter, the workflow fails:</p>
                     <pre><code class="jaiph-run" data-sample-output="failure"><span class="run-command">➜  ./say_hello.jh</span>
 
-Jaiph: Running say_hello.jh<span class="run-banner-meta"> (Docker sandbox, snapshot)</span>
+Jaiph: Running say_hello.jh
 
 <span class="run-keyword">workflow</span> default
   <span class="run-marker">▸</span> <span class="run-keyword">rule</span> valid_name
@@ -353,7 +353,7 @@ workflow default() {
                     </p>
                     <pre><code class="jaiph-run" data-sample-output="run"><span class="run-command">➜  ./recover_loop.jh</span>
 
-Jaiph: Running recover_loop.jh<span class="run-banner-meta"> (Docker sandbox, snapshot)</span>
+Jaiph: Running recover_loop.jh
 
 <span class="run-keyword">workflow</span> default
   <span class="run-marker">▸</span> <span class="run-keyword">script</span> check_report_exists
@@ -417,7 +417,7 @@ workflow default() {
                     <p>Running the workflow:</p>
                     <pre><code class="jaiph-run" data-sample-output="run"><span class="run-command">➜  ./agent_inbox.jh</span>
 
-Jaiph: Running agent_inbox.jh<span class="run-banner-meta"> (Docker sandbox, snapshot)</span>
+Jaiph: Running agent_inbox.jh
 
 <span class="run-keyword">workflow</span> default
   <span class="run-marker">▸</span> <span class="run-keyword">workflow</span> scanner
@@ -464,7 +464,7 @@ workflow default(name) {
                     <p>Running the workflow:</p>
                     <pre><code class="jaiph-run" data-sample-output="run"><span class="run-command">➜  ./async.jh</span>
 
-Jaiph: Running async.jh<span class="run-banner-meta"> (Docker sandbox, snapshot)</span>
+Jaiph: Running async.jh
 
 <span class="run-keyword">workflow</span> default
  <span class="run-marker">₁</span><span class="run-marker">▸</span> <span class="run-keyword">workflow</span> cursor_say_hello
@@ -531,10 +531,9 @@ Jaiph: Running async.jh<span class="run-banner-meta"> (Docker sandbox, snapshot)
                 </p>
 
                 <h3>Runtime</h3>
-                <p><strong>Docker sandboxing.</strong> Workflows run inside Docker by default for local development,
-                    providing
-                    filesystem and process isolation for agent and shell actions. Disable with
-                    <code>JAIPH_UNSAFE=true</code>. See <a href="sandboxing">Sandboxing</a>.
+                <p><strong>Host execution.</strong> Workflows run on the host. Isolation is an outer
+                    concern: wrap jaiph in a container, a pod, or a CI runner if wanted.
+                    See <a href="/how-to/deploy">Deploy jaiph</a>.
                 </p>
                 <p><strong>Hooks.</strong> Attach shell automation to workflow and step lifecycle events via
                     <code>~/.jaiph/hooks.json</code> or <code>&lt;project&gt;/.jaiph/hooks.json</code>. See <a
@@ -544,9 +543,8 @@ Jaiph: Running async.jh<span class="run-banner-meta"> (Docker sandbox, snapshot)
                     executable — a shell script, a Python wrapper, or your own CLI tool — and Jaiph will
                     pipe the prompt via stdin and capture raw stdout as the response. No JSON stream
                     protocol required; just read stdin and print your answer.</p>
-                <p><strong>Artifacts library.</strong> Publish files from inside the sandbox to a host-readable
-                    location with the built-in <code>jaiphlang/artifacts</code> library (<code>artifacts.save</code>).
-                    Works identically in Docker and on the host.
+                <p><strong>Artifacts library.</strong> Publish files from a run with the built-in
+                    <code>jaiphlang/artifacts</code> library (<code>artifacts.save</code>).
                     See <a href="/how-to/artifacts">Save artifacts</a>.
                 </p>
                 <p><strong>Configuration.</strong> Control behavior with <code>config { ... }</code> blocks
@@ -583,12 +581,10 @@ Jaiph: Running async.jh<span class="run-banner-meta"> (Docker sandbox, snapshot)
                     pointer &mdash; so operators get alerting and grouping without scraping run dirs. Host-side,
                     redacted, with zero new dependencies, never load-bearing; successful runs send nothing.
                     See <a href="/how-to/observability#report-failed-runs-to-sentry">Report failed runs to Sentry</a>.</p>
-                <p><strong>Standalone deployment.</strong> The published
-                    <code>ghcr.io/jaiphlang/jaiph-runtime</code> image bakes <code>JAIPH_UNSAFE=true</code>, so
-                    <code>docker run &hellip; jaiph run flow.jh</code> (or a Kubernetes pod) runs workflows directly &mdash;
-                    put credentials plus <code>.jh</code> files and go, with no host Jaiph process and no Docker daemon
-                    inside the container. Here the container/pod boundary <em>is</em> the sandbox; there is no
-                    jaiph-managed isolation. See <a href="/how-to/deploy">Deploy the runtime image standalone</a>.</p>
+                <p><strong>Bring-your-own image.</strong> Wrap <code>jaiph</code> in an image you own
+                    (<code>docker run &hellip; jaiph run flow.jh</code>, or a Kubernetes pod). Jaiph does not
+                    ship a first-party runtime image. Isolation is the container or pod boundary.
+                    See <a href="/how-to/deploy">Deploy jaiph</a>.</p>
                 <p><strong>GitHub Actions install.</strong> The reusable
                     <a href="https://github.com/jaiphlang/jaiph/tree/main/actions/setup-jaiph" target="_blank"
                         rel="noopener noreferrer"><code>setup-jaiph</code></a> composite action installs a pinned

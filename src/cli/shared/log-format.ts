@@ -1,11 +1,9 @@
-import type { SandboxMode } from "../../runtime";
-
-// Pure presentation helpers shared across CLI slices: ANSI colorization, the
-// async-branch subscript indent, and the sandbox parenthetical label. They live
-// under `src/cli/shared` so both the `run` slice (interactive progress tree) and
-// the operator log used by `jaiph mcp` / `jaiph serve` (`shared/server-log.ts`)
-// reuse one implementation without a peer-slice import. No side effects — every
-// function maps inputs to a string.
+// Pure presentation helpers shared across CLI slices: ANSI colorization and
+// the async-branch subscript indent. They live under `src/cli/shared` so both
+// the `run` slice (interactive progress tree) and the operator log used by
+// `jaiph mcp` / `jaiph serve` (`shared/server-log.ts`) reuse one implementation
+// without a peer-slice import. No side effects — every function maps inputs
+// to a string.
 
 export type ColorCode = "dim" | "bold" | "green" | "red" | "yellow" | "blue";
 
@@ -46,19 +44,3 @@ export function buildAsyncIndent(depth: number, asyncIndices: number[]): string 
   return result;
 }
 
-/**
- * The sandbox parenthetical shared by the `jaiph run` banner and the operator
- * log per-call lines: `snapshot` / `in-place` (Docker), `Docker sandbox, unsafe`
- * (host-only via the unsafe opt-in), or `no sandbox`. One vocabulary so the
- * label an operator sees cannot drift between `jaiph run`, `jaiph mcp`, and
- * `jaiph serve`.
- */
-export function sandboxParenLabel(
-  dockerEnabled: boolean,
-  sandboxMode: SandboxMode | null,
-  unsafeMode: boolean,
-): string {
-  if (!dockerEnabled) return unsafeMode ? "Docker sandbox, unsafe" : "no sandbox";
-  if (sandboxMode === "inplace") return "Docker sandbox, in-place";
-  return "Docker sandbox, snapshot";
-}

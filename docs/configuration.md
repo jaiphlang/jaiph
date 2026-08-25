@@ -9,7 +9,7 @@ redirect_from:
 
 # Configuration
 
-This page is the authoritative inventory of Jaiph configuration keys: every key, its value type, default, environment-variable equivalent, and precedence. For environment-variable details (defaults, scopes, sandbox forwarding) see [Environment variables](env-vars.md). For the CLI flags that front-end the same knobs see [CLI](cli.md).
+This page is the authoritative inventory of Jaiph configuration keys: every key, its value type, default, environment-variable equivalent, and precedence. For environment-variable details (defaults, scopes) see [Environment variables](env-vars.md). For the CLI flags that front-end the same knobs see [CLI](cli.md).
 
 Configuration sources, in priority order:
 
@@ -18,7 +18,6 @@ Configuration sources, in priority order:
 3. **Module-level `config { … }`** — applies to all workflows in that file unless overridden.
 4. **Built-in defaults** — lowest priority.
 
-Docker enablement uses a separate, env-only resolution; see [Docker enablement](#docker-enablement).
 
 ## Config block syntax
 
@@ -26,7 +25,7 @@ Docker enablement uses a separate, env-only resolution; see [Docker enablement](
 |---|---|
 | Module-level | At most one `config { … }` block per `.jh` file. May appear anywhere among top-level constructs. |
 | Workflow-level | At most one nested `config { … }` per workflow body. Must be the first non-comment construct in the body. |
-| Allowed module keys | `agent.*`, `run.*`, `runtime.*`, `module.*`, and `trusted_envs`. |
+| Allowed module keys | `agent.*`, `run.*`, `module.*`, and `trusted_envs`. |
 | Allowed workflow keys | `agent.*`, `run.*`, and `trusted_envs`. `runtime.*` and `module.*` are `E_PARSE`. |
 | Duplicate block | `E_PARSE duplicate config block (only one allowed per file)` / `E_PARSE duplicate config block inside workflow (only one allowed per workflow)`. |
 | Unknown key | `E_PARSE unknown config key: <key>. Allowed: …` (lists every allowed key). |
@@ -115,39 +114,10 @@ workflow publish {
 Semantics:
 
 - Declared keys resolve from the **pristine host environment captured once at process start** — never from the calling workflow's scope env. A sub-workflow does not inherit a caller's keys by being called; it must declare `trusted_envs` itself.
-- Resolved values are injected **only into `run`-step script subprocesses** of the declaring workflow. They are **never** forwarded to `prompt` agent subprocesses — the prompt env stays the fail-closed allowlist described in [Sandboxing](sandboxing.md), in every sandbox mode.
+- Resolved values are injected **only into `run`-step script subprocesses** of the declaring workflow. They are **never** forwarded to `prompt` agent subprocesses — the prompt env stays the fail-closed allowlist (base env, `JAIPH_*` control keys, and that backend's own credential keys).
 - Declaring a key anywhere in the file (or an imported module) also **scrubs** it from every workflow's ambient scope env, so only the declaring workflow's `run` steps see it.
-- Pre-flight: a declared key with no value on the host (and no `--env` override) aborts before anything is spawned (`E_ENV_MISSING`). Reserved keys (the `--env` `E_ENV_RESERVED` set, including `JAIPH_DOCKER_*`) are rejected at parse time.
+- Pre-flight: a declared key with no value on the host (and no `--env` override) aborts before anything is spawned (`E_ENV_MISSING`). Reserved keys (the `--env` `E_ENV_RESERVED` set) are rejected at parse time.
 - `--env KEY=VALUE` remains the imperative override: it wins over the host-snapshot value for the same key.
-- Docker: the entry file's resolved keys cross the sandbox boundary through the same explicit `-e` channel as `--env` pairs — **but only when the operator opts in** with `JAIPH_TRUSTED_ENVS=1`. **Authoring the entry file is a trust boundary equal to `--env`:** an untrusted or model-edited entry could name arbitrary host secrets (`AWS_SECRET_ACCESS_KEY`, `GITHUB_TOKEN`) and pull them across the allowlist the sandbox exists to enforce (finding M-7). Absent the opt-in, the entry file's `trusted_envs` is ignored under Docker (with a pre-flight warning) and nothing is forwarded. Host modes have no allowlist to bypass (the runner inherits the host env directly), so they honour the declaration regardless. See [`JAIPH_TRUSTED_ENVS`](env-vars.md).
-
-## Runtime (Docker) keys
-
-These configure the Docker sandbox. Allowed in **module-level** config only. They are read by the host CLI when it considers a Docker launch (`resolveDockerConfig` in `src/runtime/docker.ts`) and never affect `NodeWorkflowRuntime` directly. **Docker on/off is not a `runtime.*` key** — see [Docker enablement](#docker-enablement).
-
-| Key | Type | Default | Env equivalent | Notes |
-|---|---|---|---|---|
-| `runtime.docker_image` | string | `ghcr.io/jaiphlang/jaiph-runtime:<version>` | `JAIPH_DOCKER_IMAGE` | Container image. Must already contain `jaiph` (`E_DOCKER_NO_JAIPH` otherwise). **Host-controlled:** an in-file value is rejected (`E_DOCKER_IMAGE_HOST_ONLY`) when Docker is the active sandbox; set a non-default image only through `JAIPH_DOCKER_IMAGE`. |
-| `runtime.docker_network` | string | `default` | `JAIPH_DOCKER_NETWORK` | `docker run --network` value. `none` disables egress. **Host-controlled for isolation-breaking values:** an in-file `host`, `container:*`, or `ns:*` is rejected (`E_DOCKER_NETWORK_HOST_ONLY`) when Docker is the active sandbox — these dissolve the sandbox network boundary. Host-safe in-file values (`default`, `none`, a named bridge network) are honoured; the operator may still select any value, including `host`, through `JAIPH_DOCKER_NETWORK`. |
-| `runtime.docker_timeout_seconds` | integer | `14400` | `JAIPH_DOCKER_TIMEOUT` | Container execution timeout in seconds. `0` disables. Negative or invalid env value produces `E_DOCKER_TIMEOUT`. |
-
-In-file `runtime.docker_enabled` is not supported (`E_PARSE`); use the env-only enablement below. In the same spirit, `runtime.docker_image` and isolation-breaking `runtime.docker_network` values are host-controlled: a repo- or model-supplied entry file cannot point the sandbox at an arbitrary image or gut its network isolation (finding M-6). When Docker is off (host / `JAIPH_UNSAFE` mode) these keys are inert and not enforced.
-
-The default official image is also pinned by manifest digest. The expected digest ships with the release, and every run verifies the local image against it and fails closed on a mismatch. There is no config-file key for the digest, so set or override it with the [`JAIPH_DOCKER_IMAGE_DIGEST`](env-vars.md) environment variable, which also lets you pin a custom `JAIPH_DOCKER_IMAGE`.
-
-## Docker enablement
-
-Checks are applied top to bottom; the first match wins.
-
-| Check | Result |
-|---|---|
-| Platform is Windows (`win32`) | Docker off (host-only mode, with a one-line notice). Overrides everything below, including `JAIPH_DOCKER_ENABLED=true`. |
-| `JAIPH_DOCKER_ENABLED` is set to exact `true` | Docker on. |
-| `JAIPH_DOCKER_ENABLED` is set to any other value | Docker off. |
-| `JAIPH_DOCKER_ENABLED` is unset and `JAIPH_UNSAFE=true` | Docker off. |
-| Default (no env) | Docker on. |
-
-`CI=true` does not change this default. Host `jaiph run --raw` never consults this branch — the workflow runner is local in that path. On Windows the Docker sandbox is out of scope, so `jaiph run` resolves to host-only mode automatically without probing `docker` or failing on a missing daemon — see [Sandboxing — Windows runs host-only](sandboxing.md#windows-runs-host-only) for the full model.
 
 ## Precedence
 {: #precedence}
@@ -160,17 +130,6 @@ Checks are applied top to bottom; the first match wins.
 | Workflow-level `config` | Applies for the workflow body; restored on exit. |
 | Module-level `config` | Applies to workflows without their own block. |
 | Built-in defaults | Lowest priority. |
-
-### Runtime (Docker) keys
-
-| Layer | Effect |
-|---|---|
-| CLI flags (`--inplace`, `--unsafe`, `--yes` on `jaiph run` / `jaiph serve` / `jaiph mcp`) | Set the corresponding `JAIPH_*` variable on the launched env for that process, so the env layer below stays the single source of truth. |
-| Environment (`JAIPH_DOCKER_*`, `JAIPH_UNSAFE`, `JAIPH_INPLACE`) | Highest env-layer priority for `image`, `network`, `timeout`, and sandbox posture. |
-| Module-level `config` (`runtime.*`) | Applies when no env override is set. |
-| Built-in defaults | Lowest priority. |
-
-Workflow-level `config` cannot set `runtime.*` keys. Contradictory posture (`--inplace`/`JAIPH_INPLACE` together with `--unsafe`/`JAIPH_UNSAFE`) is rejected with `E_FLAG_CONFLICT` before anything is spawned rather than resolved by precedence — see [Environment variables — Precedence](env-vars.md#precedence).
 
 ### Scoping across nested calls
 
@@ -222,9 +181,6 @@ The existing `JAIPH_AGENT_COMMAND_LOCKED=1` / `JAIPH_AGENT_BACKEND_LOCKED=1` fla
 | `run.logs_dir` | `JAIPH_RUNS_DIR` |
 | `run.debug` | `JAIPH_DEBUG` |
 | `run.recover_limit` | _(no env override)_ |
-| `runtime.docker_image` | `JAIPH_DOCKER_IMAGE` |
-| `runtime.docker_network` | `JAIPH_DOCKER_NETWORK` |
-| `runtime.docker_timeout_seconds` | `JAIPH_DOCKER_TIMEOUT` |
 | `module.name` | _(no env override)_ |
 | `module.version` | _(no env override)_ |
 | `module.description` | _(no env override)_ |
@@ -245,17 +201,17 @@ Backend-specific flags come from `agent.cursor_flags` / `agent.claude_flags` (or
 ### Credential pre-flight
 {: #credential-pre-flight}
 
-Before `jaiph run` spawns the workflow runner or Docker container, the host CLI runs a credential pre-flight (`src/cli/run/preflight-credentials.ts`). It collects the distinct backend(s) declared in the entry file's module-level `config` block and each workflow-level block, plus the effective default (`JAIPH_AGENT_BACKEND` env, or `cursor` when unset). Deeper per-import overrides resolved at runtime are not followed.
+Before `jaiph run` spawns the workflow runner, the host CLI runs a credential pre-flight (`src/cli/run/preflight-credentials.ts`). It collects the distinct backend(s) declared in the entry file's module-level `config` block and each workflow-level block, plus the effective default (`JAIPH_AGENT_BACKEND` env, or `cursor` when unset). Deeper per-import overrides resolved at runtime are not followed.
 
-| Backend | Required credential | Host run (no Docker) | Docker run (any mode incl. `inplace`) |
-|---|---|---|---|
-| `codex` | `OPENAI_API_KEY` | hard error (`E_AGENT_CREDENTIALS`) | hard error (`E_AGENT_CREDENTIALS`) |
-| `claude` | `ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN` | warn (CLI login may still work) | hard error (`E_AGENT_CREDENTIALS`) |
-| `cursor` | `CURSOR_API_KEY` | warn (CLI login may still work) | hard error (`E_AGENT_CREDENTIALS`) |
+| Backend | Required credential | Host behaviour |
+|---|---|---|
+| `codex` | `OPENAI_API_KEY` | hard error (`E_AGENT_CREDENTIALS`) |
+| `claude` | `ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN` | warn (CLI login may still work) |
+| `cursor` | `CURSOR_API_KEY` | warn (CLI login may still work) |
 
-Hard errors exit non-zero with no runner or container launched. Warnings go to stderr and the run proceeds. Skip cases: entry file declares no explicit backend and uses no `prompt` step → no pre-flight; `jaiph run --raw` → no pre-flight; `JAIPH_UNSAFE=true` / `--unsafe` → no pre-flight (host escape hatch — runtime backend guards remain).
+Hard errors exit non-zero with no runner launched. Warnings go to stderr and the run proceeds. Skip cases: entry file declares no explicit backend and uses no `prompt` step → no pre-flight; `jaiph run --raw` → no pre-flight.
 
-Every error and warning names: the backend; the model when `agent.model` is set; the entry `.jh` file; the config scope (`module config`, `workflow <name>`, `JAIPH_AGENT_BACKEND env`, or `default`); and the concrete remedy. Docker-mode messages also note that the variable must be set on the host so it gets forwarded.
+Every error and warning names:Every error and warning names: the backend; the model when `agent.model` is set; the entry `.jh` file; the config scope (`module config`, `workflow <name>`, `JAIPH_AGENT_BACKEND env`, or `default`); and the concrete remedy.
 
 ## Model resolution
 {: #model-resolution}
@@ -287,7 +243,7 @@ For the Claude backend, when `agent.model` is set and `agent.claude_flags` does 
 | 5 | 30m |
 | 6 | 2h |
 
-Total worst-case wall-clock: ~2h41m. Under Docker, `runtime.docker_timeout_seconds` caps this.
+Total worst-case wall-clock: ~2h41m.
 
 Only transport failures are retried (non-zero exit from cursor/claude, codex HTTP error, spawn failure). Deterministic post-processing failures — invalid JSON, schema validation — fail on the first attempt and return `{ ok: false }`.
 
@@ -313,14 +269,14 @@ The retry backoff above handles a backend that *fails*. A separate set of watchd
 
 Set any variable to `0` to disable that layer. The idle timer resets on every chunk of backend output, so a slow-but-active run is bounded only by the absolute cap.
 
-The completion-grace layer specifically addresses the known `claude -p` failure mode where the CLI streams its final answer (and the terminal `result` event) but the process never exits — often because a descendant it spawned is still holding the output pipe open. When a watchdog fires it terminates the backend's whole process tree (via `killProcessTree`; see [Architecture](architecture.md)) with `SIGTERM`, escalating to `SIGKILL` after 5s, and tears down the runtime's handles on the child's stdio so a lingering descendant cannot keep the run alive. On Windows the tree is force-killed with `taskkill /T` on the first signal, so the `SIGKILL` escalation is a no-op. Under Docker, `runtime.docker_timeout_seconds` remains the outer backstop for the whole container.
+The completion-grace layer specifically addresses the known `claude -p` failure mode where the CLI streams its final answer (and the terminal `result` event) but the process never exits — often because a descendant it spawned is still holding the output pipe open. When a watchdog fires it terminates the backend's whole process tree (via `killProcessTree`; see [Architecture](architecture.md)) with `SIGTERM`, escalating to `SIGKILL` after 5s, and tears down the runtime's handles on the child's stdio so a lingering descendant cannot keep the run alive. On Windows the tree is force-killed with `taskkill /T` on the first signal, so the `SIGKILL` escalation is a no-op.
 
 ## Overall run timeout and step cap
 {: #overall-run-timeout-and-step-cap}
 
 The prompt watchdogs above bound a single backend call. Jaiph also has two controls that bound the whole run, and both are off by default, so existing runs behave as before.
 
-`JAIPH_RUN_TIMEOUT` sets a parent-enforced wall-clock cap, in seconds, for a host-mode run. Host mode means a `jaiph run --unsafe` or host-only run, and the host spawn that a `jaiph serve` or `jaiph mcp` call uses. Without this cap, the only automatic stop for a host run is a manual Ctrl-C, because the host spawn installs only SIGINT and SIGTERM handlers and the prompt watchdogs cover a single backend call. When the cap is reached, the parent terminates the run child's whole process group with `SIGTERM` and escalates to `SIGKILL` after a short grace period (via `killProcessTree`; see [Architecture](architecture.md)), so the run stops without a manual Ctrl-C, and the failure footer shows `E_RUN_TIMEOUT`. Set it to `0`, leave it empty, or give it an invalid value to disable it, which restores the earlier behaviour where only a manual SIGINT or SIGTERM stops a host run. Docker mode does not use this variable, because a Docker run is already bounded by `runtime.docker_timeout_seconds` (`JAIPH_DOCKER_TIMEOUT`) inside the container.
+`JAIPH_RUN_TIMEOUT` sets a parent-enforced wall-clock cap, in seconds, for a run. Without this cap, the only automatic stop is a manual Ctrl-C, because the host spawn installs only SIGINT and SIGTERM handlers and the prompt watchdogs cover a single backend call. When the cap is reached, the parent terminates the run child's whole process group with `SIGTERM` and escalates to `SIGKILL` after a short grace period (via `killProcessTree`; see [Architecture](architecture.md)), so the run stops without a manual Ctrl-C, and the failure footer shows `E_RUN_TIMEOUT`. Set it to `0`, leave it empty, or give it an invalid value to disable it, which restores the earlier behaviour where only a manual SIGINT or SIGTERM stops a run.
 
 `JAIPH_MAX_STEPS` sets an optional max-step circuit breaker in the runtime. When you set it to a positive integer, the runtime counts every executed step across the whole run, and it counts loop iterations and nested or recursive calls but skips trivia. Once the count goes past the cap, the runtime logs `E_MAX_STEPS`, aborts the run, and returns a failure, so a runaway workflow stops on its own without a manual signal. Set it to `0`, leave it empty, or give it an invalid value to disable the breaker.
 
@@ -357,7 +313,6 @@ Custom commands still participate in `PROMPT_START` / `PROMPT_END`, write artifa
 
 Agent and run settings are visible inside workflows, rules, and scripts as `JAIPH_*` environment variables. In orchestration strings, `${IDENT}` resolves against workflow bindings first, then against the process environment.
 
-`JAIPH_DOCKER_*` variables are not populated from in-file `runtime.*` inside the workflow runner. Docker config is consumed when the CLI spawns the runner (or container); if a script needs Docker-related variables in its environment, export them from the parent shell.
 
 ## Created by `jaiph init`
 
@@ -367,5 +322,5 @@ Agent and run settings are visible inside workflows, rules, and scripts as `JAIP
 
 - [Environment variables](env-vars.md) — every variable Jaiph reads.
 - [CLI](cli.md) — flags that front-end these config knobs.
-- [Sandboxing](sandboxing.md) — Docker sandbox model.
+- [Deploy jaiph](deploy.md) — wrap jaiph in an image or pod for outer isolation.
 - [Grammar](grammar.md) — `config` block syntax in the formal grammar.

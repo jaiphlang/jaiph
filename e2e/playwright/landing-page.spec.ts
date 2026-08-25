@@ -36,7 +36,6 @@ function normalize(text: string): string {
     .map((l: string) => l.trimEnd());
   return lines
     .join('\n')
-    .replace(/\(Docker sandbox, snapshot\)/g, '(Docker sandbox, <sandbox-mode>)')
     .replace(/\((\d+(\.\d+)?s|\d+m \d+s)\)/g, '(<time>)')
     .replace(/\((\d+(\.\d+)?s|\d+m \d+s) failed\)/g, '(<time> failed)')
     .replace(/✓ \d+(\.\d+)?s/g, '✓ <time>')

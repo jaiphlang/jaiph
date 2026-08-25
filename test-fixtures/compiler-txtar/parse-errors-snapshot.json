@@ -39,7 +39,7 @@
     "line": 2,
     "col": 3,
     "code": "E_PARSE",
-    "message": "unknown config key: invalid.key. Allowed: agent.model, agent.command, agent.backend, agent.trusted_workspace, agent.cursor_flags, agent.claude_flags, run.logs_dir, run.debug, run.recover_limit, runtime.docker_image, runtime.docker_network, runtime.docker_timeout_seconds, module.name, module.version, module.description, trusted_envs"
+    "message": "unknown config key: invalid.key. Allowed: agent.model, agent.command, agent.backend, agent.trusted_workspace, agent.cursor_flags, agent.claude_flags, run.logs_dir, run.debug, run.recover_limit, module.name, module.version, module.description, trusted_envs"
   },
   "single-quoted import path": {
     "file": "input.jh",
@@ -162,10 +162,10 @@
   },
   "runtime keys in workflow config": {
     "file": "input.jh",
-    "line": 2,
-    "col": 1,
+    "line": 3,
+    "col": 5,
     "code": "E_PARSE",
-    "message": "runtime.* keys are not allowed in workflow-level config (only agent.* and run.* keys)"
+    "message": "unknown config key: runtime.docker_image. Allowed: agent.model, agent.command, agent.backend, agent.trusted_workspace, agent.cursor_flags, agent.claude_flags, run.logs_dir, run.debug, run.recover_limit, module.name, module.version, module.description, trusted_envs"
   },
   "script tag with manual shebang conflict": {
     "file": "input.jh",
@@ -228,28 +228,28 @@
     "line": 2,
     "col": 3,
     "code": "E_PARSE",
-    "message": "runtime.docker_timeout_seconds must be an integer"
+    "message": "run.recover_limit must be an integer"
   },
   "config array key rejects runtime.workspace (no longer supported)": {
     "file": "input.jh",
     "line": 2,
     "col": 3,
     "code": "E_PARSE",
-    "message": "unknown config key: runtime.workspace. Allowed: agent.model, agent.command, agent.backend, agent.trusted_workspace, agent.cursor_flags, agent.claude_flags, run.logs_dir, run.debug, run.recover_limit, runtime.docker_image, runtime.docker_network, runtime.docker_timeout_seconds, module.name, module.version, module.description, trusted_envs"
+    "message": "unknown config key: runtime.workspace. Allowed: agent.model, agent.command, agent.backend, agent.trusted_workspace, agent.cursor_flags, agent.claude_flags, run.logs_dir, run.debug, run.recover_limit, module.name, module.version, module.description, trusted_envs"
   },
   "config rejects runtime.docker_enabled (no longer supported)": {
     "file": "input.jh",
     "line": 2,
     "col": 3,
     "code": "E_PARSE",
-    "message": "unknown config key: runtime.docker_enabled. Allowed: agent.model, agent.command, agent.backend, agent.trusted_workspace, agent.cursor_flags, agent.claude_flags, run.logs_dir, run.debug, run.recover_limit, runtime.docker_image, runtime.docker_network, runtime.docker_timeout_seconds, module.name, module.version, module.description, trusted_envs"
+    "message": "unknown config key: runtime.docker_enabled. Allowed: agent.model, agent.command, agent.backend, agent.trusted_workspace, agent.cursor_flags, agent.claude_flags, run.logs_dir, run.debug, run.recover_limit, module.name, module.version, module.description, trusted_envs"
   },
   "unknown runtime config key": {
     "file": "input.jh",
     "line": 2,
     "col": 3,
     "code": "E_PARSE",
-    "message": "unknown config key: runtime.unknown_key. Allowed: agent.model, agent.command, agent.backend, agent.trusted_workspace, agent.cursor_flags, agent.claude_flags, run.logs_dir, run.debug, run.recover_limit, runtime.docker_image, runtime.docker_network, runtime.docker_timeout_seconds, module.name, module.version, module.description, trusted_envs"
+    "message": "unknown config key: runtime.unknown_key. Allowed: agent.model, agent.command, agent.backend, agent.trusted_workspace, agent.cursor_flags, agent.claude_flags, run.logs_dir, run.debug, run.recover_limit, module.name, module.version, module.description, trusted_envs"
   },
   "if keyword with old syntax produces error": {
     "file": "input.jh",
@@ -662,21 +662,21 @@
     "line": 2,
     "col": 3,
     "code": "E_PARSE",
-    "message": "unknown config key: runtime.workspace. Allowed: agent.model, agent.command, agent.backend, agent.trusted_workspace, agent.cursor_flags, agent.claude_flags, run.logs_dir, run.debug, run.recover_limit, runtime.docker_image, runtime.docker_network, runtime.docker_timeout_seconds, module.name, module.version, module.description, trusted_envs"
+    "message": "unknown config key: runtime.workspace. Allowed: agent.model, agent.command, agent.backend, agent.trusted_workspace, agent.cursor_flags, agent.claude_flags, run.logs_dir, run.debug, run.recover_limit, module.name, module.version, module.description, trusted_envs"
   },
   "metadata: runtime.workspace array rejected (unquoted element)": {
     "file": "input.jh",
     "line": 2,
     "col": 3,
     "code": "E_PARSE",
-    "message": "unknown config key: runtime.workspace. Allowed: agent.model, agent.command, agent.backend, agent.trusted_workspace, agent.cursor_flags, agent.claude_flags, run.logs_dir, run.debug, run.recover_limit, runtime.docker_image, runtime.docker_network, runtime.docker_timeout_seconds, module.name, module.version, module.description, trusted_envs"
+    "message": "unknown config key: runtime.workspace. Allowed: agent.model, agent.command, agent.backend, agent.trusted_workspace, agent.cursor_flags, agent.claude_flags, run.logs_dir, run.debug, run.recover_limit, module.name, module.version, module.description, trusted_envs"
   },
   "metadata: runtime.workspace array rejected (unclosed)": {
     "file": "input.jh",
     "line": 2,
     "col": 3,
     "code": "E_PARSE",
-    "message": "unknown config key: runtime.workspace. Allowed: agent.model, agent.command, agent.backend, agent.trusted_workspace, agent.cursor_flags, agent.claude_flags, run.logs_dir, run.debug, run.recover_limit, runtime.docker_image, runtime.docker_network, runtime.docker_timeout_seconds, module.name, module.version, module.description, trusted_envs"
+    "message": "unknown config key: runtime.workspace. Allowed: agent.model, agent.command, agent.backend, agent.trusted_workspace, agent.cursor_flags, agent.claude_flags, run.logs_dir, run.debug, run.recover_limit, module.name, module.version, module.description, trusted_envs"
   },
   "unterminated test block": {
     "file": "input.test.jh",

@@ -208,7 +208,7 @@ Sends text to the configured agent backend. The body can take one of these forms
 | Typed `returns` | Flat `{ field: type, … }` with `string` / `number` / `boolean`. Stored verbatim as text per-field. |
 | Capture required when `returns` | `prompt … returns "…"` without `const` is `E_PARSE`. |
 | Dot notation | Bare `result.field` (in `return`, `if` / `match` subjects, and call arguments) and `${result.field}` **inside strings** require that the base is a typed-prompt capture and the field appears in the schema. Unquoted `${result.field}` in call-argument position is `E_VALIDATE`. |
-| Interpolation into shell steps | A prompt capture (`const x = prompt …`, typed or untyped) interpolated into a workflow shell step — e.g. `echo "${x}"` as a free-form body line — is `W_PROMPT_IN_SHELL`. Shell steps run via `sh -c`, and the runtime shell-quotes every value it interpolates into the line, so an agent-controlled value reaches the shell as data and cannot inject a command; the diagnostic still fires to steer you to the argv path. Pass it as a script argument instead (`run my_script(x)` → `$1`, which is argv, not shell-expanded). Only shell steps are flagged; `run script(x)`, `log`, `logerr`, and non-prompt variables are not. See [Sandboxing — Prompt captures in shell steps](sandboxing.md#prompt-in-shell). |
+| Interpolation into shell steps | A prompt capture (`const x = prompt …`, typed or untyped) interpolated into a workflow shell step — e.g. `echo "${x}"` as a free-form body line — is `W_PROMPT_IN_SHELL`. Shell steps run via `sh -c`, and the runtime shell-quotes every value it interpolates into the line, so an agent-controlled value reaches the shell as data and cannot inject a command; the diagnostic still fires to steer you to the argv path. Pass it as a script argument instead (`run my_script(x)` → `$1`, which is argv, not shell-expanded). Only shell steps are flagged; `run script(x)`, `log`, `logerr`, and non-prompt variables are not. |
 | Rule scope | Forbidden — `prompt` and `const … = prompt` are rejected at parse time (`E_PARSE`) inside rules. |
 | Transport retry | Transport failures retry on a backoff schedule; deterministic post-processing failures do not. See [Configuration — Prompt retry on transport failure](configuration.md#prompt-retry-on-transport-failure). |
 
@@ -409,7 +409,7 @@ No string-RHS site accepts two of these but rejects the third.
 
 If an inline capture fails, the enclosing step fails. Nested inline captures (`${run foo(${run bar()})}`) are `E_PARSE` — extract the inner call to a `const`.
 
-Values interpolated into a workflow shell step (a free-form body line that runs via `sh -c`) are shell-quoted first, so a value that contains shell metacharacters is passed to the shell as data and cannot inject a command. Every other string position interpolates the raw value. See [Sandboxing — Prompt captures in shell steps](sandboxing.md#prompt-in-shell).
+Values interpolated into a workflow shell step (a free-form body line that runs via `sh -c`) are shell-quoted first, so a value that contains shell metacharacters is passed to the shell as data and cannot inject a command. Every other string position interpolates the raw value.
 
 ## Rule scope restrictions
 

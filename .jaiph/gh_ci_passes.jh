@@ -5,8 +5,8 @@
 # loop with an agent until CI is green (or run.recover_limit is hit).
 #
 # Run as:
-#   jaiph run --unsafe --env GITHUB_TOKEN .jaiph/gh_ci_passes.jh
-#   jaiph run --unsafe --env GITHUB_TOKEN .jaiph/gh_ci_passes.jh -- my-feature-branch
+#   jaiph run --env GITHUB_TOKEN .jaiph/gh_ci_passes.jh
+#   jaiph run --env GITHUB_TOKEN .jaiph/gh_ci_passes.jh -- my-feature-branch
 #
 # Requires: GH_TOKEN or GITHUB_TOKEN (via --env), jq, git, network access.
 # Each retry waits on HEAD after commit+push — do not pin an old commit here.

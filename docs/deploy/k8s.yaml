@@ -1,10 +1,9 @@
-# Standalone Jaiph on Kubernetes — long-lived HTTP runner.
+# Jaiph on Kubernetes — long-lived HTTP runner.
 #
-# This runs the published runtime image directly as a Deployment: the image
-# already contains `jaiph`, the claude/cursor/codex backends, and a full
-# toolchain, and it bakes `JAIPH_UNSAFE=true`, so the pod runs workflows in
-# host mode — the pod boundary IS the sandbox (there is no jaiph-managed Docker
-# sandbox in standalone mode). See docs/deploy.md for the security posture.
+# Wrap jaiph in an image you own: this manifest does not ship a first-party
+# runtime image. Set `image:` to a registry image that has `jaiph` on PATH
+# (and any agent backends / toolchain your workflows need). Isolation is the
+# pod boundary. See docs/deploy.md.
 #
 # Credentials are NOT part of this manifest. Create the `jaiph-credentials`
 # Secret out-of-band before applying — the Deployment references it as a
@@ -25,9 +24,6 @@
 #
 # Validate the schema without a cluster:
 #   kubectl apply --dry-run=client -f docs/deploy/k8s.yaml
-# The real deployment contract (a run completes and lands its journal on the
-# writable runs volume, the pod is non-root with no privilege escalation) is
-# exercised end-to-end against a kind cluster by e2e/tests/150_k8s_deploy.sh.
 #
 # The workflow file is supplied here via a ConfigMap mounted read-only at
 # /work for a self-contained example; a real deployment usually bakes
@@ -78,7 +74,7 @@ spec:
       # (and the agent backends they spawn) an API credential.
       automountServiceAccountToken: false
       securityContext:
-        # UID/GID 10001 is the image's `jaiph` user; fsGroup makes the
+        # Set UID/GID to the non-root user in YOUR image; fsGroup makes the
         # emptyDir volumes below group-writable for it.
         runAsNonRoot: true
         runAsUser: 10001
@@ -88,10 +84,8 @@ spec:
           type: RuntimeDefault
       containers:
         - name: jaiph
-          # Pin the image tag (or, better, a @sha256 digest) for reproducible
-          # rollouts — do NOT track a moving tag like :nightly in production.
-          image: ghcr.io/jaiphlang/jaiph-runtime:nightly
-          # The image sets no ENTRYPOINT, so spell the full command.
+          # Replace with an image you built that has `jaiph` on PATH.
+          image: your-registry/your-jaiph-image:tag
           command: ["jaiph", "serve", "--host", "0.0.0.0", "/work/tools.jh"]
           securityContext:
             allowPrivilegeEscalation: false
@@ -108,8 +102,7 @@ spec:
               value: /jaiph/runs
             # Agent CLIs (claude, cursor-agent) persist state under $HOME.
             # Point HOME at a writable emptyDir instead of the image's
-            # read-only /home/jaiph; the baked PATH still resolves
-            # cursor-agent from /home/jaiph/.local/bin.
+            # read-only home directory.
             - name: HOME
               value: /jaiph/home
             # Optional observability — uncomment and point at your stack.

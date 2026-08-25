@@ -7,26 +7,19 @@ import { dirname, join } from "node:path";
 
 /**
  * One execution-policy contract across `jaiph run`, `jaiph serve`, and
- * `jaiph mcp` — the table below drives the same sandbox/env cases through all
- * three modes and asserts the same effective child env, the same filesystem
- * outcome, and the same fail-before-spawn behavior for conflicting posture.
- *
- * Everything here is host-mode (hermetic, no Docker daemon): `--unsafe` and
- * Docker-off-by-config are exercised end to end, and the flag → env → posture
- * mapping for `--inplace` is pinned by unit tests with docker seams
- * (`src/cli/shared/generation-posture.test.ts`) plus the Docker e2e lane
- * (`e2e/tests/141_mcp_docker_sandbox.sh`), which proves snapshot/inplace
- * isolation against a real daemon.
+ * `jaiph mcp` — the table below drives the same `--env` cases through all
+ * three modes and asserts the same effective child env and the same
+ * filesystem outcome.
  */
 
 const CLI_PATH = join(process.cwd(), "dist/src/cli.js");
 
-// `env_probe` reports the passthrough keys and the posture control vars the
-// child observes; `write_marker` makes filesystem isolation observable.
+// `env_probe` reports the passthrough keys; `write_marker` makes workspace
+// writes observable.
 const FIXTURE = [
-  "script env_probe = `printf '%s|%s|%s|%s' \"${PROBE_A:-unset}\" \"${PROBE_B:-unset}\" \"${JAIPH_UNSAFE:-unset}\" \"${JAIPH_INPLACE:-unset}\"`",
+  "script env_probe = `printf '%s|%s' \"${PROBE_A:-unset}\" \"${PROBE_B:-unset}\"`",
   'script write_marker = `printf \'marker\' > "$JAIPH_WORKSPACE/written.txt"`',
-  "# Writes a workspace marker, then reports probe env values and posture vars.",
+  "# Writes a workspace marker, then reports probe env values.",
   "workflow probe_and_write() {",
   "  run write_marker()",
   "  const seen = run env_probe()",
@@ -40,8 +33,8 @@ const FIXTURE = [
   "",
 ].join("\n");
 
-/** Sandbox-control keys that must not leak in from the test-runner env. */
-const CONTROL_KEYS = ["JAIPH_UNSAFE", "JAIPH_INPLACE", "JAIPH_INPLACE_YES", "JAIPH_DOCKER_ENABLED", "JAIPH_TRUST_PROJECT_HOOKS", "PROBE_A", "PROBE_B"];
+/** Keys that must not leak in from the test-runner env. */
+const CONTROL_KEYS = ["JAIPH_TRUST_PROJECT_HOOKS", "PROBE_A", "PROBE_B"];
 
 function cleanEnv(extra: Record<string, string>): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...process.env, PATH: `${dirname(process.execPath)}:${process.env.PATH ?? ""}` };
@@ -200,14 +193,14 @@ async function runMcpMode(ws: string, fixture: string, flags: string[], env: Nod
 }
 
 // ---------------------------------------------------------------------------
-// Table: the same sandbox/env case observed through all three modes
+// Table: the same --env case observed through all three modes
 // ---------------------------------------------------------------------------
 
 interface PolicyCase {
   name: string;
   flags: string[];
   env: Record<string, string>;
-  /** Expected `PROBE_A|PROBE_B|JAIPH_UNSAFE|JAIPH_INPLACE` as the child sees it. */
+  /** Expected `PROBE_A|PROBE_B` as the child sees it. */
   expectProbe: string;
   /** Expected startup-posture fragment on serve/mcp stderr. */
   expectPosture: string;
@@ -215,31 +208,11 @@ interface PolicyCase {
 
 const POLICY_CASES: PolicyCase[] = [
   {
-    name: "--env passthrough (explicit value + host forward), Docker off by config",
+    name: "--env passthrough (explicit value + host forward)",
     flags: ["--env", "PROBE_A=va", "--env", "PROBE_B"],
-    env: { PROBE_B: "vb", JAIPH_DOCKER_ENABLED: "false" },
-    expectProbe: "va|vb|unset|unset",
-    expectPosture: "execute on the host with no sandbox.",
-  },
-  {
-    name: "--unsafe --yes (unsafe opt-in turns Docker off; consent recorded)",
-    flags: ["--unsafe", "--yes"],
-    // Server modes print the loud SANDBOXING DISABLED banner on the explicit
-    // unsafe consent (finding M-1); `jaiph run` has no banner (probed separately).
-    env: {},
-    expectProbe: "unset|unset|true|unset",
-    expectPosture: "UNSAFE MODE — SANDBOXING DISABLED",
-  },
-  {
-    // With Docker off by config the inplace *mount* is moot, but the flag's
-    // env normalization (JAIPH_INPLACE=1 on the child) must still be identical
-    // across modes — the Docker-side effect of that env value is pinned by
-    // generation-posture unit tests and the Docker e2e lane.
-    name: "--inplace normalizes JAIPH_INPLACE=1 onto every child, Docker off by config",
-    flags: ["--inplace"],
-    env: { JAIPH_DOCKER_ENABLED: "false" },
-    expectProbe: "unset|unset|unset|1",
-    expectPosture: "execute on the host with no sandbox.",
+    env: { PROBE_B: "vb" },
+    expectProbe: "va|vb",
+    expectPosture: "execute on the host.",
   },
 ];
 
@@ -274,34 +247,6 @@ for (const c of POLICY_CASES) {
     }
   });
 }
-
-// ---------------------------------------------------------------------------
-// Conflicting posture fails before anything spawns — all three modes
-// ---------------------------------------------------------------------------
-
-test("exec policy: --inplace + --unsafe conflict fails before spawning in run, serve, and mcp", async () => {
-  for (const mode of ["run", "serve", "mcp"] as const) {
-    const { ws, fixture } = makeWorkspace();
-    try {
-      const env = cleanEnv({});
-      const flags = ["--inplace", "--unsafe", "--yes"];
-      let outcome: ModeOutcome;
-      if (mode === "run") {
-        outcome = runDirect(ws, fixture, flags, env);
-      } else if (mode === "serve") {
-        outcome = await runServeMode(ws, fixture, flags, env);
-      } else {
-        outcome = await runMcpMode(ws, fixture, flags, env);
-      }
-      assert.equal(outcome.exitCode, 1, `${mode} exits 1 on the posture conflict`);
-      assert.match(outcome.stderr, /E_FLAG_CONFLICT/, `${mode} names the conflict`);
-      assert.equal(existsSync(join(ws, "written.txt")), false, `${mode}: nothing spawned, no workspace write`);
-      assert.equal(existsSync(join(ws, ".jaiph", "runs")), false, `${mode}: no run directory was created`);
-    } finally {
-      rmSync(ws, { recursive: true, force: true });
-    }
-  }
-});
 
 // ---------------------------------------------------------------------------
 // Flags belonging to another command are usage errors
@@ -408,7 +353,7 @@ test("hook contract: direct `jaiph run` dispatches all four events with the docu
     const hooksLog = writeHooksConfig(ws);
     // Project-local hooks are gated behind the per-workspace trust opt-in
     // (finding M-10); this contract exercises the trusted path.
-    const outcome = runDirect(ws, fixture, [], cleanEnv({ JAIPH_DOCKER_ENABLED: "false", JAIPH_TRUST_PROJECT_HOOKS: "1", HOOKS_LOG: hooksLog }));
+    const outcome = runDirect(ws, fixture, [], cleanEnv({ JAIPH_TRUST_PROJECT_HOOKS: "1", HOOKS_LOG: hooksLog }));
     assert.equal(outcome.exitCode, 0, `run failed:\n${outcome.stderr}`);
     assertHookContract(await waitForHookEvents(hooksLog), fixture, ws, "run");
   } finally {
@@ -423,7 +368,7 @@ test("hook contract: untrusted workspace does not run project-local hooks (findi
     // No JAIPH_TRUST_PROJECT_HOOKS: the project-local .jaiph/hooks.json must not
     // execute its host commands, so the hooks log is never created. The run
     // itself still succeeds (a hook gate never fails the workflow).
-    const outcome = runDirect(ws, fixture, [], cleanEnv({ JAIPH_DOCKER_ENABLED: "false", HOOKS_LOG: hooksLog }));
+    const outcome = runDirect(ws, fixture, [], cleanEnv({ HOOKS_LOG: hooksLog }));
     assert.equal(outcome.exitCode, 0, `run should still succeed:\n${outcome.stderr}`);
     assert.equal(existsSync(hooksLog), false, "no hook command ran, so the log was never written");
     assert.match(
@@ -441,7 +386,7 @@ test("hook contract: HTTP `jaiph serve` runs dispatch the same four events", asy
   const { ws, fixture } = makeWorkspace();
   try {
     const hooksLog = writeHooksConfig(ws);
-    const outcome = await runServeMode(ws, fixture, [], cleanEnv({ JAIPH_DOCKER_ENABLED: "false", JAIPH_TRUST_PROJECT_HOOKS: "1", HOOKS_LOG: hooksLog }));
+    const outcome = await runServeMode(ws, fixture, [], cleanEnv({ JAIPH_TRUST_PROJECT_HOOKS: "1", HOOKS_LOG: hooksLog }));
     assert.notEqual(outcome.exitCode, 1, `serve failed:\n${outcome.stderr}`);
     assertHookContract(await waitForHookEvents(hooksLog), fixture, ws, "serve");
   } finally {
@@ -453,7 +398,7 @@ test("hook contract: MCP tool calls dispatch the same four events", async () => 
   const { ws, fixture } = makeWorkspace();
   try {
     const hooksLog = writeHooksConfig(ws);
-    const outcome = await runMcpMode(ws, fixture, [], cleanEnv({ JAIPH_DOCKER_ENABLED: "false", JAIPH_TRUST_PROJECT_HOOKS: "1", HOOKS_LOG: hooksLog }));
+    const outcome = await runMcpMode(ws, fixture, [], cleanEnv({ JAIPH_TRUST_PROJECT_HOOKS: "1", HOOKS_LOG: hooksLog }));
     assert.notEqual(outcome.exitCode, 1, `mcp failed:\n${outcome.stderr}`);
     assertHookContract(await waitForHookEvents(hooksLog), fixture, ws, "mcp");
   } finally {

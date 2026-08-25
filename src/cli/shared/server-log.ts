@@ -1,5 +1,5 @@
-import { canUseAnsi, type SandboxMode } from "../../runtime";
-import { buildAsyncIndent, colorize, sandboxParenLabel, type ColorCode } from "./log-format";
+import { canUseAnsi } from "../../runtime";
+import { buildAsyncIndent, colorize, type ColorCode } from "./log-format";
 
 // Operator log for the long-lived workflow servers `jaiph mcp` and `jaiph serve`.
 // It is deliberately NOT a logging framework (no winston / pino / bunyan — that
@@ -45,30 +45,25 @@ export interface MirrorContext {
 }
 
 /**
- * Operator-log wiring for one workflow call: the {@link ServerLog} plus the
- * server's constant sandbox label. Injected by the command layer into a
- * `WorkflowCallContext` so `callWorkflow` (the shared choke point for both
- * `jaiph mcp` and `jaiph serve`) emits per-call banners through one path.
+ * Operator-log wiring for one workflow call: the {@link ServerLog}. Injected
+ * by the command layer into a `WorkflowCallContext` so `callWorkflow` (the
+ * shared choke point for both `jaiph mcp` and `jaiph serve`) emits per-call
+ * banners through one path.
  */
 export interface OperatorLog {
   log: ServerLog;
-  /** Effective sandbox label for this server (`sandboxParenLabel`), constant per call. */
-  sandboxLabel: string;
 }
 
 /**
  * Build the {@link OperatorLog} a server hands to every call: a {@link ServerLog}
  * over the injectable stderr `write` sink (colors only on a TTY sink with
- * `NO_COLOR` unset, verbosity/mirror knobs read from the process env) plus the
- * sandbox label resolved once from the startup posture. One factory so `jaiph
- * mcp` and `jaiph serve` wire the operator log identically with a single import.
+ * `NO_COLOR` unset, verbosity/mirror knobs read from the process env). One
+ * factory so `jaiph mcp` and `jaiph serve` wire the operator log identically
+ * with a single import.
  */
 export function createOperatorLog(opts: {
   label: string;
   write: (line: string) => void;
-  dockerEnabled: boolean;
-  sandboxMode: SandboxMode;
-  unsafeHostOnly: boolean;
 }): OperatorLog {
   return {
     log: createServerLog({
@@ -77,7 +72,6 @@ export function createOperatorLog(opts: {
       colorEnabled: canUseAnsi(process.stderr),
       ...resolveServerLogEnv(process.env),
     }),
-    sandboxLabel: sandboxParenLabel(opts.dockerEnabled, opts.sandboxMode, opts.unsafeHostOnly),
   };
 }
 
@@ -134,8 +128,6 @@ export function createServerLog(opts: {
 export interface CallStartFields {
   /** Workflow symbol or entry basename. */
   workflow: string;
-  /** Effective sandbox label (`sandboxParenLabel`). */
-  sandboxLabel: string;
   runId: string;
   /** Present only when the run dir is already known (rarely at start). */
   rundir?: string;
@@ -146,12 +138,11 @@ export interface CallStartFields {
 
 /**
  * One-line per-call start banner, e.g.
- * `Running engineer (Docker sandbox, unsafe) run_id=… rundir=… principal=…`.
- * The sandbox label is always parenthesized so an operator sees the posture the
- * call ran under; `run_id` and `rundir` are grep-friendly `key=value` tails.
+ * `Running engineer run_id=… rundir=… principal=…`.
+ * `run_id` and `rundir` are grep-friendly `key=value` tails.
  */
 export function formatCallStartLine(f: CallStartFields): string {
-  const parts = [`Running ${f.workflow} (${f.sandboxLabel})`, `run_id=${f.runId}`];
+  const parts = [`Running ${f.workflow}`, `run_id=${f.runId}`];
   if (f.rundir) parts.push(`rundir=${f.rundir}`);
   if (f.principal) parts.push(`principal=${f.principal}`);
   if (f.correlationId) parts.push(`correlation=${f.correlationId}`);

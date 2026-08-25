@@ -32,12 +32,6 @@ const HOW_TO_PAGES: HowToPage[] = [
     navPermalink: "/how-to/install",
   },
   {
-    file: "sandbox-run.md",
-    permalink: "/how-to/sandbox-run",
-    redirectFrom: [],
-    navPermalink: "/how-to/sandbox-run",
-  },
-  {
     file: "agent-auth.md",
     permalink: "/how-to/agent-auth",
     redirectFrom: [],

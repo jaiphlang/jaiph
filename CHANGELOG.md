@@ -2,7 +2,11 @@
 
 ## Summary
 
+- **Host-only execution:** `jaiph run`, `jaiph mcp`, and `jaiph serve` execute on the host. The Docker sandbox driver, runtime image, and sandbox flags/environment variables are removed. Isolation is an outer concern — wrap `jaiph` if you want a container or kernel sandbox.
+
 ## All changes
+
+- **Removed — first-party Docker sandbox:** no Docker driver, no digest-pinned runtime image, no snapshot/inplace modes, no `--unsafe` / `--inplace` / `--yes` sandbox consent, no `JAIPH_UNSAFE` / `JAIPH_INPLACE*` / `JAIPH_DOCKER_*`, no in-file `runtime.docker_*`. `prompt` env scrub, journal redaction, `--env`, and `trusted_envs` stay.
 
 # 0.13.0
 

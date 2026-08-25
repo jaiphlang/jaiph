@@ -68,9 +68,6 @@ export function parseWorkflowBlock(
         if (workflow.metadata !== undefined) {
           fail(filePath, "duplicate config block inside workflow (only one allowed per workflow)", configLineNo);
         }
-        if (metadata.runtime) {
-          fail(filePath, "runtime.* keys are not allowed in workflow-level config (only agent.* and run.* keys)", configLineNo);
-        }
         if (metadata.module) {
           fail(filePath, "module.* keys are not allowed in workflow-level config (only agent.* and run.* keys)", configLineNo);
         }

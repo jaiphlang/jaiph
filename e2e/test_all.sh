@@ -12,7 +12,6 @@ TEST_SCRIPTS=(
   "e2e/tests/06_bootstrap_integrity.sh"
   "e2e/tests/07_installer_binary.sh"
   "e2e/tests/08_setup_action.sh"
-  "e2e/tests/09_dockerfile_fetch_verify.sh"
   "e2e/tests/10_basic_workflows.sh"
   "e2e/tests/20_rule_and_prompt.sh"
   "e2e/tests/22_assign_capture.sh"
@@ -26,18 +25,7 @@ TEST_SCRIPTS=(
   "e2e/tests/65_fail_then_retry_pass.sh"
   "e2e/tests/70_run_artifacts.sh"
   "e2e/tests/71_loop_run_artifacts.sh"
-  "e2e/tests/72_docker_run_artifacts.sh"
-  "e2e/tests/74b_docker_signal_cleanup.sh"
-  "e2e/tests/74c_docker_prepull.sh"
-  "e2e/tests/74d_docker_snapshot_isolation.sh"
-  "e2e/tests/74e_docker_git_snapshot_content.sh"
-  "e2e/tests/74f_docker_probe_hardening.sh"
-  "e2e/tests/74g_docker_digest_verify.sh"
-  "e2e/tests/74_docker_lifecycle.sh"
   "e2e/tests/74_live_step_output.sh"
-  "e2e/tests/75_docker_live_step_output.sh"
-  "e2e/tests/76_docker_failure_parity.sh"
-  "e2e/tests/77_unsafe_confirm.sh"
   "e2e/tests/78_lang_redesign_constructs.sh"
   "e2e/tests/79_workflow_fail_keyword.sh"
   "e2e/tests/80_cli_behavior.sh"
@@ -54,7 +42,6 @@ TEST_SCRIPTS=(
   "e2e/tests/92_log_logerr.sh"
   "e2e/tests/142_logwarn.sh"
   "e2e/tests/143_step_idle_warn.sh"
-  "e2e/tests/143_docker_toolchain.sh"
   "e2e/tests/93_ensure_recover_payload.sh"
   "e2e/tests/93_inbox_stress.sh"
   "e2e/tests/94_parallel_shell_steps.sh"
@@ -111,64 +98,20 @@ TEST_SCRIPTS=(
   "e2e/tests/139_mcp_server_session.sh"
   "e2e/tests/139_agent_credentials_preflight.sh"
   "e2e/tests/140_env_passthrough.sh"
-  "e2e/tests/141_mcp_docker_sandbox.sh"
   "e2e/tests/147_serve_http_api.sh"
   "e2e/tests/152_shell_injection_serve.sh"
   "e2e/tests/149_mcp_generation_lifecycle.sh"
   "e2e/tests/146_trusted_envs.sh"
-  "e2e/tests/148_standalone_image.sh"
-  "e2e/tests/151_serve_transports_docker.sh"
-  "e2e/tests/150_k8s_deploy.sh"
-  "e2e/tests/153_docker_network_host_control.sh"
   "e2e/tests/210_standalone_binary.sh"
 )
 
 PASS_COUNT=0
 FAIL_COUNT=0
-SKIP_COUNT=0
-
-# When set (1|true), skip Docker-daemon e2e scripts — used by the overnight
-# engineer `ensure_ci_passes` loop so flaky Docker Desktop e2e cannot trap the
-# recover agent. GitHub Actions does not set this; full Docker e2e remains
-# required there. Match `*_docker_*` / `*_docker` / `docker_*` basenames so
-# static Dockerfile checks (e.g. 09_dockerfile_fetch_verify) still run.
-# A few Docker-daemon scripts don't carry "docker" in their basename (e.g.
-# 148_standalone_image builds and runs a real container); list them explicitly
-# so they skip too instead of trapping the recover agent on daemon flakes.
-# This list must stay complete: it is exactly the set of e2e scripts that gate
-# on `docker info` (i.e. need the daemon) but lack docker in their basename.
-# The test `docs/env-vars` sibling guard in src/runtime/docker.test.ts
-# ("E2E_DOCKER_DAEMON_SCRIPTS covers every daemon script …") fails if a new
-# daemon script is added without being listed here.
-E2E_DOCKER_DAEMON_SCRIPTS=(
-  "140_env_passthrough"
-  "146_trusted_envs"
-  "148_standalone_image"
-  "150_k8s_deploy"
-)
-e2e::skip_docker_script() {
-  case "${JAIPH_E2E_SKIP_DOCKER:-}" in
-    1|true|TRUE|yes|YES) ;;
-    *) return 1 ;;
-  esac
-  local script_name="$1"
-  if [[ "${script_name}" == *docker_* || "${script_name}" == *_docker || "${script_name}" == docker_* ]]; then
-    return 0
-  fi
-  local daemon_script
-  for daemon_script in "${E2E_DOCKER_DAEMON_SCRIPTS[@]}"; do
-    [[ "${script_name}" == "${daemon_script}" ]] && return 0
-  done
-  return 1
-}
 
 e2e::section "Suite setup"
 e2e::prepare_shared_context
 e2e::ensure_local_install
 e2e::pass "shared install and workspace prepared"
-if e2e::skip_docker_script "docker"; then
-  e2e::pass "JAIPH_E2E_SKIP_DOCKER set — Docker-named e2e scripts will be skipped"
-fi
 
 for script in "${TEST_SCRIPTS[@]}"; do
   script_path="${ROOT_DIR}/${script}"
@@ -178,13 +121,6 @@ for script in "${TEST_SCRIPTS[@]}"; do
   mkdir -p "${test_dir}"
 
   e2e::section "Running ${script_name}"
-  if e2e::skip_docker_script "${script_name}"; then
-    SKIP_COUNT=$((SKIP_COUNT + 1))
-    e2e::skip "${script_name} (JAIPH_E2E_SKIP_DOCKER)"
-    continue
-  fi
-  # JAIPH_UNSAFE is not defaulted here: unset → Docker on (see resolveDockerConfig).
-  # CI sets per-job env (ubuntu docker vs host). For fast local runs: JAIPH_UNSAFE=true npm run test:e2e
   if JAIPH_E2E_SKIP_INSTALL=1 \
     JAIPH_E2E_TMP_DIR="${JAIPH_E2E_TMP_DIR:-}" \
     JAIPH_E2E_BIN_DIR="${JAIPH_E2E_BIN_DIR}" \
@@ -202,5 +138,4 @@ done
 e2e::section "Summary"
 printf "  Passed scripts: %s\n" "${PASS_COUNT}"
 printf "  Failed scripts: %s\n" "${FAIL_COUNT}"
-printf "  Skipped scripts: %s\n" "${SKIP_COUNT}"
 printf "All e2e scripts completed successfully.\n"

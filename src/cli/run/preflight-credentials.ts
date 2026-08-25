@@ -4,7 +4,7 @@ import type {
   jaiphModule,
   WorkflowStepDef,
 } from "../../types";
-import { isEnvAllowed, type AgentBackend } from "../../runtime";
+import type { AgentBackend } from "../../runtime";
 
 export const E_AGENT_CREDENTIALS = "E_AGENT_CREDENTIALS";
 
@@ -25,7 +25,6 @@ export interface PreflightArgs {
   mod: jaiphModule;
   inputAbs: string;
   runtimeEnv: Record<string, string | undefined>;
-  dockerEnabled: boolean;
 }
 
 /**
@@ -70,32 +69,13 @@ function collectBackendUsages(
 }
 
 /**
- * Backends the entry file can select, in scan order — the same entry-file
- * contract as the credential pre-flight above. Feeds
- * `DockerSpawnOptions.backends` so the Docker sandbox forwards exactly the
- * credential keys these backends need (`BACKEND_CREDENTIAL_KEYS`).
- */
-export function collectEntryBackends(
-  mod: jaiphModule,
-  runtimeEnv: Record<string, string | undefined>,
-): AgentBackend[] {
-  return collectBackendUsages(mod, runtimeEnv).map((usage) => usage.backend);
-}
-
-/**
  * True when `key` is set to a non-empty value in the env that will actually
- * reach the agent. When Docker is on, the host-side allowlist (`isEnvAllowed`,
- * scoped to the backend being checked) runs first — a credential present on
- * the host but not forwarded for that backend is treated as missing because
- * the container will never see it.
+ * reach the agent.
  */
 function hasCredential(
   env: Record<string, string | undefined>,
   key: string,
-  dockerEnabled: boolean,
-  backend: AgentBackend,
 ): boolean {
-  if (dockerEnabled && !isEnvAllowed(key, [backend])) return false;
   const v = env[key];
   return typeof v === "string" && v.length > 0;
 }
@@ -105,33 +85,21 @@ function formatHeader(usage: BackendUsage, inputAbs: string): string {
   return `agent.backend "${usage.backend}"${modelPart} selected by ${usage.scope} in ${inputAbs}`;
 }
 
-function dockerSuffix(dockerEnabled: boolean): string {
-  return dockerEnabled
-    ? " (Docker is on — set the env var on the host so it is forwarded into the container.)"
-    : "";
-}
-
 function checkClaude(
   usage: BackendUsage,
   args: PreflightArgs,
   out: PreflightResult,
 ): void {
   const ok =
-    hasCredential(args.runtimeEnv, "ANTHROPIC_API_KEY", args.dockerEnabled, usage.backend) ||
-    hasCredential(args.runtimeEnv, "CLAUDE_CODE_OAUTH_TOKEN", args.dockerEnabled, usage.backend);
+    hasCredential(args.runtimeEnv, "ANTHROPIC_API_KEY") ||
+    hasCredential(args.runtimeEnv, "CLAUDE_CODE_OAUTH_TOKEN");
   if (ok) return;
   const header = formatHeader(usage, args.inputAbs);
   const remedy =
     "Run `claude setup-token` and export CLAUDE_CODE_OAUTH_TOKEN, or set ANTHROPIC_API_KEY.";
-  if (args.dockerEnabled) {
-    out.errors.push(
-      `${E_AGENT_CREDENTIALS}: ${header} — neither ANTHROPIC_API_KEY nor CLAUDE_CODE_OAUTH_TOKEN is set. ${remedy}${dockerSuffix(true)}`,
-    );
-  } else {
-    out.warnings.push(
-      `jaiph: warning: ${header} — neither ANTHROPIC_API_KEY nor CLAUDE_CODE_OAUTH_TOKEN is set. ${remedy} A stored Claude CLI login may still work.`,
-    );
-  }
+  out.warnings.push(
+    `jaiph: warning: ${header} — neither ANTHROPIC_API_KEY nor CLAUDE_CODE_OAUTH_TOKEN is set. ${remedy} A stored Claude CLI login may still work.`,
+  );
 }
 
 function checkCursor(
@@ -139,19 +107,13 @@ function checkCursor(
   args: PreflightArgs,
   out: PreflightResult,
 ): void {
-  if (hasCredential(args.runtimeEnv, "CURSOR_API_KEY", args.dockerEnabled, usage.backend)) return;
+  if (hasCredential(args.runtimeEnv, "CURSOR_API_KEY")) return;
   const header = formatHeader(usage, args.inputAbs);
   const remedy =
-    "Set CURSOR_API_KEY (or run `cursor-agent login` for host runs).";
-  if (args.dockerEnabled) {
-    out.errors.push(
-      `${E_AGENT_CREDENTIALS}: ${header} — CURSOR_API_KEY is not set. ${remedy}${dockerSuffix(true)}`,
-    );
-  } else {
-    out.warnings.push(
-      `jaiph: warning: ${header} — CURSOR_API_KEY is not set. ${remedy} A stored cursor-agent login may still work.`,
-    );
-  }
+    "Set CURSOR_API_KEY (or run `cursor-agent login`).";
+  out.warnings.push(
+    `jaiph: warning: ${header} — CURSOR_API_KEY is not set. ${remedy} A stored cursor-agent login may still work.`,
+  );
 }
 
 function checkCodex(
@@ -159,11 +121,11 @@ function checkCodex(
   args: PreflightArgs,
   out: PreflightResult,
 ): void {
-  if (hasCredential(args.runtimeEnv, "OPENAI_API_KEY", args.dockerEnabled, usage.backend)) return;
+  if (hasCredential(args.runtimeEnv, "OPENAI_API_KEY")) return;
   const header = formatHeader(usage, args.inputAbs);
   const remedy = "Set OPENAI_API_KEY to your OpenAI API key.";
   out.errors.push(
-    `${E_AGENT_CREDENTIALS}: ${header} — OPENAI_API_KEY is not set. ${remedy}${dockerSuffix(args.dockerEnabled)}`,
+    `${E_AGENT_CREDENTIALS}: ${header} — OPENAI_API_KEY is not set. ${remedy}`,
   );
 }
 
@@ -220,25 +182,16 @@ function entryFileHasExplicitBackend(mod: jaiphModule): boolean {
 /**
  * Host-side credential check, keyed to the backend(s) the entry file selects.
  *
- * Rules per task spec:
- *  - codex   → hard error on host AND Docker (no CLI-login fallback).
- *  - claude  → Docker: hard error; host: warn only (stored CLI login may work).
- *  - cursor  → Docker: hard error; host: warn only.
+ *  - codex   → hard error (no CLI-login fallback).
+ *  - claude  → warn only (stored CLI login may work).
+ *  - cursor  → warn only (stored CLI login may work).
  *
  * Skip entirely when the entry file neither declares an explicit backend nor
  * uses any `prompt` step — there is nothing the runtime would credential against,
  * so a warning would be a false positive.
- *
- * Also skip entirely in unsafe mode (`JAIPH_UNSAFE` / `--unsafe`): that is the
- * explicit "run on the host, trust my environment" escape hatch, so neither the
- * host warnings nor the codex hard error should fire — a logged-in agent CLI
- * works, and the runtime backend guards remain as a backstop.
  */
 export function preflightAgentCredentials(args: PreflightArgs): PreflightResult {
   const out: PreflightResult = { errors: [], warnings: [] };
-  if (args.runtimeEnv.JAIPH_UNSAFE === "true") {
-    return out;
-  }
   if (!entryFileHasExplicitBackend(args.mod) && !entryFileUsesPrompt(args.mod)) {
     return out;
   }

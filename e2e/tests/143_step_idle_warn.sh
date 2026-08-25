@@ -20,7 +20,6 @@ EOF
 rm -rf "${TEST_DIR}/runs_idle"
 
 JAIPH_RUNS_DIR="${TEST_DIR}/runs_idle" \
-  JAIPH_DOCKER_ENABLED=false \
   JAIPH_STEP_IDLE_WARN_SEC=1 \
   JAIPH_STEP_IDLE_WARN_CHECK_MS=500 \
   jaiph run "${TEST_DIR}/idle_warn.jh" >/tmp/jaiph-idle-out.txt 2>/tmp/jaiph-idle-err.txt

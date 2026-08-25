@@ -1,10 +1,9 @@
 // Cross-platform process-tree termination.
 //
 // `jaiph run` launches the workflow leader detached (`workflow-launch.ts`), and
-// the leader in turn spawns agent backends (`prompt.ts`) and script children,
-// or a `docker run` child (`docker.ts`). Terminating a run cleanly means
-// terminating that whole tree, not just the leader — otherwise backends and
-// script children are orphaned.
+// the leader in turn spawns agent backends (`prompt.ts`) and script children.
+// Terminating a run cleanly means terminating that whole tree, not just the
+// leader — otherwise backends and script children are orphaned.
 //
 // POSIX has a single primitive for this: a detached child is its own process
 // group leader (pgid == pid), so `process.kill(-pid, signal)` delivers `signal`

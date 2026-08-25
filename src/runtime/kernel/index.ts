@@ -6,8 +6,7 @@
 // entry needs to surface it to the CLI.
 
 // Graph construction (runtime input the CLI builds and hands to the runner).
-export { buildRuntimeGraph } from "./graph";
-export type { RuntimeGraph } from "./graph";
+export { buildRuntimeGraph, type RuntimeGraph } from "./graph";
 
 // Launch / runner entry points.
 export { runWorkflowRunner, WORKFLOW_RUNNER_ARG } from "./node-workflow-runner";

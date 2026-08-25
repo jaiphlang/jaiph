@@ -27,7 +27,6 @@ const INSTALLER = readFileSync(join(REPO_ROOT, "docs/install"), "utf8");
 const INSTALLER_PS = readFileSync(join(REPO_ROOT, "docs/install.ps1"), "utf8");
 const ENV_VARS = readFileSync(join(REPO_ROOT, "docs/env-vars.md"), "utf8");
 const INSTALLER_TEST = readFileSync(join(REPO_ROOT, "e2e/tests/07_installer_binary.sh"), "utf8");
-const DOCKERFILE = readFileSync(join(REPO_ROOT, "runtime/Dockerfile"), "utf8");
 const VERSION_CHECK = join(REPO_ROOT, "scripts/release-version-check.sh");
 
 // Single source of truth for the assets a release must ship.
@@ -232,88 +231,7 @@ test("contributing.md documents the trust model and key management", () => {
   assert.match(CONTRIBUTING, /rotate/, "documents key rotation");
 });
 
-// ── Acceptance 5: Dockerfile has no pipe-to-shell patterns ───────────────────
-
-test("Dockerfile does not pipe curl output directly to bash or sh", () => {
-  // Each line is checked independently so multi-line pipes are caught.
-  const lines = DOCKERFILE.split("\n");
-  const pipeToBashOrSh = lines.filter((line) => /\|\s*(bash|sh)(\s|-|\b)/.test(line));
-  assert.deepEqual(
-    pipeToBashOrSh,
-    [],
-    `Dockerfile has pipe-to-shell lines (fix by download-to-file + hash-verify):\n${pipeToBashOrSh.join("\n")}`,
-  );
-});
-
-test("Dockerfile pins every toolchain fetch through fetch-verify.sh with a required checksum", () => {
-  // Every toolchain checksum ARG must default to a non-empty 64-hex sha256, so a
-  // plain `docker build` cannot degrade to an unverified fetch (finding M-11).
-  const ARGS = [
-    "UV_INSTALL_SHA256",
-    "RUSTUP_INIT_SHA256",
-    "BUN_INSTALL_SHA256",
-    "CURSOR_INSTALL_SHA256",
-    "GO_SHA256_AMD64",
-    "GO_SHA256_ARM64",
-    "YQ_SHA256_AMD64",
-    "YQ_SHA256_ARM64",
-    "KUBECTL_SHA256_AMD64",
-    "KUBECTL_SHA256_ARM64",
-    "AWSCLI_SHA256_X86_64",
-    "AWSCLI_SHA256_AARCH64",
-    "TASK_SHA256_AMD64",
-    "TASK_SHA256_ARM64",
-  ];
-  for (const argName of ARGS) {
-    assert.match(
-      DOCKERFILE,
-      new RegExp(`^ARG ${argName}=[0-9a-f]{64}$`, "m"),
-      `ARG ${argName} defaults to a non-empty 64-hex sha256`,
-    );
-  }
-
-  // No toolchain may be fetched with a bare curl/wget download; each goes
-  // through the shared verify seam.
-  const stray = DOCKERFILE.split("\n").filter((l) =>
-    /^\s*(curl|wget)[^|]*(astral\.sh|rustup|bun\.sh|cursor\.com|go\.dev\/dl|mikefarah\/yq|dl\.k8s\.io|awscli\.amazonaws\.com|go-task\/task)/.test(
-      l,
-    ),
-  );
-  assert.deepEqual(stray, [], `unverified toolchain fetch(es) in Dockerfile:\n${stray.join("\n")}`);
-  assert.match(DOCKERFILE, /fetch-verify\.sh/, "Dockerfile calls the fetch-verify.sh seam");
-
-  // The seam itself fails closed on an empty checksum and verifies the download.
-  const HELPER = readFileSync(join(REPO_ROOT, "runtime/fetch-verify.sh"), "utf8");
-  assert.match(HELPER, /checksum is required/, "fetch-verify refuses an empty checksum");
-  assert.match(HELPER, /sha256sum|shasum/, "fetch-verify computes a sha256 of the download");
-  assert.match(HELPER, /sha256 mismatch/, "fetch-verify aborts on a checksum mismatch");
-});
-
-test("Dockerfile pins every base image by digest (no bare mutable tags)", () => {
-  // Every FROM must reference an image by @sha256: digest so the built runtime
-  // image is reproducible and its registry-sourced layers are attested
-  // (finding L-4). A bare `FROM node:22-bookworm-slim` would fail here.
-  const fromLines = DOCKERFILE.split("\n").filter((l) => /^FROM\s/.test(l));
-  assert.ok(fromLines.length >= 2, "expected at least the builder and runtime FROM stages");
-  const unpinned = fromLines.filter((l) => !/@sha256:[0-9a-f]{64}\b/.test(l));
-  assert.deepEqual(unpinned, [], `FROM line(s) without an @sha256: digest pin:\n${unpinned.join("\n")}`);
-});
-
-test("Dockerfile pins global npm installs to exact versions", () => {
-  // The registry-sourced global installs must pin exact versions (finding L-4),
-  // declared as bump-in-one-place ARGs.
-  for (const argName of ["PNPM_VERSION", "YARN_VERSION", "CLAUDE_CODE_VERSION"]) {
-    assert.match(DOCKERFILE, new RegExp(`^ARG ${argName}=\\S+$`, "m"), `ARG ${argName} carries a version default`);
-  }
-
-  // A registry package installed with `npm install -g <name>` and no `@version`
-  // is a bare, mutable install — the pattern the finding flagged. Local tarball
-  // installs (paths like /tmp/jaiph.tgz) are inherently pinned and excluded.
-  const bare = DOCKERFILE.split("\n").filter((l) =>
-    /npm install -g[^&|]*["\s](pnpm|yarn|@anthropic-ai\/claude-code)(["\s]|$)/.test(l),
-  );
-  assert.deepEqual(bare, [], `unpinned global npm install(s) in Dockerfile:\n${bare.join("\n")}`);
-});
+// ── Acceptance 5: installers fail closed without a signature ──────────────────
 
 test("bash installer requires SHA256SUMS.minisig and fails closed when absent", () => {
   assert.match(INSTALLER, /SHA256SUMS\.minisig/, "downloads SHA256SUMS.minisig");

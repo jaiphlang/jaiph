@@ -15,10 +15,7 @@ collector that accepts OTLP, such as a local
 Honeycomb, or Datadog.
 
 Export runs on the host after the run finishes. Once a run reaches its terminal
-state, the CLI reads that run's `run_summary.jsonl` and posts one trace. Nothing
-new crosses the sandbox boundary, and no `OTEL_*` variable is forwarded into the
-container, because the run directory is a host mount and the host already sees the
-finished journal.
+state, the CLI reads that run's `run_summary.jsonl` and posts one trace.
 
 ## Enable it
 
@@ -39,11 +36,7 @@ jaiph run ./flows/review.jh "review this diff"
 
 Every terminal run posts exactly one trace, covering an interactive `jaiph run`, a
 standalone `jaiph run --raw`, and every workflow invoked through `jaiph mcp` or
-`jaiph serve`. For a Docker-sandboxed run, the host process that launched the
-container exports the trace once. The inner `jaiph run --raw` inside the container
-is marked as the sandbox run and never re-exports, so a container run is not
-counted twice. No `OTEL_*` or `SENTRY_*` variable crosses the sandbox boundary in
-any case.
+`jaiph serve`.
 
 ### A local collector
 

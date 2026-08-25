@@ -28,9 +28,6 @@ const ALLOWED_KEYS = new Set([
   "run.logs_dir",
   "run.debug",
   "run.recover_limit",
-  "runtime.docker_image",
-  "runtime.docker_network",
-  "runtime.docker_timeout_seconds",
   "module.name",
   "module.version",
   "module.description",
@@ -48,9 +45,6 @@ const KEY_TYPES: Record<string, "string" | "boolean" | "number" | "string[]"> = 
   "run.logs_dir": "string",
   "run.debug": "boolean",
   "run.recover_limit": "number",
-  "runtime.docker_image": "string",
-  "runtime.docker_network": "string",
-  "runtime.docker_timeout_seconds": "number",
   "module.name": "string",
   "module.version": "string",
   "module.description": "string",
@@ -178,9 +172,6 @@ const KEY_SETTERS: Record<string, (out: WorkflowMetadata, value: ConfigValue) =>
   "run.logs_dir": (m, v) => ((m.run ??= {}).logsDir = v as string),
   "run.debug": (m, v) => ((m.run ??= {}).debug = v as boolean),
   "run.recover_limit": (m, v) => ((m.run ??= {}).recoverLimit = v as number),
-  "runtime.docker_image": (m, v) => ((m.runtime ??= {}).dockerImage = v as string),
-  "runtime.docker_network": (m, v) => ((m.runtime ??= {}).dockerNetwork = v as string),
-  "runtime.docker_timeout_seconds": (m, v) => ((m.runtime ??= {}).dockerTimeoutSeconds = v as number),
   "module.name": (m, v) => ((m.module ??= {}).name = v as string),
   "module.version": (m, v) => ((m.module ??= {}).version = v as string),
   "module.description": (m, v) => ((m.module ??= {}).description = v as string),
@@ -190,7 +181,7 @@ const KEY_SETTERS: Record<string, (out: WorkflowMetadata, value: ConfigValue) =>
  * `trusted_envs = "GITHUB_TOKEN NPM_TOKEN"` — a quoted, space-separated list
  * of host env keys. Each key must be a valid env var name and not reserved:
  * the same `E_ENV_RESERVED` rules as `--env` (src/env-reserved.ts) apply, so
- * a config block cannot smuggle in a runtime-managed or sandbox-control key.
+ * a config block cannot smuggle in a runtime-managed key.
  */
 function parseTrustedEnvsValue(
   filePath: string,
@@ -211,7 +202,7 @@ function parseTrustedEnvsValue(
     if (isReservedEnvKey(key)) {
       return fail(
         filePath,
-        `trusted_envs cannot declare reserved key "${key}" (E_ENV_RESERVED — same rule as --env); JAIPH_DOCKER_* and runtime-managed keys are off-limits`,
+        `trusted_envs cannot declare reserved key "${key}" (E_ENV_RESERVED — same rule as --env); runtime-managed keys are off-limits`,
         lineNo,
         colFromRaw(raw),
       );

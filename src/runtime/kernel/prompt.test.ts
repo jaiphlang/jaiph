@@ -18,7 +18,6 @@ import {
   resolvePromptConfig,
   type PromptConfig,
 } from "./prompt";
-import { buildDockerArgs } from "../docker";
 
 describe("resolveConfig", () => {
   it("uses defaults when env is empty", () => {
@@ -798,55 +797,4 @@ describe("prompt env scrub (runBackend)", () => {
     }
   });
 
-  it("docker copy mode: a --env secret crosses into the container env but stops at the prompt subprocess", async () => {
-    const root = mkdtempSync(join(tmpdir(), "jaiph-prompt-env-scrub-docker-"));
-    try {
-      const wsDir = join(root, "ws");
-      const cloneDir = join(root, "clone");
-      const runDir = join(root, "run");
-      for (const d of [wsDir, cloneDir, runDir]) mkdirSync(d, { recursive: true });
-      const args = buildDockerArgs({
-        config: { enabled: true, image: "ubuntu:24.04", imageExplicit: false, network: "default", timeoutSeconds: 300 },
-        sourceAbs: join(wsDir, "main.jh"),
-        workspaceRoot: wsDir,
-        sandboxRunDir: runDir,
-        runArgs: [],
-        env: { JAIPH_RUN_ID: "r1", CURSOR_API_KEY: "fake-cursor-key", GITHUB_TOKEN: "host-value" },
-        isTTY: false,
-        sandboxMode: "snapshot",
-        sandboxWorkspaceDir: cloneDir,
-        backends: ["cursor"],
-        extraEnv: { GITHUB_TOKEN: "fake-gh-secret" },
-      });
-      // Reconstruct the env the containerized runtime sees: image base + the
-      // emitted `-e` pairs (docker.ts owns which keys cross the boundary).
-      const containerEnv: NodeJS.ProcessEnv = { PATH: process.env.PATH, HOME: root };
-      for (let i = 0; i + 1 < args.length; i += 1) {
-        if (args[i] !== "-e") continue;
-        const eq = args[i + 1].indexOf("=");
-        containerEnv[args[i + 1].slice(0, eq)] = args[i + 1].slice(eq + 1);
-      }
-      // Existing `--env` contract: the pair crosses the sandbox boundary verbatim.
-      assert.equal(containerEnv.GITHUB_TOKEN, "fake-gh-secret");
-      assert.equal(containerEnv.CURSOR_API_KEY, "fake-cursor-key");
-
-      const envDump = join(root, "agent-env.txt");
-      const fakeAgent = join(root, "cursor-agent");
-      writeEnvDumpAgent(fakeAgent, envDump);
-      const result = await executePrompt(
-        "ignored",
-        makeConfig({ agentCommand: fakeAgent, workspaceRoot: wsDir, trustedWorkspace: wsDir }),
-        new PassThrough(),
-        containerEnv,
-      );
-      assert.equal(result.status, 0);
-      const dump = readFileSync(envDump, "utf8");
-      assert.ok(!dump.includes("GITHUB_TOKEN"), `agent env must not contain GITHUB_TOKEN:\n${dump}`);
-      assert.ok(!dump.includes("fake-gh-secret"), "agent env must not contain the secret value");
-      assert.match(dump, /^CURSOR_API_KEY=fake-cursor-key$/m, "backend's own credential must pass");
-      assert.match(dump, /^PATH=./m, "base env PATH must pass");
-    } finally {
-      rmSync(root, { recursive: true, force: true });
-    }
-  });
 });

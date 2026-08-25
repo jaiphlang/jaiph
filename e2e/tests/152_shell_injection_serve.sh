@@ -47,12 +47,9 @@ e2e::section "jaiph serve param does not inject shell commands into a shell body
 serve_err="${TEST_DIR}/serve_stderr.txt"
 : >"${serve_err}"
 
-# Host-mode legs export JAIPH_UNSAFE=true; server modes refuse an inherited
-# unsafe env without an explicit flag (finding M-1), so forward --unsafe as the
-# consent. Docker legs leave JAIPH_UNSAFE unset → no flag → sandboxed default.
 # No JAIPH_SERVE_TOKEN/OIDC here, so --allow-anonymous is required to bind even
 # loopback with no auth (finding M-2).
-jaiph serve --port 0 --allow-anonymous ${JAIPH_UNSAFE:+--unsafe} "${TEST_DIR}/tools.jh" >/dev/null 2>"${serve_err}" &
+jaiph serve --port 0 --allow-anonymous "${TEST_DIR}/tools.jh" >/dev/null 2>"${serve_err}" &
 E2E_SERVER_PID="$!"
 
 port=""

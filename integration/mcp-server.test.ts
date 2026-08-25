@@ -109,7 +109,6 @@ function startMcp(fixture: string, cwd: string, env: NodeJS.ProcessEnv, alias = 
 function mcpEnv(runsRoot: string): NodeJS.ProcessEnv {
   return {
     ...process.env,
-    JAIPH_DOCKER_ENABLED: "false",
     JAIPH_RUNS_DIR: runsRoot,
     PATH: `${dirname(process.execPath)}:${process.env.PATH ?? ""}`,
   };
@@ -403,91 +402,6 @@ test("jaiph mcp --env with a reserved key aborts with E_ENV_RESERVED", () => {
     assert.equal(result.status, 1, `expected exit 1, got ${result.status}`);
     assert.equal(result.stdout, "");
     assert.match(result.stderr, /E_ENV_RESERVED/);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test("jaiph mcp --unsafe runs tool calls host-only (no sandbox), with explicit consent", async () => {
-  const root = mkdtempSync(join(tmpdir(), "jaiph-mcp-unsafe-"));
-  const jh = join(root, "tools.jh");
-  writeFileSync(jh, TWO_WORKFLOW_FIXTURE);
-  // Drop JAIPH_DOCKER_ENABLED and rely on JAIPH_UNSAFE to force host-only —
-  // this pins the unsafe host-fallback branch of the Docker-parity path. The
-  // server refuses an ambient JAIPH_UNSAFE without explicit consent (finding
-  // M-1), so pass --unsafe on the command line as the consent.
-  const env = mcpEnv(join(root, ".jaiph/runs"));
-  delete env.JAIPH_DOCKER_ENABLED;
-  env.JAIPH_UNSAFE = "true";
-  const client = startMcp(jh, root, env, false, ["--unsafe"]);
-  try {
-    await initialize(client);
-    client.send({
-      jsonrpc: "2.0",
-      id: 1,
-      method: "tools/call",
-      params: { name: "greet", arguments: { name: "world" } },
-    });
-    const call = await client.waitFor((m) => m.id === 1, "greet call (unsafe host mode)");
-    const result = call.result as { content: Array<{ type: string; text: string }>; isError: boolean };
-    assert.equal(result.isError, false);
-    assert.deepEqual(result.content, [{ type: "text", text: "hello world" }]);
-  } finally {
-    await client.close();
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test("jaiph mcp refuses an inherited JAIPH_UNSAFE=true with no explicit flag (finding M-1)", () => {
-  const root = mkdtempSync(join(tmpdir(), "jaiph-mcp-unsafe-refuse-"));
-  try {
-    const jh = join(root, "tools.jh");
-    writeFileSync(jh, TWO_WORKFLOW_FIXTURE);
-    // Ambient unsafe env, no --unsafe / --yes on the command line: the server
-    // must exit 1 at startup (not start host-only) and emit nothing on stdout.
-    const env = mcpEnv(join(root, ".jaiph/runs"));
-    delete env.JAIPH_DOCKER_ENABLED;
-    env.JAIPH_UNSAFE = "true";
-    const result = spawnSync("node", [CLI_PATH, "mcp", jh], {
-      encoding: "utf8",
-      cwd: root,
-      env,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    assert.equal(result.status, 1, `expected exit 1, got ${result.status}\n${result.stderr}`);
-    assert.equal(result.stdout, "", `stdout must be empty, got: ${JSON.stringify(result.stdout)}`);
-    assert.match(result.stderr, /E_UNSAFE_NO_CONSENT/);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test("jaiph run --raw honors JAIPH_RUN_WORKFLOW (the symbol carried into the Docker inner run)", () => {
-  // The Docker MCP path carries the tool's workflow symbol into the container's
-  // `jaiph run --raw` via JAIPH_RUN_WORKFLOW. This pins that raw-mode honors it
-  // (host-only, so it runs everywhere): selecting `boom` must fail, proving the
-  // inner run does NOT hardcode `default` (which would succeed).
-  const root = mkdtempSync(join(tmpdir(), "jaiph-raw-symbol-"));
-  try {
-    const jh = join(root, "tools.jh");
-    writeFileSync(jh, ["workflow default() {", '  return "ok"', "}", "", "workflow boom() {", '  fail "boom-failed"', "}", ""].join("\n"));
-
-    const okResult = spawnSync("node", [CLI_PATH, "run", "--raw", jh], {
-      encoding: "utf8",
-      cwd: root,
-      env: mcpEnv(join(root, ".jaiph/runs")),
-    });
-    assert.equal(okResult.status, 0, `default should exit 0, got ${okResult.status}\n${okResult.stderr}`);
-
-    const boomEnv = mcpEnv(join(root, ".jaiph/runs"));
-    boomEnv.JAIPH_RUN_WORKFLOW = "boom";
-    const boomResult = spawnSync("node", [CLI_PATH, "run", "--raw", jh], {
-      encoding: "utf8",
-      cwd: root,
-      env: boomEnv,
-    });
-    assert.equal(boomResult.status, 1, `boom should exit 1 (not run default), got ${boomResult.status}`);
-    assert.match(boomResult.stderr, /boom-failed/, "boom's failure must surface, proving boom ran");
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

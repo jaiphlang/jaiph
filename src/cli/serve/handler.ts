@@ -165,7 +165,7 @@ export class ServeHandler {
       correlation_id: correlationId || undefined,
     };
     this.runs.set(runId, record);
-    // The per-call start banner (workflow, sandbox posture, run_id, principal,
+    // The per-call start banner (workflow, run_id, principal,
     // correlation) is emitted once by `callWorkflow` through the operator log,
     // so it is not logged again here — otherwise the start would appear twice.
     const ctx: WorkflowCallContext = {
@@ -473,7 +473,7 @@ export class ServeHandler {
   /**
    * `POST /mcp`: MCP Streamable HTTP. One JSON-RPC message per request, handled
    * by the shared {@link mcp} engine — so `tools/call` runs the exact same
-   * workflow generation, sandbox posture, run registry, concurrency cap, and
+   * workflow generation, run registry, concurrency cap, and
    * cancellation as the REST API.
    *
    * Response shape: a message carrying no reply (a notification such as

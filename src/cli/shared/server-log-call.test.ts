@@ -6,18 +6,13 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { loadGeneration } from "./generation";
 import { createServerLog, type OperatorLog } from "./server-log";
-import { callWorkflow, type ExecutionPosture, type WorkflowCallContext } from "./workflow-call";
+import { callWorkflow, type WorkflowCallContext } from "./workflow-call";
 
 // End-to-end operator-log coverage over the real host spawn path
 // (`callWorkflow` → `callWorkflowHost`), the shared choke point behind both
 // `jaiph mcp` tool calls and `jaiph serve` runs. Each test drives a captured
 // stderr `log` sink and asserts the operator lines land there — never on the
 // call result (the value that would go to the protocol channel).
-
-const HOST_POSTURE: ExecutionPosture = {
-  dockerConfig: { enabled: false, image: "", imageExplicit: false, network: "default", timeoutSeconds: 0 },
-  sandboxMode: "snapshot",
-};
 
 function operatorFor(
   lines: string[],
@@ -30,7 +25,6 @@ function operatorFor(
       colorEnabled: false,
       mirrorWorkflowLog: opts.mirror ?? false,
     }),
-    sandboxLabel: "no sandbox",
   };
 }
 
@@ -46,14 +40,14 @@ async function runWith(
     writeFileSync(jh, jhBody);
     const gen = loadGeneration(jh, root, tempRoot, 1, extraEnv, () => {}, "test");
     assert.ok(gen.state, `generation failed: ${gen.failures?.join("\n")}`);
-    return await callWorkflow(gen.state.callEnv, HOST_POSTURE, "default", [], randomUUID(), ctx);
+    return await callWorkflow(gen.state.callEnv, "default", [], randomUUID(), ctx);
   } finally {
     rmSync(root, { recursive: true, force: true });
     rmSync(tempRoot, { recursive: true, force: true });
   }
 }
 
-test("a host call emits a start banner (sandbox + run_id) and an end line with status/elapsed/rundir", async () => {
+test("a host call emits a start banner (run_id) and an end line with status/elapsed/rundir", async () => {
   const lines: string[] = [];
   const result = await runWith(
     ["workflow default() {", '  log "operator visible hi"', "}", ""].join("\n"),
@@ -62,9 +56,9 @@ test("a host call emits a start banner (sandbox + run_id) and an end line with s
   );
   assert.equal(result.isError, false, `workflow should succeed: ${result.text}`);
 
-  const start = lines.find((l) => /Running .*\(.*\).*run_id=/.test(l));
+  const start = lines.find((l) => /Running .*run_id=/.test(l));
   assert.ok(start, `a start banner must be emitted; got:\n${lines.join("\n")}`);
-  assert.match(start!, /^jaiph mcp: Running default \(no sandbox\) run_id=/, "start names workflow + sandbox label");
+  assert.match(start!, /^jaiph mcp: Running default run_id=/, "start names workflow + run_id");
 
   const end = lines.find((l) => /Finished /.test(l));
   assert.ok(end, "a terminal end line must be emitted");
