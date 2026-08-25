@@ -56,19 +56,15 @@ def main
   ▸ def scanner
   ·   ℹ Scanning for issues...
   ✓ def scanner (<time>)
-  ▸ def analyst (message="Found 3 issues in auth module", chan="findings", sender="scanner")
-  ·   ℹ Analyzing message from scanner on channel findings...
+  ▸ def analyst (msg="Found 3 issues in auth module")
   ✓ def analyst (<time>)
-  ▸ def reviewer (message="Summary: Found 3 issues in auth ...", chan="report", sender="analyst")
-  ·   ℹ Reviewing message from analyst on channel report...
+  ▸ def reviewer (msg="Summary: Found 3 issues in auth ...")
   ·   ! Critical issue: Summary: Found 3 issues in auth module
   ✓ def reviewer (<time>)
 ✓ PASS def main (<time>)
 EOF
 
 e2e::expect_out "agent_inbox.jh" "scanner" "Scanning for issues..."
-e2e::expect_out "agent_inbox.jh" "analyst" "Analyzing message from scanner on channel findings..."
-e2e::expect_out "agent_inbox.jh" "reviewer" "Reviewing message from analyst on channel report..."
 
 # ── say_hello.jh — failure path ─────────────────────────────────────────────
 # Success path requires a real agent for the prompt step; covered by
