@@ -87,7 +87,7 @@ e2e::run "bg_output.jh" >/dev/null
 
 run_dir="$(e2e::run_dir "bg_output.jh")"
 shopt -s nullglob
-out_files=( "${run_dir}"*bg_output__default.out )
+out_files=( "${run_dir}"*def__main.out )
 shopt -u nullglob
 
 if [[ ${#out_files[@]} -ne 1 ]]; then

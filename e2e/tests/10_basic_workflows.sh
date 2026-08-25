@@ -28,10 +28,10 @@ e2e::expect_stdout "${hello_out}" <<'EOF'
 
 Jaiph: Running hello.jh
 
-export def main
+def main
   ▸ script hello_impl
   ✓ script hello_impl (<time>)
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 
 hello-jh
 EOF
@@ -42,7 +42,7 @@ e2e::expect_out "hello.jh" "hello_impl" "hello-jh"
 # Given
 e2e::file "lib.jh" <<'EOF'
 script ready_impl = `echo "from-lib"`
-def ready() {
+export def ready() {
   const result = run ready_impl()
   return "${result}"
 }
@@ -66,14 +66,14 @@ e2e::expect_stdout "${mixed_out}" <<'EOF'
 
 Jaiph: Running app.jh
 
-export def main
+def main
   ▸ def ready
   ·   ▸ script ready_impl
   ·   ✓ script ready_impl (<time>)
-  ✓ def ready(<time>)
+  ✓ def ready (<time>)
   ▸ script mixed_ok_impl
   ✓ script mixed_ok_impl (<time>)
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 
 mixed-ok
 EOF

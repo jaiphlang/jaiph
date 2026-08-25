@@ -39,14 +39,14 @@ e2e::expect_stdout "${rule_pass_out}" <<'EOF'
 
 Jaiph: Running rule_pass.jh
 
-export def main
+def main
   ▸ def check_passes
   ·   ▸ script check_passes_impl
   ·   ✓ script check_passes_impl (<time>)
-  ✓ def check_passes(<time>)
+  ✓ def check_passes (<time>)
   ▸ script done_impl
   ✓ script done_impl (<time>)
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 
 e2e-rule-pass-done
 EOF
@@ -151,13 +151,13 @@ e2e::expect_stdout "${prompt_run_out}" <<'EOF'
 
 Jaiph: Running prompt_flow.jh
 
-export def main
+def main
   ▸ prompt cursor default "e2e-prompt-please-return..."
   ✓ prompt cursor default (<time>)
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 EOF
 prompt_flow_run_dir="$(e2e::run_dir "prompt_flow.jh")"
-prompt_flow_out="$(<"${prompt_flow_run_dir}000001-def__default.out")"
+prompt_flow_out="$(<"${prompt_flow_run_dir}000001-def__main.out")"
 # assert_contains: prompt transcript includes dynamic agent command output and timestamps
 e2e::assert_contains "${prompt_flow_out}" "Command:" "prompt_flow default .out contains prompt command transcript"
 # assert_contains: prompt transcript includes dynamic agent command output and timestamps
@@ -185,10 +185,10 @@ e2e::expect_stdout "${prompt_model_out}" <<'EOF'
 
 Jaiph: Running prompt_model.jh
 
-export def main
+def main
   ▸ prompt cursor sonnet "e2e-prompt-with-model"
   ✓ prompt cursor sonnet (<time>)
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 EOF
 
 # Prompt with variable references shows named params in tree (not positional args)
@@ -207,13 +207,13 @@ e2e::expect_stdout "${prompt_vars_out}" <<'EOF'
 
 Jaiph: Running prompt_with_vars.jh
 
-export def main
+def main
   ▸ prompt cursor default "${role} does ${task}" (role="engineer", task="Fix bugs")
   ✓ prompt cursor default (<time>)
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 EOF
 prompt_vars_run_dir="$(e2e::run_dir "prompt_with_vars.jh")"
-prompt_vars_out_file="$(<"${prompt_vars_run_dir}000001-def__default.out")"
+prompt_vars_out_file="$(<"${prompt_vars_run_dir}000001-def__main.out")"
 # assert_contains: prompt transcript includes dynamic agent command headers and response body
 e2e::assert_contains "${prompt_vars_out_file}" "engineer does Fix bugs" "prompt_with_vars transcript includes rendered prompt text"
 
@@ -277,15 +277,15 @@ e2e::expect_stdout "${multiline_out}" <<'EOF'
 
 Jaiph: Running multiline_prompt.jh
 
-export def main
+def main
   ▸ prompt cursor default "Line one and line two."
   ✓ prompt cursor default (<time>)
   ▸ script done_impl
   ✓ script done_impl (<time>)
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 EOF
 multiline_run_dir="$(e2e::run_dir "multiline_prompt.jh")"
-multiline_default_out="$(<"${multiline_run_dir}000001-def__default.out")"
+multiline_default_out="$(<"${multiline_run_dir}000001-def__main.out")"
 # assert_contains: prompt transcript includes dynamic agent command headers and response body
 e2e::assert_contains "${multiline_default_out}" "Line one and line two." "triple-quoted prompt transcript is captured in workflow .out"
 

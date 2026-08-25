@@ -43,12 +43,12 @@ EOF
 
 Jaiph: Running polyglot.jh
 
-export def main
+def main
   ▸ script py_echo_ok
   ✓ script py_echo_ok (<time>)
   ▸ script bash_marker
   ✓ script bash_marker (<time>)
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 EOF
 
   e2e::expect_out_files "polyglot.jh" 3
@@ -87,12 +87,12 @@ EOF
 
 Jaiph: Running polyglot_node.jh
 
-export def main
+def main
   ▸ script node_echo_ok
   ✓ script node_echo_ok (<time>)
   ▸ script bash_marker
   ✓ script bash_marker (<time>)
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 EOF
 
   e2e::expect_out_files "polyglot_node.jh" 3

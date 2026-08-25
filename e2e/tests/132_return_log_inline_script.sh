@@ -29,7 +29,7 @@ return_inline_out="$(e2e::run "return_inline.jh")"
 # assert_contains: inline script hash name is content-dependent and not predictable in heredoc
 e2e::assert_contains "${return_inline_out}" "script __inline_" "tree shows inline script step"
 e2e::assert_contains "${return_inline_out}" "got: inline-return-ok" "return run inline script returns correct value"
-e2e::assert_contains "${return_inline_out}" "PASS export def main" "workflow passes"
+e2e::assert_contains "${return_inline_out}" "PASS def main" "workflow passes"
 
 e2e::pass "return run inline script zero-arg"
 
@@ -52,7 +52,7 @@ return_inline_args_out="$(e2e::run "return_inline_args.jh")"
 
 # assert_contains: inline script hash name is content-dependent and not predictable in heredoc
 e2e::assert_contains "${return_inline_args_out}" "got: inline-arg-val" "return run inline script with args returns correct value"
-e2e::assert_contains "${return_inline_args_out}" "PASS export def main" "workflow passes"
+e2e::assert_contains "${return_inline_args_out}" "PASS def main" "workflow passes"
 
 e2e::pass "return run inline script with args"
 
@@ -71,7 +71,7 @@ log_inline_out="$(e2e::run "log_inline.jh")"
 # assert_contains: inline script hash name is content-dependent and not predictable in heredoc
 e2e::assert_contains "${log_inline_out}" "script __inline_" "tree shows inline script step"
 e2e::assert_contains "${log_inline_out}" "log-inline-ok" "log run inline script outputs correct message"
-e2e::assert_contains "${log_inline_out}" "PASS export def main" "workflow passes"
+e2e::assert_contains "${log_inline_out}" "PASS def main" "workflow passes"
 
 e2e::pass "log run inline script zero-arg"
 
@@ -89,7 +89,7 @@ log_inline_args_out="$(e2e::run "log_inline_args.jh")"
 
 # assert_contains: inline script hash name is content-dependent and not predictable in heredoc
 e2e::assert_contains "${log_inline_args_out}" "log-arg-val" "log run inline script with args outputs correct message"
-e2e::assert_contains "${log_inline_args_out}" "PASS export def main" "workflow passes"
+e2e::assert_contains "${log_inline_args_out}" "PASS def main" "workflow passes"
 
 e2e::pass "log run inline script with args"
 

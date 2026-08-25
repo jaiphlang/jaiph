@@ -29,7 +29,7 @@ EOF
 
 artifacts_out="$(e2e::run "artifacts_e2e.jh")"
 
-e2e::assert_contains "${artifacts_out}" "export def main" "output contains export def main"
+e2e::assert_contains "${artifacts_out}" "def main" "output contains def main"
 e2e::assert_contains "${artifacts_out}" "def save" "output contains def save"
 e2e::assert_contains "${artifacts_out}" "PASS" "output contains PASS"
 

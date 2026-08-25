@@ -33,10 +33,10 @@ e2e::expect_stdout "${run_out}" <<'EOF'
 
 Jaiph: Running valid.jh
 
-export def main
+def main
   ▸ script say_ok
   ✓ script say_ok (<time>)
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 EOF
 
 e2e::expect_out_files "valid.jh" 2

@@ -38,10 +38,10 @@ e2e::expect_stdout "${host_out}" <<'EOF'
 
 Jaiph: Running trusted_show.jh
 
-export def main
+def main
   ▸ script show_impl
   ✓ script show_impl (<time>)
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 
 TR_TOKEN=[host-secret]
 EOF
@@ -53,10 +53,10 @@ e2e::expect_stdout "${precedence_out}" <<'EOF'
 
 Jaiph: Running trusted_show.jh
 
-export def main
+def main
   ▸ script show_impl
   ✓ script show_impl (<time>)
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 
 TR_TOKEN=[cli-wins]
 EOF
@@ -85,14 +85,14 @@ e2e::expect_stdout "${sub_out}" <<'EOF'
 
 Jaiph: Running trusted_sub.jh
 
-export def main
+def main
   ▸ script main_show
   ✓ script main_show (<time>)
   ▸ def sub
   ·   ▸ script sub_show
   ·   ✓ script sub_show (<time>)
-  ✓ def sub(<time>)
-✓ PASS export def main (<time>)
+  ✓ def sub (<time>)
+✓ PASS def main (<time>)
 
 MAIN=[host-secret] SUB=[<unset>]
 EOF
@@ -104,7 +104,7 @@ config {
   trusted_envs = "TR_TOKEN"
 }
 script lib_show = `echo "LIB=[${TR_TOKEN:-<unset>}]"`
-def grab() {
+export def grab() {
   const g = run lib_show()
   return "${g}"
 }
@@ -123,12 +123,12 @@ e2e::expect_stdout "${import_out}" <<'EOF'
 
 Jaiph: Running trusted_entry.jh
 
-export def main
+def main
   ▸ def grab
   ·   ▸ script lib_show
   ·   ✓ script lib_show (<time>)
-  ✓ def grab(<time>)
-✓ PASS export def main (<time>)
+  ✓ def grab (<time>)
+✓ PASS def main (<time>)
 
 LIB=[<unset>]
 EOF

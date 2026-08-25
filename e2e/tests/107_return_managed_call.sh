@@ -33,13 +33,13 @@ e2e::expect_stdout "${return_run_out}" <<'EOF'
 
 Jaiph: Running return_run.jh
 
-export def main
+def main
   ▸ def helper
   ·   ▸ script greet
   ·   ✓ script greet (<time>)
-  ✓ def helper(<time>)
+  ✓ def helper (<time>)
   ℹ got: hello-direct
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 EOF
 
 e2e::expect_out "return_run.jh" "greet" "hello-direct"
@@ -68,13 +68,13 @@ e2e::expect_stdout "${return_ensure_out}" <<'EOF'
 
 Jaiph: Running return_ensure.jh
 
-export def main
+def main
   ▸ def check
   ·   ▸ script check_impl
   ·   ✓ script check_impl (<time>)
-  ✓ def check(<time>)
+  ✓ def check (<time>)
   ℹ got: rule-ok
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 EOF
 
 e2e::expect_out "return_ensure.jh" "check_impl" "rule-ok"
@@ -103,13 +103,13 @@ e2e::expect_stdout "${return_run_args_out}" <<'EOF'
 
 Jaiph: Running return_run_args.jh
 
-export def main
+def main
   ▸ def helper
   ·   ▸ script echo_arg (1="passed-arg")
   ·   ✓ script echo_arg (<time>)
-  ✓ def helper(<time>)
+  ✓ def helper (<time>)
   ℹ got: passed-arg
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 EOF
 
 e2e::expect_out "return_run_args.jh" "echo_arg" "passed-arg"
@@ -140,13 +140,13 @@ e2e::expect_stdout "${return_ensure_rule_out}" <<'EOF'
 
 Jaiph: Running return_ensure_rule.jh
 
-export def main
+def main
   ▸ def outer
   ·   ▸ def inner
-  ·   ✓ def inner(<time>)
-  ✓ def outer(<time>)
+  ·   ✓ def inner (<time>)
+  ✓ def outer (<time>)
   ℹ got: inner-val
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 EOF
 
 e2e::section "return run with unknown ref fails at compile time"

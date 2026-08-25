@@ -37,11 +37,11 @@ e2e::expect_stdout "${out}" <<'EXPECTED'
 
 Jaiph: Running custom_agent.jh
 
-export def main
+def main
   ▸ prompt echo-wc.sh "one two three four five"
   ✓ prompt echo-wc.sh (<time>)
   ℹ words: 5
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 EXPECTED
 
 # No JSON parse errors in stderr

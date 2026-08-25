@@ -180,21 +180,21 @@ e2e::expect_stdout "${display_out}" <<'EXPECTED'
 
 Jaiph: Running display_inbox.jh
 
-export def main
+def main
   ▸ def scanner
   ·   ▸ script emit_findings
   ·   ✓ script emit_findings (<time>)
-  ✓ def scanner(<time>)
-  ▸ def analyst(message="Found 3 issues in auth module", chan="findings", sender="scanner")
+  ✓ def scanner (<time>)
+  ▸ def analyst (message="Found 3 issues in auth module", chan="findings", sender="scanner")
   ·   ▸ script emit_summary (1="Found 3 issues in auth module")
   ·   ✓ script emit_summary (<time>)
-  ✓ def analyst(<time>)
-  ▸ def reviewer(message="Summary: Found 3 issues in auth ...", chan="report", sender="analyst")
+  ✓ def analyst (<time>)
+  ▸ def reviewer (message="Summary: Found 3 issues in auth ...", chan="report", sender="analyst")
   ·   ▸ script print_reviewed (1="Summary: Found 3 issues in auth ...")
   ·   ✓ script print_reviewed (<time>)
-  ✓ def reviewer(<time>)
+  ✓ def reviewer (<time>)
 
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 EXPECTED
 e2e::expect_out_files "display_inbox.jh" 7
 e2e::expect_file "*script__print_reviewed.out" <<'EOF'

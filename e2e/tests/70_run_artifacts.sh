@@ -85,10 +85,10 @@ JAIPH_RUNS_DIR="${TEST_DIR}/runs_prompt_script" \
 
 run_dir_ps="$(e2e::run_dir_at "${TEST_DIR}/runs_prompt_script" "prompt_then_script.jh")"
 shopt -s nullglob
-wf_outs=( "${run_dir_ps}"*def__default.out )
+wf_outs=( "${run_dir_ps}"*def__main.out )
 sc_outs=( "${run_dir_ps}"*script__echo_line_impl.out )
 shopt -u nullglob
-[[ ${#wf_outs[@]} -ge 1 ]] || e2e::fail "expected export def main .out"
+[[ ${#wf_outs[@]} -ge 1 ]] || e2e::fail "expected def main .out"
 [[ ${#sc_outs[@]} -ge 1 ]] || e2e::fail "expected script echo_line_impl .out"
 
 wf_out="$(<"${wf_outs[0]}")"

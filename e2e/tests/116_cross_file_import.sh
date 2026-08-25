@@ -38,13 +38,13 @@ e2e::expect_stdout "${main_out}" <<'EOF'
 
 Jaiph: Running main_wf.jh
 
-export def main
+def main
   ▸ def greet
   ·   ▸ script greet_impl
   ·   ✓ script greet_impl (<time>)
-  ✓ def greet(<time>)
+  ✓ def greet (<time>)
 
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 EOF
 
 # Then — run artifacts
@@ -58,7 +58,7 @@ e2e::section "cross-file import: run exported script"
 
 # Given
 e2e::file "scriptlib.jh" <<'EOF'
-script echo_msg = `echo "script-lib-msg"`
+export script echo_msg = `echo "script-lib-msg"`
 def dummy() {
   log "ok"
 }
@@ -80,11 +80,11 @@ e2e::expect_stdout "${script_out}" <<'EOF'
 
 Jaiph: Running main_script.jh
 
-export def main
+def main
   ▸ script slib.echo_msg
   ✓ script slib.echo_msg (<time>)
 
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 EOF
 
 # Then — run artifacts
@@ -121,14 +121,14 @@ e2e::expect_stdout "${rule_out}" <<'EOF'
 
 Jaiph: Running main_rule.jh
 
-export def main
+def main
   ▸ def passes
   ·   ▸ script check_impl
   ·   ✓ script check_impl (<time>)
-  ✓ def passes(<time>)
+  ✓ def passes (<time>)
   ℹ rule passed
 
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 EOF
 
 e2e::pass "cross-file import: run exported rule"
@@ -139,7 +139,7 @@ e2e::section "cross-file import: capture from exported script"
 
 # Given
 e2e::file "caplib.jh" <<'EOF'
-script get_value = `echo "captured-value"`
+export script get_value = `echo "captured-value"`
 def dummy() {
   log "ok"
 }

@@ -40,11 +40,11 @@ e2e::expect_stdout "${main_out}" <<'EOF'
 
 Jaiph: Running main_lib.jh
 
-export def main
+def main
   ▸ script greet.hello
   ✓ script greet.hello (<time>)
 
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 EOF
 
 # Then — run artifacts
@@ -72,13 +72,13 @@ e2e::expect_stdout "${wf_out}" <<'EOF'
 
 Jaiph: Running main_lib_wf.jh
 
-export def main
+def main
   ▸ def say_hello
   ·   ▸ script hello
   ·   ✓ script hello (<time>)
-  ✓ def say_hello(<time>)
+  ✓ def say_hello (<time>)
 
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 EOF
 
 e2e::pass "lib import: exported workflow from lib"
@@ -111,11 +111,11 @@ e2e::expect_stdout "${rel_out}" <<'EOF'
 
 Jaiph: Running main_relative.jh
 
-export def main
+def main
   ▸ script loc.local_msg
   ✓ script loc.local_msg (<time>)
 
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 EOF
 
 e2e::pass "lib import: relative imports still work"

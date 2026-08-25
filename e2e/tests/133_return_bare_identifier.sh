@@ -32,11 +32,11 @@ e2e::expect_stdout "${return_bare_out}" <<'EOF'
 
 Jaiph: Running return_bare.jh
 
-export def main
+def main
   ▸ def helper
-  ✓ def helper(<time>)
+  ✓ def helper (<time>)
   ℹ got: bare-id-ok
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 EOF
 
 e2e::section "return bare identifier from parameter"
@@ -61,11 +61,11 @@ e2e::expect_stdout "${return_param_out}" <<'EOF'
 
 Jaiph: Running return_param.jh
 
-export def main
-  ▸ def echo_back(val="param-ok")
-  ✓ def echo_back(<time>)
+def main
+  ▸ def echo_back (val="param-ok")
+  ✓ def echo_back (<time>)
   ℹ got: param-ok
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 EOF
 
 e2e::section "return interpolated string still works"
@@ -91,11 +91,11 @@ e2e::expect_stdout "${return_interp_out}" <<'EOF'
 
 Jaiph: Running return_interp.jh
 
-export def main
+def main
   ▸ def helper
-  ✓ def helper(<time>)
+  ✓ def helper (<time>)
   ℹ got: interp-ok
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 EOF
 
 e2e::section "return unknown bare identifier fails with unknown-identifier error"

@@ -33,11 +33,11 @@ e2e::expect_stdout "${first_out}" <<'EOF'
 
 Jaiph: Running if_else_if.jh
 
-export def main (status="ok")
+def main (status="ok")
   ℹ healthy
   ℹ done
 
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 EOF
 e2e::pass "else if chain: only the first arm runs for status=ok"
 
@@ -50,11 +50,11 @@ e2e::expect_stdout "${middle_out}" <<'EOF'
 
 Jaiph: Running if_else_if.jh
 
-export def main (status="warn")
+def main (status="warn")
   ⚠ degraded
   ℹ done
 
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 EOF
 e2e::pass "else if chain: only the middle arm runs for status=warn"
 
@@ -67,10 +67,10 @@ e2e::expect_stdout "${else_out}" <<'EOF'
 
 Jaiph: Running if_else_if.jh
 
-export def main (status="boom")
+def main (status="boom")
   ! unhealthy: boom
   ℹ done
 
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 EOF
 e2e::pass "else if chain: only the else arm runs for an unmatched status"

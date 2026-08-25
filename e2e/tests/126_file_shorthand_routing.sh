@@ -29,10 +29,10 @@ e2e::expect_stdout "${hello_out}" <<'EOF'
 
 Jaiph: Running hello.jh
 
-export def main
+def main
   ▸ script hello_impl
   ✓ script hello_impl (<time>)
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 
 hello-shorthand
 EOF

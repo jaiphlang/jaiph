@@ -27,11 +27,11 @@ e2e::expect_stdout "${log_out}" <<'EOF'
 
 Jaiph: Running log_multiline.jh
 
-export def main
+def main
   ℹ Hello
 World
 
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 EOF
 
 # ── 2. Triple-quoted return value ─────────────────────────────────────────────
@@ -53,9 +53,9 @@ e2e::expect_stdout "${return_out}" <<'EOF'
 
 Jaiph: Running return_multiline.jh
 
-export def main
+def main
 
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 
 line one
 line two
@@ -82,11 +82,11 @@ e2e::expect_stdout "${const_out}" <<'EOF'
 
 Jaiph: Running const_multiline.jh
 
-export def main
+def main
   ℹ Hello world
 Goodbye world
 
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 EOF
 
 # ── 4. Triple-quoted fail message ─────────────────────────────────────────────

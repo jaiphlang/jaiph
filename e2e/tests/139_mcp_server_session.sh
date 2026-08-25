@@ -39,12 +39,12 @@ fi
 # ---------------------------------------------------------------------------
 e2e::file "tools.jh" <<'EOF'
 # Echo the message argument straight back as the return value.
-def echo_msg(message) {
+export def echo_msg(message) {
   return message
 }
 
 # Always fails so the tool call reports an error.
-def boom() {
+export def boom() {
   fail "boom-failed"
 }
 EOF
@@ -150,9 +150,9 @@ e2e::expect_stdout "${run_out}" <<'EOF'
 
 Jaiph: Running greet.jh
 
-export def main (name="Adam")
+def main (name="Adam")
 
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 
 Hello, Adam
 EOF

@@ -29,8 +29,8 @@ run_dir="$(e2e::run_dir_at "${TEST_DIR}/runs_log" "log_artifacts.jh")"
 
 # Then — find the workflow .out and .err files
 shopt -s nullglob
-out_files=( "${run_dir}"*default.out )
-err_files=( "${run_dir}"*default.err )
+out_files=( "${run_dir}"*main.out )
+err_files=( "${run_dir}"*main.err )
 step_out_files=( "${run_dir}"*script__done_impl.out )
 shopt -u nullglob
 

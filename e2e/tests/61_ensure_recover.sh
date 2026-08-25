@@ -43,16 +43,16 @@ e2e::expect_stdout "${out}" <<'EOF'
 
 Jaiph: Running retry_single.jh
 
-export def main
+def main
   ▸ def dep
   ·   ▸ script dep_impl
   ·   ✗ script dep_impl (<time>)
-  ✗ def dep(<time>)
+  ✗ def dep (<time>)
   ▸ def install_deps
   ·   ▸ script install_deps_impl
   ·   ✓ script install_deps_impl (<time>)
-  ✓ def install_deps(<time>)
-✓ PASS export def main (<time>)
+  ✓ def install_deps (<time>)
+✓ PASS def main (<time>)
 EOF
 
 e2e::pass "run dep catch run install_deps: catch runs once on failure"
@@ -93,16 +93,16 @@ e2e::expect_stdout "${out_block}" <<'EOF'
 
 Jaiph: Running retry_block.jh
 
-export def main
+def main
   ▸ def ready
   ·   ▸ script ready_impl
   ·   ✗ script ready_impl (<time>)
-  ✗ def ready(<time>)
+  ✗ def ready (<time>)
   ▸ script recover_echo
   ✓ script recover_echo (<time>)
   ▸ script recover_touch
   ✓ script recover_touch (<time>)
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 EOF
 
 e2e::pass "run ready catch { echo ...; touch ...; }: block runs once on failure"

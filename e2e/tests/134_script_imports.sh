@@ -35,10 +35,10 @@ e2e::expect_stdout "${shell_out}" <<'EOF'
 
 Jaiph: Running main_shell.jh
 
-export def main
+def main
   ▸ script greet
   ✓ script greet (<time>)
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 EOF
 
 e2e::expect_out "main_shell.jh" "greet" "hello from imported shell"
@@ -74,13 +74,13 @@ e2e::expect_stdout "${cap_out}" <<'EOF'
 
 Jaiph: Running main_capture.jh
 
-export def main
+def main
   ▸ script emit
   ✓ script emit (<time>)
   ▸ script consume (1="captured-from-shell")
   ✓ script consume (<time>)
 
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 EOF
 
 e2e::expect_out "main_capture.jh" "consume" "consumed: captured-from-shell"
@@ -137,10 +137,10 @@ EOF
 
 Jaiph: Running main_python.jh
 
-export def main
+def main
   ▸ script queue
   ✓ script queue (<time>)
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 EOF
 
   e2e::expect_out "main_python.jh" "queue" "hello-from-imported-python"

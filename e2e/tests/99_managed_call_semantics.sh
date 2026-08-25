@@ -30,14 +30,14 @@ JAIPH_RUNS_DIR="runs_mc" e2e::run "run_fn_ok.jh" >/dev/null
 
 run_dir="$(e2e::run_dir_at "${TEST_DIR}/runs_mc" "run_fn_ok.jh")"
 shopt -s nullglob
-wf_outs=( "${run_dir}"*default.out )
+wf_outs=( "${run_dir}"*def__main.out )
 shopt -u nullglob
 [[ ${#wf_outs[@]} -ge 1 ]] || e2e::fail "expected default .out for run_fn_ok"
 
 shopt -s nullglob
 fn_log_file=""
 for f in "${run_dir}"/*.out; do
-  [[ "$f" == *default.out ]] && continue
+  [[ "$f" == *def__main.out ]] && continue
   if grep -q "log-to-artifacts" "$f" 2>/dev/null; then
     fn_log_file="$f"
     break

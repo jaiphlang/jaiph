@@ -29,11 +29,11 @@ e2e::expect_stdout "${then_out}" <<'EOF'
 
 Jaiph: Running if_else_wf.jh
 
-export def main (status="ok")
+def main (status="ok")
   ℹ healthy
   ℹ done
 
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 EOF
 e2e::pass "if/else workflow: only then-branch runs when condition is true"
 
@@ -46,11 +46,11 @@ e2e::expect_stdout "${else_out}" <<'EOF'
 
 Jaiph: Running if_else_wf.jh
 
-export def main (status="bad")
+def main (status="bad")
   ℹ unhealthy: bad
   ℹ done
 
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 EOF
 e2e::pass "if/else workflow: only else-branch runs when condition is false"
 
@@ -78,13 +78,13 @@ e2e::expect_stdout "${rule_ok_out}" <<'EOF'
 
 Jaiph: Running if_else_rule.jh
 
-export def main (value="hello")
-  ▸ def check(value="hello")
+def main (value="hello")
+  ▸ def check (value="hello")
   ·   ℹ value: hello
-  ✓ def check(<time>)
+  ✓ def check (<time>)
   ℹ validated
 
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 EOF
 e2e::pass "if/else rule: else branch runs and rule passes when value non-empty"
 

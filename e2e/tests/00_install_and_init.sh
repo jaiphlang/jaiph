@@ -54,7 +54,7 @@ export def main() {
     5) Print a short usage guide with exact jaiph run commands.
     6) End your response with:
        - WHAT CHANGED: files touched and key edits
-       - WHY: tie each edit to repository structure, tests, or sandbox needs
+       - WHY: tie each edit to repository structure, tests, or isolation needs
   """
   log "Bootstrap summary (what changed and why):"
   log "${bootstrap_summary}"

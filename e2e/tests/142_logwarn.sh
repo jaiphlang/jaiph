@@ -23,7 +23,7 @@ JAIPH_RUNS_DIR="${TEST_DIR}/runs_logwarn" jaiph run "${TEST_DIR}/logwarn.jh" >/t
 run_dir="$(e2e::run_dir_at "${TEST_DIR}/runs_logwarn" "logwarn.jh")"
 
 shopt -s nullglob
-err_files=( "${run_dir}"*default.err )
+err_files=( "${run_dir}"*main.err )
 shopt -u nullglob
 
 [[ ${#err_files[@]} -ge 1 ]] || e2e::fail "expected at least one .err file for default workflow (logwarn output)"

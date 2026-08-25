@@ -26,7 +26,7 @@ catch_out="$(e2e::run "inline_catch.jh")"
 # assert_contains: inline script hash name is content-dependent and not predictable in heredoc
 e2e::assert_contains "${catch_out}" "script __inline_" "tree shows inline script step"
 e2e::assert_contains "${catch_out}" "caught: bad" "catch body ran once with merged stdout+stderr bound"
-e2e::assert_contains "${catch_out}" "PASS export def main" "catch absorbed the failure"
+e2e::assert_contains "${catch_out}" "PASS def main" "catch absorbed the failure"
 
 e2e::pass "inline script catch: single-shot recovery"
 
@@ -55,7 +55,7 @@ recover_out="$(e2e::run "inline_recover.jh")"
 e2e::assert_file_exists "${COUNTER}.done" "recover body created the repair marker"
 counter_value="$(cat "${COUNTER}")"
 e2e::assert_equals "${counter_value}" "2" "recover ran exactly twice before the inline check passed"
-e2e::assert_contains "${recover_out}" "PASS export def main" "workflow passes after recover retries"
+e2e::assert_contains "${recover_out}" "PASS def main" "workflow passes after recover retries"
 
 e2e::pass "inline script recover: retry loop with counter-file repair"
 
@@ -76,6 +76,6 @@ export def main() {
 EOF
 
 rule_out="$(e2e::run "inline_catch_rule.jh")"
-e2e::assert_contains "${rule_out}" "PASS export def main" "rule with inline-script catch passes"
+e2e::assert_contains "${rule_out}" "PASS def main" "rule with inline-script catch passes"
 
 e2e::pass "inline script catch in rule body"

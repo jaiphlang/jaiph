@@ -44,21 +44,21 @@ e2e::expect_stdout "$run_output" <<'EXPECTED'
 
 Jaiph: Running fanout.jh
 
-export def main
+def main
  ₁▸ def do_a
  ₁·   ▸ script write_a
  ₂▸ def do_b
  ₂·   ▸ script write_b
   ℹ done
  ₁·   ✓ script write_a (<time>)
- ₁✓ def do_a(<time>)
+ ₁✓ def do_a (<time>)
  ₂·   ✓ script write_b (<time>)
- ₂✓ def do_b(<time>)
+ ₂✓ def do_b (<time>)
 
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 EXPECTED
 
-e2e::expect_out "fanout.jh" "default" "done"
+e2e::expect_out "fanout.jh" "main" "done"
 e2e::expect_out "fanout.jh" "do_a" ""
 e2e::expect_out "fanout.jh" "do_b" ""
 
@@ -126,17 +126,17 @@ e2e::expect_stdout "$interleave_output" <<'EXPECTED'
 
 Jaiph: Running async_interleave.jh
 
-export def main
+def main
  ₁▸ def slow
   ▸ script write_marker
  ₁·   ℹ slow-done
- ₁✓ def slow(<time>)
+ ₁✓ def slow (<time>)
   ✓ script write_marker (<time>)
 
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 EXPECTED
 
-e2e::expect_out "async_interleave.jh" "default" "slow-done"
+e2e::expect_out "async_interleave.jh" "main" "slow-done"
 e2e::expect_out "async_interleave.jh" "slow" "slow-done"
 
 # --- capture + run async returns handle that resolves on read ---
@@ -162,7 +162,7 @@ if [[ "$capture_status" -ne 0 ]]; then
 fi
 e2e::pass "capture + run async succeeds"
 
-e2e::expect_out "capture_async.jh" "default" "hello"
+e2e::expect_out "capture_async.jh" "main" "hello"
 
 # --- run async sibling depth in progress tree ---
 
@@ -193,17 +193,17 @@ e2e::expect_stdout "$depth_output" <<'EXPECTED'
 
 Jaiph: Running sibling_depth.jh
 
-export def main
+def main
  ₁▸ def branch_x
  ₁·   ▸ script write_x
  ₂▸ def branch_y
  ₂·   ▸ script write_y
  ₁·   ✓ script write_x (<time>)
- ₁✓ def branch_x(<time>)
+ ₁✓ def branch_x (<time>)
  ₂·   ✓ script write_y (<time>)
- ₂✓ def branch_y(<time>)
+ ₂✓ def branch_y (<time>)
 
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 EXPECTED
 
 # --- circled numbers on async branches ---
@@ -231,18 +231,18 @@ e2e::expect_stdout "$circled_output" <<'EXPECTED'
 
 Jaiph: Running circled.jh
 
-export def main
+def main
  ₁▸ def alpha
  ₂▸ def beta
  ₁·   ℹ alpha-done
  ₂·   ℹ beta-done
- ₁✓ def alpha(<time>)
- ₂✓ def beta(<time>)
+ ₁✓ def alpha (<time>)
+ ₂✓ def beta (<time>)
 
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 EXPECTED
 
-e2e::expect_out "circled.jh" "default" "alpha-done
+e2e::expect_out "circled.jh" "main" "alpha-done
 beta-done"
 e2e::expect_out "circled.jh" "alpha" "alpha-done"
 e2e::expect_out "circled.jh" "beta" "beta-done"
@@ -281,7 +281,7 @@ e2e::expect_stdout "$nested_output" <<'EXPECTED'
 
 Jaiph: Running nested_async.jh
 
-export def main
+def main
  ₁▸ def outer
  ₁·  ₁▸ def inner_a
  ₁·  ₂▸ def inner_b
@@ -289,15 +289,15 @@ export def main
  ₁·  ₁·   ℹ inner-a
  ₁·  ₂·   ℹ inner-b
  ₂·   ℹ side-done
- ₁·  ₁✓ def inner_a(<time>)
- ₁·  ₂✓ def inner_b(<time>)
- ₂✓ def side(<time>)
- ₁✓ def outer(<time>)
+ ₁·  ₁✓ def inner_a (<time>)
+ ₁·  ₂✓ def inner_b (<time>)
+ ₂✓ def side (<time>)
+ ₁✓ def outer (<time>)
 
-✓ PASS export def main (<time>)
+✓ PASS def main (<time>)
 EXPECTED
 
-e2e::expect_out "nested_async.jh" "default" "inner-a
+e2e::expect_out "nested_async.jh" "main" "inner-a
 inner-b
 side-done"
 e2e::expect_out "nested_async.jh" "inner_a" "inner-a"

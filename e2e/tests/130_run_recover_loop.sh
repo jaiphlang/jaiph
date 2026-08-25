@@ -38,20 +38,20 @@ e2e::expect_stdout "${out}" <<'EOF'
 
 Jaiph: Running recover_repair.jh
 
-export def main
+def main
   ▸ def check
   ·   ▸ script check_gate
   ·   ✗ script check_gate (<time>)
-  ✗ def check(<time>)
+  ✗ def check (<time>)
   ▸ def fix
   ·   ▸ script do_fix
   ·   ✓ script do_fix (<time>)
-  ✓ def fix(<time>)
+  ✓ def fix (<time>)
   ▸ def check
   ·   ▸ script check_gate
   ·   ✓ script check_gate (<time>)
-  ✓ def check(<time>)
-✓ PASS export def main (<time>)
+  ✓ def check (<time>)
+✓ PASS def main (<time>)
 EOF
 e2e::pass "recover loop: repair and retry succeeded"
 
@@ -103,11 +103,11 @@ e2e::expect_stdout "${out_pass}" <<'EOF'
 
 Jaiph: Running recover_pass.jh
 
-export def main
+def main
   ▸ def ok
   ·   ▸ script ok_impl
   ·   ✓ script ok_impl (<time>)
-  ✓ def ok(<time>)
-✓ PASS export def main (<time>)
+  ✓ def ok (<time>)
+✓ PASS def main (<time>)
 EOF
 e2e::pass "recover: success on first attempt, body never runs"

@@ -233,7 +233,7 @@ JAIPH_RUNS_DIR="runs_log" e2e::run "contract_log.jh" >/dev/null 2>&1
 run_dir="$(e2e::run_dir_at "${TEST_DIR}/runs_log" "contract_log.jh")"
 
 shopt -s nullglob
-wf_outs=( "${run_dir}"/*default.out )
+wf_outs=( "${run_dir}"/*def__main.out )
 shopt -u nullglob
 [[ ${#wf_outs[@]} -ge 1 ]] || e2e::fail "expected default .out artifact"
 wf_out="$(<"${wf_outs[0]}")"
@@ -248,7 +248,7 @@ done_content="$(<"${done_outs[0]}")"
 e2e::assert_equals "${done_content}" "done" "script stdout in .out artifact"
 
 shopt -s nullglob
-wf_errs=( "${run_dir}"/*default.err )
+wf_errs=( "${run_dir}"/*def__main.err )
 shopt -u nullglob
 if [[ ${#wf_errs[@]} -ge 1 ]]; then
   wf_err="$(<"${wf_errs[0]}")"

@@ -76,7 +76,7 @@ text = captured.decode("utf-8", errors="ignore")
 # PTY redraw/control sequences and chunk boundaries.
 text = text.replace("\r", "\n")
 text = re.sub(r"\x1b\[[0-9;]*[A-Za-z]", "", text)
-running_seen = "RUNNING export def main" in text
+running_seen = "RUNNING def main" in text
 sys.stdout.write(f"__JAIPH_TTY_RUNNING_SEEN__={'1' if running_seen else '0'}\n")
 sys.stdout.buffer.write(captured)
 sys.exit(proc.returncode if proc.returncode is not None else 1)
@@ -97,14 +97,14 @@ e2e::assert_contains "${normalized}" "__JAIPH_TTY_RUNNING_SEEN__=1" "TTY stream 
 tree_projection="$(
   printf '%s\n' "${normalized}" | awk '
     /^Jaiph: Running tty_tree\.jh$/ { print; next }
-    /^export def main$/ { print; next }
+    /^def main$/ { print; next }
     /^  ·   ✓ script leaf_fn \(<time>\)$/ { print; next }
     /^  ✓ def leaf \(<time>\)$/ { print; next }
   '
 )"
 
 e2e::assert_equals "${tree_projection}" "Jaiph: Running tty_tree.jh
-export def main
+def main
   ·   ✓ script leaf_fn (<time>)
   ✓ def leaf (<time>)" "TTY projected tree matches expected flow"
 
