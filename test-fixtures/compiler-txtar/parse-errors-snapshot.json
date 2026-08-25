@@ -259,11 +259,11 @@
     "message": "invalid channel declaration; expected: channel <name> or channel <name> -> <workflow>"
   },
   "capture and send cannot be combined": {
-    "file": "<no-error>",
-    "line": 0,
-    "col": 0,
-    "code": "OK",
-    "message": "compilation succeeded but fixture expected a parse error"
+    "file": "input.jh",
+    "line": 2,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "use 'send <payload> -> <channel>'"
   },
   "top-level local keyword is rejected": {
     "file": "input.jh",
@@ -364,11 +364,11 @@
     "message": "catch requires explicit bindings: catch (<name>) { ... }"
   },
   "capture and send combined alt form": {
-    "file": "<no-error>",
-    "line": 0,
-    "col": 0,
-    "code": "OK",
-    "message": "compilation succeeded but fixture expected a parse error"
+    "file": "input.jh",
+    "line": 2,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "use 'send <payload> -> <channel>'"
   },
   "reject bare $name in log message": {
     "file": "<no-error>",
@@ -681,16 +681,16 @@
   "send rhs: unterminated braced interpolation": {
     "file": "input.jh",
     "line": 3,
-    "col": 12,
+    "col": 1,
     "code": "E_PARSE",
-    "message": "unterminated ${...} in send right-hand side"
+    "message": "use 'send <payload> -> <channel>'"
   },
   "send rhs: command substitution inside braced interpolation": {
     "file": "input.jh",
     "line": 3,
-    "col": 12,
+    "col": 1,
     "code": "E_PARSE",
-    "message": "send right-hand side must be a quoted string (\"...\"), a variable ($name or ${...}), or \"run <ref> [args]\" — not raw shell; use a script or use const"
+    "message": "use 'send <payload> -> <channel>'"
   },
   "inline script: unexpected content after": {
     "file": "input.jh",
@@ -910,11 +910,11 @@
     "message": "single-quoted strings are not supported; use double quotes (\"...\") instead"
   },
   "capture and send combined in workflow body": {
-    "file": "<no-error>",
-    "line": 0,
-    "col": 0,
-    "code": "OK",
-    "message": "compilation succeeded but fixture expected a parse error"
+    "file": "input.jh",
+    "line": 3,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "use 'send <payload> -> <channel>'"
   },
   "if keyword at top of workflow produces error": {
     "file": "input.jh",
@@ -1108,9 +1108,9 @@
   "send with unterminated string": {
     "file": "input.jh",
     "line": 3,
-    "col": 12,
+    "col": 1,
     "code": "E_PARSE",
-    "message": "multiline strings use triple quotes: channel <- \"\"\"...\"\"\""
+    "message": "use 'send <payload> -> <channel>'"
   },
   "triple-quote opening with content on same line": {
     "file": "input.jh",
@@ -1269,9 +1269,9 @@
   "send with trailing content after string": {
     "file": "input.jh",
     "line": 3,
-    "col": 12,
+    "col": 1,
     "code": "E_PARSE",
-    "message": "send right-hand side must be a quoted string (\"...\"), a variable ($name or ${...}), or \"run <ref> [args]\" — not raw shell; use a script or use const"
+    "message": "use 'send <payload> -> <channel>'"
   },
   "capture run with invalid reference in workflow": {
     "file": "input.jh",
@@ -1521,9 +1521,9 @@
   "send with empty payload rejected": {
     "file": "input.jh",
     "line": 3,
-    "col": 12,
+    "col": 1,
     "code": "E_PARSE",
-    "message": "send requires an explicit payload: channel <- \"message\" — bare forward syntax (channel <-) has been removed"
+    "message": "use 'send <payload> -> <channel>'"
   },
   "config after semicolon-separated steps in workflow": {
     "file": "input.jh",
@@ -1583,10 +1583,10 @@
   },
   "send triple-quote with trailing content": {
     "file": "input.jh",
-    "line": 5,
+    "line": 3,
     "col": 1,
     "code": "E_PARSE",
-    "message": "unexpected content after closing \"\"\""
+    "message": "use 'send <payload> -> <channel>'"
   },
   "wait in inline catch statement": {
     "file": "input.jh",
@@ -1649,7 +1649,7 @@
     "line": 4,
     "col": 1,
     "code": "E_PARSE",
-    "message": "unexpected content after run call: '> output.txt'; shell redirection (>, |, &) is not supported — use a script block"
+    "message": "use 'send <payload> -> <channel>'"
   },
   "prompt body must be string or identifier not number": {
     "file": "input.jh",
@@ -1661,9 +1661,9 @@
   "send rhs trailing content after braced var": {
     "file": "input.jh",
     "line": 4,
-    "col": 12,
+    "col": 1,
     "code": "E_PARSE",
-    "message": "send right-hand side must be a quoted string (\"...\"), a variable ($name or ${...}), or \"run <ref> [args]\" — not raw shell; use a script or use const"
+    "message": "use 'send <payload> -> <channel>'"
   },
   "config string key with boolean value": {
     "file": "input.jh",
@@ -1689,9 +1689,9 @@
   "send multiline string without triple quotes": {
     "file": "input.jh",
     "line": 3,
-    "col": 5,
+    "col": 1,
     "code": "E_PARSE",
-    "message": "multiline strings use triple quotes: channel <- \"\"\"...\"\"\""
+    "message": "use 'send <payload> -> <channel>'"
   },
   "send triple-quoted payload valid": {
     "file": "<no-error>",
@@ -1754,7 +1754,7 @@
     "line": 3,
     "col": 1,
     "code": "E_PARSE",
-    "message": "unterminated triple-quoted block: no closing \"\"\" before end of file"
+    "message": "use 'send <payload> -> <channel>'"
   },
   "run catch without bindings bare catch block": {
     "file": "input.jh",

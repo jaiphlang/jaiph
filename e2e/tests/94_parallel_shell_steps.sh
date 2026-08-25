@@ -155,9 +155,9 @@ e2e::file "bg_inbox.jh" <<'EOF'
 channel ch -> handler
 
 def sender() {
-  ch <- echo "msg1"
-  ch <- echo "msg2"
-  ch <- echo "msg3"
+  send echo "msg1" -> ch
+  send echo "msg2" -> ch
+  send echo "msg3" -> ch
 }
 
 def handler(message, chan, sender) {

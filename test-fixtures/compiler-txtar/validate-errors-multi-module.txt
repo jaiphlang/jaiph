@@ -33,12 +33,12 @@ def existing() {
 }
 
 === send RHS with unknown imported symbol
-# @expect error E_VALIDATE "unknown symbol" @4:5
+# @expect error E_VALIDATE "unknown symbol" @4:8
 --- main.jh
 import "lib.jh" as lib
 channel c
 export def main() {
-  c <- lib.nonexistent
+  send lib.nonexistent -> c
 }
 --- lib.jh
 def dummy() {
@@ -50,7 +50,7 @@ def dummy() {
 --- main.jh
 import "shared.jh" as shared
 export def main() {
-  shared.typo <- "x"
+  send "x" -> shared.typo
 }
 --- shared.jh
 channel findings
@@ -114,12 +114,12 @@ export def helper(a, b) {
 }
 
 === send RHS with imported script bare ref
-# @expect error E_VALIDATE "is not exported from module" @4:5
+# @expect error E_VALIDATE "is not exported from module" @4:8
 --- main.jh
 import "lib.jh" as lib
 channel c
 export def main() {
-  c <- lib.helper
+  send lib.helper -> c
 }
 --- lib.jh
 script helper = `echo "ok"`
@@ -128,12 +128,12 @@ def dummy() {
 }
 
 === send RHS with imported rule bare ref
-# @expect error E_VALIDATE "must be called with run" @4:5
+# @expect error E_VALIDATE "must be called with run" @4:8
 --- main.jh
 import "lib.jh" as lib
 channel c
 export def main() {
-  c <- lib.check
+  send lib.check -> c
 }
 --- lib.jh
 export def check() {
@@ -148,7 +148,7 @@ def dummy() {
 --- main.jh
 import "lib.jh" as lib
 export def main() {
-  lib.nonexistent_chan <- "data"
+  send "data" -> lib.nonexistent_chan
 }
 --- lib.jh
 channel other_chan
@@ -214,12 +214,12 @@ def dummy() {
 }
 
 === send RHS with non-exported workflow bare ref
-# @expect error E_VALIDATE "is not exported from module" @4:5
+# @expect error E_VALIDATE "is not exported from module" @4:8
 --- main.jh
 import "lib.jh" as lib
 channel c
 export def main() {
-  c <- lib.private_wf
+  send lib.private_wf -> c
 }
 --- lib.jh
 export def public_wf() {
@@ -242,12 +242,12 @@ export def check(a, b) {
 }
 
 === send RHS with non-exported script bare ref
-# @expect error E_VALIDATE "private_script" @4:5
+# @expect error E_VALIDATE "private_script" @4:8
 --- main.jh
 import "lib.jh" as lib
 channel c
 export def main() {
-  c <- lib.private_script
+  send lib.private_script -> c
 }
 --- lib.jh
 export script public_script = `echo public`

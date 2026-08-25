@@ -9,40 +9,39 @@
 
     const STATEMENT_KEYWORDS = new Set([
         "import",
+        "export",
         "as",
         "config",
-        "const",
-        "export",
         "channel",
-        "local",
-        "rule",
-        "workflow",
         "script",
+        "def",
         "test",
-        "ensure",
-        "catch",
-        "recover",
+        "const",
         "run",
-        "async",
         "prompt",
-        "returns",
-        "return",
-        "match",
-        "fail",
-        "mock",
         "log",
         "logerr",
-        "respond",
-        "contains",
+        "logwarn",
+        "fail",
+        "return",
+        "send",
+        "recover",
+        "catch",
+        "if",
+        "else",
+        "for",
+        "in",
+        "match",
+        "async",
+        "returns",
+        "not",
+        "mock",
+        "allow_failure",
         "expect_contain",
         "expect_not_contain",
         "expect_equal",
-        "allow_failure",
-        "if",
-        "elif",
-        "then",
-        "else",
-        "fi"
+        "true",
+        "false"
     ]);
 
     /**
@@ -254,13 +253,20 @@
             }
         });
 
-        // Definition names after rule / workflow / script
+        // Definition names after def / script / channel (optional leading export)
+        let declAt = 0;
+        if (firstValue === "export" && significant[1] && significant[1].token.type === "identifier") {
+            declAt = 1;
+        }
+        const declKw = significant[declAt] && significant[declAt].token.type === "identifier"
+            ? significant[declAt].token.value
+            : "";
         if (
-            (firstValue === "rule" || firstValue === "workflow" || firstValue === "script" || firstValue === "channel") &&
-            significant[1] &&
-            significant[1].token.type === "identifier"
+            (declKw === "def" || declKw === "script" || declKw === "channel") &&
+            significant[declAt + 1] &&
+            significant[declAt + 1].token.type === "identifier"
         ) {
-            annotated[significant[1].index].kind = "definition";
+            annotated[significant[declAt + 1].index].kind = "definition";
         }
 
         function consumeRef(startAt) {
@@ -319,30 +325,6 @@
             }
         }
 
-        if (firstValue === "if") {
-            for (let i = 1; i < significant.length; i += 1) {
-                if (
-                    significant[i].token.type === "identifier" &&
-                    significant[i].token.value === "then"
-                ) {
-                    annotated[significant[i].index].kind = "keyword";
-                }
-            }
-
-            for (let i = 1; i < significant.length - 1; i += 1) {
-                if (
-                    significant[i].token.type === "identifier" &&
-                    (significant[i].token.value === "ensure" || significant[i].token.value === "run")
-                ) {
-                    annotated[significant[i].index].kind = "keyword";
-                    if (significant[i + 1].token.type === "identifier") {
-                        annotated[significant[i + 1].index].kind = "identifier";
-                    }
-                    break;
-                }
-            }
-        }
-
         for (let i = 0; i < annotated.length - 2; i += 1) {
             if (
                 annotated[i].type === "identifier" &&
@@ -355,13 +337,17 @@
             }
         }
 
-        if (firstValue === "ensure" || firstValue === "run") {
-            if (significant[1] && significant[1].token.type === "identifier") {
-                annotated[significant[1].index].kind = "identifier";
+        if (firstValue === "run") {
+            let nameAt = 1;
+            if (significant[1] && significant[1].token.value === "async") {
+                nameAt = 2;
+            }
+            if (significant[nameAt] && significant[nameAt].token.type === "identifier") {
+                annotated[significant[nameAt].index].kind = "identifier";
             }
         }
 
-        // <channel_ref> -> workflow, workflow2 (route declaration)
+        // <channel_ref> -> def, def2 (route declaration)
         const routeLeftRef = consumeRef(0);
         const routeArrowAt = routeLeftRef ? routeLeftRef.endAt + 1 : -1;
         if (
@@ -381,44 +367,11 @@
             }
         }
 
-        // <channel_ref> <- command (send operator)
-        const sendLeftRef = consumeRef(0);
-        const sendArrowAt = sendLeftRef ? sendLeftRef.endAt + 1 : -1;
-        if (
-            sendLeftRef &&
-            significant[sendArrowAt] &&
-            significant[sendArrowAt].token.type === "send_arrow"
-        ) {
-            for (let j = sendLeftRef.startAt; j <= sendLeftRef.endAt; j += 1) {
-                if (significant[j].token.type === "identifier") {
-                    annotated[significant[j].index].kind = "identifier";
-                }
-            }
-        }
-
-        // local name = value → definition for variable name
-        if (firstValue === "local") {
-            if (significant[1] && significant[1].token.type === "identifier") {
-                annotated[significant[1].index].kind = "definition";
-            }
-        }
-
-        if (firstValue === "ensure") {
+        if (firstValue === "send") {
             for (let i = 1; i < significant.length; i += 1) {
-                if (
-                    significant[i].token.type === "identifier" &&
-                    significant[i].token.value === "else"
-                ) {
-                    annotated[significant[i].index].kind = "keyword";
-                    if (
-                        significant[i + 1] &&
-                        significant[i + 1].token.type === "identifier" &&
-                        significant[i + 1].token.value === "run"
-                    ) {
-                        annotated[significant[i + 1].index].kind = "keyword";
-                        if (significant[i + 2] && significant[i + 2].token.type === "identifier") {
-                            annotated[significant[i + 2].index].kind = "identifier";
-                        }
+                if (significant[i].token.type === "arrow") {
+                    if (significant[i + 1] && significant[i + 1].token.type === "identifier") {
+                        annotated[significant[i + 1].index].kind = "identifier";
                     }
                     break;
                 }
@@ -464,12 +417,19 @@
                 return;
             }
 
+            let declAt = 0;
+            if (firstValue === "export" && significant[1] && significant[1].token.type === "identifier") {
+                declAt = 1;
+            }
+            const declKw = significant[declAt] && significant[declAt].token.type === "identifier"
+                ? significant[declAt].token.value
+                : "";
             if (
-                firstValue === "script" &&
-                significant[1] &&
-                significant[1].token.type === "identifier"
+                declKw === "script" &&
+                significant[declAt + 1] &&
+                significant[declAt + 1].token.type === "identifier"
             ) {
-                knownSymbols.functionNames.add(significant[1].token.value);
+                knownSymbols.functionNames.add(significant[declAt + 1].token.value);
             }
         });
 

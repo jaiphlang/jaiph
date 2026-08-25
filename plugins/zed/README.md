@@ -9,7 +9,7 @@ Tree-sitter syntax highlighting for Jaiph (`.jh` and `*.test.jh`) in
 ## Features
 
 Highlights the current Jaiph surface: `import`, `config`, `channel` (`->`
-routes, `<-` sends), `script` (backtick and fenced), `def`,
+routes, `send … ->` sends), `script` (backtick and fenced), `def`,
 `run` / `run async`, `catch` / `recover`, `prompt … returns`, `match`
 (`=>`, `_` wildcard), `if` / `else if`, `for … in`, `const`, `log` / `logerr` /
 `logwarn`, `fail`, `return`, and `test` blocks (`mock`, `allow_failure`,
@@ -84,6 +84,7 @@ npm test        # regenerates the grammar and query-checks the shipped .scm file
 The suite drives the real Tree-sitter CLI against
 `../../grammars/tree-sitter-jaiph` and the queries in `languages/jaiph/`,
 asserting that keywords, comments, strings, and embedded-language injections
-are captured — and that removed surface (e.g. the `wait` keyword) is not. It
+are captured — and that removed surface (e.g. `wait` / `local` / `rule` /
+`workflow` / `ensure` / `inbox`) is not. It
 fails if the grammar or a query regresses. A C toolchain is required (the CLI
 compiles the parser on the fly); CI and macOS/Linux dev machines have one.

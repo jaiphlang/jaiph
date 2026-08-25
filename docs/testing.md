@@ -9,20 +9,20 @@ redirect_from:
 
 # Write & run tests
 
-This guide shows how to write a `*.test.jh` file with mocked prompts and stubbed dependencies, and then run it with `jaiph test`. Each test block runs the workflow under test in-process through `NodeWorkflowRuntime`, which is the same interpreter that `jaiph run` uses, and then checks the captured output.
+This guide shows how to write a `*.test.jh` file with mocked prompts and stubbed dependencies, and then run it with `jaiph test`. Each test block runs the def under test in-process through `NodeWorkflowRuntime`, which is the same interpreter that `jaiph run` uses, and then checks the captured output.
 
 `jaiph test` runs on the host in-process. It does not run the credential pre-flight, and it does not run hooks.
 
-Mock every `prompt` step, and stub external workflows, rules, or scripts when you need to. If you leave a prompt unmocked, or a queued list of `mock prompt "…"` responses runs out, the runtime falls through to a real, live `prompt` call against the configured agent backend, the same way `jaiph run` would. One difference is that `jaiph test` turns off prompt retries by default by setting `JAIPH_PROMPT_RETRY=0`, so a prompt that falls through and errors fails right away instead of retrying on the production schedule. Set `JAIPH_PROMPT_RETRY` yourself when you want to test the retry behavior.
+Mock every `prompt` step, and stub imported defs or scripts when you need to. If you leave a prompt unmocked, or a queued list of `mock prompt "…"` responses runs out, the runtime falls through to a real, live `prompt` call against the configured agent backend, the same way `jaiph run` would. One difference is that `jaiph test` turns off prompt retries by default by setting `JAIPH_PROMPT_RETRY=0`, so a prompt that falls through and errors fails right away instead of retrying on the production schedule. Set `JAIPH_PROMPT_RETRY` yourself when you want to test the retry behavior.
 
 A pattern-based `mock prompt { … }` block does not fall through. An unmatched prompt fails the test unless a `_` default arm catches it.
 
-The goal is to give the workflow fixed inputs and outputs you can check, so that refactors and CI catch regressions the same way every time.
+The goal is to give the def fixed inputs and outputs you can check, so that refactors and CI catch regressions the same way every time.
 
 ## Prerequisites
 
-- The workflow under test lives in a separate `.jh` file you can import (recommended, and it keeps test files small).
-- You know the workflow's parameters and what `prompt` calls it makes.
+- The def under test lives in a separate `.jh` file you can import (recommended, and it keeps test files small).
+- You know the def's parameters and what `prompt` calls it makes.
 
 ## 1. Create the test file
 
@@ -87,7 +87,7 @@ mock script w.helper() {
 
 `mock def` uses Jaiph steps in the body. `mock script` uses raw shell, the same as a real `script`.
 
-## 4. Run the workflow and capture output
+## 4. Run the def and capture output
 
 ```jh
 const response = run w.main()
@@ -96,7 +96,7 @@ const response = run w.main("first", "second")     # comma-separated arguments
 const response = run w.main() allow_failure        # accept non-zero exit
 ```
 
-`run` captures the workflow's return value when the exit code is 0 and the return value is not empty. When the exit code is non-zero, it captures the runtime error string instead. In any other case, it captures the workflow's `*.out` files, read in sorted order and joined together.
+`run` captures the def's return value when the exit code is 0 and the return value is not empty. When the exit code is non-zero, it captures the runtime error string instead. In any other case, it captures the def's `*.out` files, read in sorted order and joined together.
 
 ## 5. Assert on the captured value
 
@@ -143,5 +143,5 @@ A failure prints the failing assertion and exits non-zero:
 ## Related
 
 - [Architecture, test runner integration](architecture.md#test-runner-integration-testjh-in-the-kernel). How `runTestFile` reuses the same module graph and runtime as `jaiph run`.
-- [Configure backend & model](configure-backend.md). Workflows under test still read `config { … }`, so pin agent settings in env when CI must be deterministic.
+- [Configure backend & model](configure-backend.md). Defs under test still read `config { … }`, so pin agent settings in env when CI must be deterministic.
 - [Authenticate agent backends](agent-auth.md). Only needed when a test reaches a live `prompt`. Fully mocked suites skip agent credentials and the `jaiph run` pre-flight.

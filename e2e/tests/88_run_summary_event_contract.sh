@@ -41,7 +41,7 @@ script emit_payload = `echo "contract-payload"`
 
 def sender() {
   log "contract-sender-log"
-  ch <- run emit_payload()
+  send run emit_payload() -> ch
 }
 
 script write_a = `echo "a:$1" > contract_a.txt`

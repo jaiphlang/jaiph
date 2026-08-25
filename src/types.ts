@@ -64,7 +64,7 @@ export type Arg =
  * One expression — used wherever a value can appear:
  * - `const name = <Expr>`
  * - `return <Expr>`
- * - `send channel <- <Expr>`
+ * - `send <Expr> -> channel`
  * - `log <Expr>` / `logerr <Expr>` / `fail <Expr>`
  * - body of an `exec` step (managed call statement form, where the value is consumed
  *   for its side effects + optional capture)
@@ -82,7 +82,7 @@ export type Arg =
  *   sugar). `returns` carries an optional flat returns schema.
  * - `match`: a `match <subject> { ... }` expression evaluated for its value.
  * - `shell`: a raw shell fragment used as a managed substitution on the send RHS.
- * - `bare_ref`: a bare symbol on a send RHS (e.g. `channel <- foo`). Always rejected by the
+ * - `bare_ref`: a bare symbol on a send payload (e.g. `send foo -> channel`). Always rejected by the
  *   validator; preserved so the error message can name the symbol.
  */
 export type Expr =

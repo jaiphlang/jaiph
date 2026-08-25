@@ -282,7 +282,7 @@ export def main() {
 }
 
 === capture and send cannot be combined
-# @expect error E_VALIDATE "invalid send: channel must be a single name or `alias.name` (at most one dot in " @2:3
+# @expect error E_PARSE "use 'send <payload> -> <channel>'" @2:1
 --- input.jh
 export def main() {
   name = channel <- "hello"
@@ -430,7 +430,7 @@ export def main() {
 }
 
 === capture and send combined alt form
-# @expect error E_VALIDATE "invalid send: channel must be a single name or `alias.name` (at most one dot in " @2:3
+# @expect error E_PARSE "use 'send <payload> -> <channel>'" @2:1
 --- input.jh
 export def main() {
   name = channel <- echo hello
@@ -743,7 +743,7 @@ export def main() {
 --- input.jh
 channel findings
 def check() {
-  findings <- "data"
+  send "data" -> findings
 }
 export def main() {
   run check()
@@ -840,7 +840,7 @@ export def main() {
 }
 
 === send rhs: unterminated braced interpolation
-# @expect error E_PARSE "unterminated ${...} in send right-hand side" @3:12
+# @expect error E_PARSE "use 'send <payload> -> <channel>'" @3:1
 --- input.jh
 channel findings
 export def main() {
@@ -848,7 +848,7 @@ export def main() {
 }
 
 === send rhs: command substitution inside braced interpolation
-# @expect error E_PARSE "send right-hand side must be a quoted string (" @3:12
+# @expect error E_PARSE "use 'send <payload> -> <channel>'" @3:1
 --- input.jh
 channel findings
 export def main() {
@@ -1175,7 +1175,7 @@ export def main() {
 }
 
 === capture and send combined in workflow body
-# @expect error E_VALIDATE "invalid send: channel must be a single name or `alias.name` (at most one dot in " @3:3
+# @expect error E_PARSE "use 'send <payload> -> <channel>'" @3:1
 --- input.jh
 channel findings
 export def main() {
@@ -1411,7 +1411,7 @@ def foo(a, a) {
 }
 
 === send with unterminated string
-# @expect error E_PARSE "multiline strings use triple quotes: channel <-" @3:12
+# @expect error E_PARSE "use 'send <payload> -> <channel>'" @3:1
 --- input.jh
 channel findings
 export def main() {
@@ -1612,7 +1612,7 @@ export def main() {
 }
 
 === send with trailing content after string
-# @expect error E_PARSE "send right-hand side must be a quoted string (" @3:12
+# @expect error E_PARSE "use 'send <payload> -> <channel>'" @3:1
 --- input.jh
 channel findings
 export def main() {
@@ -2058,7 +2058,7 @@ some content
 }
 
 === send with empty payload rejected
-# @expect error E_PARSE "send requires an explicit payload: channel <-" @3:12
+# @expect error E_PARSE "use 'send <payload> -> <channel>'" @3:1
 --- input.jh
 channel findings
 export def main() {
@@ -2142,7 +2142,7 @@ result value
 }
 
 === send triple-quote with trailing content
-# @expect error E_PARSE "unexpected content after closing" @5:1
+# @expect error E_PARSE "use 'send <payload> -> <channel>'" @3:1
 --- input.jh
 channel inbox
 export def main() {
@@ -2224,7 +2224,7 @@ export def main() {
 }
 
 === shell redirection after send run call rejected
-# @expect error E_PARSE "unexpected content after run call: '> output.txt'; shell redirection (>, |, &) i" @4:1
+# @expect error E_PARSE "use 'send <payload> -> <channel>'" @4:1
 --- input.jh
 channel findings
 script helper = `echo ok`
@@ -2240,7 +2240,7 @@ export def main() {
 }
 
 === send rhs trailing content after braced var
-# @expect error E_PARSE "send right-hand side must be a quoted string (" @4:12
+# @expect error E_PARSE "use 'send <payload> -> <channel>'" @4:1
 --- input.jh
 channel findings
 export def main() {
@@ -2278,7 +2278,7 @@ export def main() {
 }
 
 === send multiline string without triple quotes
-# @expect error E_PARSE "multiline strings use triple quotes: channel <-" @3:5
+# @expect error E_PARSE "use 'send <payload> -> <channel>'" @3:1
 --- input.jh
 channel c
 export def main() {
@@ -2291,9 +2291,9 @@ world"
 --- input.jh
 channel c
 export def main() {
-  c <- """
+  send """
 hello world
-"""
+""" -> c
 }
 
 === top-level script single backtick unterminated
@@ -2367,7 +2367,7 @@ export def main() {
 }
 
 === unterminated triple-quoted send block
-# @expect error E_PARSE "unterminated triple-quoted block: no closing" @3:1
+# @expect error E_PARSE "use 'send <payload> -> <channel>'" @3:1
 --- input.jh
 channel inbox
 export def main() {
@@ -2448,7 +2448,7 @@ def helper() {
   return "data"
 }
 export def main() {
-  c <- run helper()
+  send run helper() -> c
 }
 
 === send rhs with run to script
@@ -2457,7 +2457,7 @@ export def main() {
 channel c
 script helper = `echo "data"`
 export def main() {
-  c <- run helper()
+  send run helper() -> c
 }
 
 === return with bash exit code rejected in workflow

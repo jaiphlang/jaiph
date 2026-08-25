@@ -19,7 +19,7 @@ def analyst() {
   log "ok"
 }
 export def main() {
-  typo <- "x"
+  send "x" -> typo
 }
 
 === rule with inline brace group fails shell-step ban
@@ -74,7 +74,7 @@ export def main() {
 }
 
 === send RHS cannot invoke workflow via shell
-# @expect error E_VALIDATE "must be called with run" @7:5
+# @expect error E_VALIDATE "must be called with run" @7:8
 --- input.jh
 channel c
 script w_impl = `echo x`
@@ -82,7 +82,7 @@ def w() {
   run w_impl()
 }
 export def main() {
-  c <- w
+  send w -> c
 }
 
 === bare identifier arg unknown name fails
@@ -395,11 +395,11 @@ export def main() {
 # @expect error E_VALIDATE "inbox route target" @1:21
 --- input.jh
 channel findings -> handler
-def handler(msg) {
-  log "${msg}"
+def handler(a, b, c, d) {
+  log "${a}"
 }
 export def main() {
-  findings <- "data"
+  send "data" -> findings
 }
 
 === route target with zero parameters
@@ -410,7 +410,7 @@ def handler() {
   log "got"
 }
 export def main() {
-  findings <- "data"
+  send "data" -> findings
 }
 
 === inline run ref with unknown rule
@@ -431,14 +431,14 @@ export def main() {
 }
 
 === send RHS with local rule bare ref
-# @expect error E_VALIDATE "must be called with run" @6:5
+# @expect error E_VALIDATE "must be called with run" @6:8
 --- input.jh
 channel c
 def check() {
   return "ok"
 }
 export def main() {
-  c <- check
+  send check -> c
 }
 
 === shell redirection in run args rejected in rule
@@ -475,7 +475,7 @@ export def main() {
 --- main.jh
 import "lib.jh" as lib
 export def main() {
-  ghost.mychan <- "x"
+  send "x" -> ghost.mychan
 }
 --- lib.jh
 def dummy() {
@@ -488,11 +488,11 @@ def dummy() {
 import "lib.jh" as lib
 channel findings -> lib.handler
 export def main() {
-  findings <- "data"
+  send "data" -> findings
 }
 --- lib.jh
-export def handler(msg) {
-  log "${msg}"
+export def handler(a, b, c, d) {
+  log "${a}"
 }
 
 === const run of string variable in rule rejected
@@ -507,30 +507,30 @@ export def main() {
 }
 
 === channel reference with three dot parts is rejected
-# @expect error E_VALIDATE "invalid send: channel must be a single name or `alias.name` (at most one dot in " @2:3
+# @expect error E_VALIDATE "is not defined" @2:1
 --- input.jh
 export def main() {
-  a.b.c <- "x"
+  send "x" -> a.b.c
 }
 
 === command substitution invokes workflow in send shell RHS
-# @expect error E_VALIDATE "command substitution cannot invoke def" @6:5
+# @expect error E_VALIDATE "command substitution cannot invoke def" @6:8
 --- input.jh
 channel c
 def helper() {
   log "hi"
 }
 export def main() {
-  c <- $(helper)
+  send $(helper) -> c
 }
 
 === command substitution invokes script in send shell RHS
-# @expect error E_VALIDATE "command substitution cannot invoke script" @4:5
+# @expect error E_VALIDATE "command substitution cannot invoke script" @4:8
 --- input.jh
 channel c
 script helper = `echo ok`
 export def main() {
-  c <- $(helper)
+  send $(helper) -> c
 }
 
 === scripts are not values in rule const
@@ -642,16 +642,16 @@ export def main() {
 --- input.jh
 channel c
 export def main() {
-  c <- "data: ${ghost}"
+  send "data: ${ghost}" -> c
 }
 
 === send RHS with local script bare ref requires run
-# @expect error E_VALIDATE "must be called with run" @4:5
+# @expect error E_VALIDATE "must be called with run" @4:8
 --- input.jh
 channel c
 script helper = `echo ok`
 export def main() {
-  c <- helper
+  send helper -> c
 }
 
 === unknown identifier in workflow logerr string
@@ -731,7 +731,7 @@ export def helper() {
 channel c
 script helper = `echo ok`
 export def main() {
-  c <- "result: ${helper}"
+  send "result: ${helper}" -> c
 }
 
 === unknown identifier in inline run capture in log
@@ -900,23 +900,23 @@ def dummy() {
 }
 
 === command substitution invokes rule in send shell RHS
-# @expect error E_VALIDATE "command substitution cannot invoke def" @6:5
+# @expect error E_VALIDATE "command substitution cannot invoke def" @6:8
 --- input.jh
 channel c
 def check() {
   return "ok"
 }
 export def main() {
-  c <- $(check)
+  send $(check) -> c
 }
 
 === command substitution contains channel send
-# @expect error E_VALIDATE "command substitution cannot contain channel send (<-); use a workflow send step " @4:5
+# @expect error E_VALIDATE "command substitution cannot contain channel send (<-); use a workflow send step " @4:8
 --- input.jh
 channel c
 channel d
 export def main() {
-  c <- $(d <- "x")
+  send $(d <- "x") -> c
 }
 
 === prompt inside else block in rule

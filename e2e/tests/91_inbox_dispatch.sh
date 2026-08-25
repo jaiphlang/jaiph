@@ -17,7 +17,7 @@ channel greetings -> receiver
 
 script emit_hello = `echo "hello from sender"`
 def sender() {
-  greetings <- run emit_hello()
+  send run emit_hello() -> greetings
 }
 
 script write_received = `echo "$1" > received.txt`
@@ -49,7 +49,7 @@ channel results -> consumer_a, consumer_b
 
 script emit_payload = `echo "data-payload"`
 def producer() {
-  results <- run emit_payload()
+  send run emit_payload() -> results
 }
 
 script write_consumer_a = `echo "A got: $1" > consumer_a.txt`
@@ -84,7 +84,7 @@ channel some_channel -> dummy
 
 script emit_dropped = `echo "dropped"`
 def sender() {
-  unknown_channel <- run emit_dropped()
+  send run emit_dropped() -> unknown_channel
 }
 
 script never_called_impl = `echo "never called" > dummy.txt`
@@ -121,7 +121,7 @@ channel audit -> auditor
 
 script emit_inbox_content = `echo "inbox-content-check"`
 def writer() {
-  audit <- run emit_inbox_content()
+  send run emit_inbox_content() -> audit
 }
 
 script write_audited = `echo "$1" > audited.txt`
@@ -154,12 +154,12 @@ channel report -> reviewer
 
 script emit_findings = `echo "Found 3 issues in auth module"`
 def scanner() {
-  findings <- run emit_findings()
+  send run emit_findings() -> findings
 }
 
 script emit_summary = `echo "Summary: $1"`
 def analyst(message, chan, sender) {
-  report <- run emit_summary(message)
+  send run emit_summary(message) -> report
 }
 
 script print_reviewed = `echo "[reviewed] $1"`
@@ -209,7 +209,7 @@ channel events -> consumer
 
 script emit_payload = `echo "payload-data"`
 def producer() {
-  events <- run emit_payload()
+  send run emit_payload() -> events
 }
 
 script write_receiver_args = ```
@@ -242,7 +242,7 @@ channel results -> consumer_a, consumer_b
 
 script emit_parallel_payload = `echo "parallel-payload"`
 def producer() {
-  results <- run emit_parallel_payload()
+  send run emit_parallel_payload() -> results
 }
 
 script write_consumer_a_par = `echo "A got: $1" > consumer_a_par.txt`
@@ -277,12 +277,12 @@ channel data -> sink
 
 script emit_from_a = `echo "from-a"`
 def sender_a() {
-  data <- run emit_from_a()
+  send run emit_from_a() -> data
 }
 
 script emit_from_b = `echo "from-b"`
 def sender_b() {
-  data <- run emit_from_b()
+  send run emit_from_b() -> data
 }
 
 script append_sink_log = `echo "$1" >> sink_log.txt`
@@ -323,7 +323,7 @@ channel ch -> good_target, bad_target
 
 script emit_msg = `echo "msg"`
 def producer() {
-  ch <- run emit_msg()
+  send run emit_msg() -> ch
 }
 
 script fail_target_impl = `exit 1`
@@ -359,7 +359,7 @@ channel events -> handler_a, handler_b
 
 script emit_e1 = `echo "e1"`
 def sender() {
-  events <- run emit_e1()
+  send run emit_e1() -> events
 }
 
 script handle_a_impl = `echo "handled-a"`
@@ -414,7 +414,7 @@ def handler(message, chan, sender) {
 }
 
 export def main() {
-  lib.topic <- "x"
+  send "x" -> lib.topic
 }
 EOF
 

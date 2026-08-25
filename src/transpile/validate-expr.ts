@@ -1,4 +1,3 @@
-import { matchSendOperator } from "../parser";
 import type { Expr } from "../types";
 import {
   BARE_SEND_REF_MSG,
@@ -17,7 +16,6 @@ import {
 import { validateMatchExpr } from "./validate-match";
 import {
   extractConstScriptName,
-  hasUnquotedSendArrow,
   makeImportedKindLookup,
   makeSubEnv,
   promptBareIdentifier,
@@ -280,15 +278,6 @@ export function validateWorkflowShellExec(
   ctx: ValidatorCtx,
 ): void {
   warnPromptInShellLine(body, ctx);
-  if (hasUnquotedSendArrow(body.command) && matchSendOperator(body.command) === null) {
-    ctx.diag.error(
-      ctx.ast.filePath,
-      body.loc.line,
-      body.loc.col,
-      "E_VALIDATE",
-      "invalid send: channel must be a single name or `alias.name` (at most one dot in the channel part)",
-    );
-  }
   const t = body.command.trim();
   if (/^(?:[A-Za-z_][A-Za-z0-9_]*)(?:\.[A-Za-z_][A-Za-z0-9_]*)*$/.test(t)) {
     if (!t.includes(".")) {

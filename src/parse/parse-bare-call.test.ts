@@ -117,13 +117,13 @@ test("return run bare identifier falls through to exec/shell", () => {
 
 // === send RHS with bare identifier (no parens) ===
 
-test("channel <- run bare identifier does not parse as send with call value", () => {
+test("send run bare identifier does not parse as send with call value -> channel", () => {
   // Without parens, the send RHS falls through to Expr.shell
   const mod = parsejaiph(
     [
       "channel alerts",
       "export def main() {",
-      "  alerts <- run get_msg",
+      "  send run get_msg -> alerts",
       "}",
     ].join("\n"),
     "test.jh",

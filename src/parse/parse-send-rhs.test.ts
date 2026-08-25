@@ -7,14 +7,14 @@ import { parseSendRhs } from "./send-rhs";
 test("parseSendRhs: empty RHS throws", () => {
   assert.throws(
     () => parseSendRhs("test.jh", "", 1, 1),
-    /send requires an explicit payload/,
+    /use 'send <payload> -> <channel>'/,
   );
 });
 
 test("parseSendRhs: whitespace-only RHS throws", () => {
   assert.throws(
     () => parseSendRhs("test.jh", "   ", 1, 1),
-    /send requires an explicit payload/,
+    /use 'send <payload> -> <channel>'/,
   );
 });
 
@@ -163,7 +163,7 @@ test("parseSendRhs: unrecognized expression returns Expr.shell", () => {
 // === parseSendRhs: triple-quoted literal ===
 
 test("parseSendRhs: triple-quoted string returns Expr.literal", () => {
-  const lines = ['ch <- """', "  hello", "  world", '"""'];
+  const lines = ['"""', "  hello", "  world", '"""'];
   const { value, nextIdx } = parseSendRhs("test.jh", '"""', 1, 6, lines, 0);
   assert.equal(value.kind, "literal");
   if (value.kind === "literal") {

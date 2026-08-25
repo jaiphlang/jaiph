@@ -3,7 +3,7 @@ channel summary -> reviewer
 channel final_summary
 
 export def researcher() {
-  findings <- run emit_findings()
+  send run emit_findings() -> findings
 }
 
 script emit_findings = `echo '## findings'`
@@ -17,11 +17,11 @@ script review_summary = `echo "[reviewed] $1"`
 export def analyst(message, chan, sender) {
   run write_findings_file(message)
   const summary = run summarize_findings()
-  summary <- "${summary}"
+  send "${summary}" -> summary
 }
 
 export def reviewer(message, chan, sender) {
-  final_summary <- run review_summary(message)
+  send run review_summary(message) -> final_summary
 }
 
 # Orchestration / entrypoint workflow

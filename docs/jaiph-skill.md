@@ -174,7 +174,7 @@ def release(version) {
   log "published ${version}"                # info line in the progress tree (stdout)
   logerr "registry error"                   # red ! line (stderr)
   logwarn "registry is slow"                # yellow warning line
-  alerts <- "released ${version}"           # send to a channel
+  send "released ${version}" -> alerts
   return notes                              # set this workflow's return value
 }
 ```
@@ -286,11 +286,11 @@ for path in paths {                       # iterates LINES of the string `paths`
 channel findings -> analyst, reviewer     # routes declared at TOP LEVEL only
 
 def scanner() {
-  findings <- "Found 3 issues in auth"    # RHS: "literal", """block""", ${var}, or run ref()
+  send "Found 3 issues in auth" -> findings
 }
 
-def analyst(message, chan, sender) { # route targets declare EXACTLY 3 params
-  log "from ${sender}: ${message}"
+def analyst(msg) {
+  log "from scanner: ${msg}"
 }
 
 export def main() {
@@ -298,7 +298,7 @@ export def main() {
 }
 ```
 
-Sends enqueue in memory; the queue drains after the owning workflow's steps complete, calling each target sequentially. A `->` inside a workflow body is a parse error. Sends on a channel with no route are silently dropped. Each workflow frame may drain at most **1000** messages before the runtime aborts the owning workflow with `E_INBOX_DISPATCH_LIMIT` (naming the channel that hit the cap); override via `JAIPH_INBOX_MAX_DISPATCH=<positive int>` only if the high volume is intentional. Routed payloads are persisted under the run dir as `inbox/NNN-<channel>.txt`.
+Sends enqueue in memory; the queue drains after the owning workflow's steps complete, calling each target sequentially. A route (`name -> targets`) inside a def body is a parse error; send is `send <payload> -> channel`. Sends on a channel with no route are silently dropped. Each workflow frame may drain at most **1000** messages before the runtime aborts the owning workflow with `E_INBOX_DISPATCH_LIMIT` (naming the channel that hit the cap); override via `JAIPH_INBOX_MAX_DISPATCH=<positive int>` only if the high volume is intentional. Routed payloads are persisted under the run dir as `inbox/NNN-<channel>.txt`.
 
 ### Concurrency: `run async`
 
@@ -354,7 +354,7 @@ Precedence: **environment > def-level config > module-level config > defaults**.
 - **Capture sources:** def → its explicit `return` value; script → stdout; prompt → the agent's answer.
 - Step environment: scripts inherit the runner's environment plus `JAIPH_WORKSPACE`, `JAIPH_SCRIPTS`, `JAIPH_RUN_DIR`, `JAIPH_ARTIFACTS_DIR`, etc. Workflow variables are **not** auto-exported — pass them as arguments.
 
-## Testing your workflows
+## Testing your programs
 
 Test files are `*.test.jh` next to your modules, run with `jaiph test`. They run the same interpreter with mocked prompts and bodies. Mock every prompt (see below) so no live LLM call happens — an unmocked `prompt` still calls the backend.
 
@@ -381,12 +381,12 @@ test "failure path is handled" {
 }
 ```
 
-- Mocks: `mock prompt "…"` (queued, one per prompt call), a `mock prompt { … }` block with content-based arms (`/regex/ => "…"` matches when the pattern appears anywhere in the prompt, `"exact" => "…"` matches the whole prompt text, `_ => "…"` is the default; each arm on its own line, like a `match`), `mock def ref() { … }`, `mock def ref() { … }`, `mock script ref() { shell lines }`. All mock refs need `()`.
+- Mocks: `mock prompt "…"` (queued, one per prompt call), a `mock prompt { … }` block with content-based arms (`/regex/ => "…"` matches when the pattern appears anywhere in the prompt, `"exact" => "…"` matches the whole prompt text, `_ => "…"` is the default; each arm on its own line, like a `match`), `mock def ref() { … }`, `mock script ref() { shell lines }`. All mock refs need `()`.
 - Assertions: `expect_contain`, `expect_not_contain`, `expect_equal` — `expect_* <captureVar> "literal"` or a test-block `const` name.
 - For typed prompts, the mock text must be one line of valid JSON matching the schema.
 - Mixing queued `mock prompt "…"` / `mock prompt <const>` and a `mock prompt { … }` block in one test is rejected at compile time (`E_VALIDATE`: `cannot mix "mock prompt { … }" with queued "mock prompt …" in one test block; choose one style`). Use one style per block; separate tests in the same file may use different styles.
 
-Write at least one test per workflow you author when the repo uses tests; mock every prompt so the suite is deterministic.
+Write at least one test per def you author when the repo uses tests; mock every prompt so the suite is deterministic.
 
 ## Patterns for repetitive tasks
 
@@ -435,7 +435,7 @@ When asked to scaffold Jaiph automation (e.g. after `jaiph init`), build a small
 - `.jaiph/readiness.jh` — preflight rules (required tools, clean git) + `export def main` running them.
 - `.jaiph/verification.jh` — lint/test/build rules + `export def main`.
 - `.jaiph/main.jh` — imports both, defines the prompt-driven `implement` workflow, and a `export def main(task)` wiring **preflight → implement → verification**.
-- Optional: a review workflow gating a task queue, `*.test.jh` tests for the workflows.
+- Optional: a review def gating a task queue, `*.test.jh` tests for the defs.
 
 Keep workflows short; put expensive checks after cheap ones; pass data explicitly. Always finish with format + compile:
 

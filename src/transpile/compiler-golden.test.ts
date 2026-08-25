@@ -499,10 +499,10 @@ test("parser: brace-style if with old syntax produces E_PARSE", () => {
   );
 });
 
-test("parser: send operator parses channel <- \"literal\"", () => {
+test("parser: send operator parses send payload -> channel", () => {
   const source = [
     "export def main() {",
-    `  findings <- "hello"`,
+    `  send "hello" -> findings`,
     "}",
   ].join("\n");
   const mod = parsejaiph(source, "/fake/entry.jh");
@@ -525,7 +525,7 @@ test("parser: top-level channel declarations parse and are stored", () => {
     "  log \"ok\"",
     "}",
     "export def main() {",
-    `  findings <- "hi"`,
+    `  send "hi" -> findings`,
     "}",
   ].join("\n");
   const mod = parsejaiph(source, "/fake/entry.jh");
@@ -543,7 +543,7 @@ test("parser: channel declaration must be single per line", () => {
   const source = [
     "channel findings, report",
     "export def main() {",
-    `  findings <- "hi"`,
+    `  send "hi" -> findings`,
     "}",
   ].join("\n");
   assert.throws(
@@ -563,7 +563,7 @@ test("validator: unknown local channel fails with required message", () => {
         "  log \"ok\"",
         "}",
         "export def main() {",
-        `  typo <- "x"`,
+        `  send "x" -> typo`,
         "}",
         "",
       ].join("\n"),
@@ -597,7 +597,7 @@ test("validator: missing channel import fails with required message", () => {
       [
         'import "shared.jh" as shared',
         "export def main() {",
-        `  shared.typo <- "x"`,
+        `  send "x" -> shared.typo`,
         "}",
         "",
       ].join("\n"),
@@ -611,7 +611,7 @@ test("validator: missing channel import fails with required message", () => {
   }
 });
 
-test("parser: standalone channel <- forwards $1", () => {
+test("parser: channel <- is not a send", () => {
   const source = [
     "export def main() {",
     "  findings <-",
@@ -619,7 +619,7 @@ test("parser: standalone channel <- forwards $1", () => {
   ].join("\n");
   assert.throws(
     () => parsejaiph(source, "/fake/entry.jh"),
-    /send requires an explicit payload/,
+    /use 'send <payload> -> <channel>'/,
   );
 });
 
@@ -685,20 +685,15 @@ test("parser: route inside workflow body is a hard parse error", () => {
 });
 
 test("parser: capture + send is E_PARSE", () => {
-  // With assignment-without-const removed, "name = channel <- ..." falls through
-  // to a shell step; the inline-shell ban then rejects it at validation time.
   const source = [
     "export def main() {",
     `  name = channel <- "hello"`,
     "}",
   ].join("\n");
-  const mod = parsejaiph(source, "/fake/entry.jh");
-  // Parsed as an exec step with shell body; validation will reject it later
-  const step = mod.defs[0].steps[0];
-  assert.equal(step.type, "exec");
-  if (step.type === "exec") {
-    assert.equal(step.body.kind, "shell");
-  }
+  assert.throws(
+    () => parsejaiph(source, "/fake/entry.jh"),
+    /use 'send <payload> -> <channel>'/,
+  );
 });
 
 // === Top-level const (env declaration) tests ===

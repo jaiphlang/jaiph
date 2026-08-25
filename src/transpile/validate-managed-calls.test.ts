@@ -242,7 +242,7 @@ test("E_VALIDATE: send RHS cannot invoke Jaiph workflow via shell", () => {
         "  run w_impl()",
         "}",
         "export def main() {",
-        "  c <- w",
+        "  send w -> c",
         "}",
         "",
       ].join("\n"),

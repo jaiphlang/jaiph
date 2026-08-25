@@ -681,7 +681,7 @@
             "1": { "name": "storage.type.channel.jaiph" },
             "2": { "name": "variable.other.channel.jaiph" },
             "3": { "name": "keyword.operator.route.jaiph" },
-            "4": { "name": "entity.name.function.workflow.jaiph" }
+            "4": { "name": "entity.name.function.def.jaiph" }
           }
         }
       ]
@@ -773,21 +773,13 @@
     "channels": {
       "patterns": [
         {
-          "comment": "inbox <- (forward: sends first declared parameter)",
-          "name": "meta.send.inbox.jaiph",
-          "match": "^\\s*\\b(inbox)\\b\\s*(<-)",
-          "captures": {
-            "1": { "name": "keyword.control.inbox.jaiph" },
-            "2": { "name": "keyword.operator.send.jaiph" }
-          }
-        },
-        {
-          "comment": "channel <- message (send)",
+          "comment": "send payload -> channel",
           "name": "meta.send.jaiph",
-          "match": "^\\s*([A-Za-z_][A-Za-z0-9_]*)\\s*(<-)",
+          "match": "^\\s*(send)\\b.+(->)\\s+([A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)?)",
           "captures": {
-            "1": { "name": "variable.other.channel.jaiph" },
-            "2": { "name": "keyword.operator.send.jaiph" }
+            "1": { "name": "keyword.control.command.jaiph" },
+            "2": { "name": "keyword.operator.send.jaiph" },
+            "3": { "name": "variable.other.channel.jaiph" }
           }
         },
         {
@@ -797,7 +789,7 @@
           "captures": {
             "1": { "name": "variable.other.channel.jaiph" },
             "2": { "name": "keyword.operator.route.jaiph" },
-            "3": { "name": "entity.name.function.workflow.jaiph" }
+            "3": { "name": "entity.name.function.def.jaiph" }
           }
         }
       ]
@@ -841,7 +833,7 @@
         },
         {
           "name": "keyword.control.command.jaiph",
-          "match": "\\b(run|prompt|log|logerr|logwarn|recover|catch|fail|return)\\b"
+          "match": "\\b(run|prompt|log|logerr|logwarn|recover|catch|fail|return|send)\\b"
         },
         {
           "name": "keyword.control.test.jaiph",

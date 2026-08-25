@@ -9,7 +9,7 @@ Syntax highlighting, compiler diagnostics, and formatting for Jaiph (`.jh` and
 ## Features
 
 - Highlights the current Jaiph surface for `.jh` / `*.test.jh`: `import`,
-  `config`, `channel` (`->` routes, `<-` sends), `script` (backtick and fenced),
+  `config`, `channel` (`->` routes, `send … ->` sends), `script` (backtick and fenced),
   `def`, `run` / `run async`, `catch` / `recover`,
   `prompt … returns`, `match`, `if` / `else if`, `for … in`, `const`,
   `log` / `logerr` / `logwarn`, `fail`, `return`, and `test` blocks
@@ -47,7 +47,7 @@ The test suite (`test/`) has two lanes:
 
 - **Grammar** — tokenizes fixtures with `vscode-textmate` and asserts scopes,
   including a regression fixture that fails if stale surface (e.g. the removed
-  `wait` keyword) is reintroduced.
+  `wait` / `local` / `rule` / `workflow` / `ensure` / `inbox` keywords) is reintroduced.
 - **Diagnostics** — runs the real monorepo `jaiph compile --json` against
   fixtures, so it breaks if the CLI diagnostics contract changes. Build the CLI
   once at the repo root first: `npm run build` in the monorepo root.

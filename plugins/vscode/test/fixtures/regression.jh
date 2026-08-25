@@ -8,6 +8,11 @@ config {
 }
 
 export def main() {
-  # `wait` was removed from the language (E_PARSE). Not a command keyword.
+  # Removed keywords must highlight as plain identifiers, not commands.
   wait for_something
+  local
+  rule
+  workflow
+  ensure
+  send "payload" -> inbox
 }
