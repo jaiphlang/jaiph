@@ -24,12 +24,11 @@ import { Diagnostics } from "../diagnostics";
 import { loadModuleGraph } from "./module-graph";
 import { collectDiagnostics } from "./validate";
 import {
-  RULE_SCOPE,
-  WORKFLOW_SCOPE,
+  DEF_SCOPE,
   validateStep,
   type ValidatorCtx,
 } from "./validate-step";
-import type { jaiphModule, WorkflowStepDef } from "../types";
+import type { jaiphModule, StepDef } from "../types";
 
 const repoRoot = resolve(__dirname, "../../..");
 const validatePath = resolve(repoRoot, "src/transpile/validate.ts");
@@ -206,9 +205,8 @@ test("AC4: unknown step type is rejected with the documented 'no validator' diag
     imports: [],
     channels: [],
     exports: [],
-    rules: [],
     scripts: [],
-    workflows: [],
+    defs: [],
   };
   const diag = new Diagnostics();
   const ctx: ValidatorCtx = {
@@ -217,18 +215,17 @@ test("AC4: unknown step type is rejected with the documented 'no validator' diag
     refCtx: {
       importsByAlias: new Map(),
       importedAstCache: new Map(),
-      localRules: new Set(),
-      localWorkflows: new Set(),
+      localDefs: new Set(),
       localScripts: new Set(),
     },
-    scope: WORKFLOW_SCOPE,
+    scope: DEF_SCOPE,
     knownVars: new Set(),
     promptSchemas: new Map(),
     promptCaptures: new Set(),
     recoverBindings: undefined,
     localChannels: new Set(),
     localScripts: new Set(),
-    localWorkflows: new Set(),
+    localDefs: new Set(),
     importsByAlias: new Map(),
     importedAstCache: new Map(),
   };
@@ -236,7 +233,7 @@ test("AC4: unknown step type is rejected with the documented 'no validator' diag
   const syntheticStep = {
     type: "ZZZ_synthetic_step_type",
     loc: { line: 42, col: 7 },
-  } as unknown as WorkflowStepDef;
+  } as unknown as StepDef;
 
   diag.capture(() => validateStep(syntheticStep, ctx));
   const errs = diag.sorted();
@@ -244,48 +241,5 @@ test("AC4: unknown step type is rejected with the documented 'no validator' diag
   assert.equal(errs[0].code, "E_VALIDATE");
   assert.equal(errs[0].line, 42);
   assert.equal(errs[0].col, 7);
-  assert.match(errs[0].message, /^internal: no validator for step type "ZZZ_synthetic_step_type"$/);
-});
-
-test("AC4: same synthetic step type is rejected in RULE_SCOPE too (scope-independent fallback)", () => {
-  const ast: jaiphModule = {
-    filePath: "/synthetic.jh",
-    imports: [],
-    channels: [],
-    exports: [],
-    rules: [],
-    scripts: [],
-    workflows: [],
-  };
-  const diag = new Diagnostics();
-  const ctx: ValidatorCtx = {
-    diag,
-    ast,
-    refCtx: {
-      importsByAlias: new Map(),
-      importedAstCache: new Map(),
-      localRules: new Set(),
-      localWorkflows: new Set(),
-      localScripts: new Set(),
-    },
-    scope: RULE_SCOPE,
-    knownVars: new Set(),
-    promptSchemas: new Map(),
-    promptCaptures: new Set(),
-    recoverBindings: undefined,
-    localChannels: new Set(),
-    localScripts: new Set(),
-    localWorkflows: new Set(),
-    importsByAlias: new Map(),
-    importedAstCache: new Map(),
-  };
-  const syntheticStep = {
-    type: "ZZZ_synthetic_step_type",
-    loc: { line: 3, col: 1 },
-  } as unknown as WorkflowStepDef;
-
-  diag.capture(() => validateStep(syntheticStep, ctx));
-  const errs = diag.sorted();
-  assert.equal(errs.length, 1);
   assert.match(errs[0].message, /^internal: no validator for step type "ZZZ_synthetic_step_type"$/);
 });

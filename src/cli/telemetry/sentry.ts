@@ -42,8 +42,8 @@ export interface SentryDsn {
 
 /** Metadata the pure event builder needs beyond the journal lines themselves. */
 export interface SentryEventMeta {
-  /** Root workflow symbol (`default` for `jaiph run`, the tool symbol for MCP). */
-  workflow: string;
+  /** Root def symbol(`main` for `jaiph run`, the tool symbol for MCP). */
+  def: string;
   /** Child exit status; part of the failure message when no signal. */
   exitStatus: number;
   /** Terminating signal, when the run was killed; wins over exit code in the message. */
@@ -115,7 +115,7 @@ export function buildSentryEvent(lines: string[], meta: SentryEventMeta): Record
   const eventId = runId.replace(/-/g, "");
   const timestamp = asString(events[events.length - 1]?.ts) || asString(events[0]?.ts);
   const wf =
-    events.find((e) => e.type === "WORKFLOW_START") ?? events.find((e) => e.type === "WORKFLOW_END");
+    events.find((e) => e.type === "RUN_START") ?? events.find((e) => e.type === "RUN_END");
   const source = asString(wf?.source);
 
   // First failed step (nonzero STEP_END status) — the run's proximate failure.
@@ -129,10 +129,10 @@ export function buildSentryEvent(lines: string[], meta: SentryEventMeta): Record
     : "";
 
   const message = meta.signal
-    ? `workflow ${meta.workflow} terminated by signal ${meta.signal}`
-    : `workflow ${meta.workflow} failed (exit ${meta.exitStatus})`;
+    ? `run ${meta.def} terminated by signal ${meta.signal}`
+    : `run ${meta.def} failed (exit ${meta.exitStatus})`;
 
-  const tags: Record<string, string> = { "jaiph.workflow": meta.workflow };
+  const tags: Record<string, string> = { "jaiph.def": meta.def };
   if (source) tags["jaiph.source"] = basename(source);
   if (stepKind) tags["jaiph.step.kind"] = stepKind;
   if (stepName) tags["jaiph.step.name"] = stepName;
@@ -151,7 +151,7 @@ export function buildSentryEvent(lines: string[], meta: SentryEventMeta): Record
     message: { formatted: message },
     tags,
     extra,
-    fingerprint: ["jaiph", meta.workflow, stepName || "unknown"],
+    fingerprint: ["jaiph", meta.def, stepName || "unknown"],
     release: meta.release,
   };
   if (meta.environment) event.environment = meta.environment;
@@ -186,7 +186,7 @@ export async function reportRunFailureToSentry(
   timeoutMs: number = SEND_TIMEOUT_MS,
   warn: (msg: string) => void = stderrWarn,
 ): Promise<ExportOutcome> {
-  const { runDir, workflow, exitStatus, signal, env } = opts;
+  const { runDir, def, exitStatus, signal, env } = opts;
 
   // Fire only on an unsuccessful terminal state — successful runs send nothing.
   const runFailed = exitStatus !== 0 || signal != null;
@@ -222,7 +222,7 @@ export async function reportRunFailureToSentry(
   const release = env.SENTRY_RELEASE?.trim() || `jaiph@${VERSION}`;
   const environment = env.SENTRY_ENVIRONMENT?.trim() || undefined;
   const event = buildSentryEvent(lines, {
-    workflow,
+    def,
     exitStatus,
     signal,
     runDir,

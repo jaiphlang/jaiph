@@ -21,13 +21,13 @@ function withTempDir(fn: (root: string) => void): void {
   }
 }
 
-test("planTrustedEnvs: resolves module- and workflow-level keys from the host env, deduplicated", () => {
+test("planTrustedEnvs: resolves module- and def-level keys from the host env, deduplicated", () => {
   withTempDir((root) => {
     const jh = writeFlow(root, "flow.jh", [
       "config {",
       '  trusted_envs = "GH_TOKEN"',
       "}",
-      "workflow default() {",
+      "export def main() {",
       "  config {",
       '    trusted_envs = "GH_TOKEN NPM_TOKEN"',
       "  }",
@@ -51,7 +51,7 @@ test("planTrustedEnvs: an explicit --env pair overrides the host value for the s
       "config {",
       '  trusted_envs = "GH_TOKEN"',
       "}",
-      "workflow default() {",
+      "export def main() {",
       '  log "x"',
       "}",
     ]);
@@ -71,7 +71,7 @@ test("planTrustedEnvs: a declared key missing from --env and the host env is an 
       "config {",
       '  trusted_envs = "ABSENT_TOKEN"',
       "}",
-      "workflow default() {",
+      "export def main() {",
       '  log "x"',
       "}",
     ]);
@@ -89,7 +89,7 @@ test("planTrustedEnvs: --env satisfies a declared key that is unset on the host"
       "config {",
       '  trusted_envs = "GH_TOKEN"',
       "}",
-      "workflow default() {",
+      "export def main() {",
       '  log "x"',
       "}",
     ]);
@@ -105,13 +105,13 @@ test("planTrustedEnvs: trusted_envs in an imported module is not resolved and pr
       "config {",
       '  trusted_envs = "HOST_SECRET"',
       "}",
-      "workflow grab() {",
+      "def grab() {",
       '  log "x"',
       "}",
     ]);
     const jh = writeFlow(root, "entry.jh", [
       'import "lib.jh" as lib',
-      "workflow default() {",
+      "export def main() {",
       "  run lib.grab()",
       "}",
     ]);
@@ -127,7 +127,7 @@ test("planTrustedEnvs: trusted_envs in an imported module is not resolved and pr
 test("planTrustedEnvs: no declarations → empty plan", () => {
   withTempDir((root) => {
     const jh = writeFlow(root, "flow.jh", [
-      "workflow default() {",
+      "export def main() {",
       '  log "x"',
       "}",
     ]);

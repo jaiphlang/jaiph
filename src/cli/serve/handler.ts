@@ -5,7 +5,7 @@ import { statSync } from "node:fs";
 import { basename, join } from "node:path";
 import type { McpToolSpec } from "../shared/mcp-tools";
 import { McpServer, type McpCallContext } from "../shared/mcp-server";
-import type { WorkflowCallResult, WorkflowCallContext } from "../shared/workflow-call";
+import type { DefCallResult, DefCallContext } from "../shared/workflow-call";
 import { buildOpenApi } from "./openapi";
 import {
   DOCS_HTML,
@@ -56,7 +56,7 @@ export class ServeHandler {
   readonly runs = new Map<string, RunRecord>();
   private orderCounter = 0;
   /**
-   * Composite idempotency key (`principal\nworkflow\nkey`) → run id. Reserved
+   * Composite idempotency key (`principal\ndef\nkey`) → run id. Reserved
    * synchronously at create time and consulted before spawning, so a repeated
    * create with the same key returns the original run instead of starting a
    * duplicate. Rebuilt from reconstructed records at startup; entries are
@@ -142,14 +142,14 @@ export class ServeHandler {
   private startRun(
     spec: McpToolSpec,
     args: Record<string, string>,
-    extra?: WorkflowCallContext,
+    extra?: DefCallContext,
   ): { record: RunRecord; done: Promise<void> } | { atCapacity: true } {
     if (this.inFlight() >= this.opts.maxConcurrent) return { atCapacity: true };
     const runId = this.newRunId();
     const { principal, correlationId } = this.currentCtx();
     const record: RunRecord = {
       run_id: runId,
-      workflow: spec.workflow,
+      def: spec.def,
       status: "running",
       started_at: this.opts.now(),
       ended_at: null,
@@ -166,9 +166,9 @@ export class ServeHandler {
     };
     this.runs.set(runId, record);
     // The per-call start banner (workflow, run_id, principal,
-    // correlation) is emitted once by `callWorkflow` through the operator log,
+    // correlation) is emitted once by `callDef` through the operator log,
     // so it is not logged again here — otherwise the start would appear twice.
-    const ctx: WorkflowCallContext = {
+    const ctx: DefCallContext = {
       onStep: extra?.onStep,
       // Identity for the detached telemetry export (OTLP resource attrs + Sentry
       // tags). Never a token — only the audit subject and correlation id.
@@ -315,14 +315,14 @@ export class ServeHandler {
     const { method, path } = req;
     const { principal } = this.currentCtx();
 
-    if (path === "/v1/workflows") {
+    if (path === "/v1/defs") {
       if (method !== "GET") return this.methodNotAllowed();
       if (!principal.capabilities.has("inspect")) return this.forbidden("inspect");
-      const workflows = this.opts.getTools().map((t) => ({ name: t.name, description: t.description, params: t.params }));
-      return this.json(200, { workflows });
+      const defs = this.opts.getTools().map((t) => ({ name: t.name, description: t.description, params: t.params }));
+      return this.json(200, { defs });
     }
 
-    const runPost = /^\/v1\/workflows\/([^/]+)\/runs$/.exec(path);
+    const runPost = /^\/v1\/defs\/([^/]+)\/runs$/.exec(path);
     if (runPost) {
       if (method !== "POST") return this.methodNotAllowed();
       if (!principal.capabilities.has("invoke")) return this.forbidden("invoke");
@@ -377,7 +377,7 @@ export class ServeHandler {
 
   private async createRun(req: ServeRequest, name: string): Promise<ServeResponse> {
     const spec = this.opts.getTools().find((t) => t.name === name);
-    if (!spec) return this.error(404, "E_NOT_FOUND", `unknown workflow: ${name}`);
+    if (!spec) return this.error(404, "E_NOT_FOUND", `unknown def: ${name}`);
 
     if (req.bodyTooLarge) {
       return this.error(413, "E_BODY_TOO_LARGE", `request body exceeds ${MAX_BODY_BYTES} bytes`);
@@ -423,7 +423,7 @@ export class ServeHandler {
     let argsHash: string | undefined;
     const principal = this.currentCtx().principal.subject;
     if (typeof idempotencyKey === "string" && idempotencyKey.trim() !== "") {
-      composite = `${principal}\n${spec.workflow}\n${idempotencyKey.trim()}`;
+      composite = `${principal}\n${spec.def}\n${idempotencyKey.trim()}`;
       argsHash = hashArgs(args);
       const existingId = this.idempotencyIndex.get(composite);
       const existing = existingId ? this.runs.get(existingId) : undefined;
@@ -758,7 +758,7 @@ export class ServeHandler {
     };
   }
 
-  private finalize(record: RunRecord, result: WorkflowCallResult): void {
+  private finalize(record: RunRecord, result: DefCallResult): void {
     record.ended_at = this.opts.now();
     record.exit_status = result.exitStatus ?? null;
     record.signal = result.signal ?? null;
@@ -782,7 +782,7 @@ export class ServeHandler {
   private toRunObject(r: RunRecord): Record<string, unknown> {
     return {
       run_id: r.run_id,
-      workflow: r.workflow,
+      def: r.def,
       status: r.status,
       started_at: r.started_at,
       ended_at: r.ended_at,

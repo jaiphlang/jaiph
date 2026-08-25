@@ -3,8 +3,8 @@
 
 ; Keywords: declarations, commands, control flow, and test-block constructs.
 [
-  "import" "export" "as" "config" "channel" "script" "rule" "workflow" "test"
-  "const" "run" "ensure" "prompt" "log" "logerr" "logwarn" "fail" "return"
+  "import" "export" "as" "config" "channel" "script" "def" "test"
+  "const" "run" "prompt" "log" "logerr" "logwarn" "fail" "return"
   "send" "recover" "catch"
   "if" "else" "for" "in" "match" "async" "returns" "not"
   "mock" "allow_failure" "expect_contain" "expect_not_contain" "expect_equal"

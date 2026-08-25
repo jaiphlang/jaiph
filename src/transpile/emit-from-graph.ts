@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import type { ModuleGraph } from "./module-graph";
 import { buildScriptFiles, type ScriptArtifact } from "./emit-script";
-import { workflowSymbolForFile } from "./resolve";
+import { moduleSymbolForFile } from "./resolve";
 import { resolveScriptImportPath, validateModule } from "./validate";
 
 /**
@@ -21,10 +21,10 @@ export function emitScriptsForModuleFromGraph(
   }
   const ast = node.ast;
   validateModule(ast, graph);
-  const workflowSymbol = workflowSymbolForFile(inputFile, rootDir);
-  const importedWorkflowSymbols = new Map<string, string>();
+  const defSymbol = moduleSymbolForFile(inputFile, rootDir);
+  const importedModuleSymbols = new Map<string, string>();
   for (const [alias, importedFile] of node.imports) {
-    importedWorkflowSymbols.set(alias, workflowSymbolForFile(importedFile, rootDir));
+    importedModuleSymbols.set(alias, moduleSymbolForFile(importedFile, rootDir));
   }
   let resolvedScriptImports: Map<string, string> | undefined;
   if (ast.scriptImports && ast.scriptImports.length > 0) {
@@ -34,5 +34,5 @@ export function emitScriptsForModuleFromGraph(
       resolvedScriptImports.set(si.alias, readFileSync(resolved, "utf8"));
     }
   }
-  return buildScriptFiles(ast, importedWorkflowSymbols, workflowSymbol, resolvedScriptImports);
+  return buildScriptFiles(ast, importedModuleSymbols, defSymbol, resolvedScriptImports);
 }

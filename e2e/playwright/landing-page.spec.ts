@@ -57,7 +57,7 @@ function normalize(text: string): string {
 /** Try it out: isolate workflow run block; only ℹ is non-deterministic. */
 function normalizeTryItOutForAssert(combined: string): string {
   const n = normalize(combined);
-  const idx = n.indexOf('workflow default');
+  const idx = n.indexOf('export def main');
   const fromWorkflow = idx >= 0 ? n.slice(idx) : n;
   return fromWorkflow.replace(/^  ℹ .+$/gm, '  ℹ <model-response>').trim();
 }
@@ -137,11 +137,11 @@ test.describe.serial('docs landing page', () => {
       const actual = normalizeTryItOutForAssert(combined);
       const expected = normalizeTryItOutForAssert(
         [
-          'workflow default',
+          'export def main',
           '  ▸ prompt cursor default "Say: Hello, I am [model ..."',
           '  ✓ prompt cursor default (<time>)',
           '  ℹ Hello, I am Composer!',
-          '✓ PASS workflow default (<time>)',
+          '✓ PASS def main (<time>)',
         ].join('\n'),
       );
       console.log('actual', actual);

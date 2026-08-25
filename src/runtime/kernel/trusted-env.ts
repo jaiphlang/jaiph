@@ -9,12 +9,12 @@
 // ambiently; the values reappear only in the declaring workflow's `run`-step
 // script spawns (`executeRunRef`).
 
-import type { WorkflowMetadata } from "../../types";
+import type { DefMetadata } from "../../types";
 import type { RuntimeGraph } from "./graph";
 
 /**
  * Every `trusted_envs` key declared anywhere in the graph — module-level and
- * workflow-level, entry and imported modules alike. This is the scrub set:
+ * def-level, entry and imported modules alike. This is the scrub set:
  * declaring a key anywhere makes it non-ambient everywhere, so imported-module
  * declarations remove access instead of granting it.
  */
@@ -22,7 +22,7 @@ export function collectDeclaredTrustedEnvKeys(graph: RuntimeGraph): Set<string> 
   const keys = new Set<string>();
   for (const node of graph.modules.values()) {
     for (const key of node.ast.metadata?.trustedEnvs ?? []) keys.add(key);
-    for (const wf of node.ast.workflows) {
+    for (const wf of node.ast.defs) {
       for (const key of wf.metadata?.trustedEnvs ?? []) keys.add(key);
     }
   }
@@ -35,14 +35,14 @@ export function collectDeclaredTrustedEnvKeys(graph: RuntimeGraph): Set<string> 
  * for the entry-file gate — pass metadata from the entry module only.
  */
 export function trustedEnvKeysForWorkflow(
-  moduleMeta: WorkflowMetadata | undefined,
-  workflowMeta: WorkflowMetadata | undefined,
+  moduleMeta: DefMetadata | undefined,
+  defMeta: DefMetadata | undefined,
 ): string[] {
   const keys: string[] = [];
   for (const key of moduleMeta?.trustedEnvs ?? []) {
     if (!keys.includes(key)) keys.push(key);
   }
-  for (const key of workflowMeta?.trustedEnvs ?? []) {
+  for (const key of defMeta?.trustedEnvs ?? []) {
     if (!keys.includes(key)) keys.push(key);
   }
   return keys;

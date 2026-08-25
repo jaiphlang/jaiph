@@ -6,10 +6,10 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { loadGeneration } from "./generation";
 import { createServerLog, type OperatorLog } from "./server-log";
-import { callWorkflow, type WorkflowCallContext } from "./workflow-call";
+import { callDef, type DefCallContext } from "./workflow-call";
 
 // End-to-end operator-log coverage over the real host spawn path
-// (`callWorkflow` → `callWorkflowHost`), the shared choke point behind both
+// (`callDef` → `callDefHost`), the shared choke point behind both
 // `jaiph mcp` tool calls and `jaiph serve` runs. Each test drives a captured
 // stderr `log` sink and asserts the operator lines land there — never on the
 // call result (the value that would go to the protocol channel).
@@ -31,7 +31,7 @@ function operatorFor(
 async function runWith(
   jhBody: string,
   extraEnv: Record<string, string>,
-  ctx: WorkflowCallContext,
+  ctx: DefCallContext,
 ): Promise<{ text: string; isError: boolean; runDir?: string }> {
   const root = mkdtempSync(join(tmpdir(), "jaiph-oplog-ws-"));
   const tempRoot = mkdtempSync(join(tmpdir(), "jaiph-oplog-gen-"));
@@ -40,7 +40,7 @@ async function runWith(
     writeFileSync(jh, jhBody);
     const gen = loadGeneration(jh, root, tempRoot, 1, extraEnv, () => {}, "test");
     assert.ok(gen.state, `generation failed: ${gen.failures?.join("\n")}`);
-    return await callWorkflow(gen.state.callEnv, "default", [], randomUUID(), ctx);
+    return await callDef(gen.state.callEnv, "main", [], randomUUID(), ctx);
   } finally {
     rmSync(root, { recursive: true, force: true });
     rmSync(tempRoot, { recursive: true, force: true });
@@ -50,7 +50,7 @@ async function runWith(
 test("a host call emits a start banner (run_id) and an end line with status/elapsed/rundir", async () => {
   const lines: string[] = [];
   const result = await runWith(
-    ["workflow default() {", '  log "operator visible hi"', "}", ""].join("\n"),
+    ["export def main() {", '  log "operator visible hi"', "}", ""].join("\n"),
     {},
     { operator: operatorFor(lines) },
   );
@@ -58,7 +58,7 @@ test("a host call emits a start banner (run_id) and an end line with status/elap
 
   const start = lines.find((l) => /Running .*run_id=/.test(l));
   assert.ok(start, `a start banner must be emitted; got:\n${lines.join("\n")}`);
-  assert.match(start!, /^jaiph mcp: Running default run_id=/, "start names workflow + run_id");
+  assert.match(start!, /^jaiph mcp: Running main run_id=/, "start names workflow + run_id");
 
   const end = lines.find((l) => /Finished /.test(l));
   assert.ok(end, "a terminal end line must be emitted");
@@ -68,13 +68,13 @@ test("a host call emits a start banner (run_id) and an end line with status/elap
 
   // Channel isolation: the operator banner must not leak into the call result
   // (what the MCP tool result / HTTP body would carry).
-  assert.ok(!result.text.includes("Running default"), "operator banner is not in the call result text");
+  assert.ok(!result.text.includes("Running main"), "operator banner is not in the call result text");
 });
 
 test("workflow log is NOT mirrored to the operator sink by default", async () => {
   const lines: string[] = [];
   await runWith(
-    ["workflow default() {", '  log "operator visible hi"', "}", ""].join("\n"),
+    ["export def main() {", '  log "operator visible hi"', "}", ""].join("\n"),
     {},
     { operator: operatorFor(lines) },
   );
@@ -87,7 +87,7 @@ test("workflow log is NOT mirrored to the operator sink by default", async () =>
 test("JAIPH_SERVER_LOG_WORKFLOW opt-in mirrors the workflow log to the operator sink with run_id", async () => {
   const lines: string[] = [];
   await runWith(
-    ["workflow default() {", '  log "operator visible hi"', "}", ""].join("\n"),
+    ["export def main() {", '  log "operator visible hi"', "}", ""].join("\n"),
     {},
     { operator: operatorFor(lines, { mirror: true }) },
   );
@@ -104,7 +104,7 @@ test("mirrored operator lines are credential-redacted (never print a fixture sec
   // interpolates that binding — the same shape a real credential leak takes.
   await runWith(
     [
-      "workflow default() {",
+      "export def main() {",
       '  const secret = run `printf %s "$LEAK_API_KEY"`()',
       '  log "leaked ${secret}"',
       "}",

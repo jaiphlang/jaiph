@@ -16,7 +16,7 @@ e2e::file "match_dispatch.jh" <<'EOF'
 script foo = `echo "ran-foo"`
 script bar = `echo "ran-bar"`
 
-workflow default(cmd) {
+export def main(cmd) {
   const result = match cmd {
     "" | "check" => run foo()
     "wait" => run bar()
@@ -43,12 +43,12 @@ e2e::expect_stdout "${check_out}" <<'EOF'
 
 Jaiph: Running match_dispatch.jh
 
-workflow default (cmd="check")
+export def main (cmd="check")
   ▸ script foo
   ✓ script foo (<time>)
   ℹ ran-foo
 
-✓ PASS workflow default (<time>)
+✓ PASS export def main (<time>)
 EOF
 
 e2e::pass "alternation arm matches \"check\""
@@ -63,12 +63,12 @@ e2e::expect_stdout "${empty_out}" <<'EOF'
 
 Jaiph: Running match_dispatch.jh
 
-workflow default
+export def main
   ▸ script foo
   ✓ script foo (<time>)
   ℹ ran-foo
 
-✓ PASS workflow default (<time>)
+✓ PASS export def main (<time>)
 EOF
 
 e2e::pass "empty subject hits same arm as \"check\" (ran-foo)"
@@ -83,12 +83,12 @@ e2e::expect_stdout "${wait_out}" <<'EOF'
 
 Jaiph: Running match_dispatch.jh
 
-workflow default (cmd="wait")
+export def main (cmd="wait")
   ▸ script bar
   ✓ script bar (<time>)
   ℹ ran-bar
 
-✓ PASS workflow default (<time>)
+✓ PASS export def main (<time>)
 EOF
 
 e2e::pass "\"wait\" hits its own arm (ran-bar)"

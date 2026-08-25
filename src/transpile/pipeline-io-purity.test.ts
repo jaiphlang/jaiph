@@ -123,15 +123,15 @@ test("parse-once: full pipeline calls parsejaiph exactly once per reachable .jh 
     const entry = join(dir, "main.jh");
     const libA = join(dir, "a.jh");
     const libB = join(dir, "b.jh");
-    require("node:fs").writeFileSync(libA, "workflow a() {\n  echo ok\n}\n", "utf8");
+    require("node:fs").writeFileSync(libA, "export def a() {\n  echo ok\n}\n", "utf8");
     require("node:fs").writeFileSync(
       libB,
-      ['import "./a.jh" as a', "workflow b() {", "  run a.a()", "}", ""].join("\n"),
+      ['import "./a.jh" as a', "export def b() {", "  run a.a()", "}", ""].join("\n"),
       "utf8",
     );
     require("node:fs").writeFileSync(
       entry,
-      ['import "./b.jh" as b', "workflow default() {", "  run b.b()", "}", ""].join("\n"),
+      ['import "./b.jh" as b', "export def main() {", "  run b.b()", "}", ""].join("\n"),
       "utf8",
     );
 

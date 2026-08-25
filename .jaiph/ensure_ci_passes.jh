@@ -36,7 +36,7 @@ test -s "$1" || {
 }
 ```
 
-workflow ensure_ci_passes() {
+export def ensure_ci_passes() {
   const ci_log_dir = ".jaiph/tmp"
   const ci_log_file = "${ci_log_dir}/ensure_ci_passes.last.log"
   run common.mkdir_p_simple(ci_log_dir)
@@ -70,6 +70,6 @@ workflow ensure_ci_passes() {
   run common.rm_file_simple(ci_log_file)
 }
 
-workflow default() {
+export def main() {
   run ensure_ci_passes()
 }

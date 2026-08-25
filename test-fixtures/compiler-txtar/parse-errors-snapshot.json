@@ -1,5 +1,5 @@
 {
-  "unterminated workflow block": {
+  "unterminated block": {
     "file": "input.jh",
     "line": 1,
     "col": 1,
@@ -18,14 +18,14 @@
     "line": 1,
     "col": 1,
     "code": "E_PARSE",
-    "message": "invalid rule declaration"
+    "message": "'rule' is not a keyword; use 'def'"
   },
   "invalid workflow declaration": {
     "file": "input.jh",
     "line": 1,
     "col": 1,
     "code": "E_PARSE",
-    "message": "invalid workflow declaration"
+    "message": "'workflow' is not a keyword; use 'def'"
   },
   "duplicate config block": {
     "file": "input.jh",
@@ -67,35 +67,35 @@
     "line": 1,
     "col": 1,
     "code": "E_PARSE",
-    "message": "rule declarations require parentheses: rule foo() { … } or rule foo(params) { … }"
+    "message": "'rule' is not a keyword; use 'def'"
   },
   "rule with parentheses (unterminated)": {
     "file": "input.jh",
     "line": 1,
     "col": 1,
     "code": "E_PARSE",
-    "message": "unterminated rule block: foo"
+    "message": "unterminated block, expected \"}\""
   },
   "rule with colon instead of braces": {
     "file": "input.jh",
     "line": 1,
     "col": 1,
     "code": "E_PARSE",
-    "message": "rule declarations require parentheses: rule foo() { … } or rule foo(params) { … }"
+    "message": "'rule' is not a keyword; use 'def'"
   },
-  "export rule without braces": {
+  "export def without braces": {
     "file": "input.jh",
     "line": 1,
     "col": 1,
     "code": "E_PARSE",
-    "message": "rule declarations require parentheses: rule bar() { … } or rule bar(params) { … }"
+    "message": "def declarations require parentheses: def main() { … } or def main(params) { … }"
   },
   "rule with parentheses but no brace": {
     "file": "input.jh",
     "line": 1,
     "col": 1,
     "code": "E_PARSE",
-    "message": "rule declarations require braces: rule gate() { … } or rule gate(params) { … }"
+    "message": "def declarations require braces: def gate() { … } or def gate(params) { … }"
   },
   "script without braces": {
     "file": "input.jh",
@@ -123,7 +123,7 @@
     "line": 1,
     "col": 1,
     "code": "E_PARSE",
-    "message": "workflow declarations require parentheses: workflow default() { … } or workflow default(params) { … }"
+    "message": "def declarations require parentheses: def main() { … } or def main(params) { … }"
   },
   "workflow with parentheses (unterminated)": {
     "file": "input.jh",
@@ -132,33 +132,26 @@
     "code": "E_PARSE",
     "message": "unterminated block, expected \"}\""
   },
-  "export workflow without braces": {
-    "file": "input.jh",
-    "line": 1,
-    "col": 1,
-    "code": "E_PARSE",
-    "message": "workflow declarations require parentheses: workflow main() { … } or workflow main(params) { … }"
-  },
   "workflow with parentheses but no brace": {
     "file": "input.jh",
     "line": 1,
     "col": 1,
     "code": "E_PARSE",
-    "message": "workflow declarations require braces: workflow main() { … } or workflow main(params) { … }"
+    "message": "def declarations require braces: def main() { … } or def main(params) { … }"
   },
   "duplicate config in same workflow": {
     "file": "input.jh",
     "line": 5,
     "col": 1,
     "code": "E_PARSE",
-    "message": "duplicate config block inside workflow (only one allowed per workflow)"
+    "message": "duplicate config block inside def (only one allowed per def)"
   },
   "config after steps in workflow": {
     "file": "input.jh",
     "line": 3,
     "col": 1,
     "code": "E_PARSE",
-    "message": "config block inside workflow must appear before any steps"
+    "message": "config block inside def must appear before any steps"
   },
   "runtime keys in workflow config": {
     "file": "input.jh",
@@ -284,14 +277,14 @@
     "line": 1,
     "col": 1,
     "code": "E_PARSE",
-    "message": "duplicate name \"foo\" — variable name collides with rule of the same name"
+    "message": "duplicate name \"foo\" — variable name collides with def of the same name"
   },
   "top-level const name collision with workflow": {
     "file": "input.jh",
     "line": 1,
     "col": 1,
     "code": "E_PARSE",
-    "message": "duplicate name \"default\" — variable name collides with workflow of the same name"
+    "message": "duplicate name \"main\" — variable name collides with def of the same name"
   },
   "top-level const name collision with script": {
     "file": "input.jh",
@@ -306,13 +299,6 @@
     "col": 13,
     "code": "E_PARSE",
     "message": "Script calls in const assignments must use run. Use: const x = run some_script(\"${arg}\")"
-  },
-  "unterminated rule block": {
-    "file": "input.jh",
-    "line": 1,
-    "col": 1,
-    "code": "E_PARSE",
-    "message": "unterminated rule block: bad"
   },
   "unsupported top-level statement": {
     "file": "input.jh",
@@ -349,31 +335,31 @@
     "code": "OK",
     "message": "compilation succeeded but fixture expected a parse error"
   },
-  "ensure catch with args after catch": {
+  "run catch with args after catch": {
+    "file": "input.jh",
+    "line": 6,
+    "col": 19,
+    "code": "E_PARSE",
+    "message": "catch requires explicit bindings: catch (<name>) { ... }"
+  },
+  "run catch with multiple args after catch": {
     "file": "input.jh",
     "line": 6,
     "col": 22,
     "code": "E_PARSE",
     "message": "catch requires explicit bindings: catch (<name>) { ... }"
   },
-  "ensure catch with multiple args after catch": {
+  "run catch without block": {
     "file": "input.jh",
     "line": 6,
-    "col": 25,
-    "code": "E_PARSE",
-    "message": "catch requires explicit bindings: catch (<name>) { ... }"
-  },
-  "ensure catch without block": {
-    "file": "input.jh",
-    "line": 6,
-    "col": 33,
+    "col": 30,
     "code": "E_PARSE",
     "message": "catch requires explicit bindings and a body: catch (<name>) { ... }"
   },
-  "ensure catch without bindings (bare catch block)": {
+  "run catch without bindings (bare catch block)": {
     "file": "input.jh",
     "line": 5,
-    "col": 18,
+    "col": 15,
     "code": "E_PARSE",
     "message": "catch requires explicit bindings: catch (<name>) { ... }"
   },
@@ -594,7 +580,7 @@
     "code": "E_PARSE",
     "message": "multiline strings use triple quotes: logerr \"\"\"...\"\"\""
   },
-  "invalid workflow reference in channel route": {
+  "invalid def reference in channel route": {
     "file": "input.jh",
     "line": 1,
     "col": 1,
@@ -623,18 +609,18 @@
     "message": "\"wait\" has been removed from the language"
   },
   "brace-if: prompt in rules": {
-    "file": "input.jh",
-    "line": 2,
-    "col": 3,
-    "code": "E_PARSE",
-    "message": "prompt is not allowed in rules"
+    "file": "<no-error>",
+    "line": 0,
+    "col": 0,
+    "code": "OK",
+    "message": "compilation succeeded but fixture expected a parse error"
   },
   "brace-if: send in rules": {
-    "file": "input.jh",
-    "line": 3,
-    "col": 1,
-    "code": "E_PARSE",
-    "message": "send operator is not allowed in rules"
+    "file": "<no-error>",
+    "line": 0,
+    "col": 0,
+    "code": "OK",
+    "message": "compilation succeeded but fixture expected a parse error"
   },
   "if keyword with else branch produces error": {
     "file": "input.jh",
@@ -644,11 +630,11 @@
     "message": "invalid if syntax; expected: if <identifier> <op> <operand> { ... } where op is ==, !=, =~, or !~ and operand is \"string\" or /regex/"
   },
   "brace-if: const prompt in rules": {
-    "file": "input.jh",
-    "line": 2,
-    "col": 13,
-    "code": "E_PARSE",
-    "message": "const ... = prompt is not allowed in rules"
+    "file": "<no-error>",
+    "line": 0,
+    "col": 0,
+    "code": "OK",
+    "message": "compilation succeeded but fixture expected a parse error"
   },
   "unterminated script block": {
     "file": "input.jh",
@@ -825,19 +811,12 @@
     "code": "E_PARSE",
     "message": "mock prompt must be: mock prompt \"<response>\", mock prompt <const_name>, or mock prompt { \"pattern\" => \"response\", _ => \"default\" }"
   },
-  "test: mock workflow with invalid ref (no parens)": {
+  "test: mock def with invalid ref (no parens)": {
     "file": "input.test.jh",
     "line": 4,
     "col": 3,
     "code": "E_PARSE",
-    "message": "unrecognized test step: mock workflow a.b.c {"
-  },
-  "test: mock rule with invalid ref (no parens)": {
-    "file": "input.test.jh",
-    "line": 4,
-    "col": 3,
-    "code": "E_PARSE",
-    "message": "unrecognized test step: mock rule a.b.c {"
+    "message": "unrecognized test step: mock def a.b.c {"
   },
   "test: mock script with invalid ref (no parens)": {
     "file": "input.test.jh",
@@ -953,17 +932,10 @@
   },
   "const run without parentheses requires parens": {
     "file": "input.jh",
-    "line": 3,
-    "col": 13,
-    "code": "E_PARSE",
-    "message": "const ... = run must target a valid reference"
-  },
-  "const ensure without parentheses requires parens": {
-    "file": "input.jh",
     "line": 5,
     "col": 13,
     "code": "E_PARSE",
-    "message": "const ... = ensure must target a valid reference"
+    "message": "const ... = run must target a valid reference"
   },
   "triple-backtick prompt is rejected": {
     "file": "input.jh",
@@ -1091,19 +1063,12 @@
     "code": "E_PARSE",
     "message": "const ... = run must target a valid reference"
   },
-  "const ensure with invalid reference": {
+  "const run cannot use catch": {
     "file": "input.jh",
     "line": 2,
-    "col": 13,
+    "col": 1,
     "code": "E_PARSE",
-    "message": "const ... = ensure must target a valid reference"
-  },
-  "const ensure cannot use catch": {
-    "file": "input.jh",
-    "line": 2,
-    "col": 13,
-    "code": "E_PARSE",
-    "message": "const ... = ensure cannot use catch"
+    "message": "unexpected content after run call: 'catch {'; shell redirection (>, |, &) is not supported — use a script block"
   },
   "run with invalid reference in workflow": {
     "file": "input.jh",
@@ -1220,7 +1185,7 @@
   "unterminated multiline catch block": {
     "file": "input.jh",
     "line": 5,
-    "col": 18,
+    "col": 15,
     "code": "E_PARSE",
     "message": "unterminated catch block, expected \"}\""
   },
@@ -1229,21 +1194,21 @@
     "line": 4,
     "col": 1,
     "code": "E_PARSE",
-    "message": "duplicate name \"foo\" — channels, rules, workflows, and scripts share a single namespace (already declared as rule)"
+    "message": "duplicate name \"foo\" — channels, defs, and scripts share a single namespace (already declared as def)"
   },
   "duplicate name: script and workflow": {
     "file": "input.jh",
     "line": 2,
     "col": 1,
     "code": "E_PARSE",
-    "message": "duplicate name \"helper\" — channels, rules, workflows, and scripts share a single namespace (already declared as script)"
+    "message": "duplicate name \"helper\" — channels, defs, and scripts share a single namespace (already declared as script)"
   },
   "duplicate name: rule and script": {
     "file": "input.jh",
-    "line": 4,
+    "line": 1,
     "col": 1,
     "code": "E_PARSE",
-    "message": "duplicate name \"foo\" — channels, rules, workflows, and scripts share a single namespace (already declared as rule)"
+    "message": "duplicate name \"foo\" — channels, defs, and scripts share a single namespace (already declared as script)"
   },
   "channel route with no target after arrow": {
     "file": "input.jh",
@@ -1255,16 +1220,16 @@
   "empty multiline catch block": {
     "file": "input.jh",
     "line": 5,
-    "col": 18,
+    "col": 15,
     "code": "E_PARSE",
     "message": "catch block must contain at least one statement"
   },
-  "ensure with invalid reference": {
+  "run with invalid reference": {
     "file": "input.jh",
     "line": 2,
     "col": 1,
     "code": "E_PARSE",
-    "message": "ensure must target a valid reference: ensure ref() or ensure ref(args) — parentheses are required"
+    "message": "run must target a valid reference: run ref() or run ref(args) — parentheses are required"
   },
   "config line without equals sign": {
     "file": "input.jh",
@@ -1325,7 +1290,7 @@
   "empty inline catch block": {
     "file": "input.jh",
     "line": 5,
-    "col": 18,
+    "col": 15,
     "code": "E_PARSE",
     "message": "catch block must contain at least one statement"
   },
@@ -1364,19 +1329,12 @@
     "code": "E_PARSE",
     "message": "use \"run lib.default(…)\" to call a workflow in tests"
   },
-  "test: mock workflow without parens rejected": {
+  "test: mock def without parens rejected": {
     "file": "input.test.jh",
     "line": 4,
     "col": 3,
     "code": "E_PARSE",
-    "message": "mock workflow requires parentheses: mock workflow lib.default() { … }"
-  },
-  "test: mock rule without parens rejected": {
-    "file": "input.test.jh",
-    "line": 4,
-    "col": 3,
-    "code": "E_PARSE",
-    "message": "mock rule requires parentheses: mock rule lib.check() { … }"
+    "message": "mock def requires parentheses: mock def lib.check() { … }"
   },
   "test: mock script without parens rejected": {
     "file": "input.test.jh",
@@ -1391,34 +1349,6 @@
     "col": 3,
     "code": "E_PARSE",
     "message": "unrecognized test step: echo \"not valid\""
-  },
-  "ensure catch with unterminated bindings paren": {
-    "file": "input.jh",
-    "line": 5,
-    "col": 18,
-    "code": "E_PARSE",
-    "message": "unterminated catch bindings: expected \")\""
-  },
-  "ensure catch with empty bindings": {
-    "file": "input.jh",
-    "line": 5,
-    "col": 18,
-    "code": "E_PARSE",
-    "message": "catch requires exactly one binding: catch (<name>) { ... }"
-  },
-  "ensure catch with invalid binding name": {
-    "file": "input.jh",
-    "line": 5,
-    "col": 18,
-    "code": "E_PARSE",
-    "message": "invalid catch binding name: \"123bad\" — must be a valid identifier"
-  },
-  "ensure catch with no body after bindings": {
-    "file": "input.jh",
-    "line": 5,
-    "col": 18,
-    "code": "E_PARSE",
-    "message": "catch requires a body after bindings"
   },
   "run catch with unterminated bindings paren": {
     "file": "input.jh",
@@ -1447,13 +1377,6 @@
     "col": 16,
     "code": "E_PARSE",
     "message": "catch requires a body after bindings"
-  },
-  "ensure catch with multiple bindings rejected": {
-    "file": "input.jh",
-    "line": 5,
-    "col": 18,
-    "code": "E_PARSE",
-    "message": "catch accepts exactly one binding: catch (<name>) — the second binding (attempt) has been removed"
   },
   "run catch with multiple bindings rejected": {
     "file": "input.jh",
@@ -1787,21 +1710,14 @@
   "inline catch return without value": {
     "file": "input.jh",
     "line": 5,
-    "col": 18,
+    "col": 15,
     "code": "E_PARSE",
     "message": "catch requires explicit bindings: catch (<name>) { ... }"
   },
   "run catch unterminated multiline block": {
     "file": "input.jh",
     "line": 5,
-    "col": 16,
-    "code": "E_PARSE",
-    "message": "unterminated catch block, expected \"}\""
-  },
-  "ensure catch unterminated multiline block": {
-    "file": "input.jh",
-    "line": 5,
-    "col": 18,
+    "col": 15,
     "code": "E_PARSE",
     "message": "unterminated catch block, expected \"}\""
   },
@@ -2015,13 +1931,6 @@
     "code": "E_PARSE",
     "message": "unterminated multiline call — missing closing \")\""
   },
-  "return ensure with unclosed paren is E_PARSE not shell": {
-    "file": "input.jh",
-    "line": 2,
-    "col": 1,
-    "code": "E_PARSE",
-    "message": "unterminated multiline call — missing closing \")\""
-  },
   "multiline call content before triple-quoted argument": {
     "file": "input.jh",
     "line": 4,
@@ -2057,12 +1966,12 @@
     "code": "E_PARSE",
     "message": "array not closed with ']'"
   },
-  "module.* keys rejected in workflow-level config": {
+  "module.* keys rejected in def-level config": {
     "file": "input.jh",
     "line": 2,
     "col": 1,
     "code": "E_PARSE",
-    "message": "module.* keys are not allowed in workflow-level config (only agent.* and run.* keys)"
+    "message": "module.* keys are not allowed in def-level config (only agent.* and run.* keys)"
   },
   "match arm closing triple-quote with trailing content": {
     "file": "input.jh",

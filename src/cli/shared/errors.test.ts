@@ -24,7 +24,7 @@ test("summarizeError: trims whitespace from lines", () => {
 });
 
 test("summarizeError: returns fallback when stderr is empty", () => {
-  assert.equal(summarizeError(""), "Workflow execution failed.");
+  assert.equal(summarizeError(""), "Run failed.");
 });
 
 test("summarizeError: returns custom fallback when stderr is empty", () => {
@@ -32,7 +32,7 @@ test("summarizeError: returns custom fallback when stderr is empty", () => {
 });
 
 test("summarizeError: returns fallback when stderr is only whitespace", () => {
-  assert.equal(summarizeError("   \n  \n  "), "Workflow execution failed.");
+  assert.equal(summarizeError("   \n  \n  "), "Run failed.");
 });
 
 test("summarizeError: handles \\r\\n line endings", () => {
@@ -53,7 +53,7 @@ test("summarizeError: empty stderr with code only omits runDir clause", () => {
 
 test("summarizeError: empty stderr with runDir only omits exit clause", () => {
   const msg = summarizeError("", undefined, { runDir: "/runs/x" });
-  assert.match(msg, /^Workflow execution failed with no error output;/);
+  assert.match(msg, /^Run failed with no error output;/);
   assert.match(msg, /under \/runs\/x$/);
 });
 

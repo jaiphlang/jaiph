@@ -1,5 +1,5 @@
 import type { McpToolSpec } from "../shared/mcp-tools";
-import type { WorkflowCallResult, WorkflowCallContext } from "../shared/workflow-call";
+import type { DefCallResult, DefCallContext } from "../shared/workflow-call";
 import type { StreamTarget } from "./runfiles";
 import type { Authenticator } from "./auth";
 
@@ -14,7 +14,7 @@ export type RunStatus = "running" | "succeeded" | "failed" | "cancelled" | "inte
 /** In-memory record for one run: the public run object plus cancel bookkeeping. */
 export interface RunRecord {
   run_id: string;
-  workflow: string;
+  def: string;
   status: RunStatus;
   started_at: string;
   ended_at: string | null;
@@ -29,7 +29,7 @@ export interface RunRecord {
   /** Monotonic insertion index for newest-first listing. */
   order: number;
   /**
-   * Composite idempotency key (`principal\nworkflow\nkey`) this run reserved, so
+   * Composite idempotency key (`principal\ndef\nkey`) this run reserved, so
    * eviction can drop the index entry and startup can rebuild the index. Absent
    * when the create carried no `Idempotency-Key`.
    */
@@ -97,8 +97,8 @@ export interface ServeHandlerOptions {
     spec: McpToolSpec,
     args: Record<string, string>,
     runId: string,
-    ctx: WorkflowCallContext,
-  ) => Promise<WorkflowCallResult>;
+    ctx: DefCallContext,
+  ) => Promise<DefCallResult>;
   /**
    * Static single-operator bearer token. When set (and no `authenticator` is
    * injected) every `/v1/*` and `/mcp` request must present it. Single-operator,

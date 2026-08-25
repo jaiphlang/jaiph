@@ -13,7 +13,7 @@ TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 e2e::section "Triple-quoted log message"
 
 e2e::file "log_multiline.jh" <<'EOF'
-workflow default() {
+export def main() {
   log """
 Hello
 World
@@ -27,11 +27,11 @@ e2e::expect_stdout "${log_out}" <<'EOF'
 
 Jaiph: Running log_multiline.jh
 
-workflow default
+export def main
   ℹ Hello
 World
 
-✓ PASS workflow default (<time>)
+✓ PASS export def main (<time>)
 EOF
 
 # ── 2. Triple-quoted return value ─────────────────────────────────────────────
@@ -39,7 +39,7 @@ EOF
 e2e::section "Triple-quoted return value"
 
 e2e::file "return_multiline.jh" <<'EOF'
-workflow default() {
+export def main() {
   return """
 line one
 line two
@@ -53,9 +53,9 @@ e2e::expect_stdout "${return_out}" <<'EOF'
 
 Jaiph: Running return_multiline.jh
 
-workflow default
+export def main
 
-✓ PASS workflow default (<time>)
+✓ PASS export def main (<time>)
 
 line one
 line two
@@ -66,7 +66,7 @@ EOF
 e2e::section "Triple-quoted const with interpolation"
 
 e2e::file "const_multiline.jh" <<'EOF'
-workflow default() {
+export def main() {
   const name = "world"
   const msg = """
 Hello ${name}
@@ -82,11 +82,11 @@ e2e::expect_stdout "${const_out}" <<'EOF'
 
 Jaiph: Running const_multiline.jh
 
-workflow default
+export def main
   ℹ Hello world
 Goodbye world
 
-✓ PASS workflow default (<time>)
+✓ PASS export def main (<time>)
 EOF
 
 # ── 4. Triple-quoted fail message ─────────────────────────────────────────────
@@ -94,7 +94,7 @@ EOF
 e2e::section "Triple-quoted fail message"
 
 e2e::file "fail_multiline.jh" <<'EOF'
-workflow default() {
+export def main() {
   fail """
 something
 went wrong

@@ -10,7 +10,7 @@ echo "Hello ${USER}"
 echo "${PATH:-/usr/bin}"
 ```
 
-workflow default() {
+export def main() {
   run greet()
   run multiline()
 }

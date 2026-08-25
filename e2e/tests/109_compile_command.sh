@@ -12,7 +12,7 @@ TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 e2e::section "jaiph compile succeeds on valid module"
 
 e2e::file "ok.jh" <<'EOF'
-workflow default() {
+export def main() {
   log "hello"
 }
 EOF
@@ -23,14 +23,14 @@ e2e::pass "compile exits 0"
 e2e::section "jaiph compile fails on validation error"
 
 e2e::file "bad.jh" <<'EOF'
-workflow default() {
+export def main() {
   run missing_workflow()
 }
 EOF
 
 compile_exit=0
 jaiph compile "${TEST_DIR}/bad.jh" 2>/dev/null || compile_exit=$?
-e2e::assert_equals "${compile_exit}" "1" "compile exits 1 on unknown workflow"
+e2e::assert_equals "${compile_exit}" "1" "compile exits 1 on unknown def"
 
 e2e::section "jaiph compile --json prints empty array on success"
 

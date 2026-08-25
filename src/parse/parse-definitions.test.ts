@@ -2,215 +2,149 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { parsejaiph } from "../parser";
 
-// === Rejected: incomplete rule declarations ===
-
-test("rule without braces is rejected with fix hint", () => {
+test("'rule' is not a keyword; use 'def'", () => {
   assert.throws(
-    () => parsejaiph("rule foo", "test.jh"),
-    (err: any) =>
-      err.message.includes("E_PARSE") &&
-      err.message.includes("rule declarations require parentheses") &&
-      err.message.includes("rule foo() { … }"),
+    () => parsejaiph("rule foo() {\n}", "test.jh"),
+    (err: Error) => err.message.includes("E_PARSE") && err.message.includes("'rule' is not a keyword; use 'def'"),
   );
 });
 
-test("rule with empty parentheses is accepted", () => {
-  const mod = parsejaiph("rule foo() {\n}", "test.jh");
-  assert.equal(mod.rules.length, 1);
-  assert.equal(mod.rules[0].name, "foo");
-  assert.deepEqual(mod.rules[0].params, []);
-});
-
-test("rule with colon instead of braces is rejected", () => {
+test("'workflow' is not a keyword; use 'def'", () => {
   assert.throws(
-    () => parsejaiph("rule foo:", "test.jh"),
-    (err: any) =>
-      err.message.includes("E_PARSE") &&
-      err.message.includes("rule declarations require parentheses"),
+    () => parsejaiph("workflow foo() {\n}", "test.jh"),
+    (err: Error) => err.message.includes("E_PARSE") && err.message.includes("'workflow' is not a keyword; use 'def'"),
   );
 });
 
-test("export rule without braces is rejected with fix hint", () => {
+test("def without braces is rejected with fix hint", () => {
   assert.throws(
-    () => parsejaiph("export rule bar", "test.jh"),
-    (err: any) =>
+    () => parsejaiph("def foo", "test.jh"),
+    (err: Error) =>
       err.message.includes("E_PARSE") &&
-      err.message.includes("rule declarations require parentheses") &&
-      err.message.includes("rule bar() { … }"),
+      err.message.includes("def declarations require parentheses") &&
+      err.message.includes("def foo() { … }"),
   );
 });
 
-test("rule with parentheses but no brace is rejected", () => {
+test("def with empty parentheses is accepted", () => {
+  const mod = parsejaiph("def foo() {\n}", "test.jh");
+  assert.equal(mod.defs.length, 1);
+  assert.equal(mod.defs[0].name, "foo");
+  assert.deepEqual(mod.defs[0].params, []);
+});
+
+test("def with colon instead of braces is rejected", () => {
   assert.throws(
-    () => parsejaiph("rule gate()", "test.jh"),
-    (err: any) =>
-      err.message.includes("E_PARSE") &&
-      err.message.includes("rule declarations require braces") &&
-      err.message.includes("rule gate()"),
+    () => parsejaiph("def foo:", "test.jh"),
+    (err: Error) =>
+      err.message.includes("E_PARSE") && err.message.includes("def declarations require parentheses"),
   );
 });
 
-// === Rejected: incomplete script definitions ===
+test("export def without braces is rejected with fix hint", () => {
+  assert.throws(
+    () => parsejaiph("export def bar", "test.jh"),
+    (err: Error) =>
+      err.message.includes("E_PARSE") &&
+      err.message.includes("def declarations require parentheses") &&
+      err.message.includes("def bar() { … }"),
+  );
+});
+
+test("def with parentheses but no brace is rejected", () => {
+  assert.throws(
+    () => parsejaiph("def gate()", "test.jh"),
+    (err: Error) =>
+      err.message.includes("E_PARSE") &&
+      err.message.includes("def declarations require braces") &&
+      err.message.includes("def gate()"),
+  );
+});
 
 test("script without = is rejected with fix hint", () => {
   assert.throws(
     () => parsejaiph("script greet", "test.jh"),
-    (err: any) =>
-      err.message.includes("E_PARSE") &&
-      err.message.includes("script definitions require = after the name"),
+    (err: Error) =>
+      err.message.includes("E_PARSE") && err.message.includes("script definitions require = after the name"),
   );
 });
 
 test("script with parentheses is rejected", () => {
   assert.throws(
     () => parsejaiph("script greet()", "test.jh"),
-    (err: any) =>
-      err.message.includes("E_PARSE") &&
-      err.message.includes("definitions must not use parentheses"),
+    (err: Error) =>
+      err.message.includes("E_PARSE") && err.message.includes("definitions must not use parentheses"),
   );
 });
 
-test("script with parens but no body is rejected", () => {
+test("def without parentheses before opening brace is rejected", () => {
   assert.throws(
-    () => parsejaiph("script greet()", "test.jh"),
-    (err: any) =>
-      err.message.includes("E_PARSE") &&
-      err.message.includes("definitions must not use parentheses"),
+    () => parsejaiph("export def main {\n}", "test.jh"),
+    (err: Error) =>
+      err.message.includes("E_PARSE") && err.message.includes("def declarations require parentheses"),
   );
 });
 
-// === Rejected: incomplete workflow definitions ===
-
-test("workflow without braces is rejected with fix hint", () => {
-  assert.throws(
-    () => parsejaiph("workflow default", "test.jh"),
-    (err: any) =>
-      err.message.includes("E_PARSE") &&
-      err.message.includes("workflow declarations require parentheses") &&
-      err.message.includes("workflow default() { … }"),
-  );
-});
-
-test("workflow with empty parentheses is accepted", () => {
-  const mod = parsejaiph("workflow default() {\n}", "test.jh");
-  assert.equal(mod.workflows.length, 1);
-  assert.equal(mod.workflows[0].name, "default");
-  assert.deepEqual(mod.workflows[0].params, []);
-});
-
-test("export workflow without braces is rejected with fix hint", () => {
-  assert.throws(
-    () => parsejaiph("export workflow main", "test.jh"),
-    (err: any) =>
-      err.message.includes("E_PARSE") &&
-      err.message.includes("workflow declarations require parentheses") &&
-      err.message.includes("workflow main() { … }"),
-  );
-});
-
-test("workflow with parentheses but no brace is rejected", () => {
-  assert.throws(
-    () => parsejaiph("workflow main()", "test.jh"),
-    (err: any) =>
-      err.message.includes("E_PARSE") &&
-      err.message.includes("workflow declarations require braces") &&
-      err.message.includes("workflow main()"),
-  );
-});
-
-test("workflow without parentheses before opening brace is rejected", () => {
-  assert.throws(
-    () => parsejaiph("workflow default {\n}", "test.jh"),
-    (err: any) =>
-      err.message.includes("E_PARSE") &&
-      err.message.includes("workflow declarations require parentheses"),
-  );
-});
-
-// === Accepted: minimal/empty braced bodies ===
-
-test("rule with empty braced body is accepted", () => {
-  const mod = parsejaiph("rule check() {\n}", "test.jh");
-  assert.equal(mod.rules.length, 1);
-  assert.equal(mod.rules[0].name, "check");
-  assert.equal(mod.rules[0].steps.length, 0);
+test("def with empty braced body is accepted", () => {
+  const mod = parsejaiph("def check() {\n}", "test.jh");
+  assert.equal(mod.defs.length, 1);
+  assert.equal(mod.defs[0].name, "check");
+  assert.equal(mod.defs[0].steps.length, 0);
 });
 
 test("script with empty string body is accepted", () => {
-  const mod = parsejaiph('script noop = ``', "test.jh");
+  const mod = parsejaiph("script noop = ``", "test.jh");
   assert.equal(mod.scripts.length, 1);
   assert.equal(mod.scripts[0].name, "noop");
 });
 
-test("workflow with empty braced body is accepted", () => {
-  const mod = parsejaiph("workflow default() {\n}", "test.jh");
-  assert.equal(mod.workflows.length, 1);
-  assert.equal(mod.workflows[0].name, "default");
-  assert.equal(mod.workflows[0].steps.length, 0);
-});
-
-test("export workflow with empty braced body is accepted", () => {
-  const mod = parsejaiph("export workflow main() {\n}", "test.jh");
-  assert.equal(mod.workflows.length, 1);
-  assert.equal(mod.workflows[0].name, "main");
+test("export def main with empty braced body is accepted", () => {
+  const mod = parsejaiph("export def main() {\n}", "test.jh");
+  assert.equal(mod.defs.length, 1);
+  assert.equal(mod.defs[0].name, "main");
   assert.deepEqual(mod.exports, ["main"]);
 });
 
-test("export rule with empty braced body is accepted", () => {
-  const mod = parsejaiph("export rule check() {\n}", "test.jh");
-  assert.equal(mod.rules.length, 1);
-  assert.equal(mod.rules[0].name, "check");
+test("export def with empty braced body is accepted", () => {
+  const mod = parsejaiph("export def check() {\n}", "test.jh");
+  assert.equal(mod.defs.length, 1);
+  assert.equal(mod.defs[0].name, "check");
   assert.deepEqual(mod.exports, ["check"]);
 });
 
-// === Named parameters ===
-
-test("workflow with named parameters is accepted", () => {
-  const mod = parsejaiph("workflow greet(name, greeting) {\n}", "test.jh");
-  assert.equal(mod.workflows.length, 1);
-  assert.equal(mod.workflows[0].name, "greet");
-  assert.deepEqual(mod.workflows[0].params, ["name", "greeting"]);
+test("def with named parameters is accepted", () => {
+  const mod = parsejaiph("def greet(name, greeting) {\n}", "test.jh");
+  assert.equal(mod.defs.length, 1);
+  assert.equal(mod.defs[0].name, "greet");
+  assert.deepEqual(mod.defs[0].params, ["name", "greeting"]);
 });
 
-test("rule with named parameters is accepted", () => {
-  const mod = parsejaiph("rule check(path) {\n}", "test.jh");
-  assert.equal(mod.rules.length, 1);
-  assert.equal(mod.rules[0].name, "check");
-  assert.deepEqual(mod.rules[0].params, ["path"]);
-});
-
-test("export workflow with named parameters is accepted", () => {
-  const mod = parsejaiph("export workflow main(task, role) {\n}", "test.jh");
-  assert.equal(mod.workflows.length, 1);
-  assert.equal(mod.workflows[0].name, "main");
-  assert.deepEqual(mod.workflows[0].params, ["task", "role"]);
+test("export def with named parameters is accepted", () => {
+  const mod = parsejaiph("export def main(task, role) {\n}", "test.jh");
+  assert.equal(mod.defs.length, 1);
+  assert.equal(mod.defs[0].name, "main");
+  assert.deepEqual(mod.defs[0].params, ["task", "role"]);
   assert.deepEqual(mod.exports, ["main"]);
 });
 
 test("duplicate parameter name is rejected", () => {
   assert.throws(
-    () => parsejaiph("workflow greet(name, name) {\n}", "test.jh"),
-    (err: any) =>
-      err.message.includes("E_PARSE") &&
-      err.message.includes('duplicate parameter name "name"'),
+    () => parsejaiph("def greet(name, name) {\n}", "test.jh"),
+    (err: Error) => err.message.includes("E_PARSE") && err.message.includes('duplicate parameter name "name"'),
   );
 });
 
 test("reserved keyword as parameter name is rejected", () => {
   assert.throws(
-    () => parsejaiph("workflow greet(run) {\n}", "test.jh"),
-    (err: any) =>
-      err.message.includes("E_PARSE") &&
-      err.message.includes('parameter name "run" is a reserved keyword'),
+    () => parsejaiph("def greet(run) {\n}", "test.jh"),
+    (err: Error) =>
+      err.message.includes("E_PARSE") && err.message.includes('parameter name "run" is a reserved keyword'),
   );
 });
 
 test("log accepts a bare identifier (stored as interpolation Expr.literal)", () => {
-  const mod = parsejaiph(
-    ["workflow w() {", "  log msg", "}", ""].join("\n"),
-    "test.jh",
-  );
-  const step = mod.workflows[0].steps[0];
+  const mod = parsejaiph(["def w() {", "  log msg", "}", ""].join("\n"), "test.jh");
+  const step = mod.defs[0].steps[0];
   assert.equal(step.type, "say");
   if (step.type === "say") {
     assert.equal(step.level, "log");
@@ -221,11 +155,9 @@ test("log accepts a bare identifier (stored as interpolation Expr.literal)", () 
   }
 });
 
-// === import script ===
-
 test("import script parses into scriptImports", () => {
   const mod = parsejaiph(
-    'import script "./queue.py" as queue\n\nworkflow default() {\n  run queue("get")\n}\n',
+    'import script "./queue.py" as queue\n\nexport def main() {\n  run queue("get")\n}\n',
     "/tmp/test.jh",
   );
   assert.equal(mod.scriptImports?.length, 1);
@@ -235,18 +167,14 @@ test("import script parses into scriptImports", () => {
 
 test("import script name collides with inline script", () => {
   assert.throws(
-    () =>
-      parsejaiph(
-        'import script "./q.py" as q\n\nscript q = `echo hi`\n',
-        "/tmp/test.jh",
-      ),
+    () => parsejaiph('import script "./q.py" as q\n\nscript q = `echo hi`\n', "/tmp/test.jh"),
     /duplicate name "q"/,
   );
 });
 
 test("import script does not conflict with module imports", () => {
   const mod = parsejaiph(
-    'import script "./helper.sh" as helper\nimport "other" as other\n\nworkflow w() {\n  run helper("x")\n}\n',
+    'import script "./helper.sh" as helper\nimport "other" as other\n\ndef w() {\n  run helper("x")\n}\n',
     "/tmp/test.jh",
   );
   assert.equal(mod.scriptImports?.length, 1);

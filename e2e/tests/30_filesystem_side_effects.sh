@@ -17,7 +17,7 @@ e2e::file "fs_write_workflow.jh" <<'EOF'
 script write_workflow_file = ```
 echo "abc" > workflow_wrote.txt
 ```
-workflow default() {
+export def main() {
   run write_workflow_file()
 }
 EOF
@@ -34,10 +34,10 @@ e2e::expect_stdout "${workflow_write_out}" <<'EOF'
 
 Jaiph: Running fs_write_workflow.jh
 
-workflow default
+export def main
   ▸ script write_workflow_file
   ✓ script write_workflow_file (<time>)
-✓ PASS workflow default (<time>)
+✓ PASS export def main (<time>)
 EOF
 
 e2e::expect_out_files "fs_write_workflow.jh" 2
@@ -48,12 +48,12 @@ e2e::file "fs_write_rule.jh" <<'EOF'
 script write_attempt_impl = ```
 echo "abc" > rule_wrote.txt
 ```
-rule write_attempt() {
+def write_attempt() {
   run write_attempt_impl()
 }
 
-workflow default() {
-  ensure write_attempt()
+export def main() {
+  run write_attempt()
 }
 EOF
 rm -f "${TEST_DIR}/rule_wrote.txt"
@@ -84,12 +84,12 @@ else
 
 Jaiph: Running fs_write_rule.jh
 
-workflow default
-  ▸ rule write_attempt
+export def main
+  ▸ def write_attempt
   ·   ▸ script write_attempt_impl
   ·   ✓ script write_attempt_impl (<time>)
-  ✓ rule write_attempt (<time>)
-✓ PASS workflow default (<time>)
+  ✓ def write_attempt(<time>)
+✓ PASS export def main (<time>)
 EOF
 
   e2e::expect_out_files "fs_write_rule.jh" 3

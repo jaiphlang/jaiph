@@ -14,13 +14,13 @@ e2e::section "Single-file run ignores sibling parse errors"
 # Given
 e2e::file "valid.jh" <<'EOF'
 script say_ok = `echo "valid-ok"`
-workflow default() {
+export def main() {
   run say_ok()
 }
 EOF
 
 e2e::file "broken.jh" <<'EOF'
-workflow broken() {
+def broken() {
   name = echo "oops" -> bad
 }
 EOF
@@ -33,10 +33,10 @@ e2e::expect_stdout "${run_out}" <<'EOF'
 
 Jaiph: Running valid.jh
 
-workflow default
+export def main
   ▸ script say_ok
   ✓ script say_ok (<time>)
-✓ PASS workflow default (<time>)
+✓ PASS export def main (<time>)
 EOF
 
 e2e::expect_out_files "valid.jh" 2

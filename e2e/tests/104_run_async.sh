@@ -18,15 +18,15 @@ script write_a = `echo "a" > a.txt`
 
 script write_b = `echo "b" > b.txt`
 
-workflow do_a() {
+def do_a() {
   run write_a()
 }
 
-workflow do_b() {
+def do_b() {
   run write_b()
 }
 
-workflow default() {
+export def main() {
   run async do_a()
   run async do_b()
   log "done"
@@ -44,18 +44,18 @@ e2e::expect_stdout "$run_output" <<'EXPECTED'
 
 Jaiph: Running fanout.jh
 
-workflow default
- ₁▸ workflow do_a
+export def main
+ ₁▸ def do_a
  ₁·   ▸ script write_a
- ₂▸ workflow do_b
+ ₂▸ def do_b
  ₂·   ▸ script write_b
   ℹ done
  ₁·   ✓ script write_a (<time>)
- ₁✓ workflow do_a (<time>)
+ ₁✓ def do_a(<time>)
  ₂·   ✓ script write_b (<time>)
- ₂✓ workflow do_b (<time>)
+ ₂✓ def do_b(<time>)
 
-✓ PASS workflow default (<time>)
+✓ PASS export def main (<time>)
 EXPECTED
 
 e2e::expect_out "fanout.jh" "default" "done"
@@ -67,15 +67,15 @@ e2e::expect_out "fanout.jh" "do_b" ""
 e2e::section "run async multi-failure aggregation"
 
 e2e::file "multi_fail.jh" <<'EOF'
-workflow fail_a() {
+def fail_a() {
   fail "error-a"
 }
 
-workflow fail_b() {
+def fail_b() {
   fail "error-b"
 }
 
-workflow default() {
+export def main() {
   run async fail_a()
   run async fail_b()
 }
@@ -105,11 +105,11 @@ e2e::section "run async with interleaved sync steps"
 e2e::file "async_interleave.jh" <<'EOF'
 script write_marker = `echo "ran" > sync_marker.txt`
 
-workflow slow() {
+def slow() {
   log "slow-done"
 }
 
-workflow default() {
+export def main() {
   run async slow()
   run write_marker()
 }
@@ -126,14 +126,14 @@ e2e::expect_stdout "$interleave_output" <<'EXPECTED'
 
 Jaiph: Running async_interleave.jh
 
-workflow default
- ₁▸ workflow slow
+export def main
+ ₁▸ def slow
   ▸ script write_marker
  ₁·   ℹ slow-done
- ₁✓ workflow slow (<time>)
+ ₁✓ def slow(<time>)
   ✓ script write_marker (<time>)
 
-✓ PASS workflow default (<time>)
+✓ PASS export def main (<time>)
 EXPECTED
 
 e2e::expect_out "async_interleave.jh" "default" "slow-done"
@@ -144,11 +144,11 @@ e2e::expect_out "async_interleave.jh" "slow" "slow-done"
 e2e::section "capture + run async returns handle"
 
 e2e::file "capture_async.jh" <<'EOF'
-workflow helper() {
+def helper() {
   return "hello"
 }
 
-workflow default() {
+export def main() {
   const x = run async helper()
   log x
 }
@@ -173,15 +173,15 @@ script write_x = `echo "x" > x.txt`
 
 script write_y = `echo "y" > y.txt`
 
-workflow branch_x() {
+def branch_x() {
   run write_x()
 }
 
-workflow branch_y() {
+def branch_y() {
   run write_y()
 }
 
-workflow default() {
+export def main() {
   run async branch_x()
   run async branch_y()
 }
@@ -193,17 +193,17 @@ e2e::expect_stdout "$depth_output" <<'EXPECTED'
 
 Jaiph: Running sibling_depth.jh
 
-workflow default
- ₁▸ workflow branch_x
+export def main
+ ₁▸ def branch_x
  ₁·   ▸ script write_x
- ₂▸ workflow branch_y
+ ₂▸ def branch_y
  ₂·   ▸ script write_y
  ₁·   ✓ script write_x (<time>)
- ₁✓ workflow branch_x (<time>)
+ ₁✓ def branch_x(<time>)
  ₂·   ✓ script write_y (<time>)
- ₂✓ workflow branch_y (<time>)
+ ₂✓ def branch_y(<time>)
 
-✓ PASS workflow default (<time>)
+✓ PASS export def main (<time>)
 EXPECTED
 
 # --- circled numbers on async branches ---
@@ -211,15 +211,15 @@ EXPECTED
 e2e::section "run async circled numbers in progress tree"
 
 e2e::file "circled.jh" <<'EOF'
-workflow alpha() {
+def alpha() {
   log "alpha-done"
 }
 
-workflow beta() {
+def beta() {
   log "beta-done"
 }
 
-workflow default() {
+export def main() {
   run async alpha()
   run async beta()
 }
@@ -231,15 +231,15 @@ e2e::expect_stdout "$circled_output" <<'EXPECTED'
 
 Jaiph: Running circled.jh
 
-workflow default
- ₁▸ workflow alpha
- ₂▸ workflow beta
+export def main
+ ₁▸ def alpha
+ ₂▸ def beta
  ₁·   ℹ alpha-done
  ₂·   ℹ beta-done
- ₁✓ workflow alpha (<time>)
- ₂✓ workflow beta (<time>)
+ ₁✓ def alpha(<time>)
+ ₂✓ def beta(<time>)
 
-✓ PASS workflow default (<time>)
+✓ PASS export def main (<time>)
 EXPECTED
 
 e2e::expect_out "circled.jh" "default" "alpha-done
@@ -252,24 +252,24 @@ e2e::expect_out "circled.jh" "beta" "beta-done"
 e2e::section "nested run async circled numbers"
 
 e2e::file "nested_async.jh" <<'EOF'
-workflow inner_a() {
+def inner_a() {
   log "inner-a"
 }
 
-workflow inner_b() {
+def inner_b() {
   log "inner-b"
 }
 
-workflow outer() {
+def outer() {
   run async inner_a()
   run async inner_b()
 }
 
-workflow side() {
+def side() {
   log "side-done"
 }
 
-workflow default() {
+export def main() {
   run async outer()
   run async side()
 }
@@ -281,20 +281,20 @@ e2e::expect_stdout "$nested_output" <<'EXPECTED'
 
 Jaiph: Running nested_async.jh
 
-workflow default
- ₁▸ workflow outer
- ₁·  ₁▸ workflow inner_a
- ₁·  ₂▸ workflow inner_b
- ₂▸ workflow side
+export def main
+ ₁▸ def outer
+ ₁·  ₁▸ def inner_a
+ ₁·  ₂▸ def inner_b
+ ₂▸ def side
  ₁·  ₁·   ℹ inner-a
  ₁·  ₂·   ℹ inner-b
  ₂·   ℹ side-done
- ₁·  ₁✓ workflow inner_a (<time>)
- ₁·  ₂✓ workflow inner_b (<time>)
- ₂✓ workflow side (<time>)
- ₁✓ workflow outer (<time>)
+ ₁·  ₁✓ def inner_a(<time>)
+ ₁·  ₂✓ def inner_b(<time>)
+ ₂✓ def side(<time>)
+ ₁✓ def outer(<time>)
 
-✓ PASS workflow default (<time>)
+✓ PASS export def main (<time>)
 EXPECTED
 
 e2e::expect_out "nested_async.jh" "default" "inner-a

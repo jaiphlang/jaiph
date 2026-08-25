@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import type { Expr, WorkflowStepDef } from "../types";
+import type { Expr, StepDef } from "../types";
 
 /**
  * AC1 (Refactor 3): `bareIdentifierArgs` must not appear on any call-bearing
@@ -14,21 +14,19 @@ import type { Expr, WorkflowStepDef } from "../types";
  */
 type HasField<T, K extends string> = T extends Record<K, unknown> ? true : false;
 
-type ExecStep = Extract<WorkflowStepDef, { type: "exec" }>;
-type ReturnStep = Extract<WorkflowStepDef, { type: "return" }>;
-type SayStep = Extract<WorkflowStepDef, { type: "say" }>;
-type SendStep = Extract<WorkflowStepDef, { type: "send" }>;
-type ConstStep = Extract<WorkflowStepDef, { type: "const" }>;
+type ExecStep = Extract<StepDef, { type: "exec" }>;
+type ReturnStep = Extract<StepDef, { type: "return" }>;
+type SayStep = Extract<StepDef, { type: "say" }>;
+type SendStep = Extract<StepDef, { type: "send" }>;
+type ConstStep = Extract<StepDef, { type: "const" }>;
 
 type CallExpr = Extract<Expr, { kind: "call" }>;
-type EnsureCallExpr = Extract<Expr, { kind: "ensure_call" }>;
 type InlineScriptExpr = Extract<Expr, { kind: "inline_script" }>;
 type PromptExpr = Extract<Expr, { kind: "prompt" }>;
 type SendRunExpr = SendStep["value"];
 type ConstValueExpr = ConstStep["value"];
 
 const _callNoBare: HasField<CallExpr, "bareIdentifierArgs"> = false;
-const _ensureCallNoBare: HasField<EnsureCallExpr, "bareIdentifierArgs"> = false;
 const _inlineNoBare: HasField<InlineScriptExpr, "bareIdentifierArgs"> = false;
 const _promptNoBare: HasField<PromptExpr, "bareIdentifierArgs"> = false;
 const _sendValueNoBare: HasField<SendRunExpr, "bareIdentifierArgs"> = false;
@@ -47,7 +45,6 @@ const _constValueIsExpr: ConstStep["value"] extends Expr ? true : false = true;
 
 test("AC1: managed-call encodings collapsed into Expr; no `bareIdentifierArgs` on Expr", () => {
   assert.equal(_callNoBare, false);
-  assert.equal(_ensureCallNoBare, false);
   assert.equal(_inlineNoBare, false);
   assert.equal(_promptNoBare, false);
   assert.equal(_sendValueNoBare, false);

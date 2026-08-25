@@ -1,4 +1,4 @@
-import type { Expr, RuleRefDef, WorkflowRefDef } from "../types";
+import type { Expr, DefRef } from "../types";
 import { createTrivia, type Trivia } from "./trivia";
 import { fail, parseCallRef, rejectTrailingContent } from "./core";
 import { parseCallRefMultiline } from "./call-args";
@@ -49,7 +49,7 @@ export function validateConstBashExpr(filePath: string, expr: string, lineNo: nu
 }
 
 /**
- * Parse RHS after `const name = ` (trimmed). `forRule` disallows prompt capture.
+ * Parse RHS after `const name = ` (trimmed).
  * Returns an `Expr` node — the typed value-form that replaces the legacy `ConstRhs` union.
  */
 export function parseConstRhs(
@@ -59,15 +59,11 @@ export function parseConstRhs(
   rhs: string,
   lineNo: number,
   col: number,
-  forRule: boolean,
   constName: string,
   trivia: Trivia = createTrivia(),
 ): { value: Expr; nextLineIdx: number } {
   const head = rhs.trimStart();
   if (head.startsWith("prompt ")) {
-    if (forRule) {
-      fail(filePath, "const ... = prompt is not allowed in rules", lineNo, col);
-    }
     const innerRaw = lines[lineIdx];
     const promptCol = innerRaw.indexOf("prompt") + 1;
     const promptArg = rhs.slice(rhs.indexOf("prompt") + "prompt".length).trimStart();
@@ -103,7 +99,7 @@ export function parseConstRhs(
         fail(filePath, "const ... = run async must target a valid reference", lineNo, col);
       }
       rejectTrailingContent(filePath, lineNo, "run async", call.rest);
-      const callee: WorkflowRefDef = { value: call.ref, loc: { line: lineNo, col } };
+      const callee: DefRef = { value: call.ref, loc: { line: lineNo, col } };
       return {
         value: { kind: "call", callee, args: call.args, async: true },
         nextLineIdx: lineIdx,
@@ -129,26 +125,14 @@ export function parseConstRhs(
       fail(filePath, "const ... = run must target a valid reference", lineNo, col);
     }
     rejectTrailingContent(filePath, lineNo, "run", call.rest);
-    const callee: WorkflowRefDef = { value: call.ref, loc: { line: lineNo, col } };
+    const callee: DefRef = { value: call.ref, loc: { line: lineNo, col } };
     return {
       value: { kind: "call", callee, args: call.args },
       nextLineIdx: call.nextLineIdx - 1,
     };
   }
   if (head.startsWith("ensure ")) {
-    const rest = head.slice("ensure ".length).trim();
-    const call = parseCallRefMultiline(filePath, lines, lineIdx, rest);
-    if (!call) {
-      fail(filePath, "const ... = ensure must target a valid reference", lineNo, col);
-    }
-    if (call.rest.trim()) {
-      fail(filePath, "const ... = ensure cannot use catch", lineNo, col);
-    }
-    const callee: RuleRefDef = { value: call.ref, loc: { line: lineNo, col } };
-    return {
-      value: { kind: "ensure_call", callee, args: call.args },
-      nextLineIdx: call.nextLineIdx - 1,
-    };
+    fail(filePath, "'ensure' is not a keyword; use 'run'", lineNo, col);
   }
   // const name = match var { ... }
   const constMatchHead = head.match(/^match\s+(.+?)\s*\{\s*$/);

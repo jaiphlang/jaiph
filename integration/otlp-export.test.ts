@@ -176,7 +176,7 @@ function baseEnv(runsRoot: string): NodeJS.ProcessEnv {
 
 const STEP_FIXTURE = [
   'script emit = `echo "hello"`',
-  "workflow default() {",
+  "export def main() {",
   '  log "a log line"',
   '  logerr "an error line"',
   "  run emit()",
@@ -220,7 +220,7 @@ test("jaiph run: with OTLP env, exactly one well-formed POST reaches /v1/traces"
     };
     const rs = payload.resourceSpans[0];
     const spans = rs.scopeSpans[0].spans;
-    assert.ok(spans.some((s) => s.name === "workflow default"), "root span present");
+    assert.ok(spans.some((s) => s.name === "run main"), "root span present");
     assert.ok(spans.some((s) => s.name === "script emit"), "step span present");
     assert.ok(spans.every((s) => /^[0-9a-f]{32}$/.test(s.traceId)), "trace id is 32 hex chars");
     const svc = rs.resource.attributes.find((a) => a.key === "service.name");
@@ -252,7 +252,7 @@ test("jaiph run --raw: standalone raw run exports exactly one trace", async () =
       resourceSpans: Array<{ scopeSpans: Array<{ spans: Array<{ name: string }> }> }>;
     };
     const spans = payload.resourceSpans[0].scopeSpans[0].spans;
-    assert.ok(spans.some((s) => s.name === "workflow default"), "root span present in raw export");
+    assert.ok(spans.some((s) => s.name === "run main"), "root span present in raw export");
   } finally {
     await collector.close();
     rmSync(root, { recursive: true, force: true });
@@ -331,7 +331,7 @@ test("redaction: a credential in step output reaches the payload only as [REDACT
     const jh = join(root, "app.jh");
     writeFileSync(
       jh,
-      ['script leak = `printf %s "$SECRET_API_KEY"`', "workflow default() {", "  run leak()", "}", ""].join("\n"),
+      ['script leak = `printf %s "$SECRET_API_KEY"`', "export def main() {", "  run leak()", "}", ""].join("\n"),
     );
     const result = await runCli(["run", jh], {
       cwd: root,
@@ -365,7 +365,7 @@ test("MCP tools/call triggers exactly one export per call via the shared call la
   const collector = await startCollector(200);
   const root = mkdtempSync(join(tmpdir(), "jaiph-otlp-mcp-"));
   const jh = join(root, "tools.jh");
-  writeFileSync(jh, ["# Greets.", "workflow greet(name) {", '  return "hi ${name}"', "}", ""].join("\n"));
+  writeFileSync(jh, ["# Greets.", "export def greet(name) {", '  return "hi ${name}"', "}", ""].join("\n"));
   const child: ChildProcessWithoutNullStreams = spawn("node", [CLI_PATH, "mcp", jh], {
     cwd: root,
     env: {
@@ -430,7 +430,7 @@ test("MCP tools/call triggers exactly one export per call via the shared call la
     const payload = JSON.parse(collector.requests[0].body) as {
       resourceSpans: Array<{ resource: { attributes: Array<{ key: string; value: { stringValue?: string } }> } }>;
     };
-    const wf = payload.resourceSpans[0].resource.attributes.find((a) => a.key === "jaiph.workflow");
+    const wf = payload.resourceSpans[0].resource.attributes.find((a) => a.key === "jaiph.def");
     assert.equal(wf?.value.stringValue, "greet", "the tool's workflow symbol is on the resource");
   } finally {
     await new Promise<void>((resolve) => {
@@ -447,7 +447,7 @@ test("MCP tools/call: an unreachable collector cannot delay the tool response", 
   const hole = await startBlackHole();
   const root = mkdtempSync(join(tmpdir(), "jaiph-otlp-mcp-hole-"));
   const jh = join(root, "tools.jh");
-  writeFileSync(jh, ["# Greets.", "workflow greet(name) {", '  return "hi ${name}"', "}", ""].join("\n"));
+  writeFileSync(jh, ["# Greets.", "export def greet(name) {", '  return "hi ${name}"', "}", ""].join("\n"));
   const child = spawn("node", [CLI_PATH, "mcp", jh], {
     cwd: root,
     env: {
@@ -507,7 +507,7 @@ test("MCP tools/call: an unreachable collector cannot delay the tool response", 
 
 // --- HTTP `jaiph serve` shared-call-layer export ---------------------------
 
-const GREET_SERVE_FIXTURE = ["# Greets.", "workflow greet(name) {", '  return "hi ${name}"', "}", ""].join("\n");
+const GREET_SERVE_FIXTURE = ["# Greets.", "export def greet(name) {", '  return "hi ${name}"', "}", ""].join("\n");
 
 test("jaiph serve: an HTTP run exports exactly one trace via the shared call layer", async () => {
   const collector = await startCollector(200);
@@ -520,7 +520,7 @@ test("jaiph serve: an HTTP run exports exactly one trace via the shared call lay
       OTEL_EXPORTER_OTLP_ENDPOINT: `http://127.0.0.1:${collector.port}`,
     });
     try {
-      const res = await fetch(`${serve.baseUrl}/v1/workflows/greet/runs?wait=true`, {
+      const res = await fetch(`${serve.baseUrl}/v1/defs/greet/runs?wait=true`, {
         method: "POST",
         headers: { "content-type": "application/json", authorization: `Bearer ${SERVE_TOKEN}` },
         body: JSON.stringify({ name: "x" }),
@@ -534,7 +534,7 @@ test("jaiph serve: an HTTP run exports exactly one trace via the shared call lay
       const payload = JSON.parse(collector.requests[0].body) as {
         resourceSpans: Array<{ resource: { attributes: Array<{ key: string; value: { stringValue?: string } }> } }>;
       };
-      const wf = payload.resourceSpans[0].resource.attributes.find((a) => a.key === "jaiph.workflow");
+      const wf = payload.resourceSpans[0].resource.attributes.find((a) => a.key === "jaiph.def");
       assert.equal(wf?.value.stringValue, "greet", "the workflow symbol is on the resource");
     } finally {
       await serve.close();
@@ -560,7 +560,7 @@ test("jaiph serve: an unreachable collector cannot delay a terminal ?wait=true r
     });
     try {
       const started = Date.now();
-      const res = await fetch(`${serve.baseUrl}/v1/workflows/greet/runs?wait=true`, {
+      const res = await fetch(`${serve.baseUrl}/v1/defs/greet/runs?wait=true`, {
         method: "POST",
         headers: { "content-type": "application/json", authorization: `Bearer ${SERVE_TOKEN}` },
         body: JSON.stringify({ name: "x" }),

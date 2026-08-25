@@ -6,8 +6,8 @@
 # minimum: type, ts, run_id, event_version (always 1).
 #
 # Required event types for a workflow with inbox dispatch:
-#   WORKFLOW_START    — workflow={name}
-#   WORKFLOW_END      — workflow={name}
+#   RUN_START    — workflow={name}
+#   RUN_END      — workflow={name}
 #   STEP_START        — id={unique-step-id}
 #   STEP_END          — id={matching-step-id}
 #   LOG               — message={string}
@@ -17,7 +17,7 @@
 #
 # Invariants:
 #   - Single run_id across all events
-#   - WORKFLOW_START/END counts balance per workflow name
+#   - RUN_START/END counts balance per workflow name
 #   - STEP_START precedes its matching STEP_END (by id)
 #   - Every INBOX_DISPATCH_START has a matching INBOX_DISPATCH_COMPLETE
 #     for the same (channel, target, inbox_seq), and START precedes COMPLETE
@@ -39,22 +39,22 @@ channel ch -> receiver_a, receiver_b
 
 script emit_payload = `echo "contract-payload"`
 
-workflow sender() {
+def sender() {
   log "contract-sender-log"
   ch <- run emit_payload()
 }
 
 script write_a = `echo "a:$1" > contract_a.txt`
-workflow receiver_a(message, chan, sender) {
+def receiver_a(message, chan, sender) {
   run write_a(message)
 }
 
 script write_b = `echo "b:$1" > contract_b.txt`
-workflow receiver_b(message, chan, sender) {
+def receiver_b(message, chan, sender) {
   run write_b(message)
 }
 
-workflow default() {
+export def main() {
   log "contract-root-log"
   run sender()
 }
@@ -108,19 +108,19 @@ starts = {}
 ends = {}
 for e in events:
     ty = e.get("type")
-    if ty == "WORKFLOW_START":
-        name = e.get("workflow")
+    if ty == "RUN_START":
+        name = e.get("def")
         if not name:
-            sys.exit("WORKFLOW_START missing workflow")
+            sys.exit("RUN_START missing def")
         starts[name] = starts.get(name, 0) + 1
-    elif ty == "WORKFLOW_END":
-        name = e.get("workflow")
+    elif ty == "RUN_END":
+        name = e.get("def")
         if not name:
-            sys.exit("WORKFLOW_END missing workflow")
+            sys.exit("RUN_END missing def")
         ends[name] = ends.get(name, 0) + 1
 for name in set(starts) | set(ends):
     if starts.get(name, 0) != ends.get(name, 0):
-        sys.exit(f"workflow {name!r}: WORKFLOW_START count != WORKFLOW_END count")
+        sys.exit(f"workflow {name!r}: RUN_START count != RUN_END count")
 
 by_step_id = {}
 for idx, e in enumerate(events):
@@ -197,8 +197,8 @@ for key in set(dispatch_starts) | set(dispatch_ends):
         sys.exit(f"INBOX_DISPATCH_START must precede INBOX_DISPATCH_COMPLETE for {key!r}")
 
 want_types = (
-    "WORKFLOW_START",
-    "WORKFLOW_END",
+    "RUN_START",
+    "RUN_END",
     "STEP_START",
     "STEP_END",
     "LOG",

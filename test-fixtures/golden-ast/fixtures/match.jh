@@ -1,4 +1,4 @@
-workflow default() {
+export def main() {
   const input = "hello"
   return match input {
     "hello" => "greeting"

@@ -207,7 +207,7 @@ export async function streamRunEventsSse(target: StreamTarget, opts: SseEventsOp
       if (target.aborted) return;
       flush();
       if (opts.isTerminal()) {
-        // A final line (e.g. WORKFLOW_END) may have landed between the read above
+        // A final line (e.g. RUN_END) may have landed between the read above
         // and the registry marking the run terminal; flush once more so the
         // stream is complete before closing.
         flush();

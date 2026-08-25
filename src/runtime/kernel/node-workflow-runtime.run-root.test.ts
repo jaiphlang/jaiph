@@ -23,11 +23,11 @@ test("runRoot: a non-default workflow runs as root, binds params positionally, w
     writeFileSync(
       jh,
       [
-        "workflow greet(name, punctuation) {",
+        "def greet(name, punctuation) {",
         '  return "hello ${name}${punctuation}"',
         "}",
         "",
-        "workflow default() {",
+        "export def main() {",
         '  log "unused"',
         "}",
         "",
@@ -45,36 +45,36 @@ test("runRoot: a non-default workflow runs as root, binds params positionally, w
   }
 });
 
-test("runRoot: an unknown workflow returns 1 and writes no return_value.txt", async () => {
+test("runRoot: an unknown def returns 1 and writes no return_value.txt", async () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-run-root-missing-"));
   try {
     const jh = join(root, "tools.jh");
-    writeFileSync(jh, ["workflow greet(name) {", '  return "hi ${name}"', "}", ""].join("\n"));
+    writeFileSync(jh, ["def greet(name) {", '  return "hi ${name}"', "}", ""].join("\n"));
     const runtime = makeRuntime(root, jh);
     const status = await runtime.runRoot("missing", []);
     assert.equal(status, 1);
 
     const returnValueFile = join(runtime.getRunDir(), "return_value.txt");
-    assert.ok(!existsSync(returnValueFile), "expected no return_value.txt for an unknown workflow");
+    assert.ok(!existsSync(returnValueFile), "expected no return_value.txt for an unknown def");
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
 });
 
-test("runRoot: runDefault delegates to runRoot('default') with unchanged behaviour", async () => {
+test("runRoot: runMain delegates to runRoot('main') with unchanged behaviour", async () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-run-root-default-"));
   try {
     const jh = join(root, "tools.jh");
     writeFileSync(
       jh,
-      ["workflow default(name) {", '  return "hello ${name}"', "}", ""].join("\n"),
+      ["export def main(name) {", '  return "hello ${name}"', "}", ""].join("\n"),
     );
     const runtime = makeRuntime(root, jh);
-    const status = await runtime.runDefault(["world"]);
+    const status = await runtime.runMain(["world"]);
     assert.equal(status, 0);
 
     const returnValueFile = join(runtime.getRunDir(), "return_value.txt");
-    assert.ok(existsSync(returnValueFile), "runDefault should still write return_value.txt");
+    assert.ok(existsSync(returnValueFile), "runMain should still write return_value.txt");
     assert.equal(readFileSync(returnValueFile, "utf8"), "hello world");
   } finally {
     rmSync(root, { recursive: true, force: true });

@@ -16,7 +16,7 @@ e2e::file "artifacts_fail.jh" <<'EOF'
 script ok_step_impl = ```
 echo "ok-out"
 ```
-rule ok_step() {
+def ok_step() {
   run ok_step_impl()
 }
 
@@ -25,13 +25,13 @@ echo "bad-out"
 echo "bad-err" >&2
 exit 1
 ```
-rule failing_step() {
+def failing_step() {
   run failing_step_impl()
 }
 
-workflow default() {
-  ensure ok_step()
-  ensure failing_step()
+export def main() {
+  run ok_step()
+  run failing_step()
 }
 EOF
 rm -rf "${TEST_DIR}/runs_out"
@@ -71,7 +71,7 @@ e2e::file "prompt_then_script.jh" <<'EOF'
 script echo_line_impl = ```
 echo "script-step-out"
 ```
-workflow default() {
+export def main() {
   const _ = prompt "e2e-artifacts-prompt-line"
   run echo_line_impl()
 }
@@ -85,10 +85,10 @@ JAIPH_RUNS_DIR="${TEST_DIR}/runs_prompt_script" \
 
 run_dir_ps="$(e2e::run_dir_at "${TEST_DIR}/runs_prompt_script" "prompt_then_script.jh")"
 shopt -s nullglob
-wf_outs=( "${run_dir_ps}"*workflow__default.out )
+wf_outs=( "${run_dir_ps}"*def__default.out )
 sc_outs=( "${run_dir_ps}"*script__echo_line_impl.out )
 shopt -u nullglob
-[[ ${#wf_outs[@]} -ge 1 ]] || e2e::fail "expected workflow default .out"
+[[ ${#wf_outs[@]} -ge 1 ]] || e2e::fail "expected export def main .out"
 [[ ${#sc_outs[@]} -ge 1 ]] || e2e::fail "expected script echo_line_impl .out"
 
 wf_out="$(<"${wf_outs[0]}")"

@@ -1,4 +1,4 @@
-import type { ChannelDef, WorkflowRefDef } from "../types";
+import type { ChannelDef, DefRef } from "../types";
 import { fail, isRef } from "./core";
 
 export function parseChannelLine(
@@ -34,7 +34,7 @@ export function parseChannelLine(
     fail(filePath, "channel route requires at least one target workflow after ->", lineNo, 1);
   }
   const targetNames = targetsStr.split(/\s*,\s*/);
-  const routes: WorkflowRefDef[] = targetNames.map((t) => {
+  const routes: DefRef[] = targetNames.map((t) => {
     const trimmed = t.trim();
     if (!trimmed || !isRef(trimmed)) {
       fail(filePath, `invalid workflow reference in channel route: "${trimmed}"`, lineNo, 1);

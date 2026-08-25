@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { parsejaiph } from "../parser";
 import { loadModuleGraph } from "./module-graph";
 import { collectDiagnostics } from "./validate";
-import { buildConstVars, interpolateWorkflowMetadata } from "../config";
+import { buildConstVars, interpolateDefMetadata } from "../config";
 
 test("validateConfig: rejects unknown identifier in workflow config", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-validate-config-"));
@@ -14,19 +14,19 @@ test("validateConfig: rejects unknown identifier in workflow config", () => {
     writeFileSync(
       join(root, "test.jh"),
       [
-        "workflow implement(model) {",
+        "def implement(model) {",
         "  config {",
         "    agent.model = model",
         "  }",
         "}",
         "",
-        "workflow other() {",
+        "def other() {",
         "  config {",
         "    agent.model = missing",
         "  }",
         "}",
         "",
-        "workflow default() {",
+        "export def main() {",
         "  log \"ok\"",
         "}",
         "",
@@ -47,13 +47,13 @@ test("validateConfig: accepts workflow parameter in workflow config", () => {
     writeFileSync(
       join(root, "test.jh"),
       [
-        "workflow implement(model) {",
+        "def implement(model) {",
         "  config {",
         "    agent.model = model",
         "  }",
         "}",
         "",
-        "workflow default() {",
+        "export def main() {",
         "  log \"ok\"",
         "}",
         "",
@@ -79,7 +79,7 @@ test("validateConfig: accepts module const in module config", () => {
         "  agent.model = DEFAULT_MODEL",
         "}",
         "",
-        "workflow default() {",
+        "export def main() {",
         "  log \"ok\"",
         "}",
         "",
@@ -93,9 +93,9 @@ test("validateConfig: accepts module const in module config", () => {
   }
 });
 
-test("interpolateWorkflowMetadata: resolves workflow parameter", () => {
+test("interpolateDefMetadata: resolves workflow parameter", () => {
   const vars = new Map([["model", "claude-sonnet-5"]]);
-  const resolved = interpolateWorkflowMetadata({ agent: { model: "${model}" } }, vars);
+  const resolved = interpolateDefMetadata({ agent: { model: "${model}" } }, vars);
   assert.equal(resolved.agent?.model, "claude-sonnet-5");
 });
 
@@ -107,6 +107,6 @@ test("buildConstVars: resolves module const chain for module config", () => {
     "test.jh",
   );
   const vars = buildConstVars(ast.envDecls);
-  const resolved = interpolateWorkflowMetadata(ast.metadata!, vars);
+  const resolved = interpolateDefMetadata(ast.metadata!, vars);
   assert.equal(resolved.agent?.model, "claude-sonnet-5");
 });

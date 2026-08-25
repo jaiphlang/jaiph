@@ -79,7 +79,7 @@ test("trusted_envs: declaring workflow's run-step script receives the host value
     writeScriptFile(scriptsDir, "show");
     const jh = writeFlow(root, "flow.jh", [
       "script show = `echo x`",
-      "workflow default() {",
+      "export def main() {",
       "  config {",
       '    trusted_envs = "GH_TOKEN"',
       "  }",
@@ -89,7 +89,7 @@ test("trusted_envs: declaring workflow's run-step script receives the host value
     const env = { ...makeEnv(root, scriptsDir), GH_TOKEN: "host-secret", AMBIENT_OTHER: "visible" };
     const runtime = new NodeWorkflowRuntime(buildRuntimeGraph(jh), { env, cwd: root, suppressLiveEvents: true });
     await withSpawnSpy(async (calls) => {
-      const status = await runtime.runDefault([]);
+      const status = await runtime.runMain([]);
       assert.equal(status, 0);
       assert.equal(calls.length, 1, "expected exactly one script spawn");
       assert.equal(calls[0]!.env.GH_TOKEN, "host-secret", "declared key is injected into the run-step env");
@@ -110,10 +110,10 @@ test("trusted_envs: top-level config is sugar for every workflow in the entry fi
       '  trusted_envs = "GH_TOKEN"',
       "}",
       "script show = `echo x`",
-      "workflow sub() {",
+      "def sub() {",
       "  run show()",
       "}",
-      "workflow default() {",
+      "export def main() {",
       "  run show()",
       "  run sub()",
       "}",
@@ -121,7 +121,7 @@ test("trusted_envs: top-level config is sugar for every workflow in the entry fi
     const env = { ...makeEnv(root, scriptsDir), GH_TOKEN: "host-secret" };
     const runtime = new NodeWorkflowRuntime(buildRuntimeGraph(jh), { env, cwd: root, suppressLiveEvents: true });
     await withSpawnSpy(async (calls) => {
-      const status = await runtime.runDefault([]);
+      const status = await runtime.runMain([]);
       assert.equal(status, 0);
       assert.equal(calls.length, 2, "expected a script spawn from default and from sub");
       for (const call of calls) {
@@ -140,10 +140,10 @@ test("trusted_envs: a sub-workflow that does not declare the key does not receiv
     writeScriptFile(scriptsDir, "show");
     const jh = writeFlow(root, "flow.jh", [
       "script show = `echo x`",
-      "workflow sub() {",
+      "def sub() {",
       "  run show()",
       "}",
-      "workflow default() {",
+      "export def main() {",
       "  config {",
       '    trusted_envs = "GH_TOKEN"',
       "  }",
@@ -154,7 +154,7 @@ test("trusted_envs: a sub-workflow that does not declare the key does not receiv
     const env = { ...makeEnv(root, scriptsDir), GH_TOKEN: "host-secret" };
     const runtime = new NodeWorkflowRuntime(buildRuntimeGraph(jh), { env, cwd: root, suppressLiveEvents: true });
     await withSpawnSpy(async (calls) => {
-      const status = await runtime.runDefault([]);
+      const status = await runtime.runMain([]);
       assert.equal(status, 0);
       assert.equal(calls.length, 2);
       assert.equal(calls[0]!.env.GH_TOKEN, "host-secret", "declaring workflow's own run step gets the value");
@@ -175,20 +175,20 @@ test("trusted_envs: declared in an imported module is ignored — no injection, 
       '  trusted_envs = "HOST_SECRET"',
       "}",
       "script steal = `echo x`",
-      "workflow grab() {",
+      "def grab() {",
       "  run steal()",
       "}",
     ]);
     const jh = writeFlow(root, "entry.jh", [
       'import "lib.jh" as lib',
-      "workflow default() {",
+      "export def main() {",
       "  run lib.grab()",
       "}",
     ]);
     const env = { ...makeEnv(root, scriptsDir), HOST_SECRET: "host-value" };
     const runtime = new NodeWorkflowRuntime(buildRuntimeGraph(jh), { env, cwd: root, suppressLiveEvents: true });
     await withSpawnSpy(async (calls) => {
-      const status = await runtime.runDefault([]);
+      const status = await runtime.runMain([]);
       assert.equal(status, 0);
       assert.equal(calls.length, 1);
       assert.equal(
@@ -224,7 +224,7 @@ test("trusted_envs: host mode — the value never reaches a prompt agent subproc
     const fakeAgent = join(root, "fake-agent");
     writeEnvDumpAgent(fakeAgent, envDump);
     const jh = writeFlow(root, "flow.jh", [
-      "workflow default() {",
+      "export def main() {",
       "  config {",
       '    trusted_envs = "GH_TOKEN"',
       "  }",
@@ -238,7 +238,7 @@ test("trusted_envs: host mode — the value never reaches a prompt agent subproc
     };
     // promptRetryDelays: [] — a broken fake agent should fail fast, not back off.
     const runtime = new NodeWorkflowRuntime(buildRuntimeGraph(jh), { env, cwd: root, suppressLiveEvents: true, promptRetryDelays: [] });
-    const status = await runtime.runDefault([]);
+    const status = await runtime.runMain([]);
     assert.equal(status, 0);
     const dump = readFileSync(envDump, "utf8");
     assert.ok(!dump.includes("GH_TOKEN"), `prompt agent env must not contain GH_TOKEN:\n${dump}`);

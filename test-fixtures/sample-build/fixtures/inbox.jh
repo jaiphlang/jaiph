@@ -2,7 +2,7 @@ channel findings -> analyst
 channel summary -> reviewer
 channel final_summary
 
-workflow researcher() {
+export def researcher() {
   findings <- run emit_findings()
 }
 
@@ -14,17 +14,17 @@ script summarize_findings = `echo "Summary of findings"`
 
 script review_summary = `echo "[reviewed] $1"`
 
-workflow analyst(message, chan, sender) {
+export def analyst(message, chan, sender) {
   run write_findings_file(message)
   const summary = run summarize_findings()
   summary <- "${summary}"
 }
 
-workflow reviewer(message, chan, sender) {
+export def reviewer(message, chan, sender) {
   final_summary <- run review_summary(message)
 }
 
 # Orchestration / entrypoint workflow
-workflow default() {
+export def main() {
   run researcher()
 }

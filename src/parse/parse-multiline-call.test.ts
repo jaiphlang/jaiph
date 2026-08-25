@@ -6,10 +6,10 @@ import { parsejaiph } from "../parser";
 
 test("triple-quoted call arg stored as Arg literal, not shell", () => {
   const src = [
-    "workflow helper(prompt_text) {",
+    "def helper(prompt_text) {",
     '  return "${prompt_text}"',
     "}",
-    "workflow default() {",
+    "export def main() {",
     '  return run helper(',
     '    "x",',
     '    """',
@@ -21,7 +21,7 @@ test("triple-quoted call arg stored as Arg literal, not shell", () => {
     "}",
   ].join("\n");
   const mod = parsejaiph(src, "test.jh");
-  const wf = mod.workflows.find((w) => w.name === "default")!;
+  const wf = mod.defs.find((w) => w.name === "main")!;
   const step = wf.steps[0];
   assert.equal(step.type, "return");
   if (step.type !== "return") return;
@@ -42,10 +42,10 @@ test("triple-quoted call arg stored as Arg literal, not shell", () => {
 
 test("return run multiline call parses — three args including triple-quoted", () => {
   const src = [
-    "workflow helper(a, b, c) {",
+    "def helper(a, b, c) {",
     '  return "${a}"',
     "}",
-    "workflow default() {",
+    "export def main() {",
     "  return run helper(",
     '    "codebase",',
     '    """',
@@ -56,7 +56,7 @@ test("return run multiline call parses — three args including triple-quoted", 
     "}",
   ].join("\n");
   const mod = parsejaiph(src, "test.jh");
-  const wf = mod.workflows.find((w) => w.name === "default")!;
+  const wf = mod.defs.find((w) => w.name === "main")!;
   const step = wf.steps[0];
   assert.equal(step.type, "return");
   if (step.type !== "return") return;
@@ -75,10 +75,10 @@ test("return run multiline call parses — three args including triple-quoted", 
 
 test("standalone run multiline call parses", () => {
   const src = [
-    "workflow helper(a, b) {",
+    "def helper(a, b) {",
     '  return "${a}"',
     "}",
-    "workflow default() {",
+    "export def main() {",
     "  run helper(",
     '    "first",',
     '    """',
@@ -88,7 +88,7 @@ test("standalone run multiline call parses", () => {
     "}",
   ].join("\n");
   const mod = parsejaiph(src, "test.jh");
-  const wf = mod.workflows.find((w) => w.name === "default")!;
+  const wf = mod.defs.find((w) => w.name === "main")!;
   const step = wf.steps[0];
   assert.equal(step.type, "exec");
   if (step.type !== "exec") return;
@@ -101,56 +101,56 @@ test("standalone run multiline call parses", () => {
   assert.equal(args[1].kind, "literal");
 });
 
-// ─── positive: multiline ensure statement ────────────────────────────────────
+// ─── positive: multiline run statement ────────────────────────────────────
 
-test("standalone ensure multiline call parses", () => {
+test("standalone run multiline call parses", () => {
   const src = [
-    "rule checker(a) {",
+    "def checker(a) {",
     '  return "${a}"',
     "}",
-    "workflow default() {",
-    "  ensure checker(",
+    "export def main() {",
+    "  run checker(",
     '    "arg"',
     "  )",
     "}",
   ].join("\n");
   const mod = parsejaiph(src, "test.jh");
-  const wf = mod.workflows.find((w) => w.name === "default")!;
+  const wf = mod.defs.find((w) => w.name === "main")!;
   const step = wf.steps[0];
   assert.equal(step.type, "exec");
   if (step.type !== "exec") return;
-  assert.equal(step.body.kind, "ensure_call");
+  assert.equal(step.body.kind, "call");
 });
 
-// ─── positive: return ensure multiline ───────────────────────────────────────
+// ─── positive: return run multiline ───────────────────────────────────────
 
-test("return ensure multiline call parses", () => {
+test("return run multiline call parses", () => {
   const src = [
-    "rule checker(a) {",
+    "def checker(a) {",
     '  return "${a}"',
     "}",
-    "workflow default() {",
-    "  return ensure checker(",
+    "export def main() {",
+    "  return run checker(",
     '    "arg"',
     "  )",
     "}",
   ].join("\n");
   const mod = parsejaiph(src, "test.jh");
-  const wf = mod.workflows.find((w) => w.name === "default")!;
+  const wf = mod.defs.find((w) => w.name === "main")!;
   const step = wf.steps[0];
   assert.equal(step.type, "return");
   if (step.type !== "return") return;
-  assert.equal(step.value.kind, "ensure_call");
+  assert.equal(step.value.kind, "call");
 });
 
 // ─── positive: const = run multiline ─────────────────────────────────────────
 
 test("const = run multiline call parses", () => {
   const src = [
-    "workflow helper(a, b) {",
+    "def helper(a, b) {",
     '  return "${a}"',
     "}",
-    "workflow default() {",
+    "export def main() {",
     "  const result = run helper(",
     '    "x",',
     '    """',
@@ -161,7 +161,7 @@ test("const = run multiline call parses", () => {
     "}",
   ].join("\n");
   const mod = parsejaiph(src, "test.jh");
-  const wf = mod.workflows.find((w) => w.name === "default")!;
+  const wf = mod.defs.find((w) => w.name === "main")!;
   const constStep = wf.steps[0];
   assert.equal(constStep.type, "const");
   if (constStep.type !== "const") return;
@@ -181,7 +181,7 @@ test("return run with unclosed paren is E_PARSE, not shell", () => {
     () =>
       parsejaiph(
         [
-          "workflow default() {",
+          "export def main() {",
           "  return run missing_close(",
           "}",
         ].join("\n"),
@@ -196,13 +196,13 @@ test("return run with unclosed paren is E_PARSE, not shell", () => {
   );
 });
 
-test("return ensure with unclosed paren is E_PARSE, not shell", () => {
+test("return run with unclosed paren is E_PARSE, not shell", () => {
   assert.throws(
     () =>
       parsejaiph(
         [
-          "workflow default() {",
-          "  return ensure missing_close(",
+          "export def main() {",
+          "  return run missing_close(",
           "}",
         ].join("\n"),
         "test.jh",
@@ -220,10 +220,10 @@ test("standalone run with unclosed paren is E_PARSE, not shell", () => {
     () =>
       parsejaiph(
         [
-          "workflow helper() {",
+          "def helper() {",
           '  return "ok"',
           "}",
-          "workflow default() {",
+          "export def main() {",
           "  run helper(",
           "}",
         ].join("\n"),
@@ -241,22 +241,23 @@ test("standalone run with unclosed paren is E_PARSE, not shell", () => {
 
 test("return run bare identifier (no parens) still falls through to shell", () => {
   const mod = parsejaiph(
-    `workflow default() {\n  return run helper\n}`,
+    `export def main() {\n  return run helper\n}`,
     "test.jh",
   );
-  const step = mod.workflows[0].steps[0];
+  const step = mod.defs[0].steps[0];
   assert.equal(step.type, "exec");
   if (step.type === "exec") {
     assert.equal(step.body.kind, "shell");
   }
 });
 
-test("return ensure bare identifier (no parens) still falls through to shell", () => {
+test("return run bare identifier (no parens) still falls through to shell", () => {
   const mod = parsejaiph(
-    `rule check() {\n  return "ok"\n}\nworkflow default() {\n  return ensure check\n}`,
+    `def check() {\n  return "ok"\n}\nexport def main() {\n  return run check\n}`,
     "test.jh",
   );
-  const step = mod.workflows[0].steps[0];
+  const main = mod.defs.find((w) => w.name === "main")!;
+  const step = main.steps[0];
   assert.equal(step.type, "exec");
   if (step.type === "exec") {
     assert.equal(step.body.kind, "shell");
@@ -267,10 +268,10 @@ test("return ensure bare identifier (no parens) still falls through to shell", (
 
 test("single-line run with double-quoted args still works", () => {
   const mod = parsejaiph(
-    'workflow deploy(env, ver) {\n  return "${env}"\n}\nworkflow default() {\n  run deploy("prod", "v1")\n}',
+    'def deploy(env, ver) {\n  return "${env}"\n}\nexport def main() {\n  run deploy("prod", "v1")\n}',
     "test.jh",
   );
-  const step = mod.workflows.find((w) => w.name === "default")!.steps[0];
+  const step = mod.defs.find((w) => w.name === "main")!.steps[0];
   assert.equal(step.type, "exec");
   if (step.type === "exec" && step.body.kind === "call") {
     assert.deepEqual(step.body.args, [

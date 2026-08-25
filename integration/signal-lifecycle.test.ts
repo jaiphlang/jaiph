@@ -140,7 +140,7 @@ async function runInterruptTest(
   const workflowPath = join(root, "long.jh");
   writeFileSync(
     workflowPath,
-    ['script sleep_impl = `sleep 120`', "workflow default() {", "  run sleep_impl()", "}"].join("\n"),
+    ['script sleep_impl = `sleep 120`', "export def main() {", "  run sleep_impl()", "}"].join("\n"),
   );
 
   const child = spawn("node", [cliPath, "run", workflowPath], {
@@ -158,7 +158,7 @@ async function runInterruptTest(
     });
   });
 
-  // Let the workflow start (bash + sleep running). Detached runner reparenting can
+  // Let the def start(bash + sleep running). Detached runner reparenting can
   // delay visible children; poll briefly instead of a single fixed sleep.
   const nodePid = child.pid;
   assert.ok(nodePid != null, "spawned node process must have a pid");
@@ -202,7 +202,7 @@ async function runInterruptTest(
   const stillAlive = anyPidsAlive(trackedPids);
   assert.ok(
     !stillAlive,
-    `our workflow process(es) should be gone after ${signal}; PIDs we spawned: ${trackedPids.join(", ")}`,
+    `our def process(es) should be gone after ${signal}; PIDs we spawned: ${trackedPids.join(", ")}`,
   );
 }
 

@@ -1,4 +1,4 @@
-import type { WorkflowMetadata } from "../types";
+import type { DefMetadata } from "../types";
 import type { Trivia, ConfigBodyPart } from "./trivia";
 import {
   colFromRaw,
@@ -163,7 +163,7 @@ function parseArrayValue(
 
 type ConfigValue = string | boolean | number | string[];
 
-const KEY_SETTERS: Record<string, (out: WorkflowMetadata, value: ConfigValue) => void> = {
+const KEY_SETTERS: Record<string, (out: DefMetadata, value: ConfigValue) => void> = {
   "agent.model": (m, v) => ((m.agent ??= {}).model = v as string),
   "agent.command": (m, v) => ((m.agent ??= {}).command = v as string),
   "agent.trusted_workspace": (m, v) => ((m.agent ??= {}).trustedWorkspace = v as string),
@@ -213,7 +213,7 @@ function parseTrustedEnvsValue(
 
 function assignConfigKey(
   filePath: string,
-  out: WorkflowMetadata,
+  out: DefMetadata,
   key: string,
   value: ConfigValue,
   lineNo: number,
@@ -245,7 +245,7 @@ export function parseConfigBlock(
   lines: string[],
   startIndex: number,
   trivia?: Trivia,
-): { metadata: WorkflowMetadata; nextIndex: number } {
+): { metadata: DefMetadata; nextIndex: number } {
   const openLineNo = startIndex + 1;
   const rawOpen = lines[startIndex];
   const lineOpen = rawOpen.trim();
@@ -254,7 +254,7 @@ export function parseConfigBlock(
     return fail(filePath, "config block must be exactly 'config {' on its own line", openLineNo, colFromRaw(rawOpen));
   }
 
-  const out: WorkflowMetadata = {};
+  const out: DefMetadata = {};
   const bodySequence: ConfigBodyPart[] = [];
   let idx = startIndex + 1;
 

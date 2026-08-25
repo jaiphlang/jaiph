@@ -1,4 +1,4 @@
-workflow default() {
+export def main() {
   const answer = prompt "What is your name?"
   log "${answer}"
 }

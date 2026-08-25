@@ -17,7 +17,7 @@ e2e::section "jaiph ./file.jh routes to run"
 
 e2e::file "hello.jh" <<'EOF'
 script hello_impl = `echo "hello-shorthand"`
-workflow default() {
+export def main() {
   const msg = run hello_impl()
   return "${msg}"
 }
@@ -29,10 +29,10 @@ e2e::expect_stdout "${hello_out}" <<'EOF'
 
 Jaiph: Running hello.jh
 
-workflow default
+export def main
   ▸ script hello_impl
   ✓ script hello_impl (<time>)
-✓ PASS workflow default (<time>)
+✓ PASS export def main (<time>)
 
 hello-shorthand
 EOF
@@ -48,7 +48,7 @@ e2e::pass "file shorthand routes .jh to run"
 e2e::section "jaiph ./file.test.jh routes to test"
 
 e2e::file "lib.jh" <<'EOF'
-export workflow greet() {
+export def greet() {
   log "hello from lib"
 }
 EOF
@@ -83,7 +83,7 @@ e2e::section "jaiph test <dir> recursive discovery"
 mkdir -p "${TEST_DIR}/subdir"
 
 e2e::file "subdir/inner_lib.jh" <<'EOF'
-export workflow inner() {
+export def inner() {
   log "inner workflow"
 }
 EOF

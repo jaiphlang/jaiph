@@ -29,7 +29,7 @@ test("jaiph init creates workspace structure and guidance", () => {
     assert.equal(existsSync(join(root, ".jaiph/SKILL.md")), true);
     const bootstrap = readFileSync(join(root, ".jaiph/bootstrap.jh"), "utf8");
     assert.match(bootstrap, /^#!\/usr\/bin\/env jaiph\n\n/);
-    assert.match(bootstrap, /workflow default\(\) \{/);
+    assert.match(bootstrap, /export def main\(\) \{/);
     assert.match(bootstrap, /\.jaiph\/SKILL\.md/);
     assert.match(bootstrap, /Analyze repository structure/);
     assert.match(bootstrap, /Create or update Jaiph workflows under \.jaiph\//);
@@ -109,7 +109,7 @@ test("jaiph run tree includes function calls from workflow shell steps", () => {
         "printf '%s\\n' \"$1\"",
         "\`\`\`",
         "",
-        "workflow default() {",
+        "export def main() {",
         "  const VALUE = run changed_files()",
         '  run print_value(VALUE)',
         "}",
@@ -125,7 +125,7 @@ test("jaiph run tree includes function calls from workflow shell steps", () => {
     });
 
     assert.equal(runResult.status, 0, runResult.stderr);
-    assert.match(runResult.stdout, /workflow default/);
+    assert.match(runResult.stdout, /def main/);
     assert.match(runResult.stdout, /script changed_files/);
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -134,10 +134,10 @@ test("jaiph run tree includes function calls from workflow shell steps", () => {
 
 test("parseStepEvent parses params array from event payload", () => {
   const line =
-    '__JAIPH_EVENT__ {"type":"STEP_START","func":"main::docs_page","kind":"workflow","name":"docs_page","ts":"2025-01-01T00:00:00Z","status":null,"elapsed_ms":null,"out_file":"","err_file":"","id":"run:1:1","parent_id":"run:0:0","seq":1,"depth":1,"run_id":"run-1","params":[["path","docs/cli.md"],["mode","strict"]]}';
+    '__JAIPH_EVENT__ {"type":"STEP_START","func":"main::docs_page","kind":"def","name":"docs_page","ts":"2025-01-01T00:00:00Z","status":null,"elapsed_ms":null,"out_file":"","err_file":"","id":"run:1:1","parent_id":"run:0:0","seq":1,"depth":1,"run_id":"run-1","params":[["path","docs/cli.md"],["mode","strict"]]}';
   const event = parseStepEvent(line);
   assert.ok(event);
-  assert.equal(event?.kind, "workflow");
+  assert.equal(event?.kind, "def");
   assert.equal(event?.name, "docs_page");
   assert.equal(event?.params?.length, 2);
   assert.deepEqual(event?.params?.[0], ["path", "docs/cli.md"]);
@@ -146,17 +146,17 @@ test("parseStepEvent parses params array from event payload", () => {
 
 test("parseStepEvent returns empty params when payload has no params", () => {
   const line =
-    '__JAIPH_EVENT__ {"type":"STEP_START","func":"main::default","kind":"workflow","name":"default","ts":"2025-01-01T00:00:00Z","status":null,"elapsed_ms":null,"out_file":"","err_file":"","id":"run:1:1","parent_id":null,"seq":1,"depth":0,"run_id":"run-1"}';
+    '__JAIPH_EVENT__ {"type":"STEP_START","func":"main::main","kind":"def","name":"main","ts":"2025-01-01T00:00:00Z","status":null,"elapsed_ms":null,"out_file":"","err_file":"","id":"run:1:1","parent_id":null,"seq":1,"depth":0,"run_id":"run-1"}';
   const event = parseStepEvent(line);
   assert.ok(event);
   assert.equal(event?.params?.length, 0);
 });
 
 test("formatRunningBottomLine produces TTY bottom line with RUNNING, workflow name, and elapsed time", () => {
-  const line = formatRunningBottomLine("default", 2.6);
+  const line = formatRunningBottomLine("main", 2.6);
   assert.ok(line.includes("RUNNING"), "contains RUNNING");
-  assert.ok(line.includes("workflow"), "contains workflow");
-  assert.ok(line.includes("default"), "contains workflow name");
+  assert.ok(line.includes("def"), "contains def");
+  assert.ok(line.includes("main"), "contains def name");
   assert.match(line, /\(\d+\.\ds\)/, "contains (X.Xs) time");
 });
 
@@ -165,14 +165,14 @@ test("jaiph run tree shows workflow params inline when run has key=value args", 
   try {
     writeFileSync(
       join(root, "sub.jh"),
-      ["script done_impl = `echo done`", "workflow default(path, mode) {", "  run done_impl()", "}", ""].join("\n"),
+      ["script done_impl = `echo done`", "export def main(path, mode) {", "  run done_impl()", "}", ""].join("\n"),
     );
     writeFileSync(
       join(root, "main.jh"),
       [
         'import "sub.jh" as sub',
-        "workflow default() {",
-        '  run sub.default(path="docs/cli.md", mode="strict")',
+        "export def main() {",
+        '  run sub.main(path="docs/cli.md", mode="strict")',
         "}",
         "",
       ].join("\n"),
@@ -184,9 +184,9 @@ test("jaiph run tree shows workflow params inline when run has key=value args", 
       env: { ...process.env, NO_COLOR: "1" },
     });
     assert.equal(runResult.status, 0, runResult.stderr);
-    assert.match(runResult.stdout, /workflow default/);
+    assert.match(runResult.stdout, /def main/);
     // Nested workflow step is shown (rootStepId fix); params inline when runtime sends them
-    assert.match(runResult.stdout, /▸ workflow default/);
+    assert.match(runResult.stdout, /def main/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -201,7 +201,7 @@ test("jaiph run tree shows function step; params shown when runtime includes the
         "script echo_args = \`\`\`",
         "printf '%s %s\\n' \"$1\" \"$2\"",
         "\`\`\`",
-        "workflow default() {",
+        "export def main() {",
         '  run echo_args("first" "second")',
         "}",
         "",
@@ -226,14 +226,14 @@ test("jaiph run tree truncates param values over 32 chars when params present", 
     const longValue = "a".repeat(40);
     writeFileSync(
       join(root, "sub.jh"),
-      ["script done_impl = `echo done`", "workflow default(longparam) {", "  run done_impl()", "}", ""].join("\n"),
+      ["script done_impl = `echo done`", "export def main(longparam) {", "  run done_impl()", "}", ""].join("\n"),
     );
     writeFileSync(
       join(root, "main.jh"),
       [
         'import "sub.jh" as sub',
-        "workflow default() {",
-        `  run sub.default(longparam="${longValue}")`,
+        "export def main() {",
+        `  run sub.main(longparam="${longValue}")`,
         "}",
         "",
       ].join("\n"),
@@ -245,7 +245,7 @@ test("jaiph run tree truncates param values over 32 chars when params present", 
       env: { ...process.env, NO_COLOR: "1" },
     });
     assert.equal(runResult.status, 0, runResult.stderr);
-    assert.match(runResult.stdout, /workflow default/);
+    assert.match(runResult.stdout, /def main/);
     // When params are shown, long values are truncated to 32 chars + "..."
     if (/longparam=/.test(runResult.stdout)) {
       assert.match(runResult.stdout, /longparam="a{32}\.\.\./);
@@ -258,13 +258,13 @@ test("jaiph run tree truncates param values over 32 chars when params present", 
 test("buildRunTreeRows expands nested workflow from imported module", () => {
   const mainSource = [
     'import "sub.jh" as sub',
-    "workflow default() {",
-    "  run sub.default()",
+    "export def main() {",
+    "  run sub.main()",
     "}",
     "",
   ].join("\n");
   const subSource = [
-    "workflow default() {",
+    "export def main() {",
     '  prompt "nested prompt"',
     "}",
     "",
@@ -274,11 +274,11 @@ test("buildRunTreeRows expands nested workflow from imported module", () => {
   const importedModules = new Map<string, ReturnType<typeof parsejaiph>>([
     ["sub", subMod],
   ]);
-  const rows = buildRunTreeRows(mainMod, "workflow default", importedModules, "/fake");
+  const rows = buildRunTreeRows(mainMod, "def main", importedModules, "/fake");
   assert.equal(rows.length, 3);
-  assert.equal(rows[0].rawLabel, "workflow default");
+  assert.equal(rows[0].rawLabel, "def main");
   assert.equal(rows[0].isRoot, true);
-  assert.equal(rows[1].rawLabel, "workflow sub.default");
+  assert.equal(rows[1].rawLabel, "def sub.main");
   assert.equal(rows[2].rawLabel, 'prompt "nested prompt"');
 });
 
@@ -289,7 +289,7 @@ test("jaiph run shows nested workflow subtree and step timing", () => {
     writeFileSync(
       join(root, "sub.jh"),
       [
-        "workflow default() {",
+        "export def main() {",
         '  prompt "nested prompt"',
         "}",
         "",
@@ -300,8 +300,8 @@ test("jaiph run shows nested workflow subtree and step timing", () => {
       mainPath,
       [
         'import "sub.jh" as sub',
-        "workflow default() {",
-        "  run sub.default()",
+        "export def main() {",
+        "  run sub.main()",
         "}",
         "",
       ].join("\n"),
@@ -313,7 +313,7 @@ test("jaiph run shows nested workflow subtree and step timing", () => {
         "",
         'test "nested workflow" {',
         '  mock prompt "mocked"',
-        "  const response = run m.default()",
+        "  const response = run m.main()",
         '  expect_contain response "mocked"',
         "}",
         "",

@@ -77,7 +77,7 @@ e2e::assert_contains "${missing_out}" "does_not_exist.test.jh" \
 e2e::section "jaiph test: plain .jh file rejected"
 
 e2e::file "plain.jh" <<'EOF'
-workflow default() {
+export def main() {
   log "hello"
 }
 EOF

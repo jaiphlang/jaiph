@@ -12,17 +12,17 @@ import { ServeHandler } from "./handler";
 import { writeChainKey } from "../../runtime";
 import { CHAIN_GENESIS, chainHmac, RuntimeEventEmitter } from "../../runtime/testing";
 import type { McpToolSpec } from "../shared/mcp-tools";
-import type { WorkflowCallResult } from "../shared/workflow-call";
+import type { DefCallResult } from "../shared/workflow-call";
 
 const NOARG_TOOL: McpToolSpec = {
   name: "ping",
-  workflow: "ping",
+  def: "ping",
   description: "Pings.",
   params: [],
   inputSchema: { type: "object", properties: {}, additionalProperties: false },
 };
 
-function makeHandler(callTool: () => Promise<WorkflowCallResult>): ServeHandler {
+function makeHandler(callTool: () => Promise<DefCallResult>): ServeHandler {
   let n = 0;
   return new ServeHandler({
     version: "0.0.0-test",
@@ -93,7 +93,7 @@ test("destroying a request mid-upload occupies no run slot and the server keeps 
     await new Promise<void>((r) => socket.on("connect", () => r()));
     // Declare a bigger body than we send, then vanish mid-upload.
     socket.write(
-      "POST /v1/workflows/ping/runs HTTP/1.1\r\n" +
+      "POST /v1/defs/ping/runs HTTP/1.1\r\n" +
         "host: localhost\r\n" +
         "content-type: application/json\r\n" +
         "content-length: 64\r\n" +
@@ -128,7 +128,7 @@ async function serveArtifact(payloadPath: string, payload: Buffer | null): Promi
   const handler = makeHandler(async () => ({ text: "ok", isError: false, exitStatus: 0, runDir }));
   const server = createHttpServer(handler, () => {});
   const port = await listen(server, "127.0.0.1", 0);
-  const res = await fetch(`http://127.0.0.1:${port}/v1/workflows/ping/runs?wait=true`, { method: "POST" });
+  const res = await fetch(`http://127.0.0.1:${port}/v1/defs/ping/runs?wait=true`, { method: "POST" });
   const runId = ((await res.json()) as { run_id: string }).run_id;
   return { server, port, runId, runDir };
 }
@@ -139,13 +139,13 @@ test("GET /v1/runs/{id}/events hard-fails (409) on a tampered journal, streams a
   const runDir = mkdtempSync(join(tmpdir(), "jaiph-srv-events-"));
   try {
     // A journal with no valid keyed chain, plus a persisted key → verifiable.
-    writeFileSync(join(runDir, "run_summary.jsonl"), '{"type":"WORKFLOW_START","prev_hash":"deadbeef"}\n');
+    writeFileSync(join(runDir, "run_summary.jsonl"), '{"type":"RUN_START","prev_hash":"deadbeef"}\n');
     writeChainKey(runDir, "k".repeat(64));
     const handler = makeHandler(async () => ({ text: "ok", isError: false, exitStatus: 0, runDir }));
     const server = createHttpServer(handler, () => {});
     const port = await listen(server, "127.0.0.1", 0);
     try {
-      const create = await fetch(`http://127.0.0.1:${port}/v1/workflows/ping/runs?wait=true`, { method: "POST" });
+      const create = await fetch(`http://127.0.0.1:${port}/v1/defs/ping/runs?wait=true`, { method: "POST" });
       const runId = ((await create.json()) as { run_id: string }).run_id;
 
       const tampered = await fetch(`http://127.0.0.1:${port}/v1/runs/${runId}/events`);
@@ -153,11 +153,11 @@ test("GET /v1/runs/{id}/events hard-fails (409) on a tampered journal, streams a
       assert.equal(((await tampered.json()) as { error: { code: string } }).error.code, "E_TAMPERED");
 
       // Replace with a journal that verifies under the same key: a COMPLETE
-      // terminal chain (keyed genesis for line 1, then a WORKFLOW_END whose
+      // terminal chain (keyed genesis for line 1, then a RUN_END whose
       // prev_hash links to it). A keyed run is only persisted once terminal, so
-      // the verify boundary requires the WORKFLOW_END marker (finding L-3).
-      const l0 = JSON.stringify({ type: "WORKFLOW_START", prev_hash: chainHmac("k".repeat(64), CHAIN_GENESIS) });
-      const l1 = JSON.stringify({ type: "WORKFLOW_END", prev_hash: chainHmac("k".repeat(64), l0) });
+      // the verify boundary requires the RUN_END marker (finding L-3).
+      const l0 = JSON.stringify({ type: "RUN_START", prev_hash: chainHmac("k".repeat(64), CHAIN_GENESIS) });
+      const l1 = JSON.stringify({ type: "RUN_END", prev_hash: chainHmac("k".repeat(64), l0) });
       writeFileSync(join(runDir, "run_summary.jsonl"), `${l0}\n${l1}\n`);
       const clean = await fetch(`http://127.0.0.1:${port}/v1/runs/${runId}/events`);
       assert.equal(clean.status, 200, "a verifying journal streams normally");
@@ -195,7 +195,7 @@ test("GET /v1/runs/{id}/events serves a newly-detected credential as [REDACTED]"
     const server = createHttpServer(handler, () => {});
     const port = await listen(server, "127.0.0.1", 0);
     try {
-      const create = await fetch(`http://127.0.0.1:${port}/v1/workflows/ping/runs?wait=true`, { method: "POST" });
+      const create = await fetch(`http://127.0.0.1:${port}/v1/defs/ping/runs?wait=true`, { method: "POST" });
       const runId = ((await create.json()) as { run_id: string }).run_id;
       const res = await fetch(`http://127.0.0.1:${port}/v1/runs/${runId}/events`);
       assert.equal(res.status, 200);

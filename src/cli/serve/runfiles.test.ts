@@ -164,9 +164,9 @@ test("streamRunEventsSse replays a terminal run's journal as data: frames then e
   const runDir = makeRunDir();
   try {
     const lines = [
-      '{"type":"WORKFLOW_START","run_id":"r1"}',
+      '{"type":"RUN_START","run_id":"r1"}',
       '{"type":"STEP_END","status":0}',
-      '{"type":"WORKFLOW_END","run_id":"r1"}',
+      '{"type":"RUN_END","run_id":"r1"}',
     ];
     writeFileSync(join(runDir, "run_summary.jsonl"), lines.map((l) => `${l}\n`).join(""));
     const target = fakeTarget();
@@ -285,7 +285,7 @@ test("SSE follow reads each appended journal byte exactly once, never before the
 test("streamRunEventsSse stops promptly when the client disconnects mid-run", async () => {
   const runDir = makeRunDir();
   try {
-    writeFileSync(join(runDir, "run_summary.jsonl"), '{"type":"WORKFLOW_START","run_id":"r1"}\n');
+    writeFileSync(join(runDir, "run_summary.jsonl"), '{"type":"RUN_START","run_id":"r1"}\n');
     const target = fakeTarget();
     // Never terminal: the loop would poll forever, but an abort ends it.
     const done = streamRunEventsSse(target, {

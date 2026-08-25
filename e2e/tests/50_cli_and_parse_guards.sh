@@ -16,7 +16,7 @@ e2e::file "ok_a.jh" <<'EOF'
 script a_impl = ```
 echo "A"
 ```
-workflow default() {
+export def main() {
   run a_impl()
 }
 EOF
@@ -25,7 +25,7 @@ e2e::file "ok_a.test.jh" <<'EOF'
 import "ok_a.jh" as w
 
 test "A passes" {
-  const out = run w.default()
+  const out = run w.main()
   expect_contain out "A"
 }
 EOF
@@ -34,7 +34,7 @@ e2e::file "ok_b.jh" <<'EOF'
 script b_impl = ```
 echo "B"
 ```
-workflow default() {
+export def main() {
   run b_impl()
 }
 EOF
@@ -43,7 +43,7 @@ e2e::file "ok_b.test.jh" <<'EOF'
 import "ok_b.jh" as w
 
 test "B passes" {
-  const out = run w.default()
+  const out = run w.main()
   expect_contain out "B"
 }
 EOF
@@ -79,14 +79,14 @@ e2e::assert_equals "${empty_out}" \
   "jaiph test: no *.test.jh files found (nothing to do)" \
   "jaiph test reports discovery notice for empty directory"
 
-e2e::section "jaiph run requires workflow default"
+e2e::section "jaiph run requires export def main"
 
 # Given
 e2e::file "no_default.jh" <<'EOF'
 script no_default_impl = ```
 echo "no default here"
 ```
-workflow docs() {
+def docs() {
   run no_default_impl()
 }
 EOF
@@ -96,20 +96,20 @@ no_default_err="$(mktemp)"
 if jaiph run "${TEST_DIR}/no_default.jh" 2>"${no_default_err}"; then
   cat "${no_default_err}" >&2
   rm -f "${no_default_err}"
-  e2e::fail "jaiph run should fail when workflow default is missing"
+  e2e::fail "jaiph run should fail when export def main is missing"
 fi
 no_default_out="$(cat "${no_default_err}")"
 rm -f "${no_default_err}"
 
 # Then
 # assert_contains: error message includes absolute source file path which varies per machine
-e2e::assert_contains "${no_default_out}" "requires workflow 'default'" "jaiph run explains missing default workflow"
+e2e::assert_contains "${no_default_out}" "requires \`export def main\`" "jaiph run explains missing export def main"
 
 e2e::section "prompt parse guards reject shell substitution"
 
 # Given
 e2e::file "bad_prompt_subshell.jh" <<'EOF'
-workflow default() {
+export def main() {
   prompt "show host $(uname)"
 }
 EOF
@@ -130,14 +130,14 @@ e2e::assert_contains "${subshell_out}" "E_PARSE" "prompt command substitution em
 # assert_contains: compile error includes absolute source path which varies per machine
 e2e::assert_contains "${subshell_out}" "prompt cannot contain" "prompt command substitution is rejected with explicit guard"
 
-e2e::section "shell redirection around run/ensure is rejected"
+e2e::section "shell redirection around run/run is rejected"
 
 # Given — run with stdout redirect
 e2e::file "run_redirect.jh" <<'EOF'
 script greet = ```
 echo "hello"
 ```
-workflow default() {
+export def main() {
   run greet() > out.txt
 }
 EOF
@@ -165,7 +165,7 @@ e2e::file "run_pipe.jh" <<'EOF'
 script greet = ```
 echo "hello"
 ```
-workflow default() {
+export def main() {
   run greet() | tr a-z A-Z
 }
 EOF
@@ -191,7 +191,7 @@ e2e::file "run_bg.jh" <<'EOF'
 script greet = ```
 echo "hello"
 ```
-workflow default() {
+export def main() {
   run greet() &
 }
 EOF

@@ -7,7 +7,7 @@
  * in `validate-match.ts`, and the scope/context shapes in `validate-step-ctx.ts`;
  * this file re-exports the surface `validate.ts` (and the visitor tests) consume.
  */
-import type { WorkflowStepDef } from "../types";
+import type { StepDef } from "../types";
 import { validateExpr, validateWorkflowShellExec } from "./validate-expr";
 import {
   validateChannelRef,
@@ -25,7 +25,7 @@ import {
 import type { ValidatorCtx } from "./validate-step-ctx";
 
 export type { Scope, ValidatorCtx } from "./validate-step-ctx";
-export { WORKFLOW_SCOPE, RULE_SCOPE } from "./validate-step-ctx";
+export { DEF_SCOPE } from "./validate-step-ctx";
 export { validateMatchExpr } from "./validate-match";
 export {
   ROUTE_REF_EXPECT,
@@ -34,9 +34,9 @@ export {
   validateNoShellRedirection,
 } from "./validate-step-helpers";
 
-type StepValidator = (s: WorkflowStepDef, ctx: ValidatorCtx) => void;
+type StepValidator = (s: StepDef, ctx: ValidatorCtx) => void;
 
-const VALIDATORS: Record<WorkflowStepDef["type"], StepValidator> = {
+const VALIDATORS: Record<StepDef["type"], StepValidator> = {
   trivia: () => {},
   const: validateConstStep,
   return: validateReturnStep,
@@ -48,7 +48,7 @@ const VALIDATORS: Record<WorkflowStepDef["type"], StepValidator> = {
 };
 
 /** Sole entry for per-step validation. Scope gate first, table dispatch second. */
-export function validateStep(s: WorkflowStepDef, ctx: ValidatorCtx): void {
+export function validateStep(s: StepDef, ctx: ValidatorCtx): void {
   const v = (VALIDATORS as Record<string, StepValidator | undefined>)[s.type];
   if (!v) {
     const loc = (s as { loc?: { line: number; col: number } }).loc ?? { line: 0, col: 0 };
@@ -73,23 +73,23 @@ export function validateStep(s: WorkflowStepDef, ctx: ValidatorCtx): void {
 
 // -- Per-step validators ----------------------------------------------------
 
-function validateConstStep(s: WorkflowStepDef, ctx: ValidatorCtx): void {
+function validateConstStep(s: StepDef, ctx: ValidatorCtx): void {
   if (s.type !== "const") return;
   validateExpr(s.value, s.loc, "const", ctx);
 }
 
-function validateReturnStep(s: WorkflowStepDef, ctx: ValidatorCtx): void {
+function validateReturnStep(s: StepDef, ctx: ValidatorCtx): void {
   if (s.type !== "return") return;
   validateExpr(s.value, s.loc, "return", ctx);
 }
 
-function validateSendStep(s: WorkflowStepDef, ctx: ValidatorCtx): void {
+function validateSendStep(s: StepDef, ctx: ValidatorCtx): void {
   if (s.type !== "send") return;
   validateChannelRef(s.channel, s.loc, ctx);
   validateExpr(s.value, s.loc, "send", ctx);
 }
 
-function validateSayStep(s: WorkflowStepDef, ctx: ValidatorCtx): void {
+function validateSayStep(s: StepDef, ctx: ValidatorCtx): void {
   if (s.type !== "say") return;
   if (s.level === "log" || s.level === "logerr" || s.level === "logwarn") {
     if (s.message.kind === "inline_script") return;
@@ -151,49 +151,22 @@ function validateSayStep(s: WorkflowStepDef, ctx: ValidatorCtx): void {
   );
 }
 
-function validateExecStep(s: WorkflowStepDef, ctx: ValidatorCtx): void {
+function validateExecStep(s: StepDef, ctx: ValidatorCtx): void {
   if (s.type !== "exec") return;
   const body = s.body;
   if (body.kind === "prompt") {
-    if (ctx.scope.kind === "rule") {
-      ctx.diag.error(
-        ctx.ast.filePath,
-        body.loc.line,
-        body.loc.col,
-        "E_VALIDATE",
-        "prompt is not allowed in rules",
-      );
-    }
     validateExpr(body, s.loc, "const", ctx);
     validatePromptStepReturns(body, s.captureName, ctx.ast.filePath);
     return;
   }
   if (body.kind === "shell") {
-    if (ctx.scope.kind === "rule") {
-      ctx.diag.error(
-        ctx.ast.filePath,
-        body.loc.line,
-        body.loc.col,
-        "E_VALIDATE",
-        "inline shell steps are forbidden in rules; use explicit script blocks",
-      );
-    }
     validateWorkflowShellExec(body, ctx);
     return;
-  }
-  if (body.kind === "call" && body.async && ctx.scope.kind === "rule") {
-    ctx.diag.error(
-      ctx.ast.filePath,
-      body.callee.loc.line,
-      body.callee.loc.col,
-      "E_VALIDATE",
-      "run async is not allowed in rules; use it in workflows only",
-    );
   }
   validateExpr(body, s.loc, "exec", ctx);
 }
 
-function validateIfStep(s: WorkflowStepDef, ctx: ValidatorCtx): void {
+function validateIfStep(s: StepDef, ctx: ValidatorCtx): void {
   if (s.type !== "if") return;
   if (s.operand.kind === "regex") {
     try {
@@ -211,7 +184,7 @@ function validateIfStep(s: WorkflowStepDef, ctx: ValidatorCtx): void {
   validateDotSubject(s.subject, s.loc, ctx);
 }
 
-function validateForLinesStep(s: WorkflowStepDef, ctx: ValidatorCtx): void {
+function validateForLinesStep(s: StepDef, ctx: ValidatorCtx): void {
   if (s.type !== "for_lines") return;
   if (!ctx.knownVars.has(s.sourceVar)) {
     ctx.diag.error(

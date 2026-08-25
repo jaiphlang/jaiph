@@ -11,7 +11,7 @@ import {
   canonicalizeTripleQuotedString,
   resolveInterpreterFromShebang,
 } from "../../parser";
-import type { CatchBody, Expr, MatchExprDef, MatchPatternDef, WorkflowStepDef } from "../../types";
+import type { CatchBody, Expr, MatchExprDef, MatchPatternDef, StepDef } from "../../types";
 import {
   executePrompt,
   modelForStepEvent,
@@ -23,9 +23,9 @@ import {
 } from "./prompt";
 import { appendRunSummaryLine, CHAIN_KEY_ENV } from "./emit";
 import { buildStepDisplayParamPairs } from "./format-params";
-import { resolveRuleRef, resolveScriptRef, resolveWorkflowRef, type RuntimeGraph } from "./graph";
-import type { WorkflowMetadata } from "../../types";
-import { interpolateWorkflowMetadata } from "../../config";
+import { resolveScriptRef, resolveDefRef, type RuntimeGraph } from "./graph";
+import type { DefMetadata } from "../../types";
+import { interpolateDefMetadata } from "../../config";
 import { extractJson, validateFields } from "./schema";
 import {
   commaArgsToInterpolated,
@@ -133,10 +133,10 @@ type InboxMsg = {
 };
 
 type WorkflowContext = {
-  workflowName: string;
+  defName: string;
   routes: Map<string, string[]>;
   queue: InboxMsg[];
-  workflowMeta?: WorkflowMetadata;
+  defMeta?: DefMetadata;
 };
 
 export class NodeWorkflowRuntime {
@@ -152,7 +152,7 @@ export class NodeWorkflowRuntime {
   private asyncFrameStack = new AsyncLocalStorage<Frame[]>();
   private asyncIndicesStorage = new AsyncLocalStorage<number[]>();
   private inboxSeq = 0;
-  private workflowCtxStack: WorkflowContext[] = [];
+  private defCtxStack: WorkflowContext[] = [];
   private readonly mockBodies: Map<string, MockBodyDef>;
   private handleRegistry = new Map<string, AsyncHandle>();
   private handleIdCounter = 0;
@@ -423,43 +423,43 @@ export class NodeWorkflowRuntime {
     }
   }
 
-  async runDefault(args: string[]): Promise<number> {
-    return this.runRoot("default", args);
+  async runMain(args: string[]): Promise<number> {
+    return this.runRoot("main", args);
   }
 
   /**
    * Run a workflow from the entry module as the root of a run (same contract
-   * as `runDefault`, with the entry symbol parameterized): emits
-   * WORKFLOW_START/END and persists `return_value.txt`. Used by `jaiph run`
-   * (`default`) and by `jaiph mcp` tool calls (any exposed workflow).
+   * as `runMain`, with the entry symbol parameterized): emits
+   * RUN_START/END and persists `return_value.txt`. Used by `jaiph run`
+   * (`main`) and by `jaiph mcp` tool calls (any exposed workflow).
    */
-  async runRoot(workflowName: string, args: string[]): Promise<number> {
-    this.emitter.emitWorkflow("WORKFLOW_START", workflowName);
+  async runRoot(defName: string, args: string[]): Promise<number> {
+    this.emitter.emitRun("RUN_START", defName);
     const rootEnv = this.scrubTrustedKeys({ ...this.env });
     const rootScope: Scope = {
       filePath: this.graph.entryFile,
       vars: this.newScopeVars(this.graph.entryFile, undefined, rootEnv),
       env: rootEnv,
     };
-    const resolved = resolveWorkflowRef(this.graph, this.graph.entryFile, {
-      value: workflowName,
+    const resolved = resolveDefRef(this.graph, this.graph.entryFile, {
+      value: defName,
       loc: { line: 1, col: 1 },
     });
     if (!resolved) {
       process.stderr.write(
-        workflowName === "default"
-          ? "jaiph run requires workflow 'default' in the input file\n"
-          : `jaiph run: unknown workflow '${workflowName}' in the input file\n`,
+        defName === "main"
+          ? "jaiph run requires `export def main` in the input file\n"
+          : `jaiph run: unknown def '${defName}' in the input file\n`,
       );
-      this.emitter.emitWorkflow("WORKFLOW_END", workflowName);
+      this.emitter.emitRun("RUN_END", defName);
       this.stopHeartbeat();
       return 1;
     }
     // Bind CLI args to declared parameter names by position.
-    resolved.workflow.params.forEach((name, i) => {
+    resolved.def.params.forEach((name, i) => {
       if (i < args.length) rootScope.vars.set(name, args[i]);
     });
-    const result = await this.executeWorkflow(resolved.filePath, resolved.workflow.name, rootScope, args, false);
+    const result = await this.executeDef(resolved.filePath, resolved.def.name, rootScope, args, false);
     // Persist the workflow's return value so the CLI can print it after the run tree.
     // Empty/undefined values are written as an empty file so the consumer can distinguish
     // "ran with no return" from "no run happened".
@@ -470,31 +470,31 @@ export class NodeWorkflowRuntime {
         // Best-effort capture; the run succeeded regardless.
       }
     }
-    this.emitter.emitWorkflow("WORKFLOW_END", workflowName);
+    this.emitter.emitRun("RUN_END", defName);
     this.stopHeartbeat();
     return result.status;
   }
 
-  async runNamedWorkflow(ref: string, args: string[]): Promise<{ status: number; output: string; error?: string; returnValue?: string }> {
+  async runNamedDef(ref: string, args: string[]): Promise<{ status: number; output: string; error?: string; returnValue?: string }> {
     const rootEnv = this.scrubTrustedKeys({ ...this.env });
     const rootScope: Scope = {
       filePath: this.graph.entryFile,
       vars: this.newScopeVars(this.graph.entryFile, undefined, rootEnv),
       env: rootEnv,
     };
-    const resolved = resolveWorkflowRef(this.graph, this.graph.entryFile, {
+    const resolved = resolveDefRef(this.graph, this.graph.entryFile, {
       value: ref,
       loc: { line: 1, col: 1 },
     });
     if (!resolved) {
       this.stopHeartbeat();
-      return { status: 1, output: `Unknown workflow: ${ref}` };
+      return { status: 1, output: `Unknown def: ${ref}` };
     }
     // Bind args to declared parameter names by position.
-    resolved.workflow.params.forEach((name, i) => {
+    resolved.def.params.forEach((name, i) => {
       if (i < args.length) rootScope.vars.set(name, args[i]);
     });
-    const result = await this.executeWorkflow(resolved.filePath, resolved.workflow.name, rootScope, args, false);
+    const result = await this.executeDef(resolved.filePath, resolved.def.name, rootScope, args, false);
     this.stopHeartbeat();
     return { status: result.status, output: result.output, error: result.error, returnValue: result.returnValue };
   }
@@ -508,41 +508,40 @@ export class NodeWorkflowRuntime {
     return join(this.cwd, ".jaiph", "runs");
   }
 
-  private async executeWorkflow(
+  private async executeDef(
     filePath: string,
-    workflowName: string,
+    defName: string,
     scope: Scope,
     args: string[],
     inheritCallerMetadataScope: boolean,
   ): Promise<StepResult> {
-    const resolved = resolveWorkflowRef(this.graph, filePath, {
-      value: workflowName,
+    const resolved = resolveDefRef(this.graph, filePath, {
+      value: defName,
       loc: { line: 1, col: 1 },
     });
     if (!resolved) {
-      return { status: 1, output: "", error: `Unknown workflow: ${workflowName}` };
+      return { status: 1, output: "", error: `Unknown def: ${defName}` };
     }
     const callerModulePath = resolvePath(scope.filePath);
     const calleeModulePath = resolvePath(resolved.filePath);
     const crossModuleNested = callerModulePath !== calleeModulePath;
-    return this.executeManagedStep("workflow", `${workflowName}`, args, async (io) => {
+    return this.executeManagedStep("def", `${defName}`, args, async (io) => {
       const metadataVars = this.newScopeVars(resolved.filePath, scope.vars, scope.env);
-      resolved.workflow.params.forEach((name, i) => {
+      resolved.def.params.forEach((name, i) => {
         if (i < args.length) metadataVars.set(name, args[i]);
       });
-      // Root entry (`runDefault`, inheritCallerMetadataScope=false): apply entry module + workflow metadata.
+      // Root entry (`runMain`, inheritCallerMetadataScope=false): apply entry module + workflow metadata.
       // Nested cross-module `run`: layer callee module + workflow metadata on top of the caller's
       // effective env (same mechanics as root entry, respecting `${NAME}_LOCKED`).  A module's
-      // config describes how that module's workflows run, regardless of who called them; this
-      // also matches cross-module `ensure` (see `executeRule`).
-      // Same-module nested `run`: apply only the callee workflow-level metadata (workflow boundaries
+      // config describes how that module's workflows run, regardless of who called them.
+      // Same-module nested `run`: apply only the callee def-level metadata (workflow boundaries
       // still apply within one module; module config is already in the caller's effective env).
       // Root call (`!inheritCallerMetadataScope`): the user explicitly invoked this workflow
       // (via `jaiph run` or the test runner `run w.wf()`), so its module config is trusted.
       // Nested cross-module calls: only the entry module is trusted for execution-binary keys.
       const fromEntryModule = !inheritCallerMetadataScope
         || calleeModulePath === resolvePath(this.graph.entryFile);
-      // Same-module nested `run` layers only the callee workflow metadata (module config is already
+      // Same-module nested `run` layers only the callee def metadata(module config is already
       // in the caller's effective env); root entry and cross-module `run` both also apply the callee
       // module's metadata.
       const moduleMeta =
@@ -552,7 +551,7 @@ export class NodeWorkflowRuntime {
       const workflowEnv = this.applyMetadataScope(
         scope.env,
         moduleMeta,
-        resolved.workflow.metadata,
+        resolved.def.metadata,
         metadataVars,
         fromEntryModule,
       );
@@ -563,14 +562,14 @@ export class NodeWorkflowRuntime {
         // them cannot see them ambiently (and prompts never can); this
         // workflow's own declaration comes back via `trustedEnv` below.
         env: this.scrubTrustedKeys(workflowEnv),
-        declaredParamNames: resolved.workflow.params,
-        trustedEnv: this.resolveWorkflowTrustedEnv(resolved.filePath, resolved.workflow.metadata),
+        declaredParamNames: resolved.def.params,
+        trustedEnv: this.resolveWorkflowTrustedEnv(resolved.filePath, resolved.def.metadata),
       };
       const ctx: WorkflowContext = {
-        workflowName,
+        defName,
         routes: new Map(),
         queue: [],
-        workflowMeta: resolved.workflow.metadata,
+        defMeta: resolved.def.metadata,
       };
       // Build route map from channel-level route declarations in the module.
       // Only register on the entry workflow (not nested calls) so that sends from
@@ -586,51 +585,17 @@ export class NodeWorkflowRuntime {
           }
         }
       }
-      this.workflowCtxStack.push(ctx);
+      this.defCtxStack.push(ctx);
       try {
-        const out = await this.executeSteps(childScope, resolved.workflow.steps, io);
+        const out = await this.executeSteps(childScope, resolved.def.steps, io);
         if (out.status !== 0) return out;
         const drained = await this.drainWorkflowQueue(childScope, ctx);
         if (drained.status !== 0) return drained;
         return out;
       } finally {
-        this.workflowCtxStack.pop();
+        this.defCtxStack.pop();
       }
-    }, resolved.workflow.params);
-  }
-
-  private async executeRule(filePath: string, ruleName: string, scope: Scope, args: string[]): Promise<StepResult> {
-    const resolved = resolveRuleRef(this.graph, filePath, {
-      value: ruleName,
-      loc: { line: 1, col: 1 },
-    });
-    if (!resolved) {
-      return { status: 1, output: "", error: `Unknown rule: ${ruleName}` };
-    }
-    return this.executeManagedStep("rule", `${ruleName}`, args, async (io) => {
-      // Same-module rules inherit the calling scope's effective env (which already
-      // includes module + workflow metadata).  Only apply callee module metadata
-      // for cross-module rule references so we don't overwrite workflow-level overrides.
-      const sameModule = resolvePath(scope.filePath) === resolvePath(resolved.filePath);
-      const moduleMeta = sameModule ? undefined : this.graph.modules.get(resolved.filePath)?.ast.metadata;
-      const metadataVars = this.newScopeVars(resolved.filePath, scope.vars, scope.env);
-      const fromEntryModule = resolvePath(resolved.filePath) === resolvePath(this.graph.entryFile);
-      const ruleEnv = this.applyMetadataScope(scope.env, moduleMeta, undefined, metadataVars, fromEntryModule);
-      const ruleVars = new Map(metadataVars);
-      resolved.rule.params.forEach((name, i) => {
-        if (i < args.length) ruleVars.set(name, args[i]);
-      });
-      return this.executeSteps(
-        {
-          filePath: resolved.filePath,
-          vars: ruleVars,
-          env: ruleEnv,
-          declaredParamNames: resolved.rule.params,
-        },
-        resolved.rule.steps,
-        io,
-      );
-    }, resolved.rule.params);
+    }, resolved.def.params);
   }
 
   private mergeStepResult(accOut: string, accErr: string, r: StepResult): StepResult {
@@ -642,10 +607,10 @@ export class NodeWorkflowRuntime {
     };
   }
 
-  private static readonly INLINE_CAPTURE_RE = /\$\{(run|ensure)\s+([^}]+)\}/g;
+  private static readonly INLINE_CAPTURE_RE = /\$\{(run)\s+([^}]+)\}/g;
 
   /**
-   * Interpolate `${var}` refs and inline `${run ref [args]}` / `${ensure ref [args]}`
+   * Interpolate `${var}` refs and inline `${run ref [args]}`
    * captures: each capture is executed and replaced with its output, then regular
    * `${var}` interpolation runs. Returns { ok: true, value } or { ok: false, result }.
    *
@@ -673,9 +638,7 @@ export class NodeWorkflowRuntime {
     while ((m = re.exec(input)) !== null) {
       result += input.slice(lastIndex, m.index);
       const { ref, argsRaw } = parseInlineCaptureCall(m[2]);
-      const r = m[1] === "run"
-        ? await this.executeRunRef(scope, ref, argsRaw)
-        : await this.executeEnsureRef(scope, ref, argsRaw, undefined);
+      const r = await this.executeRunRef(scope, ref, argsRaw);
       if (r.status !== 0) return { ok: false, result: r };
       const captured = r.returnValue ?? r.output.trim();
       result += quoteValue ? quoteValue(captured) : captured;
@@ -715,14 +678,6 @@ export class NodeWorkflowRuntime {
           return { ok: true, value: result.returnValue ?? result.output.trim() };
         }
 
-        // ensure ref(args) — execute rule and capture return value
-        const ensureM = body.match(/^ensure\s+([A-Za-z_][A-Za-z0-9_.]*)\(([^)]*)\)\s*$/);
-        if (ensureM) {
-          const result = await this.executeEnsureRef(scope, ensureM[1]!, commaArgsToInterpolated(ensureM[2]!), undefined);
-          if (result.status !== 0) return { ok: false, result };
-          return { ok: true, value: result.returnValue ?? result.output.trim() };
-        }
-
         // Bare in-scope identifier (e.g. `=> name_arg`) — sugar for `=> "${name_arg}"`.
         // Validator already ensures the identifier is in scope; runtime mirrors `return val`.
         const bareIdent = body.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*$/);
@@ -742,7 +697,7 @@ export class NodeWorkflowRuntime {
 
   /**
    * Evaluate an `Expr` to its string value, executing any managed call
-   * (call/ensure_call/inline_script/match/prompt) and returning its captured
+   * (call/inline_script/match/prompt) and returning its captured
    * result. Used by `const` / `return` / `send` / `say` step handlers so they
    * don't each duplicate the dispatch table.
    *
@@ -763,11 +718,6 @@ export class NodeWorkflowRuntime {
     }
     if (expr.kind === "call") {
       const r = await this.executeRunRef(scope, expr.callee.value, argsToRuntimeString(expr.args));
-      if (r.status !== 0) return { ok: false, result: r, output: "" };
-      return { ok: true, value: r.returnValue ?? r.output.trim(), output: "" };
-    }
-    if (expr.kind === "ensure_call") {
-      const r = await this.executeEnsureRef(scope, expr.callee.value, argsToRuntimeString(expr.args), undefined);
       if (r.status !== 0) return { ok: false, result: r, output: "" };
       return { ok: true, value: r.returnValue ?? r.output.trim(), output: "" };
     }
@@ -806,7 +756,7 @@ export class NodeWorkflowRuntime {
     };
   }
 
-  private async executeSteps(scope: Scope, steps: WorkflowStepDef[], io?: StepIO): Promise<StepResult> {
+  private async executeSteps(scope: Scope, steps: StepDef[], io?: StepIO): Promise<StepResult> {
     let accOut = "";
     let accErr = "";
     let returnValue: string | undefined;
@@ -880,7 +830,7 @@ export class NodeWorkflowRuntime {
         return this.mergeStepResult(accOut, accErr, { status: 0, output: "", error: "", returnValue });
       }
       if (step.type === "send") {
-        const ctx = this.workflowCtxStack[this.workflowCtxStack.length - 1];
+        const ctx = this.defCtxStack[this.defCtxStack.length - 1];
         if (!ctx) {
           return this.mergeStepResult(accOut, accErr, {
             status: 1,
@@ -907,7 +857,7 @@ export class NodeWorkflowRuntime {
         }
         this.inboxSeq += 1;
         const seqPadded = String(this.inboxSeq).padStart(3, "0");
-        const senderName = ctx.workflowName;
+        const senderName = ctx.defName;
         // Validator (validateChannelRef) has already proven that an `alias.name`
         // token refers to an existing imported channel. Routes are registered
         // under the bare channel name, so strip the alias prefix so the same
@@ -922,9 +872,9 @@ export class NodeWorkflowRuntime {
         };
         let targetCtx = ctx;
         let routed = false;
-        for (let i = this.workflowCtxStack.length - 1; i >= 0; i -= 1) {
-          if (this.workflowCtxStack[i]!.routes.has(channelKey)) {
-            targetCtx = this.workflowCtxStack[i]!;
+        for (let i = this.defCtxStack.length - 1; i >= 0; i -= 1) {
+          if (this.defCtxStack[i]!.routes.has(channelKey)) {
+            targetCtx = this.defCtxStack[i]!;
             routed = true;
             break;
           }
@@ -1060,15 +1010,6 @@ export class NodeWorkflowRuntime {
           } else {
             return this.mergeStepResult(accOut, accErr, runResult);
           }
-          continue;
-        }
-        if (body.kind === "ensure_call") {
-          const ensureResult = await this.executeEnsureRef(scope, body.callee.value, argsToRuntimeString(body.args), step.catch);
-          if (step.captureName && ensureResult.status === 0) {
-            scope.vars.set(step.captureName, ensureResult.returnValue ?? ensureResult.output.trim());
-          }
-          if (ensureResult.status !== 0) return this.mergeStepResult(accOut, accErr, ensureResult);
-          if (ensureResult.recoverReturn) return this.mergeStepResult(accOut, accErr, ensureResult);
           continue;
         }
         if (body.kind === "inline_script") {
@@ -1239,8 +1180,8 @@ export class NodeWorkflowRuntime {
   /** Build dispatch scope that binds message/channel/sender to the target workflow's declared param names. */
   private buildInboxDispatchScope(scope: Scope, target: string, msg: InboxMsg): Scope {
     const dispatchVars = new Map(scope.vars);
-    const resolved = resolveWorkflowRef(this.graph, scope.filePath, { value: target, loc: { line: 1, col: 1 } });
-    const params = resolved?.workflow.params ?? [];
+    const resolved = resolveDefRef(this.graph, scope.filePath, { value: target, loc: { line: 1, col: 1 } });
+    const params = resolved?.def.params ?? [];
     const values = [msg.content, msg.channel, msg.sender];
     params.forEach((name, i) => {
       if (i < values.length) dispatchVars.set(name, values[i]);
@@ -1350,9 +1291,7 @@ export class NodeWorkflowRuntime {
         resolved.push(result.returnValue ?? result.output.trim());
         continue;
       }
-      const result = token.managedKind === "run"
-        ? await this.executeRunRef(scope, token.ref, token.argsRaw)
-        : await this.executeEnsureRef(scope, token.ref, token.argsRaw, undefined);
+      const result = await this.executeRunRef(scope, token.ref, token.argsRaw);
       if (result.status !== 0) {
         return result;
       }
@@ -1365,20 +1304,20 @@ export class NodeWorkflowRuntime {
     const resolvedArgs = await this.resolveArgsRaw(scope, argsRaw);
     if (!Array.isArray(resolvedArgs)) return resolvedArgs;
     const args = resolvedArgs;
-    const resolvedWorkflow = resolveWorkflowRef(this.graph, scope.filePath, { value: ref, loc: { line: 1, col: 1 } });
-    if (resolvedWorkflow) {
-      const mk = this.mockKey(resolvedWorkflow.filePath, resolvedWorkflow.workflow.name);
+    const resolvedDef = resolveDefRef(this.graph, scope.filePath, { value: ref, loc: { line: 1, col: 1 } });
+    if (resolvedDef) {
+      const mk = this.mockKey(resolvedDef.filePath, resolvedDef.def.name);
       const mockBody = this.mockBodies.get(mk);
       if (mockBody !== undefined) {
         return this.executeManagedStep(
-          "workflow",
+          "def",
           ref,
           args,
           async () => this.dispatchMockBody(ref, mockBody, args),
-          resolvedWorkflow.workflow.params,
+          resolvedDef.def.params,
         );
       }
-      return this.executeWorkflow(resolvedWorkflow.filePath, resolvedWorkflow.workflow.name, scope, args, true);
+      return this.executeDef(resolvedDef.filePath, resolvedDef.def.name, scope, args, true);
     }
     const resolvedScript = resolveScriptRef(this.graph, scope.filePath, ref);
     if (resolvedScript) {
@@ -1574,8 +1513,8 @@ export class NodeWorkflowRuntime {
   private async runRecoverBody(
     scope: Scope,
     catchDef: { bindings: { failure: string } } & (
-      | { single: WorkflowStepDef }
-      | { block: WorkflowStepDef[] }
+      | { single: StepDef }
+      | { block: StepDef[] }
     ),
     failurePayload: string,
   ): Promise<StepResult> {
@@ -1583,40 +1522,6 @@ export class NodeWorkflowRuntime {
     const recoverVars = new Map(scope.vars);
     recoverVars.set(catchDef.bindings.failure, failurePayload);
     return this.executeSteps({ ...scope, vars: recoverVars }, recoverSteps);
-  }
-
-  private async executeEnsureRef(
-    scope: Scope,
-    ref: string,
-    argsRaw: string,
-    catchDef: CatchBody | undefined,
-  ): Promise<StepResult> {
-    const resolvedArgs = await this.resolveArgsRaw(scope, argsRaw);
-    if (!Array.isArray(resolvedArgs)) return resolvedArgs;
-    const args = resolvedArgs;
-    const attempt = async (): Promise<StepResult> => {
-      const resolvedRule = resolveRuleRef(this.graph, scope.filePath, { value: ref, loc: { line: 1, col: 1 } });
-      if (!resolvedRule) return { status: 1, output: "", error: `Unknown ensure target: ${ref}` };
-      const mk = this.mockKey(resolvedRule.filePath, resolvedRule.rule.name);
-      const mockBody = this.mockBodies.get(mk);
-      if (mockBody !== undefined) {
-        return this.executeManagedStep(
-          "rule",
-          ref,
-          args,
-          async () => this.dispatchMockBody(ref, mockBody, args),
-          resolvedRule.rule.params,
-        );
-      }
-      return this.executeRule(resolvedRule.filePath, resolvedRule.rule.name, scope, args);
-    };
-    const res = await attempt();
-    if (res.status === 0) return res;
-    if (!catchDef) return res;
-    const rr = await this.runRecoverBody(scope, catchDef, `${res.output}${res.error}`);
-    if (rr.status !== 0) return rr;
-    if (rr.returnValue !== undefined) return { ...rr, recoverReturn: true };
-    return { status: 0, output: res.output, error: "" };
   }
 
   /**
@@ -1798,18 +1703,18 @@ export class NodeWorkflowRuntime {
   }
 
   private resolveConfigAgentModel(scope: Scope, filePath: string): string | undefined {
-    const ctx = this.workflowCtxStack[this.workflowCtxStack.length - 1];
+    const ctx = this.defCtxStack[this.defCtxStack.length - 1];
     const moduleMeta = this.graph.modules.get(filePath)?.ast.metadata;
-    const workflowMeta = ctx?.workflowMeta;
-    const layered: WorkflowMetadata = {};
+    const defMeta = ctx?.defMeta;
+    const layered: DefMetadata = {};
     if (moduleMeta?.agent?.model !== undefined) {
       layered.agent = { model: moduleMeta.agent.model };
     }
-    if (workflowMeta?.agent?.model !== undefined) {
-      (layered.agent ??= {}).model = workflowMeta.agent.model;
+    if (defMeta?.agent?.model !== undefined) {
+      (layered.agent ??= {}).model = defMeta.agent.model;
     }
     if (layered.agent?.model === undefined) return undefined;
-    return interpolateWorkflowMetadata(layered, scope.vars, scope.env).agent?.model;
+    return interpolateDefMetadata(layered, scope.vars, scope.env).agent?.model;
   }
 
   /**
@@ -1841,19 +1746,19 @@ export class NodeWorkflowRuntime {
    */
   private resolveWorkflowTrustedEnv(
     filePath: string,
-    workflowMeta: WorkflowMetadata | undefined,
+    defMeta: DefMetadata | undefined,
   ): Record<string, string> | undefined {
     if (resolvePath(filePath) !== resolvePath(this.graph.entryFile)) return undefined;
     const moduleMeta = this.graph.modules.get(filePath)?.ast.metadata;
-    const keys = trustedEnvKeysForWorkflow(moduleMeta, workflowMeta);
+    const keys = trustedEnvKeysForWorkflow(moduleMeta, defMeta);
     if (keys.length === 0) return undefined;
     return resolveTrustedEnv(this.trustedEnvSnapshot, keys);
   }
 
   private applyMetadataScope(
     parentEnv: NodeJS.ProcessEnv,
-    moduleMeta: WorkflowMetadata | undefined,
-    workflowMeta: WorkflowMetadata | undefined,
+    moduleMeta: DefMetadata | undefined,
+    defMeta: DefMetadata | undefined,
     vars: Map<string, string> | undefined,
     // Only the entry module's config may set execution-binary keys by default.
     // Set JAIPH_AGENT_COMMAND_IMPORT_UNLOCK=1 / JAIPH_AGENT_BACKEND_IMPORT_UNLOCK=1
@@ -1861,9 +1766,9 @@ export class NodeWorkflowRuntime {
     fromEntryModule: boolean,
   ): NodeJS.ProcessEnv {
     const nextEnv: NodeJS.ProcessEnv = { ...parentEnv };
-    const apply = (meta?: WorkflowMetadata): void => {
+    const apply = (meta?: DefMetadata): void => {
       if (!meta) return;
-      const resolved = vars ? interpolateWorkflowMetadata(meta, vars, parentEnv) : meta;
+      const resolved = vars ? interpolateDefMetadata(meta, vars, parentEnv) : meta;
       if (parentEnv.JAIPH_AGENT_COMMAND_LOCKED !== "1" && resolved.agent?.command !== undefined) {
         if (fromEntryModule || parentEnv.JAIPH_AGENT_COMMAND_IMPORT_UNLOCK === "1") {
           nextEnv.JAIPH_AGENT_COMMAND = resolved.agent.command;
@@ -1894,12 +1799,12 @@ export class NodeWorkflowRuntime {
       }
     };
     apply(moduleMeta);
-    apply(workflowMeta);
+    apply(defMeta);
     return nextEnv;
   }
 
   private resolveRecoverLimit(filePath: string): number {
-    const activeWorkflowMeta = this.workflowCtxStack[this.workflowCtxStack.length - 1]?.workflowMeta;
+    const activeWorkflowMeta = this.defCtxStack[this.defCtxStack.length - 1]?.defMeta;
     if (activeWorkflowMeta?.run?.recoverLimit !== undefined) {
       return activeWorkflowMeta.run.recoverLimit;
     }
@@ -1908,7 +1813,7 @@ export class NodeWorkflowRuntime {
   }
 
   private async executeManagedStep(
-    kind: "workflow" | "rule" | "script",
+    kind: "def" | "script",
     name: string,
     args: string[],
     fn: (io: StepIO) => Promise<StepResult>,

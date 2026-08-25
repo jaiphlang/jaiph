@@ -1,12 +1,12 @@
-rule ok() {
+def ok() {
   run ok_impl()
 }
 
 script ok_impl = `true`
 script save = `printf '%s' "$1" > "$2"`
 
-workflow default() {
-  ensure ok() catch (err) {
+export def main() {
+  run ok() catch (err) {
     run save(err, "error.log")
   }
 }

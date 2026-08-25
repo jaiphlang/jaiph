@@ -1,4 +1,4 @@
-workflow default() {
+export def main() {
   const r = prompt "Classify" returns "{ verdict: string }"
   if r.verdict == "ok" {
     log "approved"

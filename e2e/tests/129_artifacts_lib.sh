@@ -21,7 +21,7 @@ printf 'build-output-content' > "${TEST_DIR}/build_output.txt"
 e2e::file "artifacts_e2e.jh" <<'EOF'
 import "jaiphlang/artifacts" as artifacts
 
-workflow default() {
+export def main() {
   const save_path = run artifacts.save("./build_output.txt")
   log save_path
 }
@@ -29,8 +29,8 @@ EOF
 
 artifacts_out="$(e2e::run "artifacts_e2e.jh")"
 
-e2e::assert_contains "${artifacts_out}" "workflow default" "output contains workflow default"
-e2e::assert_contains "${artifacts_out}" "workflow save" "output contains workflow save"
+e2e::assert_contains "${artifacts_out}" "export def main" "output contains export def main"
+e2e::assert_contains "${artifacts_out}" "def save" "output contains def save"
 e2e::assert_contains "${artifacts_out}" "PASS" "output contains PASS"
 
 run_dir="$(e2e::run_dir "artifacts_e2e.jh")"

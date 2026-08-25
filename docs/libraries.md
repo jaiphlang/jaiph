@@ -62,8 +62,8 @@ The clone directory name is the import prefix. For `jaiph install jaiphlang`, th
 ```jh
 import "jaiphlang/queue" as q
 
-workflow default() {
-  ensure q.has_tasks()
+export def main() {
+  run q.has_tasks()
   const t = run q.get_first_task()
   log "${t}"
 }
@@ -100,14 +100,14 @@ Companion scripts (e.g. `queue.py` next to `queue.jh`) must be referenced with *
 
 ### 2. Decide the public surface
 
-Add `export` to the workflows, rules, and scripts you want importers to see:
+Add `export` to the defs and scripts you want importers to see:
 
 ```jh
-export workflow get_first_task() { … }
-export rule has_tasks() { … }
+export def get_first_task() { … }
+export def has_tasks() { … }
 ```
 
-A module with **zero** `export` lines exposes every top-level rule, workflow, and script through the import alias. Prefer explicit `export` on published libraries so removing a private helper does not break consumers.
+A module with **zero** `export` lines exposes nothing through the import alias. Names are private by default; importers can only call exported names.
 
 ### 3. Tag a release
 

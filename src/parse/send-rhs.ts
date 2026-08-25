@@ -1,4 +1,4 @@
-import type { Expr, WorkflowRefDef } from "../types";
+import type { Expr, DefRef } from "../types";
 import { createTrivia, type Trivia } from "./trivia";
 import { fail, hasUnescapedClosingQuote, indexOfClosingDoubleQuote, isRef, parseCallRef, rejectTrailingContent } from "./core";
 import { dedentTripleQuotedBody, parseTripleQuoteBlock, tripleQuoteBodyToRaw } from "./triple-quote";
@@ -50,7 +50,7 @@ export function parseSendRhs(
     const call = parseCallRef(t.slice("run ".length).trim());
     if (call) {
       rejectTrailingContent(filePath, lineNo, "run", call.rest);
-      const callee: WorkflowRefDef = { value: call.ref, loc: { line: lineNo, col } };
+      const callee: DefRef = { value: call.ref, loc: { line: lineNo, col } };
       return {
         value: { kind: "call", callee, ...(call.args ? { args: call.args } : {}) },
         nextIdx: defaultNext,

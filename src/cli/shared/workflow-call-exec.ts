@@ -16,23 +16,23 @@ import {
   capBytes,
   type CollectedOutput,
   type OutputCaps,
-  type WorkflowCallContext,
-  type WorkflowCallEnvironment,
-  type WorkflowCallResult,
+  type DefCallContext,
+  type DefCallEnvironment,
+  type DefCallResult,
 } from "./workflow-call-types";
 
 /** Host execution — same self-spawn path as `jaiph run --raw`. */
-export async function callWorkflowHost(
-  env: WorkflowCallEnvironment,
-  workflowSymbol: string,
+export async function callDefHost(
+  env: DefCallEnvironment,
+  defSymbol: string,
   positionalArgs: string[],
   runtimeEnv: Record<string, string | undefined>,
   runId: string,
   caps: OutputCaps,
   onStepEvent: (event: StepEvent) => void,
-  ctx?: WorkflowCallContext,
+  ctx?: DefCallContext,
   onLogEvent?: (event: LogEvent) => void,
-): Promise<WorkflowCallResult> {
+): Promise<DefCallResult> {
   runtimeEnv.JAIPH_MODULE_GRAPH_FILE = env.graphFile;
   // `--env` passthrough defines the workflow process's env, overriding
   // inherited values, on every call.
@@ -41,7 +41,7 @@ export async function callWorkflowHost(
   const metaFile = join(env.outDir, `.jaiph-run-meta-${runId}.txt`);
   const dummyBuiltPath = join(env.outDir, "entry.sh");
 
-  const child = spawnRunProcess([metaFile, dummyBuiltPath, workflowSymbol, ...positionalArgs], {
+  const child = spawnRunProcess([metaFile, dummyBuiltPath, defSymbol, ...positionalArgs], {
     cwd: env.workspaceRoot,
     env: runtimeEnv,
   });
@@ -57,7 +57,7 @@ export async function callWorkflowHost(
   collector.drain();
 
   const runDir = readMetaFields(metaFile, ["run_dir"]).run_dir;
-  return composeResult(workflowSymbol, collector.data, exit, runDir, runtimeEnv, caps);
+  return composeResult(defSymbol, collector.data, exit, runDir, runtimeEnv, caps);
 }
 
 /**
@@ -179,13 +179,13 @@ export function attachOutputCollector(
  * dump cannot grow the run registry without limit.
  */
 export function composeResult(
-  workflowSymbol: string,
+  defSymbol: string,
   data: CollectedOutput,
   exit: { status: number; signal: NodeJS.Signals | null },
   runDir: string | undefined,
   env: NodeJS.ProcessEnv,
   caps: OutputCaps = DEFAULT_OUTPUT_CAPS,
-): WorkflowCallResult {
+): DefCallResult {
   const failed = exit.status !== 0 || exit.signal !== null;
 
   if (!failed) {
@@ -195,7 +195,7 @@ export function composeResult(
         ? returnValue
         : data.logs.length > 0
           ? redactCredentials(data.logs.join("\n"), env)
-          : `workflow ${workflowSymbol} completed`;
+          : `run ${defSymbol} completed`;
     return {
       text: capBytes(trimTrailingNewline(text), caps.resultText),
       isError: false,
@@ -208,8 +208,8 @@ export function composeResult(
   const parts: string[] = [];
   parts.push(
     exit.signal
-      ? `workflow ${workflowSymbol} terminated by signal ${exit.signal}`
-      : `workflow ${workflowSymbol} failed (exit ${exit.status})`,
+      ? `run ${defSymbol} terminated by signal ${exit.signal}`
+      : `run ${defSymbol} failed (exit ${exit.status})`,
   );
   if (data.failedStep) {
     parts.push(`failed step: ${data.failedStep.name}`);

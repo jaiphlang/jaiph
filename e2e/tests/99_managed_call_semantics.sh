@@ -19,7 +19,7 @@ echo "captured-value"
 
 script print_capture = `echo "out=x=$1"`
 
-workflow default() {
+export def main() {
   const x = run give()
   run print_capture("$x")
 }
@@ -54,7 +54,7 @@ e2e::section "compiler rejects direct function call in workflow"
 
 e2e::file "direct_fn.jh" <<'EOF'
 script f = `return "x"`
-workflow default() {
+export def main() {
   f
 }
 EOF
@@ -68,7 +68,7 @@ e2e::section "compiler rejects Jaiph function inside command substitution"
 
 e2e::file "sub_fn.jh" <<'EOF'
 script f = `return "x"`
-workflow default() {
+export def main() {
   x="$(f)"
 }
 EOF
@@ -78,22 +78,22 @@ if jaiph run "${TEST_DIR}/sub_fn.jh" >/dev/null 2>&1; then
 fi
 e2e::pass "command substitution with Jaiph function rejected"
 
-e2e::section "ensure and run workflows still build"
+e2e::section "run and run workflows still build"
 
 e2e::file "ensure_run_smoke.jh" <<'EOF'
 script ok_impl = `true`
 
-rule ok() {
+def ok() {
   run ok_impl()
 }
-workflow child() {
-  ensure ok()
+def child() {
+  run ok()
 }
-workflow default() {
-  ensure ok()
+export def main() {
+  run ok()
   run child()
 }
 EOF
 
 smoke_out="$(jaiph run "${TEST_DIR}/ensure_run_smoke.jh" 2>&1)"
-e2e::pass "ensure and run regression smoke"
+e2e::pass "run and run regression smoke"

@@ -15,11 +15,11 @@ e2e::section "return run: direct return of workflow result"
 e2e::file "return_run.jh" <<'EOF'
 script greet = `echo "hello-direct"`
 
-workflow helper() {
+def helper() {
   return run greet()
 }
 
-workflow default() {
+export def main() {
   const r = run helper()
   log "got: ${r}"
 }
@@ -33,13 +33,13 @@ e2e::expect_stdout "${return_run_out}" <<'EOF'
 
 Jaiph: Running return_run.jh
 
-workflow default
-  ▸ workflow helper
+export def main
+  ▸ def helper
   ·   ▸ script greet
   ·   ✓ script greet (<time>)
-  ✓ workflow helper (<time>)
+  ✓ def helper(<time>)
   ℹ got: hello-direct
-✓ PASS workflow default (<time>)
+✓ PASS export def main (<time>)
 EOF
 
 e2e::expect_out "return_run.jh" "greet" "hello-direct"
@@ -50,12 +50,12 @@ e2e::section "return ensure: direct return of rule result"
 e2e::file "return_ensure.jh" <<'EOF'
 script check_impl = `echo "rule-ok"`
 
-rule check() {
+def check() {
   return run check_impl()
 }
 
-workflow default() {
-  const r = ensure check()
+export def main() {
+  const r = run check()
   log "got: ${r}"
 }
 EOF
@@ -68,13 +68,13 @@ e2e::expect_stdout "${return_ensure_out}" <<'EOF'
 
 Jaiph: Running return_ensure.jh
 
-workflow default
-  ▸ rule check
+export def main
+  ▸ def check
   ·   ▸ script check_impl
   ·   ✓ script check_impl (<time>)
-  ✓ rule check (<time>)
+  ✓ def check(<time>)
   ℹ got: rule-ok
-✓ PASS workflow default (<time>)
+✓ PASS export def main (<time>)
 EOF
 
 e2e::expect_out "return_ensure.jh" "check_impl" "rule-ok"
@@ -85,11 +85,11 @@ e2e::section "return run with args"
 e2e::file "return_run_args.jh" <<'EOF'
 script echo_arg = `echo "$1"`
 
-workflow helper() {
+def helper() {
   return run echo_arg("passed-arg")
 }
 
-workflow default() {
+export def main() {
   const r = run helper()
   log "got: ${r}"
 }
@@ -103,31 +103,31 @@ e2e::expect_stdout "${return_run_args_out}" <<'EOF'
 
 Jaiph: Running return_run_args.jh
 
-workflow default
-  ▸ workflow helper
+export def main
+  ▸ def helper
   ·   ▸ script echo_arg (1="passed-arg")
   ·   ✓ script echo_arg (<time>)
-  ✓ workflow helper (<time>)
+  ✓ def helper(<time>)
   ℹ got: passed-arg
-✓ PASS workflow default (<time>)
+✓ PASS export def main (<time>)
 EOF
 
 e2e::expect_out "return_run_args.jh" "echo_arg" "passed-arg"
 
-e2e::section "return ensure in rule"
+e2e::section "return run in rule"
 
 # Given
 e2e::file "return_ensure_rule.jh" <<'EOF'
-rule inner() {
+def inner() {
   return "inner-val"
 }
 
-rule outer() {
-  return ensure inner()
+def outer() {
+  return run inner()
 }
 
-workflow default() {
-  const r = ensure outer()
+export def main() {
+  const r = run outer()
   log "got: ${r}"
 }
 EOF
@@ -140,20 +140,20 @@ e2e::expect_stdout "${return_ensure_rule_out}" <<'EOF'
 
 Jaiph: Running return_ensure_rule.jh
 
-workflow default
-  ▸ rule outer
-  ·   ▸ rule inner
-  ·   ✓ rule inner (<time>)
-  ✓ rule outer (<time>)
+export def main
+  ▸ def outer
+  ·   ▸ def inner
+  ·   ✓ def inner(<time>)
+  ✓ def outer(<time>)
   ℹ got: inner-val
-✓ PASS workflow default (<time>)
+✓ PASS export def main (<time>)
 EOF
 
 e2e::section "return run with unknown ref fails at compile time"
 
 # Given
 e2e::file "return_run_unknown.jh" <<'EOF'
-workflow default() {
+export def main() {
   return run nonexistent()
 }
 EOF

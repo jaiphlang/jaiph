@@ -22,7 +22,7 @@ const role = """
   - Prose must follow the plain-writing skill
     (.jaiph/skills/plain-writing/SKILL.md): everyday words, complete
     sentences, limited clause stacking, and no unnecessary jargon. Real
-    Jaiph terms (workflow, sandbox, MCP, …) are allowed; define them briefly
+    Jaiph terms (def, sandbox, MCP, …) are allowed; define them briefly
     on first use when a newcomer might not know them.
 """
 
@@ -49,7 +49,7 @@ script assert_newline_paths_are_files = ```
   done <<< "$1"
 ```
 
-rule docs_files_present(list) {
+def docs_files_present(list) {
   run assert_newline_paths_are_files(list)
 }
 
@@ -70,7 +70,7 @@ script assert_worktree_clean_for_docs = ```
   fi
 ```
 
-rule worktree_is_clean() {
+def worktree_is_clean() {
   run assert_worktree_clean_for_docs()
 }
 
@@ -94,7 +94,7 @@ script assert_only_allowed_changed = ```
   done <<< "$after_changed_files"
 ```
 
-rule only_expected_docs_changed_after_prompt(allowed) {
+def only_expected_docs_changed_after_prompt(allowed) {
   run assert_only_allowed_changed(allowed)
 }
 
@@ -121,7 +121,7 @@ script build_allowed_paths_block = ```
   printf '%s\n' "$out"
 ```
 
-workflow update_from_task(taskDesc) {
+export def update_from_task(taskDesc) {
   prompt """
     ${skills_preamble}
     <role>
@@ -148,7 +148,7 @@ workflow update_from_task(taskDesc) {
   """
 }
 
-workflow docs_page(path) {
+def docs_page(path) {
   prompt """
     ${skills_preamble}
     <role>
@@ -182,7 +182,7 @@ workflow docs_page(path) {
   """
 }
 
-workflow docs_overview(docPaths) {
+def docs_overview(docPaths) {
   prompt """
     ${skills_preamble}
     <role>
@@ -220,7 +220,7 @@ workflow docs_overview(docPaths) {
     8. Ensure docs/index.html and README.md have links to getting-started.md
        page of the documentation or jaiph.org/getting-started, and the agent
        skill URL (https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md).
-    9. Knowing the whole documentation, ensure the agent skill is up to date
+    9. Knowing the whole documentation, run the agent skill is up to date
        and coherent with the documentation. It should be a minimal workflow set
        that supports safe feature delivery, preflight checks, implementation
        workflow, verification workflow, and a default entrypoint that
@@ -233,11 +233,11 @@ workflow docs_overview(docPaths) {
   """
 }
 
-workflow default() {
+export def main() {
   run claude.ensure_usage()
-  ensure worktree_is_clean()
+  run worktree_is_clean()
   const allowed_list = run build_allowed_paths_block()
-  ensure docs_files_present(allowed_list)
+  run docs_files_present(allowed_list)
   const docs_md_list = run list_docs_md_paths()
   for path in docs_md_list {
     if path != "" {
@@ -247,5 +247,5 @@ workflow default() {
   }
   run claude.ensure_usage()
   run docs_overview(docs_md_list)
-  ensure only_expected_docs_changed_after_prompt(allowed_list)
+  run only_expected_docs_changed_after_prompt(allowed_list)
 }

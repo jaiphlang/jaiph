@@ -86,7 +86,7 @@ describe("run_summary.jsonl keyed hash chain", () => {
   it("untampered chain verifies successfully under the key", () => {
     withRun("jaiph-chain-ok-", (_dir, summary) => {
       const emitter = makeEmitter(_dir);
-      emitter.emitWorkflow("WORKFLOW_START", "default");
+      emitter.emitRun("RUN_START", "main");
       emitter.emitLog("LOG", "hello");
       const result = verifyRunSummaryChain(summary, TEST_KEY);
       assert.equal(result.ok, true, result.error);
@@ -96,12 +96,12 @@ describe("run_summary.jsonl keyed hash chain", () => {
   it("tampered first line breaks the chain", () => {
     withRun("jaiph-chain-tamper-", (_dir, summary) => {
       const emitter = makeEmitter(_dir);
-      emitter.emitWorkflow("WORKFLOW_START", "default");
+      emitter.emitRun("RUN_START", "main");
       emitter.emitLog("LOG", "hello");
 
       const lines = readFileSync(summary, "utf8").split("\n").filter(Boolean);
       const first = JSON.parse(lines[0]) as Record<string, unknown>;
-      first["workflow"] = "tampered";
+      first["def"] = "tampered";
       writeFileSync(summary, [JSON.stringify(first), ...lines.slice(1)].join("\n") + "\n");
 
       const result = verifyRunSummaryChain(summary, TEST_KEY);
@@ -120,8 +120,8 @@ describe("run_summary.jsonl keyed hash chain", () => {
       const sha = (s: string) => createHash("sha256").update(s, "utf8").digest("hex");
       // Attacker's rewrite: omit an incriminating line, chain the rest with the
       // public genesis + SHA-256 exactly as the old unkeyed emitter did.
-      const l0 = JSON.stringify({ type: "WORKFLOW_START", workflow: "clean", prev_hash: CHAIN_GENESIS });
-      const l1 = JSON.stringify({ type: "WORKFLOW_END", workflow: "clean", prev_hash: sha(l0) });
+      const l0 = JSON.stringify({ type: "RUN_START", def: "clean", prev_hash: CHAIN_GENESIS });
+      const l1 = JSON.stringify({ type: "RUN_END", def: "clean", prev_hash: sha(l0) });
       writeFileSync(summary, `${l0}\n${l1}\n`);
 
       const result = verifyRunSummaryChain(summary, TEST_KEY);
@@ -146,7 +146,7 @@ describe("run_summary.jsonl keyed hash chain", () => {
   it("verifyRunJournal skips (verified:false) when the run was never keyed", () => {
     withRun("jaiph-chain-nokey-", (dir, summary) => {
       const emitter = makeEmitter(dir);
-      emitter.emitWorkflow("WORKFLOW_START", "default");
+      emitter.emitRun("RUN_START", "main");
       // No writeChainKey → no store entry → boundaries cannot verify, must not block.
       const res = verifyRunJournal(dir);
       assert.equal(res.verified, false);
@@ -161,8 +161,8 @@ describe("run_summary.jsonl keyed hash chain", () => {
   it("persists the key outside the run dir, never as .chain-key inside it", () => {
     withRun("jaiph-chain-outside-", (dir, _summary) => {
       const emitter = makeEmitter(dir);
-      emitter.emitWorkflow("WORKFLOW_START", "default");
-      emitter.emitWorkflow("WORKFLOW_END", "default");
+      emitter.emitRun("RUN_START", "main");
+      emitter.emitRun("RUN_END", "main");
       writeChainKey(dir, TEST_KEY);
 
       assert.ok(!existsSync(join(dir, ".chain-key")), "run dir must not contain a .chain-key file");
@@ -187,9 +187,9 @@ describe("run_summary.jsonl keyed hash chain", () => {
       mkdirSync(join(dir, ".chain-key"), { recursive: true });
 
       const emitter = makeEmitter(dir);
-      emitter.emitWorkflow("WORKFLOW_START", "default");
+      emitter.emitRun("RUN_START", "main");
       emitter.emitLog("LOGERR", "incriminating failure");
-      emitter.emitWorkflow("WORKFLOW_END", "default");
+      emitter.emitRun("RUN_END", "main");
       // The host persists the key despite the squat — it writes to the store, not the run dir.
       writeChainKey(dir, TEST_KEY);
       assert.ok(existsSync(chainKeyPath(dir)), "key persisted to the store despite the squat");
@@ -224,8 +224,8 @@ describe("run_summary.jsonl keyed hash chain", () => {
   it("verifyRunJournal fails closed when a keyed run's key is missing", () => {
     withRun("jaiph-chain-failclosed-", (dir, _summary) => {
       const emitter = makeEmitter(dir);
-      emitter.emitWorkflow("WORKFLOW_START", "default");
-      emitter.emitWorkflow("WORKFLOW_END", "default");
+      emitter.emitRun("RUN_START", "main");
+      emitter.emitRun("RUN_END", "main");
       writeChainKey(dir, TEST_KEY);
       assert.equal(verifyRunJournal(dir).ok, true, "verifies while the key is present");
 
@@ -239,14 +239,14 @@ describe("run_summary.jsonl keyed hash chain", () => {
   });
 
   // L-3 AC2 (happy path): a complete terminal journal — ending with the
-  // WORKFLOW_END marker — verifies successfully at the boundary and under the
+  // RUN_END marker — verifies successfully at the boundary and under the
   // low-level chain check with requireTerminal.
-  it("a complete terminal journal (ends with WORKFLOW_END) verifies", () => {
+  it("a complete terminal journal (ends with RUN_END) verifies", () => {
     withRun("jaiph-chain-terminal-ok-", (dir, summary) => {
       const emitter = makeEmitter(dir);
-      emitter.emitWorkflow("WORKFLOW_START", "default");
+      emitter.emitRun("RUN_START", "main");
       emitter.emitLog("LOG", "hello");
-      emitter.emitWorkflow("WORKFLOW_END", "default");
+      emitter.emitRun("RUN_END", "main");
       writeChainKey(dir, TEST_KEY);
 
       assert.equal(verifyRunSummaryChain(summary, TEST_KEY, { requireTerminal: true }).ok, true);
@@ -263,14 +263,14 @@ describe("run_summary.jsonl keyed hash chain", () => {
   it("rejects a terminal journal whose tail was truncated after the run ended", () => {
     withRun("jaiph-chain-truncate-", (dir, summary) => {
       const emitter = makeEmitter(dir);
-      emitter.emitWorkflow("WORKFLOW_START", "default");
+      emitter.emitRun("RUN_START", "main");
       emitter.emitLog("LOGERR", "incriminating failure");
-      emitter.emitWorkflow("WORKFLOW_END", "default");
+      emitter.emitRun("RUN_END", "main");
       writeChainKey(dir, TEST_KEY);
       assert.equal(verifyRunJournal(dir).ok, true, "the intact terminal journal verifies first");
 
       // Post-terminal tail truncation: drop the last two lines (the incriminating
-      // LOGERR and the WORKFLOW_END), leaving only the WORKFLOW_START prefix.
+      // LOGERR and the RUN_END), leaving only the RUN_START prefix.
       const lines = readFileSync(summary, "utf8").split("\n").filter(Boolean);
       writeFileSync(summary, lines.slice(0, 1).join("\n") + "\n");
 
@@ -280,7 +280,7 @@ describe("run_summary.jsonl keyed hash chain", () => {
         true,
         "the truncated prefix is still internally chain-valid (the L-3 gap)",
       );
-      // But requiring terminality rejects it: the WORKFLOW_END marker is gone.
+      // But requiring terminality rejects it: the RUN_END marker is gone.
       const chain = verifyRunSummaryChain(summary, TEST_KEY, { requireTerminal: true });
       assert.equal(chain.ok, false);
       assert.ok(chain.error?.includes("not terminal"), `expected a terminality failure, got: ${chain.error}`);
@@ -297,8 +297,8 @@ describe("run_summary.jsonl keyed hash chain", () => {
   it("rejects a keyed journal truncated to empty", () => {
     withRun("jaiph-chain-empty-", (dir, summary) => {
       const emitter = makeEmitter(dir);
-      emitter.emitWorkflow("WORKFLOW_START", "default");
-      emitter.emitWorkflow("WORKFLOW_END", "default");
+      emitter.emitRun("RUN_START", "main");
+      emitter.emitRun("RUN_END", "main");
       writeChainKey(dir, TEST_KEY);
       writeFileSync(summary, "");
       const res = verifyRunJournal(dir);
@@ -314,14 +314,14 @@ describe("run_summary.jsonl keyed hash chain", () => {
   it("still rejects an append that breaks the chain", () => {
     withRun("jaiph-chain-append-", (dir, summary) => {
       const emitter = makeEmitter(dir);
-      emitter.emitWorkflow("WORKFLOW_START", "default");
-      emitter.emitWorkflow("WORKFLOW_END", "default");
+      emitter.emitRun("RUN_START", "main");
+      emitter.emitRun("RUN_END", "main");
       writeChainKey(dir, TEST_KEY);
 
-      // Append a WORKFLOW_END-typed line with a bogus prev_hash (a tamper that
+      // Append a RUN_END-typed line with a bogus prev_hash (a tamper that
       // keeps a terminal marker last but breaks the link). The chain walk must
       // still reject it before terminality is even considered.
-      const forged = JSON.stringify({ type: "WORKFLOW_END", workflow: "forged", prev_hash: "deadbeef" });
+      const forged = JSON.stringify({ type: "RUN_END", def: "forged", prev_hash: "deadbeef" });
       writeFileSync(summary, readFileSync(summary, "utf8") + forged + "\n");
 
       const chain = verifyRunSummaryChain(summary, TEST_KEY, { requireTerminal: true });
@@ -334,9 +334,9 @@ describe("run_summary.jsonl keyed hash chain", () => {
   it("verifyRunJournal hard-fails once the key file is written and an incriminating line is dropped", () => {
     withRun("jaiph-chain-boundary-", (dir, summary) => {
       const emitter = makeEmitter(dir);
-      emitter.emitWorkflow("WORKFLOW_START", "default");
+      emitter.emitRun("RUN_START", "main");
       emitter.emitLog("LOGERR", "incriminating failure");
-      emitter.emitWorkflow("WORKFLOW_END", "default");
+      emitter.emitRun("RUN_END", "main");
       // Host persists the key after the run (as run.ts / call.ts do at finalize).
       writeChainKey(dir, TEST_KEY);
       assert.equal(verifyRunJournal(dir).ok, true, "untampered journal verifies once keyed");

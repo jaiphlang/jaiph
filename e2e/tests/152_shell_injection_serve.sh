@@ -37,7 +37,7 @@ fi
 # redirects it into the run's artifacts dir so we can download the result.
 e2e::file "tools.jh" <<'EOF'
 # Echoes the greeting into an artifact via a shell line.
-workflow greet_shell(name) {
+def greet_shell(name) {
   echo "Hello ${name}" > "$JAIPH_ARTIFACTS_DIR/greeting.txt"
 }
 EOF
@@ -67,7 +67,7 @@ fi
 base="http://127.0.0.1:${port}"
 
 # --- $(id) command substitution is not evaluated ---
-run_json="$(curl -s -X POST "${base}/v1/workflows/greet_shell/runs?wait=true" \
+run_json="$(curl -s -X POST "${base}/v1/defs/greet_shell/runs?wait=true" \
   -H 'content-type: application/json' -d '{"name":"$(id)"}')"
 run_id="$(printf '%s' "${run_json}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["run_id"])')"
 run_status="$(printf '%s' "${run_json}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["status"])')"
@@ -84,7 +84,7 @@ e2e::assert_equals "$(cat "${art_file}")" 'Hello $\(id\)' \
 # --- $(touch marker) does not create a file ---
 marker="${TEST_DIR}/pwned.txt"
 rm -f "${marker}"
-curl -s -X POST "${base}/v1/workflows/greet_shell/runs?wait=true" \
+curl -s -X POST "${base}/v1/defs/greet_shell/runs?wait=true" \
   -H 'content-type: application/json' \
   -d "{\"name\":\"\$(touch ${marker})\"}" >/dev/null
 if [[ -f "${marker}" ]]; then

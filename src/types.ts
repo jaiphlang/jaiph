@@ -18,17 +18,12 @@ export interface ScriptImportDef {
   loc: SourceLoc;
 }
 
-export interface RuleRefDef {
+export interface DefRef {
   value: string;
   loc: SourceLoc;
 }
 
-export interface WorkflowRefDef {
-  value: string;
-  loc: SourceLoc;
-}
-
-/** RHS of `const name = ...` in workflows/rules (P10). */
+/** RHS of `const name = ...` in defs (P10). */
 export type MatchPatternDef =
   | { kind: "string_literal"; value: string }
   | { kind: "regex"; source: string }
@@ -58,7 +53,7 @@ export interface MatchExprDef {
  *   The validator checks `name` against in-scope bindings (or, for dotted names,
  *   against typed-prompt schemas); the runtime sees `${name}`.
  * - `literal`: any other form (quoted string, nested `run …` /
- *   `ensure …` / inline-script call, or illicit unquoted `${…}` which the
+ *   inline-script call, or illicit unquoted `${…}` which the
  *   validator rejects). Stored verbatim as authored, between the surrounding commas.
  */
 export type Arg =
@@ -80,9 +75,8 @@ export type Arg =
  * Kinds:
  * - `literal`: a string or `$var` / `${var}` form — the raw text as it appears in source
  *   (post-dedent for triple-quoted bodies; the formatter consults trivia for surface form).
- * - `call`: a managed workflow/script call `ref(args)`. `async` is set when the source said
+ * - `call`: a managed def/script call `ref(args)`. `async` is set when the source said
  *   `run async ref(...)` in capture position.
- * - `ensure_call`: a managed rule call `ref(args)`.
  * - `inline_script`: an inline-script call (`` `body`(args) `` or fenced).
  * - `prompt`: a prompt body. `raw` carries the JSON-quoted prompt text (or `"${identifier}"`
  *   sugar). `returns` carries an optional flat returns schema.
@@ -93,43 +87,32 @@ export type Arg =
  */
 export type Expr =
   | { kind: "literal"; raw: string }
-  | { kind: "call"; callee: WorkflowRefDef; args?: Arg[]; async?: boolean }
-  | { kind: "ensure_call"; callee: RuleRefDef; args?: Arg[] }
+  | { kind: "call"; callee: DefRef; args?: Arg[]; async?: boolean }
   | { kind: "inline_script"; lang?: string; body: string; args?: Arg[] }
   | { kind: "prompt"; raw: string; loc: SourceLoc; returns?: string }
   | { kind: "match"; match: MatchExprDef }
   | { kind: "shell"; command: string; loc: SourceLoc }
-  | { kind: "bare_ref"; ref: WorkflowRefDef };
+  | { kind: "bare_ref"; ref: DefRef };
 
 /** Body attached to a `catch` or `recover` clause on an exec step. */
 export type CatchBody =
-  | { single: WorkflowStepDef; bindings: { failure: string } }
-  | { block: WorkflowStepDef[]; bindings: { failure: string } };
-
-export interface RuleDef {
-  name: string;
-  /** Named parameters declared on the rule definition (`()` means none). */
-  params: string[];
-  comments: string[];
-  /** Rule body: Jaiph keywords plus shell fragments. */
-  steps: WorkflowStepDef[];
-  loc: SourceLoc;
-}
+  | { single: StepDef; bindings: { failure: string } }
+  | { block: StepDef[]; bindings: { failure: string } };
 
 export interface ChannelDef {
   name: string;
-  routes?: WorkflowRefDef[];
+  routes?: DefRef[];
   loc: SourceLoc;
 }
 
-export interface WorkflowDef {
+export interface Def {
   name: string;
-  /** Named parameters declared on the workflow definition (`()` means none). */
+  /** Named parameters declared on the def definition(`()` means none). */
   params: string[];
   comments: string[];
-  steps: WorkflowStepDef[];
+  steps: StepDef[];
   /** Optional workflow-scoped config (overrides module-level config for steps inside this workflow). */
-  metadata?: WorkflowMetadata;
+  metadata?: DefMetadata;
   loc: SourceLoc;
 }
 
@@ -146,7 +129,7 @@ export interface ScriptDef {
 /**
  * Eight workflow-step variants — all values that flow through a step live in `Expr`.
  *
- * - `exec`: side-effecting managed call statement (was: `run` / `ensure` /
+ * - `exec`: side-effecting managed call statement (was: `run` /
  *   `run_inline_script` / `prompt` / `shell` step / standalone `match`). The
  *   discriminator now lives inside `body.kind`; `captureName` / `async` /
  *   `catch` / `recover` are step-level attributes.
@@ -158,7 +141,7 @@ export interface ScriptDef {
  * - `trivia`: formatter-only `comment` / `blank_line` slots — they have no
  *   execution semantics and are skipped by the runtime / validator.
  */
-export type WorkflowStepDef =
+export type StepDef =
   | {
       type: "exec";
       body: Expr;
@@ -198,9 +181,9 @@ export type WorkflowStepDef =
       subject: string;
       operator: "==" | "!=" | "=~" | "!~";
       operand: { kind: "string_literal"; value: string } | { kind: "regex"; source: string };
-      body: WorkflowStepDef[];
+      body: StepDef[];
       /** Optional `else { ... }` branch on `} else {`. */
-      elseBody?: WorkflowStepDef[];
+      elseBody?: StepDef[];
       loc: SourceLoc;
     }
   | {
@@ -208,7 +191,7 @@ export type WorkflowStepDef =
       type: "for_lines";
       iterVar: string;
       sourceVar: string;
-      body: WorkflowStepDef[];
+      body: StepDef[];
       loc: SourceLoc;
     }
   | {
@@ -230,32 +213,30 @@ export interface EnvDeclDef {
 
 /** Source order of definitions below imports / config / channels (formatter and round-trip). */
 export type TopLevelEmitOrder =
-  | { kind: "rule"; index: number }
   | { kind: "script"; index: number }
-  | { kind: "workflow"; index: number }
+  | { kind: "def"; index: number }
   | { kind: "env"; index: number }
   | { kind: "test"; index: number };
 
 export interface jaiphModule {
   filePath: string;
-  /** Optional in-file workflow metadata (agent model, command, run options). */
-  metadata?: WorkflowMetadata;
+  /** Optional in-file def metadata(agent model, command, run options). */
+  metadata?: DefMetadata;
   imports: ImportDef[];
   /** `import script "<path>" as <name>` declarations. */
   scriptImports?: ScriptImportDef[];
   channels: ChannelDef[];
   exports: string[];
-  rules: RuleDef[];
   scripts: ScriptDef[];
-  workflows: WorkflowDef[];
+  defs: Def[];
   /** Top-level variable declarations (`const name = value`). */
   envDecls?: EnvDeclDef[];
   /** Present only when parsing a *.test.jh file. */
   tests?: TestBlockDef[];
 }
 
-/** In-file workflow metadata (replaces config file for V1). */
-export interface WorkflowMetadata {
+/** In-file def metadata(replaces config file for V1). */
+export interface DefMetadata {
   agent?: {
     model?: string;
     command?: string;
@@ -300,9 +281,9 @@ export type TestStepDef =
       loc: SourceLoc;
     }
   | {
-      type: "test_run_workflow";
+      type: "test_run_def";
       captureName?: string;
-      workflowRef: string;
+      defRef: string;
       args?: string[];
       allowFailure?: boolean;
       loc: SourceLoc;
@@ -331,8 +312,7 @@ export type TestStepDef =
       expectedVar?: string;
       loc: SourceLoc;
     }
-  | { type: "test_mock_workflow"; ref: string; params: string[]; steps: WorkflowStepDef[]; loc: SourceLoc }
-  | { type: "test_mock_rule"; ref: string; params: string[]; steps: WorkflowStepDef[]; loc: SourceLoc }
+  | { type: "test_mock_def"; ref: string; params: string[]; steps: StepDef[]; loc: SourceLoc }
   | { type: "test_mock_script"; ref: string; params: string[]; body: string; loc: SourceLoc };
 
 export interface TestBlockDef {
@@ -351,15 +331,15 @@ export interface JaiphTestModule {
 
 /** Supported hook event names for jaiph run lifecycle. */
 export type HookEventName =
-  | "workflow_start"
-  | "workflow_end"
+  | "run_start"
+  | "run_end"
   | "step_start"
   | "step_end";
 
 /** Schema for hooks.json: event name -> array of shell commands to run. */
 export interface HookConfig {
-  workflow_start?: string[];
-  workflow_end?: string[];
+  run_start?: string[];
+  run_end?: string[];
   step_start?: string[];
   step_end?: string[];
 }
@@ -367,27 +347,27 @@ export interface HookConfig {
 /** Payload passed to hook commands (JSON on stdin). */
 export interface HookPayload {
   event: HookEventName;
-  /** Workflow run id (from runtime; empty for workflow_start until first step). */
-  workflow_id: string;
+  /** Workflow run id (from runtime; empty for run_start until first step). */
+  run_id: string;
   /** Step id (only for step_start/step_end). */
   step_id?: string;
-  /** Step kind: workflow, rule, script, prompt. */
+  /** Step kind: workflow, script, prompt. */
   step_kind?: string;
-  /** Step name (e.g. default, scan_passes). */
+  /** Step name (e.g. main, scan_passes). */
   step_name?: string;
-  /** Exit status (step_end: 0 = success; workflow_end: resolved status). */
+  /** Exit status (step_end: 0 = success; run_end: resolved status). */
   status?: number;
   /** ISO timestamp when event occurred. */
   timestamp: string;
-  /** Elapsed ms for step (step_end) or total run (workflow_end). */
+  /** Elapsed ms for step (step_end) or total run (run_end). */
   elapsed_ms?: number;
   /** Absolute path to the workflow file being run. */
   run_path: string;
   /** Workspace root (project directory). */
   workspace: string;
-  /** Run directory (logs); set for workflow_end and step_end when available. */
+  /** Run directory (logs); set for run_end and step_end when available. */
   run_dir?: string;
-  /** Path to run_summary.jsonl; set for workflow_end when available. */
+  /** Path to run_summary.jsonl; set for run_end when available. */
   summary_file?: string;
   /** Step stdout log path (step_end). */
   out_file?: string;

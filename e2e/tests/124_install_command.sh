@@ -25,7 +25,7 @@ create_local_lib() {
     git config user.name "jaiph-e2e"
     git remote add origin "${repo_dir}"
     cat > lib.jh <<'JHEOF'
-export workflow greet() {
+export def greet() {
   log "hello from lib"
 }
 JHEOF

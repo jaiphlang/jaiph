@@ -60,13 +60,13 @@ done < <(
 return $bad
 ```
 
-rule no_test_or_e2e_paths_changed() {
+def no_test_or_e2e_paths_changed() {
   run assert_no_test_or_e2e_in_changed()
 }
 
 script report_file_nonempty = `test -s ".jaiph/tmp/simplifier_report.md"`
 
-workflow find_simplifications() {
+def find_simplifications() {
   const report = prompt """
     <role>
     You are a senior engineer focused on codebase simplification for the Jaiph
@@ -104,14 +104,14 @@ workflow find_simplifications() {
 
   run save_simplifier_report(report)
   log "Simplification report saved to .jaiph/tmp/simplifier_report.md"
-  ensure no_test_or_e2e_paths_changed()
+  run no_test_or_e2e_paths_changed()
 }
 
 script save_simplifier_report = `printf '%s\n' "$1" > .jaiph/tmp/simplifier_report.md`
 
 script read_simplifier_report = `cat .jaiph/tmp/simplifier_report.md`
 
-workflow apply_simplifications() {
+def apply_simplifications() {
   run report_file_nonempty() catch (err) {
     fail "No report at .jaiph/tmp/simplifier_report.md. Run find_simplifications first."
   }
@@ -143,7 +143,7 @@ workflow apply_simplifications() {
     </task>
 """
 
-  ensure no_test_or_e2e_paths_changed()
+  run no_test_or_e2e_paths_changed()
 }
 
 script mkdir_tmp_jaiph = `mkdir -p .jaiph/tmp`
@@ -153,12 +153,12 @@ const commit_task = """
   .jaiph/tmp/simplifier_report.md. Preserve behavior; no test/ or e2e/ edits.
 """
 
-workflow default() {
-  ensure git.is_clean()
+export def main() {
+  run git.is_clean()
   run mkdir_tmp_jaiph()
   run find_simplifications()
   run apply_simplifications()
   run ci.ensure_ci_passes()
-  ensure no_test_or_e2e_paths_changed()
+  run no_test_or_e2e_paths_changed()
   run git.commit_if_changes(commit_task)
 }

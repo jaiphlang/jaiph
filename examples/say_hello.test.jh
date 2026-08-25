@@ -8,7 +8,7 @@ import "say_hello.jh" as hello
 # is correct.
 test "without name, workflow fails with validation message" {
   # When
-  const response = run hello.default() allow_failure
+  const response = run hello.main() allow_failure
 
   # Then
   expect_equal response "You didn't provide your name"
@@ -20,7 +20,7 @@ test "with name, returns greeting and logs response" {
   mock prompt expected_response
 
   # When
-  const response = run hello.default("Alice")
+  const response = run hello.main("Alice")
 
   # Then
   expect_equal response expected_response

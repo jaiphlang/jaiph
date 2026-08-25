@@ -1,13 +1,9 @@
 {
   "channels": [],
-  "exports": [],
-  "imports": [],
-  "rules": [],
-  "scripts": [],
-  "workflows": [
+  "defs": [
     {
       "comments": [],
-      "name": "default",
+      "name": "main",
       "params": [
         "cmd"
       ],
@@ -79,5 +75,10 @@
         }
       ]
     }
-  ]
+  ],
+  "exports": [
+    "main"
+  ],
+  "imports": [],
+  "scripts": []
 }

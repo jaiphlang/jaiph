@@ -34,9 +34,9 @@ export function summarizeError(
     const dirPart = runDir
       ? `; inspect run_summary.jsonl and step artifacts under ${runDir}`
       : "";
-    return `Workflow execution failed${codePart} with no error output${dirPart}`;
+    return `Run failed${codePart} with no error output${dirPart}`;
   }
-  return fallback ?? "Workflow execution failed.";
+  return fallback ?? "Run failed.";
 }
 
 export function formatRunTimeoutMessage(timeoutSeconds: number): string {
@@ -58,7 +58,7 @@ export function resolveFailureDetails(
   summaryPath?: string,
   opts?: { code?: number; runDir?: string },
 ): FailureDetails {
-  const summary = summarizeError(stderr, "Workflow execution failed.", opts);
+  const summary = summarizeError(stderr, "Run failed.", opts);
   const failedStepOutput = summaryPath ? readFailedStepOutput(summaryPath) : null;
   return {
     summary,
@@ -223,7 +223,7 @@ export function readFailedStepOutput(summaryPath: string): string | null {
 
 /**
  * Locate a run's host-side directory under `runsRoot` by matching `runId`
- * against the `WORKFLOW_START` line (always the first line) of each candidate
+ * against the `RUN_START` line (always the first line) of each candidate
  * `run_summary.jsonl`. Works while the run is still executing (that line is
  * written at run start). Scans date/time directories newest-first; returns `null`
  * when no run dir matches or `runsRoot` is unreadable.
@@ -248,7 +248,7 @@ export function findRunDir(runsRoot: string, runId: string): string | null {
         if (!firstLine) continue;
         try {
           const parsed = JSON.parse(firstLine) as { type?: string; run_id?: string };
-          if (parsed.type === "WORKFLOW_START" && parsed.run_id === runId) {
+          if (parsed.type === "RUN_START" && parsed.run_id === runId) {
             return runDir;
           }
         } catch {

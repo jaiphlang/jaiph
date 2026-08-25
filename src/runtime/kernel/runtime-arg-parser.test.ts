@@ -135,11 +135,11 @@ describe("parseManagedArgAt", () => {
     }
   });
 
-  it("parses `ensure ref(args)` form", () => {
-    const result = parseManagedArgAt("ensure check(a, b)", 0);
+  it("parses `run ref(args)` form", () => {
+    const result = parseManagedArgAt("run check(a, b)", 0);
     assert.ok(result);
     if (result!.token.kind === "managed") {
-      assert.equal(result!.token.managedKind, "ensure");
+      assert.equal(result!.token.managedKind, "run");
       assert.equal(result!.token.ref, "check");
       assert.equal(result!.token.argsRaw, "${a} ${b}");
     }
@@ -156,7 +156,7 @@ describe("parseManagedArgAt", () => {
     }
   });
 
-  it("returns null when not a run/ensure prefix", () => {
+  it("returns null when not a run/run prefix", () => {
     assert.equal(parseManagedArgAt("foo bar", 0), null);
   });
 });
@@ -168,7 +168,7 @@ describe("parseArgTokens", () => {
     assert.deepEqual(tokens.map((t) => t.kind), ["literal", "literal", "literal"]);
   });
 
-  it("recognises managed run/ensure tokens within a list", () => {
+  it("recognises managed run/run tokens within a list", () => {
     const tokens = parseArgTokens("foo run greet(x) bar");
     assert.equal(tokens.length, 3);
     assert.equal(tokens[0].kind, "literal");

@@ -12,8 +12,8 @@ config {
 script jaiph_review_body_file = `printf '%s\n' "$JAIPH_WORKSPACE/.jaiph/tmp/architect_review_body.txt"`
 
 # Packed as: first line = verdict, rest = updated_description (must stay top-level:
-# const … = prompt """…""" is not supported inside ensure … catch — see parseRecoverStatement).
-workflow architect_agent_review(task) {
+# const … = prompt """…""" is not supported inside run … catch — see parseRecoverStatement).
+def architect_agent_review(task) {
   const result = prompt """
     You are a software architect reviewing a task from the Jaiph
     improvement queue. Jaiph is a TypeScript compiler and runtime
@@ -70,12 +70,12 @@ workflow architect_agent_review(task) {
   """
 }
 
-workflow review_one_header(header) {
+def review_one_header(header) {
   run common.arg_nonempty(header) catch (err) {
     return ""
   }
   const task = run queue.get_task_by_header(header)
-  ensure queue.task_is_dev_ready(task) catch (err) {
+  run queue.task_is_dev_ready(task) catch (err) {
     const packed = run architect_agent_review(task)
     const verdict = run common.first_line_str(packed)
     const updated_description = run common.rest_lines_str(packed)
@@ -104,7 +104,7 @@ workflow review_one_header(header) {
   log "Already dev-ready: ${header}"
 }
 
-workflow process_headers_recursive(header, remaining) {
+def process_headers_recursive(header, remaining) {
   run review_one_header(header)
   run common.arg_nonempty(remaining) catch (err) {
     return ""
@@ -114,19 +114,19 @@ workflow process_headers_recursive(header, remaining) {
   run process_headers_recursive(next, rest)
 }
 
-workflow maybe_process_headers(first, rest) {
+def maybe_process_headers(first, rest) {
   run common.arg_nonempty(first) catch (err) {
     return ""
   }
   run process_headers_recursive(first, rest)
 }
 
-workflow default() {
+export def main() {
   const headers = run queue.get_all_task_headers()
   const first = run common.first_line_str(headers)
   const rest = run common.rest_lines_str(headers)
   run maybe_process_headers(first, rest)
-  ensure queue.all_dev_ready() catch (err) {
+  run queue.all_dev_ready() catch (err) {
     fail "One or more tasks need work. Review the agent output above."
   }
 }

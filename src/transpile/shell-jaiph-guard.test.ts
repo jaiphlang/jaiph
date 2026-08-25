@@ -11,8 +11,7 @@ function makeEnv(overrides?: Partial<SubstitutionValidateEnv>): SubstitutionVali
   return {
     filePath: "test.jh",
     loc: { line: 1, col: 1 },
-    localRules: new Set<string>(),
-    localWorkflows: new Set<string>(),
+    localDefs: new Set<string>(),
     localScripts: new Set<string>(),
     importsByAlias: new Map<string, string>(),
     lookupImported: () => undefined,
@@ -34,14 +33,14 @@ test("classifyJaiphShellRefToken: returns 'none' for printf", () => {
   assert.equal(classifyJaiphShellRefToken("printf", makeEnv()), "none");
 });
 
-test("classifyJaiphShellRefToken: returns 'rule' for local rule", () => {
-  const env = makeEnv({ localRules: new Set(["check_passes"]) });
-  assert.equal(classifyJaiphShellRefToken("check_passes", env), "rule");
+test("classifyJaiphShellRefToken: returns 'workflow' for local def", () => {
+  const env = makeEnv({ localDefs: new Set(["check_passes"]) });
+  assert.equal(classifyJaiphShellRefToken("check_passes", env), "def");
 });
 
 test("classifyJaiphShellRefToken: returns 'workflow' for local workflow", () => {
-  const env = makeEnv({ localWorkflows: new Set(["deploy"]) });
-  assert.equal(classifyJaiphShellRefToken("deploy", env), "workflow");
+  const env = makeEnv({ localDefs: new Set(["deploy"]) });
+  assert.equal(classifyJaiphShellRefToken("deploy", env), "def");
 });
 
 test("classifyJaiphShellRefToken: returns 'script' for local script", () => {
@@ -56,9 +55,9 @@ test("classifyJaiphShellRefToken: returns 'none' for unknown local name", () => 
 test("classifyJaiphShellRefToken: returns kind for imported symbol", () => {
   const env = makeEnv({
     importsByAlias: new Map([["lib", "lib.jh"]]),
-    lookupImported: (alias, name) => (alias === "lib" && name === "ready" ? "rule" : undefined),
+    lookupImported: (alias, name) => (alias === "lib" && name === "ready" ? "def" : undefined),
   });
-  assert.equal(classifyJaiphShellRefToken("lib.ready", env), "rule");
+  assert.equal(classifyJaiphShellRefToken("lib.ready", env), "def");
 });
 
 test("classifyJaiphShellRefToken: returns 'unknown' for missing imported symbol", () => {
@@ -83,14 +82,14 @@ test("classifyJaiphShellRefToken: returns 'none' for three-part dotted name", ()
 test("assertKeywordFirstShellFragment: rejects 'run' keyword", () => {
   assert.throws(
     () => assertKeywordFirstShellFragment("run my_wf", makeEnv()),
-    /cannot use Jaiph keywords "run" or "ensure"/,
+    /cannot use Jaiph keyword "run"/,
   );
 });
 
 test("assertKeywordFirstShellFragment: rejects 'ensure' keyword", () => {
   assert.throws(
-    () => assertKeywordFirstShellFragment("ensure my_rule", makeEnv()),
-    /cannot use Jaiph keywords "run" or "ensure"/,
+    () => assertKeywordFirstShellFragment("run my_rule", makeEnv()),
+    /cannot use Jaiph keyword "run"/,
   );
 });
 
@@ -106,19 +105,19 @@ test("assertKeywordFirstShellFragment: allows send operator inside single quotes
   assertKeywordFirstShellFragment("echo '<-'", makeEnv());
 });
 
-test("assertKeywordFirstShellFragment: rejects local rule as command", () => {
-  const env = makeEnv({ localRules: new Set(["check_it"]) });
+test("assertKeywordFirstShellFragment: rejects local def as command", () => {
+  const env = makeEnv({ localDefs: new Set(["check_it"]) });
   assert.throws(
     () => assertKeywordFirstShellFragment("check_it arg1", env),
-    /cannot invoke rule "check_it"/,
+    /cannot invoke def "check_it"/,
   );
 });
 
 test("assertKeywordFirstShellFragment: rejects local workflow as command", () => {
-  const env = makeEnv({ localWorkflows: new Set(["deploy"]) });
+  const env = makeEnv({ localDefs: new Set(["deploy"]) });
   assert.throws(
     () => assertKeywordFirstShellFragment("deploy arg1", env),
-    /cannot invoke workflow "deploy"/,
+    /cannot invoke def "deploy"/,
   );
 });
 
@@ -152,30 +151,30 @@ test("assertKeywordFirstShellFragment: allows plain shell commands", () => {
 test("assertNoJaiphLeadCommandWord: rejects 'run' keyword", () => {
   assert.throws(
     () => assertNoJaiphLeadCommandWord("run something", makeEnv()),
-    /cannot use Jaiph keywords "run" or "ensure" as the shell command/,
+    /Jaiph keyword "run"/,
   );
 });
 
 test("assertNoJaiphLeadCommandWord: rejects 'ensure' keyword", () => {
   assert.throws(
-    () => assertNoJaiphLeadCommandWord("ensure check", makeEnv()),
-    /cannot use Jaiph keywords "run" or "ensure" as the shell command/,
+    () => assertNoJaiphLeadCommandWord("run check", makeEnv()),
+    /Jaiph keyword "run"/,
   );
 });
 
-test("assertNoJaiphLeadCommandWord: rejects rule as leading command", () => {
-  const env = makeEnv({ localRules: new Set(["my_rule"]) });
+test("assertNoJaiphLeadCommandWord: rejects def as leading command", () => {
+  const env = makeEnv({ localDefs: new Set(["my_rule"]) });
   assert.throws(
     () => assertNoJaiphLeadCommandWord("my_rule arg", env),
-    /rule "my_rule" must be called with ensure/,
+    /def "my_rule" must be called with run/,
   );
 });
 
 test("assertNoJaiphLeadCommandWord: rejects workflow as leading command", () => {
-  const env = makeEnv({ localWorkflows: new Set(["my_wf"]) });
+  const env = makeEnv({ localDefs: new Set(["my_wf"]) });
   assert.throws(
     () => assertNoJaiphLeadCommandWord("my_wf arg", env),
-    /workflow "my_wf" must be called with run/,
+    /def "my_wf" must be called with run/,
   );
 });
 
@@ -203,18 +202,18 @@ test("assertNoJaiphLeadCommandWord: allows ordinary shell commands", () => {
   assertNoJaiphLeadCommandWord("git status", makeEnv());
 });
 
-test("assertKeywordFirstShellFragment: detects rule as first command in fragment", () => {
-  const env = makeEnv({ localRules: new Set(["check"]) });
+test("assertKeywordFirstShellFragment: detects def as first command in fragment", () => {
+  const env = makeEnv({ localDefs: new Set(["check"]) });
   assert.throws(
     () => assertKeywordFirstShellFragment("check arg | sort", env),
-    /cannot invoke rule "check"/,
+    /cannot invoke def "check"/,
   );
 });
 
 test("assertNoJaiphLeadCommandWord: handles env assigns before command", () => {
-  const env = makeEnv({ localRules: new Set(["my_rule"]) });
+  const env = makeEnv({ localDefs: new Set(["my_rule"]) });
   assert.throws(
     () => assertNoJaiphLeadCommandWord("FOO=bar my_rule", env),
-    /rule "my_rule" must be called with ensure/,
+    /def "my_rule" must be called with run/,
   );
 });

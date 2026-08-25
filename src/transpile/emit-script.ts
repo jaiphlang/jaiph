@@ -1,5 +1,5 @@
 import { inlineScriptName } from "../inline-script-name";
-import type { Expr, jaiphModule, ScriptImportDef, WorkflowStepDef } from "../types";
+import type { Expr, jaiphModule, ScriptImportDef, StepDef } from "../types";
 import { scriptShebangIsBash, langToShebang } from "../parser";
 
 /**
@@ -8,9 +8,9 @@ import { scriptShebangIsBash, langToShebang } from "../parser";
  */
 export function resolveShellRefs(
   command: string,
-  importedWorkflowSymbols: Map<string, string>,
+  importedModuleSymbols: Map<string, string>,
 ): string {
-  for (const [alias, symbol] of importedWorkflowSymbols) {
+  for (const [alias, symbol] of importedModuleSymbols) {
     const pattern = new RegExp(
       `(?<![A-Za-z0-9_])${alias}\\.([A-Za-z_][A-Za-z0-9_]*)`,
       "g",
@@ -28,7 +28,7 @@ export function normalizeShellLocalExport(command: string): string {
   );
 }
 
-function emitScriptBodyLine(cmd: string, importedWorkflowSymbols: Map<string, string>): string {
+function emitScriptBodyLine(cmd: string, importedModuleSymbols: Map<string, string>): string {
   const t = cmd.trim();
   if (/^\s*return\s*$/.test(t)) {
     return "return $?";
@@ -44,7 +44,7 @@ function emitScriptBodyLine(cmd: string, importedWorkflowSymbols: Map<string, st
       return t.replace(/^\s*return\s+/, "return ");
     }
   }
-  return normalizeShellLocalExport(resolveShellRefs(cmd, importedWorkflowSymbols));
+  return normalizeShellLocalExport(resolveShellRefs(cmd, importedModuleSymbols));
 }
 
 function wrapBashStandaloneScriptBody(body: string, envPreamble: string): string {
@@ -78,7 +78,7 @@ function emitInlineFromExpr(expr: Expr, seen: Set<string>, out: ScriptArtifact[]
 
 /** Collect all inline script bodies from a step tree (handles if/for/catch/recover nesting). */
 function collectInlineScripts(
-  steps: WorkflowStepDef[],
+  steps: StepDef[],
   seen: Set<string>,
   out: ScriptArtifact[],
 ): void {
@@ -155,8 +155,8 @@ function resolveScriptShebang(body: string, lang?: string): { shebang: string; c
 
 export function buildScriptFiles(
   ast: jaiphModule,
-  importedWorkflowSymbols: Map<string, string>,
-  _workflowSymbol: string,
+  importedModuleSymbols: Map<string, string>,
+  _defSymbol: string,
   resolvedScriptImports?: Map<string, string>,
 ): ScriptArtifact[] {
   const out: ScriptArtifact[] = [];
@@ -174,7 +174,7 @@ export function buildScriptFiles(
     const { shebang, cleanBody } = resolveScriptShebang(rawBody, sc.lang);
     const isBash = scriptShebangIsBash(shebang === "#!/usr/bin/env bash" ? undefined : shebang);
     const processedBody = isBash
-      ? cleanBody.split("\n").map((c) => emitScriptBodyLine(c, importedWorkflowSymbols)).join("\n")
+      ? cleanBody.split("\n").map((c) => emitScriptBodyLine(c, importedModuleSymbols)).join("\n")
       : cleanBody;
     const body = isBash
       ? wrapBashStandaloneScriptBody(processedBody, "")
@@ -185,8 +185,7 @@ export function buildScriptFiles(
 
   // Emit inline script artifacts from workflow/rule steps
   const seen = new Set<string>();
-  for (const w of ast.workflows) collectInlineScripts(w.steps, seen, out);
-  for (const r of ast.rules) collectInlineScripts(r.steps, seen, out);
+  for (const w of ast.defs) collectInlineScripts(w.steps, seen, out);
 
   return out;
 }

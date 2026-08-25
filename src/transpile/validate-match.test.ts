@@ -11,7 +11,7 @@ test("E_VALIDATE: return as leading token of match arm body is rejected", () => 
     writeFileSync(
       join(root, "m.jh"),
       [
-        "workflow default() {",
+        "export def main() {",
         '  const x = "ok"',
         "  return match x {",
         '    "ok" => return "yes"',
@@ -36,7 +36,7 @@ test("E_VALIDATE: inline script in match arm body is rejected", () => {
     writeFileSync(
       join(root, "m.jh"),
       [
-        "workflow default() {",
+        "export def main() {",
         '  const x = "ok"',
         "  return match x {",
         "    \"ok\" => `echo yes`()",
@@ -61,7 +61,7 @@ test("return match at workflow level remains valid", () => {
     writeFileSync(
       join(root, "m.jh"),
       [
-        "workflow default() {",
+        "export def main() {",
         '  const x = "ok"',
         "  return match x {",
         '    "ok" => "yes"',
@@ -85,7 +85,7 @@ test("match arm with fail body is accepted", () => {
     writeFileSync(
       join(root, "m.jh"),
       [
-        "workflow default() {",
+        "export def main() {",
         '  const x = "ok"',
         "  return match x {",
         '    "ok" => fail "bad"',
@@ -110,7 +110,7 @@ test("match arm with run ref body is accepted", () => {
       join(root, "m.jh"),
       [
         "script helper = `echo ok`",
-        "workflow default() {",
+        "export def main() {",
         '  const x = "ok"',
         "  return match x {",
         '    "ok" => run helper()',
@@ -134,7 +134,7 @@ test("match arm with unknown verb (e.g. error) is rejected with hint", () => {
     writeFileSync(
       join(root, "m.jh"),
       [
-        "workflow default() {",
+        "export def main() {",
         '  const x = "ok"',
         "  return match x {",
         '    "" => error "missing"',
@@ -159,7 +159,7 @@ test("match arm with bare function-call form (error(\"...\")) is rejected", () =
     writeFileSync(
       join(root, "m.jh"),
       [
-        "workflow default() {",
+        "export def main() {",
         '  const x = "ok"',
         "  return match x {",
         '    "" => error("missing")',
@@ -184,7 +184,7 @@ test("E_VALIDATE: bare unknown word (true) in match arm body is rejected", () =>
     writeFileSync(
       join(root, "m.jh"),
       [
-        "workflow default() {",
+        "export def main() {",
         '  const x = "ok"',
         "  return match x {",
         '    "" => fail "missing"',
@@ -209,7 +209,7 @@ test("E_VALIDATE: bare unknown word (blorp) in match arm body is rejected", () =
     writeFileSync(
       join(root, "m.jh"),
       [
-        "workflow default() {",
+        "export def main() {",
         '  const x = "ok"',
         "  return match x {",
         '    "" => fail "missing"',
@@ -234,7 +234,7 @@ test("E_VALIDATE: bare unknown word (false) in match arm body is rejected", () =
     writeFileSync(
       join(root, "m.jh"),
       [
-        "workflow default() {",
+        "export def main() {",
         '  const x = "ok"',
         "  return match x {",
         '    "" => fail "missing"',
@@ -259,7 +259,7 @@ test("match arm with bare in-scope identifier is accepted", () => {
     writeFileSync(
       join(root, "m.jh"),
       [
-        "workflow default() {",
+        "export def main() {",
         '  const name = "alice"',
         "  return match name {",
         '    "" => fail "missing"',
@@ -283,7 +283,7 @@ test("match arm with string literal continues to compile", () => {
     writeFileSync(
       join(root, "m.jh"),
       [
-        "workflow default() {",
+        "export def main() {",
         '  const name = "alice"',
         "  return match name {",
         '    "" => fail "missing"',
@@ -307,7 +307,7 @@ test("match arm with trailing comma after fail is rejected", () => {
     writeFileSync(
       join(root, "m.jh"),
       [
-        "rule valid_name(name_arg) {",
+        "def valid_name(name_arg) {",
         "  return match name_arg {",
         '    "" => fail "You didn\'t provide your name :(",',
         "    _  => name_arg",
@@ -331,7 +331,7 @@ test("match arm with trailing comma after string value is rejected", () => {
     writeFileSync(
       join(root, "m.jh"),
       [
-        "workflow default() {",
+        "export def main() {",
         '  const x = "ok"',
         "  return match x {",
         '    "ok" => "yes",',
@@ -356,7 +356,7 @@ test("triple-quoted arm body parses and validates", () => {
     writeFileSync(
       join(root, "m.jh"),
       [
-        "workflow default() {",
+        "export def main() {",
         '  const x = "ok"',
         "  return match x {",
         '    "ok" => """',

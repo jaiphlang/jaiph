@@ -44,7 +44,7 @@ export function validateTestBlocks(
           inScope.add(step.name);
           return;
         }
-        if (step.type === "test_run_workflow") {
+        if (step.type === "test_run_def") {
           if (step.captureName) inScope.add(step.captureName);
           return;
         }

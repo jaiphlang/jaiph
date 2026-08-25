@@ -5,7 +5,7 @@ import { emitMatchArm, emitSteps } from "./emit-steps";
 
 // `test "…" { … }` block emitters. Split from `emit-steps.ts` so both stay
 // under the analyzability line cap. Reuses the step-tree emitters for the
-// `mock workflow` / `mock rule` bodies and `mock prompt { … }` arms.
+// `mock def` / `mock prompt { … }` arms.
 
 export function emitTestBlock(test: TestBlockDef, pad: string, trivia: Trivia): string {
   const lines: string[] = [];
@@ -41,11 +41,11 @@ function emitTestStep(step: TestStepDef, pad: string, trivia: Trivia): string[] 
       lines.push(`${pad}}`);
       return lines;
     }
-    case "test_run_workflow": {
+    case "test_run_def": {
       const capture = step.captureName ? `const ${step.captureName} = ` : "";
       const args = step.args && step.args.length > 0 ? step.args.map((a) => `"${a}"`).join(", ") : "";
       const allow = step.allowFailure ? " allow_failure" : "";
-      return [`${pad}${capture}run ${step.workflowRef}(${args})${allow}`];
+      return [`${pad}${capture}run ${step.defRef}(${args})${allow}`];
     }
     case "test_expect_contain":
       return step.substringVar
@@ -59,16 +59,9 @@ function emitTestStep(step: TestStepDef, pad: string, trivia: Trivia): string[] 
       return step.expectedVar
         ? [`${pad}expect_equal ${step.variable} ${step.expectedVar}`]
         : [`${pad}expect_equal ${step.variable} "${step.expected}"`];
-    case "test_mock_workflow": {
+    case "test_mock_def": {
       const paramStr = `(${step.params.join(", ")})`;
-      const lines = [`${pad}mock workflow ${step.ref}${paramStr} {`];
-      lines.push(...emitSteps(step.steps, pad, pad + pad, trivia));
-      lines.push(`${pad}}`);
-      return lines;
-    }
-    case "test_mock_rule": {
-      const paramStr = `(${step.params.join(", ")})`;
-      const lines = [`${pad}mock rule ${step.ref}${paramStr} {`];
+      const lines = [`${pad}mock def ${step.ref}${paramStr} {`];
       lines.push(...emitSteps(step.steps, pad, pad + pad, trivia));
       lines.push(`${pad}}`);
       return lines;

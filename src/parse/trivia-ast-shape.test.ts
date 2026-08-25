@@ -6,8 +6,8 @@ import type {
   ScriptDef,
   ScriptImportDef,
   TestBlockDef,
-  WorkflowMetadata,
-  WorkflowStepDef,
+  DefMetadata,
+  StepDef,
   jaiphModule,
   Expr,
 } from "../types";
@@ -32,17 +32,17 @@ const _scriptImportNoLeading: HasField<ScriptImportDef, "leadingComments"> = fal
 const _channelNoLeading: HasField<ChannelDef, "leadingComments"> = false;
 const _testBlockNoLeading: HasField<TestBlockDef, "leadingComments"> = false;
 
-// WorkflowMetadata must not carry configBodySequence.
-const _metaNoConfigSeq: HasField<WorkflowMetadata, "configBodySequence"> = false;
+// DefMetadata must not carry configBodySequence.
+const _metaNoConfigSeq: HasField<DefMetadata, "configBodySequence"> = false;
 
 // ScriptDef must not carry bodyKind.
 const _scriptNoBodyKind: HasField<ScriptDef, "bodyKind"> = false;
 
 // Step variants must not carry surface-form trivia.
-type SayStep = Extract<WorkflowStepDef, { type: "say" }>;
-type ReturnStep = Extract<WorkflowStepDef, { type: "return" }>;
-type SendStep = Extract<WorkflowStepDef, { type: "send" }>;
-type ExecStep = Extract<WorkflowStepDef, { type: "exec" }>;
+type SayStep = Extract<StepDef, { type: "say" }>;
+type ReturnStep = Extract<StepDef, { type: "return" }>;
+type SendStep = Extract<StepDef, { type: "send" }>;
+type ExecStep = Extract<StepDef, { type: "exec" }>;
 
 const _sayNoTripleQuoted: HasField<SayStep, "tripleQuoted"> = false;
 const _returnNoTripleQuoted: HasField<ReturnStep, "tripleQuoted"> = false;

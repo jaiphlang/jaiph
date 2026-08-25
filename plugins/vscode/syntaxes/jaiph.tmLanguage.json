@@ -548,9 +548,9 @@
           "match": "\\\\."
         },
         {
-          "comment": "Inline capture: ${run ref()} or ${ensure ref()}",
+          "comment": "Inline capture: ${run ref()}",
           "name": "meta.interpolation.capture.jaiph",
-          "match": "(\\$\\{)\\s*(run|ensure)\\s+([A-Za-z_][A-Za-z0-9_.]*\\([^)]*\\))\\s*(\\})",
+          "match": "(\\$\\{)\\s*(run)\\s+([A-Za-z_][A-Za-z0-9_.]*\\([^)]*\\))\\s*(\\})",
           "captures": {
             "1": { "name": "punctuation.definition.interpolation.begin.jaiph" },
             "2": { "name": "keyword.control.command.jaiph" },
@@ -594,47 +594,24 @@
           }
         },
         {
-          "comment": "export rule NAME(params) {",
-          "name": "meta.declaration.rule.jaiph",
-          "match": "\\b(export)\\b\\s+\\b(rule)\\b\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*\\(([^)]*)\\)\\s*(\\{)",
+          "comment": "export def NAME(params) {",
+          "name": "meta.declaration.def.jaiph",
+          "match": "\\b(export)\\b\\s+\\b(def)\\b\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*\\(([^)]*)\\)\\s*(\\{)",
           "captures": {
             "1": { "name": "storage.modifier.jaiph" },
-            "2": { "name": "storage.type.rule.jaiph" },
-            "3": { "name": "entity.name.function.rule.jaiph" },
+            "2": { "name": "storage.type.def.jaiph" },
+            "3": { "name": "entity.name.function.def.jaiph" },
             "4": { "name": "variable.parameter.jaiph" },
             "5": { "name": "punctuation.section.block.begin.jaiph" }
           }
         },
         {
-          "comment": "export workflow NAME(params) {",
-          "name": "meta.declaration.workflow.jaiph",
-          "match": "\\b(export)\\b\\s+\\b(workflow)\\b\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*\\(([^)]*)\\)\\s*(\\{)",
+          "comment": "def NAME(params) {",
+          "name": "meta.declaration.def.jaiph",
+          "match": "\\b(def)\\b\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*\\(([^)]*)\\)\\s*(\\{)",
           "captures": {
-            "1": { "name": "storage.modifier.jaiph" },
-            "2": { "name": "storage.type.workflow.jaiph" },
-            "3": { "name": "entity.name.function.workflow.jaiph" },
-            "4": { "name": "variable.parameter.jaiph" },
-            "5": { "name": "punctuation.section.block.begin.jaiph" }
-          }
-        },
-        {
-          "comment": "rule NAME(params) {",
-          "name": "meta.declaration.rule.jaiph",
-          "match": "\\b(rule)\\b\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*\\(([^)]*)\\)\\s*(\\{)",
-          "captures": {
-            "1": { "name": "storage.type.rule.jaiph" },
-            "2": { "name": "entity.name.function.rule.jaiph" },
-            "3": { "name": "variable.parameter.jaiph" },
-            "4": { "name": "punctuation.section.block.begin.jaiph" }
-          }
-        },
-        {
-          "comment": "workflow NAME(params) {",
-          "name": "meta.declaration.workflow.jaiph",
-          "match": "\\b(workflow)\\b\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*\\(([^)]*)\\)\\s*(\\{)",
-          "captures": {
-            "1": { "name": "storage.type.workflow.jaiph" },
-            "2": { "name": "entity.name.function.workflow.jaiph" },
+            "1": { "name": "storage.type.def.jaiph" },
+            "2": { "name": "entity.name.function.def.jaiph" },
             "3": { "name": "variable.parameter.jaiph" },
             "4": { "name": "punctuation.section.block.begin.jaiph" }
           }
@@ -864,7 +841,7 @@
         },
         {
           "name": "keyword.control.command.jaiph",
-          "match": "\\b(ensure|run|prompt|log|logerr|logwarn|recover|catch|fail|return)\\b"
+          "match": "\\b(run|prompt|log|logerr|logwarn|recover|catch|fail|return)\\b"
         },
         {
           "name": "keyword.control.test.jaiph",

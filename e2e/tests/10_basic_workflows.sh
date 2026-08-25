@@ -14,7 +14,7 @@ e2e::section "Basic workflow execution"
 # Given
 e2e::file "hello.jh" <<'EOF'
 script hello_impl = `echo "hello-jh"`
-workflow default() {
+export def main() {
   const msg = run hello_impl()
   return "${msg}"
 }
@@ -28,10 +28,10 @@ e2e::expect_stdout "${hello_out}" <<'EOF'
 
 Jaiph: Running hello.jh
 
-workflow default
+export def main
   ▸ script hello_impl
   ✓ script hello_impl (<time>)
-✓ PASS workflow default (<time>)
+✓ PASS export def main (<time>)
 
 hello-jh
 EOF
@@ -42,7 +42,7 @@ e2e::expect_out "hello.jh" "hello_impl" "hello-jh"
 # Given
 e2e::file "lib.jh" <<'EOF'
 script ready_impl = `echo "from-lib"`
-rule ready() {
+def ready() {
   const result = run ready_impl()
   return "${result}"
 }
@@ -51,8 +51,8 @@ EOF
 e2e::file "app.jh" <<'EOF'
 import "lib.jh" as lib
 script mixed_ok_impl = `echo "mixed-ok"`
-workflow default() {
-  ensure lib.ready()
+export def main() {
+  run lib.ready()
   const msg = run mixed_ok_impl()
   return "${msg}"
 }
@@ -66,14 +66,14 @@ e2e::expect_stdout "${mixed_out}" <<'EOF'
 
 Jaiph: Running app.jh
 
-workflow default
-  ▸ rule ready
+export def main
+  ▸ def ready
   ·   ▸ script ready_impl
   ·   ✓ script ready_impl (<time>)
-  ✓ rule ready (<time>)
+  ✓ def ready(<time>)
   ▸ script mixed_ok_impl
   ✓ script mixed_ok_impl (<time>)
-✓ PASS workflow default (<time>)
+✓ PASS export def main (<time>)
 
 mixed-ok
 EOF
@@ -106,12 +106,12 @@ if [ "$(git branch --show-current)" != "$1" ]; then
   exit 1
 fi
 ```
-rule current_branch(branch) {
+def current_branch(branch) {
   run current_branch_impl(branch)
 }
 
-workflow default(branch) {
-  ensure current_branch(branch)
+export def main(branch) {
+  run current_branch(branch)
 }
 EOF
 

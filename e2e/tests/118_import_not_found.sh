@@ -16,7 +16,7 @@ e2e::section "import referencing missing file produces friendly error"
 e2e::file "broken_import.jh" <<'EOF'
 import "nonexistent.jh" as lib
 
-workflow default() {
+export def main() {
   run lib.deploy()
 }
 EOF

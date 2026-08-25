@@ -39,12 +39,12 @@ fi
 # ---------------------------------------------------------------------------
 e2e::file "tools.jh" <<'EOF'
 # Echo the message argument straight back as the return value.
-workflow echo_msg(message) {
+def echo_msg(message) {
   return message
 }
 
 # Always fails so the tool call reports an error.
-workflow boom() {
+def boom() {
   fail "boom-failed"
 }
 EOF
@@ -128,7 +128,7 @@ e2e::assert_equals "${p_line_count}" "4" "stdout has exactly 4 JSON-RPC response
 e2e::assert_equals "${p_echo_text}" "round-trip-value" "tool result text equals the workflow return value"
 e2e::assert_equals "${p_echo_iserror}" "false" "successful tool call reports isError:false"
 e2e::assert_equals "${p_boom_iserror}" "true" "failing workflow yields isError:true (not a protocol error)"
-e2e::assert_equals "${p_boom_first_line}" "workflow boom failed (exit 1)" "failing tool result names the failure"
+e2e::assert_equals "${p_boom_first_line}" "run boom failed (exit 1)" "failing tool result names the failure"
 
 # ---------------------------------------------------------------------------
 # Fixture 2 + regression leg: the shared launch path must still run `default`.
@@ -137,7 +137,7 @@ e2e::section "jaiph run on a default workflow still exits 0 and prints the retur
 
 e2e::file "greet.jh" <<'EOF'
 # Greet the named person.
-workflow default(name) {
+export def main(name) {
   return "Hello, ${name}"
 }
 EOF
@@ -150,9 +150,9 @@ e2e::expect_stdout "${run_out}" <<'EOF'
 
 Jaiph: Running greet.jh
 
-workflow default (name="Adam")
+export def main (name="Adam")
 
-✓ PASS workflow default (<time>)
+✓ PASS export def main (<time>)
 
 Hello, Adam
 EOF

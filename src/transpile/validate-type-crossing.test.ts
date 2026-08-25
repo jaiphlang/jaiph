@@ -22,7 +22,7 @@ test("E_VALIDATE: prompt with script identifier body", () => {
       join(root, "m.jh"),
       [
         "script save = `echo ok`",
-        "workflow default() {",
+        "export def main() {",
         "  prompt save",
         "}",
         "",
@@ -41,7 +41,7 @@ test("E_VALIDATE: const = prompt with script identifier body", () => {
       join(root, "m.jh"),
       [
         "script save = `echo ok`",
-        "workflow default() {",
+        "export def main() {",
         "  const x = prompt save",
         "}",
         "",
@@ -62,7 +62,7 @@ test("E_VALIDATE: run a string const in workflow", () => {
       join(root, "m.jh"),
       [
         'const greeting = "hello"',
-        "workflow default() {",
+        "export def main() {",
         "  run greeting()",
         "}",
         "",
@@ -75,12 +75,12 @@ test("E_VALIDATE: run a string const in workflow", () => {
   });
 });
 
-test("E_VALIDATE: run a workflow-level const in workflow", () => {
+test("E_VALIDATE: run a def-level const in workflow", () => {
   withTempDir("jaiph-type-cross-", (root) => {
     writeFileSync(
       join(root, "m.jh"),
       [
-        "workflow default() {",
+        "export def main() {",
         '  const msg = "hello"',
         "  run msg()",
         "}",
@@ -100,7 +100,7 @@ test("E_VALIDATE: const = run a string const in workflow", () => {
       join(root, "m.jh"),
       [
         'const greeting = "hello"',
-        "workflow default() {",
+        "export def main() {",
         "  const x = run greeting()",
         "}",
         "",
@@ -119,7 +119,7 @@ test("E_VALIDATE: run a string const in rule", () => {
       join(root, "m.jh"),
       [
         'const greeting = "hello"',
-        "rule check() {",
+        "def check() {",
         "  run greeting()",
         "}",
         "",
@@ -140,7 +140,7 @@ test("E_VALIDATE: const assignment from script name in workflow", () => {
       join(root, "m.jh"),
       [
         "script save = `echo ok`",
-        "workflow default() {",
+        "export def main() {",
         "  const x = save",
         "}",
         "",
@@ -159,7 +159,7 @@ test("E_VALIDATE: const assignment from script name in rule", () => {
       join(root, "m.jh"),
       [
         "script save = `echo ok`",
-        "rule check() {",
+        "def check() {",
         "  const x = save",
         "}",
         "",
@@ -180,7 +180,7 @@ test("E_VALIDATE: script interpolation in log", () => {
       join(root, "m.jh"),
       [
         "script save = `echo ok`",
-        "workflow default() {",
+        "export def main() {",
         '  log "result: ${save}"',
         "}",
         "",
@@ -199,7 +199,7 @@ test("E_VALIDATE: script interpolation in prompt string", () => {
       join(root, "m.jh"),
       [
         "script save = `echo ok`",
-        "workflow default() {",
+        "export def main() {",
         '  prompt "do ${save}"',
         "}",
         "",
@@ -218,7 +218,7 @@ test("E_VALIDATE: script interpolation in rule log", () => {
       join(root, "m.jh"),
       [
         "script save = `echo ok`",
-        "rule check() {",
+        "def check() {",
         '  log "result: ${save}"',
         "}",
         "",
@@ -239,7 +239,7 @@ test("valid: prompt with string const works", () => {
       join(root, "m.jh"),
       [
         'const greeting = "hello"',
-        "workflow default() {",
+        "export def main() {",
         "  prompt greeting",
         "}",
         "",
@@ -255,7 +255,7 @@ test("valid: run with script works", () => {
       join(root, "m.jh"),
       [
         "script save = `echo ok`",
-        "workflow default() {",
+        "export def main() {",
         "  run save()",
         "}",
         "",
@@ -270,7 +270,7 @@ test("valid: prompt with string literal works", () => {
     writeFileSync(
       join(root, "m.jh"),
       [
-        "workflow default() {",
+        "export def main() {",
         '  prompt "hello world"',
         "}",
         "",
@@ -286,7 +286,7 @@ test("valid: const with string value works", () => {
       join(root, "m.jh"),
       [
         "script save = `echo ok`",
-        "workflow default() {",
+        "export def main() {",
         '  const x = "hello"',
         "}",
         "",

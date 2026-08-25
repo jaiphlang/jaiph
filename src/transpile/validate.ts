@@ -1,16 +1,15 @@
 import { existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { Diagnostics } from "../diagnostics";
-import type { Expr, jaiphModule, WorkflowStepDef } from "../types";
+import type { Expr, jaiphModule, StepDef } from "../types";
 import type { ModuleGraph } from "./module-graph";
 import { validateRef } from "./validate-ref-resolution";
 import {
   parseSchemaFieldNames,
   resolveRouteTargetParams,
   ROUTE_REF_EXPECT,
-  RULE_SCOPE,
   validateStep,
-  WORKFLOW_SCOPE,
+  DEF_SCOPE,
   type ValidatorCtx,
 } from "./validate-step";
 import { validateConfigInto } from "./validate-config";
@@ -24,7 +23,7 @@ import { validateTestBlocks } from "./validate-tests";
  * body can resolve `<failure>` as an in-scope identifier.
  */
 interface FlatStepEntry {
-  step: WorkflowStepDef;
+  step: StepDef;
   recoverBindings: Set<string> | undefined;
 }
 
@@ -34,7 +33,7 @@ interface FlatStepEntry {
  * capture / for-iterator), the top-level prompt schemas, and a flat list of
  * every step in tree order. The flat list is what the main validator loop
  * iterates over — that loop is non-recursive, so the only recursive helper
- * walking `WorkflowStepDef[]` in this file is `walkStepTree` itself.
+ * walking `StepDef[]` in this file is `walkStepTree` itself.
  */
 interface StepTreeWalk {
   knownVars: Set<string>;
@@ -47,7 +46,7 @@ interface StepTreeWalk {
 function walkStepTree(
   diag: Diagnostics,
   filePath: string,
-  steps: WorkflowStepDef[],
+  steps: StepDef[],
   envDecls: { name: string; loc: { line: number; col: number } }[] | undefined,
   params: string[],
   declLoc: { line: number; col: number },
@@ -98,7 +97,7 @@ function walkStepTree(
   };
 
   const descend = (
-    ss: WorkflowStepDef[],
+    ss: StepDef[],
     bindings: Map<string, { kind: string; line: number }>,
     recoverBindings: Set<string> | undefined,
     topLevel: boolean,
@@ -174,7 +173,7 @@ function walkStepTree(
 
 /** Best-effort location for an exec body — used to attribute capture-binding errors. */
 function execBodyLoc(body: Expr): { line: number; col: number } | undefined {
-  if (body.kind === "call" || body.kind === "ensure_call") return body.callee.loc;
+  if (body.kind === "call") return body.callee.loc;
   if (body.kind === "prompt" || body.kind === "shell") return body.loc;
   if (body.kind === "match") return body.match.loc;
   return undefined;
@@ -216,14 +215,38 @@ export function validateModule(ast: jaiphModule, graph: ModuleGraph): void {
   diag.throwFirstIfAny();
 }
 
+/** `main` is reserved as the run entry: if present, it must be `export def main`. */
+function validateMainReservation(diag: Diagnostics, ast: jaiphModule): void {
+  const scriptMain = ast.scripts.find((s) => s.name === "main");
+  if (scriptMain) {
+    diag.error(
+      ast.filePath,
+      scriptMain.loc.line,
+      scriptMain.loc.col,
+      "E_VALIDATE",
+      '`main` is reserved as the run entry; use `export def main(...)`',
+    );
+  }
+  const defMain = ast.defs.find((w) => w.name === "main");
+  if (!defMain) return;
+  if (!ast.exports.includes("main")) {
+    diag.error(
+      ast.filePath,
+      defMain.loc.line,
+      defMain.loc.col,
+      "E_VALIDATE",
+      '`main` must be exported: export def main(...)',
+    );
+  }
+}
+
 export function validateModuleInto(
   ast: jaiphModule,
   graph: ModuleGraph,
   diag: Diagnostics,
 ): void {
   const localChannels = new Set(ast.channels.map((c) => c.name));
-  const localRules = new Set(ast.rules.map((r) => r.name));
-  const localWorkflows = new Set(ast.workflows.map((w) => w.name));
+  const localDefs = new Set(ast.defs.map((w) => w.name));
   const localScripts = new Set(ast.scripts.map((s) => s.name));
   const importsByAlias = new Map<string, string>();
   const importedAstCache = new Map<string, jaiphModule>();
@@ -286,8 +309,7 @@ export function validateModuleInto(
   const refCtx = {
     importsByAlias,
     importedAstCache,
-    localRules,
-    localWorkflows,
+    localDefs,
     localScripts,
   };
 
@@ -297,40 +319,16 @@ export function validateModuleInto(
     refCtx,
     localChannels,
     localScripts,
-    localWorkflows,
+    localDefs,
     importsByAlias,
     importedAstCache,
   } as const;
 
   validateConfigInto(ast, diag);
 
-  for (const rule of ast.rules) {
-    let ruleWalk: StepTreeWalk | undefined;
-    diag.capture(() => {
-      ruleWalk = walkStepTree(
-        diag,
-        ast.filePath,
-        rule.steps,
-        ast.envDecls,
-        rule.params,
-        rule.loc,
-        localScripts,
-        { withPromptSchemas: false },
-      );
-    });
-    if (!ruleWalk) continue;
-    const ctx: ValidatorCtx = {
-      ...baseCtx,
-      scope: RULE_SCOPE,
-      knownVars: ruleWalk.knownVars,
-      promptSchemas: ruleWalk.promptSchemas,
-      promptCaptures: ruleWalk.promptCaptures,
-      recoverBindings: undefined,
-    };
-    for (const entry of ruleWalk.flat) {
-      diag.capture(() => validateStep(entry.step, { ...ctx, recoverBindings: entry.recoverBindings }));
-    }
-  }
+  diag.capture(() => {
+    validateMainReservation(diag, ast);
+  });
 
   for (const ch of ast.channels) {
     if (!ch.routes) continue;
@@ -351,7 +349,7 @@ export function validateModuleInto(
     }
   }
 
-  for (const workflow of ast.workflows) {
+  for (const workflow of ast.defs) {
     let wfWalk: StepTreeWalk | undefined;
     diag.capture(() => {
       wfWalk = walkStepTree(
@@ -368,7 +366,7 @@ export function validateModuleInto(
     if (!wfWalk) continue;
     const ctx: ValidatorCtx = {
       ...baseCtx,
-      scope: WORKFLOW_SCOPE,
+      scope: DEF_SCOPE,
       knownVars: wfWalk.knownVars,
       promptSchemas: wfWalk.promptSchemas,
       promptCaptures: wfWalk.promptCaptures,

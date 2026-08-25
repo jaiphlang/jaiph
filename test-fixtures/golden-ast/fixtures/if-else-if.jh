@@ -1,4 +1,4 @@
-rule classify(kind) {
+def classify(kind) {
   if kind == "a" {
     log "a"
   } else if kind == "b" {
@@ -8,7 +8,7 @@ rule classify(kind) {
   }
 }
 
-workflow default(status) {
+export def main(status) {
   if status == "ok" {
     log "healthy"
   } else if status == "warn" {

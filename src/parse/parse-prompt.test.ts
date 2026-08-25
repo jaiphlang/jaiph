@@ -9,7 +9,7 @@ const trivia = createTrivia();
  * `parsePromptStep` now returns an `exec` step whose `body` is an `Expr.prompt`.
  * The bodyKind / bodyIdentifier / rawBody trivia hangs off that inner Expr.
  */
-function unwrapPrompt(step: import("../types").WorkflowStepDef): import("../types").Expr & { kind: "prompt" } {
+function unwrapPrompt(step: import("../types").StepDef): import("../types").Expr & { kind: "prompt" } {
   if (step.type !== "exec" || step.body.kind !== "prompt") {
     throw new Error(`expected exec step with prompt body, got ${step.type}`);
   }

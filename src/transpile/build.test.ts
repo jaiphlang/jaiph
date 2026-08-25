@@ -15,10 +15,10 @@ describe("walkjhFiles", () => {
       mkdirSync(join(root, ".jaiph", "src"), { recursive: true });
 
       const source = join(root, ".jaiph", "src", "workflow.jh");
-      writeFileSync(source, "workflow default() {\n}\n");
-      writeFileSync(join(root, ".jaiph", "runs", ".sandbox", "e2e", "old.jh"), "workflow stale() {\n}\n");
-      writeFileSync(join(root, ".jaiph", "tmp", "scratch.jh"), "workflow scratch() {\n}\n");
-      writeFileSync(join(root, ".jaiph", "artifacts", "patch.jh"), "workflow patch() {\n}\n");
+      writeFileSync(source, "export def main() {\n}\n");
+      writeFileSync(join(root, ".jaiph", "runs", ".sandbox", "e2e", "old.jh"), "def stale() {\n}\n");
+      writeFileSync(join(root, ".jaiph", "tmp", "scratch.jh"), "def scratch() {\n}\n");
+      writeFileSync(join(root, ".jaiph", "artifacts", "patch.jh"), "def patch() {\n}\n");
 
       assert.deepEqual(walkjhFiles(root), [source]);
     } finally {

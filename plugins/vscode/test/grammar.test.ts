@@ -10,14 +10,12 @@ test("current .jh constructs highlight with the expected scopes", async () => {
   const t = await tokenizeFixture("current.jh");
   const expect: Array<[string, string]> = [
     // Definitions and modifiers
-    ["workflow", "storage.type.workflow.jaiph"],
-    ["rule", "storage.type.rule.jaiph"],
+    ["def", "storage.type.def.jaiph"],
     ["export", "storage.modifier.jaiph"],
     ["script", "storage.type.script.jaiph"],
     ["channel", "storage.type.channel.jaiph"],
     // Command keywords (including ones the old extension never knew)
     ["run", "keyword.control.command.jaiph"],
-    ["ensure", "keyword.control.command.jaiph"],
     ["prompt", "keyword.control.command.jaiph"],
     ["logwarn", "keyword.control.command.jaiph"],
     ["catch", "keyword.control.command.jaiph"],

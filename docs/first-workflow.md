@@ -53,7 +53,7 @@ Create a fresh directory and write a file named `hello.jh`:
 ```jh
 script greet = `echo "Hello, ${1:-world}!"`
 
-workflow default(who) {
+export def main(who) {
   return run greet(who)
 }
 ```
@@ -61,7 +61,7 @@ workflow default(who) {
 Here is what each line does:
 
 - `` script greet = `…` `` declares a managed script with a single-line bash body. For a multi-line body, use a fenced block where the fence tag selects the interpreter, such as `` script greet = ```bash … ``` `` for bash or `` ```node `` for Node. See [the Script RHS section of the grammar reference](grammar.md#definitions). A script body uses shell positional arguments such as `$1` and `$2`, not Jaiph `${name}` interpolation. The `${1:-world}` form is bash default expansion, which supplies `world` when `run greet(...)` passes no value.
-- `workflow default(who)` is the entry workflow. Every `.jh` file invoked with `jaiph run` enters at `workflow default`. The `who` parameter is bound by position from the CLI arguments after the file path.
+- `export def main(who)` is the entry workflow. Every `.jh` file invoked with `jaiph run` enters at `export def main`. The `who` parameter is bound by position from the CLI arguments after the file path.
 - `return run greet(who)` calls the script with `who` as `${1}`, captures its stdout as the step value, and returns it as the workflow's return value.
 
 ## 3. Run it
@@ -80,16 +80,16 @@ You should see this (timings will differ):
 ```text
 Jaiph: Running hello.jh
 
-workflow default (who="Adam")
+def main (who="Adam")
   ▸ script greet (1="Adam")
   ✓ script greet (0s)
 
-✓ PASS workflow default (0.2s)
+✓ PASS def main (0.2s)
 
 Hello, Adam!
 ```
 
-The first line is the run banner. The `workflow default` row and the indented `▸` and `✓` rows are the live progress tree. A `▸` marks a step that has started, a `✓` marks a step that has finished, and `(0s)` is the elapsed time for that step. The root workflow row is static, and only nested steps print `▸` and `✓` lines. The blank line and `Hello, Adam!` after `PASS` are the workflow return value, which `jaiph run` prints on stdout after a successful run.
+The first line is the run banner. The `def main` row and the indented `▸` and `✓` rows are the live progress tree. A `▸` marks a step that has started, a `✓` marks a step that has finished, and `(0s)` is the elapsed time for that step. The root workflow row is static, and only nested steps print `▸` and `✓` lines. The blank line and `Hello, Adam!` after `PASS` are the workflow return value, which `jaiph run` prints on stdout after a successful run.
 
 ## 4. Inspect the run artifacts
 
@@ -101,10 +101,10 @@ ls -la .jaiph/runs/*/*/
 
 The layout you should see:
 
-- `000001-workflow__default.out` and `.err` hold the captured stdout and stderr for the entry workflow step.
+- `000001-def__main.out` and `.err` hold the captured stdout and stderr for the entry def.
 - `000002-script__greet.out` and `.err` hold the captured stdout and stderr for the `greet` script step.
-- `return_value.txt` holds the value `workflow default` returned, and it is written only on success.
-- `run_summary.jsonl` is the durable event timeline, with records such as `WORKFLOW_START`, `STEP_START`, `STEP_END`, and `WORKFLOW_END`.
+- `return_value.txt` holds the value `def main` returned, and it is written only on success.
+- `run_summary.jsonl` is the durable event timeline, with records such as `RUN_START`, `STEP_START`, `STEP_END`, and `RUN_END`.
 - `heartbeat` is a liveness file that holds an epoch-milliseconds timestamp, refreshed about every 10 seconds while the run is active.
 
 Read the captured script output and the return value:
@@ -123,7 +123,7 @@ Replace the script body with one that exits non-zero:
 ```jh
 script greet = `echo "Hello, ${1:-world}!" && exit 7`
 
-workflow default(who) {
+export def main(who) {
   return run greet(who)
 }
 ```

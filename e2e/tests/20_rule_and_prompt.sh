@@ -18,14 +18,14 @@ export PATH="${E2E_MOCK_BIN}:${PATH}"
 e2e::file "rule_pass.jh" <<'EOF'
 #!/usr/bin/env jaiph
 script check_passes_impl = `mock_ok`
-rule check_passes() {
+def check_passes() {
   run check_passes_impl()
 }
 script done_impl = ```
 echo "e2e-rule-pass-done"
 ```
-workflow default() {
-  ensure check_passes()
+export def main() {
+  run check_passes()
   const msg = run done_impl()
   return "${msg}"
 }
@@ -39,14 +39,14 @@ e2e::expect_stdout "${rule_pass_out}" <<'EOF'
 
 Jaiph: Running rule_pass.jh
 
-workflow default
-  ▸ rule check_passes
+export def main
+  ▸ def check_passes
   ·   ▸ script check_passes_impl
   ·   ✓ script check_passes_impl (<time>)
-  ✓ rule check_passes (<time>)
+  ✓ def check_passes(<time>)
   ▸ script done_impl
   ✓ script done_impl (<time>)
-✓ PASS workflow default (<time>)
+✓ PASS export def main (<time>)
 
 e2e-rule-pass-done
 EOF
@@ -61,11 +61,11 @@ script check_fails_impl = `mock_fail`
 script unreachable_impl = ```
 echo "unreachable"
 ```
-rule check_fails() {
+def check_fails() {
   run check_fails_impl()
 }
-workflow default() {
-  ensure check_fails()
+export def main() {
+  run check_fails()
   run unreachable_impl()
 }
 EOF
@@ -89,15 +89,15 @@ e2e::file "ensure_fail.jh" <<'EOF'
 #!/usr/bin/env jaiph
 script step_ok_impl = `mock_ok`
 script step_fail_impl = `mock_fail`
-rule step_ok() {
+def step_ok() {
   run step_ok_impl()
 }
-rule step_fail() {
+def step_fail() {
   run step_fail_impl()
 }
-workflow default() {
-  ensure step_ok()
-  ensure step_fail()
+export def main() {
+  run step_ok()
+  run step_fail()
 }
 EOF
 
@@ -113,12 +113,12 @@ rm -f "${ensure_fail_stderr}"
 
 # Then
 # assert_contains: FAIL output includes absolute run-dir paths and progress tree which vary per invocation
-e2e::assert_contains "${ensure_fail_err}" "e2e-rule-fail-message" "ensure failure emits expected stderr"
+e2e::assert_contains "${ensure_fail_err}" "e2e-rule-fail-message" "run failure emits expected stderr"
 
 # Given
 e2e::file "prompt_flow.jh" <<'EOF'
 #!/usr/bin/env jaiph
-workflow default() {
+export def main() {
   prompt "e2e-prompt-please-return-mock"
 }
 EOF
@@ -129,7 +129,7 @@ import "prompt_flow.jh" as p
 
 test "prompt returns mock response" {
   mock prompt "e2e-prompt-mock-response"
-  const response = run p.default()
+  const response = run p.main()
   expect_contain response "e2e-prompt-mock-response"
 }
 EOF
@@ -151,13 +151,13 @@ e2e::expect_stdout "${prompt_run_out}" <<'EOF'
 
 Jaiph: Running prompt_flow.jh
 
-workflow default
+export def main
   ▸ prompt cursor default "e2e-prompt-please-return..."
   ✓ prompt cursor default (<time>)
-✓ PASS workflow default (<time>)
+✓ PASS export def main (<time>)
 EOF
 prompt_flow_run_dir="$(e2e::run_dir "prompt_flow.jh")"
-prompt_flow_out="$(<"${prompt_flow_run_dir}000001-workflow__default.out")"
+prompt_flow_out="$(<"${prompt_flow_run_dir}000001-def__default.out")"
 # assert_contains: prompt transcript includes dynamic agent command output and timestamps
 e2e::assert_contains "${prompt_flow_out}" "Command:" "prompt_flow default .out contains prompt command transcript"
 # assert_contains: prompt transcript includes dynamic agent command output and timestamps
@@ -172,7 +172,7 @@ e2e::file "prompt_model.jh" <<'EOF'
 config {
   agent.model = "sonnet"
 }
-workflow default() {
+export def main() {
   prompt "e2e-prompt-with-model"
 }
 EOF
@@ -185,10 +185,10 @@ e2e::expect_stdout "${prompt_model_out}" <<'EOF'
 
 Jaiph: Running prompt_model.jh
 
-workflow default
+export def main
   ▸ prompt cursor sonnet "e2e-prompt-with-model"
   ✓ prompt cursor sonnet (<time>)
-✓ PASS workflow default (<time>)
+✓ PASS export def main (<time>)
 EOF
 
 # Prompt with variable references shows named params in tree (not positional args)
@@ -196,7 +196,7 @@ e2e::file "prompt_with_vars.jh" <<'EOF'
 #!/usr/bin/env jaiph
 const role = "engineer"
 const task = "Fix bugs"
-workflow default() {
+export def main() {
   prompt "${role} does ${task}"
 }
 EOF
@@ -207,13 +207,13 @@ e2e::expect_stdout "${prompt_vars_out}" <<'EOF'
 
 Jaiph: Running prompt_with_vars.jh
 
-workflow default
+export def main
   ▸ prompt cursor default "${role} does ${task}" (role="engineer", task="Fix bugs")
   ✓ prompt cursor default (<time>)
-✓ PASS workflow default (<time>)
+✓ PASS export def main (<time>)
 EOF
 prompt_vars_run_dir="$(e2e::run_dir "prompt_with_vars.jh")"
-prompt_vars_out_file="$(<"${prompt_vars_run_dir}000001-workflow__default.out")"
+prompt_vars_out_file="$(<"${prompt_vars_run_dir}000001-def__default.out")"
 # assert_contains: prompt transcript includes dynamic agent command headers and response body
 e2e::assert_contains "${prompt_vars_out_file}" "engineer does Fix bugs" "prompt_with_vars transcript includes rendered prompt text"
 
@@ -221,13 +221,13 @@ e2e::assert_contains "${prompt_vars_out_file}" "engineer does Fix bugs" "prompt_
 # (fixed: JS kernel seq-alloc.ts provides atomic allocation across branches).
 e2e::file "async_prompt_artifacts.jh" <<'EOF'
 #!/usr/bin/env jaiph
-workflow left() {
+def left() {
   prompt "async-left"
 }
-workflow right() {
+def right() {
   prompt "async-right"
 }
-workflow default() {
+export def main() {
   run async left()
   run async right()
 }
@@ -263,7 +263,7 @@ fi
 e2e::file "multiline_prompt.jh" <<'EOF'
 #!/usr/bin/env jaiph
 script done_impl = `echo done`
-workflow default() {
+export def main() {
   prompt """
     Line one and line two.
 """
@@ -277,22 +277,22 @@ e2e::expect_stdout "${multiline_out}" <<'EOF'
 
 Jaiph: Running multiline_prompt.jh
 
-workflow default
+export def main
   ▸ prompt cursor default "Line one and line two."
   ✓ prompt cursor default (<time>)
   ▸ script done_impl
   ✓ script done_impl (<time>)
-✓ PASS workflow default (<time>)
+✓ PASS export def main (<time>)
 EOF
 multiline_run_dir="$(e2e::run_dir "multiline_prompt.jh")"
-multiline_default_out="$(<"${multiline_run_dir}000001-workflow__default.out")"
+multiline_default_out="$(<"${multiline_run_dir}000001-def__default.out")"
 # assert_contains: prompt transcript includes dynamic agent command headers and response body
 e2e::assert_contains "${multiline_default_out}" "Line one and line two." "triple-quoted prompt transcript is captured in workflow .out"
 
 # Given: workflow with prompt but test does not mock it -> selected backend runs (cursor by default).
 e2e::file "prompt_unmatched.jh" <<'EOF'
 #!/usr/bin/env jaiph
-workflow default() {
+export def main() {
   const result = prompt "e2e-unmatched-prompt-never-mocked"
   return "${result}"
 }
@@ -303,7 +303,7 @@ e2e::file "prompt_unmatched.test.jh" <<'EOF'
 import "prompt_unmatched.jh" as p
 
 test "when no mock, backend runs" {
-  const response = run p.default()
+  const response = run p.main()
   expect_contain response "e2e-backend-no-mock-output"
 }
 EOF

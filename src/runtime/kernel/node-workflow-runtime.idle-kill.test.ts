@@ -53,7 +53,7 @@ async function runScriptStep(
     [
       `script ${scriptName} = \`echo unused\``,
       "",
-      "workflow default() {",
+      "export def main() {",
       `  run ${scriptName}()`,
       "}",
       "",
@@ -73,7 +73,7 @@ async function runScriptStep(
   for (const [k, v] of Object.entries(idleEnv)) process.env[k] = v;
 
   const runtime = new NodeWorkflowRuntime(graph, { env: process.env, cwd: root, suppressLiveEvents: true });
-  const status = await runtime.runDefault([]);
+  const status = await runtime.runMain([]);
   return { status, runDir: runtime.getRunDir() };
 }
 

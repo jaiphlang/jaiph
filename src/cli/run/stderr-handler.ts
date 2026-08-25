@@ -59,7 +59,7 @@ function handleLine(
     const eventId = resolveEventId(state, event.type, event.id, event.func);
 
     if (event.type === "STEP_START") {
-      const isRoot = event.kind === "workflow" && event.name === "default" && state.runtimeStack.length === 0;
+      const isRoot = event.kind === "def" && event.name === "main" && state.runtimeStack.length === 0;
       if (isRoot) state.rootStepId = eventId;
       const depth = Math.max(1, event.depth ?? state.runtimeStack.length);
       state.runtimeStack.push(eventId);
@@ -68,7 +68,7 @@ function handleLine(
     }
 
     // STEP_END
-    const isRoot = event.kind === "workflow" && event.name === "default" && eventId === state.rootStepId;
+    const isRoot = event.kind === "def" && event.name === "main" && eventId === state.rootStepId;
     emitter.emit("step_end", { event, eventId, isRoot });
     removeLastMatching(state.runtimeStack, eventId);
     return;
@@ -92,22 +92,22 @@ export function createStderrParser(emitter: RunEmitter): (line: string) => void 
 // ── Run state (shared output read by runWorkflow after exit) ──
 
 export type RunState = {
-  workflowRunId: string;
+  journalRunId: string;
   capturedStderr: string;
 };
 
 export function createRunState(): RunState {
-  return { workflowRunId: "", capturedStderr: "" };
+  return { journalRunId: "", capturedStderr: "" };
 }
 
 // ── Subscriber: state tracking ──
 
 export function registerStateSubscriber(emitter: RunEmitter, state: RunState): void {
   emitter.on("step_start", (data) => {
-    if (data.event.run_id && !state.workflowRunId) state.workflowRunId = data.event.run_id;
+    if (data.event.run_id && !state.journalRunId) state.journalRunId = data.event.run_id;
   });
   emitter.on("step_end", (data) => {
-    if (data.event.run_id && !state.workflowRunId) state.workflowRunId = data.event.run_id;
+    if (data.event.run_id && !state.journalRunId) state.journalRunId = data.event.run_id;
   });
   emitter.on("stderr_line", (data) => {
     state.capturedStderr += `${data.line}\n`;
@@ -181,7 +181,7 @@ function writeTTYLine(line: string, ctx: TTYContext, spacing: "single" | "double
   process.stdout.write(`${line}${suffix}`);
   if (ctx.isTTY && ctx.runningInterval !== undefined) {
     const elapsedSec = (Date.now() - ctx.startedAt) / 1000;
-    process.stdout.write(formatRunningBottomLine("default", elapsedSec));
+    process.stdout.write(formatRunningBottomLine("main", elapsedSec));
   }
 }
 

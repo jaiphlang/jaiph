@@ -32,11 +32,11 @@ The runtime scans for `${name}` substrings in the places where a handle's conten
 - **Passthrough.** The step does not look at the value. For example, the `const h = run async foo()` binding itself keeps the token in the variable until something reads it, and a bare `run async` with no capture variable still tracks the handle for the implicit join.
 - **Resolving reads.** The step needs the string. A resolving read is any of the following:
   - a `${h}` interpolation, such as `log "result: ${h}"`, a send right-hand side, a prompt body, or a shell one-liner;
-  - passing `h` as an argument to `run` or `ensure`, since bare-identifier args are rewritten as `${name}` before the call;
+  - passing `h` as an argument to `run`, since bare-identifier args are rewritten as `${name}` before the call;
   - using `h` as the subject of `if` or `match`;
   - a bare-identifier `const h2 = h1`, which the parser treats as `"${h1}"`.
 
-There is no `await` keyword, and there is no way to copy a handle without reading it. To keep work overlapping, read the handle late. Hold it in the original binding, and avoid `${…}`, bare-identifier arguments to `run` or `ensure`, and `if` or `match` subjects until you need the value. When a resolving read reaches a handle whose underlying `run` failed with a non-zero exit, the read itself fails. The error then propagates exactly like a failed synchronous `run`, and the reading step does not continue with an empty value. As a side effect of the failed resolve, the runtime empties the handle's binding in that scope.
+There is no `await` keyword, and there is no way to copy a handle without reading it. To keep work overlapping, read the handle late. Hold it in the original binding, and avoid `${…}`, bare-identifier arguments to `run`, and `if` or `match` subjects until you need the value. When a resolving read reaches a handle whose underlying `run` failed with a non-zero exit, the read itself fails. The error then propagates exactly like a failed synchronous `run`, and the reading step does not continue with an empty value. As a side effect of the failed resolve, the runtime empties the handle's binding in that scope.
 
 `for_lines` is the one exception. It reads the loop source as a plain variable value and does not pass it through handle resolution. If the source is still a handle token, the loop reads the token itself and iterates over the wrong text. Resolve the value first with `const text = "${h}"`, then iterate over `text`.
 
@@ -67,13 +67,12 @@ The trade-off is that overlapping a long-running async task with later steps tak
 
 ## Where async handles are allowed
 
-`run async` is a workflow-only construct on purpose:
+`run async` is allowed in any `def`:
 
-- **Rules reject statement-form `run async`.** The validator emits `E_VALIDATE` for `run async ref(…)` in a rule body. `run async` is defined for workflows only, because fan-out without an explicit join inside a rule body would break the read-only rule contract.
 - **Inline scripts reject it.** Inline `` run `body`(args) `` is shorthand for a one-off shell step, and running it with `run async` is not supported. Move the body into a named `script` and call `run async` on that script.
 - **A `run async` call must be a real reference with parentheses.** A bare name cannot be run with `run async`.
 
-The parser or the validator enforces all three restrictions at compile time, not at runtime.
+The parser or the validator enforces both restrictions at compile time, not at runtime.
 
 ## Async indices and the progress tree
 

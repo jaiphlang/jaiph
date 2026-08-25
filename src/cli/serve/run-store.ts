@@ -18,13 +18,13 @@ export const TAMPERED_RESULT_TEXT =
 export const PUBLIC_RUN_FILE = "run.json";
 
 /** Bump when the on-disk shape changes so an old file can be ignored rather than mis-parsed. */
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 
 /** On-disk shape of {@link PUBLIC_RUN_FILE}. A superset of the public run object. */
 interface PersistedRun {
   schema_version: number;
   run_id: string;
-  workflow: string;
+  def: string;
   status: RunStatus;
   started_at: string;
   ended_at: string | null;
@@ -32,7 +32,7 @@ interface PersistedRun {
   signal: string | null;
   result_text: string | null;
   run_dir: string | null;
-  /** Composite idempotency key (`principal\nworkflow\nkey`), when the create carried one. */
+  /** Composite idempotency key (`principal\ndef\nkey`), when the create carried one. */
   idempotency_key?: string;
   /** Authenticated principal (audit subject) that created the run; scopes idempotency + ownership. */
   principal?: string;
@@ -68,7 +68,7 @@ export function persistRunRecord(record: RunRecord): void {
   const persisted: PersistedRun = {
     schema_version: SCHEMA_VERSION,
     run_id: record.run_id,
-    workflow: record.workflow,
+    def: record.def,
     status: record.status,
     started_at: record.started_at,
     ended_at: record.ended_at,
@@ -161,7 +161,7 @@ function reloadRun(runDir: string): RunRecord | null {
   if (parsed.schema_version !== SCHEMA_VERSION || typeof parsed.run_id !== "string") return null;
   return {
     run_id: parsed.run_id,
-    workflow: parsed.workflow,
+    def: parsed.def,
     status: parsed.status,
     started_at: parsed.started_at,
     ended_at: parsed.ended_at,
@@ -181,9 +181,9 @@ function reloadRun(runDir: string): RunRecord | null {
 
 /**
  * Reconcile a run that has a journal but no persisted record: it was `running`
- * when the process died. Read its identity from the `WORKFLOW_START` first line
+ * when the process died. Read its identity from the `RUN_START` first line
  * and mark it `interrupted`. The reconciled record is persisted so the terminal
- * state is durable. Returns null when the journal has no usable WORKFLOW_START.
+ * state is durable. Returns null when the journal has no usable RUN_START.
  */
 function reconcileRun(runDir: string, nowIso: string): RunRecord | null {
   let firstLine: string;
@@ -192,16 +192,16 @@ function reconcileRun(runDir: string, nowIso: string): RunRecord | null {
   } catch {
     return null;
   }
-  let start: { type?: string; run_id?: string; workflow?: string; ts?: string };
+  let start: { type?: string; run_id?: string; def?: string; ts?: string };
   try {
     start = JSON.parse(firstLine) as typeof start;
   } catch {
     return null;
   }
-  if (start.type !== "WORKFLOW_START" || typeof start.run_id !== "string") return null;
+  if (start.type !== "RUN_START" || typeof start.run_id !== "string") return null;
   const record: RunRecord = {
     run_id: start.run_id,
-    workflow: typeof start.workflow === "string" ? start.workflow : "",
+    def: typeof start.def === "string" ? start.def : "",
     status: "interrupted",
     started_at: typeof start.ts === "string" ? start.ts : nowIso,
     ended_at: nowIso,

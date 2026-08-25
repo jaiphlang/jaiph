@@ -18,7 +18,7 @@ e2e::section "inline run capture in log"
 e2e::file "ic_run_log.jh" <<'EOF'
 script greet = `echo "hello"`
 
-workflow default() {
+export def main() {
   log "got: ${run greet()}"
 }
 EOF
@@ -35,18 +35,18 @@ e2e::assert_contains "${summary_content}" '"type":"LOG"' "summary has LOG event"
 e2e::assert_contains "${summary_content}" "got: hello" "inline run capture resolved in log"
 
 # --------------------------------------------------------------------------
-# Section 2: ${ensure ref} inline capture in log
+# Section 2: ${run ref} inline capture in log
 # --------------------------------------------------------------------------
 
-e2e::section "inline ensure capture in log"
+e2e::section "inline run capture in log"
 
 e2e::file "ic_ensure_log.jh" <<'EOF'
-rule check() {
+def check() {
   return "ok"
 }
 
-workflow default() {
-  log "status: ${ensure check()}"
+export def main() {
+  log "status: ${run check()}"
 }
 EOF
 
@@ -56,7 +56,7 @@ JAIPH_RUNS_DIR="${TEST_DIR}/runs_ic2" jaiph run "${TEST_DIR}/ic_ensure_log.jh" >
 run_dir2="$(e2e::run_dir_at "${TEST_DIR}/runs_ic2" "ic_ensure_log.jh")"
 summary2="$(<"${run_dir2}run_summary.jsonl")"
 # assert_contains: run_summary.jsonl is variable-length with timestamps
-e2e::assert_contains "${summary2}" "status: ok" "inline ensure capture resolved in log"
+e2e::assert_contains "${summary2}" "status: ok" "inline run capture resolved in log"
 
 # --------------------------------------------------------------------------
 # Section 3: ${run ref} with args
@@ -67,7 +67,7 @@ e2e::section "inline run capture with args"
 e2e::file "ic_run_args.jh" <<'EOF'
 script greet = `echo "hi $1"`
 
-workflow default() {
+export def main() {
   log "said: ${run greet(world)}"
 }
 EOF
@@ -89,11 +89,11 @@ e2e::section "inline capture in return value"
 e2e::file "ic_return.jh" <<'EOF'
 script greet = `echo "hello"`
 
-workflow helper() {
+def helper() {
   return "${run greet()}"
 }
 
-workflow default() {
+export def main() {
   const r = run helper()
   log "returned: ${r}"
 }
@@ -119,7 +119,7 @@ echo "err" >&2
 exit 1
 ```
 
-workflow default() {
+export def main() {
   log "got: ${run bad()}"
   log "should not reach"
 }
@@ -140,7 +140,7 @@ e2e::section "mixed inline captures and variable interpolation"
 e2e::file "ic_mixed.jh" <<'EOF'
 script greet = `echo "hello"`
 
-workflow default() {
+export def main() {
   const name = "world"
   log "${run greet()} ${name}"
 }
@@ -163,7 +163,7 @@ e2e::section "compile rejects nested inline captures"
 e2e::file "ic_nested.jh" <<'EOF'
 script foo = `echo "a"`
 script bar = `echo "b"`
-workflow default() {
+export def main() {
   log "got: ${run foo(${run bar()})}"
 }
 EOF
@@ -180,7 +180,7 @@ e2e::pass "compile rejects nested inline captures"
 e2e::section "compile rejects unknown inline capture ref"
 
 e2e::file "ic_unknown.jh" <<'EOF'
-workflow default() {
+export def main() {
   log "got: ${run nonexistent()}"
 }
 EOF
@@ -202,19 +202,19 @@ rm -f "${TEST_DIR}/ic_nested.jh" "${TEST_DIR}/ic_unknown.jh"
 e2e::file "ic_lib.jh" <<'EOF'
 script greet = `echo "hello"`
 
-rule check_ok() {
+def check_ok() {
   return "ok"
 }
 
-workflow run_capture_log() {
+def run_capture_log() {
   log "got: ${run greet()}"
 }
 
-workflow ensure_capture_log() {
-  log "status: ${ensure check_ok()}"
+def ensure_capture_log() {
+  log "status: ${run check_ok()}"
 }
 
-workflow capture_return() {
+def capture_return() {
   return "${run greet()}"
 }
 EOF
@@ -227,7 +227,7 @@ test "inline run capture in log" {
   expect_contain out "got: hello"
 }
 
-test "inline ensure capture in log" {
+test "inline run capture in log" {
   const out = run ic.ensure_capture_log()
   expect_contain out "status: ok"
 }

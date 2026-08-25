@@ -23,12 +23,12 @@ script setup_env = ```bash
 mkdir -p out
 ```
 
-rule check_deps(path) {
+def check_deps(path) {
   run setup_env()
   return "${path}"
 }
 
-export workflow default(task) {
+export def main(task) {
   const status = run setup_env()
 
   if status == "ok" {
@@ -43,7 +43,7 @@ export workflow default(task) {
     log item
   }
 
-  ensure check_deps("package.json") catch (failure) {
+  run check_deps("package.json") catch (failure) {
     fail "deps missing"
   }
 

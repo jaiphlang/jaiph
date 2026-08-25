@@ -2,7 +2,6 @@ import { matchSendOperator } from "../parser";
 import type { Expr } from "../types";
 import {
   BARE_SEND_REF_MSG,
-  RULE_REF_EXPECT,
   RUN_TARGET_REF_EXPECT,
   validateRef,
 } from "./validate-ref-resolution";
@@ -33,7 +32,7 @@ import {
 import type { ExprLabel, ValidatorCtx } from "./validate-step-ctx";
 
 // Expression-level validators: the `validateExpr` dispatcher and its per-kind
-// bodies (literal, prompt, callable/`run`/`ensure`, and workflow-only inline
+// bodies (literal, prompt, callable/`run`, and workflow-only inline
 // shell). Split out of `validate-step.ts` so the step dispatcher stays small.
 
 export function validateExpr(
@@ -46,7 +45,7 @@ export function validateExpr(
     validateLiteralExpr(expr, stepLoc, label, ctx);
     return;
   }
-  if (expr.kind === "call" || expr.kind === "ensure_call") {
+  if (expr.kind === "call") {
     validateCallable(expr, ctx);
     return;
   }
@@ -178,15 +177,6 @@ function validatePromptExpr(
   label: ExprLabel,
   ctx: ValidatorCtx,
 ): void {
-  if (ctx.scope.kind === "rule") {
-    ctx.diag.error(
-      ctx.ast.filePath,
-      stepLoc.line,
-      stepLoc.col,
-      "E_VALIDATE",
-      "const ... = prompt is not allowed in rules",
-    );
-  }
   if (label !== "const" && label !== "exec") {
     ctx.diag.error(
       ctx.ast.filePath,
@@ -229,20 +219,18 @@ function validatePromptExpr(
 
 /**
  * The five checks every call site repeats: shell-redirection, nested-unmanaged
- * call inside literals, ref resolution, arity, and var-arg resolution. The
- * scope picks the ref expectation for `run` (workflow vs rule semantics).
+ * call inside literals, ref resolution, arity, and var-arg resolution.
  */
 function validateCallable(expr: Expr, ctx: ValidatorCtx): void {
   if (expr.kind === "call") {
     const loc = expr.callee.loc;
     validateNoShellRedirection(ctx.diag, ctx.ast.filePath, loc, "run", expr.args);
     validateNestedManagedCallArgs(ctx.diag, ctx.ast.filePath, loc, expr.args);
-    const isRuleScope = ctx.scope.kind === "rule";
     if (
       !expr.callee.value.includes(".") &&
       ctx.knownVars.has(expr.callee.value) &&
       !ctx.localScripts.has(expr.callee.value) &&
-      !(!isRuleScope && ctx.localWorkflows.has(expr.callee.value))
+      !ctx.localDefs.has(expr.callee.value)
     ) {
       ctx.diag.error(
         ctx.ast.filePath,
@@ -256,16 +244,7 @@ function validateCallable(expr: Expr, ctx: ValidatorCtx): void {
       mode: "expect",
       expect: ctx.scope.runRefExpect,
     });
-    validateArity(ctx.diag, ctx.ast.filePath, loc, expr.callee.value, expr.args, "workflow", ctx.ast, ctx.refCtx);
-    validateArgVarRefs(ctx.diag, ctx.ast.filePath, loc, expr.args, ctx.knownVars, ctx.recoverBindings, ctx);
-    return;
-  }
-  if (expr.kind === "ensure_call") {
-    const loc = expr.callee.loc;
-    validateNoShellRedirection(ctx.diag, ctx.ast.filePath, loc, "ensure", expr.args);
-    validateNestedManagedCallArgs(ctx.diag, ctx.ast.filePath, loc, expr.args);
-    validateRef(expr.callee, ctx.ast, ctx.refCtx, { mode: "expect", expect: RULE_REF_EXPECT });
-    validateArity(ctx.diag, ctx.ast.filePath, loc, expr.callee.value, expr.args, "rule", ctx.ast, ctx.refCtx);
+    validateArity(ctx.diag, ctx.ast.filePath, loc, expr.callee.value, expr.args, ctx.ast, ctx.refCtx);
     validateArgVarRefs(ctx.diag, ctx.ast.filePath, loc, expr.args, ctx.knownVars, ctx.recoverBindings, ctx);
   }
 }
@@ -313,7 +292,7 @@ export function validateWorkflowShellExec(
   const t = body.command.trim();
   if (/^(?:[A-Za-z_][A-Za-z0-9_]*)(?:\.[A-Za-z_][A-Za-z0-9_]*)*$/.test(t)) {
     if (!t.includes(".")) {
-      if (ctx.localScripts.has(t) || ctx.localWorkflows.has(t)) {
+      if (ctx.localScripts.has(t) || ctx.localDefs.has(t)) {
         ctx.diag.error(
           ctx.ast.filePath,
           body.loc.line,

@@ -12,7 +12,7 @@ function loopWorkflow(root: string): string {
   writeFileSync(
     jh,
     [
-      "workflow default(items) {",
+      "export def main(items) {",
       "  for line in items {",
       '    log "item ${line}"',
       "  }",
@@ -51,7 +51,7 @@ async function runAndReadJournal(
   const prevSummaryEnv = process.env.JAIPH_RUN_SUMMARY_FILE;
   process.env.JAIPH_RUN_SUMMARY_FILE = runtime.getSummaryFile();
   try {
-    const status = await runtime.runDefault([EIGHT_LINES]);
+    const status = await runtime.runMain([EIGHT_LINES]);
     const summary = readFileSync(runtime.getSummaryFile(), "utf8");
     return { status, summary, aborted: runtime.isAborted() };
   } finally {

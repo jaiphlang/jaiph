@@ -15,7 +15,7 @@ TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 e2e::section "const with string value"
 
 e2e::file "const_string.jh" <<'EOF'
-workflow default() {
+export def main() {
   const msg = "hello-world"
   log "${msg}"
 }
@@ -27,10 +27,10 @@ e2e::expect_stdout "${out}" <<'EXPECTED'
 
 Jaiph: Running const_string.jh
 
-workflow default
+export def main
   ℹ hello-world
 
-✓ PASS workflow default (<time>)
+✓ PASS export def main (<time>)
 EXPECTED
 
 # ---------------------------------------------------------------------------
@@ -39,7 +39,7 @@ e2e::section "const with run capture"
 e2e::file "const_run.jh" <<'EOF'
 script greet = `echo "hi from fn"`
 
-workflow default() {
+export def main() {
   const val = run greet()
   log "${val}"
 }
@@ -51,24 +51,24 @@ e2e::expect_stdout "${out}" <<'EXPECTED'
 
 Jaiph: Running const_run.jh
 
-workflow default
+export def main
   ▸ script greet
   ✓ script greet (<time>)
   ℹ hi from fn
 
-✓ PASS workflow default (<time>)
+✓ PASS export def main (<time>)
 EXPECTED
 
 # ---------------------------------------------------------------------------
-e2e::section "const with ensure capture"
+e2e::section "const with run capture"
 
 e2e::file "const_ensure.jh" <<'EOF'
-rule always_pass() {
+def always_pass() {
   return "rule-val"
 }
 
-workflow default() {
-  const r = ensure always_pass()
+export def main() {
+  const r = run always_pass()
   log "${r}"
 }
 EOF
@@ -79,19 +79,19 @@ e2e::expect_stdout "${out}" <<'EXPECTED'
 
 Jaiph: Running const_ensure.jh
 
-workflow default
-  ▸ rule always_pass
-  ✓ rule always_pass (<time>)
+export def main
+  ▸ def always_pass
+  ✓ def always_pass(<time>)
   ℹ rule-val
 
-✓ PASS workflow default (<time>)
+✓ PASS export def main (<time>)
 EXPECTED
 
 # ---------------------------------------------------------------------------
 e2e::section "const rejects command substitution"
 
 e2e::file "const_bad_subst.jh" <<'EOF'
-workflow default() {
+export def main() {
   const x = "$(echo bad)"
   log "${x}"
 }
@@ -114,11 +114,11 @@ e2e::section "wait step joins async run"
 e2e::file "wait_step.jh" <<'EOF'
 script write_marker = `echo "waited" > waited.txt`
 
-workflow bg_job() {
+def bg_job() {
   run write_marker()
 }
 
-workflow default() {
+export def main() {
   run async bg_job()
   log "wait-done"
 }
@@ -130,30 +130,30 @@ e2e::expect_stdout "${out}" <<'EXPECTED'
 
 Jaiph: Running wait_step.jh
 
-workflow default
- ₁▸ workflow bg_job
+export def main
+ ₁▸ def bg_job
  ₁·   ▸ script write_marker
   ℹ wait-done
  ₁·   ✓ script write_marker (<time>)
- ₁✓ workflow bg_job (<time>)
+ ₁✓ def bg_job(<time>)
 
-✓ PASS workflow default (<time>)
+✓ PASS export def main (<time>)
 EXPECTED
 e2e::assert_file_exists "${TEST_DIR}/waited.txt" "async job wrote marker file"
 
 # ---------------------------------------------------------------------------
-# ensure ... catch
+# run ... catch
 # ---------------------------------------------------------------------------
-e2e::section "ensure with catch on failure"
+e2e::section "run with catch on failure"
 
 e2e::file "ensure_recover.jh" <<'EOF'
 script always_fail_impl = `false`
-rule always_fail() {
+def always_fail() {
   run always_fail_impl()
 }
 
-workflow default() {
-  ensure always_fail() catch (err) {
+export def main() {
+  run always_fail() catch (err) {
     log "recovered"
   }
   log "continued"
@@ -166,15 +166,15 @@ e2e::expect_stdout "${out}" <<'EXPECTED'
 
 Jaiph: Running ensure_recover.jh
 
-workflow default
-  ▸ rule always_fail
+export def main
+  ▸ def always_fail
   ·   ▸ script always_fail_impl
   ·   ✗ script always_fail_impl (<time>)
-  ✗ rule always_fail (<time>)
+  ✗ def always_fail(<time>)
   ℹ recovered
   ℹ continued
 
-✓ PASS workflow default (<time>)
+✓ PASS export def main (<time>)
 EXPECTED
 
 # ---------------------------------------------------------------------------
@@ -183,7 +183,7 @@ e2e::section "run with catch on failure"
 e2e::file "run_recover.jh" <<'EOF'
 script returns_false = `return 1`
 
-workflow default() {
+export def main() {
   run returns_false() catch (err) {
     log "else-branch-ok"
   }
@@ -196,12 +196,12 @@ e2e::expect_stdout "${out}" <<'EXPECTED'
 
 Jaiph: Running run_recover.jh
 
-workflow default
+export def main
   ▸ script returns_false
   ✗ script returns_false (<time>)
   ℹ else-branch-ok
 
-✓ PASS workflow default (<time>)
+✓ PASS export def main (<time>)
 EXPECTED
 
 # ---------------------------------------------------------------------------
@@ -212,14 +212,14 @@ e2e::section "structured rule with run catch and fail"
 e2e::file "structured_rule.jh" <<'EOF'
 script check_ok = `return 0`
 
-rule require_name() {
+def require_name() {
   run check_ok() catch (err) {
     fail "name is required"
   }
 }
 
-workflow default() {
-  ensure require_name()
+export def main() {
+  run require_name()
   log "passed"
 }
 EOF
@@ -230,14 +230,14 @@ e2e::expect_stdout "${out}" <<'EXPECTED'
 
 Jaiph: Running structured_rule.jh
 
-workflow default
-  ▸ rule require_name
+export def main
+  ▸ def require_name
   ·   ▸ script check_ok
   ·   ✓ script check_ok (<time>)
-  ✓ rule require_name (<time>)
+  ✓ def require_name(<time>)
   ℹ passed
 
-✓ PASS workflow default (<time>)
+✓ PASS export def main (<time>)
 EXPECTED
 
 # ---------------------------------------------------------------------------
@@ -246,14 +246,14 @@ e2e::section "structured rule fails correctly"
 e2e::file "structured_rule_fail.jh" <<'EOF'
 script check_fail = `return 1`
 
-rule require_name() {
+def require_name() {
   run check_fail() catch (err) {
     fail "name is required"
   }
 }
 
-workflow default() {
-  ensure require_name()
+export def main() {
+  run require_name()
 }
 EOF
 
@@ -264,23 +264,23 @@ set -e
 
 [[ ${code} -ne 0 ]] || e2e::fail "structured rule should have failed"
 # Detailed failure excerpts suppress the generic summary line (resolveFailureDetails).
-e2e::assert_contains "${out}" "FAIL workflow default" "structured rule failure footer"
+e2e::assert_contains "${out}" "FAIL export def main" "structured rule failure footer"
 e2e::assert_contains "${out}" "name is required" "fail() output surfaces under failed step"
 
 # ---------------------------------------------------------------------------
 e2e::section "run targeting workflow inside rule is rejected"
 
 e2e::file "run_wf_in_rule.jh" <<'EOF'
-workflow helper() {
+def helper() {
   log "nope"
 }
 
-rule bad() {
+def bad() {
   run helper()
 }
 
-workflow default() {
-  ensure bad()
+export def main() {
+  run bad()
 }
 EOF
 
@@ -301,7 +301,7 @@ e2e::section "module-level const"
 e2e::file "module_const.jh" <<'EOF'
 const greeting = "module-const-works"
 
-workflow default() {
+export def main() {
   log "${greeting}"
 }
 EOF
@@ -312,8 +312,8 @@ e2e::expect_stdout "${out}" <<'EXPECTED'
 
 Jaiph: Running module_const.jh
 
-workflow default
+export def main
   ℹ module-const-works
 
-✓ PASS workflow default (<time>)
+✓ PASS export def main (<time>)
 EXPECTED

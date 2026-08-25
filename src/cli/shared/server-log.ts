@@ -46,7 +46,7 @@ export interface MirrorContext {
 
 /**
  * Operator-log wiring for one workflow call: the {@link ServerLog}. Injected
- * by the command layer into a `WorkflowCallContext` so `callWorkflow` (the
+ * by the command layer into a `DefCallContext` so `callDef` (the
  * shared choke point for both `jaiph mcp` and `jaiph serve`) emits per-call
  * banners through one path.
  */
@@ -127,7 +127,7 @@ export function createServerLog(opts: {
 /** Fields for the per-call start banner line. */
 export interface CallStartFields {
   /** Workflow symbol or entry basename. */
-  workflow: string;
+  def: string;
   runId: string;
   /** Present only when the run dir is already known (rarely at start). */
   rundir?: string;
@@ -142,7 +142,7 @@ export interface CallStartFields {
  * `run_id` and `rundir` are grep-friendly `key=value` tails.
  */
 export function formatCallStartLine(f: CallStartFields): string {
-  const parts = [`Running ${f.workflow}`, `run_id=${f.runId}`];
+  const parts = [`Running ${f.def}`, `run_id=${f.runId}`];
   if (f.rundir) parts.push(`rundir=${f.rundir}`);
   if (f.principal) parts.push(`principal=${f.principal}`);
   if (f.correlationId) parts.push(`correlation=${f.correlationId}`);
@@ -151,7 +151,7 @@ export function formatCallStartLine(f: CallStartFields): string {
 
 /** Fields for the per-call end banner line. */
 export interface CallEndFields {
-  workflow: string;
+  def: string;
   /** Terminal disposition of the call. */
   status: "ok" | "failed" | "cancelled";
   exit: number;
@@ -168,7 +168,7 @@ export interface CallEndFields {
  */
 export function formatCallEndLine(f: CallEndFields): string {
   const parts = [
-    `Finished ${f.workflow}`,
+    `Finished ${f.def}`,
     `status=${f.status}`,
     `exit=${f.exit}`,
     `elapsed_ms=${f.elapsedMs}`,

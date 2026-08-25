@@ -25,7 +25,7 @@ config {
   trusted_envs = "TR_TOKEN"
 }
 script show_impl = `echo "TR_TOKEN=[${TR_TOKEN:-<unset>}]"`
-workflow default() {
+export def main() {
   const t = run show_impl()
   return "${t}"
 }
@@ -38,10 +38,10 @@ e2e::expect_stdout "${host_out}" <<'EOF'
 
 Jaiph: Running trusted_show.jh
 
-workflow default
+export def main
   ▸ script show_impl
   ✓ script show_impl (<time>)
-✓ PASS workflow default (<time>)
+✓ PASS export def main (<time>)
 
 TR_TOKEN=[host-secret]
 EOF
@@ -53,10 +53,10 @@ e2e::expect_stdout "${precedence_out}" <<'EOF'
 
 Jaiph: Running trusted_show.jh
 
-workflow default
+export def main
   ▸ script show_impl
   ✓ script show_impl (<time>)
-✓ PASS workflow default (<time>)
+✓ PASS export def main (<time>)
 
 TR_TOKEN=[cli-wins]
 EOF
@@ -66,11 +66,11 @@ e2e::section "host mode — undeclared sub-workflow does not inherit the caller'
 e2e::file "trusted_sub.jh" <<'EOF'
 script main_show = `echo "MAIN=[${TR_TOKEN:-<unset>}]"`
 script sub_show = `echo "SUB=[${TR_TOKEN:-<unset>}]"`
-workflow sub() {
+def sub() {
   const s = run sub_show()
   return "${s}"
 }
-workflow default() {
+export def main() {
   config {
     trusted_envs = "TR_TOKEN"
   }
@@ -85,14 +85,14 @@ e2e::expect_stdout "${sub_out}" <<'EOF'
 
 Jaiph: Running trusted_sub.jh
 
-workflow default
+export def main
   ▸ script main_show
   ✓ script main_show (<time>)
-  ▸ workflow sub
+  ▸ def sub
   ·   ▸ script sub_show
   ·   ✓ script sub_show (<time>)
-  ✓ workflow sub (<time>)
-✓ PASS workflow default (<time>)
+  ✓ def sub(<time>)
+✓ PASS export def main (<time>)
 
 MAIN=[host-secret] SUB=[<unset>]
 EOF
@@ -104,7 +104,7 @@ config {
   trusted_envs = "TR_TOKEN"
 }
 script lib_show = `echo "LIB=[${TR_TOKEN:-<unset>}]"`
-workflow grab() {
+def grab() {
   const g = run lib_show()
   return "${g}"
 }
@@ -112,7 +112,7 @@ EOF
 
 e2e::file "trusted_entry.jh" <<'EOF'
 import "trusted_lib.jh" as lib
-workflow default() {
+export def main() {
   const g = run lib.grab()
   return "${g}"
 }
@@ -123,12 +123,12 @@ e2e::expect_stdout "${import_out}" <<'EOF'
 
 Jaiph: Running trusted_entry.jh
 
-workflow default
-  ▸ workflow grab
+export def main
+  ▸ def grab
   ·   ▸ script lib_show
   ·   ✓ script lib_show (<time>)
-  ✓ workflow grab (<time>)
-✓ PASS workflow default (<time>)
+  ✓ def grab(<time>)
+✓ PASS export def main (<time>)
 
 LIB=[<unset>]
 EOF
@@ -155,7 +155,7 @@ e2e::file "trusted_reserved.jh" <<'EOF'
 config {
   trusted_envs = "JAIPH_WORKSPACE"
 }
-workflow default() {
+export def main() {
   log "never runs"
 }
 EOF

@@ -17,7 +17,7 @@ TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 # A workflow that returns whatever GREETING the workflow process sees.
 e2e::file "env_show.jh" <<'EOF'
 script show_impl = `echo "$GREETING"`
-workflow default() {
+export def main() {
   const g = run show_impl()
   return "${g}"
 }
@@ -32,10 +32,10 @@ e2e::expect_stdout "${host_out}" <<'EOF'
 
 Jaiph: Running env_show.jh
 
-workflow default
+export def main
   ▸ script show_impl
   ✓ script show_impl (<time>)
-✓ PASS workflow default (<time>)
+✓ PASS export def main (<time>)
 
 hi
 EOF
@@ -47,10 +47,10 @@ e2e::expect_stdout "${bare_out}" <<'EOF'
 
 Jaiph: Running env_show.jh
 
-workflow default
+export def main
   ▸ script show_impl
   ✓ script show_impl (<time>)
-✓ PASS workflow default (<time>)
+✓ PASS export def main (<time>)
 
 from-host
 EOF

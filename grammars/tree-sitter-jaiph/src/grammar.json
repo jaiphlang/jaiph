@@ -71,11 +71,7 @@
         },
         {
           "type": "STRING",
-          "value": "rule"
-        },
-        {
-          "type": "STRING",
-          "value": "workflow"
+          "value": "def"
         },
         {
           "type": "STRING",
@@ -88,10 +84,6 @@
         {
           "type": "STRING",
           "value": "run"
-        },
-        {
-          "type": "STRING",
-          "value": "ensure"
         },
         {
           "type": "STRING",

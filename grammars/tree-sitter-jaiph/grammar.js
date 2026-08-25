@@ -37,9 +37,9 @@ module.exports = grammar({
         $.qualified_identifier,
         // declaration keywords
         "import", "export", "as", "config", "channel", "script",
-        "rule", "workflow", "test",
+        "def", "test",
         // command keywords
-        "const", "run", "ensure", "prompt", "log", "logerr", "logwarn",
+        "const", "run", "prompt", "log", "logerr", "logwarn",
         "fail", "return", "send", "recover", "catch",
         // control keywords
         "if", "else", "for", "in", "match", "async", "returns", "not",

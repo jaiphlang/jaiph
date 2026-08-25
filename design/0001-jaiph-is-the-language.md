@@ -5,7 +5,7 @@
 
 ## Decision
 
-Jaiph is a small workflow language and orchestrator: `rule`, `script`, `prompt`, `workflow`, compile, run, test, format, durable artifacts.
+Jaiph is a small workflow language and orchestrator: `def`, `script`, `prompt`, compile, run, test, format, durable artifacts.
 
 Jaiph is not a sandbox product. It does not own a container runtime, a kernel policy engine, or a toolchain image.
 
@@ -27,7 +27,7 @@ These are orchestration, not kernel:
 
 - `prompt` subprocess env is fail-closed. Injected secrets (`--env`, `trusted_envs`) reach trusted `run` steps only.
 - Run journal redaction.
-- Compiler: `rule` purity, `W_PROMPT_IN_SHELL`, a `.jh` file cannot disable host secret policy by itself.
+- Compiler: `W_PROMPT_IN_SHELL`, a `.jh` file cannot disable host secret policy by itself.
 
 ## What is out
 

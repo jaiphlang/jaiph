@@ -1,4 +1,4 @@
-import type { EnvDeclDef, WorkflowMetadata } from "./types";
+import type { EnvDeclDef, DefMetadata } from "./types";
 import { configValueHasInterpolation } from "./parser";
 
 /**
@@ -52,7 +52,7 @@ export type JaiphConfig = {
 };
 
 /** Convert in-file workflow metadata to JaiphConfig shape for runtime env resolution. */
-export function metadataToConfig(metadata: WorkflowMetadata | undefined): JaiphConfig {
+export function metadataToConfig(metadata: DefMetadata | undefined): JaiphConfig {
   if (!metadata) {
     return {};
   }
@@ -68,12 +68,12 @@ export function metadataToConfig(metadata: WorkflowMetadata | undefined): JaiphC
 
 /** Resolve module-level `config { }` string interpolation from module `const` values and env. */
 export function resolveModuleMetadata(
-  mod: { metadata?: WorkflowMetadata; envDecls?: EnvDeclDef[] },
+  mod: { metadata?: DefMetadata; envDecls?: EnvDeclDef[] },
   env?: NodeJS.ProcessEnv,
-): WorkflowMetadata | undefined {
+): DefMetadata | undefined {
   if (!mod.metadata) return undefined;
   const vars = buildConstVars(mod.envDecls, undefined, env);
-  return interpolateWorkflowMetadata(mod.metadata, vars, env);
+  return interpolateDefMetadata(mod.metadata, vars, env);
 }
 
 function interpolateStringField(
@@ -99,12 +99,12 @@ export function buildConstVars(
 }
 
 /** Resolve `${…}` references in workflow/module metadata string fields. */
-export function interpolateWorkflowMetadata(
-  metadata: WorkflowMetadata,
+export function interpolateDefMetadata(
+  metadata: DefMetadata,
   vars: Map<string, string>,
   env?: NodeJS.ProcessEnv,
-): WorkflowMetadata {
-  const out: WorkflowMetadata = {};
+): DefMetadata {
+  const out: DefMetadata = {};
   if (metadata.agent) {
     out.agent = {};
     if (metadata.agent.model !== undefined) {

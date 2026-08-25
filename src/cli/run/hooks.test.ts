@@ -37,12 +37,12 @@ test("parseHookConfig returns null for non-object", () => {
 
 test("parseHookConfig extracts only supported events with string arrays", () => {
   const cfg = parseHookConfig(
-    '{"workflow_start":["a","b"],"workflow_end":["c"],"step_start":[],"step_end":["d"],"unknown":["e"]}',
+    '{"run_start":["a","b"],"run_end":["c"],"step_start":[],"step_end":["d"],"unknown":["e"]}',
     "test",
   );
   assert.ok(cfg);
-  assert.deepEqual(cfg!.workflow_start, ["a", "b"]);
-  assert.deepEqual(cfg!.workflow_end, ["c"]);
+  assert.deepEqual(cfg!.run_start, ["a", "b"]);
+  assert.deepEqual(cfg!.run_end, ["c"]);
   assert.deepEqual(cfg!.step_start, undefined);
   assert.deepEqual(cfg!.step_end, ["d"]);
   assert.equal((cfg as Record<string, unknown>)["unknown"], undefined);
@@ -50,19 +50,19 @@ test("parseHookConfig extracts only supported events with string arrays", () => 
 
 test("parseHookConfig ignores non-string array elements", () => {
   const cfg = parseHookConfig(
-    '{"workflow_start":["ok",1,null,true,""]}',
+    '{"run_start":["ok",1,null,true,""]}',
     "test",
   );
   assert.ok(cfg);
-  assert.deepEqual(cfg!.workflow_start, ["ok"]);
+  assert.deepEqual(cfg!.run_start, ["ok"]);
 });
 
 test("loadMergedHooks returns empty when no config files exist", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-hooks-none-"));
   try {
     const merged = loadMergedHooks(root, true);
-    assert.deepEqual(merged.workflow_start, []);
-    assert.deepEqual(merged.workflow_end, []);
+    assert.deepEqual(merged.run_start, []);
+    assert.deepEqual(merged.run_end, []);
     assert.deepEqual(merged.step_start, []);
     assert.deepEqual(merged.step_end, []);
   } finally {
@@ -79,13 +79,13 @@ test("loadMergedHooks loads project-local hooks.json when the workspace is trust
     writeFileSync(
       hooksPath,
       JSON.stringify({
-        workflow_start: ["echo start"],
-        workflow_end: ["echo end"],
+        run_start: ["echo start"],
+        run_end: ["echo end"],
       }),
     );
     const merged = loadMergedHooks(root, true);
-    assert.deepEqual(merged.workflow_start, ["echo start"]);
-    assert.deepEqual(merged.workflow_end, ["echo end"]);
+    assert.deepEqual(merged.run_start, ["echo start"]);
+    assert.deepEqual(merged.run_end, ["echo end"]);
     assert.deepEqual(merged.step_start, []);
     assert.deepEqual(merged.step_end, []);
   } finally {
@@ -100,12 +100,12 @@ test("loadMergedHooks ignores project-local hooks.json when the workspace is unt
     mkdirSync(jaiphDir, { recursive: true });
     writeFileSync(
       join(jaiphDir, "hooks.json"),
-      JSON.stringify({ workflow_start: ["touch /tmp/should-not-run"] }),
+      JSON.stringify({ run_start: ["touch /tmp/should-not-run"] }),
     );
     const merged = loadMergedHooks(root, false);
     // Absent the trust decision the project file's commands must not be loaded.
-    assert.deepEqual(merged.workflow_start, []);
-    assert.deepEqual(merged.workflow_end, []);
+    assert.deepEqual(merged.run_start, []);
+    assert.deepEqual(merged.run_end, []);
     assert.deepEqual(merged.step_start, []);
     assert.deepEqual(merged.step_end, []);
   } finally {
@@ -124,7 +124,7 @@ test("loadMergedHooks keeps global ~/.jaiph/hooks.json even when the workspace i
     mkdirSync(globalDir, { recursive: true });
     writeFileSync(
       join(globalDir, "hooks.json"),
-      JSON.stringify({ workflow_start: ["echo global"] }),
+      JSON.stringify({ run_start: ["echo global"] }),
     );
     // An untrusted project file present alongside must not run, but must also
     // not suppress the global command for the same event.
@@ -132,12 +132,12 @@ test("loadMergedHooks keeps global ~/.jaiph/hooks.json even when the workspace i
     mkdirSync(projectDir, { recursive: true });
     writeFileSync(
       join(projectDir, "hooks.json"),
-      JSON.stringify({ workflow_start: ["echo project"] }),
+      JSON.stringify({ run_start: ["echo project"] }),
     );
     process.env.HOME = fakeHome;
     const merged = loadMergedHooks(root, false);
-    assert.deepEqual(merged.workflow_start, ["echo global"]);
-    assert.deepEqual(merged.workflow_end, []);
+    assert.deepEqual(merged.run_start, ["echo global"]);
+    assert.deepEqual(merged.run_end, []);
   } finally {
     if (realHome === undefined) delete process.env.HOME;
     else process.env.HOME = realHome;
@@ -156,14 +156,14 @@ test("isProjectHooksTrusted honours only the documented opt-in values", () => {
 
 test("runHooksForEvent with empty config does not throw", () => {
   const empty: MergedHookConfig = {
-    workflow_start: [],
-    workflow_end: [],
+    run_start: [],
+    run_end: [],
     step_start: [],
     step_end: [],
   };
-  runHooksForEvent(empty, "workflow_start", {
-    event: "workflow_start",
-    workflow_id: "",
+  runHooksForEvent(empty, "run_start", {
+    event: "run_start",
+    run_id: "",
     timestamp: new Date().toISOString(),
     run_path: "/x.jh",
     workspace: "/ws",
@@ -172,14 +172,14 @@ test("runHooksForEvent with empty config does not throw", () => {
 
 test("runHooksForEvent with failing command does not throw", () => {
   const config: MergedHookConfig = {
-    workflow_start: ["exit 1"],
-    workflow_end: [],
+    run_start: ["exit 1"],
+    run_end: [],
     step_start: [],
     step_end: [],
   };
-  runHooksForEvent(config, "workflow_start", {
-    event: "workflow_start",
-    workflow_id: "",
+  runHooksForEvent(config, "run_start", {
+    event: "run_start",
+    run_id: "",
     timestamp: new Date().toISOString(),
     run_path: "/x.jh",
     workspace: "/ws",
@@ -191,24 +191,24 @@ test("runHooksForEvent passes payload as JSON on stdin", async () => {
   const payloadFile = join(root, "payload.json");
   try {
     const config: MergedHookConfig = {
-      workflow_start: [`cat > "${payloadFile.replace(/"/g, '\\"')}"`],
-      workflow_end: [],
+      run_start: [`cat > "${payloadFile.replace(/"/g, '\\"')}"`],
+      run_end: [],
       step_start: [],
       step_end: [],
     };
     const payload = {
-      event: "workflow_start" as const,
-      workflow_id: "run-123",
+      event: "run_start" as const,
+      run_id: "run-123",
       timestamp: "2025-03-11T12:00:00.000Z",
       run_path: "/repo/ci.jh",
       workspace: "/repo",
     };
-    runHooksForEvent(config, "workflow_start", payload);
+    runHooksForEvent(config, "run_start", payload);
     await new Promise((r) => setTimeout(r, 150));
     const content = readFileSync(payloadFile, "utf8");
     const parsed = JSON.parse(content) as Record<string, unknown>;
-    assert.equal(parsed.event, "workflow_start");
-    assert.equal(parsed.workflow_id, "run-123");
+    assert.equal(parsed.event, "run_start");
+    assert.equal(parsed.run_id, "run-123");
     assert.equal(parsed.run_path, "/repo/ci.jh");
     assert.equal(parsed.workspace, "/repo");
     assert.equal(parsed.timestamp, "2025-03-11T12:00:00.000Z");

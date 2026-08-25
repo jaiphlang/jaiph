@@ -33,13 +33,13 @@ import "workflow_greeting.jh" as w
 
 test "runs happy path and prints PASS" {
   mock prompt "e2e-greeting-mock"
-  const response = run w.default()
+  const response = run w.main()
   expect_contain response "e2e-greeting-mock"
   expect_contain response "done"
 }
 ```
 
-A test file can have any top-level construct (`import`, `config`, `workflow`, …), but the CLI only executes `test "..." { ... }` blocks. `#` line comments and blank lines are allowed between steps inside a test block.
+A test file can have any top-level construct (`import`, `config`, `def`, …), but the CLI only executes `test "..." { ... }` blocks. `#` line comments and blank lines are allowed between steps inside a test block.
 
 ## 2. Queue mock prompt responses
 
@@ -67,16 +67,16 @@ mock prompt {
 
 Arms are checked from top to bottom, and the first match wins. A `/regex/` arm matches when its pattern is found anywhere in the prompt text. A `"string"` arm matches only when the whole prompt text equals it exactly. Without a `_` wildcard arm, an unmatched prompt fails the test.
 
-## 3. (Optional) Stub workflows, rules, or scripts
+## 3. (Optional) Stub defs or scripts
 
-Replace a workflow, rule, or script body for this test case. Parentheses are required:
+Replace a def or script body for this test case. Parentheses are required:
 
 ```jh
-mock workflow w.greet() {
+mock def w.greet() {
   return "stubbed greeting"
 }
 
-mock rule w.validate() {
+mock def w.validate() {
   return "stubbed validation"
 }
 
@@ -85,15 +85,15 @@ mock script w.helper() {
 }
 ```
 
-`mock workflow` and `mock rule` use Jaiph steps in the body. `mock script` uses raw shell, the same as a real `script`.
+`mock def` uses Jaiph steps in the body. `mock script` uses raw shell, the same as a real `script`.
 
 ## 4. Run the workflow and capture output
 
 ```jh
-const response = run w.default()
-const response = run w.default("my input")            # with one argument
-const response = run w.default("first", "second")     # comma-separated arguments
-const response = run w.default() allow_failure        # accept non-zero exit
+const response = run w.main()
+const response = run w.main("my input")            # with one argument
+const response = run w.main("first", "second")     # comma-separated arguments
+const response = run w.main() allow_failure        # accept non-zero exit
 ```
 
 `run` captures the workflow's return value when the exit code is 0 and the return value is not empty. When the exit code is non-zero, it captures the runtime error string instead. In any other case, it captures the workflow's `*.out` files, read in sorted order and joined together.

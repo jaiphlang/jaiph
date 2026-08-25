@@ -8,7 +8,7 @@
 # Usage:
 #   import "jaiphlang/artifacts" as artifacts
 #
-#   workflow default() {
+#   export def main() {
 #     # Single file:
 #     run artifacts.save("./build/output.bin")
 #
@@ -60,6 +60,6 @@ script save_script = ```
 # Each file is copied under the same relative name as in the list
 # (leading `./` stripped; absolute paths use basename only).
 # Returns the absolute destination paths, one per line, in the same order.
-export workflow save(paths) {
+export def save(paths) {
   return run save_script(paths)
 }

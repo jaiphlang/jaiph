@@ -35,12 +35,12 @@ script check_capacity = ```
   (( percent <= 90 ))
 ```
 
-workflow probe_and_log() {
+def probe_and_log() {
   const status = run check_capacity()
   log status
 }
 
-export workflow ensure_usage() {
+export def ensure_usage() {
   config {
     # At ten-minute intervals this permits roughly 7 days of capacity checks.
     run.recover_limit = 1000

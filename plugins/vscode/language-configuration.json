@@ -21,7 +21,7 @@
   ],
   "folding": {
     "markers": {
-      "start": "^\\s*(config|rule|workflow|script|test|if|else|match|mock|for)\\b.*\\{\\s*$|^\\s*(?:(?:export\\s+)?script\\s+[A-Za-z_][A-Za-z0-9_]*\\s*=\\s*|(?:(?:const\\s+)?[A-Za-z_][A-Za-z0-9_]*\\s*=\\s*)?run\\s+)```\\s*[A-Za-z0-9_]*\\s*$|(?:prompt|log|logerr|fail|return|const\\s+[A-Za-z_][A-Za-z0-9_]*\\s*=|[A-Za-z_][A-Za-z0-9_]*\\s*<-)\\s*\"\"\"\\s*$",
+      "start": "^\\s*(config|def|script|test|if|else|match|mock|for)\\b.*\\{\\s*$|^\\s*(?:(?:export\\s+)?script\\s+[A-Za-z_][A-Za-z0-9_]*\\s*=\\s*|(?:(?:const\\s+)?[A-Za-z_][A-Za-z0-9_]*\\s*=\\s*)?run\\s+)```\\s*[A-Za-z0-9_]*\\s*$|(?:prompt|log|logerr|fail|return|const\\s+[A-Za-z_][A-Za-z0-9_]*\\s*=|[A-Za-z_][A-Za-z0-9_]*\\s*<-)\\s*\"\"\"\\s*$",
       "end": "^\\s*\\}\\s*$|^\\s*```\\s*(?:\\(.*\\))?\\s*$|^\\s*\"\"\"\\s*$"
     }
   },

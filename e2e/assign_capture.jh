@@ -1,17 +1,17 @@
 #!/usr/bin/env jaiph
-# E2E fixture: assignment capture for ensure and shell.
+# E2E fixture: assignment capture for run and shell.
 script echo_line_impl = `echo "this goes to logs only"`
 
 script shell_capture = `echo shell-capture`
 
 script format_output = `printf '%s\n' "response=$1" "out=$2"`
 
-rule echo_line() {
+def echo_line() {
   run echo_line_impl()
   return "captured-value"
 }
-workflow default() {
-  const response = ensure echo_line()
+export def main() {
+  const response = run echo_line()
   const out = run shell_capture()
   run format_output(response, out)
 }

@@ -1,11 +1,10 @@
 import type {
   jaiphModule,
-  WorkflowDef,
-  RuleDef,
+  Def,
   ScriptDef,
   ChannelDef,
   EnvDeclDef,
-  WorkflowMetadata,
+  DefMetadata,
   TopLevelEmitOrder,
 } from "../types";
 import { createTrivia, type Trivia } from "../parser";
@@ -34,9 +33,8 @@ function legacyTopLevelOrder(mod: jaiphModule): TopLevelEmitOrder[] {
   if (mod.envDecls) {
     for (let i = 0; i < mod.envDecls.length; i++) o.push({ kind: "env", index: i });
   }
-  for (let i = 0; i < mod.rules.length; i++) o.push({ kind: "rule", index: i });
   for (let i = 0; i < mod.scripts.length; i++) o.push({ kind: "script", index: i });
-  for (let i = 0; i < mod.workflows.length; i++) o.push({ kind: "workflow", index: i });
+  for (let i = 0; i < mod.defs.length; i++) o.push({ kind: "def", index: i });
   if (mod.tests) {
     for (let i = 0; i < mod.tests.length; i++) o.push({ kind: "test", index: i });
   }
@@ -114,22 +112,18 @@ export function emitModule(
       sections.push(envLines.join("\n"));
       continue;
     }
-    if (item.kind === "rule") {
-      sections.push(emitRule(mod.rules[item.index], pad, exportedNames.has(mod.rules[item.index].name), trivia));
-      continue;
-    }
     if (item.kind === "script") {
       sections.push(
         emitScript(mod.scripts[item.index], pad, exportedNames.has(mod.scripts[item.index].name), trivia),
       );
       continue;
     }
-    if (item.kind === "workflow") {
+    if (item.kind === "def") {
       sections.push(
-        emitWorkflow(
-          mod.workflows[item.index],
+        emitDef(
+          mod.defs[item.index],
           pad,
-          exportedNames.has(mod.workflows[item.index].name),
+          exportedNames.has(mod.defs[item.index].name),
           trivia,
         ),
       );
@@ -172,7 +166,7 @@ const DEFAULT_CONFIG_KEY_ORDER = [
   "trusted_envs",
 ];
 
-function emitConfigKeyLines(meta: WorkflowMetadata, key: string, pad: string): string[] {
+function emitConfigKeyLines(meta: DefMetadata, key: string, pad: string): string[] {
   switch (key) {
     case "agent.model":
       if (meta.agent?.model === undefined) return [];
@@ -218,7 +212,7 @@ function emitConfigKeyLines(meta: WorkflowMetadata, key: string, pad: string): s
   }
 }
 
-function emitConfig(meta: WorkflowMetadata, pad: string, trivia: Trivia): string {
+function emitConfig(meta: DefMetadata, pad: string, trivia: Trivia): string {
   const lines: string[] = ["config {"];
   const seq = trivia.getNode(meta)?.configBodySequence;
   if (seq?.length) {
@@ -268,17 +262,6 @@ function emitEnvDecl(env: EnvDeclDef): string[] {
   return [`const ${env.name} = ${JSON.stringify(env.value)}`];
 }
 
-function emitRule(rule: RuleDef, pad: string, exported: boolean, trivia: Trivia): string {
-  const lines: string[] = [];
-  lines.push(...emitComments(rule.comments));
-  const paramStr = `(${rule.params.join(", ")})`;
-  const prefix = exported ? "export " : "";
-  lines.push(`${prefix}rule ${rule.name}${paramStr} {`);
-  lines.push(...emitSteps(rule.steps, pad, pad, trivia));
-  lines.push("}");
-  return lines.join("\n");
-}
-
 function emitScript(script: ScriptDef, pad: string, exported: boolean, trivia: Trivia): string {
   const lines: string[] = [];
   lines.push(...emitComments(script.comments));
@@ -295,13 +278,13 @@ function emitScript(script: ScriptDef, pad: string, exported: boolean, trivia: T
   return lines.join("\n");
 }
 
-function emitWorkflow(wf: WorkflowDef, pad: string, exported: boolean, trivia: Trivia): string {
+function emitDef(wf: Def, pad: string, exported: boolean, trivia: Trivia): string {
   const lines: string[] = [];
   lines.push(...emitComments(wf.comments));
 
   const paramStr = `(${wf.params.join(", ")})`;
   const prefix = exported ? "export " : "";
-  lines.push(`${prefix}workflow ${wf.name}${paramStr} {`);
+  lines.push(`${prefix}def ${wf.name}${paramStr} {`);
 
   if (wf.metadata) {
     const configLines = emitConfig(wf.metadata, pad, trivia);

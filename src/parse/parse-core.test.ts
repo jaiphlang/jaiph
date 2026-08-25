@@ -185,8 +185,8 @@ test("isBareIdentifier: rejects keyword 'run'", () => {
   assert.equal(isBareIdentifier("run"), false);
 });
 
-test("isBareIdentifier: rejects keyword 'ensure'", () => {
-  assert.equal(isBareIdentifier("ensure"), false);
+test("isBareIdentifier: accepts former keyword 'ensure'", () => {
+  assert.equal(isBareIdentifier("ensure"), true);
 });
 
 test("isBareIdentifier: rejects keyword 'const'", () => {

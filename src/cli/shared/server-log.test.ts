@@ -91,15 +91,15 @@ test("mirror() carries the async subscript indent even when colors are off", () 
 // === per-call banner formatters ===
 
 test("formatCallStartLine matches Running…run_id= shape", () => {
-  const line = formatCallStartLine({ workflow: "engineer", runId: "abc123" });
+  const line = formatCallStartLine({ def: "engineer", runId: "abc123" });
   assert.equal(line, "Running engineer run_id=abc123");
 });
 
 test("formatCallStartLine appends rundir / principal / correlation only when present", () => {
-  const bare = formatCallStartLine({ workflow: "w", runId: "r" });
+  const bare = formatCallStartLine({ def: "w", runId: "r" });
   assert.equal(bare, "Running w run_id=r", "no optional tails when unset");
   const full = formatCallStartLine({
-    workflow: "w",
+    def: "w",
     runId: "r",
     rundir: "/runs/x",
     principal: "alice",
@@ -109,9 +109,9 @@ test("formatCallStartLine appends rundir / principal / correlation only when pre
 });
 
 test("formatCallEndLine carries status, exit, elapsed_ms, and rundir when known", () => {
-  const line = formatCallEndLine({ workflow: "w", status: "ok", exit: 0, elapsedMs: 1234, rundir: "/runs/x" });
+  const line = formatCallEndLine({ def: "w", status: "ok", exit: 0, elapsedMs: 1234, rundir: "/runs/x" });
   assert.equal(line, "Finished w status=ok exit=0 elapsed_ms=1234 rundir=/runs/x");
-  const failed = formatCallEndLine({ workflow: "w", status: "failed", exit: 1, elapsedMs: 7 });
+  const failed = formatCallEndLine({ def: "w", status: "failed", exit: 1, elapsedMs: 7 });
   assert.equal(failed, "Finished w status=failed exit=1 elapsed_ms=7", "rundir omitted when unknown");
 });
 

@@ -15,7 +15,7 @@ const INIT_USAGE =
 const BOOTSTRAP_TEMPLATE = `#!/usr/bin/env jaiph
 
 # Bootstraps Jaiph workflows for this repository.
-workflow default() {
+export def main() {
   const bootstrap_summary = prompt """
     You are bootstrapping Jaiph for this repository.
     First, read the Jaiph agent bootstrap guide at:

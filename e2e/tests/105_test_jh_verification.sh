@@ -11,7 +11,7 @@ TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 
 # ==========================================================================
 # Section 1: Passing test with import, mock prompt, mock script, mock
-#            workflow, mock rule, and assertions — exact output verification
+#            workflow, mock def, and assertions — exact output verification
 # ==========================================================================
 
 e2e::section "jaiph test: representative passing .test.jh"
@@ -21,18 +21,18 @@ e2e::file "lib.jh" <<'EOF'
 #!/usr/bin/env jaiph
 script validate_impl = `[ -n "$1" ] && echo "valid"`
 
-rule validate(input) {
+def validate(input) {
   run validate_impl(input)
 }
 
 script deploy_impl = `echo "deployed"`
 
-workflow deploy() {
+def deploy() {
   run deploy_impl()
 }
 
-workflow default(input) {
-  ensure validate(input)
+export def main(input) {
+  run validate(input)
   const response = prompt "summarize deployment"
   run deploy()
 }
@@ -44,16 +44,16 @@ import "lib.jh" as lib
 test "full orchestration with all mock types" {
   mock prompt "deployment summary"
 
-  mock rule lib.validate(input) {
+  mock def lib.validate(input) {
     return "mock-valid"
   }
 
-  mock workflow lib.deploy() {
+  mock def lib.deploy() {
     log "mock-deployed"
     return "mock-deployed"
   }
 
-  const out = run lib.default("prod")
+  const out = run lib.main("prod")
   expect_contain out "deployment summary"
   expect_contain out "mock-deployed"
 }
@@ -65,7 +65,7 @@ test "mock script replaces script body" {
     echo "stubbed-validate"
   }
 
-  const out = run lib.default("prod")
+  const out = run lib.main("prod")
   expect_contain out "stubbed-validate"
 }
 EOF
@@ -93,7 +93,7 @@ e2e::file "fail_lib.jh" <<'EOF'
 #!/usr/bin/env jaiph
 script greet_impl = `echo "hello world"`
 
-workflow default() {
+export def main() {
   run greet_impl()
 }
 EOF
@@ -102,12 +102,12 @@ e2e::file "fail_lib.test.jh" <<'EOF'
 import "fail_lib.jh" as f
 
 test "passes when output matches" {
-  const out = run f.default()
+  const out = run f.main()
   expect_contain out "hello world"
 }
 
 test "fails on wrong expectation" {
-  const out = run f.default()
+  const out = run f.main()
   expect_equal out "goodbye world"
 }
 EOF
@@ -150,7 +150,7 @@ e2e::file "old_syntax.jh" <<'EOF'
 #!/usr/bin/env jaiph
 script helper = `echo "real"`
 
-workflow default() {
+export def main() {
   run helper()
 }
 EOF
@@ -163,7 +163,7 @@ test "uses deprecated mock function" {
     echo "stubbed"
   }
 
-  const out = run app.default()
+  const out = run app.main()
   expect_contain out "stubbed"
 }
 EOF

@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
-import type { Expr, WorkflowStepDef } from "./types";
+import type { Expr, StepDef } from "./types";
 import * as TypesModule from "./types";
 
 // Tests run from dist/src/, so source files live two levels up under src/.
@@ -54,11 +54,11 @@ test("AC1: no AST placeholder strings linger in src/", () => {
 });
 
 /**
- * AC2 — `WorkflowStepDef` has at most 8 variants. The exhaustive switch
+ * AC2 — `StepDef` has at most 8 variants. The exhaustive switch
  * below fails to compile if a new variant is silently added (the `never`
  * fallback widens), and the runtime tuple lookup pins the count to 8.
  */
-type StepType = WorkflowStepDef["type"];
+type StepType = StepDef["type"];
 type AllStepTypes = readonly ["exec", "const", "return", "send", "say", "if", "for_lines", "trivia"];
 type _StepTypesCoverAllVariants = StepType extends AllStepTypes[number]
   ? AllStepTypes[number] extends StepType
@@ -67,7 +67,7 @@ type _StepTypesCoverAllVariants = StepType extends AllStepTypes[number]
   : never;
 const _stepTypesAtMost8: _StepTypesCoverAllVariants = true;
 
-function _exhaustiveStepSwitch(s: WorkflowStepDef): void {
+function _exhaustiveStepSwitch(s: StepDef): void {
   switch (s.type) {
     case "exec":
     case "const":
@@ -85,7 +85,7 @@ function _exhaustiveStepSwitch(s: WorkflowStepDef): void {
   }
 }
 
-test("AC2: WorkflowStepDef has exactly 8 variants", () => {
+test("AC2: StepDef has exactly 8 variants", () => {
   const declaredTypes: AllStepTypes = ["exec", "const", "return", "send", "say", "if", "for_lines", "trivia"];
   assert.equal(declaredTypes.length, 8);
   assert.equal(_stepTypesAtMost8, true);
@@ -95,14 +95,12 @@ test("AC2: WorkflowStepDef has exactly 8 variants", () => {
 });
 
 /**
- * AC2 (companion) — `Expr` is exhaustive too. The Refactor 3 design carries
- * 7 base kinds from the task spec; this implementation adds `shell` and
- * `bare_ref` for send-RHS shapes that the validator either rejects or
- * specializes. If a kind is added or removed without updating both the
- * declared list and the exhaustive switch, this fails to compile.
+ * AC2 (companion) — `Expr` is exhaustive too. If a kind is added or removed
+ * without updating both the declared list and the exhaustive switch, this
+ * fails to compile.
  */
 type ExprKind = Expr["kind"];
-type AllExprKinds = readonly ["literal", "call", "ensure_call", "inline_script", "prompt", "match", "shell", "bare_ref"];
+type AllExprKinds = readonly ["literal", "call", "inline_script", "prompt", "match", "shell", "bare_ref"];
 type _ExprKindsExhaustive = ExprKind extends AllExprKinds[number]
   ? AllExprKinds[number] extends ExprKind
     ? true
@@ -114,7 +112,6 @@ function _exhaustiveExprSwitch(e: Expr): void {
   switch (e.kind) {
     case "literal":
     case "call":
-    case "ensure_call":
     case "inline_script":
     case "prompt":
     case "match":
@@ -128,9 +125,9 @@ function _exhaustiveExprSwitch(e: Expr): void {
   }
 }
 
-test("AC2: Expr has exactly 8 kinds (literal/call/ensure_call/inline_script/prompt/match/shell/bare_ref)", () => {
-  const declaredKinds: AllExprKinds = ["literal", "call", "ensure_call", "inline_script", "prompt", "match", "shell", "bare_ref"];
-  assert.equal(declaredKinds.length, 8);
+test("AC2: Expr has exactly 7 kinds (literal/call/inline_script/prompt/match/shell/bare_ref)", () => {
+  const declaredKinds: AllExprKinds = ["literal", "call", "inline_script", "prompt", "match", "shell", "bare_ref"];
+  assert.equal(declaredKinds.length, 7);
   assert.equal(_exprExhaustive, true);
   void _exhaustiveExprSwitch;
 });

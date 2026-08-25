@@ -46,13 +46,13 @@ test("validateJaiphStringContent rejects a malformed inline run reference", () =
   );
 });
 
-test("extractInlineCaptures pulls run and ensure refs", () => {
-  const result = extractInlineCaptures("prefix ${run greet(world)} mid ${ensure check()} suffix");
+test("extractInlineCaptures pulls run and run refs", () => {
+  const result = extractInlineCaptures("prefix ${run greet(world)} mid ${run check()} suffix");
   assert.deepEqual(
     result.map((c) => ({ kind: c.kind, ref: c.ref })),
     [
       { kind: "run", ref: "greet" },
-      { kind: "ensure", ref: "check" },
+      { kind: "run", ref: "check" },
     ],
   );
 });

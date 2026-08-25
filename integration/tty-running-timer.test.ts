@@ -81,7 +81,7 @@ test("ACCEPTANCE: TTY running timer updates and ends with PASS", () => {
       "sleep 3",
       'echo "tty-output-ok"',
       "```",
-      "workflow default() {",
+      "export def main() {",
       "  run sleep_impl()",
       "}",
     ].join("\n"),
@@ -94,12 +94,12 @@ test("ACCEPTANCE: TTY running timer updates and ends with PASS", () => {
     const normalized = stripAnsi(run.output).replace(/\r/g, "\n");
     assert.match(
       normalized,
-      /RUNNING workflow default \([0-9]+(\.[0-9]+)?s\)/,
+      /RUNNING def main \([0-9]+(\.[0-9]+)?s\)/,
       "TTY output should contain running timer line",
     );
 
     const times = Array.from(
-      normalized.matchAll(/RUNNING workflow default \(([0-9]+(?:\.[0-9]+)?)s\)/g),
+      normalized.matchAll(/RUNNING def main \(([0-9]+(?:\.[0-9]+)?)s\)/g),
       (match) => Number(match[1]),
     );
     const distinctTimes: number[] = [];
@@ -121,12 +121,12 @@ test("ACCEPTANCE: TTY running timer updates and ends with PASS", () => {
 
     assert.match(
       normalized,
-      /PASS workflow default/,
+      /PASS def main/,
       "TTY output should end with PASS summary",
     );
     assert.doesNotMatch(
       normalized,
-      /RUNNING workflow default[^\n]*PASS workflow default/,
+      /RUNNING def main[^\n]*PASS def main/,
       "RUNNING line must not remain on the PASS summary line",
     );
   } finally {

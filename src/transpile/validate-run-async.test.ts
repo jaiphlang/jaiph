@@ -1,32 +1,28 @@
 import test from "node:test";
-import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { buildScripts } from "../transpiler";
 
-test("E_VALIDATE: run async is rejected in rules", () => {
+test("E_VALIDATE: run async is accepted in any def", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-val-async-rule-"));
   try {
     writeFileSync(
       join(root, "m.jh"),
       [
-        "workflow helper() {",
+        "def helper() {",
         '  log "hi"',
         "}",
-        "rule check() {",
+        "def check() {",
         "  run async helper()",
         "}",
-        "workflow default() {",
-        "  ensure check()",
+        "export def main() {",
+        "  run check()",
         "}",
         "",
       ].join("\n"),
     );
-    assert.throws(
-      () => buildScripts(join(root, "m.jh"), join(root, "out")),
-      /run async is not allowed in rules/,
-    );
+    buildScripts(join(root, "m.jh"), join(root, "out"));
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -38,10 +34,10 @@ test("E_VALIDATE: run async is accepted in workflows", () => {
     writeFileSync(
       join(root, "m.jh"),
       [
-        "workflow helper() {",
+        "def helper() {",
         '  log "hi"',
         "}",
-        "workflow default() {",
+        "export def main() {",
         "  run async helper()",
         "}",
         "",

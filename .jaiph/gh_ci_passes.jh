@@ -27,7 +27,7 @@ script assert_nonempty_file_or_fail = ```
   }
 ```
 
-workflow ensure_gh_ci_passes(branch, workflow_name) {
+def ensure_gh_ci_passes(branch, workflow_name) {
   const ci_log_dir = ".jaiph/tmp"
   const ci_log_file = "${ci_log_dir}/gh_ci_passes.last.log"
   run common.mkdir_p_simple(ci_log_dir)
@@ -36,7 +36,7 @@ workflow ensure_gh_ci_passes(branch, workflow_name) {
   # push instead of re-checking a stale SHA.
   const commit = ""
 
-  ensure gh.token_set()
+  run gh.token_set()
 
   run gh.check_ci(branch, commit, workflow_name, ci_log_file) recover (failure) {
     run assert_nonempty_file_or_fail(ci_log_file)
@@ -64,7 +64,7 @@ workflow ensure_gh_ci_passes(branch, workflow_name) {
         - Do NOT invoke Jaiph orchestration workflows from .jaiph/.
       </task>
     """
-    ensure git.in_git_repo()
+    run git.in_git_repo()
     prompt """
       Commit the CI fix locally so Jaiph can push it. Do NOT push — Jaiph
       performs the push in a trusted step after this.
@@ -81,7 +81,7 @@ workflow ensure_gh_ci_passes(branch, workflow_name) {
   run common.rm_file_simple(ci_log_file)
 }
 
-workflow pull_latest_logs(branch, workflow_name) {
+def pull_latest_logs(branch, workflow_name) {
   const ci_log_dir = ".jaiph/tmp"
   const ci_log_file = "${ci_log_dir}/gh_ci.latest.log"
   run common.mkdir_p_simple(ci_log_dir)
@@ -90,7 +90,7 @@ workflow pull_latest_logs(branch, workflow_name) {
   return ci_log_file
 }
 
-workflow default(branch, workflow_name) {
+export def main(branch, workflow_name) {
   const wf = match workflow_name {
     "" => "CI"
     _ => workflow_name

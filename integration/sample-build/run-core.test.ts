@@ -17,7 +17,7 @@ test("jaiph run compiles and executes workflow with args", () => {
         "script print_arg = \`\`\`",
         "printf '%s\\n' \"$1\"",
         "\`\`\`",
-        "workflow default(name) {",
+        "export def main(name) {",
         "  run print_arg(name)",
         "}",
         "",
@@ -32,8 +32,8 @@ test("jaiph run compiles and executes workflow with args", () => {
     });
 
     assert.equal(runResult.status, 0, runResult.stderr);
-    assert.match(runResult.stdout, /workflow default/);
-    assert.match(runResult.stdout, /✓ PASS workflow default \((?:\d+(?:\.\d+)?s|\d+m \d+s)\)/);
+    assert.match(runResult.stdout, /def main/);
+    assert.match(runResult.stdout, /✓ PASS def main \((?:\d+(?:\.\d+)?s|\d+m \d+s)\)/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -52,7 +52,7 @@ test("jaiph run resolves nested managed call arguments", () => {
         "script jaiph_tmp_dir = ```",
         'printf "%s\\n" "$JAIPH_WORKSPACE/.jaiph/tmp"',
         "```",
-        "workflow default() {",
+        "export def main() {",
         "  run mkdir_p_simple(run jaiph_tmp_dir())",
         "}",
         "",
@@ -85,7 +85,7 @@ test("executable .jh invokes jaiph run semantics", () => {
         "script print_exec_arg = \`\`\`",
         "printf 'exec-arg:%s\\n' \"$1\"",
         "\`\`\`",
-        "workflow default(name) {",
+        "export def main(name) {",
         "  run print_exec_arg(name)",
         "}",
         "",
@@ -101,7 +101,7 @@ test("executable .jh invokes jaiph run semantics", () => {
     });
 
     assert.equal(runResult.status, 0, runResult.stderr);
-    assert.match(runResult.stdout, /✓ PASS workflow default/);
+    assert.match(runResult.stdout, /✓ PASS def main/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -117,7 +117,7 @@ test("jaiph run enables xtrace when JAIPH_DEBUG=true", () => {
         "script print_debug_arg = \`\`\`",
         "printf 'debug-run:%s\\n' \"$1\"",
         "\`\`\`",
-        "workflow default(name) {",
+        "export def main(name) {",
         "  run print_debug_arg(name)",
         "}",
         "",
@@ -138,7 +138,7 @@ test("jaiph run enables xtrace when JAIPH_DEBUG=true", () => {
   }
 });
 
-test("jaiph run fails when workflow default is missing", () => {
+test("jaiph run fails when export def main is missing", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-run-missing-default-"));
   try {
     const filePath = join(root, "pr.jh");
@@ -148,7 +148,7 @@ test("jaiph run fails when workflow default is missing", () => {
         "script print_fallback = \`\`\`",
         "printf 'fallback:%s\\n' \"$1\"",
         "\`\`\`",
-        "workflow main(name) {",
+        "def main(name) {",
         "  run print_fallback(name)",
         "}",
         "",
@@ -163,7 +163,7 @@ test("jaiph run fails when workflow default is missing", () => {
     });
 
     assert.equal(runResult.status, 1);
-    assert.match(runResult.stderr, /requires workflow 'default'/);
+    assert.match(runResult.stderr, /jaiph run requires `export def main`/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -178,7 +178,7 @@ test("jaiph run fails fast on command errors inside workflow", () => {
       [
         "script always_fail = `false`",
         "script should_not_run = `echo after-false`",
-        "workflow default() {",
+        "export def main() {",
         "  run always_fail()",
         "  run should_not_run()",
         "}",
@@ -195,7 +195,7 @@ test("jaiph run fails fast on command errors inside workflow", () => {
 
     assert.equal(runResult.status, 1);
     assert.doesNotMatch(runResult.stdout, /after-false/);
-    assert.match(runResult.stderr, /✗ FAIL workflow default \((?:\d+(?:\.\d+)?s|\d+m \d+s)\)/);
+    assert.match(runResult.stderr, /✗ FAIL def main \((?:\d+(?:\.\d+)?s|\d+m \d+s)\)/);
     assert.match(runResult.stderr, /Logs: /);
     assert.match(runResult.stderr, /Summary: /);
   } finally {
@@ -210,7 +210,7 @@ test("jaiph run fails when runtime emits non-xtrace stderr", () => {
     writeFileSync(
       filePath,
       [
-        "workflow default() {",
+        "export def main() {",
         '  log "noop"',
         "}",
         "",
@@ -245,12 +245,12 @@ test("jaiph run fails when required arg is missing and rule handles it", () => {
         "  exit 1",
         "fi",
         "\`\`\`",
-        "rule name_provided(name) {",
+        "def name_provided(name) {",
         "  run require_name(name)",
         "}",
         "",
-        "workflow default(name) {",
-        "  ensure name_provided(name)",
+        "export def main(name) {",
+        "  run name_provided(name)",
         '  prompt "Say hello to ${name}"',
         "}",
         "",
@@ -265,7 +265,7 @@ test("jaiph run fails when required arg is missing and rule handles it", () => {
     });
 
     assert.equal(runResult.status, 1);
-    assert.match(runResult.stderr, /✗ FAIL workflow default \((?:\d+(?:\.\d+)?s|\d+m \d+s)\)/);
+    assert.match(runResult.stderr, /✗ FAIL def main \((?:\d+(?:\.\d+)?s|\d+m \d+s)\)/);
     assert.match(runResult.stderr, /Logs: /);
     assert.match(runResult.stderr, /Summary: /);
     assert.doesNotMatch(runResult.stderr, /unbound variable/);
@@ -286,12 +286,12 @@ test("jaiph run allows rules to call top-level helper functions in readonly mode
         'test "ok" = "ok"',
         "\`\`\`",
         "",
-        "rule helper_is_ok() {",
+        "def helper_is_ok() {",
         "  run helper_is_ok_impl()",
         "}",
         "",
-        "workflow default() {",
-        "  ensure helper_is_ok()",
+        "export def main() {",
+        "  run helper_is_ok()",
         "}",
         "",
       ].join("\n"),
@@ -305,7 +305,7 @@ test("jaiph run allows rules to call top-level helper functions in readonly mode
     });
 
     assert.equal(runResult.status, 0, runResult.stderr);
-    assert.match(runResult.stdout, /✓ PASS workflow default/);
+    assert.match(runResult.stdout, /✓ PASS def main/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -322,12 +322,12 @@ test("jaiph run prints rule tree and fail summary", () => {
         "echo \"Current branch is not 'main'.\" >&2",
         "exit 1",
         "\`\`\`",
-        "rule current_branch() {",
+        "def current_branch() {",
         "  run current_branch_impl()",
         "}",
         "",
-        "workflow default() {",
-        "  ensure current_branch()",
+        "export def main() {",
+        "  run current_branch()",
         "}",
         "",
       ].join("\n"),
@@ -341,10 +341,10 @@ test("jaiph run prints rule tree and fail summary", () => {
     });
 
     assert.equal(runResult.status, 1);
-    assert.match(runResult.stdout, /workflow default/);
-    assert.match(runResult.stdout, /▸ rule current_branch/);
-    assert.match(runResult.stdout, /✗ rule current_branch \(\d+s\)/);
-    assert.match(runResult.stderr, /✗ FAIL workflow default \((?:\d+(?:\.\d+)?s|\d+m \d+s)\)/);
+    assert.match(runResult.stdout, /def main/);
+    assert.match(runResult.stdout, /▸ def current_branch/);
+    assert.match(runResult.stdout, /✗ def current_branch \(\d+s\)/);
+    assert.match(runResult.stderr, /✗ FAIL def main \((?:\d+(?:\.\d+)?s|\d+m \d+s)\)/);
     assert.match(runResult.stderr, /Logs: /);
     assert.match(runResult.stderr, /Summary: /);
     assert.match(runResult.stderr, /err: /);
@@ -378,7 +378,7 @@ test("jaiph run stores prompt output in run logs", () => {
     writeFileSync(
       filePath,
       [
-        "workflow default() {",
+        "export def main() {",
         '  prompt "hello from prompt"',
         "}",
         "",
@@ -412,7 +412,7 @@ test("jaiph run stores prompt output in run logs", () => {
     assert.ok(promptErr.length >= 0);
     const summary = readFileSync(join(latestRunDir, "run_summary.jsonl"), "utf8");
     assert.match(summary, /"type":"STEP_END"/);
-    assert.match(summary, /"kind":"workflow"/);
+    assert.match(summary, /"kind":"def"/);
     const stepLogFiles = runFiles.filter((name) => name.endsWith(".out"));
     assert.ok(stepLogFiles.length >= 1);
   } finally {
@@ -442,7 +442,7 @@ test("jaiph run stores both reasoning and final answer from stream-json", () => 
     writeFileSync(
       filePath,
       [
-        "workflow default() {",
+        "export def main() {",
         '  prompt "hello from prompt"',
         "}",
         "",

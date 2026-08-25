@@ -24,7 +24,7 @@ config {
   agent.model = "sonnet-test"
 }
 
-workflow default() {
+export def main() {
   log "should not run"
 }
 EOF
@@ -65,7 +65,7 @@ config {
   agent.backend = "codex"
 }
 
-workflow default() {
+export def main() {
   log "should not run"
 }
 EOF

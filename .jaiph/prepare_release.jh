@@ -184,7 +184,7 @@ const changelog_reviewer_role = """
   per commit-worthy change. Do not drop existing detail when merging.
 """
 
-workflow review_changelog(version) {
+def review_changelog(version) {
   config {
     agent.backend = "claude"
     agent.model = "opus"
@@ -244,7 +244,7 @@ workflow review_changelog(version) {
   log "CHANGELOG.md stamped for v${version}"
 }
 
-workflow resolve_version(arg) {
+export def resolve_version(arg) {
   const pkg_version = run read_pkg_version()
   const resolved = match arg {
     "" => run compute_next_patch(pkg_version)
@@ -254,22 +254,22 @@ workflow resolve_version(arg) {
   return resolved
 }
 
-workflow preflight(version) {
+export def preflight(version) {
   run assert_git_tree_clean()
   run assert_tag_does_not_exist(version)
 }
 
-workflow apply_version_change(old_version, new_version) {
+def apply_version_change(old_version, new_version) {
   run npm_version_no_tag(new_version)
   run update_install_release_ref(old_version, new_version)
 }
 
-workflow check_displayed_version(version) {
+export def check_displayed_version(version) {
   run run_npm_build()
   run assert_built_cli_version_equals(version)
 }
 
-workflow default(arg) {
+export def main(arg) {
   const version = run resolve_version(arg)
   const old_version = run read_pkg_version()
   log "Preparing release v${version} (current: v${old_version})"

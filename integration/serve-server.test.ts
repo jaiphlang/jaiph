@@ -10,17 +10,17 @@ const CLI_PATH = join(process.cwd(), "dist/src/cli.js");
 const BASE_FIXTURE = [
   "script sleeper = `sleep 1`",
   "# Greets the given name.",
-  "workflow greet(name) {",
+  "export def greet(name) {",
   '  return "hello ${name}"',
   "}",
   "",
   "# Fails on purpose for tests.",
-  "workflow boom() {",
+  "export def boom() {",
   '  fail "boom went off"',
   "}",
   "",
   "# Sleeps briefly, then returns.",
-  "workflow slow() {",
+  "export def slow() {",
   "  run sleeper()",
   '  return "woke"',
   "}",
@@ -28,7 +28,7 @@ const BASE_FIXTURE = [
   "script step_one = `sleep 0.4; echo one`",
   "script step_two = `sleep 0.4; echo two`",
   "# Two slow steps so a STEP_END is observable before the run is terminal.",
-  "workflow watchable() {",
+  "export def watchable() {",
   "  run step_one()",
   "  run step_two()",
   '  return "watched"',
@@ -36,31 +36,31 @@ const BASE_FIXTURE = [
   "",
   'script leak = `echo "token is $LEAK_API_KEY"`',
   "# Echoes a credential value to stdout to exercise journal redaction.",
-  "workflow leak_secret() {",
+  "export def leak_secret() {",
   "  run leak()",
   '  return "done"',
   "}",
   "",
   'script leak_fail = `echo "stdout token $LEAK_API_KEY"; echo "stderr token $LEAK_API_KEY" >&2; exit 1`',
   "# Echoes a credential to both streams then fails, to exercise result_text redaction.",
-  "workflow leak_and_fail() {",
+  "export def leak_and_fail() {",
   "  run leak_fail()",
   "}",
   "",
   "# Relays its argument to a sub-workflow so the value lands in generic step params.",
-  "workflow relay(token) {",
+  "export def relay(token) {",
   '  return "relayed"',
   "}",
   "# Passes a caller-supplied credential as a positional param to a run step, to",
   "# exercise redaction of generic step params in the served event stream.",
-  "workflow leak_param(token) {",
+  "export def leak_param(token) {",
   "  run relay(token)",
   '  return "done"',
   "}",
   "",
   'script publish = `printf \'artifact-payload\' > "$JAIPH_ARTIFACTS_DIR/result.txt"`',
   "# Publishes a file into the run's artifacts dir.",
-  "workflow make_artifact() {",
+  "export def make_artifact() {",
   "  run publish()",
   '  return "published"',
   "}",
@@ -147,7 +147,7 @@ test("jaiph serve: wait=true round-trips a workflow return value as succeeded", 
   writeFileSync(jh, BASE_FIXTURE);
   const srv = await startServe(jh, root, serveEnv(join(root, ".jaiph/runs")));
   try {
-    const res = await fetch(`${srv.baseUrl}/v1/workflows/greet/runs?wait=true`, {
+    const res = await fetch(`${srv.baseUrl}/v1/defs/greet/runs?wait=true`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ name: "world" }),
@@ -169,7 +169,7 @@ test("jaiph serve: async POST returns 202 + Location and polling reaches the sam
   writeFileSync(jh, BASE_FIXTURE);
   const srv = await startServe(jh, root, serveEnv(join(root, ".jaiph/runs")));
   try {
-    const res = await fetch(`${srv.baseUrl}/v1/workflows/greet/runs`, {
+    const res = await fetch(`${srv.baseUrl}/v1/defs/greet/runs`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ name: "async" }),
@@ -196,7 +196,7 @@ test("jaiph serve: a failing workflow is HTTP 200 with status failed (not an HTT
   writeFileSync(jh, BASE_FIXTURE);
   const srv = await startServe(jh, root, serveEnv(join(root, ".jaiph/runs")));
   try {
-    const res = await fetch(`${srv.baseUrl}/v1/workflows/boom/runs?wait=true`, {
+    const res = await fetch(`${srv.baseUrl}/v1/defs/boom/runs?wait=true`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: "{}",
@@ -221,7 +221,7 @@ test("jaiph serve: hot reload surfaces a new workflow and a pre-reload run still
   const srv = await startServe(jh, root, serveEnv(join(root, ".jaiph/runs")));
   try {
     // Start a slow run against the current generation, then reload.
-    const startRes = await fetch(`${srv.baseUrl}/v1/workflows/slow/runs`, {
+    const startRes = await fetch(`${srv.baseUrl}/v1/defs/slow/runs`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: "{}",
@@ -230,17 +230,17 @@ test("jaiph serve: hot reload surfaces a new workflow and a pre-reload run still
     const slowId = (await startRes.json()).run_id;
 
     // Add a workflow; the watcher reloads without a restart.
-    writeFileSync(jh, `${BASE_FIXTURE}\n# A freshly added tool.\nworkflow extra() {\n  return "extra"\n}\n`);
+    writeFileSync(jh, `${BASE_FIXTURE}\n# A freshly added tool.\nexport def extra() {\n  return "extra"\n}\n`);
 
     const start = Date.now();
     for (;;) {
       const doc = await (await fetch(`${srv.baseUrl}/openapi.json`)).json();
-      if (doc.paths["/v1/workflows/extra/runs"]) break;
+      if (doc.paths["/v1/defs/extra/runs"]) break;
       if (Date.now() - start > 15_000) throw new Error("reload did not surface the new workflow in /openapi.json");
       await delay(200);
     }
-    const wf = await (await fetch(`${srv.baseUrl}/v1/workflows`)).json();
-    assert.ok(wf.workflows.some((w: any) => w.name === "extra"), "/v1/workflows lists the new workflow");
+    const wf = await (await fetch(`${srv.baseUrl}/v1/defs`)).json();
+    assert.ok(wf.defs.some((w: any) => w.name === "extra"), "/v1/defs lists the new workflow");
 
     // The run started before the reload still finishes successfully (its
     // generation's scripts dir survives until it completes — refcounted).
@@ -259,9 +259,9 @@ test("jaiph serve: with a token, /v1/* needs the bearer while /healthz, /openapi
   writeFileSync(jh, BASE_FIXTURE);
   const srv = await startServe(jh, root, serveEnv(join(root, ".jaiph/runs"), { JAIPH_SERVE_TOKEN: "s3cret" }));
   try {
-    assert.equal((await fetch(`${srv.baseUrl}/v1/workflows`)).status, 401);
-    assert.equal((await fetch(`${srv.baseUrl}/v1/workflows`, { headers: { authorization: "Bearer wrong" } })).status, 401);
-    assert.equal((await fetch(`${srv.baseUrl}/v1/workflows`, { headers: { authorization: "Bearer s3cret" } })).status, 200);
+    assert.equal((await fetch(`${srv.baseUrl}/v1/defs`)).status, 401);
+    assert.equal((await fetch(`${srv.baseUrl}/v1/defs`, { headers: { authorization: "Bearer wrong" } })).status, 401);
+    assert.equal((await fetch(`${srv.baseUrl}/v1/defs`, { headers: { authorization: "Bearer s3cret" } })).status, 200);
 
     for (const path of ["/healthz", "/openapi.json", "/docs"]) {
       assert.equal((await fetch(`${srv.baseUrl}${path}`)).status, 200, `${path} is open without a token`);
@@ -334,7 +334,7 @@ test("jaiph serve: --allow-anonymous starts, warns about open auth, and serves a
       /WARNING --allow-anonymous.*open to ALL local principals/s,
       "startup warns that the server is open to all local principals",
     );
-    const created = await fetch(`${srv.baseUrl}/v1/workflows/greet/runs?wait=true`, {
+    const created = await fetch(`${srv.baseUrl}/v1/defs/greet/runs?wait=true`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ name: "world" }),
@@ -363,14 +363,14 @@ function sseDataLines(sse: string): string[] {
     .map((l) => l.slice("data: ".length));
 }
 
-test("jaiph serve: SSE events replay WORKFLOW_START, stream a STEP_END mid-run, then close on event: end", async () => {
+test("jaiph serve: SSE events replay RUN_START, stream a STEP_END mid-run, then close on event: end", async () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-serve-sse-"));
   const jh = join(root, "tools.jh");
   writeFileSync(jh, BASE_FIXTURE);
   const srv = await startServe(jh, root, serveEnv(join(root, ".jaiph/runs")));
   try {
     // Start async, then connect the event stream while the run is still going.
-    const startRes = await fetch(`${srv.baseUrl}/v1/workflows/watchable/runs`, {
+    const startRes = await fetch(`${srv.baseUrl}/v1/defs/watchable/runs`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: "{}",
@@ -395,8 +395,8 @@ test("jaiph serve: SSE events replay WORKFLOW_START, stream a STEP_END mid-run, 
 
     const dataLines = sseDataLines(sse);
     const events = dataLines.map((l) => JSON.parse(l));
-    // (a) the replayed WORKFLOW_START is present.
-    assert.ok(events.some((e) => e.type === "WORKFLOW_START"), "WORKFLOW_START replayed");
+    // (a) the replayed RUN_START is present.
+    assert.ok(events.some((e) => e.type === "RUN_START"), "RUN_START replayed");
     // (b) a STEP_END arrived, and it precedes the terminating `event: end`.
     const stepEndIdx = sse.indexOf('"type":"STEP_END"');
     const endIdx = sse.indexOf("event: end");
@@ -424,7 +424,7 @@ test("jaiph serve: NDJSON events on a terminal run byte-match the journal; unkno
   const srv = await startServe(jh, root, serveEnv(join(root, ".jaiph/runs"), { JAIPH_SERVE_TOKEN: "t0ken" }));
   const auth = { authorization: "Bearer t0ken" };
   try {
-    const runRes = await fetch(`${srv.baseUrl}/v1/workflows/greet/runs?wait=true`, {
+    const runRes = await fetch(`${srv.baseUrl}/v1/defs/greet/runs?wait=true`, {
       method: "POST",
       headers: { "content-type": "application/json", ...auth },
       body: JSON.stringify({ name: "nd" }),
@@ -455,7 +455,7 @@ test("jaiph serve: a credential echoed by a run is [REDACTED] in the event strea
   const secret = "supersecretvalue123";
   const srv = await startServe(jh, root, serveEnv(join(root, ".jaiph/runs")), ["--env", `LEAK_API_KEY=${secret}`]);
   try {
-    const runRes = await fetch(`${srv.baseUrl}/v1/workflows/leak_secret/runs?wait=true`, {
+    const runRes = await fetch(`${srv.baseUrl}/v1/defs/leak_secret/runs?wait=true`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: "{}",
@@ -480,7 +480,7 @@ test("jaiph serve: a credential passed as a step param is [REDACTED] in the even
   const secret = "supersecretparamvalue123";
   const srv = await startServe(jh, root, serveEnv(join(root, ".jaiph/runs")), ["--env", `LEAK_API_KEY=${secret}`]);
   try {
-    const runRes = await fetch(`${srv.baseUrl}/v1/workflows/leak_param/runs?wait=true`, {
+    const runRes = await fetch(`${srv.baseUrl}/v1/defs/leak_param/runs?wait=true`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ token: secret }),
@@ -505,7 +505,7 @@ test("jaiph serve: a failing run's result_text is [REDACTED] via wait=true and G
   const secret = "supersecretvalue123";
   const srv = await startServe(jh, root, serveEnv(join(root, ".jaiph/runs")), ["--env", `LEAK_API_KEY=${secret}`]);
   try {
-    const res = await fetch(`${srv.baseUrl}/v1/workflows/leak_and_fail/runs?wait=true`, {
+    const res = await fetch(`${srv.baseUrl}/v1/defs/leak_and_fail/runs?wait=true`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: "{}",
@@ -533,7 +533,7 @@ test("jaiph serve: artifacts round-trip — list then byte-identical download, t
   writeFileSync(jh, BASE_FIXTURE);
   const srv = await startServe(jh, root, serveEnv(join(root, ".jaiph/runs")));
   try {
-    const runRes = await fetch(`${srv.baseUrl}/v1/workflows/make_artifact/runs?wait=true`, {
+    const runRes = await fetch(`${srv.baseUrl}/v1/defs/make_artifact/runs?wait=true`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: "{}",
@@ -582,7 +582,7 @@ test(
     writeFileSync(jh, BASE_FIXTURE);
     const srv = await startServe(jh, root, serveEnv(join(root, ".jaiph/runs")));
     try {
-      const runRes = await fetch(`${srv.baseUrl}/v1/workflows/make_artifact/runs?wait=true`, {
+      const runRes = await fetch(`${srv.baseUrl}/v1/defs/make_artifact/runs?wait=true`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: "{}",

@@ -6,7 +6,7 @@ diataxis: explanation
 
 # Why Jaiph
 
-Jaiph is a small language and runtime for AI-assisted automation. This page explains the design behind Jaiph: the kind of problem it solves, the parts a workflow is built from, and the trade-offs it makes on purpose. For the implementation map, see [Architecture](architecture.md). For syntax, see [Language](language.md) and [Grammar](grammar.md).
+Jaiph is a small language and runtime for AI-assisted automation. This page explains the design behind Jaiph: the kind of problem it solves, the parts a program is built from, and the trade-offs it makes on purpose. For the implementation map, see [Architecture](architecture.md). For syntax, see [Language](language.md) and [Grammar](grammar.md).
 
 ## The problem
 
@@ -19,24 +19,23 @@ An automation pipeline often has to do four different kinds of work in the same 
 
 You can wire these together in any general-purpose language, but you pay for it in extra code. For each tool you write the argument handling, and for each agent call you write the structured-output handling. Every time, you also decide how to capture stdout, where to put logs, when to retry on failure, and how to fail clearly when the output does not match the structure you expected.
 
-Jaiph makes orchestration the job of the language itself. Over time, people add the same structure to a bash script by hand, so that every step gets captured, every prompt is logged, and every failure ends with a footer that lists the paths to the artifact files. In Jaiph that structure is built in, and the workflow author does not have to write it.
+Jaiph makes orchestration the job of the language itself. Over time, people add the same structure to a bash script by hand, so that every step gets captured, every prompt is logged, and every failure ends with a footer that lists the paths to the artifact files. In Jaiph that structure is built in, and the author does not have to write it.
 
 ## The building blocks
 
-Jaiph is built from four parts, and a workflow is what you get when you combine them. Three of them are top-level declarations, `rule`, `script`, and `workflow`. The fourth, `prompt`, is a step you write inside a workflow.
+Jaiph is built from three parts, and a program is what you get when you combine them. Two of them are top-level declarations, `def` and `script`. The third, `prompt`, is a step you write inside a def.
 
-- **`rule`** — a check that does not change anything. It can call other rules with `ensure` and scripts with `run`. The compiler rejects `send`, `prompt`, inline shell, and `run async` inside a rule, so a rule is the place to state the assumptions that the rest of the workflow can rely on.
-- **`script`** — a named block of code you can run (shell, Python, Node, or anything with a shebang line). A workflow body can also run inline shell or a `` run `body`(args) `` step, but shell you want to reuse belongs in a `script`. A script does not inherit module-level `const` bindings, so pass any values it needs as positional arguments.
+- **`def`** — the interpreted procedure. It combines scripts, prompts, other defs, [`run async`](spec-async-handles.md) to overlap work, channels to pass messages, `if` / `match` / `for` for control flow, and `recover` / `catch` to handle failures. `jaiph run` enters at `export def main`.
+- **`script`** — a named block of code you can run (shell, Python, Node, or anything with a shebang line). A def body can also run inline shell or a `` run `body`(args) `` step, but shell you want to reuse belongs in a `script`. A script does not inherit module-level `const` bindings, so pass any values it needs as positional arguments.
 - **`prompt`** — a task you hand to an AI agent. Jaiph fills in any variables in the body, captures the agent's stdout, and, when you declare a shape with `returns "{ field: type }"`, parses that output and checks it against the shape.
-- **`workflow`** — the part that ties everything together. It combines the other three, plus [`run async`](spec-async-handles.md) to run steps at the same time, channels to pass messages, `if` / `match` / `for_lines` for control flow, and `recover` / `catch` to handle failures.
 
-Every value in a workflow is a string, every step is logged, and every run leaves lasting files under `.jaiph/runs/`, including a `.out` and `.err` capture for each step and an append-only `run_summary.jsonl`. A workflow written this way gives you automation you can repeat, inspect, and test, unlike shell you wire together by hand.
+Every value in a def is a string, every step is logged, and every run leaves lasting files under `.jaiph/runs/`, including a `.out` and `.err` capture for each step and an append-only `run_summary.jsonl`. A program written this way gives you automation you can repeat, inspect, and test, unlike shell you wire together by hand.
 
 ## Design commitments
 
 The design makes three commitments, and each one settles many smaller questions:
 
-1. **Strict structure around AI steps.** An agent's response can vary from run to run, so the language gives you the surrounding pieces that do not. With `rule` and `ensure` you can check conditions before and after a prompt in the same pipeline. With `prompt … returns "{ … }"` you require the agent's output to match a JSON shape, and the step fails if it does not. With `recover` you retry a failed `run` after a repair body runs, up to `run.recover_limit` times, which helps when an agent's output needs a fix before the pipeline can go on.
+1. **Strict structure around AI steps.** An agent's response can vary from run to run, so the language gives you the surrounding pieces that do not. With `def` and `run` you can check conditions before and after a prompt in the same pipeline. With `prompt … returns "{ … }"` you require the agent's output to match a JSON shape, and the step fails if it does not. With `recover` you retry a failed `run` after a repair body runs, up to `run.recover_limit` times, which helps when an agent's output needs a fix before the pipeline can go on.
 
 2. **Isolating sensitive data.** Secrets and agent access are kept apart on purpose. Injected host keys (`--env`, [`trusted_envs`](configuration.md#trusted-envs)) reach trusted `run` steps only; a second fail-closed scrub keeps them out of every `prompt` backend subprocess. Credential-shaped values are redacted from the run journal and from returned call diagnostics. The sanctioned path for a secret is explicit injection into a trusted step, not ambient host env or a file that happened to sit next to the workflow.
 

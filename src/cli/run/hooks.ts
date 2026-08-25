@@ -43,8 +43,8 @@ export function parseHookConfig(raw: string, sourceLabel: string): HookConfig | 
     }
     const out: HookConfig = {};
     const events: HookEventName[] = [
-      "workflow_start",
-      "workflow_end",
+      "run_start",
+      "run_end",
       "step_start",
       "step_end",
     ];
@@ -87,16 +87,16 @@ function loadHookConfig(path: string): HookConfig | null {
 
 /** Merged config: project-local overrides global for each event. */
 export interface MergedHookConfig {
-  workflow_start: string[];
-  workflow_end: string[];
+  run_start: string[];
+  run_end: string[];
   step_start: string[];
   step_end: string[];
 }
 
 function emptyMerged(): MergedHookConfig {
   return {
-    workflow_start: [],
-    workflow_end: [],
+    run_start: [],
+    run_end: [],
     step_start: [],
     step_end: [],
   };
@@ -135,8 +135,8 @@ export function loadMergedHooks(
   const projectConfig = trustProjectHooks ? rawProjectConfig : null;
 
   const events: HookEventName[] = [
-    "workflow_start",
-    "workflow_end",
+    "run_start",
+    "run_end",
     "step_start",
     "step_end",
   ];
@@ -214,7 +214,7 @@ export function stepStartHookPayload(
 ): HookPayload {
   return {
     event: "step_start",
-    workflow_id: event.run_id,
+    run_id: event.run_id,
     step_id: stepId,
     step_kind: event.kind,
     step_name: event.name,
@@ -233,7 +233,7 @@ export function stepEndHookPayload(
 ): HookPayload {
   return {
     event: "step_end",
-    workflow_id: event.run_id,
+    run_id: event.run_id,
     step_id: stepId,
     step_kind: event.kind,
     step_name: event.name,
@@ -262,11 +262,11 @@ export function registerHooksSubscriber(
     runHooksForEvent(config, "step_end", stepEndHookPayload(data.event, data.eventId, inputAbs, workspaceRoot));
   });
 
-  emitter.on("workflow_start", (payload) => {
-    runHooksForEvent(config, "workflow_start", payload);
+  emitter.on("run_start", (payload) => {
+    runHooksForEvent(config, "run_start", payload);
   });
 
-  emitter.on("workflow_end", (payload) => {
-    runHooksForEvent(config, "workflow_end", payload);
+  emitter.on("run_end", (payload) => {
+    runHooksForEvent(config, "run_end", payload);
   });
 }

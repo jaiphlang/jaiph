@@ -22,7 +22,7 @@ script emit_value = `echo "shell-value"`
 script emit_stdout = `echo "stdout-log"`
 script emit_stderr = `echo "stderr-log" >&2`
 script emit_captured = `echo "captured=$1"`
-workflow default() {
+export def main() {
   const out = run emit_value()
   run emit_stdout()
   run emit_stderr()
@@ -62,18 +62,18 @@ fi
 e2e::pass "script step output contract"
 
 # ===================================================================
-e2e::section "ensure rule: captures return value only, stdout to artifacts"
+e2e::section "run rule: captures return value only, stdout to artifacts"
 # ===================================================================
 
 e2e::file "contract_ensure.jh" <<'EOF'
 script compute_echo = `echo "rule-stdout-goes-to-artifacts"`
-rule compute(input) {
+def compute(input) {
   run compute_echo()
   return "${input}-processed"
 }
 script echo_captured_ensure = `echo "captured=$1"`
-workflow default() {
-  const val = ensure compute("input")
+export def main() {
+  const val = run compute("input")
   run echo_captured_ensure(val)
 }
 EOF
@@ -97,11 +97,11 @@ cap_outs=( "${run_dir}"/*echo_captured_ensure.out )
 shopt -u nullglob
 [[ ${#cap_outs[@]} -ge 1 ]] || e2e::fail "expected echo_captured_ensure .out artifact"
 cap_content="$(<"${cap_outs[0]}")"
-e2e::assert_equals "${cap_content}" "captured=input-processed" "ensure capture = return value only"
+e2e::assert_equals "${cap_content}" "captured=input-processed" "run capture = return value only"
 if [[ "${cap_content}" == *"rule-stdout-goes-to-artifacts"* ]]; then
   e2e::fail "rule stdout must NOT leak into capture variable"
 fi
-e2e::pass "ensure rule output contract"
+e2e::pass "run rule output contract"
 
 # ===================================================================
 e2e::section "run workflow: captures return value only, stdout to artifacts"
@@ -109,12 +109,12 @@ e2e::section "run workflow: captures return value only, stdout to artifacts"
 
 e2e::file "contract_run.jh" <<'EOF'
 script greeter_impl = `echo "workflow-stdout-goes-to-artifacts"`
-workflow greeter() {
+def greeter() {
   run greeter_impl()
   return "hello-from-workflow"
 }
 script echo_captured_run = `echo "captured=$1"`
-workflow default() {
+export def main() {
   const val = run greeter()
   run echo_captured_run(val)
 }
@@ -155,7 +155,7 @@ echo "fn-stderr-goes-to-artifacts" >&2
 echo "hash-abc123"
 ```
 script echo_captured_fn = `echo "captured=$1"`
-workflow default() {
+export def main() {
   const val = run compute_hash()
   run echo_captured_fn(val)
 }
@@ -186,7 +186,7 @@ config {
   agent.backend = "cursor"
 }
 script echo_captured_prompt = `echo "captured=$1"`
-workflow default() {
+export def main() {
   const answer = prompt "What is 2+2?"
   run echo_captured_prompt(answer)
 }
@@ -220,7 +220,7 @@ e2e::section "log/logerr: messages to workflow artifacts"
 
 e2e::file "contract_log.jh" <<'EOF'
 script echo_done = `echo "done"`
-workflow default() {
+export def main() {
   log "info-message"
   logerr "error-message"
   run echo_done()

@@ -52,18 +52,18 @@ e2e::expect_stdout "${inbox_out}" <<'EOF'
 
 Jaiph: Running agent_inbox.jh
 
-workflow default
-  ▸ workflow scanner
+export def main
+  ▸ def scanner
   ·   ℹ Scanning for issues...
-  ✓ workflow scanner (<time>)
-  ▸ workflow analyst (message="Found 3 issues in auth module", chan="findings", sender="scanner")
+  ✓ def scanner(<time>)
+  ▸ def analyst(message="Found 3 issues in auth module", chan="findings", sender="scanner")
   ·   ℹ Analyzing message from scanner on channel findings...
-  ✓ workflow analyst (<time>)
-  ▸ workflow reviewer (message="Summary: Found 3 issues in auth ...", chan="report", sender="analyst")
+  ✓ def analyst(<time>)
+  ▸ def reviewer(message="Summary: Found 3 issues in auth ...", chan="report", sender="analyst")
   ·   ℹ Reviewing message from analyst on channel report...
   ·   ! Critical issue: Summary: Found 3 issues in auth module
-  ✓ workflow reviewer (<time>)
-✓ PASS workflow default (<time>)
+  ✓ def reviewer(<time>)
+✓ PASS export def main (<time>)
 EOF
 
 e2e::expect_out "agent_inbox.jh" "scanner" "Scanning for issues..."
@@ -91,9 +91,9 @@ e2e::expect_stdout "${say_hello_out}" <<'EOF'
 
 Jaiph: Running say_hello.jh
 
-workflow default
-  ▸ rule valid_name
-  ✗ rule valid_name (<time>)
+def main
+  ▸ def valid_name
+  ✗ def valid_name (<time>)
 EOF
 
 # ── say_hello.test.jh ───────────────────────────────────────────────────────
@@ -143,12 +143,12 @@ e2e::expect_stdout "${recover_out}" <<'EOF'
 
 Jaiph: Running recover_loop.jh
 
-workflow default
+export def main
   ▸ script check_report_exists
   ✓ script check_report_exists (<time>)
   ▸ script __inline_<id>
   ✓ script __inline_<id> (<time>)
-✓ PASS workflow default (<time>)
+✓ PASS export def main (<time>)
 EOF
 
 rm -f "${TEST_DIR}/report.txt"

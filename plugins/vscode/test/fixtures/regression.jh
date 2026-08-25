@@ -7,7 +7,7 @@ config {
   runtime.docker_timeout_seconds = 600
 }
 
-workflow default() {
+export def main() {
   # `wait` was removed from the language (E_PARSE). Not a command keyword.
   wait for_something
 }

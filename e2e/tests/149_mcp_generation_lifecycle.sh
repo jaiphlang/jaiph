@@ -84,7 +84,7 @@ script pause = \`echo \$\$ > "${pidfile}"; while [ ! -f "${gate}" ]; do sleep 0.
 script stamp = \`echo "${marker}"\`
 
 # Waits for the gate file, then reports its generation's marker.
-workflow slow() {
+def slow() {
   run pause()
   const out = run stamp()
   return out
@@ -209,7 +209,7 @@ cat > "${TEST_DIR}/tools_cancel.jh" <<EOF
 script hang_forever = \`echo \$\$ > "${pid3}"; sleep 300\`
 
 # Hangs until cancelled.
-workflow hang() {
+def hang() {
   run hang_forever()
   return "unreachable"
 }
@@ -242,7 +242,7 @@ e2e::assert_equals "${p_iserror}" "true" "cancelled call settles with an isError
 # assert_contains: the narrative is timing-dependent ("terminated by signal
 # SIGINT" vs "failed (exit N)" if the runner fields the signal itself), so full
 # equality is not feasible; the response must at least name the failed workflow.
-e2e::assert_contains "${p_text}" "workflow hang" "cancelled call names the failed workflow"
+e2e::assert_contains "${p_text}" "run hang" "cancelled call names the failed def"
 
 hang_pid="$(cat "${pid3}")"
 if kill -0 "${hang_pid}" 2>/dev/null; then

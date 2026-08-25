@@ -18,7 +18,7 @@ test("W_PROMPT_IN_SHELL: prompt capture interpolated in shell step produces diag
     writeFileSync(
       join(root, "m.jh"),
       [
-        "workflow default() {",
+        "export def main() {",
         '  const x = prompt "What is your name?"',
         '  echo "${x}"',
         "}",
@@ -43,7 +43,7 @@ test("W_PROMPT_IN_SHELL: typed prompt capture (with returns schema) interpolated
     writeFileSync(
       join(root, "m.jh"),
       [
-        "workflow default() {",
+        "export def main() {",
         '  const r = prompt "Pick a name:" returns "{ name: string }"',
         '  echo "${r}"',
         "}",
@@ -70,7 +70,7 @@ test("W_PROMPT_IN_SHELL: passing prompt capture as script arg does not produce d
         "echo $1",
         "```",
         "",
-        "workflow default() {",
+        "export def main() {",
         '  const x = prompt "What is your name?"',
         "  run greet(x)",
         "}",
@@ -100,7 +100,7 @@ test("W_PROMPT_IN_SHELL: non-prompt variable interpolated in shell step is not f
         "echo hello",
         "```",
         "",
-        "workflow default() {",
+        "export def main() {",
         "  const output = run compute()",
         '  echo "${output}"',
         "}",

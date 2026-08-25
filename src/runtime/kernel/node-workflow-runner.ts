@@ -16,7 +16,7 @@ interface RunnerArgs {
   metaFile: string;
   sourceFile: string;
   builtScript: string;
-  workflowName: string;
+  defName: string;
   runArgs: string[];
 }
 
@@ -24,24 +24,24 @@ function parseRunnerArgs(positional: string[]): RunnerArgs {
   const metaFile = positional[0] ?? "";
   const sourceFile = positional[1] ?? process.env.JAIPH_SOURCE_ABS ?? "";
   const builtScript = positional[2] ?? "";
-  const workflowName = positional[3] ?? "default";
+  const defName = positional[3] ?? "main";
   const runArgs = positional.slice(4);
   if (!metaFile || !sourceFile) {
     throw new Error("node-workflow-runner requires meta file and source file");
   }
-  return { metaFile, sourceFile, builtScript, workflowName, runArgs };
+  return { metaFile, sourceFile, builtScript, defName, runArgs };
 }
 
 /**
  * Run the workflow leader with the post-dispatch positional args
- * `[metaFile, sourceFile, builtScript, workflowName, ...runArgs]`.
+ * `[metaFile, sourceFile, builtScript, defName, ...runArgs]`.
  *
  * Callable from `src/cli/index.ts` when the reserved `__workflow-runner` argv
  * arrives, so the bun-compiled binary self-spawns into the runner without
  * needing a separate `node-workflow-runner.js` script on disk.
  */
 export async function runWorkflowRunner(positional: string[]): Promise<number> {
-  const { metaFile, sourceFile, builtScript, workflowName, runArgs } = parseRunnerArgs(positional);
+  const { metaFile, sourceFile, builtScript, defName, runArgs } = parseRunnerArgs(positional);
   process.env.JAIPH_SOURCE_FILE = basename(sourceFile);
   if (!process.env.JAIPH_SCRIPTS && builtScript) {
     process.env.JAIPH_SCRIPTS = join(dirname(builtScript), "scripts");
@@ -51,7 +51,7 @@ export async function runWorkflowRunner(positional: string[]): Promise<number> {
   const moduleGraph = graphFile ? readModuleGraph(graphFile) : loadModuleGraph(sourceFile, workspaceRoot);
   const graph = buildRuntimeGraph(moduleGraph);
   const runtime = new NodeWorkflowRuntime(graph, { env: process.env, cwd: process.cwd() });
-  const status = await runtime.runRoot(workflowName, runArgs);
+  const status = await runtime.runRoot(defName, runArgs);
   writeFileSync(
     metaFile,
     `status=${status}\nrun_dir=${runtime.getRunDir()}\nsummary_file=${runtime.getSummaryFile()}\n`,

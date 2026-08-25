@@ -17,15 +17,15 @@ sleep 0.05
 echo "good" > good.txt
 ```
 
-workflow good() {
+def good() {
   run good_impl()
 }
 
-workflow bad() {
+def bad() {
   fail "bad-run"
 }
 
-workflow default() {
+export def main() {
   run async good()
   run async bad()
 }

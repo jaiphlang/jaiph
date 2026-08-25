@@ -24,18 +24,18 @@ config {
 
 script log_scope_backend = `printf '%s:%s\n' "$1" "$JAIPH_AGENT_BACKEND" >> "$JAIPH_SCOPE_LOG"`
 
-workflow first() {
+def first() {
   config {
     agent.backend = "claude"
   }
   run log_scope_backend("first")
 }
 
-workflow second() {
+def second() {
   run log_scope_backend("second")
 }
 
-workflow default() {
+export def main() {
   run first()
   run second()
 }
@@ -68,22 +68,22 @@ printf 'rule_model:%s\n' "$JAIPH_AGENT_MODEL" >> "$JAIPH_OVERRIDE_LOG"
 printf 'rule_backend:%s\n' "$JAIPH_AGENT_BACKEND" >> "$JAIPH_OVERRIDE_LOG"
 ```
 
-rule check_config() {
+def check_config() {
   run log_rule_config()
 }
 
-workflow with_override() {
+def with_override() {
   config {
     agent.model = "workflow-model"
   }
-  ensure check_config()
+  run check_config()
 }
 
-workflow without_override() {
-  ensure check_config()
+def without_override() {
+  run check_config()
 }
 
-workflow default() {
+export def main() {
   run with_override()
   run without_override()
 }
@@ -118,7 +118,7 @@ config {
 
 script log_nested_backend = `printf '%s:%s\n' "$1" "$JAIPH_AGENT_BACKEND" >> "$JAIPH_NESTED_LOG"`
 
-workflow default() {
+export def main() {
   run log_nested_backend("child_backend")
 }
 EOF
@@ -132,16 +132,16 @@ config {
 
 script log_nested_backend = `printf '%s:%s\n' "$1" "$JAIPH_AGENT_BACKEND" >> "$JAIPH_NESTED_LOG"`
 
-workflow caller() {
+def caller() {
   config {
     agent.backend = "claude"
   }
   run log_nested_backend("parent_before")
-  run child.default()
+  run child.main()
   run log_nested_backend("parent_after")
 }
 
-workflow default() {
+export def main() {
   run caller()
 }
 EOF
@@ -168,7 +168,7 @@ export JAIPH_ENV_LOG="${ENV_LOG}"
 e2e::file "env_wins.jh" <<'EOF'
 script log_env_backend = `printf 'backend:%s\n' "$JAIPH_AGENT_BACKEND" >> "$JAIPH_ENV_LOG"`
 
-workflow default() {
+export def main() {
   config {
     agent.backend = "claude"
   }
@@ -182,7 +182,7 @@ unset JAIPH_AGENT_BACKEND
 
 actual="$(cat "${ENV_LOG}")"
 e2e::assert_equals "${actual}" "backend:cursor" \
-  "env variable wins over workflow config (_LOCKED behavior preserved)"
+  "env variable wins over def config(_LOCKED behavior preserved)"
 
 # ---------------------------------------------------------------------------
 # Section 5: Sibling isolation — both siblings have explicit different metadata
@@ -200,7 +200,7 @@ config {
 
 script log_sibling_env = `printf '%s:model=%s,backend=%s\n' "$1" "$JAIPH_AGENT_MODEL" "$JAIPH_AGENT_BACKEND" >> "$JAIPH_SIBLING_LOG"`
 
-workflow alpha() {
+def alpha() {
   config {
     agent.model = "alpha-model"
     agent.backend = "claude"
@@ -208,14 +208,14 @@ workflow alpha() {
   run log_sibling_env("alpha")
 }
 
-workflow beta() {
+def beta() {
   config {
     agent.model = "beta-model"
   }
   run log_sibling_env("beta")
 }
 
-workflow default() {
+export def main() {
   run alpha()
   run beta()
 }
@@ -241,14 +241,14 @@ export JAIPH_PARAM_LOG="${PARAM_LOG}"
 e2e::file "param_config.jh" <<'EOF'
 script log_model = `printf 'model:%s\n' "$JAIPH_AGENT_MODEL" >> "$JAIPH_PARAM_LOG"`
 
-workflow implement(model) {
+def implement(model) {
   config {
     agent.model = model
   }
   run log_model()
 }
 
-workflow default() {
+export def main() {
   run implement("param-model")
 }
 EOF

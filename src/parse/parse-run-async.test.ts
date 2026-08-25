@@ -4,12 +4,12 @@ import { parsejaiph } from "../parser";
 
 test("parse: run async produces exec/call with async flag on the body", () => {
   const src = [
-    "workflow default() {",
+    "export def main() {",
     "  run async some_wf()",
     "}",
   ].join("\n");
   const mod = parsejaiph(src, "test.jh");
-  const step = mod.workflows[0]!.steps[0]!;
+  const step = mod.defs[0]!.steps[0]!;
   assert.equal(step.type, "exec");
   if (step.type === "exec" && step.body.kind === "call") {
     assert.equal(step.body.callee.value, "some_wf");
@@ -19,12 +19,12 @@ test("parse: run async produces exec/call with async flag on the body", () => {
 
 test("parse: run async with args", () => {
   const src = [
-    "workflow default() {",
+    "export def main() {",
     '  run async other_wf("hello", "$x")',
     "}",
   ].join("\n");
   const mod = parsejaiph(src, "test.jh");
-  const step = mod.workflows[0]!.steps[0]!;
+  const step = mod.defs[0]!.steps[0]!;
   assert.equal(step.type, "exec");
   if (step.type === "exec" && step.body.kind === "call") {
     assert.equal(step.body.callee.value, "other_wf");
@@ -38,12 +38,12 @@ test("parse: run async with args", () => {
 
 test("parse: run async with qualified ref", () => {
   const src = [
-    "workflow default() {",
+    "export def main() {",
     "  run async mod.some_wf()",
     "}",
   ].join("\n");
   const mod = parsejaiph(src, "test.jh");
-  const step = mod.workflows[0]!.steps[0]!;
+  const step = mod.defs[0]!.steps[0]!;
   assert.equal(step.type, "exec");
   if (step.type === "exec" && step.body.kind === "call") {
     assert.equal(step.body.callee.value, "mod.some_wf");
@@ -53,12 +53,12 @@ test("parse: run async with qualified ref", () => {
 
 test("parse: regular run does not have async flag", () => {
   const src = [
-    "workflow default() {",
+    "export def main() {",
     "  run some_wf()",
     "}",
   ].join("\n");
   const mod = parsejaiph(src, "test.jh");
-  const step = mod.workflows[0]!.steps[0]!;
+  const step = mod.defs[0]!.steps[0]!;
   assert.equal(step.type, "exec");
   if (step.type === "exec" && step.body.kind === "call") {
     assert.equal(step.body.async, undefined);
@@ -67,7 +67,7 @@ test("parse: regular run does not have async flag", () => {
 
 test("parse: capture + run async is rejected without const", () => {
   const src = [
-    "workflow default() {",
+    "export def main() {",
     "  x = run async some_wf()",
     "}",
   ].join("\n");
@@ -79,12 +79,12 @@ test("parse: capture + run async is rejected without const", () => {
 
 test("parse: const capture + run async produces Expr.call with async flag", () => {
   const src = [
-    "workflow default() {",
+    "export def main() {",
     "  const h = run async some_wf()",
     "}",
   ].join("\n");
   const mod = parsejaiph(src, "test.jh");
-  const step = mod.workflows[0]!.steps[0]!;
+  const step = mod.defs[0]!.steps[0]!;
   assert.equal(step.type, "const");
   if (step.type === "const" && step.value.kind === "call") {
     assert.equal(step.name, "h");
@@ -95,12 +95,12 @@ test("parse: const capture + run async produces Expr.call with async flag", () =
 
 test("parse: const capture + run async with args", () => {
   const src = [
-    "workflow default() {",
+    "export def main() {",
     '  const h = run async other_wf("hello")',
     "}",
   ].join("\n");
   const mod = parsejaiph(src, "test.jh");
-  const step = mod.workflows[0]!.steps[0]!;
+  const step = mod.defs[0]!.steps[0]!;
   assert.equal(step.type, "const");
   if (step.type === "const" && step.value.kind === "call") {
     assert.equal(step.value.callee.value, "other_wf");
@@ -111,12 +111,12 @@ test("parse: const capture + run async with args", () => {
 
 test("parse: run async with recover block", () => {
   const src = [
-    "workflow default() {",
+    "export def main() {",
     '  run async foo() recover(err) { log "repair" }',
     "}",
   ].join("\n");
   const mod = parsejaiph(src, "test.jh");
-  const step = mod.workflows[0]!.steps[0]!;
+  const step = mod.defs[0]!.steps[0]!;
   assert.equal(step.type, "exec");
   if (step.type === "exec" && step.body.kind === "call") {
     assert.equal(step.body.callee.value, "foo");
@@ -132,7 +132,7 @@ test("parse: run async with recover block", () => {
 
 test("parse: run async with multi-line recover block", () => {
   const src = [
-    "workflow default() {",
+    "export def main() {",
     "  run async foo() recover(err) {",
     '    log "repairing"',
     "    run fix_it()",
@@ -140,7 +140,7 @@ test("parse: run async with multi-line recover block", () => {
     "}",
   ].join("\n");
   const mod = parsejaiph(src, "test.jh");
-  const step = mod.workflows[0]!.steps[0]!;
+  const step = mod.defs[0]!.steps[0]!;
   assert.equal(step.type, "exec");
   if (step.type === "exec" && step.body.kind === "call") {
     assert.equal(step.body.async, true);
@@ -153,12 +153,12 @@ test("parse: run async with multi-line recover block", () => {
 
 test("parse: run async with catch block", () => {
   const src = [
-    "workflow default() {",
+    "export def main() {",
     '  run async bar() catch (e) { log "caught" }',
     "}",
   ].join("\n");
   const mod = parsejaiph(src, "test.jh");
-  const step = mod.workflows[0]!.steps[0]!;
+  const step = mod.defs[0]!.steps[0]!;
   assert.equal(step.type, "exec");
   if (step.type === "exec" && step.body.kind === "call") {
     assert.equal(step.body.callee.value, "bar");

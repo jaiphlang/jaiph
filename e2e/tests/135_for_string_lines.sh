@@ -12,7 +12,7 @@ TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 e2e::section "for line in string iterates lines"
 
 e2e::file "for_lines.jh" <<'EOF'
-workflow default() {
+export def main() {
   const paths = """
 docs/a.md
 docs/b.md
@@ -42,7 +42,7 @@ e2e::pass "for … in … runs body per line"
 e2e::section "for line in string skips only trailing empty segment"
 
 e2e::file "for_lines_trim_nl.jh" <<'EOF'
-workflow default() {
+export def main() {
   const paths = """
 one
 two
@@ -66,7 +66,7 @@ e2e::pass "final newline does not yield empty line"
 e2e::section "for … in … with empty line in middle"
 
 e2e::file "for_lines_interior_blank.jh" <<'EOF'
-workflow default() {
+export def main() {
   const paths = """
 x
 

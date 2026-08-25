@@ -5,7 +5,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { buildScriptsFromGraph } from "../transpiler";
-import { buildRuntimeGraph, resolveScriptRef, resolveWorkflowRef } from "./kernel/graph";
+import { buildRuntimeGraph, resolveScriptRef, resolveDefRef } from "./kernel/graph";
 import {
   loadModuleGraph,
   serializeModuleGraph,
@@ -31,11 +31,11 @@ test("module-graph: buildScripts + buildRuntimeGraph reuse pre-parsed ASTs and n
     write(
       lib,
       [
-        "rule check() {",
+        "export def check() {",
         '  log "ok"',
         "}",
-        "script helper = `echo hi`",
-        "workflow inner() {",
+        "export script helper = `echo hi`",
+        "export def inner() {",
         "  echo ok",
         "}",
         "",
@@ -46,7 +46,7 @@ test("module-graph: buildScripts + buildRuntimeGraph reuse pre-parsed ASTs and n
       [
         'import "./lib.jh" as lib',
         "script local_script = `echo local`",
-        "workflow default() {",
+        "export def main() {",
         "  run lib.inner()",
         "}",
         "",
@@ -71,11 +71,11 @@ test("module-graph: buildScripts + buildRuntimeGraph reuse pre-parsed ASTs and n
 
       const runtime = buildRuntimeGraph(graph);
       assert.equal(runtime.modules.size, 2);
-      const inner = resolveWorkflowRef(runtime, main, {
+      const inner = resolveDefRef(runtime, main, {
         value: "lib.inner",
         loc: { line: 1, col: 1 },
       });
-      assert.equal(inner?.workflow.name, "inner");
+      assert.equal(inner?.def.name, "inner");
       const helper = resolveScriptRef(runtime, main, "lib.helper");
       assert.equal(helper?.script.name, "helper");
     } finally {
@@ -98,11 +98,11 @@ test("module-graph: cross-module workflow, rule, and script resolution", () => {
     write(
       lib,
       [
-        "rule check() {",
+        "export def check() {",
         '  log "ok"',
         "}",
-        "script helper = `echo hi`",
-        "workflow inner() {",
+        "export script helper = `echo hi`",
+        "export def inner() {",
         "  echo ok",
         "}",
         "",
@@ -112,11 +112,11 @@ test("module-graph: cross-module workflow, rule, and script resolution", () => {
       main,
       [
         'import "./lib.jh" as lib',
-        "rule local_check() {",
+        "def local_check() {",
         '  log "local"',
         "}",
         "script local_script = `echo local`",
-        "workflow default() {",
+        "export def main() {",
         "  run lib.inner()",
         "}",
         "",
@@ -131,16 +131,16 @@ test("module-graph: cross-module workflow, rule, and script resolution", () => {
       assert.deepEqual(emitted, ["helper", "local_script"]);
 
       const runtime = buildRuntimeGraph(graph);
-      const localWf = resolveWorkflowRef(runtime, main, {
-        value: "default",
+      const localWf = resolveDefRef(runtime, main, {
+        value: "main",
         loc: { line: 1, col: 1 },
       });
-      assert.equal(localWf?.workflow.name, "default");
-      const importedWf = resolveWorkflowRef(runtime, main, {
+      assert.equal(localWf?.def.name, "main");
+      const importedWf = resolveDefRef(runtime, main, {
         value: "lib.inner",
         loc: { line: 1, col: 1 },
       });
-      assert.equal(importedWf?.workflow.name, "inner");
+      assert.equal(importedWf?.def.name, "inner");
       const localScript = resolveScriptRef(runtime, main, "local_script");
       assert.equal(localScript?.script.name, "local_script");
       const importedScript = resolveScriptRef(runtime, main, "lib.helper");
@@ -166,7 +166,7 @@ test("module-graph: serialize round-trip preserves the import closure for the ch
     write(
       lib,
       [
-        "workflow inner() {",
+        "export def inner() {",
         "  echo ok",
         "}",
         "",
@@ -176,7 +176,7 @@ test("module-graph: serialize round-trip preserves the import closure for the ch
       main,
       [
         'import "./lib.jh" as lib',
-        "workflow default() {",
+        "export def main() {",
         "  run lib.inner()",
         "}",
         "",
@@ -192,11 +192,11 @@ test("module-graph: serialize round-trip preserves the import closure for the ch
     const round = deserializeModuleGraph(serialized);
     assert.equal(round.modules.size, 2);
     const runtime = buildRuntimeGraph(round);
-    const importedWf = resolveWorkflowRef(runtime, main, {
+    const importedWf = resolveDefRef(runtime, main, {
       value: "lib.inner",
       loc: { line: 1, col: 1 },
     });
-    assert.equal(importedWf?.workflow.name, "inner");
+    assert.equal(importedWf?.def.name, "inner");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -212,12 +212,12 @@ test("module-graph: handles a 3-module closure with one shared parse", () => {
     const main = join(dir, "main.jh");
     const libA = join(dir, "a.jh");
     const libB = join(dir, "b.jh");
-    write(libA, "workflow a() {\n  echo ok\n}\n");
+    write(libA, "export def a() {\n  echo ok\n}\n");
     write(
       libB,
       [
         'import "./a.jh" as a',
-        "workflow b() {",
+        "export def b() {",
         "  run a.a()",
         "}",
         "",
@@ -227,7 +227,7 @@ test("module-graph: handles a 3-module closure with one shared parse", () => {
       main,
       [
         'import "./b.jh" as b',
-        "workflow default() {",
+        "export def main() {",
         "  run b.b()",
         "}",
         "",
@@ -246,8 +246,8 @@ test("module-graph: handles a 3-module closure with one shared parse", () => {
     try {
       buildScriptsFromGraph(graph, outDir);
       const runtime = buildRuntimeGraph(graph);
-      const bRef = resolveWorkflowRef(runtime, main, { value: "b.b", loc: { line: 1, col: 1 } });
-      assert.equal(bRef?.workflow.name, "b");
+      const bRef = resolveDefRef(runtime, main, { value: "b.b", loc: { line: 1, col: 1 } });
+      assert.equal(bRef?.def.name, "b");
       const bNode = runtime.modules.get(libB)!;
       assert.equal(bNode.imports.get("a"), libA);
     } finally {

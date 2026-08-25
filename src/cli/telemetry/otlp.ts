@@ -24,8 +24,8 @@ import type { ExportRunTelemetryOptions, ExportOutcome } from "./types";
 
 /** Metadata the pure mapper needs beyond the journal lines themselves. */
 export interface OtlpMeta {
-  /** Root workflow symbol (`default` for `jaiph run`, the tool symbol for MCP). */
-  workflow: string;
+  /** Root def symbol(`main` for `jaiph run`, the tool symbol for MCP). */
+  def: string;
   /** Child exit status; nonzero marks the root span ERROR. */
   exitStatus: number;
   /** Terminating signal, when the run was killed; marks the root span ERROR. */
@@ -107,8 +107,8 @@ export function runSummaryToOtlp(lines: string[], meta: OtlpMeta): Record<string
   const traceId = runId.replace(/-/g, "");
   const rootSpanId = spanIdFor(runId);
 
-  const wfStart = events.find((e) => e.type === "WORKFLOW_START");
-  const wfEnd = events.find((e) => e.type === "WORKFLOW_END");
+  const wfStart = events.find((e) => e.type === "RUN_START");
+  const wfEnd = events.find((e) => e.type === "RUN_END");
   const firstTs = asString(events[0]?.ts);
   const lastTs = asString(events[events.length - 1]?.ts) || firstTs;
   const rootStart = asString(wfStart?.ts) || firstTs;
@@ -122,7 +122,7 @@ export function runSummaryToOtlp(lines: string[], meta: OtlpMeta): Record<string
   spans.push({
     traceId,
     spanId: rootSpanId,
-    name: `workflow ${meta.workflow}`,
+    name: `run ${meta.def}`,
     kind: SPAN_KIND_INTERNAL,
     startTimeUnixNano: tsToNano(rootStart),
     endTimeUnixNano: tsToNano(rootEnd),
@@ -257,7 +257,7 @@ function resourceAttributes(meta: OtlpMeta, runId: string, source: string): Otlp
     "service.name": meta.serviceName,
     ...meta.resourceAttributes,
     "jaiph.run_id": runId,
-    "jaiph.workflow": meta.workflow,
+    "jaiph.def": meta.def,
     "jaiph.source": source,
   };
   return Object.entries(merged).map(([k, v]) => strAttr(k, v));
@@ -430,7 +430,7 @@ export async function exportOtlpTraces(
   timeoutMs: number,
   warn: (msg: string) => void,
 ): Promise<ExportOutcome> {
-  const { runDir, workflow, exitStatus, signal, env } = opts;
+  const { runDir, def, exitStatus, signal, env } = opts;
   const endpoint = resolveOtlpEndpoint(env);
   if (!endpoint) return "skipped";
 
@@ -469,7 +469,7 @@ export async function exportOtlpTraces(
   // Attach the authenticated caller identity (never a token) as resource attrs.
   if (opts.identity?.principal) resourceAttrs["jaiph.principal"] = opts.identity.principal;
   if (opts.identity?.correlationId) resourceAttrs["jaiph.correlation_id"] = opts.identity.correlationId;
-  const payload = runSummaryToOtlp(lines, { workflow, exitStatus, signal, serviceName, resourceAttributes: resourceAttrs });
+  const payload = runSummaryToOtlp(lines, { def, exitStatus, signal, serviceName, resourceAttributes: resourceAttrs });
   const headers = parseKeyValueList(env.OTEL_EXPORTER_OTLP_HEADERS);
 
   try {

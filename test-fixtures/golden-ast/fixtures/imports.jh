@@ -1,6 +1,6 @@
 import "lib.jh" as lib
 
-workflow default() {
+export def main() {
   run lib.setup()
-  ensure lib.check()
+  run lib.check()
 }

@@ -19,11 +19,11 @@ export PATH="${E2E_MOCK_BIN}:${PATH}"
 e2e::file "loop_prompts.jh" <<'EOF'
 #!/usr/bin/env jaiph
 
-workflow review(name) {
+def review(name) {
   prompt "${name}"
 }
 
-workflow default() {
+export def main() {
   const first = run review("alpha")
   const second = run review("beta")
   const third = run review("gamma")
@@ -35,11 +35,11 @@ rm -rf "${TEST_DIR}/loop_runs"
 # When
 JAIPH_RUNS_DIR="${TEST_DIR}/loop_runs" e2e::run "loop_prompts.jh" >/dev/null
 
-# Then: artifacts include workflow-level .out + prompt step .out for each review call.
+# Then: artifacts include def-level .out + prompt step .out for each review call.
 e2e::expect_run_file_count_at "${TEST_DIR}/loop_runs" "loop_prompts.jh" 14
 run_dir="$(e2e::run_dir_at "${TEST_DIR}/loop_runs" "loop_prompts.jh")"
 shopt -s nullglob
-review_out_files=( "${run_dir}"*-workflow__review.out )
+review_out_files=( "${run_dir}"*-def__review.out )
 shopt -u nullglob
 [[ ${#review_out_files[@]} -eq 3 ]] || e2e::fail "expected 3 review workflow .out files, got ${#review_out_files[@]}"
 e2e::pass "loop_prompts.jh has 3 review workflow .out files"

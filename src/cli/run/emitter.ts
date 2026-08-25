@@ -19,8 +19,8 @@ export type RunEventMap = {
   step_end: StepEndData;
   log: LogEvent;
   stderr_line: { line: string };
-  workflow_start: HookPayload;
-  workflow_end: HookPayload;
+  run_start: HookPayload;
+  run_end: HookPayload;
 };
 
 export type RunEmitter = {

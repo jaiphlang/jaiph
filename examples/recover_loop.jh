@@ -6,7 +6,7 @@ script check_report_exists = ```
   test -f report.txt
 ```
 
-workflow default() {
+export def main() {
   # Recovery in loop: when check_report_exists() fails, the recovery body
   # is executed to fix it, and then check_report_exists() is retried.
   # By default, the retry limit is 10.

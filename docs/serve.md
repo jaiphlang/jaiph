@@ -1,14 +1,14 @@
 ---
-title: Serve workflows over HTTP
+title: Serve defs over HTTP
 permalink: /how-to/serve
 diataxis: how-to
 ---
 
-# Serve workflows over HTTP
+# Serve defs over HTTP
 
-This guide turns a `.jh` file into an HTTP API. `jaiph serve ./tools.jh` exposes the file's workflows as endpoints, publishes a machine-readable [OpenAPI 3.1](https://spec.openapis.org/oas/v3.1.0) document, and serves a Swagger UI you can open in a browser. Any HTTP client can invoke the tested workflows and inspect their runs without an MCP client or a local jaiph install. For example, a CI job, a Kubernetes deployment, another service, or a person with a browser can all reach the same endpoints.
+This guide turns a `.jh` file into an HTTP API. `jaiph serve ./tools.jh` exposes the file's defs as endpoints, publishes a machine-readable [OpenAPI 3.1](https://spec.openapis.org/oas/v3.1.0) document, and serves a Swagger UI you can open in a browser. Any HTTP client can invoke the tested defs and inspect their runs without an MCP client or a local jaiph install. For example, a CI job, a Kubernetes deployment, another service, or a person with a browser can all reach the same endpoints.
 
-It reuses the same compile-time validation, host execution, and `.jaiph/runs/` artifacts as [`jaiph run`](cli.md#jaiph-run), and the same exposure rules as [`jaiph mcp`](mcp.md). `jaiph mcp` binds the server to a stdio parent on the same machine, and `jaiph serve` instead makes the workflows reachable over the network.
+It reuses the same compile-time validation, host execution, and `.jaiph/runs/` artifacts as [`jaiph run`](cli.md#jaiph-run), and the same exposure rules as [`jaiph mcp`](mcp.md). `jaiph mcp` binds the server to a stdio parent on the same machine, and `jaiph serve` instead makes the defs reachable over the network.
 
 > **Security.** An exposed workflow is arbitrary shell that anyone who can reach the port can run, and that is the point of serving it. A request argument that binds to a workflow parameter is shell-quoted before it reaches any shell step, so a caller cannot use an argument value to inject extra shell commands, though the caller can still run whatever the exposed workflow itself does. When a token is set, the caller must also hold the token. With no token or OIDC the server has no auth at all, so it refuses to start unless you pass `--allow-anonymous`, which is for a single-user workstation only — on a shared host any local user could invoke the workflows (see [Authenticate and authorize](#7-authenticate-and-authorize)). For anything beyond a single-user loopback, configure authentication, put the server behind a reverse proxy or ingress that terminates TLS, and treat the run directory as sensitive. The process itself speaks plain HTTP. For authentication, use a static `JAIPH_SERVE_TOKEN` for a single operator, or OIDC/JWT for multiple users (see [Authenticate and authorize](#7-authenticate-and-authorize)).
 
@@ -21,7 +21,7 @@ It reuses the same compile-time validation, host execution, and `.jaiph/runs/` a
 
 ```bash
 jaiph serve ./tools.jh
-# jaiph serve: listening on http://127.0.0.1:5247 — API docs at http://127.0.0.1:5247/docs, MCP at http://127.0.0.1:5247/mcp (2 workflow(s))
+# jaiph serve: listening on http://127.0.0.1:5247 — API docs at http://127.0.0.1:5247/docs, MCP at http://127.0.0.1:5247/mcp (2 def(s))
 ```
 
 The defaults are `--host 127.0.0.1` and `--port 5247`. All logs go to stderr. Startup validates the file exactly like [`jaiph mcp`](cli.md#jaiph-mcp). A compile error prints a `file:line:col CODE message` diagnostic to stderr and exits `1`.
@@ -29,22 +29,22 @@ The defaults are `--host 127.0.0.1` and `--port 5247`. All logs go to stderr. St
 ## 2. Discover the workflows
 
 ```bash
-curl -s http://127.0.0.1:5247/v1/workflows | jq
+curl -s http://127.0.0.1:5247/v1/defs | jq
 ```
 
 `GET /openapi.json` returns the full OpenAPI 3.1 document, with one path per workflow. Each path carries the workflow's `#`-comment description and its parameters as a JSON request-body schema. `GET /healthz` is a liveness and readiness probe that needs no authentication.
 
 ## 3. Invoke a workflow
 
-A run is a durable resource. `POST /v1/workflows/{name}/runs` starts one. The request body is a JSON object of the workflow's parameters, and every value is a string.
+A run is a durable resource. `POST /v1/defs/{name}/runs` starts one. The request body is a JSON object of the workflow's parameters, and every value is a string.
 
 ```bash
 # Async: 202 + a Location header pointing at the run resource.
-curl -si -X POST http://127.0.0.1:5247/v1/workflows/greet/runs \
+curl -si -X POST http://127.0.0.1:5247/v1/defs/greet/runs \
   -H 'content-type: application/json' -d '{"name":"world"}'
 
 # Synchronous: block until the run is terminal, then return the final object.
-curl -s -X POST 'http://127.0.0.1:5247/v1/workflows/greet/runs?wait=true' \
+curl -s -X POST 'http://127.0.0.1:5247/v1/defs/greet/runs?wait=true' \
   -H 'content-type: application/json' -d '{"name":"world"}' | jq
 ```
 
@@ -67,7 +67,7 @@ curl -s http://127.0.0.1:5247/v1/runs/$ID/events
 curl -sN -H 'accept: text/event-stream' http://127.0.0.1:5247/v1/runs/$ID/events
 ```
 
-Each SSE message is a `data:` line that carries one raw journal line, such as `WORKFLOW_START`, `STEP_START`, `STEP_END`, `LOG*`, `PROMPT_*`, or `WORKFLOW_END`. A `:ka` comment every 15 seconds keeps proxies from idling the connection out. Connect while the run is still going to watch it step by step, or connect after it finishes for a full replay followed by an immediate `event: end`. Add `-H 'authorization: Bearer <token>'` when a token is set. The `-N` flag on `curl` disables buffering, so events surface as they arrive.
+Each SSE message is a `data:` line that carries one raw journal line, such as `RUN_START`, `STEP_START`, `STEP_END`, `LOG*`, `PROMPT_*`, or `RUN_END`. A `:ka` comment every 15 seconds keeps proxies from idling the connection out. Connect while the run is still going to watch it step by step, or connect after it finishes for a full replay followed by an immediate `event: end`. Add `-H 'authorization: Bearer <token>'` when a token is set. The `-N` flag on `curl` disables buffering, so events surface as they arrive.
 
 The default snapshot mode verifies the run's keyed integrity chain before it returns the body. When the chain does not verify, because the journal was rewritten, truncated, or forged, the snapshot request fails with `409 E_TAMPERED` and serves no timeline. A run with no persisted key, such as an older run written before the chain was keyed, cannot be verified and is never blocked. See [Architecture — Keyed hash chain](architecture.md#hash-chain) for the format and for how the key stays out of the workflow.
 
@@ -101,7 +101,7 @@ Open `http://127.0.0.1:5247/docs` in a browser to get a live form for every work
 
 ```bash
 JAIPH_SERVE_TOKEN=secret jaiph serve --host 0.0.0.0 --port 8080 ./tools.jh
-curl -s http://host:8080/v1/workflows -H 'authorization: Bearer secret' | jq
+curl -s http://host:8080/v1/defs -H 'authorization: Bearer secret' | jq
 ```
 
 **OIDC/JWT for multiple users.** Set `JAIPH_SERVE_OIDC_ISSUER` and `JAIPH_SERVE_OIDC_AUDIENCE`. OIDC takes precedence over the static token when both are set. Bearer tokens are verified against the issuer's JWKS, which is the set of public signing keys. Jaiph discovers the key set from `<issuer>/.well-known/openid-configuration`, or you can set `JAIPH_SERVE_OIDC_JWKS_URI` explicitly. A maintained JWT library (`jose`) does the cryptographic checks: the signature, the `exp` and `nbf` times, the `aud` and `iss` claims, and key selection by `kid`. Jaiph also pins an explicit allowlist of asymmetric signing algorithms, covering the RSA, ECDSA, and EdDSA families that standard OIDC providers sign with, and it excludes symmetric algorithms, `alg: none`, and the non-recommended secp256k1 curve (`ES256K`). A token whose header names an algorithm outside the allowlist is rejected even when its signing key is in the JWKS, so a future key-type or JWKS change cannot make an algorithm-confusion or `alg: none` forgery reachable. A verification failure is a `401`, with `E_TOKEN_EXPIRED` for an expired token and `E_TOKEN_INVALID` for a bad audience, issuer, key, signature, or signing algorithm. An unreachable identity provider is a `503` (`E_AUTH_UNAVAILABLE`).
@@ -110,8 +110,8 @@ Each token is authorized by three OAuth scopes. Request them in the `scope` clai
 
 | Scope | Grants |
 | --- | --- |
-| `jaiph:invoke` | `POST /v1/workflows/{name}/runs` and MCP `tools/call` |
-| `jaiph:inspect` | `GET /v1/workflows`, `/v1/runs`, a run, its events and artifacts; MCP `tools/list` |
+| `jaiph:invoke` | `POST /v1/defs/{name}/runs` and MCP `tools/call` |
+| `jaiph:inspect` | `GET /v1/defs`, `/v1/runs`, a run, its events and artifacts; MCP `tools/list` |
 | `jaiph:cancel` | `POST /v1/runs/{id}/cancel` |
 
 A missing capability is a `403` (`E_FORBIDDEN`). A principal is identified by the token `sub`, falling back to `client_id` for `sub`-less machine tokens (OAuth2 client-credentials); a verified token carrying neither is rejected `401 E_UNAUTHORIZED` rather than sharing one identity, so distinct callers never share a run-visibility bucket or idempotency namespace. A principal may inspect or cancel only the runs it created. Another principal's run returns `404`, so it looks the same as a run that does not exist. The authenticated `sub` and the request's correlation id are attached to three places: each run's metadata (`principal` and `correlation_id` on the run object), the invoke and cancel audit log lines, and the OTLP resource attributes and Sentry tags. The correlation id comes from an `X-Correlation-Id` or `X-Request-Id` header, or a generated UUID when neither is present. Jaiph never attaches the token or a claim value.
@@ -165,18 +165,18 @@ The run registry is in memory, but `jaiph serve` rebuilds it from disk on startu
 
 - **Durable run records.** When a run finishes, `jaiph serve` writes its public record (`run.json`) atomically beside its journal in the run directory. On startup `jaiph serve` scans `JAIPH_RUNS_DIR` and reloads every `run.json`, so `GET /v1/runs`, `GET /v1/runs/{id}`, `/events`, and `/artifacts` keep answering for terminal runs that finished before the restart. As it reloads each run, `jaiph serve` verifies the run's keyed integrity chain. A run whose chain does not verify is loaded with status `failed` and a result that says the journal failed integrity verification, so a rewritten or truncated journal is surfaced as a failure rather than trusted. A run with no persisted key cannot be verified and is loaded unchanged. See [Architecture — Keyed hash chain](architecture.md#hash-chain).
 - **Interrupted runs are reconciled.** A run that was still `running` when the process died has a journal but no `run.json`. On startup `jaiph serve` reconciles it into the explicit terminal status `interrupted`. Its real outcome is unknown, so it is neither `succeeded` nor `failed`, but it is never reported as permanently `running`. Jaiph persists the reconciliation, so it stays stable across further restarts.
-- **Idempotent run creation.** Send an `Idempotency-Key` request header on `POST /v1/workflows/{name}/runs`. The key is scoped to the authenticated principal and the workflow. Repeating the request with the same key and identical arguments returns the original run (`200`) and starts nothing. Reusing the key with different arguments is a `409 E_IDEMPOTENCY_CONFLICT` and, again, spawns nothing. A client that retries an expensive run after a network blip or a server restart therefore never doubles it. The key and run mapping is stored in the durable record, so it survives a restart too. An idempotency key is remembered only as long as its run is retained in the registry. Once the retention bounds above evict a run, its key is forgotten, and a fresh request with that key starts a new run.
+- **Idempotent run creation.** Send an `Idempotency-Key` request header on `POST /v1/defs/{name}/runs`. The key is scoped to the authenticated principal and the workflow. Repeating the request with the same key and identical arguments returns the original run (`200`) and starts nothing. Reusing the key with different arguments is a `409 E_IDEMPOTENCY_CONFLICT` and, again, spawns nothing. A client that retries an expensive run after a network blip or a server restart therefore never doubles it. The key and run mapping is stored in the durable record, so it survives a restart too. An idempotency key is remembered only as long as its run is retained in the registry. Once the retention bounds above evict a run, its key is forgotten, and a fresh request with that key starts a new run.
 
 ```bash
 # The same key + same args returns the original run and spawns nothing.
 KEY=$(uuidgen)
-curl -s -X POST 'http://127.0.0.1:5247/v1/workflows/greet/runs?wait=true' \
+curl -s -X POST 'http://127.0.0.1:5247/v1/defs/greet/runs?wait=true' \
   -H 'content-type: application/json' -H "Idempotency-Key: $KEY" -d '{"name":"ok"}' | jq .run_id
-curl -s -X POST 'http://127.0.0.1:5247/v1/workflows/greet/runs?wait=true' \
+curl -s -X POST 'http://127.0.0.1:5247/v1/defs/greet/runs?wait=true' \
   -H 'content-type: application/json' -H "Idempotency-Key: $KEY" -d '{"name":"ok"}' | jq .run_id   # same id
 
 # The same key + different args is a 409 conflict (spawns nothing).
-curl -s -o /dev/null -w '%{http_code}\n' -X POST 'http://127.0.0.1:5247/v1/workflows/greet/runs' \
+curl -s -o /dev/null -w '%{http_code}\n' -X POST 'http://127.0.0.1:5247/v1/defs/greet/runs' \
   -H 'content-type: application/json' -H "Idempotency-Key: $KEY" -d '{"name":"changed"}'   # 409
 ```
 
@@ -204,7 +204,7 @@ Execution follows the same contract as [`jaiph run`](cli.md#jaiph-run): every ru
 curl -s http://127.0.0.1:5247/healthz | jq -e '.status == "ok"'
 
 # A synchronous run round-trips its return value with a durable run dir.
-curl -s -X POST 'http://127.0.0.1:5247/v1/workflows/greet/runs?wait=true' \
+curl -s -X POST 'http://127.0.0.1:5247/v1/defs/greet/runs?wait=true' \
   -H 'content-type: application/json' -d '{"name":"ok"}' \
   | jq -e '.status == "succeeded" and (.run_dir | length > 0)'
 

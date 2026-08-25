@@ -20,12 +20,12 @@ const AUDIENCE = "jaiph-serve";
 const FIXTURE = [
   "script sleeper = `sleep 1`",
   "# Greets the given name.",
-  "workflow greet(name) {",
+  "export def greet(name) {",
   '  return "hi ${name}"',
   "}",
   "",
   "# Sleeps briefly so a run is observably in-flight.",
-  "workflow slow() {",
+  "export def slow() {",
   "  run sleeper()",
   '  return "woke"',
   "}",
@@ -173,7 +173,7 @@ test("jaiph serve OIDC: token validity matrix (valid, expired, wrong-aud, wrong-
     }),
   );
   const post = (token?: string): Promise<Response> =>
-    fetch(`${srv.baseUrl}/v1/workflows/greet/runs?wait=true`, {
+    fetch(`${srv.baseUrl}/v1/defs/greet/runs?wait=true`, {
       method: "POST",
       headers: { "content-type": "application/json", ...(token ? bearer(token) : {}) },
       body: JSON.stringify({ name: "x" }),
@@ -249,7 +249,7 @@ test("jaiph serve OIDC: capabilities are separate, runs are per-principal, and i
     const noCancelTok = await idp.sign({ sub: "carol", scope: "jaiph:invoke jaiph:inspect" });
 
     // Alice runs greet to completion.
-    const created = await fetch(`${srv.baseUrl}/v1/workflows/greet/runs?wait=true`, {
+    const created = await fetch(`${srv.baseUrl}/v1/defs/greet/runs?wait=true`, {
       method: "POST",
       headers: { "content-type": "application/json", ...bearer(aliceTok) },
       body: JSON.stringify({ name: "world" }),
@@ -269,7 +269,7 @@ test("jaiph serve OIDC: capabilities are separate, runs are per-principal, and i
     assert.equal((await fetch(`${srv.baseUrl}/v1/runs/${run.run_id}`, { headers: bearer(aliceTok) })).status, 200);
 
     // A principal without jaiph:cancel cannot cancel even its own in-flight run.
-    const slowStart = await fetch(`${srv.baseUrl}/v1/workflows/slow/runs`, {
+    const slowStart = await fetch(`${srv.baseUrl}/v1/defs/slow/runs`, {
       method: "POST",
       headers: { "content-type": "application/json", ...bearer(noCancelTok) },
       body: "{}",
@@ -314,7 +314,7 @@ test("jaiph serve OIDC: sub-less machine tokens get distinct client_id identitie
     const clientB = await idp.sign({ scope: fullScope, clientId: "service-b" });
 
     // Client A runs greet; the run records client A's identity, never the shared "unknown".
-    const created = await fetch(`${srv.baseUrl}/v1/workflows/greet/runs?wait=true`, {
+    const created = await fetch(`${srv.baseUrl}/v1/defs/greet/runs?wait=true`, {
       method: "POST",
       headers: { "content-type": "application/json", ...bearer(clientA) },
       body: JSON.stringify({ name: "world" }),
@@ -336,7 +336,7 @@ test("jaiph serve OIDC: sub-less machine tokens get distinct client_id identitie
     assert.equal((await fetch(`${srv.baseUrl}/v1/runs/${run.run_id}`, { headers: bearer(clientA) })).status, 200);
 
     // A verified token with neither `sub` nor `client_id` is rejected — never bucketed together.
-    const anon = await fetch(`${srv.baseUrl}/v1/workflows/greet/runs?wait=true`, {
+    const anon = await fetch(`${srv.baseUrl}/v1/defs/greet/runs?wait=true`, {
       method: "POST",
       headers: { "content-type": "application/json", ...bearer(await idp.sign({ scope: fullScope })) },
       body: JSON.stringify({ name: "x" }),

@@ -18,12 +18,12 @@ import { scrubPromptEnv } from "./env-allowlist";
 const WF = [
   // Dumps the script subprocess environment so the test can assert the key and
   // the journal path are absent from it.
-  "workflow dump_env() {",
+  "def dump_env() {",
   "  env > env_dump.txt",
   "}",
   "",
   // Attempts to destroy the authoritative journal the way the finding describes.
-  "workflow tamper() {",
+  "def tamper() {",
   '  : > "$JAIPH_RUN_DIR/run_summary.jsonl"',
   "}",
   "",

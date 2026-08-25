@@ -84,10 +84,10 @@ export class RuntimeEventEmitter {
     return this.stepSeq;
   }
 
-  emitWorkflow(type: "WORKFLOW_START" | "WORKFLOW_END", workflow: string): void {
+  emitRun(type: "RUN_START" | "RUN_END", def: string): void {
     this.serializeAndAppend({
       type,
-      workflow,
+      def,
       source: this.env.JAIPH_SOURCE_FILE ?? "",
       ts: nowIso(),
       run_id: this.runId,

@@ -16,7 +16,7 @@ e2e::section "match with string literal and wildcard"
 e2e::file "match_string.jh" <<'EOF'
 script get_status = `echo "error"`
 
-workflow default() {
+export def main() {
   const status = run get_status()
   return match status {
     "ok" => "all good"
@@ -32,10 +32,10 @@ e2e::expect_stdout "${match_out}" <<'EOF'
 
 Jaiph: Running match_string.jh
 
-workflow default
+export def main
   ▸ script get_status
   ✓ script get_status (<time>)
-✓ PASS workflow default (<time>)
+✓ PASS export def main (<time>)
 
 something broke
 EOF
@@ -50,7 +50,7 @@ e2e::section "match falls through to wildcard"
 e2e::file "match_wildcard.jh" <<'EOF'
 script get_mode = `echo "unknown-mode"`
 
-workflow default() {
+export def main() {
   const mode = run get_mode()
   return match mode {
     "fast" => "speed"
@@ -66,10 +66,10 @@ e2e::expect_stdout "${wildcard_out}" <<'EOF'
 
 Jaiph: Running match_wildcard.jh
 
-workflow default
+export def main
   ▸ script get_mode
   ✓ script get_mode (<time>)
-✓ PASS workflow default (<time>)
+✓ PASS export def main (<time>)
 
 default
 EOF
@@ -84,7 +84,7 @@ e2e::section "match with regex pattern"
 e2e::file "match_regex.jh" <<'EOF'
 script get_input = `echo "ERROR: something failed"`
 
-workflow default() {
+export def main() {
   const msg = run get_input()
   return match msg {
     /^ERROR/ => "error"
@@ -100,10 +100,10 @@ e2e::expect_stdout "${regex_out}" <<'EOF'
 
 Jaiph: Running match_regex.jh
 
-workflow default
+export def main
   ▸ script get_input
   ✓ script get_input (<time>)
-✓ PASS workflow default (<time>)
+✓ PASS export def main (<time>)
 
 error
 EOF
@@ -118,7 +118,7 @@ e2e::section "match in return with captured variable"
 e2e::file "match_return.jh" <<'EOF'
 script get_code = `echo "200"`
 
-workflow default() {
+export def main() {
   const code = run get_code()
   return match code {
     "200" => "success"
@@ -134,10 +134,10 @@ e2e::expect_stdout "${return_out}" <<'EOF'
 
 Jaiph: Running match_return.jh
 
-workflow default
+export def main
   ▸ script get_code
   ✓ script get_code (<time>)
-✓ PASS workflow default (<time>)
+✓ PASS export def main (<time>)
 
 success
 EOF

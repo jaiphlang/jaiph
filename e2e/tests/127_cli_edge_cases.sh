@@ -14,7 +14,7 @@ TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 e2e::section "format --indent with non-integer value"
 
 e2e::file "simple.jh" <<'EOF'
-workflow default() {
+export def main() {
   log "hello"
 }
 EOF
@@ -58,7 +58,7 @@ if [[ "$(id -u)" -eq 0 ]]; then
   e2e::skip "running as root (or with DAC_READ_SEARCH) — chmod 000 cannot make a file unreadable"
 else
   e2e::file "unreadable.jh" <<'EOF'
-workflow default() {
+export def main() {
   log "hello"
 }
 EOF
@@ -108,7 +108,7 @@ e2e::pass "compile on empty directory exits 0"
 e2e::section "compile --json on parse error"
 
 e2e::file "parse_bad.jh" <<'EOF'
-workflow default() {
+export def main() {
   log "unterminated
 }
 EOF
@@ -142,13 +142,13 @@ e2e::assert_contains "${nonjh_msg}" "compile expects .jh" "compile rejects non-.
 e2e::section "format --check with mixed files"
 
 e2e::file "clean.jh" <<'EOF'
-workflow default() {
+export def main() {
   log "hello"
 }
 EOF
 
 e2e::file "dirty.jh" <<'EOF'
-workflow    default()   {
+export def main()   {
   log "hello"
 }
 EOF

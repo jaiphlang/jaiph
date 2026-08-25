@@ -3,9 +3,8 @@ import { isJaiphInterpolationRef } from "../parser";
 import type { Arg, jaiphModule } from "../types";
 import {
   lookupKind,
-  RULE_REF_EXPECT,
   validateRef,
-  WORKFLOW_REF_EXPECT,
+  DEF_REF_EXPECT,
   type RefExpectMessages,
   type RefResolutionContext,
   type RefTargetKind,
@@ -48,7 +47,7 @@ export function validateChannelRef(channel: string, loc: { line: number; col: nu
   }
 }
 
-export const ROUTE_REF_EXPECT: RefExpectMessages = WORKFLOW_REF_EXPECT;
+export const ROUTE_REF_EXPECT: RefExpectMessages = DEF_REF_EXPECT;
 
 export function resolveRouteTargetParams(
   ref: string,
@@ -63,10 +62,10 @@ export function resolveRouteTargetParams(
     if (!importPath) return undefined;
     const importedAst = refCtx.importedAstCache.get(importPath);
     if (!importedAst) return undefined;
-    const wf = importedAst.workflows.find((w) => w.name === name);
+    const wf = importedAst.defs.find((w) => w.name === name);
     return wf?.params.length;
   }
-  const wf = ast.workflows.find((w) => w.name === ref);
+  const wf = ast.defs.find((w) => w.name === ref);
   return wf?.params.length;
 }
 
@@ -78,19 +77,11 @@ export function validateInlineStringCaptures(
   ctx: ValidatorCtx,
 ): void {
   for (const cap of extractInlineCaptures(content)) {
-    if (cap.kind === "run") {
-      validateNoShellRedirection(ctx.diag, ctx.ast.filePath, loc, "run", cap.args);
-      validateRef({ value: cap.ref, loc }, ctx.ast, ctx.refCtx, {
-        mode: "expect",
-        expect: ctx.scope.runRefExpect,
-      });
-    } else {
-      validateNoShellRedirection(ctx.diag, ctx.ast.filePath, loc, "ensure", cap.args);
-      validateRef({ value: cap.ref, loc }, ctx.ast, ctx.refCtx, {
-        mode: "expect",
-        expect: RULE_REF_EXPECT,
-      });
-    }
+    validateNoShellRedirection(ctx.diag, ctx.ast.filePath, loc, "run", cap.args);
+    validateRef({ value: cap.ref, loc }, ctx.ast, ctx.refCtx, {
+      mode: "expect",
+      expect: ctx.scope.runRefExpect,
+    });
   }
 }
 
@@ -215,13 +206,13 @@ function checkNestedManagedInLiteral(
   while ((match = re.exec(stripped)) !== null) {
     const before = stripped.slice(0, match.index).trimEnd();
     const lastToken = before.length === 0 ? "" : before.slice(before.lastIndexOf(" ") + 1);
-    if (lastToken === "run" || lastToken === "ensure") continue;
+    if (lastToken === "run") continue;
     diag.error(
       filePath,
       loc.line,
       loc.col,
       "E_VALIDATE",
-      `nested managed calls in argument position must be explicit; use "run ${match[1]}(...)" or "ensure ${match[1]}(...)" inside the argument list`,
+      `nested managed calls in argument position must be explicit; use "run ${match[1]}(...)" inside the argument list`,
     );
   }
   const btRe = /`[^`]*`\s*\(/g;
@@ -229,7 +220,7 @@ function checkNestedManagedInLiteral(
   while ((btMatch = btRe.exec(stripped)) !== null) {
     const before = stripped.slice(0, btMatch.index).trimEnd();
     const lastToken = before.length === 0 ? "" : before.slice(before.lastIndexOf(" ") + 1);
-    if (lastToken === "run" || lastToken === "ensure") continue;
+    if (lastToken === "run") continue;
     diag.error(
       filePath,
       loc.line,
@@ -304,7 +295,7 @@ export function validateArgVarRefs(
       loc.line,
       loc.col,
       "E_VALIDATE",
-      `unknown identifier "${a.name}" used as bare argument; declare it with "const", use a capture, or add a workflow/rule parameter`,
+      `unknown identifier "${a.name}" used as bare argument; declare it with "const", use a capture, or add a def parameter`,
     );
   }
 }
@@ -315,11 +306,10 @@ export function validateArity(
   loc: { line: number; col: number },
   ref: string,
   args: Arg[] | undefined,
-  targetKind: "workflow" | "rule",
   ast: jaiphModule,
   refCtx: RefResolutionContext,
 ): void {
-  const params = lookupCalleeParams(ref, targetKind, ast, refCtx);
+  const params = lookupCalleeParams(ref, ast, refCtx);
   if (params === undefined) return;
   const argCount = args?.length ?? 0;
   if (argCount !== params.length) {
@@ -328,26 +318,21 @@ export function validateArity(
       loc.line,
       loc.col,
       "E_VALIDATE",
-      `${targetKind} "${ref}" expects ${params.length} argument(s) (${params.join(", ") || "none"}), but got ${argCount}`,
+      `def "${ref}" expects ${params.length} argument(s) (${params.join(", ") || "none"}), but got ${argCount}`,
     );
   }
 }
 
 function lookupCalleeParams(
   ref: string,
-  targetKind: "workflow" | "rule",
   ast: jaiphModule,
   refCtx: RefResolutionContext,
 ): string[] | undefined {
   const parts = ref.split(".");
   if (parts.length === 1) {
     const name = parts[0];
-    if (targetKind === "workflow") {
-      const wf = ast.workflows.find((w) => w.name === name);
-      return wf?.params;
-    }
-    const rl = ast.rules.find((r) => r.name === name);
-    return rl?.params;
+    const wf = ast.defs.find((w) => w.name === name);
+    return wf?.params;
   }
   if (parts.length === 2) {
     const [alias, name] = parts;
@@ -355,12 +340,8 @@ function lookupCalleeParams(
     if (!importedFile) return undefined;
     const importedAst = refCtx.importedAstCache.get(importedFile);
     if (!importedAst) return undefined;
-    if (targetKind === "workflow") {
-      const wf = importedAst.workflows.find((w) => w.name === name);
-      return wf?.params;
-    }
-    const rl = importedAst.rules.find((r) => r.name === name);
-    return rl?.params;
+    const wf = importedAst.defs.find((w) => w.name === name);
+    return wf?.params;
   }
   return undefined;
 }
@@ -433,8 +414,7 @@ export function makeSubEnv(
   return {
     filePath: ctx.ast.filePath,
     loc,
-    localRules: new Set(ctx.ast.rules.map((r) => r.name)),
-    localWorkflows: ctx.localWorkflows,
+    localDefs: ctx.localDefs,
     localScripts: ctx.localScripts,
     importsByAlias: ctx.importsByAlias,
     lookupImported: makeImportedKindLookup(ctx),

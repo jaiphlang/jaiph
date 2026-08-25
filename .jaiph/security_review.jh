@@ -89,7 +89,7 @@ script worktree_fingerprint = `git status --porcelain | sort | cksum`
 
 script report_file_nonempty = `test -s "$1"`
 
-workflow review_scope(mode, scope_detail, report_file) {
+def review_scope(mode, scope_detail, report_file) {
   const result = prompt """
     First read and follow the OWASP ASI compliance skill at
     .jaiph/skills/agent-owasp-compliance/SKILL.md — use its ASI-01..ASI-10
@@ -147,7 +147,7 @@ workflow review_scope(mode, scope_detail, report_file) {
   return result.verdict
 }
 
-workflow review_codebase(report_file) {
+def review_codebase(report_file) {
   const scope_detail = """
     Review the ENTIRE repository against OWASP ASI Top 10. Explore agent
     backends, prompt paths, script/shell execution, host execution,
@@ -157,7 +157,7 @@ workflow review_codebase(report_file) {
   return run review_scope("codebase", scope_detail, report_file)
 }
 
-workflow review_diff_text(mode, scope_label, diff_text, report_file) {
+def review_diff_text(mode, scope_label, diff_text, report_file) {
   if diff_text == "" {
     log "Security review: no changes to review (${scope_label})."
     return "skip"
@@ -174,7 +174,7 @@ workflow review_diff_text(mode, scope_label, diff_text, report_file) {
   return run review_scope(mode, scope_detail, report_file)
 }
 
-workflow finish_report(verdict, report_file, fingerprint_before) {
+def finish_report(verdict, report_file, fingerprint_before) {
   if verdict == "skip" {
     log "Security review skipped (nothing in scope)."
     return ""
@@ -195,7 +195,7 @@ workflow finish_report(verdict, report_file, fingerprint_before) {
 
 script truncate_file = `: > "$1"`
 
-workflow queue_findings(report_file) {
+def queue_findings(report_file) {
   const tasks_file = run security_review_tasks_path()
   # Default to empty so a no-finding pass is a clean no-op for add_from_file.
   run truncate_file(tasks_file)
@@ -251,7 +251,7 @@ const commit_task = """
   from the latest .jaiph/tmp/security_review_*.md report.
 """
 
-workflow dispatch_review(mode, scope, report_file) {
+def dispatch_review(mode, scope, report_file) {
   if mode == "codebase" {
     return run review_codebase(report_file)
   } else if mode == "diff" {
@@ -263,8 +263,8 @@ workflow dispatch_review(mode, scope, report_file) {
   }
 }
 
-workflow default(scope) {
-  ensure git.in_git_repo()
+export def main(scope) {
+  run git.in_git_repo()
 
   const mode = match scope {
     "" | "codebase" | "full" => "codebase"
@@ -276,7 +276,7 @@ workflow default(scope) {
   # commit only contains queued findings. Diff mode reviews an existing dirty
   # tree and updates QUEUE.md without committing.
   if mode != "diff" {
-    ensure git.branch_clean()
+    run git.branch_clean()
   }
 
   run common.mkdir_p_simple(".jaiph/tmp")
@@ -294,7 +294,7 @@ workflow default(scope) {
   run queue_findings(report_file)
 
   if mode == "diff" {
-    ensure git.has_changes() catch (err) {
+    run git.has_changes() catch (err) {
       log "Security review finished (no QUEUE.md changes). Report: ${report_file}"
       return ""
     }

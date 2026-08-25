@@ -31,7 +31,7 @@ The reserved internal marker `__workflow-runner` is excluded from `--help`/usage
 
 | Subcommand | Purpose |
 |---|---|
-| `run` | Compile, launch, and observe one workflow run on the host. |
+| `run` | Compile, launch, and observe one run on the host. |
 | `test` | Execute `*.test.jh` blocks in-process with mocks. |
 | `compile` | Multi-error validation pass — no `scripts/` emission, no runtime spawn. |
 | `format` | Rewrite `.jh` / `.test.jh` files into canonical style. |
@@ -60,7 +60,7 @@ Every run executes on the host. Isolation is an outer concern: wrap jaiph in a c
 | `--raw` | — | Skip the banner, live progress tree, hooks, and PASS/FAIL footer. The runner child inherits stdio; `__JAIPH_EVENT__` JSON lines go to stderr unchanged. |
 | `--workspace` | `<dir>` | Override the workspace root used for library resolution. A missing value, missing path, or non-directory aborts with a specific message. There is no `JAIPH_WORKSPACE` env equivalent input — that name is reserved for the runner. |
 | `--env` | `KEY=VALUE` or `KEY` | Repeatable per-key environment passthrough into the workflow process. `--env KEY=VALUE` defines `KEY` with that exact value (first `=` splits; the value may contain `=`; empty is allowed). `--env KEY` forwards the host's current value, aborting with `E_ENV_MISSING` before spawning if `KEY` is unset on the host. `KEY` must match `[A-Za-z_][A-Za-z0-9_]*` (else `E_ENV_INVALID`). Runtime-managed keys (`JAIPH_WORKSPACE`, `JAIPH_RUNS_DIR`, `JAIPH_RUN_ID`, `JAIPH_SCRIPTS`, `JAIPH_MODULE_GRAPH_FILE`, `JAIPH_SOURCE_ABS`, `JAIPH_META_FILE`, `JAIPH_AGENT_TRUSTED_WORKSPACE`, `JAIPH_TRUST_PROJECT_HOOKS`) are rejected with `E_ENV_RESERVED`. Values are never path-remapped. |
-| `--` | — | End of Jaiph flags; remaining tokens are forwarded to `workflow default`. |
+| `--` | — | End of Jaiph flags; remaining tokens are forwarded to `export def main`. |
 
 ### Pre-flight
 
@@ -79,7 +79,7 @@ After module-graph load, before the runner is spawned, the host CLI runs a crede
 | `·` | Continuation marker (heartbeat lines in non-TTY mode). |
 | ` ₁`, ` ₂`, … | Subscript prefix for `run async` branch numbering. |
 
-PASS line: `✓ PASS workflow default (0.2s)`. TTY runs append a transient `▸ RUNNING workflow <name> (X.Xs)` line that is replaced by the PASS/FAIL line on exit. `--raw` and non-TTY modes skip both. Disable color globally with `NO_COLOR=1`.
+PASS line: `✓ PASS def main (0.2s)`. TTY runs append a transient `▸ RUNNING def <name> (X.Xs)` line that is replaced by the PASS/FAIL line on exit. `--raw` and non-TTY modes skip both. Disable color globally with `NO_COLOR=1`.
 
 Non-TTY heartbeat cadence is controlled by `JAIPH_NON_TTY_HEARTBEAT_FIRST_SEC` (default `60`) and `JAIPH_NON_TTY_HEARTBEAT_INTERVAL_MS` (default `30000`, floor `250`). Leaf script and prompt steps emit a yellow `⚠` idle warning when they produce no stdout/stderr for `JAIPH_STEP_IDLE_WARN_SEC` (default `180`; `0` disables).
 
@@ -87,11 +87,11 @@ A leaf script step whose subprocess produces no stdout/stderr for `JAIPH_STEP_ID
 
 ### Step display
 
-Step lines include the kind (`workflow`, `prompt`, `script`, `rule`) and name. Parameterised invocations append `key="value"` pairs in parentheses (positional params use `1=…` / `2=…`); whitespace is collapsed; values are truncated to 32 characters. Prompt step lines additionally show the backend name (or custom command basename), the effective model, and the first 24 characters of the prompt body in quotes (full line capped at 96 characters): `▸ prompt claude sonnet "Classify this task…"` on start and `✓ prompt claude sonnet (5s)` on completion. The model is the value passed to the backend (`agent.model` / `JAIPH_AGENT_MODEL` / a `--model` flag); it is a bare token between the backend and the quoted preview. When a built-in backend (cursor, claude, codex) auto-selects its own model, the token shows the literal `default` (`▸ prompt cursor default "…"`); it is omitted only for custom agent commands, which have no model concept (`▸ prompt my-agent "…"`).
+Step lines include the kind (`def`, `prompt`, `script`) and name. Parameterised invocations append `key="value"` pairs in parentheses (positional params use `1=…` / `2=…`); whitespace is collapsed; values are truncated to 32 characters. Prompt step lines additionally show the backend name (or custom command basename), the effective model, and the first 24 characters of the prompt body in quotes (full line capped at 96 characters): `▸ prompt claude sonnet "Classify this task…"` on start and `✓ prompt claude sonnet (5s)` on completion. The model is the value passed to the backend (`agent.model` / `JAIPH_AGENT_MODEL` / a `--model` flag); it is a bare token between the backend and the quoted preview. When a built-in backend (cursor, claude, codex) auto-selects its own model, the token shows the literal `default` (`▸ prompt cursor default "…"`); it is omitted only for custom agent commands, which have no model concept (`▸ prompt my-agent "…"`).
 
 ### Return values
 
-When `workflow default` returns a value (success only), the runtime writes `return_value.txt` under the run directory. Interactive `jaiph run` prints that value on stdout after the PASS line, separated by a blank line. `jaiph run --raw` never prints it to stdout; the file alone is the contract.
+When `export def main` returns a value (success only), the runtime writes `return_value.txt` under the run directory. Interactive `jaiph run` prints that value on stdout after the PASS line, separated by a blank line. `jaiph run --raw` never prints it to stdout; the file alone is the contract.
 
 ### Run artifacts
 
@@ -123,7 +123,7 @@ jaiph test <file.test.jh>             # run a single test file
 | `jaiph test <dir>` | Walk up from the resolved `<dir>`. |
 | `jaiph test <file>` | Walk up from the test file's directory. |
 
-Zero matches with no arguments (or with a directory containing no `*.test.jh` files) writes `jaiph test: no *.test.jh files found (nothing to do)` to stderr and exits `0`. An explicit file path that does not exist or is not `*.test.jh` exits `1`. Plain workflow files (`*.jh` without `.test`) are not supported as test entries. Extra positional tokens after the path are accepted but ignored.
+Zero matches with no arguments (or with a directory containing no `*.test.jh` files) writes `jaiph test: no *.test.jh files found (nothing to do)` to stderr and exits `0`. An explicit file path that does not exist or is not `*.test.jh` exits `1`. Plain def files(`*.jh` without `.test`) are not supported as test entries. Extra positional tokens after the path are accepted but ignored.
 
 Assertions: `expect_contain`, `expect_equal`, `expect_not_contain` — see [Write & run tests](testing.md).
 
@@ -165,11 +165,11 @@ Paths must end with `.jh`. Formatting is idempotent. Comments and shebangs are p
 | `--indent` | `<n>` | `2` | Spaces per indent level. |
 | `--check` | — | — | Verify without writing. Exit `0` when files match canonical form, `1` when any file would change. |
 
-Top-level ordering: the formatter hoists `import`, `config`, and `channel` declarations to the top (in that order, preserving relative source order within each group). Other top-level definitions (`const`, `rule`, `script`, `workflow`, `test`) keep their relative source order. Comments before a hoisted construct move with it; comments before non-hoisted definitions stay in place.
+Top-level ordering: the formatter hoists `import`, `config`, and `channel` declarations to the top (in that order, preserving relative source order within each group). Other top-level definitions (`const`, `script`, `def`, `test`) keep their relative source order. Comments before a hoisted construct move with it; comments before non-hoisted definitions stay in place.
 
 Top-level `const` quoting: the source delimiter is preserved per binding. Quoted values stay quoted; bare tokens stay bare; `"""…"""` values emit verbatim. The formatter does not toggle between styles based on value content.
 
-Blank-line preservation: a single blank line between steps inside a workflow or rule body is preserved. Multiple consecutive blank lines collapse to one. Trailing blank lines before `}` are removed.
+Blank-line preservation: a single blank line between steps inside a def body is preserved. Multiple consecutive blank lines collapse to one. Trailing blank lines before `}` are removed.
 
 ## `jaiph init`
 
@@ -284,7 +284,7 @@ Implementation: with no `JAIPH_INSTALL_COMMAND` override, `jaiph use` downloads 
 ## `jaiph mcp`
 {: #jaiph-mcp}
 
-Serve a file's workflows as [MCP](https://modelcontextprotocol.io/) tools over stdio. See [Serve workflows as MCP tools](mcp.md) for the recipe and client-registration steps.
+Serve a file's defs as [MCP](https://modelcontextprotocol.io/) tools over stdio. See [Serve defs as MCP tools](mcp.md) for the recipe and client-registration steps.
 
 ```text
 jaiph mcp [--workspace <dir>] [--env KEY[=VALUE]]... <file.jh>
@@ -356,7 +356,7 @@ The tool surface is derived from the **entry file only** (imports are never expo
 
 | Rule | Behaviour |
 |---|---|
-| `export workflow …` present | Exactly the exported workflows are exposed. |
+| `export def …` present | Exactly the exported workflows are exposed. |
 | No exports | Every top-level workflow except channel route targets (skipped with a warning). |
 | `default` | Exposed only when it is the sole candidate, named after the sanitized file basename (`.jh` stripped, non-`[A-Za-z0-9_-]` → `_`, truncated to 128); otherwise skipped. |
 
@@ -371,7 +371,7 @@ Tool descriptions come from the `#` comment lines directly above each workflow (
 ## `jaiph serve`
 {: #jaiph-serve}
 
-Serve a file's workflows as an HTTP API with a generated OpenAPI 3.1 document and an embedded Swagger UI. Same exposure rules and execution layer as `jaiph mcp`, over HTTP instead of stdio. See [Serve workflows over HTTP](serve.md) for the recipe.
+Serve a file's defs as an HTTP API with a generated OpenAPI 3.1 document and an embedded Swagger UI. Same exposure rules and execution layer as `jaiph mcp`, over HTTP instead of stdio. See [Serve defs over HTTP](serve.md) for the recipe.
 
 ```text
 jaiph serve [--host <addr>] [--port <n>] [--workspace <dir>] [--allow-anonymous] [--env KEY[=VALUE]]... <file.jh>
@@ -401,8 +401,8 @@ The **Cap.** column names the capability an authenticated principal must hold to
 | `GET /openapi.json` | none | OpenAPI 3.1 document, regenerated per request (hot reload needs no cache invalidation). `404` when `JAIPH_SERVE_EXPOSE_DOCS=false`. |
 | `GET /docs` | none | Self-contained Swagger UI shell. The pinned `swagger-ui-dist` assets are embedded in the binary and served from same-origin `/docs/*` paths, so it needs no browser internet access. `404` when `JAIPH_SERVE_EXPOSE_DOCS=false`. |
 | `GET /docs/swagger-ui-bundle.js`, `GET /docs/swagger-ui.css` | none | The embedded Swagger UI assets, each stamped with a `sha384` Subresource Integrity hash over the served bytes. `404` when `JAIPH_SERVE_EXPOSE_DOCS=false`. |
-| `GET /v1/workflows` | `inspect` | `{workflows: [{name, description, params}]}`. |
-| `POST /v1/workflows/{name}/runs` | `invoke` | Start a run. Default `202` + `Location: /v1/runs/{id}`; `?wait=true` blocks for the terminal `200`. Send an `Idempotency-Key` header (scoped to the authenticated principal + workflow) to make retries safe: an identical repeat returns the original run (`200`, no second spawn); a reused key with different arguments is `409 E_IDEMPOTENCY_CONFLICT` and spawns nothing. |
+| `GET /v1/defs` | `inspect` | `{defs: [{name, description, params}]}`. |
+| `POST /v1/defs/{name}/runs` | `invoke` | Start a run. Default `202` + `Location: /v1/runs/{id}`; `?wait=true` blocks for the terminal `200`. Send an `Idempotency-Key` header (scoped to the authenticated principal + def) to make retries safe: an identical repeat returns the original run (`200`, no second spawn); a reused key with different arguments is `409 E_IDEMPOTENCY_CONFLICT` and spawns nothing. |
 | `GET /v1/runs` | `inspect` | Runs started by this process **plus runs reconstructed from disk on restart**, newest first, scoped to the caller's own runs (all runs for a static/open principal). Paginated: `?limit` (default `100`, clamped to `1000`), `?offset` (default `0`). Response is `{runs, total, limit, offset}` and never unbounded. |
 | `GET /v1/runs/{id}` | `inspect` | The run object. `404` unknown (a run the principal does not own is indistinguishable from nonexistent). |
 | `GET /v1/runs/{id}/events` | `inspect` | The run's `run_summary.jsonl`. Default `application/x-ndjson` snapshot, streamed from disk (never buffered whole); `Accept: text/event-stream` replays then follows it live, closing with `event: end` when terminal. The snapshot mode first verifies the journal's keyed integrity chain and returns `409 E_TAMPERED` when the chain does not verify (see [Architecture — Keyed hash chain](architecture.md#hash-chain)). Served verbatim (already credential-redacted); raw capture files are never exposed. `404` unknown. |
@@ -410,7 +410,7 @@ The **Cap.** column names the capability an authenticated principal must hold to
 | `GET /v1/runs/{id}/artifacts/{path}` | `inspect` | Download one published file (`application/octet-stream`), streamed with backpressure — never buffered whole, so an arbitrarily large file costs no server memory and a client disconnect closes the file. Traversal-proof — `..`, absolute paths, and escaping symlinks are `404`. `413 E_ARTIFACT_TOO_LARGE` when the file exceeds `JAIPH_SERVE_MAX_ARTIFACT_BYTES`. |
 | `POST /v1/runs/{id}/cancel` | `cancel` | `202`; the run reaches `cancelled`. `409` if already terminal. |
 
-The run object is `{run_id, workflow, status, started_at, ended_at, exit_status, signal, result_text, run_dir, principal, correlation_id}` where `status` is `running` \| `succeeded` \| `failed` \| `cancelled` \| `interrupted`. `principal` is the audit subject that created the run (`anonymous`/`operator` in open/static mode, the token `sub` or `client_id` in OIDC mode — never a token) and `correlation_id` is the request id attached at create time; both are `null` when unset. `interrupted` is the terminal state a run is reconciled to after a process death caught it mid-flight — its outcome is unknown, so it is neither `succeeded` nor `failed`, but it is never reported as permanently `running`. **A workflow failure is not an HTTP error** — the run object reports `status: "failed"` with the same failure narrative `jaiph mcp` returns, over HTTP `200`/`202`. Errors use `{error: {code, message}}` with `400 E_BAD_ARGS`, `401 E_UNAUTHORIZED` (missing/invalid static token), `401 E_TOKEN_EXPIRED` / `401 E_TOKEN_INVALID` (OIDC token expired, or bad audience/issuer/key/signature/algorithm), `403 E_FORBIDDEN` (principal lacks the required capability), `404 E_NOT_FOUND`, `409 E_RUN_TERMINAL`, `409 E_IDEMPOTENCY_CONFLICT` (idempotency key reused with different arguments), `409 E_TAMPERED` (the run's journal failed its keyed integrity chain), `413 E_BODY_TOO_LARGE` (1 MiB request-body cap), `413 E_ARTIFACT_TOO_LARGE` (artifact download over `JAIPH_SERVE_MAX_ARTIFACT_BYTES`), `415` (non-`application/json` body), `429 E_TOO_MANY_RUNS`, and `503 E_AUTH_UNAVAILABLE` (OIDC identity provider / JWKS unreachable).
+The run object is `{run_id, def, status, started_at, ended_at, exit_status, signal, result_text, run_dir, principal, correlation_id}` where `status` is `running` \| `succeeded` \| `failed` \| `cancelled` \| `interrupted`. `principal` is the audit subject that created the run (`anonymous`/`operator` in open/static mode, the token `sub` or `client_id` in OIDC mode — never a token) and `correlation_id` is the request id attached at create time; both are `null` when unset. `interrupted` is the terminal state a run is reconciled to after a process death caught it mid-flight — its outcome is unknown, so it is neither `succeeded` nor `failed`, but it is never reported as permanently `running`. **A def failure is not an HTTP error** — the run object reports `status: "failed"` with the same failure narrative `jaiph mcp` returns, over HTTP `200`/`202`. Errors use `{error: {code, message}}` with `400 E_BAD_ARGS`, `401 E_UNAUTHORIZED` (missing/invalid static token), `401 E_TOKEN_EXPIRED` / `401 E_TOKEN_INVALID` (OIDC token expired, or bad audience/issuer/key/signature/algorithm), `403 E_FORBIDDEN` (principal lacks the required capability), `404 E_NOT_FOUND`, `409 E_RUN_TERMINAL`, `409 E_IDEMPOTENCY_CONFLICT` (idempotency key reused with different arguments), `409 E_TAMPERED` (the run's journal failed its keyed integrity chain), `413 E_BODY_TOO_LARGE` (1 MiB request-body cap), `413 E_ARTIFACT_TOO_LARGE` (artifact download over `JAIPH_SERVE_MAX_ARTIFACT_BYTES`), `415` (non-`application/json` body), `429 E_TOO_MANY_RUNS`, and `503 E_AUTH_UNAVAILABLE` (OIDC identity provider / JWKS unreachable).
 
 Each run's public record is persisted beside its journal as `run.json` when it finishes, and reconstructed into the registry on startup — so `GET /v1/runs`, `/v1/runs/{id}`, `/events`, and `/artifacts` keep working for pre-restart terminal runs, and idempotency keys survive a restart. `jaiph serve` is a **single-replica** service: the run registry, concurrency cap, and idempotency index are per-process and not shared across replicas — run two behind one load balancer and each has its own view. See [Serve — deployment topology](serve.md#deployment-topology).
 
@@ -439,7 +439,7 @@ See [Environment variables](env-vars.md) for the complete inventory. The variabl
 - **Live contract** (runtime → CLI): `__JAIPH_EVENT__` JSON lines on **stderr** only. Hooks and the interactive progress tree consume this stream. Stdout carries plain script output forwarded as-is.
 - **Durable contract**: `.jaiph/runs/...` + `run_summary.jsonl` + `.out` / `.err` step artifacts + optional `return_value.txt`. See [Architecture — Durable artifact layout](architecture.md#durable-artifact-layout).
 
-`run_summary.jsonl` event types: `WORKFLOW_START`, `WORKFLOW_END`, `STEP_START`, `STEP_END`, `LOG`, `LOGERR`, `LOGWARN`, `INBOX_ENQUEUE`, `INBOX_DISPATCH_START`, `INBOX_DISPATCH_COMPLETE`, `PROMPT_START`, `PROMPT_END`. Every object carries `type`, `ts` (UTC), `run_id`, and `event_version` (currently `1`). Step events also carry `id`, `parent_id`, `seq`, `depth`. See [Architecture — Contracts](architecture.md#contracts).
+`run_summary.jsonl` event types: `RUN_START`, `RUN_END`, `STEP_START`, `STEP_END`, `LOG`, `LOGERR`, `LOGWARN`, `INBOX_ENQUEUE`, `INBOX_DISPATCH_START`, `INBOX_DISPATCH_COMPLETE`, `PROMPT_START`, `PROMPT_END`. Every object carries `type`, `ts` (UTC), `run_id`, and `event_version` (currently `1`). Step events also carry `id`, `parent_id`, `seq`, `depth`. See [Architecture — Contracts](architecture.md#contracts).
 
 ## File extension
 

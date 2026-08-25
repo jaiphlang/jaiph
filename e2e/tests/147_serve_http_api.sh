@@ -35,18 +35,18 @@ fi
 
 e2e::file "tools.jh" <<'EOF'
 # Greets the given name.
-workflow greet(name) {
+def greet(name) {
   return "hello ${name}"
 }
 
 # Always fails so the run reports a failure.
-workflow boom() {
+def boom() {
   fail "boom-failed"
 }
 
 script publish = `printf 'artifact-payload' > "$JAIPH_ARTIFACTS_DIR/result.txt"`
 # Publishes a file into the run's artifacts dir.
-workflow make_artifact() {
+def make_artifact() {
   run publish()
   return "published"
 }
@@ -89,7 +89,7 @@ openapi_fields="$(printf '%s' "${openapi}" | python3 -c '
 import json, sys
 d = json.load(sys.stdin)
 print(d["openapi"])
-print("yes" if "/v1/workflows/greet/runs" in d["paths"] else "no")
+print("yes" if "/v1/defs/greet/runs" in d["paths"] else "no")
 ')"
 {
   read -r p_openapi_version
@@ -125,7 +125,7 @@ docs_css_code="$(curl -s -o "${TEST_DIR}/swagger-ui.css" -w '%{http_code}' "${ba
 e2e::assert_equals "${docs_css_code}" "200" "the embedded swagger-ui stylesheet is served same-origin"
 
 # --- POST greet ?wait=true → succeeded, return value round-trips ---
-greet="$(curl -s -X POST "${base}/v1/workflows/greet/runs?wait=true" \
+greet="$(curl -s -X POST "${base}/v1/defs/greet/runs?wait=true" \
   -H 'content-type: application/json' -d '{"name":"world"}')"
 greet_fields="$(printf '%s' "${greet}" | python3 -c '
 import json, sys
@@ -146,18 +146,18 @@ e2e::assert_equals "${p_greet_has_rundir}" "yes" "greet run object carries a run
 # --- POST boom ?wait=true → HTTP 200 with status failed (not an HTTP error) ---
 boom_body="${TEST_DIR}/boom_body.json"
 boom_code="$(curl -s -o "${boom_body}" -w '%{http_code}' -X POST \
-  "${base}/v1/workflows/boom/runs?wait=true" -H 'content-type: application/json' -d '{}')"
+  "${base}/v1/defs/boom/runs?wait=true" -H 'content-type: application/json' -d '{}')"
 e2e::assert_equals "${boom_code}" "200" "a failing workflow is HTTP 200 (workflow failure is not an HTTP error)"
 boom_status="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["status"])' "${boom_body}")"
 e2e::assert_equals "${boom_status}" "failed" "boom run status is failed"
 
-# --- GET /v1/workflows lists all exposed workflows ---
-workflows="$(curl -s "${base}/v1/workflows" | python3 -c '
+# --- GET /v1/defs lists all exposed workflows ---
+workflows="$(curl -s "${base}/v1/defs" | python3 -c '
 import json, sys
-names = sorted(w["name"] for w in json.load(sys.stdin)["workflows"])
+names = sorted(w["name"] for w in json.load(sys.stdin)["defs"])
 print(",".join(names))
 ')"
-e2e::assert_equals "${workflows}" "boom,greet,make_artifact" "GET /v1/workflows lists all workflows"
+e2e::assert_equals "${workflows}" "boom,greet,make_artifact" "GET /v1/defs lists all workflows"
 
 # --- GET /v1/runs is paginated (bounded listing) ---
 # Two runs exist by now (greet, boom); ?limit=1 must return exactly one record,
@@ -173,7 +173,7 @@ e2e::assert_equals "${runs_page}" "1,1,2" "GET /v1/runs?limit=1 returns a bounde
 # --- GET /v1/runs/{id}/events (NDJSON) mirrors the durable journal ---
 # The greet run above returned a run object; re-run it capturing the id, then
 # byte-compare the events endpoint against the on-disk run_summary.jsonl.
-run_json="$(curl -s -X POST "${base}/v1/workflows/greet/runs?wait=true" \
+run_json="$(curl -s -X POST "${base}/v1/defs/greet/runs?wait=true" \
   -H 'content-type: application/json' -d '{"name":"events"}')"
 run_id="$(printf '%s' "${run_json}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["run_id"])')"
 run_dir="$(printf '%s' "${run_json}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["run_dir"])')"
@@ -185,7 +185,7 @@ e2e::assert_equals "$(cat "${events_body}")" "$(cat "${run_dir}/run_summary.json
   "GET events (NDJSON) byte-matches the run's run_summary.jsonl"
 
 # --- artifacts: list + byte-identical download, traversal is rejected ---
-art_json="$(curl -s -X POST "${base}/v1/workflows/make_artifact/runs?wait=true" \
+art_json="$(curl -s -X POST "${base}/v1/defs/make_artifact/runs?wait=true" \
   -H 'content-type: application/json' -d '{}')"
 art_id="$(printf '%s' "${art_json}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["run_id"])')"
 
@@ -208,7 +208,7 @@ e2e::assert_equals "${trav_code}" "404" "artifact path traversal is rejected wit
 # The same server also speaks MCP over HTTP: a client can initialize, list the
 # same tools, and call one — and that call lands in the SAME run registry as the
 # REST API above. This proves one process serves both transports against one
-# workflow generation (design acceptance: same tools + same run inspection API).
+# def generation(design acceptance: same tools + same run inspection API).
 mcp_call() {
   curl -s -X POST "${base}/mcp" -H 'content-type: application/json' \
     -H 'accept: application/json' -d "$1"
@@ -242,7 +242,7 @@ e2e::assert_equals "${p_mcp_iserror}" "false" "POST /mcp tools/call reports isEr
 newest="$(curl -s "${base}/v1/runs?limit=1" | python3 -c '
 import json, sys
 r = json.load(sys.stdin)["runs"][0]
-print(r["workflow"])
+print(r["def"])
 print(r["status"])
 print(r["result_text"])
 ')"

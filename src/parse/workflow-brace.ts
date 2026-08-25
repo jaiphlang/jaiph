@@ -1,4 +1,4 @@
-import type { CatchBody, Expr, WorkflowMetadata, WorkflowStepDef } from "../types";
+import type { CatchBody, Expr, DefMetadata, StepDef } from "../types";
 import { createTrivia, type Trivia } from "./trivia";
 import {
   colFromRaw,
@@ -24,7 +24,6 @@ import { parseMatchExpr } from "./match";
 import { dottedReturnToQuotedString, isBareDottedIdentifierReturn, isBareIdentifierReturn, bareIdentifierToQuotedString } from "./workflow-return-dotted";
 
 export type BlockParseOpts = {
-  forRule?: boolean;
   /** When true, push `blank_line` trivia steps so the formatter can preserve spacing. */
   preserveBlankLines?: boolean;
   /**
@@ -32,7 +31,7 @@ export type BlockParseOpts = {
    * The callback receives the parsed metadata and may throw via `fail()` to
    * reject specific keys (workflows reject `module.*`).
    */
-  onConfigBlock?: (metadata: WorkflowMetadata, lineNo: number) => void;
+  onConfigBlock?: (metadata: DefMetadata, lineNo: number) => void;
   /**
    * When set (used for `if` bodies), also close the block on a `} else {`
    * line and signal it via `closedWithElse` in the return value. Without
@@ -49,8 +48,8 @@ export function parseBraceBlockBody(
   openerLineNo: number,
   trivia: Trivia = createTrivia(),
   opts?: BlockParseOpts,
-): { steps: WorkflowStepDef[]; nextIdx: number; closedWithElse?: boolean; closedWithElseIf?: boolean } {
-  const steps: WorkflowStepDef[] = [];
+): { steps: StepDef[]; nextIdx: number; closedWithElse?: boolean; closedWithElseIf?: boolean } {
+  const steps: StepDef[] = [];
   let idx = startIdx;
   let hadNonCommentStep = false;
   while (idx < lines.length) {
@@ -98,7 +97,7 @@ export function parseBraceBlockBody(
     }
     if (opts?.onConfigBlock && /^config\s*\{/.test(inner)) {
       if (hadNonCommentStep) {
-        fail(filePath, "config block inside workflow must appear before any steps", innerNo);
+        fail(filePath, "config block inside def must appear before any steps", innerNo);
       }
       const { metadata, nextIndex } = parseConfigBlock(filePath, lines, idx, trivia);
       opts.onConfigBlock(metadata, innerNo);
@@ -129,7 +128,7 @@ function execStep(
   body: Expr,
   loc: { line: number; col: number },
   extras: { captureName?: string; catch?: CatchBody; recover?: CatchBody } = {},
-): WorkflowStepDef {
+): StepDef {
   return {
     type: "exec",
     body,
@@ -141,26 +140,25 @@ function execStep(
 }
 
 /**
- * Parse `run [async] <ref>(args)` or `ensure <ref>(args)`, optionally followed
- * by `catch (binding) { ... }` or — for `run` only — `recover(binding) { ... }`.
+ * Parse `run [async] <ref>(args)`, optionally followed by
+ * `catch (binding) { ... }` or `recover(binding) { ... }`.
  *
  * The catch/recover clause is parsed via the unified `parseAttachedBlock`, whose
  * body uses the same `parseBlockStatement` as the top-level dispatcher.
  */
-function parseRunOrEnsure(
+function parseRun(
   filePath: string,
   lines: string[],
   idx: number,
   innerNo: number,
   innerRaw: string,
-  host: "run" | "ensure",
   hostBody: string,
   isAsync: boolean,
   captureName: string | undefined,
   trivia: Trivia,
-): { step: WorkflowStepDef; nextIdx: number } {
-  const hostName = host === "ensure" ? "ensure" : isAsync ? "run async" : "run";
-  const hostCol = innerRaw.indexOf(host) + 1;
+): { step: StepDef; nextIdx: number } {
+  const hostName = isAsync ? "run async" : "run";
+  const hostCol = innerRaw.indexOf("run") + 1;
   const stepLoc = { line: innerNo, col: hostCol };
 
   if (/\scatch$/.test(hostBody)) {
@@ -171,7 +169,7 @@ function parseRunOrEnsure(
       innerRaw.indexOf("catch") + 1,
     );
   }
-  if (host === "run" && / recover$/.test(hostBody)) {
+  if (/ recover$/.test(hostBody)) {
     fail(
       filePath,
       'recover requires explicit bindings and a body: recover(<name>) { ... }',
@@ -183,16 +181,14 @@ function parseRunOrEnsure(
   let attached:
     | { keyword: "catch" | "recover"; left: string; after: string }
     | null = null;
-  if (host === "run") {
-    const m = hostBody.match(/ recover(?=[\s(])/);
-    if (m) {
-      const pos = m.index!;
-      attached = {
-        keyword: "recover",
-        left: hostBody.slice(0, pos).trim(),
-        after: hostBody.slice(pos + " recover".length),
-      };
-    }
+  const m = hostBody.match(/ recover(?=[\s(])/);
+  if (m) {
+    const pos = m.index!;
+    attached = {
+      keyword: "recover",
+      left: hostBody.slice(0, pos).trim(),
+      after: hostBody.slice(pos + " recover".length),
+    };
   }
   if (!attached) {
     const ci = hostBody.indexOf(" catch ");
@@ -205,9 +201,9 @@ function parseRunOrEnsure(
     }
   }
 
-  // `run` falls back to plain parsing when the call before catch/recover has
+  // Fall back to plain parsing when the call before catch/recover has
   // trailing content, preserving the legacy "unexpected content" error shape.
-  if (attached && host === "run") {
+  if (attached) {
     const probe = parseCallRef(attached.left);
     if (!probe || probe.rest.trim()) {
       attached = null;
@@ -225,9 +221,7 @@ function parseRunOrEnsure(
     }
     rejectTrailingContent(filePath, innerNo, hostName, call.rest);
     const callee = { value: call.ref, loc: stepLoc };
-    const body: Expr = host === "ensure"
-      ? { kind: "ensure_call", callee, args: call.args }
-      : { kind: "call", callee, args: call.args, ...(isAsync ? { async: true as const } : {}) };
+    const body: Expr = { kind: "call", callee, args: call.args, ...(isAsync ? { async: true as const } : {}) };
     return { step: execStep(body, stepLoc, { captureName }), nextIdx: call.nextLineIdx };
   }
 
@@ -241,9 +235,7 @@ function parseRunOrEnsure(
   }
   rejectTrailingContent(filePath, innerNo, hostName, call.rest);
   const callee = { value: call.ref, loc: stepLoc };
-  const body: Expr = host === "ensure"
-    ? { kind: "ensure_call", callee, args: call.args }
-    : { kind: "call", callee, args: call.args, ...(isAsync ? { async: true as const } : {}) };
+  const body: Expr = { kind: "call", callee, args: call.args, ...(isAsync ? { async: true as const } : {}) };
 
   const result = parseAttachedBlock(
     filePath, lines, idx, innerNo, innerRaw, attached.keyword, attached.after, trivia,
@@ -262,10 +254,9 @@ export type BlockCtx = {
   inner: string;
   innerNo: number;
   trivia: Trivia;
-  forRule: boolean;
   opts: BlockParseOpts | undefined;
 };
-export type BlockResult = { step: WorkflowStepDef; nextIdx: number };
+export type BlockResult = { step: StepDef; nextIdx: number };
 export type BlockHandler = (c: BlockCtx) => BlockResult | null;
 
 /**
@@ -371,7 +362,7 @@ function tryParseConst(c: BlockCtx): BlockResult | null {
   const name = m[1];
   const rhs = m[2].trim();
   const { value, nextLineIdx } = parseConstRhs(
-    c.filePath, c.lines, c.idx, rhs, c.innerNo, c.innerRaw.indexOf(rhs) + 1, c.forRule, name, c.trivia,
+    c.filePath, c.lines, c.idx, rhs, c.innerNo, c.innerRaw.indexOf(rhs) + 1, name, c.trivia,
   );
   const nextLine = nextLineIdx > c.idx ? nextLineIdx + 1 : c.idx + 1;
   return {
@@ -440,12 +431,9 @@ function tryParseWait(c: BlockCtx): BlockResult | null {
   fail(c.filePath, '"wait" has been removed from the language', c.innerNo, c.innerRaw.indexOf("wait") + 1);
 }
 
-function tryParseEnsure(c: BlockCtx): BlockResult | null {
-  if (!c.inner.startsWith("ensure ")) return null;
-  const ensureBody = c.inner.slice("ensure ".length).trim();
-  return parseRunOrEnsure(
-    c.filePath, c.lines, c.idx, c.innerNo, c.innerRaw, "ensure", ensureBody, false, undefined, c.trivia,
-  );
+function tryParseEnsureRemoved(c: BlockCtx): BlockResult | null {
+  if (!c.inner.startsWith("ensure ") && c.inner !== "ensure") return null;
+  fail(c.filePath, "'ensure' is not a keyword; use 'run'", c.innerNo, c.innerRaw.indexOf("ensure") + 1);
 }
 
 /**
@@ -500,8 +488,8 @@ function tryParseRun(c: BlockCtx): BlockResult | null {
     if (runBody.startsWith("`")) {
       fail(c.filePath, "run async is not supported with inline scripts", c.innerNo, runCol);
     }
-    return parseRunOrEnsure(
-      c.filePath, c.lines, c.idx, c.innerNo, c.innerRaw, "run", runBody, true, undefined, c.trivia,
+    return parseRun(
+      c.filePath, c.lines, c.idx, c.innerNo, c.innerRaw, runBody, true, undefined, c.trivia,
     );
   }
   const runBody = c.inner.slice("run ".length).trim();
@@ -514,8 +502,8 @@ function tryParseRun(c: BlockCtx): BlockResult | null {
   if (runBody.startsWith("script(") || runBody.startsWith("script (")) {
     fail(c.filePath, 'inline script syntax has changed: use run `body`(args) instead of run script(args) "body"', c.innerNo);
   }
-  return parseRunOrEnsure(
-    c.filePath, c.lines, c.idx, c.innerNo, c.innerRaw, "run", runBody, false, undefined, c.trivia,
+  return parseRun(
+    c.filePath, c.lines, c.idx, c.innerNo, c.innerRaw, runBody, false, undefined, c.trivia,
   );
 }
 
@@ -612,15 +600,7 @@ function tryParseReturn(c: BlockCtx): BlockResult | null {
     }
   }
   if (returnValue.startsWith("ensure ")) {
-    const call = parseCallRefMultiline(c.filePath, c.lines, c.idx, returnValue.slice("ensure ".length).trim());
-    if (call) {
-      rejectTrailingContent(c.filePath, c.innerNo, "ensure", call.rest);
-      const callee = { value: call.ref, loc: retLoc };
-      return {
-        step: { type: "return", value: { kind: "ensure_call", callee, args: call.args }, loc: retLoc },
-        nextIdx: call.nextLineIdx,
-      };
-    }
+    fail(c.filePath, "'ensure' is not a keyword; use 'run'", c.innerNo, c.innerRaw.indexOf("ensure") + 1);
   }
   if (returnValue.startsWith("`") || returnValue.startsWith("```")) {
     fail(c.filePath, 'bare inline scripts in return are not allowed; use "return run `...`()" to execute a managed inline script', c.innerNo, retLoc.col);
@@ -705,7 +685,7 @@ export const STATEMENT: Record<string, BlockHandler> = {
   const: tryParseConst,
   fail: tryParseFail,
   wait: tryParseWait,
-  ensure: tryParseEnsure,
+  ensure: tryParseEnsureRemoved,
   run: tryParseRun,
   prompt: tryParsePrompt,
   log: tryParseLog,
@@ -717,9 +697,6 @@ export const STATEMENT: Record<string, BlockHandler> = {
 
 /** Error guards for assignment-shape lines. Emit a fail() or no-op; never return a step. */
 function applyAssignmentGuards(c: BlockCtx): void {
-  if (c.forRule && (c.inner.startsWith("prompt ") || /^[A-Za-z_][A-Za-z0-9_]*\s*=\s*prompt\s/.test(c.inner))) {
-    fail(c.filePath, "prompt is not allowed in rules", c.innerNo, colFromRaw(c.innerRaw));
-  }
   const promptAssign = c.inner.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*prompt\s+(.+)$/s);
   if (promptAssign) {
     fail(
@@ -752,9 +729,6 @@ function applyAssignmentGuards(c: BlockCtx): void {
 function trySend(c: BlockCtx): BlockResult | null {
   const sendMatch = matchSendOperator(c.inner);
   if (!sendMatch) return null;
-  if (c.forRule) {
-    fail(c.filePath, "send operator is not allowed in rules", c.innerNo, 1);
-  }
   const arrowIdx = c.inner.indexOf("<-");
   const rhsCol = arrowIdx >= 0 ? arrowIdx + 3 : 1;
   const { value, nextIdx } = parseSendRhs(
@@ -783,13 +757,12 @@ export function parseBlockStatement(
   idx: number,
   trivia: Trivia = createTrivia(),
   opts?: BlockParseOpts,
-): { step: WorkflowStepDef; nextIdx: number } {
+): { step: StepDef; nextIdx: number } {
   const innerRaw = lines[idx];
   const inner = innerRaw.trim();
   const innerNo = idx + 1;
   const c: BlockCtx = {
-    filePath, lines, idx, innerRaw, inner, innerNo, trivia,
-    forRule: opts?.forRule === true, opts,
+    filePath, lines, idx, innerRaw, inner, innerNo, trivia, opts,
   };
 
   if (inner.startsWith("#")) {
@@ -820,7 +793,7 @@ const KEYWORD_EXAMPLE = {
 
 /**
  * Parse a `(<binding>) { … } | <single-stmt>` clause attached to a host
- * `run` / `ensure` step. The body is parsed by the same `parseBlockStatement`
+ * `run` step. The body is parsed by the same `parseBlockStatement`
  * used at the top level — there is no separate mini parser for catch/recover.
  *
  * `textAfterKeyword` is whatever follows `catch` / `recover` on the host line
@@ -943,7 +916,7 @@ function parseAtHostLine(
   hostIdx: number,
   stmt: string,
   trivia: Trivia,
-): WorkflowStepDef {
+): StepDef {
   const padded = new Array<string>(hostIdx).fill("");
   padded.push(stmt);
   return parseBlockStatement(filePath, padded, hostIdx, trivia).step;

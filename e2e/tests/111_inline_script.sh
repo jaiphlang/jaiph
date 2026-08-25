@@ -14,7 +14,7 @@ e2e::section "basic inline script execution"
 # ---------------------------------------------------------------------------
 
 e2e::file "inline_basic.jh" <<'EOF'
-workflow default() {
+export def main() {
   run `echo inline-ok`()
 }
 EOF
@@ -25,7 +25,7 @@ basic_out="$(e2e::run "inline_basic.jh")"
 # nondeterministic: inline script name contains content hash
 e2e::assert_contains "${basic_out}" "script __inline_" "tree shows inline script step"
 # assert_contains: output includes dynamic timing and inline script hash name
-e2e::assert_contains "${basic_out}" "PASS workflow default" "workflow passes"
+e2e::assert_contains "${basic_out}" "PASS export def main" "workflow passes"
 
 # Verify artifact content
 rm -rf "${TEST_DIR}/runs_basic"
@@ -46,7 +46,7 @@ e2e::section "inline script with arguments"
 # ---------------------------------------------------------------------------
 
 e2e::file "inline_args.jh" <<'EOF'
-workflow default() {
+export def main() {
   run `echo $1-$2`("hello", "world")
 }
 EOF
@@ -73,7 +73,7 @@ script show = ```
 echo "got: $1"
 ```
 
-workflow default() {
+export def main() {
   const x = run `echo captured-value`()
   run show(x)
 }
@@ -101,7 +101,7 @@ script show_const = ```
 echo "const: $1"
 ```
 
-workflow default() {
+export def main() {
   const val = run `echo const-value`()
   run show_const(val)
 }
@@ -148,7 +148,7 @@ e2e::section "inline script isolation (no parent scope)"
 e2e::file "inline_iso.jh" <<'EOF'
 const secret = "parent-secret"
 
-workflow default() {
+export def main() {
   run `echo "secret=${secret:-}"`()
 }
 EOF
