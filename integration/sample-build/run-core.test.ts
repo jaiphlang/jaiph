@@ -28,7 +28,7 @@ test("jaiph run compiles and executes workflow with args", () => {
     const runResult = spawnSync("node", [cliPath, "run", filePath, "hello-run"], {
       encoding: "utf8",
       cwd: root,
-      env: { ...process.env, JAIPH_DOCKER_ENABLED: "false" },
+      env: { ...process.env },
     });
 
     assert.equal(runResult.status, 0, runResult.stderr);
@@ -63,7 +63,7 @@ test("jaiph run resolves nested managed call arguments", () => {
     const runResult = spawnSync("node", [cliPath, "run", filePath], {
       encoding: "utf8",
       cwd: root,
-      env: { ...process.env, JAIPH_DOCKER_ENABLED: "false" },
+      env: { ...process.env },
     });
 
     assert.equal(runResult.status, 0, runResult.stderr);
@@ -97,9 +97,7 @@ test("executable .jh invokes jaiph run semantics", () => {
     const runResult = spawnSync("node", [cliPath, filePath, "hello-exec"], {
       encoding: "utf8",
       cwd: root,
-      // Host-only via explicit config (matching the other run spawns in this
-      // file) so the run does not trip the unsafe host-only confirmation prompt.
-      env: { ...process.env, JAIPH_DOCKER_ENABLED: "false" },
+      env: { ...process.env },
     });
 
     assert.equal(runResult.status, 0, runResult.stderr);
@@ -130,7 +128,7 @@ test("jaiph run enables xtrace when JAIPH_DEBUG=true", () => {
     const runResult = spawnSync("node", [cliPath, "run", filePath, "hello-debug"], {
       encoding: "utf8",
       cwd: root,
-      env: { ...process.env, JAIPH_DEBUG: "true", JAIPH_DOCKER_ENABLED: "false" },
+      env: { ...process.env, JAIPH_DEBUG: "true" },
     });
 
     assert.equal(runResult.status, 0, runResult.stderr);
@@ -161,7 +159,7 @@ test("jaiph run fails when workflow default is missing", () => {
     const runResult = spawnSync("node", [cliPath, "run", filePath, "hello-main"], {
       encoding: "utf8",
       cwd: root,
-      env: { ...process.env, JAIPH_DOCKER_ENABLED: "false" },
+      env: { ...process.env },
     });
 
     assert.equal(runResult.status, 1);
@@ -192,7 +190,7 @@ test("jaiph run fails fast on command errors inside workflow", () => {
     const runResult = spawnSync("node", [cliPath, "run", filePath], {
       encoding: "utf8",
       cwd: root,
-      env: { ...process.env, JAIPH_DOCKER_ENABLED: "false" },
+      env: { ...process.env },
     });
 
     assert.equal(runResult.status, 1);
@@ -225,7 +223,6 @@ test("jaiph run fails when runtime emits non-xtrace stderr", () => {
       cwd: root,
       env: {
         ...process.env,
-        JAIPH_DOCKER_ENABLED: "false",
       },
     });
 
@@ -264,7 +261,7 @@ test("jaiph run fails when required arg is missing and rule handles it", () => {
     const runResult = spawnSync("node", [cliPath, "run", filePath], {
       encoding: "utf8",
       cwd: root,
-      env: { ...process.env, JAIPH_DOCKER_ENABLED: "false" },
+      env: { ...process.env },
     });
 
     assert.equal(runResult.status, 1);
@@ -304,7 +301,7 @@ test("jaiph run allows rules to call top-level helper functions in readonly mode
     const runResult = spawnSync("node", [cliPath, "run", filePath], {
       encoding: "utf8",
       cwd: root,
-      env: { ...process.env, JAIPH_DOCKER_ENABLED: "false" },
+      env: { ...process.env },
     });
 
     assert.equal(runResult.status, 0, runResult.stderr);
@@ -340,7 +337,7 @@ test("jaiph run prints rule tree and fail summary", () => {
     const runResult = spawnSync("node", [cliPath, "run", filePath], {
       encoding: "utf8",
       cwd: root,
-      env: { ...process.env, JAIPH_DOCKER_ENABLED: "false" },
+      env: { ...process.env },
     });
 
     assert.equal(runResult.status, 1);
@@ -395,7 +392,6 @@ test("jaiph run stores prompt output in run logs", () => {
       env: {
         ...process.env,
         JAIPH_AGENT_BACKEND: "cursor",
-        JAIPH_DOCKER_ENABLED: "false",
         PATH: `${binDir}:${process.env.PATH ?? ""}`,
       },
     });
@@ -461,7 +457,6 @@ test("jaiph run stores both reasoning and final answer from stream-json", () => 
         ...process.env,
         JAIPH_AGENT_BACKEND: "cursor",
         JAIPH_AGENT_TRUSTED_WORKSPACE: undefined,
-        JAIPH_DOCKER_ENABLED: "false",
         PATH: `${binDir}:${process.env.PATH ?? ""}`,
       },
     });

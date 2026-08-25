@@ -16,7 +16,7 @@ import {
 function findRepoRoot(): string {
   let cur = __dirname;
   while (cur !== dirname(cur)) {
-    if (existsSync(join(cur, "package.json")) && existsSync(join(cur, "runtime"))) {
+    if (existsSync(join(cur, "package.json")) && existsSync(join(cur, "docs/jaiph-skill.md"))) {
       return cur;
     }
     cur = dirname(cur);

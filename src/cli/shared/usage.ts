@@ -7,49 +7,30 @@ export function printUsage(): void {
       "  jaiph [--help | --version]",
       "  jaiph <file.jh> [args...]                # run workflow (same as jaiph run <file> [args...])",
       "  jaiph <file.test.jh> [args...]           # run tests (same as jaiph test <file>; extra args ignored)",
-      "  jaiph run [--target <dir>] [--raw] [--workspace <dir>] [--inplace] [--unsafe] [--yes|-y] [--env KEY[=VALUE]]... <file.jh> [--] [args...]",
+      "  jaiph run [--target <dir>] [--raw] [--workspace <dir>] [--env KEY[=VALUE]]... <file.jh> [--] [args...]",
       "  jaiph test [path]                        # workspace root, directory (recursive), or one *.test.jh file",
       "  jaiph init [workspace-path]",
       "  jaiph install [--force] [<name[@version]> | <repo-url[@version]> ...]",
       "  jaiph use <version|nightly>",
       "  jaiph format [--check] [--indent <n>] <file.jh ...>",
       "  jaiph compile [--json] [--workspace <dir>] <file.jh | directory> ...",
-      "  jaiph mcp [--workspace <dir>] [--inplace] [--unsafe] [--yes|-y] [--env KEY[=VALUE]]... <file.jh>  # serve the file's workflows as MCP tools over stdio (alias: jaiph --mcp)",
-      "  jaiph serve [--host <addr>] [--port <n>] [--workspace <dir>] [--allow-anonymous] [--inplace] [--unsafe] [--yes|-y] [--env KEY[=VALUE]]... <file.jh>  # serve workflows as an HTTP API + OpenAPI + Swagger UI",
+      "  jaiph mcp [--workspace <dir>] [--env KEY[=VALUE]]... <file.jh>  # serve the file's workflows as MCP tools over stdio (alias: jaiph --mcp)",
+      "  jaiph serve [--host <addr>] [--port <n>] [--workspace <dir>] [--allow-anonymous] [--env KEY[=VALUE]]... <file.jh>  # serve workflows as an HTTP API + OpenAPI + Swagger UI",
       "",
       "Global options:",
       "  -h, --help     show this usage (jaiph --help) — each subcommand also accepts -h / --help",
       "  -v, --version  show version",
       "",
-      "Execution policy (shared by jaiph run, jaiph serve, jaiph mcp):",
-      "  --workspace <dir>, --env KEY[=VALUE], --inplace, --unsafe, and --yes|-y mean the same",
-      "  thing in all three commands. Precedence: CLI flags > JAIPH_* env vars > workflow config",
-      "  metadata > built-in defaults (a flag sets its env var for that process, so the env layer",
-      "  stays the single source of truth consumed by sandbox resolution). --inplace and --unsafe",
-      "  are mutually exclusive (E_FLAG_CONFLICT, before anything is spawned). A flag belonging to",
-      "  another command is a usage error, never a silently-ignored option or a positional.",
-      "  Consent: jaiph run confirms --inplace and unsafe host-only interactively (--yes|-y or",
-      "  JAIPH_INPLACE_YES auto-confirms; non-TTY requires it). jaiph serve / jaiph mcp are",
-      "  operator-launched servers with no prompt: for the default sandbox and --inplace, passing",
-      "  the flag or env var at startup is the consent; unsafe host-only additionally requires the",
-      "  explicit --unsafe (or --yes) flag — an inherited JAIPH_UNSAFE=true alone is refused",
-      "  (E_UNSAFE_NO_CONSENT). The posture is resolved and printed once at startup and applied to",
-      "  every call. Inside a container the container itself is the sandbox, so unsafe host-only",
-      "  proceeds without the flag (the runtime image bakes JAIPH_UNSAFE=true).",
+      "Shared flags (jaiph run, jaiph serve, jaiph mcp):",
+      "  --workspace <dir> and --env KEY[=VALUE] mean the same thing in all three commands.",
+      "  A flag belonging to another command is a usage error, never a silently-ignored option or a positional.",
       "",
       "jaiph run:",
       "  --target <dir>     keep emitted script files and run metadata under <dir> (default: temp dir, cleaned up)",
-      "  --raw              skip banner, progress tree, hooks, and failure footer; inherited stdio for embedding / Docker inner run",
+      "  --raw              skip banner, progress tree, hooks, and failure footer; inherited stdio for embedding",
       "  --workspace <dir>  workspace root for import resolution (default: auto-detect from the .jh file)",
-      "  --inplace          bind-mount the host workspace rw so edits land live (sets JAIPH_INPLACE=1 for this run)",
-      "  --unsafe           run on the host with no sandbox (sets JAIPH_UNSAFE=true for this run)",
-      "  -y, --yes          skip the in-place confirmation prompt (sets JAIPH_INPLACE_YES=1 for this run)",
       "  --env KEY=VALUE    define KEY=VALUE in the workflow env (repeatable); --env KEY forwards the host value.",
-      "                     In a Docker sandbox this is the per-key consent that crosses the env allowlist verbatim.",
       "  --                 end of jaiph flags; remaining args are passed to workflow default",
-      "  Note: --inplace/--unsafe/--yes are also accepted by jaiph serve and jaiph mcp (see the",
-      "  execution-policy section above); the corresponding env vars (JAIPH_INPLACE, JAIPH_UNSAFE,",
-      "  JAIPH_INPLACE_YES) additionally apply to other entry points (e.g. `jaiph test`).",
       "",
       "jaiph test:",
       "  With no path, discovers *.test.jh under the workspace root. Extra arguments after an optional",
@@ -80,11 +61,6 @@ export function printUsage(): void {
       "  come from `#` comments directly above each workflow.",
       "  --workspace <dir>  workspace root for import resolution (default: auto-detect).",
       "  --env KEY=VALUE    define KEY in every tool call's env (repeatable); --env KEY forwards the host value.",
-      "  --inplace          Docker sandbox with the host workspace bind-mounted rw for every call (JAIPH_INPLACE=1).",
-      "  --unsafe           every call runs on the host with no sandbox (JAIPH_UNSAFE=true).",
-      "  -y, --yes          record auto-consent for the posture (JAIPH_INPLACE_YES=1).",
-      "  Sandbox posture is resolved and printed once at startup and applied to every call",
-      "  (see the shared execution-policy section above).",
       "",
       "jaiph serve:",
       "  Serve the file's workflows as an HTTP API with a generated OpenAPI 3.1 document",
@@ -104,11 +80,6 @@ export function printUsage(): void {
       "                     JAIPH_SERVE_TOKEN or OIDC is set.",
       "  --workspace <dir>  workspace root for import resolution (default: auto-detect).",
       "  --env KEY=VALUE    define KEY in every run's env (repeatable); --env KEY forwards the host value.",
-      "  --inplace          Docker sandbox with the host workspace bind-mounted rw for every run (JAIPH_INPLACE=1).",
-      "  --unsafe           every run executes on the host with no sandbox (JAIPH_UNSAFE=true).",
-      "  -y, --yes          record auto-consent for the posture (JAIPH_INPLACE_YES=1).",
-      "  Sandbox posture is resolved and printed once at startup and applied to every run",
-      "  (see the shared execution-policy section above).",
       "",
       "Examples:",
       "  jaiph --help",
@@ -118,8 +89,7 @@ export function printUsage(): void {
       "  jaiph run ./flows/review.jh 'review this diff'",
       "  jaiph run --raw ./flows/review.jh",
       "  jaiph run --target /tmp/jaiph-out ./flows/review.jh",
-      "  jaiph run --inplace --workspace ./app ./flows/fix.jh",
-      "  jaiph run --unsafe ./flows/quick.jh",
+      "  jaiph run --workspace ./app ./flows/fix.jh",
       "  jaiph run --env GITHUB_TOKEN --env API_URL=https://x.test ./flows/deploy.jh",
       "  jaiph test",
       "  jaiph test ./e2e",
@@ -190,7 +160,7 @@ function parseEnvSpec(raw: string): EnvSpec {
   }
   if (isReservedEnvKey(key)) {
     throw new Error(
-      `E_ENV_RESERVED --env cannot set reserved key "${key}"; use the sandbox flags (--inplace/--unsafe) or real env vars for control keys`,
+      `E_ENV_RESERVED --env cannot set reserved key "${key}"; use real env vars for control keys`,
     );
   }
   return value === undefined ? { key } : { key, value };
@@ -200,9 +170,6 @@ export interface ParsedArgs {
   target?: string;
   raw?: boolean;
   workspace?: string;
-  inplace?: boolean;
-  unsafe?: boolean;
-  yes?: boolean;
   /** `jaiph serve` explicit opt-in to run open (anonymous) with no configured auth. */
   allowAnonymous?: boolean;
   /** `jaiph serve` listen host. */
@@ -218,19 +185,14 @@ export interface ParsedArgs {
 export type CliCommand = "run" | "serve" | "mcp";
 
 /**
- * Which commands accept each flag. The execution-policy set (`--workspace`,
- * `--env`, `--inplace`, `--unsafe`, `--yes`/`-y`) is shared by all three
- * commands; the rest are command-specific (display / launch / transport).
- * A flag passed to a command outside its row is a usage error, never a
- * silently-ignored option or a positional.
+ * Which commands accept each flag. `--workspace` and `--env` are shared by
+ * all three commands; the rest are command-specific. A flag passed to a
+ * command outside its row is a usage error, never a silently-ignored option
+ * or a positional.
  */
 const FLAG_COMMANDS: Record<string, CliCommand[]> = {
   "--workspace": ["run", "serve", "mcp"],
   "--env": ["run", "serve", "mcp"],
-  "--inplace": ["run", "serve", "mcp"],
-  "--unsafe": ["run", "serve", "mcp"],
-  "--yes": ["run", "serve", "mcp"],
-  "-y": ["run", "serve", "mcp"],
   "--target": ["run"],
   "--raw": ["run"],
   "--allow-anonymous": ["serve"],
@@ -261,9 +223,6 @@ export function parseArgs(args: string[], command: CliCommand = "run"): ParsedAr
   let target: string | undefined;
   let raw: boolean | undefined;
   let workspace: string | undefined;
-  let inplace: boolean | undefined;
-  let unsafe: boolean | undefined;
-  let yes: boolean | undefined;
   let allowAnonymous: boolean | undefined;
   let host: string | undefined;
   let port: string | undefined;
@@ -347,24 +306,17 @@ export function parseArgs(args: string[], command: CliCommand = "run"): ParsedAr
     // Boolean flags: do not accept an `=value` form.
     if (
       name === "--raw" ||
-      name === "--inplace" ||
-      name === "--unsafe" ||
-      name === "--yes" ||
-      name === "--allow-anonymous" ||
-      arg === "-y"
+      name === "--allow-anonymous"
     ) {
       if (inlineValue !== undefined) {
         throw new Error(`${name} does not take a value`);
       }
       if (name === "--raw") raw = true;
-      else if (name === "--inplace") inplace = true;
-      else if (name === "--unsafe") unsafe = true;
-      else if (name === "--allow-anonymous") allowAnonymous = true;
-      else yes = true;
+      else allowAnonymous = true;
       continue;
     }
 
     positional.push(arg);
   }
-  return { target, raw, workspace, inplace, unsafe, yes, allowAnonymous, host, port, env, positional };
+  return { target, raw, workspace, allowAnonymous, host, port, env, positional };
 }

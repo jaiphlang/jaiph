@@ -11,8 +11,6 @@ import {
   latestRunFiles,
   readFailedStepOutput,
   failedStepArtifactPaths,
-  discoverDockerRunDir,
-  formatDockerTimeoutMessage,
 } from "./errors";
 
 // === summarizeError ===
@@ -62,15 +60,6 @@ test("summarizeError: empty stderr with runDir only omits exit clause", () => {
 test("summarizeError: non-empty stderr ignores code/runDir opts", () => {
   const msg = summarizeError("real error line", undefined, { code: 1, runDir: "/r" });
   assert.equal(msg, "real error line");
-});
-
-// === formatDockerTimeoutMessage ===
-
-test("formatDockerTimeoutMessage: includes configured seconds and remedy", () => {
-  const msg = formatDockerTimeoutMessage(42);
-  assert.match(msg, /^E_TIMEOUT container execution exceeded 42s/);
-  assert.match(msg, /runtime\.docker_timeout_seconds/);
-  assert.match(msg, /JAIPH_DOCKER_TIMEOUT/);
 });
 
 // === hasFatalRuntimeStderr ===
@@ -363,56 +352,5 @@ test("resolveFailureDetails: sets shouldPrintSummaryLine false when failedStepOu
     assert.equal(result.shouldPrintSummaryLine, false);
   } finally {
     rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-// === discoverDockerRunDir ===
-
-test("discoverDockerRunDir: returns matching dir by run_id even when a newer dir exists", () => {
-  const root = mkdtempSync(join(tmpdir(), "jaiph-discover-"));
-  try {
-    const runIdA = "aaaa-1111";
-    const runIdB = "bbbb-2222";
-    // older run dir for run A
-    const dirA = join(root, "2026-04-22", "10-00-00-wf");
-    mkdirSync(dirA, { recursive: true });
-    writeFileSync(
-      join(dirA, "run_summary.jsonl"),
-      JSON.stringify({ type: "WORKFLOW_START", run_id: runIdA }) + "\n",
-    );
-    // newer run dir for run B
-    const dirB = join(root, "2026-04-22", "10-05-00-wf");
-    mkdirSync(dirB, { recursive: true });
-    writeFileSync(
-      join(dirB, "run_summary.jsonl"),
-      JSON.stringify({ type: "WORKFLOW_START", run_id: runIdB }) + "\n",
-    );
-    // Asking for run A should return dirA, not the newer dirB
-    const resultA = discoverDockerRunDir(root, runIdA);
-    assert.equal(resultA.runDir, dirA);
-    assert.equal(resultA.summaryFile, join(dirA, "run_summary.jsonl"));
-    // Asking for run B should return dirB
-    const resultB = discoverDockerRunDir(root, runIdB);
-    assert.equal(resultB.runDir, dirB);
-    assert.equal(resultB.summaryFile, join(dirB, "run_summary.jsonl"));
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test("discoverDockerRunDir: returns empty when no dir matches the expected run_id", () => {
-  const root = mkdtempSync(join(tmpdir(), "jaiph-discover-none-"));
-  try {
-    const dir = join(root, "2026-04-22", "10-00-00-wf");
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(
-      join(dir, "run_summary.jsonl"),
-      JSON.stringify({ type: "WORKFLOW_START", run_id: "other-id" }) + "\n",
-    );
-    const result = discoverDockerRunDir(root, "nonexistent-id");
-    assert.equal(result.runDir, undefined);
-    assert.equal(result.summaryFile, undefined);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
   }
 });

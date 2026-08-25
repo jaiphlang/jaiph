@@ -5,7 +5,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { resolve, join } from "node:path";
 import { killProcessTree, resolveShell, canUseAnsi, _portability } from "./portability";
 
-// Precedent for platform stubbing: src/runtime/docker.test.ts.
+// Precedent for platform stubbing: src/runtime/kernel/portability.ts.
 function withPlatform(platform: string, fn: () => void): void {
   const orig = Object.getOwnPropertyDescriptor(process, "platform");
   Object.defineProperty(process, "platform", { value: platform, configurable: true });

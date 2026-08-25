@@ -114,7 +114,6 @@ async function startIdp(): Promise<Idp> {
 function serveEnv(runsRoot: string, extra: Record<string, string>): NodeJS.ProcessEnv {
   return {
     ...process.env,
-    JAIPH_DOCKER_ENABLED: "false",
     JAIPH_RUNS_DIR: runsRoot,
     PATH: `${dirname(process.execPath)}:${process.env.PATH ?? ""}`,
     ...extra,
@@ -282,10 +281,10 @@ test("jaiph serve OIDC: capabilities are separate, runs are per-principal, and i
     assert.equal((await cancelDenied.json()).error.code, "E_FORBIDDEN");
 
     // Audit: invoke is logged with the principal on the operator start banner
-    // (the collapsed per-call line: `Running <wf> (<sandbox>) run_id=… principal=…`),
+    // (the collapsed per-call line: `Running <wf> run_id=… principal=…`),
     // and the raw JWT never appears.
     const logged = srv.stderr();
-    assert.match(logged, /Running .*\(.*\).*run_id=.*principal=alice/, "invoke is audited with the acting principal");
+    assert.match(logged, /Running greet run_id=.*principal=alice/, "invoke is audited with the acting principal");
     assert.ok(!logged.includes(aliceTok), "the audit log never contains the bearer token");
   } finally {
     await srv.close();

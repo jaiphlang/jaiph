@@ -1,4 +1,4 @@
-import { resolveRuntimeEnv, applySandboxFlags } from "../run/env";
+import { resolveRuntimeEnv } from "../run/env";
 import {
   runHooksForEvent,
   stepStartHookPayload,
@@ -8,10 +8,9 @@ import { CHAIN_KEY_ENV, generateChainKey, writeChainKey, redactCredentials } fro
 import { deliverRunTelemetryDetached } from "../telemetry/otlp";
 import type { StepEvent, LogEvent } from "../run/events";
 import { formatCallStartLine, formatCallEndLine } from "./server-log";
-import { callWorkflowHost, callWorkflowDocker } from "./workflow-call-exec";
+import { callWorkflowHost } from "./workflow-call-exec";
 import { DEFAULT_OUTPUT_CAPS } from "./workflow-call-types";
 import type {
-  ExecutionPosture,
   OutputCaps,
   WorkflowCallContext,
   WorkflowCallEnvironment,
@@ -19,7 +18,7 @@ import type {
 } from "./workflow-call-types";
 
 // Public surface of the workflow-call slice. The heavy execution + result
-// composition lives in the sibling `workflow-call-exec.ts` (spawn host/Docker,
+// composition lives in the sibling `workflow-call-exec.ts` (host spawn,
 // collect output, compose result), and the shared shapes + output-cap
 // primitives live in `workflow-call-types.ts`. They are re-exported here so
 // callers (and the executor tests) keep a single import site.
@@ -34,7 +33,6 @@ export {
 } from "./workflow-call-types";
 export type {
   CollectedOutput,
-  ExecutionPosture,
   OutputCaps,
   WorkflowCallContext,
   WorkflowCallEnvironment,
@@ -42,10 +40,7 @@ export type {
 } from "./workflow-call-types";
 
 /**
- * Execute one workflow call. Honors the same env-driven sandbox selection as
- * `jaiph run`: when `dockerConfig.enabled`, the call runs in a per-call
- * container (workspace isolated by default; inplace when JAIPH_INPLACE=1);
- * otherwise it runs on the host like `jaiph run --raw`.
+ * Execute one workflow call on the host — the same spawn path as `jaiph run --raw`.
  *
  * The caller supplies `runId` so it can register the run before the child
  * exits (the HTTP server needs the id while the run is still `running`).
@@ -55,7 +50,6 @@ export type {
  */
 export async function callWorkflow(
   env: WorkflowCallEnvironment,
-  posture: ExecutionPosture,
   workflowSymbol: string,
   positionalArgs: string[],
   runId: string,
@@ -71,10 +65,6 @@ export async function callWorkflow(
   // journal below so read/export boundaries can verify integrity.
   const chainKey = generateChainKey();
   runtimeEnv[CHAIN_KEY_ENV] = chainKey;
-  // Same env normalization as `jaiph run --inplace/--unsafe/--yes`: the child
-  // observes identical JAIPH_* posture vars in every invocation mode. Never
-  // throws here — a flag/env conflict already failed server startup.
-  applySandboxFlags(runtimeEnv, env.sandboxFlags ?? {});
 
   const startedAt = Date.now();
   if (env.hooks) {
@@ -88,13 +78,12 @@ export async function callWorkflow(
   }
 
   // Operator log (stderr only): per-call start banner + optional workflow-log
-  // mirror. The run dir is not yet known at start (host reads it from the meta
-  // file, Docker discovers it, both after exit), so it lands on the end line.
+  // mirror. The run dir is not yet known at start (read from the meta file
+  // after exit), so it lands on the end line.
   const operator = ctx?.operator;
   operator?.log.info(
     formatCallStartLine({
       workflow: workflowSymbol,
-      sandboxLabel: operator.sandboxLabel,
       runId,
       principal: ctx?.principal,
       correlationId: ctx?.correlationId,
@@ -103,9 +92,7 @@ export async function callWorkflow(
   const onLogEvent = buildLogMirrorHandler(operator, runId, runtimeEnv, env.extraEnv);
 
   const onStepEvent = buildStepEventHandler(env, ctx);
-  const result = posture.dockerConfig.enabled
-    ? await callWorkflowDocker(env, posture, workflowSymbol, positionalArgs, runtimeEnv, runId, caps, onStepEvent, ctx, onLogEvent)
-    : await callWorkflowHost(env, workflowSymbol, positionalArgs, runtimeEnv, runId, caps, onStepEvent, ctx, onLogEvent);
+  const result = await callWorkflowHost(env, workflowSymbol, positionalArgs, runtimeEnv, runId, caps, onStepEvent, ctx, onLogEvent);
 
   if (operator) {
     const status = result.signal ? "cancelled" : result.isError ? "failed" : "ok";
@@ -156,9 +143,7 @@ export async function callWorkflow(
 
 /**
  * Combined per-step-event handler for one call: dispatches the step hooks
- * (when configured) and forwards the caller's progress callback. Passed to
- * `attachOutputCollector` by both execution paths so hook dispatch cannot
- * diverge between host and Docker.
+ * (when configured) and forwards the caller's progress callback.
  */
 function buildStepEventHandler(
   env: WorkflowCallEnvironment,
@@ -182,9 +167,8 @@ function buildStepEventHandler(
  * workflow LOG/LOGWARN/LOGERR event is mirrored to the operator log (stderr),
  * colorized by level with the same depth / async-branch subscript indent as the
  * interactive tree. The message is credential-redacted through the same
- * boundary as the durable journal / call-result text — redaction uses both the
- * runtime env and the Docker `--env` passthrough so a secret can never leak to
- * stderr regardless of which env layer carried it.
+ * boundary as the durable journal / call-result text — redaction uses the
+ * runtime env plus `--env` passthrough so a secret can never leak to stderr.
  */
 function buildLogMirrorHandler(
   operator: WorkflowCallContext["operator"],

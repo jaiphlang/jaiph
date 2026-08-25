@@ -77,24 +77,18 @@ test("scrubPromptEnv: an unrecognized backend forwards no credentials (fail-clos
   assert.equal(env.OPENAI_API_KEY, undefined);
 });
 
-test("scrubPromptEnv: JAIPH_ control keys pass, JAIPH_DOCKER_/inplace exclusions do not", () => {
+test("scrubPromptEnv: JAIPH_ control keys pass, JAIPH_SERVE_* exclusions do not", () => {
   const env = scrubPromptEnv(
     {
       JAIPH_TEST_MODE: "1",
       JAIPH_RUN_DIR: "/runs/r1",
-      JAIPH_DOCKER_IMAGE: "img",
-      JAIPH_INPLACE: "true",
-      JAIPH_RUN_WORKFLOW: "deploy",
+      JAIPH_SERVE_TOKEN: "s3cret",
     },
     "cursor",
   );
   assert.equal(env.JAIPH_TEST_MODE, "1");
   assert.equal(env.JAIPH_RUN_DIR, "/runs/r1");
-  assert.equal(env.JAIPH_DOCKER_IMAGE, undefined);
-  assert.equal(env.JAIPH_INPLACE, undefined);
-  // Bracket access: the docs parity gate (docs-reference-task5) reserves the
-  // greppable dot-access form for real runtime reads of that variable.
-  assert.equal(env["JAIPH_RUN_WORKFLOW"], undefined);
+  assert.equal(env.JAIPH_SERVE_TOKEN, undefined);
 });
 
 test("scrubPromptEnv: host-only JAIPH_SERVE_* server keys never reach a prompt backend", () => {

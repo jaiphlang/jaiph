@@ -121,7 +121,7 @@ test("jaiph run tree includes function calls from workflow shell steps", () => {
     const runResult = spawnSync("node", [cliPath, "run", filePath], {
       encoding: "utf8",
       cwd: root,
-      env: { ...process.env, JAIPH_DOCKER_ENABLED: "false" },
+      env: { ...process.env },
     });
 
     assert.equal(runResult.status, 0, runResult.stderr);
@@ -181,7 +181,7 @@ test("jaiph run tree shows workflow params inline when run has key=value args", 
     const runResult = spawnSync("node", [cliPath, "run", join(root, "main.jh")], {
       encoding: "utf8",
       cwd: root,
-      env: { ...process.env, JAIPH_DOCKER_ENABLED: "false", NO_COLOR: "1" },
+      env: { ...process.env, NO_COLOR: "1" },
     });
     assert.equal(runResult.status, 0, runResult.stderr);
     assert.match(runResult.stdout, /workflow default/);
@@ -211,7 +211,7 @@ test("jaiph run tree shows function step; params shown when runtime includes the
     const runResult = spawnSync("node", [cliPath, "run", join(root, "main.jh")], {
       encoding: "utf8",
       cwd: root,
-      env: { ...process.env, JAIPH_DOCKER_ENABLED: "false", NO_COLOR: "1" },
+      env: { ...process.env, NO_COLOR: "1" },
     });
     assert.equal(runResult.status, 0, runResult.stderr);
     assert.match(runResult.stdout, /script echo_args/);
@@ -242,7 +242,7 @@ test("jaiph run tree truncates param values over 32 chars when params present", 
     const runResult = spawnSync("node", [cliPath, "run", join(root, "main.jh")], {
       encoding: "utf8",
       cwd: root,
-      env: { ...process.env, JAIPH_DOCKER_ENABLED: "false", NO_COLOR: "1" },
+      env: { ...process.env, NO_COLOR: "1" },
     });
     assert.equal(runResult.status, 0, runResult.stderr);
     assert.match(runResult.stdout, /workflow default/);

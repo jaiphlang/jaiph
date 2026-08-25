@@ -3,12 +3,12 @@ import type { JaiphConfig } from "../../config";
 import type { EnvSpec } from "../shared/usage";
 
 /**
- * Resolve `--env` specs into a flat `KEY -> value` record, ready to apply to a
- * runner env (host modes) or thread through `DockerSpawnOptions.extraEnv`
- * (Docker). Must run **before** any process is spawned so a bare `--env KEY`
- * whose value is unset on the host aborts with `E_ENV_MISSING` rather than
- * silently dropping. Later duplicates win (flag order). Name-shape and
- * reserved-key rejection already happened at parse time (`parseArgs`).
+ * Resolve `--env` specs into a flat `KEY -> value` record, ready to apply to
+ * the runner env. Must run **before** any process is spawned so a bare
+ * `--env KEY` whose value is unset on the host aborts with `E_ENV_MISSING`
+ * rather than silently dropping. Later duplicates win (flag order).
+ * Name-shape and reserved-key rejection already happened at parse time
+ * (`parseArgs`).
  */
 export function resolveEnvPairs(
   specs: EnvSpec[],
@@ -29,71 +29,6 @@ export function resolveEnvPairs(
     }
   }
   return out;
-}
-
-/**
- * Boolean sandbox flags from `jaiph run`'s CLI surface. These are an ergonomic
- * front-end for the corresponding env vars: each flag turns the env var ON for
- * this run only. Both enabling paths (flag or env) agree, so the env layer
- * stays the single source of truth that `resolveDockerConfig` / `selectSandboxMode`
- * consume — no parameter threading through the docker layer.
- */
-export interface SandboxFlags {
-  inplace?: boolean;
-  unsafe?: boolean;
-  yes?: boolean;
-}
-
-/**
- * Apply sandbox flags to a runtime env map by mutating it in place.
- *
- * Mutate the local `env` only — never `process.env`, which would leak flag
- * choices into every child process globally. `resolveRuntimeEnv` always
- * returns a fresh spread of `process.env`, so callers can safely mutate it.
- *
- * Fails fast with `E_FLAG_CONFLICT` when `--inplace` / `JAIPH_INPLACE` and
- * `--unsafe` / `JAIPH_UNSAFE` are both truthy: one keeps the sandbox on,
- * the other turns it off.
- */
-export function applySandboxFlags(
-  env: Record<string, string | undefined>,
-  flags: SandboxFlags,
-): void {
-  if (flags.inplace) env.JAIPH_INPLACE = "1";
-  if (flags.unsafe) env.JAIPH_UNSAFE = "true";
-  if (flags.yes) env.JAIPH_INPLACE_YES = "1";
-
-  const inplaceOn = env.JAIPH_INPLACE === "1" || env.JAIPH_INPLACE === "true";
-  const unsafeOn = env.JAIPH_UNSAFE === "true";
-  if (inplaceOn && unsafeOn) {
-    throw new Error(
-      "E_FLAG_CONFLICT --inplace / JAIPH_INPLACE and --unsafe / JAIPH_UNSAFE are mutually exclusive: " +
-        "in-place mode keeps the sandbox on with the host workspace bind-mounted rw, while unsafe disables the sandbox entirely.",
-    );
-  }
-}
-
-/**
- * True when Docker is off specifically because the user opted into unsafe mode
- * (`JAIPH_UNSAFE=true` / `--unsafe`) while Docker would otherwise be on.
- *
- * "Would otherwise be on" is the key gate: it excludes win32 (forced host-only
- * with its own notice) and an explicit `JAIPH_DOCKER_ENABLED=false` (Docker
- * disabled by config, not by the unsafe opt-in). Only the unsafe-driven case
- * gets the extra host-only consent (interactive on `jaiph run`; a startup
- * notice on `jaiph serve` / `jaiph mcp`, where launching the server with the
- * flag or env var is the consent).
- */
-export function isUnsafeHostOnly(
-  dockerEnabled: boolean,
-  env: Record<string, string | undefined>,
-): boolean {
-  return (
-    !dockerEnabled &&
-    process.platform !== "win32" &&
-    env.JAIPH_DOCKER_ENABLED === undefined &&
-    env.JAIPH_UNSAFE === "true"
-  );
 }
 
 const LOCKED_ENV_KEYS = [

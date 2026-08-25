@@ -10,8 +10,7 @@ import { join } from "node:path";
 // e2e/tests/windows_native_smoke.ps1. These host-portable guards pin the
 // contract that must hold everywhere and fail when it is violated:
 //   1. The windows-native-smoke job exists on windows-latest, builds the
-//      standalone .exe, and runs the smoke harness — and it is required for
-//      merge (the docker-publish gate needs it, alongside test/e2e/e2e-wsl).
+//      standalone .exe, and runs the smoke harness.
 //   2. Output assertions run against actual jaiph.exe stdout (exit code +
 //      expected log lines); the cancellation check fails if any child survives.
 //   3. The job uses no WSL (e2e-wsl is left as-is and is the only WSL lane).
@@ -31,9 +30,9 @@ function sliceBetween(text: string, start: string, end: string | null): string {
   return text.slice(from, to === text.length ? text.length : to);
 }
 
-const SMOKE_JOB = sliceBetween(CI_YML, "\n  windows-native-smoke:", "\n  docker-publish:");
+const SMOKE_JOB = sliceBetween(CI_YML, "\n  windows-native-smoke:", null);
 
-// ── Acceptance 1: the job exists, builds the .exe, runs the harness, gates merge ─
+// ── Acceptance 1: the job exists, builds the .exe, and runs the harness ─
 
 test("windows-native-smoke runs natively on windows-latest", () => {
   assert.match(SMOKE_JOB, /runs-on:\s*windows-latest/, "job runs on windows-latest");
@@ -54,16 +53,6 @@ test("windows-native-smoke runs the smoke harness against the built exe", () => 
     /JAIPH_TEST_WINDOWS_EXE\s*=\s*Join-Path \$env:GITHUB_WORKSPACE "jaiph-windows-x64\.exe"/,
     "points the harness at the freshly built exe",
   );
-});
-
-test("windows-native-smoke is required for merge in the CI gate", () => {
-  // docker-publish is the CI gate (release-workflow uses the same pattern): its
-  // needs list is what must be green. The smoke job joins test/e2e/e2e-wsl there.
-  const needs = sliceBetween(CI_YML, "\n  docker-publish:", "\n    if:");
-  assert.match(needs, /needs:\s*\[[^\]]*\bwindows-native-smoke\b[^\]]*\]/, "gate needs windows-native-smoke");
-  for (const gate of ["test", "e2e", "e2e-wsl"]) {
-    assert.match(needs, new RegExp(`\\b${gate}\\b`), `gate still needs ${gate}`);
-  }
 });
 
 // ── Acceptance 2: assertions run against real jaiph.exe stdout / cancellation ──

@@ -1,8 +1,6 @@
 import type { JaiphConfig } from "../../config";
 import type { jaiphModule } from "../../types";
-import type { SandboxFlags } from "../run/env";
 import type { MergedHookConfig } from "../run/hooks";
-import type { DockerRunConfig, SandboxMode } from "../../runtime";
 import type { OperatorLog } from "./server-log";
 
 // Shared type surface and output-cap primitives for the workflow-call executor.
@@ -39,7 +37,7 @@ export interface WorkflowCallContext {
   onCancelHandle?: (cancel: () => void) => void;
   /**
    * Authenticated principal (audit subject) for this call, attached to the
-   * run's telemetry identity (OTLP resource attributes + Sentry tags). Never a
+   * run's telemetry identity (OTLP resource attrs + Sentry tags). Never a
    * token or a secret-bearing claim.
    */
   principal?: string;
@@ -61,11 +59,7 @@ export interface WorkflowCallContext {
 export interface WorkflowCallEnvironment {
   inputAbs: string;
   workspaceRoot: string;
-  /**
-   * Entry module AST for this generation. Docker calls scan it for the
-   * backends in play (`collectEntryBackends`) so the sandbox forwards only
-   * those backends' credential keys.
-   */
+  /** Entry module AST for this generation. */
   mod: jaiphModule;
   effectiveConfig: JaiphConfig;
   /** Emitted scripts dir for this generation (`buildScriptsFromGraph`). */
@@ -76,18 +70,9 @@ export interface WorkflowCallEnvironment {
   outDir: string;
   /**
    * Resolved `--env` passthrough applied to every call for the server's
-   * lifetime. Host execution merges it into the runner env; Docker execution
-   * threads it through `DockerSpawnOptions.extraEnv` — this is the single
-   * choke point either way.
+   * lifetime. Merged into the runner env.
    */
   extraEnv: Record<string, string>;
-  /**
-   * Sandbox flags from the server's CLI surface (`--inplace` / `--unsafe` /
-   * `--yes`), applied to every call's runtime env exactly as `jaiph run`
-   * applies them, so the child observes the same `JAIPH_*` posture vars in
-   * every mode. Conflicts were already rejected at server startup.
-   */
-  sandboxFlags?: SandboxFlags;
   /**
    * Merged lifecycle-hook config (`hooks.json`), loaded once per generation.
    * When present, every call dispatches the same four hook events as
@@ -95,16 +80,6 @@ export interface WorkflowCallEnvironment {
    * `workflow_end`) with the same payload shapes.
    */
   hooks?: MergedHookConfig;
-}
-
-/**
- * Sandbox posture for a workflow server, resolved **once at startup**
- * (`resolveStartupPosture`) and applied verbatim to every call — a call never
- * re-derives Docker enablement or the sandbox mode from its own env.
- */
-export interface ExecutionPosture {
-  dockerConfig: DockerRunConfig;
-  sandboxMode: SandboxMode;
 }
 
 /** Output accumulated from a run child's streams while it executes. */
@@ -155,8 +130,6 @@ export const TRUNCATION_MARKER = "\n[jaiph: output truncated — exceeded the co
 /** Cap `text` to `cap` UTF-8 bytes, appending {@link TRUNCATION_MARKER} on overflow. */
 export function capBytes(text: string, cap: number): string {
   if (Buffer.byteLength(text) <= cap) return text;
-  // Slice on a byte boundary, then drop a trailing partial multibyte char
-  // (which `toString` decodes to U+FFFD) so the head stays valid UTF-8.
   const head = Buffer.from(text, "utf8").subarray(0, cap).toString("utf8").replace(/�+$/, "");
   return head + TRUNCATION_MARKER;
 }

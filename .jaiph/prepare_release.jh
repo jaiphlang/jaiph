@@ -225,14 +225,9 @@ workflow review_changelog(version) {
          combine Summary bullets (dedupe), append All changes (dedupe by
          title), keep chronological/newest-first within All changes.
        - Otherwise rename # Unreleased to # ${version} in place.
-    4. Fix stale All-changes wording superseded by later work, especially:
-       - overlay / copy / fuse / JAIPH_DOCKER_NO_OVERLAY → snapshot | inplace
-       - MCP "in-place by default" → same sandbox truth table as jaiph run
-         (snapshot default; inplace only with JAIPH_INPLACE)
-       - Docker Ctrl+C / signal cleanup: snapshot and inplace modes only
-    5. Ensure Summary covers the headline themes: sandbox snapshot + git-defined
-       content, trusted_envs, language sugar (else if, match |), logging,
-       security hardening, and anything from the merged 0.11.0 tranche (MCP,
+    4. Fix stale All-changes wording superseded by later work.
+    5. Ensure Summary covers the headline themes: trusted_envs, language sugar (else if, match |), logging,
+       and anything from the merged 0.11.0 tranche (MCP,
        Windows, --env, agent.model) when that section is being folded in.
     6. Replace the top of CHANGELOG.md with a fresh empty scaffold:
          # Unreleased
@@ -298,7 +293,7 @@ workflow default(arg) {
       3. Confirm MINISIGN_SECRET_KEY is set in GitHub Actions secrets
          (see docs/contributing.md → Release signing).
       4. Tag: git tag v${version}
-      5. Push branch + tag (tag push triggers docker-publish and release.yml)
+      5. Push branch + tag (tag push triggers release.yml)
       6. Smoke check: jaiph use ${version}
   """
   return version

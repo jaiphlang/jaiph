@@ -25,7 +25,6 @@ const FIXTURE = [
 function serveEnv(runsRoot: string): NodeJS.ProcessEnv {
   return {
     ...process.env,
-    JAIPH_DOCKER_ENABLED: "false",
     JAIPH_RUNS_DIR: runsRoot,
     PATH: `${dirname(process.execPath)}:${process.env.PATH ?? ""}`,
   };

@@ -35,7 +35,6 @@ test("composeResult redacts the credential from every failure part but keeps con
     }),
     FAIL,
     "/runs/x",
-    undefined,
     ENV,
   );
   assert.equal(result.isError, true);
@@ -48,7 +47,7 @@ test("composeResult redacts the credential from every failure part but keeps con
 });
 
 test("composeResult redacts raw stdout on failure when it is the only detail", () => {
-  const result = composeResult("boom", collected({ rawStdout: `only stdout ${SECRET}` }), FAIL, undefined, undefined, ENV);
+  const result = composeResult("boom", collected({ rawStdout: `only stdout ${SECRET}` }), FAIL, undefined, ENV);
   assert.ok(!result.text.includes(SECRET));
   assert.equal(result.text.includes("only stdout [REDACTED]"), true);
 });
@@ -59,7 +58,6 @@ test("composeResult leaves non-credential env values and short credentials alone
     collected({ rawStderr: "greeting hello-world, short abc" }),
     FAIL,
     undefined,
-    undefined,
     { GREETING: "hello-world", TINY_API_KEY: "abc" },
   );
   assert.ok(result.text.includes("greeting hello-world, short abc"), "non-credential text is untouched");
@@ -69,7 +67,7 @@ test("composeResult returns a successful return value verbatim (intentional API 
   const runDir = mkdtempSync(join(tmpdir(), "jaiph-call-rv-"));
   try {
     writeFileSync(join(runDir, "return_value.txt"), `deploy key ${SECRET}\n`);
-    const result = composeResult("ok", collected({}), OK, runDir, undefined, ENV);
+    const result = composeResult("ok", collected({}), OK, runDir, ENV);
     assert.equal(result.isError, false);
     assert.equal(result.text, `deploy key ${SECRET}`, "return values are not diagnostic capture");
   } finally {
@@ -78,7 +76,7 @@ test("composeResult returns a successful return value verbatim (intentional API 
 });
 
 test("composeResult redacts the log-fallback success text (diagnostic capture)", () => {
-  const result = composeResult("ok", collected({ logs: [`log saw ${SECRET}`] }), OK, undefined, undefined, ENV);
+  const result = composeResult("ok", collected({ logs: [`log saw ${SECRET}`] }), OK, undefined, ENV);
   assert.equal(result.isError, false);
   assert.equal(result.text, "log saw [REDACTED]");
 });
@@ -104,7 +102,7 @@ test("capBytes does not split a trailing multibyte char (no U+FFFD)", () => {
 
 test("composeResult caps result_text on a runaway failure and returns a deterministic marker", () => {
   const huge = "z".repeat(5 * 1024 * 1024); // 5 MiB of stdout from a hostile run
-  const result = composeResult("boom", collected({ rawStdout: huge }), FAIL, undefined, undefined, ENV, SMALL_CAPS);
+  const result = composeResult("boom", collected({ rawStdout: huge }), FAIL, undefined, ENV, SMALL_CAPS);
   assert.equal(result.isError, true);
   assert.ok(
     Buffer.byteLength(result.text) <= SMALL_CAPS.resultText + Buffer.byteLength(TRUNCATION_MARKER),
@@ -117,7 +115,7 @@ test("composeResult caps a runaway successful return value", () => {
   const runDir = mkdtempSync(join(tmpdir(), "jaiph-call-cap-"));
   try {
     writeFileSync(join(runDir, "return_value.txt"), "y".repeat(1024));
-    const result = composeResult("ok", collected({}), OK, runDir, undefined, ENV, SMALL_CAPS);
+    const result = composeResult("ok", collected({}), OK, runDir, ENV, SMALL_CAPS);
     assert.equal(result.isError, false);
     assert.ok(Buffer.byteLength(result.text) <= SMALL_CAPS.resultText + Buffer.byteLength(TRUNCATION_MARKER));
     assert.ok(result.text.endsWith(TRUNCATION_MARKER));

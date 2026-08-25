@@ -2,7 +2,7 @@
 
 *`jaiph serve <file.jh>` serves the file's workflows as an HTTP API with a generated OpenAPI 3.1 document and an embedded Swagger UI. Anything that speaks HTTP — a CI job, a Kubernetes deployment, another service, a human with a browser — can invoke tested workflows and inspect their runs, without an MCP client or a local jaiph install.*
 
-**Status:** design — ready for implementation (tasks queued in QUEUE.md)
+**Status:** shipped. Sandbox posture in this doc is superseded by [ADR 0001](0001-jaiph-is-the-language.md) (host-only; no Docker driver).
 **Date (UTC):** 2026-07-23
 
 ## Problem

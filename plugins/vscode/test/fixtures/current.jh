@@ -7,7 +7,7 @@ config {
   agent.backend = "claude"
   agent.model = "claude-opus"
   run.recover_limit = 3
-  runtime.docker_timeout_seconds = 600
+  trusted_envs = "GITHUB_TOKEN"
   module.name = "sample"
 }
 

@@ -4,10 +4,8 @@
  * Schema: a fixed sequence of delays (ms) to wait before each retry attempt.
  * `delays.length + 1` total attempts (1 initial + N retries). Schedule the
  * default sequence escalates: 15s, 1m, 10m, 30m, 2h — total ~2h41m wall-clock
- * for a full failure run. Under Docker the container timeout
- * (`runtime.docker_timeout_seconds`, default 3600s) caps this; raise it via
- * the metadata key or JAIPH_DOCKER_TIMEOUT for workflows that need the full
- * retry budget inside a sandbox.
+ * for a full failure run. `JAIPH_RUN_TIMEOUT` is the parent-enforced wall-clock
+ * cap for the whole run.
  */
 export const DEFAULT_PROMPT_RETRY_DELAYS_MS: readonly number[] = [
   15_000,

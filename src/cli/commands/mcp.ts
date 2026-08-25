@@ -8,32 +8,16 @@ import { createOperatorLog } from "../shared/server-log";
 import { VERSION } from "../../version";
 
 const MCP_USAGE =
-  "Usage: jaiph mcp [--workspace <dir>] [--inplace] [--unsafe] [--yes|-y] [--env KEY[=VALUE]]... <file.jh>\n\n" +
+  "Usage: jaiph mcp [--workspace <dir>] [--env KEY[=VALUE]]... <file.jh>\n\n" +
   "Serve the file's workflows as MCP tools over stdio (newline-delimited JSON-RPC).\n" +
   "Exposure: `export workflow` declarations if any exist, otherwise every top-level\n" +
   "workflow except channel route targets. `default` is exposed only when it is the\n" +
   "only workflow, under a tool name derived from the file's basename.\n" +
   "Tool descriptions come from the `#` comment lines directly above each workflow.\n" +
   "Sources are re-validated on change and clients get notifications/tools/list_changed.\n\n" +
-  "Tool calls honor the same env-driven Docker sandbox as `jaiph run`: the workspace\n" +
-  "is isolated by default via a writable point-in-time snapshot taken at call start.\n" +
-  "Use --inplace (JAIPH_INPLACE=1) to bind the live workspace read-write (effects land\n" +
-  "on the host), or --unsafe (JAIPH_UNSAFE=true) to run on the host with no sandbox.\n\n" +
   "  --workspace <dir>  workspace root for import resolution (default: auto-detect)\n" +
   "  --env KEY=VALUE    define KEY in every tool call's env (repeatable); --env KEY forwards the host value\n" +
-  "  --inplace          Docker sandbox with the host workspace bind-mounted rw for every call (JAIPH_INPLACE=1)\n" +
-  "  --unsafe           every call runs on the host with no sandbox (JAIPH_UNSAFE=true)\n" +
-  "  -y, --yes          record auto-consent for the posture (JAIPH_INPLACE_YES=1)\n" +
   "  -h, --help         show this help\n\n" +
-  "Execution policy: --workspace/--env/--inplace/--unsafe/--yes are shared with jaiph run and\n" +
-  "jaiph serve. Precedence: CLI flags > JAIPH_* env vars > workflow config metadata > defaults.\n" +
-  "--inplace and --unsafe conflict (E_FLAG_CONFLICT, at startup before anything is spawned).\n" +
-  "The effective sandbox posture is resolved and printed once at startup and applied to every\n" +
-  "tool call (no interactive prompt). Host-only (unsafe) mode requires explicit consent on the\n" +
-  "command line: pass --unsafe (or --yes). An inherited JAIPH_UNSAFE=true with no such flag is\n" +
-  "refused at startup (E_UNSAFE_NO_CONSENT). Inside a container the container itself is the\n" +
-  "sandbox (the runtime image bakes JAIPH_UNSAFE=true), so host-only execution there is the\n" +
-  "documented standalone posture and needs no flag.\n\n" +
   "Example:\n" +
   "  claude mcp add mytools -- jaiph mcp ./tools.jh\n";
 
@@ -43,17 +27,14 @@ export async function runMcp(rest: string[]): Promise<number> {
   const started = startGeneration(parsed.args, "tool calls");
   if ("code" in started) return started.code;
   const ctx = started.ctx;
-  const { generations, posture, inputAbs, log } = ctx;
+  const { generations, inputAbs, log } = ctx;
 
   // Operator log (stderr only, never MCP stdout): per-call banners + optional
   // workflow-log mirror, over the same injectable `log` sink used for lifecycle
-  // lines. The sandbox label is resolved once from the startup posture.
+  // lines. Host execution is announced once at startup.
   const operator = createOperatorLog({
     label: "jaiph mcp",
     write: log,
-    dockerEnabled: posture.dockerConfig.enabled,
-    sandboxMode: posture.sandboxMode,
-    unsafeHostOnly: posture.unsafeHostOnly,
   });
 
   const server = new McpServer({
@@ -65,7 +46,6 @@ export async function runMcp(rest: string[]): Promise<number> {
       const lease = generations.acquire();
       return callWorkflow(
         lease.state.callEnv,
-        posture,
         spec.workflow,
         spec.params.map((p) => args[p] ?? ""),
         randomUUID(),

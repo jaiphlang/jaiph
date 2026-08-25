@@ -75,14 +75,14 @@ test("registerTTYSubscriber: stderr_line renders immediately in TTY mode", () =>
   try {
     registerTTYSubscriber(emitter, ctx);
     emitter.emit("stderr_line", {
-      line: "jaiph docker: taking a point-in-time snapshot of the workspace before startup",
+      line: "workflow helper: compiling scripts",
     });
   } finally {
     (process.stdout.write as unknown as typeof process.stdout.write) = originalWrite as typeof process.stdout.write;
   }
 
   const output = writes.join("");
-  assert.equal(output, "jaiph docker: taking a point-in-time snapshot of the workspace before startup\n");
+  assert.equal(output, "workflow helper: compiling scripts\n");
 });
 
 test("registerTTYSubscriber: LOG is blue, LOGWARN yellow, LOGERR red when color enabled", () => {

@@ -3,8 +3,7 @@
 #
 # Artifact publishing for Jaiph workflows.
 # Copies files from the workspace into ${JAIPH_ARTIFACTS_DIR} so they
-# survive sandbox teardown and are readable on the host at
-# .jaiph/runs/<run_id>/artifacts/.
+# are readable at .jaiph/runs/<run_id>/artifacts/.
 #
 # Usage:
 #   import "jaiphlang/artifacts" as artifacts

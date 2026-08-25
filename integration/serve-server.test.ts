@@ -70,7 +70,6 @@ const BASE_FIXTURE = [
 function serveEnv(runsRoot: string, extra?: Record<string, string>): NodeJS.ProcessEnv {
   return {
     ...process.env,
-    JAIPH_DOCKER_ENABLED: "false",
     JAIPH_RUNS_DIR: runsRoot,
     PATH: `${dirname(process.execPath)}:${process.env.PATH ?? ""}`,
     ...extra,

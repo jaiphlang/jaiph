@@ -430,8 +430,6 @@ e2e::prepare_shared_context() {
 
   export PATH="${JAIPH_E2E_BIN_DIR}:${PATH}"
   export JAIPH_BIN_DIR="${JAIPH_E2E_BIN_DIR}"
-  # Docker sandbox is opt-in (beta); keep it disabled for e2e tests.
-  export JAIPH_DOCKER_ENABLED="${JAIPH_DOCKER_ENABLED:-false}"
   # Redirect the operator-side audit-chain key store (finding M-3) into the E2E
   # work area so runs never write keys into the real home `.jaiph/audit-keys`.
   # JAIPH_E2E_WORK_DIR is always set above; run dirs live under per-test subdirs,
@@ -498,108 +496,9 @@ EOF
   JAIPH_BIN_DIR="${JAIPH_E2E_BIN_DIR}" curl -fsSL "${E2E_SERVER_URL}/install" | bash
 }
 
-E2E_DOCKER_TEST_IMAGE="${JAIPH_E2E_DOCKER_IMAGE:-}"
-E2E_DOCKER_IMAGE_BUILT=0
-
-# Build a local jaiph-e2e-runtime image from the current source tree.
-# Caches the image name in E2E_DOCKER_TEST_IMAGE so it is built at most once.
-e2e::ensure_docker_test_image() {
-  if [[ -n "${E2E_DOCKER_TEST_IMAGE}" ]]; then
-    return 0
-  fi
-  if ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
-    return 1
-  fi
-  local tag="jaiph-e2e-runtime:local"
-  if [[ "${E2E_DOCKER_IMAGE_BUILT}" == "1" ]]; then
-    E2E_DOCKER_TEST_IMAGE="${tag}"
-    export JAIPH_E2E_DOCKER_IMAGE="${tag}"
-    return 0
-  fi
-  if docker build -t "${tag}" -f "${E2E_REPO_ROOT}/runtime/Dockerfile" "${E2E_REPO_ROOT}" >/dev/null 2>&1; then
-    E2E_DOCKER_IMAGE_BUILT=1
-    E2E_DOCKER_TEST_IMAGE="${tag}"
-    export JAIPH_E2E_DOCKER_IMAGE="${tag}"
-  fi
-  [[ -n "${E2E_DOCKER_TEST_IMAGE}" ]]
-}
-
-# ---------------------------------------------------------------------------
-# Docker-daemon e2e helpers.
-#
-# Docker Desktop under concurrent load is flaky: leftover `Created` containers,
-# "unable to upgrade to tcp, received 500", and signal-cleanup races. These
-# helpers make the Docker-daemon scripts (1) observable on failure — a `jaiph
-# run` that dies mid-flight surfaces its stderr instead of a bare "artifact
-# missing" — and (2) self-cleaning, so a leftover `jaiph-run-*` container from
-# one case can't fail the next case (or a back-to-back run of the whole script).
-#
-# Every Docker-backed run gets a deterministic `--name jaiph-run-<hex>` from
-# spawnDockerProcess (src/runtime/docker.ts), so we can wait on / remove the
-# scenario container by name rather than an image-wide `ancestor=` filter that
-# would also latch onto the short-lived image-probe container.
-# ---------------------------------------------------------------------------
-
-# IDs of jaiph-run-* containers in ANY state — Created, Running, or Exited.
-# Plain `docker ps` hides Created/Exited; `-a` includes them, so a container
-# that is still mid-create counts as "appeared" for wait purposes, and a
-# stopped-but-not-removed leftover counts for cleanup/gone assertions.
-e2e::jaiph_run_container_ids() {
-  command -v docker >/dev/null 2>&1 || return 0
-  docker ps -aq --filter "name=jaiph-run-" 2>/dev/null || true
-}
-
-# Bounded wait for at least one jaiph-run-* container to APPEAR (Created counts).
-# $1 = max seconds (default 15). Prints "yes" and returns 0 on appearance;
-# returns 1 if none appeared within the window (no output).
-e2e::wait_for_jaiph_run_container() {
-  local max="${1:-15}" i
-  for ((i = 0; i < max * 2; i++)); do
-    if [[ -n "$(e2e::jaiph_run_container_ids)" ]]; then
-      printf "yes"
-      return 0
-    fi
-    sleep 0.5
-  done
-  return 1
-}
-
-# Force-remove any leftover jaiph-run-* containers (best-effort). Call between
-# cases and from the EXIT trap so a flake can't leave live/created state for the
-# next case or the next back-to-back run of the script.
-e2e::rm_jaiph_run_containers() {
-  command -v docker >/dev/null 2>&1 || return 0
-  local cid
-  for cid in $(e2e::jaiph_run_container_ids); do
-    docker rm -f "${cid}" >/dev/null 2>&1 || true
-  done
-}
-
-# Presence probes use jaiph-probe-<hex> (src/runtime/docker.ts). A SIGKILL'd
-# Docker Desktop client can leave them in Created; clean those too.
-e2e::rm_jaiph_probe_containers() {
-  command -v docker >/dev/null 2>&1 || return 0
-  local cid
-  for cid in $(docker ps -aq --filter "name=jaiph-probe-" 2>/dev/null || true); do
-    docker rm -f "${cid}" >/dev/null 2>&1 || true
-  done
-}
-
-# EXIT trap for Docker-daemon scripts: remove leftover jaiph-run-* / probe
-# containers, then run the standard cleanup. Docker-daemon scripts should
-# `trap e2e::docker_cleanup EXIT` instead of `trap e2e::cleanup EXIT`.
-e2e::docker_cleanup() {
-  e2e::rm_jaiph_run_containers
-  e2e::rm_jaiph_probe_containers
-  e2e::cleanup
-}
-
 # Run a command with stdout+stderr captured to a log; on non-zero exit, dump the
-# log to stderr and fail with $label. Replaces the silent
-# `jaiph run … >/dev/null 2>&1` then file-assert pattern that hid the real error
-# (a Docker daemon flake) behind a downstream "artifact missing" failure.
+# log to stderr and fail with $label.
 # Usage: e2e::run_logged "<label>" <command> [args…]
-#   e.g. e2e::run_logged "docker: abs runs" env JAIPH_DOCKER_ENABLED=true jaiph run flow.jh
 e2e::run_logged() {
   local label="$1"
   shift
@@ -619,12 +518,10 @@ e2e::run_logged() {
 # Run a long, output-silent command while emitting a periodic heartbeat so an
 # outer idle-output watchdog (JAIPH_STEP_IDLE_KILL_SEC — the whole e2e suite runs
 # as one leaf step under `jaiph ensure_ci_passes`) does not mistake a slow-but-
-# live step for a hang. The trigger case: `kind create cluster` / `kind load
-# docker-image` handle the ~1GB kindest/node image and, in non-TTY mode, kind
-# prints one line then goes silent for the entire pull/transfer — long enough to
-# trip the watchdog. The command runs in the foreground (its own output and exit
-# status pass straight through); a background heartbeat prints "<label>: still
-# working (<n>s elapsed)" every E2E_HEARTBEAT_SEC (default 15s) until it exits.
+# live step for a hang. The command runs in the foreground (its own output and
+# exit status pass straight through); a background heartbeat prints
+# "<label>: still working (<n>s elapsed)" every E2E_HEARTBEAT_SEC (default 15s)
+# until it exits.
 # Usage: e2e::run_with_heartbeat "<label>" <command> [args…]
 e2e::run_with_heartbeat() {
   local label="$1"

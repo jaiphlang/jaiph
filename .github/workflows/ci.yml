@@ -38,60 +38,13 @@ jobs:
           VERSION="$(node -p "require('./package.json').version")"
           git ls-remote --exit-code https://github.com/jaiphlang/jaiph.git "refs/tags/v${VERSION}"
 
-  k8s-manifest:
-    name: Validate Kubernetes deploy manifest
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      # `kubectl apply --dry-run=client` still needs an API server for resource
-      # discovery (RESTMapper), so provision a throwaway kind cluster for it.
-      # The same cluster then backs the real deploy test below.
-      - name: Create kind cluster
-        uses: helm/kind-action@v1
-        with:
-          cluster_name: jaiph-e2e
-
-      # Fast schema gate — cheap, but only proves the manifest parses.
-      - name: Dry-run apply the standalone deploy manifest
-        run: kubectl apply --dry-run=client -f docs/deploy/k8s.yaml
-
-      - name: Build runtime image for the deploy test
-        run: docker build -t jaiph-e2e-runtime:local -f runtime/Dockerfile .
-
-      # Real deployment contract: external Secret gate, pod hardening
-      # (non-root, no privilege escalation, dropped caps, no SA token,
-      # read-only rootfs), an authenticated HTTP run, and its journal on the
-      # writable runs volume.
-      - name: Deploy and exercise the manifest on kind
-        run: |
-          JAIPH_E2E_SKIP_INSTALL=1 \
-          JAIPH_E2E_KIND_CLUSTER=jaiph-e2e \
-          JAIPH_E2E_DOCKER_IMAGE=jaiph-e2e-runtime:local \
-          bash e2e/tests/150_k8s_deploy.sh
-
   e2e:
-    name: E2E (${{ matrix.os }}, ${{ matrix.label }})
+    name: E2E (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    env:
-      # Host/safe split applies on Ubuntu only. macOS runners do not ship Docker the same way — keep host-only there.
-      # "docker": unset JAIPH_UNSAFE so resolveDockerConfig enables the sandbox (pulls ghcr.io/jaiphlang/jaiph-runtime).
-      # "host": explicit opt-out, same as a fast local `JAIPH_UNSAFE=true npm run test:e2e`.
-      JAIPH_UNSAFE: ${{ matrix.jaiph_unsafe }}
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: ubuntu-latest
-            label: docker
-            jaiph_unsafe: ""
-          - os: ubuntu-latest
-            label: host
-            jaiph_unsafe: "true"
-          - os: macos-latest
-            label: host
-            jaiph_unsafe: "true"
+        os: [ubuntu-latest, macos-latest]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -100,12 +53,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "20"
-
-      - name: Build runtime image for Docker E2E
-        if: matrix.label == 'docker'
-        run: |
-          docker build -t jaiph-ci-runtime:local -f runtime/Dockerfile .
-          echo "JAIPH_DOCKER_IMAGE=jaiph-ci-runtime:local" >> "$GITHUB_ENV"
 
       - name: Run runtime acceptance E2E
         run: |
@@ -141,11 +88,6 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
 
-      - name: Build runtime image for docs sample Docker runs
-        run: |
-          docker build -t jaiph-ci-runtime:local -f runtime/Dockerfile .
-          echo "JAIPH_DOCKER_IMAGE=jaiph-ci-runtime:local" >> "$GITHUB_ENV"
-
       - name: Install dependencies
         run: npm ci
 
@@ -169,7 +111,7 @@ jobs:
           fi
           command -v cursor-agent
 
-      - name: Install Claude Code CLI (prompt backend parity with Docker image)
+      - name: Install Claude Code CLI
         run: |
           npm install -g @anthropic-ai/claude-code
           command -v claude
@@ -273,7 +215,6 @@ jobs:
           $bashScript = @'
           set -euo pipefail
           export DEBIAN_FRONTEND=noninteractive
-          export JAIPH_UNSAFE=true
           # wsl.exe does not forward the parent runner's env into this Linux
           # session, so CI (which docs/install treats as "trusted toolchain,
           # checksum-only OK when minisign is absent") must be re-set here —
@@ -382,53 +323,3 @@ jobs:
         run: |
           $env:JAIPH_TEST_WINDOWS_EXE = Join-Path $env:GITHUB_WORKSPACE "jaiph-windows-x64.exe"
           ./e2e/tests/windows_native_smoke.ps1
-
-  docker-publish:
-    name: Publish Docker runtime image
-    needs: [test, e2e, docs-local, e2e-wsl, installer-powershell, windows-native-smoke]
-    if: github.ref == 'refs/heads/nightly' || startsWith(github.ref, 'refs/tags/v')
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-    env:
-      REGISTRY: ghcr.io
-      IMAGE_NAME: jaiphlang/jaiph-runtime
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Log in to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Image tags
-        id: meta
-        run: |
-          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
-            VERSION="${GITHUB_REF_NAME#v}"
-            echo "tags=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${VERSION},${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest" >> "$GITHUB_OUTPUT"
-          else
-            echo "tags=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:nightly" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Build and push
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: runtime/Dockerfile
-          push: true
-          platforms: linux/amd64,linux/arm64
-          tags: ${{ steps.meta.outputs.tags }}
-
-      - name: Verify pushed image contains jaiph
-        run: |
-          TAG="$(echo '${{ steps.meta.outputs.tags }}' | cut -d',' -f1)"
-          docker run --rm --entrypoint sh "${TAG}" -lc "command -v jaiph && jaiph --version"
-          docker run --rm --cap-drop ALL --entrypoint sh "${TAG}" -lc "command -v jaiph"

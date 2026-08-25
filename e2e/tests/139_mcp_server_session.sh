@@ -58,16 +58,13 @@ mcp_err="${TEST_DIR}/mcp_stderr.txt"
 # then EOF (closing stdin) triggers the exit-0 shutdown after in-flight calls
 # settle. Requests carry explicit ids so responses can be matched regardless of
 # concurrent-handling interleave.
-# Host-mode legs export JAIPH_UNSAFE=true; server modes refuse an inherited
-# unsafe env without an explicit flag (finding M-1), so forward --unsafe as the
-# consent. Docker legs leave JAIPH_UNSAFE unset → no flag → sandboxed default.
 mcp_exit=0
 printf '%s\n' \
   '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{}}}' \
   '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' \
   '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"echo_msg","arguments":{"message":"round-trip-value"}}}' \
   '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"boom","arguments":{}}}' \
-  | jaiph mcp ${JAIPH_UNSAFE:+--unsafe} "${TEST_DIR}/tools.jh" >"${mcp_out}" 2>"${mcp_err}" || mcp_exit=$?
+  | jaiph mcp "${TEST_DIR}/tools.jh" >"${mcp_out}" 2>"${mcp_err}" || mcp_exit=$?
 
 e2e::assert_equals "${mcp_exit}" "0" "jaiph mcp exits 0 on stdin close"
 

@@ -3,11 +3,11 @@
  *
  * Fires host-side, after a run reaches an *unsuccessful* terminal state, from
  * the shared post-run telemetry hook (`exportRunTelemetry` in `otlp.ts`) — never
- * inside the runtime/emitter and never across the sandbox boundary. Successful
+ * inside the runtime/emitter. Successful
  * runs send nothing. Enabled iff `SENTRY_DSN` is set.
  *
  * The event is built entirely from the run's `run_summary.jsonl`, which is
- * already credential-redacted and host-visible in every sandbox mode, so a
+ * already credential-redacted and host-visible, so a
  * secret in step output reaches Sentry only as `[REDACTED]`. The raw per-step
  * capture files are never read.
  *

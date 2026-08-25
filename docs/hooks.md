@@ -11,7 +11,7 @@ redirect_from:
 
 A hook is a shell command that the CLI runs when a workflow reaches a lifecycle event. Hooks let you observe a run or notify another system from outside the workflow, for example send an HTTP webhook, append a line to a log file, or trigger a CI job. Hooks are not part of the workflow language.
 
-Hooks run on the host CLI, even when the workflow itself runs inside Docker. The CLI dispatches them at four lifecycle events. It reads the step events from `__JAIPH_EVENT__` lines on the runner's stderr, and it emits `workflow_start` before the runner spawns and `workflow_end` after the runner exits. Each hook command receives a JSON payload on its stdin.
+Hooks run on the host CLI. The CLI dispatches them at four lifecycle events. It reads the step events from `__JAIPH_EVENT__` lines on the runner's stderr, and it emits `workflow_start` before the runner spawns and `workflow_end` after the runner exits. Each hook command receives a JSON payload on its stdin.
 
 The same four events (`workflow_start`, `step_start`, `step_end`, `workflow_end`), with the same payload shapes, fire in the three ways you can run a workflow:
 
@@ -19,7 +19,7 @@ The same four events (`workflow_start`, `step_start`, `step_end`, `workflow_end`
 - HTTP runs. Every workflow run under `jaiph serve`, dispatched by the server process.
 - MCP tool calls. Every `jaiph mcp` tool call, dispatched by the server process. The hook's stderr goes to the server's stderr, and stdout stays clean for the protocol.
 
-Some run modes dispatch no hooks. `jaiph run --raw` dispatches no hooks, because it is meant for transparent embedding and for the inner run of a Docker sandbox. The host side of a Docker run still dispatches hooks. `jaiph test` runs workflows in-process and dispatches no hooks. When you run `jaiph serve` or `jaiph mcp`, the server loads `hooks.json` at startup and reads it again on each source reload.
+Some run modes dispatch no hooks. `jaiph run --raw` dispatches no hooks, because it is meant for transparent embedding. `jaiph test` runs workflows in-process and dispatches no hooks. When you run `jaiph serve` or `jaiph mcp`, the server loads `hooks.json` at startup and reads it again on each source reload.
 
 ## Prerequisites
 
@@ -37,7 +37,7 @@ Hooks come from one of two files. Project hooks override global hooks for each e
 
 Both files are optional. If a file contains invalid JSON, the CLI writes a `jaiph hooks: …` line to stderr and skips that file.
 
-Hook commands run on the **host**, before and outside any Docker sandbox, so a project-local `<workspace>/.jaiph/hooks.json` that arrives with a cloned or untrusted repository is gated behind a per-workspace trust decision. Absent trust, the CLI ignores the project file and writes a one-line notice to stderr; the global file is unaffected. Trust the current workspace by exporting the opt-in before you run:
+Hook commands run on the **host**, so a project-local `<workspace>/.jaiph/hooks.json` that arrives with a cloned or untrusted repository is gated behind a per-workspace trust decision. Absent trust, the CLI ignores the project file and writes a one-line notice to stderr; the global file is unaffected. Trust the current workspace by exporting the opt-in before you run:
 
 ```bash
 export JAIPH_TRUST_PROJECT_HOOKS=1
@@ -128,5 +128,4 @@ There is no flag that disables a hook. An empty array does not override the glob
 ## Related
 
 - [Architecture — Channels and hooks in context](architecture.md#channels-and-hooks-in-context) — where hooks sit relative to runtime semantics.
-- [Architecture — Runtime vs CLI responsibilities](architecture.md#runtime-vs-cli-responsibilities) — why hooks run on the host even for Docker runs.
-- [Run a workflow in a Docker sandbox](sandbox-run.md) — Docker runs still hit host hooks.
+- [Architecture — Runtime vs CLI responsibilities](architecture.md#runtime-vs-cli-responsibilities) — why hooks run on the host CLI.

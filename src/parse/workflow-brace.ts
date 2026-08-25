@@ -30,7 +30,7 @@ export type BlockParseOpts = {
   /**
    * When set, allow a `config { … }` block as the first non-comment statement.
    * The callback receives the parsed metadata and may throw via `fail()` to
-   * reject specific keys (workflows reject `runtime.*` and `module.*`).
+   * reject specific keys (workflows reject `module.*`).
    */
   onConfigBlock?: (metadata: WorkflowMetadata, lineNo: number) => void;
   /**

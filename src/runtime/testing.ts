@@ -7,12 +7,6 @@
 // the CLI-facing production entry (src/runtime/index.ts). Add a seam here only
 // when a cross-package test genuinely needs it.
 
-// Docker exec/spawn indirection seams (tests stub these to avoid real Docker).
-export { _dockerExec, _dockerSpawn } from "./docker";
-
-// In-place run prompt seam (tests stub the confirm prompt).
-export { _inplacePrompt } from "./docker-inplace";
-
 // Audit-chain HMAC internals (tests reconstruct the expected chain).
 export { CHAIN_GENESIS, chainHmac } from "./kernel/emit";
 

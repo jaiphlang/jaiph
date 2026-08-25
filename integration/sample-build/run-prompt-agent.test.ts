@@ -41,7 +41,6 @@ test("jaiph run interpolates positional args in prompt text", () => {
       env: {
         ...process.env,
         JAIPH_AGENT_BACKEND: "cursor",
-        JAIPH_DOCKER_ENABLED: "false",
         PATH: `${binDir}:${process.env.PATH ?? ""}`,
       },
     });
@@ -94,7 +93,6 @@ test("jaiph run interpolates named array placeholders in prompt text", () => {
       env: {
         ...process.env,
         JAIPH_AGENT_BACKEND: "cursor",
-        JAIPH_DOCKER_ENABLED: "false",
         PATH: `${binDir}:${process.env.PATH ?? ""}`,
       },
     });
@@ -144,7 +142,6 @@ test("jaiph run applies model from in-file metadata", () => {
     const runEnv: NodeJS.ProcessEnv = {
       ...process.env,
       JAIPH_AGENT_BACKEND: "cursor",
-      JAIPH_DOCKER_ENABLED: "false",
       PATH: `${binDir}:${process.env.PATH ?? ""}`,
     };
     delete runEnv.JAIPH_AGENT_CURSOR_FLAGS;
@@ -202,7 +199,6 @@ test("jaiph run supports agent.command with inline args", () => {
       env: {
         ...process.env,
         JAIPH_AGENT_BACKEND: "cursor",
-        JAIPH_DOCKER_ENABLED: "false",
         PATH: `${binDir}:${process.env.PATH ?? ""}`,
       },
     });
@@ -256,7 +252,6 @@ test("jaiph run agent.backend = claude uses Claude CLI and captures output", () 
     const cliPath = join(process.cwd(), "dist/src/cli.js");
     const runEnv: NodeJS.ProcessEnv = {
       ...process.env,
-      JAIPH_DOCKER_ENABLED: "false",
       NODE_NO_WARNINGS: "1",
       PATH: `${binDir}:${process.env.PATH ?? ""}`,
     };
@@ -303,7 +298,6 @@ test("jaiph run agent.backend = claude without claude in PATH fails with clear e
     const cliPath = join(process.cwd(), "dist/src/cli.js");
     const runEnv: NodeJS.ProcessEnv = {
       ...process.env,
-      JAIPH_DOCKER_ENABLED: "false",
       PATH: `${nodeOnlyBin}:/nonexistent`,
       // Disable prompt-retry backoff for this single-attempt failure assertion;
       // otherwise the default schedule (15s → 1m → 10m → 30m → 2h) would
@@ -368,7 +362,6 @@ test("jaiph run JAIPH_AGENT_BACKEND env overrides file default", () => {
       env: {
         ...process.env,
         JAIPH_AGENT_BACKEND: "cursor",
-        JAIPH_DOCKER_ENABLED: "false",
         PATH: `${binDir}:${process.env.PATH ?? ""}`,
       },
     });
@@ -423,7 +416,6 @@ test("jaiph run defaults Cursor trusted workspace to project root", () => {
       env: {
         ...env,
         JAIPH_AGENT_BACKEND: "cursor",
-        JAIPH_DOCKER_ENABLED: "false",
         PATH: `${binDir}:${process.env.PATH ?? ""}`,
       },
     });
@@ -480,7 +472,6 @@ test("jaiph run JAIPH_AGENT_TRUSTED_WORKSPACE env overrides metadata", () => {
         ...process.env,
         JAIPH_AGENT_BACKEND: "cursor",
         JAIPH_AGENT_TRUSTED_WORKSPACE: "/tmp/jaiph-explicit-trust",
-        JAIPH_DOCKER_ENABLED: "false",
         PATH: `${binDir}:${process.env.PATH ?? ""}`,
       },
     });

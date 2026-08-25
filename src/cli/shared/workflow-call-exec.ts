@@ -7,23 +7,14 @@ import {
   armRunTimeout,
   parseRunTimeoutSeconds,
 } from "../run/lifecycle";
-import { collectEntryBackends } from "../run/preflight-credentials";
 import { parseLogEvent, parseStepEvent, type StepEvent, type LogEvent } from "../run/events";
-import {
-  spawnDockerProcess,
-  stopDockerContainer,
-  withDockerExitGuard,
-  resolveDockerHostRunsRoot,
-  redactCredentials,
-} from "../../runtime";
-import { discoverDockerRunDir } from "./errors";
+import { redactCredentials } from "../../runtime";
 import { readMetaFields, readReturnValue } from "./run-meta";
 import {
   DEFAULT_OUTPUT_CAPS,
   TRUNCATION_MARKER,
   capBytes,
   type CollectedOutput,
-  type ExecutionPosture,
   type OutputCaps,
   type WorkflowCallContext,
   type WorkflowCallEnvironment,
@@ -66,68 +57,7 @@ export async function callWorkflowHost(
   collector.drain();
 
   const runDir = readMetaFields(metaFile, ["run_dir"]).run_dir;
-  return composeResult(workflowSymbol, collector.data, exit, runDir, undefined, runtimeEnv, caps);
-}
-
-/**
- * Container execution — the same Docker path as `jaiph run`. The workflow
- * symbol is carried into the container so a non-`default` call runs correctly.
- * Sandbox mode matches `jaiph run` (isolated by default; inplace when
- * JAIPH_INPLACE=1). The container meta file is inaccessible from the host, so
- * the run dir is discovered from the sandbox runs mount.
- */
-export async function callWorkflowDocker(
-  env: WorkflowCallEnvironment,
-  posture: ExecutionPosture,
-  workflowSymbol: string,
-  positionalArgs: string[],
-  runtimeEnv: Record<string, string | undefined>,
-  runId: string,
-  caps: OutputCaps,
-  onStepEvent: (event: StepEvent) => void,
-  ctx?: WorkflowCallContext,
-  onLogEvent?: (event: LogEvent) => void,
-): Promise<WorkflowCallResult> {
-  // Posture (Docker enablement + sandbox mode) was resolved once at server
-  // startup; the call applies it verbatim rather than re-deriving from env.
-  const sandboxMode = posture.sandboxMode;
-  const sandboxRunDir = resolveDockerHostRunsRoot(env.workspaceRoot, runtimeEnv);
-  const dockerResult = spawnDockerProcess({
-    config: posture.dockerConfig,
-    sourceAbs: env.inputAbs,
-    workspaceRoot: env.workspaceRoot,
-    sandboxRunDir,
-    runArgs: positionalArgs,
-    env: runtimeEnv,
-    extraEnv: env.extraEnv,
-    backends: collectEntryBackends(env.mod, runtimeEnv),
-    isTTY: false,
-    sandboxMode,
-    workflowSymbol,
-  });
-  // Cancel must also stop+remove the container: a `docker run --rm` container
-  // can outlive its killed client, orphaning the sandboxed work.
-  ctx?.onCancelHandle?.(() => {
-    stopDockerContainer(dockerResult.containerName);
-    cancelRunProcess(dockerResult.child);
-  });
-  const collector = attachOutputCollector(dockerResult.child, onStepEvent, caps, onLogEvent);
-  return withDockerExitGuard(dockerResult, async () => {
-    const exit = await waitForRunExit(dockerResult.child);
-    collector.drain();
-    const discovered = discoverDockerRunDir(sandboxRunDir, runId);
-    // Docker keeps `--env` passthrough out of runtimeEnv (it flows through
-    // DockerSpawnOptions.extraEnv), so merge it back in for redaction.
-    return composeResult(
-      workflowSymbol,
-      collector.data,
-      exit,
-      discovered.runDir,
-      sandboxRunDir,
-      { ...runtimeEnv, ...env.extraEnv },
-      caps,
-    );
-  });
+  return composeResult(workflowSymbol, collector.data, exit, runDir, runtimeEnv, caps);
 }
 
 /**
@@ -253,14 +183,13 @@ export function composeResult(
   data: CollectedOutput,
   exit: { status: number; signal: NodeJS.Signals | null },
   runDir: string | undefined,
-  sandboxRunDir: string | undefined,
   env: NodeJS.ProcessEnv,
   caps: OutputCaps = DEFAULT_OUTPUT_CAPS,
 ): WorkflowCallResult {
   const failed = exit.status !== 0 || exit.signal !== null;
 
   if (!failed) {
-    const returnValue = readReturnValue(runDir, sandboxRunDir);
+    const returnValue = readReturnValue(runDir);
     const text =
       returnValue !== undefined && returnValue.length > 0
         ? returnValue

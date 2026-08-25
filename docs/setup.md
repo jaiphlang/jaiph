@@ -107,5 +107,5 @@ The action follows the installer's [fail-closed policy](#verify-the-release-sign
 ## Related
 
 - [Architecture: Distribution, Node vs Bun standalone](architecture.md#distribution-node-vs-bun-standalone): what the installer downloads and why the binary is self-contained.
-- [Deploy the runtime image standalone](deploy.md): skip installing entirely and run the prebuilt `ghcr.io/jaiphlang/jaiph-runtime` image directly with `docker run` or Kubernetes.
+- [Deploy jaiph](deploy.md): wrap jaiph in an image or Kubernetes pod you own.
 - [Why Jaiph](why-jaiph.md): the design context behind the single-binary distribution.

@@ -2,7 +2,7 @@
 
 *`jaiph mcp <file.jh>` serves the file's workflows as MCP tools over stdio. Any MCP client (Claude Code, Claude Desktop, Cursor) can call tested, deterministic Jaiph workflows as tools — a `.jh` file becomes an MCP server with zero boilerplate.*
 
-**Status:** design — ready for implementation (an MVP was spiked and verified end-to-end; this doc records the verified contracts)
+**Status:** shipped. Sandbox posture in this doc is superseded by [ADR 0001](0001-jaiph-is-the-language.md) (host-only; no Docker driver).
 **Date (UTC):** 2026-07-14
 
 ## Problem

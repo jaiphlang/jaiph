@@ -155,8 +155,7 @@ export function runBackend(
     // The agent subprocess never inherits the workflow env verbatim: it gets
     // the base environment, JAIPH_* control keys, and this backend's own
     // credential keys only. `--env`-injected secrets (e.g. GITHUB_TOKEN) stay
-    // with trusted `run` steps and never reach the model — in host mode and
-    // in every Docker sandbox mode alike.
+    // with trusted `run` steps and never reach the model.
     let childEnv: NodeJS.ProcessEnv = scrubPromptEnv(execEnv, config.backend);
     if (isClaude) {
       const prepared = prepareClaudeEnv(childEnv, config.workspaceRoot);

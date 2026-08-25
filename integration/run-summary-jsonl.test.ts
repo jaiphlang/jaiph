@@ -80,7 +80,6 @@ test("run_summary.jsonl: workflow, steps, log, inbox dispatch stream", () => {
       cwd: root,
       env: {
         ...process.env,
-        JAIPH_DOCKER_ENABLED: "false",
         JAIPH_RUNS_DIR: runsRoot,
         PATH: `${dirname(process.execPath)}:${process.env.PATH ?? ""}`,
       },
@@ -162,7 +161,6 @@ test("run_summary.jsonl: STEP_END remains parseable for legacy consumers (event_
       cwd: root,
       env: {
         ...process.env,
-        JAIPH_DOCKER_ENABLED: "false",
         JAIPH_RUNS_DIR: runsRoot,
       },
     });

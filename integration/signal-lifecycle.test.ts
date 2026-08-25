@@ -148,8 +148,6 @@ async function runInterruptTest(
     cwd: root,
     env: {
       ...process.env,
-      JAIPH_UNSAFE: "true",
-      JAIPH_DOCKER_ENABLED: "false",
       JAIPH_RUNS_DIR: join(root, ".jaiph/runs"),
     },
   });

@@ -1,10 +1,8 @@
 #!/usr/bin/env bash
 #
-# Pre-flight agent-credential check: fails fast on Docker, warns on host.
-#
-# Runs without needing a real Docker daemon: setting JAIPH_DOCKER_ENABLED=true
-# causes runWorkflow to consult the pre-flight before `checkDockerAvailable`,
-# so the credential check fires and exits before any container can spawn.
+# Host-side credential pre-flight: claude/cursor warn and proceed when
+# credentials are missing (a stored CLI login may still work); codex
+# hard-fails with E_AGENT_CREDENTIALS (no login fallback).
 #
 
 set -euo pipefail
@@ -16,11 +14,11 @@ trap e2e::cleanup EXIT
 e2e::prepare_test_env "agent_credentials_preflight"
 TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 
-# ── 1. Docker on + claude + no creds → hard fail with E_AGENT_CREDENTIALS ────
+# ── 1. claude + no creds → warn, but proceed ────────────────────────────────
 
-e2e::section "claude under Docker without credentials fails before launch"
+e2e::section "claude without credentials warns but proceeds"
 
-e2e::file "claude_docker.jh" <<'EOF'
+e2e::file "claude_host.jh" <<'EOF'
 config {
   agent.backend = "claude"
   agent.model = "sonnet-test"
@@ -32,54 +30,10 @@ workflow default() {
 EOF
 
 err_file="$(mktemp)"
-exit_code=0
-env -u ANTHROPIC_API_KEY -u CLAUDE_CODE_OAUTH_TOKEN \
-  JAIPH_DOCKER_ENABLED=true \
-  jaiph run "${TEST_DIR}/claude_docker.jh" 2>"${err_file}" >/dev/null \
-  || exit_code=$?
-err_msg="$(cat "${err_file}")"
-rm -f "${err_file}"
-
-if [[ "${exit_code}" == "0" ]]; then
-  printf "stderr was:\n%s\n" "${err_msg}" >&2
-  e2e::fail "expected non-zero exit when claude credentials are missing under Docker"
-fi
-e2e::pass "non-zero exit when claude credentials missing under Docker"
-
-# Message contract: backend + model + entry path + scope.
-# assert_contains: each substring is part of a single composed line whose
-# format is exercised by exhaustive unit tests; here we just confirm wiring.
-e2e::assert_contains "${err_msg}" "E_AGENT_CREDENTIALS" "stderr names error code"
-e2e::assert_contains "${err_msg}" "claude" "stderr names the backend"
-e2e::assert_contains "${err_msg}" "sonnet-test" "stderr names the configured model"
-e2e::assert_contains "${err_msg}" "claude_docker.jh" "stderr names the entry .jh file"
-e2e::assert_contains "${err_msg}" "module config" "stderr names the config scope"
-
-# The run dir must NOT exist — pre-flight aborts before any runner/container starts.
-if [[ -d "${TEST_DIR}/.jaiph/runs" ]]; then
-  shopt -s nullglob
-  matches=( "${TEST_DIR}/.jaiph/runs/"*/*"claude_docker.jh"/ )
-  shopt -u nullglob
-  if [[ ${#matches[@]} -gt 0 ]]; then
-    e2e::fail "expected no run dir to be created (pre-flight should abort before launch)"
-  fi
-fi
-e2e::pass "no run directory created — runner/container never launched"
-
-# ── 2. Host (Docker off) + claude + no creds → warn, but proceed ────────────
-
-e2e::section "claude on host without credentials warns but proceeds"
-
-# The harness already runs on the host (JAIPH_DOCKER_ENABLED=false), so a plain
-# `jaiph run` exercises the host warn-only pre-flight path. NOTE: do not pass
-# --unsafe here — unsafe mode (`JAIPH_UNSAFE`) deliberately skips the credential
-# pre-flight entirely (see preflight-credentials.ts), which would suppress the
-# very warning this section asserts.
-err_file="$(mktemp)"
 stdout_file="$(mktemp)"
 exit_code=0
 env -u ANTHROPIC_API_KEY -u CLAUDE_CODE_OAUTH_TOKEN \
-  jaiph run "${TEST_DIR}/claude_docker.jh" >"${stdout_file}" 2>"${err_file}" \
+  jaiph run "${TEST_DIR}/claude_host.jh" >"${stdout_file}" 2>"${err_file}" \
   || exit_code=$?
 err_msg="$(cat "${err_file}")"
 out_msg="$(cat "${stdout_file}")"
@@ -96,16 +50,15 @@ e2e::assert_contains "${err_msg}" "warning" "stderr contains a warning"
 e2e::assert_contains "${err_msg}" "claude" "warning names the backend"
 e2e::assert_contains "${err_msg}" "module config" "warning names the config scope"
 
-# Hard-error code must NOT appear on the host warn-only path.
 if [[ "${err_msg}" == *"E_AGENT_CREDENTIALS"* ]]; then
   printf "%s\n" "${err_msg}" >&2
-  e2e::fail "host run must not emit E_AGENT_CREDENTIALS — that is the Docker contract"
+  e2e::fail "claude host run must not emit E_AGENT_CREDENTIALS — that is the warn-only path"
 fi
-e2e::pass "no E_AGENT_CREDENTIALS on host warn-only path"
+e2e::pass "no E_AGENT_CREDENTIALS on claude warn-only path"
 
-# ── 3. codex + no OPENAI_API_KEY → hard fail on host (no login path) ────────
+# ── 2. codex + no OPENAI_API_KEY → hard fail (no login path) ────────────────
 
-e2e::section "codex on host without OPENAI_API_KEY fails fast"
+e2e::section "codex without OPENAI_API_KEY fails fast"
 
 e2e::file "codex_host.jh" <<'EOF'
 config {
@@ -119,8 +72,6 @@ EOF
 
 err_file="$(mktemp)"
 exit_code=0
-# Plain host run (no --unsafe): unsafe mode skips the credential pre-flight, so
-# it would suppress the codex hard error this section asserts.
 env -u OPENAI_API_KEY \
   jaiph run "${TEST_DIR}/codex_host.jh" 2>"${err_file}" >/dev/null \
   || exit_code=$?
@@ -133,4 +84,4 @@ if [[ "${exit_code}" == "0" ]]; then
 fi
 e2e::assert_contains "${err_msg}" "E_AGENT_CREDENTIALS" "codex host: stderr names error code"
 e2e::assert_contains "${err_msg}" "OPENAI_API_KEY" "codex host: stderr names the env var"
-e2e::pass "codex hard-fails on both host and Docker"
+e2e::pass "codex hard-fails when OPENAI_API_KEY is missing"

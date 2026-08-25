@@ -17,7 +17,7 @@ import {
   loadModuleGraph,
   writeModuleGraph,
 } from "../../transpiler";
-import { canUseAnsi } from "../../runtime";
+import { canUseAnsi, CHAIN_KEY_ENV, generateChainKey, writeChainKey } from "../../runtime";
 import { resolveModuleMetadata, metadataToConfig } from "../../config";
 import { buildStepDisplayParamPairs, formatNamedParamsForDisplay } from "../shared/format-params.js";
 import {
@@ -26,9 +26,6 @@ import {
   hasFatalRuntimeStderr,
   latestRunFiles,
   failedStepArtifactPaths,
-  discoverDockerRunDir,
-  remapContainerPath,
-  formatDockerTimeoutMessage,
   formatRunTimeoutMessage,
 } from "../shared/errors";
 import { readMetaFields, readReturnValue } from "../shared/run-meta";
@@ -36,24 +33,17 @@ import { detectWorkspaceRoot } from "../shared/paths";
 import { hasHelpFlag, parseArgs } from "../shared/usage";
 
 const RUN_USAGE =
-  "Usage: jaiph run [--target <dir>] [--raw] [--workspace <dir>] [--inplace] [--unsafe] [--yes|-y] <file.jh> [--] [args...]\n\n" +
+  "Usage: jaiph run [--target <dir>] [--raw] [--workspace <dir>] [--env KEY[=VALUE]]... <file.jh> [--] [args...]\n\n" +
   "Parse, validate, and run a Jaiph workflow file. Requires a `workflow default` entrypoint.\n\n" +
   "  --target <dir>     keep emitted scripts and run metadata under <dir>\n" +
   "  --raw              skip banner, progress tree, hooks, and failure footer; inherited stdio\n" +
   "  --workspace <dir>  workspace root for import resolution (default: auto-detect from the .jh file)\n" +
-  "  --inplace          bind-mount the host workspace rw so edits land live (sets JAIPH_INPLACE=1 for this run)\n" +
-  "  --unsafe           run on the host with no sandbox (sets JAIPH_UNSAFE=true for this run)\n" +
-  "  -y, --yes          skip the in-place confirmation prompt (sets JAIPH_INPLACE_YES=1 for this run)\n" +
+  "  --env KEY=VALUE    define KEY=VALUE in the workflow env (repeatable); --env KEY forwards the host value\n" +
   "  --                 end of jaiph flags; remaining args go to workflow default\n" +
   "  -h, --help         show this help\n\n" +
-  "--workspace, --env, --inplace, --unsafe, and --yes are the shared execution-policy flags,\n" +
-  "accepted identically by jaiph serve and jaiph mcp. Precedence: CLI flags > JAIPH_* env vars >\n" +
-  "workflow config metadata > defaults. --inplace and --unsafe conflict (E_FLAG_CONFLICT).\n" +
-  "Consent: jaiph run confirms --inplace / unsafe host-only interactively (--yes auto-confirms;\n" +
-  "required non-TTY); the corresponding env vars also apply to other entry points.\n\n" +
   "Examples:\n" +
   "  jaiph run ./flows/review.jh \"review this diff\"\n" +
-  "  jaiph run --inplace --workspace ./app ./flows/fix.jh\n";
+  "  jaiph run --workspace ./app ./flows/fix.jh\n";
 import {
   spawnRunProcess,
   setupRunSignalHandlers,
@@ -62,33 +52,17 @@ import {
   parseRunTimeoutSeconds,
 } from "../run/lifecycle";
 import {
-  resolveDockerConfig,
-  checkDockerAvailable,
-  prepareImage,
-  spawnDockerProcess,
-  stopDockerRunOnSignal,
-  withDockerExitGuard,
-  resolveDockerHostRunsRoot,
-  selectSandboxMode,
-  RUN_WORKFLOW_ENV,
-  DOCKER_SANDBOX_ENV,
-  confirmInplaceRun,
-  confirmUnsafeRun,
-  UNSAFE_RUN_LOGWARN_MESSAGE,
-} from "../../runtime";
-import {
   styleKeywordLabel,
   formatElapsedDuration,
   formatRunningBottomLine,
 } from "../run/progress";
 import { loadMergedHooks, registerHooksSubscriber, isProjectHooksTrusted } from "../run/hooks";
-import { resolveRuntimeEnv, applySandboxFlags, resolveEnvPairs, isUnsafeHostOnly } from "../run/env";
-import { preflightAgentCredentials, collectEntryBackends } from "../run/preflight-credentials";
-import { planTrustedEnvs, isTrustedEnvsOptIn } from "../run/trusted-envs";
+import { resolveRuntimeEnv, resolveEnvPairs } from "../run/env";
+import { preflightAgentCredentials } from "../run/preflight-credentials";
+import { planTrustedEnvs } from "../run/trusted-envs";
 import { colorize, formatJaiphRunningBannerLines } from "../run/display";
 import { createRunEmitter } from "../run/emitter";
 import { exportRunTelemetry } from "../telemetry/otlp";
-import { CHAIN_KEY_ENV, generateChainKey, writeChainKey } from "../../runtime";
 import {
   createStderrParser,
   createRunState,
@@ -110,7 +84,7 @@ export async function runWorkflow(rest: string[]): Promise<number> {
   } catch (err) {
     return failWith(err);
   }
-  const { target, raw, workspace, inplace, unsafe, yes, env, positional } = parsed;
+  const { target, raw, workspace, env, positional } = parsed;
   const input = positional[0];
   const runArgs = positional.slice(1);
   if (!input) {
@@ -142,9 +116,8 @@ export async function runWorkflow(rest: string[]): Promise<number> {
     return 1;
   }
 
-  const sandboxFlags = { inplace, unsafe, yes };
   if (raw) {
-    return runWorkflowRaw(inputAbs, workspaceRoot, target, runArgs, sandboxFlags, extraEnv);
+    return runWorkflowRaw(inputAbs, workspaceRoot, target, runArgs, extraEnv);
   }
 
   const hooksConfig = loadMergedHooks(workspaceRoot, isProjectHooksTrusted(process.env));
@@ -165,88 +138,27 @@ export async function runWorkflow(rest: string[]): Promise<number> {
     const runId = randomUUID();
     runtimeEnv.JAIPH_RUN_ID = runId;
     // Per-run audit-chain key: generated host-side, forwarded to the trusted
-    // runner (and, under Docker, into the container via the JAIPH_ allowlist),
-    // scrubbed from every script/agent subprocess env, and persisted beside the
-    // journal after the run so read/export boundaries can verify it (finding H-3).
+    // runner, scrubbed from every script/agent subprocess env, and persisted
+    // beside the journal after the run so read/export boundaries can verify it.
     const chainKey = generateChainKey();
     runtimeEnv[CHAIN_KEY_ENV] = chainKey;
-    try {
-      applySandboxFlags(runtimeEnv, sandboxFlags);
-    } catch (err) {
-      return failWith(err);
-    }
-    const dockerConfigForBanner = resolveDockerConfig(resolvedModuleMetadata?.runtime, runtimeEnv);
-    // Host modes: `--env` defines the workflow process's env directly,
-    // overriding inherited values. Docker: the pairs cross the boundary as
-    // explicit `-e` container args instead (threaded through `extraEnv`), so
-    // they must not be pre-merged here (the allowlist would drop them).
-    if (!dockerConfigForBanner.enabled) {
-      Object.assign(runtimeEnv, extraEnv);
-    }
+    Object.assign(runtimeEnv, extraEnv);
     const credPreflight = preflightAgentCredentials({
       mod,
       inputAbs,
       runtimeEnv,
-      dockerEnabled: dockerConfigForBanner.enabled,
     });
     if (reportPreflight(credPreflight.warnings, credPreflight.errors)) return 1;
-    // trusted_envs pre-flight: a declared key with no host/--env value fails
-    // before anything is spawned, like a bare `--env KEY` with no host value.
-    // Under Docker the entry file's trusted_envs only crosses the sandbox
-    // allowlist when the operator opts in (JAIPH_TRUSTED_ENVS) — the file naming
-    // a host secret is not consent on its own (finding M-7).
-    const trustedPlan = planTrustedEnvs(graph, extraEnv, process.env, {
-      dockerEnabled: dockerConfigForBanner.enabled,
-      optIn: isTrustedEnvsOptIn(runtimeEnv),
-    });
+    const trustedPlan = planTrustedEnvs(graph, extraEnv, process.env);
     if (reportPreflight(trustedPlan.warnings, trustedPlan.errors)) return 1;
-    if (dockerConfigForBanner.enabled) {
-      checkDockerAvailable();
-      prepareImage(dockerConfigForBanner);
-    }
-    const sandboxModeForBanner = dockerConfigForBanner.enabled ? selectSandboxMode(runtimeEnv) : null;
-    const unsafeHostOnly = isUnsafeHostOnly(dockerConfigForBanner.enabled, runtimeEnv);
-    if (sandboxModeForBanner === "inplace") {
-      const proceed = await confirmInplaceRun(workspaceRoot, runtimeEnv, isTTY);
-      if (!proceed) {
-        process.stderr.write("jaiph in-place mode: aborted by user.\n");
-        return 1;
-      }
-    } else if (unsafeHostOnly) {
-      // Docker is off *because* the user opted into unsafe (JAIPH_UNSAFE=true /
-      // --unsafe) while Docker would otherwise be on — require the same consent
-      // as in-place before running host-only with no sandbox. Not triggered when
-      // Docker is off for another reason (win32 host-only override, which already
-      // prints its own notice, or an explicit JAIPH_DOCKER_ENABLED=false).
-      const proceed = await confirmUnsafeRun(workspaceRoot, runtimeEnv, isTTY);
-      if (!proceed) {
-        process.stderr.write("jaiph unsafe mode: aborted by user.\n");
-        return 1;
-      }
-    }
 
-    process.stdout.write(
-      formatJaiphRunningBannerLines(
-        basename(inputAbs),
-        dockerConfigForBanner.enabled,
-        sandboxModeForBanner,
-        colorEnabled,
-        unsafeHostOnly,
-      ),
-    );
+    process.stdout.write(formatJaiphRunningBannerLines(basename(inputAbs)));
 
     const { scriptsDir } = buildScriptsFromGraph(graph, outDir);
     runtimeEnv.JAIPH_SCRIPTS = scriptsDir;
-    // Serialized module graph consumed by the spawned runner so the runtime
-    // graph reuses these ASTs instead of re-parsing every reachable module.
-    // Docker mounts the workspace read-only, so place the cache under outDir,
-    // which the host already arranges for the container side via its existing
-    // sandbox layout. For local runs the runner reads the path directly.
     const graphFile = join(outDir, ".jaiph-module-graph.json");
     writeModuleGraph(graphFile, graph);
-    if (!dockerConfigForBanner.enabled) {
-      runtimeEnv.JAIPH_MODULE_GRAPH_FILE = graphFile;
-    }
+    runtimeEnv.JAIPH_MODULE_GRAPH_FILE = graphFile;
     const metaFile = join(outDir, `.jaiph-run-meta-${Date.now()}-${process.pid}.txt`);
 
     const emitter = createRunEmitter();
@@ -264,15 +176,6 @@ export async function runWorkflow(rest: string[]): Promise<number> {
     registerTTYSubscriber(emitter, ttyCtx);
     registerHooksSubscriber(emitter, hooksConfig, inputAbs, workspaceRoot);
 
-    if (unsafeHostOnly) {
-      emitter.emit("log", {
-        type: "LOGWARN",
-        message: UNSAFE_RUN_LOGWARN_MESSAGE,
-        depth: 1,
-        async_indices: [],
-      });
-    }
-
     writeWorkflowRootLabel(mod, runArgs, colorEnabled, isTTY, startedAt);
 
     emitter.emit("workflow_start", {
@@ -283,62 +186,36 @@ export async function runWorkflow(rest: string[]): Promise<number> {
       workspace: workspaceRoot,
     });
 
-    // Docker forwards the entry file's resolved trusted_envs values through
-    // the same explicit `-e` channel as `--env` (declaration = per-key
-    // consent), with an explicit `--env` pair winning on the same key. Host
-    // modes ignore this merge — the runner inherits the host env directly.
-    const { execResult, dockerResult, dockerConfig: activeDockerConfig } = spawnExec(
-      mod, runtimeEnv, outDir, workspaceRoot, metaFile, "default", runArgs, isTTY,
-      { ...trustedPlan.resolved, ...extraEnv },
-    );
+    Object.assign(runtimeEnv, trustedPlan.resolved, extraEnv);
+    const execResult = spawnHostRun(runtimeEnv, outDir, workspaceRoot, metaFile, "default", runArgs);
 
-    // On interrupt, stop+remove the container (docker run --rm can outlive its
-    // killed client) before removing the host sandbox clone.
-    const onSignalCleanup = dockerResult ? () => stopDockerRunOnSignal(dockerResult) : undefined;
     const signalHandlers = setupRunSignalHandlers(execResult, {
       forceKillAfterMs: 1500,
-      onSignalCleanup,
     });
-    // Host mode: parent-enforced wall-clock run timeout. Docker mode enforces its
-    // own JAIPH_DOCKER_TIMEOUT inside spawnDockerProcess, so it is skipped here to
-    // avoid a double timer. On expiry the run child's process group is terminated
-    // (SIGTERM → SIGKILL) without requiring Ctrl-C.
-    const hostRunTimeoutSec = dockerResult ? 0 : parseRunTimeoutSeconds(runtimeEnv);
+    const hostRunTimeoutSec = parseRunTimeoutSeconds(runtimeEnv);
     const runTimeout = armRunTimeout(execResult, hostRunTimeoutSec, {
       onTimeout: () => {
         runState.capturedStderr += `${formatRunTimeoutMessage(hostRunTimeoutSec)}\n`;
       },
     });
-    const childExit = await withDockerExitGuard(dockerResult, async () => {
-      if (isTTY) {
-        ttyCtx.runningInterval = setInterval(() => {
-          const elapsedSec = (Date.now() - startedAt) / 1000;
-          process.stdout.write("\r" + formatRunningBottomLine("default", elapsedSec) + "\u001b[K");
-        }, 1000);
-      } else {
-        const hbMs = nonTTYHeartbeatTickMs();
-        ttyCtx.nonTTYHeartbeatInterval = setInterval(() => {
-          tickNonTTYHeartbeat(ttyCtx);
-        }, hbMs);
-      }
+    if (isTTY) {
+      ttyCtx.runningInterval = setInterval(() => {
+        const elapsedSec = (Date.now() - startedAt) / 1000;
+        process.stdout.write("\r" + formatRunningBottomLine("default", elapsedSec) + "\u001b[K");
+      }, 1000);
+    } else {
+      const hbMs = nonTTYHeartbeatTickMs();
+      ttyCtx.nonTTYHeartbeatInterval = setInterval(() => {
+        tickNonTTYHeartbeat(ttyCtx);
+      }, hbMs);
+    }
 
-      const onLine = createStderrParser(emitter);
-      const buf: StreamBuffers = { stdout: "", stderr: "" };
+    const onLine = createStderrParser(emitter);
+    const buf: StreamBuffers = { stdout: "", stderr: "" };
 
-      wireStreams(execResult, onLine, buf, ttyCtx);
-      const exit = await waitForRunExit(execResult, () => signalHandlers.remove());
-      drainBuffers(onLine, buf, ttyCtx);
-
-      if (dockerResult) {
-        const timedOut = dockerResult.timeoutTimer === undefined && activeDockerConfig.timeoutSeconds > 0
-          ? false
-          : (Date.now() - startedAt) >= activeDockerConfig.timeoutSeconds * 1000;
-        if (timedOut && exit.status !== 0) {
-          runState.capturedStderr += `${formatDockerTimeoutMessage(activeDockerConfig.timeoutSeconds)}\n`;
-        }
-      }
-      return exit;
-    });
+    wireStreams(execResult, onLine, buf, ttyCtx);
+    const childExit = await waitForRunExit(execResult, () => signalHandlers.remove());
+    drainBuffers(onLine, buf, ttyCtx);
 
     runTimeout.cancel();
     if (childExit.signal && runState.capturedStderr.trim().length === 0) {
@@ -358,7 +235,7 @@ export async function runWorkflow(rest: string[]): Promise<number> {
     return await reportResult(
       runState.capturedStderr, childExit.status, childExit.signal, startedAt, runtimeEnv,
       emitter, runState.workflowRunId, inputAbs, workspaceRoot, metaFile,
-      dockerResult?.sandboxRunDir, runId, chainKey,
+      chainKey,
     );
   } finally {
     if (shouldCleanup) {
@@ -368,17 +245,14 @@ export async function runWorkflow(rest: string[]): Promise<number> {
 }
 
 /**
- * Raw mode: transparent passthrough for Docker sandbox.
- * Parses and compiles the workflow, spawns the runtime with inherited stdio
- * so __JAIPH_EVENT__ lines flow directly to stderr for the host CLI to render.
- * No banner, no tree rendering, no reportResult.
+ * Raw mode: skip banner, tree, hooks, and failure footer. Inherited stdio so
+ * `__JAIPH_EVENT__` lines flow to the caller. Used for embedding.
  */
 async function runWorkflowRaw(
   inputAbs: string,
   workspaceRoot: string,
   target: string | undefined,
   runArgs: string[],
-  sandboxFlags: { inplace?: boolean; unsafe?: boolean; yes?: boolean },
   extraEnv: Record<string, string>,
 ): Promise<number> {
   const mod = parsejaiph(readFileSync(inputAbs, "utf8"), inputAbs);
@@ -389,67 +263,36 @@ async function runWorkflowRaw(
   try {
     const runtimeEnv = resolveRuntimeEnv(effectiveConfig, workspaceRoot, inputAbs);
     runtimeEnv.JAIPH_SOURCE_ABS = inputAbs;
-    // As the Docker inner entrypoint the host already forwarded a chain key —
-    // reuse it so the parent's persisted key matches. A standalone `--raw` run
-    // has none and generates its own.
     const chainKey = runtimeEnv[CHAIN_KEY_ENV] ?? generateChainKey();
     runtimeEnv[CHAIN_KEY_ENV] = chainKey;
-    try {
-      applySandboxFlags(runtimeEnv, sandboxFlags);
-    } catch (err) {
-      return failWith(err);
-    }
-    // Raw mode runs host-only (used for embedding and the Docker inner run);
-    // `--env` defines the workflow process's env directly.
     Object.assign(runtimeEnv, extraEnv);
     const { scriptsDir } = buildScripts(inputAbs, outDir, workspaceRoot);
     runtimeEnv.JAIPH_SCRIPTS = scriptsDir;
     const metaFile = join(outDir, `.jaiph-run-meta-${Date.now()}-${process.pid}.txt`);
 
     const dummyBuiltPath = join(outDir, "entry.sh");
-    // Raw mode is the Docker container's inner entrypoint. It runs `default`
-    // unless a non-default root symbol is carried in via JAIPH_RUN_WORKFLOW
-    // (set by the Docker MCP call path through DockerSpawnOptions.workflowSymbol).
-    const workflowSymbol = process.env[RUN_WORKFLOW_ENV] || "default";
+    const workflowSymbol = "default";
     const execResult = spawnRunProcess(
       [metaFile, dummyBuiltPath, workflowSymbol, ...runArgs],
       { cwd: workspaceRoot, env: runtimeEnv, stdio: "inherit" },
     );
 
     const childExit = await waitForRunExit(execResult);
-    // A user-invoked standalone `jaiph run --raw` exports telemetry like a normal
-    // run. The inner raw process of a host-orchestrated Docker run is marked with
-    // DOCKER_SANDBOX_ENV and skips here — the outer host process exports that run
-    // exactly once. Best-effort; never affects the exit status below.
-    if (shouldExportRawTelemetry(process.env)) {
-      // Standalone `jaiph run --raw` owns its journal, so it persists the chain
-      // key. The inner raw run of a Docker orchestration skips here — the outer
-      // host process persists the key beside the discovered run dir instead.
-      const rawRunDir = readRunDirFromMeta(metaFile);
-      if (rawRunDir) writeChainKey(rawRunDir, chainKey);
-      await exportRunTelemetry({
-        runDir: rawRunDir,
-        workflow: workflowSymbol,
-        exitStatus: childExit.status,
-        signal: childExit.signal,
-        env: process.env,
-      });
-    }
+    const rawRunDir = readRunDirFromMeta(metaFile);
+    if (rawRunDir) writeChainKey(rawRunDir, chainKey);
+    await exportRunTelemetry({
+      runDir: rawRunDir,
+      workflow: workflowSymbol,
+      exitStatus: childExit.status,
+      signal: childExit.signal,
+      env: process.env,
+    });
     return childExit.status;
   } finally {
     if (shouldCleanup) {
       rmSync(outDir, { recursive: true, force: true });
     }
   }
-}
-
-/**
- * A standalone `jaiph run --raw` exports its own telemetry; the inner raw run of
- * a host-orchestrated Docker run does not (marked by DOCKER_SANDBOX_ENV), so the
- * outer host process is the single exporter for that run — no double export.
- */
-export function shouldExportRawTelemetry(env: NodeJS.ProcessEnv): boolean {
-  return !env[DOCKER_SANDBOX_ENV];
 }
 
 /** Write an error's message to stderr and return exit code 1. */
@@ -502,44 +345,19 @@ function writeWorkflowRootLabel(
   }
 }
 
-function spawnExec(
-  mod: ReturnType<typeof parsejaiph>,
+function spawnHostRun(
   runtimeEnv: Record<string, string | undefined>,
   outDir: string,
   workspaceRoot: string,
   metaFile: string,
   workflowSymbol: string,
   runArgs: string[],
-  isTTY: boolean,
-  extraEnv: Record<string, string>,
-): { execResult: ReturnType<typeof spawnRunProcess>; dockerResult: ReturnType<typeof spawnDockerProcess> | undefined; dockerConfig: ReturnType<typeof resolveDockerConfig> } {
-  const resolvedMetadata = resolveModuleMetadata(mod, runtimeEnv);
-  const dockerConfig = resolveDockerConfig(resolvedMetadata?.runtime, runtimeEnv);
-  let dockerResult: ReturnType<typeof spawnDockerProcess> | undefined;
-  let execResult;
-
-  if (dockerConfig.enabled) {
-    const sandboxRunDir = resolveDockerHostRunsRoot(workspaceRoot, runtimeEnv);
-    dockerResult = spawnDockerProcess({
-      config: dockerConfig,
-      sourceAbs: runtimeEnv.JAIPH_SOURCE_ABS!,
-      workspaceRoot,
-      sandboxRunDir,
-      runArgs,
-      env: runtimeEnv,
-      extraEnv,
-      backends: collectEntryBackends(mod, runtimeEnv),
-      isTTY,
-    });
-    execResult = dockerResult.child;
-  } else {
-    const dummyBuiltPath = join(outDir, "entry.sh");
-    execResult = spawnRunProcess([metaFile, dummyBuiltPath, workflowSymbol, ...runArgs], {
-      cwd: workspaceRoot,
-      env: runtimeEnv,
-    });
-  }
-  return { execResult, dockerResult, dockerConfig };
+): ReturnType<typeof spawnRunProcess> {
+  const dummyBuiltPath = join(outDir, "entry.sh");
+  return spawnRunProcess([metaFile, dummyBuiltPath, workflowSymbol, ...runArgs], {
+    cwd: workspaceRoot,
+    env: runtimeEnv,
+  });
 }
 
 type StreamBuffers = { stdout: string; stderr: string };
@@ -622,32 +440,17 @@ async function reportResult(
   inputAbs: string,
   workspaceRoot: string,
   metaFile: string,
-  sandboxRunDir?: string,
-  expectedRunId?: string,
   chainKey?: string,
 ): Promise<number> {
   const elapsedMs = Date.now() - startedAt;
   const elapsedLabel = formatElapsedDuration(elapsedMs);
   const metaFields = readMetaFields(metaFile, ["run_dir", "summary_file"]);
-  let runDir: string | undefined = metaFields.run_dir;
-  let summaryFile: string | undefined = metaFields.summary_file;
-  // Docker mode: container meta file is inaccessible from host.
-  // Discover the run directory from the bind-mounted sandbox runs dir.
-  if (!runDir && sandboxRunDir && expectedRunId) {
-    const discovered = discoverDockerRunDir(sandboxRunDir, expectedRunId);
-    runDir = discovered.runDir;
-    summaryFile = discovered.summaryFile;
-  }
-  // Persist the audit-chain key beside the (now terminal) journal so every
-  // read/export boundary — including this export call — can verify integrity.
+  const runDir: string | undefined = metaFields.run_dir;
+  const summaryFile: string | undefined = metaFields.summary_file;
   if (runDir && chainKey) writeChainKey(runDir, chainKey);
-  // Export a trace to an OTLP collector when configured (standard OTEL env).
-  // Best-effort: never affects the exit code, output, or journal below.
   await exportRunTelemetry({ runDir, workflow: "default", exitStatus, signal, env: process.env });
   const runtimeDebugEnabled = runtimeEnv.JAIPH_DEBUG === "true";
-  const runtimeErrorPrinted = sandboxRunDir
-    ? false
-    : hasFatalRuntimeStderr(capturedStderr, runtimeDebugEnabled);
+  const runtimeErrorPrinted = hasFatalRuntimeStderr(capturedStderr, runtimeDebugEnabled);
   const resolvedStatus = exitStatus !== 0 || runtimeErrorPrinted ? 1 : 0;
 
   emitter.emit("workflow_end", {
@@ -671,7 +474,7 @@ async function reportResult(
     );
     // Print workflow return value (if any) on its own line, separated by a blank line.
     // The runtime writes return_value.txt only when the default workflow returns a value.
-    const returnValue = readReturnValue(runDir, sandboxRunDir);
+    const returnValue = readReturnValue(runDir);
     if (returnValue !== undefined && returnValue.length > 0) {
       const trimmed = returnValue.endsWith("\n") ? returnValue.slice(0, -1) : returnValue;
       process.stdout.write(`\n${trimmed}\n`);
@@ -696,10 +499,9 @@ async function reportResult(
       process.stderr.write(`  Summary: ${summaryFile}\n`);
     }
     const fromSummary = summaryFile ? failedStepArtifactPaths(summaryFile) : {};
-    const remap = (p: string) => sandboxRunDir ? remapContainerPath(p, sandboxRunDir) : p;
     const files =
       fromSummary.out !== undefined || fromSummary.err !== undefined
-        ? { out: fromSummary.out ? remap(fromSummary.out) : undefined, err: fromSummary.err ? remap(fromSummary.err) : undefined }
+        ? { out: fromSummary.out, err: fromSummary.err }
         : latestRunFiles(runDir);
     if (files.out) process.stderr.write(`    out: ${files.out}\n`);
     if (files.err) process.stderr.write(`    err: ${files.err}\n`);
@@ -709,17 +511,6 @@ async function reportResult(
         process.stderr.write(`    ${line}\n`);
       }
     }
-  } else if (sandboxRunDir) {
-    // Docker mode: discoverDockerRunDir returned nothing. Surface the
-    // sandbox runs root + expected run_id so the user can still investigate
-    // (instead of leaving them with only "Workflow execution failed.").
-    process.stderr.write(`  Sandbox runs dir: ${sandboxRunDir}\n`);
-    if (expectedRunId) {
-      process.stderr.write(`    expected run_id: ${expectedRunId}\n`);
-    }
-    process.stderr.write(
-      `  Could not locate this run's artifacts under the sandbox runs dir.\n`,
-    );
   }
 
   return resolvedStatus;

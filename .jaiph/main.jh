@@ -6,10 +6,10 @@
 # helpers in the imported modules stay hidden.
 #
 # Serve (HTTP + MCP Streamable HTTP on the same port):
-#   jaiph serve --inplace -y --env ANTHROPIC_API_KEY --env GITHUB_TOKEN .jaiph/main.jh
+#   jaiph serve --env ANTHROPIC_API_KEY --env GITHUB_TOKEN .jaiph/main.jh
 #
 # MCP over stdio:
-#   jaiph mcp --inplace -y --env ANTHROPIC_API_KEY --env GITHUB_TOKEN .jaiph/main.jh
+#   jaiph mcp --env ANTHROPIC_API_KEY --env GITHUB_TOKEN .jaiph/main.jh
 #
 # Optional args use "" for the workflow default (MCP/HTTP require every
 # declared parameter as a string). gh_ci_passes needs GITHUB_TOKEN or GH_TOKEN.

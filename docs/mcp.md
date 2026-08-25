@@ -13,7 +13,7 @@ You don't need an SDK project or a build step. `jaiph mcp ./tools.jh` reuses the
 ## Prerequisites
 
 - A `.jh` file with at least one workflow.
-- Agent credentials for any exposed workflow that uses `prompt`. See [Authenticate agent backends](agent-auth.md). Set the credentials on the host environment. In Docker mode, Jaiph forwards the credential keys for the backends the served file selects (`ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN`, `CURSOR_API_KEY`, and `OPENAI_API_KEY`) into the container through the env allowlist. In host mode it reads them directly. Any other host variable a workflow needs, such as a `GITHUB_TOKEN` or an API base URL, does not cross the sandbox on its own, so forward it with `--env` (described below).
+- Agent credentials for any exposed workflow that uses `prompt`. See [Authenticate agent backends](agent-auth.md). Set the credentials on the host environment. Any other host variable a workflow needs, such as a `GITHUB_TOKEN` or an API base URL, forward with `--env` (described below).
 
 ## 1. Serve a file over stdio
 
@@ -23,11 +23,11 @@ jaiph mcp ./tools.jh
 
 The server speaks newline-delimited [JSON-RPC 2.0](https://www.jsonrpc.org/specification) over stdio, which is the MCP stdio transport. It runs until stdin closes or it receives `SIGINT` or `SIGTERM`. `jaiph --mcp ./tools.jh` is an equivalent alias.
 
-> **MCP over the network.** [`jaiph serve`](serve.md) exposes the same tools over MCP Streamable HTTP at `POST /mcp`, alongside its REST API. It shares one run registry, concurrency cap, sandbox posture, hot reload, and bearer auth with the stdio server. Use `jaiph mcp` for a stdio client on the same machine, and use `jaiph serve` when an MCP client must reach the workflows over HTTP. Everything below applies to both transports the same way: exposure rules, descriptions, input schema, result shape, progress, and cancel.
+> **MCP over the network.** [`jaiph serve`](serve.md) exposes the same tools over MCP Streamable HTTP at `POST /mcp`, alongside its REST API. It shares one run registry, concurrency cap, hot reload, and bearer auth with the stdio server. Use `jaiph mcp` for a stdio client on the same machine, and use `jaiph serve` when an MCP client must reach the workflows over HTTP. Everything below applies to both transports the same way: exposure rules, descriptions, input schema, result shape, progress, and cancel.
 
 Add `--workspace <dir>` to set the import resolution root. By default Jaiph auto-detects it from the file's directory, the same as `jaiph run`.
 
-Add `--env KEY=VALUE` to define a variable in every tool call's environment, or `--env KEY` to forward the host's current value. The flag is repeatable. Jaiph resolves the pairs once at startup and then applies them to every call for the server's lifetime. A bare `--env KEY` whose value is missing on the host fails with `E_ENV_MISSING` before the server starts. In a Docker sandbox, `--env` is the per-key consent that copies a host variable into the container as is, bypassing the credential allowlist. Use it for any config value or secret a workflow needs that the backend allowlist does not already forward (see [Safety posture](#safety-posture)).
+Add `--env KEY=VALUE` to define a variable in every tool call's environment, or `--env KEY` to forward the host's current value. The flag is repeatable. Jaiph resolves the pairs once at startup and then applies them to every call for the server's lifetime. A bare `--env KEY` whose value is missing on the host fails with `E_ENV_MISSING` before the server starts.
 
 > **stdout carries only protocol JSON.** From the moment the server starts, stdout is the JSON-RPC channel. Every banner, warning, reload notice, and compile diagnostic goes to stderr. If the file has compile errors, the server prints `file:line:col CODE message` lines to stderr and exits `1` with nothing on stdout.
 
@@ -99,14 +99,14 @@ A workflow with no parameters produces the same shape with an empty `properties`
 
 ## 6. Call a tool and read the result
 
-On `tools/call`, the server maps the arguments object to positional workflow arguments in declared order and runs the workflow. It runs in a Docker sandbox or on the host, chosen by the same env settings as `jaiph run` (see [Safety posture](#safety-posture)). The result is a text content block:
+On `tools/call`, the server maps the arguments object to positional workflow arguments in declared order and runs the workflow on the host. The result is a text content block:
 
 - On success, the text is the workflow's `return` value, saved as `return_value.txt`. If the workflow returns nothing, the text falls back to the workflow's `log` output, and then to a `workflow <name> completed` note.
 - On failure, the result carries `isError: true`. The text describes the failing step, its captured output, and a `run dir: <path>` pointer so the client can inspect the full run. Jaiph redacts credentials in the failure text (`[REDACTED]`) the same way as in the event journal, so a secret that a failing step prints is never returned to the client. A successful `return` value is intended API output, so Jaiph returns it as is.
 
 A workflow failure is not a protocol error. It comes back as a normal result with `isError: true`. Jaiph reserves protocol-level errors (JSON-RPC `-32602`) for calls that never start, such as an unknown tool name, a missing or non-string required argument, or an unexpected argument key.
 
-Every call is a durable run under `.jaiph/runs/` in the workspace, and you can inspect it exactly as for `jaiph run`. Jaiph isolates concurrent calls by giving each one its own run id and run directory, so a slow call never stalls other calls or a `ping`. Under the default isolated sandbox, each call also gets its own point-in-time snapshot of the workspace, so calls do not race on workspace files. Only in inplace mode (`JAIPH_INPLACE=1`) can two calls that change the same files race, because both write the live tree.
+Every call is a durable run under `.jaiph/runs/` in the workspace, and you can inspect it exactly as for `jaiph run`. Jaiph isolates concurrent calls by giving each one its own run id and run directory, so a slow call never stalls other calls or a `ping`. Two calls that change the same files can race.
 
 ## 7. Stream progress and cancel a long call
 
@@ -141,7 +141,7 @@ To abandon a running call, send a `notifications/cancelled` naming its request i
 {"jsonrpc":"2.0","method":"notifications/cancelled","params":{"requestId":1}}
 ```
 
-The server terminates that call's run, meaning the whole child process tree. It sends `SIGINT` first, then `SIGKILL` after a short grace period, the same escalation `jaiph run` applies on Ctrl-C. In Docker mode, the server also force-removes the call's container by name (`docker rm -f`) so the container does not keep running after cancellation, the same guarantee `jaiph run` gives on interrupt (see [Sandboxing, interrupting a Docker run](sandboxing.md#interrupting-a-docker-run)). Per the MCP spec, a cancelled call sends no response for that id, and Jaiph leaves the run's `.jaiph/runs/` directory in place for inspection. The server keeps serving, other in-flight calls are untouched, and a later `ping` or `tools/call` answers normally. A cancellation that arrives before the run's child has spawned is honored as soon as the child starts.
+The server terminates that call's run, meaning the whole child process tree. It sends `SIGINT` first, then `SIGKILL` after a short grace period, the same escalation `jaiph run` applies on Ctrl-C. Per the MCP spec, a cancelled call sends no response for that id, and Jaiph leaves the run's `.jaiph/runs/` directory in place for inspection. The server keeps serving, other in-flight calls are untouched, and a later `ping` or `tools/call` answers normally. A cancellation that arrives before the run's child has spawned is honored as soon as the child starts.
 
 ## 8. Edit the file while the server runs (hot reload)
 
@@ -153,26 +153,15 @@ The server watches every source file in the module graph, polling about every 75
 
 ## Shutdown (drain, then cancel)
 
-The server shuts down when stdin closes or on `SIGINT` or `SIGTERM`. Either way it first drains. It stops accepting input and waits for in-flight tool calls to finish, keeping their scripts on disk until they settle, and then cleans up and exits `0`. If you don't want to wait, send a second signal. The server then terminates every in-flight run's child process tree (`SIGINT`, then `SIGKILL` after a short grace period) and, in Docker mode, force-removes each call's container (`docker rm -f`), the same guarantee as per-call cancellation above. The killed calls report error results, and the server exits `0`.
+The server shuts down when stdin closes or on `SIGINT` or `SIGTERM`. Either way it first drains. It stops accepting input and waits for in-flight tool calls to finish, keeping their scripts on disk until they settle, and then cleans up and exits `0`. If you don't want to wait, send a second signal. The server then terminates every in-flight run's child process tree (`SIGINT`, then `SIGKILL` after a short grace period). The killed calls report error results, and the server exits `0`.
 
 ## Safety posture
 
 An exposed workflow is arbitrary shell that the connected agent can run, which is the point of the feature. Treat every exposed workflow as code the client may run at any time, and limit the exposed set with `export`. A tool-call argument that binds to a workflow parameter is shell-quoted before it reaches any shell step, so an argument value cannot inject extra shell commands, though the client can still run whatever the exposed workflow itself does.
 
-Tool calls use the same env-driven Docker sandbox as `jaiph run` (see [Sandboxing](sandboxing.md)). Docker is on by default on macOS and Linux. It is off on Windows, where calls run on the host. Host-only execution under `JAIPH_UNSAFE=true` additionally requires explicit consent on the command line (see below). Jaiph prepares the image once when the server starts, not per call.
+Tool calls execute on the host, the same as `jaiph run`. Isolation is an outer concern: wrap `jaiph mcp` in a container, a pod, or a CI runner if wanted. See [Deploy jaiph](deploy.md).
 
-The workspace is isolated by default, the same as `jaiph run`. Each tool call's container works on its own writable point-in-time snapshot of the workspace. Jaiph discards the edits when the container exits, and the host workspace is untouched. Concurrent calls each get their own run id and run directory.
-
-To opt into live writes, pass `--inplace` (or set `JAIPH_INPLACE=1`) when starting the server. In inplace mode, Jaiph bind-mounts the host workspace read-write into each tool call's container, so effects land on the host. Two calls that change the same files can still race.
-
-Other sandbox controls:
-
-- `--unsafe` runs every call on the host with no sandbox. Because the server has no interactive prompt, this host-only posture requires the explicit flag: `--unsafe` (or `--yes`) on the command line. An ambient `JAIPH_UNSAFE=true` inherited from the environment, with no such flag, is refused at startup (`E_UNSAFE_NO_CONSENT`) so a stray value cannot silently switch the server to host-only. Inside a container or Kubernetes pod the container is the sandbox, so the [standalone runtime image](deploy.md) (baked `JAIPH_UNSAFE=true`) starts without `--unsafe` and without that refusal. When consent is given on a bare host, the server prints a prominent SANDBOXING DISABLED banner at startup.
-- `--yes` or `-y` (or `JAIPH_INPLACE_YES=1`) records auto-consent for the posture. The server has no interactive prompt, but for an ambient `JAIPH_UNSAFE=true` it counts as the explicit host-only consent, the same as `--unsafe`.
-
-The sandbox flags are the shared execution-policy surface of `jaiph run`, `jaiph serve`, and `jaiph mcp`. The precedence is CLI flags, then `JAIPH_*` env vars, then workflow config metadata, then defaults. Passing both `--inplace` and `--unsafe` fails with `E_FLAG_CONFLICT` at startup. The server resolves the posture once at startup, prints it, and applies it to every call. There is no interactive confirmation: for inplace and the default sandbox, launching the server with the flag or env var is the consent; for unsafe host-only the consent must be the explicit flag (see above). Inside a container the container is the sandbox, so an inherited `JAIPH_UNSAFE=true` proceeds without the flag. See [Environment variables, precedence](env-vars.md#precedence).
-
-The agent-credential pre-flight check runs once at startup. In MCP mode, the server reports its findings as warnings even in Docker mode, because the server can outlive a credential fix and a per-call failure still surfaces to the client. Set credentials on the host so the allowlist forwards them into the container.
+The agent-credential pre-flight check runs once at startup. In MCP mode, the server reports its findings as warnings, because the server can outlive a credential fix and a per-call failure still surfaces to the client.
 
 ## Verification
 

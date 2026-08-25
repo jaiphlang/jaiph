@@ -72,7 +72,12 @@ test("stale surface from the old extension is not highlighted", async () => {
     "`wait` must not be scoped as a command keyword",
   );
   // Stale config keys must not be scoped as config properties.
-  for (const stale of ["agent.default_model", "runtime.docker_enabled"]) {
+  for (const stale of [
+    "agent.default_model",
+    "runtime.docker_enabled",
+    "runtime.docker_image",
+    "runtime.docker_timeout_seconds",
+  ]) {
     assert.ok(
       !hasScope(t, stale, "variable.other.property.jaiph"),
       `stale config key ${stale} must not be scoped as a config property`,

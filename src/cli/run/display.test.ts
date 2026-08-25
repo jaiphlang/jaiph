@@ -11,46 +11,9 @@ import {
 
 // === formatJaiphRunningBannerLines ===
 
-test("formatJaiphRunningBannerLines: no Docker shows no sandbox (no color)", () => {
-  const s = formatJaiphRunningBannerLines("say_hello.jh", false, null, false);
-  assert.equal(s, "\nJaiph: Running say_hello.jh (no sandbox)\n\n");
-});
-
-test("formatJaiphRunningBannerLines: unsafe opt-in shows Docker sandbox, unsafe (no color)", () => {
-  const s = formatJaiphRunningBannerLines("engineer.jh", false, null, false, true);
-  assert.equal(s, "\nJaiph: Running engineer.jh (Docker sandbox, unsafe)\n\n");
-});
-
-test("formatJaiphRunningBannerLines: Docker snapshot (default) shows snapshot (no color)", () => {
-  const s = formatJaiphRunningBannerLines("say_hello.jh", true, "snapshot", false);
-  assert.equal(s, "\nJaiph: Running say_hello.jh (Docker sandbox, snapshot)\n\n");
-});
-
-test("formatJaiphRunningBannerLines: Docker inplace shows in-place, distinct from snapshot", () => {
-  const sInplace = formatJaiphRunningBannerLines("say_hello.jh", true, "inplace", false);
-  const sSnapshot = formatJaiphRunningBannerLines("say_hello.jh", true, "snapshot", false);
-  assert.equal(sInplace, "\nJaiph: Running say_hello.jh (Docker sandbox, in-place)\n\n");
-  assert.notEqual(sInplace, sSnapshot);
-});
-
-test("formatJaiphRunningBannerLines: banner is the same in CI and locally (no obfuscation)", () => {
-  const prev = process.env.CI;
-  process.env.CI = "true";
-  try {
-    const sCi = formatJaiphRunningBannerLines("say_hello.jh", true, "snapshot", false);
-    delete process.env.CI;
-    const sLocal = formatJaiphRunningBannerLines("say_hello.jh", true, "snapshot", false);
-    assert.equal(sCi, sLocal);
-    assert.equal(sCi, "\nJaiph: Running say_hello.jh (Docker sandbox, snapshot)\n\n");
-  } finally {
-    if (prev === undefined) delete process.env.CI;
-    else process.env.CI = prev;
-  }
-});
-
-test("formatJaiphRunningBannerLines: dim ANSI wraps parenthetical when color on", () => {
-  const s = formatJaiphRunningBannerLines("x.jh", false, null, true);
-  assert.ok(s.includes("\u001b[2m (no sandbox)\u001b[0m"));
+test("formatJaiphRunningBannerLines: file name only", () => {
+  const s = formatJaiphRunningBannerLines("say_hello.jh");
+  assert.equal(s, "\nJaiph: Running say_hello.jh\n\n");
 });
 
 // === colorize ===

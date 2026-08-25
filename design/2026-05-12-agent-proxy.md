@@ -2,7 +2,7 @@
 
 *Phantom Token credential proxy for the jaiph Docker sandbox. Container holds only a placeholder; real credentials live on the host and never cross the sandbox boundary.*
 
-**Status:** design — ready for implementation
+**Status:** rejected — see [ADR 0001](0001-jaiph-is-the-language.md). Jaiph does not own a sandbox; there is no credential proxy.
 **Date (UTC):** 2026-05-12
 
 ## Problem

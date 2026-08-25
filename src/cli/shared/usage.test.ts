@@ -55,52 +55,23 @@ test("parseArgs: --workspace without a value throws", () => {
   assert.throws(() => parseArgs(["--workspace"]), /--workspace requires a directory path/);
 });
 
-test("parseArgs: --inplace sets inplace=true", () => {
-  const r = parseArgs(["--inplace", "flow.jh"]);
-  assert.equal(r.inplace, true);
-  assert.deepEqual(r.positional, ["flow.jh"]);
+test("parseArgs: -- still terminates parsing after --workspace; post-`--` tokens land in positional unchanged", () => {
+  const r = parseArgs(["--workspace", "/tmp/ws", "flow.jh", "--", "--workspace", "--raw"]);
+  assert.equal(r.workspace, "/tmp/ws");
+  assert.deepEqual(r.positional, ["flow.jh", "--workspace", "--raw"]);
 });
 
-test("parseArgs: --unsafe sets unsafe=true", () => {
-  const r = parseArgs(["--unsafe", "flow.jh"]);
-  assert.equal(r.unsafe, true);
-  assert.deepEqual(r.positional, ["flow.jh"]);
-});
-
-test("parseArgs: --yes sets yes=true", () => {
-  const r = parseArgs(["--yes", "flow.jh"]);
-  assert.equal(r.yes, true);
-});
-
-test("parseArgs: -y short form sets yes=true", () => {
-  const r = parseArgs(["-y", "flow.jh"]);
-  assert.equal(r.yes, true);
-});
-
-test("parseArgs: -- still terminates parsing after new flags; post-`--` tokens land in positional unchanged", () => {
-  const r = parseArgs(["--inplace", "flow.jh", "--", "--inplace", "--unsafe", "--yes"]);
-  assert.equal(r.inplace, true);
-  assert.equal(r.unsafe, undefined);
-  assert.equal(r.yes, undefined);
-  assert.deepEqual(r.positional, ["flow.jh", "--inplace", "--unsafe", "--yes"]);
-});
-
-test("parseArgs: all new flags combined with existing flags", () => {
+test("parseArgs: all flags combined", () => {
   const r = parseArgs([
     "--raw",
     "--target", "/tmp/out",
     "--workspace", "/tmp/ws",
-    "--inplace",
-    "--yes",
     "flow.jh",
     "arg1",
   ]);
   assert.equal(r.raw, true);
   assert.equal(r.target, "/tmp/out");
   assert.equal(r.workspace, "/tmp/ws");
-  assert.equal(r.inplace, true);
-  assert.equal(r.yes, true);
-  assert.equal(r.unsafe, undefined);
   assert.deepEqual(r.positional, ["flow.jh", "arg1"]);
 });
 
@@ -137,7 +108,7 @@ test("parseArgs: --workspace= with empty value throws", () => {
 });
 
 test("parseArgs: boolean flag with =value form throws", () => {
-  assert.throws(() => parseArgs(["--inplace=true", "flow.jh"]), /--inplace does not take a value/);
+  assert.throws(() => parseArgs(["--raw=true", "flow.jh"]), /--raw does not take a value/);
 });
 
 test("parseArgs: --flag=value after -- is left untouched in positional", () => {
@@ -204,18 +175,6 @@ test("parseArgs: --env after -- is not parsed (lands in positional)", () => {
 
 // Reserved-key rejection (E_ENV_RESERVED), per category and both flag forms.
 
-test("parseArgs: --env rejects a control key (E_ENV_RESERVED), KEY=VALUE form", () => {
-  assert.throws(() => parseArgs(["--env", "JAIPH_UNSAFE=true", "flow.jh"]), /E_ENV_RESERVED/);
-});
-
-test("parseArgs: --env rejects a control key (E_ENV_RESERVED), bare KEY form", () => {
-  assert.throws(() => parseArgs(["--env", "JAIPH_INPLACE", "flow.jh"]), /E_ENV_RESERVED/);
-});
-
-test("parseArgs: --env rejects the JAIPH_DOCKER_* control family", () => {
-  assert.throws(() => parseArgs(["--env", "JAIPH_DOCKER_IMAGE=x", "flow.jh"]), /E_ENV_RESERVED/);
-});
-
 test("parseArgs: --env rejects a runtime-managed key (E_ENV_RESERVED), KEY=VALUE form", () => {
   assert.throws(() => parseArgs(["--env", "JAIPH_WORKSPACE=/x", "flow.jh"]), /E_ENV_RESERVED/);
 });
@@ -224,34 +183,20 @@ test("parseArgs: --env rejects a runtime-managed key (E_ENV_RESERVED), bare KEY 
   assert.throws(() => parseArgs(["--env", "JAIPH_RUNS_DIR", "flow.jh"]), /E_ENV_RESERVED/);
 });
 
-test("parseArgs: --env rejects JAIPH_RUN_WORKFLOW (managed via Docker MCP spawn wiring)", () => {
-  assert.throws(() => parseArgs(["--env", "JAIPH_RUN_WORKFLOW=greet", "flow.jh"]), /E_ENV_RESERVED/);
-});
-
 // ---------------------------------------------------------------------------
 // parseArgs: per-command flag scoping — shared execution-policy set everywhere,
 // command-specific flags rejected elsewhere, unknown flags never positionals
 // ---------------------------------------------------------------------------
 
-test("parseArgs: shared execution-policy flags parse identically for run, serve, and mcp", () => {
+test("parseArgs: shared flags parse identically for run, serve, and mcp", () => {
   for (const command of ["run", "serve", "mcp"] as const) {
     const r = parseArgs(
-      ["--workspace", "/tmp/ws", "--inplace", "--yes", "--env", "A=1", "flow.jh"],
+      ["--workspace", "/tmp/ws", "--env", "A=1", "flow.jh"],
       command,
     );
     assert.equal(r.workspace, "/tmp/ws", `${command}: --workspace`);
-    assert.equal(r.inplace, true, `${command}: --inplace`);
-    assert.equal(r.yes, true, `${command}: --yes`);
     assert.deepEqual(r.env, [{ key: "A", value: "1" }], `${command}: --env`);
     assert.deepEqual(r.positional, ["flow.jh"], `${command}: positional`);
-  }
-});
-
-test("parseArgs: --unsafe and -y are accepted by serve and mcp", () => {
-  for (const command of ["serve", "mcp"] as const) {
-    const r = parseArgs(["--unsafe", "-y", "flow.jh"], command);
-    assert.equal(r.unsafe, true);
-    assert.equal(r.yes, true);
   }
 });
 
@@ -306,7 +251,7 @@ test("parseArgs: a bare '-' stays positional", () => {
 // printUsage: lists the new flags under `jaiph run`
 // ---------------------------------------------------------------------------
 
-test("printUsage: lists --workspace, --inplace, --unsafe, --yes under jaiph run", () => {
+test("printUsage: lists --workspace and --env under jaiph run", () => {
   const cap = captureStdout();
   try {
     printUsage();
@@ -316,9 +261,6 @@ test("printUsage: lists --workspace, --inplace, --unsafe, --yes under jaiph run"
   const text = cap.text();
   const runSection = text.slice(text.indexOf("jaiph run:"));
   assert.ok(runSection.includes("--workspace"), "jaiph run section mentions --workspace");
-  assert.ok(runSection.includes("--inplace"), "jaiph run section mentions --inplace");
-  assert.ok(runSection.includes("--unsafe"), "jaiph run section mentions --unsafe");
-  assert.ok(runSection.includes("--yes"), "jaiph run section mentions --yes");
   assert.ok(runSection.includes("--env"), "jaiph run section mentions --env");
 });
 
@@ -334,7 +276,7 @@ test("printUsage: documents --env under jaiph mcp too", () => {
   assert.ok(mcpSection.includes("--env"), "jaiph mcp section mentions --env");
 });
 
-test("printUsage: example shows --inplace + --workspace combo", () => {
+test("printUsage: example shows --workspace", () => {
   const cap = captureStdout();
   try {
     printUsage();
@@ -342,30 +284,7 @@ test("printUsage: example shows --inplace + --workspace combo", () => {
     cap.restore();
   }
   assert.ok(
-    cap.text().includes("jaiph run --inplace --workspace"),
-    "examples block has the documented --inplace + --workspace combo",
+    cap.text().includes("jaiph run --workspace"),
+    "examples block has the documented --workspace combo",
   );
-});
-
-test("printUsage: documents the shared execution policy (precedence + consent) once", () => {
-  const cap = captureStdout();
-  try {
-    printUsage();
-  } finally {
-    cap.restore();
-  }
-  const text = cap.text();
-  assert.ok(text.includes("Execution policy (shared by jaiph run, jaiph serve, jaiph mcp):"));
-  assert.ok(
-    text.includes("CLI flags > JAIPH_* env vars > workflow config"),
-    "precedence order is spelled out",
-  );
-  assert.ok(text.includes("E_FLAG_CONFLICT"), "posture conflict rule is documented");
-  const serveSection = text.slice(text.indexOf("jaiph serve:"));
-  const mcpSection = text.slice(text.indexOf("jaiph mcp:"));
-  for (const [label, section] of [["serve", serveSection], ["mcp", mcpSection]] as const) {
-    assert.ok(section.includes("--inplace"), `jaiph ${label} section mentions --inplace`);
-    assert.ok(section.includes("--unsafe"), `jaiph ${label} section mentions --unsafe`);
-    assert.ok(section.includes("--yes"), `jaiph ${label} section mentions --yes`);
-  }
 });

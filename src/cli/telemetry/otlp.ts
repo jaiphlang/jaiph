@@ -4,7 +4,7 @@
  * Export happens host-side, after the run reaches terminal state, by reading the
  * run's `run_summary.jsonl` — never inside the runtime/emitter. The journal is
  * complete (it carries the WORKFLOW and PROMPT records the live stderr stream omits),
- * already credential-redacted, and host-visible in every sandbox mode, so nothing
+ * already credential-redacted, and host-visible, so nothing
  * new crosses the container boundary. Telemetry is never load-bearing: an
  * unreachable or erroring collector produces exactly one stderr warning and never
  * affects the run's exit code, output, or journal.

@@ -154,8 +154,7 @@ function emitConfigStringRhs(value: string): string {
 
 /**
  * Config keys in canonical emit order, used for the fallback when no original
- * `configBodySequence` is recorded. `runtime.docker_enabled` is intentionally
- * absent — it is never re-emitted (see {@link emitConfigKeyLines}).
+ * `configBodySequence` is recorded.
  */
 const DEFAULT_CONFIG_KEY_ORDER = [
   "agent.model",
@@ -167,9 +166,6 @@ const DEFAULT_CONFIG_KEY_ORDER = [
   "run.debug",
   "run.logs_dir",
   "run.recover_limit",
-  "runtime.docker_image",
-  "runtime.docker_network",
-  "runtime.docker_timeout_seconds",
   "module.name",
   "module.version",
   "module.description",
@@ -205,17 +201,6 @@ function emitConfigKeyLines(meta: WorkflowMetadata, key: string, pad: string): s
     case "run.recover_limit":
       if (meta.run?.recoverLimit === undefined) return [];
       return [`${pad}run.recover_limit = ${meta.run.recoverLimit}`];
-    case "runtime.docker_enabled":
-      return [];
-    case "runtime.docker_image":
-      if (meta.runtime?.dockerImage === undefined) return [];
-      return [`${pad}runtime.docker_image = ${emitConfigStringRhs(meta.runtime.dockerImage)}`];
-    case "runtime.docker_network":
-      if (meta.runtime?.dockerNetwork === undefined) return [];
-      return [`${pad}runtime.docker_network = ${emitConfigStringRhs(meta.runtime.dockerNetwork)}`];
-    case "runtime.docker_timeout_seconds":
-      if (meta.runtime?.dockerTimeoutSeconds === undefined) return [];
-      return [`${pad}runtime.docker_timeout_seconds = ${meta.runtime.dockerTimeoutSeconds}`];
     case "module.name":
       if (meta.module?.name === undefined) return [];
       return [`${pad}module.name = ${emitConfigStringRhs(meta.module.name)}`];

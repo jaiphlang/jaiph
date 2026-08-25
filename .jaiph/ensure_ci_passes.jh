@@ -11,11 +11,8 @@ script npm_run_test_ci = ```
 while IFS= read -r _v; do
   unset "$_v" 2>/dev/null || true
 done < <(compgen -e | grep '^JAIPH_' || true)
-# Full Docker e2e (incl. kind) is required here — same as GitHub Actions.
-# Do NOT re-add JAIPH_E2E_SKIP_DOCKER to dodge a flake; fix the harness
-# (named waits, EXIT cleanup, probe flake classification, kind heartbeats).
 # Heartbeat so JAIPH_STEP_IDLE_KILL_SEC cannot kill a long-but-live test:ci
-# when individual e2e scripts go quiet (kind pulls, large docker builds).
+# when individual e2e scripts go quiet.
 (
   elapsed=0
   while true; do
@@ -66,12 +63,6 @@ workflow ensure_ci_passes() {
           expectations, or removal of obsolete features.
         - Any test change must be minimal with a clear rationale.
         - Do NOT add speculative fixes. Fix only what the log shows is broken.
-        - Do NOT lengthen src/runtime/docker.ts probe timeouts to paper over
-          Docker Desktop load flakes; fix the e2e harness instead (named
-          jaiph-run container waits, EXIT cleanup of leftover containers,
-          surface stderr on failure, probe flake retries / E_DOCKER_PROBE_FAILED).
-        - Do NOT set JAIPH_E2E_SKIP_DOCKER here — overnight runs the full
-          suite like GitHub Actions.
       </task>
     """
   }

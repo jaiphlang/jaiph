@@ -24,7 +24,7 @@ Jaiph is a small workflow language. A `.jh` file declares:
 
 Everything is **strings**. Every step is logged. Every run leaves durable artifacts under `.jaiph/runs/` (per-step `.out`/`.err` files and an append-only `run_summary.jsonl`). Compared with ad-hoc shell scripts, a Jaiph run is repeatable, inspectable, and testable.
 
-**Source of truth:** when this document and the compiler disagree, the compiler wins. Full references: [Grammar](grammar.md), [CLI](cli.md), [Configuration](configuration.md), [Write & run tests](testing.md), [Inbox & dispatch](inbox.md), [Sandboxing](sandboxing.md).
+**Source of truth:** when this document and the compiler disagree, the compiler wins. Full references: [Grammar](grammar.md), [CLI](cli.md), [Configuration](configuration.md), [Write & run tests](testing.md), [Inbox & dispatch](inbox.md).
 
 ## Smallest working example
 
@@ -75,7 +75,7 @@ CLI quick reference:
 
 Shorthand: `jaiph ./file.jh` routes by extension (`*.test.jh` → test, other `.jh` → run). A `#!/usr/bin/env jaiph` shebang makes a `.jh` file directly executable.
 
-**Sandboxing:** by default, interactive `jaiph run` executes the workflow inside a Docker container (`ghcr.io/jaiphlang/jaiph-runtime`). Set `JAIPH_UNSAFE=true` or pass `--unsafe` to run directly on the host, or set `JAIPH_DOCKER_ENABLED=true/false` to force either mode. `jaiph test` always runs on the host (no Docker).
+**Host execution:** `jaiph run` executes on the host. Isolation is an outer concern — wrap jaiph in a container or CI runner if wanted. `jaiph test` also runs on the host.
 
 ## Core rules you must internalize
 
@@ -84,7 +84,7 @@ Most compile errors come from breaking one of these six rules:
 1. **Parentheses everywhere.** Definitions and call sites both require `()`, even with zero arguments: `workflow default() { … }`, `run setup()`, `ensure check()`. Bare `run setup` is a parse error.
 2. **All captures use `const`, and all bindings are immutable.** `const x = run foo()` — never `x = run foo()`, never rebind `x` later, never shadow a parameter with a `const` of the same name.
 3. **Call keyword must match callee type.** `ensure` → rules only. `run` → workflows and scripts (inside a workflow); scripts **only** (inside a rule). Mixing them is `E_VALIDATE`.
-4. **Shell lives in scripts.** Rules reject raw shell lines entirely. Workflows technically allow inline shell lines, but you should not write them — use a named `script` or an inline script (`` run `cmd`() ``). Shell operators next to managed calls (`run foo() | grep x`, `run foo() > file`, `run foo() &`) are parse errors. Interpolating a `prompt` capture into a shell line (`const x = prompt …` then `echo "${x}"`) is `W_PROMPT_IN_SHELL` and fails the build: the agent-controlled value would be spliced into `sh -c`. Pass it as a script argument (`run my_script(x)` → `$1`, argv, not shell-expanded) — see [Sandboxing](sandboxing.md#prompt-in-shell).
+4. **Shell lives in scripts.** Rules reject raw shell lines entirely. Workflows technically allow inline shell lines, but you should not write them — use a named `script` or an inline script (`` run `cmd`() ``). Shell operators next to managed calls (`run foo() | grep x`, `run foo() > file`, `run foo() &`) are parse errors. Interpolating a `prompt` capture into a shell line (`const x = prompt …` then `echo "${x}"`) is `W_PROMPT_IN_SHELL` and fails the build: the agent-controlled value would be spliced into `sh -c`. Pass it as a script argument (`run my_script(x)` → `$1`, argv, not shell-expanded).
 5. **Interpolation is `${name}` only.** In an orchestration string, `$name`, `$(…)`, and shell fallback forms like `${var:-default}` are compile errors. Other shell parameter forms like `${var//x/y}` are not caught, so they pass through as literal text, which is almost never what you want. Keep all of these in a `script` body, where they run as normal shell.
 6. **Arguments are not forwarded implicitly.** If `workflow default(task)` calls `run implement()`, the implement workflow does not see `task`. Pass it: `run implement(task)`.
 
@@ -327,7 +327,7 @@ config {
 }
 ```
 
-Precedence: **environment > workflow-level config > module-level config > defaults**. A workflow body may open with its own `config { … }` (before any steps; `agent.*`/`run.*` keys only) to override the model or backend for just that workflow. Docker on/off is env-only (`JAIPH_UNSAFE`, `JAIPH_DOCKER_ENABLED`); image/network/timeout come from `runtime.*` keys or `JAIPH_DOCKER_*`.
+Precedence: **environment > workflow-level config > module-level config > defaults**. A workflow body may open with its own `config { … }` (before any steps; `agent.*`/`run.*` keys only) to override the model or backend for just that workflow.
 
 ## Compile errors you will see, and the fix
 

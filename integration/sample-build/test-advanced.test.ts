@@ -50,7 +50,6 @@ test("jaiph run prompt capture: variable accessible in subsequent shell step", (
       env: {
         ...process.env,
         JAIPH_AGENT_BACKEND: "cursor",
-        JAIPH_DOCKER_ENABLED: "false",
         PATH: `${binDir}:${process.env.PATH ?? ""}`,
       },
     });
@@ -105,7 +104,6 @@ test("jaiph run prompt capture stores only final answer in assigned variable", (
       env: {
         ...process.env,
         JAIPH_AGENT_BACKEND: "cursor",
-        JAIPH_DOCKER_ENABLED: "false",
         PATH: `${binDir}:${process.env.PATH ?? ""}`,
       },
     });

@@ -1,6 +1,5 @@
 import { formatNamedParamsForDisplay, isInternalParamValue } from "../shared/format-params.js";
-import { colorize, sandboxParenLabel } from "../shared/log-format";
-import type { SandboxMode } from "../../runtime";
+import { colorize } from "../shared/log-format";
 
 // `colorize` is a pure presentation helper shared with the operator log
 // (`shared/server-log.ts`); it lives under `src/cli/shared/log-format.ts` and is
@@ -10,22 +9,11 @@ export { colorize } from "../shared/log-format";
 const PROMPT_PREVIEW_MAX = 24;
 const PROMPT_ARGS_DISPLAY_MAX = 96;
 
-/**
- * First stdout lines for `jaiph run`: file name plus a dim parenthetical describing
- * Docker sandbox mode. The label always reflects the actual mode (no CI obfuscation)
- * so docs/landing-page samples can compare against the literal banner text.
- */
+/** First stdout lines for `jaiph run`: file name. */
 export function formatJaiphRunningBannerLines(
   fileBasename: string,
-  dockerEnabled: boolean,
-  sandboxMode: SandboxMode | null,
-  colorEnabled: boolean,
-  /** True when the user opted into `--unsafe` / `JAIPH_UNSAFE=true` (not win32 / explicit Docker off). */
-  unsafeMode = false,
 ): string {
-  const parenInner = sandboxParenLabel(dockerEnabled, sandboxMode, unsafeMode);
-  const dimParen = colorize(` (${parenInner})`, "dim", colorEnabled);
-  return `\nJaiph: Running ${fileBasename}${dimParen}\n\n`;
+  return `\nJaiph: Running ${fileBasename}\n\n`;
 }
 
 /**

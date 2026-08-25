@@ -4,7 +4,7 @@ import { dirname, extname, join, resolve } from "node:path";
 import { errText } from "../../errors";
 import { detectWorkspaceRoot } from "./paths";
 import { hasHelpFlag, parseArgs, type ParsedArgs } from "./usage";
-import { resolveEnvPairs, type SandboxFlags } from "../run/env";
+import { resolveEnvPairs } from "../run/env";
 import {
   loadGeneration,
   createGenerationTracker,
@@ -17,9 +17,9 @@ import {
 
 // Bootstrap shared by the long-lived workflow servers `jaiph mcp` and
 // `jaiph serve`. Both parse the same flag set, validate the same `.jh` input,
-// load a generation into a temp dir, and resolve the same startup sandbox
-// posture — so that whole prefix (and the hot-reload watcher) lives here once
-// rather than being copied between the two commands.
+// load a generation into a temp dir, and resolve the same startup
+// posture, then watch sources for hot reload. That shared prefix lives here
+// once rather than being copied between the two commands.
 
 /** How often `watchFile` polls module sources for hot reload (ms). */
 export const WATCH_INTERVAL_MS = 750;
@@ -31,7 +31,6 @@ export interface ServerArgs {
   inputAbs: string;
   workspaceRoot: string;
   extraEnv: Record<string, string>;
-  sandboxFlags: SandboxFlags;
   /** Every diagnostic goes to stderr; stdout stays reserved for protocol/scripting. */
   log: (line: string) => void;
 }
@@ -47,7 +46,7 @@ export interface ServerContext extends ServerArgs {
 
 /**
  * Phase 1: parse + validate the shared flags and `.jh` input. Cheap, side-effect
- * free work that runs before any temp dir is created or image is pulled, so a
+ * free work that runs before any temp dir is created, so a
  * command can insert its own validation (serve's auth/host/port) between this
  * and {@link startGeneration}. On help or any error, writes the message and
  * returns `{ code }`; on success returns `{ args }`.
@@ -71,8 +70,7 @@ export function parseServerArgs(
     log(errText(err));
     return { code: 1 };
   }
-  const { workspace, env, positional, inplace, unsafe, yes } = parsed;
-  const sandboxFlags: SandboxFlags = { inplace, unsafe, yes };
+  const { workspace, env, positional } = parsed;
   const input = positional[0];
   if (!input) {
     log(`jaiph ${command} requires a .jh file path`);
@@ -97,12 +95,12 @@ export function parseServerArgs(
     log(`--workspace path is not a directory: ${workspaceRoot}`);
     return { code: 1 };
   }
-  return { args: { command, parsed, inputAbs, workspaceRoot, extraEnv, sandboxFlags, log } };
+  return { args: { command, parsed, inputAbs, workspaceRoot, extraEnv, log } };
 }
 
 /**
  * Phase 2: create the temp root, load generation 0, and resolve + announce the
- * startup sandbox posture. Expensive work (image pull, credential pre-flight),
+ * startup posture. Expensive work (credential pre-flight),
  * so callers run their cheap validation first. `noun` names what the server
  * executes in the startup notice ("runs" for HTTP, "tool calls" for MCP). On
  * failure logs, removes the temp root, and returns `{ code: 1 }`.
@@ -111,14 +109,14 @@ export function startGeneration(
   args: ServerArgs,
   noun: string,
 ): { code: number } | { ctx: ServerContext } {
-  const { command, inputAbs, workspaceRoot, extraEnv, sandboxFlags, log } = args;
+  const { command, inputAbs, workspaceRoot, extraEnv, log } = args;
   const label = `jaiph ${command}`;
   const tempRoot = mkdtempSync(join(tmpdir(), `jaiph-${command}-`));
   const cleanup = (): void => rmSync(tempRoot, { recursive: true, force: true });
 
   let generations: GenerationTracker;
   try {
-    const loaded = loadGeneration(inputAbs, workspaceRoot, tempRoot, 0, extraEnv, log, label, sandboxFlags);
+    const loaded = loadGeneration(inputAbs, workspaceRoot, tempRoot, 0, extraEnv, log, label);
     if (!loaded.state) {
       for (const f of loaded.failures) log(f);
       cleanup();
@@ -187,7 +185,7 @@ export function startReloadWatcher(
   nouns: { reloaded: string; keepPrevious: string },
   onReloaded?: (state: GenerationState) => void,
 ): { rewatch: (files: string[]) => void; stop: () => void } {
-  const { command, inputAbs, workspaceRoot, tempRoot, extraEnv, sandboxFlags, generations, log } = ctx;
+  const { command, inputAbs, workspaceRoot, tempRoot, extraEnv, generations, log } = ctx;
   const label = `jaiph ${command}`;
   let generation = 0;
   let reloading = false;
@@ -196,7 +194,7 @@ export function startReloadWatcher(
     reloading = true;
     try {
       generation += 1;
-      const loaded = loadGeneration(inputAbs, workspaceRoot, tempRoot, generation, extraEnv, log, label, sandboxFlags);
+      const loaded = loadGeneration(inputAbs, workspaceRoot, tempRoot, generation, extraEnv, log, label);
       if (!loaded.state) {
         log(`${label}: reload failed; keeping the previous ${nouns.keepPrevious}:`);
         for (const f of loaded.failures) log(`  ${f}`);

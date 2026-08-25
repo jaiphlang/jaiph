@@ -14,9 +14,9 @@ import { join } from "node:path";
 // Task 6 acceptance: Tutorials quadrant pages exist, are wired into nav,
 // retire `/getting-started` via redirect_from, and the first-workflow
 // tutorial's `.jh` snippet is *executable* — extracting the first ```jh
-// fenced block and running it with `JAIPH_UNSAFE=true` produces the
-// documented output. This guards against tutorials drifting into
-// aspirational prose where the copy-pasted commands no longer work.
+// fenced block and running it produces the documented output. This
+// guards against tutorials drifting into aspirational prose where the
+// copy-pasted commands no longer work.
 
 const REPO_ROOT = process.cwd();
 const DOCS_DIR = join(REPO_ROOT, "docs");
@@ -188,14 +188,10 @@ test("task-6: first-workflow tutorial's `.jh` snippet runs end-to-end and matche
 
     const env = {
       // Clean env: PATH for child shell + script execve, HOME for any
-      // tooling that touches it, JAIPH_UNSAFE so Docker is bypassed in CI,
-      // and TERM so the runtime does not try to render TTY escapes.
+      // tooling that touches it, and TERM so the runtime does not try
+      // to render TTY escapes.
       PATH: process.env.PATH ?? "/usr/bin:/bin",
       HOME: tmp,
-      JAIPH_UNSAFE: "true",
-      // Unsafe host-only runs now require consent; auto-confirm for this
-      // non-interactive snippet.
-      JAIPH_INPLACE_YES: "1",
       TERM: "dumb",
       NO_COLOR: "1",
     };

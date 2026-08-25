@@ -43,9 +43,8 @@ export function cancelRunProcess(
 /**
  * Parse the parent-enforced host-mode wall-clock run timeout
  * (`JAIPH_RUN_TIMEOUT`, seconds). Unset / empty / non-numeric / `<= 0` disables
- * it (returns `0`), preserving the prior host behaviour where only a manual
- * SIGINT/SIGTERM stops a run. Docker mode uses its own `JAIPH_DOCKER_TIMEOUT`
- * enforced inside `spawnDockerProcess`; this covers the host spawn.
+ * it (returns `0`), preserving the prior behaviour where only a manual
+ * SIGINT/SIGTERM stops a run.
  */
 export function parseRunTimeoutSeconds(
   env: Record<string, string | undefined>,
@@ -60,7 +59,7 @@ export function parseRunTimeoutSeconds(
  * Arm a parent-enforced wall-clock timeout on a host run child. On expiry it
  * terminates the whole process group with SIGTERM and escalates to SIGKILL
  * after a grace period — the same escalation `setupRunSignalHandlers` applies to
- * CLI signals — so a host/`--unsafe` run that exceeds the budget is stopped
+ * CLI signals — so a run that exceeds the budget is stopped
  * without a manual Ctrl-C.
  *
  * `timeoutSeconds <= 0` (disabled) returns an inert handle. The timer is cleared

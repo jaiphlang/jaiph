@@ -23,9 +23,9 @@ export function projectHooksPath(workspaceRoot: string): string {
 /**
  * Operator opt-in (`JAIPH_TRUST_PROJECT_HOOKS=1|true`) that trusts the current
  * workspace's project-local `.jaiph/hooks.json`. Absent it, the project file is
- * ignored (finding M-10): its commands run on the *host* CLI — before and
- * outside any Docker sandbox — so a cloned/untrusted repo must not execute
- * arbitrary host commands on `jaiph run` without an explicit trust decision.
+ * ignored: its commands run on the *host* CLI, so a cloned/untrusted repo
+ * must not execute arbitrary host commands on `jaiph run` without an explicit
+ * trust decision.
  * The global `~/.jaiph/hooks.json` is the operator's own and stays trusted.
  * Read from the host env only, never from workflow config — the file must not
  * be able to trust itself.
@@ -128,7 +128,7 @@ export function loadMergedHooks(
   if (projectHasCommands && !trustProjectHooks) {
     process.stderr.write(
       `jaiph hooks: project-local hooks at ${projectPath} are ignored (untrusted workspace) — ` +
-        `they run host commands outside the Docker sandbox. Set JAIPH_TRUST_PROJECT_HOOKS=1 to trust ` +
+        `they run host commands in the CLI process. Set JAIPH_TRUST_PROJECT_HOOKS=1 to trust ` +
         `this workspace. Global ~/.jaiph/hooks.json still runs.\n`,
     );
   }

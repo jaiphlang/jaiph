@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { loadGeneration } from "./generation";
-import { callWorkflow, type ExecutionPosture } from "./workflow-call";
+import { callWorkflow } from "./workflow-call";
 
 /**
  * AC2: the parent-enforced wall-clock timeout (`JAIPH_RUN_TIMEOUT`) shared with
@@ -25,14 +25,8 @@ test("callWorkflow (serve/mcp host path): a run exceeding JAIPH_RUN_TIMEOUT is t
     const gen = loadGeneration(jh, root, tempRoot, 1, { JAIPH_RUN_TIMEOUT: "1" }, () => {}, "test");
     assert.ok(gen.state, `generation failed: ${gen.failures.join("\n")}`);
 
-    // Host posture: Docker disabled, so callWorkflow takes the host spawn path.
-    const posture: ExecutionPosture = {
-      dockerConfig: { enabled: false, image: "", imageExplicit: false, network: "default", timeoutSeconds: 0 },
-      sandboxMode: "snapshot",
-    };
-
     const startedAt = Date.now();
-    const result = await callWorkflow(gen.state.callEnv, posture, "default", [], randomUUID());
+    const result = await callWorkflow(gen.state.callEnv, "default", [], randomUUID());
     const elapsedMs = Date.now() - startedAt;
 
     assert.equal(result.isError, true, "an over-budget call must return an error result");

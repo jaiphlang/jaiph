@@ -3,6 +3,8 @@
 config {
   agent.default_model = "old-key"
   runtime.docker_enabled = true
+  runtime.docker_image = "stale"
+  runtime.docker_timeout_seconds = 600
 }
 
 workflow default() {
