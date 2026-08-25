@@ -8,7 +8,7 @@ redirect_from:
 
 # Jaiph Skill (for Agents)
 
-You are an agent. A user has asked you to automate a repetitive task, for example a delivery pipeline, a review loop, a recurring check, or a queue of work items. This page teaches you to author **Jaiph workflows** for those tasks. Read it fully before you write any `.jh` file. Jaiph looks like shell plus YAML but is neither, and most authoring mistakes come from guessing at the syntax instead of following the rules below.
+You are an agent. A user has asked you to automate a repetitive task, for example a delivery pipeline, a review loop, a recurring check, or a queue of work items. This page teaches you to author **Jaiph programs** for those tasks. Read it fully before you write any `.jh` file. Jaiph looks like shell plus YAML but is neither, and most authoring mistakes come from guessing at the syntax instead of following the rules below.
 
 ## What Jaiph is
 
@@ -69,7 +69,7 @@ CLI quick reference:
 | `jaiph test [path]` | Run `*.test.jh` files (workspace, dir, or single file) |
 | `jaiph compile [--json] [--workspace <dir>] <paths…>` | Validate only — no execution, no side effects |
 | `jaiph format [--check] <file.jh …>` | Reformat (or verify formatting in CI) |
-| `jaiph init [workspace]` | Scaffold `.jaiph/` (bootstrap workflow + this skill file) |
+| `jaiph init [workspace]` | Scaffold `.jaiph/` (bootstrap file + this skill file) |
 | `jaiph install [<name[@version]> \| <url[@version]>…]` | Install libraries into `.jaiph/libs/` (bare names resolve via `JAIPH_REGISTRY`, else `https://jaiph.org/registry`; URL form is unchanged) |
 
 Shorthand: `jaiph ./file.jh` routes by extension (`*.test.jh` → test, other `.jh` → run). A `#!/usr/bin/env jaiph` shebang makes a `.jh` file directly executable.

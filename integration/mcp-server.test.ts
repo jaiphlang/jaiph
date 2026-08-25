@@ -148,10 +148,15 @@ test("jaiph mcp: scripted stdio session (initialize, list, call, invalid-params,
 
     // initialize
     const init = await initialize(client);
-    const initResult = init.result as { protocolVersion: string; capabilities: unknown; serverInfo: { name: string } };
+    const initResult = init.result as {
+      protocolVersion: string;
+      capabilities: unknown;
+      serverInfo: { name: string; title: string };
+    };
     assert.equal(initResult.protocolVersion, "2025-06-18");
     assert.deepEqual(initResult.capabilities, { tools: { listChanged: true } });
     assert.equal(initResult.serverInfo.name, "jaiph");
+    assert.equal(initResult.serverInfo.title, "Jaiph");
 
     // tools/list — both tools, comment-derived descriptions
     client.send({ jsonrpc: "2.0", id: 1, method: "tools/list" });

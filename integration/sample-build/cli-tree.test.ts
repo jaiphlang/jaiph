@@ -32,7 +32,7 @@ test("jaiph init creates workspace structure and guidance", () => {
     assert.match(bootstrap, /export def main\(\) \{/);
     assert.match(bootstrap, /\.jaiph\/SKILL\.md/);
     assert.match(bootstrap, /Analyze repository structure/);
-    assert.match(bootstrap, /Create or update Jaiph workflows under \.jaiph\//);
+    assert.match(bootstrap, /Create or update Jaiph files under \.jaiph\//);
     assert.doesNotMatch(bootstrap, /\$1/);
     assert.equal(statSync(join(root, ".jaiph/bootstrap.jh")).mode & 0o777, 0o755);
     const localSkill = readFileSync(join(root, ".jaiph/SKILL.md"), "utf8");

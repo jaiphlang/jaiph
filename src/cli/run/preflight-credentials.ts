@@ -10,7 +10,7 @@ export const E_AGENT_CREDENTIALS = "E_AGENT_CREDENTIALS";
 
 interface BackendUsage {
   backend: AgentBackend;
-  /** Human-readable scope: "module config" | "workflow <name>" | "default" | "JAIPH_AGENT_BACKEND env". */
+  /** Human-readable scope: "module config" | "def <name>" | "default" | "JAIPH_AGENT_BACKEND env". */
   scope: string;
   /** Model from the same scope, falling back to module-level model. */
   model?: string;

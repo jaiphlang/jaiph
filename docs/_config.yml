@@ -1,7 +1,6 @@
-title: Jaiph — AI Workflow DSL
+title: Jaiph — language for AI-assisted development
 description: >-
-  Jaiph — Open source AI workflow DSL. Powerful and friendly automation for
-  AI-assisted development.
+  Jaiph — Open source language for AI-assisted development.
 
 markdown: kramdown
 kramdown:

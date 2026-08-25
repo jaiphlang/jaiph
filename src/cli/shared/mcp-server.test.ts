@@ -56,6 +56,11 @@ test("initialize: echoes a supported protocol version and advertises tools", asy
   assert.equal(res.id, 0);
   assert.equal((res.result as { protocolVersion: string }).protocolVersion, "2025-06-18");
   assert.deepEqual((res.result as { capabilities: unknown }).capabilities, { tools: { listChanged: true } });
+  assert.deepEqual((res.result as { serverInfo: { name: string; title: string } }).serverInfo, {
+    name: "jaiph",
+    title: "Jaiph",
+    version: "0.0.0-test",
+  });
 });
 
 test("initialize: falls back to the latest known version for unknown requests", async () => {

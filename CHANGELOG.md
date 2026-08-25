@@ -12,6 +12,8 @@
 
 - **Removed — first-party Docker sandbox:** no Docker driver, no digest-pinned runtime image, no snapshot/inplace modes, no `--unsafe` / `--inplace` / `--yes` sandbox consent, no `JAIPH_UNSAFE` / `JAIPH_INPLACE*` / `JAIPH_DOCKER_*`, no in-file `runtime.docker_*`. `prompt` env scrub, journal redaction, `--env`, and `trusted_envs` stay.
 
+- **Docs — `def` / `run` teaching and `/tutorials/first-run`:** the current docs (landing, README, CLI, MCP, serve, grammar, tutorials) match the `def` / `run` contracts. The first tutorial permalink is `/tutorials/first-run` (`docs/first-run.md`, title **Your first run**); `/tutorials/first-workflow`, `/getting-started`, and `/getting-started.md` redirect to it. How-to titles are **Serve defs as MCP tools** and **Serve defs over HTTP**. Live trees document `def main` / `PASS def main`. MCP `serverInfo.title` is `"Jaiph"`.
+
 # 0.13.0
 
 ## Summary

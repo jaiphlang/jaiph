@@ -105,7 +105,7 @@ test("message contains backend, model, entry file path, and 'module config' scop
   assert.ok(msg.includes("module config"), `missing scope label: ${msg}`);
 });
 
-test("message reports 'workflow <name>' scope when backend is set at workflow level", () => {
+test("message reports 'def <name>' scope when backend is set at def level", () => {
   const mod = emptyModule(ENTRY);
   mod.defs = [
     workflow("review", {
@@ -121,7 +121,7 @@ test("message reports 'workflow <name>' scope when backend is set at workflow le
   assert.ok(claudeWarn, "expected a claude warning");
   assert.ok(claudeWarn.includes("opus-4"));
   assert.ok(claudeWarn.includes(ENTRY));
-  assert.ok(claudeWarn.includes("def review"), `missing 'workflow review' scope: ${claudeWarn}`);
+  assert.ok(claudeWarn.includes("def review"), `missing 'def review' scope: ${claudeWarn}`);
 });
 
 test("claude with ANTHROPIC_API_KEY only → silent", () => {

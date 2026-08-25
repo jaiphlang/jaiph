@@ -20,7 +20,7 @@ This page is the authoritative syntactic reference for Jaiph: lexical rules, sta
 | Identifier | `[A-Za-z_][A-Za-z0-9_]*`. |
 | Reference | `IDENT` (local) or `IDENT.IDENT` (module-qualified). |
 | Comment | Full-line `#` comment. Trailing `#` on a step line is not a comment. |
-| Blank line | Preserved between steps inside workflow and def bodies(as `blank_line` trivia). `jaiph format` collapses multiple consecutive body blanks to one and trims trailing blanks before `}`. Top-level blank lines are not preserved — the formatter emits one blank line between emitted sections. |
+| Blank line | Preserved between steps inside def bodies (as `blank_line` trivia). `jaiph format` collapses multiple consecutive body blanks to one and trims trailing blanks before `}`. Top-level blank lines are not preserved — the formatter emits one blank line between emitted sections. |
 | Shebang | A `#!` first line of the file is ignored by the parser. |
 | Single-line string | Double-quoted `"…"`. Single-quoted strings are `E_PARSE`. Write `\"` to include a quote without ending the string. In orchestration strings the backslash is otherwise passed through verbatim — `\n`, `\t`, and `\\` are **not** decoded to newline/tab/backslash (use a `"""…"""` block or a `script` for literal newlines). Config-block string values are the exception: they decode `\"`, `\\`, `\n`, and `\t`. Match string patterns are a second exception: they decode `\"`, `\n`, and `\\` (but not `\t`). |
 | Multiline string | Triple-quoted `"""…"""`. The opening `"""` must end the line; the closing `"""` must be on its own line. |
@@ -58,7 +58,7 @@ env_decl  = "const" IDENT "=" env_value ;
 env_value = double_quoted_string | triple_quoted_block | bare_value ;
 ```
 
-Values: double-quoted string (single-line; multi-line double-quoted is `E_PARSE`), triple-quoted multiline, or a bare token (e.g. `const N = 42` stores the string `"42"`). Top-level `local` is `E_PARSE` — use `const`. Top-level `const` shares the unified per-module namespace with channels, rules, workflows, and scripts.
+Values: double-quoted string (single-line; multi-line double-quoted is `E_PARSE`), triple-quoted multiline, or a bare token (e.g. `const N = 42` stores the string `"42"`). Top-level `local` is `E_PARSE` — use `const`. Top-level `const` shares the unified per-module namespace with channels, defs, scripts, and script-import aliases.
 
 ## Imports and exports
 
@@ -82,7 +82,7 @@ import_script_stmt = "import" "script" string "as" IDENT ;
 channel_decl = "channel" IDENT [ "->" REF { "," REF } ] ;
 ```
 
-One channel per line. A `->` route declaration inside a workflow body is `E_PARSE`. Routes are stored on `ChannelDef`. Route targets must be workflows declaring exactly **three** named parameters (message, channel, sender). Multiple routes drain sequentially.
+One channel per line. A `->` route declaration inside a def body is `E_PARSE`. Routes are stored on `ChannelDef`. Route targets must be defs declaring exactly **three** named parameters (message, channel, sender). Multiple routes drain sequentially.
 
 ## Config blocks
 
@@ -113,7 +113,7 @@ Crossings (`run` on a string, `prompt` on a script, `const x = scriptName`, `${s
 ## Definitions
 
 ```ebnf
-def_decl      = [ "export" ] "def" IDENT "(" [ param_list ] ")" "{" [ workflow_config ] { workflow_step } "}" ;
+def_decl      = [ "export" ] "def" IDENT "(" [ param_list ] ")" "{" [ def_config ] { def_step } "}" ;
 script_decl   = "script" IDENT "=" script_rhs ;
 param_list    = IDENT { "," IDENT } ;
 ```
@@ -122,7 +122,7 @@ param_list    = IDENT { "," IDENT } ;
 |---|---|
 | Definition parens | Required even when parameterless (e.g. `def check()`, `export def main()`). Omitting them is `E_PARSE` with a fix hint. |
 | Parameter names | Identifier syntax, no duplicates, no reserved keywords. |
-| Workflow body | May begin with an optional nested `config { … }` (must precede the first step). |
+| Def body | May begin with an optional nested `config { … }` (must precede the first step). |
 
 Script RHS:
 
@@ -171,7 +171,7 @@ carry Trivia).
 **Hard error contract:** any line that begins with `run`/`return run`
 followed by a valid identifier and `(` is treated as a managed call start. If the matching `)` is
 never found (e.g. the file ends or the block closes first), the compiler emits `E_PARSE` and the
-line is **never** silently treated as a workflow shell step (`sh_line_*`).
+line is **never** silently treated as a def shell step (`sh_line_*`).
 Intentionally free-form shell lines that are not prefixed with a managed-call keyword continue to
 fall through to the shell executor unchanged.
 
@@ -182,13 +182,15 @@ fall through to the shell executor unchanged.
 | Bare dotted argument | `IDENT.IDENT` is typed-prompt field access (same as in `return` / `if` / `match`). The base must be a typed prompt capture and the field must appear in its `returns` schema (`E_VALIDATE` otherwise). |
 | Unquoted interpolation | Unquoted `${ident}` / `${base.field}` in call-argument position is `E_VALIDATE` — interpolation belongs inside strings. Use the bare form (`name`, `result.role`) or a quoted string (`"${name}"`). |
 | Nested managed calls | The `run` keyword is required. `run foo(bar())` / `run foo(\`echo aaa\`())` are `E_VALIDATE`. Valid: `run foo(run bar())`, `run foo(run \`echo aaa\`())`. Capture-then-pass is always valid. |
-| Arity | Workflows and rules: argument count must match the declared parameter list (`E_VALIDATE`), including `()` callees (zero arguments required). Scripts accept any argument count (no parameter list to check). |
+| Arity | Defs: argument count must match the declared parameter list (`E_VALIDATE`), including `()` callees (zero arguments required). Scripts accept any argument count (no parameter list to check). |
 | Shell redirection / pipes | Trailing `>`, `>>`, `|`, or `&` after a `run` call is `E_PARSE`. The same operators inside unquoted portions of call arguments are `E_VALIDATE`. Use a `script` for shell I/O. |
 
-## Workflow body statements
+## Def body statements
+{: #def-body-statements}
+{: #workflow-body-statements}
 
 ```ebnf
-workflow_step = run_stmt | run_catch_stmt | run_recover_stmt | run_async_stmt
+def_step = run_stmt | run_catch_stmt | run_recover_stmt | run_async_stmt
               | prompt_stmt | const_decl_step | return_stmt
               | fail_stmt | log_stmt | logerr_stmt | logwarn_stmt | send_stmt
               | match_stmt | if_stmt | for_lines_stmt | comment_line ;
@@ -208,8 +210,8 @@ run_async_stmt   = "run" "async" call_ref [ recover_suffix | catch_suffix ] ;
 | Position | Allowed targets |
 |---|---|
 | `run` | Def or script. |
-| `run async` | Workflows only. Inline scripts not supported. |
-| Inline script in `run` | Both workflows and rules. |
+| `run async` | Defs only. Inline scripts not supported. |
+| Inline script in `run` | Defs. |
 
 Capture: a def callee yields the explicit `return` value; a script callee yields trimmed stdout.
 
@@ -217,9 +219,9 @@ Capture: a def callee yields the explicit `return` value; a script callee yields
 
 ```ebnf
 catch_bindings   = "(" IDENT ")" ;
-catch_body       = workflow_step | "{" { workflow_step } "}" ;
+catch_body       = def_step | "{" { def_step } "}" ;
 recover_bindings = "(" IDENT ")" ;
-recover_body     = workflow_step | "{" { workflow_step } "}" ;
+recover_body     = def_step | "{" { def_step } "}" ;
 ```
 
 | Rule | Behaviour |
@@ -313,10 +315,10 @@ Aborts the def with a stderr message and non-zero exit.
 ### `if`
 
 ```ebnf
-if_stmt        = "if" subject_ref if_op if_operand "{" { workflow_step } "}"
+if_stmt        = "if" subject_ref if_op if_operand "{" { def_step } "}"
                  { else_if_clause } [ else_clause ] ;
-else_if_clause = "}" "else" "if" subject_ref if_op if_operand "{" { workflow_step } ;
-else_clause    = "else" "{" { workflow_step } "}" ;
+else_if_clause = "}" "else" "if" subject_ref if_op if_operand "{" { def_step } ;
+else_clause    = "else" "{" { def_step } "}" ;
 subject_ref    = IDENT | IDENT "." IDENT ;
 if_op          = "==" | "!=" | "=~" | "!~" ;
 if_operand     = double_quoted_string | "/" regex_source "/" ;
@@ -330,7 +332,7 @@ if_operand     = double_quoted_string | "/" regex_source "/" ;
 | Operator/operand pairing | `==` / `!=` require a double-quoted string. `=~` / `!~` require a `/regex/`. Mixing is `E_PARSE`. |
 | `else` / `else if` placement | `} else {` and each `} else if <cond> {` must be on a single line — the closing `}` and the keyword share the line. An `else if` split onto its own line, an `else if` without a condition, or an empty `else if` body is `E_PARSE`. |
 | Value production | `if` is a statement and does not produce a value. Use `match` for value branching. |
-| Allowed in | Workflows and rules. |
+| Allowed in | Defs. |
 
 ### `match`
 
@@ -358,7 +360,7 @@ arm_body      = double_quoted_string | triple_quoted_block
 ### `for`
 
 ```ebnf
-for_lines_stmt = "for" IDENT "in" IDENT "{" { workflow_step } "}" ;
+for_lines_stmt = "for" IDENT "in" IDENT "{" { def_step } "}" ;
 ```
 
 | Rule | Behaviour |
@@ -366,7 +368,7 @@ for_lines_stmt = "for" IDENT "in" IDENT "{" { workflow_step } "}" ;
 | Source variable | Must already hold a string (`const`, capture, parameter). Unknown names are `E_VALIDATE`. |
 | Line splitting | Splits on `\n` (normalises `\r\n` → `\n`). If the string ends with a final newline, the trailing empty segment is dropped. Interior empty lines are still yielded. |
 | Iterator name | Subject to the same immutable-binding rules as `const` in the surrounding scope. |
-| Allowed in | Workflows and rules. |
+| Allowed in | Defs. |
 
 ## Inline scripts
 
@@ -430,10 +432,10 @@ Validator entry points (`src/transpile/validate.ts` for the outer layer; `src/tr
 
 ### Validation rules
 
-1. At most one `config` block per file and per workflow. Workflow `config` must precede steps. Workflow `config` allows only `agent.*` / `run.*`.
+1. At most one `config` block per file and per def. Def `config` must precede steps. Def `config` allows only `agent.*` / `run.*`.
 2. Config values are type-checked. `agent.backend` must be `cursor`, `claude`, or `codex`.
 3. Import aliases must be unique. Import targets must exist.
-4. Unified per-module namespace: channels, rules, workflows, scripts, script-import aliases, and top-level `const` share one namespace. Duplicate top-level names fail at parse time (`E_PARSE`); duplicate import aliases fail in validation (`E_VALIDATE`).
+4. Unified per-module namespace: channels, defs, scripts, script-import aliases, and top-level `const` share one namespace. Duplicate top-level names fail at parse time (`E_PARSE`); duplicate import aliases fail in validation (`E_VALIDATE`).
 5. `run` targets a def or a script. Same rules apply to `return run` and `${run …}`. `recover` is legal on every `run`.
 6. Channel references in `send` must resolve to declared channels. Route targets must be defs with exactly three parameters. Inline routes in def bodies are `E_PARSE`.
 7. `catch` / `recover` argument ordering — all call args appear before `catch` / `recover`.
@@ -444,7 +446,7 @@ Validator entry points (`src/transpile/validate.ts` for the outer layer; `src/tr
 
 ## Build artifacts
 
-`jaiph run` and `jaiph test` do not transpile workflows to shell. `buildScripts` emits only per-`script` executable files under `scripts/`:
+`jaiph run` and `jaiph test` do not transpile defs to shell. `buildScripts` emits only per-`script` executable files under `scripts/`:
 
 | Source form | Emitted artifact |
 |---|---|
@@ -453,7 +455,7 @@ Validator entry points (`src/transpile/validate.ts` for the outer layer; `src/tr
 | `` run `body`(args) `` / `` run ```lang body```(args) `` | `scripts/__inline_<12-hex>` with the deterministic name from `inlineScriptName`. |
 | `import script "path" as name` | Copied verbatim to `scripts/<name>` with its original shebang preserved; the runtime resolves it through `JAIPH_SCRIPTS` like any other script. |
 
-Workflows, rules, prompts, channels, and control flow are interpreted by `NodeWorkflowRuntime` from the AST. There is no def-level shell emission. Script subprocesses inherit the runner's `process.env` plus Jaiph metadata.
+Defs, prompts, channels, and control flow are interpreted by `NodeWorkflowRuntime` from the AST. There is no def-level shell emission. Script subprocesses inherit the runner's `process.env` plus Jaiph metadata.
 
 ## Related
 

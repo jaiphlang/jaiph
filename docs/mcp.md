@@ -13,7 +13,7 @@ You don't need an SDK project or a build step. `jaiph mcp ./tools.jh` reuses the
 ## Prerequisites
 
 - A `.jh` file with at least one exported def.
-- Agent credentials for any exposed workflow that uses `prompt`. See [Authenticate agent backends](agent-auth.md). Set the credentials on the host environment. Any other host variable a workflow needs, such as a `GITHUB_TOKEN` or an API base URL, forward with `--env` (described below).
+- Agent credentials for any exposed def that uses `prompt`. See [Authenticate agent backends](agent-auth.md). Set the credentials on the host environment. Any other host variable a def needs, such as a `GITHUB_TOKEN` or an API base URL, forward with `--env` (described below).
 
 ## 1. Serve a file over stdio
 
@@ -23,7 +23,7 @@ jaiph mcp ./tools.jh
 
 The server speaks newline-delimited [JSON-RPC 2.0](https://www.jsonrpc.org/specification) over stdio, which is the MCP stdio transport. It runs until stdin closes or it receives `SIGINT` or `SIGTERM`. `jaiph --mcp ./tools.jh` is an equivalent alias.
 
-> **MCP over the network.** [`jaiph serve`](serve.md) exposes the same tools over MCP Streamable HTTP at `POST /mcp`, alongside its REST API. It shares one run registry, concurrency cap, hot reload, and bearer auth with the stdio server. Use `jaiph mcp` for a stdio client on the same machine, and use `jaiph serve` when an MCP client must reach the workflows over HTTP. Everything below applies to both transports the same way: exposure rules, descriptions, input schema, result shape, progress, and cancel.
+> **MCP over the network.** [`jaiph serve`](serve.md) exposes the same tools over MCP Streamable HTTP at `POST /mcp`, alongside its REST API. It shares one run registry, concurrency cap, hot reload, and bearer auth with the stdio server. Use `jaiph mcp` for a stdio client on the same machine, and use `jaiph serve` when an MCP client must reach the defs over HTTP. Everything below applies to both transports the same way: exposure rules, descriptions, input schema, result shape, progress, and cancel.
 
 Add `--workspace <dir>` to set the import resolution root. By default Jaiph auto-detects it from the file's directory, the same as `jaiph run`.
 
@@ -54,9 +54,9 @@ Clients that configure MCP servers with JSON (Claude Desktop's `claude_desktop_c
 
 Any client that launches a command and speaks the MCP stdio transport works the same way. Point it at `jaiph mcp <file.jh>`. The client sends `initialize`, then `tools/list`, then `tools/call`, and the server needs no other configuration.
 
-## 3. Choose which workflows are exposed
+## 3. Choose which defs are exposed
 
-Not every workflow in the file becomes a tool. `deriveTools` applies these rules to the entry file only, and never exposes imported modules:
+Not every def in the file becomes a tool. `deriveTools` applies these rules to the entry file only, and never exposes imported modules:
 
 1. Candidates are exported defs only. Zero exports → no tools, plus a warning.
 2. Skip `main` unless it is the only export; then expose it under a tool name taken from the file's basename (`deploy.jh` becomes `deploy`). `main` stays the `jaiph run` entrypoint, not a public tool next to other exports.
@@ -68,7 +68,7 @@ Jaiph logs every skip and exclusion as a warning on stderr at load time, and nev
 
 ## 4. Write tool descriptions as comments
 
-The description an agent reads when it decides whether to call a tool comes from the `#` comment lines directly above the workflow. Jaiph drops shebang lines (`#!…`), strips the leading `#` from each remaining line, and joins the lines with newlines. A client relies on the description to pick a tool, so write it for the calling agent.
+The description an agent reads when it decides whether to call a tool comes from the `#` comment lines directly above the def. Jaiph drops shebang lines (`#!…`), strips the leading `#` from each remaining line, and joins the lines with newlines. A client relies on the description to pick a tool, so write it for the calling agent.
 
 ```jaiph
 # Deploy the application to the named environment.
@@ -80,11 +80,11 @@ export def deploy(environment) {
 }
 ```
 
-If a workflow has no leading comment, the description falls back to `Run the "<name>" workflow from <basename>.`
+If a def has no leading comment, the description falls back to `Run the "<name>" def from <basename>.`
 
 ## 5. Understand the input schema
 
-Every Jaiph parameter is a string, so each tool's input schema is a flat object of string properties. Every parameter is required, and no additional properties are allowed. The `deploy` workflow above produces this schema:
+Every Jaiph parameter is a string, so each tool's input schema is a flat object of string properties. Every parameter is required, and no additional properties are allowed. The `deploy` def above produces this schema:
 
 ```json
 {
@@ -95,22 +95,22 @@ Every Jaiph parameter is a string, so each tool's input schema is a flat object 
 }
 ```
 
-A workflow with no parameters produces the same shape with an empty `properties` and no `required` key.
+A def with no parameters produces the same shape with an empty `properties` and no `required` key.
 
 ## 6. Call a tool and read the result
 
-On `tools/call`, the server maps the arguments object to positional workflow arguments in declared order and runs the workflow on the host. The result is a text content block:
+On `tools/call`, the server maps the arguments object to positional def arguments in declared order and runs the def on the host. The result is a text content block:
 
-- On success, the text is the workflow's `return` value, saved as `return_value.txt`. If the workflow returns nothing, the text falls back to the workflow's `log` output, and then to a `workflow <name> completed` note.
+- On success, the text is the def's `return` value, saved as `return_value.txt`. If the def returns nothing, the text falls back to the def's `log` output, and then to a `run <name> completed` note.
 - On failure, the result carries `isError: true`. The text describes the failing step, its captured output, and a `run dir: <path>` pointer so the client can inspect the full run. Jaiph redacts credentials in the failure text (`[REDACTED]`) the same way as in the event journal, so a secret that a failing step prints is never returned to the client. A successful `return` value is intended API output, so Jaiph returns it as is.
 
-A workflow failure is not a protocol error. It comes back as a normal result with `isError: true`. Jaiph reserves protocol-level errors (JSON-RPC `-32602`) for calls that never start, such as an unknown tool name, a missing or non-string required argument, or an unexpected argument key.
+A def failure is not a protocol error. It comes back as a normal result with `isError: true`. Jaiph reserves protocol-level errors (JSON-RPC `-32602`) for calls that never start, such as an unknown tool name, a missing or non-string required argument, or an unexpected argument key.
 
 Every call is a durable run under `.jaiph/runs/` in the workspace, and you can inspect it exactly as for `jaiph run`. Jaiph isolates concurrent calls by giving each one its own run id and run directory, so a slow call never stalls other calls or a `ping`. Two calls that change the same files can race.
 
 ## 7. Stream progress and cancel a long call
 
-A workflow with several steps can take a while. The server streams step-level progress to clients that ask for it, and lets a client cancel a call it no longer needs.
+A def with several steps can take a while. The server streams step-level progress to clients that ask for it, and lets a client cancel a call it no longer needs.
 
 ### Receive progress notifications
 
@@ -120,16 +120,16 @@ Include a `progressToken` (a string or number of your choosing) in the call's `p
 {"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"deploy","arguments":{"environment":"staging"},"_meta":{"progressToken":"deploy-1"}}}
 ```
 
-As the workflow runs, Jaiph sends a `notifications/progress` back to the client at each step boundary, carrying your token. A step boundary is a step starting or a step finishing. For example:
+As the def runs, Jaiph sends a `notifications/progress` back to the client at each step boundary, carrying your token. A step boundary is a step starting or a step finishing. For example:
 
 ```json
-{"jsonrpc":"2.0","method":"notifications/progress","params":{"progressToken":"deploy-1","progress":1,"message":"workflow deploy"}}
+{"jsonrpc":"2.0","method":"notifications/progress","params":{"progressToken":"deploy-1","progress":1,"message":"def deploy"}}
 {"jsonrpc":"2.0","method":"notifications/progress","params":{"progressToken":"deploy-1","progress":2,"message":"script deploy_sh"}}
 {"jsonrpc":"2.0","method":"notifications/progress","params":{"progressToken":"deploy-1","progress":3,"message":"script deploy_sh"}}
 ```
 
-- `progress` is a counter that only increases. It is a running count of the step events seen so far, not a fraction of a known total. There is no `total`, because Jaiph does not know a workflow's step count up front. Both the start and the end of a step send a notification, so the counter goes up by two per step, and the `message` repeats across the start and end pair (above, the `deploy_sh` script step).
-- `message` is the step's kind and name, one of `workflow <name>` or `script <name>`. These are the same step events that `jaiph run` prints on stderr. The tool's own workflow is the first step (`workflow deploy` above), followed by its nested steps.
+- `progress` is a counter that only increases. It is a running count of the step events seen so far, not a fraction of a known total. There is no `total`, because Jaiph does not know a def's step count up front. Both the start and the end of a step send a notification, so the counter goes up by two per step, and the `message` repeats across the start and end pair (above, the `deploy_sh` script step).
+- `message` is the step's kind and name, one of `def <name>` or `script <name>`. These are the same step events that `jaiph run` prints on stderr. The tool's own def is the first step (`def deploy` above), followed by its nested steps.
 - Notifications stop the moment the call's response is sent. No progress notification ever follows the result for that call.
 - A call without a `progressToken` receives no progress notifications at all, which is the same behavior as before you opted in.
 
@@ -157,7 +157,7 @@ The server shuts down when stdin closes or on `SIGINT` or `SIGTERM`. Either way 
 
 ## Safety posture
 
-An exposed workflow is arbitrary shell that the connected agent can run, which is the point of the feature. Treat every exposed workflow as code the client may run at any time, and limit the exposed set with `export`. A tool-call argument that binds to a workflow parameter is shell-quoted before it reaches any shell step, so an argument value cannot inject extra shell commands, though the client can still run whatever the exposed workflow itself does.
+An exposed def is arbitrary shell that the connected agent can run, which is the point of the feature. Treat every exposed def as code the client may run at any time, and limit the exposed set with `export`. A tool-call argument that binds to a def parameter is shell-quoted before it reaches any shell step, so an argument value cannot inject extra shell commands, though the client can still run whatever the exposed def itself does.
 
 Tool calls execute on the host, the same as `jaiph run`. Isolation is an outer concern: wrap `jaiph mcp` in a container, a pod, or a CI runner if wanted. See [Deploy jaiph](deploy.md).
 
@@ -176,11 +176,11 @@ printf '%s\n' \
  | jaiph mcp ./tools.jh
 ```
 
-You should see three responses on stdout. They are the `initialize` result, the `tools/list` array with your comment-derived descriptions, and the `tools/call` result carrying the workflow's return value. Startup and warning lines appear only on stderr.
+You should see three responses on stdout. They are the `initialize` result, the `tools/list` array with your comment-derived descriptions, and the `tools/call` result carrying the def's return value. Startup and warning lines appear only on stderr.
 
 ## Related
 
 - [CLI reference for `jaiph mcp`](cli.md#jaiph-mcp): the flags, exit behavior, and error codes.
-- [Authenticate agent backends](agent-auth.md): host credentials for workflows that use `prompt`.
+- [Authenticate agent backends](agent-auth.md): host credentials for defs that use `prompt`.
 - [Grammar, imports and exports](grammar.md#imports-and-exports): how `export` marks the public surface.
 - [Save artifacts](artifacts.md): the `.jaiph/runs/` layout every call writes to.

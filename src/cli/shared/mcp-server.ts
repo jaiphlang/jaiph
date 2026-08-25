@@ -203,7 +203,7 @@ export class McpServer {
     this.writeResult(id, {
       protocolVersion,
       capabilities: { tools: { listChanged: true } },
-      serverInfo: { name: "jaiph", title: "Jaiph workflows", version: this.opts.serverVersion },
+      serverInfo: { name: "jaiph", title: "Jaiph", version: this.opts.serverVersion },
     });
   }
 

@@ -38,19 +38,19 @@ The reserved internal marker `__workflow-runner` is excluded from `--help`/usage
 | `init` | Initialize `.jaiph/` directory layout in a workspace. |
 | `install` | Install project-scoped libraries from the registry or git URLs. |
 | `use` | Reinstall `jaiph` globally with a selected version or channel. |
-| `mcp` | Serve a file's workflows as MCP tools over stdio (newline-delimited JSON-RPC). |
-| `serve` | Serve a file's workflows as an HTTP API, with an OpenAPI document and an embedded Swagger UI. |
+| `mcp` | Serve a file's exported defs as MCP tools over stdio (newline-delimited JSON-RPC). |
+| `serve` | Serve a file's exported defs as an HTTP API, with an OpenAPI document and an embedded Swagger UI. |
 
 ## `jaiph run`
 {: #jaiph-run}
 
-Compile and execute a workflow's `default` entrypoint.
+Compile and execute `export def main` in the input file.
 
 ```text
 jaiph run [--target <dir>] [--raw] [--workspace <dir>] [--env KEY[=VALUE]]... <file.jh> [--] [args...]
 ```
 
-Every run executes on the host. Isolation is an outer concern: wrap jaiph in a container, a pod, or a CI runner if wanted. Shared flags (`--workspace`, `--env`) mean the same thing on `jaiph run`, `jaiph serve`, and `jaiph mcp` (precedence: CLI flags > `JAIPH_*` env vars > workflow config metadata > defaults) — see [Configuration — Precedence](configuration.md#precedence) and [Environment variables — Precedence](env-vars.md#precedence). Flags belonging to another command (`--host`, `--port`) and unknown flags are usage errors, never positionals.
+Every run executes on the host. Isolation is an outer concern: wrap jaiph in a container, a pod, or a CI runner if wanted. Shared flags (`--workspace`, `--env`) mean the same thing on `jaiph run`, `jaiph serve`, and `jaiph mcp` (precedence: CLI flags > `JAIPH_*` env vars > module config metadata > defaults) — see [Configuration — Precedence](configuration.md#precedence) and [Environment variables — Precedence](env-vars.md#precedence). Flags belonging to another command (`--host`, `--port`) and unknown flags are usage errors, never positionals.
 
 ### Flags
 
@@ -59,7 +59,7 @@ Every run executes on the host. Isolation is an outer concern: wrap jaiph in a c
 | `--target` | `<dir>` | Keep emitted script files and run metadata under `<dir>` instead of a temp directory. |
 | `--raw` | — | Skip the banner, live progress tree, hooks, and PASS/FAIL footer. The runner child inherits stdio; `__JAIPH_EVENT__` JSON lines go to stderr unchanged. |
 | `--workspace` | `<dir>` | Override the workspace root used for library resolution. A missing value, missing path, or non-directory aborts with a specific message. There is no `JAIPH_WORKSPACE` env equivalent input — that name is reserved for the runner. |
-| `--env` | `KEY=VALUE` or `KEY` | Repeatable per-key environment passthrough into the workflow process. `--env KEY=VALUE` defines `KEY` with that exact value (first `=` splits; the value may contain `=`; empty is allowed). `--env KEY` forwards the host's current value, aborting with `E_ENV_MISSING` before spawning if `KEY` is unset on the host. `KEY` must match `[A-Za-z_][A-Za-z0-9_]*` (else `E_ENV_INVALID`). Runtime-managed keys (`JAIPH_WORKSPACE`, `JAIPH_RUNS_DIR`, `JAIPH_RUN_ID`, `JAIPH_SCRIPTS`, `JAIPH_MODULE_GRAPH_FILE`, `JAIPH_SOURCE_ABS`, `JAIPH_META_FILE`, `JAIPH_AGENT_TRUSTED_WORKSPACE`, `JAIPH_TRUST_PROJECT_HOOKS`) are rejected with `E_ENV_RESERVED`. Values are never path-remapped. |
+| `--env` | `KEY=VALUE` or `KEY` | Repeatable per-key environment passthrough into the run process. `--env KEY=VALUE` defines `KEY` with that exact value (first `=` splits; the value may contain `=`; empty is allowed). `--env KEY` forwards the host's current value, aborting with `E_ENV_MISSING` before spawning if `KEY` is unset on the host. `KEY` must match `[A-Za-z_][A-Za-z0-9_]*` (else `E_ENV_INVALID`). Runtime-managed keys (`JAIPH_WORKSPACE`, `JAIPH_RUNS_DIR`, `JAIPH_RUN_ID`, `JAIPH_SCRIPTS`, `JAIPH_MODULE_GRAPH_FILE`, `JAIPH_SOURCE_ABS`, `JAIPH_META_FILE`, `JAIPH_AGENT_TRUSTED_WORKSPACE`, `JAIPH_TRUST_PROJECT_HOOKS`) are rejected with `E_ENV_RESERVED`. Values are never path-remapped. |
 | `--` | — | End of Jaiph flags; remaining tokens are forwarded to `export def main`. |
 
 ### Pre-flight
@@ -130,7 +130,7 @@ Assertions: `expect_contain`, `expect_equal`, `expect_not_contain` — see [Writ
 ## `jaiph compile`
 {: #jaiph-compile}
 
-Parse modules and run `collectDiagnostics(graph)` — the same per-module validator as `jaiph run`, but collecting every recoverable error instead of stopping at the first — **without** writing `scripts/`, **without** calling `buildRuntimeGraph()`, and **without** spawning the workflow runner.
+Parse modules and run `collectDiagnostics(graph)` — the same per-module validator as `jaiph run`, but collecting every recoverable error instead of stopping at the first — **without** writing `scripts/`, **without** calling `buildRuntimeGraph()`, and **without** spawning the run.
 
 ```text
 jaiph compile [--json] [--workspace <dir>] <file.jh | directory> ...
@@ -182,7 +182,7 @@ Creates the following under the target workspace:
 | File | Content |
 |---|---|
 | `.jaiph/.gitignore` | Two-line file listing `runs` and `tmp`. If the file exists and does not match, the command exits non-zero. |
-| `.jaiph/bootstrap.jh` | Canonical bootstrap workflow; made executable. The body is a triple-quoted multiline `prompt` that asks the agent to scaffold workflows. |
+| `.jaiph/bootstrap.jh` | Canonical bootstrap file; made executable. The body is a triple-quoted multiline `prompt` that asks the agent to scaffold `.jh` files. |
 | `.jaiph/SKILL.md` | Copy of the skill markdown shipped with this `jaiph` build (see [`JAIPH_SKILL_PATH`](env-vars.md)). |
 
 SKILL.md resolution order: `JAIPH_SKILL_PATH` (if set and the path exists) → install-relative paths (`jaiph-skill.md` next to the package tree, then `docs/jaiph-skill.md` next to the package) → `docs/jaiph-skill.md` under the current working directory → the embedded copy baked into the binary. There is no "skip and warn" path; the file is always written.
@@ -298,7 +298,7 @@ jaiph mcp [--workspace <dir>] [--env KEY[=VALUE]]... <file.jh>
 | `--env` | `KEY=VALUE` or `KEY` | Same per-key passthrough as `jaiph run --env` (same forms, validation, and reserved-key rejection), resolved once at startup and applied to **every** tool call for the server's lifetime. A bare `--env KEY` unset on the host aborts server startup with `E_ENV_MISSING`. |
 | `-h`, `--help` | — | Print the subcommand usage and exit `0`. |
 
-Flags that belong to another command (for example `--raw` or `--port`) are usage errors naming the owning command — never silently ignored. Precedence across layers is the shared execution-policy order: CLI flags > `JAIPH_*` env vars > workflow config metadata > defaults (see [Environment variables — Precedence](env-vars.md#precedence)).
+Flags that belong to another command (for example `--raw` or `--port`) are usage errors naming the owning command — never silently ignored. Precedence across layers is the shared execution-policy order: CLI flags > `JAIPH_*` env vars > module config metadata > defaults (see [Environment variables — Precedence](env-vars.md#precedence)).
 
 ### Startup and exit behaviour
 
@@ -308,18 +308,18 @@ Flags that belong to another command (for example `--raw` or `--port`) are usage
 
 ### stdout invariant
 
-From the moment the server starts, **stdout carries only newline-delimited JSON-RPC**. Every banner, warning, workflow-exclusion notice, reload message, and credential-pre-flight warning goes to **stderr**. Each outbound protocol message is a single atomic write of `JSON.stringify(msg) + "\n"`.
+From the moment the server starts, **stdout carries only newline-delimited JSON-RPC**. Every banner, warning, exclusion notice, reload message, and credential-pre-flight warning goes to **stderr**. Each outbound protocol message is a single atomic write of `JSON.stringify(msg) + "\n"`.
 
 ### Operator log (stderr)
 
 `jaiph mcp` and `jaiph serve` write an **operator log to stderr only**. They never write it to the protocol channel, so MCP stdout stays JSON-RPC and HTTP response bodies stay API payloads. The operator log is **not** a logging framework, and Jaiph adds no winston, pino, or bunyan for it. It is a thin labelled writer that prints one line at a time to stderr and reuses the same level and color formatting as the `jaiph run` progress tree. Colors are used only when the stderr sink is a terminal and `NO_COLOR` is unset.
 
-On every tool call or run the operator log writes two lines. The start line names the workflow and the run id, for example `jaiph mcp: Running <workflow> run_id=…`. The end line reports the terminal status, the exit code, the elapsed time, and the run dir when it is known, for example `jaiph mcp: Finished <workflow> status=ok exit=0 elapsed_ms=… rundir=…`. On `jaiph serve` both lines also carry `principal=` and `correlation=`.
+On every tool call or run the operator log writes two lines. The start line names the def and the run id, for example `jaiph mcp: Running <def> run_id=…`. The end line reports the terminal status, the exit code, the elapsed time, and the run dir when it is known, for example `jaiph mcp: Finished <def> status=ok exit=0 elapsed_ms=… rundir=…`. On `jaiph serve` both lines also carry `principal=` and `correlation=`.
 
 Two environment variables change how much the operator log prints, both documented in [Environment variables](env-vars.md):
 
 - `JAIPH_SERVER_LOG=debug` prints the servers' extra `debug` diagnostic lines.
-- `JAIPH_SERVER_LOG_WORKFLOW=1` mirrors each workflow `log`, `logwarn`, and `logerr` event to the operator log. Each mirrored line is colored by level and carries `run_id=` and the same depth and async-branch subscript indent as the run tree. Mirroring is off by default, so an MCP host is not flooded and the tool-result text is not repeated. Mirrored lines go through the same credential redaction as the durable run journal, so a secret is never printed to stderr.
+- `JAIPH_SERVER_LOG_WORKFLOW=1` mirrors each `log`, `logwarn`, and `logerr` event to the operator log. Each mirrored line is colored by level and carries `run_id=` and the same depth and async-branch subscript indent as the run tree. Mirroring is off by default, so an MCP host is not flooded and the tool-result text is not repeated. Mirrored lines go through the same credential redaction as the durable run journal, so a secret is never printed to stderr.
 
 ### Protocol subset
 
@@ -327,17 +327,17 @@ Newline-delimited JSON-RPC 2.0. Requests are handled concurrently (a long `tools
 
 | Method | Behaviour |
 |---|---|
-| `initialize` | Replies with `protocolVersion`, `capabilities: {tools: {listChanged: true}}`, and `serverInfo: {name: "jaiph", title: "Jaiph workflows", version}`. Echoes the client's `protocolVersion` if it is one of `2024-11-05`, `2025-03-26`, `2025-06-18`; otherwise replies with the newest of that set. |
+| `initialize` | Replies with `protocolVersion`, `capabilities: {tools: {listChanged: true}}`, and `serverInfo: {name: "jaiph", title: "Jaiph", version}`. Echoes the client's `protocolVersion` if it is one of `2024-11-05`, `2025-03-26`, `2025-06-18`; otherwise replies with the newest of that set. |
 | `ping` | Empty result. |
 | `tools/list` | `{tools: [{name, description, inputSchema}]}` from the current tool set (re-read per request, so hot reload needs no cache invalidation). |
-| `tools/call` | Runs the workflow on the host. Result: `{content: [{type: "text", text}], isError}`. When `params._meta.progressToken` is present, the run's `STEP_START` / `STEP_END` events stream as `notifications/progress` until the response is sent (see below). |
+| `tools/call` | Runs the def on the host. Result: `{content: [{type: "text", text}], isError}`. When `params._meta.progressToken` is present, the run's `STEP_START` / `STEP_END` events stream as `notifications/progress` until the response is sent (see below). |
 | `notifications/cancelled` | Cancels the matching in-flight `tools/call` (`params.requestId`): terminates the run's child process tree (SIGINT, then SIGKILL after a grace period); sends **no response** for that id, and keeps the server serving. A cancellation for an unknown or already-finished id is a no-op. |
 | other notifications | Ignored (`notifications/initialized`, …); no response. |
 | unknown request | JSON-RPC error `-32601`. |
 
 The server emits `notifications/tools/list_changed` after a successful hot reload (only once `initialize` has happened).
 
-When a `tools/call` carries a `progressToken`, the server also emits `notifications/progress` (`{progressToken, progress, message}`) for that call — one per step event, with a monotonically increasing `progress` counter and a `message` of `"<kind> <name>"` (no `total`, since a workflow's step count is not known up front). Notifications stop the instant the call's response is sent; a call without a `progressToken` emits none. See [Serve workflows as MCP tools — Stream progress and cancel a long call](mcp.md#7-stream-progress-and-cancel-a-long-call).
+When a `tools/call` carries a `progressToken`, the server also emits `notifications/progress` (`{progressToken, progress, message}`) for that call — one per step event, with a monotonically increasing `progress` counter and a `message` of `"<kind> <name>"` (no `total`, since a def's step count is not known up front). Notifications stop the instant the call's response is sent; a call without a `progressToken` emits none. See [Serve defs as MCP tools — Stream progress and cancel a long call](mcp.md#7-stream-progress-and-cancel-a-long-call).
 
 ### Error mapping
 
@@ -348,7 +348,7 @@ When a `tools/call` carries a `progressToken`, the server also emits `notificati
 | Unknown method | `-32601` |
 | Unknown tool, missing/non-string required argument, or unexpected argument key | `-32602` (the call never starts) |
 | Infrastructure crash while running a call | `-32603` (also logged to stderr) |
-| **Workflow failure** | *not* a protocol error — a normal result with `isError: true` and a `run dir:` pointer |
+| **Def failure** | *not* a protocol error — a normal result with `isError: true` and a `run dir:` pointer |
 
 ### Exposure and naming
 
@@ -356,11 +356,11 @@ The tool surface is derived from the **entry file only** (imports are never expo
 
 | Rule | Behaviour |
 |---|---|
-| `export def …` present | Exactly the exported workflows are exposed. |
-| No exports | Every top-level workflow except channel route targets (skipped with a warning). |
-| `default` | Exposed only when it is the sole candidate, named after the sanitized file basename (`.jh` stripped, non-`[A-Za-z0-9_-]` → `_`, truncated to 128); otherwise skipped. |
+| `export def …` present | Exactly the exported defs are exposed. |
+| No exports | No tools, plus a warning. |
+| `main` | Exposed only when it is the sole export, named after the sanitized file basename (`.jh` stripped, non-`[A-Za-z0-9_-]` → `_`, truncated to 128); otherwise skipped. |
 
-Tool descriptions come from the `#` comment lines directly above each workflow (shebang lines dropped, `#` prefix stripped); the fallback is `Run the "<name>" workflow from <basename>.` Every parameter is a required string in the input schema.
+Tool descriptions come from the `#` comment lines directly above each def (shebang lines dropped, `#` prefix stripped); the fallback is `Run the "<name>" def from <basename>.` Every parameter is a required string in the input schema.
 
 ### Execution and hot reload
 
@@ -386,9 +386,9 @@ jaiph serve [--host <addr>] [--port <n>] [--workspace <dir>] [--allow-anonymous]
 | `--env` | `KEY=VALUE` or `KEY` | Same per-key passthrough as `jaiph run --env`, resolved once at startup and applied to every run for the server's lifetime. |
 | `-h`, `--help` | — | Print the subcommand usage and exit `0`. |
 
-Flags that belong to another command (for example `--raw` or `--target`) are usage errors naming the owning command — never silently ignored. Precedence across layers is the shared execution-policy order: CLI flags > `JAIPH_*` env vars > workflow config metadata > defaults (see [Environment variables — Precedence](env-vars.md#precedence)).
+Flags that belong to another command (for example `--raw` or `--target`) are usage errors naming the owning command — never silently ignored. Precedence across layers is the shared execution-policy order: CLI flags > `JAIPH_*` env vars > module config metadata > defaults (see [Environment variables — Precedence](env-vars.md#precedence)).
 
-Startup mirrors `jaiph mcp`: graph load + `collectDiagnostics` (diagnostics to stderr, exit `1`), credential pre-flight as warnings, and a host-execution notice. All logs go to stderr; one startup line prints the listen URL and the `/docs` URL. Per-run operator lines (a start line `Running … run_id=` and an end line `Finished … status=… elapsed_ms=…`) and the optional workflow-log mirror follow the same stderr-only operator-log contract as `jaiph mcp`, and HTTP response bodies stay API payloads. See [Operator log (stderr)](#operator-log-stderr) above, and `JAIPH_SERVER_LOG` and `JAIPH_SERVER_LOG_WORKFLOW` in [Environment variables](env-vars.md).
+Startup mirrors `jaiph mcp`: graph load + `collectDiagnostics` (diagnostics to stderr, exit `1`), credential pre-flight as warnings, and a host-execution notice. All logs go to stderr; one startup line prints the listen URL and the `/docs` URL. Per-run operator lines (a start line `Running … run_id=` and an end line `Finished … status=… elapsed_ms=…`) and the optional log mirror follow the same stderr-only operator-log contract as `jaiph mcp`, and HTTP response bodies stay API payloads. See [Operator log (stderr)](#operator-log-stderr) above, and `JAIPH_SERVER_LOG` and `JAIPH_SERVER_LOG_WORKFLOW` in [Environment variables](env-vars.md).
 
 ### Endpoints
 
@@ -421,7 +421,7 @@ Each run's public record is persisted beside its journal as `run.json` when it f
 - `JAIPH_SERVE_EXPOSE_DOCS` (default `true`) controls whether `/docs` and `/openapi.json` are served; set `false` (or `0`) to return `404` for both and hide the API surface. `/healthz` is always open and credential-free (liveness/readiness only — no tokens or sensitive detail).
 - `JAIPH_SERVE_MAX_CONCURRENT` (default `4`) caps simultaneous runs; requests beyond it get `429`.
 - `JAIPH_SERVE_MAX_ARTIFACT_BYTES` (default `0` = no cap) refuses artifact downloads larger than the limit with `413`. Downloads stream with backpressure regardless, so the default keeps server memory bounded no matter the file size; set a finite cap only to reject oversized downloads outright.
-- Memory bounds keep a long-lived server from growing without limit: `JAIPH_SERVE_MAX_OUTPUT_BYTES` (default 1 MiB) caps collected stdout, stderr, log output, and the resident `result_text` per run (overflow dropped with a truncation marker); `JAIPH_SERVE_RETAIN_RUNS` (default `500`) and `JAIPH_SERVE_RETAIN_AGE_SEC` (default `86400`, `0` disables) bound how many completed runs stay in the in-memory registry, evicting the oldest terminal records first. **Active runs are never evicted**, and eviction drops only the in-memory record — durable `.jaiph/runs` journals and artifacts persist on disk and are the operator's to prune. See [Serve workflows over HTTP](serve.md#9-bound-memory-over-a-long-lived-server).
+- Memory bounds keep a long-lived server from growing without limit: `JAIPH_SERVE_MAX_OUTPUT_BYTES` (default 1 MiB) caps collected stdout, stderr, log output, and the resident `result_text` per run (overflow dropped with a truncation marker); `JAIPH_SERVE_RETAIN_RUNS` (default `500`) and `JAIPH_SERVE_RETAIN_AGE_SEC` (default `86400`, `0` disables) bound how many completed runs stay in the in-memory registry, evicting the oldest terminal records first. **Active runs are never evicted**, and eviction drops only the in-memory record — durable `.jaiph/runs` journals and artifacts persist on disk and are the operator's to prune. See [Serve defs over HTTP](serve.md#9-bound-memory-over-a-long-lived-server).
 - Execution and hot reload are identical to `jaiph mcp`; a superseded generation's scripts dir survives until its in-flight HTTP runs finish.
 
 ## Environment variables
@@ -451,4 +451,4 @@ See [Environment variables](env-vars.md) for the complete inventory. The variabl
 - [Grammar](grammar.md) — syntax and validation catalog.
 - [Language](language.md) — step semantics and step-output contract.
 - [Environment variables](env-vars.md) — every variable Jaiph reads.
-- [Serve workflows as MCP tools](mcp.md) — exposing a file's workflows to MCP clients via `jaiph mcp`.
+- [Serve defs as MCP tools](mcp.md) — exposing a file's exported defs to MCP clients via `jaiph mcp`.
