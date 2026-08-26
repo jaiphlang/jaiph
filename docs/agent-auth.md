@@ -6,13 +6,13 @@ diataxis: how-to
 
 # Authenticate agent backends
 
-This recipe sets the credentials each agent backend needs so the CLI's credential pre-flight passes and `prompt` steps reach the model.
+This guide shows how to set the credentials each agent backend needs, so the CLI's credential pre-flight passes and `prompt` steps can reach the model.
 
-`jaiph run` runs a host-side credential pre-flight before it spawns the runner. The pre-flight is keyed to the backends the entry file declares. Missing credentials produce either `E_AGENT_CREDENTIALS`, which is a hard abort, or a `jaiph: warning:` for the `claude` and `cursor` backends (see the table below). Hard failures exit before any runner is launched. The behavior is implemented in `src/cli/run/preflight-credentials.ts`.
+`jaiph run` runs a host-side credential pre-flight before it spawns the runner. The pre-flight checks the backends the entry file declares. Missing credentials produce one of two results. A missing `codex` credential is a hard failure with the error `E_AGENT_CREDENTIALS`, and the run stops before any runner is launched. A missing `claude` or `cursor` credential produces only a `jaiph: warning:` line and the run still proceeds (see the table below). The behavior is implemented in `src/cli/run/preflight-credentials.ts`.
 
 ## Prerequisites
 
-- The entry `.jh` file declares a backend (`agent.backend = "claude" | "cursor" | "codex"`) at module or workflow scope, or uses a `prompt` step that consumes the default backend.
+- The entry `.jh` file declares a backend in a `config { }` block (`agent.backend = "claude" | "cursor" | "codex"`) at module or def scope, or uses a `prompt` step that consumes the default backend.
 
 ## Pick the backend's credential
 
@@ -31,7 +31,7 @@ The pre-flight validates every backend the entry file could reach, which is each
 The default is deduplicated against your declarations, so where you set the backend decides whether the `cursor` default is also checked:
 
 - **Module scope.** Putting `config { agent.backend = "claude" }` at the top of the file makes `claude` the effective default, so only `claude` is checked.
-- **Workflow scope only.** Putting `config { agent.backend = "claude" }` inside a workflow, with no module-level backend, leaves `cursor` as the default. The pre-flight then checks both `claude` and `cursor`.
+- **Def scope only.** Putting `config { agent.backend = "claude" }` inside a def, with no module-level backend, leaves `cursor` as the default. The pre-flight then checks both `claude` and `cursor`.
 
 To check only the backend you intend to use, set it at module scope or export `JAIPH_AGENT_BACKEND`. Either one becomes the default and absorbs the extra check. See [Configure backend/model](configure-backend.md) for the config scopes.
 
@@ -76,7 +76,7 @@ To target an OpenAI-compatible endpoint instead of the default, set `JAIPH_CODEX
 jaiph run ./flow.jh
 ```
 
-The pre-flight runs before the banner. Hard failures print a stderr message naming the backend, the model (when `agent.model` is set), the entry `.jh` file, the config scope that picked the backend (`module config`, `workflow <name>`, `JAIPH_AGENT_BACKEND env`, or `default`), and the concrete remedy. The error code is `E_AGENT_CREDENTIALS`. Host-only warnings for `claude` and `cursor` use the same header fields with a `jaiph: warning:` prefix.
+The pre-flight runs before the banner. A hard failure (`codex` only) prints a stderr message naming the backend, the model (when `agent.model` is set), the entry `.jh` file, the config scope that picked the backend (`module config`, `def <name>`, `JAIPH_AGENT_BACKEND env`, or `default`), and the remedy. The message is prefixed with `E_AGENT_CREDENTIALS`. Host-only warnings for `claude` and `cursor` use the same header fields with a `jaiph: warning:` prefix.
 
 ## Skip the pre-flight
 
@@ -86,13 +86,19 @@ The pre-flight is skipped when the entry file neither declares an explicit backe
 
 ## Verification
 
-When every required credential is present, the pre-flight is silent, with no stderr before the banner. On host runs, missing `claude` or `cursor` env vars emit `jaiph: warning:` lines and the run still proceeds, because a stored CLI login may satisfy the runtime. A hard failure prints:
+When every required credential is present, the pre-flight is silent, with no stderr before the banner. On host runs, missing `claude` or `cursor` env vars emit `jaiph: warning:` lines and the run still proceeds, because a stored CLI login may satisfy the runtime. A missing `claude` credential prints this warning:
 
 ```
-E_AGENT_CREDENTIALS: agent.backend "claude" selected by module config in /path/to/flow.jh — neither ANTHROPIC_API_KEY nor CLAUDE_CODE_OAUTH_TOKEN is set. Run `claude setup-token` and export CLAUDE_CODE_OAUTH_TOKEN, or set ANTHROPIC_API_KEY.
+jaiph: warning: agent.backend "claude" selected by module config in /path/to/flow.jh — neither ANTHROPIC_API_KEY nor CLAUDE_CODE_OAUTH_TOKEN is set. Run `claude setup-token` and export CLAUDE_CODE_OAUTH_TOKEN, or set ANTHROPIC_API_KEY. A stored Claude CLI login may still work.
+```
+
+Only the `codex` backend hard-fails. When `OPENAI_API_KEY` is missing, the pre-flight prints this and the command stops before the banner:
+
+```
+E_AGENT_CREDENTIALS: agent.backend "codex" selected by module config in /path/to/flow.jh — OPENAI_API_KEY is not set. Set OPENAI_API_KEY to your OpenAI API key.
 ```
 
 ## Related
 
-- [Configure backend/model](configure-backend.md) — picking which backend a workflow uses.
+- [Configure backend/model](configure-backend.md) — picking which backend a def uses.
 - [Environment variables](env-vars.md) — `--env` and credential names.

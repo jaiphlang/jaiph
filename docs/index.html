@@ -49,8 +49,8 @@ layout: null
     <header>
         <h1>J<span class="jaiph-accent">ai</span>ph</h1>
         <div class="hero-cta">
-            <a href="#samples" rel="noopener noreferrer" class="button button-primary">Samples</a>
-            <a href="/tutorials/first-run" rel="noopener noreferrer" class="button button-dark">Tutorial</a>
+            <a href="#start-here" rel="noopener noreferrer" class="button button-primary">Start here</a>
+            <a href="#samples" rel="noopener noreferrer" class="button button-dark">Samples</a>
             <a href="https://marketplace.visualstudio.com/items?itemName=jaiph.jaiph-syntax-vscode" target="_blank"
                 rel="noopener noreferrer" class="button button-dark no-mobile">VSCode</a>
             <a href="https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md"
@@ -67,74 +67,63 @@ layout: null
         <section class="try-it-out">
             <h2>Try it out!</h2>
             <div class="card doc-content">
-                <div class="code-tab-list">
-                    <button type="button" class="code-tab-button is-active" data-target="try-run-sample">Try it
-                        out</button>
-                    <button type="button" class="code-tab-button" data-target="try-init-project">Init project</button>
-                    <button type="button" class="code-tab-button" data-target="try-install-only">Just install</button>
-                </div>
-
-                <div class="os-switch" role="group" aria-label="Choose your platform">
-                    <button type="button" class="os-switch-button is-active" data-os="posix">macOS / Linux</button>
-                    <button type="button" class="os-switch-button" data-os="windows">Windows</button>
+                <div class="try-it-toolbar">
+                    <div class="code-tab-list">
+                        <button type="button" class="code-tab-button is-active"
+                            data-target="try-run-sample">Run a sample</button>
+                        <button type="button" class="code-tab-button" data-target="try-init-project">Init
+                            project</button>
+                        <button type="button" class="code-tab-button"
+                            data-target="try-install-only">Install</button>
+                    </div>
+                    <div class="os-link-switch" role="group" aria-label="Choose your platform">
+                        <button type="button" class="os-switch-button is-active" data-os="posix"
+                            aria-label="Switch to macOS and Linux commands">Switch to macOS / Linux</button>
+                        <button type="button" class="os-switch-button" data-os="windows"
+                            aria-label="Switch to Windows commands">Switch to Windows</button>
+                    </div>
                 </div>
 
                 <div class="code-tab-panel is-active" data-panel="try-run-sample">
                     <div class="os-variant is-active" data-os="posix">
                         <pre><code class="language-bash static-highlight"><span class="code-line">curl -fsSL https://jaiph.org/run | bash -s '</span><span class="code-line"><span class="ralph-keyword">export def</span> <span class="ralph-definition">main</span>() {</span><span class="code-line">  <span class="ralph-keyword">const</span> <span class="ralph-variable">response</span> <span class="ralph-operator">=</span> <span class="ralph-keyword">prompt</span> <span class="ralph-string">"Say: Hello, I am [model name]!"</span></span><span class="code-line">  <span class="ralph-keyword">log</span> response</span><span class="code-line">}'</span></code></pre>
-                        <p class="small">Installs Jaiph <strong>v0.13.0</strong> to <strong>~/.local/bin</strong> (if not
-                            already
-                            installed), and runs the sample with <a href="https://cursor.com/docs/cli/installation"
-                                target="_blank" rel="noopener noreferrer">Cursor CLI</a> agent backend (the default one).
-                            See <a href="#samples">more samples</a>!</p>
-                        <p class="small warning">Jaiph is under heavy development. Core features and language syntax are
-                            stable since v0.8.0, but you may expect breaking changes before v1.0.0.</p>
+                        <p class="small">Installs <strong>v0.13.0</strong> to <strong>~/.local/bin</strong> if needed,
+                            then runs the snippet with <a href="https://cursor.com/docs/cli/installation"
+                                target="_blank" rel="noopener noreferrer">Cursor CLI</a> (the default backend).</p>
+                        <p class="small warning">Jaiph is under heavy development. You may expect breaking changes before
+                            v1.0.0.</p>
                     </div>
                     <div class="os-variant" data-os="windows">
-                        <p class="small">On Windows, install with PowerShell:</p>
                         <pre><code class="language-powershell">irm https://jaiph.org/install.ps1 | iex</code></pre>
-                        <p class="small">then run a sample:</p>
-                        <pre><code class="language-bash">jaiph run say_hello.jh Adam</code></pre>
-                        <p class="small">Installs Jaiph <strong>v0.13.0</strong> to <strong>%LOCALAPPDATA%\jaiph\bin</strong>.
-                            Grab <code>say_hello.jh</code> from the <a href="#samples">samples</a> below, then run it. See
-                            <a href="#samples">more samples</a>!</p>
-                        <p class="small warning">Jaiph is under heavy development. Core features and language syntax are
-                            stable since v0.8.0, but you may expect breaking changes before v1.0.0.</p>
+                        <p class="small">Then grab a sample below and run <code>jaiph run say_hello.jh Adam</code>.</p>
+                        <p class="small warning">Jaiph is under heavy development. You may expect breaking changes before
+                            v1.0.0.</p>
                     </div>
                 </div>
 
                 <div class="code-tab-panel" data-panel="try-init-project">
                     <div class="os-variant is-active" data-os="posix">
-                        <p class="small">Run the script below from the project directory:</p>
                         <pre><code class="language-bash">curl -fsSL https://jaiph.org/init | bash</code></pre>
-                        <p class="small">Installs Jaiph <strong>v0.13.0</strong> to <strong>~/.local/bin</strong> (if not
-                            already installed), and runs <code>jaiph init</code> to initialize the Jaiph workspace in the
-                            current directory.</p>
+                        <p class="small">Installs Jaiph if needed, then runs <code>jaiph init</code> in this directory.
+                        </p>
                     </div>
                     <div class="os-variant" data-os="windows">
-                        <p class="small">On Windows, install with PowerShell:</p>
                         <pre><code class="language-powershell">irm https://jaiph.org/install.ps1 | iex</code></pre>
-                        <p class="small">then initialize the Jaiph workspace in the current directory:</p>
-                        <pre><code class="language-bash">jaiph init</code></pre>
-                        <p class="small">Installs Jaiph <strong>v0.13.0</strong> to <strong>%LOCALAPPDATA%\jaiph\bin</strong>
-                            (if not already installed).</p>
+                        <p class="small">Then run <code>jaiph init</code> in your project directory.</p>
                     </div>
                 </div>
 
                 <div class="code-tab-panel" data-panel="try-install-only">
                     <div class="os-variant is-active" data-os="posix">
                         <pre><code class="language-bash">curl -fsSL https://jaiph.org/install | bash</code></pre>
-                        <p class="small">The installer will install the version <strong>0.13.0</strong> of Jaiph to
-                            <strong>~/.local/bin</strong>. To switch versions, use <code>jaiph use nightly</code>
-                            or <code>jaiph use &lt;version&gt;</code> to switch.
-                        </p>
-                        <p class="small">Or install from npm: <code>npm install -g jaiph</code></p>
+                        <p class="small">Writes <strong>v0.13.0</strong> to <strong>~/.local/bin</strong>. Switch later
+                            with <code>jaiph use nightly</code> or <code>jaiph use &lt;version&gt;</code>. Or
+                            <code>npm install -g jaiph</code>.</p>
                     </div>
                     <div class="os-variant" data-os="windows">
                         <pre><code class="language-powershell">irm https://jaiph.org/install.ps1 | iex</code></pre>
-                        <p class="small">This installs <strong>jaiph-windows-x64.exe</strong> to
-                            <strong>%LOCALAPPDATA%\jaiph\bin</strong> and adds it to your user <code>PATH</code>.</p>
-                        <p class="small">Or install from npm: <code>npm install -g jaiph</code></p>
+                        <p class="small">Installs to <strong>%LOCALAPPDATA%\jaiph\bin</strong> and adds it to your
+                            <code>PATH</code>. Or <code>npm install -g jaiph</code>.</p>
                     </div>
                 </div>
             </div>
@@ -143,11 +132,39 @@ layout: null
         <section>
             <h2>What is Jaiph?</h2>
             <div class="card doc-content">
-                <p><strong>Jaiph</strong> is a language and runtime for defining and orchestrating AI agent programs.
-                </p>
-                <p>It allows you to combine agentic defs with strict checks and script calls. It comes with
-                    host execution for those programs, and a set of tooling to make your development
-                    faster and more efficient.</p>
+                <p><strong>Jaiph</strong> is a language and runtime for defining and orchestrating
+                    AI agent calls, with strict checks and custom scripts.</p>
+                <p>Jaiph applications run as command-line programs, MCP servers, and HTTP servers.</p>
+            </div>
+        </section>
+
+        <section>
+            <h2 id="start-here">Start here</h2>
+            <div class="path-grid">
+                <a class="path-card" href="/tutorials/first-run">
+                    <h3>Your first run</h3>
+                    <p>Five minutes. No API keys. Write a file and watch the run tree.</p>
+                </a>
+                <a class="path-card" href="/how-to/mcp">
+                    <h3>MCP server in 30 seconds</h3>
+                    <p><code>jaiph mcp ./tools.jh</code> — Claude Code, Cursor, or any MCP client.</p>
+                </a>
+                <a class="path-card" href="/tutorials/first-agent-run">
+                    <h3>Your first agent run</h3>
+                    <p>Add a <code>prompt</code>. Cursor, Claude, or Codex — you pick the backend.</p>
+                </a>
+                <a class="path-card" href="/how-to/serve">
+                    <h3>HTTP API in one command</h3>
+                    <p><code>jaiph serve ./tools.jh</code> — OpenAPI, Swagger UI, same defs.</p>
+                </a>
+                <a class="path-card" href="/how-to/testing">
+                    <h3>Test your programs</h3>
+                    <p>Mocks, assertions, <code>*.test.jh</code>. CI-friendly and deterministic.</p>
+                </a>
+                <a class="path-card" href="/reference/language">
+                    <h3>Language reference</h3>
+                    <p>Defs, prompts, scripts, recover, channels. The full lookup.</p>
+                </a>
             </div>
         </section>
 
@@ -157,23 +174,23 @@ layout: null
                 <div class="comparison-grid">
                     <div class="comparison-col">
                         <h3>Language</h3>
-                        <p>Simple and easy to learn</p>
-                        <p>Strict checks and structure over agent responses</p>
-                        <p>Supports chaining, routing, agent inbox, and parallel defs</p>
-                        <p>Embed scripts in your favorite language</p>
+                        <p>Simple, small, easy to learn</p>
+                        <p>Checks around agent output</p>
+                        <p>Routing, inbox, parallel defs</p>
+                        <p>Embed scripts in any language</p>
                     </div>
                     <div class="comparison-col">
                         <h3>Tooling</h3>
+                        <p>One file: CLI, MCP server, or HTTP API</p>
                         <p>Host execution; wrap jaiph for isolation</p>
-                        <p>Built-in testing framework</p>
-                        <p>Tracks and saves all agent responses</p>
-                        <p>Default formatter and VSCode plugin</p>
+                        <p>Built-in tests with prompt mocks</p>
+                        <p>Every agent response is saved</p>
                     </div>
                     <div class="comparison-col">
                         <h3>Open Source</h3>
-                        <p>No vendor lock-in: Use any AI agent you want</p>
-                        <p>No data gathering, no tracking. Verify it in the <a href="https://github.com/jaiphlang/jaiph"
-                                target="_blank" rel="noopener noreferrer">source code</a>!</p>
+                        <p>No vendor lock-in. Use any agent.</p>
+                        <p>No tracking. Read the <a href="https://github.com/jaiphlang/jaiph"
+                                target="_blank" rel="noopener noreferrer">source</a>.</p>
                     </div>
                 </div>
             </div>
@@ -195,12 +212,9 @@ layout: null
 
                 <div class="code-tab-panel is-active" data-panel="say-hello-jh" data-sample="say-hello"
                     data-sample-file="say_hello.jh">
-                    <p><strong>Jaiph</strong> programs are typically executable <code>.jh</code> files with a shebang.
-                    </p>
-                    <p>The core primitives are <strong>def</strong> (interpreted procedures), <strong>prompt</strong>
-                        (calling agents), and <strong>script</strong> (custom code or shell commands).
-                        <code>jaiph run</code> enters at <code>export def main</code>.
-                    </p>
+                    <p>A <code>.jh</code> file is a program. <code>def</code> is a procedure,
+                        <code>prompt</code> calls an agent, <code>script</code> runs code.
+                        <code>jaiph run</code> enters at <code>export def main</code>.</p>
                     <pre><code class="language-jaiph" data-sample-source>#!/usr/bin/env jaiph
 
 # check the name before calling the agent
@@ -238,7 +252,7 @@ Jaiph: Running say_hello.jh
 <span class="run-pass">✓ PASS</span> <span class="run-keyword">def</span> main <span class="run-time">(5.1s)</span>
 
 Hello, Adam—Adam Smith, the 18th-century Scottish economist and philosopher, is often called the father of modern economics for his landmark work *The Wealth of Nations*.</code></pre>
-                    <p>When you don't provide the name parameter, the run fails:</p>
+                    <p>Missing name fails before the prompt:</p>
                     <pre><code class="jaiph-run" data-sample-output="failure"><span class="run-command">➜  ./say_hello.jh</span>
 
 Jaiph: Running say_hello.jh
@@ -255,25 +269,14 @@ Jaiph: Running say_hello.jh
 
   Output of failed step:
     You didn't provide your name :(</code></pre>
-                    <p>
-                        Jaiph also supports structured output. You can use the following syntax:
-                    </p>
-                    <pre><code class="language-jaiph">const response = prompt "..." returns "{ hello: string, fact: string }"</code></pre>
-                    <p>
-                        Then, Jaiph will add at runtime instructions to the prompt asking the agent to return a JSON
-                        object with the fields <code>hello</code> and <code>fact</code>, and it will parse the response
-                        and set the capture variable to the raw JSON string. The parser tolerates text before the JSON
-                        object (e.g. when the agent writes preamble before <code>{...}</code>). You can access the
-                        fields with dot notation: <code>${response.hello}</code> and <code>${response.fact}</code>.
-                    </p>
+                    <p>Need a JSON shape? <code>prompt "..." returns "{ hello: string, fact: string }"</code>
+                        then read <code>${response.hello}</code>.</p>
                 </div>
 
                 <div class="code-tab-panel" data-panel="say-hello-test-jh" data-sample="say-hello-test"
                     data-sample-file="say_hello.test.jh">
-                    <p><strong>Jaiph</strong> has native support for testing. All files that end with
-                        <code>*.test.jh</code> are treated as tests.
-                    </p>
-                    <p>And Jaiph highly recommends testing your programs!</p>
+                    <p>Native tests. Files named <code>*.test.jh</code> are test suites. Mock prompts so runs stay
+                        deterministic.</p>
                     <pre><code class="language-jaiph" data-sample-source>#!/usr/bin/env jaiph
 
 import "say_hello.jh" as hello
@@ -301,8 +304,7 @@ test "with name, returns greeting and logs response" {
   # Then
   expect_equal response expected_response
 }</code></pre>
-                    <p>Example failing test run output (expected string omits the trailing <code>:(</code> from stderr):
-                    </p>
+                    <p>Example of a failing test (the expected string omits the trailing <code>:(</code>):</p>
                     <pre><code class="jaiph-run" data-sample-output="failing-run"><span class="run-command">➜  ./say_hello.test.jh</span>
 testing say_hello.test.jh
   <span class="run-marker">▸</span> without name, workflow fails with validation message
@@ -319,12 +321,7 @@ testing say_hello.test.jh
 
                 <div class="code-tab-panel" data-panel="recover-loop-jh" data-sample="recover-loop"
                     data-sample-file="recover_loop.jh">
-                    <p>The <code>run … recover</code> pattern is a first-class repair-and-retry loop.
-                        When the target fails, the <code>recover(failure)</code> body runs, then the
-                        target is retried automatically. The loop stops on success or when the retry
-                        limit (default 10, configurable via <code>run.recover_limit</code>) is
-                        exhausted. Below, an agent is asked to create the missing file so the next
-                        attempt at the same script call passes.</p>
+                    <p>When a step fails, <code>recover</code> repairs it and retries. Default limit is 10.</p>
                     <pre><code class="language-jaiph" data-sample-source>#!/usr/bin/env jaiph
 
 # scripts are defined in fenced blocks or single line backticks
@@ -345,12 +342,8 @@ export def main() {
   # scripts can be also executed inline
   return run `cat report.txt`()
 }</code></pre>
-                    <p>In the run below, <code>check_report_exists()</code> fails on the first
-                        attempt. The <code>recover</code> body logs the failure and prompts an agent
-                        to create <code>report.txt</code>; Jaiph then retries the script call which
-                        now succeeds. The inline-backtick <code>cat report.txt</code> script returns
-                        the file contents from the def, which Jaiph prints below the run tree.
-                    </p>
+                    <p>First attempt fails, the agent creates the file, retry passes.
+                        For a one-shot handler, use <code>catch</code>.</p>
                     <pre><code class="jaiph-run" data-sample-output="run"><span class="run-command">➜  ./recover_loop.jh</span>
 
 Jaiph: Running recover_loop.jh
@@ -378,19 +371,12 @@ this file; it exists only to satisfy tooling or documentation that expects
 - Status: OK (dummy)
 - Artifacts: none
 - Next steps: replace with a real report when you add automated reporting</code></pre>
-                    <p>For one-shot failure handling without retry, use <code>catch</code> instead. See
-                        <a href="/reference/language#catch-and-recover">Language — catch and recover</a>.
-                    </p>
                 </div>
 
                 <div class="code-tab-panel" data-panel="inbox-pipeline-jh" data-sample="agent-inbox"
                     data-sample-file="agent_inbox.jh">
-                    <p>You can define named <strong>channels</strong> with inline routing — for instance
-                        <code>channel findings -&gt; analyst</code> means the <code>analyst</code> def
-                        listens to messages passed on the <code>findings</code> channel. Each time a
-                        message is sent with <code>send "…" -&gt; findings</code>,
-                        the <code>analyst</code> def is triggered.
-                    </p>
+                    <p>Named channels route messages. <code>channel findings -&gt; analyst</code> runs
+                        <code>analyst</code> on every send.</p>
                     <pre><code class="language-jaiph" data-sample-source>#!/usr/bin/env jaiph
 
 channel findings -> analyst
@@ -431,11 +417,8 @@ Jaiph: Running agent_inbox.jh
                 </div>
 
                 <div class="code-tab-panel" data-panel="async-jh" data-sample="async" data-sample-file="async.jh">
-                    <p>This sample runs two prompt defs in parallel: one with Cursor and one with Claude.</p>
-                    <p>Each def sets its own <code>agent.backend</code>, captures the prompt response, and logs it.
-                        <code>export def main</code> uses <code>run async</code> to fan out both defs concurrently.
-                        Each <code>run async</code> response resolves on the first read, or at the end of
-                        the embracing def.</p>
+                    <p>Two prompts in parallel, Cursor and Claude. <code>run async</code> fans out;
+                        the parent waits for both.</p>
                     <pre><code class="language-jaiph" data-sample-source>#!/usr/bin/env jaiph
 
 const prompt_text = "Say: Greetings! I am [model name]."
@@ -475,344 +458,18 @@ Jaiph: Running async.jh
  <span class="run-marker">₂</span><span class="run-pass">✓</span> <span class="run-time">def claude_say_hello (4s)</span>
 
 <span class="run-pass">✓ PASS</span> <span class="run-keyword">def</span> main <span class="run-time">(4.6s)</span></code></pre>
-                    <p>Both defs run in parallel, and in this case Cursor was faster than Claude.</p>
+                    <p>Cursor finished first in this run.</p>
                 </div>
 
             </div>
         </section>
 
-        <section>
-            <h2>Core features</h2>
-            <div class="card doc-content">
-                <h3>Running a file</h3>
-                <pre><code class="language-bash">./path/to/main.jh "first" "second" "third"</code></pre>
-                <p>Jaiph runs <code>export def main</code> in the file and binds invocation arguments to its
-                    parameters. Run artifacts and step output go under <code>.jaiph/runs/</code>.
-                </p>
-                <p><code>.jaiph/</code> is the Jaiph working directory in your project—the recommended place for
-                    <code>.jh</code> files. Run <code>jaiph init</code> so the project is configured correctly.
-                </p>
-
-                <h3>Language</h3>
-                <p><strong>Combine prompts with strict checks.</strong> Compose <code>def</code>,
-                    <code>script</code>, <code>run</code>, and <code>prompt</code> in one executable flow so checks
-                    and AI steps stay in the same pipeline. This way you can enforce structure over non-deterministic
-                    agent responses.
-                    See <a href="grammar">Grammar</a> and <a href="/tutorials/first-run">Your first run</a>
-                    (<a href="/tutorials/first-run" target="_blank"
-                        rel="noopener noreferrer">jaiph.org/tutorials/first-run</a>).
-                </p>
-                <p><strong>Embed and run scripts</strong> in the language of your choice. Define them with fence lang
-                    tags providing the runtime: <code>```node</code>, <code>```python3</code>, <code>```ruby</code>,
-                    <code>```pwsh</code> etc.
-                </p>
-                <p><strong>Async calls.</strong> <code>run async foo()</code> returns a <code>Handle&lt;T&gt;</code>
-                    that resolves on first read. Capture with <code>const h = run async foo()</code> and read
-                    the handle when you need the value. Unresolved handles are <strong>implicitly joined</strong>
-                    before the parent def completes. Supports <code>recover</code> and <code>catch</code>
-                    composition for async error handling.
-                </p>
-                <p><strong>Agent inbox pattern (channels).</strong> Use inbox channels as a way to pass messages between
-                    defs. Declare channels at top level with <code>channel &lt;name&gt; [-&gt; def]</code>
-                    &mdash; routes are declared inline on the channel, not inside def bodies. Send with
-                    <code>channel_ref &lt;- ...</code>
-                    (<code>channel_ref</code> can be local or imported, e.g. <code>shared.findings</code>).
-                    See <a href="inbox">Inbox &amp; Dispatch</a>.
-                </p>
-                <p><strong>Failure recovery.</strong> <code>run … catch</code>
-                    handles failures inline: when a def or script fails, the recovery body runs <strong>once</strong>.
-                    For automatic repair-and-retry, use <code>run … recover</code> — a loop that retries
-                    the target after each repair attempt (configurable limit, default 10). Both <code>catch</code>
-                    and <code>recover</code> work on every <code>run</code>. See <a href="grammar">Grammar</a>.
-                </p>
-
-                <h3>Runtime</h3>
-                <p><strong>Host execution.</strong> Programs run on the host. Isolation is an outer
-                    concern: wrap jaiph in a container, a pod, or a CI runner if wanted.
-                    See <a href="/how-to/deploy">Deploy jaiph</a>.
-                </p>
-                <p><strong>Hooks.</strong> Attach shell automation to run and step lifecycle events via
-                    <code>~/.jaiph/hooks.json</code> or <code>&lt;project&gt;/.jaiph/hooks.json</code>. See <a
-                        href="/how-to/hooks">Add a hook</a>.
-                </p>
-                <p><strong>Custom agent backends.</strong> Point <code>agent.command</code> to any
-                    executable — a shell script, a Python wrapper, or your own CLI tool — and Jaiph will
-                    pipe the prompt via stdin and capture raw stdout as the response. No JSON stream
-                    protocol required; just read stdin and print your answer.</p>
-                <p><strong>Artifacts library.</strong> Publish files from a run with the built-in
-                    <code>jaiphlang/artifacts</code> library (<code>artifacts.save</code>).
-                    See <a href="/how-to/artifacts">Save artifacts</a>.
-                </p>
-                <p><strong>Configuration.</strong> Control behavior with <code>config { ... }</code> blocks
-                    at the module level or inside individual defs for per-def overrides, plus environment
-                    variables (env wins precedence). See <a href="configuration">Configuration</a> and
-                    <a href="cli">CLI reference</a>.
-                </p>
-                <p><strong>Testing Jaiph programs.</strong> Test defs with executable <code>*.test.jh</code>
-                    suites, mocks, and assertions to cover deterministic and agent-assisted paths. See <a
-                        href="/how-to/testing">Write &amp; run tests</a>.</p>
-                <p><strong>Formatting.</strong> <code>jaiph format</code> rewrites <code>.jh</code> files to a canonical
-                    style &mdash; consistent whitespace and indentation. See <a href="cli#jaiph-format">CLI
-                        reference</a>.</p>
-                <p><strong>MCP server.</strong> <code>jaiph mcp ./tools.jh</code> serves a file's exported defs as
-                    <a href="https://modelcontextprotocol.io/" target="_blank" rel="noopener noreferrer">MCP</a> tools
-                    over stdio, so any MCP client (Claude Code, Claude Desktop, Cursor) can call tested Jaiph defs
-                    as tools. See <a href="/how-to/mcp">Serve defs as MCP tools</a>.</p>
-                <p><strong>HTTP API.</strong> <code>jaiph serve ./tools.jh</code> serves the same defs over HTTP
-                    with a generated <a href="https://spec.openapis.org/oas/v3.1.0" target="_blank"
-                        rel="noopener noreferrer">OpenAPI 3.1</a> document and a browser Swagger UI at <code>/docs</code>,
-                    so any HTTP client (CI, Kubernetes, another service) can invoke them and inspect runs. Production
-                    auth is a static single-operator bearer token or OIDC/JWT with per-user identity and
-                    <code>invoke</code>&nbsp;/&nbsp;<code>inspect</code>&nbsp;/&nbsp;<code>cancel</code> scope
-                    authorization, and every run is audit-attributed to its principal and correlation id. See
-                    <a href="/how-to/serve">Serve defs over HTTP</a>.</p>
-                <p><strong>OpenTelemetry.</strong> Set the standard
-                    <code>OTEL_EXPORTER_OTLP_ENDPOINT</code> and every run exports one span tree
-                    (def&nbsp;&rarr;&nbsp;steps&nbsp;&rarr;&nbsp;prompts) to any OTLP collector &mdash; Grafana Tempo,
-                    Honeycomb, Datadog. Host-side, end-of-run, credential-redacted, with zero new dependencies, and never
-                    load-bearing. See <a href="/how-to/observability">Export traces to an OTLP collector</a>.</p>
-                <p><strong>Sentry error reporting.</strong> Set the standard
-                    <code>SENTRY_DSN</code> and every failed run (nonzero exit or a signal) is pushed to Sentry
-                    as one error event &mdash; def, failing step, a redacted output excerpt, and a run-dir
-                    pointer &mdash; so operators get alerting and grouping without scraping run dirs. Host-side,
-                    redacted, with zero new dependencies, never load-bearing; successful runs send nothing.
-                    See <a href="/how-to/observability#report-failed-runs-to-sentry">Report failed runs to Sentry</a>.</p>
-                <p><strong>Bring-your-own image.</strong> Wrap <code>jaiph</code> in an image you own
-                    (<code>docker run &hellip; jaiph run flow.jh</code>, or a Kubernetes pod). Jaiph does not
-                    ship a first-party runtime image. Isolation is the container or pod boundary.
-                    See <a href="/how-to/deploy">Deploy jaiph</a>.</p>
-                <p><strong>GitHub Actions install.</strong> The reusable
-                    <a href="https://github.com/jaiphlang/jaiph/tree/main/actions/setup-jaiph" target="_blank"
-                        rel="noopener noreferrer"><code>setup-jaiph</code></a> composite action installs a pinned
-                    <code>jaiph</code> CLI onto <code>PATH</code> for GitHub-hosted Linux and macOS runners in one step
-                    &mdash; the same release binaries as the curl installer, so no Node is required on the runner. It
-                    installs <code>minisign</code> so the release signature is verified, and fails closed on a missing
-                    or invalid signature, a bad checksum, or a missing artifact. See
-                    <a href="/how-to/install#install-in-github-actions-ci">Install in GitHub Actions (CI)</a>.</p>
-
-                <h3>Samples</h3>
-                <p>Jaiph source code is built mostly with real Jaiph programs. The
-                    <a
-                        href="https://github.com/jaiphlang/jaiph/blob/main/.jaiph/docs_parity.jh">.jaiph/docs_parity.jh</a>
-                    program runs documentation maintenance checks, changelog updates, and cross-doc consistency guards;
-                    its three prompts instruct the agent to read and follow a vendored
-                    <a href="https://diataxis.fr/">Diátaxis</a> documentation skill at
-                    <code>.jaiph/skills/documentation-writer/SKILL.md</code> (sourced from
-                    <a href="https://github.com/github/awesome-copilot">github/awesome-copilot</a>) before writing any
-                    docs, so runs stay offline-safe and reproducible.
-                    The <a href="https://github.com/jaiphlang/jaiph/blob/main/.jaiph/engineer.jh">.jaiph/engineer.jh</a>
-                    program implements a queue-driven engineering loop that picks work, implements changes, verifies
-                    CI, and updates queue state.
-                </p>
-            </div>
-        </section>
-
-        <section>
-            <h2>Syntax</h2>
-            <div class="card doc-content">
-                <h3>Jaiph programs</h3>
-                <dl class="primitive-list">
-                    <dt><code>config { ... }</code></dt>
-                    <dd>Optional runtime options (agent backend/flags, logs, runtime, module metadata). Allowed at the
-                        top level
-                        (module-wide) and inside individual defs (per-def overrides for <code>agent.*</code>
-                        and <code>run.*</code> keys only; <code>runtime.*</code> and <code>module.*</code> are
-                        module-level only). Environment variables override config values. See <a
-                            href="configuration">Configuration</a>.</dd>
-
-                    <dt><code>import "file.jh" as alias</code> &middot; <code>const name = value</code>
-                    </dt>
-                    <dd>Import other modules and define module-scoped variables shared by
-                        defs and scripts in the same file. Values can be single-line
-                        <code>"..."</code> strings, triple-quoted <code>"""..."""</code> multiline strings,
-                        or bare tokens.
-                    </dd>
-
-                    <dt><code>def name() { ... }</code> &middot; <code>def name(params) { ... }</code>
-                        &middot;
-                        <code>script name = `cmd`</code> &middot; <code>script name = ```[lang] ... ```</code>
-                    </dt>
-                    <dd><code>def</code> is the interpreted callable: prompts, sends, other defs, scripts, <code>run async</code>,
-                        <code>catch</code> / <code>recover</code>. Inline shell lines are allowed when they do not
-                        parse as Jaiph keywords (prefer <code>script</code> + <code>run</code> for
-                        non-trivial shell). See <a href="grammar#def-body-statements">Grammar — Def body statements</a>.
-                        <code>script</code> holds bash (or any
-                        language via a fence lang tag like <code>```node</code>, <code>```python3</code>, or a custom
-                        shebang) invoked with <code>run</code>. Defs <strong>require parentheses</strong>
-                        on every definition &mdash; even when parameterless (e.g.
-                        <code>export def main() { &hellip; }</code>).
-                        Named parameters go inside the parentheses; the compiler validates
-                        call-site arity when the callee declares params. Any fence tag is valid &mdash; it maps directly
-                        to
-                        <code>#!/usr/bin/env &lt;tag&gt;</code>. Scripts run in <strong>full isolation</strong>
-                        &mdash; only positional arguments
-                        and essential Jaiph variables (<code>JAIPH_SCRIPTS</code>,
-                        <code>JAIPH_WORKSPACE</code>) are inherited; module-scoped variables are not visible.
-                        Reuse shell helpers with <code>import script</code> or small named <code>script</code> blocks in
-                        the same module. Scripts are emitted as
-                        separate executable files under <code>scripts/</code> (within the run build output tree; see <a
-                            href="cli">CLI reference</a>).
-                    </dd>
-
-                    <dt><code>run ref()</code> &middot; <code>run ref(args) catch (name) { ... }</code> &middot;
-                        <code>run `body`(args)</code>
-                    </dt>
-                    <dd><code>run</code> calls another def or named script
-                        (managed step). Parentheses are
-                        <strong>required</strong> on all call sites &mdash; even when passing zero arguments
-                        (e.g. <code>run setup()</code>).
-                        Arguments can be quoted strings, <strong>bare identifiers</strong>, or triple-quoted
-                        <code>"""…"""</code> multiline blocks:
-                        <code>run greet(name)</code> is equivalent to <code>run greet("${name}")</code>.
-                        A call's parentheses may span multiple lines; a line that starts a managed call
-                        (<code>run</code> / <code>return run</code>)
-                        but never closes its <code>(</code> is a compile error, <strong>never</strong> a silent shell line.
-                        <code>run `body`(args)</code> embeds a one-off shell command directly
-                        without a named <code>script</code> definition &mdash; supports arguments and capture.
-                        Use triple backticks for multiline: <code>run ```...```(args)</code>.
-                    </dd>
-
-                    <dt><code>prompt "..."</code> &middot; <code>prompt myVar</code> &middot;
-                        <code>prompt """ ... """</code> &middot;
-                        <code>const name = prompt "..." returns "{ field: type }"</code>
-                    </dt>
-                    <dd>Sends a prompt to the configured agent. The body can be a single-line string, a bare identifier,
-                        or a triple-quoted <code>"""</code> block for multiline text. Triple backticks are reserved for
-                        scripts. Optionally validates structured JSON output and exposes captured variables.</dd>
-
-                    <dt><code>const name = …</code> &middot; <code>const name = run ref()</code>
-                    </dt>
-                    <dd>Bind or capture step values. All captures require the <code>const</code> keyword.
-                        All bindings are <strong>immutable</strong> &mdash; a name bound by a parameter,
-                        <code>const</code>, capture, or <code>script</code> cannot be rebound in the same scope.
-                        For <code>run</code> to a def,
-                        explicit
-                        <code>return "value"</code>, <code>return identifier</code>
-                        (or <code>return run ref()</code>)
-                        feeds the variable; for <code>run</code> to a
-                        <strong>script</strong>, capture follows
-                        stdout. <code>const</code> RHS has stricter rules (no <code>$(...)</code> &mdash; use
-                        <code>run</code>
-                        to a script). A
-                        call-like RHS must use the keyword explicitly &mdash; e.g.
-                        <code>const x = run helper(arg)</code>,
-                        not
-                        <code>const x = helper(arg)</code> (compile error with a correction hint). See
-                        <a href="language#const-bind-a-value">Language — const</a> and
-                        <a href="grammar#step-output-contract">Step output contract</a>.
-                    </dd>
-
-                    <dt><code>run async ref(args)</code> &middot;
-                        <code>const h = run async ref(args)</code>
-                    </dt>
-                    <dd>Run a def or script concurrently. Returns a <code>Handle&lt;T&gt;</code>
-                        that resolves on first non-passthrough read (interpolation, passing as arg to
-                        <code>run</code>, comparison, conditional). Passthrough (capture, re-assignment)
-                        does not force resolution. Unresolved handles are implicitly joined at def exit.
-                        Supports <code>recover</code> (retry loop) and <code>catch</code> (single-shot) composition:
-                        <code>run async foo() recover(err) { &hellip; }</code>.
-                        See <a href="grammar">Grammar</a> and
-                        <a href="spec-async-handles">Spec: Async Handles</a>.
-                    </dd>
-
-                    <dt><code>fail "reason"</code> &middot; <code>fail """..."""</code></dt>
-                    <dd><code>fail</code> aborts with stderr + non-zero exit. Use triple quotes for multiline messages.
-                    </dd>
-
-                    <dt><code>run ref() catch (err) { … }</code>
-                    </dt>
-                    <dd>Failure recovery: when the target fails, the recovery body runs <strong>once</strong>
-                        (like a <code>catch</code> clause). <code>catch</code> requires explicit bindings
-                        in parentheses. Legal on every <code>run</code>.
-                    </dd>
-
-                    <dt><code>run ref() recover (err) { … }</code></dt>
-                    <dd>Repair-and-retry loop: when the target fails, the repair body runs and the target
-                        is retried automatically. Stops on success or when the retry limit is exhausted
-                        (default 10, configurable via <code>run.recover_limit</code>). <code>recover</code>
-                        requires explicit bindings. Legal on every <code>run</code>. See
-                        <a href="language#catch-and-recover">Language — catch and recover</a>.
-                    </dd>
-
-                    <dt><code>match var { "lit" =&gt; … ⏎ /re/ =&gt; … ⏎ _ =&gt; … }</code></dt>
-                    <dd>Pattern match on a string value. The subject is a bare identifier (no
-                        <code>$</code> or <code>${}</code>), or <code>IDENT.IDENT</code> reading a field from a
-                        typed prompt capture (<code>match r.verdict { … }</code>). <code>if</code> accepts the
-                        same dot-subject form. Arms are tested top-to-bottom; first match wins.
-                        Patterns: string literal (exact), regex, or <code>_</code> wildcard.
-                        Pipe-separated alternation shares one arm (<code>"" | "check" =&gt; …</code>), matching if any
-                        alternand matches; <code>_</code> cannot join an alternation.
-                        Arms are newline-delimited — commas between or after arms are rejected.
-                        Usable as a statement, expression (<code>const x = match var { … }</code>),
-                        or with <code>return</code> (<code>return match var { … }</code>).
-                        Exactly one <code>_</code> wildcard arm is required.
-                        Arm bodies support single-line strings, triple-quoted <code>"""…"""</code> multiline strings,
-                        <code>fail</code>, and <code>run ref(…)</code>.
-                        These forms execute at runtime: <code>fail</code> aborts the def,
-                        <code>run</code> executes the target and captures its return value.
-                        The <code>return</code> keyword and inline scripts are forbidden inside arm bodies.
-                    </dd>
-
-                    <dt><code>log "message"</code> &middot; <code>log """..."""</code> &middot;
-                        <code>logerr "message"</code>
-                    </dt>
-                    <dd>Emit informational or error output to the run tree while keeping def execution explicit and
-                        auditable. Use triple quotes for multiline messages. Terminal and tree text use
-                        <code>echo -e</code>-style backslash escapes; structured
-                        <code>LOG</code> / <code>LOGERR</code> payloads keep the raw message string.
-                    </dd>
-
-                    <dt><code>channel &lt;name&gt; [-&gt; def]</code> &middot;
-                        <code>channel_ref &lt;- ...</code>
-                    </dt>
-                    <dd>Declare channels at top level with optional inline routing
-                        (<code>channel findings -&gt; analyst</code>) and send messages between defs.
-                        Routes belong on the channel declaration, not inside def bodies.
-                        <code>channel_ref</code> supports local and imported refs (for example
-                        <code>findings</code>, <code>shared.findings</code>). Undefined refs fail validation.
-                        See <a href="inbox">Inbox &amp;
-                            Dispatch</a>.
-                    </dd>
-                </dl>
-
-                <h3>Jaiph tests</h3>
-                <dl class="primitive-list">
-                    <dt><code>test "description" { ... }</code></dt>
-                    <dd>Defines a test case; files named <code>*.test.jh</code> execute as test suites. See <a
-                            href="testing">Testing</a>.</dd>
-
-                    <dt><code>mock prompt "..."</code> &middot;
-                        <code>mock prompt { /pattern/ =&gt; "response", _ =&gt; "default" }</code>
-                    </dt>
-                    <dd>Stub prompt calls with fixed responses or pattern-based dispatch so tests stay deterministic.
-                    </dd>
-
-                    <dt><code>mock def</code> &middot; <code>mock script</code>
-                    </dt>
-                    <dd>Replace def or script implementations in tests for isolation and targeted
-                        assertions.
-                    </dd>
-
-                    <dt><code>const name = run alias.main()</code> &middot; <code>run alias.main()</code>
-                        &middot; <code>allow_failure</code></dt>
-                    <dd>Runs an imported def through the test harness with explicit <code>run</code> and
-                        optional <code>const</code> capture (same managed semantics as <code>run</code>
-                        in <code>.jh</code> files): capture prefers an explicit <code>return</code> from the callee,
-                        otherwise combined output with internal event lines stripped. Add <code>allow_failure</code>
-                        when the test expects a non-zero exit. See <a href="testing">Testing</a>.
-                    </dd>
-
-                    <dt><code>expect_equal</code> &middot; <code>expect_contain</code> &middot;
-                        <code>expect_not_contain</code>
-                    </dt>
-                    <dd>Core assertion helpers for exact matches and substring checks (snake_case).</dd>
-                </dl>
-            </div>
-        </section>
     </div>
 
     <div class="footer">
         <p class="footer-links"><a href="/tutorials/first-run">Tutorial</a>
+            &middot; <a href="/how-to/mcp">MCP</a>
+            &middot; <a href="/how-to/serve">HTTP API</a>
             &middot; <a href="/how-to/install">How-to</a>
             &middot; <a href="https://github.com/jaiphlang/jaiph" target="_blank" rel="noopener noreferrer">GitHub</a>
             &middot; <a href="https://marketplace.visualstudio.com/items?itemName=jaiph.jaiph-syntax-vscode"

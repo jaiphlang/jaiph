@@ -9,7 +9,7 @@ redirect_from:
 
 # Add a hook
 
-A hook is a shell command that the CLI runs when a run reaches a lifecycle event. Hooks let you observe a run or notify another system from outside it, for example send an HTTP webhook, append a line to a log file, or trigger a CI job. Hooks are not part of the language.
+A hook is a shell command that the CLI runs when a run reaches a lifecycle event. Hooks let you observe a run or notify another system from outside it, for example, send an HTTP webhook, append a line to a log file, or trigger a CI job. Hooks are not part of the language.
 
 Hooks run on the host CLI. The CLI dispatches them at four lifecycle events. It reads the step events from `__JAIPH_EVENT__` lines on the runner's stderr, and it emits `run_start` before the runner spawns and `run_end` after the runner exits. Each hook command receives a JSON payload on its stdin.
 
@@ -19,7 +19,7 @@ The same four events (`run_start`, `step_start`, `step_end`, `run_end`), with th
 - HTTP runs. Every workflow run under `jaiph serve`, dispatched by the server process.
 - MCP tool calls. Every `jaiph mcp` tool call, dispatched by the server process. The hook's stderr goes to the server's stderr, and stdout stays clean for the protocol.
 
-Some run modes dispatch no hooks. `jaiph run --raw` dispatches no hooks, because it is meant for transparent embedding. `jaiph test` runs workflows in-process and dispatches no hooks. When you run `jaiph serve` or `jaiph mcp`, the server loads `hooks.json` at startup and reads it again on each source reload.
+Some run modes dispatch no hooks. `jaiph run --raw` dispatches no hooks, because it is meant for embedding a run inside another program and keeps its output clean. `jaiph test` runs workflows in-process and dispatches no hooks. When you run `jaiph serve` or `jaiph mcp`, the server loads `hooks.json` at startup and reads it again on each source reload.
 
 ## Prerequisites
 
@@ -37,7 +37,7 @@ Hooks come from one of two files. Project hooks override global hooks for each e
 
 Both files are optional. If a file contains invalid JSON, the CLI writes a `jaiph hooks: …` line to stderr and skips that file.
 
-Hook commands run on the **host**, so a project-local `<workspace>/.jaiph/hooks.json` that arrives with a cloned or untrusted repository is gated behind a per-workspace trust decision. Absent trust, the CLI ignores the project file and writes a one-line notice to stderr; the global file is unaffected. Trust the current workspace by exporting the opt-in before you run:
+Hook commands run on the **host**, so a project-local `<workspace>/.jaiph/hooks.json` that arrives with a cloned or untrusted repository is gated behind a per-workspace trust decision. Without that trust, the CLI ignores the project file and writes a one-line notice to stderr. The global file still runs. Trust the current workspace by exporting the opt-in before you run:
 
 ```bash
 export JAIPH_TRUST_PROJECT_HOOKS=1
@@ -103,7 +103,7 @@ A successful `step_end` record looks like this:
 {"event":"step_end","step_kind":"def","step_name":"main","status":0,"elapsed_ms":1500}
 ```
 
-The jq filter above keeps only a few fields. A full `step_end` payload also includes `run_id`, `step_id`, `timestamp`, `run_path`, and `workspace`. It adds `out_file` and `err_file` when the step captured stdout or stderr log files.
+The jq filter above keeps only a few fields. A full `step_end` payload also includes `run_id`, `step_id`, `timestamp`, `run_path`, and `workspace`. It adds `out_file` and `err_file` when the step captured stdout or stderr log files. `step_kind` is `def` for a `def` call and `script` for a script step.
 
 The other events carry different fields:
 

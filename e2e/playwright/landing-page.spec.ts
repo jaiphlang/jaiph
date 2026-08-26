@@ -150,8 +150,10 @@ test.describe.serial('docs landing page', () => {
     });
   });
 
-  test.describe('install tabs — platform variants', () => {
+    test.describe('install tabs — platform variants', () => {
     const PS_INSTALL = 'irm https://jaiph.org/install.ps1 | iex';
+    const osLink = (page: import('@playwright/test').Page, os: 'posix' | 'windows') =>
+      page.locator(`section.try-it-out .os-switch-button[data-os="${os}"]`);
 
     /** Override the platform Jaiph auto-detects, before any page script runs. */
     async function emulatePlatform(page: import('@playwright/test').Page, platform: string) {
@@ -174,6 +176,8 @@ test.describe.serial('docs landing page', () => {
       const active = activeRunSampleVariant(page);
       await expect(active).toHaveAttribute('data-os', 'windows');
       await expect(active.locator('pre code').first()).toHaveText(PS_INSTALL);
+      await expect(osLink(page, 'posix')).toBeVisible();
+      await expect(osLink(page, 'windows')).toBeHidden();
     });
 
     test('macOS/Linux visitor keeps the bash default unchanged', async ({ page }) => {
@@ -185,14 +189,25 @@ test.describe.serial('docs landing page', () => {
       await expect(active.locator('pre code')).toContainText('curl -fsSL https://jaiph.org/run | bash');
     });
 
+    test('shows a single other-OS link instead of a second tab row', async ({ page }) => {
+      await emulatePlatform(page, 'MacIntel');
+      await page.goto('/');
+
+      await expect(osLink(page, 'windows')).toBeVisible();
+      await expect(osLink(page, 'posix')).toBeHidden();
+      await expect(page.locator('section.try-it-out .os-switch')).toHaveCount(0);
+    });
+
     test('manual platform + tab switching works in both directions', async ({ page }) => {
       await emulatePlatform(page, 'MacIntel');
       await page.goto('/');
 
-      // Starts on POSIX; manual switch to Windows reveals the PowerShell command.
+      // Starts on POSIX; the Windows link reveals the PowerShell command.
       await expect(activeRunSampleVariant(page)).toHaveAttribute('data-os', 'posix');
-      await page.locator('section.try-it-out .os-switch-button[data-os="windows"]').click();
+      await osLink(page, 'windows').click();
       await expect(activeRunSampleVariant(page)).toHaveAttribute('data-os', 'windows');
+      await expect(osLink(page, 'posix')).toBeVisible();
+      await expect(osLink(page, 'windows')).toBeHidden();
 
       // Tab switch keeps the chosen platform: the install tab shows PowerShell.
       await page.locator('[data-target="try-install-only"]').click();
@@ -203,7 +218,7 @@ test.describe.serial('docs landing page', () => {
       await expect(installActive.locator('pre code').first()).toHaveText(PS_INSTALL);
 
       // Switch back to POSIX; the install tab shows the bash one-liner.
-      await page.locator('section.try-it-out .os-switch-button[data-os="posix"]').click();
+      await osLink(page, 'posix').click();
       await expect(installActive).toHaveAttribute('data-os', 'posix');
       await expect(installActive.locator('pre code').first()).toHaveText(
         'curl -fsSL https://jaiph.org/install | bash',
@@ -225,7 +240,7 @@ test.describe.serial('docs landing page', () => {
       });
       await page.goto('/');
 
-      await page.locator('section.try-it-out .os-switch-button[data-os="windows"]').click();
+      await osLink(page, 'windows').click();
       await page.locator('[data-target="try-install-only"]').click();
 
       const winInstall = page.locator(
@@ -255,6 +270,19 @@ test.describe.serial('docs landing page', () => {
       } finally {
         await context.close();
       }
+    });
+  });
+
+  test.describe('start here', () => {
+    test('path cards cover the main entry points', async ({ page }) => {
+      await page.goto('/');
+      await expect(page.locator('.path-card')).toHaveCount(6);
+      await expect(page.locator('a.path-card[href="/how-to/mcp"]')).toContainText(
+        'MCP server in 30 seconds',
+      );
+      await expect(page.locator('a.path-card[href="/how-to/serve"]')).toBeVisible();
+      await expect(page.locator('a.path-card[href="/tutorials/first-run"]')).toBeVisible();
+      await expect(page.locator('a.path-card[href="/tutorials/first-agent-run"]')).toBeVisible();
     });
   });
 

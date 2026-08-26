@@ -9,7 +9,7 @@ redirect_from:
 
 # Environment variables
 
-This page lists every environment variable Jaiph reads. It covers the `JAIPH_*` variables the TypeScript runtime and CLI read (`src/`), the vendor credentials Jaiph checks before it launches a workflow, and the host-side variables the installer script reads.
+This page lists every environment variable Jaiph reads. It covers the `JAIPH_*` variables the TypeScript runtime and CLI read (`src/`), the vendor credentials Jaiph checks before it launches a workflow, the standard `OTEL_*` and `SENTRY_*` variables that turn on telemetry, and the host-side variables the installer script reads.
 
 For role-oriented overviews see [Configuration](configuration.md) and [CLI](cli.md). For the credential pre-flight contract see [Authenticate agent backends](agent-auth.md).
 
@@ -111,7 +111,6 @@ The long-lived servers `jaiph serve` and `jaiph mcp` resolve the effective env o
 <!-- end: src-parity -->
 
 ## Agent credentials
-## Agent credentials
 
 The host CLI checks these before spawning the runner when [credential pre-flight](configuration.md#credential-pre-flight) applies. Pre-flight is skipped when the entry file declares no explicit backend and uses no `prompt` step, and on `jaiph run --raw`. See [Authenticate agent backends](agent-auth.md) for per-backend rules.
 
@@ -186,7 +185,6 @@ The error codes below surface during `jaiph run` / `jaiph serve` / `jaiph mcp` i
 | `E_ENV_RESERVED` | `--env` or `trusted_envs` named a runtime-managed key. | Run exits before launch. |
 | `E_ENV_INVALID` | `--env` key is not a POSIX-style name. | Run exits before launch. |
 
-## Related
 ## Related
 
 - [Configuration](configuration.md) — config keys and their environment-variable equivalents.

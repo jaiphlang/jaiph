@@ -218,6 +218,6 @@ Each `jq -e` check exits `0` when the contract holds. The run's durable record i
 ## Related
 
 - [CLI reference for `jaiph serve`](cli.md#jaiph-serve): the flag and endpoint reference.
-- [Serve defs as MCP tools](mcp.md): the stdio sibling with the same exposure rules. `POST /mcp` here is its network transport.
+- [MCP server in 30 seconds](mcp.md): the stdio sibling with the same exposure rules. `POST /mcp` here is its network transport.
 - [Deploy jaiph](deploy.md): wrap jaiph in an image or pod for outer isolation.
 - [Environment variables](env-vars.md): `JAIPH_SERVE_TOKEN`, `JAIPH_SERVE_MAX_CONCURRENT`, the `JAIPH_SERVE_MAX_OUTPUT_BYTES`, `JAIPH_SERVE_RETAIN_RUNS`, and `JAIPH_SERVE_RETAIN_AGE_SEC` memory bounds.

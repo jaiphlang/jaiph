@@ -180,7 +180,8 @@ body {
 }
 
 /* Landing logo hangs below sticky nav; keep in-page targets out from under it */
-#samples {
+#samples,
+#start-here {
     scroll-margin-top: 10rem;
 }
 
@@ -665,6 +666,20 @@ pre code .code-line::before {
     margin-bottom: 0.75rem;
 }
 
+.try-it-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem 1.25rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.75rem;
+}
+
+.try-it-toolbar .code-tab-list {
+    margin-bottom: 0;
+    flex: 1 1 auto;
+}
+
 .code-tab-button {
     border: 1px solid var(--tab-border);
     border-radius: 8px;
@@ -718,6 +733,33 @@ pre code .code-line::before {
     background: var(--tab-active-bg);
     border-color: var(--tab-active-border);
     color: var(--tab-active-color);
+}
+
+/* Single "switch to the other OS" link. The active platform's button is hidden. */
+.os-link-switch {
+    flex: 0 0 auto;
+    margin-left: auto;
+}
+
+.os-link-switch .os-switch-button {
+    border: none;
+    background: none;
+    color: var(--link);
+    font-family: inherit;
+    font-size: 0.85rem;
+    font-weight: 600;
+    padding: 0.25rem 0;
+    text-decoration: underline;
+    text-underline-offset: 0.18em;
+}
+
+.os-link-switch .os-switch-button:hover {
+    color: var(--orange);
+    background: none;
+}
+
+.os-link-switch .os-switch-button.is-active {
+    display: none;
 }
 
 /* Platform variants: static markup shows the POSIX (bash) variant; JS reveals
@@ -849,6 +891,57 @@ pre code .code-line::before {
     line-height: 1.5rem;
     margin: 1.5em 0;
     transition: color 0.25s ease;
+}
+
+/* ── Start-here path cards ── */
+
+.path-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+.path-card {
+    display: block;
+    text-decoration: none;
+    color: inherit;
+    background: var(--card-bg);
+    border: 1px solid var(--pre-border);
+    border-radius: 10px;
+    padding: 1.15rem 1.25rem;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.path-card:hover {
+    border-color: var(--tab-active-border);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08);
+}
+
+[data-theme="dark"] .path-card {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+[data-theme="dark"] .path-card:hover {
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45);
+}
+
+.path-card h3 {
+    color: var(--navy);
+    margin: 0 0 0.4rem;
+    font-size: 1.05rem;
+}
+
+.path-card p {
+    color: var(--muted);
+    margin: 0;
+    font-size: 0.92rem;
+    line-height: 1.45;
+}
+
+.path-card:hover h3 {
+    color: var(--link);
 }
 
 /* ── Install section ── */
@@ -1216,6 +1309,12 @@ pre code .code-line::before {
 
 /* ── Responsive ── */
 
+@media (max-width: 900px) {
+    .path-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
 @media (max-width: 768px) {
 
     .no-mobile {
@@ -1330,6 +1429,10 @@ pre code .code-line::before {
     .comparison-grid {
         grid-template-columns: 1fr;
         gap: 1rem;
+    }
+
+    .path-grid {
+        grid-template-columns: 1fr;
     }
 
     .doc-header {

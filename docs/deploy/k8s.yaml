@@ -39,8 +39,8 @@ metadata:
     app: jaiph-runner
 data:
   tools.jh: |
-    # health — trivial workflow proving the runner is live.
-    export workflow health() {
+    # health — trivial def proving the runner is live.
+    export def health() {
       return "ok"
     }
 ---

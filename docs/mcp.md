@@ -1,10 +1,10 @@
 ---
-title: Serve defs as MCP tools
+title: MCP server in 30 seconds
 permalink: /how-to/mcp
 diataxis: how-to
 ---
 
-# Serve defs as MCP tools
+# MCP server in 30 seconds
 
 This guide turns a `.jh` file into an [MCP](https://modelcontextprotocol.io/) server, so any MCP client (Claude Code, Claude Desktop, Cursor) can call the file's exported defs as tools. A def is a tested procedure with several steps and built-in repair (`catch`, `recover`, and artifacts). When you expose that def as a tool, an agent can invoke the procedure instead of writing its own shell commands.
 
