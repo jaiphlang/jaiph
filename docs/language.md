@@ -251,7 +251,7 @@ return run `cat report.txt`()
 |---|---|
 | String / triple-quoted | Verbatim with interpolation. |
 | Bare identifier | Sugar for `return "${ident}"`. Unknown identifier is `E_VALIDATE`. |
-| `return run ref()` / `return run ref()` | Managed direct return. Requires `()`. `return run helper` without parens becomes a shell step. |
+| `return run ref()` | Managed direct return. Requires `()`. `return run helper` without parens becomes a shell step. |
 | `return run \`…\`(args)` | Inline-script direct return. The `run` keyword is required. |
 | `return match … { … }` | Match expression as the return value. `return` inside an arm body is forbidden. |
 | Position | Only in `def` bodies. Script bodies use `echo`/`printf`; bare `return 0` / `return $?` in a script are shell exit codes. |
@@ -349,8 +349,8 @@ match cmd {
 | Subject | Bare identifier or `IDENT.IDENT`. `$var` / `${var}` is `E_PARSE`. |
 | Patterns | String literal (exact equality), `/regex/`, or `_` (wildcard — exactly one required). |
 | Alternation | `"a" \| "b" \| /^c/ => body` — pipe-separated string literals and/or regexes share one arm, which matches if **any** alternand matches (OR). String and regex alternands may be mixed. Arm order still decides ties (first matching arm wins). `_` cannot participate (`_ \| "x"` / `"x" \| _` are `E_PARSE`); a trailing `\|` before `=>` is `E_PARSE`. |
-| Arm delimiter | Newlines. Commas between arms are `E_PARSE`. |
-| Arm bodies | String literal, triple-quoted block, bare in-scope identifier, `$var` / `${var}`, `fail "…"`, `run ref(…)`, `run ref(…)`. |
+| Arm delimiter | Newlines, or `;` to place more than one arm on a line. Commas between arms are `E_PARSE`. |
+| Arm bodies | String literal, triple-quoted block, bare in-scope identifier, `$var` / `${var}`, `fail "…"`, `run ref(…)`. |
 | Disallowed in arms | `return` (use `return match … { … }` outside), inline scripts, unknown bare identifiers (`E_VALIDATE: unknown identifier "…" in match arm body; declare it with "const", use a capture, or add a parameter`). |
 | Expression form | Usable with `const x = match …` or `return match …`. |
 
@@ -395,7 +395,7 @@ No string-RHS site accepts two of these but rejects the third.
 | `${ident}` | Primary | All orchestration strings. |
 | `${var.field}` | Typed-prompt field access | All orchestration strings. |
 | `${run ref(args)}` | Inline capture — executes and inlines stdout / return value. | All orchestration strings. |
-| `$ident` (no braces) | `E_PARSE` in orchestration strings. | — |
+| `$ident` (no braces) | `E_PARSE` in `log` / `logerr` / `logwarn` / `fail` / `prompt` / `return` / `send` / `config`. In a `const` RHS a bare `$` is stored verbatim, not treated as a reference. | — |
 | `$1`, `$2`, … | Positional args | `script` bodies only (interpretation depends on the interpreter). |
 | `${var:-fallback}` (and `:+`, `:=`, `:?`) | `E_PARSE` in every orchestration string (`const`, `log`, `logerr`, `logwarn`, `fail`, `prompt`, `return`, `send`, `config`). Passes through unchanged in backtick and fenced scripts. | — |
 | `${var%%…}`, `${var//…}`, `${#var}` | `E_PARSE` in `const` RHS only. In other orchestration strings and in backtick / fenced scripts they pass through unchanged. | — |
@@ -407,7 +407,7 @@ Values interpolated into a workflow shell step (a free-form body line that runs 
 
 ## Subprocess environment
 
-Managed script steps (`run` to a named script, `import script`, inline scripts) and workflow inline-shell lines all use the same `scope.env`: the runner's `process.env` augmented by Jaiph (`JAIPH_WORKSPACE`, `JAIPH_SCRIPTS`, `JAIPH_RUN_DIR`, `JAIPH_ARTIFACTS_DIR`, `JAIPH_RUN_ID`, `JAIPH_RUN_SUMMARY_FILE`, prompt-related `JAIPH_AGENT_*`, and keys derived from `config { … }`). This is **not** an `env -i`-style wipe — anything the runner sees, the child sees, unless explicitly stripped.
+Managed script steps (`run` to a named script, `import script`, inline scripts) and workflow inline-shell lines all use the same `scope.env`: the runner's `process.env` augmented by Jaiph (`JAIPH_WORKSPACE`, `JAIPH_SCRIPTS`, `JAIPH_RUN_DIR`, `JAIPH_ARTIFACTS_DIR`, `JAIPH_RUN_ID`, prompt-related `JAIPH_AGENT_*`, and keys derived from `config { … }`). This is **not** an `env -i`-style wipe — anything the runner sees, the child sees, unless explicitly stripped. The runtime removes some keys from every subprocess environment so the audited workflow cannot read them: the audit journal path (`JAIPH_RUN_SUMMARY_FILE`), the audit-chain key (`JAIPH_CHAIN_KEY`), and any host keys named by `trusted_envs`. A `trusted_envs` key is re-injected only into the declaring workflow's own `run` steps. See [Environment variables](env-vars.md).
 
 Module `const` values are **not** automatically exported into script environments. Pass them as positional arguments (`$1`, `$2`, …) or read Jaiph-provided variables.
 

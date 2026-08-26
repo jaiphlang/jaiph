@@ -90,7 +90,7 @@ def main (who="Adam")
 Hello, Adam!
 ```
 
-The first line is the run banner. The `def main` row and the indented `▸` and `✓` rows are the live progress tree. A `▸` marks a step that has started, a `✓` marks a step that has finished, and `(0s)` is the elapsed time for that step. The root row is static, and only nested steps print `▸` and `✓` lines. The blank line and `Hello, Adam!` after `PASS` are the return value of `export def main`, which `jaiph run` prints on stdout after a successful run.
+The first line is the run banner. The `def main` row and the indented `▸` and `✓` rows are the live progress tree. A `▸` marks a step that has started, a `✓` marks a step that has finished, and `(0s)` is the elapsed time for that step. The root row is static, and only nested steps print `▸` and `✓` lines. The `Hello, Adam!` line after `PASS` is the return value of `export def main`, which `jaiph run` prints on stdout after a successful run.
 
 ## 4. Inspect the run artifacts
 

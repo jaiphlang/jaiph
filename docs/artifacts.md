@@ -9,9 +9,9 @@ redirect_from:
 
 # Save artifacts
 
-This recipe publishes files from a workflow into the run's `artifacts/` directory under the run logs root (`.jaiph/runs/` by default). Copying files into `artifacts/` is the supported way to export them from a run.
+This guide shows how to publish files from a workflow into the run's `artifacts/` directory. Each run gets its own directory under the runs root (`.jaiph/runs/` by default), and `artifacts/` sits inside that run directory. Copying files into `artifacts/` is the supported way to export them from a run.
 
-The runtime always creates an `artifacts/` directory under the run log directory and exposes its absolute path as `JAIPH_ARTIFACTS_DIR`. The `jaiphlang/artifacts` library is the standard way to copy files into that directory, and you can also write there directly from a `script` step.
+The runtime always creates the `artifacts/` directory and exposes its absolute path as `JAIPH_ARTIFACTS_DIR`. The `jaiphlang/artifacts` library is the standard way to copy files into that directory, and you can also write there directly from a `script` step.
 
 ## Prerequisites
 
@@ -34,7 +34,7 @@ export def main() {
 }
 ```
 
-`save` copies the source path into `${JAIPH_ARTIFACTS_DIR}/...` preserving the relative layout (the leading `./` is stripped). Absolute source paths are copied using `basename` only. The workflow value is the absolute destination path.
+`save` copies the source path into `${JAIPH_ARTIFACTS_DIR}/...` preserving the relative layout (the leading `./` is stripped). Absolute source paths are copied using `basename` only. The `run` step returns the absolute destination path.
 
 ## 3. Save several files at once
 
@@ -68,7 +68,7 @@ export def main() {
 }
 ```
 
-The runtime also sets `JAIPH_RUN_DIR`, `JAIPH_RUN_SUMMARY_FILE`, and `JAIPH_RUN_ID` on script steps if you need those paths.
+The runtime also sets `JAIPH_RUN_DIR`, `JAIPH_RUN_SUMMARY_FILE`, and `JAIPH_RUN_ID` for script steps, so you can read the run directory, the summary file, or the run id when you need them.
 
 ## Verification
 
@@ -84,7 +84,7 @@ Replace `<runs_root>` with `.jaiph/runs` when `JAIPH_RUNS_DIR` is unset, or with
 
 ## Verify a run's integrity chain
 
-Every line the runtime appends to `run_summary.jsonl` carries a `prev_hash` field. The field holds a **keyed** HMAC-SHA256 of the previous raw line (keyed genesis for the first line), computed under a per-run secret the audited workflow never sees. Rewriting a line, or dropping a line and re-linking the survivors, breaks the chain and cannot be re-forged without the key, so you can detect tampering with a run's audit trail. The key is persisted once the run is terminal — **not** in the run directory (which the workflow can write to), but in an operator-side store (`~/.jaiph/audit-keys` by default, override `JAIPH_AUDIT_KEY_DIR`), keyed by run-directory identity. See [Architecture — Keyed hash chain](architecture.md#hash-chain) for the full contract, including the key-isolation and read/export-boundary guarantees.
+Every line the runtime appends to `run_summary.jsonl` carries a `prev_hash` field. The field holds a **keyed** HMAC-SHA256 of the previous raw line (keyed genesis for the first line), computed under a per-run secret the audited workflow never sees. Rewriting a line, or dropping a line and re-linking the survivors, breaks the chain and cannot be re-forged without the key, so you can detect tampering with a run's audit trail. The key is persisted once the run finishes. It is **not** stored in the run directory, which the workflow can write to. It is stored in an operator-side store instead (`~/.jaiph/audit-keys` by default, or the directory in `JAIPH_AUDIT_KEY_DIR`), keyed by the run directory's identity. See [Architecture, keyed hash chain](architecture.md#hash-chain) for the full contract, including the key-isolation and read/export-boundary guarantees.
 
 To check a run directory, run this self-contained Node script. It resolves the run's key from the operator store, where the `sha256` of the run directory's canonical path names its entry. It then recomputes the keyed chain the same way the runtime does and confirms the journal still ends with its `RUN_END` terminal marker. No jaiph build is required:
 
@@ -112,10 +112,10 @@ node -e '
 ' <runs_root>/<YYYY-MM-DD>/<HH-MM-SS>-<source>/
 ```
 
-A clean, complete journal prints `chain intact and terminal (N lines)` and exits `0`. A rewritten file prints the first broken line number and exits `1`. A completed journal whose last lines were deleted after the run ended prints that it is not terminal and exits `1`. The chain commits to prefix integrity but not to length, so a shorter journal that still links correctly is caught only by the missing `RUN_END` marker (finding L-3). Inside the repo you can call the exported `verifyRunSummaryChain(filePath, key, opts?)` helper (`src/runtime/kernel/emit.ts`) directly, or `verifyRunJournal(runDir)`, which resolves the key from the store for you, requires the terminal marker, and returns `{ verified, ok, error }`. A run with no store entry (an unkeyed/legacy run) cannot be verified and is never blocked; a run that **was** keyed but whose key is missing fails closed (`verified: true, ok: false`).
+A clean, complete journal prints `chain intact and terminal (N lines)` and exits `0`. A rewritten file prints the first broken line number and exits `1`. A completed journal whose last lines were deleted after the run ended prints that it is not terminal and exits `1`. The chain commits to prefix integrity but not to length, so a shorter journal that still links correctly is caught only by the missing `RUN_END` marker (finding L-3). Inside the repo you can call the exported `verifyRunSummaryChain(filePath, key, opts?)` helper (`src/runtime/kernel/emit.ts`) directly, or `verifyRunJournal(runDir)`, which resolves the key from the store for you, requires the terminal marker, and returns `{ verified, ok, error }`. A run with no store entry (an unkeyed or legacy run) cannot be verified and is never blocked. A run that **was** keyed but whose key is missing fails closed (`verified: true, ok: false`).
 
 ## Related
 
-- [Architecture — Durable artifact layout](architecture.md#durable-artifact-layout) — the full run directory tree, including where `artifacts/` sits, plus the hash chain and secret-redaction contracts for `run_summary.jsonl`.
-- [Use & publish a library](libraries.md) — installing `jaiphlang/artifacts` and writing your own libraries.
-- [CLI](cli.md) — `jaiph run` artifacts layout.
+- [Architecture, durable artifact layout](architecture.md#durable-artifact-layout). The full run directory tree, including where `artifacts/` sits, plus the hash chain and secret-redaction contracts for `run_summary.jsonl`.
+- [Use & publish a library](libraries.md). Installing `jaiphlang/artifacts` and writing your own libraries.
+- [CLI](cli.md). The `jaiph run` artifacts layout.

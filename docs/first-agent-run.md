@@ -140,7 +140,7 @@ Each `prompt` step writes a `PROMPT_START` and a `PROMPT_END` line to `run_summa
 jq -c 'select(.type=="PROMPT_START")' .jaiph/runs/*/*/run_summary.jsonl | tail -1
 ```
 
-The record includes the resolved `backend`, the `model` (or `null` when the backend picks its own), and a `model_reason`. For this run the reason is `explicit`, because you set `agent.model`. The other reasons are `flags` and `backend-default`. [Configure backend & model](configure-backend.md) reads the same fields to check config precedence.
+The record includes the resolved `backend`, the `model` (or `null` when the backend picks its own), and a `model_reason`. For this run the reason is `explicit`, because you set `agent.model`. The other values are `flags`, `backend-default`, and `none`. [Configure backend & model](configure-backend.md) describes each value and reads the same fields to check config precedence.
 
 ## Where to go next
 

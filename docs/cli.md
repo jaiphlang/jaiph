@@ -9,7 +9,7 @@ redirect_from:
 
 # CLI
 
-This page is the authoritative inventory of the `jaiph` CLI: every subcommand, every flag, every exit-relevant behaviour. It does not explain how to choose between commands — see [Why Jaiph](why-jaiph.md) for context and the how-to pages for recipes.
+This page is the complete inventory of the `jaiph` CLI: every subcommand, every flag, and every behavior that affects the exit code. It does not explain how to choose between commands — see [Why Jaiph](why-jaiph.md) for context and the how-to pages for recipes.
 
 The published `jaiph` bin is `node dist/src/cli.js` (npm) or the standalone `dist/jaiph` (Bun-compiled). Both dispatch through `src/cli/index.ts`.
 
@@ -73,7 +73,7 @@ After module-graph load, before the runner is spawned, the host CLI runs a crede
 | `▸` | Step started. |
 | `✓` | Step completed successfully (with elapsed time). |
 | `✗` | Step failed (with elapsed time). |
-| `ℹ` | `log` message (dim/gray, no marker timing). |
+| `ℹ` | `log` message (blue marker and text; the tree prefix is dim; no elapsed time). |
 | `!` | `logerr` message (red; rendered on stdout with the progress tree). |
 | `⚠` | `logwarn` message and automatic leaf-step idle warnings (yellow; rendered on stdout with the progress tree). |
 | `·` | Continuation marker (heartbeat lines in non-TTY mode). |
@@ -87,7 +87,7 @@ A leaf script step whose subprocess produces no stdout/stderr for `JAIPH_STEP_ID
 
 ### Step display
 
-Step lines include the kind (`def`, `prompt`, `script`) and name. Parameterised invocations append `key="value"` pairs in parentheses (positional params use `1=…` / `2=…`); whitespace is collapsed; values are truncated to 32 characters. Prompt step lines additionally show the backend name (or custom command basename), the effective model, and the first 24 characters of the prompt body in quotes (full line capped at 96 characters): `▸ prompt claude sonnet "Classify this task…"` on start and `✓ prompt claude sonnet (5s)` on completion. The model is the value passed to the backend (`agent.model` / `JAIPH_AGENT_MODEL` / a `--model` flag); it is a bare token between the backend and the quoted preview. When a built-in backend (cursor, claude, codex) auto-selects its own model, the token shows the literal `default` (`▸ prompt cursor default "…"`); it is omitted only for custom agent commands, which have no model concept (`▸ prompt my-agent "…"`).
+Step lines include the kind (`def`, `prompt`, `script`) and name. Parameterised invocations append `key="value"` pairs in parentheses (positional params use `1=…` / `2=…`); whitespace is collapsed; values are truncated to 32 characters. Prompt step lines additionally show the backend name (or custom command basename), the effective model, and the first 24 characters of the prompt body in quotes: `▸ prompt claude sonnet "Classify this task…"` on start and `✓ prompt claude sonnet (5s)` on completion. Any trailing `key="value"` parameter pairs shown after the preview are capped at 96 characters in total. The model is the value passed to the backend (`agent.model` / `JAIPH_AGENT_MODEL` / a `--model` flag); it is a bare token between the backend and the quoted preview. When a built-in backend (cursor, claude, codex) auto-selects its own model, the token shows the literal `default` (`▸ prompt cursor default "…"`); it is omitted only for custom agent commands, which have no model concept (`▸ prompt my-agent "…"`).
 
 ### Return values
 
@@ -167,7 +167,7 @@ Paths must end with `.jh`. Formatting is idempotent. Comments and shebangs are p
 
 Top-level ordering: the formatter hoists `import`, `config`, and `channel` declarations to the top (in that order, preserving relative source order within each group). Other top-level definitions (`const`, `script`, `def`, `test`) keep their relative source order. Comments before a hoisted construct move with it; comments before non-hoisted definitions stay in place.
 
-Top-level `const` quoting: the source delimiter is preserved per binding. Quoted values stay quoted; bare tokens stay bare; `"""…"""` values emit verbatim. The formatter does not toggle between styles based on value content.
+Top-level `const` quoting: the source delimiter is preserved per binding. Bare tokens stay bare, `"""…"""` values emit verbatim, and a double-quoted value stays double-quoted. The one exception is a double-quoted value whose content contains a `"` or a `\`: the formatter emits it as a `"""…"""` block so the text needs no escaping. The formatter never rewrites a quoted value as bare, or a bare token as quoted, based on the value's content (for example, whether it contains a space).
 
 Blank-line preservation: a single blank line between steps inside a def body is preserved. Multiple consecutive blank lines collapse to one. Trailing blank lines before `}` are removed.
 
@@ -182,7 +182,7 @@ Creates the following under the target workspace:
 | File | Content |
 |---|---|
 | `.jaiph/.gitignore` | Two-line file listing `runs` and `tmp`. If the file exists and does not match, the command exits non-zero. |
-| `.jaiph/bootstrap.jh` | Canonical bootstrap file; made executable. The body is a triple-quoted multiline `prompt` that asks the agent to scaffold `.jh` files. |
+| `.jaiph/bootstrap.jh` | Canonical bootstrap file, made executable. The body is a triple-quoted multiline `prompt` that asks the agent to scaffold `.jh` files. Like `.gitignore`, if the file already exists and does not match the canonical template, the command exits non-zero. |
 | `.jaiph/SKILL.md` | Copy of the skill markdown shipped with this `jaiph` build (see [`JAIPH_SKILL_PATH`](env-vars.md)). |
 
 SKILL.md resolution order: `JAIPH_SKILL_PATH` (if set and the path exists) → install-relative paths (`jaiph-skill.md` next to the package tree, then `docs/jaiph-skill.md` next to the package) → `docs/jaiph-skill.md` under the current working directory → the embedded copy baked into the binary. There is no "skip and warn" path; the file is always written.
@@ -217,10 +217,10 @@ Remote registry and library URLs must use an allowed scheme. A value with an exp
 Each successful clone runs these checks before the lib counts as installed:
 
 - **`.jh` module check** — at least one `*.jh` file must exist under the clone (recursive, `.git` skipped). Failure removes the directory and aborts with `lib "<name>" contains no .jh modules — not a jaiph library?`. No lock entry written.
-- **Commit capture** — `git rev-parse HEAD` is recorded as the 40-char `commit` on the lock entry.
-- **Pinned-commit check** — when the registry entry (or lock entry) carries a `commit`, the cloned HEAD must equal it, or the directory is removed and the install fails with the locked vs cloned SHAs and the remedy. This makes the *first* install from the registry authenticated, not just restore.
+- **Commit capture** — when the clone has a `.git` directory, `git rev-parse HEAD` is recorded as the 40-char `commit` on the lock entry. A clone with no usable git checkout leaves `commit` unset.
+- **`.git` strip** — `<libDir>/.git` is removed recursively, right after the commit is captured and before the two checks below.
+- **Pinned-commit check** — when the registry entry (or lock entry) carries a `commit`, the captured HEAD must equal it, or the directory is removed and the install fails with the locked vs cloned SHAs and the remedy. This makes the *first* install from the registry authenticated, not just restore.
 - **Detached signature check** — when the registry entry carries a `signature` (a detached minisign signature over the ASCII commit SHA), it is verified against the embedded `jaiph.pub` project key only, never a key supplied by the entry itself (a self-supplied key attests nothing an attacker controlling the entry could not forge). An invalid or unverifiable signature removes the directory and fails the install closed with `lib "<name>" signature verification failed for commit <sha>`.
-- **`.git` strip** — `<libDir>/.git` is removed recursively.
 
 ### Restore-from-lockfile mode
 
@@ -284,7 +284,7 @@ Implementation: with no `JAIPH_INSTALL_COMMAND` override, `jaiph use` downloads 
 ## `jaiph mcp`
 {: #jaiph-mcp}
 
-Serve a file's defs as [MCP](https://modelcontextprotocol.io/) tools over stdio. See [Serve defs as MCP tools](mcp.md) for the recipe and client-registration steps.
+Serve a file's defs as [MCP](https://modelcontextprotocol.io/) tools over stdio. See [MCP server in 30 seconds](mcp.md) for the recipe and client-registration steps.
 
 ```text
 jaiph mcp [--workspace <dir>] [--env KEY[=VALUE]]... <file.jh>
@@ -300,7 +300,7 @@ jaiph mcp [--workspace <dir>] [--env KEY[=VALUE]]... <file.jh>
 
 Flags that belong to another command (for example `--raw` or `--port`) are usage errors naming the owning command — never silently ignored. Precedence across layers is the shared execution-policy order: CLI flags > `JAIPH_*` env vars > module config metadata > defaults (see [Environment variables — Precedence](env-vars.md#precedence)).
 
-### Startup and exit behaviour
+### Startup and exit behavior
 
 - Loads the module graph and runs `collectDiagnostics` (the same compile-time pass as `jaiph compile`). Any diagnostic prints `file:line:col CODE message` lines to **stderr** and exits `1`.
 - A missing path, a non-`.jh` path, or a path that is not a file exits `1` with a message on stderr.
@@ -337,7 +337,7 @@ Newline-delimited JSON-RPC 2.0. Requests are handled concurrently (a long `tools
 
 The server emits `notifications/tools/list_changed` after a successful hot reload (only once `initialize` has happened).
 
-When a `tools/call` carries a `progressToken`, the server also emits `notifications/progress` (`{progressToken, progress, message}`) for that call — one per step event, with a monotonically increasing `progress` counter and a `message` of `"<kind> <name>"` (no `total`, since a def's step count is not known up front). Notifications stop the instant the call's response is sent; a call without a `progressToken` emits none. See [Serve defs as MCP tools — Stream progress and cancel a long call](mcp.md#7-stream-progress-and-cancel-a-long-call).
+When a `tools/call` carries a `progressToken`, the server also emits `notifications/progress` (`{progressToken, progress, message}`) for that call — one per step event, with a monotonically increasing `progress` counter and a `message` of `"<kind> <name>"` (no `total`, since a def's step count is not known up front). Notifications stop the instant the call's response is sent; a call without a `progressToken` emits none. See [MCP server in 30 seconds — Stream progress and cancel a long call](mcp.md#7-stream-progress-and-cancel-a-long-call).
 
 ### Error mapping
 
@@ -358,7 +358,7 @@ The tool surface is derived from the **entry file only** (imports are never expo
 |---|---|
 | `export def …` present | Exactly the exported defs are exposed. |
 | No exports | No tools, plus a warning. |
-| `main` | Exposed only when it is the sole export, named after the sanitized file basename (`.jh` stripped, non-`[A-Za-z0-9_-]` → `_`, truncated to 128); otherwise skipped. |
+| `main` | Exposed only when it is the sole export, named after the sanitized file basename (`.jh` stripped, non-`[A-Za-z0-9_-]` → `_`, truncated to 128; an empty result falls back to the literal `def`). Skipped when it is not the sole export, or when the sanitized name would collide with an already-exposed def. |
 
 Tool descriptions come from the `#` comment lines directly above each def (shebang lines dropped, `#` prefix stripped); the fallback is `Run the "<name>" def from <basename>.` Every parameter is a required string in the input schema.
 
@@ -388,7 +388,7 @@ jaiph serve [--host <addr>] [--port <n>] [--workspace <dir>] [--allow-anonymous]
 
 Flags that belong to another command (for example `--raw` or `--target`) are usage errors naming the owning command — never silently ignored. Precedence across layers is the shared execution-policy order: CLI flags > `JAIPH_*` env vars > module config metadata > defaults (see [Environment variables — Precedence](env-vars.md#precedence)).
 
-Startup mirrors `jaiph mcp`: graph load + `collectDiagnostics` (diagnostics to stderr, exit `1`), credential pre-flight as warnings, and a host-execution notice. All logs go to stderr; one startup line prints the listen URL and the `/docs` URL. Per-run operator lines (a start line `Running … run_id=` and an end line `Finished … status=… elapsed_ms=…`) and the optional log mirror follow the same stderr-only operator-log contract as `jaiph mcp`, and HTTP response bodies stay API payloads. See [Operator log (stderr)](#operator-log-stderr) above, and `JAIPH_SERVER_LOG` and `JAIPH_SERVER_LOG_WORKFLOW` in [Environment variables](env-vars.md).
+Startup mirrors `jaiph mcp`: graph load + `collectDiagnostics` (diagnostics to stderr, exit `1`), credential pre-flight as warnings, and a host-execution notice. All logs go to stderr. Startup prints a line with the listen URL, the `/docs` and `/mcp` URLs, and the exposed-def count, followed by an authentication-mode line, a memory-bounds line, and, when terminal runs were rebuilt from disk, a line reporting how many were reconstructed. Per-run operator lines (a start line `Running … run_id=` and an end line `Finished … status=… elapsed_ms=…`) and the optional log mirror follow the same stderr-only operator-log contract as `jaiph mcp`, and HTTP response bodies stay API payloads. See [Operator log (stderr)](#operator-log-stderr) above, and `JAIPH_SERVER_LOG` and `JAIPH_SERVER_LOG_WORKFLOW` in [Environment variables](env-vars.md).
 
 ### Endpoints
 
@@ -410,7 +410,7 @@ The **Cap.** column names the capability an authenticated principal must hold to
 | `GET /v1/runs/{id}/artifacts/{path}` | `inspect` | Download one published file (`application/octet-stream`), streamed with backpressure — never buffered whole, so an arbitrarily large file costs no server memory and a client disconnect closes the file. Traversal-proof — `..`, absolute paths, and escaping symlinks are `404`. `413 E_ARTIFACT_TOO_LARGE` when the file exceeds `JAIPH_SERVE_MAX_ARTIFACT_BYTES`. |
 | `POST /v1/runs/{id}/cancel` | `cancel` | `202`; the run reaches `cancelled`. `409` if already terminal. |
 
-The run object is `{run_id, def, status, started_at, ended_at, exit_status, signal, result_text, run_dir, principal, correlation_id}` where `status` is `running` \| `succeeded` \| `failed` \| `cancelled` \| `interrupted`. `principal` is the audit subject that created the run (`anonymous`/`operator` in open/static mode, the token `sub` or `client_id` in OIDC mode — never a token) and `correlation_id` is the request id attached at create time; both are `null` when unset. `interrupted` is the terminal state a run is reconciled to after a process death caught it mid-flight — its outcome is unknown, so it is neither `succeeded` nor `failed`, but it is never reported as permanently `running`. **A def failure is not an HTTP error** — the run object reports `status: "failed"` with the same failure narrative `jaiph mcp` returns, over HTTP `200`/`202`. Errors use `{error: {code, message}}` with `400 E_BAD_ARGS`, `401 E_UNAUTHORIZED` (missing/invalid static token), `401 E_TOKEN_EXPIRED` / `401 E_TOKEN_INVALID` (OIDC token expired, or bad audience/issuer/key/signature/algorithm), `403 E_FORBIDDEN` (principal lacks the required capability), `404 E_NOT_FOUND`, `409 E_RUN_TERMINAL`, `409 E_IDEMPOTENCY_CONFLICT` (idempotency key reused with different arguments), `409 E_TAMPERED` (the run's journal failed its keyed integrity chain), `413 E_BODY_TOO_LARGE` (1 MiB request-body cap), `413 E_ARTIFACT_TOO_LARGE` (artifact download over `JAIPH_SERVE_MAX_ARTIFACT_BYTES`), `415` (non-`application/json` body), `429 E_TOO_MANY_RUNS`, and `503 E_AUTH_UNAVAILABLE` (OIDC identity provider / JWKS unreachable).
+The run object is `{run_id, def, status, started_at, ended_at, exit_status, signal, result_text, run_dir, principal, correlation_id}` where `status` is `running` \| `succeeded` \| `failed` \| `cancelled` \| `interrupted`. `principal` is the audit subject that created the run (`anonymous`/`operator` in open/static mode, the token `sub` or `client_id` in OIDC mode — never a token) and `correlation_id` is the request id attached at create time; both are `null` when unset. `interrupted` is the terminal state a run is reconciled to after a process death caught it mid-flight — its outcome is unknown, so it is neither `succeeded` nor `failed`, but it is never reported as permanently `running`. **A def failure is not an HTTP error** — the run object reports `status: "failed"` with the same failure narrative `jaiph mcp` returns, over HTTP `200`/`202`. Errors use `{error: {code, message}}` with `400 E_BAD_ARGS`, `401 E_UNAUTHORIZED` (missing or invalid static token; in OIDC mode, a request with no bearer token, or a verified token that carries neither `sub` nor `client_id`), `401 E_TOKEN_EXPIRED` / `401 E_TOKEN_INVALID` (OIDC token expired, or bad audience/issuer/key/signature/algorithm), `403 E_FORBIDDEN` (principal lacks the required capability), `404 E_NOT_FOUND`, `409 E_RUN_TERMINAL`, `409 E_IDEMPOTENCY_CONFLICT` (idempotency key reused with different arguments), `409 E_TAMPERED` (the run's journal failed its keyed integrity chain), `413 E_BODY_TOO_LARGE` (1 MiB request-body cap), `413 E_ARTIFACT_TOO_LARGE` (artifact download over `JAIPH_SERVE_MAX_ARTIFACT_BYTES`), `415` (non-`application/json` body), `429 E_TOO_MANY_RUNS`, and `503 E_AUTH_UNAVAILABLE` (OIDC identity provider / JWKS unreachable).
 
 Each run's public record is persisted beside its journal as `run.json` when it finishes, and reconstructed into the registry on startup — so `GET /v1/runs`, `/v1/runs/{id}`, `/events`, and `/artifacts` keep working for pre-restart terminal runs, and idempotency keys survive a restart. `jaiph serve` is a **single-replica** service: the run registry, concurrency cap, and idempotency index are per-process and not shared across replicas — run two behind one load balancer and each has its own view. See [Serve — deployment topology](serve.md#deployment-topology).
 
@@ -426,7 +426,7 @@ Each run's public record is persisted beside its journal as `run.json` when it f
 
 ## Environment variables
 
-See [Environment variables](env-vars.md) for the complete inventory. The variables most relevant to CLI behaviour:
+See [Environment variables](env-vars.md) for the complete inventory. The variables most relevant to CLI behavior:
 
 - `JAIPH_RUN_TIMEOUT` — parent-enforced wall-clock cap for a run.
 - `JAIPH_NON_TTY_HEARTBEAT_FIRST_SEC`, `JAIPH_NON_TTY_HEARTBEAT_INTERVAL_MS` — non-TTY progress cadence.
@@ -451,4 +451,4 @@ See [Environment variables](env-vars.md) for the complete inventory. The variabl
 - [Grammar](grammar.md) — syntax and validation catalog.
 - [Language](language.md) — step semantics and step-output contract.
 - [Environment variables](env-vars.md) — every variable Jaiph reads.
-- [Serve defs as MCP tools](mcp.md) — exposing a file's exported defs to MCP clients via `jaiph mcp`.
+- [MCP server in 30 seconds](mcp.md) — exposing a file's exported defs to MCP clients via `jaiph mcp`.

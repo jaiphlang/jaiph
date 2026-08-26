@@ -18,6 +18,7 @@ This page is the authoritative syntactic reference for Jaiph: lexical rules, sta
 | Element | Rule |
 |---|---|
 | Identifier | `[A-Za-z_][A-Za-z0-9_]*`. |
+| Reserved keyword | The words `async`, `catch`, `channel`, `config`, `const`, `def`, `else`, `export`, `fail`, `false`, `for`, `if`, `import`, `in`, `log`, `logerr`, `logwarn`, `match`, `not`, `prompt`, `return`, `returns`, `run`, `script`, `send`, and `true`. A reserved word cannot be a parameter name or a top-level name in the unified namespace (`E_PARSE`). `not` is reserved but has no syntax yet. |
 | Reference | `IDENT` (local) or `IDENT.IDENT` (module-qualified). |
 | Comment | Full-line `#` comment. Trailing `#` on a step line is not a comment. |
 | Blank line | Preserved between steps inside def bodies (as `blank_line` trivia). `jaiph format` collapses multiple consecutive body blanks to one and trims trailing blanks before `}`. Top-level blank lines are not preserved — the formatter emits one blank line between emitted sections. |
@@ -93,7 +94,7 @@ config_value = string | identifier | interp_ref | "true" | "false" | integer ;
 interp_ref   = "${" IDENT [ "." IDENT ] "}" ;
 ```
 
-All three string forms are equivalent: a bare `identifier`, a bare `${name}` interpolation ref, and a double-quoted string `"${name}"` all store and resolve identically. Shell expansion forms (`${var:-default}`, `${#var}`, etc.) are `E_PARSE`. See [Configuration](configuration.md#value-syntax).
+All three string forms are equivalent: a bare `identifier`, a bare `${name}` interpolation ref, and a double-quoted string `"${name}"` all store and resolve identically. An unquoted shell-expansion form (`${var:-default}`, `${#var}`, etc.) is `E_PARSE`. Inside a double-quoted config value the same text is kept verbatim as a literal string, because config values, unlike a bare `const` RHS, have no shell-fallback rejection. See [Configuration](configuration.md#value-syntax).
 
 Allowed keys: `agent.model`, `agent.command`, `agent.backend`, `agent.trusted_workspace`, `agent.cursor_flags`, `agent.claude_flags`, `run.logs_dir`, `run.debug`, `run.recover_limit`, `module.name`, `module.version`, `module.description`, and `trusted_envs`. See [Configuration](configuration.md). The `trusted_envs` value is a quoted, space-separated list of host environment variable names (for example `trusted_envs = "GITHUB_TOKEN NPM_TOKEN"`). See [Trusted env keys](configuration.md#trusted-envs). Def-level `config` permits `agent.*`, `run.*`, and `trusted_envs` (`runtime.*` / `module.*` are `E_PARSE`).
 
@@ -178,7 +179,7 @@ fall through to the shell executor unchanged.
 | Position | Rule |
 |---|---|
 | Triple-quoted block argument | `"""…"""` must open as the first non-whitespace token on its own line (same rule as every other triple-quoted position). The body is dedented to the common leading margin. The formatter normalises triple-quoted call args to an inline double-quoted string (intentional — `Arg` nodes do not carry Trivia for round-trip preservation). |
-| Bare identifier argument | Must reference an in-scope binding (`const`, capture, parameter). `name` and `"${name}"` (quoted string) are both accepted when the variable is in scope. Unknown names are `E_VALIDATE`. Jaiph keywords are rejected. |
+| Bare identifier argument | Must reference an in-scope binding (`const`, capture, parameter). `name` and `"${name}"` (quoted string) are both accepted when the variable is in scope. An unknown name is `E_VALIDATE`. A Jaiph keyword in this position (for example `run` or `return`) is not read as a variable reference; it is stored as a literal string instead, so it is not checked against scope. |
 | Bare dotted argument | `IDENT.IDENT` is typed-prompt field access (same as in `return` / `if` / `match`). The base must be a typed prompt capture and the field must appear in its `returns` schema (`E_VALIDATE` otherwise). |
 | Unquoted interpolation | Unquoted `${ident}` / `${base.field}` in call-argument position is `E_VALIDATE` — interpolation belongs inside strings. Use the bare form (`name`, `result.role`) or a quoted string (`"${name}"`). |
 | Nested managed calls | The `run` keyword is required. `run foo(bar())` / `run foo(\`echo aaa\`())` are `E_VALIDATE`. Valid: `run foo(run bar())`, `run foo(run \`echo aaa\`())`. Capture-then-pass is always valid. |
@@ -429,6 +430,7 @@ Validator entry points (`src/transpile/validate.ts` for the outer layer; `src/tr
 | `E_SCHEMA` | Invalid `returns` schema — empty, non-flat, unsupported type. |
 | `E_VALIDATE` | Unknown def / script; duplicate import alias; forbidden Jaiph usage inside `$(…)`; dot notation on non-prompt variable or invalid field name; bare identifier argument referencing an unknown variable; unquoted `${…}` in call-argument position; `${ident}` referencing an unknown variable in orchestration strings; arity mismatch; shell redirection (`>`, `>>`, `|`, `&`) inside unquoted call-argument text; bare nested managed calls; bare nested inline-script calls; type crossings (`prompt` on a script, `run` on a string, `const x = scriptName`, `${scriptName}`). |
 | `E_IMPORT_NOT_FOUND` | Import target does not exist (module or script). |
+| `W_PROMPT_IN_SHELL` | A prompt capture (`const x = prompt …`) is interpolated as `${x}` directly into a raw shell step. The diagnostic steers you to pass it as a script argument (`run my_script(x)` → `$1`) instead. Only shell steps are flagged. See [Language](language.md). |
 
 ### Validation rules
 

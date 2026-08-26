@@ -25,9 +25,9 @@ Configuration sources, in priority order:
 |---|---|
 | Module-level | At most one `config { … }` block per `.jh` file. May appear anywhere among top-level constructs. |
 | Def-level | At most one nested `config { … }` per workflow body. Must be the first non-comment construct in the body. |
-| Allowed module keys | `agent.*`, `run.*`, `module.*`, and `trusted_envs`. |
-| Allowed workflow keys | `agent.*`, `run.*`, and `trusted_envs`. `runtime.*` and `module.*` are `E_PARSE`. |
-| Duplicate block | `E_PARSE duplicate config block (only one allowed per file)` / `E_PARSE duplicate config block inside workflow (only one allowed per workflow)`. |
+| Allowed module-level keys | `agent.*`, `run.*`, `module.*`, and `trusted_envs`. |
+| Allowed def-level keys | `agent.*`, `run.*`, and `trusted_envs`. A `module.*` key in a def-level block is `E_PARSE` (`module.* keys are not allowed in def-level config (only agent.* and run.* keys)`). Any other unrecognized key is the unknown-key error below. |
+| Duplicate block | `E_PARSE duplicate config block (only one allowed per file)` / `E_PARSE duplicate config block inside def (only one allowed per def)`. |
 | Unknown key | `E_PARSE unknown config key: <key>. Allowed: …` (lists every allowed key). |
 | Wrong value type | `E_PARSE`. |
 
@@ -209,7 +209,7 @@ Before `jaiph run` spawns the workflow runner, the host CLI runs a credential pr
 
 Hard errors exit non-zero with no runner launched. Warnings go to stderr and the run proceeds. Skip cases: entry file declares no explicit backend and uses no `prompt` step → no pre-flight; `jaiph run --raw` → no pre-flight.
 
-Every error and warning names:Every error and warning names: the backend; the model when `agent.model` is set; the entry `.jh` file; the config scope (`module config`, `workflow <name>`, `JAIPH_AGENT_BACKEND env`, or `default`); and the concrete remedy.
+Every error and warning names the backend, the model when `agent.model` is set, the entry `.jh` file, the config scope, and the concrete remedy. The config scope is one of `module config`, `def <name>`, `JAIPH_AGENT_BACKEND env`, or `default`.
 
 ## Model resolution
 {: #model-resolution}
@@ -309,7 +309,7 @@ Custom commands still participate in `PROMPT_START` / `PROMPT_END`, write artifa
 
 ## Inspecting effective config at runtime
 
-Agent and run settings are visible inside workflows, rules, and scripts as `JAIPH_*` environment variables. In orchestration strings, `${IDENT}` resolves against workflow bindings first, then against the process environment.
+Agent and run settings are visible inside workflows and scripts as `JAIPH_*` environment variables. In orchestration strings, `${IDENT}` resolves against workflow bindings first, then against the process environment.
 
 
 ## Created by `jaiph init`

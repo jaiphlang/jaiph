@@ -104,13 +104,13 @@ def tests_pass() { run run_tests() }   # checks
 export def main() { … }                # orchestration; default = the entrypoint
 ```
 
-Channels, rules, workflows, scripts, script-import aliases, and module `const` share **one namespace per module** — duplicate top-level names are `E_PARSE`; duplicate import aliases are `E_VALIDATE`. Comments are full-line `#` only.
+Channels, defs, scripts, script-import aliases, and module `const` share **one namespace per module** — duplicate top-level names are `E_PARSE`; duplicate import aliases are `E_VALIDATE`. Comments are full-line `#` only.
 
 **Imports:** paths resolve relative to the importing file; if not found and the path contains `/`, it falls back to `<workspace>/.jaiph/libs/<lib>/<path>.jh` (installed via `jaiph install`). Reference imported symbols as `alias.name`. If a module uses `export` on any declaration, only exported names are visible to importers; with zero `export`s, everything is public.
 
 ### Strings and interpolation
 
-- `"single line"` — double quotes only; single quotes are parse errors. Only `\"` is decoded, so you can include a quote. `\n`, `\t`, and `\\` are passed through verbatim, so use a `"""…"""` block for real line breaks.
+- `"single line"` — double quotes only; single quotes are parse errors. Backslash escapes are not decoded here. `\"` lets the parser find the closing quote, but the backslash stays in the value, so `\"` produces the two characters `\"`, not a bare `"`. `\n`, `\t`, and `\\` also pass through verbatim. To include a literal double quote or a real line break in a value, use a `"""…"""` block.
 - `"""…"""` — multiline. Opening `"""` ends its line; closing `"""` is on its own line.
 - A double-quoted string spanning multiple lines is rejected — use `"""`.
 
@@ -184,7 +184,9 @@ def release(version) {
 - **`fail "reason"`** aborts with a non-zero exit. **`return`** accepts `"string"`, `"""…"""`, a bare identifier, `run ref()` / `run ref()`, an inline script, or a `match` expression.
 - **`log` / `logerr` / `logwarn`** accept `"string"`, `"""…"""`, a bare identifier (`log status` ≡ `log "${status}"`), or `log run \`cmd\`()`. `logerr` writes a red line and `logwarn` a yellow warning line; both also appear on stderr.
 
-### Rules — checks only
+### Checks — a def used as a gate
+
+A check is an ordinary def whose job is to pass or fail. It runs a script or another def, and a non-zero exit or a `fail` stops the caller.
 
 ```jaiph
 def branch_is(expected) {
@@ -311,14 +313,14 @@ export def main() {
 }                                        # unread handles are joined when this step list finishes
 ```
 
-Workflows only (rejected in rules); not combinable with inline scripts. `catch`/`recover` compose with `run async`. Unread handles are joined at the end of the **current step list** (the workflow body, an `if`/`else` branch, or a `catch`/`recover` body) before control continues — channel drains run only after the entry workflow's top-level list finishes. For concurrent *shell*, use `&` + `wait` inside one script body instead.
+Allowed in any def; not combinable with inline scripts. `catch`/`recover` compose with `run async`. Unread handles are joined at the end of the **current step list** (the workflow body, an `if`/`else` branch, or a `catch`/`recover` body) before control continues — channel drains run only after the entry workflow's top-level list finishes. For concurrent *shell*, use `&` + `wait` inside one script body instead.
 
 ### Config
 
 ```jaiph
 config {
   agent.backend = "claude"               # cursor | claude | codex
-  agent.model = "claude-sonnet-4-6"
+  agent.model = "claude-sonnet-5"
   run.recover_limit = 5                  # def-level config also honored
   run.logs_dir = ".jaiph/runs"
 }
@@ -432,8 +434,8 @@ def triage(item) {
 
 When asked to scaffold Jaiph automation (e.g. after `jaiph init`), build a small composable set under `.jaiph/`:
 
-- `.jaiph/readiness.jh` — preflight rules (required tools, clean git) + `export def main` running them.
-- `.jaiph/verification.jh` — lint/test/build rules + `export def main`.
+- `.jaiph/readiness.jh` — preflight checks (required tools, clean git) + `export def main` running them.
+- `.jaiph/verification.jh` — lint/test/build checks + `export def main`.
 - `.jaiph/main.jh` — imports both, defines the prompt-driven `implement` workflow, and a `export def main(task)` wiring **preflight → implement → verification**.
 - Optional: a review def gating a task queue, `*.test.jh` tests for the defs.
 

@@ -704,6 +704,8 @@
     /**
      * Toggles the visible platform variant (posix / windows) across every
      * panel in the install card, and reflects the choice on the switch buttons.
+     * The landing page shows only the *other* platform as a top-right link
+     * (the active button is hidden via CSS).
      */
     function setOsVariant(root, os) {
         root.querySelectorAll(".os-switch-button").forEach(function (button) {
@@ -715,9 +717,9 @@
     }
 
     /**
-     * Wires the platform sub-toggle in the install card and auto-selects the
-     * Windows variant for Windows visitors. Manual switching stays available;
-     * non-Windows visitors keep the static (POSIX) default with no layout shift.
+     * Wires the platform switch in the install card and auto-selects Windows
+     * for Windows visitors. The control is a single "other OS" link; non-Windows
+     * visitors keep the static POSIX default with no layout shift.
      */
     function attachOsSwitch() {
         var root = document.querySelector("section.try-it-out .card");
