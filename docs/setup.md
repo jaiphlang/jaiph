@@ -19,7 +19,7 @@ The curl installer downloads a standalone binary built for your platform from th
 - For the curl installer (step 1): `curl` and either `shasum` or `sha256sum` on `PATH`.
 - For the PowerShell installer (step 1, Windows): PowerShell (`irm`/`Invoke-WebRequest` and `Get-FileHash` are built in).
 - For the npm alternative (step 1): Node.js and npm on the host.
-- (Optional) [`minisign`](https://jedisct1.github.io/minisign/) on `PATH` to verify the detached release signature. Both installers embed the project public key (`jaiph.pub`). When `minisign` is missing, the installer still requires the signature file to be present and fails if it cannot download that file. It then skips signature verification, checks only the checksum, and prints a warning.
+- [`minisign`](https://jedisct1.github.io/minisign/) on `PATH` to verify the detached release signature. Both installers embed the project public key (`jaiph.pub`) and require a valid signature by default. When `minisign` is missing, the install aborts rather than falling back to a checksum-only install (finding M-5). For a deliberate checksum-only install, set `JAIPH_ALLOW_UNSIGNED=1`, which checks only the checksum and prints a warning. See [Verify the release signature](#verify-the-release-signature).
 
 ## 1. Install the binary
 
@@ -29,7 +29,7 @@ Use the curl installer:
 curl -fsSL https://jaiph.org/install | bash
 ```
 
-This downloads three files from the current stable Release: the platform binary `jaiph-{darwin|linux}-{arm64|x64}`, the checksum file `SHA256SUMS`, and the detached signature `SHA256SUMS.minisig`. It verifies the checksum, and it verifies the signature when `minisign` is available (see [Verify the release signature](#verify-the-release-signature)). It then installs the binary to `~/.local/bin/jaiph`. The installer fails closed if it cannot download `SHA256SUMS.minisig`. Override the install location with `JAIPH_BIN_DIR`.
+This downloads three files from the current stable Release: the platform binary `jaiph-{darwin|linux}-{arm64|x64}`, the checksum file `SHA256SUMS`, and the detached signature `SHA256SUMS.minisig`. It verifies the checksum and the release signature (see [Verify the release signature](#verify-the-release-signature)). It then installs the binary to `~/.local/bin/jaiph`. The installer fails closed if it cannot download `SHA256SUMS.minisig`, or if `minisign` is not installed and you have not set `JAIPH_ALLOW_UNSIGNED=1`. Override the install location with `JAIPH_BIN_DIR`.
 
 **Windows (PowerShell):** the curl installer rejects Windows and points you here. Use the PowerShell one-liner instead:
 
@@ -37,7 +37,7 @@ This downloads three files from the current stable Release: the platform binary 
 irm https://jaiph.org/install.ps1 | iex
 ```
 
-This downloads the same three files from the current stable Release: `jaiph-windows-x64.exe`, `SHA256SUMS`, and `SHA256SUMS.minisig`. It verifies the checksum with `Get-FileHash`, and it verifies the signature when `minisign` is available (see [Verify the release signature](#verify-the-release-signature)). It then installs the binary to `%LOCALAPPDATA%\jaiph\bin\jaiph.exe` and adds that directory to your user `PATH`. Open a new terminal to pick up the new `PATH`. Override the ref with `JAIPH_REPO_REF` (or the first argument), and override the install location with `JAIPH_BIN_DIR`. Windows ships an x64 binary only, because Bun has no Windows arm64 target, so ARM Windows exits with an unsupported-platform message.
+This downloads the same three files from the current stable Release: `jaiph-windows-x64.exe`, `SHA256SUMS`, and `SHA256SUMS.minisig`. It verifies the checksum with `Get-FileHash` and the release signature (see [Verify the release signature](#verify-the-release-signature)). It then installs the binary to `%LOCALAPPDATA%\jaiph\bin\jaiph.exe` and adds that directory to your user `PATH`. Open a new terminal to pick up the new `PATH`. Override the ref with `JAIPH_REPO_REF` (or the first argument), and override the install location with `JAIPH_BIN_DIR`. Windows ships an x64 binary only, because Bun has no Windows arm64 target, so ARM Windows exits with an unsupported-platform message.
 
 (Alternative) Install via npm when you already have Node on the host and want a package-manager-tracked install:
 

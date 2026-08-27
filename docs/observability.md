@@ -20,9 +20,9 @@ state, the CLI reads that run's `run_summary.jsonl` and posts one trace.
 ## Enable it
 
 Export stays off until you point Jaiph at a collector with the standard
-OpenTelemetry environment variables. There are no `JAIPH_*` variables for this
-feature. Set either the traces endpoint, which Jaiph uses exactly as given, or the
-generic base endpoint, to which Jaiph appends `/v1/traces`:
+OpenTelemetry environment variables. You enable it with those variables, not with
+a `JAIPH_*` variable. Set either the traces endpoint, which Jaiph uses exactly as
+given, or the generic base endpoint, to which Jaiph appends `/v1/traces`:
 
 ```bash
 # Generic base — Jaiph appends /v1/traces
@@ -137,8 +137,8 @@ a run terminates unsuccessfully, from a nonzero exit or a signal, Jaiph posts on
 Sentry error event, which gives operators alerting and grouping without reading
 through run directories. A successful run sends nothing.
 
-Reporting stays off until you set a Sentry DSN. As with traces, there are no
-`JAIPH_*` variables for this feature:
+Reporting stays off until you set a Sentry DSN. As with traces, you enable it with
+a standard variable, not a `JAIPH_*` variable:
 
 ```bash
 export SENTRY_DSN="https://<key>@<host>/<projectId>"

@@ -37,7 +37,7 @@ Crossings produce specific `E_VALIDATE` messages identifying the violated rule.
 | `export def` / `export script` | Marks a definition public. Names are private by default: same-file code can call any name; `import` can only call names listed in `mod.exports`. Zero exports means nothing is public. |
 | `channel name [-> target [, target …]]` | Declares a named queue. Inline routes target defs with 1 to 3 parameters (message, channel, sender). |
 | `const NAME = value` | Module-scoped immutable string. Values: double-quoted, triple-quoted, or bare token. Stored verbatim. |
-| `config { … }` | Module-level configuration block (`agent.*`, `run.*`, `runtime.*`, `module.*`). See [Configuration](configuration.md). |
+| `config { … }` | Module-level configuration block (`agent.*`, `run.*`, `module.*`, and `trusted_envs`). See [Configuration](configuration.md). |
 | `script name = …` | Executable definition. Invoked with `run`. |
 | `def name([params]) { … }` | Interpreted callable. Invoked with `run`. `export def main` is the `jaiph run` entry; it is optional in library modules. |
 
@@ -147,18 +147,6 @@ export def main() {
 | Progress display | Each branch is prefixed with subscript digits (₁, ₂, …) at the call site's indent level, in dispatch order. Nested branches get their own numbering scope. |
 
 See [Spec — Async Handles](spec-async-handles.md) for the full value model.
-
-## `run` — execute a def or script
-
-```jaiph
-run check_deps()
-const result = run lib.validate(input)
-run ci_passes() catch (failure) {
-  log "ci failed: ${failure}"
-}
-```
-
-The capture binds the callee's explicit `return` value (def) or trimmed stdout (script). `recover` is legal on every `run`.
 
 ## `catch` and `recover`
 

@@ -210,9 +210,9 @@ run_async_stmt   = "run" "async" call_ref [ recover_suffix | catch_suffix ] ;
 
 | Position | Allowed targets |
 |---|---|
-| `run` | Def or script. |
-| `run async` | Defs only. Inline scripts not supported. |
-| Inline script in `run` | Defs. |
+| `run` | Def or named script. |
+| `run async` | Defs and named scripts. Inline scripts not supported. |
+| Inline script in `run` | Allowed. |
 
 Capture: a def callee yields the explicit `return` value; a script callee yields trimmed stdout.
 

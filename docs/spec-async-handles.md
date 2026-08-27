@@ -8,7 +8,7 @@ redirect_from:
 
 # The async handle value model
 
-Some workflows reach a point where two pieces of work do not depend on each other. For example, an analysis and a build can run at the same time. The two could overlap, but only if the runtime keeps a record of every piece of work that has started and waits for each one to finish before the workflow ends.
+Some workflows reach a point where two pieces of work do not depend on each other. For example, an analysis and a build can run at the same time. To let the two overlap, the runtime has to start each piece of work without waiting for it, and it still has to wait for every started piece to finish before the workflow ends.
 
 Jaiph provides `run async` and a value type called `Handle<T>` for overlapping independent work. The value model covers what a handle represents, when it turns into a real string, and how it interacts with recovery and joins. For the surface syntax see [Language, `run async`](language.md#run-async-concurrent-execution-with-handles) and [Grammar, `run async`](grammar.md). For the runtime implementation see [Architecture, Core components](architecture.md#core-components).
 
@@ -23,7 +23,7 @@ The model separates when work starts from when its value is read:
 1. **Eager start.** Work is scheduled the moment `run async` runs.
 2. **Lazy resolve.** The handle is not the value yet. The token can stay in its binding while later steps run, and the wait happens at the first resolving read or at the implicit join.
 
-Separating the start from the read is what lets `run async` overlap work. You start the work and keep going, and you only pay the wait cost at the step that depends on the result.
+Separating the start from the read is what lets `run async` overlap work. You start the work and keep going, and you only wait at the step that depends on the result.
 
 ## Passthrough versus reads that force resolution
 

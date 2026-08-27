@@ -45,7 +45,7 @@ The design makes three commitments, and each one settles many smaller questions:
 
 It also helps to say what Jaiph is not:
 
-- **Not a general-purpose programming language.** A workflow runs steps in order and has only the control flow it needs, which is `if`, `match`, `for_lines`, `recover`, and `catch`. Anything more complex belongs in a `script`.
+- **Not a general-purpose programming language.** A workflow runs steps in order and has only the control flow it needs, which is `if`, `match`, `for`, `recover`, and `catch`. Anything more complex belongs in a `script`.
 - **Not a distributed system.** Channels pass messages between workflows in the same run, in one process. See [Inbox & Dispatch](inbox.md). There is no broker, no cross-process routing, and no retry queue.
 - **Not a replacement for CI.** Jaiph runs the same way on your machine and inside a CI container. It does not provide the test matrix, artifact publishing, or environment management that CI platforms do.
 - **Not a prompt framework.** There is no chain abstraction, no agent class hierarchy, and no built-in memory store. A `prompt` step calls a backend, and if you want to chain calls, you compose steps yourself.
