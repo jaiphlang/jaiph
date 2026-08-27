@@ -184,10 +184,9 @@ test("executeScript: missing interpreter fails with a diagnosable error naming t
 
 // Regression for the prompt env scrub (kernel/env-allowlist.ts): scrubbing is
 // scoped to prompt backend subprocesses only. A trusted `run` script step must
-// still receive the full workflow env — including a `--env`-injected secret
-// (host mode merges the pairs into the runner env; Docker forwards them as
-// explicit `-e` args). If the scrub ever extended to script spawns, the token
-// below would be empty and this test would fail.
+// still receive the full runner env — including a `--env`-injected secret
+// (the pairs are merged into the runner env). If the scrub ever extended to
+// script spawns, the token below would be empty and this test would fail.
 test("executeScript: a run script step still receives a --env-injected non-allowlisted secret", async () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-script-env-secret-"));
   try {

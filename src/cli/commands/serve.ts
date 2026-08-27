@@ -246,7 +246,7 @@ export async function runServe(rest: string[]): Promise<number> {
     persistRun: persistRunRecord,
     // A run's dir is only recorded on its object at finalize; while it runs the
     // events/artifacts endpoints locate it by scanning the host runs root for
-    // the run id (works host- and Docker-side — the run dir is a host mount).
+    // the run id.
     // The handler caches the first hit per record, so a live SSE poll loop
     // scans at most once.
     resolveRunDir: (record) => findRunDir(hostRunsRoot, record.run_id),

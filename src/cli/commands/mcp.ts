@@ -111,9 +111,8 @@ export async function runMcp(rest: string[]): Promise<number> {
         rl.close();
         drain();
       } else {
-        // Second signal: kill every in-flight run's child process tree and, in
-        // Docker mode, force-remove its container; the calls then settle and
-        // the drain above finishes cleanup.
+        // Second signal: kill every in-flight run's child process tree; the
+        // calls then settle and the drain above finishes cleanup.
         log("jaiph mcp: cancelling in-flight calls...");
         server.cancelAll();
       }

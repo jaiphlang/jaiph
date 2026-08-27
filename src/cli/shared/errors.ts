@@ -203,9 +203,8 @@ export function readFailedStepOutput(summaryPath: string): string | null {
     }
     return trimmed;
   };
-  // Prefer embedded content from the event (works in both Docker and
-  // non-Docker modes). Fall back to reading files only for older
-  // summaries that lack embedded content.
+  // Prefer embedded content from the event. Fall back to reading files
+  // only for older summaries that lack embedded content.
   const readFileContent = (path: string): string => {
     if (!path || !existsSync(path)) return "";
     return readFileSync(path, "utf8").trimEnd();

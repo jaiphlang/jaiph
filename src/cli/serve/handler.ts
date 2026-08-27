@@ -525,7 +525,7 @@ export class ServeHandler {
 
     // A tools/call may emit progress; stream it as SSE when the client offers
     // that content type. The client hanging up cancels the run through the same
-    // MCP cancel path (kills the child + Docker container).
+    // MCP cancel path (kills the child process tree).
     if (requestId !== undefined && method === "tools/call" && wantsSse) {
       // The stream body runs after this method returns (outside the request's
       // AsyncLocalStorage scope), so capture the identity and re-establish it
