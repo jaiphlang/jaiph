@@ -48,12 +48,11 @@ const KEY_FILE = "key";
 /**
  * Operator-side directory that holds per-run audit-chain keys. It lives OUTSIDE
  * the run directory — which is agent-writable (`$JAIPH_RUN_DIR` for script
- * steps, bind-mounted rw at `/jaiph/run` under Docker) — so a workflow cannot
- * squat the key path, delete the key, or otherwise disable its own tamper
- * evidence (finding M-3). Default: the operator's home `.jaiph/audit-keys`,
- * which is never mounted into a container; override with `JAIPH_AUDIT_KEY_DIR`
- * (e.g. to place keys on a locked-down volume). Read host-side only — the
- * container/kernel never resolves this.
+ * steps) — so a program cannot squat the key path, delete the key, or
+ * otherwise disable its own tamper evidence (finding M-3). Default: the
+ * operator's home `.jaiph/audit-keys`; override with `JAIPH_AUDIT_KEY_DIR`
+ * (e.g. to place keys on a locked-down volume). Read by the CLI only — the
+ * kernel never resolves this.
  */
 export function resolveAuditKeyStore(env: NodeJS.ProcessEnv = process.env): string {
   const override = env.JAIPH_AUDIT_KEY_DIR;

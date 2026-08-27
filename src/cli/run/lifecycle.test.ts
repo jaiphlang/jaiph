@@ -47,10 +47,10 @@ test("waitForRunExit resolves from exit if close does not arrive", async () => {
   assert.equal(result.signal, null);
 });
 
-test("waitForRunExit resolves on immediate exit (Docker early container exit)", async () => {
+test("waitForRunExit resolves on immediate exit (exit before close)", async () => {
   const child = fakeChild();
   const promise = waitForRunExit(child, undefined, { closeGraceMs: 50 });
-  // Simulate Docker container failing at startup: exit fires immediately, then close follows.
+  // Simulate a child failing at startup: exit fires immediately, then close follows.
   child.emit("exit", 1, null);
   child.emit("close", 1, null);
   const result = await promise;
@@ -58,7 +58,7 @@ test("waitForRunExit resolves on immediate exit (Docker early container exit)", 
   assert.equal(result.signal, null);
 });
 
-test("waitForRunExit resolves with signal when Docker container is killed", async () => {
+test("waitForRunExit resolves with signal when the child is killed", async () => {
   const child = fakeChild();
   const promise = waitForRunExit(child);
   child.emit("exit", null, "SIGTERM");
@@ -135,7 +135,7 @@ test("armRunTimeout: a child that exits before the budget is never signalled", a
   timeout.cancel();
 });
 
-test("setupRunSignalHandlers: SIGINT runs onSignalCleanup (Docker container-stop hook)", () => {
+test("setupRunSignalHandlers: SIGINT runs onSignalCleanup", () => {
   withIsolatedSignal("SIGINT", () => {
     const child = fakeChild();
     let cleanupCalls = 0;
@@ -152,7 +152,7 @@ test("setupRunSignalHandlers: SIGINT runs onSignalCleanup (Docker container-stop
   });
 });
 
-test("setupRunSignalHandlers: SIGTERM runs onSignalCleanup (Docker container-stop hook)", () => {
+test("setupRunSignalHandlers: SIGTERM runs onSignalCleanup", () => {
   withIsolatedSignal("SIGTERM", () => {
     const child = fakeChild();
     let cleanupCalls = 0;
