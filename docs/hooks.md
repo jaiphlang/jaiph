@@ -13,13 +13,13 @@ A hook is a shell command that the CLI runs when a run reaches a lifecycle event
 
 Hooks run on the host CLI. The CLI dispatches them at four lifecycle events. It reads the step events from `__JAIPH_EVENT__` lines on the runner's stderr, and it emits `run_start` before the runner spawns and `run_end` after the runner exits. Each hook command receives a JSON payload on its stdin.
 
-The same four events (`run_start`, `step_start`, `step_end`, `run_end`), with the same payload shapes, fire in the three ways you can run a workflow:
+The same four events (`run_start`, `step_start`, `step_end`, `run_end`), with the same payload shapes, fire in the three ways you can run a def:
 
 - Direct runs. Interactive `jaiph run` or `jaiph <file.jh>`.
-- HTTP runs. Every workflow run under `jaiph serve`, dispatched by the server process.
+- HTTP runs. Every run under `jaiph serve`, dispatched by the server process.
 - MCP tool calls. Every `jaiph mcp` tool call, dispatched by the server process. The hook's stderr goes to the server's stderr, and stdout stays clean for the protocol.
 
-Some run modes dispatch no hooks. `jaiph run --raw` dispatches no hooks, because it is meant for embedding a run inside another program and keeps its output clean. `jaiph test` runs workflows in-process and dispatches no hooks. When you run `jaiph serve` or `jaiph mcp`, the server loads `hooks.json` at startup and reads it again on each source reload.
+Some run modes dispatch no hooks. `jaiph run --raw` dispatches no hooks, because it is meant for embedding a run inside another program and keeps its output clean. `jaiph test` runs defs in-process and dispatches no hooks. When you run `jaiph serve` or `jaiph mcp`, the server loads `hooks.json` at startup and reads it again on each source reload.
 
 ## Prerequisites
 
@@ -76,9 +76,9 @@ Each command runs under `sh -c`, with the JSON payload written to its stdin. A p
 p=$(cat); echo "$p" | jq -r .status; echo "$p" | jq -r .run_path
 ```
 
-The CLI discards each hook's stdout and copies its stderr to the CLI's stderr. A hook failure never changes the workflow exit code. When a hook fails, the CLI writes a `jaiph hooks: …` line and continues.
+The CLI discards each hook's stdout and copies its stderr to the CLI's stderr. A hook failure never changes the run exit code. When a hook fails, the CLI writes a `jaiph hooks: …` line and continues.
 
-## 3. Run the workflow
+## 3. Run the def
 
 Trust the workspace first if the hooks live in the project file (`<workspace>/.jaiph/hooks.json`); global hooks need no opt-in.
 
@@ -123,7 +123,7 @@ There is no flag that disables a hook. An empty array does not override the glob
 
 ## Reload behavior on a running server
 
-`jaiph serve` and `jaiph mcp` re-read `hooks.json` when they reload the workflow source, not the moment you save the file. A server reloads when a watched module source file changes, and it reads the hooks again as part of that reload. So an edit to `hooks.json` alone takes effect on the next source change, not on its own.
+`jaiph serve` and `jaiph mcp` re-read `hooks.json` when they reload the program source, not the moment you save the file. A server reloads when a watched module source file changes, and it reads the hooks again as part of that reload. So an edit to `hooks.json` alone takes effect on the next source change, not on its own.
 
 ## Related
 

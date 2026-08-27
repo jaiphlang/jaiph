@@ -300,7 +300,7 @@ export function validateWorkflowShellExec(
         body.loc.line,
         body.loc.col,
         "E_VALIDATE",
-        `use run ${t}() — "${t}" is a valid script or workflow reference; use a managed run step`,
+        `use run ${t}() — "${t}" is a valid script or def reference; use a managed run step`,
       );
     }
   }

@@ -285,7 +285,7 @@ import "say_hello.jh" as hello
 # between the prompt and the error message in the test file.
 # We use it to verify the test works and the error message output
 # is correct.
-test "without name, workflow fails with validation message" {
+test "without name, main fails with validation message" {
   # When
   const response = run hello.main() allow_failure
 
@@ -307,7 +307,7 @@ test "with name, returns greeting and logs response" {
                     <p>Example of a failing test (the expected string omits the trailing <code>:(</code>):</p>
                     <pre><code class="jaiph-run" data-sample-output="failing-run"><span class="run-command">➜  ./say_hello.test.jh</span>
 testing say_hello.test.jh
-  <span class="run-marker">▸</span> without name, workflow fails with validation message
+  <span class="run-marker">▸</span> without name, main fails with validation message
   <span class="run-fail">✗</span> expect_equal failed: <span class="run-time">0s</span>
     <span class="run-diff-minus">- You didn't provide your name</span>
     <span class="run-diff-plus">+ You didn't provide your name :(</span>
@@ -316,7 +316,7 @@ testing say_hello.test.jh
   <span class="run-pass">✓</span> <span class="run-time">0s</span>
 
 <span class="run-fail">✗ 1 / 2 test(s) failed</span>
-  - without name, workflow fails with validation message</code></pre>
+  - without name, main fails with validation message</code></pre>
                 </div>
 
                 <div class="code-tab-panel" data-panel="recover-loop-jh" data-sample="recover-loop"

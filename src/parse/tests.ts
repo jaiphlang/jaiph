@@ -357,13 +357,13 @@ export function parseTestBlock(
     // --- Reject old syntax: bare assignment without const/run ---
     const oldAssignMatch = inner.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)(?:\s|$)/);
     if (oldAssignMatch) {
-      fail(filePath, `use "const ${oldAssignMatch[1]} = run ${oldAssignMatch[2]}(…)" to capture workflow output`, innerNo, col);
+      fail(filePath, `use "const ${oldAssignMatch[1]} = run ${oldAssignMatch[2]}(…)" to capture def output`, innerNo, col);
     }
 
     // --- Reject old syntax: bare workflow call without run ---
     const oldBareCallMatch = inner.match(/^([A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*)(?:\s|$)/);
     if (oldBareCallMatch) {
-      fail(filePath, `use "run ${oldBareCallMatch[1]}(…)" to call a workflow in tests`, innerNo, col);
+      fail(filePath, `use "run ${oldBareCallMatch[1]}(…)" to call a def in tests`, innerNo, col);
     }
 
     // --- No fallback: reject unrecognized lines ---

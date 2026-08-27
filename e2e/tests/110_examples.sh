@@ -112,7 +112,7 @@ fi
 
 e2e::expect_stdout "${test_out}" <<'EOF'
 testing say_hello.test.jh
-  ▸ without name, workflow fails with validation message
+  ▸ without name, main fails with validation message
   ✗ expect_equal failed: <time>
     - You didn't provide your name
     + You didn't provide your name :(
@@ -121,7 +121,7 @@ testing say_hello.test.jh
   ✓ <time>
 
 ✗ 1 / 2 test(s) failed
-  - without name, workflow fails with validation message
+  - without name, main fails with validation message
 EOF
 
 # ── recover_loop.jh ────────────────────────────────────────────────────────

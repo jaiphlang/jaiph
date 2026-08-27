@@ -15,7 +15,7 @@ You write a Jaiph program as one or more modules. Each `.jh` module holds top-le
 
 Every value in a def is either a `string` or a `script`. A `string` is ordinary text that you can interpolate, pass as an argument, and return. A `script` is an executable body that you invoke with `run`. The Value types table below lists what you can do with each and which uses the validator rejects.
 
-The runtime that executes these definitions is `NodeWorkflowRuntime` (`src/runtime/kernel/node-workflow-runtime.ts`). It dispatches on `StepDef.type` and evaluates every value through one private `evaluateExpr` over `Expr.kind` (seven expression kinds). See [Architecture](architecture.md#core-components).
+The def runtime (`src/runtime/kernel/node-workflow-runtime.ts`) executes these definitions. It dispatches on `StepDef.type` and evaluates every value through one private `evaluateExpr` over `Expr.kind` (seven expression kinds). See [Architecture](architecture.md#core-components).
 
 For the formal grammar (EBNF, lexical rules, and the validation catalog) see [Grammar](grammar.md). For why the language is shaped the way it is, see [Why Jaiph](why-jaiph.md).
 
@@ -45,7 +45,7 @@ Visibility: same-file, all names. Across `import`, only names in `mod.exports` (
 
 The unified per-module namespace covers channels, defs, scripts, script-import aliases, and top-level `const`. Duplicates are `E_PARSE`. `main` is reserved as the run entry: if a symbol named `main` exists, it must be `export def main`.
 
-## Workflow body — step types
+## Def body — step types
 
 There are eight `StepDef` variants. Every body line that does not match a managed form becomes a `shell` step.
 
@@ -54,7 +54,7 @@ There are eight `StepDef` variants. Every body line that does not match a manage
 | `exec` | `run` / `prompt` / standalone `match` / inline shell | Side-effecting managed call statement. The discriminator (call / inline_script / prompt / match / shell) lives in `body.kind`. Carries optional `catch` or `recover`. |
 | `const` | `const NAME = <expr>` | Bind a value expression to a name. |
 | `return` | `return <expr>` | Set the managed return value. |
-| `send` | `send <expr> -> channel` | Enqueue a payload on a channel for the current workflow context. |
+| `send` | `send <expr> -> channel` | Enqueue a payload on a channel for the current def context. |
 | `say` | `log` / `logerr` / `logwarn` / `fail` | `level: "log"` / `"logerr"` / `"logwarn"` / `"fail"`. `level: "fail"` aborts with the message. |
 | `if` | `if <subject> <op> <operand> { … } [ else if … { … } ]* [ else { … } ]` | Conditional block. |
 | `for_lines` | `for <iter> in <source> { … }` | Iterate lines of a string variable. |
@@ -71,7 +71,7 @@ Every value position (`const` RHS, `return`, `send` RHS, `log` / `logerr` / `fai
 | `inline_script` | `` `body`(args) `` / `` ```lang...body...```(args) `` | Inline script body emitted as `scripts/__inline_<hash>`. |
 | `prompt` | `prompt body [returns "<schema>"]` | Sends body to the agent backend; JSON-quoted in transport. |
 | `match` | `match <subject> { … }` | Walks arms top-to-bottom; first match wins. |
-| `shell` | Free-form workflow body line; raw shell fragment on a `send` payload | An unparsed line becomes an inline-shell `exec` step. Send: a raw shell fragment (e.g. `send echo "$payload" -> findings`) is a valid managed shell payload. `send` is the only position that accepts `shell`; it is `E_VALIDATE` anywhere else. |
+| `shell` | Free-form def body line; raw shell fragment on a `send` payload | An unparsed line becomes an inline-shell `exec` step. Send: a raw shell fragment (e.g. `send echo "$payload" -> findings`) is a valid managed shell payload. `send` is the only position that accepts `shell`; it is `E_VALIDATE` anywhere else. |
 | `bare_ref` | A bare symbol on a `send` RHS | Always rejected by the validator; preserved so the error can name the symbol. |
 
 ## `run` — execute a def or script
@@ -86,10 +86,9 @@ Capture rules:
 
 | Callee | Captured value |
 |---|---|
-| Workflow | Explicit `return` value of the callee. |
+| Def (`run`) | Explicit `return` value of the callee. |
 | Named script | Trimmed stdout. |
 | Inline script | Trimmed stdout. |
-| Def (`run`) | Explicit `return` value. |
 
 Call arguments:
 
@@ -101,7 +100,7 @@ Call arguments:
 | Bare dotted `IDENT.IDENT` | Typed-prompt field access. Base must be a typed-prompt capture; field must appear in its `returns` schema (`E_VALIDATE` otherwise). |
 | `run ref(args)` | Nested managed call. The `run` keyword is required. |
 
-**Hard error contract:** any line that begins with `run`, `return run` followed by a valid identifier and `(` is treated as a managed-call start. If the matching `)` is never found before end-of-block, the compiler emits `E_PARSE` — the line is **never** silently treated as a workflow shell step.
+**Hard error contract:** any line that begins with `run`, `return run` followed by a valid identifier and `(` is treated as a managed-call start. If the matching `)` is never found before end-of-block, the compiler emits `E_PARSE` — the line is **never** silently treated as an inline shell step.
 
 ### Inline scripts
 
@@ -192,7 +191,7 @@ Sends text to the configured agent backend. The body can take one of these forms
 | Typed `returns` | Flat `{ field: type, … }` with `string` / `number` / `boolean`. Stored verbatim as text per-field. |
 | Capture required when `returns` | `prompt … returns "…"` without `const` is `E_PARSE`. |
 | Dot notation | Bare `result.field` (in `return`, `if` / `match` subjects, and call arguments) and `${result.field}` **inside strings** require that the base is a typed-prompt capture and the field appears in the schema. Unquoted `${result.field}` in call-argument position is `E_VALIDATE`. |
-| Interpolation into shell steps | A prompt capture (`const x = prompt …`, typed or untyped) interpolated into a workflow shell step — e.g. `echo "${x}"` as a free-form body line — is `W_PROMPT_IN_SHELL`. Shell steps run via `sh -c`, and the runtime shell-quotes every value it interpolates into the line, so an agent-controlled value reaches the shell as data and cannot inject a command; the diagnostic still fires to steer you to the argv path. Pass it as a script argument instead (`run my_script(x)` → `$1`, which is argv, not shell-expanded). Only shell steps are flagged; `run script(x)`, `log`, `logerr`, and non-prompt variables are not. |
+| Interpolation into shell steps | A prompt capture (`const x = prompt …`, typed or untyped) interpolated into an inline shell step — e.g. `echo "${x}"` as a free-form body line — is `W_PROMPT_IN_SHELL`. Shell steps run via `sh -c`, and the runtime shell-quotes every value it interpolates into the line, so an agent-controlled value reaches the shell as data and cannot inject a command; the diagnostic still fires to steer you to the argv path. Pass it as a script argument instead (`run my_script(x)` → `$1`, which is argv, not shell-expanded). Only shell steps are flagged; `run script(x)`, `log`, `logerr`, and non-prompt variables are not. |
 | Transport retry | Transport failures retry on a backoff schedule; deterministic post-processing failures do not. See [Configuration — Prompt retry on transport failure](configuration.md#prompt-retry-on-transport-failure). |
 
 ## `const` — bind a value
@@ -263,7 +262,7 @@ send """
 | Bare ref payload | A bare def / script name is `E_VALIDATE`. |
 | Combined capture | `name = send …` is `E_PARSE`. |
 | Allowed in | Defs. |
-| Dispatch | `send` enqueues on the active workflow context. After that workflow's steps complete successfully, the runtime drains the queue sequentially and runs each route target. Sends from nested workflows bubble to the nearest ancestor context that declares routes for the channel. See [Inbox & Dispatch](inbox.md). |
+| Dispatch | `send` enqueues on the active def context. After that def's steps complete successfully, the runtime drains the queue sequentially and runs each route target. Sends from nested defs bubble to the nearest ancestor context that declares routes for the channel. See [Inbox & Dispatch](inbox.md). |
 
 ## `log` / `logerr` / `logwarn` / `fail`
 
@@ -391,11 +390,11 @@ No string-RHS site accepts two of these but rejects the third.
 
 If an inline capture fails, the enclosing step fails. Nested inline captures (`${run foo(${run bar()})}`) are `E_PARSE` — extract the inner call to a `const`.
 
-Values interpolated into a workflow shell step (a free-form body line that runs via `sh -c`) are shell-quoted first, so a value that contains shell metacharacters is passed to the shell as data and cannot inject a command. Every other string position interpolates the raw value.
+Values interpolated into an inline shell step (a free-form body line that runs via `sh -c`) are shell-quoted first, so a value that contains shell metacharacters is passed to the shell as data and cannot inject a command. Every other string position interpolates the raw value.
 
 ## Subprocess environment
 
-Managed script steps (`run` to a named script, `import script`, inline scripts) and workflow inline-shell lines all use the same `scope.env`: the runner's `process.env` augmented by Jaiph (`JAIPH_WORKSPACE`, `JAIPH_SCRIPTS`, `JAIPH_RUN_DIR`, `JAIPH_ARTIFACTS_DIR`, `JAIPH_RUN_ID`, prompt-related `JAIPH_AGENT_*`, and keys derived from `config { … }`). This is **not** an `env -i`-style wipe — anything the runner sees, the child sees, unless explicitly stripped. The runtime removes some keys from every subprocess environment so the audited workflow cannot read them: the audit journal path (`JAIPH_RUN_SUMMARY_FILE`), the audit-chain key (`JAIPH_CHAIN_KEY`), and any host keys named by `trusted_envs`. A `trusted_envs` key is re-injected only into the declaring workflow's own `run` steps. See [Environment variables](env-vars.md).
+Managed script steps (`run` to a named script, `import script`, inline scripts) and def inline-shell lines all use the same `scope.env`: the runner's `process.env` augmented by Jaiph (`JAIPH_WORKSPACE`, `JAIPH_SCRIPTS`, `JAIPH_RUN_DIR`, `JAIPH_ARTIFACTS_DIR`, `JAIPH_RUN_ID`, prompt-related `JAIPH_AGENT_*`, and keys derived from `config { … }`). This is **not** an `env -i`-style wipe — anything the runner sees, the child sees, unless explicitly stripped. The runtime removes some keys from every subprocess environment so the audited program cannot read them: the audit journal path (`JAIPH_RUN_SUMMARY_FILE`), the audit-chain key (`JAIPH_CHAIN_KEY`), and any host keys named by `trusted_envs`. A `trusted_envs` key is re-injected only into the declaring def's own `run` steps. See [Environment variables](env-vars.md).
 
 Module `const` values are **not** automatically exported into script environments. Pass them as positional arguments (`$1`, `$2`, …) or read Jaiph-provided variables.
 

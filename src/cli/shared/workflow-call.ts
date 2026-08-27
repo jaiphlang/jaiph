@@ -162,9 +162,9 @@ function buildStepEventHandler(
 }
 
 /**
- * Build the workflow-log mirror handler for one call, or `undefined` when
+ * Build the run-log mirror handler for one call, or `undefined` when
  * mirroring is off (the default) or there is no operator log. When on, every
- * workflow LOG/LOGWARN/LOGERR event is mirrored to the operator log (stderr),
+ * run LOG/LOGWARN/LOGERR event is mirrored to the operator log (stderr),
  * colorized by level with the same depth / async-branch subscript indent as the
  * interactive tree. The message is credential-redacted through the same
  * boundary as the durable journal / call-result text — redaction uses the
@@ -176,7 +176,7 @@ function buildLogMirrorHandler(
   runtimeEnv: Record<string, string | undefined>,
   extraEnv: Record<string, string>,
 ): ((ev: LogEvent) => void) | undefined {
-  if (!operator || !operator.log.mirrorWorkflowLog) return undefined;
+  if (!operator || !operator.log.mirrorRunLog) return undefined;
   const redactEnv = { ...runtimeEnv, ...extraEnv };
   return (ev) => {
     operator.log.mirror(ev.type, redactCredentials(ev.message, redactEnv), {

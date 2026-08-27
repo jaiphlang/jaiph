@@ -9,7 +9,7 @@ redirect_from:
 
 # Save artifacts
 
-This guide shows how to publish files from a workflow into the run's `artifacts/` directory. Each run gets its own directory under the runs root (`.jaiph/runs/` by default), and `artifacts/` sits inside that run directory. Copying files into `artifacts/` is the supported way to export them from a run.
+This guide shows how to publish files from a def into the run's `artifacts/` directory. Each run gets its own directory under the runs root (`.jaiph/runs/` by default), and `artifacts/` sits inside that run directory. Copying files into `artifacts/` is the supported way to export them from a run.
 
 The runtime always creates the `artifacts/` directory and exposes its absolute path as `JAIPH_ARTIFACTS_DIR`. The `jaiphlang/artifacts` library is the standard way to copy files into that directory, and you can also write there directly from a `script` step.
 
@@ -78,13 +78,13 @@ After the run, list the artifacts directory:
 ls <runs_root>/<YYYY-MM-DD>/<HH-MM-SS>-<source>/artifacts/
 ```
 
-Replace `<runs_root>` with `.jaiph/runs` when `JAIPH_RUNS_DIR` is unset, or with your configured runs directory otherwise. The date and time segments are UTC, and `<source>` is the entry-file basename (or `JAIPH_SOURCE_FILE` when set). You should see the files your workflow saved.
+Replace `<runs_root>` with `.jaiph/runs` when `JAIPH_RUNS_DIR` is unset, or with your configured runs directory otherwise. The date and time segments are UTC, and `<source>` is the entry-file basename (or `JAIPH_SOURCE_FILE` when set). You should see the files your program saved.
 
-`artifacts.save(...)` fails when the input list is empty after trimming, when any listed path is missing or not a regular file, or when `JAIPH_ARTIFACTS_DIR` is unset. Wrap the call in `recover` or `catch` if you want the workflow to tolerate that failure.
+`artifacts.save(...)` fails when the input list is empty after trimming, when any listed path is missing or not a regular file, or when `JAIPH_ARTIFACTS_DIR` is unset. Wrap the call in `recover` or `catch` if you want the def to tolerate that failure.
 
 ## Verify a run's integrity chain
 
-Every line the runtime appends to `run_summary.jsonl` carries a `prev_hash` field. The field holds a **keyed** HMAC-SHA256 of the previous raw line (keyed genesis for the first line), computed under a per-run secret the audited workflow never sees. Rewriting a line, or dropping a line and re-linking the survivors, breaks the chain and cannot be re-forged without the key, so you can detect tampering with a run's audit trail. The key is persisted once the run finishes. It is **not** stored in the run directory, which the workflow can write to. It is stored in an operator-side store instead (`~/.jaiph/audit-keys` by default, or the directory in `JAIPH_AUDIT_KEY_DIR`), keyed by the run directory's identity. See [Architecture, keyed hash chain](architecture.md#hash-chain) for the full contract, including the key-isolation and read/export-boundary guarantees.
+Every line the runtime appends to `run_summary.jsonl` carries a `prev_hash` field. The field holds a **keyed** HMAC-SHA256 of the previous raw line (keyed genesis for the first line), computed under a per-run secret the audited program never sees. Rewriting a line, or dropping a line and re-linking the survivors, breaks the chain and cannot be re-forged without the key, so you can detect tampering with a run's audit trail. The key is persisted once the run finishes. It is **not** stored in the run directory, which the program can write to. It is stored in an operator-side store instead (`~/.jaiph/audit-keys` by default, or the directory in `JAIPH_AUDIT_KEY_DIR`), keyed by the run directory's identity. See [Architecture, keyed hash chain](architecture.md#hash-chain) for the full contract, including the key-isolation and read/export-boundary guarantees.
 
 To check a run directory, run this self-contained Node script. It resolves the run's key from the operator store, where the `sha256` of the run directory's canonical path names its entry. It then recomputes the keyed chain the same way the runtime does and confirms the journal still ends with its `RUN_END` terminal marker. No jaiph build is required:
 

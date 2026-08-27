@@ -49,25 +49,25 @@ test("debug lines are gated behind debugEnabled (JAIPH_SERVER_LOG=debug)", () =>
 });
 
 test("resolveServerLogEnv reads the two documented knobs", () => {
-  assert.deepEqual(resolveServerLogEnv({}), { debugEnabled: false, mirrorWorkflowLog: false });
+  assert.deepEqual(resolveServerLogEnv({}), { debugEnabled: false, mirrorRunLog: false });
   assert.deepEqual(resolveServerLogEnv({ JAIPH_SERVER_LOG: "debug" }).debugEnabled, true);
   assert.deepEqual(resolveServerLogEnv({ JAIPH_SERVER_LOG: "DEBUG" }).debugEnabled, true);
   assert.deepEqual(resolveServerLogEnv({ JAIPH_SERVER_LOG: "info" }).debugEnabled, false);
-  assert.equal(resolveServerLogEnv({ JAIPH_SERVER_LOG_WORKFLOW: "1" }).mirrorWorkflowLog, true);
-  assert.equal(resolveServerLogEnv({ JAIPH_SERVER_LOG_WORKFLOW: "true" }).mirrorWorkflowLog, true);
-  assert.equal(resolveServerLogEnv({ JAIPH_SERVER_LOG_WORKFLOW: "0" }).mirrorWorkflowLog, false);
+  assert.equal(resolveServerLogEnv({ JAIPH_SERVER_LOG_RUNS: "1" }).mirrorRunLog, true);
+  assert.equal(resolveServerLogEnv({ JAIPH_SERVER_LOG_RUNS: "true" }).mirrorRunLog, true);
+  assert.equal(resolveServerLogEnv({ JAIPH_SERVER_LOG_RUNS: "0" }).mirrorRunLog, false);
 });
 
-test("mirrorWorkflowLog flag reflects the option; mirror() is silent otherwise via the caller gate", () => {
+test("mirrorRunLog flag reflects the option; mirror() is silent otherwise via the caller gate", () => {
   const off = createServerLog({ label: "jaiph mcp", write: () => {}, colorEnabled: false });
-  assert.equal(off.mirrorWorkflowLog, false);
-  const on = createServerLog({ label: "jaiph mcp", write: () => {}, colorEnabled: false, mirrorWorkflowLog: true });
-  assert.equal(on.mirrorWorkflowLog, true);
+  assert.equal(off.mirrorRunLog, false);
+  const on = createServerLog({ label: "jaiph mcp", write: () => {}, colorEnabled: false, mirrorRunLog: true });
+  assert.equal(on.mirrorRunLog, true);
 });
 
 test("mirror() colorizes by level and tags run_id; async_indices add a subscript indent", () => {
   const cap = capture();
-  const log = createServerLog({ label: "jaiph mcp", write: cap.write, colorEnabled: true, mirrorWorkflowLog: true });
+  const log = createServerLog({ label: "jaiph mcp", write: cap.write, colorEnabled: true, mirrorRunLog: true });
   log.mirror("LOG", "info line", { runId: "r1", depth: 0, asyncIndices: [] });
   log.mirror("LOGWARN", "warn line", { runId: "r1", depth: 0, asyncIndices: [] });
   log.mirror("LOGERR", "err line", { runId: "r1", depth: 1, asyncIndices: [2] });
@@ -81,7 +81,7 @@ test("mirror() colorizes by level and tags run_id; async_indices add a subscript
 
 test("mirror() carries the async subscript indent even when colors are off", () => {
   const cap = capture();
-  const log = createServerLog({ label: "jaiph serve", write: cap.write, colorEnabled: false, mirrorWorkflowLog: true });
+  const log = createServerLog({ label: "jaiph serve", write: cap.write, colorEnabled: false, mirrorRunLog: true });
   log.mirror("LOG", "line", { runId: "r9", depth: 2, asyncIndices: [1, 3] });
   assert.ok(!cap.lines[0].includes("\u001b["), "no ANSI when colors are off");
   assert.ok(cap.lines[0].includes("₁") && cap.lines[0].includes("₃"), "both subscripts present");

@@ -692,7 +692,7 @@ export def main() {
 }
 
 === invalid def reference in channel route
-# @expect error E_PARSE "invalid workflow reference in channel route:" @1:1
+# @expect error E_PARSE "invalid def reference in channel route:" @1:1
 --- input.jh
 channel findings -> 123bad
 export def main() {
@@ -1543,7 +1543,7 @@ export def main() {
 }
 
 === channel route with no target after arrow
-# @expect error E_PARSE "channel route requires at least one target workflow after ->" @1:1
+# @expect error E_PARSE "channel route requires at least one target def after ->" @1:1
 --- input.jh
 channel findings ->
 export def main() {
