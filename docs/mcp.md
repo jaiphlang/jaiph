@@ -129,7 +129,7 @@ As the def runs, Jaiph sends a `notifications/progress` back to the client at ea
 ```
 
 - `progress` is a counter that only increases. It is a running count of the step events seen so far, not a fraction of a known total. There is no `total`, because Jaiph does not know a def's step count up front. Both the start and the end of a step send a notification, so the counter goes up by two per step, and the `message` repeats across the start and end pair (above, the `deploy_sh` script step).
-- `message` is the step's kind and name, one of `def <name>` or `script <name>`. These are the same step events that `jaiph run` prints on stderr. The tool's own def is the first step (`def deploy` above), followed by its nested steps.
+- `message` is the step's kind and name, one of `def <name>`, `script <name>`, or `prompt <backend>`. For a prompt step the name is the backend rather than a step name, such as `prompt claude`. These are the same step events that `jaiph run` prints on stderr. The tool's own def is the first step (`def deploy` above), followed by its nested steps.
 - Notifications stop the moment the call's response is sent. No progress notification ever follows the result for that call.
 - A call without a `progressToken` receives no progress notifications at all, which is the same behavior as before you opted in.
 

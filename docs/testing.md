@@ -87,6 +87,16 @@ mock script w.helper() {
 
 `mock def` uses Jaiph steps in the body. `mock script` uses raw shell, the same as a real `script`.
 
+The parentheses can also declare parameters. A parameter receives the matching call argument by position, so a mock that reads its arguments should list the same parameters as the real def:
+
+```jh
+mock def w.greet(name) {
+  return "hi, ${name}"
+}
+```
+
+An empty `()` ignores any arguments passed at the call site.
+
 ## 4. Run the def and capture output
 
 ```jh
@@ -117,7 +127,7 @@ jaiph test ./e2e/workflow_greeting.test.jh  # single file
 jaiph ./e2e/workflow_greeting.test.jh       # shorthand: a *.test.jh path is treated as jaiph test
 ```
 
-The runner discovers `*.test.jh` files recursively. When no files match, whether you ran a bare `jaiph test` or pointed it at a directory, it prints `jaiph test: no *.test.jh files found (nothing to do)` and exits 0, so you can call it from CI without checking first.
+The runner discovers `*.test.jh` files recursively. A bare `jaiph test` walks every subdirectory under the workspace root, which includes installed libraries under `.jaiph/libs/`, so any test files that ship inside a library run too. Point `jaiph test` at your own directory (for example `jaiph test ./e2e`) when you want to run only your tests. When no files match, whether you ran a bare `jaiph test` or pointed it at a directory, it prints `jaiph test: no *.test.jh files found (nothing to do)` and exits 0, so you can call it from CI without checking first.
 
 ## Verification
 

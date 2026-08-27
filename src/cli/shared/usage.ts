@@ -41,6 +41,7 @@ export function printUsage(): void {
       "  With one or more args: shallow-clone each repo into .jaiph/libs/<name>/ and update .jaiph/libs.lock.",
       "  With no args: restore all libraries listed in .jaiph/libs.lock (registry not contacted).",
       "  --force         delete existing clone and re-clone",
+      "  --allow-unpinned  install a registry entry that has no pinned commit (prints a warning)",
       "  JAIPH_REGISTRY  registry index path/URL (default: https://jaiph.org/registry).",
       "",
       "jaiph format:",

@@ -103,7 +103,7 @@ A successful `step_end` record looks like this:
 {"event":"step_end","step_kind":"def","step_name":"main","status":0,"elapsed_ms":1500}
 ```
 
-The jq filter above keeps only a few fields. A full `step_end` payload also includes `run_id`, `step_id`, `timestamp`, `run_path`, and `workspace`. It adds `out_file` and `err_file` when the step captured stdout or stderr log files. `step_kind` is `def` for a `def` call and `script` for a script step.
+The jq filter above keeps only a few fields. A full `step_end` payload also includes `run_id`, `step_id`, `timestamp`, `run_path`, and `workspace`. It adds `out_file` and `err_file` when the step captured stdout or stderr log files. `step_kind` is `def` for a `def` call, `script` for a script step, and `prompt` for a prompt step.
 
 The other events carry different fields:
 

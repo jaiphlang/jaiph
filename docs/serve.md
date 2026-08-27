@@ -32,7 +32,7 @@ The defaults are `--host 127.0.0.1` and `--port 5247`. All logs go to stderr. St
 curl -s http://127.0.0.1:5247/v1/defs | jq
 ```
 
-`GET /openapi.json` returns the full OpenAPI 3.1 document, with one path per def. Each path carries the def's `#`-comment description and its parameters as a JSON request-body schema. `GET /healthz` is a liveness and readiness probe that needs no authentication.
+`GET /v1/defs` returns `{"defs": [{name, description, params}, ...]}`, one entry per exposed def, and it needs the `inspect` capability. `GET /openapi.json` returns the full OpenAPI 3.1 document, with one path per def. Each path carries the def's `#`-comment description and its parameters as a JSON request-body schema. `GET /healthz` is a liveness and readiness probe that needs no authentication.
 
 ## 3. Invoke a def
 
@@ -78,7 +78,7 @@ The default snapshot mode verifies the run's keyed integrity chain before it ret
 A def can publish files to `$JAIPH_ARTIFACTS_DIR` (see [artifacts](artifacts.md)). You can list and download them.
 
 ```bash
-# List published files: [{path, size, mtime}, ...] (empty when the run made none).
+# List published files: {"artifacts": [{path, size, mtime}, ...]} (empty when the run made none).
 curl -s http://127.0.0.1:5247/v1/runs/$ID/artifacts | jq
 
 # Download one by its relative path (application/octet-stream).
@@ -91,7 +91,7 @@ Downloads stream from disk with backpressure. The server never buffers a complet
 
 ## 6. Use the Swagger UI
 
-Open `http://127.0.0.1:5247/docs` in a browser to get a live form for every def. When a token is configured, paste it into the Authorize box, and Swagger UI keeps it across reloads. `/docs` is self-contained and does not require browser internet access. The pinned `swagger-ui-dist` assets are embedded in the jaiph binary and served from same-origin `/docs/*` paths, so the browser never fetches anything from a third-party host. Each asset tag carries a Subresource Integrity hash computed from the embedded bytes, so a proxy or cache that changes an asset in flight is rejected. Because everything loads from the same origin, `/docs` renders and can invoke defs on an air-gapped network, and behind a Content-Security-Policy that blocks external hosts. `/openapi.json` stays available for any other renderer.
+Open `http://127.0.0.1:5247/docs` in a browser to get a live form for every def. The server root `/` redirects to `/docs`, so `http://127.0.0.1:5247/` opens the same UI. When a token is configured, paste it into the Authorize box, and Swagger UI keeps it across reloads. `/docs` is self-contained and does not require browser internet access. The pinned `swagger-ui-dist` assets are embedded in the jaiph binary and served from same-origin `/docs/*` paths, so the browser never fetches anything from a third-party host. Each asset tag carries a Subresource Integrity hash computed from the embedded bytes, so a proxy or cache that changes an asset in flight is rejected. Because everything loads from the same origin, `/docs` renders and can invoke defs on an air-gapped network, and behind a Content-Security-Policy that blocks external hosts. `/openapi.json` stays available for any other renderer.
 
 ## 7. Authenticate and authorize
 
