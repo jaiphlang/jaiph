@@ -673,7 +673,7 @@
       "line": 3,
       "col": 3,
       "code": "E_VALIDATE",
-      "message": "use run lib.deploy() — \"lib.deploy\" is a valid script or workflow reference; use a managed run step"
+      "message": "use run lib.deploy() — \"lib.deploy\" is a valid script or def reference; use a managed run step"
     }
   ],
   "validate-errors.txt > bare imported script as shell line must use run": [
@@ -682,7 +682,7 @@
       "line": 3,
       "col": 3,
       "code": "E_VALIDATE",
-      "message": "use run lib.helper() — \"lib.helper\" is a valid script or workflow reference; use a managed run step"
+      "message": "use run lib.helper() — \"lib.helper\" is a valid script or def reference; use a managed run step"
     }
   ],
   "validate-errors.txt > command substitution invokes rule in send shell RHS": [

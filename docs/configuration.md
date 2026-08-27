@@ -14,8 +14,8 @@ This page is the authoritative inventory of Jaiph configuration keys: every key,
 Configuration sources, in priority order:
 
 1. **Environment variables** — locked once observed by the host CLI; see [Locked variables](#locked-variables).
-2. **Def-level `config { … }`** — applies for the duration of that workflow.
-3. **Module-level `config { … }`** — applies to all workflows in that file unless overridden.
+2. **Def-level `config { … }`** — applies for the duration of that def.
+3. **Module-level `config { … }`** — applies to all defs in that file unless overridden.
 4. **Built-in defaults** — lowest priority.
 
 
@@ -24,7 +24,7 @@ Configuration sources, in priority order:
 | Aspect | Rule |
 |---|---|
 | Module-level | At most one `config { … }` block per `.jh` file. May appear anywhere among top-level constructs. |
-| Def-level | At most one nested `config { … }` per workflow body. Must be the first non-comment construct in the body. |
+| Def-level | At most one nested `config { … }` per def body. Must be the first non-comment construct in the body. |
 | Allowed module-level keys | `agent.*`, `run.*`, `module.*`, and `trusted_envs`. |
 | Allowed def-level keys | `agent.*`, `run.*`, and `trusted_envs`. A `module.*` key in a def-level block is `E_PARSE` (`module.* keys are not allowed in def-level config (only agent.* and run.* keys)`). Any other unrecognized key is the unknown-key error below. |
 | Duplicate block | `E_PARSE duplicate config block (only one allowed per file)` / `E_PARSE duplicate config block inside def (only one allowed per def)`. |
@@ -58,15 +58,15 @@ String config values support the same `${identifier}` interpolation as orchestra
 | Config level | Available identifiers |
 |---|---|
 | Module-level | Module `const` values and environment variables |
-| Def-level | Module `const` values, environment variables, and that workflow's parameters |
+| Def-level | Module `const` values, environment variables, and that def's parameters |
 
-Interpolation runs when the config scope is applied (workflow entry for def-level keys; CLI startup for module-level keys). Environment variables still win over in-file config when locked.
+Interpolation runs when the config scope is applied (def entry for def-level keys; CLI startup for module-level keys). Environment variables still win over in-file config when locked.
 
 ## Agent keys
 
 | Key | Type | Default | Env equivalent | Notes |
 |---|---|---|---|---|
-| `agent.model` | string | — | `JAIPH_AGENT_MODEL` (env only) | Model for `prompt` steps in this scope. Resolved at each `prompt` invocation and passed as a per-call `--model` flag — it does **not** set `JAIPH_AGENT_MODEL` in the workflow environment, so scripts and other steps do not see it. Set `JAIPH_AGENT_MODEL` in the shell to override all prompts in a run. |
+| `agent.model` | string | — | `JAIPH_AGENT_MODEL` (env only) | Model for `prompt` steps in this scope. Resolved at each `prompt` invocation and passed as a per-call `--model` flag — it does **not** set `JAIPH_AGENT_MODEL` in the run environment, so scripts and other steps do not see it. Set `JAIPH_AGENT_MODEL` in the shell to override all prompts in a run. |
 | `agent.command` | string | `cursor-agent` | `JAIPH_AGENT_COMMAND` | Cursor backend command. Basename other than `cursor-agent` enables custom-command mode (stdin → command → stdout). **Entry module only** — imported modules cannot set this key by default (see [Import trust boundary](#import-trust-boundary)). |
 | `agent.backend` | string (`cursor` \| `claude` \| `codex`) | `cursor` | `JAIPH_AGENT_BACKEND` | Backend selector. **Entry module only** — imported modules cannot set this key by default (see [Import trust boundary](#import-trust-boundary)). |
 | `agent.trusted_workspace` | string (path) | workspace root | `JAIPH_AGENT_TRUSTED_WORKSPACE` | Directory passed to Cursor as `--trust`. When unset, defaults to `JAIPH_WORKSPACE`. A relative path in the **entry module's module-level** config is resolved against the workspace root to an absolute path at CLI startup. Values applied at runtime — a def-level block or an imported module — are assigned to the env var exactly as authored (not normalized). |
@@ -79,7 +79,7 @@ Interpolation runs when the config scope is applied (workflow entry for def-leve
 |---|---|---|---|---|
 | `run.logs_dir` | string (path) | `.jaiph/runs` | `JAIPH_RUNS_DIR` | Step log directory. Relative paths join the workspace root; absolute paths are used as-is. |
 | `run.debug` | boolean | `false` | `JAIPH_DEBUG` | Enable debug tracing. |
-| `run.recover_limit` | integer | `10` | — (no env override) | Maximum attempts for `run … recover` loops before the step fails. Resolves via workflow > module > default. |
+| `run.recover_limit` | integer | `10` | — (no env override) | Maximum attempts for `run … recover` loops before the step fails. Resolves via def > module > default. |
 
 ## Module keys
 
@@ -94,16 +94,16 @@ Informational metadata only; does not affect execution. Allowed in module-level 
 ## Trusted env keys (`trusted_envs`)
 {: #trusted-envs}
 
-`trusted_envs = "GITHUB_TOKEN NPM_TOKEN"` declares which **host** environment variables a workflow's trusted `run` steps receive — the declarative alternative to remembering `jaiph run --env GITHUB_TOKEN …`. The value is a quoted, space-separated list of env var names.
+`trusted_envs = "GITHUB_TOKEN NPM_TOKEN"` declares which **host** environment variables a def's trusted `run` steps receive — the declarative alternative to remembering `jaiph run --env GITHUB_TOKEN …`. The value is a quoted, space-separated list of env var names.
 
 | Scope | Effect |
 |---|---|
-| Module-level `config` | Sugar: applies to every workflow in the file. |
-| Def-level `config` | Scopes the keys to that workflow only. |
+| Module-level `config` | Sugar: applies to every def in the file. |
+| Def-level `config` | Scopes the keys to that def only. |
 | Imported (non-entry) module | **Ignored** (warned at pre-flight) — an imported module must not be able to pull arbitrary host secrets into its own steps. Mirrors the [import trust boundary](#import-trust-boundary) for `agent.command` / `agent.backend`. |
 
 ```jaiph
-config { trusted_envs = "NPM_TOKEN" }   # module-level: every workflow's run steps
+config { trusted_envs = "NPM_TOKEN" }   # module-level: every def's run steps
 
 def publish{
   config { trusted_envs = "GITHUB_TOKEN" }   # only publish's run steps also see GITHUB_TOKEN
@@ -113,9 +113,9 @@ def publish{
 
 Semantics:
 
-- Declared keys resolve from the **pristine host environment captured once at process start** — never from the calling workflow's scope env. A sub-workflow does not inherit a caller's keys by being called; it must declare `trusted_envs` itself.
-- Resolved values are injected **only into `run`-step script subprocesses** of the declaring workflow. They are **never** forwarded to `prompt` agent subprocesses — the prompt env stays the fail-closed allowlist (base env, `JAIPH_*` control keys, and that backend's own credential keys).
-- Declaring a key anywhere in the file (or an imported module) also **scrubs** it from every workflow's ambient scope env, so only the declaring workflow's `run` steps see it.
+- Declared keys resolve from the **pristine host environment captured once at process start** — never from the calling def's scope env. A called def does not inherit a caller's keys by being called; it must declare `trusted_envs` itself.
+- Resolved values are injected **only into `run`-step script subprocesses** of the declaring def. They are **never** forwarded to `prompt` agent subprocesses — the prompt env stays the fail-closed allowlist (base env, `JAIPH_*` control keys, and that backend's own credential keys).
+- Declaring a key anywhere in the file (or an imported module) also **scrubs** it from every def's ambient scope env, so only the declaring def's `run` steps see it.
 - Pre-flight: a declared key with no value on the host (and no `--env` override) aborts before anything is spawned (`E_ENV_MISSING`). Reserved keys (the `--env` `E_ENV_RESERVED` set) are rejected at parse time.
 - `--env KEY=VALUE` remains the imperative override: it wins over the host-snapshot value for the same key.
 
@@ -127,15 +127,15 @@ Semantics:
 | Layer | Effect |
 |---|---|
 | Environment (`JAIPH_AGENT_*`, `JAIPH_RUNS_DIR`, `JAIPH_DEBUG`) | Locked when present in the parent env; cannot be overridden by module- or def-level config. |
-| Def-level `config` | Applies for the workflow body; restored on exit. |
-| Module-level `config` | Applies to workflows without their own block. |
+| Def-level `config` | Applies for the def body; restored on exit. |
+| Module-level `config` | Applies to defs without their own block. |
 | Built-in defaults | Lowest priority. |
 
 ### Scoping across nested calls
 
 | Call type | Scope behaviour |
 |---|---|
-| Root entry (`jaiph run file.jh`) | Full module + workflow metadata applied with normal precedence. |
+| Root entry (`jaiph run file.jh`) | Full module + def metadata applied with normal precedence. |
 | Same-module `run` | Callee's def-level `config` is layered on top of the caller's effective env. Module-level config is not re-applied. |
 | Cross-module `run` (e.g. `run alias.main()`) | Callee's module-level config is layered, then def-level on top — same as root-entry precedence, respecting `${NAME}_LOCKED`. **`agent.command` and `agent.backend` are not applied from imported modules** (see [Import trust boundary](#import-trust-boundary)). |
 
@@ -199,7 +199,7 @@ Backend-specific flags come from `agent.cursor_flags` / `agent.claude_flags` (or
 ### Credential pre-flight
 {: #credential-pre-flight}
 
-Before `jaiph run` spawns the workflow runner, the host CLI runs a credential pre-flight (`src/cli/run/preflight-credentials.ts`). It collects the distinct backend(s) declared in the entry file's module-level `config` block and each def-level block, plus the effective default (`JAIPH_AGENT_BACKEND` env, or `cursor` when unset). Deeper per-import overrides resolved at runtime are not followed.
+Before `jaiph run` spawns the runner, the host CLI runs a credential pre-flight (`src/cli/run/preflight-credentials.ts`). It collects the distinct backend(s) declared in the entry file's module-level `config` block and each def-level block, plus the effective default (`JAIPH_AGENT_BACKEND` env, or `cursor` when unset). Deeper per-import overrides resolved at runtime are not followed.
 
 | Backend | Required credential | Host behaviour |
 |---|---|---|
@@ -252,7 +252,7 @@ Each attempt emits its own `PROMPT_START` / `PROMPT_END` and `STEP_START` / `STE
 | `JAIPH_PROMPT_RETRY=0` | Disable retry entirely (one attempt, fail on transport failure). |
 | `JAIPH_PROMPT_RETRY_DELAYS` | Comma-separated list of non-negative integer milliseconds. Invalid entries abort the prompt. |
 
-`jaiph test` defaults `JAIPH_PROMPT_RETRY=0`. Backoff sleep is interruptible: workflow abort, SIGINT, or SIGTERM cancels the pending wait without further backend calls.
+`jaiph test` defaults `JAIPH_PROMPT_RETRY=0`. Backoff sleep is interruptible: run abort, SIGINT, or SIGTERM cancels the pending wait without further backend calls.
 
 ## Prompt watchdog timeouts
 {: #prompt-watchdog-timeouts}
@@ -276,7 +276,7 @@ The prompt watchdogs above bound a single backend call. Jaiph also has two contr
 
 `JAIPH_RUN_TIMEOUT` sets a parent-enforced wall-clock cap, in seconds, for a run. Without this cap, the only automatic stop is a manual Ctrl-C, because the host spawn installs only SIGINT and SIGTERM handlers and the prompt watchdogs cover a single backend call. When the cap is reached, the parent terminates the run child's whole process group with `SIGTERM` and escalates to `SIGKILL` after a short grace period (via `killProcessTree`; see [Architecture](architecture.md)), so the run stops without a manual Ctrl-C, and the failure footer shows `E_RUN_TIMEOUT`. Set it to `0`, leave it empty, or give it an invalid value to disable it, which restores the earlier behaviour where only a manual SIGINT or SIGTERM stops a run.
 
-`JAIPH_MAX_STEPS` sets an optional max-step circuit breaker in the runtime. When you set it to a positive integer, the runtime counts every executed step across the whole run, and it counts loop iterations and nested or recursive calls but skips trivia. Once the count goes past the cap, the runtime logs `E_MAX_STEPS`, aborts the run, and returns a failure, so a runaway workflow stops on its own without a manual signal. Set it to `0`, leave it empty, or give it an invalid value to disable the breaker.
+`JAIPH_MAX_STEPS` sets an optional max-step circuit breaker in the runtime. When you set it to a positive integer, the runtime counts every executed step across the whole run, and it counts loop iterations and nested or recursive calls but skips trivia. Once the count goes past the cap, the runtime logs `E_MAX_STEPS`, aborts the run, and returns a failure, so a runaway program stops on its own without a manual signal. Set it to `0`, leave it empty, or give it an invalid value to disable the breaker.
 
 ## Leaf step idle output
 {: #leaf-step-idle-output}
@@ -309,12 +309,12 @@ Custom commands still participate in `PROMPT_START` / `PROMPT_END`, write artifa
 
 ## Inspecting effective config at runtime
 
-Agent and run settings are visible inside workflows and scripts as `JAIPH_*` environment variables. In orchestration strings, `${IDENT}` resolves against workflow bindings first, then against the process environment.
+Agent and run settings are visible inside defs and scripts as `JAIPH_*` environment variables. In orchestration strings, `${IDENT}` resolves against def bindings first, then against the process environment.
 
 
 ## Created by `jaiph init`
 
-`jaiph init` creates `.jaiph/bootstrap.jh`, `.jaiph/SKILL.md`, and `.jaiph/.gitignore`. There is no separate config file — `config { … }` blocks live in workflow source. See [CLI — `jaiph init`](cli.md#jaiph-init).
+`jaiph init` creates `.jaiph/bootstrap.jh`, `.jaiph/SKILL.md`, and `.jaiph/.gitignore`. There is no separate config file — `config { … }` blocks live in program source. See [CLI — `jaiph init`](cli.md#jaiph-init).
 
 ## Related
 

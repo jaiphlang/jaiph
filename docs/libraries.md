@@ -9,7 +9,7 @@ redirect_from:
 
 # Use & publish a library
 
-This guide installs a reusable Jaiph library into your workspace, imports it from a workflow, and (in the second half) publishes a library of your own.
+This guide installs a reusable Jaiph library into your workspace, imports it from a program, and (in the second half) publishes a library of your own.
 
 A **Jaiph library** is a git repository with at least one `.jh` module anywhere in the tree. Imports written as `lib-name/path` resolve to `<workspace>/.jaiph/libs/<lib-name>/<path>.jh` after `jaiph install` clones the library into that directory.
 
@@ -55,7 +55,7 @@ jaiph install
 
 With no arguments, `jaiph install` restores every entry in `.jaiph/libs.lock`. It clones any missing library directory, and existing directories are skipped unless you pass `--force`. When a lock entry includes a `commit`, the cloned HEAD must match it. On a mismatch the directory is removed and the run fails, reporting the locked SHA and the cloned SHA. Lock entries without `commit` (older lockfiles) restore without that check. The registry is never read on this path.
 
-### 3. Import from a workflow
+### 3. Import from a program
 
 The clone directory name is the import prefix. For `jaiph install jaiphlang`, the lib lives at `.jaiph/libs/jaiphlang/` and imports use the `jaiphlang/` prefix:
 

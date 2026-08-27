@@ -23,7 +23,7 @@ function operatorFor(
       label: "jaiph mcp",
       write: (line) => void lines.push(line),
       colorEnabled: false,
-      mirrorWorkflowLog: opts.mirror ?? false,
+      mirrorRunLog: opts.mirror ?? false,
     }),
   };
 }
@@ -54,11 +54,11 @@ test("a host call emits a start banner (run_id) and an end line with status/elap
     {},
     { operator: operatorFor(lines) },
   );
-  assert.equal(result.isError, false, `workflow should succeed: ${result.text}`);
+  assert.equal(result.isError, false, `def call should succeed: ${result.text}`);
 
   const start = lines.find((l) => /Running .*run_id=/.test(l));
   assert.ok(start, `a start banner must be emitted; got:\n${lines.join("\n")}`);
-  assert.match(start!, /^jaiph mcp: Running main run_id=/, "start names workflow + run_id");
+  assert.match(start!, /^jaiph mcp: Running main run_id=/, "start names def + run_id");
 
   const end = lines.find((l) => /Finished /.test(l));
   assert.ok(end, "a terminal end line must be emitted");
@@ -71,7 +71,7 @@ test("a host call emits a start banner (run_id) and an end line with status/elap
   assert.ok(!result.text.includes("Running main"), "operator banner is not in the call result text");
 });
 
-test("workflow log is NOT mirrored to the operator sink by default", async () => {
+test("run log is NOT mirrored to the operator sink by default", async () => {
   const lines: string[] = [];
   await runWith(
     ["export def main() {", '  log "operator visible hi"', "}", ""].join("\n"),
@@ -80,11 +80,11 @@ test("workflow log is NOT mirrored to the operator sink by default", async () =>
   );
   assert.ok(
     !lines.some((l) => l.includes("operator visible hi")),
-    `default (mirror off) must not echo workflow log to stderr; got:\n${lines.join("\n")}`,
+    `default (mirror off) must not echo run log to stderr; got:\n${lines.join("\n")}`,
   );
 });
 
-test("JAIPH_SERVER_LOG_WORKFLOW opt-in mirrors the workflow log to the operator sink with run_id", async () => {
+test("JAIPH_SERVER_LOG_RUNS opt-in mirrors the run log to the operator sink with run_id", async () => {
   const lines: string[] = [];
   await runWith(
     ["export def main() {", '  log "operator visible hi"', "}", ""].join("\n"),
@@ -92,7 +92,7 @@ test("JAIPH_SERVER_LOG_WORKFLOW opt-in mirrors the workflow log to the operator 
     { operator: operatorFor(lines, { mirror: true }) },
   );
   const mirrored = lines.find((l) => l.includes("operator visible hi"));
-  assert.ok(mirrored, `mirror opt-in must echo the workflow log; got:\n${lines.join("\n")}`);
+  assert.ok(mirrored, `mirror opt-in must echo the run log; got:\n${lines.join("\n")}`);
   assert.match(mirrored!, /run_id=\S+$/, "mirrored line carries the run_id tail");
 });
 

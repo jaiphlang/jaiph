@@ -37,17 +37,17 @@ The design makes three commitments, and each one settles many smaller questions:
 
 1. **Strict structure around AI steps.** An agent's response can vary from run to run, so the language gives you the surrounding pieces that do not. With `def` and `run` you can check conditions before and after a prompt in the same pipeline. With `prompt … returns "{ … }"` you require the agent's output to match a JSON shape, and the step fails if it does not. With `recover` you retry a failed `run` after a repair body runs, up to `run.recover_limit` times, which helps when an agent's output needs a fix before the pipeline can go on.
 
-2. **Isolating sensitive data.** Secrets and agent access are kept apart on purpose. Injected host keys (`--env`, [`trusted_envs`](configuration.md#trusted-envs)) reach trusted `run` steps only; a second fail-closed scrub keeps them out of every `prompt` backend subprocess. Credential-shaped values are redacted from the run journal and from returned call diagnostics. The sanctioned path for a secret is explicit injection into a trusted step, not ambient host env or a file that happened to sit next to the workflow.
+2. **Isolating sensitive data.** Secrets and agent access are kept apart on purpose. Injected host keys (`--env`, [`trusted_envs`](configuration.md#trusted-envs)) reach trusted `run` steps only; a second fail-closed scrub keeps them out of every `prompt` backend subprocess. Credential-shaped values are redacted from the run journal and from returned call diagnostics. The sanctioned path for a secret is explicit injection into a trusted step, not ambient host env or a file that happened to sit next to the program.
 
-3. **No vendor lock-in.** You choose a backend with `agent.backend`, which can be `cursor`, `claude`, or `codex`. The cursor and claude backends call their own command-line tools, and the codex backend calls an HTTP chat-completions endpoint. On the cursor backend, `agent.command` can name any program that reads stdin and writes stdout, so a wrapper around a local model or a self-hosted endpoint works without implementing Jaiph's stream-json format. A workflow author does not need a proprietary agent protocol.
+3. **No vendor lock-in.** You choose a backend with `agent.backend`, which can be `cursor`, `claude`, or `codex`. The cursor and claude backends call their own command-line tools, and the codex backend calls an HTTP chat-completions endpoint. On the cursor backend, `agent.command` can name any program that reads stdin and writes stdout, so a wrapper around a local model or a self-hosted endpoint works without implementing Jaiph's stream-json format. A program author does not need a proprietary agent protocol.
 
 ## What Jaiph is not
 
 It also helps to say what Jaiph is not:
 
-- **Not a general-purpose programming language.** A workflow runs steps in order and has only the control flow it needs, which is `if`, `match`, `for`, `recover`, and `catch`. Anything more complex belongs in a `script`.
-- **Not a distributed system.** Channels pass messages between workflows in the same run, in one process. See [Inbox & Dispatch](inbox.md). There is no broker, no cross-process routing, and no retry queue.
+- **Not a general-purpose programming language.** A def runs steps in order and has only the control flow it needs, which is `if`, `match`, `for`, `recover`, and `catch`. Anything more complex belongs in a `script`.
+- **Not a distributed system.** Channels pass messages between defs in the same run, in one process. See [Inbox & Dispatch](inbox.md). There is no broker, no cross-process routing, and no retry queue.
 - **Not a replacement for CI.** Jaiph runs the same way on your machine and inside a CI container. It does not provide the test matrix, artifact publishing, or environment management that CI platforms do.
 - **Not a prompt framework.** There is no chain abstraction, no agent class hierarchy, and no built-in memory store. A `prompt` step calls a backend, and if you want to chain calls, you compose steps yourself.
 
-Jaiph stays small on purpose. A `.jh` file behaves the way it reads, and the structure around it, which includes logging, testing, and formatting, is the runtime's job rather than the workflow author's.
+Jaiph stays small on purpose. A `.jh` file behaves the way it reads, and the structure around it, which includes logging, testing, and formatting, is the runtime's job rather than the program author's.

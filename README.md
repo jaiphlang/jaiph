@@ -37,14 +37,14 @@
 - **Parser** (`src/parser.ts`, `src/parse/*`) — `.jh` / `.test.jh` → AST.
 - **Validator** (`src/transpile/validate.ts`) — imports and symbol references at compile time.
 - **Transpiler** (`src/transpile/*`) — emits atomic `script` files under `scripts/` only (no def-level shell).
-- **Node workflow runtime** (`src/runtime/kernel/node-workflow-runtime.ts`, `graph.ts`) — interprets the AST; `buildRuntimeGraph(graph)` consumes the `ModuleGraph` produced by `loadModuleGraph` (no filesystem reads).
+- **Node runtime** (`src/runtime/kernel/node-workflow-runtime.ts`, `graph.ts`) — interprets the AST; `buildRuntimeGraph(graph)` consumes the `ModuleGraph` produced by `loadModuleGraph` (no filesystem reads).
 - **Node test runner** (`src/runtime/kernel/node-test-runner.ts`) — `*.test.jh` blocks with mocks.
 - **JS kernel** (`src/runtime/kernel/`) — prompts, managed scripts, `__JAIPH_EVENT__`, inbox, mocks.
 Diagrams, runtime contracts, on-disk artifact layout, and distribution: **[Architecture](docs/architecture.md)**. Test layers and E2E policy: **[Contributing](docs/contributing.md)**.
 
 ## Quick try
 
-Run a sample workflow without installing anything first:
+Run a sample program without installing anything first:
 
 ```bash
 curl -fsSL https://jaiph.org/run | bash -s '

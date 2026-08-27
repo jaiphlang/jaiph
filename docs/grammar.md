@@ -188,7 +188,6 @@ fall through to the shell executor unchanged.
 
 ## Def body statements
 {: #def-body-statements}
-{: #workflow-body-statements}
 
 ```ebnf
 def_step = run_stmt | run_catch_stmt | run_recover_stmt | run_async_stmt

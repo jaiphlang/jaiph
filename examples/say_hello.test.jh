@@ -6,7 +6,7 @@ import "say_hello.jh" as hello
 # between the prompt and the error message in the test file.
 # We use it to verify the test works and the error message output
 # is correct.
-test "without name, workflow fails with validation message" {
+test "without name, main fails with validation message" {
   # When
   const response = run hello.main() allow_failure
 

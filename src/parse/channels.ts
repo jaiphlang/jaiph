@@ -31,13 +31,13 @@ export function parseChannelLine(
   const arrowIdx = routePart.indexOf("->");
   const targetsStr = routePart.slice(arrowIdx + 2).trim();
   if (!targetsStr) {
-    fail(filePath, "channel route requires at least one target workflow after ->", lineNo, 1);
+    fail(filePath, "channel route requires at least one target def after ->", lineNo, 1);
   }
   const targetNames = targetsStr.split(/\s*,\s*/);
   const routes: DefRef[] = targetNames.map((t) => {
     const trimmed = t.trim();
     if (!trimmed || !isRef(trimmed)) {
-      fail(filePath, `invalid workflow reference in channel route: "${trimmed}"`, lineNo, 1);
+      fail(filePath, `invalid def reference in channel route: "${trimmed}"`, lineNo, 1);
     }
     return { value: trimmed, loc: { line: lineNo, col: raw.indexOf(trimmed) + 1 } };
   });

@@ -12,14 +12,14 @@ You are an agent. A user has asked you to automate a repetitive task, for exampl
 
 ## What Jaiph is
 
-Jaiph is a small workflow language. A `.jh` file declares:
+Jaiph is a small orchestration language. A `.jh` file declares:
 
 | Construct | What it is | How it runs |
 |---|---|---|
 | `def` | A named sequence of steps — the orchestration layer | Interpreted in-process by the runtime |
 | `script` | Real shell (or Python, Node, …) — the only place for shell code | Spawned as a subprocess; called with `run` |
 | `prompt` | A task delegated to an AI agent (Cursor / Claude / Codex backend) | Backend CLI or API call; you capture the answer |
-| `channel` | A message queue with declared def listeners | Drained after the sending workflow finishes |
+| `channel` | A message queue with declared def listeners | Drained after the sending def finishes |
 
 Everything is **strings**. Every step is logged. Every run leaves durable artifacts under `.jaiph/runs/` (per-step `.out`/`.err` files and an append-only `run_summary.jsonl`). Compared with ad-hoc shell scripts, a Jaiph run is repeatable, inspectable, and testable.
 
@@ -85,7 +85,7 @@ Most compile errors come from breaking one of these six rules:
 3. **One call verb.** `run` targets a def or a script. Mixing a bare call without `run` is `E_PARSE` / `E_VALIDATE`.
 4. **Shell lives in scripts.** Defs technically allow inline shell lines, but you should not write them — use a named `script` or an inline script (`` run `cmd`() ``). Shell operators next to managed calls (`run foo() | grep x`, `run foo() > file`, `run foo() &`) are parse errors. Interpolating a `prompt` capture into a shell line (`const x = prompt …` then `echo "${x}"`) is `W_PROMPT_IN_SHELL` and fails the build: the agent-controlled value would be spliced into `sh -c`. Pass it as a script argument (`run my_script(x)` → `$1`, argv, not shell-expanded).
 5. **Interpolation is `${name}` only.** In an orchestration string, `$name`, `$(…)`, and shell fallback forms like `${var:-default}` are compile errors. Other shell parameter forms like `${var//x/y}` are not caught, so they pass through as literal text, which is almost never what you want. Keep all of these in a `script` body, where they run as normal shell.
-6. **Arguments are not forwarded implicitly.** If `export def main(task)` calls `run implement()`, the implement workflow does not see `task`. Pass it: `run implement(task)`.
+6. **Arguments are not forwarded implicitly.** If `export def main(task)` calls `run implement()`, the implement def does not see `task`. Pass it: `run implement(task)`.
 
 ## Syntax reference
 
@@ -148,7 +148,7 @@ Script semantics:
 
 - Bodies are **opaque** to Jaiph orchestration — full shell/Python/whatever, heredocs included. The compiler strips the block's common leading whitespace at parse time (same idea as triple-quoted prompts); `jaiph format` re-adds one indent level for readability. The one check: do not call Jaiph symbols (`run`, def names) from inside a script body or `$(…)`.
 - **Capture = stdout.** `const v = run parse_json("pkg.json")` binds the script's stdout. Use `echo`/`printf` to return data; use exit codes (`return N` / `exit N`) for pass/fail.
-- **Arguments arrive as `$1`, `$2`, …** Module `const` values and workflow bindings are *not* exported into the subprocess environment — pass them explicitly as arguments.
+- **Arguments arrive as `$1`, `$2`, …** Module `const` values and def bindings are *not* exported into the subprocess environment — pass them explicitly as arguments.
 - Alternatively a manual `#!` shebang as the first body line selects the interpreter (mutually exclusive with a fence tag).
 - A newline inside a single-backtick body is a parse error — use a fenced block.
 
@@ -164,18 +164,18 @@ import sys; print(len(sys.argv[1]))
 
 Inline scripts work in `run`, `const … = run`, `return run`, and `log run` positions. They cannot be used with `run async`. A `run` step whose body is an inline script accepts the same optional `catch (name) <body>` / `recover (name) <body>` suffix as a named-ref `run` step (same semantics — `catch` runs once, `recover` retries up to `run.recover_limit`, mutually exclusive). The other inline-script positions (`const … = run`, `return run`, `log run`) do not take those suffixes — wrap in a standalone `run` step.
 
-### Workflow steps
+### Def body steps
 
 ```jaiph
 def release(version) {
   run git_clean()                        # run a def
-  const notes = run gen_notes(version)      # run a script/workflow, capture
+  const notes = run gen_notes(version)      # run a script/def, capture
   run publish(version, notes)               # args: bare identifiers for variables
   log "published ${version}"                # info line in the progress tree (stdout)
   logerr "registry error"                   # red ! line (stderr)
   logwarn "registry is slow"                # yellow warning line
   send "released ${version}" -> alerts
-  return notes                              # set this workflow's return value
+  return notes                              # set this def's return value
 }
 ```
 
@@ -234,7 +234,7 @@ if r.verdict == "reject" {
 - For a `"""` prompt, `returns "…"` goes on the closing-`"""` line or the line immediately after.
 - Triple **backticks** inside prompt context are rejected — they are script delimiters. Use indentation or quotes for code in prompt text.
 
-Backend is run-scoped: `agent.backend` = `cursor` (default) | `claude` | `codex` via `config { … }` or `JAIPH_AGENT_*` env vars (env wins for mapped keys). Model is **per-prompt**: in-file `agent.model` is resolved at each `prompt` step and passed as `--model` — it does **not** set `JAIPH_AGENT_MODEL` in the workflow environment. Set `JAIPH_AGENT_MODEL` in the shell to override the model for every prompt in a run. On the **cursor** backend only, `agent.command` can point at a custom executable (prompt on stdin, answer on stdout); `claude` and `codex` ignore `agent.command`.
+Backend is run-scoped: `agent.backend` = `cursor` (default) | `claude` | `codex` via `config { … }` or `JAIPH_AGENT_*` env vars (env wins for mapped keys). Model is **per-prompt**: in-file `agent.model` is resolved at each `prompt` step and passed as `--model` — it does **not** set `JAIPH_AGENT_MODEL` in the run environment. Set `JAIPH_AGENT_MODEL` in the shell to override the model for every prompt in a run. On the **cursor** backend only, `agent.command` can point at a custom executable (prompt on stdin, answer on stdout); `claude` and `codex` ignore `agent.command`.
 
 **Write prompts like task briefs:** state the goal, the constraints, the acceptance criteria, and what to output. Interpolate concrete context (`${task}`, `${diff}`, captured file contents) rather than asking the agent to go find it.
 
@@ -256,7 +256,7 @@ run tests() recover (err) {
 - The binding (`err`) receives the merged stdout+stderr of the failed execution. Exactly one binding, always in parentheses — bare `catch {` is a parse error.
 - `catch` and `recover` attach to `run` (including `run async`). They are mutually exclusive on one step.
 - `recover` retries until success or `run.recover_limit` (default **10**; def-level config overrides module-level).
-- A common pattern: a `catch` whose body is the "else branch" — note `return` inside a catch body returns from the **enclosing workflow**.
+- A common pattern: a `catch` whose body is the "else branch" — note `return` inside a catch body returns from the **enclosing def**.
 
 A `recover` step with a `prompt` body is the core loop for repetitive agent work. It runs a check, asks the agent to fix the code when the check fails, then runs the check again, all without a human.
 
@@ -280,9 +280,9 @@ for path in paths {                       # iterates LINES of the string `paths`
 - Subjects for `if` and `match` are bare identifiers (`if status == …`, `match status {`) or `IDENT.IDENT` reading a field from a typed prompt capture (`if r.verdict == "ok"`, `match r.verdict { … }`). `$status` / `${status}` as subject is still a parse error. Dot subjects on a non-typed-capture variable, or a field not in the prompt's `returns` schema, get the same `E_VALIDATE` errors as `${var.field}` interpolation. `for` iterators stay bare identifiers (`for x in lines`).
 - `if` supports optional `} else if <cond> {` arms and a final `} else {` branch — each keyword must be on **the same line** as the closing `}` of the preceding block. `else if` is sugar that desugars to nested `if`/`else` at parse time and chains to any depth (`if a == "x" { … } else if a == "y" { … } else { … }`); each arm uses the same condition grammar as `if`. `if` stays statement-only (no value production) — use `match` for value branching. An `else if` split onto its own line, without a condition, or with an empty body is `E_PARSE`.
 - `match`: arms are newline-separated (no commas), first match wins, exactly one `_` arm required. A pattern may be pipe-separated **alternation** (`"" | "check" => …`, `/^a/ | /^b/ => …`) that matches if any alternand matches; string and regex alternands may be mixed, `_` cannot join an alternation, and a trailing `|` is `E_PARSE`. Arm bodies: string, `"""…"""`, in-scope identifier, `${var}`, `fail "…"`, `run ref()`, `run ref()`. **Not** allowed in arms: `return` (write `return match x { … }`), `log`/`logerr`, inline scripts — capture the match result into a `const` and act on it after.
-- `for` splits the source string on newlines (a trailing final newline does not produce an empty iteration). There is no numeric/while loop — iterate lines, use `recover`, or use recursive workflows (depth limit 256).
+- `for` splits the source string on newlines (a trailing final newline does not produce an empty iteration). There is no numeric/while loop — iterate lines, use `recover`, or use recursive defs (depth limit 256).
 
-### Channels — fan-out between workflows
+### Channels — fan-out between defs
 
 ```jaiph
 channel findings -> analyst, reviewer     # routes declared at TOP LEVEL only
@@ -300,7 +300,7 @@ export def main() {
 }
 ```
 
-Sends enqueue in memory; the queue drains after the owning workflow's steps complete, calling each target sequentially. A route (`name -> targets`) inside a def body is a parse error; send is `send <payload> -> channel`. Sends on a channel with no route are silently dropped. Each workflow frame may drain at most **1000** messages before the runtime aborts the owning workflow with `E_INBOX_DISPATCH_LIMIT` (naming the channel that hit the cap); override via `JAIPH_INBOX_MAX_DISPATCH=<positive int>` only if the high volume is intentional. Routed payloads are persisted under the run dir as `inbox/NNN-<channel>.txt`.
+Sends enqueue in memory; the queue drains after the owning def's steps complete, calling each target sequentially. A route (`name -> targets`) inside a def body is a parse error; send is `send <payload> -> channel`. Sends on a channel with no route are silently dropped. Each def frame may drain at most **1000** messages before the runtime aborts the owning def with `E_INBOX_DISPATCH_LIMIT` (naming the channel that hit the cap); override via `JAIPH_INBOX_MAX_DISPATCH=<positive int>` only if the high volume is intentional. Routed payloads are persisted under the run dir as `inbox/NNN-<channel>.txt`.
 
 ### Concurrency: `run async`
 
@@ -313,7 +313,7 @@ export def main() {
 }                                        # unread handles are joined when this step list finishes
 ```
 
-Allowed in any def; not combinable with inline scripts. `catch`/`recover` compose with `run async`. Unread handles are joined at the end of the **current step list** (the workflow body, an `if`/`else` branch, or a `catch`/`recover` body) before control continues — channel drains run only after the entry workflow's top-level list finishes. For concurrent *shell*, use `&` + `wait` inside one script body instead.
+Allowed in any def; not combinable with inline scripts. `catch`/`recover` compose with `run async`. Unread handles are joined at the end of the **current step list** (the def body, an `if`/`else` branch, or a `catch`/`recover` body) before control continues — channel drains run only after the entry def's top-level list finishes. For concurrent *shell*, use `&` + `wait` inside one script body instead.
 
 ### Config
 
@@ -326,7 +326,7 @@ config {
 }
 ```
 
-Precedence: **environment > def-level config > module-level config > defaults**. A workflow body may open with its own `config { … }` (before any steps; `agent.*`/`run.*` keys only) to override the model or backend for just that workflow.
+Precedence: **environment > def-level config > module-level config > defaults**. A def body may open with its own `config { … }` (before any steps; `agent.*`/`run.*` keys only) to override the model or backend for just that def.
 
 ## Compile errors you will see, and the fix
 
@@ -343,7 +343,7 @@ Precedence: **environment > def-level config > module-level config > defaults**.
 | `E_VALIDATE` arity mismatch | Match the callee's declared parameter count |
 | `E_PARSE` redirection after managed call | Move pipes/redirects into a script body |
 | `E_VALIDATE` scripts are not values/promptable | Scripts aren't strings: don't `const x = scriptName`, `${scriptName}`, or `prompt scriptName` |
-| `E_PARSE` `->` inside workflow body | Move the route to the top-level `channel` line |
+| `E_PARSE` `->` inside def body | Move the route to the top-level `channel` line |
 | `E_PARSE` `prompt … returns` without capture | `const x = prompt … returns "…"` |
 | `E_SCHEMA` invalid returns schema | Flat `{ field: string|number|boolean }` only |
 | `E_IMPORT_NOT_FOUND` | Fix the path (relative to the importing file) or `jaiph install` the library |
@@ -354,7 +354,7 @@ Precedence: **environment > def-level config > module-level config > defaults**.
 - **Run directory:** `.jaiph/runs/<UTC-date>/<UTC-time>-<file>/` with numbered `NNNNNN-<step>.out`/`.err` per step (written incrementally — `tail -f` works) and `run_summary.jsonl`, one JSON event per line (`RUN_START/END`, `STEP_START/END`, `LOG`, `INBOX_*`, `PROMPT_*`). When debugging a failed run, read the failure footer the CLI prints, then the referenced `.err`/`.out` files.
 - **Return value:** if `main` returns a string, the CLI prints it to stdout after the PASS line.
 - **Capture sources:** def → its explicit `return` value; script → stdout; prompt → the agent's answer.
-- Step environment: scripts inherit the runner's environment plus `JAIPH_WORKSPACE`, `JAIPH_SCRIPTS`, `JAIPH_RUN_DIR`, `JAIPH_ARTIFACTS_DIR`, etc. Workflow variables are **not** auto-exported — pass them as arguments.
+- Step environment: scripts inherit the runner's environment plus `JAIPH_WORKSPACE`, `JAIPH_SCRIPTS`, `JAIPH_RUN_DIR`, `JAIPH_ARTIFACTS_DIR`, etc. Def variables are **not** auto-exported — pass them as arguments.
 
 ## Testing your programs
 
@@ -436,10 +436,10 @@ When asked to scaffold Jaiph automation (e.g. after `jaiph init`), build a small
 
 - `.jaiph/readiness.jh` — preflight checks (required tools, clean git) + `export def main` running them.
 - `.jaiph/verification.jh` — lint/test/build checks + `export def main`.
-- `.jaiph/main.jh` — imports both, defines the prompt-driven `implement` workflow, and a `export def main(task)` wiring **preflight → implement → verification**.
+- `.jaiph/main.jh` — imports both, defines the prompt-driven `implement` def, and a `export def main(task)` wiring **preflight → implement → verification**.
 - Optional: a review def gating a task queue, `*.test.jh` tests for the defs.
 
-Keep workflows short; put expensive checks after cheap ones; pass data explicitly. Always finish with format + compile:
+Keep defs short; put expensive checks after cheap ones; pass data explicitly. Always finish with format + compile:
 
 ```bash
 jaiph format .jaiph/*.jh

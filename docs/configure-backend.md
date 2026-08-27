@@ -6,7 +6,7 @@ diataxis: how-to
 
 # Configure the agent backend and model
 
-This guide shows how to pick which agent backend your `prompt` steps use (`cursor`, `claude`, or `codex`) and which model to request. You can set both in the workflow file with a `config { … }` block or in the environment. The environment wins over the in-file value when both are set.
+This guide shows how to pick which agent backend your `prompt` steps use (`cursor`, `claude`, or `codex`) and which model to request. You can set both in the program file with a `config { … }` block or in the environment. The environment wins over the in-file value when both are set.
 
 For the full key/default/precedence reference, see [Configuration](configuration.md). For credential setup per backend, see [Authenticate agent backends](agent-auth.md).
 
@@ -35,9 +35,9 @@ The valid backend values are `"cursor"` (the default), `"claude"`, and `"codex"`
 
 Set `agent.backend` (and `agent.command`) only from the entry file. Jaiph ignores these two keys when an imported module sets them in its own `config { … }`, so a third-party module cannot redirect your `prompt` steps to a different binary. See [Import trust boundary](configuration.md#import-trust-boundary).
 
-## 2. Override per-workflow
+## 2. Override per-def
 
-To use a different backend for one workflow in the same file, add a def-level `config { … }` block (it must be the first non-comment construct in the body):
+To use a different backend for one def in the same file, add a def-level `config { … }` block (it must be the first non-comment construct in the body):
 
 ```jh
 def fast_check() {
@@ -89,5 +89,5 @@ When `model_reason` is `backend-default`, codex still calls the API with `gpt-4o
 ## Related
 
 - [Authenticate agent backends](agent-auth.md) — the credentials each backend needs.
-- [Configuration — Precedence](configuration.md#precedence) — env vs module vs workflow layering, lock flags, and nested-call scoping.
+- [Configuration — Precedence](configuration.md#precedence) — env vs module vs def layering, lock flags, and nested-call scoping.
 - [Configuration](configuration.md) — the full set of config keys, defaults, and env equivalents.

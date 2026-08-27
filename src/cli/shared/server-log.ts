@@ -1,20 +1,20 @@
 import { canUseAnsi } from "../../runtime";
 import { buildAsyncIndent, colorize, type ColorCode } from "./log-format";
 
-// Operator log for the long-lived workflow servers `jaiph mcp` and `jaiph serve`.
+// Operator log for the long-lived servers `jaiph mcp` and `jaiph serve`.
 // It is deliberately NOT a logging framework (no winston / pino / bunyan — that
 // would pull a dependency into a package that solved "write a line to stderr"
 // with `process.stderr.write`): it wraps the existing injectable stderr `log`
 // sink with a label prefix, level colors, and grep-friendly `key=value` tails.
 //
 // Two channels stay separate. This operator log goes to **stderr only** —
-// lifecycle notices, per-call banners, and (opt-in) a mirror of workflow log
+// lifecycle notices, per-call banners, and (opt-in) a mirror of run log
 // events. It is never written to MCP stdout (JSON-RPC only) or into an HTTP
-// response body (API payloads only). Workflow LOG/LOGWARN/LOGERR events keep
+// response body (API payloads only). Run LOG/LOGWARN/LOGERR events keep
 // their own contract (run_summary.jsonl + the call result text); mirroring them
-// here is opt-in via JAIPH_SERVER_LOG_WORKFLOW.
+// here is opt-in via JAIPH_SERVER_LOG_RUNS.
 
-/** Level of a mirrored workflow log event (drives the mirror line color). */
+/** Level of a mirrored run log event (drives the mirror line color). */
 export type MirrorLevel = "LOG" | "LOGWARN" | "LOGERR";
 
 export interface ServerLog {
@@ -26,10 +26,10 @@ export interface ServerLog {
   error(message: string): void;
   /** Verbose line, emitted only under JAIPH_SERVER_LOG=debug. */
   debug(message: string): void;
-  /** True when JAIPH_SERVER_LOG_WORKFLOW opts into mirroring workflow log events. */
-  readonly mirrorWorkflowLog: boolean;
+  /** True when JAIPH_SERVER_LOG_RUNS opts into mirroring run log events. */
+  readonly mirrorRunLog: boolean;
   /**
-   * Mirror one workflow log event to the operator log, colorized by level with
+   * Mirror one run log event to the operator log, colorized by level with
    * the same depth / async-branch subscript indent the interactive `jaiph run`
    * tree uses. The caller must pass an already credential-redacted `message`
    * (the same boundary as the durable journal / call-result text).
@@ -37,7 +37,7 @@ export interface ServerLog {
   mirror(level: MirrorLevel, message: string, ctx: MirrorContext): void;
 }
 
-/** Per-event context for a mirrored workflow log line. */
+/** Per-event context for a mirrored run log line. */
 export interface MirrorContext {
   runId: string;
   depth: number;
@@ -45,7 +45,7 @@ export interface MirrorContext {
 }
 
 /**
- * Operator-log wiring for one workflow call: the {@link ServerLog}. Injected
+ * Operator-log wiring for one def call: the {@link ServerLog}. Injected
  * by the command layer into a `DefCallContext` so `callDef` (the
  * shared choke point for both `jaiph mcp` and `jaiph serve`) emits per-call
  * banners through one path.
@@ -78,11 +78,11 @@ export function createOperatorLog(opts: {
 /** Read the operator-log env knobs (documented in docs/env-vars.md). */
 export function resolveServerLogEnv(env: NodeJS.ProcessEnv): {
   debugEnabled: boolean;
-  mirrorWorkflowLog: boolean;
+  mirrorRunLog: boolean;
 } {
   return {
     debugEnabled: /^debug$/i.test((env.JAIPH_SERVER_LOG ?? "").trim()),
-    mirrorWorkflowLog: /^(1|true)$/i.test((env.JAIPH_SERVER_LOG_WORKFLOW ?? "").trim()),
+    mirrorRunLog: /^(1|true)$/i.test((env.JAIPH_SERVER_LOG_RUNS ?? "").trim()),
   };
 }
 
@@ -98,17 +98,17 @@ export function createServerLog(opts: {
   write: (line: string) => void;
   colorEnabled: boolean;
   debugEnabled?: boolean;
-  mirrorWorkflowLog?: boolean;
+  mirrorRunLog?: boolean;
 }): ServerLog {
   const { label, write, colorEnabled } = opts;
   const debugEnabled = opts.debugEnabled ?? false;
-  const mirrorWorkflowLog = opts.mirrorWorkflowLog ?? false;
+  const mirrorRunLog = opts.mirrorRunLog ?? false;
   const emit = (message: string, code?: ColorCode): void => {
     const line = `${label}: ${message}`;
     write(code ? colorize(line, code, colorEnabled) : line);
   };
   return {
-    mirrorWorkflowLog,
+    mirrorRunLog,
     info: (message) => emit(message),
     warn: (message) => emit(message, "yellow"),
     error: (message) => emit(message, "red"),
@@ -126,7 +126,7 @@ export function createServerLog(opts: {
 
 /** Fields for the per-call start banner line. */
 export interface CallStartFields {
-  /** Workflow symbol or entry basename. */
+  /** Def symbol or entry basename. */
   def: string;
   runId: string;
   /** Present only when the run dir is already known (rarely at start). */

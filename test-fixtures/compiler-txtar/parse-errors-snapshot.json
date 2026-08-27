@@ -585,7 +585,7 @@
     "line": 1,
     "col": 1,
     "code": "E_PARSE",
-    "message": "invalid workflow reference in channel route: \"123bad\""
+    "message": "invalid def reference in channel route: \"123bad\""
   },
   "route inside workflow body is parse error": {
     "file": "input.jh",
@@ -1215,7 +1215,7 @@
     "line": 1,
     "col": 1,
     "code": "E_PARSE",
-    "message": "channel route requires at least one target workflow after ->"
+    "message": "channel route requires at least one target def after ->"
   },
   "empty multiline catch block": {
     "file": "input.jh",
@@ -1320,14 +1320,14 @@
     "line": 4,
     "col": 3,
     "code": "E_PARSE",
-    "message": "use \"const out = run lib.default(…)\" to capture workflow output"
+    "message": "use \"const out = run lib.default(…)\" to capture def output"
   },
   "test: bare workflow call without run rejected": {
     "file": "input.test.jh",
     "line": 4,
     "col": 3,
     "code": "E_PARSE",
-    "message": "use \"run lib.default(…)\" to call a workflow in tests"
+    "message": "use \"run lib.default(…)\" to call a def in tests"
   },
   "test: mock def without parens rejected": {
     "file": "input.test.jh",

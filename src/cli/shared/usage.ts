@@ -204,7 +204,7 @@ const FLAG_COMMANDS: Record<string, CliCommand[]> = {
  * Reject a token that looks like a flag (`-…` before `--`) but is not accepted
  * by this command. Distinguishes "belongs to another command" (named in the
  * error) from "unknown everywhere", and points `jaiph run` users at `--` for
- * workflow arguments that begin with `-`.
+ * program arguments that begin with `-`.
  */
 function rejectUnsupportedFlag(name: string, command: CliCommand): never {
   const owners = FLAG_COMMANDS[name];
@@ -215,7 +215,7 @@ function rejectUnsupportedFlag(name: string, command: CliCommand): never {
     );
   }
   const passthroughHint =
-    command === "run" ? " Use \`--\` before workflow arguments that start with \`-\`." : "";
+    command === "run" ? " Use \`--\` before program arguments that start with \`-\`." : "";
   throw new Error(`unknown flag ${name} for jaiph ${command}.${passthroughHint}`);
 }
 

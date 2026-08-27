@@ -234,7 +234,7 @@ test("parseArgs: an unknown flag is a usage error, not a positional", () => {
 });
 
 test("parseArgs: jaiph run's unknown-flag error points at -- for dash-leading workflow args", () => {
-  assert.throws(() => parseArgs(["flow.jh", "-v5"], "run"), /Use `--` before workflow arguments/);
+  assert.throws(() => parseArgs(["flow.jh", "-v5"], "run"), /Use `--` before program arguments/);
 });
 
 test("parseArgs: rejected flags are still fine after -- (workflow args untouched)", () => {

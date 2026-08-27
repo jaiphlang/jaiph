@@ -35,12 +35,12 @@ jaiph run ./flows/review.jh "review this diff"
 ```
 
 Every terminal run posts exactly one trace, covering an interactive `jaiph run`, a
-standalone `jaiph run --raw`, and every workflow invoked through `jaiph mcp` or
+standalone `jaiph run --raw`, and every def invoked through `jaiph mcp` or
 `jaiph serve`.
 
 ### A local collector
 
-Run a collector that logs what it receives, then run a workflow against it:
+Run a collector that logs what it receives, then run a def against it:
 
 ```bash
 docker run --rm -p 4318:4318 otel/opentelemetry-collector:latest
@@ -149,7 +149,7 @@ jaiph run ./deploy.jh
 ```
 
 The same host-side, end-of-run step that exports traces also sends the report. So
-`jaiph run` completions, including a standalone `jaiph run --raw`, and workflows
+`jaiph run` completions, including a standalone `jaiph run --raw`, and defs
 invoked through `jaiph mcp` or `jaiph serve` are all covered, and each one produces
 one Sentry event when it fails. If the DSN is malformed, Jaiph writes exactly one
 stderr warning and sends nothing.

@@ -483,7 +483,7 @@ test("parseConfigBlock: trusted_envs must be a string", () => {
   );
 });
 
-test("workflow config: trusted_envs is accepted at workflow level", () => {
+test("def config: trusted_envs is accepted at def level", () => {
   const src = [
     "export def main() {",
     "  config {",
