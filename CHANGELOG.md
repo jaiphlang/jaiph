@@ -4,6 +4,8 @@
 
 - **Language: `def`, `main`, private-by-default.** One interpreted callable (`def`); `jaiph run` requires `export def main` in the input file (optional in libraries); names are private across `import` unless listed in `export`; `rule`, `ensure`, `workflow`, and `default` are removed. The public noun is `def` / `run`, not workflow.
 
+- **Removed: the first-party Docker sandbox.** `jaiph run`, `jaiph mcp`, and `jaiph serve` execute on the host. The `--unsafe` / `--inplace` / `--yes` consent flags, the `JAIPH_UNSAFE` / `JAIPH_INPLACE*` / `JAIPH_DOCKER_*` env vars, and in-file `runtime.docker_*` keys are gone (`runtime.docker_*` is now an unknown-key error). Isolation is an outer concern — wrap `jaiph` in your own container, pod, or CI runner ([Deploy jaiph](docs/deploy.md)). Secret isolation is unchanged: the `prompt` env scrub, journal redaction, `--env`, and `trusted_envs` all stay.
+
 ## All changes
 
 - **Breaking — Language:** `send <payload> -> channel`. `channel <- payload` is `E_PARSE`. Route targets declare 1 to 3 parameters (message, channel, sender).
@@ -12,7 +14,7 @@
 
 - **Breaking — Language:** `def name(params) { … }` is the only interpreted callable. `run` is the only call verb (`${run …}`, `return run …`, match-arm `run`); `recover` is legal on every `run`. `export` is required for cross-module names — zero exports means nothing is public. `main` is reserved as the run entry: if present it must be `export def main`. `jaiph run` fails before spawn when the input file has no `export def main`. MCP/serve expose exported defs only and skip `main` unless it is the sole export (then named after the file basename). Removed keywords `workflow`, `rule`, and `ensure` are hard parse errors that name the replacement (`def` / `run`). Mocks are `mock def`. AST uses `Def` / `mod.defs`; step events and artifacts use kind `def` (`def__<name>.out`).
 
-- **Breaking — Run contracts:** journal events `RUN_START` / `RUN_END` (was `WORKFLOW_*`) with field `def`; hooks `run_start` / `run_end` with payload `run_id`; HTTP `/v1/defs` and `{ defs: [...] }` / run object field `def`; telemetry tag `jaiph.def` and root span `run <name>`; MCP tool spec field `def`.
+- **Breaking — Run contracts:** journal events `RUN_START` / `RUN_END` (was `WORKFLOW_*`) with field `def`; hooks `run_start` / `run_end` with payload `run_id`; HTTP `/v1/defs` and `{ defs: [...] }` / run object field `def`; telemetry tag `jaiph.def` and root span `run <name>`; MCP tool spec field `def`; operator-log mirror opt-in is `JAIPH_SERVER_LOG_RUNS` (was `JAIPH_SERVER_LOG_WORKFLOW`).
 
 - **Removed — first-party Docker sandbox:** no Docker driver, no digest-pinned runtime image, no snapshot/inplace modes, no `--unsafe` / `--inplace` / `--yes` sandbox consent, no `JAIPH_UNSAFE` / `JAIPH_INPLACE*` / `JAIPH_DOCKER_*`, no in-file `runtime.docker_*`. `prompt` env scrub, journal redaction, `--env`, and `trusted_envs` stay.
 
