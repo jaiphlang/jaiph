@@ -112,6 +112,90 @@ test("E_PARSE: import inside an if body of a nested def is rejected too", () => 
   );
 });
 
+test("E_PARSE: import inside a catch body of a nested def is rejected", () => {
+  const src = [
+    "def outer() {",
+    "  def inner() {",
+    "    run s() catch (e) {",
+    '      import "x.jh" as y',
+    "    }",
+    "  }",
+    "}",
+    "",
+  ].join("\n");
+  assert.throws(
+    () => parsejaiph(src, "t.jh"),
+    /E_PARSE.*import declarations are not allowed inside a nested def/,
+  );
+});
+
+test("E_PARSE: import inside a recover body of a nested def is rejected", () => {
+  const src = [
+    "def outer() {",
+    "  def inner() {",
+    "    run s() recover(e) {",
+    '      import "x.jh" as y',
+    "    }",
+    "  }",
+    "}",
+    "",
+  ].join("\n");
+  assert.throws(
+    () => parsejaiph(src, "t.jh"),
+    /E_PARSE.*import declarations are not allowed inside a nested def/,
+  );
+});
+
+test("E_PARSE: config inside a catch body of a nested def is rejected", () => {
+  const src = [
+    "def outer() {",
+    "  def inner() {",
+    "    run s() catch (e) {",
+    "      config {",
+    '        agent.backend = "claude"',
+    "      }",
+    "    }",
+    "  }",
+    "}",
+    "",
+  ].join("\n");
+  assert.throws(
+    () => parsejaiph(src, "t.jh"),
+    /E_PARSE.*config blocks are not allowed inside a nested def/,
+  );
+});
+
+test("E_PARSE: inline catch `{ import … }` in a nested def is rejected", () => {
+  const src = 'def outer() {\n  def inner() {\n    run s() catch (e) { import "x.jh" as y }\n  }\n}\n';
+  assert.throws(
+    () => parsejaiph(src, "t.jh"),
+    /E_PARSE.*import declarations are not allowed inside a nested def/,
+  );
+});
+
+test("E_PARSE: single-statement catch import in a nested def is rejected", () => {
+  const src = 'def outer() {\n  def inner() {\n    run s() catch (e) import "x.jh" as y\n  }\n}\n';
+  assert.throws(
+    () => parsejaiph(src, "t.jh"),
+    /E_PARSE.*import declarations are not allowed inside a nested def/,
+  );
+});
+
+test("top-level def catch body: `import` still falls through to shell (unchanged)", () => {
+  const ast = parsejaiph(
+    'export def main() {\n  run s() catch (e) {\n    import photo.png\n  }\n}\n',
+    "t.jh",
+  );
+  const step = ast.defs[0].steps.find((s) => s.type === "exec");
+  assert.ok(step && step.type === "exec" && step.catch && "block" in step.catch);
+  if (!(step && step.type === "exec" && step.catch && "block" in step.catch)) return;
+  const shell = step.catch.block.find((s) => s.type === "exec");
+  assert.ok(
+    shell && shell.type === "exec" && shell.body.kind === "shell",
+    "a top-level def catch body keeps the shell fallthrough for import",
+  );
+});
+
 test("a nested def with only run / const / nested script still compiles", () => {
   const src = [
     "export def main() {",
