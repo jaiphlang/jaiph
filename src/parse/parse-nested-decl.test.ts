@@ -70,3 +70,70 @@ test("a bash `export FOO=bar` shell line inside a def still parses (not a declar
   const step = ast.defs[0].steps.find((s) => s.type === "exec");
   assert.ok(step, "export FOO=bar is a shell exec step, not a declaration");
 });
+
+test("E_PARSE: import inside a nested def is rejected (would run as shell)", () => {
+  const src = 'def outer() {\n  def inner() {\n    import "x.jh" as y\n  }\n}\n';
+  assert.throws(
+    () => parsejaiph(src, "t.jh"),
+    /E_PARSE.*import declarations are not allowed inside a nested def/,
+  );
+});
+
+test("E_PARSE: import script inside a nested def is rejected", () => {
+  const src = 'def outer() {\n  def inner() {\n    import script "./x.sh" as y\n  }\n}\n';
+  assert.throws(
+    () => parsejaiph(src, "t.jh"),
+    /E_PARSE.*import declarations are not allowed inside a nested def/,
+  );
+});
+
+test("E_PARSE: config block inside a nested def is rejected", () => {
+  const src = 'def outer() {\n  def inner() {\n    config {\n      agent.backend = "claude"\n    }\n  }\n}\n';
+  assert.throws(
+    () => parsejaiph(src, "t.jh"),
+    /E_PARSE.*config blocks are not allowed inside a nested def/,
+  );
+});
+
+test("E_PARSE: import inside an if body of a nested def is rejected too", () => {
+  const src = [
+    "def outer() {",
+    "  def inner(flag) {",
+    '    if flag == "y" {',
+    '      import "x.jh" as y',
+    "    }",
+    "  }",
+    "}",
+    "",
+  ].join("\n");
+  assert.throws(
+    () => parsejaiph(src, "t.jh"),
+    /E_PARSE.*import declarations are not allowed inside a nested def/,
+  );
+});
+
+test("a nested def with only run / const / nested script still compiles", () => {
+  const src = [
+    "export def main() {",
+    "  def inner() {",
+    '    const x = "1"',
+    "    script s = `echo hi`",
+    "    run s()",
+    "  }",
+    "  run inner()",
+    "}",
+    "",
+  ].join("\n");
+  const ast = parsejaiph(src, "t.jh");
+  const inner = ast.defs[0].steps.find((s) => s.type === "local_decl");
+  assert.ok(inner && inner.type === "local_decl" && inner.decl.kind === "def", "inner def parses");
+});
+
+test("top-level def body: `import` still falls through to shell (unchanged)", () => {
+  const ast = parsejaiph("export def main() {\n  import photo.png\n}\n", "t.jh");
+  const step = ast.defs[0].steps.find((s) => s.type === "exec");
+  assert.ok(
+    step && step.type === "exec" && step.body.kind === "shell",
+    "a top-level def body keeps the shell fallthrough for import",
+  );
+});

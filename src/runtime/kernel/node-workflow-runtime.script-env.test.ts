@@ -221,6 +221,81 @@ test("no def-level leak: a callee def's script without `use` stays sterile even 
   }
 });
 
+test("shell-fallthrough def lines spawn `sh -c` with the sterile script env", async () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-script-env-shline-"));
+  try {
+    const { scriptsDir } = setup(root);
+    const jh = writeFlow(root, "flow.jh", [
+      "export def main() {",
+      "  echo hello",
+      "}",
+    ]);
+    const env = {
+      ...makeEnv(root, scriptsDir),
+      UE_TOKEN: "host-secret",
+      CLAUDE_CODE_OAUTH_TOKEN: "oauth-secret",
+      JAIPH_SERVE_TOKEN: "serve-secret",
+      JAIPH_CHAIN_KEY: "chain-secret",
+      JAIPH_RUN_SUMMARY_FILE: join(root, "run_summary.jsonl"),
+      JAIPH_ENV_GRANT: "UE_TOKEN",
+    };
+    const runtime = new NodeWorkflowRuntime(buildRuntimeGraph(jh), { env, cwd: root, suppressLiveEvents: true });
+    await withSpawnSpy(async (calls) => {
+      assert.equal(await runtime.runMain([]), 0);
+      assert.equal(calls.length, 1, "expected exactly one sh -c spawn");
+      assert.deepEqual(calls[0]!.args, ["-c", "echo hello"], "the interpolated line runs via sh -c");
+      const child = calls[0]!.env;
+      assert.equal(child.UE_TOKEN, undefined, "shell lines have no use clause: a grant forwards nothing");
+      assert.equal(child.CLAUDE_CODE_OAUTH_TOKEN, undefined, "agent credential must not cross");
+      assert.equal(child.JAIPH_SERVE_TOKEN, undefined, "host-only serve token must not cross");
+      assert.equal(child.JAIPH_CHAIN_KEY, undefined, "audit-chain key never crosses");
+      assert.equal(child.JAIPH_RUN_SUMMARY_FILE, undefined, "journal path never crosses");
+      assert.equal(child.JAIPH_ENV_GRANT, undefined, "the grant list itself never crosses");
+      // Base + contract surface still present, same as an inline script.
+      assert.equal(child.PATH, process.env.PATH, "base env (PATH) is forwarded");
+      assert.equal(child.JAIPH_WORKSPACE, root, "contract key JAIPH_WORKSPACE is forwarded");
+    });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("cross-module use: `run lib.publish()` forwards the imported module's use key", async () => {
+  // `use` lives on the definition: the entry file imports lib.jh with no `use`
+  // of its own, and the granted key still reaches lib's script subprocess.
+  const root = mkdtempSync(join(tmpdir(), "jaiph-script-env-cross-"));
+  try {
+    const { scriptsDir } = setup(root);
+    writeScriptFile(scriptsDir, "publish");
+    writeFlow(root, "lib.jh", [
+      "export script publish use UE_TOKEN = `echo x`",
+    ]);
+    const jh = writeFlow(root, "flow.jh", [
+      'import "./lib.jh" as lib',
+      "export def main() {",
+      "  run lib.publish()",
+      "}",
+    ]);
+    const env = {
+      ...makeEnv(root, scriptsDir),
+      UE_TOKEN: "cross-secret",
+      JAIPH_ENV_GRANT: "UE_TOKEN",
+    };
+    const runtime = new NodeWorkflowRuntime(buildRuntimeGraph(jh), { env, cwd: root, suppressLiveEvents: true });
+    await withSpawnSpy(async (calls) => {
+      assert.equal(await runtime.runMain([]), 0);
+      assert.equal(calls.length, 1, "expected exactly one script spawn");
+      assert.equal(
+        calls[0]!.env.UE_TOKEN,
+        "cross-secret",
+        "the imported script's own use clause forwards the granted key across modules",
+      );
+    });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("inline scripts have no use clause and get the sterile base only", async () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-script-env-inline-"));
   try {

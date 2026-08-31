@@ -1828,10 +1828,14 @@ export class NodeWorkflowRuntime {
 
   /**
    * Run a raw workflow shell line (after Jaiph interpolation) via `sh -c` in
-   * the workspace, matching script cwd semantics.
+   * the workspace, matching script cwd semantics. Shell lines have no
+   * definition site and therefore no `use` clause, so they get the same
+   * sterile env as an inline script: base process mechanics plus the runtime
+   * contract keys — never ambient host secrets or kernel keys.
    */
   private executeShLine(scope: Scope, command: string, io: StepIO): Promise<StepResult> {
-    return this.spawnAndCapture(resolveShell(), ["-c", command], scope.env, this.scriptCwd(scope.env, scope.filePath), io);
+    const env = this.buildScriptSpawnEnv(scope.env, undefined);
+    return this.spawnAndCapture(resolveShell(), ["-c", command], env, this.scriptCwd(scope.env, scope.filePath), io);
   }
 
   private async executeInlineScript(

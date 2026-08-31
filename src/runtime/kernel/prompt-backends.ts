@@ -21,6 +21,29 @@ import {
 import { commandExists, prepareClaudeEnv } from "./prompt-claude";
 import { runCodexBackend } from "./prompt-codex";
 
+/**
+ * Indirection seam for the Codex HTTP backend, so tests can observe the
+ * request env (credential scrub + named-prompt `use` injection) without a
+ * real HTTP call. Production uses `runCodexBackend` unchanged.
+ */
+export const _codexBackend = { run: runCodexBackend };
+
+/**
+ * Merge named-prompt `use` grants over a scrubbed env. Injected last so they
+ * survive the scrub (and, for claude, the env prep). Anonymous prompts pass
+ * no `useEnv` and stay sterile.
+ */
+function applyUseEnv(
+  childEnv: NodeJS.ProcessEnv,
+  useEnv: NodeJS.ProcessEnv | undefined,
+): NodeJS.ProcessEnv {
+  if (!useEnv) return childEnv;
+  for (const [key, value] of Object.entries(useEnv)) {
+    if (value !== undefined) childEnv[key] = value;
+  }
+  return childEnv;
+}
+
 // Subprocess backend dispatch (`runBackend`) and the three-layer prompt
 // watchdog. Split out of `prompt.ts` so each prompt concern stays under the
 // analyzability line cap. Codex (HTTP) lives in `prompt-codex.ts`.
@@ -143,9 +166,12 @@ export function runBackend(
   /** Named-prompt `use` keys (granted host secrets) injected on top of the scrubbed env. */
   useEnv?: NodeJS.ProcessEnv,
 ): Promise<{ final: string; status: number }> {
-  // Codex uses HTTP API, not a CLI subprocess.
+  // Codex uses HTTP API, not a CLI subprocess, but the named-prompt `use`
+  // contract is identical: the request env is the scrubbed env plus the
+  // granted `use` keys, injected last.
   if (config.backend === "codex") {
-    return runCodexBackend(config, promptText, writer, stderr);
+    const requestEnv = applyUseEnv(scrubPromptEnv(execEnv, config.backend), useEnv);
+    return _codexBackend.run(config, promptText, writer, stderr, requestEnv);
   }
 
   // Pre-flight check for claude backend
@@ -178,13 +204,7 @@ export function runBackend(
       }
       childEnv = prepared.env;
     }
-    // Named-prompt `use` grants: injected last so they survive the scrub and the
-    // Claude env prep. Anonymous prompts pass no `useEnv` and stay sterile.
-    if (useEnv) {
-      for (const [key, value] of Object.entries(useEnv)) {
-        if (value !== undefined) childEnv[key] = value;
-      }
-    }
+    childEnv = applyUseEnv(childEnv, useEnv);
     // Cursor: stdin is not used (prompt is passed as arg), stderr passes through to caller.
     // Claude / custom: stdin receives prompt, stdout is parsed or collected raw.
     const useStdin = isClaude || isCustom;

@@ -12,7 +12,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildRuntimeGraph } from "./graph";
 import { NodeWorkflowRuntime } from "./node-workflow-runtime";
-import { _backendSpawn } from "./prompt-backends";
+import { _backendSpawn, _codexBackend } from "./prompt-backends";
 
 /** A fake agent child for the custom-command backend path: echoes a payload on stdout then closes. */
 function fakeAgentChild(stdoutPayload: string): EventEmitter {
@@ -141,7 +141,61 @@ test("named prompt `use GITHUB_TOKEN` + --env grant reaches the agent child env;
       const [named, anon] = calls;
       assert.equal(named.env.GITHUB_TOKEN, "s3cr3t-token", "named prompt gets the granted use key");
       assert.equal(anon.env.GITHUB_TOKEN, undefined, "anonymous prompt stays sterile");
+      assert.equal(named.env.JAIPH_ENV_GRANT, undefined, "the grant list itself never reaches the agent");
+      assert.equal(anon.env.JAIPH_ENV_GRANT, undefined, "the grant list itself never reaches the agent");
     });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("codex backend: named prompt `use` + --env grant reaches the request env; anonymous prompt does not", async () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-named-prompt-codex-"));
+  try {
+    const jh = join(root, "flow.jh");
+    writeFileSync(
+      jh,
+      [
+        'prompt privileged(x) use GITHUB_TOKEN = "Privileged ${x}"',
+        "export def main() {",
+        '  const x = "y"',
+        "  prompt privileged(x)",
+        '  prompt "sterile anonymous"',
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const graph = buildRuntimeGraph(jh);
+    const envs: NodeJS.ProcessEnv[] = [];
+    const orig = _codexBackend.run;
+    _codexBackend.run = ((_config, _promptText, _writer, _stderr, requestEnv) => {
+      envs.push(requestEnv ?? {});
+      return Promise.resolve({ final: "done", status: 0 });
+    }) as typeof _codexBackend.run;
+    try {
+      const runtime = new NodeWorkflowRuntime(graph, {
+        env: {
+          ...process.env,
+          JAIPH_RUNS_DIR: join(root, ".jaiph", "runs"),
+          JAIPH_AGENT_BACKEND: "codex",
+          OPENAI_API_KEY: "sk-test",
+          JAIPH_WORKSPACE: root,
+          JAIPH_ENV_GRANT: "GITHUB_TOKEN",
+          GITHUB_TOKEN: "s3cr3t-token",
+        },
+        cwd: root,
+        suppressLiveEvents: true,
+      });
+      const status = await runtime.runMain([]);
+      assert.equal(status, 0);
+      assert.equal(envs.length, 2, "both prompts reach the codex backend");
+      const [named, anon] = envs;
+      assert.equal(named.GITHUB_TOKEN, "s3cr3t-token", "named prompt puts the granted use key on the codex request env");
+      assert.equal(anon.GITHUB_TOKEN, undefined, "anonymous prompt stays sterile");
+      assert.equal(named.JAIPH_ENV_GRANT, undefined, "the grant list itself never reaches the agent");
+    } finally {
+      _codexBackend.run = orig;
+    }
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

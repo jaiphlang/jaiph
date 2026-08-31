@@ -202,7 +202,7 @@ export def main() {
 }
 ```
 
-- **Not hoisted.** A nested name is visible only after its declaration in the same def; using it earlier is `E_VALIDATE`. **No `export`** on a nested declaration (`E_PARSE`); the nested forms are `const` / `script` / `def` / named `prompt` only.
+- **Not hoisted.** A nested name is visible only after its declaration in the same def; using it earlier is `E_VALIDATE`. **No `export`** on a nested declaration (`E_PARSE`); the nested forms are `const` / `script` / `def` / named `prompt` only. Inside a nested def, `import` and a `config { … }` block are also `E_PARSE`.
 - **Shadowing.** A nested name may shadow a module-level `script` / `def` / `prompt`; the local wins. Another def cannot `run` / `prompt` a name declared only inside a different def (`E_VALIDATE`). A collision with a parameter or another local name is `E_VALIDATE` (`cannot rebind immutable name`).
 - **Closure vs subprocess.** A nested `def` (and a nested named `prompt` body) interpolates the enclosing def's params/`const`s plus its own params at runtime. A nested `script` is a sterile subprocess: enclosing bindings do **not** cross into its env — pass argv (`run inner(x)` → `$1`). Nested `script` / `prompt` carry their own `use` + `--env` grant.
 

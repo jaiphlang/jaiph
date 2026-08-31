@@ -108,6 +108,9 @@ export function scrubPromptEnv(execEnv: NodeJS.ProcessEnv, backend: string): Nod
     // The audit-chain HMAC key is a JAIPH_ control key the runner needs, but
     // it must never reach the agent itself — drop it here regardless.
     if (key === CHAIN_KEY_ENV) continue;
+    // Same for the `--env` grant hand-off: the values it names are injected
+    // per definition site via `use` (`buildPromptUseEnv`), never the list.
+    if (key === ENV_GRANT_ENV) continue;
     if (isEnvAllowed(key, backends) || isPromptBaseEnv(key)) {
       out[key] = value;
     }
@@ -146,7 +149,8 @@ export const SCRIPT_CONTRACT_ENV_NAMES = [
 
 /**
  * Build the sterile environment for a script subprocess (named script,
- * `import script`, or inline script):
+ * `import script`, inline script, or a free-form def shell line, which has
+ * no definition site and therefore never passes `use` keys):
  *  - the prompt base env (process mechanics: PATH, HOME, locale, TLS/proxy);
  *  - the script runtime contract keys (`SCRIPT_CONTRACT_ENV_NAMES`, incl. the
  *    config-scoped `JAIPH_AGENT_BACKEND` when scope has it), plus

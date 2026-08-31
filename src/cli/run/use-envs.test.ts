@@ -5,11 +5,21 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { loadModuleGraph } from "../../transpiler";
 import { planUseEnvs } from "./use-envs";
+
+// Runs from dist/src/cli/run — four levels below the repo root.
+const repoRoot = resolve(__dirname, "../../../..");
+
+test("use-envs.ts source contains no NUL bytes (git must treat it as text)", () => {
+  // The dedupe key once used raw \x00 separators, which made git classify the
+  // whole file as binary. Printable separators only.
+  const source = readFileSync(join(repoRoot, "src", "cli", "run", "use-envs.ts"), "utf8");
+  assert.ok(!source.includes("\x00"), "use-envs.ts must not contain NUL bytes");
+});
 
 function writeFlow(root: string, name: string, lines: string[]): string {
   const path = join(root, name);

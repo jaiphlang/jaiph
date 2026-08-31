@@ -249,7 +249,7 @@ export def main() {
 
 | Aspect | Rule |
 |---|---|
-| Where | `const` / `script` / `def` / named `prompt` inside a def body. **No `export`** (`E_PARSE`). `import` and `channel` stay module-level; a def-level `config` block is separate metadata that must precede the first step. |
+| Where | `const` / `script` / `def` / named `prompt` inside a def body. **No `export`** (`E_PARSE`). `import` and `channel` stay module-level; a def-level `config` block is separate metadata that must precede the first step. Inside a **nested** def, `import` / `import script` and a `config { … }` block are `E_PARSE` (same class as `export`), never silent shell lines. |
 | Scope | Sequential local binding, **not hoisted**: visible only in the enclosing def and only **after** its declaration (using it earlier is `E_VALIDATE`). One local namespace per def, shared with the def's parameters and `const`s — a duplicate name or a collision with a parameter is `E_VALIDATE` (`cannot rebind immutable name`). |
 | Shadowing | A nested name **may shadow** a module-level `script` / `def` / `prompt` of the same name; the local binding wins for the rest of the body. Another def cannot `run` / `prompt` a name declared only inside a different def (`E_VALIDATE`). |
 | Calls | `run name(args)` for a nested script or def (`run async` allowed for a nested def); `prompt name(args)` for a nested named prompt. |
@@ -463,7 +463,7 @@ Managed script steps (`run` to a named script, `import script`, inline scripts) 
 - the script runtime contract: `JAIPH_WORKSPACE`, `JAIPH_SCRIPTS`, `JAIPH_RUN_DIR`, `JAIPH_ARTIFACTS_DIR`, the config-scoped `JAIPH_AGENT_BACKEND` (when set), and `JAIPH_AGENT_MODEL` (kept defined, empty when unset, for `set -u` scripts);
 - the host keys named in the script's own `use` clause, and only when the operator granted each with `--env KEY[=VALUE]`.
 
-Nothing else crosses: the rest of the host environment, agent credentials (`ANTHROPIC_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`, `CURSOR_API_KEY`, `OPENAI_API_KEY`), the audit journal path (`JAIPH_RUN_SUMMARY_FILE`), and the audit-chain key (`JAIPH_CHAIN_KEY`) all stay with the runner. A def in the call tree neither grants nor denies keys — `run bbb()` where `bbb` is a def never injects host keys into `bbb`'s scripts; only each script's own declaration counts. Def inline-shell lines (free-form body lines run via `sh -c`) still use the workflow's `scope.env`. See [Environment variables](env-vars.md#script-env).
+Nothing else crosses: the rest of the host environment, agent credentials (`ANTHROPIC_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`, `CURSOR_API_KEY`, `OPENAI_API_KEY`), the audit journal path (`JAIPH_RUN_SUMMARY_FILE`), and the audit-chain key (`JAIPH_CHAIN_KEY`) all stay with the runner. A def in the call tree neither grants nor denies keys — `run bbb()` where `bbb` is a def never injects host keys into `bbb`'s scripts; only each script's own declaration counts. Def inline-shell lines (free-form body lines run via `sh -c`) get the same sterile environment as an inline script; a shell line has no declaration and therefore no `use` clause, so granted keys never reach it — use a named script with `use` when a line needs a host secret. See [Environment variables](env-vars.md#script-env).
 
 Module `const` values are **not** automatically exported into script environments. Pass them as positional arguments (`$1`, `$2`, …) or read Jaiph-provided variables.
 

@@ -91,6 +91,19 @@ test("scrubPromptEnv: JAIPH_ control keys pass, JAIPH_SERVE_* exclusions do not"
   assert.equal(env.JAIPH_SERVE_TOKEN, undefined);
 });
 
+test("scrubPromptEnv: the --env grant hand-off (JAIPH_ENV_GRANT) never reaches a prompt backend", () => {
+  const env = scrubPromptEnv(
+    {
+      JAIPH_ENV_GRANT: "GITHUB_TOKEN",
+      // A runtime-consumed control key the workflow legitimately needs still passes.
+      JAIPH_TEST_MODE: "1",
+    },
+    "claude",
+  );
+  assert.equal(env.JAIPH_ENV_GRANT, undefined, "grant routing metadata stays with the runner");
+  assert.equal(env.JAIPH_TEST_MODE, "1");
+});
+
 test("scrubPromptEnv: host-only JAIPH_SERVE_* server keys never reach a prompt backend", () => {
   const env = scrubPromptEnv(
     {
