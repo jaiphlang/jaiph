@@ -1,4 +1,11 @@
 import { spawn as nodeSpawn, type ChildProcess } from "node:child_process";
+
+/**
+ * Indirection seam for the agent-backend spawn, so tests can observe the child
+ * env (credential scrub + named-prompt `use` injection) without launching a
+ * real backend. Production uses `node:child_process.spawn` unchanged.
+ */
+export const _backendSpawn = { spawn: nodeSpawn };
 import { PassThrough } from "node:stream";
 import { parseStream, type StreamWriter } from "./stream-parser";
 import { killProcessTreeEscalating } from "./portability";
@@ -133,6 +140,8 @@ export function runBackend(
   writer: StreamWriter,
   execEnv: NodeJS.ProcessEnv = process.env,
   stderr: NodeJS.WritableStream = process.stderr,
+  /** Named-prompt `use` keys (granted host secrets) injected on top of the scrubbed env. */
+  useEnv?: NodeJS.ProcessEnv,
 ): Promise<{ final: string; status: number }> {
   // Codex uses HTTP API, not a CLI subprocess.
   if (config.backend === "codex") {
@@ -169,10 +178,17 @@ export function runBackend(
       }
       childEnv = prepared.env;
     }
+    // Named-prompt `use` grants: injected last so they survive the scrub and the
+    // Claude env prep. Anonymous prompts pass no `useEnv` and stay sterile.
+    if (useEnv) {
+      for (const [key, value] of Object.entries(useEnv)) {
+        if (value !== undefined) childEnv[key] = value;
+      }
+    }
     // Cursor: stdin is not used (prompt is passed as arg), stderr passes through to caller.
     // Claude / custom: stdin receives prompt, stdout is parsed or collected raw.
     const useStdin = isClaude || isCustom;
-    const child = nodeSpawn(command, args, {
+    const child = _backendSpawn.spawn(command, args, {
       stdio: useStdin ? ["pipe", "pipe", "pipe"] : ["ignore", "pipe", "pipe"],
       env: childEnv,
     });

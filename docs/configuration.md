@@ -104,7 +104,7 @@ script release use GITHUB_TOKEN NPM_TOKEN = `gh release create …`
 jaiph run --env GITHUB_TOKEN --env NPM_TOKEN publish.jh
 ```
 
-The `use` request lives on the script declaration (named `script`, `export script`, or `import script … as alias use KEY`), never on defs, `run` call sites, or prompts. Prompt subprocesses keep the fail-closed `scrubPromptEnv` allowlist and never receive `--env` secrets. See [Language — Subprocess environment](language.md#subprocess-environment) and [Environment variables](env-vars.md#script-env).
+The `use` request lives on a script declaration (named `script`, `export script`, or `import script … as alias use KEY`) or on a [named prompt](language.md#named-prompts) definition (`prompt analyze(log) use GITHUB_TOKEN = …`) — never on defs, `run` / `prompt` call sites, or anonymous `prompt` steps. Anonymous prompt subprocesses keep the fail-closed `scrubPromptEnv` allowlist and never receive `--env` secrets; a named prompt's granted `use` keys are injected into its agent subprocess on top of that scrub. See [Language — Subprocess environment](language.md#subprocess-environment) and [Environment variables](env-vars.md#script-env).
 
 ## Precedence
 {: #precedence}

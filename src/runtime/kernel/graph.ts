@@ -1,6 +1,6 @@
 import { resolve } from "node:path";
 import { loadModuleGraph, type ModuleGraph, type ModuleNode } from "../../transpiler";
-import type { ScriptDef, Def, DefRef, jaiphModule } from "../../types";
+import type { ScriptDef, Def, DefRef, PromptDef, jaiphModule } from "../../types";
 
 export type RuntimeModuleNode = ModuleNode;
 export type RuntimeGraph = ModuleGraph;
@@ -13,6 +13,11 @@ export interface ResolvedDef {
 export interface ResolvedScript {
   filePath: string;
   script: ScriptDef;
+}
+
+export interface ResolvedPrompt {
+  filePath: string;
+  prompt: PromptDef;
 }
 
 /** Inject `ScriptDef` stubs for `import script` declarations so `resolveScriptRef` finds them. Idempotent. */
@@ -71,6 +76,24 @@ export function resolveDefRef(graph: RuntimeGraph, fromFile: string, ref: DefRef
   if (!importedNode) return null;
   const def = importedNode.ast.defs.find((w) => w.name === name) ?? null;
   return def ? { filePath: importedNode.filePath, def } : null;
+}
+
+export function resolvePromptRef(graph: RuntimeGraph, fromFile: string, ref: string): ResolvedPrompt | null {
+  const node = graph.modules.get(resolve(fromFile));
+  if (!node) return null;
+  const parts = ref.split(".");
+  if (parts.length === 1) {
+    const prompt = node.ast.prompts?.find((p) => p.name === parts[0]) ?? null;
+    return prompt ? { filePath: node.filePath, prompt } : null;
+  }
+  const [alias, name] = parts;
+  if (!alias || !name) return null;
+  const importedFile = node.imports.get(alias);
+  if (!importedFile) return null;
+  const importedNode = graph.modules.get(importedFile);
+  if (!importedNode) return null;
+  const prompt = importedNode.ast.prompts?.find((p) => p.name === name) ?? null;
+  return prompt ? { filePath: importedNode.filePath, prompt } : null;
 }
 
 export function lookupScript(graph: RuntimeGraph, fromFile: string, ref: string): ScriptDef | null {

@@ -1,6 +1,6 @@
 import type { Expr, StepDef } from "../types";
 import { createTrivia, type Trivia } from "./trivia";
-import { fail, SINGLE_QUOTE_MESSAGE, hasUnescapedClosingQuote, indexOfClosingDoubleQuote, isJaiphInterpolationRef } from "./core";
+import { fail, SINGLE_QUOTE_MESSAGE, hasUnescapedClosingQuote, indexOfClosingDoubleQuote, isJaiphInterpolationRef, parseCallRef, rejectTrailingContent } from "./core";
 import { dedentTripleQuotedBody, parseTripleQuoteBlock, tripleQuoteBodyToRaw } from "./triple-quote";
 
 /**
@@ -301,6 +301,22 @@ export function parsePromptStep(
         return buildStep(expr, { bodyKind: "string" }, nextIndex - 1);
       }
     }
+  }
+
+  // --- Case 2c: Named-prompt invocation `prompt foo(args)` ---
+  // A parenthesised call form invokes a module-level named prompt. The bare
+  // `prompt foo` (no `()`) form below stays the identifier-as-body sugar.
+  const call = parseCallRef(promptArg);
+  if (call) {
+    rejectTrailingContent(filePath, lineNo, "prompt", call.rest);
+    const expr: Expr = {
+      kind: "prompt",
+      raw: "",
+      loc: stepLoc,
+      name: call.ref,
+      ...(call.args ? { args: call.args } : {}),
+    };
+    return buildStep(expr, {}, lineIdx);
   }
 
   // --- Case 3: Bare identifier ---

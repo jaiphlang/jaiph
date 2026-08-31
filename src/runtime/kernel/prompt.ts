@@ -100,6 +100,11 @@ export async function executePrompt(
   /** Workflow/runtime env (JAIPH_TEST_MODE and mocks); defaults to process.env for CLI entry. */
   execEnv: NodeJS.ProcessEnv = process.env,
   stderr: NodeJS.WritableStream = process.stderr,
+  /**
+   * Named-prompt `use` keys granted via `--env`, injected into the agent
+   * subprocess on top of `scrubPromptEnv`. Anonymous prompts pass nothing.
+   */
+  useEnv?: NodeJS.ProcessEnv,
 ): Promise<{ final: string; status: number }> {
   writePromptTranscriptHeader(stdout, config, promptText);
 
@@ -135,7 +140,7 @@ export async function executePrompt(
     writeFinal: (text) => stdout.write(text),
   };
 
-  const result = await runBackend(config, promptText, writer, execEnv, stderr);
+  const result = await runBackend(config, promptText, writer, execEnv, stderr, useEnv);
   const final =
     config.backend === "cursor"
       ? trimSurroundingBlankLines(result.final)

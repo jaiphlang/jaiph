@@ -150,7 +150,7 @@ Script semantics:
 - Bodies are **opaque** to Jaiph orchestration — full shell/Python/whatever, heredocs included. The compiler strips the block's common leading whitespace at parse time (same idea as triple-quoted prompts); `jaiph format` re-adds one indent level for readability. The one check: do not call Jaiph symbols (`run`, def names) from inside a script body or `$(…)`.
 - **Capture = stdout.** `const v = run parse_json("pkg.json")` binds the script's stdout. Use `echo`/`printf` to return data; use exit codes (`return N` / `exit N`) for pass/fail.
 - **Arguments arrive as `$1`, `$2`, …** Module `const` values and def bindings are *not* exported into the subprocess environment — pass them explicitly as arguments.
-- **Script env is sterile.** A script sees only process basics (`PATH`, `HOME`, locale), the `JAIPH_WORKSPACE` / `JAIPH_SCRIPTS` / `JAIPH_RUN_DIR` / `JAIPH_ARTIFACTS_DIR` contract keys, and host keys it requests with a `use` clause: `script release use GITHUB_TOKEN = …` (also on `import script … as gh use GITHUB_TOKEN`). Each `use` key must be granted at run time with `--env KEY[=VALUE]` or `jaiph run` refuses to start (`E_ENV_MISSING`); host presence alone is not enough. `use` goes on the script declaration only — never on defs, `run` call sites, or prompts.
+- **Script env is sterile.** A script sees only process basics (`PATH`, `HOME`, locale), the `JAIPH_WORKSPACE` / `JAIPH_SCRIPTS` / `JAIPH_RUN_DIR` / `JAIPH_ARTIFACTS_DIR` contract keys, and host keys it requests with a `use` clause: `script release use GITHUB_TOKEN = …` (also on `import script … as gh use GITHUB_TOKEN`). Each `use` key must be granted at run time with `--env KEY[=VALUE]` or `jaiph run` refuses to start (`E_ENV_MISSING`); host presence alone is not enough. `use` goes on a `script` declaration or a **named `prompt` definition** — never on defs, `run` / `prompt` call sites, or anonymous `prompt` steps.
 - Alternatively a manual `#!` shebang as the first body line selects the interpreter (mutually exclusive with a fence tag).
 - A newline inside a single-backtick body is a parse error — use a fenced block.
 
@@ -235,6 +235,26 @@ if r.verdict == "reject" {
 - The runtime extracts and validates JSON from the agent's reply; on schema mismatch the step fails. All fields are stored as **strings** (a `number` field holds the text `"42"`).
 - For a `"""` prompt, `returns "…"` goes on the closing-`"""` line or the line immediately after.
 - Triple **backticks** inside prompt context are rejected — they are script delimiters. Use indentation or quotes for code in prompt text.
+
+**Named prompts** are reusable, parameterised prompt definitions at module level — same namespace as `script` / `def`, invoked with parentheses:
+
+```jaiph
+prompt analyze_ci(log) use GITHUB_TOKEN = """
+  Look at this CI log and summarize the failure:
+  ${log}
+"""
+returns "{ summary: string }"
+
+export def main() {
+  const log = run fetch_ci_log()
+  const r = prompt analyze_ci(log)   # invoke with (); prompt analyze_ci (no ()) is the identifier form
+  return r.summary
+}
+```
+
+- **`prompt name(args)` vs `prompt name`.** Parentheses invoke the named prompt (arity must match — `E_VALIDATE` otherwise, including `()`); a bare `prompt name` with no `()` stays the identifier-as-body form (prompt text = value of the string `name`). A named prompt is **never** called with `run` — `run name()` on a prompt is `E_VALIDATE`.
+- **Body + `returns`** follow the anonymous-prompt rules (double-quoted or `"""…"""`, optional flat `returns` on the definition). `${param}` interpolates the prompt's parameters. `export prompt` is allowed.
+- **`use KEY`** on the definition injects that host key into the invocation's agent subprocess (same clause and `--env KEY[=VALUE]` grant as `use` on a script); anonymous `prompt "…"` steps never receive `--env` secrets, and backend credentials are never written as `use`.
 
 Backend is run-scoped: `agent.backend` = `cursor` (default) | `claude` | `codex` via `config { … }` or `JAIPH_AGENT_*` env vars (env wins for mapped keys). Model is **per-prompt**: in-file `agent.model` is resolved at each `prompt` step and passed as `--model` — it does **not** set `JAIPH_AGENT_MODEL` in the run environment. Set `JAIPH_AGENT_MODEL` in the shell to override the model for every prompt in a run. On the **cursor** backend only, `agent.command` can point at a custom executable (prompt on stdin, answer on stdout); `claude` and `codex` ignore `agent.command`.
 

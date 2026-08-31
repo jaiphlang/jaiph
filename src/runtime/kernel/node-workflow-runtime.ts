@@ -23,7 +23,7 @@ import {
 } from "./prompt";
 import { appendRunSummaryLine, CHAIN_KEY_ENV } from "./emit";
 import { buildStepDisplayParamPairs } from "./format-params";
-import { resolveScriptRef, resolveDefRef, type RuntimeGraph } from "./graph";
+import { resolveScriptRef, resolveDefRef, resolvePromptRef, type RuntimeGraph } from "./graph";
 import type { DefMetadata } from "../../types";
 import { interpolateDefMetadata } from "../../config";
 import { extractJson, validateFields } from "./schema";
@@ -722,17 +722,24 @@ export class NodeWorkflowRuntime {
       return { ok: true, value: mr.value, output: "" };
     }
     if (expr.kind === "prompt") {
-      if (expr.returns !== undefined && !promptCaptureName) {
+      const inv = await this.resolvePromptInvocation(scope, expr);
+      if (!inv.ok) return { ok: false, result: inv.result, output: "" };
+      if (inv.returns !== undefined && !promptCaptureName) {
         return {
           ok: false,
           result: { status: 1, output: "", error: 'prompt with "returns" schema must capture to a variable' },
           output: "",
         };
       }
-      const r = await this.runPromptStep(scope, expr.raw, expr.returns, promptCaptureName, io);
+      const r = await this.runPromptStep(inv.promptScope, inv.raw, inv.returns, promptCaptureName, io, inv.useEnv);
       if (!r.ok) return { ok: false, result: r.result, output: r.output };
-      // For captured prompts `runPromptStep` writes the value into scope and we
-      // return that here; non-capture prompts (no binding) yield empty string.
+      // `runPromptStep` writes the capture into its prompt scope; for a named
+      // prompt that is the def-site child scope, so copy the binding back.
+      if (promptCaptureName && inv.promptScope !== scope) {
+        this.copyCaptureAcross(inv.promptScope, scope, promptCaptureName);
+      }
+      // For captured prompts the value is now in scope; non-capture prompts
+      // (no binding) yield empty string.
       const value = promptCaptureName ? (scope.vars.get(promptCaptureName) ?? "") : "";
       return { ok: true, value, output: r.output };
     }
@@ -1039,16 +1046,22 @@ export class NodeWorkflowRuntime {
           continue;
         }
         if (body.kind === "prompt") {
-          if (body.returns !== undefined && !step.captureName) {
+          const inv = await this.resolvePromptInvocation(scope, body);
+          if (!inv.ok) return this.mergeStepResult(accOut, accErr, inv.result);
+          if (inv.returns !== undefined && !step.captureName) {
             return this.mergeStepResult(accOut, accErr, {
               status: 1,
               output: "",
               error: 'prompt with "returns" schema must capture to a variable',
             });
           }
-          const r = await this.runPromptStep(scope, body.raw, body.returns, step.captureName, io);
+          const r = await this.runPromptStep(inv.promptScope, inv.raw, inv.returns, step.captureName, io, inv.useEnv);
           accOut += r.output;
           if (!r.ok) return this.mergeStepResult(accOut, accErr, r.result);
+          // Named-prompt captures bind into the current scope, not the def-site child scope.
+          if (step.captureName && inv.promptScope !== scope) {
+            this.copyCaptureAcross(inv.promptScope, scope, step.captureName);
+          }
           continue;
         }
         if (body.kind === "match") {
@@ -1345,12 +1358,81 @@ export class NodeWorkflowRuntime {
    * failures (invalid JSON, schema validation) are not retried — they fail
    * identically on re-run.
    */
+  /**
+   * Resolve a prompt expression to the concrete body/returns/env to run. For an
+   * anonymous prompt this is the in-scope raw + returns. For a named-prompt
+   * invocation (`prompt foo(args)`) it resolves the module-level `PromptDef`,
+   * binds parameters to the resolved argument values in a fresh definition-site
+   * scope, and computes the `use` env (granted host keys) injected on top of the
+   * scrubbed agent env.
+   */
+  private async resolvePromptInvocation(
+    scope: Scope,
+    expr: Extract<Expr, { kind: "prompt" }>,
+  ): Promise<
+    | { ok: true; promptScope: Scope; raw: string; returns: string | undefined; useEnv?: NodeJS.ProcessEnv }
+    | { ok: false; result: StepResult }
+  > {
+    if (expr.name === undefined) {
+      return { ok: true, promptScope: scope, raw: expr.raw, returns: expr.returns };
+    }
+    const resolved = resolvePromptRef(this.graph, scope.filePath, expr.name);
+    if (!resolved) {
+      return { ok: false, result: { status: 1, output: "", error: `Unknown prompt: ${expr.name}` } };
+    }
+    const argValues = await this.resolveArgsRaw(scope, argsToRuntimeString(expr.args));
+    if (!Array.isArray(argValues)) return { ok: false, result: argValues };
+    // Definition-site scope: only the prompt's params + its module `const`s are
+    // visible in the body (caller locals are not), mirroring a def call.
+    const childVars = this.newScopeVars(resolved.filePath, undefined, scope.env);
+    resolved.prompt.params.forEach((p, i) => childVars.set(p, argValues[i] ?? ""));
+    const promptScope: Scope = { ...scope, filePath: resolved.filePath, vars: childVars };
+    return {
+      ok: true,
+      promptScope,
+      raw: resolved.prompt.raw,
+      returns: resolved.prompt.returns,
+      useEnv: this.buildPromptUseEnv(resolved.prompt.use),
+    };
+  }
+
+  /**
+   * Copy a prompt capture (and its typed `${name}_field` exports) from a
+   * def-site child scope back into the caller scope so downstream steps resolve
+   * the binding.
+   */
+  private copyCaptureAcross(from: Scope, to: Scope, captureName: string): void {
+    const value = from.vars.get(captureName);
+    if (value !== undefined) to.vars.set(captureName, value);
+    const prefix = `${captureName}_`;
+    for (const [k, v] of from.vars) {
+      if (k.startsWith(prefix)) to.vars.set(k, v);
+    }
+  }
+
+  /**
+   * Host keys a named prompt's `use` clause requests, intersected with the
+   * operator's `--env` grant, with values from the pristine host env snapshot.
+   * These are injected into the agent subprocess on top of `scrubPromptEnv`.
+   */
+  private buildPromptUseEnv(useKeys: readonly string[] | undefined): NodeJS.ProcessEnv | undefined {
+    if (!useKeys || useKeys.length === 0) return undefined;
+    const out: NodeJS.ProcessEnv = {};
+    for (const key of useKeys) {
+      if (!this.envGrantKeys.has(key)) continue;
+      const value = this.hostEnvSnapshot[key];
+      if (value !== undefined) out[key] = value;
+    }
+    return Object.keys(out).length > 0 ? out : undefined;
+  }
+
   private async runPromptStep(
     scope: Scope,
     raw: string,
     returns: string | undefined,
     captureName: string | undefined,
     io: StepIO | undefined,
+    useEnv?: NodeJS.ProcessEnv,
   ): Promise<{ ok: true; output: string } | { ok: false; result: StepResult; output: string }> {
     const promptIr = await this.interpolateWithCaptures(raw, scope);
     if (!promptIr.ok) return { ok: false, result: promptIr.result, output: "" };
@@ -1418,7 +1500,7 @@ export class NodeWorkflowRuntime {
           io?.appendErr(chunk);
           if (chunk.length > 0) idleWarn?.bump();
         });
-        const result = await executePrompt(promptText, promptConfig, out, scope.env, err);
+        const result = await executePrompt(promptText, promptConfig, out, scope.env, err, useEnv);
         const promptErr = errChunks.join("");
         this.emitter.emitPromptStepEnd(promptStep, result.status, chunks.join(""), promptErr);
         this.emitter.emitPromptEvent("PROMPT_END", {

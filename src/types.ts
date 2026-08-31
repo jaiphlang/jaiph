@@ -85,7 +85,10 @@ export type Arg =
  *   `run async ref(...)` in capture position.
  * - `inline_script`: an inline-script call (`` `body`(args) `` or fenced).
  * - `prompt`: a prompt body. `raw` carries the JSON-quoted prompt text (or `"${identifier}"`
- *   sugar). `returns` carries an optional flat returns schema.
+ *   sugar) for the anonymous / identifier forms. `returns` carries an optional flat returns
+ *   schema. When `name` is set the expression is a **named-prompt invocation**
+ *   (`prompt foo(args)`): the body, `returns`, and `use` keys live on the module-level
+ *   `PromptDef` named `foo`; `raw` is empty and `args` carries the call arguments.
  * - `match`: a `match <subject> { ... }` expression evaluated for its value.
  * - `shell`: a raw shell fragment used as a managed substitution on the send RHS.
  * - `bare_ref`: a bare symbol on a send payload (e.g. `send foo -> channel`). Always rejected by the
@@ -95,7 +98,7 @@ export type Expr =
   | { kind: "literal"; raw: string }
   | { kind: "call"; callee: DefRef; args?: Arg[]; async?: boolean }
   | { kind: "inline_script"; lang?: string; body: string; args?: Arg[] }
-  | { kind: "prompt"; raw: string; loc: SourceLoc; returns?: string }
+  | { kind: "prompt"; raw: string; loc: SourceLoc; returns?: string; name?: string; args?: Arg[] }
   | { kind: "match"; match: MatchExprDef }
   | { kind: "shell"; command: string; loc: SourceLoc }
   | { kind: "bare_ref"; ref: DefRef };
@@ -133,6 +136,29 @@ export interface ScriptDef {
    * Host env keys this script's spawns request (`use GITHUB_TOKEN NPM_TOKEN`).
    * A key reaches the subprocess only when the operator also granted it with
    * `--env KEY[=VALUE]`; script env is otherwise sterile (env-allowlist.ts).
+   */
+  use?: string[];
+  loc: SourceLoc;
+}
+
+/**
+ * Module-level named prompt: `prompt name(params) [use KEY …] = <body> [returns "…"]`.
+ * Shares the module namespace with `script` / `def` / `const` / channels. Invoked with
+ * `prompt name(args)` (a `prompt`-kind `Expr` carrying `name` + `args`), never with `run`.
+ */
+export interface PromptDef {
+  name: string;
+  /** Named parameters declared on the definition (`()` means none). */
+  params: string[];
+  comments: string[];
+  /** JSON-quoted prompt body text (same shape as an anonymous prompt `Expr.raw`). */
+  raw: string;
+  /** Optional flat returns schema (same rules as a step-level `returns`). */
+  returns?: string;
+  /**
+   * Host env keys this prompt's agent subprocess requests (`use GITHUB_TOKEN`).
+   * A key reaches the agent only when the operator also granted it with
+   * `--env KEY[=VALUE]`, layered on top of `scrubPromptEnv` (env-allowlist.ts).
    */
   use?: string[];
   loc: SourceLoc;
@@ -226,6 +252,7 @@ export interface EnvDeclDef {
 /** Source order of definitions below imports / config / channels (formatter and round-trip). */
 export type TopLevelEmitOrder =
   | { kind: "script"; index: number }
+  | { kind: "prompt"; index: number }
   | { kind: "def"; index: number }
   | { kind: "env"; index: number }
   | { kind: "test"; index: number };
@@ -240,6 +267,8 @@ export interface jaiphModule {
   channels: ChannelDef[];
   exports: string[];
   scripts: ScriptDef[];
+  /** Module-level named prompts (`prompt name(params) = "…"`). */
+  prompts?: PromptDef[];
   defs: Def[];
   /** Top-level variable declarations (`const name = value`). */
   envDecls?: EnvDeclDef[];

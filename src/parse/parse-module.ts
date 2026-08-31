@@ -10,6 +10,7 @@ import {
   parseTestBlock,
   parseEnvDecl,
 } from "./blocks";
+import { parsePromptDefBlock } from "./prompt-def";
 
 // The module parser: the single top-to-bottom scan that turns source lines into
 // a `jaiphModule` AST plus formatting trivia. It lives here (private to the
@@ -159,6 +160,19 @@ export function parsejaiphWithTrivia(source: string, filePath: string): ParseRes
       continue;
     }
 
+    if (/^(export\s+)?prompt\s/.test(line)) {
+      const { promptDef, nextIndex, exported } = parsePromptDefBlock(filePath, lines, i - 1, pendingTopLevelComments, trivia);
+      pendingTopLevelComments = [];
+      if (exported) {
+        mod.exports.push(promptDef.name);
+      }
+      if (!mod.prompts) mod.prompts = [];
+      mod.prompts.push(promptDef);
+      topLevelOrder.push({ kind: "prompt", index: mod.prompts.length - 1 });
+      i = nextIndex;
+      continue;
+    }
+
     if (/^(export\s+)?def\s/.test(line)) {
       const { def, nextIndex, exported } = parseDefBlock(filePath, lines, i - 1, pendingTopLevelComments, trivia);
       pendingTopLevelComments = [];
@@ -185,6 +199,7 @@ export function parsejaiphWithTrivia(source: string, filePath: string): ParseRes
     { items: (mod.scriptImports ?? []).map((si) => ({ name: si.alias, loc: si.loc })), kind: "script import" },
     { items: mod.channels.map((c) => ({ name: c.name, loc: c.loc })), kind: "channel" },
     { items: mod.scripts.map((s) => ({ name: s.name, loc: s.loc })), kind: "script" },
+    { items: (mod.prompts ?? []).map((p) => ({ name: p.name, loc: p.loc })), kind: "prompt" },
     { items: mod.defs.map((w) => ({ name: w.name, loc: w.loc })), kind: "def" },
     { items: (mod.envDecls ?? []).map((e) => ({ name: e.name, loc: e.loc })), kind: "const" },
   ];

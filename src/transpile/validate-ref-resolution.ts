@@ -1,12 +1,13 @@
 import { jaiphError } from "../errors";
 import type { jaiphModule } from "../types";
 
-export type RefTargetKind = "def" | "script";
+export type RefTargetKind = "def" | "script" | "prompt";
 
 /** Look up which kind a name belongs to in a module. */
 export function lookupKind(mod: jaiphModule, name: string): RefTargetKind | undefined {
   if (mod.defs.some((w) => w.name === name)) return "def";
   if (mod.scripts.some((s) => s.name === name)) return "script";
+  if (mod.prompts?.some((p) => p.name === name)) return "prompt";
   return undefined;
 }
 
@@ -15,6 +16,8 @@ export interface RefResolutionContext {
   importedAstCache: Map<string, jaiphModule>;
   localDefs: Set<string>;
   localScripts: Set<string>;
+  /** Named prompts in the current module (absent in narrow test contexts). */
+  localPrompts?: Set<string>;
 }
 
 function localSymbolKind(
@@ -23,6 +26,7 @@ function localSymbolKind(
 ): RefTargetKind | undefined {
   if (ctx.localDefs.has(name)) return "def";
   if (ctx.localScripts.has(name)) return "script";
+  if (ctx.localPrompts?.has(name)) return "prompt";
   return undefined;
 }
 
@@ -33,6 +37,7 @@ function importedHasAllowedKind(
 ): boolean {
   if (allowed.has("def") && mod.defs.some((w) => w.name === name)) return true;
   if (allowed.has("script") && mod.scripts.some((s) => s.name === name)) return true;
+  if (allowed.has("prompt") && (mod.prompts?.some((p) => p.name === name) ?? false)) return true;
   return false;
 }
 
@@ -210,8 +215,29 @@ export const RUN_TARGET_REF_EXPECT: RefExpectMessages = {
   unknownImportAlias: (alias, rv) => `unknown import alias "${alias}" for run target "${rv}"`,
   unknownLocal: (rv) => `unknown local def or script reference "${rv}"`,
   missingImported: (rv) => `imported def or script "${rv}" does not exist`,
-  wrongLocal: {},
-  wrongImported: {},
+  wrongLocal: {
+    prompt: (name) => `prompt "${name}" cannot be called with run; invoke it with prompt ${name}(...)`,
+  },
+  wrongImported: {
+    prompt: (rv) => `prompt "${rv}" cannot be called with run; invoke it with prompt ${rv}(...)`,
+  },
+};
+
+/** Expect messages for a named-prompt invocation `prompt name(...)`. */
+export const PROMPT_REF_EXPECT: RefExpectMessages = {
+  allowedKinds: new Set<RefTargetKind>(["prompt"]),
+  invalidSplitRef: (rv) => `invalid prompt reference "${rv}"`,
+  unknownImportAlias: (alias, rv) => `unknown import alias "${alias}" for prompt reference "${rv}"`,
+  unknownLocal: (rv) => `unknown local prompt reference "${rv}"`,
+  missingImported: (rv) => `imported prompt "${rv}" does not exist`,
+  wrongLocal: {
+    def: (name) => `"${name}" is a def, not a prompt; call it with run ${name}(...)`,
+    script: (name) => `"${name}" is a script, not a prompt; call it with run ${name}(...)`,
+  },
+  wrongImported: {
+    def: (rv) => `"${rv}" is a def, not a prompt; call it with run ${rv}(...)`,
+    script: (rv) => `"${rv}" is a script, not a prompt; call it with run ${rv}(...)`,
+  },
 };
 
 export const BARE_SEND_REF_MSG: BareSendRefMessages = {

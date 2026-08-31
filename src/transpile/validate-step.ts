@@ -8,7 +8,7 @@
  * this file re-exports the surface `validate.ts` (and the visitor tests) consume.
  */
 import type { StepDef } from "../types";
-import { validateExpr, validateWorkflowShellExec } from "./validate-expr";
+import { validateExpr, validateNamedPromptReturnsCapture, validateWorkflowShellExec } from "./validate-expr";
 import {
   validateChannelRef,
   validateDotFieldRefs,
@@ -31,6 +31,7 @@ export {
   ROUTE_REF_EXPECT,
   parseSchemaFieldNames,
   resolveRouteTargetParams,
+  resolvePromptDef,
   validateNoShellRedirection,
 } from "./validate-step-helpers";
 
@@ -157,6 +158,7 @@ function validateExecStep(s: StepDef, ctx: ValidatorCtx): void {
   if (body.kind === "prompt") {
     validateExpr(body, s.loc, "const", ctx);
     validatePromptStepReturns(body, s.captureName, ctx.ast.filePath);
+    validateNamedPromptReturnsCapture(body, s.captureName, ctx);
     return;
   }
   if (body.kind === "shell") {

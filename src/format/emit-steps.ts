@@ -123,6 +123,9 @@ function emitExprFirstLine(
     return { head: `run \`${expr.body}\`(${formatArgs(expr.args)})`, tail: [] };
   }
   if (expr.kind === "prompt") {
+    if (expr.name !== undefined) {
+      return { head: `prompt ${expr.name}(${formatArgs(expr.args)})`, tail: [] };
+    }
     const returns = expr.returns ? ` returns "${expr.returns}"` : "";
     if (valueTrivia.bodyKind === "identifier" && valueTrivia.bodyIdentifier) {
       return { head: `prompt ${valueTrivia.bodyIdentifier}${returns}`, tail: [] };
@@ -275,6 +278,10 @@ function emitStep(step: StepDef, pad: string, currentIndent: string, trivia: Tri
       return lines;
     }
     if (body.kind === "prompt") {
+      if (body.name !== undefined) {
+        lines.push(`${ci}${capture}prompt ${body.name}(${formatArgs(body.args)})`);
+        return lines;
+      }
       const bodyTrivia = tn(trivia, body);
       const returns = body.returns ? ` returns "${body.returns}"` : "";
       if (bodyTrivia.bodyKind === "identifier" && bodyTrivia.bodyIdentifier) {

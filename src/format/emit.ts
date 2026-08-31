@@ -2,6 +2,7 @@ import type {
   jaiphModule,
   Def,
   ScriptDef,
+  PromptDef,
   ChannelDef,
   EnvDeclDef,
   DefMetadata,
@@ -12,6 +13,7 @@ import {
   emitComments,
   emitCommentBlock,
   emitFencedScriptBodyLines,
+  decodeTripleQuotedInner,
   tn,
 } from "./emit-shared";
 import { emitSteps } from "./emit-steps";
@@ -34,6 +36,9 @@ function legacyTopLevelOrder(mod: jaiphModule): TopLevelEmitOrder[] {
     for (let i = 0; i < mod.envDecls.length; i++) o.push({ kind: "env", index: i });
   }
   for (let i = 0; i < mod.scripts.length; i++) o.push({ kind: "script", index: i });
+  if (mod.prompts) {
+    for (let i = 0; i < mod.prompts.length; i++) o.push({ kind: "prompt", index: i });
+  }
   for (let i = 0; i < mod.defs.length; i++) o.push({ kind: "def", index: i });
   if (mod.tests) {
     for (let i = 0; i < mod.tests.length; i++) o.push({ kind: "test", index: i });
@@ -116,6 +121,11 @@ export function emitModule(
       sections.push(
         emitScript(mod.scripts[item.index], pad, exportedNames.has(mod.scripts[item.index].name), trivia),
       );
+      continue;
+    }
+    if (item.kind === "prompt") {
+      const p = mod.prompts![item.index];
+      sections.push(emitPromptDef(p, pad, exportedNames.has(p.name), trivia));
       continue;
     }
     if (item.kind === "def") {
@@ -276,6 +286,26 @@ function emitScript(script: ScriptDef, pad: string, exported: boolean, trivia: T
     lines.push("```");
   } else {
     lines.push(`${prefix}script ${script.name}${useClause} = \`${script.body}\``);
+  }
+  return lines.join("\n");
+}
+
+function emitPromptDef(prompt: PromptDef, pad: string, exported: boolean, trivia: Trivia): string {
+  const lines: string[] = [];
+  lines.push(...emitComments(prompt.comments));
+  const prefix = exported ? "export " : "";
+  const useClause = emitUseClause(prompt.use);
+  const header = `${prefix}prompt ${prompt.name}(${prompt.params.join(", ")})${useClause} = `;
+  const returns = prompt.returns ? ` returns "${prompt.returns}"` : "";
+  const bodyKind = tn(trivia, prompt).bodyKind;
+  if (bodyKind === "triple_quoted") {
+    const inner = tn(trivia, prompt).rawBody ?? decodeTripleQuotedInner(prompt.raw);
+    lines.push(`${header}"""`);
+    for (const bl of inner.split("\n")) lines.push(bl);
+    lines.push('"""');
+    if (prompt.returns) lines.push(`returns "${prompt.returns}"`);
+  } else {
+    lines.push(`${header}${prompt.raw}${returns}`);
   }
   return lines.join("\n");
 }

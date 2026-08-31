@@ -8,12 +8,14 @@ import {
   parseSchemaFieldNames,
   resolveRouteTargetParams,
   ROUTE_REF_EXPECT,
+  resolvePromptDef,
   validateStep,
   DEF_SCOPE,
   type ValidatorCtx,
 } from "./validate-step";
 import { validateConfigInto } from "./validate-config";
 import { validateTestBlocks } from "./validate-tests";
+import { validatePromptDefs } from "./validate-prompt-def";
 
 /**
  * One step entry in the flat list built by the single workflow walk.
@@ -51,7 +53,11 @@ function walkStepTree(
   params: string[],
   declLoc: { line: number; col: number },
   moduleScripts: Set<string>,
-  options: { withPromptSchemas: boolean },
+  options: {
+    withPromptSchemas: boolean;
+    /** Resolve a named-prompt call's returns schema (its schema lives on the def). */
+    resolvePromptReturns?: (ref: string) => string | undefined;
+  },
 ): StepTreeWalk {
   const knownVars = new Set<string>();
   const promptSchemas = new Map<string, string[]>();
@@ -110,8 +116,9 @@ function walkStepTree(
         checkBinding(s.name, "const", s.loc, bindings);
         if (s.value.kind === "prompt") {
           promptCaptures.add(s.name);
-          if (options.withPromptSchemas && topLevel && s.value.returns !== undefined) {
-            promptSchemas.set(s.name, parseSchemaFieldNames(s.value.returns));
+          const ret = promptExprReturns(s.value, options.resolvePromptReturns);
+          if (options.withPromptSchemas && topLevel && ret !== undefined) {
+            promptSchemas.set(s.name, parseSchemaFieldNames(ret));
           }
         }
         continue;
@@ -124,8 +131,9 @@ function walkStepTree(
           checkBinding(s.captureName, "capture", captureLoc, bindings);
           if (s.body.kind === "prompt") {
             promptCaptures.add(s.captureName);
-            if (options.withPromptSchemas && topLevel && s.body.returns !== undefined) {
-              promptSchemas.set(s.captureName, parseSchemaFieldNames(s.body.returns));
+            const ret = promptExprReturns(s.body, options.resolvePromptReturns);
+            if (options.withPromptSchemas && topLevel && ret !== undefined) {
+              promptSchemas.set(s.captureName, parseSchemaFieldNames(ret));
             }
           }
         }
@@ -169,6 +177,15 @@ function walkStepTree(
 
   descend(steps, seedBindings, undefined, true);
   return { knownVars, promptSchemas, promptCaptures, flat };
+}
+
+/** The effective returns schema of a prompt expr: on the def for a named call, inline otherwise. */
+function promptExprReturns(
+  expr: Extract<Expr, { kind: "prompt" }>,
+  resolvePromptReturns?: (ref: string) => string | undefined,
+): string | undefined {
+  if (expr.name !== undefined) return resolvePromptReturns?.(expr.name);
+  return expr.returns;
 }
 
 /** Best-effort location for an exec body — used to attribute capture-binding errors. */
@@ -248,6 +265,7 @@ export function validateModuleInto(
   const localChannels = new Set(ast.channels.map((c) => c.name));
   const localDefs = new Set(ast.defs.map((w) => w.name));
   const localScripts = new Set(ast.scripts.map((s) => s.name));
+  const localPrompts = new Set((ast.prompts ?? []).map((p) => p.name));
   const importsByAlias = new Map<string, string>();
   const importedAstCache = new Map<string, jaiphModule>();
 
@@ -311,6 +329,7 @@ export function validateModuleInto(
     importedAstCache,
     localDefs,
     localScripts,
+    localPrompts,
   };
 
   const baseCtx = {
@@ -323,6 +342,11 @@ export function validateModuleInto(
     importsByAlias,
     importedAstCache,
   } as const;
+
+  const resolvePromptReturns = (ref: string): string | undefined =>
+    resolvePromptDef(ref, ast, refCtx)?.returns;
+
+  validatePromptDefs(diag, ast);
 
   validateConfigInto(ast, diag);
 
@@ -360,7 +384,7 @@ export function validateModuleInto(
         workflow.params,
         workflow.loc,
         localScripts,
-        { withPromptSchemas: true },
+        { withPromptSchemas: true, resolvePromptReturns },
       );
     });
     if (!wfWalk) continue;
