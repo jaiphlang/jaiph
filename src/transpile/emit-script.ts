@@ -1,5 +1,5 @@
-import { inlineScriptName } from "../inline-script-name";
-import type { Expr, jaiphModule, ScriptImportDef, StepDef } from "../types";
+import { inlineScriptName, nestedScriptName } from "../inline-script-name";
+import type { Expr, jaiphModule, ScriptDef, ScriptImportDef, StepDef } from "../types";
 import { scriptShebangIsBash, langToShebang } from "../parser";
 
 /**
@@ -111,8 +111,79 @@ function collectInlineScripts(
       emitInlineFromExpr(s.value, seen, out);
       continue;
     }
-    if (s.type === "if" || s.type === "for_lines") {
+    if (s.type === "local_decl" && s.decl.kind === "def") {
+      collectInlineScripts(s.decl.def.steps, seen, out);
+      continue;
+    }
+    if (s.type === "if") {
       collectInlineScripts(s.body, seen, out);
+      if (s.elseBody) collectInlineScripts(s.elseBody, seen, out);
+      continue;
+    }
+    if (s.type === "for_lines") {
+      collectInlineScripts(s.body, seen, out);
+    }
+  }
+}
+
+/** Build one script artifact (module-level or nested) with a caller-chosen file name. */
+function buildOneScriptArtifact(
+  sc: ScriptDef,
+  importedModuleSymbols: Map<string, string>,
+  name: string,
+): ScriptArtifact {
+  const { shebang, cleanBody } = resolveScriptShebang(sc.body, sc.lang);
+  const isBash = scriptShebangIsBash(shebang === "#!/usr/bin/env bash" ? undefined : shebang);
+  const processedBody = isBash
+    ? cleanBody.split("\n").map((c) => emitScriptBodyLine(c, importedModuleSymbols)).join("\n")
+    : cleanBody;
+  const body = isBash ? wrapBashStandaloneScriptBody(processedBody, "") : processedBody;
+  const content = body.length > 0 ? `${shebang}\n${body}\n` : `${shebang}\n`;
+  return { name, content };
+}
+
+/**
+ * Collect nested (def-local) `script` declarations from a step tree, emitting
+ * each under its deterministic {@link nestedScriptName}. Recurses into nested
+ * def bodies and every control-flow / recovery body so a script declared at any
+ * depth is emitted.
+ */
+function collectNestedScripts(
+  steps: StepDef[],
+  importedModuleSymbols: Map<string, string>,
+  seen: Set<string>,
+  out: ScriptArtifact[],
+): void {
+  for (const s of steps) {
+    if (s.type === "local_decl") {
+      if (s.decl.kind === "script") {
+        const sc = s.decl.script;
+        const name = nestedScriptName(sc.name, sc.body, sc.lang, sc.use);
+        if (!seen.has(name)) {
+          seen.add(name);
+          out.push(buildOneScriptArtifact(sc, importedModuleSymbols, name));
+        }
+      } else if (s.decl.kind === "def") {
+        collectNestedScripts(s.decl.def.steps, importedModuleSymbols, seen, out);
+      }
+      continue;
+    }
+    if (s.type === "exec") {
+      if (s.catch) {
+        collectNestedScripts("single" in s.catch ? [s.catch.single] : s.catch.block, importedModuleSymbols, seen, out);
+      }
+      if (s.recover) {
+        collectNestedScripts("single" in s.recover ? [s.recover.single] : s.recover.block, importedModuleSymbols, seen, out);
+      }
+      continue;
+    }
+    if (s.type === "if") {
+      collectNestedScripts(s.body, importedModuleSymbols, seen, out);
+      if (s.elseBody) collectNestedScripts(s.elseBody, importedModuleSymbols, seen, out);
+      continue;
+    }
+    if (s.type === "for_lines") {
+      collectNestedScripts(s.body, importedModuleSymbols, seen, out);
     }
   }
 }
@@ -133,11 +204,6 @@ function emitInlineScriptArtifact(
   const wrapped = isBash ? wrapBashStandaloneScriptBody(expandedBody, "") : expandedBody;
   const content = wrapped.length > 0 ? `${resolvedShebang}\n${wrapped}\n` : `${resolvedShebang}\n`;
   out.push({ name, content });
-}
-
-/** Resolve the actual body for a ScriptDef. */
-function resolveScriptBody(sc: jaiphModule["scripts"][0], _ast: jaiphModule): string {
-  return sc.body;
 }
 
 /** Resolve shebang for a script: from lang tag, manual #! in body, or default bash. */
@@ -170,22 +236,14 @@ export function buildScriptFiles(
   }
 
   for (const sc of ast.scripts) {
-    const rawBody = resolveScriptBody(sc, ast);
-    const { shebang, cleanBody } = resolveScriptShebang(rawBody, sc.lang);
-    const isBash = scriptShebangIsBash(shebang === "#!/usr/bin/env bash" ? undefined : shebang);
-    const processedBody = isBash
-      ? cleanBody.split("\n").map((c) => emitScriptBodyLine(c, importedModuleSymbols)).join("\n")
-      : cleanBody;
-    const body = isBash
-      ? wrapBashStandaloneScriptBody(processedBody, "")
-      : processedBody;
-    const content = body.length > 0 ? `${shebang}\n${body}\n` : `${shebang}\n`;
-    out.push({ name: sc.name, content });
+    out.push(buildOneScriptArtifact(sc, importedModuleSymbols, sc.name));
   }
 
-  // Emit inline script artifacts from workflow/rule steps
+  // Emit inline script artifacts and nested (def-local) scripts from def steps.
   const seen = new Set<string>();
   for (const w of ast.defs) collectInlineScripts(w.steps, seen, out);
+  const nestedSeen = new Set<string>();
+  for (const w of ast.defs) collectNestedScripts(w.steps, importedModuleSymbols, nestedSeen, out);
 
   return out;
 }

@@ -206,12 +206,33 @@ fall through to the shell executor unchanged.
 
 ```ebnf
 def_step = run_stmt | run_catch_stmt | run_recover_stmt | run_async_stmt
-              | prompt_stmt | const_decl_step | return_stmt
+              | prompt_stmt | const_decl_step | nested_decl_step | return_stmt
               | fail_stmt | log_stmt | logerr_stmt | logwarn_stmt | send_stmt
               | match_stmt | if_stmt | for_lines_stmt | comment_line ;
+
+nested_decl_step = script_decl | def_decl | prompt_decl ;
 ```
 
 Any line that does not match a managed form becomes a **shell** step in a def.
+
+### Nested declarations
+{: #nested-declarations}
+
+A `nested_decl_step` reuses the module-level `script_decl` / `def_decl` /
+`prompt_decl` surface inside a def body (nested `const` stays a
+`const_decl_step`), with one restriction: **no `export`** (`E_PARSE`). The nested
+declaration forms are `const` / `script` / `def` / named `prompt` only. `import`
+and `channel` stay module-level, and a def-level `config` block is separate
+metadata that must precede the first step (see [Definitions](#definitions)).
+Nested names are sequential local bindings (not hoisted): visible only after
+their declaration in the enclosing def (earlier use is `E_VALIDATE`), sharing one
+namespace per def with its parameters and `const`s. A duplicate name, or a name
+that collides with a parameter, is `E_VALIDATE` (`cannot rebind immutable name`).
+A nested name may shadow a module-level symbol of the same name. Another def
+cannot reach a name declared only inside a different def. A nested `def` / named
+`prompt` closes over the enclosing scope at runtime; a nested `script` is a
+sterile subprocess (argv only). See [Language — Nested
+declarations](language.md#nested-declarations) for the full semantics.
 
 ### `run`
 
@@ -471,6 +492,7 @@ Validator entry points (`src/transpile/validate.ts` for the outer layer; `src/tr
 | `script name = \`…\`` (single-line) | `scripts/<name>` with `#!/usr/bin/env bash` (or the fence-tag / manual shebang). |
 | `script name = \`\`\`<tag>…\`\`\`` (fenced) | `scripts/<name>` with `#!/usr/bin/env <tag>` or the manual `#!` line. |
 | `` run `body`(args) `` / `` run ```lang body```(args) `` | `scripts/__inline_<12-hex>` with the deterministic name from `inlineScriptName`. |
+| `script name = …` **nested inside a def** | `scripts/__nested_<12-hex>` with the deterministic name from `nestedScriptName` (hash of name, lang tag, `use` keys, and body). Same interpreter/shebang path as a top-level script; the OS exec bit is not required. |
 | `import script "path" as name` | Copied verbatim to `scripts/<name>` with its original shebang preserved; the runtime resolves it through `JAIPH_SCRIPTS` like any other script. |
 
 Defs, prompts, channels, and control flow are interpreted by `NodeWorkflowRuntime` from the AST. There is no def-level shell emission. Script subprocesses inherit the runner's `process.env` plus Jaiph metadata.

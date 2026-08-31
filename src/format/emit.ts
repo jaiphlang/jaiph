@@ -18,6 +18,7 @@ import {
 } from "./emit-shared";
 import { emitSteps } from "./emit-steps";
 import { emitTestBlock } from "./emit-test";
+import { emitUseClause, emitScriptDecl, emitPromptDecl } from "./emit-decls";
 
 // Module + declaration emitters: the `emitModule` entry point and the top-level
 // declaration/config formatters. The step-tree and expression emitters live in
@@ -118,14 +119,13 @@ export function emitModule(
       continue;
     }
     if (item.kind === "script") {
-      sections.push(
-        emitScript(mod.scripts[item.index], pad, exportedNames.has(mod.scripts[item.index].name), trivia),
-      );
+      const s = mod.scripts[item.index];
+      sections.push(emitScriptDecl(s, "", pad, exportedNames.has(s.name), trivia).join("\n"));
       continue;
     }
     if (item.kind === "prompt") {
       const p = mod.prompts![item.index];
-      sections.push(emitPromptDef(p, pad, exportedNames.has(p.name), trivia));
+      sections.push(emitPromptDecl(p, "", exportedNames.has(p.name), trivia).join("\n"));
       continue;
     }
     if (item.kind === "def") {
@@ -266,48 +266,6 @@ function emitEnvDecl(env: EnvDeclDef): string[] {
     return [`const ${env.name} = """`, env.value, '"""'];
   }
   return [`const ${env.name} = ${JSON.stringify(env.value)}`];
-}
-
-/** `use KEY [KEY …]` suffix on script declarations; empty when no keys are requested. */
-function emitUseClause(use: string[] | undefined): string {
-  return use?.length ? ` use ${use.join(" ")}` : "";
-}
-
-function emitScript(script: ScriptDef, pad: string, exported: boolean, trivia: Trivia): string {
-  const lines: string[] = [];
-  lines.push(...emitComments(script.comments));
-  const prefix = exported ? "export " : "";
-  const useClause = emitUseClause(script.use);
-  const bodyKind = tn(trivia, script).scriptBodyKind;
-  if (bodyKind === "fenced" || script.lang || script.body.includes("\n")) {
-    const langTag = script.lang ?? "";
-    lines.push(`${prefix}script ${script.name}${useClause} = \`\`\`${langTag}`);
-    lines.push(...emitFencedScriptBodyLines(script.body, pad));
-    lines.push("```");
-  } else {
-    lines.push(`${prefix}script ${script.name}${useClause} = \`${script.body}\``);
-  }
-  return lines.join("\n");
-}
-
-function emitPromptDef(prompt: PromptDef, pad: string, exported: boolean, trivia: Trivia): string {
-  const lines: string[] = [];
-  lines.push(...emitComments(prompt.comments));
-  const prefix = exported ? "export " : "";
-  const useClause = emitUseClause(prompt.use);
-  const header = `${prefix}prompt ${prompt.name}(${prompt.params.join(", ")})${useClause} = `;
-  const returns = prompt.returns ? ` returns "${prompt.returns}"` : "";
-  const bodyKind = tn(trivia, prompt).bodyKind;
-  if (bodyKind === "triple_quoted") {
-    const inner = tn(trivia, prompt).rawBody ?? decodeTripleQuotedInner(prompt.raw);
-    lines.push(`${header}"""`);
-    for (const bl of inner.split("\n")) lines.push(bl);
-    lines.push('"""');
-    if (prompt.returns) lines.push(`returns "${prompt.returns}"`);
-  } else {
-    lines.push(`${header}${prompt.raw}${returns}`);
-  }
-  return lines.join("\n");
 }
 
 function emitDef(wf: Def, pad: string, exported: boolean, trivia: Trivia): string {

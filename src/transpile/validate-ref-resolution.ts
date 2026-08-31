@@ -1,5 +1,5 @@
 import { jaiphError } from "../errors";
-import type { jaiphModule } from "../types";
+import type { Def, jaiphModule, PromptDef } from "../types";
 
 export type RefTargetKind = "def" | "script" | "prompt";
 
@@ -18,6 +18,13 @@ export interface RefResolutionContext {
   localScripts: Set<string>;
   /** Named prompts in the current module (absent in narrow test contexts). */
   localPrompts?: Set<string>;
+  /**
+   * Nested `def` / named `prompt` declarations in lexical scope (enclosing def).
+   * Populated per-step so arity / returns lookups resolve a nested target the
+   * same way as a module-level one. Nested names win over module names.
+   */
+  localDefsByName?: Map<string, Def>;
+  localPromptsByName?: Map<string, PromptDef>;
 }
 
 function localSymbolKind(

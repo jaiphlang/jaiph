@@ -5,13 +5,13 @@ import { basename, dirname, join, resolve as resolvePath } from "node:path";
 import { PassThrough } from "node:stream";
 import { randomUUID } from "node:crypto";
 import { AsyncLocalStorage } from "node:async_hooks";
-import { inlineScriptName } from "../../inline-script-name";
+import { inlineScriptName, nestedScriptName } from "../../inline-script-name";
 import {
   argsToRuntimeString,
   canonicalizeTripleQuotedString,
   resolveInterpreterFromShebang,
 } from "../../parser";
-import type { CatchBody, Expr, MatchExprDef, MatchPatternDef, StepDef } from "../../types";
+import type { CatchBody, Def, Expr, LocalDecl, MatchExprDef, MatchPatternDef, StepDef } from "../../types";
 import {
   executePrompt,
   modelForStepEvent,
@@ -102,7 +102,21 @@ type Scope = {
   env: NodeJS.ProcessEnv;
   /** Declared parameter names for the active workflow or rule. */
   declaredParamNames?: string[];
+  /**
+   * Nested (def-local) declarations registered so far in this def body:
+   * `script` / `def` / named `prompt`. Populated sequentially as `local_decl`
+   * steps execute, so a name resolves only after its declaration and shadows a
+   * module-level symbol of the same name.
+   */
+  locals?: Map<string, LocalDecl>;
 };
+
+/** Name a nested declaration binds in its enclosing def scope. */
+function localDeclName(decl: LocalDecl): string {
+  if (decl.kind === "script") return decl.script.name;
+  if (decl.kind === "def") return decl.def.name;
+  return decl.prompt.name;
+}
 
 type StepIO = {
   appendOut: (chunk: string) => void;
@@ -587,6 +601,31 @@ export class NodeWorkflowRuntime {
     }, resolved.def.params);
   }
 
+  /**
+   * Execute a nested (def-local) `def`. It is interpreted in-process and closes
+   * over the enclosing def lexically: the child scope inherits the caller's
+   * variables (params + `const`s) and its sibling nested declarations, then
+   * binds its own parameters on top. It does not inherit a parent `use` (defs
+   * have none) and does not push a new channel/route context — a nested def is
+   * part of the enclosing def, not a separate module workflow.
+   */
+  private async executeLocalDef(callerScope: Scope, def: Def, args: string[]): Promise<StepResult> {
+    return this.executeManagedStep("def", def.name, args, async (io) => {
+      const childVars = new Map(callerScope.vars);
+      def.params.forEach((name, i) => {
+        if (i < args.length) childVars.set(name, args[i]);
+      });
+      const childScope: Scope = {
+        filePath: callerScope.filePath,
+        vars: childVars,
+        env: callerScope.env,
+        declaredParamNames: def.params,
+        locals: callerScope.locals ? new Map(callerScope.locals) : new Map(),
+      };
+      return this.executeSteps(childScope, def.steps, io);
+    }, def.params);
+  }
+
   private mergeStepResult(accOut: string, accErr: string, r: StepResult): StepResult {
     return {
       status: r.status,
@@ -761,6 +800,12 @@ export class NodeWorkflowRuntime {
     let asyncCounter = 0;
     for (const step of steps) {
       if (step.type === "trivia") continue;
+      if (step.type === "local_decl") {
+        // Sequential local binding: visible to later steps in this def body.
+        if (!scope.locals) scope.locals = new Map();
+        scope.locals.set(localDeclName(step.decl), step.decl);
+        continue;
+      }
       // Max-step circuit breaker: count every executed step across the whole run
       // (loop iterations and nested/recursive calls share this counter). Once the
       // cap is exceeded, abort so a runaway workflow stops without a manual signal.
@@ -1308,6 +1353,28 @@ export class NodeWorkflowRuntime {
     const resolvedArgs = await this.resolveArgsRaw(scope, argsRaw);
     if (!Array.isArray(resolvedArgs)) return resolvedArgs;
     const args = resolvedArgs;
+    // Nested (def-local) declarations shadow module symbols and win first.
+    if (!ref.includes(".")) {
+      const local = scope.locals?.get(ref);
+      if (local?.kind === "def") {
+        return this.executeLocalDef(scope, local.def, args);
+      }
+      if (local?.kind === "script") {
+        const sc = local.script;
+        // Sterile subprocess env + this script's `use` grant (same as a module
+        // script). Enclosing bindings are NOT exported; args arrive as argv.
+        const scriptEnv = this.buildScriptSpawnEnv(scope.env, sc.use);
+        const fileName = nestedScriptName(sc.name, sc.body, sc.lang, sc.use);
+        return this.executeManagedStep(
+          "script",
+          ref,
+          args,
+          async (io) => this.executeScript(scope.filePath, fileName, args, scriptEnv, io),
+        );
+      }
+      // A local `prompt` reached via `run` is a validation error; fall through
+      // to module resolution, which reports "Unknown run target".
+    }
     const resolvedDef = resolveDefRef(this.graph, scope.filePath, { value: ref, loc: { line: 1, col: 1 } });
     if (resolvedDef) {
       const mk = this.mockKey(resolvedDef.filePath, resolvedDef.def.name);
@@ -1375,6 +1442,26 @@ export class NodeWorkflowRuntime {
   > {
     if (expr.name === undefined) {
       return { ok: true, promptScope: scope, raw: expr.raw, returns: expr.returns };
+    }
+    // Nested (def-local) named prompt: its body interpolates the enclosing scope
+    // (params/consts) plus its own params; `use` is its own.
+    if (!expr.name.includes(".")) {
+      const local = scope.locals?.get(expr.name);
+      if (local?.kind === "prompt") {
+        const prompt = local.prompt;
+        const argValues = await this.resolveArgsRaw(scope, argsToRuntimeString(expr.args));
+        if (!Array.isArray(argValues)) return { ok: false, result: argValues };
+        const childVars = new Map(scope.vars);
+        prompt.params.forEach((p, i) => childVars.set(p, argValues[i] ?? ""));
+        const promptScope: Scope = { ...scope, vars: childVars };
+        return {
+          ok: true,
+          promptScope,
+          raw: prompt.raw,
+          returns: prompt.returns,
+          useEnv: this.buildPromptUseEnv(prompt.use),
+        };
+      }
     }
     const resolved = resolvePromptRef(this.graph, scope.filePath, expr.name);
     if (!resolved) {

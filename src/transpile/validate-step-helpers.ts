@@ -331,6 +331,8 @@ function lookupCalleeParams(
   const parts = ref.split(".");
   if (parts.length === 1) {
     const name = parts[0];
+    const nested = refCtx.localDefsByName?.get(name);
+    if (nested) return nested.params;
     const wf = ast.defs.find((w) => w.name === name);
     return wf?.params;
   }
@@ -356,6 +358,8 @@ export function resolvePromptDef(
 ): { params: string[]; returns?: string } | undefined {
   const parts = ref.split(".");
   if (parts.length === 1) {
+    const nested = refCtx.localPromptsByName?.get(parts[0]);
+    if (nested) return nested;
     return ast.prompts?.find((p) => p.name === parts[0]);
   }
   if (parts.length === 2) {

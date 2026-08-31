@@ -1,5 +1,8 @@
-import type { CatchBody, Expr, DefMetadata, StepDef } from "../types";
+import type { CatchBody, Def, Expr, DefMetadata, LocalDecl, StepDef } from "../types";
 import { createTrivia, type Trivia } from "./trivia";
+import { parseScriptBlock } from "./scripts";
+import { parsePromptDefBlock } from "./prompt-def";
+import { parseDefHeader, stripTrailingBlankLines } from "./def-header";
 import {
   colFromRaw,
   fail,
@@ -374,6 +377,59 @@ function tryParseConst(c: BlockCtx): BlockResult | null {
   };
 }
 
+/** Wrap a nested declaration node in a `local_decl` step. */
+function localDeclStep(decl: LocalDecl, loc: { line: number; col: number }): StepDef {
+  return { type: "local_decl", decl, loc };
+}
+
+/**
+ * `export` on a nested `script` / `def` / `prompt` is rejected: nested
+ * declarations are private to the enclosing def. A non-declaration `export`
+ * (a bash `export FOO=bar` shell line) falls through to the shell handler.
+ */
+function tryParseExportInDef(c: BlockCtx): BlockResult | null {
+  const m = c.inner.match(/^export\s+(script|def|prompt)\b/);
+  if (!m) return null;
+  fail(
+    c.filePath,
+    `nested ${m[1]} declarations cannot be exported; drop 'export' (nested declarations are private to the enclosing def)`,
+    c.innerNo,
+    c.innerRaw.indexOf("export") + 1,
+  );
+}
+
+/** Nested `script name [use …] = …` declaration, local to the enclosing def. */
+function tryParseLocalScript(c: BlockCtx): BlockResult | null {
+  if (c.inner !== "script" && !c.inner.startsWith("script ")) return null;
+  const { scriptDef, nextIndex } = parseScriptBlock(c.filePath, c.lines, c.idx, [], c.trivia);
+  const loc = { line: c.innerNo, col: c.innerRaw.indexOf("script") + 1 };
+  return { step: localDeclStep({ kind: "script", script: scriptDef }, loc), nextIdx: nextIndex };
+}
+
+/** Nested `def name(params) { … }` declaration, local to the enclosing def. */
+function tryParseLocalDef(c: BlockCtx): BlockResult | null {
+  if (c.inner !== "def" && !c.inner.startsWith("def ")) return null;
+  const lineNo = c.innerNo;
+  const header = parseDefHeader(c.filePath, c.innerRaw, lineNo);
+  const loc = { line: lineNo, col: c.innerRaw.indexOf("def") + 1 };
+  const def: Def = { name: header.name, params: header.params, comments: [], steps: [], loc };
+  const { steps, nextIdx } = parseBraceBlockBody(
+    c.filePath, c.lines, c.idx + 1, lineNo, c.trivia, { preserveBlankLines: true },
+  );
+  def.steps.push(...steps);
+  stripTrailingBlankLines(def.steps);
+  return { step: localDeclStep({ kind: "def", def }, loc), nextIdx };
+}
+
+/**
+ * A named-prompt *definition* (`prompt name(params) [use …] = …`) — distinct
+ * from a prompt *step* / invocation. The `= ` after the parameter list is the
+ * discriminator: an invocation `prompt foo(a)` has no `=`.
+ */
+function looksLikeNamedPromptDef(inner: string): boolean {
+  return /^prompt\s+[A-Za-z_][A-Za-z0-9_]*\s*\([^)]*\)(?:\s+use\s+[^=]+?)?\s*=/.test(inner);
+}
+
 type InlineScriptResult = ReturnType<typeof parseAnonymousInlineScript>;
 
 /** Build an `inline_script` Expr from a parsed anonymous-script result. */
@@ -512,6 +568,11 @@ function tryParseRun(c: BlockCtx): BlockResult | null {
 
 function tryParsePrompt(c: BlockCtx): BlockResult | null {
   if (!c.inner.startsWith("prompt ")) return null;
+  if (looksLikeNamedPromptDef(c.inner)) {
+    const { promptDef, nextIndex } = parsePromptDefBlock(c.filePath, c.lines, c.idx, [], c.trivia);
+    const loc = { line: c.innerNo, col: c.innerRaw.indexOf("prompt") + 1 };
+    return { step: localDeclStep({ kind: "prompt", prompt: promptDef }, loc), nextIdx: nextIndex };
+  }
   const promptCol = c.innerRaw.indexOf("prompt") + 1;
   const promptArg = c.innerRaw.slice(c.innerRaw.indexOf("prompt") + "prompt".length).trimStart();
   const result = parsePromptStep(c.filePath, c.lines, c.idx, promptArg, promptCol, undefined, c.trivia);
@@ -686,6 +747,9 @@ export const STATEMENT: Record<string, BlockHandler> = {
   else: tryParseElseError,
   for: tryParseFor,
   const: tryParseConst,
+  export: tryParseExportInDef,
+  script: tryParseLocalScript,
+  def: tryParseLocalDef,
   fail: tryParseFail,
   wait: tryParseWait,
   ensure: tryParseEnsureRemoved,

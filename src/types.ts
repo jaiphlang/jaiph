@@ -103,6 +103,16 @@ export type Expr =
   | { kind: "shell"; command: string; loc: SourceLoc }
   | { kind: "bare_ref"; ref: DefRef };
 
+/**
+ * A nested declaration inside a def body (`local_decl` step). Reuses the same
+ * `ScriptDef` / `Def` / `PromptDef` shapes as the module level. `export` is
+ * rejected at parse time, so there is no exported flag here.
+ */
+export type LocalDecl =
+  | { kind: "script"; script: ScriptDef }
+  | { kind: "def"; def: Def }
+  | { kind: "prompt"; prompt: PromptDef };
+
 /** Body attached to a `catch` or `recover` clause on an exec step. */
 export type CatchBody =
   | { single: StepDef; bindings: { failure: string } }
@@ -230,6 +240,17 @@ export type StepDef =
       iterVar: string;
       sourceVar: string;
       body: StepDef[];
+      loc: SourceLoc;
+    }
+  | {
+      /**
+       * A nested declaration local to the enclosing def: `script` / `def` /
+       * named `prompt`. Sequential (not hoisted): the name is visible only in
+       * the enclosing def and only after this step. `const` is still a separate
+       * `const` step; only script/def/prompt use this variant.
+       */
+      type: "local_decl";
+      decl: LocalDecl;
       loc: SourceLoc;
     }
   | {

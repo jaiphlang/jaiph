@@ -1,5 +1,6 @@
 import type {
   Arg,
+  Def,
   Expr,
   StepDef,
   MatchPatternDef,
@@ -8,11 +9,13 @@ import type {
 import type { Trivia } from "../parser";
 import {
   decodeTripleQuotedInner,
+  emitComments,
   emitFencedScriptBodyLines,
   emitRef,
   formatArgs,
   tn,
 } from "./emit-shared";
+import { emitScriptDecl, emitPromptDecl } from "./emit-decls";
 
 // Step / expression / test-block emitters. The declaration emitters in
 // `emit.ts` call `emitSteps` for rule / workflow bodies; splitting the step
@@ -367,5 +370,22 @@ function emitStep(step: StepDef, pad: string, currentIndent: string, trivia: Tri
     return lines;
   }
 
+  if (step.type === "local_decl") {
+    const decl = step.decl;
+    if (decl.kind === "script") return emitScriptDecl(decl.script, ci, pad, false, trivia);
+    if (decl.kind === "prompt") return emitPromptDecl(decl.prompt, ci, false, trivia);
+    return emitLocalDef(decl.def, pad, ci, trivia);
+  }
+
+  return lines;
+}
+
+/** Emit a nested `def name(params) { … }` at the given indent (no config / export). */
+function emitLocalDef(def: Def, pad: string, ci: string, trivia: Trivia): string[] {
+  const lines: string[] = [];
+  for (const c of emitComments(def.comments)) lines.push(`${ci}${c}`);
+  lines.push(`${ci}def ${def.name}(${def.params.join(", ")}) {`);
+  lines.push(...emitSteps(def.steps, pad, ci + pad, trivia));
+  lines.push(`${ci}}`);
   return lines;
 }
