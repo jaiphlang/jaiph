@@ -52,6 +52,33 @@ export type BlockParseOpts = {
   inNestedDef?: boolean;
 };
 
+/** Reject module-level forms that would otherwise become `sh -c` inside a nested def. */
+function rejectNestedModuleForms(
+  filePath: string,
+  inner: string,
+  innerRaw: string,
+  innerNo: number,
+  opts: BlockParseOpts | undefined,
+): void {
+  if (!opts?.inNestedDef) return;
+  if (/^config\s*\{/.test(inner)) {
+    fail(
+      filePath,
+      "config blocks are not allowed inside a nested def; move config to the top of the enclosing def or module",
+      innerNo,
+      innerRaw.indexOf("config") + 1,
+    );
+  }
+  if (/^import\b/.test(inner)) {
+    fail(
+      filePath,
+      "import declarations are not allowed inside a nested def; move the import to the top of the file",
+      innerNo,
+      innerRaw.indexOf("import") + 1,
+    );
+  }
+}
+
 /** Parse statements until a closing `}` at the current block level. */
 export function parseBraceBlockBody(
   filePath: string,
@@ -117,24 +144,9 @@ export function parseBraceBlockBody(
       continue;
     }
     // Nested defs carry no config scope and cannot re-import modules; without
-    // these rejections both lines would fall through to the shell handler and
+    // this rejection both lines would fall through to the shell handler and
     // run under `sh -c` (same class as the nested `export` rejection).
-    if (opts?.inNestedDef && /^config\s*\{/.test(inner)) {
-      fail(
-        filePath,
-        "config blocks are not allowed inside a nested def; move config to the top of the enclosing def or module",
-        innerNo,
-        innerRaw.indexOf("config") + 1,
-      );
-    }
-    if (opts?.inNestedDef && /^import\b/.test(inner)) {
-      fail(
-        filePath,
-        "import declarations are not allowed inside a nested def; move the import to the top of the file",
-        innerNo,
-        innerRaw.indexOf("import") + 1,
-      );
-    }
+    rejectNestedModuleForms(filePath, inner, innerRaw, innerNo, opts);
     // Reject route declarations at body level: routes belong at the top of the file.
     // `send … -> channel` is a send statement, not a route.
     const routeMatch = inner.match(
@@ -188,6 +200,7 @@ function parseRun(
   isAsync: boolean,
   captureName: string | undefined,
   trivia: Trivia,
+  opts?: BlockParseOpts,
 ): { step: StepDef; nextIdx: number } {
   const hostName = isAsync ? "run async" : "run";
   const hostCol = innerRaw.indexOf("run") + 1;
@@ -270,7 +283,7 @@ function parseRun(
   const body: Expr = { kind: "call", callee, args: call.args, ...(isAsync ? { async: true as const } : {}) };
 
   const result = parseAttachedBlock(
-    filePath, lines, idx, innerNo, innerRaw, attached.keyword, attached.after, trivia,
+    filePath, lines, idx, innerNo, innerRaw, attached.keyword, attached.after, trivia, opts,
   );
   const extras = attached.keyword === "catch"
     ? { captureName, catch: result.body }
@@ -561,7 +574,7 @@ function parseInlineScriptTail(
   const closingNo = result.closingLineIdx + 1;
   const block = parseAttachedBlock(
     c.filePath, c.lines, result.closingLineIdx, closingNo, closingRaw,
-    attached.keyword, attached.after, c.trivia,
+    attached.keyword, attached.after, c.trivia, c.opts,
   );
   const extras = attached.keyword === "catch" ? { catch: block.body } : { recover: block.body };
   return { step: execStep(body, stepLoc, extras), nextIdx: block.nextIdx };
@@ -576,7 +589,7 @@ function tryParseRun(c: BlockCtx): BlockResult | null {
       fail(c.filePath, "run async is not supported with inline scripts", c.innerNo, runCol);
     }
     return parseRun(
-      c.filePath, c.lines, c.idx, c.innerNo, c.innerRaw, runBody, true, undefined, c.trivia,
+      c.filePath, c.lines, c.idx, c.innerNo, c.innerRaw, runBody, true, undefined, c.trivia, c.opts,
     );
   }
   const runBody = c.inner.slice("run ".length).trim();
@@ -590,7 +603,7 @@ function tryParseRun(c: BlockCtx): BlockResult | null {
     fail(c.filePath, 'inline script syntax has changed: use run `body`(args) instead of run script(args) "body"', c.innerNo);
   }
   return parseRun(
-    c.filePath, c.lines, c.idx, c.innerNo, c.innerRaw, runBody, false, undefined, c.trivia,
+    c.filePath, c.lines, c.idx, c.innerNo, c.innerRaw, runBody, false, undefined, c.trivia, c.opts,
   );
 }
 
@@ -900,6 +913,7 @@ export function parseBlockStatement(
     };
   }
 
+  rejectNestedModuleForms(filePath, inner, innerRaw, innerNo, opts);
   applyAssignmentGuards(c);
 
   const keyword = inner.match(/^([A-Za-z_][A-Za-z0-9_]*)/)?.[1];
@@ -937,6 +951,7 @@ export function parseAttachedBlock(
   keyword: "catch" | "recover",
   textAfterKeyword: string,
   trivia: Trivia = createTrivia(),
+  opts?: BlockParseOpts,
 ): { body: CatchBody; nextIdx: number } {
   const keywordCol = innerRaw.indexOf(keyword) + 1;
   const right = textAfterKeyword.trimStart();
@@ -1006,7 +1021,7 @@ export function parseAttachedBlock(
     if (probe >= lines.length) {
       fail(filePath, `unterminated ${keyword} block, expected "}"`, innerNo, keywordCol);
     }
-    const { steps, nextIdx } = parseBraceBlockBody(filePath, lines, idx + 1, innerNo, trivia);
+    const { steps, nextIdx } = parseBraceBlockBody(filePath, lines, idx + 1, innerNo, trivia, opts);
     if (steps.length === 0) {
       fail(filePath, `${keyword} block must contain at least one statement`, innerNo, keywordCol);
     }
@@ -1023,7 +1038,7 @@ export function parseAttachedBlock(
     if (stmts.length === 0) {
       fail(filePath, `${keyword} block must contain at least one statement`, innerNo, keywordCol);
     }
-    const blockSteps = stmts.map((stmt) => parseAtHostLine(filePath, idx, stmt, trivia));
+    const blockSteps = stmts.map((stmt) => parseAtHostLine(filePath, idx, stmt, trivia, opts));
     return { body: { block: blockSteps, bindings }, nextIdx: idx + 1 };
   }
 
@@ -1031,7 +1046,7 @@ export function parseAttachedBlock(
     fail(filePath, `${keyword} requires a body after bindings`, innerNo, keywordCol);
   }
 
-  const single = parseAtHostLine(filePath, idx, afterBindings, trivia);
+  const single = parseAtHostLine(filePath, idx, afterBindings, trivia, opts);
   return { body: { single, bindings }, nextIdx: idx + 1 };
 }
 
@@ -1044,8 +1059,9 @@ function parseAtHostLine(
   hostIdx: number,
   stmt: string,
   trivia: Trivia,
+  opts?: BlockParseOpts,
 ): StepDef {
   const padded = new Array<string>(hostIdx).fill("");
   padded.push(stmt);
-  return parseBlockStatement(filePath, padded, hostIdx, trivia).step;
+  return parseBlockStatement(filePath, padded, hostIdx, trivia, opts).step;
 }

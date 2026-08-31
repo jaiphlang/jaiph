@@ -224,8 +224,9 @@ A `nested_decl_step` reuses the module-level `script_decl` / `def_decl` /
 declaration forms are `const` / `script` / `def` / named `prompt` only. `import`
 and `channel` stay module-level, and a def-level `config` block is separate
 metadata that must precede the first step (see [Definitions](#definitions)).
-Inside a nested def, `import` / `import script` and a `config { … }` block are
-themselves `E_PARSE` (same class as `export`), not shell lines.
+Inside a nested def — including `if` / `for` / `catch` / `recover` bodies —
+`import` / `import script` and a `config { … }` block are themselves `E_PARSE`
+(same class as `export`), not shell lines.
 Nested names are sequential local bindings (not hoisted): visible only after
 their declaration in the enclosing def (earlier use is `E_VALIDATE`), sharing one
 namespace per def with its parameters and `const`s. A duplicate name, or a name

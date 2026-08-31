@@ -249,7 +249,7 @@ export def main() {
 
 | Aspect | Rule |
 |---|---|
-| Where | `const` / `script` / `def` / named `prompt` inside a def body. **No `export`** (`E_PARSE`). `import` and `channel` stay module-level; a def-level `config` block is separate metadata that must precede the first step. Inside a **nested** def, `import` / `import script` and a `config { … }` block are `E_PARSE` (same class as `export`), never silent shell lines. |
+| Where | `const` / `script` / `def` / named `prompt` inside a def body. **No `export`** (`E_PARSE`). `import` and `channel` stay module-level; a def-level `config` block is separate metadata that must precede the first step. Inside a **nested** def — including `if` / `for` / `catch` / `recover` bodies — `import` / `import script` and a `config { … }` block are `E_PARSE` (same class as `export`), never silent shell lines. |
 | Scope | Sequential local binding, **not hoisted**: visible only in the enclosing def and only **after** its declaration (using it earlier is `E_VALIDATE`). One local namespace per def, shared with the def's parameters and `const`s — a duplicate name or a collision with a parameter is `E_VALIDATE` (`cannot rebind immutable name`). |
 | Shadowing | A nested name **may shadow** a module-level `script` / `def` / `prompt` of the same name; the local binding wins for the rest of the body. Another def cannot `run` / `prompt` a name declared only inside a different def (`E_VALIDATE`). |
 | Calls | `run name(args)` for a nested script or def (`run async` allowed for a nested def); `prompt name(args)` for a nested named prompt. |
