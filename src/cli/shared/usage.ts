@@ -35,6 +35,8 @@ export function printUsage(): void {
       "jaiph test:",
       "  With no path, discovers *.test.jh under the workspace root. Extra arguments after an optional",
       "  path are accepted but ignored (reserved).",
+      "  --env KEY[=VALUE]  grant KEY to matching script `use` clauses (no pre-flight: an ungranted",
+      "                     `use` key is simply absent in the script's env).",
       "",
       "jaiph install:",
       "  Args: bare names resolve via the registry; anything containing '/' or ':' is a git URL.",
@@ -139,9 +141,39 @@ export interface EnvSpec {
   value?: string;
 }
 
-// Name-shape and reserved-key policy is shared with the declarative
-// `trusted_envs` config key (`src/parse/metadata.ts`) — see src/env-reserved.ts.
+// Name-shape and reserved-key policy is shared with the `use` clause on
+// script declarations (`src/parse/scripts.ts`) — see src/env-reserved.ts.
 export { isReservedEnvKey };
+
+/**
+ * Resolve `--env` specs into a flat `KEY -> value` record, ready to apply to
+ * the runner env. Must run **before** any process is spawned so a bare
+ * `--env KEY` whose value is unset on the host aborts with `E_ENV_MISSING`
+ * rather than silently dropping. Later duplicates win (flag order).
+ * Name-shape and reserved-key rejection already happened at parse time
+ * (`parseArgs`). The record's key set is also the `use` grant
+ * (`JAIPH_ENV_GRANT`).
+ */
+export function resolveEnvPairs(
+  specs: EnvSpec[],
+  hostEnv: Record<string, string | undefined>,
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const spec of specs) {
+    if (spec.value !== undefined) {
+      out[spec.key] = spec.value;
+    } else {
+      const hostValue = hostEnv[spec.key];
+      if (hostValue === undefined) {
+        throw new Error(
+          `E_ENV_MISSING --env ${spec.key}: no value given and ${spec.key} is not set on the host`,
+        );
+      }
+      out[spec.key] = hostValue;
+    }
+  }
+  return out;
+}
 
 /**
  * Parse one `--env` argument into an `EnvSpec`. Splits on the first `=` only,

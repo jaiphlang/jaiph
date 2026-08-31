@@ -2,6 +2,40 @@ import type { ScriptDef } from "../types";
 import { createTrivia, type Trivia } from "./trivia";
 import { fail, parseSingleBacktickBody } from "./core";
 import { parseFencedScriptBlock } from "./fence";
+import { ENV_KEY_RE, isReservedEnvKey } from "../env-reserved";
+
+/**
+ * Parse the `use KEY [KEY …]` clause on a script declaration (named script or
+ * `import script`). Identifiers only — no quotes, no `${…}`. Same reserved-key
+ * contract as `--env`: the clause requests host keys, `--env` grants them.
+ */
+export function parseUseClauseKeys(
+  filePath: string,
+  clause: string,
+  lineNo: number,
+): string[] {
+  const keys = clause.trim().split(/\s+/).filter((k) => k.length > 0);
+  if (keys.length === 0) {
+    fail(filePath, "use clause requires at least one environment variable name: use KEY [KEY ...]", lineNo);
+  }
+  for (const key of keys) {
+    if (!ENV_KEY_RE.test(key)) {
+      fail(
+        filePath,
+        `E_ENV_INVALID use key "${key}" is not a valid environment variable name (must match [A-Za-z_][A-Za-z0-9_]*)`,
+        lineNo,
+      );
+    }
+    if (isReservedEnvKey(key)) {
+      fail(
+        filePath,
+        `E_ENV_RESERVED use cannot request reserved key "${key}" (same rule as --env); runtime-managed keys are off-limits`,
+        lineNo,
+      );
+    }
+  }
+  return keys;
+}
 
 /**
  * Convert a fence language tag to a shebang line.
@@ -49,8 +83,8 @@ export function parseScriptBlock(
   const raw = lines[startIndex];
   const line = raw.trim();
 
-  // Match: [export] script name = ...
-  const match = line.match(/^(export\s+)?script\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/);
+  // Match: [export] script name [use KEY ...] = ...
+  const match = line.match(/^(export\s+)?script\s+([A-Za-z_][A-Za-z0-9_]*)(?:\s+use\s+([^=]+?))?\s*=\s*(.*)$/);
   if (!match) {
     // Check for old brace syntax
     if (/^(export\s+)?script\s+[A-Za-z_][A-Za-z0-9_]*\s*\{/.test(line)) {
@@ -81,7 +115,11 @@ export function parseScriptBlock(
 
   const isExported = Boolean(match[1]);
   const scriptName = match[2];
-  const rhs = match[3].trimStart();
+  if (scriptName === "use") {
+    fail(filePath, `"use" is reserved and cannot be a script name`, lineNo);
+  }
+  const useKeys = match[3] !== undefined ? parseUseClauseKeys(filePath, match[3], lineNo) : undefined;
+  const rhs = match[4].trimStart();
 
   // Case 1: Fenced block — opening ``` must be on the same line as script name =
   if (rhs.startsWith("```")) {
@@ -107,6 +145,7 @@ export function parseScriptBlock(
       comments: pendingComments,
       body,
       ...(lang ? { lang } : {}),
+      ...(useKeys ? { use: useKeys } : {}),
       loc: { line: lineNo, col: 1 },
     };
     trivia.setNode(scriptDef, { scriptBodyKind: "fenced" });
@@ -131,6 +170,7 @@ export function parseScriptBlock(
       name: scriptName,
       comments: pendingComments,
       body,
+      ...(useKeys ? { use: useKeys } : {}),
       loc: { line: lineNo, col: 1 },
     };
     trivia.setNode(scriptDef, { scriptBodyKind: "backtick" });

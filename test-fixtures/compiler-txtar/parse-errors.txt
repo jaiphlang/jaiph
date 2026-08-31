@@ -2632,24 +2632,39 @@ export def main() {
   }
 }
 
-=== config array element must be a quoted string
-# @expect error E_PARSE "array elements must be quoted strings: unquoted_value" @3:5
+=== trusted_envs is removed from config (unknown key)
+# @expect error E_PARSE "unknown config key: trusted_envs" @2:3
 --- input.jh
 config {
-  trusted_envs = [
-    unquoted_value
-  ]
+  trusted_envs = "GITHUB_TOKEN"
 }
 export def main() {
   log "ok"
 }
 
-=== config multi-line array not closed
-# @expect error E_PARSE "array not closed with ']'" @2:1
+=== script use key must be a valid env var name
+# @expect error E_PARSE "E_ENV_INVALID use key" @1:1
 --- input.jh
-config {
-  trusted_envs = [
-    "PATH"
+script aaa use 1BAD = `echo x`
+export def main() {
+  run aaa()
+}
+
+=== script use key must not be reserved
+# @expect error E_PARSE "E_ENV_RESERVED use cannot request reserved key" @1:1
+--- input.jh
+script aaa use JAIPH_WORKSPACE = `echo x`
+export def main() {
+  run aaa()
+}
+
+=== use is reserved as a script name
+# @expect error E_PARSE "is reserved and cannot be a script name" @1:1
+--- input.jh
+script use = `echo x`
+export def main() {
+  log "ok"
+}
 
 === module.* keys rejected in def-level config
 # @expect error E_PARSE "module.* keys are not allowed in def-level config (only agent.* and run.* keys)" @2:1

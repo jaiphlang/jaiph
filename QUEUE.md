@@ -14,46 +14,6 @@ Process rules:
 
 ***
 
-## Sterile script env, `use` on scripts, `--env` as the only grant #dev-ready
-
-Context: Script/`run` subprocesses inherit the runner’s full `process.env` (`resolveRuntimeEnv` copies the host env; `executeRunRef` passes `scope.env` into `executeScript`). Prompt agents are already fail-closed (`scrubPromptEnv`). `trusted_envs` plus `--env` grant extra keys on top of that inherit. A script that execs agent-edited tree content (for example `npm run build`) therefore sees host credentials such as `CLAUDE_CODE_OAUTH_TOKEN` unless the script author strips them by hand.
-
-Problem: Ambient inherit is the default. `--env KEY` is not a gate. `trusted_envs` is entry-only injection into the declaring def’s script spawns and is named as if the keys were “trusted.” There is no fail-closed allowlist for scripts.
-
-Remediation — implement exactly this (hard rewrite; remove `trusted_envs`):
-
-1. **Sterile script spawn.** Every named script, `import script`, and inline script subprocess receives only:
-   - the prompt base env names/prefixes already listed in `PROMPT_BASE_ENV_NAMES` / `PROMPT_BASE_ENV_PREFIXES` (`src/runtime/kernel/env-allowlist.ts`) — process mechanics, not secrets;
-   - runtime contract keys the script is documented to read: `JAIPH_WORKSPACE`, `JAIPH_SCRIPTS`, `JAIPH_RUN_DIR`, `JAIPH_ARTIFACTS_DIR` (and empty `JAIPH_AGENT_MODEL` if scripts under `set -u` rely on it today);
-   - host keys requested by that **script’s** `use` clause, intersected with the `--env` grant (below).
-   Do not forward the rest of the host env. Do not forward agent credentials (`ANTHROPIC_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`, `CURSOR_API_KEY`, `OPENAI_API_KEY`) unless the script `use`s that name (do not special-case-forbid them). Keep scrubbing `JAIPH_CHAIN_KEY` and `JAIPH_RUN_SUMMARY_FILE` from script env. Keep `JAIPH_SERVE_*` out.
-
-2. **`use` on the written script body only** (definition site, not the `run` call):
-   ```
-   script aaa use GITHUB_TOKEN NPM_TOKEN = `gh …`
-   export script aaa use GITHUB_TOKEN = `…`
-   import script "./gh.sh" as gh use GITHUB_TOKEN
-   ```
-   Grammar: `use` is reserved. Clause is `use` IDENT { IDENT } after the script name (and after `as` alias for `import script`), before `=`. Identifiers only — no quotes, no `${…}`. Multiple `use` lines are not needed; one clause, space-separated keys. Same reserved-key set as today’s `--env` (`E_ENV_RESERVED` / `isReservedEnvKey`). Invalid names: `E_ENV_INVALID` (or `E_PARSE` with that contract).
-   **Not in this task:** `use` on defs, on `run` call sites, or on prompts. A def that `run`s a script does not grant or deny keys; the script declaration does. `run bbb()` where `bbb` is a def never injects host keys into `bbb`.
-
-3. **`--env` is the only grant.** A `use` key reaches the script iff it was passed as `jaiph run|serve|mcp --env KEY` or `--env KEY=VALUE`. Presence on the host environment without the flag is not enough. Bare `--env KEY` still resolves the host value and still `E_ENV_MISSING` if unset (existing `resolveEnvPairs`). `--env KEY=VALUE` still overrides.
-
-4. **Preflight before spawn** (`jaiph run`, `jaiph serve`, `jaiph mcp` — same stage as today’s credential / `trusted_envs` preflight). Collect every `use` key in the **import graph**. Each must appear in the `--env` spec list. Missing → `E_ENV_MISSING` naming the key (and that it was `use`d but not passed as `--env`). Unused extra `--env FOO` is allowed. A graph with no `use` does not require `--env`. **`jaiph test` does not fail** for missing `--env`; if `--env` is passed, inject those keys into matching `use` spawns; otherwise the key is absent in the spawn.
-
-5. **Delete `trusted_envs`.** Parse, metadata, `planTrustedEnvs`, runtime `trustedEnv` / `scrubTrustedKeys` trusted-key injection, docs, and tests go away. `--env` remains the operator grant; `use` is the request.
-
-6. **Docs:** `docs/grammar.md`, `docs/language.md`, `docs/jaiph-skill.md`, `docs/configuration.md` (remove trusted_envs), `docs/cli.md`, `docs/env-vars.md`. State: scripts are sterile by default; `use` + `--env`; prompts stay on `scrubPromptEnv` (no host `--env` secrets) until a later named-prompt task.
-
-### Acceptance criteria
-- A script with no `use` spawned under a host env that sets `GITHUB_TOKEN` and `CLAUDE_CODE_OAUTH_TOKEN` does not receive those keys in the child `env` (spawn-spy or equivalent unit test; fails on today’s inherit).
-- A script `use GITHUB_TOKEN` run with `jaiph run --env GITHUB_TOKEN` receives the host/flag value; the same script run without `--env GITHUB_TOKEN` does not start (`E_ENV_MISSING`) even if `GITHUB_TOKEN` is set on the host (CLI/integration test).
-- `import script "…" as gh use GITHUB_TOKEN` has the same spawn/preflight contract as a named `script gh use GITHUB_TOKEN`.
-- `run callee()` where `callee` is a def whose body runs a script that does **not** `use GITHUB_TOKEN` does not put `GITHUB_TOKEN` in that script’s env, even when `--env GITHUB_TOKEN` was passed (no def-level leak, no call-tree propagate).
-- `jaiph test` on a file whose import graph `use`s `GITHUB_TOKEN` exits 0 without `--env` when the script is mocked or does not require the value to succeed; it must not hard-fail preflight the way `jaiph run` does.
-- `trusted_envs` is `E_PARSE` (unknown config key). Existing `trusted_envs` unit tests are replaced by `use` tests, not left passing against the old contract.
-- `npm run build`, `npm test`, and `npm run test:e2e` pass; grammar/skill/config docs describe `use` and sterile script env.
-
 ## Named prompts with parameters and `use` #dev-ready
 
 Context: Prompts exist only as def-body steps (`prompt_stmt`). `prompt IDENT` today means the prompt **text** is the in-scope identifier `IDENT` (`prompt_body` includes IDENT). Scripts can declare `use KEY` on the definition (sterile spawn + `--env` grant). Prompts have no definition site, so a prompt cannot request extra host keys without a call-site `use` (which this language is not adding) or a named prompt form.
@@ -138,4 +98,3 @@ Remediation — implement exactly this:
 - Another def in the same file cannot `run nested_helper()` when `nested_helper` is declared only inside `outer` (`E_VALIDATE`).
 - Nested script `use GITHUB_TOKEN` participates in `--env` preflight the same way as a module-level `use` (fail `jaiph run` without the flag).
 - `npm run build`, `npm test`, and `npm run test:e2e` pass.
-

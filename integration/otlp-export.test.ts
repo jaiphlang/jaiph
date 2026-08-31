@@ -331,9 +331,11 @@ test("redaction: a credential in step output reaches the payload only as [REDACT
     const jh = join(root, "app.jh");
     writeFileSync(
       jh,
-      ['script leak = `printf %s "$SECRET_API_KEY"`', "export def main() {", "  run leak()", "}", ""].join("\n"),
+      // The leak script must `use` the key and the run must grant it with
+      // --env: script env is sterile, host presence alone no longer crosses.
+      ['script leak use SECRET_API_KEY = `printf %s "$SECRET_API_KEY"`', "export def main() {", "  run leak()", "}", ""].join("\n"),
     );
-    const result = await runCli(["run", jh], {
+    const result = await runCli(["run", "--env", "SECRET_API_KEY", jh], {
       cwd: root,
       env: {
         ...baseEnv(join(root, ".jaiph/runs")),

@@ -34,19 +34,6 @@ const BASE_FIXTURE = [
   '  return "watched"',
   "}",
   "",
-  'script leak = `echo "token is $LEAK_API_KEY"`',
-  "# Echoes a credential value to stdout to exercise journal redaction.",
-  "export def leak_secret() {",
-  "  run leak()",
-  '  return "done"',
-  "}",
-  "",
-  'script leak_fail = `echo "stdout token $LEAK_API_KEY"; echo "stderr token $LEAK_API_KEY" >&2; exit 1`',
-  "# Echoes a credential to both streams then fails, to exercise result_text redaction.",
-  "export def leak_and_fail() {",
-  "  run leak_fail()",
-  "}",
-  "",
   "# Relays its argument to a sub-workflow so the value lands in generic step params.",
   "export def relay(token) {",
   '  return "relayed"',
@@ -63,6 +50,27 @@ const BASE_FIXTURE = [
   "export def make_artifact() {",
   "  run publish()",
   '  return "published"',
+  "}",
+  "",
+].join("\n");
+
+// The leak scripts `use` LEAK_API_KEY, so a graph containing them requires a
+// `--env LEAK_API_KEY[=…]` grant at startup (`use` pre-flight). Only the
+// redaction tests grant it, so they get their own fixture — the base fixture
+// must keep serving without any --env.
+const REDACT_FIXTURE = [
+  BASE_FIXTURE,
+  'script leak use LEAK_API_KEY = `echo "token is $LEAK_API_KEY"`',
+  "# Echoes a credential value to stdout to exercise journal redaction.",
+  "export def leak_secret() {",
+  "  run leak()",
+  '  return "done"',
+  "}",
+  "",
+  'script leak_fail use LEAK_API_KEY = `echo "stdout token $LEAK_API_KEY"; echo "stderr token $LEAK_API_KEY" >&2; exit 1`',
+  "# Echoes a credential to both streams then fails, to exercise result_text redaction.",
+  "export def leak_and_fail() {",
+  "  run leak_fail()",
   "}",
   "",
 ].join("\n");
@@ -451,7 +459,7 @@ test("jaiph serve: NDJSON events on a terminal run byte-match the journal; unkno
 test("jaiph serve: a credential echoed by a run is [REDACTED] in the event stream", async () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-serve-redact-"));
   const jh = join(root, "tools.jh");
-  writeFileSync(jh, BASE_FIXTURE);
+  writeFileSync(jh, REDACT_FIXTURE);
   const secret = "supersecretvalue123";
   const srv = await startServe(jh, root, serveEnv(join(root, ".jaiph/runs")), ["--env", `LEAK_API_KEY=${secret}`]);
   try {
@@ -501,7 +509,7 @@ test("jaiph serve: a credential passed as a step param is [REDACTED] in the even
 test("jaiph serve: a failing run's result_text is [REDACTED] via wait=true and GET /v1/runs/{id}", async () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-serve-redact-fail-"));
   const jh = join(root, "tools.jh");
-  writeFileSync(jh, BASE_FIXTURE);
+  writeFileSync(jh, REDACT_FIXTURE);
   const secret = "supersecretvalue123";
   const srv = await startServe(jh, root, serveEnv(join(root, ".jaiph/runs")), ["--env", `LEAK_API_KEY=${secret}`]);
   try {

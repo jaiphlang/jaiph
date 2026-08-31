@@ -70,7 +70,7 @@ export function emitModule(
     for (const si of mod.scriptImports) {
       const lc = tn(trivia, si).leadingComments;
       if (lc?.length) importLines.push(emitCommentBlock(lc));
-      importLines.push(`import script "${si.path}" as ${si.alias}`);
+      importLines.push(`import script "${si.path}" as ${si.alias}${emitUseClause(si.use)}`);
     }
   }
   for (const imp of mod.imports) {
@@ -163,7 +163,6 @@ const DEFAULT_CONFIG_KEY_ORDER = [
   "module.name",
   "module.version",
   "module.description",
-  "trusted_envs",
 ];
 
 function emitConfigKeyLines(meta: DefMetadata, key: string, pad: string): string[] {
@@ -204,9 +203,6 @@ function emitConfigKeyLines(meta: DefMetadata, key: string, pad: string): string
     case "module.description":
       if (meta.module?.description === undefined) return [];
       return [`${pad}module.description = ${emitConfigStringRhs(meta.module.description)}`];
-    case "trusted_envs":
-      if (meta.trustedEnvs === undefined) return [];
-      return [`${pad}trusted_envs = ${emitConfigStringRhs(meta.trustedEnvs.join(" "))}`];
     default:
       return [];
   }
@@ -262,18 +258,24 @@ function emitEnvDecl(env: EnvDeclDef): string[] {
   return [`const ${env.name} = ${JSON.stringify(env.value)}`];
 }
 
+/** `use KEY [KEY …]` suffix on script declarations; empty when no keys are requested. */
+function emitUseClause(use: string[] | undefined): string {
+  return use?.length ? ` use ${use.join(" ")}` : "";
+}
+
 function emitScript(script: ScriptDef, pad: string, exported: boolean, trivia: Trivia): string {
   const lines: string[] = [];
   lines.push(...emitComments(script.comments));
   const prefix = exported ? "export " : "";
+  const useClause = emitUseClause(script.use);
   const bodyKind = tn(trivia, script).scriptBodyKind;
   if (bodyKind === "fenced" || script.lang || script.body.includes("\n")) {
     const langTag = script.lang ?? "";
-    lines.push(`${prefix}script ${script.name} = \`\`\`${langTag}`);
+    lines.push(`${prefix}script ${script.name}${useClause} = \`\`\`${langTag}`);
     lines.push(...emitFencedScriptBodyLines(script.body, pad));
     lines.push("```");
   } else {
-    lines.push(`${prefix}script ${script.name} = \`${script.body}\``);
+    lines.push(`${prefix}script ${script.name}${useClause} = \`${script.body}\``);
   }
   return lines.join("\n");
 }

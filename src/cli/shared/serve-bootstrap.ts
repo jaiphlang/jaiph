@@ -3,17 +3,18 @@ import { tmpdir } from "node:os";
 import { dirname, extname, join, resolve } from "node:path";
 import { errText } from "../../errors";
 import { detectWorkspaceRoot } from "./paths";
-import { hasHelpFlag, parseArgs, type ParsedArgs } from "./usage";
-import { resolveEnvPairs } from "../run/env";
+import { hasHelpFlag, parseArgs, resolveEnvPairs, type ParsedArgs } from "./usage";
 import {
   loadGeneration,
   createGenerationTracker,
-  resolveStartupPosture,
-  logStartupPosture,
   type GenerationState,
   type GenerationTracker,
-  type StartupPosture,
 } from "./generation";
+import {
+  resolveStartupPosture,
+  logStartupPosture,
+  type StartupPosture,
+} from "./startup-posture";
 
 // Bootstrap shared by the long-lived workflow servers `jaiph mcp` and
 // `jaiph serve`. Both parse the same flag set, validate the same `.jh` input,

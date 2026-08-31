@@ -191,7 +191,7 @@ Tests that span multiple modules, require subprocess/PTY harnesses, exercise pro
 | `integration/serve-restart.test.ts` | Integration | `jaiph serve` run recovery and idempotency across a real process restart |
 | `integration/otlp-export.test.ts` | Integration | OTLP trace export — a run with OTLP env sends exactly one well-formed POST to `/v1/traces`, and delivery is detached so a hanging collector does not block the terminal result |
 | `integration/sentry-export.test.ts` | Integration | Sentry error reporting — a failed run delivers exactly one envelope carrying the failing step and an excerpt across `jaiph run`, `jaiph run --raw`, and `jaiph serve`; a succeeding run delivers nothing |
-| `integration/exec-policy.test.ts` | Integration | One execution-policy contract across `jaiph run`, `jaiph serve`, and `jaiph mcp` — `--env` / `trusted_envs` produce the same effective child env |
+| `integration/exec-policy.test.ts` | Integration | One execution-policy contract across `jaiph run`, `jaiph serve`, and `jaiph mcp` — `--env` grants to script `use` clauses produce the same effective child env |
 | `integration/factory-code-philosophy.test.ts` | Integration | Keeps the overnight engineer factory in sync with the ADR — the `code_philosophy` string in `.jaiph/engineer.jh` still points at `docs/agent-analyzability.md` and the `arch:check` gate, and `AGENT.md` still points at the ADR |
 | `integration/tty-running-timer.test.ts` | Acceptance | In a TTY, verifies the “RUNNING workflow” line updates over time (requires Python 3 PTY harness) |
 

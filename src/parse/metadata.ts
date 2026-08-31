@@ -9,7 +9,6 @@ import {
   unescapeConfigInner,
 } from "./core";
 import { validateJaiphStringContent } from "./validate-string-content";
-import { ENV_KEY_RE, isReservedEnvKey } from "../env-reserved";
 
 const CONFIG_INTERPOLATION_RE = /\$\{[a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)?\}/;
 
@@ -31,11 +30,10 @@ const ALLOWED_KEYS = new Set([
   "module.name",
   "module.version",
   "module.description",
-  "trusted_envs",
 ]);
 
 /** Expected value type for each key that needs type validation. */
-const KEY_TYPES: Record<string, "string" | "boolean" | "number" | "string[]"> = {
+const KEY_TYPES: Record<string, "string" | "boolean" | "number"> = {
   "agent.model": "string",
   "agent.command": "string",
   "agent.backend": "string",
@@ -48,10 +46,9 @@ const KEY_TYPES: Record<string, "string" | "boolean" | "number" | "string[]"> = 
   "module.name": "string",
   "module.version": "string",
   "module.description": "string",
-  "trusted_envs": "string",
 };
 
-function parseMetadataValue(filePath: string, rawLine: string, valuePart: string, lineNo: number): string | boolean | number | string[] {
+function parseMetadataValue(filePath: string, rawLine: string, valuePart: string, lineNo: number): string | boolean | number {
   const trimmed = valuePart.trim();
   if (trimmed === "true") {
     return true;
@@ -61,9 +58,6 @@ function parseMetadataValue(filePath: string, rawLine: string, valuePart: string
   }
   if (/^[0-9]+$/.test(trimmed)) {
     return Number(trimmed);
-  }
-  if (trimmed === "[]") {
-    return [];
   }
   if (trimmed.startsWith(`'`)) {
     return fail(filePath, SINGLE_QUOTE_MESSAGE, lineNo, colFromRaw(rawLine));
@@ -94,7 +88,7 @@ function parseMetadataValue(filePath: string, rawLine: string, valuePart: string
 function validateKeyType(
   filePath: string,
   key: string,
-  value: string | boolean | number | string[],
+  value: string | boolean | number,
   lineNo: number,
   raw: string,
 ): void {
@@ -110,58 +104,9 @@ function validateKeyType(
   if (expected === "number" && typeof value !== "number") {
     return fail(filePath, `${key} must be an integer`, lineNo, colFromRaw(raw));
   }
-  if (expected === "string[]" && !Array.isArray(value)) {
-    return fail(filePath, `${key} must be an array of strings`, lineNo, colFromRaw(raw));
-  }
 }
 
-function parseArrayValue(
-  filePath: string,
-  lines: string[],
-  startIdx: number,
-): { value: string[]; nextIndex: number } {
-  const result: string[] = [];
-  let idx = startIdx;
-
-  for (; idx < lines.length; idx += 1) {
-    const lineNo = idx + 1;
-    const raw = lines[idx];
-    const line = raw.trim();
-
-    if (!line || line.startsWith("#")) {
-      continue;
-    }
-
-    if (line === "]" || line === "],") {
-      return { value: result, nextIndex: idx };
-    }
-
-    // Strip inline comment first, then trailing comma
-    let element = line;
-    // Remove inline comment
-    const commentIdx = element.indexOf(" #");
-    if (commentIdx >= 0) {
-      element = element.slice(0, commentIdx).trimEnd();
-    }
-    // Remove trailing comma
-    if (element.endsWith(",")) {
-      element = element.slice(0, -1).trimEnd();
-    }
-
-    if (element.startsWith(`'`)) {
-      return fail(filePath, SINGLE_QUOTE_MESSAGE, lineNo, colFromRaw(raw));
-    }
-    if (element.startsWith(`"`) && element.endsWith(`"`)) {
-      result.push(unescapeConfigInner(element.slice(1, -1)));
-    } else {
-      return fail(filePath, `array elements must be quoted strings: ${element}`, lineNo, colFromRaw(raw));
-    }
-  }
-
-  return fail(filePath, "array not closed with ']'", startIdx, 1);
-}
-
-type ConfigValue = string | boolean | number | string[];
+type ConfigValue = string | boolean | number;
 
 const KEY_SETTERS: Record<string, (out: DefMetadata, value: ConfigValue) => void> = {
   "agent.model": (m, v) => ((m.agent ??= {}).model = v as string),
@@ -177,40 +122,6 @@ const KEY_SETTERS: Record<string, (out: DefMetadata, value: ConfigValue) => void
   "module.description": (m, v) => ((m.module ??= {}).description = v as string),
 };
 
-/**
- * `trusted_envs = "GITHUB_TOKEN NPM_TOKEN"` — a quoted, space-separated list
- * of host env keys. Each key must be a valid env var name and not reserved:
- * the same `E_ENV_RESERVED` rules as `--env` (src/env-reserved.ts) apply, so
- * a config block cannot smuggle in a runtime-managed key.
- */
-function parseTrustedEnvsValue(
-  filePath: string,
-  value: string,
-  lineNo: number,
-  raw: string,
-): string[] {
-  const keys = value.split(/\s+/).filter((k) => k.length > 0);
-  for (const key of keys) {
-    if (!ENV_KEY_RE.test(key)) {
-      return fail(
-        filePath,
-        `trusted_envs key "${key}" is not a valid environment variable name (must match [A-Za-z_][A-Za-z0-9_]*)`,
-        lineNo,
-        colFromRaw(raw),
-      );
-    }
-    if (isReservedEnvKey(key)) {
-      return fail(
-        filePath,
-        `trusted_envs cannot declare reserved key "${key}" (E_ENV_RESERVED — same rule as --env); runtime-managed keys are off-limits`,
-        lineNo,
-        colFromRaw(raw),
-      );
-    }
-  }
-  return keys;
-}
-
 function assignConfigKey(
   filePath: string,
   out: DefMetadata,
@@ -220,10 +131,6 @@ function assignConfigKey(
   raw: string,
 ): void {
   validateKeyType(filePath, key, value, lineNo, raw);
-  if (key === "trusted_envs") {
-    out.trustedEnvs = parseTrustedEnvsValue(filePath, value as string, lineNo, raw);
-    return;
-  }
   if (key === "agent.backend") {
     if (
       typeof value === "string" &&
@@ -294,19 +201,8 @@ export function parseConfigBlock(
       );
     }
 
-    // Check for array opening bracket
-    let value: string | boolean | number | string[];
-    const trimmedValue = valuePart.trim();
     bodySequence.push({ kind: "assign", key });
-    if (trimmedValue === "[") {
-      // Multi-line array
-      const arrayResult = parseArrayValue(filePath, lines, idx + 1);
-      value = arrayResult.value;
-      idx = arrayResult.nextIndex;
-    } else {
-      value = parseMetadataValue(filePath, raw, valuePart, lineNo);
-    }
-
+    const value = parseMetadataValue(filePath, raw, valuePart, lineNo);
     assignConfigKey(filePath, out, key, value, lineNo, raw);
   }
 

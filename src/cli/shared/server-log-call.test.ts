@@ -99,13 +99,14 @@ test("JAIPH_SERVER_LOG_RUNS opt-in mirrors the run log to the operator sink with
 test("mirrored operator lines are credential-redacted (never print a fixture secret)", async () => {
   const SECRET = "supersecretvalue1234567";
   const lines: string[] = [];
-  // The secret reaches the log line through a legitimate binding: an inline
-  // script reads it from the forwarded env into a `const`, then `log`
+  // The secret reaches the log line through a legitimate binding: a script
+  // that `use`s the granted key reads it into a `const`, then `log`
   // interpolates that binding — the same shape a real credential leak takes.
   await runWith(
     [
+      'script read_secret use LEAK_API_KEY = `printf %s "$LEAK_API_KEY"`',
       "export def main() {",
-      '  const secret = run `printf %s "$LEAK_API_KEY"`()',
+      "  const secret = run read_secret()",
       '  log "leaked ${secret}"',
       "}",
       "",

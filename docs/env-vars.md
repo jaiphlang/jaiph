@@ -29,7 +29,7 @@ The table below covers every `JAIPH_*` name read from `process.env` or `env` in 
 
 1. **CLI flags** (`--workspace`, `--env`).
 2. **`JAIPH_*` environment variables** (this table).
-3. **In-file config metadata** (`agent.*`, `run.*`, `trusted_envs`).
+3. **In-file config metadata** (`agent.*`, `run.*`).
 4. **Built-in defaults.**
 
 The long-lived servers `jaiph serve` and `jaiph mcp` resolve the effective env once at startup and apply it to every call. `jaiph run` resolves it once per run.
@@ -57,6 +57,7 @@ The long-lived servers `jaiph serve` and `jaiph mcp` resolve the effective env o
 | `JAIPH_CODEX_API_URL` | runtime | string | `https://api.openai.com/v1/chat/completions` | — | Chat-completions endpoint for the `codex` backend. |
 | `JAIPH_DEBUG` | host, runtime | bool (exact `"true"`) | `false` | `run.debug` | Enable debug tracing for the run. |
 | `JAIPH_DEBUG_LOCKED` | internal | bool | — | — | Lock flag for `JAIPH_DEBUG`. |
+| `JAIPH_ENV_GRANT` | internal | string (comma-separated env key names) | — | — | The `--env` grant hand-off. The CLI (`jaiph run` / `serve` / `mcp` / `test`) writes the key names it received via `--env KEY[=VALUE]` here before spawning the runner; the runtime forwards a script's `use` key into its subprocess only when the key is named in this grant. Set unconditionally at every spawn site so a stale inherited grant never leaks. Reserved (`E_ENV_RESERVED`): not settable via `--env` or requestable via `use`. See [Script subprocess environment](#script-env). |
 | `JAIPH_INBOX_MAX_DISPATCH` | runtime | int | `1000` | — | Maximum inbox messages a single def frame may drain before aborting with `E_INBOX_DISPATCH_LIMIT`. |
 | `JAIPH_INBOX_PARALLEL` | — | — | — | — | Unused — the runtime does not read this variable (tests assert setting it has no effect on inbox dispatch order). |
 | `JAIPH_INSTALL_COMMAND` | host | string | — | — | Operator override for `jaiph use` (forks, offline bundles, local scripts); run as-is. When unset, `jaiph use` fetches `${JAIPH_SITE}/install`, verifies it against `${JAIPH_SITE}/install.sha256`, and only then executes it (a mismatch fails closed). |
@@ -105,7 +106,7 @@ The long-lived servers `jaiph serve` and `jaiph mcp` resolve the effective env o
 | `JAIPH_STDLIB` | host | path | — | — | Removed from the product. Stripped from the launched env. |
 | `JAIPH_TELEMETRY_FLUSH_MS` | host | int (ms) | `10000` | — | Total flush budget for the post-run telemetry hook. The OTLP-trace and Sentry exporters run concurrently, each bounded by this, so the whole flush cannot exceed it. A non-positive or unparseable value falls back to the default. Best-effort only — never load-bearing on the run. |
 | `JAIPH_TEST_MODE` | runtime | bool (exact `"1"`) | `false` | — | Set by `jaiph test` so the runtime skips production-only branches (e.g. file-mode normalization). |
-| `JAIPH_TRUST_PROJECT_HOOKS` | host | bool (`1` / `true`) | `false` | — | Operator opt-in that trusts the current workspace's project-local `.jaiph/hooks.json`. Hook commands run on the **host** CLI, so absent this opt-in a project-local hooks file is ignored (with a one-line stderr notice) and none of its commands run: a cloned or untrusted repo cannot execute arbitrary host commands on `jaiph run` / `jaiph serve` / `jaiph mcp`. The global `~/.jaiph/hooks.json` is the operator's own and always runs regardless. Read from the host env only; not itself settable via `--env` / `trusted_envs` (`E_ENV_RESERVED`). |
+| `JAIPH_TRUST_PROJECT_HOOKS` | host | bool (`1` / `true`) | `false` | — | Operator opt-in that trusts the current workspace's project-local `.jaiph/hooks.json`. Hook commands run on the **host** CLI, so absent this opt-in a project-local hooks file is ignored (with a one-line stderr notice) and none of its commands run: a cloned or untrusted repo cannot execute arbitrary host commands on `jaiph run` / `jaiph serve` / `jaiph mcp`. The global `~/.jaiph/hooks.json` is the operator's own and always runs regardless. Read from the host env only; not itself settable via `--env` or requestable via `use` (`E_ENV_RESERVED`). |
 | `JAIPH_WORKSPACE` | host, runtime | path | autodetected | — | Workspace root. |
 
 <!-- end: src-parity -->
@@ -123,11 +124,16 @@ The host CLI checks these before spawning the runner when [credential pre-flight
 
 To define a variable on the run process, use the per-key `--env` flag on `jaiph run`, `jaiph serve`, or `jaiph mcp`. `--env KEY=VALUE` sets an exact value, and `--env KEY` forwards the host's current value.
 
-Jaiph rejects some names before it spawns anything. A bare `--env KEY` that is unset on the host aborts with `E_ENV_MISSING`. An invalid name gives `E_ENV_INVALID`. Runtime-managed keys the CLI owns (`JAIPH_WORKSPACE`, `JAIPH_RUNS_DIR`, `JAIPH_RUN_ID`, `JAIPH_SCRIPTS`, `JAIPH_MODULE_GRAPH_FILE`, `JAIPH_SOURCE_ABS`, `JAIPH_META_FILE`, `JAIPH_AGENT_TRUSTED_WORKSPACE`, `JAIPH_TRUST_PROJECT_HOOKS`) are rejected with `E_ENV_RESERVED`. Values are never path-remapped. See [CLI — `jaiph run` flags](cli.md#jaiph-run).
+Jaiph rejects some names before it spawns anything. A bare `--env KEY` that is unset on the host aborts with `E_ENV_MISSING`. An invalid name gives `E_ENV_INVALID`. Runtime-managed keys the CLI owns (`JAIPH_WORKSPACE`, `JAIPH_RUNS_DIR`, `JAIPH_RUN_ID`, `JAIPH_SCRIPTS`, `JAIPH_MODULE_GRAPH_FILE`, `JAIPH_SOURCE_ABS`, `JAIPH_META_FILE`, `JAIPH_ENV_GRANT`, `JAIPH_AGENT_TRUSTED_WORKSPACE`, `JAIPH_TRUST_PROJECT_HOOKS`) are rejected with `E_ENV_RESERVED`. Values are never path-remapped. See [CLI — `jaiph run` flags](cli.md#jaiph-run).
 
-A variable forwarded with `--env` is visible to trusted `run` script and inline-shell steps, but not to `prompt` agent subprocesses. Jaiph spawns every prompt backend with a fail-closed scrub of the environment. The scrub forwards only the base environment (`PATH`, `HOME`, locale, proxies, `CLAUDE_CONFIG_DIR`, and so on), the `JAIPH_*` control keys, and that backend's own credential keys.
+## Script subprocess environment
+{: #script-env}
 
-For the common case of forwarding a host key, the [`trusted_envs`](configuration.md#trusted-envs) config key is the in-file alternative to `--env`. A `.jh` file names the host keys its trusted `run` steps need, for example `trusted_envs = "GITHUB_TOKEN"`. The keys resolve from a clean snapshot of the host environment, and the same reserved-key (`E_ENV_RESERVED`) and missing-value (`E_ENV_MISSING`) rules apply. An explicit `--env KEY=VALUE` still overrides the snapshot value for that key. Like `--env`, `trusted_envs` values reach trusted `run` steps only, never `prompt` subprocesses.
+Scripts are **sterile by default**. A script subprocess (named `script`, `import script`, or inline script) receives only the base environment (`PATH`, `HOME`, locale, TLS/proxy settings), the script runtime contract keys (`JAIPH_WORKSPACE`, `JAIPH_SCRIPTS`, `JAIPH_RUN_DIR`, `JAIPH_ARTIFACTS_DIR`, the config-scoped `JAIPH_AGENT_BACKEND` when set, plus `JAIPH_AGENT_MODEL` kept defined for `set -u`), and the host keys granted through `use` + `--env`. The rest of the host environment — including agent credentials — never reaches a script.
+
+The `use` clause on the script declaration is the request; `--env` is the only grant. A script `use GITHUB_TOKEN` receives the key iff the run was started with `--env GITHUB_TOKEN` (host value) or `--env GITHUB_TOKEN=VALUE` (explicit value). Presence of the key on the host environment without the flag is not enough. `jaiph run`, `jaiph serve`, and `jaiph mcp` pre-flight every `use` key in the import graph and abort with `E_ENV_MISSING` when one was not granted; extra `--env` keys nothing `use`s are allowed. `jaiph test` skips that pre-flight — with `--env` the keys are injected into matching `use` spawns, and without it the key is simply absent.
+
+Prompt agent subprocesses are unaffected by `--env`: Jaiph spawns every prompt backend with a fail-closed scrub of the environment (`scrubPromptEnv`). The scrub forwards only the base environment (`PATH`, `HOME`, locale, proxies, `CLAUDE_CONFIG_DIR`, and so on), the `JAIPH_*` control keys, and that backend's own credential keys — never `--env`-granted secrets.
 
 ## Telemetry variables
 
@@ -181,8 +187,8 @@ The error codes below surface during `jaiph run` / `jaiph serve` / `jaiph mcp` i
 |---|---|---|
 | `E_RUN_TIMEOUT` | The run exceeded `JAIPH_RUN_TIMEOUT` seconds. | The run child's process group is terminated (SIGTERM → SIGKILL). |
 | `E_AGENT_CREDENTIALS` | Credential pre-flight detected a missing agent credential. | Run exits before launch. |
-| `E_ENV_MISSING` | A bare `--env KEY` or `trusted_envs` key is unset on the host. | Run exits before launch. |
-| `E_ENV_RESERVED` | `--env` or `trusted_envs` named a runtime-managed key. | Run exits before launch. |
+| `E_ENV_MISSING` | A bare `--env KEY` is unset on the host, or a script `use` key was not granted with `--env`. | Run exits before launch. |
+| `E_ENV_RESERVED` | `--env` or a script `use` clause named a runtime-managed key. | Run exits before launch. |
 | `E_ENV_INVALID` | `--env` key is not a POSIX-style name. | Run exits before launch. |
 
 ## Related

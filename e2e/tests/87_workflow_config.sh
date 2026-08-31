@@ -22,7 +22,7 @@ config {
   agent.backend = "cursor"
 }
 
-script log_scope_backend = `printf '%s:%s\n' "$1" "$JAIPH_AGENT_BACKEND" >> "$JAIPH_SCOPE_LOG"`
+script log_scope_backend use JAIPH_SCOPE_LOG = `printf '%s:%s\n' "$1" "$JAIPH_AGENT_BACKEND" >> "$JAIPH_SCOPE_LOG"`
 
 def first() {
   config {
@@ -42,7 +42,8 @@ export def main() {
 EOF
 
 unset JAIPH_AGENT_BACKEND 2>/dev/null || true
-jaiph run "${TEST_DIR}/scope_test.jh" >/dev/null
+# Script env is sterile: the log-file host var crosses only via `use` + `--env`.
+jaiph run --env JAIPH_SCOPE_LOG "${TEST_DIR}/scope_test.jh" >/dev/null
 
 actual="$(cat "${SCOPE_LOG}")"
 expected="$(printf '%s\n' 'first:claude' 'second:cursor')"
@@ -63,7 +64,7 @@ config {
   agent.backend = "cursor"
 }
 
-script log_rule_config = ```
+script log_rule_config use JAIPH_OVERRIDE_LOG = ```
 printf 'rule_model:%s\n' "$JAIPH_AGENT_MODEL" >> "$JAIPH_OVERRIDE_LOG"
 printf 'rule_backend:%s\n' "$JAIPH_AGENT_BACKEND" >> "$JAIPH_OVERRIDE_LOG"
 ```
@@ -91,7 +92,7 @@ EOF
 
 unset JAIPH_AGENT_MODEL 2>/dev/null || true
 unset JAIPH_AGENT_BACKEND 2>/dev/null || true
-jaiph run "${TEST_DIR}/override_test.jh" >/dev/null
+jaiph run --env JAIPH_OVERRIDE_LOG "${TEST_DIR}/override_test.jh" >/dev/null
 
 actual="$(cat "${OVERRIDE_LOG}")"
 expected="$(printf '%s\n' \
@@ -116,7 +117,7 @@ config {
   agent.backend = "cursor"
 }
 
-script log_nested_backend = `printf '%s:%s\n' "$1" "$JAIPH_AGENT_BACKEND" >> "$JAIPH_NESTED_LOG"`
+script log_nested_backend use JAIPH_NESTED_LOG = `printf '%s:%s\n' "$1" "$JAIPH_AGENT_BACKEND" >> "$JAIPH_NESTED_LOG"`
 
 export def main() {
   run log_nested_backend("child_backend")
@@ -130,7 +131,7 @@ config {
   agent.backend = "cursor"
 }
 
-script log_nested_backend = `printf '%s:%s\n' "$1" "$JAIPH_AGENT_BACKEND" >> "$JAIPH_NESTED_LOG"`
+script log_nested_backend use JAIPH_NESTED_LOG = `printf '%s:%s\n' "$1" "$JAIPH_AGENT_BACKEND" >> "$JAIPH_NESTED_LOG"`
 
 def caller() {
   config {
@@ -147,7 +148,7 @@ export def main() {
 EOF
 
 unset JAIPH_AGENT_BACKEND 2>/dev/null || true
-jaiph run "${TEST_DIR}/parent_nested.jh" >/dev/null
+jaiph run --env JAIPH_NESTED_LOG "${TEST_DIR}/parent_nested.jh" >/dev/null
 
 actual="$(cat "${NESTED_LOG}")"
 expected="$(printf '%s\n' \
@@ -166,7 +167,7 @@ ENV_LOG="${TEST_DIR}/env.log"
 export JAIPH_ENV_LOG="${ENV_LOG}"
 
 e2e::file "env_wins.jh" <<'EOF'
-script log_env_backend = `printf 'backend:%s\n' "$JAIPH_AGENT_BACKEND" >> "$JAIPH_ENV_LOG"`
+script log_env_backend use JAIPH_ENV_LOG = `printf 'backend:%s\n' "$JAIPH_AGENT_BACKEND" >> "$JAIPH_ENV_LOG"`
 
 export def main() {
   config {
@@ -177,7 +178,7 @@ export def main() {
 EOF
 
 export JAIPH_AGENT_BACKEND="cursor"
-jaiph run "${TEST_DIR}/env_wins.jh" >/dev/null
+jaiph run --env JAIPH_ENV_LOG "${TEST_DIR}/env_wins.jh" >/dev/null
 unset JAIPH_AGENT_BACKEND
 
 actual="$(cat "${ENV_LOG}")"
@@ -198,7 +199,7 @@ config {
   agent.backend = "cursor"
 }
 
-script log_sibling_env = `printf '%s:model=%s,backend=%s\n' "$1" "$JAIPH_AGENT_MODEL" "$JAIPH_AGENT_BACKEND" >> "$JAIPH_SIBLING_LOG"`
+script log_sibling_env use JAIPH_SIBLING_LOG = `printf '%s:model=%s,backend=%s\n' "$1" "$JAIPH_AGENT_MODEL" "$JAIPH_AGENT_BACKEND" >> "$JAIPH_SIBLING_LOG"`
 
 def alpha() {
   config {
@@ -223,7 +224,7 @@ EOF
 
 unset JAIPH_AGENT_MODEL 2>/dev/null || true
 unset JAIPH_AGENT_BACKEND 2>/dev/null || true
-jaiph run "${TEST_DIR}/sibling_isolation.jh" >/dev/null
+jaiph run --env JAIPH_SIBLING_LOG "${TEST_DIR}/sibling_isolation.jh" >/dev/null
 
 actual="$(cat "${SIBLING_LOG}")"
 expected="$(printf '%s\n' 'alpha:model=,backend=claude' 'beta:model=,backend=cursor')"
@@ -239,7 +240,7 @@ PARAM_LOG="${TEST_DIR}/param.log"
 export JAIPH_PARAM_LOG="${PARAM_LOG}"
 
 e2e::file "param_config.jh" <<'EOF'
-script log_model = `printf 'model:%s\n' "$JAIPH_AGENT_MODEL" >> "$JAIPH_PARAM_LOG"`
+script log_model use JAIPH_PARAM_LOG = `printf 'model:%s\n' "$JAIPH_AGENT_MODEL" >> "$JAIPH_PARAM_LOG"`
 
 def implement(model) {
   config {
@@ -254,7 +255,7 @@ export def main() {
 EOF
 
 unset JAIPH_AGENT_MODEL 2>/dev/null || true
-jaiph run "${TEST_DIR}/param_config.jh" >/dev/null
+jaiph run --env JAIPH_PARAM_LOG "${TEST_DIR}/param_config.jh" >/dev/null
 
 actual="$(cat "${PARAM_LOG}")"
 e2e::assert_equals "${actual}" "model:" \

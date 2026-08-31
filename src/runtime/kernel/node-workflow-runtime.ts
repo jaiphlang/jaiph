@@ -46,11 +46,7 @@ import { createStepIdleOutputWarn } from "./step-idle-warn";
 import { parseMaxSteps, maxStepsTrippedMessage } from "./max-steps";
 import { executeMockBodyDef, type MockBodyDef, type StepResult } from "./runtime-mock";
 import { resetMockResponses } from "./mock";
-import {
-  collectDeclaredTrustedEnvKeys,
-  resolveTrustedEnv,
-  trustedEnvKeysForWorkflow,
-} from "./trusted-env";
+import { buildScriptEnv, parseEnvGrant } from "./env-allowlist";
 import { linesOfDelimitedString } from "../string-lines";
 import {
   defaultPromptSleep,
@@ -106,12 +102,6 @@ type Scope = {
   env: NodeJS.ProcessEnv;
   /** Declared parameter names for the active workflow or rule. */
   declaredParamNames?: string[];
-  /**
-   * Host-snapshot values for this workflow's `trusted_envs` declaration.
-   * Injected only into `run`-step script spawns (`executeRunRef`); never into
-   * `scope.env`, so nested workflows and prompts cannot inherit them.
-   */
-  trustedEnv?: Record<string, string>;
 };
 
 type StepIO = {
@@ -175,10 +165,13 @@ export class NodeWorkflowRuntime {
   private cachedPromptRetryDelays: number[] | undefined;
   private cachedPromptRetryError: Error | undefined;
   private readonly promptRetryDelaysOverride: readonly number[] | undefined;
-  /** Pristine env snapshot `trusted_envs` keys resolve against (see trusted-env.ts). */
-  private readonly trustedEnvSnapshot: NodeJS.ProcessEnv;
-  /** Every trusted_envs key declared anywhere in the graph — the scrub set. */
-  private readonly declaredTrustedEnvKeys: Set<string>;
+  /**
+   * Pristine env snapshot captured at construction; a script's granted `use`
+   * keys resolve against it, never against a workflow's mutated scope env.
+   */
+  private readonly hostEnvSnapshot: NodeJS.ProcessEnv;
+  /** Keys the operator granted via `--env` (`JAIPH_ENV_GRANT`, see env-allowlist.ts). */
+  private readonly envGrantKeys: Set<string>;
 
   private getFrameStack(): Frame[] {
     return this.asyncFrameStack.getStore() ?? this.stack;
@@ -303,11 +296,11 @@ export class NodeWorkflowRuntime {
     // runs must not share one exhausted queue (see resetMockResponses).
     resetMockResponses();
     this.env = opts.env ?? process.env;
-    // Pristine env captured once at process start: `trusted_envs` keys resolve
+    // Pristine env captured once at process start: granted `use` keys resolve
     // against this snapshot, never against a calling workflow's scope env.
-    this.trustedEnvSnapshot = { ...this.env };
+    this.hostEnvSnapshot = { ...this.env };
+    this.envGrantKeys = parseEnvGrant(this.env);
     this.maxSteps = parseMaxSteps(this.env);
-    this.declaredTrustedEnvKeys = collectDeclaredTrustedEnvKeys(graph);
     this.cwd = opts.cwd ?? process.cwd();
     this.mockBodies = opts.mockBodies ?? new Map();
     this.sleep = opts.sleep ?? defaultPromptSleep;
@@ -435,7 +428,7 @@ export class NodeWorkflowRuntime {
    */
   async runRoot(defName: string, args: string[]): Promise<number> {
     this.emitter.emitRun("RUN_START", defName);
-    const rootEnv = this.scrubTrustedKeys({ ...this.env });
+    const rootEnv = this.scrubKernelKeys({ ...this.env });
     const rootScope: Scope = {
       filePath: this.graph.entryFile,
       vars: this.newScopeVars(this.graph.entryFile, undefined, rootEnv),
@@ -476,7 +469,7 @@ export class NodeWorkflowRuntime {
   }
 
   async runNamedDef(ref: string, args: string[]): Promise<{ status: number; output: string; error?: string; returnValue?: string }> {
-    const rootEnv = this.scrubTrustedKeys({ ...this.env });
+    const rootEnv = this.scrubKernelKeys({ ...this.env });
     const rootScope: Scope = {
       filePath: this.graph.entryFile,
       vars: this.newScopeVars(this.graph.entryFile, undefined, rootEnv),
@@ -558,12 +551,8 @@ export class NodeWorkflowRuntime {
       const childScope: Scope = {
         filePath: resolved.filePath,
         vars: metadataVars,
-        // Scrub graph-declared trusted keys so a workflow that did not declare
-        // them cannot see them ambiently (and prompts never can); this
-        // workflow's own declaration comes back via `trustedEnv` below.
-        env: this.scrubTrustedKeys(workflowEnv),
+        env: this.scrubKernelKeys(workflowEnv),
         declaredParamNames: resolved.def.params,
-        trustedEnv: this.resolveWorkflowTrustedEnv(resolved.filePath, resolved.def.metadata),
       };
       const ctx: WorkflowContext = {
         defName,
@@ -1328,9 +1317,9 @@ export class NodeWorkflowRuntime {
       if (mockBody !== undefined) {
         return this.executeManagedStep("script", ref, args, async () => this.dispatchMockBody(ref, mockBody, args));
       }
-      // Trusted `run` step: layer the calling workflow's trusted_envs values
-      // over its scope env for the script subprocess only.
-      const scriptEnv = scope.trustedEnv ? { ...scope.env, ...scope.trustedEnv } : scope.env;
+      // Sterile script env: base process mechanics + runtime contract keys +
+      // this script's `use` keys intersected with the `--env` grant.
+      const scriptEnv = this.buildScriptSpawnEnv(scope.env, resolvedScript.script.use);
       return this.executeManagedStep(
         "script",
         ref,
@@ -1686,11 +1675,13 @@ export class NodeWorkflowRuntime {
     if (!Array.isArray(resolvedArgs)) return resolvedArgs;
     const args = resolvedArgs;
     const scriptName = inlineScriptName(body, shebang);
+    // Inline scripts have no `use` clause, so they get the sterile base only.
+    const scriptEnv = this.buildScriptSpawnEnv(scope.env, undefined);
     return this.executeManagedStep(
       "script",
       scriptName,
       args,
-      async (io) => this.executeScript(scope.filePath, scriptName, args, scope.env, io),
+      async (io) => this.executeScript(scope.filePath, scriptName, args, scriptEnv, io),
     );
   }
 
@@ -1720,41 +1711,26 @@ export class NodeWorkflowRuntime {
   }
 
   /**
-   * Delete every graph-declared trusted_envs key from `env` (in place on the
-   * caller's fresh copy). Declaring a key anywhere in the file (or an import)
-   * makes it non-ambient for every workflow scope — it reaches subprocesses
-   * only through the declaring workflow's `run`-step injection.
+   * The audit-chain key and the journal path must never reach a script (or,
+   * via this scoped env, a prompt-agent) subprocess: without the key the
+   * audited workflow cannot forge a run_summary.jsonl chain that verifies,
+   * and without the path it is not even handed the file to overwrite
+   * (finding H-3). Deletes in place on the caller's fresh copy. `this.env`
+   * keeps both — the trusted kernel writes the journal and
+   * `appendRunSummaryLine` reads the path from `process.env`.
    */
-  private scrubTrustedKeys(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
-    for (const key of this.declaredTrustedEnvKeys) {
-      delete env[key];
-    }
-    // The audit-chain key and the journal path must never reach a script (or,
-    // via this scoped env, a prompt-agent) subprocess: without the key the
-    // audited workflow cannot forge a run_summary.jsonl chain that verifies,
-    // and without the path it is not even handed the file to overwrite
-    // (finding H-3). `this.env` keeps both — the trusted kernel writes the
-    // journal and `appendRunSummaryLine` reads the path from `process.env`.
+  private scrubKernelKeys(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
     delete env[CHAIN_KEY_ENV];
     delete env.JAIPH_RUN_SUMMARY_FILE;
     return env;
   }
 
-  /**
-   * Resolve the trusted env map for a workflow: entry-file declarations only
-   * (module-level sugar plus the workflow's own), resolved against the
-   * pristine snapshot. Imported modules get nothing — they must not be able
-   * to pull host secrets into their own steps.
-   */
-  private resolveWorkflowTrustedEnv(
-    filePath: string,
-    defMeta: DefMetadata | undefined,
-  ): Record<string, string> | undefined {
-    if (resolvePath(filePath) !== resolvePath(this.graph.entryFile)) return undefined;
-    const moduleMeta = this.graph.modules.get(filePath)?.ast.metadata;
-    const keys = trustedEnvKeysForWorkflow(moduleMeta, defMeta);
-    if (keys.length === 0) return undefined;
-    return resolveTrustedEnv(this.trustedEnvSnapshot, keys);
+  /** Sterile script subprocess env (see `buildScriptEnv` in env-allowlist.ts). */
+  private buildScriptSpawnEnv(
+    scopeEnv: NodeJS.ProcessEnv,
+    useKeys: readonly string[] | undefined,
+  ): NodeJS.ProcessEnv {
+    return buildScriptEnv(scopeEnv, useKeys, this.envGrantKeys, this.hostEnvSnapshot);
   }
 
   private applyMetadataScope(

@@ -18,7 +18,7 @@ This page is the authoritative syntactic reference for Jaiph: lexical rules, sta
 | Element | Rule |
 |---|---|
 | Identifier | `[A-Za-z_][A-Za-z0-9_]*`. |
-| Reserved keyword | The words `async`, `catch`, `channel`, `config`, `const`, `def`, `else`, `export`, `fail`, `false`, `for`, `if`, `import`, `in`, `log`, `logerr`, `logwarn`, `match`, `not`, `prompt`, `return`, `returns`, `run`, `script`, `send`, and `true`. A reserved word cannot be a parameter name or a top-level name in the unified namespace (`E_PARSE`). `not` is reserved but has no syntax yet. |
+| Reserved keyword | The words `async`, `catch`, `channel`, `config`, `const`, `def`, `else`, `export`, `fail`, `false`, `for`, `if`, `import`, `in`, `log`, `logerr`, `logwarn`, `match`, `not`, `prompt`, `return`, `returns`, `run`, `script`, `send`, `true`, and `use`. A reserved word cannot be a parameter name or a top-level name in the unified namespace (`E_PARSE`). `not` is reserved but has no syntax yet. |
 | Reference | `IDENT` (local) or `IDENT.IDENT` (module-qualified). |
 | Comment | Full-line `#` comment. Trailing `#` on a step line is not a comment. |
 | Blank line | Preserved between steps inside def bodies (as `blank_line` trivia). `jaiph format` collapses multiple consecutive body blanks to one and trims trailing blanks before `}`. Top-level blank lines are not preserved — the formatter emits one blank line between emitted sections. |
@@ -65,7 +65,9 @@ Values: double-quoted string (single-line; multi-line double-quoted is `E_PARSE`
 
 ```ebnf
 import_stmt        = "import" string "as" IDENT ;
-import_script_stmt = "import" "script" string "as" IDENT ;
+import_script_stmt = "import" "script" string "as" IDENT [ use_clause ] ;
+use_clause         = "use" ENV_KEY { ENV_KEY } ;
+ENV_KEY            = IDENT ;
 ```
 
 | Aspect | Rule |
@@ -73,6 +75,7 @@ import_script_stmt = "import" "script" string "as" IDENT ;
 | Module import path | Quoted string. `.jh` extension auto-appended when omitted. Relative resolution against the importing file's directory. |
 | Library fallback | When relative resolution finds no file and the path contains `/`, the path is split as `<lib-name>/<sub-path>` and resolved to `<workspace>/.jaiph/libs/<lib-name>/<sub-path>.jh`. |
 | Script import path | Quoted string. Relative-only (no library fallback). The path refers to a raw script file (no `.jh` appended). |
+| `use` clause | Optional, after the alias. Requests host env keys for this script's spawns, same clause as on a named `script` declaration — identifiers only (no quotes, no `${…}`; invalid names are `E_ENV_INVALID`, reserved keys `E_ENV_RESERVED`, same set as `--env`). A key reaches the subprocess only when granted with `--env KEY[=VALUE]`. `use` is reserved: it cannot be a script name or alias. See [Environment variables](env-vars.md#script-env). |
 | Missing target | `E_IMPORT_NOT_FOUND` at compile time. |
 | Alias collision | A duplicate module-import alias is `E_VALIDATE`. Script-import aliases (`import script … as name`) join the parse-time unified namespace shared with channels, defs, scripts, and top-level `const`, so a name clash there is `E_PARSE`. See [rule 4](#validation-rules). |
 | `export` | Marks a top-level `def` / `script` as public. Same-file code can call any name; across `import`, only names in `mod.exports` are reachable (`E_VALIDATE: "<name>" is not exported from module "<alias>"`). Zero exports means nothing is public. |
@@ -96,7 +99,7 @@ interp_ref   = "${" IDENT [ "." IDENT ] "}" ;
 
 All three string forms are equivalent: a bare `identifier`, a bare `${name}` interpolation ref, and a double-quoted string `"${name}"` all store and resolve identically. An unquoted shell-expansion form (`${var:-default}`, `${#var}`, etc.) is `E_PARSE`. Inside a double-quoted config value the same text is kept verbatim as a literal string, because config values, unlike a bare `const` RHS, have no shell-fallback rejection. See [Configuration](configuration.md#value-syntax).
 
-Allowed keys: `agent.model`, `agent.command`, `agent.backend`, `agent.trusted_workspace`, `agent.cursor_flags`, `agent.claude_flags`, `run.logs_dir`, `run.debug`, `run.recover_limit`, `module.name`, `module.version`, `module.description`, and `trusted_envs`. See [Configuration](configuration.md). The `trusted_envs` value is a quoted, space-separated list of host environment variable names (for example `trusted_envs = "GITHUB_TOKEN NPM_TOKEN"`). See [Trusted env keys](configuration.md#trusted-envs). Def-level `config` permits `agent.*`, `run.*`, and `trusted_envs` (`runtime.*` / `module.*` are `E_PARSE`).
+Allowed keys: `agent.model`, `agent.command`, `agent.backend`, `agent.trusted_workspace`, `agent.cursor_flags`, `agent.claude_flags`, `run.logs_dir`, `run.debug`, `run.recover_limit`, `module.name`, `module.version`, and `module.description`. See [Configuration](configuration.md). Def-level `config` permits `agent.*` and `run.*` (`runtime.*` / `module.*` are `E_PARSE`). `trusted_envs` was removed and is now the unknown-key error: scripts request host env keys with a `use` clause on the script declaration instead, granted by `--env` (see [Environment variables](env-vars.md#script-env)).
 
 The opening line is `config` followed by `{` with optional whitespace between them. Duplicate blocks are `E_PARSE` (`duplicate config block …`). Unknown keys are `E_PARSE` listing the allowed keys. Wrong value types are `E_PARSE`.
 
@@ -115,7 +118,7 @@ Crossings (`run` on a string, `prompt` on a script, `const x = scriptName`, `${s
 
 ```ebnf
 def_decl      = [ "export" ] "def" IDENT "(" [ param_list ] ")" "{" [ def_config ] { def_step } "}" ;
-script_decl   = "script" IDENT "=" script_rhs ;
+script_decl   = [ "export" ] "script" IDENT [ use_clause ] "=" script_rhs ;
 param_list    = IDENT { "," IDENT } ;
 ```
 
@@ -133,6 +136,8 @@ backtick_script_body = "`" script_text "`" ;
 fenced_script_block  = "```" [ LANG_TAG ] newline { script_line newline } "```" ;
 LANG_TAG             = IDENT ;
 ```
+
+The optional `use` clause (`script aaa use GITHUB_TOKEN NPM_TOKEN = …`) sits between the name and `=`: one clause, space-separated env key identifiers. It requests host keys for this script's subprocess; each key must also be granted with `--env KEY[=VALUE]` at run time or `jaiph run` / `serve` / `mcp` refuse to start (`E_ENV_MISSING`). Script env is otherwise sterile — see [Environment variables](env-vars.md#script-env). Invalid key names are `E_ENV_INVALID`; reserved keys are `E_ENV_RESERVED` (same set as `--env`). `use` on defs, `run` call sites, or prompts is not syntax.
 
 The lang tag maps directly to `#!/usr/bin/env <tag>`. Combining a lang tag with a leading `#!` shebang in the body is an error. With neither, the emitter writes `#!/usr/bin/env bash`.
 

@@ -135,10 +135,6 @@ export function interpolateDefMetadata(
       out.run.logsDir = interpolateStringField(metadata.run.logsDir, vars, env);
     }
   }
-  // trusted_envs keys are literal env var names — never interpolated.
-  if (metadata.trustedEnvs) {
-    out.trustedEnvs = [...metadata.trustedEnvs];
-  }
   if (metadata.module) {
     out.module = {};
     if (metadata.module.name !== undefined) {

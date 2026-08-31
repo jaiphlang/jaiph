@@ -30,7 +30,7 @@ import {
 } from "../shared/errors";
 import { readMetaFields, readReturnValue } from "../shared/run-meta";
 import { detectWorkspaceRoot } from "../shared/paths";
-import { hasHelpFlag, parseArgs } from "../shared/usage";
+import { hasHelpFlag, parseArgs, resolveEnvPairs } from "../shared/usage";
 import type { jaiphModule } from "../../types";
 
 const RUN_USAGE =
@@ -58,9 +58,9 @@ import {
   formatRunningBottomLine,
 } from "../run/progress";
 import { loadMergedHooks, registerHooksSubscriber, isProjectHooksTrusted } from "../run/hooks";
-import { resolveRuntimeEnv, resolveEnvPairs } from "../run/env";
+import { resolveRuntimeEnv } from "../run/env";
 import { preflightAgentCredentials } from "../run/preflight-credentials";
-import { planTrustedEnvs } from "../run/trusted-envs";
+import { planUseEnvs } from "../run/use-envs";
 import { colorize, formatJaiphRunningBannerLines } from "../run/display";
 import { createRunEmitter } from "../run/emitter";
 import { exportRunTelemetry } from "../telemetry/otlp";
@@ -148,14 +148,17 @@ export async function runWorkflow(rest: string[]): Promise<number> {
     const chainKey = generateChainKey();
     runtimeEnv[CHAIN_KEY_ENV] = chainKey;
     Object.assign(runtimeEnv, extraEnv);
+    // `--env` is the grant: scripts receive a `use` key only when its name is
+    // in this list. Set unconditionally so a stale inherited grant never leaks.
+    runtimeEnv.JAIPH_ENV_GRANT = Object.keys(extraEnv).join(",");
     const credPreflight = preflightAgentCredentials({
       mod,
       inputAbs,
       runtimeEnv,
     });
     if (reportPreflight(credPreflight.warnings, credPreflight.errors)) return 1;
-    const trustedPlan = planTrustedEnvs(graph, extraEnv, process.env);
-    if (reportPreflight(trustedPlan.warnings, trustedPlan.errors)) return 1;
+    const usePlan = planUseEnvs(graph, new Set(Object.keys(extraEnv)));
+    if (reportPreflight([], usePlan.errors)) return 1;
 
     process.stdout.write(formatJaiphRunningBannerLines(basename(inputAbs)));
 
@@ -191,7 +194,6 @@ export async function runWorkflow(rest: string[]): Promise<number> {
       workspace: workspaceRoot,
     });
 
-    Object.assign(runtimeEnv, trustedPlan.resolved, extraEnv);
     const execResult = spawnHostRun(runtimeEnv, outDir, workspaceRoot, metaFile, "main", runArgs);
 
     const signalHandlers = setupRunSignalHandlers(execResult, {
@@ -275,6 +277,10 @@ async function runWorkflowRaw(
     const chainKey = runtimeEnv[CHAIN_KEY_ENV] ?? generateChainKey();
     runtimeEnv[CHAIN_KEY_ENV] = chainKey;
     Object.assign(runtimeEnv, extraEnv);
+    // Same `--env` grant hand-off as the interactive path. Raw mode skips the
+    // graph-wide `use` pre-flight (it loads no graph host-side); an ungranted
+    // `use` key is simply absent in the script spawn.
+    runtimeEnv.JAIPH_ENV_GRANT = Object.keys(extraEnv).join(",");
     const { scriptsDir } = buildScripts(inputAbs, outDir, workspaceRoot);
     runtimeEnv.JAIPH_SCRIPTS = scriptsDir;
     const metaFile = join(outDir, `.jaiph-run-meta-${Date.now()}-${process.pid}.txt`);
