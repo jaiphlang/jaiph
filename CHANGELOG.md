@@ -2,15 +2,19 @@
 
 ## Summary
 
-- **Language: `def`, `main`, private-by-default.** One interpreted callable (`def`); `jaiph run` requires `export def main` in the input file (optional in libraries); names are private across `import` unless listed in `export`; `rule`, `ensure`, `workflow`, and `default` are removed. The public noun is `def` / `run`, not workflow.
+## All changes
 
-- **Removed: the first-party Docker sandbox.** `jaiph run`, `jaiph mcp`, and `jaiph serve` execute on the host. The `--unsafe` / `--inplace` / `--yes` consent flags, the `JAIPH_UNSAFE` / `JAIPH_INPLACE*` / `JAIPH_DOCKER_*` env vars, and in-file `runtime.docker_*` keys are gone (`runtime.docker_*` is now an unknown-key error). Isolation is an outer concern — wrap `jaiph` in your own container, pod, or CI runner ([Deploy jaiph](docs/deploy.md)). Secret isolation stays: the `prompt` env scrub, journal redaction, and `--env`.
+# 0.14.0
 
-- **Sterile script env: `use` + `--env`, `trusted_envs` removed.** Script subprocesses (named `script`, `import script`, inline) no longer inherit the host environment. A script receives only process basics, the `JAIPH_*` script contract keys (`JAIPH_WORKSPACE`, `JAIPH_SCRIPTS`, `JAIPH_RUN_DIR`, `JAIPH_ARTIFACTS_DIR`, plus a defined `JAIPH_AGENT_MODEL`), and the host keys its declaration requests with a `use` clause (`script aaa use GITHUB_TOKEN = …`, `import script "./gh.sh" as gh use GITHUB_TOKEN`) — each granted by the operator with `--env KEY[=VALUE]`. Host presence without the flag is not a grant. `jaiph run` / `serve` / `mcp` pre-flight every `use` key in the import graph (`E_ENV_MISSING` when ungranted); `jaiph test` accepts `--env` but never hard-fails on an ungranted `use` key. The `trusted_envs` config key is removed (`E_PARSE` unknown config key).
+## Summary
 
-- **Language: named prompts with parameters and `use`.** `prompt name(params) [use KEY …] = "…"` (or `"""…"""`, with an optional `returns` schema) defines a reusable, parameterised prompt in the module namespace next to `script` / `def` / `const`. Invoke it with `prompt name(args)` or `const out = prompt name(args)` — parentheses required, arity checked. Bare `prompt name` (no `()`) stays the existing identifier-as-body form, and `run name()` on a named prompt is `E_VALIDATE`. A named prompt's `use` clause injects the granted host keys into that invocation's agent subprocess on top of the prompt env scrub, under the same `--env` grant and `E_ENV_MISSING` pre-flight as a script; anonymous `prompt` steps still receive no `--env` secrets.
-
-- **Language: nested declarations inside a def.** A def body may declare a nested `const`, `script`, `def`, or named `prompt` to scope a helper to the one def that uses it instead of the module namespace. Nested names are sequential local bindings, not hoisted: visible only after their declaration in the enclosing def, and a nested name may shadow a module-level name of the same kind. `export` on a nested declaration is `E_PARSE`. A nested `def` and a nested named prompt are interpreted in-process and interpolate the enclosing def's params and `const`s; a nested `script` stays a sterile subprocess that receives enclosing values only through argv (`run inner(x)` → `$1`), with its own `use` and `--env` grant.
+- **Language: `def` and `run`, private by default.** One interpreted callable; `jaiph run` requires `export def main` (optional in libraries). Names are private across `import` unless listed in `export`. `workflow` / `rule` / `ensure` / `default` are gone.
+- **No first-party Docker sandbox.** `jaiph run`, `jaiph mcp`, and `jaiph serve` execute on the host. Isolate with your own container, pod, or CI runner ([Deploy jaiph](docs/deploy.md)). Secret isolation stays: the `prompt` env scrub, journal redaction, and `--env`.
+- **Sterile script env.** A script sees process basics, the `JAIPH_*` contract keys, and host keys it lists in `use` — each granted with `--env`. Host presence alone is not a grant. `trusted_envs` is removed.
+- **Named prompts.** `prompt name(params) [use KEY …] = "…"` is reusable next to `script` / `def`. `use` injects granted keys into that agent only; anonymous `prompt` steps stay sterile.
+- **Nested declarations.** A def may declare a local `const`, `script`, `def`, or named `prompt`. Nested `import` / `config` (including inside `catch` / `recover`) is `E_PARSE`.
+- **`send payload -> channel`.** `channel <- payload` is `E_PARSE`.
+- **Editor highlighting.** VS Code, Zed, and the docs highlighter cover `use`, `import script`, and named prompts.
 
 ## All changes
 
