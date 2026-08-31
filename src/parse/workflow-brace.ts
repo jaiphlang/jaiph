@@ -43,6 +43,13 @@ export type BlockParseOpts = {
    * this flag, `} else {` is parsed as a normal statement line (and errors).
    */
   allowElseTerminator?: boolean;
+  /**
+   * When set (nested `def` bodies), reject `import` / `import script` and
+   * `config { … }` lines as parse errors instead of letting them fall
+   * through to the shell handler — same class as the nested `export`
+   * rejection. Top-level def bodies and module level are unaffected.
+   */
+  inNestedDef?: boolean;
 };
 
 /** Parse statements until a closing `}` at the current block level. */
@@ -108,6 +115,25 @@ export function parseBraceBlockBody(
       opts.onConfigBlock(metadata, innerNo);
       idx = nextIndex;
       continue;
+    }
+    // Nested defs carry no config scope and cannot re-import modules; without
+    // these rejections both lines would fall through to the shell handler and
+    // run under `sh -c` (same class as the nested `export` rejection).
+    if (opts?.inNestedDef && /^config\s*\{/.test(inner)) {
+      fail(
+        filePath,
+        "config blocks are not allowed inside a nested def; move config to the top of the enclosing def or module",
+        innerNo,
+        innerRaw.indexOf("config") + 1,
+      );
+    }
+    if (opts?.inNestedDef && /^import\b/.test(inner)) {
+      fail(
+        filePath,
+        "import declarations are not allowed inside a nested def; move the import to the top of the file",
+        innerNo,
+        innerRaw.indexOf("import") + 1,
+      );
     }
     // Reject route declarations at body level: routes belong at the top of the file.
     // `send … -> channel` is a send statement, not a route.
@@ -310,7 +336,8 @@ function parseIfArm(c: BlockCtx, headIdx: number, isElseIf: boolean): BlockResul
     fail(c.filePath, `operator "${operator}" requires a regex operand (/pattern/), not a string`, headIdx + 1, ifCol);
   }
   const thenResult = parseBraceBlockBody(
-    c.filePath, c.lines, headIdx + 1, headIdx + 1, c.trivia, { allowElseTerminator: true },
+    c.filePath, c.lines, headIdx + 1, headIdx + 1, c.trivia,
+    { allowElseTerminator: true, inNestedDef: c.opts?.inNestedDef },
   );
   if (isElseIf && thenResult.steps.length === 0) {
     fail(c.filePath, '"else if" body cannot be empty', headIdx + 1, ifCol);
@@ -323,6 +350,7 @@ function parseIfArm(c: BlockCtx, headIdx: number, isElseIf: boolean): BlockResul
   if (thenResult.closedWithElse) {
     const elseResult = parseBraceBlockBody(
       c.filePath, c.lines, thenResult.nextIdx, thenResult.nextIdx, c.trivia,
+      { inNestedDef: c.opts?.inNestedDef },
     );
     return { step: { ...base, elseBody: elseResult.steps }, nextIdx: elseResult.nextIdx };
   }
@@ -414,7 +442,7 @@ function tryParseLocalDef(c: BlockCtx): BlockResult | null {
   const loc = { line: lineNo, col: c.innerRaw.indexOf("def") + 1 };
   const def: Def = { name: header.name, params: header.params, comments: [], steps: [], loc };
   const { steps, nextIdx } = parseBraceBlockBody(
-    c.filePath, c.lines, c.idx + 1, lineNo, c.trivia, { preserveBlankLines: true },
+    c.filePath, c.lines, c.idx + 1, lineNo, c.trivia, { preserveBlankLines: true, inNestedDef: true },
   );
   def.steps.push(...steps);
   stripTrailingBlankLines(def.steps);

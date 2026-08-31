@@ -7,12 +7,20 @@ import type { PromptConfig } from "./prompt-config";
 
 const CODEX_DEFAULT_MODEL = "gpt-4o";
 
-/** Run a prompt against the OpenAI Chat Completions API with streaming. */
+/**
+ * Run a prompt against the OpenAI Chat Completions API with streaming.
+ *
+ * `requestEnv` is the environment for this request: the scrubbed prompt env
+ * plus a named prompt's granted `use` keys (see `runBackend`). Codex has no
+ * subprocess to inherit it, so nothing here reads it yet, but the parameter
+ * keeps the `use` contract uniform across backends and lets tests observe it.
+ */
 export function runCodexBackend(
   config: PromptConfig,
   promptText: string,
   writer: StreamWriter,
   stderr: NodeJS.WritableStream,
+  requestEnv: NodeJS.ProcessEnv = {},
 ): Promise<{ final: string; status: number }> {
   if (!config.codexApiKey) {
     stderr.write(
