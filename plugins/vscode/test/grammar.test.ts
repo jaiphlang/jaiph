@@ -14,6 +14,13 @@ test("current .jh constructs highlight with the expected scopes", async () => {
     ["export", "storage.modifier.jaiph"],
     ["script", "storage.type.script.jaiph"],
     ["channel", "storage.type.channel.jaiph"],
+    ["use", "keyword.control.use.jaiph"],
+    ["GITHUB_TOKEN", "variable.other.env.jaiph"],
+    ["NPM_TOKEN", "variable.other.env.jaiph"],
+    ["analyze", "entity.name.function.prompt.jaiph"],
+    ["describe", "entity.name.function.prompt.jaiph"],
+    ["prompt", "storage.type.prompt.jaiph"],
+    ["gh", "entity.name.namespace.jaiph"],
     // Command keywords (including ones the old extension never knew)
     ["run", "keyword.control.command.jaiph"],
     ["prompt", "keyword.control.command.jaiph"],
@@ -94,6 +101,7 @@ test("stale surface from the old extension is not highlighted", async () => {
     "runtime.docker_enabled",
     "runtime.docker_image",
     "runtime.docker_timeout_seconds",
+    "trusted_envs",
   ]) {
     assert.ok(
       !hasScope(t, stale, "variable.other.property.jaiph"),

@@ -53,7 +53,7 @@ test("keywords, comments, and strings highlight in current.jh", () => {
   const caps = runQuery("highlights.scm", "current.jh");
 
   const keywords = [
-    "import", "export", "config", "channel", "script", "def",
+    "import", "export", "config", "channel", "script", "def", "use",
     "const", "run", "prompt", "log", "logerr", "logwarn", "fail",
     "return", "recover", "catch", "if", "else", "for", "in", "match", "async",
     "returns",

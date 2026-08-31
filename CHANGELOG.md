@@ -30,6 +30,8 @@
 
 - **Removed — first-party Docker sandbox:** no Docker driver, no digest-pinned runtime image, no snapshot/inplace modes, no `--unsafe` / `--inplace` / `--yes` sandbox consent, no `JAIPH_UNSAFE` / `JAIPH_INPLACE*` / `JAIPH_DOCKER_*`, no in-file `runtime.docker_*`. `prompt` env scrub, journal redaction, and `--env` stay.
 
+- **Plugins / Docs highlighter:** VS Code TextMate and Zed Tree-sitter highlight `use`, `import script`, named `prompt name(params)`, and the `use KEY` env identifiers; `trusted_envs` is no longer treated as a live config key. The docs highlighter keyword set includes `use`.
+
 - **Docs — `def` / `run` teaching and `/tutorials/first-run`:** the current docs (landing, README, CLI, MCP, serve, grammar, tutorials, [Write & run tests](docs/testing.md)) match the `def` / `run` contracts. The first tutorial permalink is `/tutorials/first-run` (`docs/first-run.md`, title **Your first run**); `/tutorials/first-workflow`, `/getting-started`, and `/getting-started.md` redirect to it. How-to titles are **Serve defs as MCP tools** and **Serve defs over HTTP**. Live trees document `def main` / `PASS def main`. MCP `serverInfo.title` is `"Jaiph"`. Test authoring uses `mock def` / `run <def>()`; `mock workflow` / `mock rule` are parse errors. The docs highlighter keywords match the live language (`def`, not `local` / `rule` / `workflow` / `ensure`). VS Code no longer paints `inbox` as a send keyword.
 
 # 0.13.0

@@ -5,6 +5,7 @@ config {
   runtime.docker_enabled = true
   runtime.docker_image = "stale"
   runtime.docker_timeout_seconds = 600
+  trusted_envs = "GITHUB_TOKEN"
 }
 
 export def main() {
