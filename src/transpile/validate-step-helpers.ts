@@ -348,6 +348,26 @@ function lookupCalleeParams(
 
 // -- Misc small helpers -----------------------------------------------------
 
+/** Resolve a named prompt's `PromptDef` (local or imported) for schema / param lookup. */
+export function resolvePromptDef(
+  ref: string,
+  ast: jaiphModule,
+  refCtx: RefResolutionContext,
+): { params: string[]; returns?: string } | undefined {
+  const parts = ref.split(".");
+  if (parts.length === 1) {
+    return ast.prompts?.find((p) => p.name === parts[0]);
+  }
+  if (parts.length === 2) {
+    const [alias, name] = parts;
+    const importedFile = refCtx.importsByAlias.get(alias);
+    if (!importedFile) return undefined;
+    const importedAst = refCtx.importedAstCache.get(importedFile);
+    return importedAst?.prompts?.find((p) => p.name === name);
+  }
+  return undefined;
+}
+
 export function extractConstScriptName(rhs: string): string | undefined {
   const trimmed = rhs.trim();
   if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(trimmed)) return trimmed;
@@ -393,6 +413,9 @@ export function makeSubEnv(
     localDefs: ctx.localDefs,
     localScripts: ctx.localScripts,
     importsByAlias: ctx.importsByAlias,
-    lookupImported: makeImportedKindLookup(ctx),
+    lookupImported: (alias, name) => {
+      const k = makeImportedKindLookup(ctx)(alias, name);
+      return k === "def" || k === "script" ? k : undefined;
+    },
   };
 }

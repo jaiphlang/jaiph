@@ -131,9 +131,9 @@ Jaiph rejects some names before it spawns anything. A bare `--env KEY` that is u
 
 Scripts are **sterile by default**. A script subprocess (named `script`, `import script`, or inline script) receives only the base environment (`PATH`, `HOME`, locale, TLS/proxy settings), the script runtime contract keys (`JAIPH_WORKSPACE`, `JAIPH_SCRIPTS`, `JAIPH_RUN_DIR`, `JAIPH_ARTIFACTS_DIR`, the config-scoped `JAIPH_AGENT_BACKEND` when set, plus `JAIPH_AGENT_MODEL` kept defined for `set -u`), and the host keys granted through `use` + `--env`. The rest of the host environment — including agent credentials — never reaches a script.
 
-The `use` clause on the script declaration is the request; `--env` is the only grant. A script `use GITHUB_TOKEN` receives the key iff the run was started with `--env GITHUB_TOKEN` (host value) or `--env GITHUB_TOKEN=VALUE` (explicit value). Presence of the key on the host environment without the flag is not enough. `jaiph run`, `jaiph serve`, and `jaiph mcp` pre-flight every `use` key in the import graph and abort with `E_ENV_MISSING` when one was not granted; extra `--env` keys nothing `use`s are allowed. `jaiph test` skips that pre-flight — with `--env` the keys are injected into matching `use` spawns, and without it the key is simply absent.
+The `use` clause on a script declaration or a [named prompt](language.md#named-prompts) definition is the request; `--env` is the only grant. A `use GITHUB_TOKEN` receives the key iff the run was started with `--env GITHUB_TOKEN` (host value) or `--env GITHUB_TOKEN=VALUE` (explicit value). Presence of the key on the host environment without the flag is not enough. `jaiph run`, `jaiph serve`, and `jaiph mcp` pre-flight every `use` key in the import graph — script and named-prompt keys alike — and abort with `E_ENV_MISSING` when one was not granted; extra `--env` keys nothing `use`s are allowed. `jaiph test` skips that pre-flight — with `--env` the keys are injected into matching `use` spawns, and without it the key is simply absent.
 
-Prompt agent subprocesses are unaffected by `--env`: Jaiph spawns every prompt backend with a fail-closed scrub of the environment (`scrubPromptEnv`). The scrub forwards only the base environment (`PATH`, `HOME`, locale, proxies, `CLAUDE_CONFIG_DIR`, and so on), the `JAIPH_*` control keys, and that backend's own credential keys — never `--env`-granted secrets.
+Anonymous prompt steps (`prompt "…"`, `prompt """…"""`) are unaffected by `--env`: Jaiph spawns every prompt backend with a fail-closed scrub of the environment (`scrubPromptEnv`). The scrub forwards only the base environment (`PATH`, `HOME`, locale, proxies, `CLAUDE_CONFIG_DIR`, and so on), the `JAIPH_*` control keys, and that backend's own credential keys — never `--env`-granted secrets. A **named prompt** definition may carry the same `use` clause as a script (`prompt analyze(log) use GITHUB_TOKEN = …`); its granted `use` keys are injected into that invocation's agent subprocess on top of the scrub, under the identical `--env`-only grant and `E_ENV_MISSING` pre-flight. Backend credentials stay the prompt default and are never written as `use`.
 
 ## Telemetry variables
 
@@ -187,8 +187,8 @@ The error codes below surface during `jaiph run` / `jaiph serve` / `jaiph mcp` i
 |---|---|---|
 | `E_RUN_TIMEOUT` | The run exceeded `JAIPH_RUN_TIMEOUT` seconds. | The run child's process group is terminated (SIGTERM → SIGKILL). |
 | `E_AGENT_CREDENTIALS` | Credential pre-flight detected a missing agent credential. | Run exits before launch. |
-| `E_ENV_MISSING` | A bare `--env KEY` is unset on the host, or a script `use` key was not granted with `--env`. | Run exits before launch. |
-| `E_ENV_RESERVED` | `--env` or a script `use` clause named a runtime-managed key. | Run exits before launch. |
+| `E_ENV_MISSING` | A bare `--env KEY` is unset on the host, or a script or named-prompt `use` key was not granted with `--env`. | Run exits before launch. |
+| `E_ENV_RESERVED` | `--env` or a `use` clause (on a script or named prompt) named a runtime-managed key. | Run exits before launch. |
 | `E_ENV_INVALID` | `--env` key is not a POSIX-style name. | Run exits before launch. |
 
 ## Related

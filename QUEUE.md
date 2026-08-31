@@ -14,52 +14,6 @@ Process rules:
 
 ***
 
-## Named prompts with parameters and `use` #dev-ready
-
-Context: Prompts exist only as def-body steps (`prompt_stmt`). `prompt IDENT` today means the prompt **text** is the in-scope identifier `IDENT` (`prompt_body` includes IDENT). Scripts can declare `use KEY` on the definition (sterile spawn + `--env` grant). Prompts have no definition site, so a prompt cannot request extra host keys without a call-site `use` (which this language is not adding) or a named prompt form.
-
-Problem: A prompt agent that must see `GITHUB_TOKEN` (or any non-backend host key) has no definition-site `use`. Anonymous `prompt """…"""` must stay sterile extra-keys (existing `scrubPromptEnv`). Backend credentials (`ANTHROPIC_API_KEY` / `CLAUDE_CODE_OAUTH_TOKEN` / …) stay the prompt default and are **not** written as `use`.
-
-Remediation — implement exactly this:
-
-1. **Module-level named prompt**, same namespace as `script` / `def` / `const` / channels:
-   ```
-   prompt analyze_ci(log) use GITHUB_TOKEN = """
-     Look at this CI log:
-     ${log}
-   """
-
-   prompt analyze_ci(log) use GITHUB_TOKEN = """
-     …
-   """
-   returns "{ summary: string }"
-   ```
-   - Signature: `prompt` IDENT `(` [param_list] `)` [ `use` IDENT { IDENT } ] `=` prompt_rhs.
-   - RHS: the same bodies as today’s prompt step — double-quoted single line or `"""…"""` (opening `"""` ends the line; closing `"""` on its own line). No triple-backtick fence. Interpolation in the RHS is `${name}` (Jaiph orchestration), including parameters.
-   - Optional `returns` schema on the definition (same schema rules as today’s step-level `returns`). A `returns` named prompt used without `const` capture is `E_PARSE`, same as today.
-   - `export prompt` allowed, same export rules as `export script` / `export def`.
-   - `use` clause: same grammar and reserved-key rules as `use` on scripts. If script `use` is not in the tree yet, implement the shared clause parser here and wire preflight for these keys (same `--env`-only grant as scripts: flag required, host presence insufficient). If script `use` already exists, reuse it.
-
-2. **Invoke with parentheses:** `prompt analyze_ci(log)` or `const out = prompt analyze_ci(log)`. Zero args: `prompt analyze_ci()`. Bare `prompt analyze_ci` (no `()`) remains the **existing** identifier-as-body form (prompt text = value of `analyze_ci`). Do not remove that form. Arity must match the named prompt’s param list (`E_VALIDATE`), including `()`.
-
-3. **`run analyze_ci()` is invalid** when `analyze_ci` is a named prompt (`E_VALIDATE`: prompts are invoked with `prompt`, not `run`). Scripts/defs stay `run`.
-
-4. **Env at the agent subprocess.** Named prompt `use KEY` injects KEY into that invocation’s agent env (on top of `scrubPromptEnv` for that backend). Anonymous `prompt "…"` / `prompt """…"""` still do not receive `--env` secrets. Do not add `use` to the anonymous step form.
-
-5. **Preflight.** Named-prompt `use` keys join the import-graph `use` set. `jaiph run` / `serve` / `mcp` require each on `--env`. `jaiph test` does not hard-fail that preflight (same as scripts).
-
-6. **Docs:** `docs/grammar.md`, `docs/language.md`, `docs/jaiph-skill.md`. State the `prompt name()` vs `prompt name` distinction. Parentheses-everywhere applies to named prompt calls.
-
-### Acceptance criteria
-- Parse + format round-trip for `prompt foo(a) use GITHUB_TOKEN = "…"` and the `"""` form with `returns`.
-- `const x = prompt foo("hi")` interpolates `${a}` / param `a` in the named body and invokes the agent; a test with a mocked prompt asserts the expanded text contains `hi`.
-- `prompt foo` with no `()` still uses identifier-as-body when `foo` is a string binding; `prompt foo()` invokes the named prompt when `foo` is a `prompt` definition (`E_VALIDATE` if the name is the wrong kind).
-- `run foo()` when `foo` is a named prompt is `E_VALIDATE`.
-- Spawn/env test: named prompt `use GITHUB_TOKEN` plus `--env GITHUB_TOKEN` puts the value in the agent child env; an anonymous `prompt "x"` in the same def does not get `GITHUB_TOKEN`.
-- `jaiph run` without `--env GITHUB_TOKEN` on a file that `use`s it on a named prompt fails preflight with `E_ENV_MISSING`.
-- Wrong arity `prompt foo()` vs `prompt foo(a, b)` is `E_VALIDATE`.
-- `npm run build`, `npm test`, and `npm run test:e2e` pass.
-
 ## Nested script, named prompt, const, and def inside defs #dev-ready
 
 Context: Top-level modules already hold `const`, `script`, `def`, and (after named prompts exist) `prompt` in one namespace. A def body already allows `const` as a **step** (`const_decl_step`). It does not allow nested `script`, named `prompt`, or `def`. Scripts and named prompts therefore cannot be scoped to the def that uses them; everything lives at module scope.

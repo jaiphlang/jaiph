@@ -1,6 +1,7 @@
 import type { Expr } from "../types";
 import {
   BARE_SEND_REF_MSG,
+  PROMPT_REF_EXPECT,
   RUN_TARGET_REF_EXPECT,
   validateRef,
 } from "./validate-ref-resolution";
@@ -19,6 +20,7 @@ import {
   makeImportedKindLookup,
   makeSubEnv,
   promptBareIdentifier,
+  resolvePromptDef,
   validateArgVarRefs,
   validateArity,
   validateDotFieldRefs,
@@ -184,6 +186,12 @@ function validatePromptExpr(
       `prompt is not a valid ${label} value`,
     );
   }
+  // Named-prompt invocation: `prompt foo(args)`. Body / returns / use live on
+  // the module-level PromptDef; validate it as a call site.
+  if (expr.name !== undefined) {
+    validateNamedPromptCall(expr, ctx);
+    return;
+  }
   const promptIdent = promptBareIdentifier(expr.raw);
   if (promptIdent && ctx.localScripts.has(promptIdent)) {
     ctx.diag.error(
@@ -212,6 +220,53 @@ function validatePromptExpr(
     ctx.promptSchemas,
     ctx.recoverBindings,
     ctx.localScripts,
+  );
+}
+
+function validateNamedPromptCall(
+  expr: Extract<Expr, { kind: "prompt" }>,
+  ctx: ValidatorCtx,
+): void {
+  const ref = expr.name!;
+  const loc = expr.loc;
+  validateNoShellRedirection(ctx.diag, ctx.ast.filePath, loc, "prompt", expr.args);
+  validateNestedManagedCallArgs(ctx.diag, ctx.ast.filePath, loc, expr.args);
+  validateRef({ value: ref, loc }, ctx.ast, ctx.refCtx, { mode: "expect", expect: PROMPT_REF_EXPECT });
+  const def = resolvePromptDef(ref, ctx.ast, ctx.refCtx);
+  if (def) {
+    const argCount = expr.args?.length ?? 0;
+    if (argCount !== def.params.length) {
+      ctx.diag.error(
+        ctx.ast.filePath,
+        loc.line,
+        loc.col,
+        "E_VALIDATE",
+        `prompt "${ref}" expects ${def.params.length} argument(s) (${def.params.join(", ") || "none"}), but got ${argCount}`,
+      );
+    }
+  }
+  validateArgVarRefs(ctx.diag, ctx.ast.filePath, loc, expr.args, ctx.knownVars, ctx.recoverBindings, ctx);
+}
+
+/**
+ * A named prompt whose definition carries a `returns` schema must be captured
+ * (same rule as an inline `prompt … returns`). Resolves the schema from the
+ * PromptDef; the exec-step visitor calls this once it knows `captureName`.
+ */
+export function validateNamedPromptReturnsCapture(
+  expr: Extract<Expr, { kind: "prompt" }>,
+  captureName: string | undefined,
+  ctx: ValidatorCtx,
+): void {
+  if (expr.name === undefined || captureName) return;
+  const def = resolvePromptDef(expr.name, ctx.ast, ctx.refCtx);
+  if (def?.returns === undefined) return;
+  ctx.diag.error(
+    ctx.ast.filePath,
+    expr.loc.line,
+    expr.loc.col,
+    "E_PARSE",
+    `prompt "${expr.name}" has a "returns" schema and must capture to a variable (e.g. const result = prompt ${expr.name}(...))`,
   );
 }
 

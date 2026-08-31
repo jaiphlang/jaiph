@@ -93,3 +93,40 @@ test("planUseEnvs: use keys are collected across the whole import graph, incl. i
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("planUseEnvs: an ungranted use key on a named prompt is E_ENV_MISSING", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-use-envs-prompt-"));
+  try {
+    const entry = writeFlow(root, "flow.jh", [
+      'prompt analyze(log) use GITHUB_TOKEN = "Look at ${log}"',
+      "export def main() {",
+      '  const l = "x"',
+      "  prompt analyze(l)",
+      "}",
+    ]);
+    const plan = planUseEnvs(loadModuleGraph(entry, root), new Set());
+    assert.equal(plan.errors.length, 1);
+    assert.match(plan.errors[0], /E_ENV_MISSING/);
+    assert.match(plan.errors[0], /prompt analyze .*uses GITHUB_TOKEN/);
+    assert.match(plan.errors[0], /--env GITHUB_TOKEN/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("planUseEnvs: a granted named-prompt use key passes", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-use-envs-prompt-ok-"));
+  try {
+    const entry = writeFlow(root, "flow.jh", [
+      'prompt analyze(log) use GITHUB_TOKEN = "Look at ${log}"',
+      "export def main() {",
+      '  const l = "x"',
+      "  prompt analyze(l)",
+      "}",
+    ]);
+    const plan = planUseEnvs(loadModuleGraph(entry, root), new Set(["GITHUB_TOKEN"]));
+    assert.deepEqual(plan.errors, []);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

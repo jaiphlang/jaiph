@@ -17,10 +17,10 @@ const TEST_USAGE =
   "Run *.test.jh modules. With no path, discovers every *.test.jh under the workspace\n" +
   "root. With a directory, runs every *.test.jh underneath (recursive). With a single\n" +
   "*.test.jh file, runs only that file.\n\n" +
-  "  --env KEY=VALUE grant KEY to matching script `use` clauses (repeatable);\n" +
-  "                  --env KEY forwards the host value. Unlike jaiph run, a `use`\n" +
-  "                  key that is not granted does not fail the test — the key is\n" +
-  "                  simply absent in the script's env.\n" +
+  "  --env KEY=VALUE grant KEY to matching script and named-prompt `use` clauses\n" +
+  "                  (repeatable); --env KEY forwards the host value. Unlike jaiph run,\n" +
+  "                  a `use` key that is not granted does not fail the test — the key\n" +
+  "                  is simply absent in the subprocess env.\n" +
   "  -h, --help      show this help\n\n" +
   "Example:\n" +
   "  jaiph test ./e2e/say_hello.test.jh\n";

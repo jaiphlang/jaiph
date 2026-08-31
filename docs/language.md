@@ -39,11 +39,12 @@ Crossings produce specific `E_VALIDATE` messages identifying the violated rule.
 | `const NAME = value` | Module-scoped immutable string. Values: double-quoted, triple-quoted, or bare token. Stored verbatim. |
 | `config { … }` | Module-level configuration block (`agent.*`, `run.*`, and `module.*`). See [Configuration](configuration.md). |
 | `script name [use KEY …] = …` | Executable definition. Invoked with `run`. The optional `use` clause requests host env keys for this script's subprocess; each key must be granted with `--env KEY[=VALUE]` (see [Subprocess environment](#subprocess-environment)). |
+| `prompt name([params]) [use KEY …] = …` | Named, parameterised [prompt](#named-prompts). Invoked with `prompt name(args)`, never `run`. The optional `use` clause requests host env keys for this prompt's agent subprocess (same `--env` grant as a script). |
 | `def name([params]) { … }` | Interpreted callable. Invoked with `run`. `export def main` is the `jaiph run` entry; it is optional in library modules. |
 
 Visibility: same-file, all names. Across `import`, only names in `mod.exports` (`E_VALIDATE: "<name>" is not exported from module "<alias>"`). Zero exports means nothing is public.
 
-The unified per-module namespace covers channels, defs, scripts, script-import aliases, and top-level `const`. Duplicates are `E_PARSE`. `main` is reserved as the run entry: if a symbol named `main` exists, it must be `export def main`.
+The unified per-module namespace covers channels, defs, scripts, named prompts, script-import aliases, and top-level `const`. Duplicates are `E_PARSE`. `main` is reserved as the run entry: if a symbol named `main` exists, it must be `export def main`.
 
 ## Def body — step types
 
@@ -184,6 +185,7 @@ Sends text to the configured agent backend. The body can take one of these forms
 | Identifier | `prompt my_text` (`my_text` must be in scope) |
 | Bare ref | `prompt ${my_text}` or `prompt ${result.field}` — equivalent to identifier form |
 | Triple-quoted | `prompt """\nMultiline body with ${vars}\n"""` |
+| Named invocation | `prompt analyze(log)` — invokes a [named prompt](#named-prompts) definition. Parentheses select the invocation; bare `prompt analyze` (no `()`) stays the identifier form above. |
 
 | Aspect | Rule |
 |---|---|
@@ -193,6 +195,32 @@ Sends text to the configured agent backend. The body can take one of these forms
 | Dot notation | Bare `result.field` (in `return`, `if` / `match` subjects, and call arguments) and `${result.field}` **inside strings** require that the base is a typed-prompt capture and the field appears in the schema. Unquoted `${result.field}` in call-argument position is `E_VALIDATE`. |
 | Interpolation into shell steps | A prompt capture (`const x = prompt …`, typed or untyped) interpolated into an inline shell step — e.g. `echo "${x}"` as a free-form body line — is `W_PROMPT_IN_SHELL`. Shell steps run via `sh -c`, and the runtime shell-quotes every value it interpolates into the line, so an agent-controlled value reaches the shell as data and cannot inject a command; the diagnostic still fires to steer you to the argv path. Pass it as a script argument instead (`run my_script(x)` → `$1`, which is argv, not shell-expanded). Only shell steps are flagged; `run script(x)`, `log`, `logerr`, and non-prompt variables are not. |
 | Transport retry | Transport failures retry on a backoff schedule; deterministic post-processing failures do not. See [Configuration — Prompt retry on transport failure](configuration.md#prompt-retry-on-transport-failure). |
+
+### Named prompts
+
+A **named prompt** is a module-level, parameterised prompt definition — the same shape as `script` / `def`, sharing the one namespace:
+
+```
+prompt analyze_ci(log) use GITHUB_TOKEN = """
+  Look at this CI log:
+  ${log}
+"""
+returns "{ summary: string }"
+
+export def main() {
+  const log = run fetch_ci_log()
+  const result = prompt analyze_ci(log)
+  return result.summary
+}
+```
+
+| Aspect | Rule |
+|---|---|
+| Body | Same forms as an anonymous `prompt` step — double-quoted single line or `"""…"""`. No triple-backtick fence. `${name}` in the body resolves against the prompt's own parameters and module-level `const`s (caller locals are not visible). |
+| `returns` | Optional, on the definition (not the call site), same schema rules as a step-level `returns`. Invoking a `returns` named prompt without a `const` capture is `E_PARSE`. |
+| `export` | Allowed (`export prompt …`), same visibility rules as `export script` / `export def`. |
+| Invocation | `prompt name(args)` or `const x = prompt name(args)`; `prompt name()` for zero args. Bare `prompt name` (no `()`) is the identifier-as-body form. `run name()` on a named prompt is `E_VALIDATE`. Arity must match (`E_VALIDATE`), including `()`. |
+| `use KEY` | Same clause, reserved-key rules, and `--env` grant as `use` on a script. The requested keys are injected into that invocation's **agent** subprocess on top of the sterile prompt env; anonymous `prompt "…"` steps never receive `--env` secrets. Backend credentials (`ANTHROPIC_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`, …) stay the default and are not written as `use`. Ungranted `use` keys fail `jaiph run` / `serve` / `mcp` preflight with `E_ENV_MISSING`; `jaiph test` does not hard-fail. |
 
 ## `const` — bind a value
 

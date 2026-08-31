@@ -119,6 +119,8 @@ Crossings (`run` on a string, `prompt` on a script, `const x = scriptName`, `${s
 ```ebnf
 def_decl      = [ "export" ] "def" IDENT "(" [ param_list ] ")" "{" [ def_config ] { def_step } "}" ;
 script_decl   = [ "export" ] "script" IDENT [ use_clause ] "=" script_rhs ;
+prompt_decl   = [ "export" ] "prompt" IDENT "(" [ param_list ] ")" [ use_clause ] "=" prompt_rhs [ returns_schema ] ;
+prompt_rhs    = double_quoted_string | triple_quoted_block ;
 param_list    = IDENT { "," IDENT } ;
 ```
 
@@ -137,7 +139,15 @@ fenced_script_block  = "```" [ LANG_TAG ] newline { script_line newline } "```" 
 LANG_TAG             = IDENT ;
 ```
 
-The optional `use` clause (`script aaa use GITHUB_TOKEN NPM_TOKEN = …`) sits between the name and `=`: one clause, space-separated env key identifiers. It requests host keys for this script's subprocess; each key must also be granted with `--env KEY[=VALUE]` at run time or `jaiph run` / `serve` / `mcp` refuse to start (`E_ENV_MISSING`). Script env is otherwise sterile — see [Environment variables](env-vars.md#script-env). Invalid key names are `E_ENV_INVALID`; reserved keys are `E_ENV_RESERVED` (same set as `--env`). `use` on defs, `run` call sites, or prompts is not syntax.
+The optional `use` clause (`script aaa use GITHUB_TOKEN NPM_TOKEN = …`) sits between the name and `=`: one clause, space-separated env key identifiers. It requests host keys for this script's subprocess; each key must also be granted with `--env KEY[=VALUE]` at run time or `jaiph run` / `serve` / `mcp` refuse to start (`E_ENV_MISSING`). Script env is otherwise sterile — see [Environment variables](env-vars.md#script-env). Invalid key names are `E_ENV_INVALID`; reserved keys are `E_ENV_RESERVED` (same set as `--env`). The identical `use` clause is available on a **named prompt definition** (see below); it is not syntax on defs, `run` / `prompt` call sites, or anonymous `prompt` steps.
+
+### Named prompts
+
+A `prompt_decl` binds a reusable, parameterised prompt in the same unified namespace as `script` / `def` / `const` / channels. The `prompt_rhs` uses the same bodies as a `prompt` step — a double-quoted single line or a `"""…"""` block (no triple-backtick fence) — and `${name}` interpolation in the body resolves against the prompt's own parameters (and module-level `const`s). An optional `returns_schema` on the definition follows the same rules as a step-level `returns`; a `returns` named prompt invoked without `const` capture is `E_PARSE`.
+
+The optional `use` clause (`prompt analyze(log) use GITHUB_TOKEN = …`) sits between the parameter list and `=`, with the same grammar, reserved-key rules, and `--env` grant contract as `use` on a script. The requested keys are injected into that invocation's **agent** subprocess on top of the sterile prompt env (`scrubPromptEnv`); anonymous `prompt "…"` / `prompt """…"""` steps never receive `--env` secrets.
+
+A named prompt is **invoked** with parentheses — `prompt analyze(log)` or `const out = prompt analyze(log)`, `prompt analyze()` for zero args — and is never called with `run` (`run analyze()` on a named prompt is `E_VALIDATE`). Bare `prompt analyze` (no `()`) stays the identifier-as-body form (the prompt text is the value of the in-scope string `analyze`). Arity must match the definition (`E_VALIDATE`), including `()`.
 
 The lang tag maps directly to `#!/usr/bin/env <tag>`. Combining a lang tag with a leading `#!` shebang in the body is an error. With neither, the emitter writes `#!/usr/bin/env bash`.
 
@@ -240,18 +250,20 @@ recover_body     = def_step | "{" { def_step } "}" ;
 ### `prompt`
 
 ```ebnf
-prompt_stmt    = "prompt" prompt_body [ returns_schema ] ;
+prompt_stmt    = "prompt" ( prompt_body | prompt_call ) [ returns_schema ] ;
 prompt_body    = double_quoted_string | IDENT | "${" IDENT [ "." IDENT ] "}" | triple_quoted_block ;
+prompt_call    = REF "(" [ call_args ] ")" ;
 returns_schema = "returns" double_quoted_string ;
 ```
 
 | Aspect | Rule |
 |---|---|
 | Body forms | Single-line string, in-scope identifier (bare `name` or `${name}` / `${name.field}`), or triple-quoted block. Triple-backtick fences in prompt context are `E_PARSE`. |
+| Named invocation | `prompt name(args)` invokes a module-level [named prompt](#named-prompts). Parentheses select the invocation; bare `prompt name` stays the identifier-as-body form. Wrong kind (`name` is a def/script) or wrong arity is `E_VALIDATE`. A named prompt's `returns` lives on the definition; the same no-capture rule applies. `returns` is not written on the call site. |
 | Multiline form | Opening `"""` must end the line; closing `"""` must be on its own line. |
 | `returns` placement | After a single-line or identifier body on the same line, or on the line after the closing `"""`, or on the same line as the closing `"""` (nothing else may follow). |
 | `returns` schema | Flat `{ field: type, … }` with types `string`, `number`, `boolean`. Invalid schemas are `E_SCHEMA`. |
-| Capture requirement | `prompt … returns` without `const` capture is `E_PARSE`. |
+| Capture requirement | `prompt … returns` without `const` capture is `E_PARSE` (inline and named alike). |
 | Allowed in | Defs. |
 
 ### `const`
@@ -260,7 +272,7 @@ returns_schema = "returns" double_quoted_string ;
 const_decl_step = "const" IDENT "=" const_rhs ;
 const_rhs       = double_quoted_string | triple_quoted_block | bash_value_expr
                 | "run" ( call_ref | inline_script ) | "run" "async" call_ref
-                | "prompt" prompt_body [ returns_schema ]
+                | "prompt" ( prompt_body | prompt_call ) [ returns_schema ]
                 | "match" IDENT "{" { match_arm } "}" ;
 ```
 
