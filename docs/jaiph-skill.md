@@ -186,6 +186,26 @@ def release(version) {
 - **`fail "reason"`** aborts with a non-zero exit. **`return`** accepts `"string"`, `"""…"""`, a bare identifier, `run ref()` / `run ref()`, an inline script, or a `match` expression.
 - **`log` / `logerr` / `logwarn`** accept `"string"`, `"""…"""`, a bare identifier (`log status` ≡ `log "${status}"`), or `log run \`cmd\`()`. `logerr` writes a red line and `logwarn` a yellow warning line; both also appear on stderr.
 
+### Nested declarations — helpers scoped to one def
+
+A def body may declare a nested `const`, `script`, `def`, or named `prompt` to scope a helper to the def that uses it instead of the module namespace:
+
+```jaiph
+export def main() {
+  const greeting = "hi"
+  script shout = `echo "$1"`      # nested script — subprocess, argv only
+  def helper(name) {              # nested def — in-process, closes over greeting
+    return "helped-${greeting}-${name}"
+  }
+  const h = run helper("bob")     # run a nested def/script
+  run shout(greeting)             # pass greeting as $1 (not auto-exported)
+}
+```
+
+- **Not hoisted.** A nested name is visible only after its declaration in the same def; using it earlier is `E_VALIDATE`. **No `export`** on a nested declaration (`E_PARSE`); the nested forms are `const` / `script` / `def` / named `prompt` only.
+- **Shadowing.** A nested name may shadow a module-level `script` / `def` / `prompt`; the local wins. Another def cannot `run` / `prompt` a name declared only inside a different def (`E_VALIDATE`). A collision with a parameter or another local name is `E_VALIDATE` (`cannot rebind immutable name`).
+- **Closure vs subprocess.** A nested `def` (and a nested named `prompt` body) interpolates the enclosing def's params/`const`s plus its own params at runtime. A nested `script` is a sterile subprocess: enclosing bindings do **not** cross into its env — pass argv (`run inner(x)` → `$1`). Nested `script` / `prompt` carry their own `use` + `--env` grant.
+
 ### Checks — a def used as a gate
 
 A check is an ordinary def whose job is to pass or fail. It runs a script or another def, and a non-zero exit or a `fail` stops the caller.

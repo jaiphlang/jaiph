@@ -54,12 +54,13 @@ test("AC1: no AST placeholder strings linger in src/", () => {
 });
 
 /**
- * AC2 — `StepDef` has at most 8 variants. The exhaustive switch
+ * AC2 — `StepDef` has exactly 9 variants. The exhaustive switch
  * below fails to compile if a new variant is silently added (the `never`
- * fallback widens), and the runtime tuple lookup pins the count to 8.
+ * fallback widens), and the runtime tuple lookup pins the count to 9.
+ * (The 9th, `local_decl`, carries a nested script/def/prompt declaration.)
  */
 type StepType = StepDef["type"];
-type AllStepTypes = readonly ["exec", "const", "return", "send", "say", "if", "for_lines", "trivia"];
+type AllStepTypes = readonly ["exec", "const", "return", "send", "say", "if", "for_lines", "local_decl", "trivia"];
 type _StepTypesCoverAllVariants = StepType extends AllStepTypes[number]
   ? AllStepTypes[number] extends StepType
     ? true
@@ -76,6 +77,7 @@ function _exhaustiveStepSwitch(s: StepDef): void {
     case "say":
     case "if":
     case "for_lines":
+    case "local_decl":
     case "trivia":
       return;
     default: {
@@ -85,9 +87,9 @@ function _exhaustiveStepSwitch(s: StepDef): void {
   }
 }
 
-test("AC2: StepDef has exactly 8 variants", () => {
-  const declaredTypes: AllStepTypes = ["exec", "const", "return", "send", "say", "if", "for_lines", "trivia"];
-  assert.equal(declaredTypes.length, 8);
+test("AC2: StepDef has exactly 9 variants", () => {
+  const declaredTypes: AllStepTypes = ["exec", "const", "return", "send", "say", "if", "for_lines", "local_decl", "trivia"];
+  assert.equal(declaredTypes.length, 9);
   assert.equal(_stepTypesAtMost8, true);
   // Reference the exhaustive switch so the unused-symbol check is happy and
   // the dead-code eliminator can't drop the type-level assertion.

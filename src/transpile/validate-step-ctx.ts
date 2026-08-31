@@ -27,6 +27,7 @@ export const DEF_SCOPE: Scope = {
   kind: "def",
   allowSteps: new Set([
     "trivia",
+    "local_decl",
     "send",
     "say",
     "return",

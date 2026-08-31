@@ -103,6 +103,7 @@ TEST_SCRIPTS=(
   "e2e/tests/149_mcp_generation_lifecycle.sh"
   "e2e/tests/146_script_use_env.sh"
   "e2e/tests/147_named_prompt_use_env.sh"
+  "e2e/tests/148_nested_decls.sh"
   "e2e/tests/210_standalone_binary.sh"
 )
 

@@ -26,6 +26,13 @@ import type { ValidatorCtx } from "./validate-step-ctx";
 
 export type { Scope, ValidatorCtx } from "./validate-step-ctx";
 export { DEF_SCOPE } from "./validate-step-ctx";
+export {
+  localDeclName,
+  localSymFromDecl,
+  localPromptReturnsResolver,
+  refCtxWithLocals,
+  type LocalSym,
+} from "./validate-local-decl";
 export { validateMatchExpr } from "./validate-match";
 export {
   ROUTE_REF_EXPECT,
@@ -39,6 +46,9 @@ type StepValidator = (s: StepDef, ctx: ValidatorCtx) => void;
 
 const VALIDATORS: Record<StepDef["type"], StepValidator> = {
   trivia: () => {},
+  // Nested declarations are validated by `validateDefTree` (their own scope /
+  // sequential local visibility), never through this per-step dispatcher.
+  local_decl: () => {},
   const: validateConstStep,
   return: validateReturnStep,
   send: validateSendStep,

@@ -157,6 +157,10 @@ function stepHasPrompt(s: StepDef): boolean {
       return s.body.some(stepHasPrompt) || (s.elseBody?.some(stepHasPrompt) ?? false);
     case "for_lines":
       return s.body.some(stepHasPrompt);
+    case "local_decl":
+      if (s.decl.kind === "prompt") return true;
+      if (s.decl.kind === "def") return s.decl.def.steps.some(stepHasPrompt);
+      return false;
     case "trivia":
       return false;
   }

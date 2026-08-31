@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { Diagnostics } from "../diagnostics";
-import type { Expr, jaiphModule, StepDef } from "../types";
+import type { Def, Expr, jaiphModule, LocalDecl, PromptDef, StepDef } from "../types";
 import type { ModuleGraph } from "./module-graph";
 import { validateRef } from "./validate-ref-resolution";
 import {
@@ -11,11 +11,16 @@ import {
   resolvePromptDef,
   validateStep,
   DEF_SCOPE,
+  localDeclName,
+  localSymFromDecl,
+  localPromptReturnsResolver,
+  refCtxWithLocals,
+  type LocalSym,
   type ValidatorCtx,
 } from "./validate-step";
 import { validateConfigInto } from "./validate-config";
 import { validateTestBlocks } from "./validate-tests";
-import { validatePromptDefs } from "./validate-prompt-def";
+import { validatePromptDefs, validatePromptDefBody } from "./validate-prompt-def";
 
 /**
  * One step entry in the flat list built by the single workflow walk.
@@ -57,6 +62,8 @@ function walkStepTree(
     withPromptSchemas: boolean;
     /** Resolve a named-prompt call's returns schema (its schema lives on the def). */
     resolvePromptReturns?: (ref: string) => string | undefined;
+    /** Names visible from an enclosing def (closure): its params + `const`s. */
+    inheritedKnownVars?: Set<string>;
   },
 ): StepTreeWalk {
   const knownVars = new Set<string>();
@@ -64,6 +71,9 @@ function walkStepTree(
   const promptCaptures = new Set<string>();
   const flat: FlatStepEntry[] = [];
 
+  if (options.inheritedKnownVars) {
+    for (const v of options.inheritedKnownVars) knownVars.add(v);
+  }
   if (envDecls) {
     for (const d of envDecls) knownVars.add(d.name);
   }
@@ -121,6 +131,26 @@ function walkStepTree(
             promptSchemas.set(s.name, parseSchemaFieldNames(ret));
           }
         }
+        continue;
+      }
+
+      if (s.type === "local_decl") {
+        const name = localDeclName(s.decl);
+        const prev = bindings.get(name);
+        if (prev) {
+          diag.error(
+            filePath,
+            s.loc.line,
+            s.loc.col,
+            "E_VALIDATE",
+            `cannot rebind immutable name "${name}"; already bound as ${prev.kind} at ${filePath}:${prev.line}`,
+          );
+        }
+        // A nested declaration MAY shadow a module-level script/def/prompt, so
+        // unlike `checkBinding` the module-script collision check is skipped.
+        bindings.set(name, { kind: s.decl.kind, line: s.loc.line });
+        // Do not descend into a nested def body — it is validated as its own
+        // scope by `validateDefTree`.
         continue;
       }
 
@@ -373,32 +403,72 @@ export function validateModuleInto(
     }
   }
 
-  for (const workflow of ast.defs) {
-    let wfWalk: StepTreeWalk | undefined;
+  /**
+   * Validate one def (top-level or nested) as its own scope. Nested defs recurse
+   * with the enclosing knownVars (closure over params/`const`s) and the nested
+   * declarations visible at their declaration point. Nested `run` / `prompt`
+   * targets resolve against a per-step ref context that overlays the locals
+   * declared so far, so a name is visible only after its declaration and may
+   * shadow a module symbol.
+   */
+  const validateDefTree = (
+    def: Def,
+    inheritedKnownVars: Set<string>,
+    inheritedLocals: Map<string, LocalSym>,
+  ): void => {
+    const resolveReturns = localPromptReturnsResolver(def, resolvePromptReturns);
+    let walk: StepTreeWalk | undefined;
     diag.capture(() => {
-      wfWalk = walkStepTree(
+      walk = walkStepTree(
         diag,
         ast.filePath,
-        workflow.steps,
+        def.steps,
         ast.envDecls,
-        workflow.params,
-        workflow.loc,
+        def.params,
+        def.loc,
         localScripts,
-        { withPromptSchemas: true, resolvePromptReturns },
+        { withPromptSchemas: true, resolvePromptReturns: resolveReturns, inheritedKnownVars },
       );
     });
-    if (!wfWalk) continue;
-    const ctx: ValidatorCtx = {
+    if (!walk) return;
+    const w = walk;
+    const ctxBase: ValidatorCtx = {
       ...baseCtx,
       scope: DEF_SCOPE,
-      knownVars: wfWalk.knownVars,
-      promptSchemas: wfWalk.promptSchemas,
-      promptCaptures: wfWalk.promptCaptures,
+      knownVars: w.knownVars,
+      promptSchemas: w.promptSchemas,
+      promptCaptures: w.promptCaptures,
       recoverBindings: undefined,
     };
-    for (const entry of wfWalk.flat) {
-      diag.capture(() => validateStep(entry.step, { ...ctx, recoverBindings: entry.recoverBindings }));
+    const localsSoFar = new Map(inheritedLocals);
+    for (const entry of w.flat) {
+      const step = entry.step;
+      if (step.type === "local_decl") {
+        const decl = step.decl;
+        if (decl.kind === "def") {
+          validateDefTree(decl.def, w.knownVars, new Map(localsSoFar));
+        } else if (decl.kind === "prompt") {
+          validatePromptDefBody(diag, ast.filePath, decl.prompt, w.knownVars);
+        }
+        // Nested scripts need no body validation (module scripts don't either).
+        localsSoFar.set(localDeclName(decl), localSymFromDecl(decl));
+        continue;
+      }
+      const refCtx = refCtxWithLocals(baseCtx.refCtx, localsSoFar);
+      diag.capture(() =>
+        validateStep(step, {
+          ...ctxBase,
+          refCtx,
+          localScripts: refCtx.localScripts,
+          localDefs: refCtx.localDefs,
+          recoverBindings: entry.recoverBindings,
+        }),
+      );
     }
+  };
+
+  for (const workflow of ast.defs) {
+    validateDefTree(workflow, new Set(), new Map());
   }
 
   if (ast.tests && ast.tests.length > 0) {

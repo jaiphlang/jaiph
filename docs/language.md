@@ -48,7 +48,7 @@ The unified per-module namespace covers channels, defs, scripts, named prompts, 
 
 ## Def body — step types
 
-There are eight `StepDef` variants. Every body line that does not match a managed form becomes a `shell` step.
+There are nine `StepDef` variants. Every body line that does not match a managed form becomes a `shell` step.
 
 | Type | Surface | Description |
 |---|---|---|
@@ -59,6 +59,7 @@ There are eight `StepDef` variants. Every body line that does not match a manage
 | `say` | `log` / `logerr` / `logwarn` / `fail` | `level: "log"` / `"logerr"` / `"logwarn"` / `"fail"`. `level: "fail"` aborts with the message. |
 | `if` | `if <subject> <op> <operand> { … } [ else if … { … } ]* [ else { … } ]` | Conditional block. |
 | `for_lines` | `for <iter> in <source> { … }` | Iterate lines of a string variable. |
+| `local_decl` | nested `script` / `def` / named `prompt` | A [nested declaration](#nested-declarations) local to the enclosing def (sequential, not hoisted). Nested `const` stays a `const` step. |
 | `trivia` | comments, blank lines | Formatter-only. Skipped by the runtime and validator. |
 
 ## Value expressions — `Expr` kinds
@@ -221,6 +222,40 @@ export def main() {
 | `export` | Allowed (`export prompt …`), same visibility rules as `export script` / `export def`. |
 | Invocation | `prompt name(args)` or `const x = prompt name(args)`; `prompt name()` for zero args. Bare `prompt name` (no `()`) is the identifier-as-body form. `run name()` on a named prompt is `E_VALIDATE`. Arity must match (`E_VALIDATE`), including `()`. |
 | `use KEY` | Same clause, reserved-key rules, and `--env` grant as `use` on a script. The requested keys are injected into that invocation's **agent** subprocess on top of the sterile prompt env; anonymous `prompt "…"` steps never receive `--env` secrets. Backend credentials (`ANTHROPIC_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`, …) stay the default and are not written as `use`. Ungranted `use` keys fail `jaiph run` / `serve` / `mcp` preflight with `E_ENV_MISSING`; `jaiph test` does not hard-fail. |
+
+### Nested declarations
+{: #nested-declarations}
+
+A def body may declare a **nested** `const`, `script`, `def`, or named `prompt`
+— the same surface as at module level — to scope a helper to the one def that
+uses it instead of the module namespace:
+
+```
+export def main() {
+  const greeting = "hi"
+
+  script shout = `echo "$1"`
+
+  def helper(name) {
+    return "helped-${greeting}-${name}"
+  }
+
+  prompt describe(x) = "Describe ${greeting} for ${x}"
+
+  const h = run helper("bob")
+  run shout(greeting)
+}
+```
+
+| Aspect | Rule |
+|---|---|
+| Where | `const` / `script` / `def` / named `prompt` inside a def body. **No `export`** (`E_PARSE`). `import` and `channel` stay module-level; a def-level `config` block is separate metadata that must precede the first step. |
+| Scope | Sequential local binding, **not hoisted**: visible only in the enclosing def and only **after** its declaration (using it earlier is `E_VALIDATE`). One local namespace per def, shared with the def's parameters and `const`s — a duplicate name or a collision with a parameter is `E_VALIDATE` (`cannot rebind immutable name`). |
+| Shadowing | A nested name **may shadow** a module-level `script` / `def` / `prompt` of the same name; the local binding wins for the rest of the body. Another def cannot `run` / `prompt` a name declared only inside a different def (`E_VALIDATE`). |
+| Calls | `run name(args)` for a nested script or def (`run async` allowed for a nested def); `prompt name(args)` for a nested named prompt. |
+| Nested `def` | Interpreted in-process; interpolates the enclosing def's params and `const`s (lexical scope) plus its own params. Does not inherit a parent `use`. |
+| Nested `prompt` | Body interpolated at invocation from the enclosing scope (params/`const`s visible) plus its own params; its `use` is the only extra host-key injection for that agent spawn. |
+| Nested `script` | Still a subprocess: enclosing bindings are **not** auto-exported into its env — pass argv (`run inner(param)` → `$1`). Sterile env + its own `use` + `--env` grant, same as a module-level script. |
 
 ## `const` — bind a value
 
