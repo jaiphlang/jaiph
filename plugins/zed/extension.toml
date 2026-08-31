@@ -1,7 +1,7 @@
 id = "jaiph"
 name = "Jaiph"
 description = "Jaiph orchestration language support for Zed (Tree-sitter syntax highlighting)."
-version = "0.13.0"
+version = "0.14.0"
 schema_version = 1
 authors = ["Jaiph contributors"]
 repository = "https://github.com/jaiphlang/jaiph"
@@ -16,5 +16,5 @@ repository = "https://github.com/jaiphlang/jaiph"
 #   repository = "file:///absolute/path/to/jaiph"
 [grammars.jaiph]
 repository = "https://github.com/jaiphlang/jaiph"
-rev = "098adc1f838aaf0f8b2d56c3c107b3418550906d"
+rev = "9da201c5f66a97b6a814f3513763557dc3457bef"
 path = "grammars/tree-sitter-jaiph"

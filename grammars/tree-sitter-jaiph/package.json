@@ -1,6 +1,6 @@
 {
   "name": "tree-sitter-jaiph",
-  "version": "0.13.0",
+  "version": "0.14.0",
   "description": "Tree-sitter grammar for the Jaiph orchestration language (.jh / *.test.jh)",
   "license": "MIT",
   "homepage": "https://jaiph.org",
