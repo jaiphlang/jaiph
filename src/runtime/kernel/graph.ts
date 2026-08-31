@@ -24,6 +24,9 @@ function attachScriptImportStubs(ast: jaiphModule): void {
       name: si.alias,
       comments: [],
       body: "",
+      // Carry the `use` clause so the stub's script spawns get the same
+      // sterile-env + `--env`-grant contract as a named script.
+      ...(si.use ? { use: si.use } : {}),
       loc: si.loc,
     });
   }

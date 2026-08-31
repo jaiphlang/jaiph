@@ -25,8 +25,8 @@ Configuration sources, in priority order:
 |---|---|
 | Module-level | At most one `config { … }` block per `.jh` file. May appear anywhere among top-level constructs. |
 | Def-level | At most one nested `config { … }` per def body. Must be the first non-comment construct in the body. |
-| Allowed module-level keys | `agent.*`, `run.*`, `module.*`, and `trusted_envs`. |
-| Allowed def-level keys | `agent.*`, `run.*`, and `trusted_envs`. A `module.*` key in a def-level block is `E_PARSE` (`module.* keys are not allowed in def-level config (only agent.* and run.* keys)`). Any other unrecognized key is the unknown-key error below. |
+| Allowed module-level keys | `agent.*`, `run.*`, and `module.*`. |
+| Allowed def-level keys | `agent.*` and `run.*`. A `module.*` key in a def-level block is `E_PARSE` (`module.* keys are not allowed in def-level config (only agent.* and run.* keys)`). Any other unrecognized key is the unknown-key error below — including the removed `trusted_envs`. |
 | Duplicate block | `E_PARSE duplicate config block (only one allowed per file)` / `E_PARSE duplicate config block inside def (only one allowed per def)`. |
 | Unknown key | `E_PARSE unknown config key: <key>. Allowed: …` (lists every allowed key). |
 | Wrong value type | `E_PARSE`. |
@@ -91,33 +91,20 @@ Informational metadata only; does not affect execution. Allowed in module-level 
 | `module.version` | string | — |
 | `module.description` | string | — |
 
-## Trusted env keys (`trusted_envs`)
+## Script env keys (`use` + `--env`)
 {: #trusted-envs}
 
-`trusted_envs = "GITHUB_TOKEN NPM_TOKEN"` declares which **host** environment variables a def's trusted `run` steps receive — the declarative alternative to remembering `jaiph run --env GITHUB_TOKEN …`. The value is a quoted, space-separated list of env var names.
-
-| Scope | Effect |
-|---|---|
-| Module-level `config` | Sugar: applies to every def in the file. |
-| Def-level `config` | Scopes the keys to that def only. |
-| Imported (non-entry) module | **Ignored** (warned at pre-flight) — an imported module must not be able to pull arbitrary host secrets into its own steps. Mirrors the [import trust boundary](#import-trust-boundary) for `agent.command` / `agent.backend`. |
+The `trusted_envs` config key is **removed** (`E_PARSE unknown config key`). Scripts are sterile by default: a script subprocess receives only process mechanics, the `JAIPH_*` script contract keys, and the host keys its own declaration requests with a `use` clause — and a `use` key crosses only when the operator granted it with `--env KEY[=VALUE]`:
 
 ```jaiph
-config { trusted_envs = "NPM_TOKEN" }   # module-level: every def's run steps
-
-def publish{
-  config { trusted_envs = "GITHUB_TOKEN" }   # only publish's run steps also see GITHUB_TOKEN
-  run release()
-}
+script release use GITHUB_TOKEN NPM_TOKEN = `gh release create …`
 ```
 
-Semantics:
+```sh
+jaiph run --env GITHUB_TOKEN --env NPM_TOKEN publish.jh
+```
 
-- Declared keys resolve from the **pristine host environment captured once at process start** — never from the calling def's scope env. A called def does not inherit a caller's keys by being called; it must declare `trusted_envs` itself.
-- Resolved values are injected **only into `run`-step script subprocesses** of the declaring def. They are **never** forwarded to `prompt` agent subprocesses — the prompt env stays the fail-closed allowlist (base env, `JAIPH_*` control keys, and that backend's own credential keys).
-- Declaring a key anywhere in the file (or an imported module) also **scrubs** it from every def's ambient scope env, so only the declaring def's `run` steps see it.
-- Pre-flight: a declared key with no value on the host (and no `--env` override) aborts before anything is spawned (`E_ENV_MISSING`). Reserved keys (the `--env` `E_ENV_RESERVED` set) are rejected at parse time.
-- `--env KEY=VALUE` remains the imperative override: it wins over the host-snapshot value for the same key.
+The `use` request lives on the script declaration (named `script`, `export script`, or `import script … as alias use KEY`), never on defs, `run` call sites, or prompts. Prompt subprocesses keep the fail-closed `scrubPromptEnv` allowlist and never receive `--env` secrets. See [Language — Subprocess environment](language.md#subprocess-environment) and [Environment variables](env-vars.md#script-env).
 
 ## Precedence
 {: #precedence}
@@ -153,7 +140,7 @@ Locked names: `JAIPH_AGENT_BACKEND`, `JAIPH_AGENT_MODEL`, `JAIPH_AGENT_COMMAND`,
 
 `agent.command` and `agent.backend` are **execution-binary keys** — they determine which process runs `prompt` steps. To prevent a third-party `.jh` library from silently redirecting execution to a different binary, these two keys may only be set from the **entry module's** `config {}` block (module-level or def-level). Imported modules that declare `agent.command` or `agent.backend` in their `config {}` are silently ignored for these keys.
 
-[`trusted_envs`](#trusted-envs) carries the same entry-only restriction: declarations in imported modules are ignored (with a pre-flight warning) so a library cannot pull host secrets into its own steps.
+Host secrets carry a related boundary: a script — imported or local — receives a host key only through its own `use` clause **and** an explicit operator `--env` grant, so a library cannot pull host secrets into its steps without the operator naming each key on the command line (see [Script env keys](#trusted-envs)).
 
 All other config keys (`agent.model`, `agent.trusted_workspace`, `agent.cursor_flags`, `agent.claude_flags`, `run.logs_dir`, `run.debug`) are not restricted and follow the normal scoping rules for cross-module calls.
 

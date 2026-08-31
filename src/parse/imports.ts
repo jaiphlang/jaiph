@@ -1,5 +1,6 @@
 import type { ImportDef, ScriptImportDef } from "../types";
 import { fail, SINGLE_QUOTE_MESSAGE, stripQuotes } from "./core";
+import { parseUseClauseKeys } from "./scripts";
 
 function parsePathAlias(
   filePath: string,
@@ -46,12 +47,21 @@ export function parseScriptImportLine(
   raw: string,
   lineNo: number,
 ): ScriptImportDef {
-  return parsePathAlias(
+  // `use KEY [KEY ...]` after the alias requests host keys for this script's
+  // spawns, same clause as on a named script declaration.
+  const useMatch = line.match(/^(.*\s+as\s+[A-Za-z_][A-Za-z0-9_]*)\s+use\s+(.+)$/);
+  const aliasPart = useMatch ? useMatch[1] : line;
+  const def = parsePathAlias(
     filePath,
-    line,
+    aliasPart,
     raw,
     lineNo,
     /^import\s+script\s+(.+?)\s+as\s+([A-Za-z_][A-Za-z0-9_]*)$/,
-    'import script must match: import script "<path>" as <alias>',
+    'import script must match: import script "<path>" as <alias> [use KEY ...]',
   );
+  if (def.alias === "use") {
+    fail(filePath, `"use" is reserved and cannot be a script alias`, lineNo);
+  }
+  if (!useMatch) return def;
+  return { ...def, use: parseUseClauseKeys(filePath, useMatch[2], lineNo) };
 }

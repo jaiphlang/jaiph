@@ -18,7 +18,7 @@ e2e::file "child.jh" <<'EOF'
 config {
   agent.backend = "claude"
 }
-script log_backend = `printf '%s:%s\n' "$1" "$JAIPH_AGENT_BACKEND" >> "$JAIPH_META_SCOPE_FILE"`
+script log_backend use JAIPH_META_SCOPE_FILE = `printf '%s:%s\n' "$1" "$JAIPH_AGENT_BACKEND" >> "$JAIPH_META_SCOPE_FILE"`
 export def main() {
   run log_backend("child")
 }
@@ -30,7 +30,7 @@ import "child.jh" as child
 config {
   agent.backend = "cursor"
 }
-script log_backend = `printf '%s:%s\n' "$1" "$JAIPH_AGENT_BACKEND" >> "$JAIPH_META_SCOPE_FILE"`
+script log_backend use JAIPH_META_SCOPE_FILE = `printf '%s:%s\n' "$1" "$JAIPH_AGENT_BACKEND" >> "$JAIPH_META_SCOPE_FILE"`
 export def main() {
   run log_backend("parent_before")
   run child.main()
@@ -40,7 +40,10 @@ EOF
 
 # When
 unset JAIPH_AGENT_BACKEND 2>/dev/null || true
-jaiph run "${TEST_DIR}/parent.jh" >/dev/null
+# Script env is sterile: the log-file host var reaches the scripts only through
+# their `use` clause plus this `--env` grant. The config-scoped backend is a
+# runtime contract key and needs no grant.
+jaiph run --env JAIPH_META_SCOPE_FILE "${TEST_DIR}/parent.jh" >/dev/null
 
 # Then
 # Imported module's agent.backend is blocked by default (security trust boundary).

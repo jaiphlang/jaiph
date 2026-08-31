@@ -285,7 +285,7 @@ test("jaiph --mcp dispatches to the same command as jaiph mcp", async () => {
 });
 
 const ENV_ECHO_FIXTURE = [
-  'script echo_impl = `printf %s "$GREETING"`',
+  'script echo_impl use GREETING = `printf %s "${GREETING:-}"`',
   "# Returns the GREETING env var the workflow process sees.",
   "export def show() {",
   "  const g = run echo_impl()",
@@ -320,7 +320,7 @@ test("jaiph mcp --env GREETING=hi: every tools/call sees the var in the result t
 });
 
 const LEAK_FAIL_FIXTURE = [
-  'script leak_fail = `echo "stdout token $LEAK_API_KEY"; echo "stderr token $LEAK_API_KEY" >&2; exit 1`',
+  'script leak_fail use LEAK_API_KEY = `echo "stdout token $LEAK_API_KEY"; echo "stderr token $LEAK_API_KEY" >&2; exit 1`',
   "# Echoes a credential to both streams then fails, to exercise tool-result redaction.",
   "export def leak_and_fail() {",
   "  run leak_fail()",

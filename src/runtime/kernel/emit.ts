@@ -5,7 +5,7 @@
  * process, but its integrity is protected by a *keyed* HMAC chain: each line's
  * `prev_hash` is `chainHmac(key, previousRawLine)`. The per-run key is held by
  * the host and the kernel process only — it is scrubbed from every script /
- * agent subprocess env (see `scrubTrustedKeys` in node-workflow-runtime.ts and
+ * agent subprocess env (see `scrubKernelKeys` in node-workflow-runtime.ts and
  * `scrubPromptEnv` in env-allowlist.ts). An audited workflow can therefore
  * delete or rewrite the journal on disk, but it cannot forge a chain that
  * verifies, so every read/export boundary can detect the tamper and hard-fail.

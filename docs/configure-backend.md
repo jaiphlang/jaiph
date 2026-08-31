@@ -49,7 +49,7 @@ def fast_check() {
 }
 ```
 
-A def-level block can set `agent.*`, `run.*`, and `trusted_envs` keys. The `module.*` keys are module-only, so a def-level block cannot set them.
+A def-level block can set `agent.*` and `run.*` keys. The `module.*` keys are module-only, so a def-level block cannot set them.
 
 ## 3. Override from the environment
 

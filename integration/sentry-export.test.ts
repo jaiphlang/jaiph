@@ -367,9 +367,11 @@ test("redaction: a credential in the failing step's output reaches the event onl
     const jh = join(root, "app.jh");
     writeFileSync(
       jh,
-      ['script leak = `printf %s "$SECRET_API_KEY"; exit 1`', "export def main() {", "  run leak()", "}", ""].join("\n"),
+      // The leak script must `use` the key and the run must grant it with
+      // --env: script env is sterile, host presence alone no longer crosses.
+      ['script leak use SECRET_API_KEY = `printf %s "$SECRET_API_KEY"; exit 1`', "export def main() {", "  run leak()", "}", ""].join("\n"),
     );
-    const result = await runCli(["run", jh], {
+    const result = await runCli(["run", "--env", "SECRET_API_KEY", jh], {
       cwd: root,
       env: { ...baseEnv(join(root, ".jaiph/runs")), SECRET_API_KEY: SECRET, SENTRY_DSN: dsn(sentry.port) },
     });

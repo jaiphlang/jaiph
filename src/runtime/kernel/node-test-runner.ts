@@ -84,6 +84,7 @@ async function runTestBlock(
   workspaceRoot: string,
   scriptsDir: string,
   graph: RuntimeGraph,
+  extraEnv: Record<string, string>,
 ): Promise<TestResult> {
   const tmpDir = mkdtempSync(join(tmpdir(), "jaiph-test-block-"));
   try {
@@ -144,10 +145,16 @@ async function runTestBlock(
         const mockBodies = resolveMockBodies(graph, testFileAbs, mockRefs);
         const env: NodeJS.ProcessEnv = {
           ...process.env,
+          ...extraEnv,
           JAIPH_TEST_MODE: "1",
           JAIPH_WORKSPACE: workspaceRoot,
           JAIPH_RUNS_DIR: join(tmpDir, ".jaiph", "runs"),
           JAIPH_SCRIPTS: scriptsDir,
+          // `jaiph test --env` grants `use` keys the same way `jaiph run` does,
+          // but there is no pre-flight: an ungranted `use` key is simply absent
+          // in the script spawn. Set unconditionally so an inherited grant
+          // never leaks in from a parent jaiph process.
+          JAIPH_ENV_GRANT: Object.keys(extraEnv).join(","),
         };
         // `jaiph test` is meant to be deterministic and fast: a prompt that
         // returns non-zero (e.g. no matching mock arm) should fail the test
@@ -266,6 +273,7 @@ export async function runTestFile(
   workspaceRoot: string,
   scriptsDir: string,
   blocks: TestBlockDef[],
+  extraEnv: Record<string, string> = {},
 ): Promise<number> {
   const testFileAbs = moduleGraph.entryFile;
   const bold = "\x1b[1m";
@@ -314,7 +322,7 @@ export async function runTestFile(
   for (const block of blocks) {
     total += 1;
     const start = Date.now();
-    const result = await runTestBlock(block, testFileAbs, workspaceRoot, scriptsDir, graph);
+    const result = await runTestBlock(block, testFileAbs, workspaceRoot, scriptsDir, graph, extraEnv);
     const elapsed = Math.floor((Date.now() - start) / 1000);
 
     process.stdout.write(`  \u25b8 ${block.description}\n`);

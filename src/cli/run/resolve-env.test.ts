@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { resolveRuntimeEnv, resolveEnvPairs } from "./env";
+import { resolveRuntimeEnv } from "./env";
+import { resolveEnvPairs } from "../shared/usage";
 import type { JaiphConfig } from "../../config";
 
 test("resolveRuntimeEnv: sets JAIPH_WORKSPACE from workspaceRoot", () => {

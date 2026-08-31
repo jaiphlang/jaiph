@@ -43,7 +43,7 @@ Hook commands run on the **host**, so a project-local `<workspace>/.jaiph/hooks.
 export JAIPH_TRUST_PROJECT_HOOKS=1
 ```
 
-The variable is read from the host environment on `jaiph run`, `jaiph serve`, and `jaiph mcp`; it cannot be set from a `.jh` file via `--env` or `trusted_envs` (a file must not be able to trust itself). See [`JAIPH_TRUST_PROJECT_HOOKS`](env-vars.md).
+The variable is read from the host environment on `jaiph run`, `jaiph serve`, and `jaiph mcp`; it cannot be set via `--env` or requested via a script `use` clause (a file must not be able to trust itself). See [`JAIPH_TRUST_PROJECT_HOOKS`](env-vars.md).
 
 Create the one you want:
 

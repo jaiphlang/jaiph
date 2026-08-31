@@ -39,7 +39,7 @@
     "line": 2,
     "col": 3,
     "code": "E_PARSE",
-    "message": "unknown config key: invalid.key. Allowed: agent.model, agent.command, agent.backend, agent.trusted_workspace, agent.cursor_flags, agent.claude_flags, run.logs_dir, run.debug, run.recover_limit, module.name, module.version, module.description, trusted_envs"
+    "message": "unknown config key: invalid.key. Allowed: agent.model, agent.command, agent.backend, agent.trusted_workspace, agent.cursor_flags, agent.claude_flags, run.logs_dir, run.debug, run.recover_limit, module.name, module.version, module.description"
   },
   "single-quoted import path": {
     "file": "input.jh",
@@ -158,7 +158,7 @@
     "line": 3,
     "col": 5,
     "code": "E_PARSE",
-    "message": "unknown config key: runtime.docker_image. Allowed: agent.model, agent.command, agent.backend, agent.trusted_workspace, agent.cursor_flags, agent.claude_flags, run.logs_dir, run.debug, run.recover_limit, module.name, module.version, module.description, trusted_envs"
+    "message": "unknown config key: runtime.docker_image. Allowed: agent.model, agent.command, agent.backend, agent.trusted_workspace, agent.cursor_flags, agent.claude_flags, run.logs_dir, run.debug, run.recover_limit, module.name, module.version, module.description"
   },
   "script tag with manual shebang conflict": {
     "file": "input.jh",
@@ -228,21 +228,21 @@
     "line": 2,
     "col": 3,
     "code": "E_PARSE",
-    "message": "unknown config key: runtime.workspace. Allowed: agent.model, agent.command, agent.backend, agent.trusted_workspace, agent.cursor_flags, agent.claude_flags, run.logs_dir, run.debug, run.recover_limit, module.name, module.version, module.description, trusted_envs"
+    "message": "unknown config key: runtime.workspace. Allowed: agent.model, agent.command, agent.backend, agent.trusted_workspace, agent.cursor_flags, agent.claude_flags, run.logs_dir, run.debug, run.recover_limit, module.name, module.version, module.description"
   },
   "config rejects runtime.docker_enabled (no longer supported)": {
     "file": "input.jh",
     "line": 2,
     "col": 3,
     "code": "E_PARSE",
-    "message": "unknown config key: runtime.docker_enabled. Allowed: agent.model, agent.command, agent.backend, agent.trusted_workspace, agent.cursor_flags, agent.claude_flags, run.logs_dir, run.debug, run.recover_limit, module.name, module.version, module.description, trusted_envs"
+    "message": "unknown config key: runtime.docker_enabled. Allowed: agent.model, agent.command, agent.backend, agent.trusted_workspace, agent.cursor_flags, agent.claude_flags, run.logs_dir, run.debug, run.recover_limit, module.name, module.version, module.description"
   },
   "unknown runtime config key": {
     "file": "input.jh",
     "line": 2,
     "col": 3,
     "code": "E_PARSE",
-    "message": "unknown config key: runtime.unknown_key. Allowed: agent.model, agent.command, agent.backend, agent.trusted_workspace, agent.cursor_flags, agent.claude_flags, run.logs_dir, run.debug, run.recover_limit, module.name, module.version, module.description, trusted_envs"
+    "message": "unknown config key: runtime.unknown_key. Allowed: agent.model, agent.command, agent.backend, agent.trusted_workspace, agent.cursor_flags, agent.claude_flags, run.logs_dir, run.debug, run.recover_limit, module.name, module.version, module.description"
   },
   "if keyword with old syntax produces error": {
     "file": "input.jh",
@@ -648,21 +648,21 @@
     "line": 2,
     "col": 3,
     "code": "E_PARSE",
-    "message": "unknown config key: runtime.workspace. Allowed: agent.model, agent.command, agent.backend, agent.trusted_workspace, agent.cursor_flags, agent.claude_flags, run.logs_dir, run.debug, run.recover_limit, module.name, module.version, module.description, trusted_envs"
+    "message": "unknown config key: runtime.workspace. Allowed: agent.model, agent.command, agent.backend, agent.trusted_workspace, agent.cursor_flags, agent.claude_flags, run.logs_dir, run.debug, run.recover_limit, module.name, module.version, module.description"
   },
   "metadata: runtime.workspace array rejected (unquoted element)": {
     "file": "input.jh",
     "line": 2,
     "col": 3,
     "code": "E_PARSE",
-    "message": "unknown config key: runtime.workspace. Allowed: agent.model, agent.command, agent.backend, agent.trusted_workspace, agent.cursor_flags, agent.claude_flags, run.logs_dir, run.debug, run.recover_limit, module.name, module.version, module.description, trusted_envs"
+    "message": "unknown config key: runtime.workspace. Allowed: agent.model, agent.command, agent.backend, agent.trusted_workspace, agent.cursor_flags, agent.claude_flags, run.logs_dir, run.debug, run.recover_limit, module.name, module.version, module.description"
   },
   "metadata: runtime.workspace array rejected (unclosed)": {
     "file": "input.jh",
     "line": 2,
     "col": 3,
     "code": "E_PARSE",
-    "message": "unknown config key: runtime.workspace. Allowed: agent.model, agent.command, agent.backend, agent.trusted_workspace, agent.cursor_flags, agent.claude_flags, run.logs_dir, run.debug, run.recover_limit, module.name, module.version, module.description, trusted_envs"
+    "message": "unknown config key: runtime.workspace. Allowed: agent.model, agent.command, agent.backend, agent.trusted_workspace, agent.cursor_flags, agent.claude_flags, run.logs_dir, run.debug, run.recover_limit, module.name, module.version, module.description"
   },
   "unterminated test block": {
     "file": "input.test.jh",
@@ -1952,19 +1952,33 @@
     "code": "E_PARSE",
     "message": "trailing | in match alternation; expected a pattern after |"
   },
-  "config array element must be a quoted string": {
-    "file": "input.jh",
-    "line": 3,
-    "col": 5,
-    "code": "E_PARSE",
-    "message": "array elements must be quoted strings: unquoted_value"
-  },
-  "config multi-line array not closed": {
+  "trusted_envs is removed from config (unknown key)": {
     "file": "input.jh",
     "line": 2,
+    "col": 3,
+    "code": "E_PARSE",
+    "message": "unknown config key: trusted_envs. Allowed: agent.model, agent.command, agent.backend, agent.trusted_workspace, agent.cursor_flags, agent.claude_flags, run.logs_dir, run.debug, run.recover_limit, module.name, module.version, module.description"
+  },
+  "script use key must be a valid env var name": {
+    "file": "input.jh",
+    "line": 1,
     "col": 1,
     "code": "E_PARSE",
-    "message": "array not closed with ']'"
+    "message": "E_ENV_INVALID use key \"1BAD\" is not a valid environment variable name (must match [A-Za-z_][A-Za-z0-9_]*)"
+  },
+  "script use key must not be reserved": {
+    "file": "input.jh",
+    "line": 1,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "E_ENV_RESERVED use cannot request reserved key \"JAIPH_WORKSPACE\" (same rule as --env); runtime-managed keys are off-limits"
+  },
+  "use is reserved as a script name": {
+    "file": "input.jh",
+    "line": 1,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "\"use\" is reserved and cannot be a script name"
   },
   "module.* keys rejected in def-level config": {
     "file": "input.jh",

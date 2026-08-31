@@ -14,24 +14,32 @@ import { dirname, join } from "node:path";
 
 const CLI_PATH = join(process.cwd(), "dist/src/cli.js");
 
-// `env_probe` reports the passthrough keys; `write_marker` makes workspace
-// writes observable.
-const FIXTURE = [
-  "script env_probe = `printf '%s|%s' \"${PROBE_A:-unset}\" \"${PROBE_B:-unset}\"`",
-  'script write_marker = `printf \'marker\' > "$JAIPH_WORKSPACE/written.txt"`',
-  "# Writes a workspace marker, then reports probe env values.",
-  "export def probe_and_write() {",
-  "  run write_marker()",
-  "  const seen = run env_probe()",
-  "  return seen",
-  "}",
-  "",
-  "export def main() {",
-  "  const seen = run probe_and_write()",
-  "  return seen",
-  "}",
-  "",
-].join("\n");
+// `env_probe` reports the granted `use` keys (script env is sterile: a
+// `--env` key reaches a script only through its `use` clause); `write_marker`
+// makes workspace writes observable. The hook-contract tests run with no
+// `--env` grant, so their fixture carries no `use` clause (an ungranted `use`
+// key would fail the pre-flight before any hook fires).
+function fixtureSource(useClause: string): string {
+  return [
+    `script env_probe${useClause} = \`printf '%s|%s' "\${PROBE_A:-unset}" "\${PROBE_B:-unset}"\``,
+    'script write_marker = `printf \'marker\' > "$JAIPH_WORKSPACE/written.txt"`',
+    "# Writes a workspace marker, then reports probe env values.",
+    "export def probe_and_write() {",
+    "  run write_marker()",
+    "  const seen = run env_probe()",
+    "  return seen",
+    "}",
+    "",
+    "export def main() {",
+    "  const seen = run probe_and_write()",
+    "  return seen",
+    "}",
+    "",
+  ].join("\n");
+}
+
+const FIXTURE = fixtureSource(" use PROBE_A PROBE_B");
+const HOOK_FIXTURE = fixtureSource("");
 
 /** Keys that must not leak in from the test-runner env. */
 const CONTROL_KEYS = ["JAIPH_TRUST_PROJECT_HOOKS", "PROBE_A", "PROBE_B"];
@@ -42,10 +50,10 @@ function cleanEnv(extra: Record<string, string>): NodeJS.ProcessEnv {
   return { ...env, ...extra };
 }
 
-function makeWorkspace(): { ws: string; fixture: string } {
+function makeWorkspace(source: string = FIXTURE): { ws: string; fixture: string } {
   const ws = mkdtempSync(join(tmpdir(), "jaiph-exec-policy-"));
   const fixture = join(ws, "tools.jh");
-  writeFileSync(fixture, FIXTURE);
+  writeFileSync(fixture, source);
   return { ws, fixture };
 }
 
@@ -348,7 +356,7 @@ function assertHookContract(events: Array<Record<string, unknown>>, fixture: str
 }
 
 test("hook contract: direct `jaiph run` dispatches all four events with the documented payloads", async () => {
-  const { ws, fixture } = makeWorkspace();
+  const { ws, fixture } = makeWorkspace(HOOK_FIXTURE);
   try {
     const hooksLog = writeHooksConfig(ws);
     // Project-local hooks are gated behind the per-workspace trust opt-in
@@ -362,7 +370,7 @@ test("hook contract: direct `jaiph run` dispatches all four events with the docu
 });
 
 test("hook contract: untrusted workspace does not run project-local hooks (finding M-10)", async () => {
-  const { ws, fixture } = makeWorkspace();
+  const { ws, fixture } = makeWorkspace(HOOK_FIXTURE);
   try {
     const hooksLog = writeHooksConfig(ws);
     // No JAIPH_TRUST_PROJECT_HOOKS: the project-local .jaiph/hooks.json must not
@@ -383,7 +391,7 @@ test("hook contract: untrusted workspace does not run project-local hooks (findi
 });
 
 test("hook contract: HTTP `jaiph serve` runs dispatch the same four events", async () => {
-  const { ws, fixture } = makeWorkspace();
+  const { ws, fixture } = makeWorkspace(HOOK_FIXTURE);
   try {
     const hooksLog = writeHooksConfig(ws);
     const outcome = await runServeMode(ws, fixture, [], cleanEnv({ JAIPH_TRUST_PROJECT_HOOKS: "1", HOOKS_LOG: hooksLog }));
@@ -395,7 +403,7 @@ test("hook contract: HTTP `jaiph serve` runs dispatch the same four events", asy
 });
 
 test("hook contract: MCP tool calls dispatch the same four events", async () => {
-  const { ws, fixture } = makeWorkspace();
+  const { ws, fixture } = makeWorkspace(HOOK_FIXTURE);
   try {
     const hooksLog = writeHooksConfig(ws);
     const outcome = await runMcpMode(ws, fixture, [], cleanEnv({ JAIPH_TRUST_PROJECT_HOOKS: "1", HOOKS_LOG: hooksLog }));

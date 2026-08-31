@@ -9,12 +9,18 @@ export interface ImportDef {
   loc: SourceLoc;
 }
 
-/** `import script "<path>" as <name>` — binds an external script file as a local script symbol. */
+/** `import script "<path>" as <name> [use KEY …]` — binds an external script file as a local script symbol. */
 export interface ScriptImportDef {
   /** Relative path to the script file (as written in source). */
   path: string;
   /** Bound script name. */
   alias: string;
+  /**
+   * Host env keys this script's spawns request (`use GITHUB_TOKEN NPM_TOKEN`).
+   * A key reaches the subprocess only when the operator also granted it with
+   * `--env KEY[=VALUE]`; script env is otherwise sterile (env-allowlist.ts).
+   */
+  use?: string[];
   loc: SourceLoc;
 }
 
@@ -123,6 +129,12 @@ export interface ScriptDef {
   body: string;
   /** Fence language tag (e.g. "python3", "node"). Maps to `#!/usr/bin/env <lang>`. */
   lang?: string;
+  /**
+   * Host env keys this script's spawns request (`use GITHUB_TOKEN NPM_TOKEN`).
+   * A key reaches the subprocess only when the operator also granted it with
+   * `--env KEY[=VALUE]`; script env is otherwise sterile (env-allowlist.ts).
+   */
+  use?: string[];
   loc: SourceLoc;
 }
 
@@ -247,13 +259,6 @@ export interface DefMetadata {
   };
   run?: { debug?: boolean; logsDir?: string; recoverLimit?: number };
   module?: { name?: string; version?: string; description?: string };
-  /**
-   * Host env keys this scope's trusted `run` steps may receive
-   * (`trusted_envs = "GITHUB_TOKEN NPM_TOKEN"`). Only honored when declared
-   * in the entry file; resolved from the pristine host env snapshot, never
-   * from a calling workflow's scope env.
-   */
-  trustedEnvs?: string[];
 }
 
 /** Step inside a test block. Only present when module is a test file (*.test.jh). */

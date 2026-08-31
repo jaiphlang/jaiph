@@ -7,16 +7,20 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve, extname } from "node:path";
 import { basename } from "node:path";
 import { buildScriptsFromGraph, walkTestFiles, loadModuleGraph } from "../../transpiler";
-import { jaiphError } from "../../errors";
+import { errText, jaiphError } from "../../errors";
 import { detectWorkspaceRoot } from "../shared/paths";
-import { hasHelpFlag, parseArgs } from "../shared/usage";
+import { hasHelpFlag, parseArgs, resolveEnvPairs } from "../shared/usage";
 import { runTestFile } from "../../runtime";
 
 const TEST_USAGE =
-  "Usage: jaiph test [path]\n\n" +
+  "Usage: jaiph test [--env KEY[=VALUE]]... [path]\n\n" +
   "Run *.test.jh modules. With no path, discovers every *.test.jh under the workspace\n" +
   "root. With a directory, runs every *.test.jh underneath (recursive). With a single\n" +
   "*.test.jh file, runs only that file.\n\n" +
+  "  --env KEY=VALUE grant KEY to matching script `use` clauses (repeatable);\n" +
+  "                  --env KEY forwards the host value. Unlike jaiph run, a `use`\n" +
+  "                  key that is not granted does not fail the test — the key is\n" +
+  "                  simply absent in the script's env.\n" +
   "  -h, --help      show this help\n\n" +
   "Example:\n" +
   "  jaiph test ./e2e/say_hello.test.jh\n";
@@ -26,9 +30,19 @@ export async function runTest(rest: string[]): Promise<number> {
     process.stdout.write(TEST_USAGE);
     return 0;
   }
-  const { positional } = parseArgs(rest);
+  const { positional, env } = parseArgs(rest);
   const input = positional[0];
   const runArgs = positional.slice(1);
+  // `--env` grants `use` keys to script spawns (bare KEY still resolves the
+  // host value and fails E_ENV_MISSING when unset). There is no `use`
+  // pre-flight in the test lane: an ungranted key is absent in the spawn.
+  let extraEnv: Record<string, string>;
+  try {
+    extraEnv = resolveEnvPairs(env, process.env);
+  } catch (err) {
+    process.stderr.write(`${errText(err)}\n`);
+    return 1;
+  }
 
   if (!input) {
     const workspaceRoot = detectWorkspaceRoot(process.cwd());
@@ -39,7 +53,7 @@ export async function runTest(rest: string[]): Promise<number> {
     }
     let exitCode = 0;
     for (const testFile of testFiles) {
-      const code = await runSingleTestFile(testFile, workspaceRoot, runArgs);
+      const code = await runSingleTestFile(testFile, workspaceRoot, runArgs, extraEnv);
       if (code !== 0) exitCode = code;
     }
     return exitCode;
@@ -58,7 +72,7 @@ export async function runTest(rest: string[]): Promise<number> {
     const workspaceRoot = detectWorkspaceRoot(inputAbs);
     let exitCode = 0;
     for (const testFile of testFiles) {
-      const code = await runSingleTestFile(testFile, workspaceRoot, runArgs);
+      const code = await runSingleTestFile(testFile, workspaceRoot, runArgs, extraEnv);
       if (code !== 0) exitCode = code;
     }
     return exitCode;
@@ -72,7 +86,7 @@ export async function runTest(rest: string[]): Promise<number> {
   const isTestFile = basename(inputAbs).endsWith(".test.jh");
   if (isTestFile) {
     const workspaceRoot = detectWorkspaceRoot(dirname(inputAbs));
-    return await runSingleTestFile(inputAbs, workspaceRoot, runArgs);
+    return await runSingleTestFile(inputAbs, workspaceRoot, runArgs, extraEnv);
   }
 
   process.stderr.write(
@@ -86,6 +100,7 @@ export async function runSingleTestFile(
   testFileAbs: string,
   workspaceRoot: string,
   _runArgs: string[],
+  extraEnv: Record<string, string> = {},
 ): Promise<number> {
   const graph = loadModuleGraph(testFileAbs, workspaceRoot);
   const ast = graph.modules.get(graph.entryFile)!.ast;
@@ -98,7 +113,7 @@ export async function runSingleTestFile(
   try {
     /** Only compile the test module and its imports — not every `.jh` under the workspace. */
     const { scriptsDir } = buildScriptsFromGraph(graph, outDir);
-    return await runTestFile(graph, workspaceRoot, scriptsDir, ast.tests);
+    return await runTestFile(graph, workspaceRoot, scriptsDir, ast.tests, extraEnv);
   } finally {
     rmSync(outDir, { recursive: true, force: true });
   }

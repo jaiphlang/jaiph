@@ -8,21 +8,16 @@ import {
 } from "../../transpiler";
 import { resolveModuleMetadata, metadataToConfig } from "../../config";
 import { loadMergedHooks, isProjectHooksTrusted } from "../run/hooks";
+import { planUseEnvs } from "../run/use-envs";
 import { deriveTools } from "./mcp-tools";
 import type { GenerationState } from "./generation-state";
 
 // The generation "shape" lives in its own leaf so the posture module can read
 // it without importing back into this file; re-export it here so callers keep a
-// single import site for the generation surface.
+// single import site for the generation surface. Startup posture (credential
+// pre-flight, host runs root) is a sibling concern in ./startup-posture.ts —
+// import it from there directly (keeps this file under the fan-out cap).
 export type { GenerationState } from "./generation-state";
-// Startup posture (credential pre-flight, host runs root) is a sibling
-// concern; re-exported so `jaiph mcp` / `jaiph serve` reach the whole
-// generation surface through this one module.
-export {
-  resolveStartupPosture,
-  logStartupPosture,
-  type StartupPosture,
-} from "./startup-posture";
 
 /**
  * Load (or reload) everything one generation of a workflow server needs:
@@ -46,6 +41,13 @@ export function loadGeneration(
     return {
       failures: diag.sorted().map((d) => `${d.file}:${d.line}:${d.col} ${d.code} ${d.message}`),
     };
+  }
+
+  // Same `use` pre-flight as `jaiph run`: every `use` key in the import graph
+  // must be granted with `--env` before the server starts serving calls.
+  const usePlan = planUseEnvs(graph, new Set(Object.keys(extraEnv)));
+  if (usePlan.errors.length > 0) {
+    return { failures: usePlan.errors };
   }
 
   const mod = graph.modules.get(inputAbs)!.ast;

@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 
-# Contract: `jaiph run --env` defines the workflow process's env var.
-# Host mode applies the pairs to the runner env. Bare `--env KEY` forwards
-# the host value, and a host-unset bare key aborts with E_ENV_MISSING
-# before any process is spawned.
+# Contract: `jaiph run --env` defines the workflow process's env var and is
+# the grant for script `use` clauses (script env is sterile; a `use` key
+# crosses only when --env names it). Bare `--env KEY` forwards the host
+# value, and a host-unset bare key aborts with E_ENV_MISSING before any
+# process is spawned.
 
 set -euo pipefail
 
@@ -14,9 +15,9 @@ trap e2e::cleanup EXIT
 e2e::prepare_test_env "env_passthrough"
 TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 
-# A workflow that returns whatever GREETING the workflow process sees.
+# A workflow whose script requests GREETING with `use`; --env grants it.
 e2e::file "env_show.jh" <<'EOF'
-script show_impl = `echo "$GREETING"`
+script show_impl use GREETING = `echo "$GREETING"`
 export def main() {
   const g = run show_impl()
   return "${g}"

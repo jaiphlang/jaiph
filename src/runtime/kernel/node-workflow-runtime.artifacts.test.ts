@@ -402,15 +402,16 @@ test("NodeWorkflowRuntime: nested cross-module run applies callee module config 
     const childJh = join(root, "child.jh");
     const parentJh = join(root, "parent.jh");
     const metaFile = join(root, "config_scope.log");
+    // Scope env is observed through inline shell lines: script env is sterile
+    // (env-allowlist.ts), so a script spawn no longer sees JAIPH_AGENT_MODEL.
     writeFileSync(
       childJh,
       [
         'config {',
         '  agent.model = "model-b"',
         "}",
-        'script log_model = `printf \'%s:%s\\n\' "$1" "$JAIPH_AGENT_MODEL" >> "$JAIPH_META_SCOPE_FILE"`',
         "def show() {",
-        '  run log_model("child")',
+        '  echo "child:$JAIPH_AGENT_MODEL" >> "$JAIPH_META_SCOPE_FILE"',
         "}",
         "",
       ].join("\n"),
@@ -423,26 +424,16 @@ test("NodeWorkflowRuntime: nested cross-module run applies callee module config 
         'config {',
         '  agent.model = "model-a"',
         "}",
-        'script log_model = `printf \'%s:%s\\n\' "$1" "$JAIPH_AGENT_MODEL" >> "$JAIPH_META_SCOPE_FILE"`',
         "export def main() {",
-        '  run log_model("parent_before")',
+        '  echo "parent_before:$JAIPH_AGENT_MODEL" >> "$JAIPH_META_SCOPE_FILE"',
         "  run child.show()",
-        '  run log_model("parent_after")',
+        '  echo "parent_after:$JAIPH_AGENT_MODEL" >> "$JAIPH_META_SCOPE_FILE"',
         "}",
         "",
       ].join("\n"),
     );
     const scriptsDir = join(root, "scripts");
     mkdirSync(scriptsDir, { recursive: true });
-    writeFileSync(
-      join(scriptsDir, "log_model"),
-      [
-        "#!/usr/bin/env bash",
-        'printf \'%s:%s\n\' "$1" "$JAIPH_AGENT_MODEL" >> "$JAIPH_META_SCOPE_FILE"',
-        "",
-      ].join("\n"),
-      { mode: 0o755 },
-    );
 
     const graph = buildRuntimeGraph(parentJh);
     const env: NodeJS.ProcessEnv = {
@@ -472,19 +463,18 @@ test("NodeWorkflowRuntime: config agent.model applies to prompt only via PROMPT_
   try {
     const jh = join(root, "prompt_model.jh");
     const metaFile = join(root, "scope.log");
+    // Shell-line observation: scope env is what an inline shell step sees.
     writeFileSync(
       jh,
       [
         'config {',
         '  agent.model = "module-model"',
         "}",
-        'script log_model = `printf \'script:%s\\n\' "$JAIPH_AGENT_MODEL" >> "$JAIPH_SCOPE_LOG"`',
-        "",
         "def with_prompt(model) {",
         "  config {",
         "    agent.model = model",
         "  }",
-        '  run log_model()',
+        '  echo "shell:$JAIPH_AGENT_MODEL" >> "$JAIPH_SCOPE_LOG"',
         '  const answer = prompt "hello"',
         "}",
         "",
@@ -496,15 +486,6 @@ test("NodeWorkflowRuntime: config agent.model applies to prompt only via PROMPT_
     );
     const scriptsDir = join(root, "scripts");
     mkdirSync(scriptsDir, { recursive: true });
-    writeFileSync(
-      join(scriptsDir, "log_model"),
-      [
-        "#!/usr/bin/env bash",
-        'printf \'script:%s\n\' "$JAIPH_AGENT_MODEL" >> "$JAIPH_SCOPE_LOG"',
-        "",
-      ].join("\n"),
-      { mode: 0o755 },
-    );
 
     const runsDir = join(root, ".jaiph", "runs");
     const graph = buildRuntimeGraph(jh);
@@ -530,7 +511,7 @@ test("NodeWorkflowRuntime: config agent.model applies to prompt only via PROMPT_
       else process.env.JAIPH_RUN_SUMMARY_FILE = prevSummaryEnv;
     }
 
-    assert.equal(readFileSync(metaFile, "utf8"), "script:\n");
+    assert.equal(readFileSync(metaFile, "utf8"), "shell:\n");
 
     const summaryLines = readFileSync(join(runtime.getRunDir(), "run_summary.jsonl"), "utf8")
       .trim()
@@ -558,12 +539,11 @@ test("NodeWorkflowRuntime: nested cross-module run applies callee def-level conf
         'config {',
         '  agent.model = "child-module-model"',
         "}",
-        'script log_model = `printf \'%s:%s\\n\' "$1" "$JAIPH_AGENT_MODEL" >> "$JAIPH_META_SCOPE_FILE"`',
         "def show() {",
         '  config {',
         '    agent.model = "child-workflow-model"',
         "  }",
-        '  run log_model("child")',
+        '  echo "child:$JAIPH_AGENT_MODEL" >> "$JAIPH_META_SCOPE_FILE"',
         "}",
         "",
       ].join("\n"),
@@ -584,15 +564,6 @@ test("NodeWorkflowRuntime: nested cross-module run applies callee def-level conf
     );
     const scriptsDir = join(root, "scripts");
     mkdirSync(scriptsDir, { recursive: true });
-    writeFileSync(
-      join(scriptsDir, "log_model"),
-      [
-        "#!/usr/bin/env bash",
-        'printf \'%s:%s\n\' "$1" "$JAIPH_AGENT_MODEL" >> "$JAIPH_META_SCOPE_FILE"',
-        "",
-      ].join("\n"),
-      { mode: 0o755 },
-    );
 
     const graph = buildRuntimeGraph(parentJh);
     const env: NodeJS.ProcessEnv = {
@@ -628,12 +599,11 @@ test("NodeWorkflowRuntime: nested cross-module run honors locked JAIPH_AGENT_MOD
         'config {',
         '  agent.model = "model-b"',
         "}",
-        'script log_model = `printf \'%s:%s\\n\' "$1" "$JAIPH_AGENT_MODEL" >> "$JAIPH_META_SCOPE_FILE"`',
         "def show() {",
         '  config {',
         '    agent.model = "child-workflow-model"',
         "  }",
-        '  run log_model("child")',
+        '  echo "child:$JAIPH_AGENT_MODEL" >> "$JAIPH_META_SCOPE_FILE"',
         "}",
         "",
       ].join("\n"),
@@ -654,15 +624,6 @@ test("NodeWorkflowRuntime: nested cross-module run honors locked JAIPH_AGENT_MOD
     );
     const scriptsDir = join(root, "scripts");
     mkdirSync(scriptsDir, { recursive: true });
-    writeFileSync(
-      join(scriptsDir, "log_model"),
-      [
-        "#!/usr/bin/env bash",
-        'printf \'%s:%s\n\' "$1" "$JAIPH_AGENT_MODEL" >> "$JAIPH_META_SCOPE_FILE"',
-        "",
-      ].join("\n"),
-      { mode: 0o755 },
-    );
 
     const graph = buildRuntimeGraph(parentJh);
     const env: NodeJS.ProcessEnv = {
@@ -698,9 +659,8 @@ test("NodeWorkflowRuntime: nested cross-module preserves locked JAIPH_AGENT_BACK
         'config {',
         '  agent.backend = "claude"',
         "}",
-        'script log_backend = `printf \'%s:%s\\n\' "$1" "$JAIPH_AGENT_BACKEND" >> "$JAIPH_META_SCOPE_FILE"`',
         "export def main() {",
-        '  run log_backend("child")',
+        '  echo "child:$JAIPH_AGENT_BACKEND" >> "$JAIPH_META_SCOPE_FILE"',
         "}",
         "",
       ].join("\n"),
@@ -713,26 +673,16 @@ test("NodeWorkflowRuntime: nested cross-module preserves locked JAIPH_AGENT_BACK
         'config {',
         '  agent.backend = "cursor"',
         "}",
-        'script log_backend = `printf \'%s:%s\\n\' "$1" "$JAIPH_AGENT_BACKEND" >> "$JAIPH_META_SCOPE_FILE"`',
         "export def main() {",
-        '  run log_backend("parent_before")',
+        '  echo "parent_before:$JAIPH_AGENT_BACKEND" >> "$JAIPH_META_SCOPE_FILE"',
         "  run child.main()",
-        '  run log_backend("parent_after")',
+        '  echo "parent_after:$JAIPH_AGENT_BACKEND" >> "$JAIPH_META_SCOPE_FILE"',
         "}",
         "",
       ].join("\n"),
     );
     const scriptsDir = join(root, "scripts");
     mkdirSync(scriptsDir, { recursive: true });
-    writeFileSync(
-      join(scriptsDir, "log_backend"),
-      [
-        "#!/usr/bin/env bash",
-        'printf \'%s:%s\n\' "$1" "$JAIPH_AGENT_BACKEND" >> "$JAIPH_META_SCOPE_FILE"',
-        "",
-      ].join("\n"),
-      { mode: 0o755 },
-    );
 
     const graph = buildRuntimeGraph(parentJh);
     const env: NodeJS.ProcessEnv = {
@@ -770,21 +720,19 @@ test("NodeWorkflowRuntime: sibling workflows do not inherit each other's metadat
         '  agent.backend = "cursor"',
         "}",
         "",
-        'script log_env = `printf \'%s:model=%s,backend=%s\\n\' "$1" "$JAIPH_AGENT_MODEL" "$JAIPH_AGENT_BACKEND" >> "$JAIPH_SIBLING_LOG"`',
-        "",
         "def alpha() {",
         "  config {",
         '    agent.model = "alpha-model"',
         '    agent.backend = "claude"',
         "  }",
-        '  run log_env("alpha")',
+        '  echo "alpha:model=$JAIPH_AGENT_MODEL,backend=$JAIPH_AGENT_BACKEND" >> "$JAIPH_SIBLING_LOG"',
         "}",
         "",
         "def beta() {",
         "  config {",
         '    agent.model = "beta-model"',
         "  }",
-        '  run log_env("beta")',
+        '  echo "beta:model=$JAIPH_AGENT_MODEL,backend=$JAIPH_AGENT_BACKEND" >> "$JAIPH_SIBLING_LOG"',
         "}",
         "",
         "export def main() {",
@@ -796,15 +744,6 @@ test("NodeWorkflowRuntime: sibling workflows do not inherit each other's metadat
     );
     const scriptsDir = join(root, "scripts");
     mkdirSync(scriptsDir, { recursive: true });
-    writeFileSync(
-      join(scriptsDir, "log_env"),
-      [
-        "#!/usr/bin/env bash",
-        'printf \'%s:model=%s,backend=%s\n\' "$1" "$JAIPH_AGENT_MODEL" "$JAIPH_AGENT_BACKEND" >> "$JAIPH_SIBLING_LOG"',
-        "",
-      ].join("\n"),
-      { mode: 0o755 },
-    );
 
     const graph = buildRuntimeGraph(jh);
     const env: NodeJS.ProcessEnv = {
@@ -1404,9 +1343,8 @@ test("NodeWorkflowRuntime: imported module cannot override agent.command by defa
         "config {",
         '  agent.command = "injected-agent"',
         "}",
-        'script log_cmd = `printf \'%s:%s\\n\' "$1" "$JAIPH_AGENT_COMMAND" >> "$JAIPH_META_SCOPE_FILE"`',
         "export def main() {",
-        '  run log_cmd("child")',
+        '  echo "child:$JAIPH_AGENT_COMMAND" >> "$JAIPH_META_SCOPE_FILE"',
         "}",
         "",
       ].join("\n"),
@@ -1416,9 +1354,8 @@ test("NodeWorkflowRuntime: imported module cannot override agent.command by defa
       [
         'import "child.jh" as child',
         "",
-        'script log_cmd = `printf \'%s:%s\\n\' "$1" "$JAIPH_AGENT_COMMAND" >> "$JAIPH_META_SCOPE_FILE"`',
         "export def main() {",
-        '  run log_cmd("parent")',
+        '  echo "parent:$JAIPH_AGENT_COMMAND" >> "$JAIPH_META_SCOPE_FILE"',
         "  run child.main()",
         "}",
         "",
@@ -1426,15 +1363,6 @@ test("NodeWorkflowRuntime: imported module cannot override agent.command by defa
     );
     const scriptsDir = join(root, "scripts");
     mkdirSync(scriptsDir, { recursive: true });
-    writeFileSync(
-      join(scriptsDir, "log_cmd"),
-      [
-        "#!/usr/bin/env bash",
-        'printf \'%s:%s\n\' "$1" "$JAIPH_AGENT_COMMAND" >> "$JAIPH_META_SCOPE_FILE"',
-        "",
-      ].join("\n"),
-      { mode: 0o755 },
-    );
 
     const graph = buildRuntimeGraph(parentJh);
     // Run 1: no unlock — imported module's agent.command must not override
@@ -1491,24 +1419,14 @@ test("NodeWorkflowRuntime: entry module agent.command config is applied", async 
         "config {",
         '  agent.command = "my-custom-agent"',
         "}",
-        'script log_cmd = `printf \'cmd:%s\\n\' "$JAIPH_AGENT_COMMAND" >> "$JAIPH_CMD_LOG"`',
         "export def main() {",
-        "  run log_cmd()",
+        '  echo "cmd:$JAIPH_AGENT_COMMAND" >> "$JAIPH_CMD_LOG"',
         "}",
         "",
       ].join("\n"),
     );
     const scriptsDir = join(root, "scripts");
     mkdirSync(scriptsDir, { recursive: true });
-    writeFileSync(
-      join(scriptsDir, "log_cmd"),
-      [
-        "#!/usr/bin/env bash",
-        'printf \'cmd:%s\n\' "$JAIPH_AGENT_COMMAND" >> "$JAIPH_CMD_LOG"',
-        "",
-      ].join("\n"),
-      { mode: 0o755 },
-    );
 
     const graph = buildRuntimeGraph(jh);
     const env: NodeJS.ProcessEnv = {

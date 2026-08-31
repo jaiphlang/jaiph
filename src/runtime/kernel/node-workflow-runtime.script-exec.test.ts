@@ -182,30 +182,31 @@ test("executeScript: missing interpreter fails with a diagnosable error naming t
   }
 });
 
-// Regression for the prompt env scrub (kernel/env-allowlist.ts): scrubbing is
-// scoped to prompt backend subprocesses only. A trusted `run` script step must
-// still receive the full runner env — including a `--env`-injected secret
-// (the pairs are merged into the runner env). If the scrub ever extended to
-// script spawns, the token below would be empty and this test would fail.
-test("executeScript: a run script step still receives a --env-injected non-allowlisted secret", async () => {
+// Sterile script env, exercised through a real spawn (no spy): a `use`d and
+// `--env`-granted key reaches the script; without the script's own `use` the
+// same granted key never arrives (env-allowlist.ts buildScriptEnv).
+test("executeScript: a use + --env-granted key reaches the script; an un-used key does not", async () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-script-env-secret-"));
   try {
     const jh = join(root, "flow.jh");
     writeFileSync(
       jh,
       [
-        'script show_token = `echo "token=$GITHUB_TOKEN"`',
+        'script show_token use GITHUB_TOKEN = `echo "token=${GITHUB_TOKEN:-}"`',
+        'script show_bare = `echo "bare=${GITHUB_TOKEN:-}"`',
         "",
         "export def main() {",
         "  const t = run show_token()",
-        '  return "${t}"',
+        "  const b = run show_bare()",
+        '  return "${t}|${b}"',
         "}",
         "",
       ].join("\n"),
     );
     const scriptsDir = join(root, "scripts");
     mkdirSync(scriptsDir, { recursive: true });
-    writeFileSync(join(scriptsDir, "show_token"), '#!/usr/bin/env bash\necho "token=$GITHUB_TOKEN"\n');
+    writeFileSync(join(scriptsDir, "show_token"), '#!/usr/bin/env bash\necho "token=${GITHUB_TOKEN:-}"\n');
+    writeFileSync(join(scriptsDir, "show_bare"), '#!/usr/bin/env bash\necho "bare=${GITHUB_TOKEN:-}"\n');
 
     const graph = buildRuntimeGraph(jh);
     const env: NodeJS.ProcessEnv = {
@@ -215,12 +216,13 @@ test("executeScript: a run script step still receives a --env-injected non-allow
       JAIPH_SCRIPTS: scriptsDir,
       JAIPH_WORKSPACE: root,
       GITHUB_TOKEN: "fake-gh-secret",
+      JAIPH_ENV_GRANT: "GITHUB_TOKEN",
     };
     const runtime = new NodeWorkflowRuntime(graph, { env, cwd: root, suppressLiveEvents: true });
     const status = await runtime.runMain([]);
     assert.equal(status, 0);
     const returnValue = readFileSync(join(runtime.getRunDir(), "return_value.txt"), "utf8");
-    assert.equal(returnValue, "token=fake-gh-secret");
+    assert.equal(returnValue, "token=fake-gh-secret|bare=");
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

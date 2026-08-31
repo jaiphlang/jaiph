@@ -35,8 +35,11 @@ export async function callDefHost(
 ): Promise<DefCallResult> {
   runtimeEnv.JAIPH_MODULE_GRAPH_FILE = env.graphFile;
   // `--env` passthrough defines the workflow process's env, overriding
-  // inherited values, on every call.
+  // inherited values, on every call. It is also the grant: a script's `use`
+  // key is forwarded only when named here (set unconditionally so a stale
+  // inherited grant never leaks).
   Object.assign(runtimeEnv, env.extraEnv);
+  runtimeEnv.JAIPH_ENV_GRANT = Object.keys(env.extraEnv).join(",");
 
   const metaFile = join(env.outDir, `.jaiph-run-meta-${runId}.txt`);
   const dummyBuiltPath = join(env.outDir, "entry.sh");

@@ -96,6 +96,7 @@ Top-level forms, in conventional order (`jaiph format` hoists `import`, `config`
 ```jaiph
 import "helpers.jh" as helpers          # module import (relative; .jh appended if omitted)
 import script "./tool.py" as tool       # external script file, callable with run tool(args)
+import script "./gh.sh" as gh use GITHUB_TOKEN   # `use` requests host env keys (granted by --env)
 config { agent.backend = "claude" }     # optional, at most one per file
 channel findings -> analyst             # channels + optional routes, top level only
 const VERSION = "1.0"                   # module-scoped immutable string
@@ -149,6 +150,7 @@ Script semantics:
 - Bodies are **opaque** to Jaiph orchestration — full shell/Python/whatever, heredocs included. The compiler strips the block's common leading whitespace at parse time (same idea as triple-quoted prompts); `jaiph format` re-adds one indent level for readability. The one check: do not call Jaiph symbols (`run`, def names) from inside a script body or `$(…)`.
 - **Capture = stdout.** `const v = run parse_json("pkg.json")` binds the script's stdout. Use `echo`/`printf` to return data; use exit codes (`return N` / `exit N`) for pass/fail.
 - **Arguments arrive as `$1`, `$2`, …** Module `const` values and def bindings are *not* exported into the subprocess environment — pass them explicitly as arguments.
+- **Script env is sterile.** A script sees only process basics (`PATH`, `HOME`, locale), the `JAIPH_WORKSPACE` / `JAIPH_SCRIPTS` / `JAIPH_RUN_DIR` / `JAIPH_ARTIFACTS_DIR` contract keys, and host keys it requests with a `use` clause: `script release use GITHUB_TOKEN = …` (also on `import script … as gh use GITHUB_TOKEN`). Each `use` key must be granted at run time with `--env KEY[=VALUE]` or `jaiph run` refuses to start (`E_ENV_MISSING`); host presence alone is not enough. `use` goes on the script declaration only — never on defs, `run` call sites, or prompts.
 - Alternatively a manual `#!` shebang as the first body line selects the interpreter (mutually exclusive with a fence tag).
 - A newline inside a single-backtick body is a parse error — use a fenced block.
 
@@ -354,7 +356,7 @@ Precedence: **environment > def-level config > module-level config > defaults**.
 - **Run directory:** `.jaiph/runs/<UTC-date>/<UTC-time>-<file>/` with numbered `NNNNNN-<step>.out`/`.err` per step (written incrementally — `tail -f` works) and `run_summary.jsonl`, one JSON event per line (`RUN_START/END`, `STEP_START/END`, `LOG`, `INBOX_*`, `PROMPT_*`). When debugging a failed run, read the failure footer the CLI prints, then the referenced `.err`/`.out` files.
 - **Return value:** if `main` returns a string, the CLI prints it to stdout after the PASS line.
 - **Capture sources:** def → its explicit `return` value; script → stdout; prompt → the agent's answer.
-- Step environment: scripts inherit the runner's environment plus `JAIPH_WORKSPACE`, `JAIPH_SCRIPTS`, `JAIPH_RUN_DIR`, `JAIPH_ARTIFACTS_DIR`, etc. Def variables are **not** auto-exported — pass them as arguments.
+- Step environment: script env is sterile — process basics plus `JAIPH_WORKSPACE`, `JAIPH_SCRIPTS`, `JAIPH_RUN_DIR`, `JAIPH_ARTIFACTS_DIR` (and `JAIPH_AGENT_MODEL`, kept defined for `set -u`); host keys cross only via a `use` clause granted with `--env`. Def variables are **not** auto-exported — pass them as arguments.
 
 ## Testing your programs
 

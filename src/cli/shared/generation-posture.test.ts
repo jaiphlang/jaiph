@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { loadGeneration, resolveStartupPosture, logStartupPosture, type GenerationState } from "./generation";
+import { loadGeneration, type GenerationState } from "./generation";
+import { resolveStartupPosture, logStartupPosture } from "./startup-posture";
 
 function makeGeneration(): { state: GenerationState; workspaceRoot: string; cleanup: () => void } {
   const workspaceRoot = mkdtempSync(join(tmpdir(), "jaiph-posture-ws-"));

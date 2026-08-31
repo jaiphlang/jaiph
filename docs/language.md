@@ -33,12 +33,12 @@ Crossings produce specific `E_VALIDATE` messages identifying the violated rule.
 | Top-level | Description |
 |---|---|
 | `import "path" as alias` | Loads another module. `.jh` is appended unless the path already ends in `.jh`. Resolution: relative-first; then, for paths containing a `/` (and when a workspace root is known), library fallback (`<workspace>/.jaiph/libs/<name>/...`). |
-| `import script "path" as name` | Loads an external script file (no `.jh` appended). Path is relative-only. Treated as a `script` symbol. |
+| `import script "path" as name [use KEY …]` | Loads an external script file (no `.jh` appended). Path is relative-only. Treated as a `script` symbol. The optional `use` clause requests host env keys for the script's spawns, same as on a named `script`. |
 | `export def` / `export script` | Marks a definition public. Names are private by default: same-file code can call any name; `import` can only call names listed in `mod.exports`. Zero exports means nothing is public. |
 | `channel name [-> target [, target …]]` | Declares a named queue. Inline routes target defs with 1 to 3 parameters (message, channel, sender). |
 | `const NAME = value` | Module-scoped immutable string. Values: double-quoted, triple-quoted, or bare token. Stored verbatim. |
-| `config { … }` | Module-level configuration block (`agent.*`, `run.*`, `module.*`, and `trusted_envs`). See [Configuration](configuration.md). |
-| `script name = …` | Executable definition. Invoked with `run`. |
+| `config { … }` | Module-level configuration block (`agent.*`, `run.*`, and `module.*`). See [Configuration](configuration.md). |
+| `script name [use KEY …] = …` | Executable definition. Invoked with `run`. The optional `use` clause requests host env keys for this script's subprocess; each key must be granted with `--env KEY[=VALUE]` (see [Subprocess environment](#subprocess-environment)). |
 | `def name([params]) { … }` | Interpreted callable. Invoked with `run`. `export def main` is the `jaiph run` entry; it is optional in library modules. |
 
 Visibility: same-file, all names. Across `import`, only names in `mod.exports` (`E_VALIDATE: "<name>" is not exported from module "<alias>"`). Zero exports means nothing is public.
@@ -121,7 +121,7 @@ run `echo $1-$2`("hello", "world")   # => hello-world
 | Default shebang | `#!/usr/bin/env bash` when neither tag nor `#!` line is present. |
 | Emitted name | `scripts/__inline_<12-hex>`; deterministic across runs. |
 | `catch` / `recover` | Allowed on a standalone `run` step with inline-script body. Forbidden on inline scripts in `log` / `logerr` / `logwarn` / `return` / `const` RHS. |
-| Subprocess env | Same `scope.env` as named scripts (runner `process.env` plus Jaiph metadata). Module `const` values are not auto-exported — pass via `$1`, `$2`. |
+| Subprocess env | Same sterile env as named scripts, minus `use` (inline scripts cannot request host keys). Module `const` values are not auto-exported — pass via `$1`, `$2`. |
 | `run async` | Not supported. |
 
 ### `run async` — concurrent execution with handles
@@ -394,7 +394,13 @@ Values interpolated into an inline shell step (a free-form body line that runs v
 
 ## Subprocess environment
 
-Managed script steps (`run` to a named script, `import script`, inline scripts) and def inline-shell lines all use the same `scope.env`: the runner's `process.env` augmented by Jaiph (`JAIPH_WORKSPACE`, `JAIPH_SCRIPTS`, `JAIPH_RUN_DIR`, `JAIPH_ARTIFACTS_DIR`, `JAIPH_RUN_ID`, prompt-related `JAIPH_AGENT_*`, and keys derived from `config { … }`). This is **not** an `env -i`-style wipe — anything the runner sees, the child sees, unless explicitly stripped. The runtime removes some keys from every subprocess environment so the audited program cannot read them: the audit journal path (`JAIPH_RUN_SUMMARY_FILE`), the audit-chain key (`JAIPH_CHAIN_KEY`), and any host keys named by `trusted_envs`. A `trusted_envs` key is re-injected only into the declaring def's own `run` steps. See [Environment variables](env-vars.md).
+Managed script steps (`run` to a named script, `import script`, inline scripts) run in a **sterile** environment. A script subprocess receives only:
+
+- process mechanics (`PATH`, `HOME`, locale, TLS/proxy settings — the same base set a prompt agent gets);
+- the script runtime contract: `JAIPH_WORKSPACE`, `JAIPH_SCRIPTS`, `JAIPH_RUN_DIR`, `JAIPH_ARTIFACTS_DIR`, the config-scoped `JAIPH_AGENT_BACKEND` (when set), and `JAIPH_AGENT_MODEL` (kept defined, empty when unset, for `set -u` scripts);
+- the host keys named in the script's own `use` clause, and only when the operator granted each with `--env KEY[=VALUE]`.
+
+Nothing else crosses: the rest of the host environment, agent credentials (`ANTHROPIC_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`, `CURSOR_API_KEY`, `OPENAI_API_KEY`), the audit journal path (`JAIPH_RUN_SUMMARY_FILE`), and the audit-chain key (`JAIPH_CHAIN_KEY`) all stay with the runner. A def in the call tree neither grants nor denies keys — `run bbb()` where `bbb` is a def never injects host keys into `bbb`'s scripts; only each script's own declaration counts. Def inline-shell lines (free-form body lines run via `sh -c`) still use the workflow's `scope.env`. See [Environment variables](env-vars.md#script-env).
 
 Module `const` values are **not** automatically exported into script environments. Pass them as positional arguments (`$1`, `$2`, …) or read Jaiph-provided variables.
 

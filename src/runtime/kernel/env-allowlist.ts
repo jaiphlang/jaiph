@@ -1,6 +1,9 @@
-// Fail-closed environment allowlist for prompt backend subprocesses
-// (`runBackend` in ./prompt.ts). Trusted `run` steps keep the full workflow
-// env; only what crosses to an agent is filtered here.
+// Fail-closed environment allowlists for the two subprocess boundaries:
+// prompt backend subprocesses (`runBackend` in ./prompt.ts, via
+// `scrubPromptEnv`) and script subprocesses (`NodeWorkflowRuntime`, via
+// `buildScriptEnv`). Both start from nothing and forward only what is listed;
+// a script additionally receives the host keys its `use` clause requests,
+// intersected with the operator's `--env` grant (`JAIPH_ENV_GRANT`).
 import { CHAIN_KEY_ENV } from "./emit";
 
 /** Agent backends the runtime can execute prompts against. */
@@ -10,9 +13,9 @@ export type AgentBackend = "cursor" | "claude" | "codex";
  * Enumerated credential keys forwarded to an agent per backend.
  * Only the keys for the run's resolved backends cross the boundary — the rest
  * of the `ANTHROPIC_*` / `CLAUDE_*` / `CURSOR_*` / `OPENAI_*` families stay
- * with the workflow process. Anything else goes through `--env` / `trusted_envs`
- * for trusted `run` steps. Must stay in sync with the credential pre-flight
- * (`src/cli/run/preflight-credentials.ts`) and docs/env-vars.md.
+ * with the workflow process. Anything else reaches a script only through its
+ * `use` clause plus the `--env` grant. Must stay in sync with the credential
+ * pre-flight (`src/cli/run/preflight-credentials.ts`) and docs/env-vars.md.
  */
 export const BACKEND_CREDENTIAL_KEYS: Record<AgentBackend, readonly string[]> = {
   cursor: ["CURSOR_API_KEY"],
@@ -92,9 +95,9 @@ function isPromptBaseEnv(key: string): boolean {
  * Build the environment for a prompt agent subprocess: the base environment
  * (`PROMPT_BASE_ENV_NAMES`/`_PREFIXES`) plus whatever the allowlist forwards
  * for this backend (`isEnvAllowed`: `JAIPH_*` control keys and the backend's
- * own credential keys). Everything else — including `--env`-injected secrets
- * like `GITHUB_TOKEN` — is dropped, fail-closed: credentials are for trusted
- * `run` steps, never for the model. `backend` is the raw configured value; an
+ * own credential keys). Everything else — including `--env`-granted secrets
+ * like `GITHUB_TOKEN` — is dropped, fail-closed: granted keys are for `use`
+ * script steps, never for the model. `backend` is the raw configured value; an
  * unrecognized backend forwards no credentials.
  */
 export function scrubPromptEnv(execEnv: NodeJS.ProcessEnv, backend: string): NodeJS.ProcessEnv {
@@ -108,6 +111,72 @@ export function scrubPromptEnv(execEnv: NodeJS.ProcessEnv, backend: string): Nod
     if (isEnvAllowed(key, backends) || isPromptBaseEnv(key)) {
       out[key] = value;
     }
+  }
+  return out;
+}
+
+/**
+ * The `--env` grant hand-off: the CLI (`jaiph run` / `serve` / `mcp` / `test`)
+ * writes the comma-separated key names it received via `--env KEY[=VALUE]`
+ * into this runner-env variable. A script's `use` key is forwarded only when
+ * it appears here — presence of the key on the host env alone is not a grant.
+ */
+export const ENV_GRANT_ENV = "JAIPH_ENV_GRANT";
+
+/** Parse the `--env` grant key set from a runner env (absent/empty → no grant). */
+export function parseEnvGrant(env: NodeJS.ProcessEnv): Set<string> {
+  const raw = env[ENV_GRANT_ENV] ?? "";
+  return new Set(raw.split(",").filter((k) => k.length > 0));
+}
+
+/**
+ * Runtime contract keys every script subprocess receives — the documented
+ * script-facing API surface (docs/env-vars.md), not secrets.
+ * `JAIPH_AGENT_BACKEND` is the config-derived (not host-secret) backend name;
+ * it is forwarded when scope has it so scripts can observe the effective,
+ * config-scoped backend (see the metadata-scope contract tested by e2e 86/87).
+ */
+export const SCRIPT_CONTRACT_ENV_NAMES = [
+  "JAIPH_WORKSPACE",
+  "JAIPH_SCRIPTS",
+  "JAIPH_RUN_DIR",
+  "JAIPH_ARTIFACTS_DIR",
+  "JAIPH_AGENT_BACKEND",
+] as const;
+
+/**
+ * Build the sterile environment for a script subprocess (named script,
+ * `import script`, or inline script):
+ *  - the prompt base env (process mechanics: PATH, HOME, locale, TLS/proxy);
+ *  - the script runtime contract keys (`SCRIPT_CONTRACT_ENV_NAMES`, incl. the
+ *    config-scoped `JAIPH_AGENT_BACKEND` when scope has it), plus
+ *    `JAIPH_AGENT_MODEL` kept defined (empty when unset) for `set -u` scripts;
+ *  - the host keys requested by the script's `use` clause, intersected with
+ *    the operator's `--env` grant; values resolve from `grantValues` (the
+ *    pristine runner env snapshot), never from workflow scope mutations.
+ * Nothing else is forwarded — no ambient host env, no agent credentials, and
+ * never `JAIPH_CHAIN_KEY` / `JAIPH_RUN_SUMMARY_FILE` / `JAIPH_SERVE_*`.
+ */
+export function buildScriptEnv(
+  scopeEnv: NodeJS.ProcessEnv,
+  useKeys: readonly string[] | undefined,
+  grantKeys: ReadonlySet<string>,
+  grantValues: NodeJS.ProcessEnv,
+): NodeJS.ProcessEnv {
+  const out: NodeJS.ProcessEnv = {};
+  for (const [key, value] of Object.entries(scopeEnv)) {
+    if (value === undefined) continue;
+    if (isPromptBaseEnv(key)) out[key] = value;
+  }
+  for (const key of SCRIPT_CONTRACT_ENV_NAMES) {
+    const value = scopeEnv[key];
+    if (value !== undefined) out[key] = value;
+  }
+  out.JAIPH_AGENT_MODEL = scopeEnv.JAIPH_AGENT_MODEL ?? "";
+  for (const key of useKeys ?? []) {
+    if (!grantKeys.has(key)) continue;
+    const value = grantValues[key];
+    if (value !== undefined) out[key] = value;
   }
   return out;
 }
