@@ -3,7 +3,7 @@
 
 ; Keywords: declarations, commands, control flow, and test-block constructs.
 [
-  "import" "export" "as" "config" "channel" "script" "def" "test"
+  "import" "export" "as" "config" "channel" "script" "def" "test" "use"
   "const" "run" "prompt" "log" "logerr" "logwarn" "fail" "return"
   "send" "recover" "catch"
   "if" "else" "for" "in" "match" "async" "returns" "not"

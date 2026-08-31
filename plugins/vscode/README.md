@@ -8,13 +8,15 @@ Syntax highlighting, compiler diagnostics, and formatting for Jaiph (`.jh` and
 
 ## Features
 
-- Highlights the current Jaiph surface for `.jh` / `*.test.jh`: `import`,
-  `config`, `channel` (`->` routes, `send … ->` sends), `script` (backtick and fenced),
-  `def`, `run` / `run async`, `catch` / `recover`,
-  `prompt … returns`, `match`, `if` / `else if`, `for … in`, `const`,
-  `log` / `logerr` / `logwarn`, `fail`, `return`, and `test` blocks
-  (`mock …`, `allow_failure`, `expect_contain` / `expect_not_contain` /
-  `expect_equal`).
+- Highlights the current Jaiph surface for `.jh` / `*.test.jh`: `import` /
+  `import script`, `config`, `channel` (`->` routes, `send … ->` sends),
+  `script` (backtick and fenced, optional `use KEY …`), `def`, named
+  `prompt name(params) [use KEY …] = …`, `run` / `run async`, `catch` /
+  `recover`, anonymous `prompt … returns`, `match`, `if` / `else if`,
+  `for … in`, `const`, `log` / `logerr` / `logwarn`, `fail`, `return`, and
+  `test` blocks (`mock …`, `allow_failure`, `expect_contain` /
+  `expect_not_contain` / `expect_equal`). Nested `script` / `def` /
+  `prompt` / `const` inside a def highlight the same way.
 - Compiler diagnostics on open/save via `jaiph compile --json`.
 - Document formatting via `jaiph format`.
 - Embedded grammars for script/prompt bodies (shell, python, node/js,

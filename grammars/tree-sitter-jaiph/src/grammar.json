@@ -79,6 +79,10 @@
         },
         {
           "type": "STRING",
+          "value": "use"
+        },
+        {
+          "type": "STRING",
           "value": "const"
         },
         {

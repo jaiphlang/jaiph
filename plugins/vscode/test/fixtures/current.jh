@@ -2,12 +2,12 @@
 # Grammar fixture: exercises the current .jh language surface.
 
 import "helpers.jh" as helpers
+import script "./gh.sh" as gh use GITHUB_TOKEN
 
 config {
   agent.backend = "claude"
   agent.model = "claude-opus"
   run.recover_limit = 3
-  trusted_envs = "GITHUB_TOKEN"
   module.name = "sample"
 }
 
@@ -20,12 +20,18 @@ script setup_env = ```bash
 mkdir -p out
 ```
 
+script publish use NPM_TOKEN = `echo x`
+
+prompt analyze(log) use GITHUB_TOKEN = "Look at ${log}"
+
 def check_deps(path) {
   run setup_env()
   return "${path}"
 }
 
 export def main(task) {
+  script shout use UE_TOKEN = `echo "$1"`
+  prompt describe(x) = "Tell me about ${x}"
   const status = run setup_env()
 
   if status == "ok" {

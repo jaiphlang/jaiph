@@ -15,6 +15,7 @@
         "channel",
         "script",
         "def",
+        "use",
         "test",
         "const",
         "run",
@@ -262,7 +263,7 @@
             ? significant[declAt].token.value
             : "";
         if (
-            (declKw === "def" || declKw === "script" || declKw === "channel") &&
+            (declKw === "def" || declKw === "script" || declKw === "channel" || declKw === "prompt") &&
             significant[declAt + 1] &&
             significant[declAt + 1].token.type === "identifier"
         ) {

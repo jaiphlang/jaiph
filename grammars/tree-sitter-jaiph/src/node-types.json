@@ -319,6 +319,10 @@
     "named": false
   },
   {
+    "type": "use",
+    "named": false
+  },
+  {
     "type": "{",
     "named": false
   },

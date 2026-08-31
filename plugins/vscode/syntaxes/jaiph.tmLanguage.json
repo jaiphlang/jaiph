@@ -51,6 +51,20 @@
     "import-statement": {
       "patterns": [
         {
+          "comment": "import script \"path\" as alias [use KEY …]",
+          "name": "meta.import.script.jaiph",
+          "match": "\\b(import)\\b\\s+\\b(script)\\b\\s+(\"(?:\\\\.|[^\"\\\\])*\")\\s+\\b(as)\\b\\s+([A-Za-z_][A-Za-z0-9_]*)(?:\\s+\\b(use)\\b((?:\\s+[A-Za-z_][A-Za-z0-9_]*)+))?",
+          "captures": {
+            "1": { "name": "keyword.control.import.jaiph" },
+            "2": { "name": "storage.type.script.jaiph" },
+            "3": { "name": "string.quoted.double.jaiph" },
+            "4": { "name": "keyword.control.import.jaiph" },
+            "5": { "name": "entity.name.namespace.jaiph" },
+            "6": { "name": "keyword.control.use.jaiph" },
+            "7": { "name": "variable.other.env.jaiph" }
+          }
+        },
+        {
           "name": "meta.import.jaiph",
           "match": "\\b(import)\\b\\s+(\"(?:\\\\.|[^\"\\\\])*\")\\s+\\b(as)\\b\\s+([A-Za-z_][A-Za-z0-9_]*)",
           "captures": {
@@ -68,14 +82,16 @@
         {
           "comment": "script NAME = ```python3 ... ```",
           "name": "meta.declaration.script.fenced.python.jaiph",
-          "begin": "^\\s*(?:(export)\\s+)?(script)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*(=)\\s*(```)(python3|python)\\s*$",
+          "begin": "^\\s*(?:(export)\\s+)?(script)\\s+([A-Za-z_][A-Za-z0-9_]*)(?:\\s+\\b(use)\\b((?:\\s+[A-Za-z_][A-Za-z0-9_]*)+))?\\s*(=)\\s*(```)(python3|python)\\s*$",
           "beginCaptures": {
             "1": { "name": "storage.modifier.jaiph" },
             "2": { "name": "storage.type.script.jaiph" },
             "3": { "name": "entity.name.function.script.jaiph" },
-            "4": { "name": "keyword.operator.assignment.jaiph" },
-            "5": { "name": "punctuation.definition.fence.begin.jaiph" },
-            "6": { "name": "entity.name.tag.language.jaiph" }
+            "4": { "name": "keyword.control.use.jaiph" },
+            "5": { "name": "variable.other.env.jaiph" },
+            "6": { "name": "keyword.operator.assignment.jaiph" },
+            "7": { "name": "punctuation.definition.fence.begin.jaiph" },
+            "8": { "name": "entity.name.tag.language.jaiph" }
           },
           "while": "^(?!\\s*```\\s*$)",
           "contentName": "meta.embedded.block.python.jaiph",
@@ -84,14 +100,16 @@
         {
           "comment": "script NAME = ```node ... ```",
           "name": "meta.declaration.script.fenced.javascript.jaiph",
-          "begin": "^\\s*(?:(export)\\s+)?(script)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*(=)\\s*(```)(node)\\s*$",
+          "begin": "^\\s*(?:(export)\\s+)?(script)\\s+([A-Za-z_][A-Za-z0-9_]*)(?:\\s+\\b(use)\\b((?:\\s+[A-Za-z_][A-Za-z0-9_]*)+))?\\s*(=)\\s*(```)(node)\\s*$",
           "beginCaptures": {
             "1": { "name": "storage.modifier.jaiph" },
             "2": { "name": "storage.type.script.jaiph" },
             "3": { "name": "entity.name.function.script.jaiph" },
-            "4": { "name": "keyword.operator.assignment.jaiph" },
-            "5": { "name": "punctuation.definition.fence.begin.jaiph" },
-            "6": { "name": "entity.name.tag.language.jaiph" }
+            "4": { "name": "keyword.control.use.jaiph" },
+            "5": { "name": "variable.other.env.jaiph" },
+            "6": { "name": "keyword.operator.assignment.jaiph" },
+            "7": { "name": "punctuation.definition.fence.begin.jaiph" },
+            "8": { "name": "entity.name.tag.language.jaiph" }
           },
           "while": "^(?!\\s*```\\s*$)",
           "contentName": "meta.embedded.block.javascript.jaiph",
@@ -100,14 +118,16 @@
         {
           "comment": "script NAME = ```ruby ... ```",
           "name": "meta.declaration.script.fenced.ruby.jaiph",
-          "begin": "^\\s*(?:(export)\\s+)?(script)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*(=)\\s*(```)(ruby)\\s*$",
+          "begin": "^\\s*(?:(export)\\s+)?(script)\\s+([A-Za-z_][A-Za-z0-9_]*)(?:\\s+\\b(use)\\b((?:\\s+[A-Za-z_][A-Za-z0-9_]*)+))?\\s*(=)\\s*(```)(ruby)\\s*$",
           "beginCaptures": {
             "1": { "name": "storage.modifier.jaiph" },
             "2": { "name": "storage.type.script.jaiph" },
             "3": { "name": "entity.name.function.script.jaiph" },
-            "4": { "name": "keyword.operator.assignment.jaiph" },
-            "5": { "name": "punctuation.definition.fence.begin.jaiph" },
-            "6": { "name": "entity.name.tag.language.jaiph" }
+            "4": { "name": "keyword.control.use.jaiph" },
+            "5": { "name": "variable.other.env.jaiph" },
+            "6": { "name": "keyword.operator.assignment.jaiph" },
+            "7": { "name": "punctuation.definition.fence.begin.jaiph" },
+            "8": { "name": "entity.name.tag.language.jaiph" }
           },
           "while": "^(?!\\s*```\\s*$)",
           "contentName": "meta.embedded.block.ruby.jaiph",
@@ -116,14 +136,16 @@
         {
           "comment": "script NAME = ```perl ... ```",
           "name": "meta.declaration.script.fenced.perl.jaiph",
-          "begin": "^\\s*(?:(export)\\s+)?(script)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*(=)\\s*(```)(perl)\\s*$",
+          "begin": "^\\s*(?:(export)\\s+)?(script)\\s+([A-Za-z_][A-Za-z0-9_]*)(?:\\s+\\b(use)\\b((?:\\s+[A-Za-z_][A-Za-z0-9_]*)+))?\\s*(=)\\s*(```)(perl)\\s*$",
           "beginCaptures": {
             "1": { "name": "storage.modifier.jaiph" },
             "2": { "name": "storage.type.script.jaiph" },
             "3": { "name": "entity.name.function.script.jaiph" },
-            "4": { "name": "keyword.operator.assignment.jaiph" },
-            "5": { "name": "punctuation.definition.fence.begin.jaiph" },
-            "6": { "name": "entity.name.tag.language.jaiph" }
+            "4": { "name": "keyword.control.use.jaiph" },
+            "5": { "name": "variable.other.env.jaiph" },
+            "6": { "name": "keyword.operator.assignment.jaiph" },
+            "7": { "name": "punctuation.definition.fence.begin.jaiph" },
+            "8": { "name": "entity.name.tag.language.jaiph" }
           },
           "while": "^(?!\\s*```\\s*$)",
           "contentName": "meta.embedded.block.perl.jaiph",
@@ -132,14 +154,16 @@
         {
           "comment": "script NAME = ```lua ... ```",
           "name": "meta.declaration.script.fenced.lua.jaiph",
-          "begin": "^\\s*(?:(export)\\s+)?(script)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*(=)\\s*(```)(lua)\\s*$",
+          "begin": "^\\s*(?:(export)\\s+)?(script)\\s+([A-Za-z_][A-Za-z0-9_]*)(?:\\s+\\b(use)\\b((?:\\s+[A-Za-z_][A-Za-z0-9_]*)+))?\\s*(=)\\s*(```)(lua)\\s*$",
           "beginCaptures": {
             "1": { "name": "storage.modifier.jaiph" },
             "2": { "name": "storage.type.script.jaiph" },
             "3": { "name": "entity.name.function.script.jaiph" },
-            "4": { "name": "keyword.operator.assignment.jaiph" },
-            "5": { "name": "punctuation.definition.fence.begin.jaiph" },
-            "6": { "name": "entity.name.tag.language.jaiph" }
+            "4": { "name": "keyword.control.use.jaiph" },
+            "5": { "name": "variable.other.env.jaiph" },
+            "6": { "name": "keyword.operator.assignment.jaiph" },
+            "7": { "name": "punctuation.definition.fence.begin.jaiph" },
+            "8": { "name": "entity.name.tag.language.jaiph" }
           },
           "while": "^(?!\\s*```\\s*$)",
           "contentName": "meta.embedded.block.lua.jaiph",
@@ -148,14 +172,16 @@
         {
           "comment": "script NAME = ```pwsh|powershell ... ```",
           "name": "meta.declaration.script.fenced.powershell.jaiph",
-          "begin": "^\\s*(?:(export)\\s+)?(script)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*(=)\\s*(```)(pwsh|powershell)\\s*$",
+          "begin": "^\\s*(?:(export)\\s+)?(script)\\s+([A-Za-z_][A-Za-z0-9_]*)(?:\\s+\\b(use)\\b((?:\\s+[A-Za-z_][A-Za-z0-9_]*)+))?\\s*(=)\\s*(```)(pwsh|powershell)\\s*$",
           "beginCaptures": {
             "1": { "name": "storage.modifier.jaiph" },
             "2": { "name": "storage.type.script.jaiph" },
             "3": { "name": "entity.name.function.script.jaiph" },
-            "4": { "name": "keyword.operator.assignment.jaiph" },
-            "5": { "name": "punctuation.definition.fence.begin.jaiph" },
-            "6": { "name": "entity.name.tag.language.jaiph" }
+            "4": { "name": "keyword.control.use.jaiph" },
+            "5": { "name": "variable.other.env.jaiph" },
+            "6": { "name": "keyword.operator.assignment.jaiph" },
+            "7": { "name": "punctuation.definition.fence.begin.jaiph" },
+            "8": { "name": "entity.name.tag.language.jaiph" }
           },
           "while": "^(?!\\s*```\\s*$)",
           "contentName": "meta.embedded.block.powershell.jaiph",
@@ -164,14 +190,16 @@
         {
           "comment": "script NAME = ```deno ... ```",
           "name": "meta.declaration.script.fenced.deno.jaiph",
-          "begin": "^\\s*(?:(export)\\s+)?(script)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*(=)\\s*(```)(deno)\\s*$",
+          "begin": "^\\s*(?:(export)\\s+)?(script)\\s+([A-Za-z_][A-Za-z0-9_]*)(?:\\s+\\b(use)\\b((?:\\s+[A-Za-z_][A-Za-z0-9_]*)+))?\\s*(=)\\s*(```)(deno)\\s*$",
           "beginCaptures": {
             "1": { "name": "storage.modifier.jaiph" },
             "2": { "name": "storage.type.script.jaiph" },
             "3": { "name": "entity.name.function.script.jaiph" },
-            "4": { "name": "keyword.operator.assignment.jaiph" },
-            "5": { "name": "punctuation.definition.fence.begin.jaiph" },
-            "6": { "name": "entity.name.tag.language.jaiph" }
+            "4": { "name": "keyword.control.use.jaiph" },
+            "5": { "name": "variable.other.env.jaiph" },
+            "6": { "name": "keyword.operator.assignment.jaiph" },
+            "7": { "name": "punctuation.definition.fence.begin.jaiph" },
+            "8": { "name": "entity.name.tag.language.jaiph" }
           },
           "while": "^(?!\\s*```\\s*$)",
           "contentName": "meta.embedded.block.javascript.jaiph",
@@ -180,14 +208,16 @@
         {
           "comment": "script NAME = ```ts-node|tsx|typescript ... ```",
           "name": "meta.declaration.script.fenced.typescript.jaiph",
-          "begin": "^\\s*(?:(export)\\s+)?(script)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*(=)\\s*(```)(typescript)\\s*$",
+          "begin": "^\\s*(?:(export)\\s+)?(script)\\s+([A-Za-z_][A-Za-z0-9_]*)(?:\\s+\\b(use)\\b((?:\\s+[A-Za-z_][A-Za-z0-9_]*)+))?\\s*(=)\\s*(```)(typescript)\\s*$",
           "beginCaptures": {
             "1": { "name": "storage.modifier.jaiph" },
             "2": { "name": "storage.type.script.jaiph" },
             "3": { "name": "entity.name.function.script.jaiph" },
-            "4": { "name": "keyword.operator.assignment.jaiph" },
-            "5": { "name": "punctuation.definition.fence.begin.jaiph" },
-            "6": { "name": "entity.name.tag.language.jaiph" }
+            "4": { "name": "keyword.control.use.jaiph" },
+            "5": { "name": "variable.other.env.jaiph" },
+            "6": { "name": "keyword.operator.assignment.jaiph" },
+            "7": { "name": "punctuation.definition.fence.begin.jaiph" },
+            "8": { "name": "entity.name.tag.language.jaiph" }
           },
           "while": "^(?!\\s*```\\s*$)",
           "contentName": "meta.embedded.block.typescript.jaiph",
@@ -196,14 +226,16 @@
         {
           "comment": "script NAME = ```bun ... ```",
           "name": "meta.declaration.script.fenced.bun.jaiph",
-          "begin": "^\\s*(?:(export)\\s+)?(script)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*(=)\\s*(```)(bun)\\s*$",
+          "begin": "^\\s*(?:(export)\\s+)?(script)\\s+([A-Za-z_][A-Za-z0-9_]*)(?:\\s+\\b(use)\\b((?:\\s+[A-Za-z_][A-Za-z0-9_]*)+))?\\s*(=)\\s*(```)(bun)\\s*$",
           "beginCaptures": {
             "1": { "name": "storage.modifier.jaiph" },
             "2": { "name": "storage.type.script.jaiph" },
             "3": { "name": "entity.name.function.script.jaiph" },
-            "4": { "name": "keyword.operator.assignment.jaiph" },
-            "5": { "name": "punctuation.definition.fence.begin.jaiph" },
-            "6": { "name": "entity.name.tag.language.jaiph" }
+            "4": { "name": "keyword.control.use.jaiph" },
+            "5": { "name": "variable.other.env.jaiph" },
+            "6": { "name": "keyword.operator.assignment.jaiph" },
+            "7": { "name": "punctuation.definition.fence.begin.jaiph" },
+            "8": { "name": "entity.name.tag.language.jaiph" }
           },
           "while": "^(?!\\s*```\\s*$)",
           "contentName": "meta.embedded.block.javascript.jaiph",
@@ -212,14 +244,16 @@
         {
           "comment": "script NAME = ```php ... ```",
           "name": "meta.declaration.script.fenced.php.jaiph",
-          "begin": "^\\s*(?:(export)\\s+)?(script)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*(=)\\s*(```)(php)\\s*$",
+          "begin": "^\\s*(?:(export)\\s+)?(script)\\s+([A-Za-z_][A-Za-z0-9_]*)(?:\\s+\\b(use)\\b((?:\\s+[A-Za-z_][A-Za-z0-9_]*)+))?\\s*(=)\\s*(```)(php)\\s*$",
           "beginCaptures": {
             "1": { "name": "storage.modifier.jaiph" },
             "2": { "name": "storage.type.script.jaiph" },
             "3": { "name": "entity.name.function.script.jaiph" },
-            "4": { "name": "keyword.operator.assignment.jaiph" },
-            "5": { "name": "punctuation.definition.fence.begin.jaiph" },
-            "6": { "name": "entity.name.tag.language.jaiph" }
+            "4": { "name": "keyword.control.use.jaiph" },
+            "5": { "name": "variable.other.env.jaiph" },
+            "6": { "name": "keyword.operator.assignment.jaiph" },
+            "7": { "name": "punctuation.definition.fence.begin.jaiph" },
+            "8": { "name": "entity.name.tag.language.jaiph" }
           },
           "while": "^(?!\\s*```\\s*$)",
           "contentName": "meta.embedded.block.php.jaiph",
@@ -228,14 +262,16 @@
         {
           "comment": "script NAME = ```[tag]? ... ``` (shell default)",
           "name": "meta.declaration.script.fenced.shell.jaiph",
-          "begin": "^\\s*(?:(export)\\s+)?(script)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*(=)\\s*(```)([A-Za-z_][A-Za-z0-9_]*)?\\s*$",
+          "begin": "^\\s*(?:(export)\\s+)?(script)\\s+([A-Za-z_][A-Za-z0-9_]*)(?:\\s+\\b(use)\\b((?:\\s+[A-Za-z_][A-Za-z0-9_]*)+))?\\s*(=)\\s*(```)([A-Za-z_][A-Za-z0-9_]*)?\\s*$",
           "beginCaptures": {
             "1": { "name": "storage.modifier.jaiph" },
             "2": { "name": "storage.type.script.jaiph" },
             "3": { "name": "entity.name.function.script.jaiph" },
-            "4": { "name": "keyword.operator.assignment.jaiph" },
-            "5": { "name": "punctuation.definition.fence.begin.jaiph" },
-            "6": { "name": "entity.name.tag.language.jaiph" }
+            "4": { "name": "keyword.control.use.jaiph" },
+            "5": { "name": "variable.other.env.jaiph" },
+            "6": { "name": "keyword.operator.assignment.jaiph" },
+            "7": { "name": "punctuation.definition.fence.begin.jaiph" },
+            "8": { "name": "entity.name.tag.language.jaiph" }
           },
           "while": "^(?!\\s*```\\s*$)",
           "contentName": "meta.embedded.block.shell.jaiph",
@@ -503,6 +539,31 @@
     "prompt-triple-quoted": {
       "patterns": [
         {
+          "comment": "[export] prompt NAME(params) [use KEY …] = \"\"\"...\"\"\" [returns \"schema\"]",
+          "name": "meta.declaration.prompt.triple-quoted.jaiph",
+          "begin": "\\b(?:(export)\\s+)?(prompt)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*\\(([^)]*)\\)(?:\\s+\\b(use)\\b((?:\\s+[A-Za-z_][A-Za-z0-9_]*)+))?\\s*(=)\\s*(\"\"\")\\s*$",
+          "beginCaptures": {
+            "1": { "name": "storage.modifier.jaiph" },
+            "2": { "name": "storage.type.prompt.jaiph" },
+            "3": { "name": "entity.name.function.prompt.jaiph" },
+            "4": { "name": "variable.parameter.jaiph" },
+            "5": { "name": "keyword.control.use.jaiph" },
+            "6": { "name": "variable.other.env.jaiph" },
+            "7": { "name": "keyword.operator.assignment.jaiph" },
+            "8": { "name": "punctuation.definition.string.begin.jaiph" }
+          },
+          "end": "^\\s*(\"\"\")(?:\\s+(returns)\\s+(\"(?:\\\\.|[^\"\\\\])*\"))?\\s*$",
+          "endCaptures": {
+            "1": { "name": "punctuation.definition.string.end.jaiph" },
+            "2": { "name": "keyword.control.returns.jaiph" },
+            "3": { "name": "string.quoted.schema.jaiph" }
+          },
+          "contentName": "string.unquoted.prompt.jaiph",
+          "patterns": [
+            { "include": "#string-interpolation" }
+          ]
+        },
+        {
           "comment": "[const name =] prompt \"\"\"...\"\"\" [returns \"schema\"]",
           "name": "meta.prompt.triple-quoted.jaiph",
           "begin": "(?:(?:(const)\\s+)?([A-Za-z_][A-Za-z0-9_]*)\\s*(=)\\s*)?(prompt)\\s+(\"\"\")\\s*$",
@@ -617,6 +678,20 @@
           }
         },
         {
+          "comment": "[export] prompt NAME(params) [use KEY …] =",
+          "name": "meta.declaration.prompt.jaiph",
+          "match": "\\b(?:(export)\\s+)?(prompt)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*\\(([^)]*)\\)(?:\\s+\\b(use)\\b((?:\\s+[A-Za-z_][A-Za-z0-9_]*)+))?\\s*(=)",
+          "captures": {
+            "1": { "name": "storage.modifier.jaiph" },
+            "2": { "name": "storage.type.prompt.jaiph" },
+            "3": { "name": "entity.name.function.prompt.jaiph" },
+            "4": { "name": "variable.parameter.jaiph" },
+            "5": { "name": "keyword.control.use.jaiph" },
+            "6": { "name": "variable.other.env.jaiph" },
+            "7": { "name": "keyword.operator.assignment.jaiph" }
+          }
+        },
+        {
           "comment": "test \"description\" {",
           "name": "meta.declaration.test.jaiph",
           "match": "\\b(test)\\b\\s+(\"(?:\\\\.|[^\"\\\\])*\")\\s*(\\{)",
@@ -634,24 +709,28 @@
         {
           "comment": "[export] script NAME = `body` (single-line backtick)",
           "name": "meta.declaration.script.backtick.jaiph",
-          "match": "^\\s*(?:(export)\\s+)?(script)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*(=)\\s*(`[^`]*`)",
+          "match": "^\\s*(?:(export)\\s+)?(script)\\s+([A-Za-z_][A-Za-z0-9_]*)(?:\\s+\\b(use)\\b((?:\\s+[A-Za-z_][A-Za-z0-9_]*)+))?\\s*(=)\\s*(`[^`]*`)",
           "captures": {
             "1": { "name": "storage.modifier.jaiph" },
             "2": { "name": "storage.type.script.jaiph" },
             "3": { "name": "entity.name.function.script.jaiph" },
-            "4": { "name": "keyword.operator.assignment.jaiph" },
-            "5": { "name": "string.unquoted.script.jaiph" }
+            "4": { "name": "keyword.control.use.jaiph" },
+            "5": { "name": "variable.other.env.jaiph" },
+            "6": { "name": "keyword.operator.assignment.jaiph" },
+            "7": { "name": "string.unquoted.script.jaiph" }
           }
         },
         {
           "comment": "[export] script NAME = (prefix for non-fence, non-backtick RHS)",
           "name": "meta.declaration.script.jaiph",
-          "match": "^\\s*(?:(export)\\s+)?(script)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*(=)(?!\\s*```|\\s*`)",
+          "match": "^\\s*(?:(export)\\s+)?(script)\\s+([A-Za-z_][A-Za-z0-9_]*)(?:\\s+\\b(use)\\b((?:\\s+[A-Za-z_][A-Za-z0-9_]*)+))?\\s*(=)(?!\\s*```|\\s*`)",
           "captures": {
             "1": { "name": "storage.modifier.jaiph" },
             "2": { "name": "storage.type.script.jaiph" },
             "3": { "name": "entity.name.function.script.jaiph" },
-            "4": { "name": "keyword.operator.assignment.jaiph" }
+            "4": { "name": "keyword.control.use.jaiph" },
+            "5": { "name": "variable.other.env.jaiph" },
+            "6": { "name": "keyword.operator.assignment.jaiph" }
           }
         }
       ]
@@ -834,6 +913,11 @@
         {
           "name": "keyword.control.command.jaiph",
           "match": "\\b(run|prompt|log|logerr|logwarn|recover|catch|fail|return|send)\\b"
+        },
+        {
+          "comment": "use clause (script / import script / named prompt)",
+          "name": "keyword.control.use.jaiph",
+          "match": "\\b(use)\\b"
         },
         {
           "name": "keyword.control.test.jaiph",
