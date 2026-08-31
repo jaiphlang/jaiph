@@ -255,7 +255,7 @@ def classify_role(task) {
 
 def implement(task, role_name) {
   config {
-    agent.model = "opus"
+    agent.model = "fable"
   }
   run task_text_has_header(task) catch (err) {
     fail "Provided task does not contain a '## [text]' header"

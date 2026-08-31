@@ -2,14 +2,16 @@
 
 #
 # GitHub Actions helpers for Jaiph orchestration workflows.
-# Requires: gh, jq, git, and GH_TOKEN or GITHUB_TOKEN in the environment.
+# Requires: gh, jq, git, and GITHUB_TOKEN granted with --env (this file's
+# `use GITHUB_TOKEN`). The script also accepts GH_TOKEN in-process by copying
+# GITHUB_TOKEN when GH_TOKEN is unset.
 #
 # CLI usage:
-#   jaiph .jaiph/libs/jaiphlang/gh_actions.jh check
-#   jaiph .jaiph/libs/jaiphlang/gh_actions.jh wait my-branch
-#   jaiph .jaiph/libs/jaiphlang/gh_actions.jh pull "" abc123 .jaiph/tmp/ci.log
+#   jaiph run --env GITHUB_TOKEN .jaiph/libs/jaiphlang/gh_actions.jh check
+#   jaiph run --env GITHUB_TOKEN .jaiph/libs/jaiphlang/gh_actions.jh wait my-branch
+#   jaiph run --env GITHUB_TOKEN .jaiph/libs/jaiphlang/gh_actions.jh pull "" abc123 .jaiph/tmp/ci.log
 #
-import script "./gh_actions.sh" as gh
+import script "./gh_actions.sh" as gh use GITHUB_TOKEN
 
 export def token_set() {
   run gh("require-token")
