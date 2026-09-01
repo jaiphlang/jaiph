@@ -11,7 +11,9 @@
 #    a module-level `use` (E_ENV_MISSING when ungranted);
 #  - a name declared only inside one def is not reachable from another def
 #    (E_VALIDATE);
-#  - `export` on a nested declaration is E_PARSE.
+#  - `export` on a nested declaration is E_PARSE;
+#  - nested `const` / named `prompt` string templates interpolate enclosing
+#    params and consts (`${…}`), including triple-quoted bodies.
 
 set -euo pipefail
 
@@ -126,4 +128,68 @@ e2e::assert_contains "${export_out}" "E_PARSE" "nested export: rejected with E_P
 e2e::assert_contains "${export_out}" "nested script declarations cannot be exported" \
   "nested export: message steers to dropping export"
 
-e2e::pass "nested declaration closure, shadowing, argv, use pre-flight, isolation, and export rules hold"
+e2e::section "nested const templates interpolate enclosing params/consts (quoted and triple-quoted)"
+
+e2e::file "nested_const_tpl.jh" <<'EOF'
+export def main() {
+  const who = "world"
+  const greeting = "hello ${who}"
+  const note = """
+    note for ${who}
+  """
+  def inner(name) {
+    const msg = "${greeting}-${name}"
+    return msg
+  }
+  const h = run inner("bob")
+  return "${h}|${note}"
+}
+EOF
+
+tpl_out="$(e2e::run "nested_const_tpl.jh")"
+e2e::expect_stdout "${tpl_out}" <<'EOF'
+
+Jaiph: Running nested_const_tpl.jh
+
+def main
+  ▸ def inner (name="bob")
+  ✓ def inner (<time>)
+
+✓ PASS def main (<time>)
+
+hello world-bob|note for world
+EOF
+
+e2e::section "nested named prompt interpolates enclosing const + own param (quoted and triple-quoted)"
+
+AGENT="${TEST_DIR}/echo-agent.sh"
+cat > "${AGENT}" <<'AGENT_EOF'
+#!/usr/bin/env bash
+cat
+AGENT_EOF
+chmod 755 "${AGENT}"
+
+e2e::file "nested_prompt_tpl.jh" <<'EOF'
+export def main() {
+  const who = "Ada"
+  prompt describe(x) = "Tell ${who} about ${x}"
+  prompt describe_block(x) = """
+    Block ${who} ${x}
+  """
+  const r = prompt describe("today")
+  const b = prompt describe_block("now")
+  return "${r}|${b}"
+}
+EOF
+
+prompt_out="$(JAIPH_AGENT_BACKEND=cursor JAIPH_AGENT_COMMAND="${AGENT}" \
+  e2e::run "nested_prompt_tpl.jh")"
+# assert_contains: the agent-command tree line is path-normalized and the
+# transported body may still carry source quotes, so full-tree equality is
+# not feasible here.
+e2e::assert_contains "${prompt_out}" "Tell Ada about today" \
+  "nested prompt interpolates enclosing const and own param"
+e2e::assert_contains "${prompt_out}" "Block Ada now" \
+  "nested triple-quoted prompt interpolates enclosing const and own param"
+
+e2e::pass "nested declaration closure, shadowing, argv, use pre-flight, isolation, export, and string templates hold"

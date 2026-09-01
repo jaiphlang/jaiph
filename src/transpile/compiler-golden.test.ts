@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildScripts, emitScriptsForModule } from "../transpiler";
 import { parsejaiph } from "../parser";
+import { nestedScriptName } from "../inline-script-name";
 
 test("compiler: extracts script bodies for a simple module", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-golden-scripts-"));
@@ -925,6 +926,40 @@ test("compiler: import script emits external file verbatim as script artifact", 
     const helperScript = scripts.find((s) => s.name === "helper");
     assert.ok(helperScript, "helper script artifact should exist");
     assert.equal(helperScript.content, scriptContent);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("compiler golden: nested script emits under __nested_* and does not collide with a shadowed module script", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-golden-nested-script-"));
+  try {
+    const input = join(root, "entry.jh");
+    const nestedBody = 'printf NESTED';
+    writeFileSync(
+      input,
+      [
+        "script foo = `printf MODULE`",
+        "",
+        "export def main() {",
+        `  script foo = \`${nestedBody}\``,
+        "  run foo()",
+        "}",
+        "",
+      ].join("\n"),
+    );
+
+    const scripts = emitScriptsForModule(input, root);
+    const moduleFoo = scripts.find((s) => s.name === "foo");
+    assert.ok(moduleFoo, "module-level script foo still emits under its bare name");
+    assert.ok(moduleFoo.content.includes("MODULE"), "module script body preserved");
+
+    const expectedNested = nestedScriptName("foo", nestedBody);
+    const nested = scripts.find((s) => s.name === expectedNested);
+    assert.ok(nested, `nested script emits as ${expectedNested}`);
+    assert.ok(nested.content.includes("NESTED"), "nested script body preserved");
+    assert.ok(nested.name.startsWith("__nested_"));
+    assert.notEqual(nested.name, "foo");
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

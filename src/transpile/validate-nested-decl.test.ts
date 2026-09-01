@@ -112,6 +112,89 @@ test("valid: a nested script shadows a module-level script of the same name", ()
   );
 });
 
+test("valid: nested const/prompt ${…} interpolates enclosing params and consts", () => {
+  withFlow(
+    [
+      "export def main(who) {",
+      '  const greeting = "hello ${who}"',
+      "  const note = \"\"\"",
+      "    note for ${who}",
+      "  \"\"\"",
+      "  def helper(name) {",
+      '    const msg = "${greeting}-${name}"',
+      "    return msg",
+      "  }",
+      '  prompt describe(x) = "Tell ${who} about ${x}"',
+      "  prompt describe_block(x) = \"\"\"",
+      "    Tell ${who} about ${x}",
+      "  \"\"\"",
+      '  const h = run helper("bob")',
+      '  const d = prompt describe("today")',
+      '  const b = prompt describe_block("now")',
+      '  return "${h}-${d}-${b}-${note}"',
+      "}",
+    ],
+    (entry, out) => {
+      buildScripts(entry, out); // no throw
+    },
+  );
+});
+
+test("E_VALIDATE: unknown ${ghost} in a nested const is rejected", () => {
+  withFlow(
+    [
+      "export def main() {",
+      '  const greeting = "hello ${ghost}"',
+      "  return greeting",
+      "}",
+    ],
+    (entry, out) => {
+      assert.throws(
+        () => buildScripts(entry, out),
+        /E_VALIDATE.*unknown identifier "ghost" in const/,
+      );
+    },
+  );
+});
+
+test("E_VALIDATE: unknown ${ghost} in a nested-def const is rejected", () => {
+  withFlow(
+    [
+      "export def main() {",
+      "  def helper() {",
+      '    const msg = "x-${ghost}"',
+      "    return msg",
+      "  }",
+      "  return run helper()",
+      "}",
+    ],
+    (entry, out) => {
+      assert.throws(
+        () => buildScripts(entry, out),
+        /E_VALIDATE.*unknown identifier "ghost" in const/,
+      );
+    },
+  );
+});
+
+test("E_VALIDATE: unknown ${ghost} in a nested prompt body is rejected", () => {
+  withFlow(
+    [
+      "export def main() {",
+      '  prompt describe(x) = "about ${ghost} ${x}"',
+      '  const d = prompt describe("today")',
+      "  return d",
+      "}",
+    ],
+    (entry, out) => {
+      assert.throws(
+        () => buildScripts(entry, out),
+        /E_VALIDATE.*unknown identifier "ghost" in prompt/,
+      );
+    },
+  );
+});
+
 test("E_VALIDATE: a nested-prompt arity mismatch is caught (nested def resolves for arity)", () => {
   withFlow(
     [

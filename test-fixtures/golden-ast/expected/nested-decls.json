@@ -1,0 +1,143 @@
+{
+  "channels": [],
+  "defs": [
+    {
+      "comments": [],
+      "name": "main",
+      "params": [
+        "who"
+      ],
+      "steps": [
+        {
+          "name": "greeting",
+          "type": "const",
+          "value": {
+            "kind": "literal",
+            "raw": "\"hello ${who}\""
+          }
+        },
+        {
+          "name": "note",
+          "type": "const",
+          "value": {
+            "kind": "literal",
+            "raw": "\"note for ${who}\""
+          }
+        },
+        {
+          "decl": {
+            "kind": "script",
+            "script": {
+              "body": "echo \"$1\"",
+              "comments": [],
+              "name": "shout"
+            }
+          },
+          "type": "local_decl"
+        },
+        {
+          "decl": {
+            "def": {
+              "comments": [],
+              "name": "helper",
+              "params": [
+                "name"
+              ],
+              "steps": [
+                {
+                  "name": "msg",
+                  "type": "const",
+                  "value": {
+                    "kind": "literal",
+                    "raw": "\"${greeting}-${name}\""
+                  }
+                },
+                {
+                  "type": "return",
+                  "value": {
+                    "kind": "literal",
+                    "raw": "\"${msg}\""
+                  }
+                }
+              ]
+            },
+            "kind": "def"
+          },
+          "type": "local_decl"
+        },
+        {
+          "decl": {
+            "kind": "prompt",
+            "prompt": {
+              "comments": [],
+              "name": "describe",
+              "params": [
+                "x"
+              ],
+              "raw": "\"Tell ${who} about ${x}\""
+            }
+          },
+          "type": "local_decl"
+        },
+        {
+          "name": "h",
+          "type": "const",
+          "value": {
+            "args": [
+              {
+                "kind": "literal",
+                "raw": "\"bob\""
+              }
+            ],
+            "callee": {
+              "value": "helper"
+            },
+            "kind": "call"
+          }
+        },
+        {
+          "name": "d",
+          "type": "const",
+          "value": {
+            "args": [
+              {
+                "kind": "literal",
+                "raw": "\"today\""
+              }
+            ],
+            "kind": "prompt",
+            "name": "describe",
+            "raw": ""
+          }
+        },
+        {
+          "body": {
+            "args": [
+              {
+                "kind": "var",
+                "name": "greeting"
+              }
+            ],
+            "callee": {
+              "value": "shout"
+            },
+            "kind": "call"
+          },
+          "type": "exec"
+        },
+        {
+          "type": "return",
+          "value": {
+            "kind": "literal",
+            "raw": "\"${h} ${d}\""
+          }
+        }
+      ]
+    }
+  ],
+  "exports": [
+    "main"
+  ],
+  "imports": [],
+  "scripts": []
+}

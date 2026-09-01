@@ -37,6 +37,73 @@ test("parse: a def holds nested const/script/def/prompt as local_decl steps", ()
   assert.equal(ast.defs.length, 1);
 });
 
+const TEMPLATE_SRC = [
+  "export def main(who) {",
+  '  const greeting = "hello ${who}"',
+  "  const note = \"\"\"",
+  "    note for ${who}",
+  "  \"\"\"",
+  '  script shout = `echo "$1"`',
+  "  def helper(name) {",
+  '    const msg = "${greeting}-${name}"',
+  "    return msg",
+  "  }",
+  '  prompt describe(x) = "Tell ${who} about ${x}"',
+  "  prompt describe_block(x) = \"\"\"",
+  "    Tell ${who} about ${x}",
+  "  \"\"\"",
+  '  const h = run helper("bob")',
+  '  const d = prompt describe("today")',
+  "  run shout(greeting)",
+  '  return "${h} ${d}"',
+  "}",
+  "",
+].join("\n");
+
+test("parse: nested const and prompt bodies keep ${…} templates (including triple-quoted)", () => {
+  const ast = parsejaiph(TEMPLATE_SRC, "t.jh");
+  const main = ast.defs[0];
+  const greeting = main.steps.find((s) => s.type === "const" && s.name === "greeting");
+  assert.ok(greeting && greeting.type === "const" && greeting.value.kind === "literal");
+  if (!(greeting && greeting.type === "const" && greeting.value.kind === "literal")) return;
+  assert.equal(greeting.value.raw, '"hello ${who}"');
+
+  const note = main.steps.find((s) => s.type === "const" && s.name === "note");
+  assert.ok(note && note.type === "const" && note.value.kind === "literal");
+  if (!(note && note.type === "const" && note.value.kind === "literal")) return;
+  assert.match(note.value.raw, /\$\{who\}/);
+
+  const helper = main.steps.find((s) => s.type === "local_decl" && s.decl.kind === "def");
+  assert.ok(helper && helper.type === "local_decl" && helper.decl.kind === "def");
+  if (!(helper && helper.type === "local_decl" && helper.decl.kind === "def")) return;
+  const msg = helper.decl.def.steps.find((s) => s.type === "const" && s.name === "msg");
+  assert.ok(msg && msg.type === "const" && msg.value.kind === "literal");
+  if (!(msg && msg.type === "const" && msg.value.kind === "literal")) return;
+  assert.equal(msg.value.raw, '"${greeting}-${name}"');
+
+  const describe = main.steps.find(
+    (s) => s.type === "local_decl" && s.decl.kind === "prompt" && s.decl.prompt.name === "describe",
+  );
+  assert.ok(describe && describe.type === "local_decl" && describe.decl.kind === "prompt");
+  if (!(describe && describe.type === "local_decl" && describe.decl.kind === "prompt")) return;
+  assert.equal(describe.decl.prompt.raw, '"Tell ${who} about ${x}"');
+
+  const block = main.steps.find(
+    (s) => s.type === "local_decl" && s.decl.kind === "prompt" && s.decl.prompt.name === "describe_block",
+  );
+  assert.ok(block && block.type === "local_decl" && block.decl.kind === "prompt");
+  if (!(block && block.type === "local_decl" && block.decl.kind === "prompt")) return;
+  assert.match(block.decl.prompt.raw, /\$\{who\}/);
+  assert.match(block.decl.prompt.raw, /\$\{x\}/);
+});
+
+test("format: nested const/prompt templates (quoted and triple-quoted) round-trip", () => {
+  const once = roundtrip(TEMPLATE_SRC);
+  const twice = roundtrip(once);
+  assert.equal(once, twice, "format is idempotent");
+  assert.equal(once, TEMPLATE_SRC, "canonical form is preserved");
+});
+
 test("format: nested declarations round-trip bit-for-bit", () => {
   const once = roundtrip(NESTED_SRC);
   const twice = roundtrip(once);

@@ -1,0 +1,16 @@
+export def main(who) {
+  const greeting = "hello ${who}"
+  const note = """
+    note for ${who}
+  """
+  script shout = `echo "$1"`
+  def helper(name) {
+    const msg = "${greeting}-${name}"
+    return msg
+  }
+  prompt describe(x) = "Tell ${who} about ${x}"
+  const h = run helper("bob")
+  const d = prompt describe("today")
+  run shout(greeting)
+  return "${h} ${d}"
+}
