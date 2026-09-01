@@ -166,7 +166,7 @@ export function resolveEnvPairs(
       const hostValue = hostEnv[spec.key];
       if (hostValue === undefined) {
         throw new Error(
-          `E_ENV_MISSING --env ${spec.key}: no value given and ${spec.key} is not set on the host`,
+          `E_ENV_MISSING: Jaiph requires ${spec.key} to be set. Use --env ${spec.key} to pass it from the environment, or --env ${spec.key}=VALUE to set it.`,
         );
       }
       out[spec.key] = hostValue;

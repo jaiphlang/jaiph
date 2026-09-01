@@ -66,7 +66,8 @@ fi
 # assert_contains: the error text includes the varying key name; the run never
 # starts, so there is no banner/tree to compare in full.
 e2e::assert_contains "${missing_out}" "E_ENV_MISSING" "env: host-unset bare --env aborts with E_ENV_MISSING"
-e2e::assert_contains "${missing_out}" "NOPE_TOKEN" "env: E_ENV_MISSING names the missing key"
+e2e::assert_contains "${missing_out}" "requires NOPE_TOKEN to be set" "env: E_ENV_MISSING names the required key"
+e2e::assert_contains "${missing_out}" "--env NOPE_TOKEN" "env: E_ENV_MISSING tells the operator how to pass it"
 
 e2e::section "reserved keys are rejected (E_ENV_RESERVED)"
 
