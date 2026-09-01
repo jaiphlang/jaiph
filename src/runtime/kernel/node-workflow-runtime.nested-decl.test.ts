@@ -17,7 +17,10 @@ import { buildRuntimeGraph } from "./graph";
 import { NodeWorkflowRuntime } from "./node-workflow-runtime";
 
 /** Emit scripts, run `main`, and return the workflow's return value (or undefined). */
-async function runReturn(lines: string[]): Promise<{ status: number; value?: string; root: string }> {
+async function runReturn(
+  lines: string[],
+  args: string[] = [],
+): Promise<{ status: number; value?: string; root: string }> {
   const root = mkdtempSync(join(tmpdir(), "jaiph-nested-rt-"));
   const jh = join(root, "flow.jh");
   writeFileSync(jh, `${lines.join("\n")}\n`);
@@ -33,7 +36,7 @@ async function runReturn(lines: string[]): Promise<{ status: number; value?: str
     cwd: root,
     suppressLiveEvents: true,
   });
-  const status = await runtime.runMain([]);
+  const status = await runtime.runMain(args);
   const rv = join(runtime.getRunDir(), "return_value.txt");
   return { status, value: existsSync(rv) ? readFileSync(rv, "utf8") : undefined, root };
 }
@@ -97,6 +100,32 @@ test("a nested `script foo` shadows a module-level `script foo` (the nested body
   }
 });
 
+test("nested const templates interpolate enclosing params/consts (quoted and triple-quoted)", async () => {
+  const { status, value, root } = await runReturn(
+    [
+      "export def main(who) {",
+      '  const greeting = "hello ${who}"',
+      '  const note = """',
+      "    note for ${who}",
+      '  """',
+      "  def helper(name) {",
+      '    const msg = "${greeting}-${name}"',
+      "    return msg",
+      "  }",
+      '  const h = run helper("bob")',
+      '  return "${h}|${note}"',
+      "}",
+    ],
+    ["world"],
+  );
+  try {
+    assert.equal(status, 0);
+    assert.equal(value, "hello world-bob|note for world");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("a nested named prompt interpolates the enclosing scope at invocation", async () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-nested-prompt-"));
   try {
@@ -133,6 +162,49 @@ test("a nested named prompt interpolates the enclosing scope at invocation", asy
     const rv = readFileSync(join(runtime.getRunDir(), "return_value.txt"), "utf8");
     // Enclosing const `topic` and own param `x` both interpolate.
     assert.match(rv, /Tell me about weather for today/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("a nested named prompt interpolates an enclosing param and a triple-quoted body", async () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-nested-prompt-param-"));
+  try {
+    const jh = join(root, "flow.jh");
+    writeFileSync(
+      jh,
+      [
+        "export def main(who) {",
+        '  prompt describe(x) = "Tell ${who} about ${x}"',
+        "  prompt describe_block(x) = \"\"\"",
+        "    Block ${who} ${x}",
+        "  \"\"\"",
+        '  const r = prompt describe("today")',
+        '  const b = prompt describe_block("now")',
+        '  return "${r}|${b}"',
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const agent = join(root, "echo-agent");
+    writeFileSync(agent, "#!/usr/bin/env bash\ncat\n", { mode: 0o755 });
+    const graph = buildRuntimeGraph(jh);
+    const runtime = new NodeWorkflowRuntime(graph, {
+      env: {
+        ...process.env,
+        JAIPH_RUNS_DIR: join(root, ".jaiph", "runs"),
+        JAIPH_AGENT_BACKEND: "cursor",
+        JAIPH_AGENT_COMMAND: agent,
+        JAIPH_WORKSPACE: root,
+      },
+      cwd: root,
+      suppressLiveEvents: true,
+    });
+    const status = await runtime.runMain(["Ada"]);
+    assert.equal(status, 0);
+    const rv = readFileSync(join(runtime.getRunDir(), "return_value.txt"), "utf8");
+    assert.match(rv, /Tell Ada about today/);
+    assert.match(rv, /Block Ada now/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
