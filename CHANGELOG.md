@@ -4,6 +4,8 @@
 
 ## All changes
 
+- **UX — CLI:** a bare `--env KEY` whose value is unset on the host now says Jaiph requires that key and how to pass it (`--env KEY` or `--env KEY=VALUE`), instead of `no value given and KEY is not set on the host`.
+
 # 0.14.0
 
 ## Summary

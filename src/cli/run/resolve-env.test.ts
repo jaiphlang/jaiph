@@ -145,7 +145,7 @@ test("resolveEnvPairs: bare KEY forwards the host's current value", () => {
 test("resolveEnvPairs: bare KEY unset on the host aborts with E_ENV_MISSING", () => {
   assert.throws(
     () => resolveEnvPairs([{ key: "TOKEN" }], {}),
-    /E_ENV_MISSING.*TOKEN/,
+    /E_ENV_MISSING: Jaiph requires TOKEN to be set.*--env TOKEN/,
   );
 });
 
