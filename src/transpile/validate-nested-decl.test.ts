@@ -558,6 +558,51 @@ test("E_VALIDATE: an `if`-scoped `returns` capture is not typed after the `if`",
   );
 });
 
+// -- Nested-def self-recursion ----------------------------------------------
+// A nested `def` may call itself (its own name is visible inside its body), but
+// a later sibling def is still not hoisted.
+
+test("valid: a nested `def fact` may `run` itself on the recursive arm", () => {
+  withFlow(
+    [
+      "export def main() {",
+      "  def fact(n) {",
+      '    if n == "0" {',
+      '      return "1"',
+      "    }",
+      "    return run fact(n)",
+      "  }",
+      '  return run fact("3")',
+      "}",
+    ],
+    (entry, out) => {
+      buildScripts(entry, out); // self-recursion validates
+    },
+  );
+});
+
+test("E_VALIDATE: a nested def running a later sibling def is unknown (not hoisted)", () => {
+  withFlow(
+    [
+      "export def main() {",
+      "  def a() {",
+      "    return run b()",
+      "  }",
+      "  def b() {",
+      '    return "hi"',
+      "  }",
+      "  return run a()",
+      "}",
+    ],
+    (entry, out) => {
+      assert.throws(
+        () => buildScripts(entry, out),
+        /E_VALIDATE.*unknown local def or script reference "b"/,
+      );
+    },
+  );
+});
+
 test("valid: a top-of-def `returns` prompt types `${r.field}` after its capture", () => {
   withFlow(
     [

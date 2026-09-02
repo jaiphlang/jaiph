@@ -282,6 +282,81 @@ test("a script shadowed inside a taken `if` does not leak; the enclosing script 
   }
 });
 
+// -- Nested-def self-recursion (runtime) ------------------------------------
+// A nested `def` may call itself; a base case terminates and returns the
+// computed value, while a runaway self-recursion hits the existing depth cap.
+
+test("a nested def with a base case recurses on itself and returns the computed value", async () => {
+  const { status, value, root } = await runReturn([
+    "export def main() {",
+    "  def countdown(n) {",
+    '    if n == "0" {',
+    '      return "done"',
+    "    }",
+    '    script dec = `echo $(( $1 - 1 ))`',
+    "    const m = run dec(n)",
+    "    return run countdown(m)",
+    "  }",
+    '  return run countdown("3")',
+    "}",
+  ]);
+  try {
+    // Self-recursion runs three levels deep, then the base case returns "done".
+    assert.equal(status, 0);
+    assert.equal(value, "done");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("a runaway nested self-recursion hits the recursion-depth cap, not an unknown-local failure", async () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-nested-recur-"));
+  try {
+    const jh = join(root, "flow.jh");
+    writeFileSync(
+      jh,
+      [
+        "export def main() {",
+        "  def loop(n) {",
+        "    return run loop(n)",
+        "  }",
+        '  return run loop("1")',
+        "}",
+        "",
+      ].join("\n"),
+    );
+    // Compiles fine (self-recursion validates), then diverges at runtime.
+    buildScripts(jh, join(root, "out"));
+    const graph = buildRuntimeGraph(jh);
+    const runtime = new NodeWorkflowRuntime(graph, {
+      env: {
+        ...process.env,
+        JAIPH_RUNS_DIR: join(root, ".jaiph", "runs"),
+        JAIPH_WORKSPACE: root,
+      },
+      cwd: root,
+      suppressLiveEvents: true,
+    });
+    const prevSummaryEnv = process.env.JAIPH_RUN_SUMMARY_FILE;
+    process.env.JAIPH_RUN_SUMMARY_FILE = runtime.getSummaryFile();
+    let status: number;
+    let summary: string;
+    try {
+      status = await runtime.runMain([]);
+      summary = readFileSync(runtime.getSummaryFile(), "utf8");
+    } finally {
+      if (prevSummaryEnv === undefined) delete process.env.JAIPH_RUN_SUMMARY_FILE;
+      else process.env.JAIPH_RUN_SUMMARY_FILE = prevSummaryEnv;
+    }
+    assert.notEqual(status, 0, "runaway recursion must fail");
+    // The failure is the depth cap, NOT the pre-fix "unknown local" miss.
+    assert.match(summary, /Maximum recursion depth \(256\) exceeded/);
+    assert.doesNotMatch(summary, /unknown local/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("a nested named prompt interpolates an enclosing param and a triple-quoted body", async () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-nested-prompt-param-"));
   try {

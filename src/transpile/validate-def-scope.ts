@@ -239,7 +239,13 @@ export function validateDef(
         // this declaration point — snapshot them before registering the decl.
         const inheritedKnownVars = flatVars(scope);
         if (s.decl.kind === "def") {
-          validateDef(s.decl.def, mod, inheritedKnownVars, flatLocals(scope));
+          // Self-recursion: the def's own name is visible inside its body (but
+          // NOT its later siblings, which are added to `scope.locals` only when
+          // their own `local_decl` step is reached). A forward `run` to a
+          // sibling declared later therefore stays an unknown-local error.
+          const selfLocals = flatLocals(scope);
+          selfLocals.set(name, localSymFromDecl(s.decl));
+          validateDef(s.decl.def, mod, inheritedKnownVars, selfLocals);
         } else if (s.decl.kind === "prompt") {
           validatePromptDefBody(diag, filePath, s.decl.prompt, inheritedKnownVars);
         }
