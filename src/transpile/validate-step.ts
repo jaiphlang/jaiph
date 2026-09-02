@@ -14,6 +14,7 @@ import {
   validateDotFieldRefs,
   validateDotSubject,
   validateInlineStringCaptures,
+  validateSubjectForwardConst,
 } from "./validate-step-helpers";
 import { validatePromptStepReturns } from "./validate-prompt-schema";
 import {
@@ -31,9 +32,11 @@ export {
   localSymFromDecl,
   localPromptReturnsResolver,
   refCtxWithLocals,
+  seqConstVisibility,
   type LocalSym,
 } from "./validate-local-decl";
 export { validateMatchExpr } from "./validate-match";
+export { walkStepTree, type StepTreeWalk } from "./validate-step-tree";
 export {
   ROUTE_REF_EXPECT,
   parseSchemaFieldNames,
@@ -194,6 +197,7 @@ function validateIfStep(s: StepDef, ctx: ValidatorCtx): void {
     }
   }
   validateDotSubject(s.subject, s.loc, ctx);
+  validateSubjectForwardConst(s.subject, s.loc, ctx);
 }
 
 function validateForLinesStep(s: StepDef, ctx: ValidatorCtx): void {

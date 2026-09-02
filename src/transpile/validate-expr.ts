@@ -28,6 +28,7 @@ import {
   validateInlineStringCaptures,
   validateNestedManagedCallArgs,
   validateNoShellRedirection,
+  validateSubjectForwardConst,
 } from "./validate-step-helpers";
 import type { ExprLabel, ValidatorCtx } from "./validate-step-ctx";
 
@@ -55,6 +56,7 @@ export function validateExpr(
   if (expr.kind === "match") {
     validateMatchExpr(ctx.diag, ctx.ast.filePath, expr.match, ctx.knownVars);
     validateDotSubject(expr.match.subject, expr.match.loc, ctx);
+    validateSubjectForwardConst(expr.match.subject, expr.match.loc, ctx);
     return;
   }
   if (expr.kind === "prompt") {

@@ -14,36 +14,6 @@ Process rules:
 
 ***
 
-## Sequential `const` visibility: use-before-decl is `E_VALIDATE` #dev-ready
-
-Context: Docs (`docs/language.md` Nested declarations / `const`) say local bindings are sequential, not hoisted. Nested `run foo()` before `script foo = …` is already `E_VALIDATE` via `localsSoFar` in `src/transpile/validate.ts`. Ordinary `const` is not. `walkStepTree` adds every `const` name to `knownVars` for the whole def, then `${name}` (`src/transpile/validate-string.ts`) and bare call args (`src/transpile/validate-step-helpers.ts`) consult that full set.
-
-Problem: this compiles today and interpolates empty at runtime:
-
-```
-export def main() {
-  log "${later}"
-  const later = "ok"
-}
-```
-
-Same hole for a bare identifier arg (`run consumer(later)` before `const later = …`) and for a nested def body that interpolates an enclosing `const` declared *after* the nested `def` (forward-const TDZ: validates, runtime `""`).
-
-Remediation — implement exactly this:
-
-1. Track a sequential visible-`const` set the same way `localsSoFar` tracks nested decls. A `${name}` / bare-arg / `if`/`match` subject that names a `const` not yet declared in the current step list is `E_VALIDATE` (unknown identifier), same message family as today's unknown-identifier errors.
-2. When validating a nested `def` or nested named `prompt` body, `${…}` of enclosing `const`s may see only consts declared *before* that `local_decl` (snapshot at the declaration point). Params of the enclosing def are visible. Module-level `const`s stay visible.
-3. Do not invent a new diagnostic code. Do not change runtime interpolation of a missing var (still empty) — the point is compile-time rejection.
-4. Docs: one sentence in `docs/language.md` under `const` and Nested declarations stating use-before-decl is `E_VALIDATE` for interpolation and call args, not only for `run`/`prompt` targets.
-
-### Acceptance criteria
-- `export def main() { log "${later}"; const later = "ok" }` is `E_VALIDATE` naming `later` (`validate-nested-decl.test.ts` or a dedicated validate test; today's tree must fail this case).
-- `export def main() { run consumer(later); const later = "ok" }` (with `def consumer(v)`) is `E_VALIDATE` naming `later`.
-- `export def main() { def helper() { return "${later}" }; const x = run helper(); const later = "hi"; return x }` is `E_VALIDATE` naming `later` inside `helper`.
-- `export def main() { const later = "ok"; log "${later}" }` still validates and a runtime test still prints `ok`.
-- Nested `run foo()` before `script foo = …` stays `E_VALIDATE` (existing test must keep passing).
-- `npm run build`, `npm test`, and `npm run test:e2e` pass.
-
 ## Nested decls inside `if` / `for` / `catch` / `recover` use block scope #dev-ready
 
 Context: Nested `script` / `def` / named `prompt` (`local_decl`) and nested `const` are allowed in any step list, including `if` / `else` / `else if` / `for` / `catch` / `recover` bodies. That is required — do **not** ban in-branch decls. `validateDefTree` (`src/transpile/validate.ts`) walks the flat step tree and adds every `local_decl` to `localsSoFar` regardless of branch, so a name declared only inside `if` is treated as visible after the `if`. `localPromptReturnsResolver` (`src/transpile/validate-local-decl.ts`) only scans top-level `def.steps`, so a `returns` nested prompt inside `if` is invisible to `${r.field}` validation (false reject) while a later `run`/`prompt` of that name outside the `if` is a false accept.

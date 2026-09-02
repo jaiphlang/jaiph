@@ -253,8 +253,8 @@ export def main() {
 | Scope | Sequential local binding, **not hoisted**: visible only in the enclosing def and only **after** its declaration (using it earlier is `E_VALIDATE`). One local namespace per def, shared with the def's parameters and `const`s — a duplicate name or a collision with a parameter is `E_VALIDATE` (`cannot rebind immutable name`). |
 | Shadowing | A nested name **may shadow** a module-level `script` / `def` / `prompt` of the same name; the local binding wins for the rest of the body. Another def cannot `run` / `prompt` a name declared only inside a different def (`E_VALIDATE`). |
 | Calls | `run name(args)` for a nested script or def (`run async` allowed for a nested def); `prompt name(args)` for a nested named prompt. |
-| Nested `def` | Interpreted in-process; interpolates the enclosing def's params and `const`s (lexical scope) plus its own params. Does not inherit a parent `use`. |
-| Nested `prompt` | Body interpolated at invocation from the enclosing scope (params/`const`s visible) plus its own params; its `use` is the only extra host-key injection for that agent spawn. |
+| Nested `def` | Interpreted in-process; interpolates the enclosing def's params and `const`s (lexical scope) plus its own params. An enclosing `const` is visible only if declared before this nested `def`; a `${…}` of a later enclosing `const` is `E_VALIDATE` (unknown identifier). Does not inherit a parent `use`. |
+| Nested `prompt` | Body interpolated at invocation from the enclosing scope (params visible, plus enclosing `const`s declared before this nested `prompt` — a `${…}` of a later one is `E_VALIDATE`) plus its own params; its `use` is the only extra host-key injection for that agent spawn. |
 | Nested `script` | Still a subprocess: enclosing bindings are **not** auto-exported into its env — pass argv (`run inner(param)` → `$1`). Sterile env + its own `use` + `--env` grant, same as a module-level script. |
 
 ## `const` — bind a value
@@ -284,6 +284,8 @@ const label = match status {
 | `$(…)`, `${var:-fallback}`, etc. | `E_PARSE` in `const` RHS. |
 
 All bindings — parameters, `const`, captures, `script` names — are immutable in their scope. The validator names the conflicting binding and its origin (`E_VALIDATE: cannot rebind immutable name "x"; already bound as parameter at file.jh:1`).
+
+A `const` is sequential, not hoisted: naming it before its declaration is `E_VALIDATE` (unknown identifier) in a `${…}` interpolation, a bare `run` / `prompt` call argument, and an `if` / `match` subject, not only in a `run` / `prompt` target.
 
 ## `return` — managed return value
 

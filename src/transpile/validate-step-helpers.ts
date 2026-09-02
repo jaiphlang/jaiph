@@ -114,6 +114,29 @@ export function validateDotSubject(
   validateDotFieldRef(varName, fieldName, loc, ctx);
 }
 
+/**
+ * Reject a bare `if` / `match` subject that names a `const` declared later in
+ * the same def (use-before-declaration). Dotted subjects (`var.field`) are
+ * handled by {@link validateDotSubject}; non-`const` names are left untouched to
+ * preserve prior behavior.
+ */
+export function validateSubjectForwardConst(
+  subject: string,
+  loc: { line: number; col: number },
+  ctx: ValidatorCtx,
+): void {
+  if (subject.includes(".")) return;
+  if (ctx.forwardConsts?.has(subject)) {
+    ctx.diag.error(
+      ctx.ast.filePath,
+      loc.line,
+      loc.col,
+      "E_VALIDATE",
+      `unknown identifier "${subject}"; declare it with \`const\`, use a capture, or add a def parameter`,
+    );
+  }
+}
+
 export function validateDotFieldRef(
   varName: string,
   fieldName: string,

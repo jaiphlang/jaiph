@@ -13,7 +13,11 @@
 #    (E_VALIDATE);
 #  - `export` on a nested declaration is E_PARSE;
 #  - nested `const` / named `prompt` string templates interpolate enclosing
-#    params and consts (`${…}`), including triple-quoted bodies.
+#    params and consts (`${…}`), including triple-quoted bodies;
+#  - a `const` is sequential (not hoisted): using its name before its
+#    declaration — in `${…}` interpolation, a bare call argument, or from a
+#    nested def body that closes over a later `const` — is E_VALIDATE, while a
+#    `const` used after its declaration interpolates at runtime.
 
 set -euo pipefail
 
@@ -192,4 +196,82 @@ e2e::assert_contains "${prompt_out}" "Tell Ada about today" \
 e2e::assert_contains "${prompt_out}" "Block Ada now" \
   "nested triple-quoted prompt interpolates enclosing const and own param"
 
-e2e::pass "nested declaration closure, shadowing, argv, use pre-flight, isolation, export, and string templates hold"
+e2e::section "a const declared before its use interpolates at runtime"
+
+e2e::file "seq_ok.jh" <<'EOF'
+export def main() {
+  const later = "ok"
+  log "${later}"
+}
+EOF
+
+seq_out="$(e2e::run "seq_ok.jh")"
+e2e::expect_stdout "${seq_out}" <<'EOF'
+
+Jaiph: Running seq_ok.jh
+
+def main
+  ℹ ok
+
+✓ PASS def main (<time>)
+EOF
+
+e2e::section "using a const before its declaration is E_VALIDATE (interpolation)"
+
+e2e::file "seq_interp.jh" <<'EOF'
+export def main() {
+  log "${later}"
+  const later = "ok"
+}
+EOF
+
+seq_interp_out=""
+if seq_interp_out="$(e2e::run "seq_interp.jh" 2>&1)"; then
+  e2e::fail "sequential const: interpolating a const before its declaration must be rejected"
+fi
+e2e::assert_contains "${seq_interp_out}" "E_VALIDATE" "sequential const: interpolation rejected with E_VALIDATE"
+e2e::assert_contains "${seq_interp_out}" 'unknown identifier "later"' \
+  "sequential const: interpolation names the not-yet-declared const"
+
+e2e::section "using a const before its declaration is E_VALIDATE (bare call argument)"
+
+e2e::file "seq_arg.jh" <<'EOF'
+export def main() {
+  run consumer(later)
+  const later = "ok"
+}
+def consumer(v) {
+  return "${v}"
+}
+EOF
+
+seq_arg_out=""
+if seq_arg_out="$(e2e::run "seq_arg.jh" 2>&1)"; then
+  e2e::fail "sequential const: a bare arg naming a const before its declaration must be rejected"
+fi
+e2e::assert_contains "${seq_arg_out}" "E_VALIDATE" "sequential const: bare arg rejected with E_VALIDATE"
+e2e::assert_contains "${seq_arg_out}" 'unknown identifier "later"' \
+  "sequential const: bare arg names the not-yet-declared const"
+
+e2e::section "a nested def body referencing a later enclosing const is E_VALIDATE"
+
+e2e::file "seq_nested.jh" <<'EOF'
+export def main() {
+  def helper() {
+    return "${later}"
+  }
+  const x = run helper()
+  const later = "hi"
+  return x
+}
+EOF
+
+seq_nested_out=""
+if seq_nested_out="$(e2e::run "seq_nested.jh" 2>&1)"; then
+  e2e::fail "sequential const: a nested def closing over a later const must be rejected"
+fi
+e2e::assert_contains "${seq_nested_out}" "E_VALIDATE" "sequential const: nested-def forward const rejected with E_VALIDATE"
+e2e::assert_contains "${seq_nested_out}" 'unknown identifier "later"' \
+  "sequential const: nested-def message names the forward const"
+
+e2e::pass "nested declaration closure, shadowing, argv, use pre-flight, isolation, export, string templates, and sequential const visibility hold"
