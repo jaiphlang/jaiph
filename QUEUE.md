@@ -14,58 +14,6 @@ Process rules:
 
 ***
 
-## Nested decls inside `if` / `for` / `catch` / `recover` use block scope #dev-ready
-
-Context: Nested `script` / `def` / named `prompt` (`local_decl`) and nested `const` are allowed in any step list, including `if` / `else` / `else if` / `for` / `catch` / `recover` bodies. That is required — do **not** ban in-branch decls. `validateDefTree` (`src/transpile/validate.ts`) walks the flat step tree and adds every `local_decl` to `localsSoFar` regardless of branch, so a name declared only inside `if` is treated as visible after the `if`. `localPromptReturnsResolver` (`src/transpile/validate-local-decl.ts`) only scans top-level `def.steps`, so a `returns` nested prompt inside `if` is invisible to `${r.field}` validation (false reject) while a later `run`/`prompt` of that name outside the `if` is a false accept.
-
-Problem: this validates, then fails at runtime when the branch is not taken:
-
-```
-export def main(flag) {
-  if flag == "y" {
-    script s = `echo YES`
-  }
-  return run s()
-}
-```
-
-Remediation — implement exactly this (block-scoped locals; support in-branch decls):
-
-1. A nested `script` / `def` / `prompt` / `const` declared inside a body is visible only in that body, and only after its declaration (same sequential rule as today's top-of-def locals). After the `if` / `for` / `catch` / `recover` ends, the name is not in scope. A later `run` / `prompt` / `${name}` / bare arg that names it is `E_VALIDATE` (unknown identifier / unknown local — same family as today's use-before-decl).
-2. Each body is its own local scope. `if { script s = … }` and `else { script s = … }` are two independent locals (not `cannot rebind`). `run s()` after the `if`/`else` is `E_VALIDATE`. `else if` bodies follow the same rule.
-3. A branch may shadow a name from the enclosing def or module for the rest of that body only. After the branch, the outer binding is visible again.
-4. `localPromptReturnsResolver` (or its replacement) must use the same visible set: `${r.field}` is legal only where `r` is a typed prompt capture in scope. A `returns` prompt declared and captured inside `if` allows `${r.field}` later in that `if` body; it does not allow `${r.field}` after the `if`. Top-of-def nested prompts with `returns` keep working.
-5. Runtime: do not leave a silent empty/`status 1` when a name is missing — validation must reject the miss-after-branch cases so they never run. Taken-branch happy paths must execute (script stdout / def return / prompt interp).
-6. Docs: `docs/language.md` Nested declarations — in-branch decls are allowed; visibility is the declaring body only.
-
-### Acceptance criteria
-
-Parse (`src/parse/parse-nested-decl.test.ts`):
-- Nested `script` / `def` / named `prompt` / `const` inside `if`, `else`, `else if`, `for`, `catch`, and `recover` parse as `local_decl` (or `const`) in that body's step list. Today's tree must fail at least one of these AST assertions if the parser drops the decl.
-
-Validate (`src/transpile/validate-nested-decl.test.ts`) — each case is a test that fails on today's hoisted `localsSoFar`:
-- `if flag == "y" { script s = \`echo YES\` }; return run s()` is `E_VALIDATE` naming `s`.
-- `if flag == "y" { script s = \`echo YES\`; return run s() }` validates.
-- `if flag == "y" { script s = \`echo YES\` } else { script s = \`echo NO\` }; return run s()` is `E_VALIDATE` naming `s`.
-- `if flag == "y" { script s = \`echo YES\`; return run s() } else { script s = \`echo NO\`; return run s() }` validates (two independent locals).
-- `for line in src { script s = \`echo "$1"\`; run s(line) }` validates; `run s()` after the `for` is `E_VALIDATE`.
-- `run boom() catch (e) { script s = \`echo recovered\`; return run s() }` validates; `run s()` after the `catch` is `E_VALIDATE`.
-- `run boom() recover (e) { def fix() { return "ok" }; return run fix() }` validates; `run fix()` after the `recover` is `E_VALIDATE`.
-- Module or enclosing-def `script s` shadowed inside `if { script s = …; run s() }`, then `run s()` after the `if` resolves the outer `s` (validates; not unknown).
-- Nested prompt with `returns` inside `if`: `const r = prompt p("a"); return "${r.v}"` in that `if` validates; the same `${r.v}` after the `if` is `E_VALIDATE`.
-- Top-of-def nested prompt with `returns` + `${r.field}` after `const r = prompt p("a")` still validates (existing happy path).
-
-Runtime (`src/runtime/kernel/node-workflow-runtime.nested-decl.test.ts`):
-- `flag=y` / `if { script s = \`echo YES\`; return run s() }` returns `YES`.
-- `flag=n` / `if { … } else { script t = \`echo NO\`; return run t() }` returns `NO`.
-- `for` body nested script receives the iterator via argv and runs once per line.
-- `catch` body nested script runs on failure and its stdout/`return` is the catch result.
-- Enclosing/module `script s` after an `if` that shadowed `s` still runs the outer body (shadow does not leak).
-
-Docs + suite:
-- `docs/language.md` Nested declarations states in-branch decls are allowed and scoped to the declaring body.
-- `npm run build`, `npm test`, and `npm run test:e2e` pass.
-
 ## Nested `def` self-recursion matches module-level `def` #dev-ready
 
 Context: A module-level `def fact(n) { … run fact(…) }` validates. A nested `def fact` does not: `validateDefTree` passes `localsSoFar` without the name being defined (`src/transpile/validate.ts` around the nested-def walk). Runtime would work once the `local_decl` has registered `fact` in `scope.locals`.

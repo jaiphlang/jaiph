@@ -288,3 +288,75 @@ test("top-level def body: `import` still falls through to shell (unchanged)", ()
     "a top-level def body keeps the shell fallthrough for import",
   );
 });
+
+// Nested declarations inside control-flow bodies (`if` / `else` / `else if` /
+// `for` / `catch` / `recover`) parse as `local_decl` / `const` in that body's
+// step list — the AST prerequisite for block-scoped validation. If the parser
+// dropped an in-branch decl these assertions would fail.
+
+const IN_BRANCH_SRC = [
+  "export def main(flag, src) {",
+  '  if flag == "y" {',
+  "    script s = `echo YES`",
+  "  } else if flag == \"m\" {",
+  "    def d() {",
+  '      return "x"',
+  "    }",
+  "  } else {",
+  '    prompt p(x) = "hi ${x}"',
+  "  }",
+  "  for line in src {",
+  '    const c = "1"',
+  "  }",
+  "  run s() catch (e) {",
+  "    script cs = `echo recovered`",
+  "  }",
+  "  run s() recover (e) {",
+  "    def rf() {",
+  '      return "ok"',
+  "    }",
+  "  }",
+  "}",
+  "",
+].join("\n");
+
+function declKind(s: { type: string; decl?: { kind: string } }): string {
+  if (s.type === "local_decl" && s.decl) return `local_decl:${s.decl.kind}`;
+  return s.type;
+}
+
+test("parse: nested decls inside if / else if / else bodies parse as local_decl", () => {
+  const ast = parsejaiph(IN_BRANCH_SRC, "t.jh");
+  const main = ast.defs[0];
+  const ifStep = main.steps.find((s) => s.type === "if");
+  assert.ok(ifStep && ifStep.type === "if");
+  if (!(ifStep && ifStep.type === "if")) return;
+  assert.deepEqual(ifStep.body.map(declKind), ["local_decl:script"]);
+  const elseIf = ifStep.elseBody?.find((s) => s.type === "if");
+  assert.ok(elseIf && elseIf.type === "if", "else if is a nested if in elseBody");
+  if (!(elseIf && elseIf.type === "if")) return;
+  assert.deepEqual(elseIf.body.map(declKind), ["local_decl:def"]);
+  assert.deepEqual(elseIf.elseBody?.map(declKind), ["local_decl:prompt"]);
+});
+
+test("parse: a nested const inside a for body stays a const step in that body", () => {
+  const ast = parsejaiph(IN_BRANCH_SRC, "t.jh");
+  const forStep = ast.defs[0].steps.find((s) => s.type === "for_lines");
+  assert.ok(forStep && forStep.type === "for_lines");
+  if (!(forStep && forStep.type === "for_lines")) return;
+  assert.deepEqual(forStep.body.map(declKind), ["const"]);
+});
+
+test("parse: nested decls inside catch / recover bodies parse as local_decl", () => {
+  const ast = parsejaiph(IN_BRANCH_SRC, "t.jh");
+  const execs = ast.defs[0].steps.filter((s) => s.type === "exec");
+  const withCatch = execs.find((s) => s.type === "exec" && s.catch);
+  assert.ok(withCatch && withCatch.type === "exec" && withCatch.catch && "block" in withCatch.catch);
+  if (!(withCatch && withCatch.type === "exec" && withCatch.catch && "block" in withCatch.catch)) return;
+  assert.deepEqual(withCatch.catch.block.map(declKind), ["local_decl:script"]);
+
+  const withRecover = execs.find((s) => s.type === "exec" && s.recover);
+  assert.ok(withRecover && withRecover.type === "exec" && withRecover.recover && "block" in withRecover.recover);
+  if (!(withRecover && withRecover.type === "exec" && withRecover.recover && "block" in withRecover.recover)) return;
+  assert.deepEqual(withRecover.recover.block.map(declKind), ["local_decl:def"]);
+});

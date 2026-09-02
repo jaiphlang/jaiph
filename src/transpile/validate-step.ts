@@ -30,13 +30,10 @@ export { DEF_SCOPE } from "./validate-step-ctx";
 export {
   localDeclName,
   localSymFromDecl,
-  localPromptReturnsResolver,
   refCtxWithLocals,
-  seqConstVisibility,
   type LocalSym,
 } from "./validate-local-decl";
 export { validateMatchExpr } from "./validate-match";
-export { walkStepTree, type StepTreeWalk } from "./validate-step-tree";
 export {
   ROUTE_REF_EXPECT,
   parseSchemaFieldNames,
@@ -44,6 +41,7 @@ export {
   resolvePromptDef,
   validateNoShellRedirection,
 } from "./validate-step-helpers";
+export { validateRef } from "./validate-ref-resolution";
 
 type StepValidator = (s: StepDef, ctx: ValidatorCtx) => void;
 

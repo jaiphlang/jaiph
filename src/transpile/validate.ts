@@ -1,28 +1,18 @@
 import { existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { Diagnostics } from "../diagnostics";
-import type { Def, jaiphModule, LocalDecl } from "../types";
+import type { jaiphModule } from "../types";
 import type { ModuleGraph } from "./module-graph";
-import { validateRef } from "./validate-ref-resolution";
 import {
   resolveRouteTargetParams,
   ROUTE_REF_EXPECT,
   resolvePromptDef,
-  validateStep,
-  DEF_SCOPE,
-  localDeclName,
-  localSymFromDecl,
-  localPromptReturnsResolver,
-  refCtxWithLocals,
-  seqConstVisibility,
-  walkStepTree,
-  type LocalSym,
-  type StepTreeWalk,
-  type ValidatorCtx,
+  validateRef,
 } from "./validate-step";
+import { validateDef, type DefScopeModuleCtx } from "./validate-def-scope";
 import { validateConfigInto } from "./validate-config";
 import { validateTestBlocks } from "./validate-tests";
-import { validatePromptDefs, validatePromptDefBody } from "./validate-prompt-def";
+import { validatePromptDefs } from "./validate-prompt-def";
 
 export function resolveScriptImportPath(fromFile: string, importPath: string): string {
   return resolve(dirname(fromFile), importPath);
@@ -169,7 +159,7 @@ export function validateModuleInto(
     localDefs,
     importsByAlias,
     importedAstCache,
-  } as const;
+  };
 
   const resolvePromptReturns = (ref: string): string | undefined =>
     resolvePromptDef(ref, ast, refCtx)?.returns;
@@ -201,83 +191,14 @@ export function validateModuleInto(
     }
   }
 
-  /**
-   * Validate one def (top-level or nested) as its own scope. Nested defs recurse
-   * with the enclosing knownVars (closure over params/`const`s) and the nested
-   * declarations visible at their declaration point. Nested `run` / `prompt`
-   * targets resolve against a per-step ref context that overlays the locals
-   * declared so far, so a name is visible only after its declaration and may
-   * shadow a module symbol.
-   */
-  const validateDefTree = (
-    def: Def,
-    inheritedKnownVars: Set<string>,
-    inheritedLocals: Map<string, LocalSym>,
-  ): void => {
-    const resolveReturns = localPromptReturnsResolver(def, resolvePromptReturns);
-    let walk: StepTreeWalk | undefined;
-    diag.capture(() => {
-      walk = walkStepTree(
-        diag,
-        ast.filePath,
-        def.steps,
-        ast.envDecls,
-        def.params,
-        def.loc,
-        localScripts,
-        { withPromptSchemas: true, resolvePromptReturns: resolveReturns, inheritedKnownVars },
-      );
-    });
-    if (!walk) return;
-    const w = walk;
-    const ctxBase: ValidatorCtx = {
-      ...baseCtx,
-      scope: DEF_SCOPE,
-      knownVars: w.knownVars,
-      promptSchemas: w.promptSchemas,
-      promptCaptures: w.promptCaptures,
-      recoverBindings: undefined,
-    };
-    const localsSoFar = new Map(inheritedLocals);
-    // Sequential `const` visibility, mirroring `localsSoFar` for nested decls:
-    // a `const` is only visible once its declaration is reached in flat order.
-    const seq = seqConstVisibility(w.knownVars, w.constNames);
-    for (const entry of w.flat) {
-      const step = entry.step;
-      if (step.type === "local_decl") {
-        const decl = step.decl;
-        // A nested def / prompt body closes only over the enclosing `const`s
-        // declared *before* this declaration point (forward-const TDZ) plus the
-        // enclosing params / module names — snapshot the visible set here.
-        const inheritedKnownVars = seq.visibleKnownVars();
-        if (decl.kind === "def") {
-          validateDefTree(decl.def, inheritedKnownVars, new Map(localsSoFar));
-        } else if (decl.kind === "prompt") {
-          validatePromptDefBody(diag, ast.filePath, decl.prompt, inheritedKnownVars);
-        }
-        // Nested scripts need no body validation (module scripts don't either).
-        localsSoFar.set(localDeclName(decl), localSymFromDecl(decl));
-        continue;
-      }
-      // A `const` is visible in its own RHS (self-reference behavior unchanged).
-      if (step.type === "const") seq.declare(step.name);
-      const refCtx = refCtxWithLocals(baseCtx.refCtx, localsSoFar);
-      diag.capture(() =>
-        validateStep(step, {
-          ...ctxBase,
-          knownVars: seq.visibleKnownVars(),
-          forwardConsts: seq.forwardConsts(),
-          refCtx,
-          localScripts: refCtx.localScripts,
-          localDefs: refCtx.localDefs,
-          recoverBindings: entry.recoverBindings,
-        }),
-      );
-    }
+  const modCtx: DefScopeModuleCtx = {
+    baseCtx,
+    moduleScripts: localScripts,
+    resolvePromptReturns,
   };
 
   for (const workflow of ast.defs) {
-    validateDefTree(workflow, new Set(), new Map());
+    validateDef(workflow, modCtx, new Set(), new Map());
   }
 
   if (ast.tests && ast.tests.length > 0) {
