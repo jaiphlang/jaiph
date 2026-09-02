@@ -911,7 +911,7 @@ export def main() {
 }
 
 === command substitution contains channel send
-# @expect error E_VALIDATE "command substitution cannot contain channel send (<-); use a workflow send step " @4:8
+# @expect error E_VALIDATE "command substitution cannot contain a channel send; use a def send step (send … ->) instead" @4:8
 --- input.jh
 channel c
 channel d

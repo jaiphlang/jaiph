@@ -96,7 +96,7 @@ test("assertKeywordFirstShellFragment: rejects 'ensure' keyword", () => {
 test("assertKeywordFirstShellFragment: rejects channel send operator", () => {
   assert.throws(
     () => assertKeywordFirstShellFragment("chan <- value", makeEnv()),
-    /cannot contain channel send/,
+    /cannot contain a channel send/,
   );
 });
 

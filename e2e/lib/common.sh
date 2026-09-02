@@ -351,13 +351,6 @@ e2e::git_current_branch() {
   printf "%s" "${branch}"
 }
 
-e2e::readonly_sandbox_available() {
-  command -v unshare >/dev/null 2>&1 &&
-    command -v sudo >/dev/null 2>&1 &&
-    sudo -n true >/dev/null 2>&1 &&
-    unshare -m true >/dev/null 2>&1
-}
-
 e2e::cleanup() {
   if [[ -n "${E2E_SERVER_PID}" ]]; then
     kill "${E2E_SERVER_PID}" >/dev/null 2>&1 || true

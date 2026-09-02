@@ -71,6 +71,15 @@ export function formatInvalidAsyncHandleError(handleId: string): string {
   return `invalid async handle "${handleId}" — the handle was never created or was already consumed`;
 }
 
+/**
+ * Error surfaced when a `send` step executes with no enclosing def context on
+ * the stack. Defensive: the parser only accepts `send` inside a def body and
+ * `executeDef` always pushes a context, so this is not reachable through the
+ * normal compile+run path — exported so the operator-facing wording (`def`, not
+ * the retired `workflow` noun) is pinned by a unit test.
+ */
+export const SEND_OUTSIDE_DEF_CONTEXT_ERROR = "send is only valid inside def execution context";
+
 const DEFAULT_INBOX_DISPATCH_LIMIT = 1000;
 
 function resolveInboxDispatchLimit(env: NodeJS.ProcessEnv): number {
@@ -891,7 +900,7 @@ export class NodeWorkflowRuntime {
           return this.mergeStepResult(accOut, accErr, {
             status: 1,
             output: "",
-            error: "send is only valid inside workflow execution context",
+            error: SEND_OUTSIDE_DEF_CONTEXT_ERROR,
           });
         }
         let payload = "";

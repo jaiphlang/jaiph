@@ -14,32 +14,6 @@ Process rules:
 
 ***
 
-## Sweep leftover `workflow` / sandbox wording on live surfaces #dev-ready
-
-Context: The language and runtime no longer have `workflow` / `rule` / `ensure` or a first-party Docker sandbox. User-visible strings and a few tests still teach the old nouns. Historical CHANGELOG entries stay as history.
-
-Live leftovers found in review (re-grep; do not treat this list as exhaustive):
-
-- `src/runtime/kernel/node-workflow-runtime.ts` send-outside-context error: `"workflow execution context"`.
-- `src/parse/channels.ts` route error still says `channel <name> -> <workflow>`.
-- `src/runtime/kernel/shell-jaiph-guard.ts` diagnostic text still mentions `channel send (<-)`.
-- `e2e/tests/30_filesystem_side_effects.sh` "readonly sandbox" branch (`unshare`/`sudo`) is not a Jaiph sandbox and always skips on macOS CI. `docs/contributing.md` still documents `e2e::readonly_sandbox_available`.
-- `design/2026-07-14-mcp-server.md` still describes Docker mode / `JAIPH_UNSAFE` (design note; either a one-line "superseded" banner or delete the sandbox claims).
-- Test titles in `src/parse/parse-steps.test.ts` (`ensure:` section that tests `run`) and similar.
-
-Remediation — implement exactly this:
-
-1. Change operator-facing error strings to `def` / `send … ->` wording. Keep internal identifiers (`WORKFLOW_RUNNER_ARG`, filenames) unless a rename is a few lines with no behavior change.
-2. Remove or rewrite the e2e readonly-sandbox branch so CI does not pretend Jaiph still has a sandbox helper. Update `docs/contributing.md`.
-3. Banner or trim the MCP design note so it cannot be read as current sandbox contract.
-4. Rename misleading test titles/comments that say `ensure`/`workflow` when they assert `run`/`def`. Do not churn passing assertions.
-
-### Acceptance criteria
-- Grep of `src/` `*.ts` (excluding `*.test.ts` comments if you must) for user-facing `"workflow execution"` / `-> <workflow>` / `channel send (<-)` is empty.
-- `e2e/tests/30_filesystem_side_effects.sh` no longer documents a Jaiph readonly sandbox; contributing docs match.
-- A unit test asserts the send-outside-context (or equivalent) message says `def`, not `workflow`, if that path is reachable; otherwise the string is gone.
-- `npm run build`, `npm test`, and `npm run test:e2e` pass.
-
 ## Runner env is constructed; `--env` values stay off the runner process #dev-ready
 
 Context: `resolveRuntimeEnv` (`src/cli/run/env.ts`) starts from `{ ...process.env }`. `jaiph run` / `serve` / `mcp` then `Object.assign(runtimeEnv, extraEnv)` (`src/cli/commands/run.ts`, `src/cli/shared/workflow-call-exec.ts`). `jaiph test` spreads `process.env` and `extraEnv` onto the runtime env (`src/runtime/kernel/node-test-runner.ts`). `NodeWorkflowRuntime` snapshots `this.env` as `hostEnvSnapshot` and reads `--env` values from that snapshot (`buildScriptEnv`, `buildPromptUseEnv` in `src/runtime/kernel/env-allowlist.ts` / `node-workflow-runtime.ts`).

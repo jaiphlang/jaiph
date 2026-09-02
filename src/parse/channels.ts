@@ -12,7 +12,7 @@ export function parseChannelLine(
   if (!match) {
     fail(
       filePath,
-      'invalid channel declaration; expected: channel <name> or channel <name> -> <workflow>',
+      'invalid channel declaration; expected: channel <name> or channel <name> -> <def>',
       lineNo,
       1,
     );
