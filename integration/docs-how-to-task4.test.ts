@@ -38,6 +38,12 @@ const HOW_TO_PAGES: HowToPage[] = [
     navPermalink: "/how-to/agent-auth",
   },
   {
+    file: "script-env.md",
+    permalink: "/how-to/script-env",
+    redirectFrom: [],
+    navPermalink: "/how-to/script-env",
+  },
+  {
     file: "configure-backend.md",
     permalink: "/how-to/configure-backend",
     redirectFrom: [],

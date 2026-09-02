@@ -463,7 +463,7 @@ Managed script steps (`run` to a named script, `import script`, inline scripts) 
 - the script runtime contract: `JAIPH_WORKSPACE`, `JAIPH_SCRIPTS`, `JAIPH_RUN_DIR`, `JAIPH_ARTIFACTS_DIR`, the config-scoped `JAIPH_AGENT_BACKEND` (when set), and `JAIPH_AGENT_MODEL` (kept defined, empty when unset, for `set -u` scripts);
 - the host keys named in the script's own `use` clause, and only when the operator granted each with `--env KEY[=VALUE]`.
 
-Nothing else crosses: the rest of the host environment, agent credentials (`ANTHROPIC_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`, `CURSOR_API_KEY`, `OPENAI_API_KEY`), the audit journal path (`JAIPH_RUN_SUMMARY_FILE`), and the audit-chain key (`JAIPH_CHAIN_KEY`) all stay with the runner. A def in the call tree neither grants nor denies keys — `run bbb()` where `bbb` is a def never injects host keys into `bbb`'s scripts; only each script's own declaration counts. Def inline-shell lines (free-form body lines run via `sh -c`) get the same sterile environment as an inline script; a shell line has no declaration and therefore no `use` clause, so granted keys never reach it — use a named script with `use` when a line needs a host secret. See [Environment variables](env-vars.md#script-env).
+Nothing else crosses **into that child `env`**: the rest of the host environment, agent credentials (`ANTHROPIC_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`, `CURSOR_API_KEY`, `OPENAI_API_KEY`), the audit journal path (`JAIPH_RUN_SUMMARY_FILE`), and the audit-chain key (`JAIPH_CHAIN_KEY`) all stay with the runner. A def in the call tree neither grants nor denies keys — `run bbb()` where `bbb` is a def never injects host keys into `bbb`'s scripts; only each script's own declaration counts. Def inline-shell lines (free-form body lines run via `sh -c`) get the same sterile environment as an inline script; a shell line has no declaration and therefore no `use` clause, so granted keys never reach it — use a named script with `use` when a line needs a host secret. This contract is spawn-env only. A `cursor` or `claude` prompt that can run tools is the same user as `jaiph` and is not confined to that child `env`. See [Pass a host key to a script](script-env.md), [Environment variables](env-vars.md#script-env), and [Why Jaiph](why-jaiph.md).
 
 Module `const` values are **not** automatically exported into script environments. Pass them as positional arguments (`$1`, `$2`, …) or read Jaiph-provided variables.
 
@@ -491,4 +491,5 @@ The runtime enforces a hard recursion depth limit of `256` (`MAX_RECURSION_DEPTH
 - [Inbox & Dispatch](inbox.md) — `send` queueing and route execution semantics.
 - [Run work concurrently](async.md) — operator recipe for `run async`.
 - [Spec — Async Handles](spec-async-handles.md) — handle resolution and join semantics.
+- [Pass a host key to a script](script-env.md) — `use` + `--env` recipe.
 - [Environment variables](env-vars.md) — variables visible to defs and scripts.

@@ -101,4 +101,5 @@ E_AGENT_CREDENTIALS: agent.backend "codex" selected by module config in /path/to
 ## Related
 
 - [Configure backend/model](configure-backend.md) — picking which backend a def uses.
+- [Pass a host key to a script](script-env.md) — `use` + `--env` for script and named-prompt secrets.
 - [Environment variables](env-vars.md) — `--env` and credential names.

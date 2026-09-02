@@ -11,7 +11,7 @@ redirect_from:
 
 This page lists every environment variable Jaiph reads. It covers the `JAIPH_*` variables the TypeScript runtime and CLI read (`src/`), the vendor credentials Jaiph checks before it launches a run, the standard `OTEL_*` and `SENTRY_*` variables that turn on telemetry, and the host-side variables the installer script reads.
 
-For role-oriented overviews see [Configuration](configuration.md) and [CLI](cli.md). For the credential pre-flight contract see [Authenticate agent backends](agent-auth.md).
+For role-oriented overviews see [Configuration](configuration.md) and [CLI](cli.md). For the credential pre-flight contract see [Authenticate agent backends](agent-auth.md). To put a host key into a script, see [Pass a host key to a script](script-env.md).
 
 The tables below use three symbols.
 
@@ -133,7 +133,7 @@ Scripts are **sterile by default**. A script subprocess (named `script`, `import
 
 The `use` clause on a script declaration or a [named prompt](language.md#named-prompts) definition is the request; `--env` is the only grant. A `use GITHUB_TOKEN` receives the key iff the run was started with `--env GITHUB_TOKEN` (host value) or `--env GITHUB_TOKEN=VALUE` (explicit value). Presence of the key on the host environment without the flag is not enough. `jaiph run`, `jaiph serve`, and `jaiph mcp` pre-flight every `use` key in the import graph — script and named-prompt keys alike — and abort with `E_ENV_MISSING` when one was not granted; extra `--env` keys nothing `use`s are allowed. `jaiph test` skips that pre-flight — with `--env` the keys are injected into matching `use` spawns, and without it the key is simply absent.
 
-Anonymous prompt steps (`prompt "…"`, `prompt """…"""`) are unaffected by `--env`: Jaiph spawns every prompt backend with a fail-closed scrub of the environment (`scrubPromptEnv`). The scrub forwards only the base environment (`PATH`, `HOME`, locale, proxies, `CLAUDE_CONFIG_DIR`, and so on), the `JAIPH_*` control keys, and that backend's own credential keys — never `--env`-granted secrets. A **named prompt** definition may carry the same `use` clause as a script (`prompt analyze(log) use GITHUB_TOKEN = …`); its granted `use` keys are injected into that invocation's agent subprocess (for the HTTP `codex` backend, onto the request environment) on top of the scrub, under the identical `--env`-only grant and `E_ENV_MISSING` pre-flight. Backend credentials stay the prompt default and are never written as `use`.
+Anonymous prompt steps (`prompt "…"`, `prompt """…"""`) are unaffected by `--env`: Jaiph spawns every prompt backend with a fail-closed scrub of the environment (`scrubPromptEnv`). The scrub forwards only the base environment (`PATH`, `HOME`, locale, proxies, `CLAUDE_CONFIG_DIR`, and so on), the `JAIPH_*` control keys, and that backend's own credential keys — never `--env`-granted secrets. A **named prompt** definition may carry the same `use` clause as a script (`prompt analyze(log) use GITHUB_TOKEN = …`); its granted `use` keys are injected into that invocation's agent subprocess (for the HTTP `codex` backend, onto the request environment) on top of the scrub, under the identical `--env`-only grant and `E_ENV_MISSING` pre-flight. Backend credentials stay the prompt default and are never written as `use`. This is the child `env` Jaiph builds. It is not a sandbox: a `cursor` or `claude` agent that can run tools runs as the same user as `jaiph`. See [Why Jaiph](why-jaiph.md) and [Deploy jaiph](deploy.md).
 
 ## Telemetry variables
 
@@ -193,6 +193,7 @@ The error codes below surface during `jaiph run` / `jaiph serve` / `jaiph mcp` i
 
 ## Related
 
+- [Pass a host key to a script](script-env.md) — `use` + `--env` recipe.
 - [Configuration](configuration.md) — config keys and their environment-variable equivalents.
 - [CLI](cli.md) — commands and flags that front-end these variables.
-- [Deploy jaiph](deploy.md) — wrap jaiph in an image or pod for outer isolation.
+- [Deploy jaiph](deploy.md) — image, pod, or a dedicated user you create for outer isolation.

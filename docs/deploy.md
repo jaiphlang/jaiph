@@ -12,10 +12,24 @@ A complete, apply-ready Kubernetes example lives at [`docs/deploy/k8s.yaml`](htt
 
 ## Isolation is yours
 
-`jaiph run`, `jaiph serve`, and `jaiph mcp` execute as ordinary host processes. They do not drop capabilities, clone a workspace snapshot, or filter the environment into a sandbox allowlist.
+`jaiph run`, `jaiph serve`, and `jaiph mcp` execute as ordinary host processes. They do not drop capabilities, clone a workspace snapshot, or filter the environment into a sandbox allowlist. Sterile script env, the prompt scrub, `use`, and `--env` only shape the `env` of each child process. They do not isolate a tool-using agent from the rest of that user — see [Why Jaiph](why-jaiph.md).
 
 - **Workspace content is your responsibility.** Everything you mount or copy into the process working directory is visible to scripts and agent backends, including gitignored secrets. Do not mount files you would not hand to the agent.
 - **Hardening is yours to configure.** Container and pod settings (read-only root filesystem, dropped capabilities, network policy, non-root UID, resource limits) belong at the deployment layer.
+
+## Dedicated user or container
+
+The curl installer writes `~/.local/bin` and does not create a system user. `jaiph run` on a laptop is your user. A coding-agent `prompt` is that same user.
+
+To keep Jaiph off the rest of your session, run the **whole** process — CLI, runner, scripts, and agent — as an account that does not own your other terminals, browser, or `$HOME`. Create that account yourself. Options:
+
+- A container or pod (sections below). The image user is the boundary.
+- Linux `systemd` `User=` / `Group=` on a `jaiph serve` unit, with the workspace and a `$HOME` for agent CLI logins owned by that account.
+- `sudo -u jaiph jaiph run …` on a workspace that account can write.
+
+That account still needs only the keys the program uses (backend credentials, `--env` grants). Do not copy your login environment into it.
+
+This isolates Jaiph from **you**. It does not isolate the agent from a script in the same run: they share that account. A token granted for `gh push` is still visible to a live agent that can run a shell. For that split, use two invocations — implement with no token, then a scripts-only run that grants it — or do not start a `prompt` next to the privileged script.
 
 ## Run one program in a container you own
 
@@ -79,5 +93,6 @@ Isolation is the pod boundary. There is no jaiph-managed sandbox inside.
 
 ## Related
 
+- [Why Jaiph](why-jaiph.md) — spawn-env and journal rules vs a process sandbox.
 - [Serve defs over HTTP](serve.md), the `jaiph serve` API that the Kubernetes manifest exposes.
 - [Environment variables](env-vars.md), covering `JAIPH_SERVE_TOKEN` and the rest.
