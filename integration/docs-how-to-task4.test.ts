@@ -67,6 +67,12 @@ const HOW_TO_PAGES: HowToPage[] = [
     redirectFrom: ["/testing"],
     navPermalink: "/how-to/testing",
   },
+  {
+    file: "async.md",
+    permalink: "/how-to/async",
+    redirectFrom: [],
+    navPermalink: "/how-to/async",
+  },
 ];
 
 function readPage(name: string): string {

@@ -104,6 +104,47 @@ test("named prompt interpolates ${param} in the body and invokes the agent", asy
   }
 });
 
+test("module-level named prompt interpolates module const, not a same-named caller local", async () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-named-prompt-scope-"));
+  try {
+    const jh = join(root, "flow.jh");
+    writeFileSync(
+      jh,
+      [
+        'const TOPIC = "module"',
+        'prompt p() = "t=${TOPIC}"',
+        "export def main() {",
+        '  const TOPIC = "caller"',
+        "  const r = prompt p()",
+        "  return r",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const agent = join(root, "echo-agent");
+    writeEchoAgent(agent);
+    const graph = buildRuntimeGraph(jh);
+    const runtime = new NodeWorkflowRuntime(graph, {
+      env: {
+        ...process.env,
+        JAIPH_RUNS_DIR: join(root, ".jaiph", "runs"),
+        JAIPH_AGENT_BACKEND: "cursor",
+        JAIPH_AGENT_COMMAND: agent,
+        JAIPH_WORKSPACE: root,
+      },
+      cwd: root,
+      suppressLiveEvents: true,
+    });
+    const status = await runtime.runMain([]);
+    assert.equal(status, 0);
+    const value = readFileSync(join(runtime.getRunDir(), "return_value.txt"), "utf8");
+    assert.match(value, /t=module/, "module const TOPIC must win over the caller local");
+    assert.doesNotMatch(value, /t=caller/, "caller local TOPIC must not leak into the module prompt");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("named prompt `use GITHUB_TOKEN` + --env grant reaches the agent child env; anonymous prompt does not", async () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-named-prompt-env-"));
   try {

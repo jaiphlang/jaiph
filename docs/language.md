@@ -147,7 +147,7 @@ export def main() {
 | Inline scripts | Not supported with `run async`. |
 | Progress display | Each branch is prefixed with subscript digits (₁, ₂, …) at the call site's indent level, in dispatch order. Nested branches get their own numbering scope. |
 
-See [Spec — Async Handles](spec-async-handles.md) for the full value model.
+See [Run work concurrently](async.md) for the operator recipe and [Spec — Async Handles](spec-async-handles.md) for the value model.
 
 ## `catch` and `recover`
 
@@ -489,5 +489,6 @@ The runtime enforces a hard recursion depth limit of `256` (`MAX_RECURSION_DEPTH
 - [Grammar](grammar.md) — formal EBNF, lexical rules, validation catalog.
 - [Configuration](configuration.md) — config keys consumed at runtime.
 - [Inbox & Dispatch](inbox.md) — `send` queueing and route execution semantics.
+- [Run work concurrently](async.md) — operator recipe for `run async`.
 - [Spec — Async Handles](spec-async-handles.md) — handle resolution and join semantics.
 - [Environment variables](env-vars.md) — variables visible to defs and scripts.

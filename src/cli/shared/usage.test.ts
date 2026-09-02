@@ -183,6 +183,11 @@ test("parseArgs: --env rejects a runtime-managed key (E_ENV_RESERVED), bare KEY 
   assert.throws(() => parseArgs(["--env", "JAIPH_RUNS_DIR", "flow.jh"]), /E_ENV_RESERVED/);
 });
 
+test("parseArgs: --env rejects audit-chain keys (E_ENV_RESERVED)", () => {
+  assert.throws(() => parseArgs(["--env", "JAIPH_CHAIN_KEY=secret", "flow.jh"]), /E_ENV_RESERVED/);
+  assert.throws(() => parseArgs(["--env", "JAIPH_RUN_SUMMARY_FILE", "flow.jh"]), /E_ENV_RESERVED/);
+});
+
 // ---------------------------------------------------------------------------
 // parseArgs: per-command flag scoping — shared execution-policy set everywhere,
 // command-specific flags rejected elsewhere, unknown flags never positionals

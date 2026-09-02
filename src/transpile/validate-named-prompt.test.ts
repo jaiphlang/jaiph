@@ -137,6 +137,24 @@ test("valid: bare `prompt foo` (no parens) is identifier-as-body for a string co
   );
 });
 
+test("E_VALIDATE: module-level named prompt cannot see caller locals", () => {
+  withFlow(
+    [
+      'prompt p(x) = "${callerOnly}"',
+      "export def main() {",
+      '  const callerOnly = "x"',
+      '  prompt p("a")',
+      "}",
+    ],
+    (entry, out) => {
+      assert.throws(
+        () => buildScripts(entry, out),
+        /E_VALIDATE.*unknown identifier "callerOnly"/,
+      );
+    },
+  );
+});
+
 test("valid: named prompt used across import with alias", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-named-prompt-import-"));
   try {

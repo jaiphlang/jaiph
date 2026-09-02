@@ -96,3 +96,14 @@ test("parse: E_PARSE on non-string body (identifier is step-only sugar)", () => 
     /named prompt bodies must be a double-quoted string or triple-quoted block/,
   );
 });
+
+test("parse: named prompt use rejects audit-chain keys (E_ENV_RESERVED)", () => {
+  assert.throws(
+    () => parsejaiph('prompt p() use JAIPH_CHAIN_KEY = "x"\n', "t.jh"),
+    /E_ENV_RESERVED/,
+  );
+  assert.throws(
+    () => parsejaiph('prompt p() use JAIPH_RUN_SUMMARY_FILE = "x"\n', "t.jh"),
+    /E_ENV_RESERVED/,
+  );
+});

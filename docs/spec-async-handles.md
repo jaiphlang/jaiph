@@ -86,6 +86,7 @@ Async handles in Jaiph are a token bookkeeping model built on top of a normal `r
 
 ## Related
 
+- [Run work concurrently](async.md) is the operator recipe (late reads, recover, `for` pitfall).
 - [Inbox](inbox.md) covers the drain step that runs after the implicit join.
 - [Architecture, CLI progress reporting pipeline](architecture.md#cli-progress-reporting-pipeline) covers how `async_indices` shape the live progress tree.
 - [Language, `run async`](language.md#run-async-concurrent-execution-with-handles) and [Grammar, `run async`](grammar.md) cover the surface syntax.
