@@ -117,8 +117,8 @@ The host CLI checks these before spawning the runner when [credential pre-flight
 
 | Variable | Backend | Host behaviour | Notes |
 |---|---|---|---|
-| `ANTHROPIC_API_KEY` | `claude` | warning if absent | Either this **or** `CLAUDE_CODE_OAUTH_TOKEN` satisfies Claude. |
-| `CLAUDE_CODE_OAUTH_TOKEN` | `claude` | warning if absent | Long-lived OAuth token from `claude setup-token`. |
+| `ANTHROPIC_API_KEY` | `claude` | not checked | Either this **or** `CLAUDE_CODE_OAUTH_TOKEN` (or a stored Claude CLI login) satisfies Claude. |
+| `CLAUDE_CODE_OAUTH_TOKEN` | `claude` | not checked | Long-lived OAuth token from `claude setup-token`. |
 | `CURSOR_API_KEY` | `cursor` | warning if absent | A stored `cursor-agent login` may still work. |
 | `OPENAI_API_KEY` | `codex` | hard error (`E_AGENT_CREDENTIALS`) | No CLI-login fallback. |
 

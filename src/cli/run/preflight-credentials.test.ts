@@ -52,17 +52,14 @@ function envFor(moduleBackend: string | undefined, extra: Record<string, string>
     : { ...extra };
 }
 
-test("claude with no creds → warning, no error (CLI login may work)", () => {
+test("claude with no creds → silent (CLI login is the host path)", () => {
   const mod = emptyModule(ENTRY, { agent: { backend: "claude" } });
   const r = preflightAgentCredentials({
     mod,
     inputAbs: ENTRY,
     runtimeEnv: envFor("claude"),
   });
-  assert.equal(r.errors.length, 0);
-  assert.equal(r.warnings.length, 1);
-  assert.ok(r.warnings[0].toLowerCase().includes("warning"));
-  assert.ok(r.warnings[0].includes("claude"));
+  assert.deepEqual(r, { errors: [], warnings: [] });
 });
 
 test("cursor with no CURSOR_API_KEY → warning, no error", () => {
@@ -91,16 +88,16 @@ test("codex with no OPENAI_API_KEY → hard error", () => {
 
 test("message contains backend, model, entry file path, and 'module config' scope", () => {
   const mod = emptyModule(ENTRY, {
-    agent: { backend: "claude", model: "sonnet-4" },
+    agent: { backend: "cursor", model: "composer" },
   });
   const r = preflightAgentCredentials({
     mod,
     inputAbs: ENTRY,
-    runtimeEnv: envFor("claude"),
+    runtimeEnv: envFor("cursor"),
   });
   const msg = r.warnings[0];
-  assert.ok(msg.includes("claude"), `missing backend name: ${msg}`);
-  assert.ok(msg.includes("sonnet-4"), `missing model string: ${msg}`);
+  assert.ok(msg.includes("cursor"), `missing backend name: ${msg}`);
+  assert.ok(msg.includes("composer"), `missing model string: ${msg}`);
   assert.ok(msg.includes(ENTRY), `missing entry file path: ${msg}`);
   assert.ok(msg.includes("module config"), `missing scope label: ${msg}`);
 });
@@ -109,7 +106,7 @@ test("message reports 'def <name>' scope when backend is set at def level", () =
   const mod = emptyModule(ENTRY);
   mod.defs = [
     workflow("review", {
-      agent: { backend: "claude", model: "opus-4" },
+      agent: { backend: "cursor", model: "composer" },
     }),
   ];
   const r = preflightAgentCredentials({
@@ -117,31 +114,11 @@ test("message reports 'def <name>' scope when backend is set at def level", () =
     inputAbs: ENTRY,
     runtimeEnv: {},
   });
-  const claudeWarn = r.warnings.find((e) => e.includes("claude"));
-  assert.ok(claudeWarn, "expected a claude warning");
-  assert.ok(claudeWarn.includes("opus-4"));
-  assert.ok(claudeWarn.includes(ENTRY));
-  assert.ok(claudeWarn.includes("def review"), `missing 'def review' scope: ${claudeWarn}`);
-});
-
-test("claude with ANTHROPIC_API_KEY only → silent", () => {
-  const mod = emptyModule(ENTRY, { agent: { backend: "claude" } });
-  const r = preflightAgentCredentials({
-    mod,
-    inputAbs: ENTRY,
-    runtimeEnv: envFor("claude", { ANTHROPIC_API_KEY: "sk-xxx" }),
-  });
-  assert.deepEqual(r, { errors: [], warnings: [] });
-});
-
-test("claude with CLAUDE_CODE_OAUTH_TOKEN only → silent", () => {
-  const mod = emptyModule(ENTRY, { agent: { backend: "claude" } });
-  const r = preflightAgentCredentials({
-    mod,
-    inputAbs: ENTRY,
-    runtimeEnv: envFor("claude", { CLAUDE_CODE_OAUTH_TOKEN: "tok-yyy" }),
-  });
-  assert.deepEqual(r, { errors: [], warnings: [] });
+  const cursorWarn = r.warnings.find((e) => e.includes("cursor"));
+  assert.ok(cursorWarn, "expected a cursor warning");
+  assert.ok(cursorWarn.includes("composer"));
+  assert.ok(cursorWarn.includes(ENTRY));
+  assert.ok(cursorWarn.includes("def review"), `missing 'def review' scope: ${cursorWarn}`);
 });
 
 test("cursor with CURSOR_API_KEY set → silent", () => {
@@ -198,18 +175,18 @@ test("no agent.backend configured, cursor default, no CURSOR_API_KEY, prompt use
 });
 
 test("explicit backend in config but no prompt step → still checks", () => {
-  const mod = emptyModule(ENTRY, { agent: { backend: "claude" } });
+  const mod = emptyModule(ENTRY, { agent: { backend: "cursor" } });
   const r = preflightAgentCredentials({
     mod,
     inputAbs: ENTRY,
-    runtimeEnv: envFor("claude"),
+    runtimeEnv: envFor("cursor"),
   });
   assert.equal(r.errors.length, 0);
   assert.equal(r.warnings.length, 1);
-  assert.ok(r.warnings[0].includes("claude"));
+  assert.ok(r.warnings[0].includes("cursor"));
 });
 
-test("module-level claude + def-level cursor → both warned", () => {
+test("module-level claude + def-level cursor → only cursor warned", () => {
   const mod = emptyModule(ENTRY, { agent: { backend: "claude" } });
   mod.defs = [
     workflow("legacy", { agent: { backend: "cursor" } }),
@@ -219,18 +196,16 @@ test("module-level claude + def-level cursor → both warned", () => {
     inputAbs: ENTRY,
     runtimeEnv: envFor("claude"),
   });
-  assert.equal(r.warnings.length, 2);
-  const joined = r.warnings.join("\n");
-  assert.ok(joined.includes("claude") && joined.includes("module config"));
-  assert.ok(joined.includes("cursor") && joined.includes("def legacy"));
+  assert.equal(r.warnings.length, 1);
+  assert.ok(r.warnings[0].includes("cursor") && r.warnings[0].includes("def legacy"));
 });
 
 test("module config matches the effective env default → no duplicate check", () => {
-  const mod = emptyModule(ENTRY, { agent: { backend: "claude" } });
+  const mod = emptyModule(ENTRY, { agent: { backend: "cursor" } });
   const r = preflightAgentCredentials({
     mod,
     inputAbs: ENTRY,
-    runtimeEnv: envFor("claude"),
+    runtimeEnv: envFor("cursor"),
   });
   assert.equal(r.warnings.length, 1, `expected exactly one warning, got: ${r.warnings.join("\n")}`);
 });

@@ -85,23 +85,6 @@ function formatHeader(usage: BackendUsage, inputAbs: string): string {
   return `agent.backend "${usage.backend}"${modelPart} selected by ${usage.scope} in ${inputAbs}`;
 }
 
-function checkClaude(
-  usage: BackendUsage,
-  args: PreflightArgs,
-  out: PreflightResult,
-): void {
-  const ok =
-    hasCredential(args.runtimeEnv, "ANTHROPIC_API_KEY") ||
-    hasCredential(args.runtimeEnv, "CLAUDE_CODE_OAUTH_TOKEN");
-  if (ok) return;
-  const header = formatHeader(usage, args.inputAbs);
-  const remedy =
-    "Run `claude setup-token` and export CLAUDE_CODE_OAUTH_TOKEN, or set ANTHROPIC_API_KEY.";
-  out.warnings.push(
-    `jaiph: warning: ${header} — neither ANTHROPIC_API_KEY nor CLAUDE_CODE_OAUTH_TOKEN is set. ${remedy} A stored Claude CLI login may still work.`,
-  );
-}
-
 function checkCursor(
   usage: BackendUsage,
   args: PreflightArgs,
@@ -184,8 +167,8 @@ function entryFileHasExplicitBackend(mod: jaiphModule): boolean {
  * Host-side credential check, keyed to the backend(s) the entry file selects.
  *
  *  - codex   → hard error (no CLI-login fallback).
- *  - claude  → warn only (stored CLI login may work).
  *  - cursor  → warn only (stored CLI login may work).
+ *  - claude  → no check (stored Claude CLI login is the host path).
  *
  * Skip entirely when the entry file neither declares an explicit backend nor
  * uses any `prompt` step — there is nothing the runtime would credential against,
@@ -198,7 +181,6 @@ export function preflightAgentCredentials(args: PreflightArgs): PreflightResult 
   }
   for (const usage of collectBackendUsages(args.mod, args.runtimeEnv)) {
     if (usage.backend === "codex") checkCodex(usage, args, out);
-    else if (usage.backend === "claude") checkClaude(usage, args, out);
     else if (usage.backend === "cursor") checkCursor(usage, args, out);
   }
   return out;
