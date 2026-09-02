@@ -1,6 +1,6 @@
 /**
  * Keyword-first checks for Jaiph symbols inside bash `$(...)` and at the start of
- * workflow/rule shell lines.
+ * def shell lines.
  */
 
 import { jaiphError } from "../errors";
@@ -73,7 +73,7 @@ function throwJaiphInSubstitution(env: SubstitutionValidateEnv, message: string)
 }
 
 /**
- * If `token` is a Jaiph REF naming a rule, workflow, script, or unknown
+ * If `token` is a Jaiph REF naming a def, script, or unknown
  * import, return its kind; otherwise "none" (ordinary shell / echo / printf).
  */
 export function classifyJaiphShellRefToken(
@@ -112,7 +112,7 @@ export function assertKeywordFirstShellFragment(inner: string, env: Substitution
   if (hasSendOperatorOutsideQuotes(inner)) {
     throwJaiphInSubstitution(
       env,
-      "command substitution cannot contain channel send (<-); use a workflow send step instead",
+      "command substitution cannot contain a channel send; use a def send step (send … ->) instead",
     );
   }
   const word = firstCommandWord(inner);

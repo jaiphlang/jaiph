@@ -700,7 +700,7 @@
       "line": 4,
       "col": 8,
       "code": "E_VALIDATE",
-      "message": "command substitution cannot contain channel send (<-); use a workflow send step instead"
+      "message": "command substitution cannot contain a channel send; use a def send step (send … ->) instead"
     }
   ],
   "validate-errors.txt > prompt inside else block in rule": [],

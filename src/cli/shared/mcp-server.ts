@@ -5,7 +5,7 @@ import type { McpToolSpec } from "./mcp-tools";
 /**
  * Minimal MCP server over newline-delimited JSON-RPC 2.0.
  *
- * The transport and the workflow execution are injected so the protocol layer
+ * The transport and the def execution are injected so the protocol layer
  * stays a pure line-in / message-out state machine (unit-testable without
  * spawning processes). Handles: `initialize`, `ping`, `tools/list`,
  * `tools/call`; emits `notifications/tools/list_changed` on hot reload.

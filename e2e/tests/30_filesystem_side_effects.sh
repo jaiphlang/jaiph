@@ -58,29 +58,15 @@ export def main() {
 EOF
 rm -f "${TEST_DIR}/rule_wrote.txt"
 
-if e2e::readonly_sandbox_available; then
-  # When
-  rule_write_stderr="$(mktemp)"
-  if e2e::run "fs_write_rule.jh" 2>"${rule_write_stderr}"; then
-    cat "${rule_write_stderr}" >&2
-    rm -f "${rule_write_stderr}"
-    e2e::fail "rule write should be blocked when readonly sandbox is available"
-  fi
-  rm -f "${rule_write_stderr}"
+# Jaiph runs def shell steps on the host with no first-party sandbox, so a
+# nested-def shell write lands on the real filesystem in every mode.
+# When
+nested_write_out="$(e2e::run "fs_write_rule.jh")"
 
-  # Then
-  if [[ -f "${TEST_DIR}/rule_wrote.txt" ]]; then
-    e2e::fail "rule_wrote.txt should not exist when readonly sandbox blocks writes"
-  fi
-  e2e::pass "rule write is blocked in readonly sandbox"
-else
-  # When
-  permissive_out="$(e2e::run "fs_write_rule.jh")"
+# Then
+e2e::assert_file_exists "${TEST_DIR}/rule_wrote.txt" "nested-def shell step created rule_wrote.txt"
 
-  # Then
-  e2e::assert_file_exists "${TEST_DIR}/rule_wrote.txt" "fallback mode allows rule_wrote.txt creation"
-
-  e2e::expect_stdout "${permissive_out}" <<'EOF'
+e2e::expect_stdout "${nested_write_out}" <<'EOF'
 
 Jaiph: Running fs_write_rule.jh
 
@@ -92,7 +78,4 @@ def main
 ✓ PASS def main (<time>)
 EOF
 
-  e2e::expect_out_files "fs_write_rule.jh" 3
-
-  e2e::skip "readonly sandbox not available on this host; write-blocking assertion skipped"
-fi
+e2e::expect_out_files "fs_write_rule.jh" 3

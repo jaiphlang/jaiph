@@ -403,7 +403,6 @@ All helpers are defined in `e2e/lib/common.sh`.
 | `e2e::latest_run_dir_at "base" "file"` | Return the path of the most recent run directory for `file` under a custom base. Useful when a file may have been run multiple times. |
 | `e2e::git_init` | Initialize a git repo in the test directory (portable across bash versions). |
 | `e2e::git_current_branch` | Return the current branch name (defaults to `main` if detached). |
-| `e2e::readonly_sandbox_available` | Return success if Linux read-only sandboxing prerequisites (`unshare`, passwordless `sudo`) are available. Use to guard platform-dependent tests with `e2e::skip`. |
 
 #### Tree output assertions
 

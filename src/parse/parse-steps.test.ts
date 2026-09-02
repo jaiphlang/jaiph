@@ -12,12 +12,6 @@ import type { StepDef } from "../types";
  * level.
  */
 
-function asEnsureExec(step: StepDef) {
-  if (step.type !== "exec" || step.body.kind !== "call") {
-    throw new Error(`expected exec/call step, got ${step.type}`);
-  }
-  return step;
-}
 function asRunExec(step: StepDef) {
   if (step.type !== "exec" || step.body.kind !== "call") {
     throw new Error(`expected exec/call step, got ${step.type}`);
@@ -29,16 +23,16 @@ function parseOneWorkflowStep(bodyLines: string[]): StepDef {
   const src = ["def w() {", ...bodyLines.map((l) => `  ${l}`), "}", ""].join("\n");
   const mod = parsejaiph(src, "fixture.jh");
   const w = mod.defs.find((x) => x.name === "w");
-  if (!w) throw new Error("workflow not found");
+  if (!w) throw new Error("def not found");
   const steps = w.steps.filter((s) => s.type !== "trivia");
   if (steps.length !== 1) throw new Error(`expected one step, got ${steps.length}`);
   return steps[0];
 }
 
-// === ensure: basic ===
+// === run: basic ===
 
-test("ensure: parses basic run call", () => {
-  const e = asEnsureExec(parseOneWorkflowStep(["run my_rule()"]));
+test("run: parses basic run call", () => {
+  const e = asRunExec(parseOneWorkflowStep(["run my_rule()"]));
   assert.equal(e.body.kind, "call");
   if (e.body.kind === "call") {
     assert.equal(e.body.callee.value, "my_rule");
@@ -46,22 +40,22 @@ test("ensure: parses basic run call", () => {
   assert.equal(e.catch, undefined);
 });
 
-test("ensure: parses run with args", () => {
-  const e = asEnsureExec(parseOneWorkflowStep(['run my_rule("arg1")']));
+test("run: parses run with args", () => {
+  const e = asRunExec(parseOneWorkflowStep(['run my_rule("arg1")']));
   if (e.body.kind === "call") {
     assert.equal(e.body.callee.value, "my_rule");
     assert.deepEqual(e.body.args, [{ kind: "literal", raw: '"arg1"' }]);
   }
 });
 
-test("ensure: parses run with dotted ref", () => {
-  const e = asEnsureExec(parseOneWorkflowStep(["run lib.check()"]));
+test("run: parses run with dotted ref", () => {
+  const e = asRunExec(parseOneWorkflowStep(["run lib.check()"]));
   if (e.body.kind === "call") {
     assert.equal(e.body.callee.value, "lib.check");
   }
 });
 
-test("ensure: run without parens throws", () => {
+test("run: run without parens throws", () => {
   assert.throws(
     () => parseOneWorkflowStep(["run my_rule"]),
     /parentheses are required/,
@@ -71,7 +65,7 @@ test("ensure: run without parens throws", () => {
 // === run catch: single statement forms ===
 
 test("run catch: parses single catch log statement", () => {
-  const e = asEnsureExec(parseOneWorkflowStep(['run my_rule() catch (failure) log "failed"']));
+  const e = asRunExec(parseOneWorkflowStep(['run my_rule() catch (failure) log "failed"']));
   assert.ok(e.catch);
   assert.equal(e.catch!.bindings.failure, "failure");
   if (e.catch && "single" in e.catch) {
@@ -80,7 +74,7 @@ test("run catch: parses single catch log statement", () => {
 });
 
 test("run catch: parses single catch run statement", () => {
-  const e = asEnsureExec(parseOneWorkflowStep(["run my_rule() catch (err) run fallback()"]));
+  const e = asRunExec(parseOneWorkflowStep(["run my_rule() catch (err) run fallback()"]));
   assert.ok(e.catch);
   assert.equal(e.catch!.bindings.failure, "err");
   if (e.catch && "single" in e.catch) {
@@ -96,7 +90,7 @@ test("run catch: wait statement is rejected", () => {
 });
 
 test("run catch: parses single catch fail statement", () => {
-  const e = asEnsureExec(parseOneWorkflowStep(['run my_rule() catch (failure) fail "reason"']));
+  const e = asRunExec(parseOneWorkflowStep(['run my_rule() catch (failure) fail "reason"']));
   assert.ok(e.catch);
   if (e.catch && "single" in e.catch) {
     assert.equal(e.catch.single.type, "say");
@@ -109,7 +103,7 @@ test("run catch: parses single catch fail statement", () => {
 // === run catch: inline block ===
 
 test("run catch: parses inline catch block", () => {
-  const e = asEnsureExec(parseOneWorkflowStep(['run my_rule() catch (failure) { log "a"; log "b" }']));
+  const e = asRunExec(parseOneWorkflowStep(['run my_rule() catch (failure) { log "a"; log "b" }']));
   if (e.catch && "block" in e.catch) {
     assert.equal(e.catch.block.length, 2);
     assert.equal(e.catch.block[0].type, "say");
@@ -120,7 +114,7 @@ test("run catch: parses inline catch block", () => {
 // === run catch: multiline block ===
 
 test("run catch: parses multiline catch block", () => {
-  const e = asEnsureExec(parseOneWorkflowStep([
+  const e = asRunExec(parseOneWorkflowStep([
     "run my_rule() catch (failure) {",
     '    log "recovering"',
     "    run fallback()",
@@ -134,7 +128,7 @@ test("run catch: parses multiline catch block", () => {
 });
 
 test("run catch: multiline block with triple-quoted prompt", () => {
-  const e = asEnsureExec(parseOneWorkflowStep([
+  const e = asRunExec(parseOneWorkflowStep([
     "run gate() catch (err) {",
     "    run save()",
     '    prompt """',
@@ -156,7 +150,7 @@ test("run catch: multiline block with triple-quoted prompt", () => {
 });
 
 test("run catch: comment lines become trivia", () => {
-  const e = asEnsureExec(parseOneWorkflowStep([
+  const e = asRunExec(parseOneWorkflowStep([
     "run gate() catch (err) {",
     "    # note",
     "    run retry()",
@@ -229,7 +223,7 @@ test("run catch: empty inline catch block throws", () => {
 // === run catch: statement varieties ===
 
 test("run catch: single shell command", () => {
-  const e = asEnsureExec(parseOneWorkflowStep(["run my_rule() catch (failure) echo fallback"]));
+  const e = asRunExec(parseOneWorkflowStep(["run my_rule() catch (failure) echo fallback"]));
   if (e.catch && "single" in e.catch) {
     assert.equal(e.catch.single.type, "exec");
     if (e.catch.single.type === "exec") {
@@ -239,7 +233,7 @@ test("run catch: single shell command", () => {
 });
 
 test("run catch: single logerr statement", () => {
-  const e = asEnsureExec(parseOneWorkflowStep(['run my_rule() catch (failure) logerr "error msg"']));
+  const e = asRunExec(parseOneWorkflowStep(['run my_rule() catch (failure) logerr "error msg"']));
   if (e.catch && "single" in e.catch) {
     assert.equal(e.catch.single.type, "say");
     if (e.catch.single.type === "say") {
@@ -248,7 +242,7 @@ test("run catch: single logerr statement", () => {
   }
 });
 
-test("parsejaiph: workflow with run catch and multiline triple-quoted prompt", () => {
+test("parsejaiph: def with run catch and multiline triple-quoted prompt", () => {
   const src = [
     "def gate() {",
     "  run noop()",
@@ -266,7 +260,7 @@ test("parsejaiph: workflow with run catch and multiline triple-quoted prompt", (
   const mod = parsejaiph(src, "catch_prompt.jh");
   const w = mod.defs.find((x) => x.name === "w");
   assert.ok(w);
-  const e = asEnsureExec(w!.steps[0]);
+  const e = asRunExec(w!.steps[0]);
   if (e.catch && "block" in e.catch) {
     assert.equal(e.catch.block.length, 1);
     const p = e.catch.block[0];
@@ -342,7 +336,7 @@ test("run recover: empty recover block throws", () => {
   );
 });
 
-test("parsejaiph: workflow with run recover block", () => {
+test("parsejaiph: def with run recover block", () => {
   const src = [
     "def deploy() {",
     '  run setup() recover(err) {',

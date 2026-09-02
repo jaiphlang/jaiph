@@ -274,7 +274,7 @@ export def main() {
 }
 
 === channel declaration must be single per line
-# @expect error E_PARSE "invalid channel declaration; expected: channel <name> or channel <name> -> <work" @1:1
+# @expect error E_PARSE "invalid channel declaration; expected: channel <name> or channel <name> -> <def>" @1:1
 --- input.jh
 channel findings, report
 export def main() {

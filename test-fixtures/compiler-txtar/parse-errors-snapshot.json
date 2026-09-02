@@ -256,7 +256,7 @@
     "line": 1,
     "col": 1,
     "code": "E_PARSE",
-    "message": "invalid channel declaration; expected: channel <name> or channel <name> -> <workflow>"
+    "message": "invalid channel declaration; expected: channel <name> or channel <name> -> <def>"
   },
   "capture and send cannot be combined": {
     "file": "input.jh",
