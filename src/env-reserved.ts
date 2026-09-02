@@ -9,7 +9,8 @@ export const ENV_KEY_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
 /**
  * Keys `--env` and `use` refuse to name:
  *  - runtime-managed keys that `resolveRuntimeEnv` computes;
- *  - the `--env` grant hand-off itself (`JAIPH_ENV_GRANT`);
+ *  - the `--env` grant hand-off itself (`JAIPH_ENV_GRANT`) and the off-process
+ *    grant-file pointer the runner reads it through (`JAIPH_ENV_GRANT_FILE`);
  *  - the operator opt-in that trusts the workspace's project-local
  *    `.jaiph/hooks.json`;
  *  - the audit-chain HMAC key and journal path, which stay with the
@@ -24,6 +25,7 @@ export const RESERVED_ENV_KEYS = new Set<string>([
   "JAIPH_SOURCE_ABS",
   "JAIPH_META_FILE",
   "JAIPH_ENV_GRANT",
+  "JAIPH_ENV_GRANT_FILE",
   "JAIPH_AGENT_TRUSTED_WORKSPACE",
   "JAIPH_TRUST_PROJECT_HOOKS",
   "JAIPH_CHAIN_KEY",

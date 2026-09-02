@@ -145,15 +145,16 @@ async function runTestBlock(
         const mockBodies = resolveMockBodies(graph, testFileAbs, mockRefs);
         const env: NodeJS.ProcessEnv = {
           ...process.env,
-          ...extraEnv,
           JAIPH_TEST_MODE: "1",
           JAIPH_WORKSPACE: workspaceRoot,
           JAIPH_RUNS_DIR: join(tmpDir, ".jaiph", "runs"),
           JAIPH_SCRIPTS: scriptsDir,
           // `jaiph test --env` grants `use` keys the same way `jaiph run` does,
           // but there is no pre-flight: an ungranted `use` key is simply absent
-          // in the script spawn. Set unconditionally so an inherited grant
-          // never leaks in from a parent jaiph process.
+          // in the script spawn. Only the grant NAMES go on the env; the VALUES
+          // are handed to the runtime off-env via `grantValues` below, so an
+          // `--env` value never lands on the runtime env object. Set the grant
+          // list unconditionally so an inherited grant never leaks from a parent.
           JAIPH_ENV_GRANT: Object.keys(extraEnv).join(","),
         };
         // `jaiph test` is meant to be deterministic and fast: a prompt that
@@ -176,6 +177,7 @@ async function runTestBlock(
           cwd: workspaceRoot,
           mockBodies,
           suppressLiveEvents: true,
+          grantValues: extraEnv,
         });
         const result = await runtime.runNamedDef(step.defRef, step.args ?? []);
         // Resolve the captured value following production `run_capture` semantics.

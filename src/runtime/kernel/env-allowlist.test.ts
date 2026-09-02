@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { scrubPromptEnv } from "./env-allowlist";
+import { scrubPromptEnv, buildRunnerBaseEnv, isRunnerEnvAllowed } from "./env-allowlist";
 
 // scrubPromptEnv builds the env handed to every prompt backend subprocess
 // (runBackend in prompt.ts). Contract: base environment + JAIPH_* control keys
@@ -146,4 +146,48 @@ test("scrubPromptEnv: skips undefined values", () => {
   const env = scrubPromptEnv({ PATH: undefined, HOME: "/home/u" }, "cursor");
   assert.ok(!("PATH" in env));
   assert.equal(env.HOME, "/home/u");
+});
+
+// buildRunnerBaseEnv builds the workflow-leader (runner) process env from an
+// allowlist, never a copy of the host env: process basics + JAIPH_* control
+// keys (minus JAIPH_SERVE_*) + backend credential keys pass; ungranted host
+// secrets are dropped.
+
+test("buildRunnerBaseEnv: process basics and JAIPH_* control keys pass; ungranted host secrets drop", () => {
+  const env = buildRunnerBaseEnv({
+    PATH: "/usr/bin",
+    HOME: "/home/u",
+    JAIPH_DEBUG: "true",
+    UNOWNED_SECRET: "leak",
+    GITHUB_TOKEN: "leak-too",
+  });
+  assert.equal(env.PATH, "/usr/bin");
+  assert.equal(env.HOME, "/home/u");
+  assert.equal(env.JAIPH_DEBUG, "true");
+  assert.equal(env.UNOWNED_SECRET, undefined);
+  assert.equal(env.GITHUB_TOKEN, undefined);
+});
+
+test("buildRunnerBaseEnv: backend credential keys pass; JAIPH_SERVE_* server keys drop", () => {
+  const env = buildRunnerBaseEnv({
+    ANTHROPIC_API_KEY: "sk-ant",
+    CLAUDE_CODE_OAUTH_TOKEN: "oauth",
+    CURSOR_API_KEY: "cur",
+    OPENAI_API_KEY: "sk-oai",
+    JAIPH_SERVE_TOKEN: "operator-secret",
+  });
+  assert.equal(env.ANTHROPIC_API_KEY, "sk-ant");
+  assert.equal(env.CLAUDE_CODE_OAUTH_TOKEN, "oauth");
+  assert.equal(env.CURSOR_API_KEY, "cur");
+  assert.equal(env.OPENAI_API_KEY, "sk-oai");
+  assert.equal(env.JAIPH_SERVE_TOKEN, undefined, "host-only serve token stays off the runner");
+});
+
+test("isRunnerEnvAllowed: matches base env, JAIPH_* control keys, and credentials only", () => {
+  assert.ok(isRunnerEnvAllowed("PATH"));
+  assert.ok(isRunnerEnvAllowed("JAIPH_DEBUG"));
+  assert.ok(isRunnerEnvAllowed("ANTHROPIC_API_KEY"));
+  assert.ok(!isRunnerEnvAllowed("JAIPH_SERVE_TOKEN"));
+  assert.ok(!isRunnerEnvAllowed("GITHUB_TOKEN"));
+  assert.ok(!isRunnerEnvAllowed("UNOWNED_SECRET"));
 });

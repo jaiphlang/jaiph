@@ -24,6 +24,16 @@ export const BACKEND_CREDENTIAL_KEYS: Record<AgentBackend, readonly string[]> = 
 };
 
 /**
+ * Every backend's credential keys, flattened. The runner (workflow-leader)
+ * process must hold all of them — the resolved backend is a per-prompt runtime
+ * decision — so `scrubPromptEnv` can forward the matching subset to each
+ * prompt's agent. Ungranted host secrets are never in this set.
+ */
+export const ALL_BACKEND_CREDENTIAL_KEYS: readonly string[] = Object.values(
+  BACKEND_CREDENTIAL_KEYS,
+).flat();
+
+/**
  * Environment variable prefixes forwarded to a prompt agent. Only `JAIPH_*`
  * run-control keys are prefix-forwarded. Agent credentials are NOT
  * prefix-forwarded: only the enumerated per-backend keys in
@@ -92,6 +102,37 @@ function isPromptBaseEnv(key: string): boolean {
 }
 
 /**
+ * True if `key` belongs on the runner (workflow-leader) process environment.
+ * The runner env is built from this allowlist, never a copy of the host env, so
+ * an ungranted host secret never rides on it — and neither does a `--env` grant
+ * VALUE, which is held off-process in the grant map (`env-grant-file.ts`). The
+ * allowlist reuses the prompt-base names/prefixes (process mechanics: PATH,
+ * HOME, locale, TLS/proxy), the `JAIPH_*` run-control keys (minus the
+ * `JAIPH_SERVE_*` server carve-out), and every backend credential key the
+ * runner must hold so `scrubPromptEnv` can forward it to a prompt agent.
+ */
+export function isRunnerEnvAllowed(key: string): boolean {
+  if (isPromptBaseEnv(key)) return true;
+  if (ENV_ALLOW_EXCLUDE_PREFIXES.some((prefix) => key.startsWith(prefix))) return false;
+  if (ENV_ALLOW_PREFIXES.some((prefix) => key.startsWith(prefix))) return true;
+  return ALL_BACKEND_CREDENTIAL_KEYS.includes(key);
+}
+
+/**
+ * Build the runner base env from the host env using `isRunnerEnvAllowed`.
+ * Callers layer the run-scoped keys (`JAIPH_WORKSPACE`, the audit-chain key,
+ * the `--env` grant *names*, etc.) on top; the grant *values* never appear here.
+ */
+export function buildRunnerBaseEnv(hostEnv: NodeJS.ProcessEnv): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(hostEnv)) {
+    if (value === undefined) continue;
+    if (isRunnerEnvAllowed(key)) out[key] = value;
+  }
+  return out;
+}
+
+/**
  * Build the environment for a prompt agent subprocess: the base environment
  * (`PROMPT_BASE_ENV_NAMES`/`_PREFIXES`) plus whatever the allowlist forwards
  * for this backend (`isEnvAllowed`: `JAIPH_*` control keys and the backend's
@@ -157,7 +198,7 @@ export const SCRIPT_CONTRACT_ENV_NAMES = [
  *    `JAIPH_AGENT_MODEL` kept defined (empty when unset) for `set -u` scripts;
  *  - the host keys requested by the script's `use` clause, intersected with
  *    the operator's `--env` grant; values resolve from `grantValues` (the
- *    pristine runner env snapshot), never from workflow scope mutations.
+ *    off-process grant map, never on the runner env or a workflow scope).
  * Nothing else is forwarded — no ambient host env, no agent credentials, and
  * never `JAIPH_CHAIN_KEY` / `JAIPH_RUN_SUMMARY_FILE` / `JAIPH_SERVE_*`.
  */

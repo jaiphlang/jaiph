@@ -1,4 +1,5 @@
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { rmSync } from "node:fs";
 import type { ChildProcess } from "node:child_process";
 import {
   spawnRunProcess,
@@ -7,6 +8,7 @@ import {
   armRunTimeout,
   parseRunTimeoutSeconds,
 } from "../run/lifecycle";
+import { applyEnvGrant } from "../run/env";
 import { parseLogEvent, parseStepEvent, type StepEvent, type LogEvent } from "../run/events";
 import { redactCredentials } from "../../runtime";
 import { readMetaFields, readReturnValue } from "./run-meta";
@@ -34,12 +36,11 @@ export async function callDefHost(
   onLogEvent?: (event: LogEvent) => void,
 ): Promise<DefCallResult> {
   runtimeEnv.JAIPH_MODULE_GRAPH_FILE = env.graphFile;
-  // `--env` passthrough defines the workflow process's env, overriding
-  // inherited values, on every call. It is also the grant: a script's `use`
-  // key is forwarded only when named here (set unconditionally so a stale
-  // inherited grant never leaks).
-  Object.assign(runtimeEnv, env.extraEnv);
-  runtimeEnv.JAIPH_ENV_GRANT = Object.keys(env.extraEnv).join(",");
+  // `--env` is the grant, applied on every call. Its VALUES stay off the runner
+  // process env: the names go on `JAIPH_ENV_GRANT`, the values into an
+  // off-process grant file the detached leader reads. Set unconditionally so a
+  // stale inherited grant never leaks.
+  const { grantFile } = applyEnvGrant(runtimeEnv, env.extraEnv);
 
   const metaFile = join(env.outDir, `.jaiph-run-meta-${runId}.txt`);
   const dummyBuiltPath = join(env.outDir, "entry.sh");
@@ -58,9 +59,16 @@ export async function callDefHost(
   const exit = await waitForRunExit(child);
   runTimeout.cancel();
   collector.drain();
+  // The leader removes the grant file on read; clean up here too in case the
+  // spawn never reached it.
+  if (grantFile) rmSync(dirname(grantFile), { recursive: true, force: true });
 
   const runDir = readMetaFields(metaFile, ["run_dir"]).run_dir;
-  return composeResult(defSymbol, collector.data, exit, runDir, runtimeEnv, caps);
+  // Redaction is name-based over env values. `--env` values are off `runtimeEnv`
+  // now, so redact against them explicitly or a granted credential echoed by a
+  // failing step would leak into the returned result text.
+  const redactEnv = { ...runtimeEnv, ...env.extraEnv };
+  return composeResult(defSymbol, collector.data, exit, runDir, redactEnv, caps);
 }
 
 /**

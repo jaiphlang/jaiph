@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { resolveRuntimeEnv } from "./env";
+import { rmSync } from "node:fs";
+import { dirname } from "node:path";
+import { resolveRuntimeEnv, applyEnvGrant } from "./env";
 import { resolveEnvPairs } from "../shared/usage";
 import type { JaiphConfig } from "../../config";
 
@@ -159,6 +161,68 @@ test("resolveEnvPairs: later duplicate wins (flag order)", () => {
 
 test("resolveEnvPairs: empty spec list yields an empty record", () => {
   assert.deepEqual(resolveEnvPairs([], { ANYTHING: "x" }), {});
+});
+
+// ---------------------------------------------------------------------------
+// Runner env is built from an allowlist, not a copy of the host env.
+// ---------------------------------------------------------------------------
+
+test("resolveRuntimeEnv: an ungranted host secret is not forwarded onto the runner env", () => {
+  const saved = process.env.UNOWNED_SECRET;
+  process.env.UNOWNED_SECRET = "x";
+  try {
+    const env = resolveRuntimeEnv({}, "/ws", "/ws/main.sh");
+    // Today's `{ ...process.env }` fails this: the ungranted secret leaked onto
+    // the workflow-leader env.
+    assert.equal(env.UNOWNED_SECRET, undefined);
+  } finally {
+    if (saved !== undefined) process.env.UNOWNED_SECRET = saved;
+    else delete process.env.UNOWNED_SECRET;
+  }
+});
+
+test("resolveRuntimeEnv: process basics (PATH, HOME) still appear on the runner env", () => {
+  const env = resolveRuntimeEnv({}, "/ws", "/ws/main.sh");
+  assert.equal(env.PATH, process.env.PATH);
+  assert.equal(env.HOME, process.env.HOME);
+  assert.equal(env.JAIPH_WORKSPACE, "/ws");
+});
+
+test("resolveRuntimeEnv: a backend credential (ANTHROPIC_API_KEY) is forwarded when set", () => {
+  const saved = process.env.ANTHROPIC_API_KEY;
+  process.env.ANTHROPIC_API_KEY = "sk-ant-test";
+  try {
+    const env = resolveRuntimeEnv({}, "/ws", "/ws/main.sh");
+    assert.equal(env.ANTHROPIC_API_KEY, "sk-ant-test");
+  } finally {
+    if (saved !== undefined) process.env.ANTHROPIC_API_KEY = saved;
+    else delete process.env.ANTHROPIC_API_KEY;
+  }
+});
+
+// ---------------------------------------------------------------------------
+// applyEnvGrant: --env VALUES stay off the runner env (held off-process).
+// ---------------------------------------------------------------------------
+
+test("applyEnvGrant: a --env value never lands on the runner env; only its name goes on JAIPH_ENV_GRANT", () => {
+  const runtimeEnv: Record<string, string | undefined> = {};
+  const { grantFile } = applyEnvGrant(runtimeEnv, { GITHUB_TOKEN: "ghs_test" });
+  try {
+    // Today's `Object.assign(runtimeEnv, extraEnv)` fails this: it copied the
+    // value straight onto the env the runner leader is spawned with.
+    assert.equal(runtimeEnv.GITHUB_TOKEN, undefined);
+    assert.equal(runtimeEnv.JAIPH_ENV_GRANT, "GITHUB_TOKEN");
+    assert.ok(grantFile, "a granted value is written to an off-process grant file");
+  } finally {
+    if (grantFile) rmSync(dirname(grantFile), { recursive: true, force: true });
+  }
+});
+
+test("applyEnvGrant: no --env keys writes no grant file and an empty grant list", () => {
+  const runtimeEnv: Record<string, string | undefined> = {};
+  const { grantFile } = applyEnvGrant(runtimeEnv, {});
+  assert.equal(grantFile, undefined);
+  assert.equal(runtimeEnv.JAIPH_ENV_GRANT, "");
 });
 
 test("resolveRuntimeEnv: sets debug from config", () => {

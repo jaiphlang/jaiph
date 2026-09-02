@@ -215,10 +215,14 @@ test("executeScript: a use + --env-granted key reaches the script; an un-used ke
       JAIPH_RUNS_DIR: join(root, ".jaiph", "runs"),
       JAIPH_SCRIPTS: scriptsDir,
       JAIPH_WORKSPACE: root,
-      GITHUB_TOKEN: "fake-gh-secret",
       JAIPH_ENV_GRANT: "GITHUB_TOKEN",
     };
-    const runtime = new NodeWorkflowRuntime(graph, { env, cwd: root, suppressLiveEvents: true });
+    const runtime = new NodeWorkflowRuntime(graph, {
+      env,
+      cwd: root,
+      suppressLiveEvents: true,
+      grantValues: { GITHUB_TOKEN: "fake-gh-secret" },
+    });
     const status = await runtime.runMain([]);
     assert.equal(status, 0);
     const returnValue = readFileSync(join(runtime.getRunDir(), "return_value.txt"), "utf8");

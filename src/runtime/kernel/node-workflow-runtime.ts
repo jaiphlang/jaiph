@@ -204,10 +204,13 @@ export class NodeWorkflowRuntime {
   private cachedPromptRetryError: Error | undefined;
   private readonly promptRetryDelaysOverride: readonly number[] | undefined;
   /**
-   * Pristine env snapshot captured at construction; a script's granted `use`
-   * keys resolve against it, never against a workflow's mutated scope env.
+   * The `--env` grant VALUE map — the only source of granted `use` values.
+   * Passed in off-process (never on `this.env`): the CLI writes the values to a
+   * grant file and the runner reads them here (see `env-grant-file.ts`). Ungranted
+   * host keys are absent from both this map and the runner env. A script's / named
+   * prompt's granted `use` key resolves against this map, gated by `envGrantKeys`.
    */
-  private readonly hostEnvSnapshot: NodeJS.ProcessEnv;
+  private readonly grantValues: Record<string, string>;
   /** Keys the operator granted via `--env` (`JAIPH_ENV_GRANT`, see env-allowlist.ts). */
   private readonly envGrantKeys: Set<string>;
 
@@ -327,6 +330,12 @@ export class NodeWorkflowRuntime {
        * sequence with zero real wall-clock wait.
        */
       promptRetryDelays?: readonly number[];
+      /**
+       * The `--env` grant VALUE map, supplied off-process (never on `env`). The
+       * runner reads it from the grant file; `jaiph test` passes it directly.
+       * Granted `use` keys (gated by `JAIPH_ENV_GRANT`) resolve from here.
+       */
+      grantValues?: Record<string, string>;
     },
   ) {
     this.graph = graph;
@@ -334,9 +343,9 @@ export class NodeWorkflowRuntime {
     // runs must not share one exhausted queue (see resetMockResponses).
     resetMockResponses();
     this.env = opts.env ?? process.env;
-    // Pristine env captured once at process start: granted `use` keys resolve
-    // against this snapshot, never against a calling workflow's scope env.
-    this.hostEnvSnapshot = { ...this.env };
+    // Granted `use` values come from this off-process map, never from `this.env`
+    // (which no longer carries `--env` values or ungranted host keys).
+    this.grantValues = opts.grantValues ?? {};
     this.envGrantKeys = parseEnvGrant(this.env);
     this.maxSteps = parseMaxSteps(this.env);
     this.cwd = opts.cwd ?? process.cwd();
@@ -378,7 +387,11 @@ export class NodeWorkflowRuntime {
     this.emitter = new RuntimeEventEmitter({
       runId: this.runId,
       runDir: this.runDir,
-      env: this.env,
+      // Credential redaction is name-based over env values. Grant values are off
+      // `this.env` now, so fold them into the emitter's redaction view (trusted
+      // kernel; not a subprocess env) or a granted credential would slip through
+      // unredacted into the journal/event stream.
+      env: { ...this.env, ...this.grantValues },
       getFrameStack: () => this.getFrameStack(),
       getAsyncIndices: () => this.getAsyncIndices(),
       suppressLiveEvents: opts.suppressLiveEvents,
@@ -1526,15 +1539,16 @@ export class NodeWorkflowRuntime {
 
   /**
    * Host keys a named prompt's `use` clause requests, intersected with the
-   * operator's `--env` grant, with values from the pristine host env snapshot.
-   * These are injected into the agent subprocess on top of `scrubPromptEnv`.
+   * operator's `--env` grant, with values from the off-process grant map
+   * (`grantValues`). These are injected into the agent subprocess on top of
+   * `scrubPromptEnv`.
    */
   private buildPromptUseEnv(useKeys: readonly string[] | undefined): NodeJS.ProcessEnv | undefined {
     if (!useKeys || useKeys.length === 0) return undefined;
     const out: NodeJS.ProcessEnv = {};
     for (const key of useKeys) {
       if (!this.envGrantKeys.has(key)) continue;
-      const value = this.hostEnvSnapshot[key];
+      const value = this.grantValues[key];
       if (value !== undefined) out[key] = value;
     }
     return Object.keys(out).length > 0 ? out : undefined;
@@ -1932,7 +1946,7 @@ export class NodeWorkflowRuntime {
     scopeEnv: NodeJS.ProcessEnv,
     useKeys: readonly string[] | undefined,
   ): NodeJS.ProcessEnv {
-    return buildScriptEnv(scopeEnv, useKeys, this.envGrantKeys, this.hostEnvSnapshot);
+    return buildScriptEnv(scopeEnv, useKeys, this.envGrantKeys, this.grantValues);
   }
 
   private applyMetadataScope(

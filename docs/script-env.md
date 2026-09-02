@@ -46,6 +46,7 @@ jaiph run --env GITHUB_TOKEN release.jh
 
 Only the declaration that `use`s the key receives it.
 
+- The runner process itself does not carry `--env` values. A `--env KEY[=VALUE]` value is injected only into a subprocess whose declaration `use`s that key; it is never placed on the workflow-leader (runner) process environment, so a step, prompt, or def that does not `use` the key cannot read it there either. The workflow leader is built from an allowlist (process basics, `JAIPH_*` control keys, backend credentials), not a copy of your shell — an ungranted host key is absent from it.
 - Another script in the same def, with no `use GITHUB_TOKEN`, does not see it.
 - An anonymous `prompt "…"` never receives `--env` secrets. A named prompt does, and only for keys it `use`s.
 - Backend credentials (`ANTHROPIC_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`, `CURSOR_API_KEY`, `OPENAI_API_KEY`) stay the prompt default. Do not write them as `use`.

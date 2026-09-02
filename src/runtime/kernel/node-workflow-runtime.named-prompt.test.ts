@@ -171,10 +171,10 @@ test("named prompt `use GITHUB_TOKEN` + --env grant reaches the agent child env;
           JAIPH_AGENT_COMMAND: join(root, "unused-agent"),
           JAIPH_WORKSPACE: root,
           JAIPH_ENV_GRANT: "GITHUB_TOKEN",
-          GITHUB_TOKEN: "s3cr3t-token",
         },
         cwd: root,
         suppressLiveEvents: true,
+        grantValues: { GITHUB_TOKEN: "s3cr3t-token" },
       });
       const status = await runtime.runMain([]);
       assert.equal(status, 0);
@@ -222,10 +222,10 @@ test("codex backend: named prompt `use` + --env grant reaches the request env; a
           OPENAI_API_KEY: "sk-test",
           JAIPH_WORKSPACE: root,
           JAIPH_ENV_GRANT: "GITHUB_TOKEN",
-          GITHUB_TOKEN: "s3cr3t-token",
         },
         cwd: root,
         suppressLiveEvents: true,
+        grantValues: { GITHUB_TOKEN: "s3cr3t-token" },
       });
       const status = await runtime.runMain([]);
       assert.equal(status, 0);
