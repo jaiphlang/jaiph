@@ -118,6 +118,21 @@ function localDeclName(decl: LocalDecl): string {
   return decl.prompt.name;
 }
 
+/**
+ * A block-local child scope for an `if` / `else` / `for` / `catch` / `recover`
+ * body. `vars` and `locals` are copied so a nested `const` / capture / iterator
+ * / `script` / `def` / `prompt` declared inside the body is visible for the rest
+ * of that body but does not leak past it — mirroring the validator's block
+ * scope, so a shadow inside a branch never overwrites the enclosing binding.
+ */
+function blockChildScope(scope: Scope): Scope {
+  return {
+    ...scope,
+    vars: new Map(scope.vars),
+    locals: scope.locals ? new Map(scope.locals) : undefined,
+  };
+}
+
 type StepIO = {
   appendOut: (chunk: string) => void;
   appendErr: (chunk: string) => void;
@@ -1157,7 +1172,7 @@ export class NodeWorkflowRuntime {
         }
         const branch = condMet ? step.body : step.elseBody;
         if (branch) {
-          const bodyResult = await this.executeSteps(scope, branch, io);
+          const bodyResult = await this.executeSteps(blockChildScope(scope), branch, io);
           if (bodyResult.status !== 0 || bodyResult.returnValue !== undefined) {
             return this.mergeStepResult(accOut, accErr, bodyResult);
           }
@@ -1172,8 +1187,11 @@ export class NodeWorkflowRuntime {
           scope.env?.[step.sourceVar] ??
           "";
         for (const line of linesOfDelimitedString(raw)) {
-          scope.vars.set(step.iterVar, line);
-          const bodyResult = await this.executeSteps(scope, step.body, io);
+          // Each iteration is its own block scope: the iterator and any nested
+          // decl in the body are visible only inside the body, not after the loop.
+          const iterScope = blockChildScope(scope);
+          iterScope.vars.set(step.iterVar, line);
+          const bodyResult = await this.executeSteps(iterScope, step.body, io);
           if (bodyResult.status !== 0 || bodyResult.returnValue !== undefined) {
             return this.mergeStepResult(accOut, accErr, bodyResult);
           }
@@ -1679,9 +1697,11 @@ export class NodeWorkflowRuntime {
     failurePayload: string,
   ): Promise<StepResult> {
     const recoverSteps = "single" in catchDef ? [catchDef.single] : catchDef.block;
-    const recoverVars = new Map(scope.vars);
-    recoverVars.set(catchDef.bindings.failure, failurePayload);
-    return this.executeSteps({ ...scope, vars: recoverVars }, recoverSteps);
+    // A recover / catch body is its own block scope: copy `locals` (as well as
+    // `vars`) so a nested decl inside the body does not leak past it.
+    const bodyScope = blockChildScope(scope);
+    bodyScope.vars.set(catchDef.bindings.failure, failurePayload);
+    return this.executeSteps(bodyScope, recoverSteps);
   }
 
   /**

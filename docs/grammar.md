@@ -227,12 +227,16 @@ metadata that must precede the first step (see [Definitions](#definitions)).
 Inside a nested def — including `if` / `for` / `catch` / `recover` bodies —
 `import` / `import script` and a `config { … }` block are themselves `E_PARSE`
 (same class as `export`), not shell lines.
-Nested names are sequential local bindings (not hoisted): visible only after
-their declaration in the enclosing def (earlier use is `E_VALIDATE`), sharing one
-namespace per def with its parameters and `const`s. A duplicate name, or a name
-that collides with a parameter, is `E_VALIDATE` (`cannot rebind immutable name`).
-A nested name may shadow a module-level symbol of the same name. Another def
-cannot reach a name declared only inside a different def. A nested `def` / named
+Nested names are sequential local bindings (not hoisted): a name is visible only
+after its declaration and only inside the body that declares it, so using it
+earlier is `E_VALIDATE`. A body is the def body or an `if` / `else` / `else if` /
+`for` / `catch` / `recover` block, and each body is its own scope, so after the
+branch ends the name is out of scope and a later `run` / `prompt` / `${name}`
+naming it is `E_VALIDATE`. A duplicate name in the same body, or a name that
+collides with a parameter, is `E_VALIDATE` (`cannot rebind immutable name`).
+A nested name may shadow a module-level symbol, or an enclosing def or branch
+name, for the rest of that body, and the outer binding is visible again after the
+body. Another def cannot reach a name declared only inside a different def. A nested `def` / named
 `prompt` closes over the enclosing scope at runtime; a nested `script` is a
 sterile subprocess (argv only). See [Language — Nested
 declarations](language.md#nested-declarations) for the full semantics.

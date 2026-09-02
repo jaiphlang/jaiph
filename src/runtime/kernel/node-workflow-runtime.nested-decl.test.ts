@@ -167,6 +167,121 @@ test("a nested named prompt interpolates the enclosing scope at invocation", asy
   }
 });
 
+// -- Block-scoped in-branch declarations (runtime) --------------------------
+// The taken branch executes its nested decl; an enclosing/module name shadowed
+// inside a branch is restored after it.
+
+test("nested script inside a taken `if` body runs and its return is the def result", async () => {
+  const { status, value, root } = await runReturn(
+    [
+      "export def main(flag) {",
+      '  if flag == "y" {',
+      "    script s = `echo YES`",
+      "    return run s()",
+      "  }",
+      '  return "none"',
+      "}",
+    ],
+    ["y"],
+  );
+  try {
+    assert.equal(status, 0);
+    assert.equal(value, "YES");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("nested script inside the taken `else` body runs and its return is the def result", async () => {
+  const { status, value, root } = await runReturn(
+    [
+      "export def main(flag) {",
+      '  if flag == "y" {',
+      "    script s = `echo YES`",
+      "    return run s()",
+      "  } else {",
+      "    script t = `echo NO`",
+      "    return run t()",
+      "  }",
+      "}",
+    ],
+    ["n"],
+  );
+  try {
+    assert.equal(status, 0);
+    assert.equal(value, "NO");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("a `for` body nested script receives the iterator via argv and runs once per line", async () => {
+  const { status, value, root } = await runReturn(
+    [
+      "export def main(src) {",
+      "  script show = `cat trace.txt`",
+      "  for line in src {",
+      '    script emit = `printf "[%s]" "$1" >> trace.txt`',
+      "    run emit(line)",
+      "  }",
+      "  return run show()",
+      "}",
+    ],
+    ["a\nb\nc"],
+  );
+  try {
+    assert.equal(status, 0);
+    // The `for`-body nested script `emit` ran once per line, each with the
+    // iterator passed as argv ($1); `show` reads back the accumulated trace.
+    assert.equal(value, "[a][b][c]");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("a nested script inside a `catch` body runs on failure and its return is the catch result", async () => {
+  const { status, value, root } = await runReturn([
+    "export def main() {",
+    "  script boom = `exit 3`",
+    "  run boom() catch (e) {",
+    "    script s = `echo recovered`",
+    "    return run s()",
+    "  }",
+    '  return "x"',
+    "}",
+  ]);
+  try {
+    assert.equal(status, 0);
+    assert.equal(value, "recovered");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("a script shadowed inside a taken `if` does not leak; the enclosing script runs after", async () => {
+  const { status, value, root } = await runReturn(
+    [
+      "script s = `printf OUTER`",
+      "export def main(flag) {",
+      '  if flag == "y" {',
+      "    script s = `printf INNER`",
+      "    const inner = run s()",
+      '    log "${inner}"',
+      "  }",
+      "  return run s()",
+      "}",
+    ],
+    ["y"],
+  );
+  try {
+    assert.equal(status, 0);
+    // The inner `s` ran inside the branch, but after the `if` the module `s` is restored.
+    assert.equal(value, "OUTER");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("a nested named prompt interpolates an enclosing param and a triple-quoted body", async () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-nested-prompt-param-"));
   try {

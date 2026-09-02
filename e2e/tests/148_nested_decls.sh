@@ -17,7 +17,10 @@
 #  - a `const` is sequential (not hoisted): using its name before its
 #    declaration — in `${…}` interpolation, a bare call argument, or from a
 #    nested def body that closes over a later `const` — is E_VALIDATE, while a
-#    `const` used after its declaration interpolates at runtime.
+#    `const` used after its declaration interpolates at runtime;
+#  - a nested decl inside an `if` / `else` / `for` / `catch` / `recover` body is
+#    block-scoped to that body: the taken branch runs it, but naming it after the
+#    branch is E_VALIDATE, and a shadow inside a branch does not leak past it.
 
 set -euo pipefail
 
@@ -274,4 +277,73 @@ e2e::assert_contains "${seq_nested_out}" "E_VALIDATE" "sequential const: nested-
 e2e::assert_contains "${seq_nested_out}" 'unknown identifier "later"' \
   "sequential const: nested-def message names the forward const"
 
-e2e::pass "nested declaration closure, shadowing, argv, use pre-flight, isolation, export, string templates, and sequential const visibility hold"
+e2e::section "in-branch nested decls are block-scoped to the declaring body"
+
+# A nested script declared inside the taken `if` body runs and its return is the
+# def result; the return-value artifact is compared in full.
+e2e::file "branch_if.jh" <<'EOF'
+export def main(flag) {
+  if flag == "y" {
+    script s = `printf YES`
+    return run s()
+  }
+  return "none"
+}
+EOF
+
+e2e::run "branch_if.jh" y >/dev/null
+e2e::expect_run_file "branch_if.jh" "return_value.txt" "YES"
+
+# The taken `else` body runs its own nested script.
+e2e::file "branch_else.jh" <<'EOF'
+export def main(flag) {
+  if flag == "y" {
+    script s = `printf YES`
+    return run s()
+  } else {
+    script t = `printf NO`
+    return run t()
+  }
+}
+EOF
+
+e2e::run "branch_else.jh" n >/dev/null
+e2e::expect_run_file "branch_else.jh" "return_value.txt" "NO"
+
+# A name declared only inside a branch is out of scope after it: E_VALIDATE.
+# assert_contains: the diagnostic embeds an absolute path + line:col that vary.
+e2e::file "branch_miss.jh" <<'EOF'
+export def main(flag) {
+  if flag == "y" {
+    script s = `echo YES`
+  }
+  return run s()
+}
+EOF
+
+branch_miss_out=""
+if branch_miss_out="$(e2e::run "branch_miss.jh" y 2>&1)"; then
+  e2e::fail "in-branch: a name declared only inside a branch must be rejected after it"
+fi
+e2e::assert_contains "${branch_miss_out}" "E_VALIDATE" "in-branch: post-branch use rejected with E_VALIDATE"
+e2e::assert_contains "${branch_miss_out}" 'unknown local def or script reference "s"' \
+  "in-branch: message names the out-of-scope local"
+
+# A branch that shadows the module `s` does not leak: after the `if`, the module
+# `s` runs again.
+e2e::file "branch_shadow.jh" <<'EOF'
+script s = `printf OUTER`
+export def main(flag) {
+  if flag == "y" {
+    script s = `printf INNER`
+    const inner = run s()
+    log "inner=${inner}"
+  }
+  return run s()
+}
+EOF
+
+e2e::run "branch_shadow.jh" y >/dev/null
+e2e::expect_run_file "branch_shadow.jh" "return_value.txt" "OUTER"
+
+e2e::pass "nested declaration closure, shadowing, argv, use pre-flight, isolation, export, string templates, sequential const visibility, and in-branch block scoping hold"
