@@ -191,7 +191,7 @@ Before `jaiph run` spawns the runner, the host CLI runs a credential pre-flight 
 | Backend | Required credential | Host behaviour |
 |---|---|---|
 | `codex` | `OPENAI_API_KEY` | hard error (`E_AGENT_CREDENTIALS`) |
-| `claude` | `ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN` | warn (CLI login may still work) |
+| `claude` | `ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN` | not checked (CLI login is the host path) |
 | `cursor` | `CURSOR_API_KEY` | warn (CLI login may still work) |
 
 Hard errors exit non-zero with no runner launched. Warnings go to stderr and the run proceeds. Skip cases: entry file declares no explicit backend and uses no `prompt` step → no pre-flight; `jaiph run --raw` → no pre-flight.

@@ -2,6 +2,7 @@
 
 ## Summary
 
+- **CLI:** `claude` no longer warns when `ANTHROPIC_API_KEY` and `CLAUDE_CODE_OAUTH_TOKEN` are unset. A stored Claude CLI login is the host path.
 - **Language:** using a `const` before its declaration is `E_VALIDATE` in a `${…}` interpolation, a bare `run` / `prompt` call argument, and an `if` / `match` subject, not only in a `run` / `prompt` target.
 - **Language:** nested `const` / `script` / `def` / named `prompt` declared inside an `if` / `else` / `for` / `catch` / `recover` body are block-scoped to that body. A reference after the branch is `E_VALIDATE`, not a name that validates and then interpolates empty at runtime when the branch was not taken.
 - **Language:** a nested `def` may `run` itself. Self-recursion validates and is bounded only by the runtime recursion-depth cap of 256; a `run` of a sibling nested `def` declared later in the same body stays `E_VALIDATE` (declarations are sequential, not hoisted).
@@ -10,6 +11,7 @@
 
 ## All changes
 
+- **UX — CLI:** `claude` credential pre-flight no longer warns when `ANTHROPIC_API_KEY` and `CLAUDE_CODE_OAUTH_TOKEN` are unset. A stored Claude CLI login is the host path; the warning existed for Docker, which is gone. `cursor` still warns; `codex` still hard-fails. Docs: [Authenticate agent backends](docs/agent-auth.md), [Configuration — Credential pre-flight](docs/configuration.md#credential-pre-flight), [Environment variables](docs/env-vars.md). Tests: `src/cli/run/preflight-credentials.test.ts`, `e2e/tests/139_agent_credentials_preflight.sh`.
 - **Docs:** how-to `/how-to/script-env` (`docs/script-env.md`) — request with `use`, grant with `--env`, what stays sterile (anonymous prompts, other scripts, reserved keys). Nav + links from language, env-vars, configuration, why-jaiph, and agent-auth.
 - **Docs:** sterile script env, prompt scrub, `use`, and `--env` are documented as child-`env` and journal guardrails, not process isolation. [Why Jaiph](docs/why-jaiph.md) is the explanation; [Pass a host key to a script](docs/script-env.md), [Deploy jaiph](docs/deploy.md), [Language — Subprocess environment](docs/language.md), [Environment variables](docs/env-vars.md), [Your first agent run](docs/first-agent-run.md), and [jaiph-skill](docs/jaiph-skill.md) state the same limit.
 - **Docs:** [Deploy jaiph](docs/deploy.md) — dedicated user or container is operator-owned (installer does not create an account); that isolates Jaiph from the login session, not agent from script in one run; two invocations when a token must not coexist with a `prompt`.

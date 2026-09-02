@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 #
-# Host-side credential pre-flight: claude/cursor warn and proceed when
-# credentials are missing (a stored CLI login may still work); codex
-# hard-fails with E_AGENT_CREDENTIALS (no login fallback).
+# Host-side credential pre-flight: claude is silent when credentials are
+# missing (stored CLI login is the host path); cursor warns and proceeds;
+# codex hard-fails with E_AGENT_CREDENTIALS (no login fallback).
 #
 
 set -euo pipefail
@@ -14,9 +14,9 @@ trap e2e::cleanup EXIT
 e2e::prepare_test_env "agent_credentials_preflight"
 TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 
-# ── 1. claude + no creds → warn, but proceed ────────────────────────────────
+# ── 1. claude + no creds → silent, proceed ─────────────────────────────────
 
-e2e::section "claude without credentials warns but proceeds"
+e2e::section "claude without credentials is silent and proceeds"
 
 e2e::file "claude_host.jh" <<'EOF'
 config {
@@ -41,20 +41,21 @@ rm -f "${err_file}" "${stdout_file}"
 
 if [[ "${exit_code}" != "0" ]]; then
   printf "stdout was:\n%s\nstderr was:\n%s\n" "${out_msg}" "${err_msg}" >&2
-  e2e::fail "host run with missing claude creds should not hard-fail (warn only)"
+  e2e::fail "host run with missing claude creds should not hard-fail"
 fi
 e2e::pass "zero exit on host run with missing claude credentials"
 
-# assert_contains: stderr also carries unrelated lines (banner, hooks etc.)
-e2e::assert_contains "${err_msg}" "warning" "stderr contains a warning"
-e2e::assert_contains "${err_msg}" "claude" "warning names the backend"
-e2e::assert_contains "${err_msg}" "module config" "warning names the config scope"
+if [[ "${err_msg}" == *"ANTHROPIC_API_KEY"* ]] || [[ "${err_msg}" == *"CLAUDE_CODE_OAUTH_TOKEN"* ]]; then
+  printf "%s\n" "${err_msg}" >&2
+  e2e::fail "claude host run must not warn about missing env credentials"
+fi
+e2e::pass "no claude credential warning"
 
 if [[ "${err_msg}" == *"E_AGENT_CREDENTIALS"* ]]; then
   printf "%s\n" "${err_msg}" >&2
-  e2e::fail "claude host run must not emit E_AGENT_CREDENTIALS — that is the warn-only path"
+  e2e::fail "claude host run must not emit E_AGENT_CREDENTIALS"
 fi
-e2e::pass "no E_AGENT_CREDENTIALS on claude warn-only path"
+e2e::pass "no E_AGENT_CREDENTIALS on claude silent path"
 
 # ── 2. codex + no OPENAI_API_KEY → hard fail (no login path) ────────────────
 

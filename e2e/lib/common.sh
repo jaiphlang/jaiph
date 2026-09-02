@@ -409,10 +409,10 @@ e2e::prepare_shared_context() {
   # so this store dir is safely outside every run directory.
   export JAIPH_AUDIT_KEY_DIR="${JAIPH_E2E_WORK_DIR}/audit-keys"
   # The host pre-flight credential check (src/cli/run/preflight-credentials.ts)
-  # warns when an explicit `agent.backend` is declared but no credential env is
-  # set. E2E uses mock agent binaries that don't need real keys, so seed dummy
-  # values to keep the pre-flight silent. Tests that exercise the missing-key
-  # path explicitly unset them via `env -u`.
+  # warns for `cursor` (and hard-fails for `codex`) when an explicit backend is
+  # declared but no credential env is set. E2E uses mock agent binaries that
+  # don't need real keys, so seed dummy values to keep the pre-flight silent.
+  # Tests that exercise the missing-key path explicitly unset them via `env -u`.
   export CURSOR_API_KEY="${CURSOR_API_KEY:-e2e-dummy}"
   export ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-e2e-dummy}"
 

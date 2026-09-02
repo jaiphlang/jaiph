@@ -14,7 +14,7 @@ You will build a file with two steps. The first step runs a `def` that checks a 
 
 ## Credentials
 
-A `prompt` step calls an agent backend. Before it spawns the runner, the CLI runs a [credential pre-flight](agent-auth.md). The `claude` and `cursor` backends warn and proceed when credentials are missing, because a stored CLI login might still work. The `codex` backend has no login fallback, so a missing `OPENAI_API_KEY` is a hard error (`E_AGENT_CREDENTIALS`).
+A `prompt` step calls an agent backend. Before it spawns the runner, the CLI runs a [credential pre-flight](agent-auth.md). The `cursor` backend warns and proceeds when `CURSOR_API_KEY` is missing, because a stored CLI login might still work. The `claude` backend is not checked — a stored Claude CLI login is enough. The `codex` backend has no login fallback, so a missing `OPENAI_API_KEY` is a hard error (`E_AGENT_CREDENTIALS`).
 
 Pick one backend and set its env var on the host:
 
