@@ -14,25 +14,6 @@ Process rules:
 
 ***
 
-## Nested `def` self-recursion matches module-level `def` #dev-ready
-
-Context: A module-level `def fact(n) { … run fact(…) }` validates. A nested `def fact` does not: `validateDefTree` passes `localsSoFar` without the name being defined (`src/transpile/validate.ts` around the nested-def walk). Runtime would work once the `local_decl` has registered `fact` in `scope.locals`.
-
-Problem: nested helpers cannot recurse. Sibling forward-ref (`def a() { run b() }` declared before `def b`) should stay `E_VALIDATE` (sequential, not hoisted). Mutual recursion of two nested defs is out of scope unless it falls out of allowing self.
-
-Remediation — implement exactly this:
-
-1. When validating a nested `def`'s body, include that def's own name in the local map (self only).
-2. Do not hoist later siblings.
-3. Runtime: a nested `def fact` that calls itself must hit the existing recursion-depth cap (`256`), not a missing-local failure.
-4. Docs: one line under Nested declarations — a nested def may call itself; it may not call a nested def declared later.
-
-### Acceptance criteria
-- Nested `def fact(n)` that `run fact(…)` on the recursive arm validates; a test fails on today's tree.
-- `def a() { run b() }` then `def b()` later in the same def is still `E_VALIDATE` unknown local `b`.
-- Runtime: nested `fact` with a base case returns the computed value; a runaway nested recursion hits the existing depth error (not "unknown local").
-- `npm run build`, `npm test`, and `npm run test:e2e` pass.
-
 ## Editor plugins: current-surface highlighting leftovers #dev-ready
 
 Context: VS Code TextMate (`plugins/vscode/syntaxes/jaiph.tmLanguage.json`) and Zed/Tree-sitter (`grammars/tree-sitter-jaiph`, `plugins/zed/`) already highlight `use`, named prompt **definitions**, nested `script`/`prompt`, `send … ->`, and stale-keyword regressions. Gaps left after the 0.14.0 review:
