@@ -142,6 +142,7 @@ The CLI prints a `✗ FAIL` line on stderr, then a block with `Logs:`, `Summary:
 Revert the failing script body so the run passes again, then pick a direction:
 
 - [Your first agent run](first-agent-run.md) adds a `prompt` step that calls an agent backend.
+- [Pass a host key to a script](script-env.md) shows how to grant one host secret with `use` and `--env`.
 - [Language reference](language.md) covers every step type and expression kind, with their allowed positions and capture rules.
 - [CLI reference](cli.md) covers every `jaiph` subcommand and flag.
 - [Architecture](architecture.md) explains how the CLI, parser, validator, transpiler, runtime, and contracts fit together.

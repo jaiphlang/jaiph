@@ -15,7 +15,7 @@ An automation pipeline often has to do four different kinds of work in the same 
 - **Deterministic checks** — does this file exist, does the build pass, does the schema match.
 - **Real shell** — running a build tool, calling a CLI, changing files.
 - **AI steps that vary from run to run** — asking an agent to summarize a diff, write a fix, or classify a finding.
-- **Isolating sensitive data** — tokens and credentials a script needs must not reach the agent or the run journal.
+- **Keeping secrets out of child `env` and the journal** — a script token is not inherited into every subprocess, and credential-shaped values are redacted from the run log. That is not a process sandbox.
 
 You can wire these together in any general-purpose language, but you pay for it in extra code. For each tool you write the argument handling, and for each agent call you write the structured-output handling. Every time, you also decide how to capture stdout, where to put logs, when to retry on failure, and how to fail clearly when the output does not match the structure you expected.
 
@@ -37,7 +37,7 @@ The design makes three commitments, and each one settles many smaller questions:
 
 1. **Strict structure around AI steps.** An agent's response can vary from run to run, so the language gives you the surrounding pieces that do not. With `def` and `run` you can check conditions before and after a prompt in the same pipeline. With `prompt … returns "{ … }"` you require the agent's output to match a JSON shape, and the step fails if it does not. With `recover` you retry a failed `run` after a repair body runs, up to `run.recover_limit` times, which helps when an agent's output needs a fix before the pipeline can go on.
 
-2. **Isolating sensitive data.** Secrets and agent access are kept apart on purpose. Script environments are sterile: a host key reaches a script only when the script's declaration requests it with a [`use` clause](configuration.md#trusted-envs) *and* the operator grants it with `--env`; a second fail-closed scrub keeps every such key out of every `prompt` backend subprocess. Credential-shaped values are redacted from the run journal and from returned call diagnostics. The sanctioned path for a secret is an explicit request plus an explicit grant, not ambient host env or a file that happened to sit next to the program.
+2. **Spawn-env and journal guardrails, not a sandbox.** A host key reaches a script only when the script's declaration requests it with a [`use` clause](script-env.md) *and* the operator grants it with `--env`. A fail-closed scrub builds each `prompt` child's environment the same way: anonymous prompts never receive `--env` keys; a named prompt receives only keys it `use`s. Credential-shaped values are redacted from the run journal and from returned call diagnostics. Those rules stop accidental inherit, a script printing a token into the journal, and interpolation of a key that was never meant for the model. They do not isolate the agent. A `cursor` or `claude` prompt that can run tools runs as the same user as `jaiph` and can open the workspace, `$HOME`, and other processes that user owns. The HTTP `codex` backend has no local shell unless `agent.command` points at a program that does. Isolation of the whole run is an outer concern — a container, pod, or a dedicated user you create, not an install-time account. See [Deploy jaiph](deploy.md).
 
 3. **No vendor lock-in.** You choose a backend with `agent.backend`, which can be `cursor`, `claude`, or `codex`. The cursor and claude backends call their own command-line tools, and the codex backend calls an HTTP chat-completions endpoint. On the cursor backend, `agent.command` can name any program that reads stdin and writes stdout, so a wrapper around a local model or a self-hosted endpoint works without implementing Jaiph's stream-json format. A program author does not need a proprietary agent protocol.
 
@@ -47,6 +47,7 @@ It also helps to say what Jaiph is not:
 
 - **Not a general-purpose programming language.** A def runs steps in order and has only the control flow it needs, which is `if`, `match`, `for`, `recover`, and `catch`. Anything more complex belongs in a `script`.
 - **Not a distributed system.** Channels pass messages between defs in the same run, in one process. See [Inbox & Dispatch](inbox.md). There is no broker, no cross-process routing, and no retry queue.
+- **Not a process sandbox.** Sterile script env and the prompt scrub shape child `env`. They do not confine a tool-using agent. Isolation is [Deploy jaiph](deploy.md).
 - **Not a replacement for CI.** Jaiph runs the same way on your machine and inside a CI container. It does not provide the test matrix, artifact publishing, or environment management that CI platforms do.
 - **Not a prompt framework.** There is no chain abstraction, no agent class hierarchy, and no built-in memory store. A `prompt` step calls a backend, and if you want to chain calls, you compose steps yourself.
 
