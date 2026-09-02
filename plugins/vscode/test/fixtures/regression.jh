@@ -16,4 +16,7 @@ export def main() {
   workflow
   ensure
   send "payload" -> inbox
+  # The reverse arrow below is invalid (the send arrow is right-pointing only);
+  # it must not scope as a send or route operator.
+  send "legacy" <- alerts
 }

@@ -25,7 +25,7 @@ mkdir -p out
 
 script publish use NPM_TOKEN = `echo x`
 
-prompt analyze(log) use GITHUB_TOKEN = "Look at ${log}"
+export prompt analyze(log) use GITHUB_TOKEN = "Look at ${log}"
 
 def check_deps(path) {
   run setup_env()
@@ -68,6 +68,11 @@ print("inline")
 
   const answer = prompt "Summarize ${task}" returns "{ risk: string }"
   log "risk: ${answer.risk}"
+
+  if answer.risk == "ok" {
+    const insight = prompt analyze(log)
+    log "${insight}"
+  }
 
   send "started" -> alerts
   send run setup_env() -> findings

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { tokenizeFixture, hasScope } from "./tmgrammar";
+import { tokenizeFixture, hasScope, scopeCount } from "./tmgrammar";
 
 // Each assertion pins a construct that exists in the CURRENT .jh grammar
 // (docs/grammar.md + parser sources), so the test breaks if the shipped
@@ -31,6 +31,10 @@ test("current .jh constructs highlight with the expected scopes", async () => {
     ["fail", "keyword.control.command.jaiph"],
     ["return", "keyword.control.command.jaiph"],
     ["async", "keyword.control.async.jaiph"],
+    // if-subject dotted field access: `if answer.risk == "ok"` scopes the base
+    // and member with the same field scopes used for `${var.field}`.
+    ["answer", "variable.other.jaiph"],
+    ["risk", "variable.other.member.jaiph"],
     // Control flow
     ["if", "keyword.control.conditional.jaiph"],
     ["for", "keyword.control.loop.jaiph"],
@@ -53,6 +57,23 @@ test("current .jh constructs highlight with the expected scopes", async () => {
   for (const [text, scope] of expect) {
     assert.ok(hasScope(t, text, scope), `expected "${text}" to have scope ${scope}`);
   }
+
+  // `if answer.risk == "ok"`: the dotted subject must scope `answer` as a
+  // variable, NOT a module namespace. If the if-subject field pattern regresses,
+  // `answer.risk` falls through to the qualified-reference rule and `answer`
+  // becomes entity.name.namespace, so this guards the new field-access path.
+  assert.ok(
+    !hasScope(t, "answer", "entity.name.namespace.jaiph"),
+    "`if answer.risk` must scope answer as a variable, not a module namespace",
+  );
+
+  // Named prompt invocation `const insight = prompt analyze(log)` scopes the
+  // callee as a prompt function — separate from the `export prompt analyze(...)`
+  // definition. Both occurrences carry the scope, so require at least two.
+  assert.ok(
+    scopeCount(t, "analyze", "entity.name.function.prompt.jaiph") >= 2,
+    "`analyze` must scope as a prompt function at both its definition and its call site",
+  );
 });
 
 test("current *.test.jh test-block keywords highlight", async () => {
@@ -96,6 +117,21 @@ test("stale surface from the old extension is not highlighted", async () => {
     hasScope(t, "inbox", "variable.other.channel.jaiph"),
     "`send … -> inbox` should highlight inbox as a channel",
   );
+  // `<-` is not the send arrow (`->` only); it must never scope as a send or
+  // route operator. The unmatched text may merge with neighbours, so scan every
+  // token that contains it rather than requiring an exact `<-` token.
+  const arrowTokens = t.filter((tok) => tok.text.includes("<-") && !tok.scopes.includes("comment.line.number-sign.jaiph"));
+  assert.ok(arrowTokens.length > 0, "regression fixture must contain a `<-` occurrence in code");
+  for (const tok of arrowTokens) {
+    assert.ok(
+      !tok.scopes.includes("keyword.operator.send.jaiph"),
+      "`<-` must not scope as a send operator",
+    );
+    assert.ok(
+      !tok.scopes.includes("keyword.operator.route.jaiph"),
+      "`<-` must not scope as a route operator",
+    );
+  }
   // Stale config keys must not be scoped as config properties.
   for (const stale of [
     "agent.default_model",

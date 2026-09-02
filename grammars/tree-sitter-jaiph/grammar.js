@@ -56,7 +56,9 @@ module.exports = grammar({
 
     comment: ($) => token(/#.*/),
 
-    operator: ($) => choice("<-", "->", "=>", "==", "!=", "=~", "!~", "="),
+    // The send form is `->` only; `<-` is E_PARSE in the language, so it is not
+    // an operator token (highlighters must not surface it as a send arrow).
+    operator: ($) => choice("->", "=>", "==", "!=", "=~", "!~", "="),
 
     number: ($) => token(/[0-9]+/),
 

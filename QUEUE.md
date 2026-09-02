@@ -14,30 +14,6 @@ Process rules:
 
 ***
 
-## Editor plugins: current-surface highlighting leftovers #dev-ready
-
-Context: VS Code TextMate (`plugins/vscode/syntaxes/jaiph.tmLanguage.json`) and Zed/Tree-sitter (`grammars/tree-sitter-jaiph`, `plugins/zed/`) already highlight `use`, named prompt **definitions**, nested `script`/`prompt`, `send … ->`, and stale-keyword regressions. Gaps left after the 0.14.0 review:
-
-1. `#if-statement` in the TextMate grammar only matches a bare `IDENT` subject. Language allows `IDENT.IDENT` (`if answer.risk == "high"`). `answer` / `risk` get no typed-prompt field scopes.
-2. Named prompt **invocation** `prompt analyze(log)` is not scoped as `entity.name.function.prompt` on the callee (only the `prompt` keyword).
-3. Tree-sitter `grammar.js` still tokenizes `<-` as an `@operator`. The language send form is `->` only; `<-` is `E_PARSE`.
-4. Fixtures (`plugins/vscode/test/fixtures/current.jh`, `plugins/zed/test/fixtures/current.jh`) now include a nested `def helper` but have no `export prompt` line and no named-prompt call site.
-
-Remediation — implement exactly this (do not invent a plugin framework):
-
-1. Extend the TM `if` subject to `IDENT` or `IDENT.IDENT` with the same field scopes used for `${var.field}`.
-2. Add a TM (and Zed highlight query, if the grammar exposes the node) pattern so `prompt name(` at a call site scopes `name` as a prompt function.
-3. Drop `<-` from the tree-sitter operator choice. Regenerated `src/` parser must be committed. Zed query tests must still pass.
-4. Add `export prompt` and `const x = prompt analyze(log)` (or `describe`) to both `current.jh` fixtures; assert scopes in `plugins/vscode/test/grammar.test.ts` and the Zed highlight suite.
-5. Negative: a fixture line using `<-` must **not** get `keyword.operator.send.jaiph` (VS Code) or a send-operator capture (Zed).
-
-### Acceptance criteria
-- `if answer.risk == "ok"` in a VS Code grammar fixture asserts field-access scopes on `answer` / `risk`.
-- `const x = prompt analyze(log)` asserts `analyze` has `entity.name.function.prompt.jaiph` (or the Zed equivalent).
-- `<-` is not a tree-sitter operator token; `npm test` in `plugins/zed` regenerates and query-checks.
-- Stale-keyword regression tests keep passing (`wait` / `local` / `rule` / `workflow` / `ensure` / `inbox`).
-- `plugins/vscode`: `npm test`. `plugins/zed`: `npm test`.
-
 ## Sweep leftover `workflow` / sandbox wording on live surfaces #dev-ready
 
 Context: The language and runtime no longer have `workflow` / `rule` / `ensure` or a first-party Docker sandbox. User-visible strings and a few tests still teach the old nouns. Historical CHANGELOG entries stay as history.

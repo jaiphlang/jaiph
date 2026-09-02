@@ -692,6 +692,15 @@
           }
         },
         {
+          "comment": "named prompt invocation: prompt NAME( … ) — callee scopes as a prompt function",
+          "name": "meta.prompt.call.jaiph",
+          "match": "\\b(prompt)\\s+([A-Za-z_][A-Za-z0-9_]*)(?=\\s*\\()",
+          "captures": {
+            "1": { "name": "keyword.control.command.jaiph" },
+            "2": { "name": "entity.name.function.prompt.jaiph" }
+          }
+        },
+        {
           "comment": "test \"description\" {",
           "name": "meta.declaration.test.jaiph",
           "match": "\\b(test)\\b\\s+(\"(?:\\\\.|[^\"\\\\])*\")\\s*(\\{)",
@@ -782,27 +791,31 @@
     "if-statement": {
       "patterns": [
         {
-          "comment": "else if varName op operand {",
+          "comment": "else if IDENT[.field] op operand {",
           "name": "meta.conditional.elseif.jaiph",
-          "match": "\\b(else\\s+if)\\b\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*(==|!=|=~|!~)\\s*(?:(\"(?:\\\\.|[^\"\\\\])*\")|(/[^/]+/))",
+          "match": "\\b(else\\s+if)\\b\\s+([A-Za-z_][A-Za-z0-9_]*)(?:(\\.)([A-Za-z_][A-Za-z0-9_]*))?\\s*(==|!=|=~|!~)\\s*(?:(\"(?:\\\\.|[^\"\\\\])*\")|(/[^/]+/))",
           "captures": {
             "1": { "name": "keyword.control.conditional.jaiph" },
             "2": { "name": "variable.other.jaiph" },
-            "3": { "name": "keyword.operator.comparison.jaiph" },
-            "4": { "name": "string.quoted.double.jaiph" },
-            "5": { "name": "string.regexp.jaiph" }
+            "3": { "name": "punctuation.accessor.dot.jaiph" },
+            "4": { "name": "variable.other.member.jaiph" },
+            "5": { "name": "keyword.operator.comparison.jaiph" },
+            "6": { "name": "string.quoted.double.jaiph" },
+            "7": { "name": "string.regexp.jaiph" }
           }
         },
         {
-          "comment": "if varName op operand {",
+          "comment": "if IDENT[.field] op operand {",
           "name": "meta.conditional.if.jaiph",
-          "match": "\\b(if)\\b\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*(==|!=|=~|!~)\\s*(?:(\"(?:\\\\.|[^\"\\\\])*\")|(/[^/]+/))",
+          "match": "\\b(if)\\b\\s+([A-Za-z_][A-Za-z0-9_]*)(?:(\\.)([A-Za-z_][A-Za-z0-9_]*))?\\s*(==|!=|=~|!~)\\s*(?:(\"(?:\\\\.|[^\"\\\\])*\")|(/[^/]+/))",
           "captures": {
             "1": { "name": "keyword.control.conditional.jaiph" },
             "2": { "name": "variable.other.jaiph" },
-            "3": { "name": "keyword.operator.comparison.jaiph" },
-            "4": { "name": "string.quoted.double.jaiph" },
-            "5": { "name": "string.regexp.jaiph" }
+            "3": { "name": "punctuation.accessor.dot.jaiph" },
+            "4": { "name": "variable.other.member.jaiph" },
+            "5": { "name": "keyword.operator.comparison.jaiph" },
+            "6": { "name": "string.quoted.double.jaiph" },
+            "7": { "name": "string.regexp.jaiph" }
           }
         }
       ]

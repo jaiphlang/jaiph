@@ -37,6 +37,12 @@
 
 (identifier) @variable
 
+; Named prompt invocation / definition: the callee after `prompt` is a function.
+; The grammar is flat, so `prompt` and its callee are adjacent children.
+(source_file
+  "prompt" .
+  (identifier) @function)
+
 ; Match-arm wildcard `_`.
 ((identifier) @constant.builtin
   (#eq? @constant.builtin "_"))
