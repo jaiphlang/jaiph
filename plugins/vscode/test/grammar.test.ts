@@ -19,6 +19,7 @@ test("current .jh constructs highlight with the expected scopes", async () => {
     ["NPM_TOKEN", "variable.other.env.jaiph"],
     ["analyze", "entity.name.function.prompt.jaiph"],
     ["describe", "entity.name.function.prompt.jaiph"],
+    ["helper", "entity.name.function.def.jaiph"],
     ["prompt", "storage.type.prompt.jaiph"],
     ["gh", "entity.name.namespace.jaiph"],
     // Command keywords (including ones the old extension never knew)

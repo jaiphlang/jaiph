@@ -4,21 +4,24 @@
 
 ## All changes
 
-- **UX — CLI:** a bare `--env KEY` whose value is unset on the host now says Jaiph requires that key and how to pass it (`--env KEY` or `--env KEY=VALUE`), instead of `no value given and KEY is not set on the host`.
-
 # 0.14.0
 
 ## Summary
 
-- **Language: `def` and `run`, private by default.** One interpreted callable; `jaiph run` requires `export def main` (optional in libraries). Names are private across `import` unless listed in `export`. `workflow` / `rule` / `ensure` / `default` are gone.
-- **No first-party Docker sandbox.** `jaiph run`, `jaiph mcp`, and `jaiph serve` execute on the host. Isolate with your own container, pod, or CI runner ([Deploy jaiph](docs/deploy.md)). Secret isolation stays: the `prompt` env scrub, journal redaction, and `--env`.
-- **Sterile script env.** A script sees process basics, the `JAIPH_*` contract keys, and host keys it lists in `use` — each granted with `--env`. Host presence alone is not a grant. `trusted_envs` is removed.
-- **Named prompts.** `prompt name(params) [use KEY …] = "…"` is reusable next to `script` / `def`. `use` injects granted keys into that agent only; anonymous `prompt` steps stay sterile.
-- **Nested declarations.** A def may declare a local `const`, `script`, `def`, or named `prompt`. Nested `import` / `config` (including inside `catch` / `recover`) is `E_PARSE`.
-- **`send payload -> channel`.** `channel <- payload` is `E_PARSE`.
-- **Editor highlighting.** VS Code, Zed, and the docs highlighter cover `use`, `import script`, and named prompts.
+- **Language:** `def` and `run` replace `workflow` / `rule` / `ensure`. Names are private unless `export`. `jaiph run` needs `export def main`.
+- **Runtime:** No first-party Docker sandbox. Runs execute on the host. Isolate with your own container or CI runner ([Deploy jaiph](docs/deploy.md)).
+- **Scripts:** Sterile env. A script sees process basics, `JAIPH_*` contract keys, and host keys listed in `use` and granted with `--env`. Host presence alone is not a grant.
+- **Prompts:** Named, reusable `prompt name(params) [use KEY] = "…"`. A def may declare a local `script`, `def`, `prompt`, or `const`.
+- **Channels:** `send payload -> channel`. The old `channel <- payload` form is gone.
+- **CLI:** `--env KEY` names a missing host value and how to pass it. `use` / `--env` cannot name the audit-chain key or journal path.
+- **Editors:** VS Code, Zed, and the docs highlighter cover `use`, `import script`, and named prompts.
 
 ## All changes
+
+- **UX — CLI:** a bare `--env KEY` whose value is unset on the host now says Jaiph requires that key and how to pass it (`--env KEY` or `--env KEY=VALUE`), instead of `no value given and KEY is not set on the host`.
+- **Fix — Reserved keys:** `use` and `--env` reject `JAIPH_CHAIN_KEY` and `JAIPH_RUN_SUMMARY_FILE` (`E_ENV_RESERVED`). Those keys stay with the runner; a `use` grant can no longer put them on a script or agent after the prompt scrub.
+- **Docs:** operator recipe for `run async` at [Run work concurrently](docs/async.md). The value model stays at [Async Handles](docs/spec-async-handles.md).
+- **Plugins:** VS Code triple-quoted send blocks fold on the send form, not the removed channel-arrow form.
 
 - **Breaking — Language / Runtime:** scripts run in a sterile environment (see Summary). Grammar: `use` is a reserved keyword; the clause sits after the script name (or `import script` alias) and before `=`, identifiers only, with the `--env` name-shape (`E_ENV_INVALID`) and reserved-key (`E_ENV_RESERVED`) rules. `--env` is the only grant and is handed to the runner as `JAIPH_ENV_GRANT` (itself reserved, and dropped by the prompt scrub so it never reaches an agent). Free-form shell lines in a def body (`sh -c`) run under the same sterile env as an inline script, minus the `use` layer — a shell line has no declaration to carry a `use` clause. `trusted_envs` (parse, metadata, host pre-flight plan, runtime injection/scrub) is deleted; `jaiph test` gains `--env` for granting `use` keys in the test lane. Docs: [Grammar](docs/grammar.md), [Language — Subprocess environment](docs/language.md), [Configuration](docs/configuration.md), [CLI](docs/cli.md), [Environment variables — Script subprocess environment](docs/env-vars.md). Tests: `src/runtime/kernel/node-workflow-runtime.script-env.test.ts`, `src/cli/run/use-envs.test.ts`, `src/parse/parse-script-use.test.ts`, `e2e/tests/146_script_use_env.sh`.
 

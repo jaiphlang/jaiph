@@ -355,7 +355,7 @@ export def main() {
 }                                        # unread handles are joined when this step list finishes
 ```
 
-Allowed in any def; not combinable with inline scripts. `catch`/`recover` compose with `run async`. Unread handles are joined at the end of the **current step list** (the def body, an `if`/`else` branch, or a `catch`/`recover` body) before control continues — channel drains run only after the entry def's top-level list finishes. For concurrent *shell*, use `&` + `wait` inside one script body instead.
+Allowed in any def; not combinable with inline scripts. `catch`/`recover` compose with `run async`. Unread handles are joined at the end of the **current step list** (the def body, an `if`/`else` branch, or a `catch`/`recover` body) before control continues — channel drains run only after the entry def's top-level list finishes. For concurrent *shell*, use `&` + `wait` inside one script body instead. Operator recipe: [Run work concurrently](async.md).
 
 ### Config
 

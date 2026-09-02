@@ -11,7 +11,9 @@ export const ENV_KEY_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
  *  - runtime-managed keys that `resolveRuntimeEnv` computes;
  *  - the `--env` grant hand-off itself (`JAIPH_ENV_GRANT`);
  *  - the operator opt-in that trusts the workspace's project-local
- *    `.jaiph/hooks.json` (finding M-10).
+ *    `.jaiph/hooks.json`;
+ *  - the audit-chain HMAC key and journal path, which stay with the
+ *    runner and must not be injectable via `use` after the prompt scrub.
  */
 export const RESERVED_ENV_KEYS = new Set<string>([
   "JAIPH_WORKSPACE",
@@ -24,6 +26,8 @@ export const RESERVED_ENV_KEYS = new Set<string>([
   "JAIPH_ENV_GRANT",
   "JAIPH_AGENT_TRUSTED_WORKSPACE",
   "JAIPH_TRUST_PROJECT_HOOKS",
+  "JAIPH_CHAIN_KEY",
+  "JAIPH_RUN_SUMMARY_FILE",
 ]);
 
 /** True if `--env` / `use` must reject `key` (`E_ENV_RESERVED`). */

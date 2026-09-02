@@ -63,6 +63,14 @@ test("use key must not be reserved (E_ENV_RESERVED, same rule as --env)", () => 
     () => parsejaiph('import script "./gh.sh" as gh use JAIPH_ENV_GRANT', "test.jh"),
     /E_ENV_RESERVED/,
   );
+  assert.throws(
+    () => parsejaiph("script leak use JAIPH_CHAIN_KEY = `echo x`", "test.jh"),
+    /E_ENV_RESERVED use cannot request reserved key "JAIPH_CHAIN_KEY"/,
+  );
+  assert.throws(
+    () => parsejaiph("script leak use JAIPH_RUN_SUMMARY_FILE = `echo x`", "test.jh"),
+    /E_ENV_RESERVED/,
+  );
 });
 
 test("`use` is reserved as a script name and import alias", () => {

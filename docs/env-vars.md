@@ -124,7 +124,7 @@ The host CLI checks these before spawning the runner when [credential pre-flight
 
 To define a variable on the run process, use the per-key `--env` flag on `jaiph run`, `jaiph serve`, or `jaiph mcp`. `--env KEY=VALUE` sets an exact value, and `--env KEY` forwards the host's current value.
 
-Jaiph rejects some names before it spawns anything. A bare `--env KEY` that is unset on the host aborts with `E_ENV_MISSING`. An invalid name gives `E_ENV_INVALID`. Runtime-managed keys the CLI owns (`JAIPH_WORKSPACE`, `JAIPH_RUNS_DIR`, `JAIPH_RUN_ID`, `JAIPH_SCRIPTS`, `JAIPH_MODULE_GRAPH_FILE`, `JAIPH_SOURCE_ABS`, `JAIPH_META_FILE`, `JAIPH_ENV_GRANT`, `JAIPH_AGENT_TRUSTED_WORKSPACE`, `JAIPH_TRUST_PROJECT_HOOKS`) are rejected with `E_ENV_RESERVED`. Values are never path-remapped. See [CLI — `jaiph run` flags](cli.md#jaiph-run).
+Jaiph rejects some names before it spawns anything. A bare `--env KEY` that is unset on the host aborts with `E_ENV_MISSING`. An invalid name gives `E_ENV_INVALID`. Runtime-managed keys the CLI owns (`JAIPH_WORKSPACE`, `JAIPH_RUNS_DIR`, `JAIPH_RUN_ID`, `JAIPH_SCRIPTS`, `JAIPH_MODULE_GRAPH_FILE`, `JAIPH_SOURCE_ABS`, `JAIPH_META_FILE`, `JAIPH_ENV_GRANT`, `JAIPH_AGENT_TRUSTED_WORKSPACE`, `JAIPH_TRUST_PROJECT_HOOKS`, `JAIPH_CHAIN_KEY`, `JAIPH_RUN_SUMMARY_FILE`) are rejected with `E_ENV_RESERVED`. Values are never path-remapped. See [CLI — `jaiph run` flags](cli.md#jaiph-run).
 
 ## Script subprocess environment
 {: #script-env}

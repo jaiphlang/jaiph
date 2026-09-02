@@ -147,7 +147,7 @@ The record includes the resolved `backend`, the `model` (or `null` when the back
 You now have a working agent run. Here are some directions to go next:
 
 - [Language reference](language.md) covers every step type, including `run async`, `match`, `for_lines`, `send`, and `if`.
-- [Async handles](spec-async-handles.md) shows how to fan out two `prompt` steps in parallel and join them at the end of the run.
+- [Run work concurrently](async.md) is the recipe for `run async`. [Async handles](spec-async-handles.md) is the value model.
 - [Inbox and dispatch](inbox.md) explains how to route work between defs without tight coupling.
 - [Deploy jaiph](deploy.md) shows how to wrap jaiph in your own image or Kubernetes pod if you want an outer sandbox.
 - [Write and run tests](testing.md) shows how to author a `*.test.jh` file with mock prompts so the program stays deterministic in CI.

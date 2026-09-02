@@ -32,6 +32,9 @@ def check_deps(path) {
 export def main(task) {
   script shout use UE_TOKEN = `echo "$1"`
   prompt describe(x) = "Tell me about ${x}"
+  def helper(x) {
+    return "${x}"
+  }
   const status = run setup_env()
 
   if status == "ok" {
