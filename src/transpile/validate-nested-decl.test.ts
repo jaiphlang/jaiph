@@ -195,6 +195,97 @@ test("E_VALIDATE: unknown ${ghost} in a nested prompt body is rejected", () => {
   );
 });
 
+test('E_VALIDATE: ${const} interpolated before its declaration is unknown', () => {
+  withFlow(
+    [
+      "export def main() {",
+      '  log "${later}"',
+      '  const later = "ok"',
+      "}",
+    ],
+    (entry, out) => {
+      assert.throws(
+        () => buildScripts(entry, out),
+        /E_VALIDATE.*unknown identifier "later" in log/,
+      );
+    },
+  );
+});
+
+test("E_VALIDATE: a bare const arg used before its declaration is unknown", () => {
+  withFlow(
+    [
+      "export def main() {",
+      "  run consumer(later)",
+      '  const later = "ok"',
+      "}",
+      "def consumer(v) {",
+      '  return "${v}"',
+      "}",
+    ],
+    (entry, out) => {
+      assert.throws(
+        () => buildScripts(entry, out),
+        /E_VALIDATE.*unknown identifier "later" used as bare argument/,
+      );
+    },
+  );
+});
+
+test("E_VALIDATE: a nested def body interpolating a forward enclosing const is unknown", () => {
+  withFlow(
+    [
+      "export def main() {",
+      "  def helper() {",
+      '    return "${later}"',
+      "  }",
+      "  const x = run helper()",
+      '  const later = "hi"',
+      "  return x",
+      "}",
+    ],
+    (entry, out) => {
+      assert.throws(
+        () => buildScripts(entry, out),
+        /E_VALIDATE.*unknown identifier "later"/,
+      );
+    },
+  );
+});
+
+test("E_VALIDATE: an if subject naming a forward const is unknown", () => {
+  withFlow(
+    [
+      "export def main() {",
+      '  if later == "ok" {',
+      '    log "yes"',
+      "  }",
+      '  const later = "ok"',
+      "}",
+    ],
+    (entry, out) => {
+      assert.throws(
+        () => buildScripts(entry, out),
+        /E_VALIDATE.*unknown identifier "later"/,
+      );
+    },
+  );
+});
+
+test("valid: a const declared before its use interpolates fine", () => {
+  withFlow(
+    [
+      "export def main() {",
+      '  const later = "ok"',
+      '  log "${later}"',
+      "}",
+    ],
+    (entry, out) => {
+      buildScripts(entry, out); // no throw
+    },
+  );
+});
+
 test("E_VALIDATE: a nested-prompt arity mismatch is caught (nested def resolves for arity)", () => {
   withFlow(
     [

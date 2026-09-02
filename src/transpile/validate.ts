@@ -1,11 +1,10 @@
 import { existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { Diagnostics } from "../diagnostics";
-import type { Def, Expr, jaiphModule, LocalDecl, PromptDef, StepDef } from "../types";
+import type { Def, jaiphModule, LocalDecl } from "../types";
 import type { ModuleGraph } from "./module-graph";
 import { validateRef } from "./validate-ref-resolution";
 import {
-  parseSchemaFieldNames,
   resolveRouteTargetParams,
   ROUTE_REF_EXPECT,
   resolvePromptDef,
@@ -15,216 +14,15 @@ import {
   localSymFromDecl,
   localPromptReturnsResolver,
   refCtxWithLocals,
+  seqConstVisibility,
+  walkStepTree,
   type LocalSym,
+  type StepTreeWalk,
   type ValidatorCtx,
 } from "./validate-step";
 import { validateConfigInto } from "./validate-config";
 import { validateTestBlocks } from "./validate-tests";
 import { validatePromptDefs, validatePromptDefBody } from "./validate-prompt-def";
-
-/**
- * One step entry in the flat list built by the single workflow walk.
- *
- * `recoverBindings` is the `Set` of failure-binding names contributed by an
- * enclosing `catch` / `recover`, threaded down so steps inside a recovery
- * body can resolve `<failure>` as an in-scope identifier.
- */
-interface FlatStepEntry {
-  step: StepDef;
-  recoverBindings: Set<string> | undefined;
-}
-
-/**
- * Result of the single recursive descent over a workflow's / rule's step
- * tree: the global identifier set (envDecls + params + every nested const /
- * capture / for-iterator), the top-level prompt schemas, and a flat list of
- * every step in tree order. The flat list is what the main validator loop
- * iterates over — that loop is non-recursive, so the only recursive helper
- * walking `StepDef[]` in this file is `walkStepTree` itself.
- */
-interface StepTreeWalk {
-  knownVars: Set<string>;
-  promptSchemas: Map<string, string[]>;
-  /** All variables bound to a prompt result — typed and untyped, const or exec-capture. */
-  promptCaptures: Set<string>;
-  flat: FlatStepEntry[];
-}
-
-function walkStepTree(
-  diag: Diagnostics,
-  filePath: string,
-  steps: StepDef[],
-  envDecls: { name: string; loc: { line: number; col: number } }[] | undefined,
-  params: string[],
-  declLoc: { line: number; col: number },
-  moduleScripts: Set<string>,
-  options: {
-    withPromptSchemas: boolean;
-    /** Resolve a named-prompt call's returns schema (its schema lives on the def). */
-    resolvePromptReturns?: (ref: string) => string | undefined;
-    /** Names visible from an enclosing def (closure): its params + `const`s. */
-    inheritedKnownVars?: Set<string>;
-  },
-): StepTreeWalk {
-  const knownVars = new Set<string>();
-  const promptSchemas = new Map<string, string[]>();
-  const promptCaptures = new Set<string>();
-  const flat: FlatStepEntry[] = [];
-
-  if (options.inheritedKnownVars) {
-    for (const v of options.inheritedKnownVars) knownVars.add(v);
-  }
-  if (envDecls) {
-    for (const d of envDecls) knownVars.add(d.name);
-  }
-  for (const p of params) knownVars.add(p);
-
-  const seedBindings = new Map<string, { kind: string; line: number }>();
-  for (const p of params) {
-    seedBindings.set(p, { kind: "parameter", line: declLoc.line });
-  }
-
-  const checkBinding = (
-    name: string,
-    kind: string,
-    loc: { line: number; col: number },
-    b: Map<string, { kind: string; line: number }>,
-  ): void => {
-    const prev = b.get(name);
-    if (prev) {
-      diag.error(
-        filePath,
-        loc.line,
-        loc.col,
-        "E_VALIDATE",
-        `cannot rebind immutable name "${name}"; already bound as ${prev.kind} at ${filePath}:${prev.line}`,
-      );
-    }
-    if (moduleScripts.has(name)) {
-      diag.error(
-        filePath,
-        loc.line,
-        loc.col,
-        "E_VALIDATE",
-        `cannot rebind immutable name "${name}"; already bound as script in this module`,
-      );
-    }
-    b.set(name, { kind, line: loc.line });
-  };
-
-  const descend = (
-    ss: StepDef[],
-    bindings: Map<string, { kind: string; line: number }>,
-    recoverBindings: Set<string> | undefined,
-    topLevel: boolean,
-  ): void => {
-    for (const s of ss) {
-      flat.push({ step: s, recoverBindings });
-
-      if (s.type === "const") {
-        knownVars.add(s.name);
-        checkBinding(s.name, "const", s.loc, bindings);
-        if (s.value.kind === "prompt") {
-          promptCaptures.add(s.name);
-          const ret = promptExprReturns(s.value, options.resolvePromptReturns);
-          if (options.withPromptSchemas && topLevel && ret !== undefined) {
-            promptSchemas.set(s.name, parseSchemaFieldNames(ret));
-          }
-        }
-        continue;
-      }
-
-      if (s.type === "local_decl") {
-        const name = localDeclName(s.decl);
-        const prev = bindings.get(name);
-        if (prev) {
-          diag.error(
-            filePath,
-            s.loc.line,
-            s.loc.col,
-            "E_VALIDATE",
-            `cannot rebind immutable name "${name}"; already bound as ${prev.kind} at ${filePath}:${prev.line}`,
-          );
-        }
-        // A nested declaration MAY shadow a module-level script/def/prompt, so
-        // unlike `checkBinding` the module-script collision check is skipped.
-        bindings.set(name, { kind: s.decl.kind, line: s.loc.line });
-        // Do not descend into a nested def body — it is validated as its own
-        // scope by `validateDefTree`.
-        continue;
-      }
-
-      if (s.type === "exec") {
-        if (s.captureName) {
-          knownVars.add(s.captureName);
-          const captureLoc = execBodyLoc(s.body) ?? s.loc;
-          checkBinding(s.captureName, "capture", captureLoc, bindings);
-          if (s.body.kind === "prompt") {
-            promptCaptures.add(s.captureName);
-            const ret = promptExprReturns(s.body, options.resolvePromptReturns);
-            if (options.withPromptSchemas && topLevel && ret !== undefined) {
-              promptSchemas.set(s.captureName, parseSchemaFieldNames(ret));
-            }
-          }
-        }
-        if (s.catch) {
-          const catchSteps = "single" in s.catch ? [s.catch.single] : s.catch.block;
-          descend(catchSteps, bindings, new Set([s.catch.bindings.failure]), false);
-        }
-        if (s.recover) {
-          const recoverSteps = "single" in s.recover ? [s.recover.single] : s.recover.block;
-          descend(recoverSteps, bindings, new Set([s.recover.bindings.failure]), false);
-        }
-        continue;
-      }
-
-      if (s.type === "if") {
-        descend(s.body, bindings, recoverBindings, false);
-        if (s.elseBody) {
-          descend(s.elseBody, bindings, recoverBindings, false);
-        }
-        continue;
-      }
-
-      if (s.type === "for_lines") {
-        knownVars.add(s.iterVar);
-        if (bindings.has(s.iterVar)) {
-          diag.error(
-            filePath,
-            s.loc.line,
-            s.loc.col,
-            "E_VALIDATE",
-            `for loop iterator "${s.iterVar}" conflicts with an existing binding`,
-          );
-        }
-        const inner = new Map(bindings);
-        inner.set(s.iterVar, { kind: "loop_iterator", line: s.loc.line });
-        descend(s.body, inner, recoverBindings, false);
-        continue;
-      }
-    }
-  };
-
-  descend(steps, seedBindings, undefined, true);
-  return { knownVars, promptSchemas, promptCaptures, flat };
-}
-
-/** The effective returns schema of a prompt expr: on the def for a named call, inline otherwise. */
-function promptExprReturns(
-  expr: Extract<Expr, { kind: "prompt" }>,
-  resolvePromptReturns?: (ref: string) => string | undefined,
-): string | undefined {
-  if (expr.name !== undefined) return resolvePromptReturns?.(expr.name);
-  return expr.returns;
-}
-
-/** Best-effort location for an exec body — used to attribute capture-binding errors. */
-function execBodyLoc(body: Expr): { line: number; col: number } | undefined {
-  if (body.kind === "call") return body.callee.loc;
-  if (body.kind === "prompt" || body.kind === "shell") return body.loc;
-  if (body.kind === "match") return body.match.loc;
-  return undefined;
-}
 
 export function resolveScriptImportPath(fromFile: string, importPath: string): string {
   return resolve(dirname(fromFile), importPath);
@@ -441,23 +239,34 @@ export function validateModuleInto(
       recoverBindings: undefined,
     };
     const localsSoFar = new Map(inheritedLocals);
+    // Sequential `const` visibility, mirroring `localsSoFar` for nested decls:
+    // a `const` is only visible once its declaration is reached in flat order.
+    const seq = seqConstVisibility(w.knownVars, w.constNames);
     for (const entry of w.flat) {
       const step = entry.step;
       if (step.type === "local_decl") {
         const decl = step.decl;
+        // A nested def / prompt body closes only over the enclosing `const`s
+        // declared *before* this declaration point (forward-const TDZ) plus the
+        // enclosing params / module names — snapshot the visible set here.
+        const inheritedKnownVars = seq.visibleKnownVars();
         if (decl.kind === "def") {
-          validateDefTree(decl.def, w.knownVars, new Map(localsSoFar));
+          validateDefTree(decl.def, inheritedKnownVars, new Map(localsSoFar));
         } else if (decl.kind === "prompt") {
-          validatePromptDefBody(diag, ast.filePath, decl.prompt, w.knownVars);
+          validatePromptDefBody(diag, ast.filePath, decl.prompt, inheritedKnownVars);
         }
         // Nested scripts need no body validation (module scripts don't either).
         localsSoFar.set(localDeclName(decl), localSymFromDecl(decl));
         continue;
       }
+      // A `const` is visible in its own RHS (self-reference behavior unchanged).
+      if (step.type === "const") seq.declare(step.name);
       const refCtx = refCtxWithLocals(baseCtx.refCtx, localsSoFar);
       diag.capture(() =>
         validateStep(step, {
           ...ctxBase,
+          knownVars: seq.visibleKnownVars(),
+          forwardConsts: seq.forwardConsts(),
           refCtx,
           localScripts: refCtx.localScripts,
           localDefs: refCtx.localDefs,

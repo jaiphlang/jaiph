@@ -50,6 +50,12 @@ export interface ValidatorCtx {
   promptSchemas: Map<string, string[]>;
   /** All variables bound via `const x = prompt …` or `exec` with a prompt body capture — typed and untyped. */
   promptCaptures: Set<string>;
+  /**
+   * `const`s declared later in the current def than the step being validated.
+   * A bare `if`/`match` subject naming one of these is a use-before-declaration
+   * (E_VALIDATE). Absent for callers that do not track sequential visibility.
+   */
+  forwardConsts?: Set<string>;
   recoverBindings: Set<string> | undefined;
   localChannels: Set<string>;
   localScripts: Set<string>;

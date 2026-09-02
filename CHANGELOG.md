@@ -2,6 +2,7 @@
 
 ## Summary
 
+- **Language:** using a `const` before its declaration is `E_VALIDATE` in a `${…}` interpolation, a bare `run` / `prompt` call argument, and an `if` / `match` subject, not only in a `run` / `prompt` target.
 - **Docs:** Spawn-env and journal rules are guardrails, not a sandbox. [Why Jaiph](docs/why-jaiph.md) states the limit. [Deploy jaiph](docs/deploy.md) has the dedicated-user / two-run operator recipe.
 - **Docs:** [Pass a host key to a script](docs/script-env.md) is the operator recipe for sterile script env, `use`, and `--env`.
 
@@ -10,6 +11,8 @@
 - **Docs:** how-to `/how-to/script-env` (`docs/script-env.md`) — request with `use`, grant with `--env`, what stays sterile (anonymous prompts, other scripts, reserved keys). Nav + links from language, env-vars, configuration, why-jaiph, and agent-auth.
 - **Docs:** sterile script env, prompt scrub, `use`, and `--env` are documented as child-`env` and journal guardrails, not process isolation. [Why Jaiph](docs/why-jaiph.md) is the explanation; [Pass a host key to a script](docs/script-env.md), [Deploy jaiph](docs/deploy.md), [Language — Subprocess environment](docs/language.md), [Environment variables](docs/env-vars.md), [Your first agent run](docs/first-agent-run.md), and [jaiph-skill](docs/jaiph-skill.md) state the same limit.
 - **Docs:** [Deploy jaiph](docs/deploy.md) — dedicated user or container is operator-owned (installer does not create an account); that isolates Jaiph from the login session, not agent from script in one run; two invocations when a token must not coexist with a `prompt`.
+
+- **Fix — Language:** sequential `const` visibility now rejects use-before-declaration in every position, not only a `run` / `prompt` target. A `${…}` interpolation, a bare `run` / `prompt` call argument, and an `if` / `match` subject that names a `const` declared later in the same def are `E_VALIDATE` (unknown identifier). A nested `def` or named `prompt` body sees an enclosing `const` only when it was declared before that nested declaration; a `${…}` of a later enclosing `const` is `E_VALIDATE`, while the enclosing def's params and module-level `const`s stay visible. Runtime interpolation of a genuinely missing variable is still empty — the change is compile-time rejection. Previously these forms compiled and interpolated empty at runtime. Docs: [Language — `const`](docs/language.md#const--bind-a-value), [Language — Nested declarations](docs/language.md#nested-declarations). Tests: `src/transpile/validate-nested-decl.test.ts`, `e2e/tests/148_nested_decls.sh`.
 
 # 0.14.0
 

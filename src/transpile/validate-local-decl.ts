@@ -16,6 +16,50 @@ export type LocalSym =
   | { kind: "def"; def: Def }
   | { kind: "prompt"; prompt: PromptDef };
 
+/**
+ * Sequential `const` visibility within one def, mirroring how `localsSoFar`
+ * gates nested decls. A `const` is only visible for `${…}` / bare-arg / subject
+ * lookups once its declaration has been reached in flat (source) order, so a
+ * reference to a not-yet-declared `const` is rejected as an unknown identifier.
+ *
+ * `knownVars` is the def's full identifier set and `constNames` every `const`
+ * bound in it; call `declare(name)` when a `const` step is reached, then read
+ * `visibleKnownVars()` (full set minus not-yet-declared consts) and
+ * `forwardConsts()` (the not-yet-declared consts) at each step.
+ */
+export interface SeqConstVisibility {
+  visibleKnownVars(): Set<string>;
+  forwardConsts(): Set<string>;
+  declare(name: string): void;
+}
+
+export function seqConstVisibility(
+  knownVars: Set<string>,
+  constNames: Set<string>,
+): SeqConstVisibility {
+  const visible = new Set<string>();
+  return {
+    visibleKnownVars(): Set<string> {
+      if (visible.size === constNames.size) return knownVars;
+      const s = new Set(knownVars);
+      for (const c of constNames) {
+        if (!visible.has(c)) s.delete(c);
+      }
+      return s;
+    },
+    forwardConsts(): Set<string> {
+      const s = new Set<string>();
+      for (const c of constNames) {
+        if (!visible.has(c)) s.add(c);
+      }
+      return s;
+    },
+    declare(name: string): void {
+      visible.add(name);
+    },
+  };
+}
+
 export function localDeclName(decl: LocalDecl): string {
   if (decl.kind === "script") return decl.script.name;
   if (decl.kind === "def") return decl.def.name;
