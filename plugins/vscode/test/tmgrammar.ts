@@ -63,3 +63,8 @@ export async function tokenizeFixture(fixtureName: string): Promise<Token[]> {
 export function hasScope(tokens: Token[], text: string, scope: string): boolean {
   return tokens.some((t) => t.text.trim() === text && t.scopes.includes(scope));
 }
+
+/** How many tokens whose trimmed text equals `text` carry `scope`. */
+export function scopeCount(tokens: Token[], text: string, scope: string): number {
+  return tokens.filter((t) => t.text.trim() === text && t.scopes.includes(scope)).length;
+}

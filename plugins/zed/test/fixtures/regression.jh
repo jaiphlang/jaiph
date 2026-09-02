@@ -8,4 +8,7 @@ export def main() {
   workflow
   ensure
   inbox
+  # The reverse arrow below is invalid (the send arrow is right-pointing only);
+  # it must not tokenize as an operator.
+  send "legacy" <- alerts
 }

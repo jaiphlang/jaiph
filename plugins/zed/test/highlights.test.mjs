@@ -80,6 +80,12 @@ test("keywords, comments, and strings highlight in current.jh", () => {
   // segment like `run` in `run.recover_limit` is NOT mis-highlighted as a keyword.
   assert.ok(has(caps, "property", "run.recover_limit"), "config key should be @property");
   assert.ok(!has(caps, "keyword", "run.recover_limit"), "config key must not be @keyword");
+
+  // Dotted if-subject `answer.risk` tokenizes as one qualified name → @property.
+  assert.ok(has(caps, "property", "answer.risk"), "if-subject `answer.risk` should be @property");
+
+  // Named prompt invocation `prompt analyze(log)`: the callee is @function.
+  assert.ok(has(caps, "function", "analyze"), "named prompt callee should be @function");
 });
 
 test("test-block keywords highlight in current.test.jh", () => {
@@ -98,6 +104,9 @@ test("stale removed keywords are not highlighted as @keyword", () => {
     assert.ok(!has(caps, "keyword", stale), `\`${stale}\` was removed; must not be @keyword`);
     assert.ok(has(caps, "variable", stale), `\`${stale}\` should highlight as a plain @variable`);
   }
+  // `<-` is not the send arrow (`->` only); it is not an operator token, so it
+  // must never produce an @operator capture.
+  assert.ok(!has(caps, "operator", "<-"), "`<-` must not tokenize as an @operator");
 });
 
 test("injections resolve embedded script languages", () => {
