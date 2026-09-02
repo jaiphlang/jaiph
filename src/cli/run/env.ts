@@ -1,5 +1,6 @@
 import { basename, resolve } from "node:path";
 import type { JaiphConfig } from "../../config";
+import { buildRunnerBaseEnv, isRunnerEnvAllowed, writeEnvGrantFile, ENV_GRANT_FILE_ENV } from "../../runtime";
 
 // `--env` spec resolution (`resolveEnvPairs`) lives beside `EnvSpec` in
 // `../shared/usage.ts` — the shared flag surface for run, serve, mcp, and test.
@@ -17,15 +18,17 @@ const LOCKED_ENV_KEYS = [
 
 /**
  * Build the runtime environment for a workflow process.
- * Merges process.env with config-derived values, sets lock flags,
- * and cleans transient keys.
+ * Starts from an allowlist of the host env (`buildRunnerBaseEnv`, not a copy of
+ * `process.env`), layers config-derived values, sets lock flags, and cleans
+ * transient keys. Ungranted host secrets never ride on the runner env; `--env`
+ * grant values are applied off-process by `applyEnvGrant`.
  */
 export function resolveRuntimeEnv(
   effectiveConfig: JaiphConfig,
   workspaceRoot: string,
   inputAbs: string,
 ): Record<string, string | undefined> {
-  const env = { ...process.env, JAIPH_WORKSPACE: workspaceRoot } as Record<string, string | undefined>;
+  const env = { ...buildRunnerBaseEnv(process.env), JAIPH_WORKSPACE: workspaceRoot } as Record<string, string | undefined>;
 
   // Mark env-provided keys as locked so the runtime doesn't override them.
   for (const key of LOCKED_ENV_KEYS) {
@@ -90,4 +93,42 @@ export function resolveRuntimeEnv(
   delete env.JAIPH_LIB;
 
   return env;
+}
+
+/**
+ * Apply the `--env` grant to a runner env. The grant *names* go on
+ * `JAIPH_ENV_GRANT` (always, so a stale inherited grant never leaks — set even
+ * when empty), and every granted value is written to a private tmpdir grant
+ * file (outside the workspace and the run dir) that the detached leader reads
+ * into its in-memory grant map — the only source of `use` values.
+ *
+ * A granted key lands on the runner process env **only** when it is
+ * runner-allowlisted (`isRunnerEnvAllowed`: process basics, `JAIPH_*` control
+ * keys, backend credentials) — those are runner configuration a host-set value
+ * would also carry, not a `use` secret. Everything else (a `GITHUB_TOKEN` and
+ * friends) stays off the runner env entirely; a `use` subprocess reaches it only
+ * through the off-process grant map. So `jaiph run --env GITHUB_TOKEN` never puts
+ * `GITHUB_TOKEN` on the workflow-leader process environment.
+ *
+ * Returns the grant file path so the caller can remove its dir after the run
+ * (the leader also removes it on read).
+ */
+export function applyEnvGrant(
+  runtimeEnv: Record<string, string | undefined>,
+  extraEnv: Record<string, string>,
+): { grantFile: string | undefined } {
+  runtimeEnv.JAIPH_ENV_GRANT = Object.keys(extraEnv).join(",");
+  for (const [key, value] of Object.entries(extraEnv)) {
+    // Non-allowlisted secrets must never sit on the runner env, even if an
+    // inherited value happened to be there; allowlisted config keys may.
+    if (isRunnerEnvAllowed(key)) runtimeEnv[key] = value;
+    else delete runtimeEnv[key];
+  }
+  if (Object.keys(extraEnv).length === 0) {
+    delete runtimeEnv[ENV_GRANT_FILE_ENV];
+    return { grantFile: undefined };
+  }
+  const grantFile = writeEnvGrantFile(extraEnv);
+  runtimeEnv[ENV_GRANT_FILE_ENV] = grantFile;
+  return { grantFile };
 }

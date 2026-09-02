@@ -24,7 +24,13 @@ export {
   buildStepDisplayParamPairs,
   type RuntimeGraph,
 } from "./kernel";
-export { isEnvAllowed, type AgentBackend } from "./kernel/env-allowlist";
+export {
+  isEnvAllowed,
+  isRunnerEnvAllowed,
+  buildRunnerBaseEnv,
+  type AgentBackend,
+} from "./kernel/env-allowlist";
+export { ENV_GRANT_FILE_ENV, writeEnvGrantFile, readEnvGrantFile } from "./kernel/env-grant-file";
 
 // Assets embedded into the runtime bundle (skill doc, Swagger UI).
 export {

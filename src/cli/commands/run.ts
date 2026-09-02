@@ -58,7 +58,7 @@ import {
   formatRunningBottomLine,
 } from "../run/progress";
 import { loadMergedHooks, registerHooksSubscriber, isProjectHooksTrusted } from "../run/hooks";
-import { resolveRuntimeEnv } from "../run/env";
+import { resolveRuntimeEnv, applyEnvGrant } from "../run/env";
 import { preflightAgentCredentials } from "../run/preflight-credentials";
 import { planUseEnvs } from "../run/use-envs";
 import { colorize, formatJaiphRunningBannerLines } from "../run/display";
@@ -133,6 +133,7 @@ export async function runWorkflow(rest: string[]): Promise<number> {
 
   const outDir = target ? resolve(target) : mkdtempSync(join(tmpdir(), "jaiph-run-"));
   const shouldCleanup = !target;
+  let grantFile: string | undefined;
   try {
     const colorEnabled = canUseAnsi();
     const isTTY = !!process.stdout.isTTY;
@@ -147,10 +148,10 @@ export async function runWorkflow(rest: string[]): Promise<number> {
     // beside the journal after the run so read/export boundaries can verify it.
     const chainKey = generateChainKey();
     runtimeEnv[CHAIN_KEY_ENV] = chainKey;
-    Object.assign(runtimeEnv, extraEnv);
-    // `--env` is the grant: scripts receive a `use` key only when its name is
-    // in this list. Set unconditionally so a stale inherited grant never leaks.
-    runtimeEnv.JAIPH_ENV_GRANT = Object.keys(extraEnv).join(",");
+    // `--env` is the grant. Its VALUES stay off the runner process env: the
+    // names go on `JAIPH_ENV_GRANT`, the values into an off-process grant file
+    // the detached leader reads. Set unconditionally so a stale grant never leaks.
+    grantFile = applyEnvGrant(runtimeEnv, extraEnv).grantFile;
     const credPreflight = preflightAgentCredentials({
       mod,
       inputAbs,
@@ -245,6 +246,9 @@ export async function runWorkflow(rest: string[]): Promise<number> {
       chainKey,
     );
   } finally {
+    // The leader removes the grant file on read; clean up here too in case the
+    // spawn never reached it (grant values live in a tmpdir dir of their own).
+    if (grantFile) rmSync(dirname(grantFile), { recursive: true, force: true });
     if (shouldCleanup) {
       rmSync(outDir, { recursive: true, force: true });
     }
@@ -271,16 +275,17 @@ async function runWorkflowRaw(
   const effectiveConfig = metadataToConfig(resolvedModuleMetadata);
   const outDir = target ? resolve(target) : mkdtempSync(join(tmpdir(), "jaiph-run-"));
   const shouldCleanup = !target;
+  let grantFile: string | undefined;
   try {
     const runtimeEnv = resolveRuntimeEnv(effectiveConfig, workspaceRoot, inputAbs);
     runtimeEnv.JAIPH_SOURCE_ABS = inputAbs;
     const chainKey = runtimeEnv[CHAIN_KEY_ENV] ?? generateChainKey();
     runtimeEnv[CHAIN_KEY_ENV] = chainKey;
-    Object.assign(runtimeEnv, extraEnv);
-    // Same `--env` grant hand-off as the interactive path. Raw mode skips the
-    // graph-wide `use` pre-flight (it loads no graph host-side); an ungranted
-    // `use` key is simply absent in the script spawn.
-    runtimeEnv.JAIPH_ENV_GRANT = Object.keys(extraEnv).join(",");
+    // Same `--env` grant hand-off as the interactive path: values stay off the
+    // runner env (off-process grant file), only the names go on JAIPH_ENV_GRANT.
+    // Raw mode skips the graph-wide `use` pre-flight (it loads no graph
+    // host-side); an ungranted `use` key is simply absent in the script spawn.
+    grantFile = applyEnvGrant(runtimeEnv, extraEnv).grantFile;
     const { scriptsDir } = buildScripts(inputAbs, outDir, workspaceRoot);
     runtimeEnv.JAIPH_SCRIPTS = scriptsDir;
     const metaFile = join(outDir, `.jaiph-run-meta-${Date.now()}-${process.pid}.txt`);
@@ -304,6 +309,7 @@ async function runWorkflowRaw(
     });
     return childExit.status;
   } finally {
+    if (grantFile) rmSync(dirname(grantFile), { recursive: true, force: true });
     if (shouldCleanup) {
       rmSync(outDir, { recursive: true, force: true });
     }

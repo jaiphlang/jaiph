@@ -4,6 +4,7 @@ import { writeFileSync } from "node:fs";
 import { loadModuleGraph, readModuleGraph } from "../../transpiler";
 import { buildRuntimeGraph } from "./graph";
 import { NodeWorkflowRuntime } from "./node-workflow-runtime";
+import { readEnvGrantFile, ENV_GRANT_FILE_ENV } from "./env-grant-file";
 
 /**
  * Internal argv marker dispatched from `main` (src/cli/index.ts) to route the
@@ -50,7 +51,11 @@ export async function runWorkflowRunner(positional: string[]): Promise<number> {
   const graphFile = process.env.JAIPH_MODULE_GRAPH_FILE;
   const moduleGraph = graphFile ? readModuleGraph(graphFile) : loadModuleGraph(sourceFile, workspaceRoot);
   const graph = buildRuntimeGraph(moduleGraph);
-  const runtime = new NodeWorkflowRuntime(graph, { env: process.env, cwd: process.cwd() });
+  // Read the `--env` grant VALUE map off-process (never from the leader env),
+  // then drop the pointer so no script/prompt child inherits even the path.
+  const grantValues = readEnvGrantFile(process.env[ENV_GRANT_FILE_ENV]);
+  delete process.env[ENV_GRANT_FILE_ENV];
+  const runtime = new NodeWorkflowRuntime(graph, { env: process.env, cwd: process.cwd(), grantValues });
   const status = await runtime.runRoot(defName, runArgs);
   writeFileSync(
     metaFile,

@@ -129,11 +129,13 @@ test("use + grant: the key crosses only when named in JAIPH_ENV_GRANT", async ()
     ]);
     const base = { ...makeEnv(root, scriptsDir), GITHUB_TOKEN: "host-secret" };
 
-    // Granted: --env GITHUB_TOKEN was passed (CLI hand-off via JAIPH_ENV_GRANT).
+    // Granted: --env GITHUB_TOKEN was passed. The CLI hands the grant NAMES on
+    // JAIPH_ENV_GRANT and the VALUES off-env via `grantValues`.
     const granted = new NodeWorkflowRuntime(buildRuntimeGraph(jh), {
       env: { ...base, JAIPH_ENV_GRANT: "GITHUB_TOKEN" },
       cwd: root,
       suppressLiveEvents: true,
+      grantValues: { GITHUB_TOKEN: "host-secret" },
     });
     await withSpawnSpy(async (calls) => {
       assert.equal(await granted.runMain([]), 0);
@@ -155,6 +157,43 @@ test("use + grant: the key crosses only when named in JAIPH_ENV_GRANT", async ()
   }
 });
 
+test("constructed the way jaiph run/test will: the grant value is off `env` but the use script still gets it", async () => {
+  // Post-task construction: the CLI keeps `--env` VALUES off the runner env and
+  // hands them to the runtime via `grantValues`. So `this.env.GITHUB_TOKEN` is
+  // undefined while the `use` script child still receives the granted value.
+  const root = mkdtempSync(join(tmpdir(), "jaiph-script-env-grantmap-"));
+  try {
+    const { scriptsDir } = setup(root);
+    writeScriptFile(scriptsDir, "show");
+    const jh = writeFlow(root, "flow.jh", [
+      "script show use GITHUB_TOKEN = `echo x`",
+      "export def main() {",
+      "  run show()",
+      "}",
+    ]);
+    // No GITHUB_TOKEN on the env object — only the grant NAMES. (The env type
+    // itself has no GITHUB_TOKEN key, so `this.env.GITHUB_TOKEN` is undefined.)
+    const env = { ...makeEnv(root, scriptsDir), JAIPH_ENV_GRANT: "GITHUB_TOKEN" };
+    const runtime = new NodeWorkflowRuntime(buildRuntimeGraph(jh), {
+      env,
+      cwd: root,
+      suppressLiveEvents: true,
+      grantValues: { GITHUB_TOKEN: "granted-secret" },
+    });
+    await withSpawnSpy(async (calls) => {
+      assert.equal(await runtime.runMain([]), 0);
+      assert.equal(calls.length, 1);
+      assert.equal(
+        calls[0]!.env.GITHUB_TOKEN,
+        "granted-secret",
+        "the use script child gets the granted value from the off-env grant map",
+      );
+    });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("import script: `use` on the import line has the same spawn contract as a named script", async () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-script-env-import-"));
   try {
@@ -169,10 +208,14 @@ test("import script: `use` on the import line has the same spawn contract as a n
     ]);
     const env = {
       ...makeEnv(root, scriptsDir),
-      GITHUB_TOKEN: "host-secret",
       JAIPH_ENV_GRANT: "GITHUB_TOKEN",
     };
-    const runtime = new NodeWorkflowRuntime(buildRuntimeGraph(jh), { env, cwd: root, suppressLiveEvents: true });
+    const runtime = new NodeWorkflowRuntime(buildRuntimeGraph(jh), {
+      env,
+      cwd: root,
+      suppressLiveEvents: true,
+      grantValues: { GITHUB_TOKEN: "host-secret" },
+    });
     await withSpawnSpy(async (calls) => {
       assert.equal(await runtime.runMain([]), 0);
       assert.equal(calls.length, 1);
@@ -202,10 +245,14 @@ test("no def-level leak: a callee def's script without `use` stays sterile even 
     ]);
     const env = {
       ...makeEnv(root, scriptsDir),
-      GITHUB_TOKEN: "host-secret",
       JAIPH_ENV_GRANT: "GITHUB_TOKEN",
     };
-    const runtime = new NodeWorkflowRuntime(buildRuntimeGraph(jh), { env, cwd: root, suppressLiveEvents: true });
+    const runtime = new NodeWorkflowRuntime(buildRuntimeGraph(jh), {
+      env,
+      cwd: root,
+      suppressLiveEvents: true,
+      grantValues: { GITHUB_TOKEN: "host-secret" },
+    });
     await withSpawnSpy(async (calls) => {
       assert.equal(await runtime.runMain([]), 0);
       assert.equal(calls.length, 2);
@@ -278,10 +325,14 @@ test("cross-module use: `run lib.publish()` forwards the imported module's use k
     ]);
     const env = {
       ...makeEnv(root, scriptsDir),
-      UE_TOKEN: "cross-secret",
       JAIPH_ENV_GRANT: "UE_TOKEN",
     };
-    const runtime = new NodeWorkflowRuntime(buildRuntimeGraph(jh), { env, cwd: root, suppressLiveEvents: true });
+    const runtime = new NodeWorkflowRuntime(buildRuntimeGraph(jh), {
+      env,
+      cwd: root,
+      suppressLiveEvents: true,
+      grantValues: { UE_TOKEN: "cross-secret" },
+    });
     await withSpawnSpy(async (calls) => {
       assert.equal(await runtime.runMain([]), 0);
       assert.equal(calls.length, 1, "expected exactly one script spawn");
