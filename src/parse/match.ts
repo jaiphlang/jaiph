@@ -246,6 +246,13 @@ export function parseMatchAfterKeyword(
   const head = afterMatchKw.trim();
   const m = head.match(MATCH_HEAD_RE);
   if (!m) {
+    // The head regex only accepts a bare identifier subject. When a subject is
+    // present but invalid (`$x`, `123`), surface the specific subject error
+    // rather than the generic shape error.
+    const braceIdx = head.indexOf("{");
+    if (braceIdx !== -1) {
+      validateMatchSubject(filePath, head.slice(0, braceIdx).trim(), loc.line);
+    }
     fail(filePath, "match must be: match subject { ... }", loc.line, loc.col);
   }
   const subject = m[1];
