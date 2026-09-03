@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, rmSync, statSync, unwatchFile, watchFile } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, extname, join, resolve } from "node:path";
 import { errText } from "../../errors";
@@ -22,7 +22,7 @@ import {
 // posture, then watch sources for hot reload. That shared prefix lives here
 // once rather than being copied between the two commands.
 
-/** How often `watchFile` polls module sources for hot reload (ms). */
+/** How often the source watcher polls module sources for hot reload (ms). */
 export const WATCH_INTERVAL_MS = 750;
 
 /** Validated CLI arguments shared by the server commands. */
@@ -144,32 +144,59 @@ export function startGeneration(
 }
 
 /**
- * A `watchFile`-based source watcher. `rewatch(files)` reconciles the watched
- * set to `files` (unwatch only those that left, watch only those that arrived);
- * `stop()` unwatches everything. The `onChange` callback is the single listener
- * registered against every file, so unwatch matches watch exactly.
+ * A polling source watcher. `rewatch(files)` reconciles the watched set to
+ * `files` (drop those that left, add those that arrived); `stop()` drops
+ * everything and halts polling. A single shared interval stats every watched
+ * file and fires `onChange` once per tick if any fingerprint moved.
  *
- * A file that survives a reload keeps its existing `watchFile` untouched:
- * re-watching resets `watchFile`'s baseline, which it captures with an
- * asynchronous initial stat that fires no callback — so an edit landing before
- * that stat completes would be silently absorbed into the new baseline and
- * never detected. Leaving persistent files alone keeps their live baseline intact.
+ * The baseline for each newly watched file is captured *synchronously* at watch
+ * time. `node:fs`'s `watchFile` instead captures its baseline with an
+ * asynchronous initial stat that fires no callback — under load that stat can be
+ * delayed past the client's first edit, silently absorbing the edit into the
+ * baseline so it is never detected. Capturing the baseline synchronously closes
+ * that window. A file that survives a reload keeps its existing baseline
+ * untouched, so an edit landing mid-reload is still seen on the next tick.
  */
 export function createSourceWatcher(
   intervalMs: number,
   onChange: () => void,
 ): { rewatch: (files: string[]) => void; stop: () => void } {
-  let watched = new Set<string>();
+  const baselines = new Map<string, string>();
+  let timer: NodeJS.Timeout | undefined;
+  // A change-detecting fingerprint: size and mtime move on any edit; a missing
+  // file collapses to a sentinel so delete/recreate reads as a change too.
+  const fingerprint = (f: string): string => {
+    try {
+      const s = statSync(f);
+      return `${s.size}:${s.mtimeMs}`;
+    } catch {
+      return "absent";
+    }
+  };
+  const poll = (): void => {
+    let changed = false;
+    for (const [f, prev] of baselines) {
+      const now = fingerprint(f);
+      if (now !== prev) {
+        baselines.set(f, now);
+        changed = true;
+      }
+    }
+    if (changed) onChange();
+  };
   return {
     rewatch(files: string[]): void {
       const next = new Set(files);
-      for (const f of watched) if (!next.has(f)) unwatchFile(f, onChange);
-      for (const f of next) if (!watched.has(f)) watchFile(f, { interval: intervalMs }, onChange);
-      watched = next;
+      for (const f of [...baselines.keys()]) if (!next.has(f)) baselines.delete(f);
+      for (const f of next) if (!baselines.has(f)) baselines.set(f, fingerprint(f));
+      if (!timer && baselines.size > 0) timer = setInterval(poll, intervalMs);
     },
     stop(): void {
-      for (const f of watched) unwatchFile(f, onChange);
-      watched = new Set();
+      baselines.clear();
+      if (timer) {
+        clearInterval(timer);
+        timer = undefined;
+      }
     },
   };
 }
