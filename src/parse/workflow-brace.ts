@@ -25,7 +25,7 @@ import { parseConfigBlock } from "./metadata";
 import { splitStatementsOnSemicolons } from "./statement-split";
 import { parsePromptStep } from "./prompt";
 import { parseSendRhs } from "./send-rhs";
-import { parseMatchExpr } from "./match";
+import { parseMatchAfterKeyword } from "./match";
 import { dottedReturnToQuotedString, isBareDottedIdentifierReturn, isBareIdentifierReturn, bareIdentifierToQuotedString } from "./workflow-return-dotted";
 
 export type BlockParseOpts = {
@@ -679,10 +679,32 @@ function tryParseReturn(c: BlockCtx): BlockResult | null {
     const value = makeTripleQuotedLiteral(c.trivia, body, true);
     return { step: { type: "return", value, loc: retLoc }, nextIdx };
   }
-  const matchHead = returnValue.match(/^match\s+(.+?)\s*\{\s*$/);
-  if (matchHead) {
-    const { expr, nextIndex } = parseMatchExpr(c.filePath, c.lines, c.idx, matchHead[1].trim(), retLoc);
+  if (returnValue.startsWith("match ") || returnValue === "match") {
+    const after = returnValue === "match" ? "" : returnValue.slice("match ".length);
+    const { expr, nextIndex } = parseMatchAfterKeyword(c.filePath, c.lines, c.idx, after, retLoc);
     return { step: { type: "return", value: { kind: "match", match: expr }, loc: retLoc }, nextIdx: nextIndex };
+  }
+  if (returnValue.startsWith("prompt ") || returnValue === "prompt") {
+    const promptCol = c.innerRaw.indexOf("prompt") + 1;
+    const promptArg = returnValue === "prompt" ? "" : returnValue.slice("prompt ".length).trimStart();
+    const result = parsePromptStep(c.filePath, c.lines, c.idx, promptArg, promptCol, undefined, c.trivia);
+    const st = result.step;
+    if (st.type !== "exec" || st.body.kind !== "prompt") {
+      fail(c.filePath, "return prompt internal parse error", c.innerNo, retLoc.col);
+    }
+    const promptBody = st.body;
+    const promptTrivia = c.trivia.getNode(st);
+    if (promptTrivia) {
+      c.trivia.setNode(promptBody, {
+        ...(promptTrivia.bodyKind ? { bodyKind: promptTrivia.bodyKind } : {}),
+        ...(promptTrivia.bodyIdentifier ? { bodyIdentifier: promptTrivia.bodyIdentifier } : {}),
+        ...(promptTrivia.rawBody !== undefined ? { rawBody: promptTrivia.rawBody } : {}),
+      });
+    }
+    return {
+      step: { type: "return", value: promptBody, loc: retLoc },
+      nextIdx: result.nextLineIdx > c.idx ? result.nextLineIdx + 1 : c.idx + 1,
+    };
   }
   if (returnValue.startsWith("run ")) {
     const runBody = returnValue.slice("run ".length).trim();
@@ -703,6 +725,12 @@ function tryParseReturn(c: BlockCtx): BlockResult | null {
         nextIdx: call.nextLineIdx,
       };
     }
+    fail(
+      c.filePath,
+      "return run requires a call: return run name(...)",
+      c.innerNo,
+      c.innerRaw.indexOf("run") + 1,
+    );
   }
   if (returnValue.startsWith("ensure ")) {
     fail(c.filePath, "'ensure' is not a keyword; use 'run'", c.innerNo, c.innerRaw.indexOf("ensure") + 1);
@@ -743,7 +771,12 @@ function tryParseReturn(c: BlockCtx): BlockResult | null {
     }
     return { step: { type: "return", value, loc: retLoc }, nextIdx: c.idx + 1 };
   }
-  return null;
+  fail(
+    c.filePath,
+    'return value must be a string, identifier, run …, prompt …, or match …',
+    c.innerNo,
+    retLoc.col,
+  );
 }
 
 function tryParseElseError(c: BlockCtx): BlockResult | null {
@@ -765,11 +798,10 @@ function tryParseElseError(c: BlockCtx): BlockResult | null {
 }
 
 function tryParseStandaloneMatch(c: BlockCtx): BlockResult | null {
-  const m = c.inner.match(/^match\s+(.+?)\s*\{\s*$/);
-  if (!m) return null;
-  const subject = m[1].trim();
+  if (c.inner !== "match" && !c.inner.startsWith("match ")) return null;
   const matchLoc = { line: c.innerNo, col: c.innerRaw.indexOf("match") + 1 };
-  const { expr, nextIndex } = parseMatchExpr(c.filePath, c.lines, c.idx, subject, matchLoc);
+  const after = c.inner === "match" ? "" : c.inner.slice("match ".length);
+  const { expr, nextIndex } = parseMatchAfterKeyword(c.filePath, c.lines, c.idx, after, matchLoc);
   return { step: execStep({ kind: "match", match: expr }, matchLoc), nextIdx: nextIndex };
 }
 

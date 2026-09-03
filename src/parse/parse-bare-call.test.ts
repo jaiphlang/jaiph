@@ -86,33 +86,22 @@ test("const x = run bare identifier is rejected — parentheses required", () =>
 
 // === return run/run bare identifier (no parens) now falls through ===
 
-test("return run bare identifier falls through to exec/shell", () => {
-  // Without parens, "return run helper" is not recognized as a managed return
-  // and falls through to a shell exec step
-  const mod = parsejaiph(
-    `export def main() {\n  return run helper\n}`,
-    "test.jh",
+test("return run bare identifier is E_PARSE, not shell", () => {
+  assert.throws(
+    () => parsejaiph(`export def main() {\n  return run helper\n}`, "test.jh"),
+    /return run requires a call/,
   );
-  const step = mod.defs[0].steps[0];
-  assert.equal(step.type, "exec");
-  if (step.type === "exec") {
-    assert.equal(step.body.kind, "shell");
-  }
 });
 
-test("return run bare identifier falls through to exec/shell", () => {
-  // Without parens, "return run check" is not recognized as a managed return
-  // and falls through to a shell exec step
-  const mod = parsejaiph(
-    `def check() {\n  return "ok"\n}\nexport def main() {\n  return run check\n}`,
-    "test.jh",
+test("return run bare identifier on a known def is E_PARSE, not shell", () => {
+  assert.throws(
+    () =>
+      parsejaiph(
+        `def check() {\n  return "ok"\n}\nexport def main() {\n  return run check\n}`,
+        "test.jh",
+      ),
+    /return run requires a call/,
   );
-  const main = mod.defs.find((w) => w.name === "main")!;
-  const step = main.steps[0];
-  assert.equal(step.type, "exec");
-  if (step.type === "exec") {
-    assert.equal(step.body.kind, "shell");
-  }
 });
 
 // === send RHS with bare identifier (no parens) ===

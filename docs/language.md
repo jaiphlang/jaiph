@@ -102,7 +102,7 @@ Call arguments:
 | Bare dotted `IDENT.IDENT` | Typed-prompt field access. Base must be a typed-prompt capture; field must appear in its `returns` schema (`E_VALIDATE` otherwise). |
 | `run ref(args)` | Nested managed call. The `run` keyword is required. |
 
-**Hard error contract:** any line that begins with `run`, `return run` followed by a valid identifier and `(` is treated as a managed-call start. If the matching `)` is never found before end-of-block, the compiler emits `E_PARSE` — the line is **never** silently treated as an inline shell step.
+**Hard error contract:** any line that begins with `run`, or `return` followed by `run` / `prompt` / `match`, is a managed form. A missing `)`, a `return run` without `()`, or a `return` RHS that is not a string, identifier, `run`, `prompt`, or `match` is `E_PARSE` — those lines are **never** silently treated as an inline shell step.
 
 ### Inline scripts
 
@@ -297,6 +297,7 @@ return response                  # sugar for return "${response}"
 return run helper()
 return run check(input)
 return match status { "ok" => "pass", _ => "fail" }
+return prompt "summarize ${log}"
 return run `cat report.txt`()
 ```
 
@@ -304,9 +305,10 @@ return run `cat report.txt`()
 |---|---|
 | String / triple-quoted | Verbatim with interpolation. |
 | Bare identifier | Sugar for `return "${ident}"`. Unknown identifier is `E_VALIDATE`. |
-| `return run ref()` | Managed direct return. Requires `()`. `return run helper` without parens becomes a shell step. |
+| `return run ref()` | Managed direct return. Requires `()`. `return run helper` without parens is `E_PARSE`. |
 | `return run \`…\`(args)` | Inline-script direct return. The `run` keyword is required. |
-| `return match … { … }` | Match expression as the return value. `return` inside an arm body is forbidden. |
+| `return match … { … }` | Match expression as the return value — compact one-line or multiline `{` opener. `return` inside an arm body is forbidden. |
+| `return prompt …` | Prompt expression as the return value (same body forms as `const x = prompt …`). |
 | Position | Only in `def` bodies. Script bodies use `echo`/`printf`; bare `return 0` / `return $?` in a script are shell exit codes. |
 
 ## `send` — channel message

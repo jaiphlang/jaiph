@@ -237,31 +237,24 @@ test("standalone run with unclosed paren is E_PARSE, not shell", () => {
   );
 });
 
-// ─── regression: bare-identifier return run still falls through to shell ─────
+// ─── regression: bare-identifier return run is E_PARSE, not shell ────────────
 
-test("return run bare identifier (no parens) still falls through to shell", () => {
-  const mod = parsejaiph(
-    `export def main() {\n  return run helper\n}`,
-    "test.jh",
+test("return run bare identifier (no parens) is E_PARSE, not shell", () => {
+  assert.throws(
+    () => parsejaiph(`export def main() {\n  return run helper\n}`, "test.jh"),
+    /return run requires a call/,
   );
-  const step = mod.defs[0].steps[0];
-  assert.equal(step.type, "exec");
-  if (step.type === "exec") {
-    assert.equal(step.body.kind, "shell");
-  }
 });
 
-test("return run bare identifier (no parens) still falls through to shell", () => {
-  const mod = parsejaiph(
-    `def check() {\n  return "ok"\n}\nexport def main() {\n  return run check\n}`,
-    "test.jh",
+test("return run bare identifier (no parens) on a known def is E_PARSE, not shell", () => {
+  assert.throws(
+    () =>
+      parsejaiph(
+        `def check() {\n  return "ok"\n}\nexport def main() {\n  return run check\n}`,
+        "test.jh",
+      ),
+    /return run requires a call/,
   );
-  const main = mod.defs.find((w) => w.name === "main")!;
-  const step = main.steps[0];
-  assert.equal(step.type, "exec");
-  if (step.type === "exec") {
-    assert.equal(step.body.kind, "shell");
-  }
 });
 
 // ─── existing single-line calls still work unchanged ─────────────────────────
