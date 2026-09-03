@@ -253,6 +253,23 @@ test("E_VALIDATE: a nested def body interpolating a forward enclosing const is u
   );
 });
 
+test("E_VALIDATE: a compact return match subject naming a forward const is unknown", () => {
+  withFlow(
+    [
+      "export def main() {",
+      '  return match later { _ => "x" }',
+      '  const later = "ok"',
+      "}",
+    ],
+    (entry, out) => {
+      assert.throws(
+        () => buildScripts(entry, out),
+        /E_VALIDATE.*unknown identifier "later"/,
+      );
+    },
+  );
+});
+
 test("E_VALIDATE: an if subject naming a forward const is unknown", () => {
   withFlow(
     [

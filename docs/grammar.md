@@ -317,7 +317,7 @@ return_value = double_quoted_string | triple_quoted_block | "$" IDENT | "${" IDE
              | "match" IDENT "{" { match_arm } "}" ;
 ```
 
-`return run helper` (no `()`) becomes a shell `return` step — required to write `return run helper()` / `return run check()` for the managed form. Bare identifiers desugar to `return "${ident}"`. Inline-script form requires the `run` keyword (`return run \`echo $1\`("arg")`). Numeric exit codes (`return 0`, `return $?`) are rejected in def bodies; use them only in opaque `script` definition bodies.
+`return run helper` (no `()`) is `E_PARSE` — write `return run helper()` / `return run check()` for the managed form. Bare identifiers desugar to `return "${ident}"`. Inline-script form requires the `run` keyword (`return run \`echo $1\`("arg")`). Numeric exit codes (`return 0`, `return $?`) are rejected in def bodies; use them only in opaque `script` definition bodies. Compact `return match subject { … }` and `return prompt …` are match / prompt expressions, not shell.
 
 ### `send`
 

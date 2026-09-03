@@ -5,7 +5,7 @@ import { parseCallRefMultiline } from "./call-args";
 import { dedentTripleQuotedBody, parseTripleQuoteBlock, tripleQuoteBodyToRaw } from "./triple-quote";
 import { parseAnonymousInlineScript } from "./inline-script";
 import { parsePromptStep } from "./prompt";
-import { parseMatchExpr } from "./match";
+import { parseMatchAfterKeyword } from "./match";
 import {
   bareIdentifierToQuotedString,
   dottedReturnToQuotedString,
@@ -134,11 +134,12 @@ export function parseConstRhs(
   if (head.startsWith("ensure ")) {
     fail(filePath, "'ensure' is not a keyword; use 'run'", lineNo, col);
   }
-  // const name = match var { ... }
-  const constMatchHead = head.match(/^match\s+(.+?)\s*\{\s*$/);
-  if (constMatchHead) {
-    const subject = constMatchHead[1].trim();
-    const { expr, nextIndex } = parseMatchExpr(filePath, lines, lineIdx, subject, { line: lineNo, col });
+  // const name = match var { ... }  (compact one-line or multiline `{` opener)
+  if (head.startsWith("match ") || head === "match") {
+    const after = head === "match" ? "" : head.slice("match ".length);
+    const { expr, nextIndex } = parseMatchAfterKeyword(
+      filePath, lines, lineIdx, after, { line: lineNo, col },
+    );
     return { value: { kind: "match", match: expr }, nextLineIdx: nextIndex - 1 };
   }
   // const name = """..."""

@@ -226,3 +226,131 @@ export function parseMatchExpr(
     nextIndex,
   };
 }
+
+const MATCH_HEAD_RE =
+  /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)\s*\{(.*)$/s;
+
+/**
+ * Parse `match <subject> { … }` after the `match` keyword has been stripped.
+ * Compact one-line form (`match status { "ok" => "pass", _ => "fail" }`) and
+ * the multiline `{` at end-of-line form both produce a `match` expr.
+ * Callers that already know the token is `match` must not fall through to shell.
+ */
+export function parseMatchAfterKeyword(
+  filePath: string,
+  lines: string[],
+  lineIdx: number,
+  afterMatchKw: string,
+  loc: { line: number; col: number },
+): { expr: MatchExprDef; nextIndex: number } {
+  const head = afterMatchKw.trim();
+  const m = head.match(MATCH_HEAD_RE);
+  if (!m) {
+    fail(filePath, "match must be: match subject { ... }", loc.line, loc.col);
+  }
+  const subject = m[1];
+  const afterBrace = m[2];
+  if (afterBrace.trim() === "") {
+    return parseMatchExpr(filePath, lines, lineIdx, subject, loc);
+  }
+  const close = lastUnquotedChar(afterBrace, "}");
+  if (close === -1) {
+    fail(filePath, "unterminated match block", loc.line, loc.col);
+  }
+  const trailing = afterBrace.slice(close + 1).trim();
+  if (trailing) {
+    fail(filePath, "unexpected content after match", loc.line, loc.col);
+  }
+  validateMatchSubject(filePath, subject, loc.line);
+  const inner = afterBrace.slice(0, close).trim();
+  const arms = parseCompactMatchArms(filePath, inner, loc.line);
+  if (arms.length === 0) {
+    fail(filePath, "match must have at least one arm", loc.line);
+  }
+  return { expr: { subject, arms, loc }, nextIndex: lineIdx + 1 };
+}
+
+/** Last `}` that is not inside a double-quoted string or `/regex/`. */
+function lastUnquotedChar(text: string, ch: string): number {
+  let last = -1;
+  let inDq = false;
+  let inRegex = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inDq) {
+      if (c === `"` && text[i - 1] !== "\\") inDq = false;
+      continue;
+    }
+    if (inRegex) {
+      if (c === "/" && text[i - 1] !== "\\") inRegex = false;
+      continue;
+    }
+    if (c === `"`) {
+      inDq = true;
+      continue;
+    }
+    if (c === "/") {
+      inRegex = true;
+      continue;
+    }
+    if (c === ch) last = i;
+  }
+  return last;
+}
+
+/**
+ * Split a compact `{ arm, arm }` body on commas that sit between arms
+ * (outside quotes and regex literals). Language.md's one-line example uses
+ * that comma form; multiline match still forbids commas (one arm per line).
+ */
+function splitCompactArmSegments(inner: string): string[] {
+  const segs: string[] = [];
+  let start = 0;
+  let inDq = false;
+  let inRegex = false;
+  for (let i = 0; i < inner.length; i++) {
+    const c = inner[i];
+    if (inDq) {
+      if (c === `"` && inner[i - 1] !== "\\") inDq = false;
+      continue;
+    }
+    if (inRegex) {
+      if (c === "/" && inner[i - 1] !== "\\") inRegex = false;
+      continue;
+    }
+    if (c === `"`) {
+      inDq = true;
+      continue;
+    }
+    if (c === "/") {
+      inRegex = true;
+      continue;
+    }
+    if (c === ",") {
+      segs.push(inner.slice(start, i));
+      start = i + 1;
+    }
+  }
+  segs.push(inner.slice(start));
+  return segs.map((s) => s.trim()).filter((s) => s.length > 0);
+}
+
+function parseCompactMatchArms(filePath: string, inner: string, lineNo: number): MatchArmDef[] {
+  const arms: MatchArmDef[] = [];
+  for (const seg of splitCompactArmSegments(inner)) {
+    const { pattern, rest: afterPattern } = parseArmPattern(filePath, seg, lineNo);
+    if (!afterPattern.startsWith("=>")) {
+      fail(filePath, 'expected "=>" after match pattern', lineNo);
+    }
+    const afterArrow = afterPattern.slice(2).trimStart();
+    if (afterArrow.startsWith('"""')) {
+      fail(filePath, "triple-quoted match arm bodies need a multiline match", lineNo);
+    }
+    const { body, rest } = parseArmBody(filePath, afterArrow, lineNo);
+    if (rest) {
+      fail(filePath, "unexpected content after match arm body", lineNo);
+    }
+    arms.push({ pattern, body });
+  }
+  return arms;
+}
