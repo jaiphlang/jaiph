@@ -69,22 +69,18 @@ e2e::assert_equals "${jose_version}" "5.10.0" "jose is exact-pinned in package.j
 
 # ── Build a fake PATH with the tools docs/run needs, but no jaiph ─────────────
 #
-# docs/run's preflight requires node; install_jaiph_verified needs curl, awk,
-# mktemp, bash, rm and a sha tool. Symlinking exactly these guarantees jaiph is
-# absent (so the install branch runs) while the script can still function.
+# install_jaiph_verified needs curl, awk, mktemp, bash, rm and a sha tool.
+# Symlinking exactly these guarantees jaiph is absent (so the install branch
+# runs) while the script can still function.
 
 FAKE_BIN="${TEST_DIR}/fakebin"
 mkdir -p "${FAKE_BIN}"
-for t in node curl mktemp awk bash rm mkdir chmod cat cp ln uname sed grep dirname sha256sum shasum; do
+for t in curl mktemp awk bash rm mkdir chmod cat cp ln uname sed grep dirname sha256sum shasum; do
   p="$(command -v "${t}" 2>/dev/null || true)"
   [ -n "${p}" ] && ln -sf "${p}" "${FAKE_BIN}/${t}"
 done
 if PATH="${FAKE_BIN}" command -v jaiph >/dev/null 2>&1; then
   e2e::skip "jaiph resolvable on the fake PATH — cannot exercise the install branch"
-  exit 0
-fi
-if ! PATH="${FAKE_BIN}" command -v node >/dev/null 2>&1; then
-  e2e::skip "node not available for the fake PATH — skipping bootstrap install-branch checks"
   exit 0
 fi
 

@@ -166,6 +166,9 @@ test.describe.serial('docs landing page', () => {
       }, platform);
     }
 
+    const windowsInstall = (page: import('@playwright/test').Page) =>
+      page.locator('section.try-it-out .windows-install');
+
     const activeRunSampleVariant = (page: import('@playwright/test').Page) =>
       page.locator('section.try-it-out [data-panel="try-run-sample"] .os-variant.is-active');
 
@@ -173,9 +176,11 @@ test.describe.serial('docs landing page', () => {
       await emulatePlatform(page, 'Win32');
       await page.goto('/');
 
-      const active = activeRunSampleVariant(page);
-      await expect(active).toHaveAttribute('data-os', 'windows');
-      await expect(active.locator('pre code').first()).toHaveText(PS_INSTALL);
+      const card = page.locator('section.try-it-out .card');
+      await expect(card).toHaveAttribute('data-os', 'windows');
+      await expect(windowsInstall(page)).toBeVisible();
+      await expect(windowsInstall(page).locator('pre code').first()).toHaveText(PS_INSTALL);
+      await expect(page.locator('section.try-it-out .code-tab-list')).toBeHidden();
       await expect(osLink(page, 'posix')).toBeVisible();
       await expect(osLink(page, 'windows')).toBeHidden();
     });
@@ -198,34 +203,36 @@ test.describe.serial('docs landing page', () => {
       await expect(page.locator('section.try-it-out .os-switch')).toHaveCount(0);
     });
 
-    test('manual platform + tab switching works in both directions', async ({ page }) => {
+    test('manual platform switching hides the POSIX tabs on Windows', async ({ page }) => {
       await emulatePlatform(page, 'MacIntel');
       await page.goto('/');
 
-      // Starts on POSIX; the Windows link reveals the PowerShell command.
-      await expect(activeRunSampleVariant(page)).toHaveAttribute('data-os', 'posix');
+      const card = page.locator('section.try-it-out .card');
+      await expect(card).toHaveAttribute('data-os', 'posix');
+      await expect(activeRunSampleVariant(page)).toBeVisible();
       await osLink(page, 'windows').click();
-      await expect(activeRunSampleVariant(page)).toHaveAttribute('data-os', 'windows');
+      await expect(card).toHaveAttribute('data-os', 'windows');
+      await expect(windowsInstall(page)).toBeVisible();
+      await expect(windowsInstall(page).locator('pre code').first()).toHaveText(PS_INSTALL);
+      await expect(page.locator('section.try-it-out .code-tab-list')).toBeHidden();
       await expect(osLink(page, 'posix')).toBeVisible();
       await expect(osLink(page, 'windows')).toBeHidden();
 
-      // Tab switch keeps the chosen platform: the install tab shows PowerShell.
+      await osLink(page, 'posix').click();
+      await expect(card).toHaveAttribute('data-os', 'posix');
+      await expect(page.locator('section.try-it-out .code-tab-list')).toBeVisible();
+      await expect(windowsInstall(page)).toBeHidden();
       await page.locator('[data-target="try-install-only"]').click();
       const installActive = page.locator(
         'section.try-it-out [data-panel="try-install-only"] .os-variant.is-active',
       );
-      await expect(installActive).toHaveAttribute('data-os', 'windows');
-      await expect(installActive.locator('pre code').first()).toHaveText(PS_INSTALL);
-
-      // Switch back to POSIX; the install tab shows the bash one-liner.
-      await osLink(page, 'posix').click();
       await expect(installActive).toHaveAttribute('data-os', 'posix');
       await expect(installActive.locator('pre code').first()).toHaveText(
         'curl -fsSL https://jaiph.org/install | bash',
       );
     });
 
-    test('copy button on the Windows install variant copies the exact irm line', async ({ page }) => {
+    test('copy button on the Windows install panel copies the exact irm line', async ({ page }) => {
       await page.addInitScript(() => {
         (window as unknown as { __copied: string[] }).__copied = [];
         Object.defineProperty(navigator, 'clipboard', {
@@ -241,12 +248,8 @@ test.describe.serial('docs landing page', () => {
       await page.goto('/');
 
       await osLink(page, 'windows').click();
-      await page.locator('[data-target="try-install-only"]').click();
 
-      const winInstall = page.locator(
-        'section.try-it-out [data-panel="try-install-only"] .os-variant[data-os="windows"]',
-      );
-      await winInstall.locator('.copy-code-button').first().click();
+      await windowsInstall(page).locator('.copy-code-button').first().click();
 
       const copied = await page.evaluate(() => (window as unknown as { __copied: string[] }).__copied);
       expect(copied).toContain(PS_INSTALL);

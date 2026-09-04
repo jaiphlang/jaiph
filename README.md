@@ -54,7 +54,7 @@ export def main() {
 }'
 ```
 
-Requires `node` and `curl`. The script installs Jaiph automatically if needed.
+Requires `curl`. The script installs Jaiph automatically if needed.
 
 ## Install
 
