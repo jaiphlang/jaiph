@@ -435,6 +435,7 @@ header h1 img {
 
 .container {
     max-width: 1000px;
+    width: 100%;
     margin: 0 auto;
     padding: 2.5rem 1.5rem;
 }
@@ -502,6 +503,8 @@ p {
     padding: 1.5rem 2.5rem;
     box-shadow: 0 8px 20px rgba(0, 0, 0, 0.05);
     margin-top: 1rem;
+    max-width: 100%;
+    min-width: 0;
 }
 
 [data-theme="dark"] .card {
@@ -523,6 +526,7 @@ pre {
     color: var(--pre-color);
     padding: 1rem 0;
     border-radius: 8px;
+    max-width: 100%;
     overflow-x: auto;
     font-size: 0.9rem;
     border: 1px solid var(--pre-border);
@@ -612,6 +616,8 @@ pre code .code-line::before {
 
 .code-block-wrap {
     position: relative;
+    max-width: 100%;
+    min-width: 0;
 }
 
 .copy-code-button {
@@ -770,6 +776,23 @@ pre code .code-line::before {
 }
 
 .os-variant.is-active {
+    display: block;
+}
+
+/* Windows has one install command. macOS / Linux keep the three tabs. */
+.windows-install {
+    display: none;
+}
+
+.try-it-out .card[data-os="windows"] .code-tab-list {
+    display: none;
+}
+
+.try-it-out .card[data-os="windows"] .code-tab-panel {
+    display: none;
+}
+
+.try-it-out .card[data-os="windows"] .windows-install {
     display: block;
 }
 
@@ -1333,6 +1356,7 @@ pre code .code-line::before {
 
     body {
         font-size: 1rem;
+        overflow-x: hidden;
     }
 
     .top-nav-inner {
@@ -1370,8 +1394,27 @@ pre code .code-line::before {
         padding-right: 1rem;
     }
 
+    .hero-cta {
+        padding: 0 0.5rem;
+    }
+
+    .hero-cta .button {
+        font-size: 0.95rem;
+        padding: 0.5rem 1rem;
+    }
+
+    .button-primary {
+        font-size: 1.1rem;
+        height: 2.4rem;
+        line-height: 2.4rem;
+    }
+
     header {
         padding: 1.5rem 1rem 1rem;
+    }
+
+    header h1 {
+        font-size: 3.2rem;
     }
 
     header h1 img {
@@ -1379,11 +1422,22 @@ pre code .code-line::before {
     }
 
     .value-prop {
-        font-size: 1.2rem;
+        font-size: 1.15rem;
+        padding: 0 0.75rem;
+        overflow-wrap: break-word;
     }
 
     .tagline {
         font-size: 0.9rem;
+        padding: 0 0.75rem;
+    }
+
+    .try-it-out pre {
+        font-size: 0.72rem;
+    }
+
+    .try-it-out pre code .code-line {
+        padding-left: 2.4em;
     }
 
     .tagline .separator {
@@ -1451,4 +1505,17 @@ pre code .code-line::before {
         font-size: 0.85rem;
     }
 
+}
+
+@media (max-width: 480px) {
+    .hero-cta {
+        flex-direction: column;
+        align-items: stretch;
+        padding: 0 1rem;
+    }
+
+    .hero-cta .button {
+        width: 100%;
+        box-sizing: border-box;
+    }
 }

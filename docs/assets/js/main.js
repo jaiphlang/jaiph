@@ -709,6 +709,7 @@
      * (the active button is hidden via CSS).
      */
     function setOsVariant(root, os) {
+        root.setAttribute("data-os", os);
         root.querySelectorAll(".os-switch-button").forEach(function (button) {
             button.classList.toggle("is-active", button.getAttribute("data-os") === os);
         });

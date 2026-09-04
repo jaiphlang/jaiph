@@ -42,12 +42,6 @@ install_jaiph_verified() {
   return "${status}"
 }
 
-if ! command -v node >/dev/null 2>&1; then
-  echo "Error: node is required but not found in \$PATH." >&2
-  echo "Install Node.js (https://nodejs.org) and try again." >&2
-  exit 1
-fi
-
 if ! command -v jaiph >/dev/null 2>&1; then
   echo "Jaiph not found — installing..."
   if ! install_jaiph_verified; then
