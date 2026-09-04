@@ -2,15 +2,19 @@
 
 ## Summary
 
-- **CLI:** `claude` no longer warns when `ANTHROPIC_API_KEY` and `CLAUDE_CODE_OAUTH_TOKEN` are unset. A stored Claude CLI login is the host path.
-- **Language:** compact `return match … { … }` and `return prompt …` parse as those expressions. A bad `return` is `E_PARSE`, not a shell line.
-- **Language:** using a `const` before its declaration is `E_VALIDATE` in a `${…}` interpolation, a bare `run` / `prompt` call argument, and an `if` / `match` subject, not only in a `run` / `prompt` target.
-- **Language:** nested `const` / `script` / `def` / named `prompt` declared inside an `if` / `else` / `for` / `catch` / `recover` body are block-scoped to that body. A reference after the branch is `E_VALIDATE`, not a name that validates and then interpolates empty at runtime when the branch was not taken.
-- **Language:** a nested `def` may `run` itself. Self-recursion validates and is bounded only by the runtime recursion-depth cap of 256; a `run` of a sibling nested `def` declared later in the same body stays `E_VALIDATE` (declarations are sequential, not hoisted).
-- **Docs:** Spawn-env and journal rules are guardrails, not a sandbox. [Why Jaiph](docs/why-jaiph.md) states the limit. [Deploy jaiph](docs/deploy.md) has the dedicated-user / two-run operator recipe.
-- **Docs:** [Pass a host key to a script](docs/script-env.md) is the operator recipe for sterile script env, `use`, and `--env`.
-- **Editors:** VS Code and Zed now scope a named prompt call site (`prompt analyze(log)`) as a function and highlight the field on a dotted `if` subject (`if answer.risk == "ok"`). Neither editor paints the invalid reverse arrow `<-` as a send operator.
-- **Security — spawn env:** `--env` values no longer sit on the runner (workflow-leader) process environment. Jaiph builds the runner env from an allowlist (process basics, `JAIPH_*` control keys, backend credentials), so an ungranted host key is absent from it, and a granted value reaches only a subprocess whose declaration `use`s the key.
+## All changes
+
+# 0.14.0
+
+## Summary
+
+- **Language:** `def` and `run` replace `workflow` / `rule` / `ensure`. Names are private unless `export`. `jaiph run` needs `export def main`.
+- **Runtime:** No first-party Docker sandbox. Runs execute on the host. Isolate with your own container or CI runner ([Deploy jaiph](docs/deploy.md)).
+- **Scripts:** Sterile env. A script sees process basics, `JAIPH_*` contract keys, and host keys listed in `use` and granted with `--env`. Host presence alone is not a grant. `--env` values do not sit on the runner; a granted key reaches only a subprocess whose declaration `use`s it.
+- **Prompts:** Named, reusable `prompt name(params) [use KEY] = "…"`. A def may declare a local `script`, `def`, `prompt`, or `const`. Nested decls in `if` / `for` / `catch` / `recover` are block-scoped. A nested `def` may `run` itself.
+- **Channels:** `send payload -> channel`. The old `channel <- payload` form is gone.
+- **CLI:** `--env KEY` names a missing host value and how to pass it. `use` / `--env` cannot name the audit-chain key or journal path.
+- **Editors:** VS Code, Zed, and the docs highlighter cover `use`, `import script`, and named prompts.
 
 ## All changes
 
@@ -30,20 +34,6 @@
 - **Fix — Language / Runtime:** nested declarations inside a control-flow body are now block-scoped. A nested `const` / `script` / `def` / named `prompt` declared inside an `if` / `else` / `else if` / `for` / `catch` / `recover` body is visible only after its declaration and only inside that body; after the branch ends a `run` / `prompt` / `${name}` / bare arg that names it is `E_VALIDATE` (unknown identifier). Each body is its own scope, so `if { script s = … }` and `else { script s = … }` are two independent locals, not a `cannot rebind`, and a branch may shadow an enclosing def, branch, or module name for the rest of that body only, with the outer binding visible again after it. A `returns` named prompt captured inside a branch types `${r.field}` only within that branch. Previously the validator added every in-branch declaration to the whole def, so a reference after the branch validated and then failed at runtime with an empty result or a `status 1` when the branch was not taken. Docs: [Language — Nested declarations](docs/language.md#nested-declarations), [Grammar](docs/grammar.md#nested-declarations), [Jaiph skill](docs/jaiph-skill.md). Tests: `src/parse/parse-nested-decl.test.ts`, `src/transpile/validate-nested-decl.test.ts`, `src/runtime/kernel/node-workflow-runtime.nested-decl.test.ts`, `e2e/tests/148_nested_decls.sh`.
 
 - **Fix — Language:** sequential `const` visibility now rejects use-before-declaration in every position, not only a `run` / `prompt` target. A `${…}` interpolation, a bare `run` / `prompt` call argument, and an `if` / `match` subject that names a `const` declared later in the same def are `E_VALIDATE` (unknown identifier). A nested `def` or named `prompt` body sees an enclosing `const` only when it was declared before that nested declaration; a `${…}` of a later enclosing `const` is `E_VALIDATE`, while the enclosing def's params and module-level `const`s stay visible. Runtime interpolation of a genuinely missing variable is still empty — the change is compile-time rejection. Previously these forms compiled and interpolated empty at runtime. Docs: [Language — `const`](docs/language.md#const--bind-a-value), [Language — Nested declarations](docs/language.md#nested-declarations). Tests: `src/transpile/validate-nested-decl.test.ts`, `e2e/tests/148_nested_decls.sh`.
-
-# 0.14.0
-
-## Summary
-
-- **Language:** `def` and `run` replace `workflow` / `rule` / `ensure`. Names are private unless `export`. `jaiph run` needs `export def main`.
-- **Runtime:** No first-party Docker sandbox. Runs execute on the host. Isolate with your own container or CI runner ([Deploy jaiph](docs/deploy.md)).
-- **Scripts:** Sterile env. A script sees process basics, `JAIPH_*` contract keys, and host keys listed in `use` and granted with `--env`. Host presence alone is not a grant.
-- **Prompts:** Named, reusable `prompt name(params) [use KEY] = "…"`. A def may declare a local `script`, `def`, `prompt`, or `const`.
-- **Channels:** `send payload -> channel`. The old `channel <- payload` form is gone.
-- **CLI:** `--env KEY` names a missing host value and how to pass it. `use` / `--env` cannot name the audit-chain key or journal path.
-- **Editors:** VS Code, Zed, and the docs highlighter cover `use`, `import script`, and named prompts.
-
-## All changes
 
 - **UX — CLI:** a bare `--env KEY` whose value is unset on the host now says Jaiph requires that key and how to pass it (`--env KEY` or `--env KEY=VALUE`), instead of `no value given and KEY is not set on the host`.
 - **Fix — Reserved keys:** `use` and `--env` reject `JAIPH_CHAIN_KEY` and `JAIPH_RUN_SUMMARY_FILE` (`E_ENV_RESERVED`). Those keys stay with the runner; a `use` grant can no longer put them on a script or agent after the prompt scrub.
