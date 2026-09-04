@@ -33,7 +33,7 @@ Install the standalone binary:
 curl -fsSL https://jaiph.org/install | bash
 ```
 
-The installer downloads a per-platform binary, verifies its signature and checksum, and writes it to `~/.local/bin/jaiph`. See [Install and switch versions](setup.md) for other options, such as npm, `JAIPH_BIN_DIR`, and version switching.
+The installer downloads a per-platform binary, verifies its signature and checksum, and writes it to `~/.local/bin/jaiph`. See [Install and switch versions](setup.md) for other options, such as `JAIPH_BIN_DIR` and version switching.
 
 Confirm the install:
 
@@ -61,7 +61,7 @@ export def main(who) {
 
 Here is what each line does:
 
-- `` script greet = `…` `` declares a managed script with a single-line bash body. For a multi-line body, use a fenced block where the fence tag selects the interpreter, such as `` script greet = ```bash … ``` `` for bash or `` ```node `` for Node. See [the Script RHS section of the grammar reference](grammar.md#definitions). A script body uses shell positional arguments such as `$1` and `$2`, not Jaiph `${name}` interpolation. The `${1:-world}` form is bash default expansion, which supplies `world` when `run greet(...)` passes no value.
+- `script greet` declares a managed script. The body in the example is a single-line bash command. It uses shell positional arguments such as `$1` and `$2`, not Jaiph `${name}` interpolation. `${1:-world}` is bash default expansion, which supplies `world` when `run greet(...)` passes no value. For a multi-line body or another interpreter, see [the Script RHS section of the grammar reference](grammar.md#definitions).
 - `export def main(who)` is the run entry. Every `.jh` file invoked with `jaiph run` enters at `export def main`. The `who` parameter is bound by position from the CLI arguments after the file path.
 - `return run greet(who)` calls the script with `who` as `${1}`, captures its stdout as the step value, and returns it as the run's return value.
 
