@@ -6,9 +6,11 @@ diataxis: how-to
 
 # Deploy jaiph in your own image or pod
 
-Jaiph executes programs on the host. It does not ship a runtime image or a Docker sandbox driver. Isolation is an outer concern: wrap `jaiph` in a container, a Kubernetes pod, a CI runner, or another sandbox you already operate.
+Jaiph executes programs on the host. It does not ship a Docker sandbox driver. Isolation is an outer concern: wrap `jaiph` in a container, a Kubernetes pod, a CI runner, or another sandbox you already operate.
 
-A complete, apply-ready Kubernetes example lives at [`docs/deploy/k8s.yaml`](https://github.com/jaiphlang/jaiph/blob/main/docs/deploy/k8s.yaml). It assumes **your** image already has `jaiph` on `PATH`. Build that image yourself (install the CLI, any agent backends your programs use, and whatever toolchain the scripts need). Jaiph does not publish a first-party runner image.
+Each release publishes a lean runner image to GHCR: `ghcr.io/jaiphlang/jaiph-runtime` (`:<version>`, `:v<version>`, and `:latest` on a stable tag; `:nightly` on the rolling nightly). It has `jaiph`, `python3`, `git`, and `curl` on `PATH`, running as uid `10001`. It is not a sandbox and not a toolchain image. Layer agent CLIs (`claude`, `cursor-agent`, `codex`) and any script dependencies yourself. From a clone, `./docs/build-jaiph-dev-image.sh` builds the same image locally (`docs/install-from-local.sh` does not).
+
+A complete, apply-ready Kubernetes example lives at [`docs/deploy/k8s.yaml`](https://github.com/jaiphlang/jaiph/blob/main/docs/deploy/k8s.yaml). The example uses the published image. Pin a version tag in production.
 
 ## Isolation is yours
 
@@ -33,12 +35,12 @@ This isolates Jaiph from **you**. It does not isolate the agent from a script in
 
 ## Run one program in a container you own
 
-Mount your working directory and run the CLI as the container command. Replace `your-registry/your-jaiph-image` with an image you built:
+Mount your working directory and run the CLI as the container command. The published image has `jaiph` on `PATH`; add the agent CLI your program uses if the entry file has a `prompt` step:
 
 ```bash
-# claude backend (Anthropic)
+# claude backend (Anthropic) — image must also have `claude` on PATH
 docker run --rm -e ANTHROPIC_API_KEY -v "$PWD":/work -w /work \
-  your-registry/your-jaiph-image jaiph run flow.jh
+  ghcr.io/jaiphlang/jaiph-runtime:latest jaiph run flow.jh
 ```
 
 The credential env var depends on the backend the entry file selects:
@@ -46,11 +48,11 @@ The credential env var depends on the backend the entry file selects:
 ```bash
 # cursor backend
 docker run --rm -e CURSOR_API_KEY -v "$PWD":/work -w /work \
-  your-registry/your-jaiph-image jaiph run flow.jh
+  ghcr.io/jaiphlang/jaiph-runtime:latest jaiph run flow.jh
 
 # codex backend (OpenAI HTTP API)
 docker run --rm -e OPENAI_API_KEY -v "$PWD":/work -w /work \
-  your-registry/your-jaiph-image jaiph run flow.jh
+  ghcr.io/jaiphlang/jaiph-runtime:latest jaiph run flow.jh
 ```
 
 `-e ANTHROPIC_API_KEY` with no `=value` forwards the value from your shell environment. The `claude` backend also accepts `CLAUDE_CODE_OAUTH_TOKEN` in place of `ANTHROPIC_API_KEY`. A program with no `prompt` step needs no credential at all. Run artifacts land under `/work/.jaiph/runs/` when `/work` is your bind-mounted directory.
@@ -65,12 +67,12 @@ Use a container image when you want a preinstalled toolchain. Fit the one-shot `
 - name: Run jaiph
   run: |
     docker run --rm -e ANTHROPIC_API_KEY -v "$PWD":/work -w /work \
-      your-registry/your-jaiph-image jaiph run flow.jh
+      ghcr.io/jaiphlang/jaiph-runtime:latest jaiph run flow.jh
 ```
 
 ## Kubernetes
 
-Create the `jaiph-credentials` Secret out-of-band first, then apply the example manifest. Edit the Deployment `image:` to your image before apply:
+Create the `jaiph-credentials` Secret out-of-band first, then apply the example manifest. Pin `image:` to a version tag before production apply:
 
 ```bash
 kubectl create secret generic jaiph-credentials \
@@ -83,11 +85,11 @@ The Deployment references the Secret as a required `envFrom`, so a missing Secre
 
 The manifest runs `jaiph serve --host 0.0.0.0` as a long-lived HTTP runner (see [Serve defs over HTTP](serve.md)), with `JAIPH_SERVE_TOKEN` sourced from the Secret and liveness and readiness probes on `GET /healthz`, which stays open and needs no bearer token. The same Service port serves both the REST and OpenAPI API and MCP Streamable HTTP at `POST /mcp`. The example sets:
 
-- **Pod hardening by default.** `runAsNonRoot`, `allowPrivilegeEscalation: false`, all capabilities dropped, the `RuntimeDefault` seccomp profile, `readOnlyRootFilesystem: true`, and `automountServiceAccountToken: false`. Programs never talk to the Kubernetes API, so they get no API credential to leak. Set `runAsUser` / `runAsGroup` to match the user in **your** image.
+- **Pod hardening by default.** `runAsNonRoot`, `allowPrivilegeEscalation: false`, all capabilities dropped, the `RuntimeDefault` seccomp profile, `readOnlyRootFilesystem: true`, and `automountServiceAccountToken: false`. Programs never talk to the Kubernetes API, so they get no API credential to leak. `runAsUser` / `runAsGroup` are `10001`, matching the published image.
 - **Writable mounts only where required.** Program sources stay read-only as a ConfigMap at `/work`. Run artifacts go to a dedicated `emptyDir` at `/jaiph/runs` set by `JAIPH_RUNS_DIR`. Two more `emptyDir` volumes cover `/tmp` and a writable `$HOME`.
 - **Single replica by design.** The manifest pins `replicas: 1` with a `Recreate` strategy. `jaiph serve` holds its run registry, concurrency cap, and idempotency index in process with no shared store, so running more than one replica is not supported. Scale vertically with more resources and `JAIPH_SERVE_MAX_CONCURRENT`, not by adding replicas. See [Serve, deployment topology](serve.md#deployment-topology).
 - **TLS at the ingress.** `jaiph serve` speaks plain HTTP. The Service stays `ClusterIP`, and you terminate TLS at an Ingress or gateway in front of it. Do not expose the token-guarded API to the internet without TLS.
-- **Authentication.** Binding `0.0.0.0` with no authentication is a startup error by design, so the Secret is mandatory. `JAIPH_SERVE_TOKEN` is the single-operator shared secret shown here. For multiple company users, configure OIDC or JWT instead. See [Authenticate and authorize](serve.md#7-authenticate-and-authorize).
+- **Authentication.** The example does not pass `--allow-anonymous`, so the Secret is mandatory. `JAIPH_SERVE_TOKEN` is the single-operator shared secret shown here. For multiple company users, configure OIDC or JWT instead. See [Authenticate and authorize](serve.md#7-authenticate-and-authorize).
 
 Isolation is the pod boundary. There is no jaiph-managed sandbox inside.
 

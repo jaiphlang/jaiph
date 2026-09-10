@@ -522,7 +522,7 @@ test("jaiph serve: an HTTP run exports exactly one trace via the shared call lay
       OTEL_EXPORTER_OTLP_ENDPOINT: `http://127.0.0.1:${collector.port}`,
     });
     try {
-      const res = await fetch(`${serve.baseUrl}/v1/defs/greet/runs?wait=true`, {
+      const res = await fetch(`${serve.baseUrl}/greet?wait=true`, {
         method: "POST",
         headers: { "content-type": "application/json", authorization: `Bearer ${SERVE_TOKEN}` },
         body: JSON.stringify({ name: "x" }),
@@ -562,7 +562,7 @@ test("jaiph serve: an unreachable collector cannot delay a terminal ?wait=true r
     });
     try {
       const started = Date.now();
-      const res = await fetch(`${serve.baseUrl}/v1/defs/greet/runs?wait=true`, {
+      const res = await fetch(`${serve.baseUrl}/greet?wait=true`, {
         method: "POST",
         headers: { "content-type": "application/json", authorization: `Bearer ${SERVE_TOKEN}` },
         body: JSON.stringify({ name: "x" }),

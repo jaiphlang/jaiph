@@ -1,0 +1,7 @@
+#!/usr/bin/env jaiph
+
+import script "./queue_test.py" as queue_selftest
+
+export def main() {
+  return run queue_selftest()
+}

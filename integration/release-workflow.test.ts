@@ -22,6 +22,7 @@ import { tmpdir } from "node:os";
 
 const REPO_ROOT = process.cwd();
 const RELEASE_YML = readFileSync(join(REPO_ROOT, ".github/workflows/release.yml"), "utf8");
+const RUNNER_DOCKERFILE = readFileSync(join(REPO_ROOT, "runtime/Dockerfile"), "utf8");
 const CONTRIBUTING = readFileSync(join(REPO_ROOT, "docs/contributing.md"), "utf8");
 const INSTALLER = readFileSync(join(REPO_ROOT, "docs/install"), "utf8");
 const INSTALLER_PS = readFileSync(join(REPO_ROOT, "docs/install.ps1"), "utf8");
@@ -142,7 +143,7 @@ test("version sanity gate only requires a version-shaped banner for nightly", ()
 });
 
 test("a windows-latest job runs the .exe --version through the shared gate and blocks publish", () => {
-  const job = sliceBetween(RELEASE_YML, "sanity-windows:", "\n  release:");
+  const job = sliceBetween(RELEASE_YML, "sanity-windows:", "\n  publish-image:");
   assert.match(job, /runs-on:\s*windows-latest/);
   assert.match(job, /jaiph-windows-x64\.exe --version/);
   assert.match(job, /release-version-check\.sh/, "windows gate delegates to the shared script");
@@ -285,4 +286,31 @@ test("release fails closed instead of publishing unsigned when MINISIGN_SECRET_K
   assert.match(signStep, /if \[ -z "\$\{MINISIGN_SECRET_KEY\}" \]/, "guards on an unset secret");
   assert.match(signStep, /\n\s*exit 1\n/, "aborts the release job when the secret is unset");
   assert.doesNotMatch(signStep, /skipping detached signature/i, "no silent skip that would publish unsigned");
+});
+
+// ── Acceptance 6: GHCR runner image (not a GitHub Release asset) ──────────────
+
+test("release publishes a GHCR runner image without adding it to SHA256SUMS", () => {
+  const job = sliceBetween(RELEASE_YML, "  publish-image:", "\n  release:");
+  assert.match(job, /packages:\s*write/, "image job can push to GHCR");
+  assert.match(job, /ghcr\.io/, "pushes to GHCR");
+  assert.match(job, /jaiph-runtime/, "image name is jaiph-runtime");
+  assert.match(job, /linux\/amd64,linux\/arm64/, "multi-arch linux");
+  assert.match(job, /needs:\s*\[build, sanity-windows\]/, "image job waits for the windows gate");
+  assert.doesNotMatch(job, /gh release/, "image is not a GitHub Release asset");
+  const shaLine = RELEASE_YML.split("\n").find((l) => l.includes("sha256sum ") && l.includes("SHA256SUMS"));
+  assert.ok(shaLine, "found the sha256sum generation line");
+  assert.doesNotMatch(shaLine!, /docker|jaiph-runtime|\.tar/, "SHA256SUMS stays binaries-only");
+});
+
+test("runner Dockerfile installs the matching linux binary as uid 10001", () => {
+  assert.match(RUNNER_DOCKERFILE, /FROM ubuntu:24\.04/);
+  assert.match(RUNNER_DOCKERFILE, /COPY jaiph-linux-x64/);
+  assert.match(RUNNER_DOCKERFILE, /COPY jaiph-linux-arm64/);
+  assert.match(RUNNER_DOCKERFILE, /TARGETARCH/);
+  assert.match(RUNNER_DOCKERFILE, /useradd[^\n]*10001/);
+  assert.match(RUNNER_DOCKERFILE, /USER jaiph/);
+  assert.match(RUNNER_DOCKERFILE, /python3/);
+  assert.match(RUNNER_DOCKERFILE, /\bgit\b/);
+  assert.doesNotMatch(RUNNER_DOCKERFILE, /openjdk|golang|rustup|npm install/i);
 });

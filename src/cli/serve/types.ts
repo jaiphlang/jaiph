@@ -101,7 +101,7 @@ export interface ServeHandlerOptions {
   ) => Promise<DefCallResult>;
   /**
    * Static single-operator bearer token. When set (and no `authenticator` is
-   * injected) every `/v1/*` and `/mcp` request must present it. Single-operator,
+   * injected) every REST and `/mcp` request must present it. Single-operator,
    * not multi-tenant — for per-user identity/authorization pass an `authenticator`.
    */
   token?: string;

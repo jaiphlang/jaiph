@@ -4,6 +4,13 @@
 
 ## All changes
 
+- **Factory — product owner:** `.jaiph/product_owner.jh` exposes `propose_task`, `pick_task`, `report_completed_task`, `task_details`, and `update_task` for `jaiph serve` / MCP. `pick_task` prefers the first `#dev-ready` task that is not `#in-progress` and may claim a later one. A reject or needs-work is a successful return (`accepted:` / `rejected:` / `needs-work:`), not an HTTP error. Canonical queue state is `${JAIPH_QUEUE_STATE}` or `.jaiph/queue-state.md`. `QUEUE.md` and `DONE.md` are generated views. `./start-product-owner.sh` runs serve in Docker with volume `jaiph-po-state` at `.jaiph/product-owner/` (queue + runs); host `.jaiph/runs` is tmpfs-masked and forwards `ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN` (no `--env`; those are backend credentials, not `use` grants). Default is `--allow-anonymous`; set `JAIPH_SERVE_TOKEN` to require a bearer. Tests: `.jaiph/product_owner.test.jh`, `.jaiph/queue_ops.test.jh`.
+- **CLI — `jaiph serve`:** `--allow-anonymous` also permits a non-loopback bind. Without the flag, a bind with no token and no OIDC is still a startup error. Docs: [Serve defs over HTTP](docs/serve.md), [CLI](docs/cli.md). Tests: `integration/serve-server.test.ts`.
+- **Breaking — CLI — `jaiph serve`:** HTTP paths drop `/v1`. Invoke is `POST /{name}`. List and inspect are `GET /defs`, `GET /runs`, `GET /runs/{id}` (events, artifacts, cancel stay under `/runs/{id}/…`). `Location` is `/runs/{id}`. `POST /v1/defs/{name}/runs` and every `/v1/…` path are gone. OpenAPI and `/docs` match. Docs: [Serve defs over HTTP](docs/serve.md), [CLI](docs/cli.md). Tests: `src/cli/serve/handler.test.ts`, `src/cli/serve/openapi.test.ts`.
+- **CLI — `jaiph serve` / `jaiph mcp`:** startup logs `loading module graph…` / `module graph ready in Nms` and `reconstructed N run(s) … in Nms`. Operator log writes with `writeSync` so Docker (no TTY) does not buffer the lines. Docs: [CLI](docs/cli.md).
+- **Docs:** `./docs/build-jaiph-dev-image.sh` compiles the linux standalones and tags a local `ghcr.io/jaiphlang/jaiph-runtime`. `docs/install-from-local.sh` still installs the host binary only.
+- **Release:** each `v*` tag and `nightly` push publishes `ghcr.io/<owner>/jaiph-runtime` (`:<version>` / `:latest` on stable, `:nightly` on nightly) from `runtime/Dockerfile`. The image has `jaiph`, `python3`, `git`, and `curl` as uid `10001`. It is not a GitHub Release asset. Docs: [Deploy jaiph](docs/deploy.md). Tests: `integration/release-workflow.test.ts`.
+
 # 0.14.0
 
 ## Summary

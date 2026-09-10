@@ -111,7 +111,7 @@ export class RuntimeEventEmitter {
     }
     // Redact credential values from the step `params` pairs so a secret passed as
     // a positional/named argument to a `run`/tool/script step does not land raw in
-    // the journal (and thus in `GET /v1/runs/{id}/events`). Prompt params are
+    // the journal (and thus in `GET /runs/{id}/events`). Prompt params are
     // already redacted at their source; re-running on `[REDACTED]` is a no-op, so
     // this keeps both step kinds on the same durable boundary as out/err content.
     if (Array.isArray(durableFull.params)) {

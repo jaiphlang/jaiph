@@ -93,7 +93,7 @@ test("destroying a request mid-upload occupies no run slot and the server keeps 
     await new Promise<void>((r) => socket.on("connect", () => r()));
     // Declare a bigger body than we send, then vanish mid-upload.
     socket.write(
-      "POST /v1/defs/ping/runs HTTP/1.1\r\n" +
+      "POST /ping HTTP/1.1\r\n" +
         "host: localhost\r\n" +
         "content-type: application/json\r\n" +
         "content-length: 64\r\n" +
@@ -128,14 +128,14 @@ async function serveArtifact(payloadPath: string, payload: Buffer | null): Promi
   const handler = makeHandler(async () => ({ text: "ok", isError: false, exitStatus: 0, runDir }));
   const server = createHttpServer(handler, () => {});
   const port = await listen(server, "127.0.0.1", 0);
-  const res = await fetch(`http://127.0.0.1:${port}/v1/defs/ping/runs?wait=true`, { method: "POST" });
+  const res = await fetch(`http://127.0.0.1:${port}/ping?wait=true`, { method: "POST" });
   const runId = ((await res.json()) as { run_id: string }).run_id;
   return { server, port, runId, runDir };
 }
 
 // Finding H-3: the events endpoint must not stream a run whose keyed journal
 // chain fails verification.
-test("GET /v1/runs/{id}/events hard-fails (409) on a tampered journal, streams a clean one", async () => {
+test("GET /runs/{id}/events hard-fails (409) on a tampered journal, streams a clean one", async () => {
   const runDir = mkdtempSync(join(tmpdir(), "jaiph-srv-events-"));
   try {
     // A journal with no valid keyed chain, plus a persisted key → verifiable.
@@ -145,10 +145,10 @@ test("GET /v1/runs/{id}/events hard-fails (409) on a tampered journal, streams a
     const server = createHttpServer(handler, () => {});
     const port = await listen(server, "127.0.0.1", 0);
     try {
-      const create = await fetch(`http://127.0.0.1:${port}/v1/defs/ping/runs?wait=true`, { method: "POST" });
+      const create = await fetch(`http://127.0.0.1:${port}/ping?wait=true`, { method: "POST" });
       const runId = ((await create.json()) as { run_id: string }).run_id;
 
-      const tampered = await fetch(`http://127.0.0.1:${port}/v1/runs/${runId}/events`);
+      const tampered = await fetch(`http://127.0.0.1:${port}/runs/${runId}/events`);
       assert.equal(tampered.status, 409, "a tampered journal is rejected, not served");
       assert.equal(((await tampered.json()) as { error: { code: string } }).error.code, "E_TAMPERED");
 
@@ -159,7 +159,7 @@ test("GET /v1/runs/{id}/events hard-fails (409) on a tampered journal, streams a
       const l0 = JSON.stringify({ type: "RUN_START", prev_hash: chainHmac("k".repeat(64), CHAIN_GENESIS) });
       const l1 = JSON.stringify({ type: "RUN_END", prev_hash: chainHmac("k".repeat(64), l0) });
       writeFileSync(join(runDir, "run_summary.jsonl"), `${l0}\n${l1}\n`);
-      const clean = await fetch(`http://127.0.0.1:${port}/v1/runs/${runId}/events`);
+      const clean = await fetch(`http://127.0.0.1:${port}/runs/${runId}/events`);
       assert.equal(clean.status, 200, "a verifying journal streams normally");
       assert.match(clean.headers.get("content-type") ?? "", /application\/x-ndjson/);
     } finally {
@@ -174,7 +174,7 @@ test("GET /v1/runs/{id}/events hard-fails (409) on a tampered journal, streams a
 // original four-suffix rule missed — is served as [REDACTED] on the /events
 // path. The journal is written through the real RuntimeEventEmitter so this
 // exercises the production redaction boundary end-to-end, not a hand-built line.
-test("GET /v1/runs/{id}/events serves a newly-detected credential as [REDACTED]", async () => {
+test("GET /runs/{id}/events serves a newly-detected credential as [REDACTED]", async () => {
   const runDir = mkdtempSync(join(tmpdir(), "jaiph-srv-redact-"));
   const secret = "sk_live_super_secret_value_123";
   const prevSummaryFile = process.env.JAIPH_RUN_SUMMARY_FILE;
@@ -195,9 +195,9 @@ test("GET /v1/runs/{id}/events serves a newly-detected credential as [REDACTED]"
     const server = createHttpServer(handler, () => {});
     const port = await listen(server, "127.0.0.1", 0);
     try {
-      const create = await fetch(`http://127.0.0.1:${port}/v1/defs/ping/runs?wait=true`, { method: "POST" });
+      const create = await fetch(`http://127.0.0.1:${port}/ping?wait=true`, { method: "POST" });
       const runId = ((await create.json()) as { run_id: string }).run_id;
-      const res = await fetch(`http://127.0.0.1:${port}/v1/runs/${runId}/events`);
+      const res = await fetch(`http://127.0.0.1:${port}/runs/${runId}/events`);
       assert.equal(res.status, 200);
       const body = await res.text();
       assert.ok(!body.includes(secret), "the secret must not appear in the served journal");
@@ -218,7 +218,7 @@ test("an artifact download round-trips byte-identically through a real socket wi
   for (let i = 0; i < payload.length; i += 1) payload[i] = i % 251;
   const { server, port, runId, runDir } = await serveArtifact("blob.bin", payload);
   try {
-    const dl = await fetch(`http://127.0.0.1:${port}/v1/runs/${runId}/artifacts/blob.bin`);
+    const dl = await fetch(`http://127.0.0.1:${port}/runs/${runId}/artifacts/blob.bin`);
     assert.equal(dl.status, 200);
     assert.equal(dl.headers.get("content-length"), String(payload.length));
     assert.deepEqual(Buffer.from(await dl.arrayBuffer()), payload, "streamed bytes match the artifact");
@@ -254,7 +254,7 @@ test("disconnecting the client mid-download destroys the artifact file stream", 
     // Never read the response: kernel + stream buffers fill and backpressure
     // pauses the file stream mid-transfer.
     socket.pause();
-    socket.write(`GET /v1/runs/${runId}/artifacts/big.bin HTTP/1.1\r\nhost: localhost\r\n\r\n`);
+    socket.write(`GET /runs/${runId}/artifacts/big.bin HTTP/1.1\r\nhost: localhost\r\n\r\n`);
     await waitFor(() => created.length === 1, "the artifact file stream to open");
     assert.equal(created[0].destroyed, false, "the stalled stream stays open while the client is connected");
     socket.destroy();

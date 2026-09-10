@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, rmSync, statSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, statSync, writeSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, extname, join, resolve } from "node:path";
 import { errText } from "../../errors";
@@ -58,7 +58,8 @@ export function parseServerArgs(
   usage: string,
 ): { code: number } | { args: ServerArgs } {
   const log = (line: string): void => {
-    process.stderr.write(`${line}\n`);
+    // writeSync so Docker (no TTY) does not block-buffer startup lines.
+    writeSync(2, `${line}\n`);
   };
   if (hasHelpFlag(rest)) {
     process.stdout.write(usage);
@@ -117,6 +118,8 @@ export function startGeneration(
 
   let generations: GenerationTracker;
   try {
+    log(`${label}: loading module graph...`);
+    const graphStarted = Date.now();
     const loaded = loadGeneration(inputAbs, workspaceRoot, tempRoot, 0, extraEnv, log, label);
     if (!loaded.state) {
       for (const f of loaded.failures) log(f);
@@ -124,6 +127,7 @@ export function startGeneration(
       return { code: 1 };
     }
     generations = createGenerationTracker(loaded.state);
+    log(`${label}: module graph ready in ${Date.now() - graphStarted}ms`);
   } catch (err) {
     log(errText(err));
     cleanup();

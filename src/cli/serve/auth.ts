@@ -8,8 +8,7 @@ import { createRemoteJWKSet, jwtVerify, errors as joseErrors, type JWTPayload, t
  * - **none** — no `JAIPH_SERVE_TOKEN` and no OIDC config. Every caller is the
  *   `anonymous` principal with all capabilities. This mode is an explicit
  *   single-user opt-in: `jaiph serve` refuses to start in it unless
- *   `--allow-anonymous` is passed, and only ever on loopback (binding a
- *   non-loopback host in this mode is a startup error regardless of the flag).
+ *   `--allow-anonymous` is passed. The flag also permits a non-loopback bind.
  * - **static** — `JAIPH_SERVE_TOKEN` is a single shared secret. It is a
  *   **single-operator** gate: the one `operator` principal holds every
  *   capability and can inspect/cancel every run. It is NOT multi-tenant
