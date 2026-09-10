@@ -207,7 +207,7 @@ export function verifyRunSummaryChain(
  *    verified" and let a tampered journal through.
  *  - `{ verified: true, ok }` with the chain result otherwise.
  *
- * Every read/export boundary (run listing, `/v1/runs/{id}/events`, OTLP/Sentry
+ * Every read/export boundary (run listing, `/runs/{id}/events`, OTLP/Sentry
  * export) hard-fails when `verified === true && ok === false`.
  */
 export function verifyRunJournal(runDir: string, env: NodeJS.ProcessEnv = process.env): { verified: boolean; ok: boolean; error?: string } {

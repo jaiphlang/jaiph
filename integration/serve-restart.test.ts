@@ -77,7 +77,7 @@ function stop(child: ChildProcess, signal: NodeJS.Signals = "SIGTERM"): Promise<
 }
 
 async function getRun(baseUrl: string, id: string): Promise<any> {
-  const res = await fetch(`${baseUrl}/v1/runs/${id}`);
+  const res = await fetch(`${baseUrl}/runs/${id}`);
   return { status: res.status, body: res.status === 200 ? await res.json() : null };
 }
 
@@ -93,7 +93,7 @@ test("jaiph serve: recovery + idempotency survive a real process restart", async
   try {
     // 1) A completed run with an idempotency key — the record we expect to
     //    reconstruct after restart.
-    const created = await fetch(`${srv1.baseUrl}/v1/defs/greet/runs?wait=true`, {
+    const created = await fetch(`${srv1.baseUrl}/greet?wait=true`, {
       method: "POST",
       headers: { "content-type": "application/json", "idempotency-key": "idem-1" },
       body: JSON.stringify({ name: "world" }),
@@ -110,7 +110,7 @@ test("jaiph serve: recovery + idempotency survive a real process restart", async
     await delay(1200);
 
     // 2) A long run started async and left in flight, so a hard kill interrupts it.
-    const longRes = await fetch(`${srv1.baseUrl}/v1/defs/longflow/runs`, {
+    const longRes = await fetch(`${srv1.baseUrl}/longflow`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: "{}",
@@ -125,7 +125,7 @@ test("jaiph serve: recovery + idempotency survive a real process restart", async
         // journal is what we want. Break once the journal is on disk.
       }
       // Confirm the journal exists via the events endpoint resolving a dir.
-      const ev = await fetch(`${srv1.baseUrl}/v1/runs/${longId}/events`);
+      const ev = await fetch(`${srv1.baseUrl}/runs/${longId}/events`);
       if (ev.status === 200 && (await ev.text()).includes("RUN_START")) break;
       await delay(100);
     }
@@ -145,11 +145,11 @@ test("jaiph serve: recovery + idempotency survive a real process restart", async
     assert.equal(reloaded.body.result_text, "hi world");
 
     // events + artifacts work for the reloaded run.
-    const ev = await fetch(`${srv2.baseUrl}/v1/runs/${terminalId}/events`);
+    const ev = await fetch(`${srv2.baseUrl}/runs/${terminalId}/events`);
     assert.equal(ev.status, 200);
     const journal = readFileSync(join(reloaded.body.run_dir, "run_summary.jsonl"));
     assert.deepEqual(Buffer.from(await ev.arrayBuffer()), journal, "NDJSON events byte-match the journal after restart");
-    const arts = await fetch(`${srv2.baseUrl}/v1/runs/${terminalId}/artifacts`);
+    const arts = await fetch(`${srv2.baseUrl}/runs/${terminalId}/artifacts`);
     assert.equal(arts.status, 200);
 
     // (b) The interrupted run is reconciled out of `running`.
@@ -159,26 +159,26 @@ test("jaiph serve: recovery + idempotency survive a real process restart", async
 
     // (c) Idempotency survives: same key + same args returns the ORIGINAL run,
     //     spawning nothing new.
-    const before = (await (await fetch(`${srv2.baseUrl}/v1/runs`)).json()).total;
-    const replay = await fetch(`${srv2.baseUrl}/v1/defs/greet/runs?wait=true`, {
+    const before = (await (await fetch(`${srv2.baseUrl}/runs`)).json()).total;
+    const replay = await fetch(`${srv2.baseUrl}/greet?wait=true`, {
       method: "POST",
       headers: { "content-type": "application/json", "idempotency-key": "idem-1" },
       body: JSON.stringify({ name: "world" }),
     });
     assert.equal(replay.status, 200);
     assert.equal((await replay.json()).run_id, terminalId, "same key + args returns the reconstructed original run");
-    const after = (await (await fetch(`${srv2.baseUrl}/v1/runs`)).json()).total;
+    const after = (await (await fetch(`${srv2.baseUrl}/runs`)).json()).total;
     assert.equal(after, before, "no new run was spawned by the idempotent replay");
 
     // (d) Same key + changed args is a conflict that never spawns.
-    const conflict = await fetch(`${srv2.baseUrl}/v1/defs/greet/runs?wait=true`, {
+    const conflict = await fetch(`${srv2.baseUrl}/greet?wait=true`, {
       method: "POST",
       headers: { "content-type": "application/json", "idempotency-key": "idem-1" },
       body: JSON.stringify({ name: "changed" }),
     });
     assert.equal(conflict.status, 409);
     assert.equal((await conflict.json()).error.code, "E_IDEMPOTENCY_CONFLICT");
-    const afterConflict = (await (await fetch(`${srv2.baseUrl}/v1/runs`)).json()).total;
+    const afterConflict = (await (await fetch(`${srv2.baseUrl}/runs`)).json()).total;
     assert.equal(afterConflict, before, "the conflicting request spawned nothing");
   } finally {
     await stop(srv2.child, "SIGTERM");

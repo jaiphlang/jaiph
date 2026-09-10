@@ -89,7 +89,7 @@ openapi_fields="$(printf '%s' "${openapi}" | python3 -c '
 import json, sys
 d = json.load(sys.stdin)
 print(d["openapi"])
-print("yes" if "/v1/defs/greet/runs" in d["paths"] else "no")
+print("yes" if "/greet" in d["paths"] else "no")
 ')"
 {
   read -r p_openapi_version
@@ -125,7 +125,7 @@ docs_css_code="$(curl -s -o "${TEST_DIR}/swagger-ui.css" -w '%{http_code}' "${ba
 e2e::assert_equals "${docs_css_code}" "200" "the embedded swagger-ui stylesheet is served same-origin"
 
 # --- POST greet ?wait=true → succeeded, return value round-trips ---
-greet="$(curl -s -X POST "${base}/v1/defs/greet/runs?wait=true" \
+greet="$(curl -s -X POST "${base}/greet?wait=true" \
   -H 'content-type: application/json' -d '{"name":"world"}')"
 greet_fields="$(printf '%s' "${greet}" | python3 -c '
 import json, sys
@@ -146,62 +146,62 @@ e2e::assert_equals "${p_greet_has_rundir}" "yes" "greet run object carries a run
 # --- POST boom ?wait=true → HTTP 200 with status failed (not an HTTP error) ---
 boom_body="${TEST_DIR}/boom_body.json"
 boom_code="$(curl -s -o "${boom_body}" -w '%{http_code}' -X POST \
-  "${base}/v1/defs/boom/runs?wait=true" -H 'content-type: application/json' -d '{}')"
+  "${base}/boom?wait=true" -H 'content-type: application/json' -d '{}')"
 e2e::assert_equals "${boom_code}" "200" "a failing workflow is HTTP 200 (workflow failure is not an HTTP error)"
 boom_status="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["status"])' "${boom_body}")"
 e2e::assert_equals "${boom_status}" "failed" "boom run status is failed"
 
-# --- GET /v1/defs lists all exposed workflows ---
-workflows="$(curl -s "${base}/v1/defs" | python3 -c '
+# --- GET /defs lists all exposed workflows ---
+workflows="$(curl -s "${base}/defs" | python3 -c '
 import json, sys
 names = sorted(w["name"] for w in json.load(sys.stdin)["defs"])
 print(",".join(names))
 ')"
-e2e::assert_equals "${workflows}" "boom,greet,make_artifact" "GET /v1/defs lists all workflows"
+e2e::assert_equals "${workflows}" "boom,greet,make_artifact" "GET /defs lists all workflows"
 
-# --- GET /v1/runs is paginated (bounded listing) ---
+# --- GET /runs is paginated (bounded listing) ---
 # Two runs exist by now (greet, boom); ?limit=1 must return exactly one record,
 # echo the requested limit, and report the full total so the response can never
 # be unbounded. Field-level checks: run objects carry volatile run_dir/timestamps.
-runs_page="$(curl -s "${base}/v1/runs?limit=1" | python3 -c '
+runs_page="$(curl -s "${base}/runs?limit=1" | python3 -c '
 import json, sys
 d = json.load(sys.stdin)
 print("%d,%d,%d" % (len(d["runs"]), d["limit"], d["total"]))
 ')"
-e2e::assert_equals "${runs_page}" "1,1,2" "GET /v1/runs?limit=1 returns a bounded page with a total count"
+e2e::assert_equals "${runs_page}" "1,1,2" "GET /runs?limit=1 returns a bounded page with a total count"
 
-# --- GET /v1/runs/{id}/events (NDJSON) mirrors the durable journal ---
+# --- GET /runs/{id}/events (NDJSON) mirrors the durable journal ---
 # The greet run above returned a run object; re-run it capturing the id, then
 # byte-compare the events endpoint against the on-disk run_summary.jsonl.
-run_json="$(curl -s -X POST "${base}/v1/defs/greet/runs?wait=true" \
+run_json="$(curl -s -X POST "${base}/greet?wait=true" \
   -H 'content-type: application/json' -d '{"name":"events"}')"
 run_id="$(printf '%s' "${run_json}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["run_id"])')"
 run_dir="$(printf '%s' "${run_json}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["run_dir"])')"
 
 events_body="${TEST_DIR}/events.ndjson"
-curl -s "${base}/v1/runs/${run_id}/events" -o "${events_body}"
+curl -s "${base}/runs/${run_id}/events" -o "${events_body}"
 # Full-content equality: the NDJSON stream is the journal, verbatim.
 e2e::assert_equals "$(cat "${events_body}")" "$(cat "${run_dir}/run_summary.jsonl")" \
   "GET events (NDJSON) byte-matches the run's run_summary.jsonl"
 
 # --- artifacts: list + byte-identical download, traversal is rejected ---
-art_json="$(curl -s -X POST "${base}/v1/defs/make_artifact/runs?wait=true" \
+art_json="$(curl -s -X POST "${base}/make_artifact?wait=true" \
   -H 'content-type: application/json' -d '{}')"
 art_id="$(printf '%s' "${art_json}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["run_id"])')"
 
-art_list="$(curl -s "${base}/v1/runs/${art_id}/artifacts" | python3 -c '
+art_list="$(curl -s "${base}/runs/${art_id}/artifacts" | python3 -c '
 import json, sys
 print(",".join(a["path"] for a in json.load(sys.stdin)["artifacts"]))
 ')"
 e2e::assert_equals "${art_list}" "result.txt" "GET artifacts lists the published file"
 
 art_file="${TEST_DIR}/downloaded.txt"
-curl -s "${base}/v1/runs/${art_id}/artifacts/result.txt" -o "${art_file}"
+curl -s "${base}/runs/${art_id}/artifacts/result.txt" -o "${art_file}"
 e2e::assert_equals "$(cat "${art_file}")" "artifact-payload" "artifact downloads byte-identically"
 
 # A URL-encoded `..` traversal escaping artifacts/ is a 404 (no bytes served).
 trav_code="$(curl -s -o /dev/null -w '%{http_code}' \
-  "${base}/v1/runs/${art_id}/artifacts/%2e%2e%2frun_summary.jsonl")"
+  "${base}/runs/${art_id}/artifacts/%2e%2e%2frun_summary.jsonl")"
 e2e::assert_equals "${trav_code}" "404" "artifact path traversal is rejected with 404"
 
 # --- MCP Streamable HTTP (POST /mcp) on the SAME process ---
@@ -239,7 +239,7 @@ e2e::assert_equals "${p_mcp_iserror}" "false" "POST /mcp tools/call reports isEr
 
 # The MCP call is a first-class run: it is the newest entry in the shared REST
 # registry, succeeded, and carries the same result_text the MCP client saw.
-newest="$(curl -s "${base}/v1/runs?limit=1" | python3 -c '
+newest="$(curl -s "${base}/runs?limit=1" | python3 -c '
 import json, sys
 r = json.load(sys.stdin)["runs"][0]
 print(r["def"])
@@ -251,6 +251,6 @@ print(r["result_text"])
   read -r p_newest_status
   read -r p_newest_text
 } <<< "${newest}"
-e2e::assert_equals "${p_newest_wf}" "greet" "the MCP call appears in the shared /v1/runs registry"
+e2e::assert_equals "${p_newest_wf}" "greet" "the MCP call appears in the shared /runs registry"
 e2e::assert_equals "${p_newest_status}" "succeeded" "the MCP-initiated run status is succeeded"
 e2e::assert_equals "${p_newest_text}" "hello mcp" "the MCP-initiated run's result_text matches the tool result"

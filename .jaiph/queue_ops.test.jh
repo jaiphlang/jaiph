@@ -1,0 +1,8 @@
+#!/usr/bin/env jaiph
+
+import "./libs/jaiphlang/queue_selftest.jh" as qs
+
+test "queue state ignores QUEUE.md after bootstrap and archives to DONE" {
+  const out = run qs.main()
+  expect_contain out "queue_test.py: ok"
+}

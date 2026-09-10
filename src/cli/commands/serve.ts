@@ -49,34 +49,34 @@ const SERVE_USAGE =
   "when it is the only export, named after the file's basename. Descriptions come\n" +
   "from the `#` comment lines above each def. Sources are re-validated on change.\n\n" +
   "Endpoints: GET /docs (self-contained Swagger UI — assets embedded, no browser internet\n" +
-  "access needed), GET /openapi.json, GET /healthz, GET /v1/defs,\n" +
-  "POST /v1/defs/{name}/runs (async 202 or ?wait=true for 200), GET /v1/runs,\n" +
-  "GET /v1/runs/{id}, GET /v1/runs/{id}/events (NDJSON, or SSE with Accept: text/event-stream),\n" +
-  "GET /v1/runs/{id}/artifacts, GET /v1/runs/{id}/artifacts/{path}, POST /v1/runs/{id}/cancel.\n" +
+  "access needed), GET /openapi.json, GET /healthz, GET /defs,\n" +
+  "POST /{name} (async 202 or ?wait=true for 200), GET /runs,\n" +
+  "GET /runs/{id}, GET /runs/{id}/events (NDJSON, or SSE with Accept: text/event-stream),\n" +
+  "GET /runs/{id}/artifacts, GET /runs/{id}/artifacts/{path}, POST /runs/{id}/cancel.\n" +
   "MCP clients: POST /mcp speaks MCP Streamable HTTP over the same workflows, run\n" +
   "registry, concurrency cap, and auth — the network sibling of `jaiph mcp` stdio.\n\n" +
-  "Auth: JAIPH_SERVE_TOKEN sets a static single-operator bearer required on every /v1/* and\n" +
+  "Auth: JAIPH_SERVE_TOKEN sets a static single-operator bearer required on every REST and\n" +
   "/mcp request — single-operator, not multi-tenant. For per-user identity and authorization,\n" +
   "configure OIDC/JWT with JAIPH_SERVE_OIDC_ISSUER + JAIPH_SERVE_OIDC_AUDIENCE (JWKS discovered\n" +
   "from the issuer, or set JAIPH_SERVE_OIDC_JWKS_URI). OIDC tokens are authorized by scope —\n" +
   "jaiph:invoke (run), jaiph:inspect (read runs/artifacts), jaiph:cancel — and a principal may\n" +
   "inspect/cancel only its own runs. /healthz is always open and credential-free; /docs and\n" +
-  "/openapi.json are open unless JAIPH_SERVE_EXPOSE_DOCS=false. Binding a non-loopback host with\n" +
-  "no auth is a startup error. With no JAIPH_SERVE_TOKEN and no OIDC, even a loopback bind is a\n" +
-  "startup error unless --allow-anonymous is passed: anonymous mode authorizes every local\n" +
-  "principal with all capabilities over all runs, so it is for a single-user workstation only —\n" +
-  "shared hosts must set JAIPH_SERVE_TOKEN or configure OIDC. Cap concurrent runs with\n" +
+  "/openapi.json are open unless JAIPH_SERVE_EXPOSE_DOCS=false. With no JAIPH_SERVE_TOKEN and no\n" +
+  "OIDC, startup is refused unless --allow-anonymous is passed: anonymous mode authorizes every\n" +
+  "caller with all capabilities over all runs. The flag also permits a non-loopback bind (needed\n" +
+  "inside Docker). Shared or network-exposed hosts must set JAIPH_SERVE_TOKEN or configure OIDC.\n" +
+  "Cap concurrent runs with\n" +
   "JAIPH_SERVE_MAX_CONCURRENT (default 4). Bound memory with JAIPH_SERVE_MAX_OUTPUT_BYTES\n" +
   "(per-run stdout/stderr/log/result cap, default 1 MiB), JAIPH_SERVE_RETAIN_RUNS\n" +
   "(completed runs kept in memory, default 500), and JAIPH_SERVE_RETAIN_AGE_SEC\n" +
-  "(max completed-run age, default 86400; 0 disables). GET /v1/runs is paginated\n" +
+  "(max completed-run age, default 86400; 0 disables). GET /runs is paginated\n" +
   "(?limit default 100, max 1000; ?offset). Artifact downloads stream with\n" +
   "backpressure; JAIPH_SERVE_MAX_ARTIFACT_BYTES (default 0 = no cap) refuses\n" +
   "larger files with 413.\n\n" +
   "  --host <addr>      listen address (default: 127.0.0.1)\n" +
   "  --port <n>         listen port (default: 5247)\n" +
-  "  --allow-anonymous  run open with no auth on loopback (single-user workstation only; every\n" +
-  "                     local user gets all capabilities over all runs). Ignored when\n" +
+  "  --allow-anonymous  run open with no auth (every caller gets all capabilities over all\n" +
+  "                     runs). Permits loopback and non-loopback binds. Ignored when\n" +
   "                     JAIPH_SERVE_TOKEN or OIDC is set.\n" +
   "  --workspace <dir>  workspace root for import resolution (default: auto-detect)\n" +
   "  --env KEY=VALUE    define KEY in every run's env (repeatable); --env KEY forwards the host value.\n" +
@@ -122,42 +122,46 @@ export async function runServe(rest: string[]): Promise<number> {
       : { token };
   const authenticator = createAuthenticator(authConfig);
 
-  // Fail closed on exposure when no auth is configured. A non-loopback bind is
-  // always refused. Even loopback is refused unless the operator explicitly
-  // opts in with --allow-anonymous: in mode "none" every /v1/* and /mcp request
-  // is authorized as an anonymous principal holding all capabilities over all
-  // runs, and loopback is a boundary against the network, not against other
-  // local users — on a shared host any local user or process could invoke
-  // workflows and read every run's artifacts (finding M-2). All decided before
-  // any socket is opened.
+  // Fail closed when no auth is configured, unless the operator opts in with
+  // --allow-anonymous. In mode "none" every REST and /mcp request is
+  // authorized as an anonymous principal holding all capabilities over all
+  // runs. The flag also permits a non-loopback bind (Docker must listen on
+  // 0.0.0.0 for published ports). Decided before any socket is opened.
   if (!authenticator.enabled) {
-    if (!isLoopbackHost(host)) {
-      process.stderr.write(
-        `jaiph serve: refusing to bind non-loopback host "${host}" without authentication ` +
-          "(every /v1/* endpoint would be unauthenticated arbitrary shell). Set JAIPH_SERVE_TOKEN or configure " +
-          "OIDC (JAIPH_SERVE_OIDC_ISSUER + JAIPH_SERVE_OIDC_AUDIENCE) and retry.\n",
-      );
-      return 1;
-    }
     if (!allowAnonymous) {
+      if (!isLoopbackHost(host)) {
+        process.stderr.write(
+          `jaiph serve: refusing to bind non-loopback host "${host}" without authentication ` +
+            "(every REST endpoint would be unauthenticated arbitrary shell). Set JAIPH_SERVE_TOKEN or configure " +
+            "OIDC (JAIPH_SERVE_OIDC_ISSUER + JAIPH_SERVE_OIDC_AUDIENCE), or pass --allow-anonymous to run open.\n",
+        );
+        return 1;
+      }
       process.stderr.write(
         `jaiph serve: refusing to start on loopback host "${host}" with no authentication. ` +
-          "In anonymous mode every /v1/* and /mcp request is authorized as an anonymous principal with all " +
+          "In anonymous mode every REST and /mcp request is authorized as an anonymous principal with all " +
           "capabilities over all runs, so on a shared or multi-user host any other local user could invoke " +
           "workflows and read every run's artifacts (loopback guards the network, not other local users). " +
           "Set JAIPH_SERVE_TOKEN or configure OIDC (JAIPH_SERVE_OIDC_ISSUER + JAIPH_SERVE_OIDC_AUDIENCE), or " +
-          "pass --allow-anonymous to run open on a single-user workstation.\n",
+          "pass --allow-anonymous to run open.\n",
       );
       return 1;
     }
-    // --allow-anonymous on loopback: warn loudly, before binding, that every
-    // local principal holds all capabilities over all runs (finding M-2).
-    process.stderr.write(
-      "jaiph serve: WARNING --allow-anonymous — no authentication configured. The server is open to ALL " +
-        "local principals: every /v1/* and /mcp request is authorized as an anonymous principal with all " +
-        "capabilities over all runs. Use this only on a single-user workstation; set JAIPH_SERVE_TOKEN or " +
-        "configure OIDC on any shared or multi-user host.\n",
-    );
+    if (!isLoopbackHost(host)) {
+      process.stderr.write(
+        "jaiph serve: WARNING --allow-anonymous — no authentication configured. The server is bound on a " +
+          "non-loopback address and is open to anyone who can reach the port: every REST and /mcp request " +
+          "is authorized as an anonymous principal with all capabilities over all runs. Set JAIPH_SERVE_TOKEN " +
+          "or configure OIDC unless you intend this.\n",
+      );
+    } else {
+      process.stderr.write(
+        "jaiph serve: WARNING --allow-anonymous — no authentication configured. The server is open to ALL " +
+          "local principals: every REST and /mcp request is authorized as an anonymous principal with all " +
+          "capabilities over all runs. Use this only on a single-user workstation; set JAIPH_SERVE_TOKEN or " +
+          "configure OIDC on any shared or multi-user host.\n",
+      );
+    }
   }
 
   // Hide the API surface (/docs + /openapi.json) with JAIPH_SERVE_EXPOSE_DOCS=false.
@@ -221,10 +225,12 @@ export async function runServe(rest: string[]): Promise<number> {
   // keeps list/get/events/artifacts and idempotency working for prior runs.
   let initialRuns: ReturnType<typeof loadPersistedRuns> = [];
   try {
+    log(`jaiph serve: reconstructing runs from ${hostRunsRoot}...`);
+    const reconstructStarted = Date.now();
     initialRuns = loadPersistedRuns(hostRunsRoot, new Date().toISOString());
-    if (initialRuns.length > 0) {
-      log(`jaiph serve: reconstructed ${initialRuns.length} run(s) from ${hostRunsRoot}`);
-    }
+    log(
+      `jaiph serve: reconstructed ${initialRuns.length} run(s) from ${hostRunsRoot} in ${Date.now() - reconstructStarted}ms`,
+    );
   } catch (err) {
     log(`jaiph serve: could not reconstruct prior runs: ${errText(err)}`);
   }

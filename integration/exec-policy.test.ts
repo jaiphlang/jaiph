@@ -101,7 +101,7 @@ async function runServeMode(ws: string, fixture: string, flags: string[], env: N
     return { exitCode: started.exitCode ?? 1, stderr: stderrBuf };
   }
   try {
-    const res = await fetch(`${started.baseUrl}/v1/defs/probe_and_write/runs?wait=true`, {
+    const res = await fetch(`${started.baseUrl}/probe_and_write?wait=true`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({}),

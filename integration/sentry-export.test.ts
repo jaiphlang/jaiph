@@ -265,7 +265,7 @@ test("jaiph serve: a failed HTTP run delivers exactly one Sentry event via the s
     writeFileSync(jh, ['script boom = `echo "step output"; exit 3`', "# Fails on purpose.", "export def crash() {", "  run boom()", "}", ""].join("\n"));
     const serve = await startServe(jh, root, { ...baseEnv(join(root, ".jaiph/runs")), SENTRY_DSN: dsn(sentry.port) });
     try {
-      const res = await fetch(`${serve.baseUrl}/v1/defs/crash/runs?wait=true`, {
+      const res = await fetch(`${serve.baseUrl}/crash?wait=true`, {
         method: "POST",
         headers: { "content-type": "application/json", authorization: `Bearer ${SERVE_TOKEN}` },
         body: "{}",

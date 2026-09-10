@@ -40,15 +40,18 @@ test("buildOpenApi emits one path per exposed workflow, honoring export narrowin
   assert.deepEqual(tools.map((t) => t.name), ["alpha"]);
 
   const doc = buildOpenApi(tools, SERVER_INFO) as any;
-  const workflowPaths = Object.keys(doc.paths).filter((p) => /^\/v1\/defs\/[^/]+\/runs$/.test(p));
-  assert.deepEqual(workflowPaths, ["/v1/defs/alpha/runs"], "exactly one workflow path; beta is not exposed");
-  assert.equal(doc.paths["/v1/defs/beta/runs"], undefined);
+  const reserved = new Set(["/defs", "/runs", "/healthz"]);
+  const workflowPaths = Object.keys(doc.paths).filter((p) => /^\/[^/]+$/.test(p) && !reserved.has(p));
+  assert.deepEqual(workflowPaths, ["/alpha"], "exactly one workflow path; beta is not exposed");
+  assert.equal(doc.paths["/beta"], undefined);
+  assert.equal(doc.paths["/defs/alpha/runs"], undefined);
+  assert.equal(doc.paths["/v1/alpha"], undefined);
 });
 
 test("each workflow path carries the exact MCP-derived input schema as its JSON request body", () => {
   const tools = toolsFrom(EXPORT_NARROWED);
   const doc = buildOpenApi(tools, SERVER_INFO) as any;
-  const op = doc.paths["/v1/defs/alpha/runs"].post;
+  const op = doc.paths["/alpha"].post;
   assert.equal(op.operationId, "run_alpha");
   assert.deepEqual(op.requestBody.content["application/json"].schema, tools[0].inputSchema);
   // Bearer security is applied to the workflow operation.
@@ -63,7 +66,7 @@ test("the document pins info + bearer scheme + run/error component schemas", () 
   assert.ok(doc.components.schemas.Run, "Run schema present");
   assert.ok(doc.components.schemas.Error, "Error schema present");
   // Static run-resource paths are present.
-  for (const p of ["/v1/defs", "/v1/runs", "/v1/runs/{id}", "/v1/runs/{id}/cancel", "/healthz"]) {
+  for (const p of ["/defs", "/runs", "/runs/{id}", "/runs/{id}/cancel", "/healthz"]) {
     assert.ok(doc.paths[p], `path ${p} present`);
   }
 });

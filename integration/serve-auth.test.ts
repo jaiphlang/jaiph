@@ -173,7 +173,7 @@ test("jaiph serve OIDC: token validity matrix (valid, expired, wrong-aud, wrong-
     }),
   );
   const post = (token?: string): Promise<Response> =>
-    fetch(`${srv.baseUrl}/v1/defs/greet/runs?wait=true`, {
+    fetch(`${srv.baseUrl}/greet?wait=true`, {
       method: "POST",
       headers: { "content-type": "application/json", ...(token ? bearer(token) : {}) },
       body: JSON.stringify({ name: "x" }),
@@ -249,7 +249,7 @@ test("jaiph serve OIDC: capabilities are separate, runs are per-principal, and i
     const noCancelTok = await idp.sign({ sub: "carol", scope: "jaiph:invoke jaiph:inspect" });
 
     // Alice runs greet to completion.
-    const created = await fetch(`${srv.baseUrl}/v1/defs/greet/runs?wait=true`, {
+    const created = await fetch(`${srv.baseUrl}/greet?wait=true`, {
       method: "POST",
       headers: { "content-type": "application/json", ...bearer(aliceTok) },
       body: JSON.stringify({ name: "world" }),
@@ -260,23 +260,23 @@ test("jaiph serve OIDC: capabilities are separate, runs are per-principal, and i
     assert.equal(run.principal, "alice", "the run records its creating principal");
 
     // Bob (valid, fully-scoped) cannot see or cancel Alice's run.
-    assert.equal((await fetch(`${srv.baseUrl}/v1/runs/${run.run_id}`, { headers: bearer(bobTok) })).status, 404);
-    assert.equal((await fetch(`${srv.baseUrl}/v1/runs/${run.run_id}/events`, { headers: bearer(bobTok) })).status, 404);
-    const bobList = await (await fetch(`${srv.baseUrl}/v1/runs`, { headers: bearer(bobTok) })).json();
+    assert.equal((await fetch(`${srv.baseUrl}/runs/${run.run_id}`, { headers: bearer(bobTok) })).status, 404);
+    assert.equal((await fetch(`${srv.baseUrl}/runs/${run.run_id}/events`, { headers: bearer(bobTok) })).status, 404);
+    const bobList = await (await fetch(`${srv.baseUrl}/runs`, { headers: bearer(bobTok) })).json();
     assert.equal(bobList.total, 0, "bob's listing does not include alice's run");
 
     // Alice sees her own run.
-    assert.equal((await fetch(`${srv.baseUrl}/v1/runs/${run.run_id}`, { headers: bearer(aliceTok) })).status, 200);
+    assert.equal((await fetch(`${srv.baseUrl}/runs/${run.run_id}`, { headers: bearer(aliceTok) })).status, 200);
 
     // A principal without jaiph:cancel cannot cancel even its own in-flight run.
-    const slowStart = await fetch(`${srv.baseUrl}/v1/defs/slow/runs`, {
+    const slowStart = await fetch(`${srv.baseUrl}/slow`, {
       method: "POST",
       headers: { "content-type": "application/json", ...bearer(noCancelTok) },
       body: "{}",
     });
     assert.equal(slowStart.status, 202);
     const slowId = (await slowStart.json()).run_id;
-    const cancelDenied = await fetch(`${srv.baseUrl}/v1/runs/${slowId}/cancel`, { method: "POST", headers: bearer(noCancelTok) });
+    const cancelDenied = await fetch(`${srv.baseUrl}/runs/${slowId}/cancel`, { method: "POST", headers: bearer(noCancelTok) });
     assert.equal(cancelDenied.status, 403);
     assert.equal((await cancelDenied.json()).error.code, "E_FORBIDDEN");
 
@@ -314,7 +314,7 @@ test("jaiph serve OIDC: sub-less machine tokens get distinct client_id identitie
     const clientB = await idp.sign({ scope: fullScope, clientId: "service-b" });
 
     // Client A runs greet; the run records client A's identity, never the shared "unknown".
-    const created = await fetch(`${srv.baseUrl}/v1/defs/greet/runs?wait=true`, {
+    const created = await fetch(`${srv.baseUrl}/greet?wait=true`, {
       method: "POST",
       headers: { "content-type": "application/json", ...bearer(clientA) },
       body: JSON.stringify({ name: "world" }),
@@ -326,17 +326,17 @@ test("jaiph serve OIDC: sub-less machine tokens get distinct client_id identitie
     assert.notEqual(run.principal, "unknown", "no principal collapses onto the shared constant");
 
     // Client B (a distinct sub-less token) cannot enumerate or cancel client A's run.
-    assert.equal((await fetch(`${srv.baseUrl}/v1/runs/${run.run_id}`, { headers: bearer(clientB) })).status, 404);
-    const bList = await (await fetch(`${srv.baseUrl}/v1/runs`, { headers: bearer(clientB) })).json();
+    assert.equal((await fetch(`${srv.baseUrl}/runs/${run.run_id}`, { headers: bearer(clientB) })).status, 404);
+    const bList = await (await fetch(`${srv.baseUrl}/runs`, { headers: bearer(clientB) })).json();
     assert.equal(bList.total, 0, "client B's listing does not include client A's run");
-    const cancelDenied = await fetch(`${srv.baseUrl}/v1/runs/${run.run_id}/cancel`, { method: "POST", headers: bearer(clientB) });
+    const cancelDenied = await fetch(`${srv.baseUrl}/runs/${run.run_id}/cancel`, { method: "POST", headers: bearer(clientB) });
     assert.equal(cancelDenied.status, 404, "client B cannot cancel client A's run");
 
     // Client A still sees its own run.
-    assert.equal((await fetch(`${srv.baseUrl}/v1/runs/${run.run_id}`, { headers: bearer(clientA) })).status, 200);
+    assert.equal((await fetch(`${srv.baseUrl}/runs/${run.run_id}`, { headers: bearer(clientA) })).status, 200);
 
     // A verified token with neither `sub` nor `client_id` is rejected — never bucketed together.
-    const anon = await fetch(`${srv.baseUrl}/v1/defs/greet/runs?wait=true`, {
+    const anon = await fetch(`${srv.baseUrl}/greet?wait=true`, {
       method: "POST",
       headers: { "content-type": "application/json", ...bearer(await idp.sign({ scope: fullScope })) },
       body: JSON.stringify({ name: "x" }),

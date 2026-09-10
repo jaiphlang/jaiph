@@ -1,9 +1,9 @@
 # Jaiph on Kubernetes — long-lived HTTP runner.
 #
-# Wrap jaiph in an image you own: this manifest does not ship a first-party
-# runtime image. Set `image:` to a registry image that has `jaiph` on PATH
-# (and any agent backends / toolchain your workflows need). Isolation is the
-# pod boundary. See docs/deploy.md.
+# Default image is the published runner (`ghcr.io/jaiphlang/jaiph-runtime`).
+# It has `jaiph` on PATH as uid 10001. Layer agent CLIs and script
+# dependencies in a derived image if your programs need them. Isolation is
+# the pod boundary. See docs/deploy.md.
 #
 # Credentials are NOT part of this manifest. Create the `jaiph-credentials`
 # Secret out-of-band before applying — the Deployment references it as a
@@ -74,8 +74,8 @@ spec:
       # (and the agent backends they spawn) an API credential.
       automountServiceAccountToken: false
       securityContext:
-        # Set UID/GID to the non-root user in YOUR image; fsGroup makes the
-        # emptyDir volumes below group-writable for it.
+        # UID/GID match the published runner image (uid 10001). fsGroup
+        # makes the emptyDir volumes below group-writable for it.
         runAsNonRoot: true
         runAsUser: 10001
         runAsGroup: 10001
@@ -84,8 +84,8 @@ spec:
           type: RuntimeDefault
       containers:
         - name: jaiph
-          # Replace with an image you built that has `jaiph` on PATH.
-          image: your-registry/your-jaiph-image:tag
+          # Pin a version tag in production (`:0.15.0`, not `:latest`).
+          image: ghcr.io/jaiphlang/jaiph-runtime:latest
           command: ["jaiph", "serve", "--host", "0.0.0.0", "/work/tools.jh"]
           securityContext:
             allowPrivilegeEscalation: false
