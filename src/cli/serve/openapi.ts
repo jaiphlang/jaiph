@@ -8,7 +8,7 @@ export interface OpenApiServerInfo {
   version: string;
 }
 
-/** A bearer-secured operation on the `/v1/*` surface. */
+/** A bearer-secured operation on the REST surface. */
 const BEARER_SECURITY = [{ bearer: [] as string[] }];
 
 /** Standard `{error:{code,message}}` responses, keyed by HTTP status. */
@@ -31,12 +31,11 @@ function runResponse(description: string): Record<string, unknown> {
  * the same `(tools, serverInfo)` always yields the same document, so it can be
  * regenerated per request and picks up hot-reloaded tool sets for free.
  *
- * One concrete path per workflow (`/v1/defs/<name>/runs`) carries that
- * workflow's own `operationId`, `#`-comment description, and the exact
- * MCP-derived input schema as its JSON request body — which is what makes
- * Swagger UI render a usable per-workflow form. The static run-resource paths,
- * the run/error component schemas, and the bearer security scheme complete the
- * document.
+ * One concrete path per workflow (`/<name>`) carries that workflow's own
+ * `operationId`, `#`-comment description, and the exact MCP-derived input
+ * schema as its JSON request body — which is what makes Swagger UI render a
+ * usable per-workflow form. The static run-resource paths, the run/error
+ * component schemas, and the bearer security scheme complete the document.
  */
 export function buildOpenApi(tools: McpToolSpec[], serverInfo: OpenApiServerInfo): Record<string, unknown> {
   const paths: Record<string, unknown> = {};
@@ -49,7 +48,7 @@ export function buildOpenApi(tools: McpToolSpec[], serverInfo: OpenApiServerInfo
             content: { "application/json": { schema: tool.inputSchema } },
           }
         : { required: false, content: { "application/json": { schema: tool.inputSchema } } };
-    paths[`/v1/defs/${tool.name}/runs`] = {
+    paths[`/${tool.name}`] = {
       post: {
         operationId: `run_${tool.name}`,
         summary: `Run the ${tool.name} def`,
@@ -115,7 +114,7 @@ export function buildOpenApi(tools: McpToolSpec[], serverInfo: OpenApiServerInfo
     },
   };
 
-  paths["/v1/defs"] = {
+  paths["/defs"] = {
     get: {
       operationId: "listDefs",
       summary: "List exposed defs",
@@ -151,7 +150,7 @@ export function buildOpenApi(tools: McpToolSpec[], serverInfo: OpenApiServerInfo
     },
   };
 
-  paths["/v1/runs"] = {
+  paths["/runs"] = {
     get: {
       operationId: "listRuns",
       summary: "List runs started by this server (newest first, paginated)",
@@ -195,7 +194,7 @@ export function buildOpenApi(tools: McpToolSpec[], serverInfo: OpenApiServerInfo
     },
   };
 
-  paths["/v1/runs/{id}"] = {
+  paths["/runs/{id}"] = {
     get: {
       operationId: "getRun",
       summary: "Fetch one run",
@@ -209,7 +208,7 @@ export function buildOpenApi(tools: McpToolSpec[], serverInfo: OpenApiServerInfo
     },
   };
 
-  paths["/v1/runs/{id}/events"] = {
+  paths["/runs/{id}/events"] = {
     get: {
       operationId: "getRunEvents",
       summary: "Stream a run's event journal",
@@ -234,7 +233,7 @@ export function buildOpenApi(tools: McpToolSpec[], serverInfo: OpenApiServerInfo
     },
   };
 
-  paths["/v1/runs/{id}/artifacts"] = {
+  paths["/runs/{id}/artifacts"] = {
     get: {
       operationId: "listRunArtifacts",
       summary: "List a run's published artifacts",
@@ -272,7 +271,7 @@ export function buildOpenApi(tools: McpToolSpec[], serverInfo: OpenApiServerInfo
     },
   };
 
-  paths["/v1/runs/{id}/artifacts/{path}"] = {
+  paths["/runs/{id}/artifacts/{path}"] = {
     get: {
       operationId: "downloadRunArtifact",
       summary: "Download one published artifact",
@@ -292,7 +291,7 @@ export function buildOpenApi(tools: McpToolSpec[], serverInfo: OpenApiServerInfo
     },
   };
 
-  paths["/v1/runs/{id}/cancel"] = {
+  paths["/runs/{id}/cancel"] = {
     post: {
       operationId: "cancelRun",
       summary: "Cancel an in-flight run",

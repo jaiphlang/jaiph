@@ -34,7 +34,10 @@ jaiph.key
 *.swp
 *.vsix
 
+.jaiph/queue-state.md
+.jaiph/queue-state.md.lock
 .jaiph/runs/
+.jaiph/product-owner/
 .jaiph/*.jaiph.map
 .jaiph/tmp/
 .jaiph/scripts/

@@ -1,0 +1,3 @@
+# Release / local docker context copies. Do not commit binaries.
+jaiph-linux-x64
+jaiph-linux-arm64

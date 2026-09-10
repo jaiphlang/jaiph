@@ -38,9 +38,15 @@ jaiph --version
 jaiph --help
 ```
 
-The script builds the self-contained standalone binary via `docs/install` (`npm ci` when a lockfile is present, else `npm install`, plus `npm run build:standalone`, including uncommitted changes) and installs `dist/jaiph` to `~/.local/bin` by default (or `JAIPH_BIN_DIR` if set).
+The script builds the self-contained standalone binary via `docs/install` (`npm ci` when a lockfile is present, else `npm install`, plus `npm run build:standalone`, including uncommitted changes) and installs `dist/jaiph` to `~/.local/bin` by default (or `JAIPH_BIN_DIR` if set). It does **not** build the linux runner image.
 
-**From-source prerequisites:** **`npm`** and **[Bun](https://bun.sh)**.
+To build a local `ghcr.io/jaiphlang/jaiph-runtime` (linux binaries + `runtime/Dockerfile`):
+
+```bash
+./docs/build-jaiph-dev-image.sh
+```
+
+**From-source prerequisites:** **`npm`** and **[Bun](https://bun.sh)**. The image script also needs **Docker**.
 
 ## Developing in the repository
 
@@ -186,7 +192,7 @@ Tests that span multiple modules, require subprocess/PTY harnesses, exercise pro
 | `integration/signal-lifecycle.test.ts` | Acceptance | After SIGINT/SIGTERM, verifies `jaiph run` exits within a time bound and leaves no stale child processes |
 | `integration/subcommand-help.test.ts` | Integration | `--help` / usage text for CLI subcommands |
 | `integration/mcp-server.test.ts` | Integration | Drives a live `jaiph mcp` stdio JSON-RPC session — `initialize` / `tools/list` / `tools/call`, the `--mcp` alias, hot-reload `list_changed`, `--env` forwarding and `E_ENV_*` pre-flight, compile diagnostics to stderr, progress-token streaming, and `notifications/cancelled` |
-| `integration/serve-server.test.ts` | Integration | `jaiph serve` HTTP contract — synchronous (`wait=true`) and async (`202` + `Location` polling) runs, a failing workflow returned as HTTP 200 with status `failed`, hot reload surfacing a new workflow, bearer auth required on `/v1/*` while `/healthz` / `/openapi.json` / `/docs` stay open, and refusing to bind a non-loopback host without `JAIPH_SERVE_TOKEN` |
+| `integration/serve-server.test.ts` | Integration | `jaiph serve` HTTP contract — synchronous (`wait=true`) and async (`202` + `Location` polling) runs, a failing workflow returned as HTTP 200 with status `failed`, hot reload surfacing a new workflow, bearer auth required on REST while `/healthz` / `/openapi.json` / `/docs` stay open, refusing to bind without auth unless `--allow-anonymous`, and `--allow-anonymous` permitting a non-loopback bind |
 | `integration/serve-auth.test.ts` | Integration | `jaiph serve` OIDC/JWT auth against a local JWKS server — token validity matrix (valid, expired, wrong audience, wrong issuer, unknown key, insufficient scope, missing), per-principal capabilities and run ownership, and audited invoke / cancel |
 | `integration/serve-restart.test.ts` | Integration | `jaiph serve` run recovery and idempotency across a real process restart |
 | `integration/otlp-export.test.ts` | Integration | OTLP trace export — a run with OTLP env sends exactly one well-formed POST to `/v1/traces`, and delivery is detached so a hanging collector does not block the terminal result |
@@ -221,11 +227,11 @@ jaiph run .jaiph/prepare_release.jh             # next patch from package.json
 
 The workflow refuses to start when the git tree is dirty or when `v<version>` already exists, then bumps `package.json` + `package-lock.json` via `npm version X.Y.Z --no-git-tag-version --allow-same-version`, refreshes the hardcoded release ref in `docs/install` and `docs/install.ps1` (kept in lockstep), runs **`npm run build`** (rebuilding **`dist/`**), asserts **`node dist/src/cli.js --version`** matches the new version, and runs **`npm run registry:build`** to regenerate **`docs/registry`**. It creates **no commits, no tags, and no `git add`** — review the diff (`git diff`), stage the changes, commit, then `git tag v<version>` and push branch + tag yourself. The CLI version is single-sourced from `package.json`'s `version` field (codegen'd into `src/version.ts` by `npm run embed-assets`).
 
-Pushing a **`v*`** tag triggers the standalone-binary release — `.github/workflows/release.yml` cross-compiles the Bun-compiled standalone binary for five targets via `oven-sh/setup-bun` and `bun build --compile --target=…`, generates a `SHA256SUMS` file, signs it with minisign (if `MINISIGN_SECRET_KEY` is set) to produce `SHA256SUMS.minisig`, runs a Linux x64 sanity gate and a `windows-latest` Windows x64 sanity gate (`--version` must equal `jaiph <tag-without-v>` for stable tags — both delegate to `scripts/release-version-check.sh`), and uploads all seven assets to the GitHub Release for the tag (creating it if needed). The Windows gate is a required dependency of the publish job, so a version mismatch there fails the whole release. The release job waits for the `CI` workflow on the same SHA to succeed before publishing. Re-runs are available via `workflow_dispatch`.
+Pushing a **`v*`** tag triggers the standalone-binary release — `.github/workflows/release.yml` cross-compiles the Bun-compiled standalone binary for five targets via `oven-sh/setup-bun` and `bun build --compile --target=…`, generates a `SHA256SUMS` file, signs it with minisign (if `MINISIGN_SECRET_KEY` is set) to produce `SHA256SUMS.minisig`, runs a Linux x64 sanity gate and a `windows-latest` Windows x64 sanity gate (`--version` must equal `jaiph <tag-without-v>` for stable tags — both delegate to `scripts/release-version-check.sh`), and uploads all seven assets to the GitHub Release for the tag (creating it if needed). A sibling job builds `runtime/Dockerfile` for `linux/amd64` and `linux/arm64` and pushes `ghcr.io/<owner>/jaiph-runtime` (`:<version>`, `:v<version>`, `:latest` on stable; `:nightly` on nightly). The image is not a GitHub Release asset and is not listed in `SHA256SUMS`. The Windows gate is a required dependency of both publish jobs, so a version mismatch there fails the whole release. The release job waits for the `CI` workflow on the same SHA to succeed before publishing. Re-runs are available via `workflow_dispatch`.
 
 Pushes to the **`nightly`** branch follow the same matrix and upload to a **rolling prerelease** tagged `nightly` (`gh release upload nightly --clobber`), so `jaiph use nightly` keeps working under the binary installer.
 
-Pushing a **`v*`** ref does **not** run any npm publish step from this repository — `.github/workflows/` contains `ci.yml` (push CI), `release.yml` (standalone binaries; see above), `nightly-engineer.yml` (optional manual engineer run), the path-filtered editor-plugin jobs `vscode-plugin.yml` and `zed-plugin.yml` (each builds and tests its extension under `plugins/` only when that extension's tree changes), and the path-filtered `setup-jaiph-action.yml` (installs the nightly release through the `actions/setup-jaiph` composite action on Linux and macOS, only when that action or `docs/install` changes), and **none publishes to npm**. If you are preparing a release that includes the **npm** package, coordinate version bumps, registry publish, and smoke checks with the maintainers — that flow is intentionally outside this repo's workflows.
+Pushing a **`v*`** ref does **not** run any npm publish step from this repository — `.github/workflows/` contains `ci.yml` (push CI), `release.yml` (standalone binaries and the GHCR runner image; see above), `nightly-engineer.yml` (optional manual engineer run), the path-filtered editor-plugin jobs `vscode-plugin.yml` and `zed-plugin.yml` (each builds and tests its extension under `plugins/` only when that extension's tree changes), and the path-filtered `setup-jaiph-action.yml` (installs the nightly release through the `actions/setup-jaiph` composite action on Linux and macOS, only when that action or `docs/install` changes), and **none publishes to npm**. If you are preparing a release that includes the **npm** package, coordinate version bumps, registry publish, and smoke checks with the maintainers — that flow is intentionally outside this repo's workflows.
 
 #### Release asset naming contract
 

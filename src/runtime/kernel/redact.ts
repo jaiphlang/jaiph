@@ -2,7 +2,7 @@
  * Credential redaction shared by every surface that persists or returns
  * workflow output: the durable `run_summary.jsonl` writes in
  * `RuntimeEventEmitter` — which the OTLP export (`otlp.ts`), the Sentry export
- * (`sentry.ts`), and `GET /v1/runs/{id}/events` (`handler.ts`) all read back
+ * (`sentry.ts`), and `GET /runs/{id}/events` (`handler.ts`) all read back
  * verbatim — and the call-result text composed for `jaiph serve` and
  * `jaiph mcp` (`src/cli/shared/workflow-call.ts`). One definition of "credential" keeps the
  * journal, telemetry, HTTP, and MCP surfaces in agreement.

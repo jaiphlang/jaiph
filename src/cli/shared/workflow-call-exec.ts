@@ -178,7 +178,7 @@ export function attachOutputCollector(
  *
  * Diagnostic capture — failed-step detail, raw stderr/stdout, and collected
  * `log` messages — is credential-redacted here, the single boundary both
- * `jaiph serve` (`result_text`, `?wait=true`, `GET /v1/runs/{id}`) and
+ * `jaiph serve` (`result_text`, `?wait=true`, `GET /runs/{id}`) and
  * `jaiph mcp` (tool results) return through. Live `__JAIPH_EVENT__` lines are
  * not redacted at the source, so this must not rely on the event stream.
  * A successful workflow's return value is intentional API output, not

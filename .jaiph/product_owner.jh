@@ -1,0 +1,283 @@
+#!/usr/bin/env jaiph
+
+#
+# Product owner — sole runtime writer of the task queue.
+# Serve (HTTP + MCP on one port):
+#   ./start-product-owner.sh
+#   or: jaiph serve .jaiph/product_owner.jh
+# Claude creds (ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN) come from
+# the process env. They are not `use` keys — do not --env them.
+#
+import "jaiphlang/queue" as queue
+import "./lib_common.jh" as common
+
+config {
+  agent.backend = "claude"
+  agent.model = "sonnet"
+  agent.claude_flags = "--permission-mode bypassPermissions"
+}
+
+const po_file_rule = """
+  You are given the queue as text in this prompt. That text is complete.
+  Do not read or write QUEUE.md, DONE.md, .jaiph/queue-state.md,
+  .jaiph/product-owner/, or any other queue file. Do not launch nested
+  jaiph workflows or agent sessions.
+"""
+
+script first_line_task = ```
+  local line
+  line="$(printf '%s\n' "$1" | awk 'NR==1 { print; exit }')"
+  line="${line#\#\# }"
+  line="$(printf '%s\n' "$line" | sed 's/ *#[A-Za-z0-9_-]*//g')"
+  printf '%s\n' "$line"
+```
+
+script git_evidence = ```
+  git log -5 --oneline 2>/dev/null || true
+  echo "---"
+  git status --porcelain 2>/dev/null || true
+  echo "---"
+  git log -1 --format=fuller 2>/dev/null || true
+  echo "---"
+  git diff --stat HEAD~1 2>/dev/null || true
+```
+
+script format_task_file = ```
+  title="$1"
+  tags="$2"
+  body="$3"
+  dest="$4"
+  out="## $title"
+  for t in $tags; do
+    t="${t#\#}"
+    [ -n "$t" ] && out="$out #$t"
+  done
+  {
+    printf '%s\n\n' "$out"
+    printf '%s\n' "$body"
+  } > "$dest"
+```
+
+# Claim one available task. Prefers the first #dev-ready that is not
+# #in-progress; may claim a later one. HTTP 200 either way — empty queue is fail.
+export def pick_task() {
+  const preferred = run queue.next_available()
+  const state = run queue.state_json()
+  const result = prompt """
+    ${po_file_rule}
+
+    You are the product owner. Pick one available task for an implementer.
+
+    Available means #dev-ready and not #in-progress. Prefer the first
+    such task (given below). Pick a later available task only with a
+    reason: blocked preferred task, sequencing, or a dependency.
+    Do not invent a title. Do not pick #in-progress.
+
+    Preferred (first available):
+    ${preferred}
+
+    Full queue state (JSON):
+    ${state}
+
+    Respond with title (exact task title, no #tags) and notes
+    (empty if you took the preferred task; required if you skipped it).
+  """
+  returns "{ title: string, notes: string }"
+
+  run common.arg_nonempty("${result.title}") catch (err) {
+    fail "pick_task requires a title"
+  }
+  const task = run queue.get_task_by_header("${result.title}")
+  const header = run first_line_task(task)
+  run queue.mark_task_in_progress(header)
+  return run queue.get_task_by_header(header)
+}
+
+# Propose a task from a brief or markdown spec. Reject leaves the queue unchanged.
+# Verdict is in the return text (accepted: / rejected:). HTTP stays 200.
+# fail is only a broken call (empty spec, accepted with no title).
+export def propose_task(spec) {
+  run common.arg_nonempty(spec) catch (err) {
+    fail "propose_task requires a non-empty spec"
+  }
+  const state = run queue.state_json()
+  const result = prompt """
+    ${po_file_rule}
+
+    You are the product owner. Decide whether to accept this proposal
+    onto the queue.
+
+    Rules: standalone task, testable acceptance, no title clash, no
+    "see prior task", no stealing scope from an existing task.
+    Set tags to #dev-ready only if the spec is implementable as-is.
+    Otherwise leave tags empty.
+
+    Current queue state (JSON):
+    ${state}
+
+    Spec:
+    ${spec}
+
+    Respond with verdict accepted or rejected, title, body (markdown
+    below the heading, no ## heading line), and tags (space-separated
+    tag names without #, or empty).
+  """
+  returns "{ verdict: string, title: string, body: string, tags: string }"
+
+  run common.str_equals("${result.verdict}", "accepted") catch (err) {
+    return "rejected: ${result.body}"
+  }
+  run common.arg_nonempty("${result.title}") catch (err) {
+    fail "accepted propose_task requires a title"
+  }
+  const tmpdir = run common.jaiph_tmp_dir()
+  run common.mkdir_p_simple(tmpdir)
+  const spec_file = "${tmpdir}/po_propose_task.md"
+  run format_task_file("${result.title}", "${result.tags}", "${result.body}", spec_file)
+  run queue.add_task_from_file(spec_file)
+  return "accepted: ${result.title}"
+}
+
+# Report a claimed task as done. Archive or send back (needs-work).
+# Verdict is in the return text. HTTP stays 200. fail is a broken call.
+export def report_completed_task(header, notes) {
+  run common.arg_nonempty(header) catch (err) {
+    fail "report_completed_task requires a task header"
+  }
+  const task = run queue.get_task_by_header(header)
+  const state = run queue.state_json()
+  const evidence = run git_evidence()
+  const result = prompt """
+    ${po_file_rule}
+
+    You are the product owner. Decide if this task is done.
+
+    Rough check only: git evidence vs acceptance criteria. Look for
+    missing behavior, missing tests, or an unmerged main.
+
+    Task:
+    ${task}
+
+    Caller notes:
+    ${notes}
+
+    Git evidence:
+    ${evidence}
+
+    Full queue state (JSON):
+    ${state}
+
+    Respond with verdict accepted or needs-work, and notes
+    (empty if accepted and nothing to record; required if needs-work).
+  """
+  returns "{ verdict: string, notes: string }"
+
+  const tmpdir = run common.jaiph_tmp_dir()
+  run common.mkdir_p_simple(tmpdir)
+  const notes_file = "${tmpdir}/po_complete_notes.md"
+  run common.str_equals("${result.verdict}", "accepted") catch (err) {
+    run common.arg_nonempty("${result.notes}") catch (err) {
+      fail "needs-work requires notes"
+    }
+    const rest = run common.rest_lines_str(task)
+    const updated = "${rest}\n\n### PO notes\n\n${result.notes}\n"
+    run common.save_string_to_file(notes_file, updated)
+    const clean = run first_line_task(task)
+    run queue.set_task_description_from_file(clean, notes_file)
+    return "needs-work: ${result.notes}"
+  }
+  run common.save_string_to_file(notes_file, "${result.notes}")
+  const title = run first_line_task(task)
+  run queue.archive_to_done(title, notes_file)
+  return "accepted: ${title}"
+}
+
+# Answer a question about a task. Persist Q and A on the task body.
+export def task_details(header, question) {
+  run common.arg_nonempty(header) catch (err) {
+    fail "task_details requires a task header"
+  }
+  run common.arg_nonempty(question) catch (err) {
+    fail "task_details requires a question"
+  }
+  const task = run queue.get_task_by_header(header)
+  const state = run queue.state_json()
+  const result = prompt """
+    ${po_file_rule}
+
+    You are the product owner. Answer the question from the queue
+    state and the task text. You may use the codebase if needed.
+
+    Task:
+    ${task}
+
+    Question:
+    ${question}
+
+    Full queue state (JSON):
+    ${state}
+
+    Respond with verdict ok and notes equal to the answer.
+  """
+  returns "{ verdict: string, notes: string }"
+
+  run common.arg_nonempty("${result.notes}") catch (err) {
+    fail "task_details requires an answer"
+  }
+  const tmpdir = run common.jaiph_tmp_dir()
+  run common.mkdir_p_simple(tmpdir)
+  const body_file = "${tmpdir}/po_details_body.md"
+  const rest = run common.rest_lines_str(task)
+  const updated = "${rest}\n\n### PO note\n\nQ: ${question}\n\nA: ${result.notes}\n"
+  run common.save_string_to_file(body_file, updated)
+  const title = run first_line_task(task)
+  run queue.set_task_description_from_file(title, body_file)
+  return "${result.notes}"
+}
+
+# Apply a requested change to a task after validation. Reject leaves the file unchanged.
+# Verdict is in the return text. HTTP stays 200.
+export def update_task(header, request) {
+  run common.arg_nonempty(header) catch (err) {
+    fail "update_task requires a task header"
+  }
+  run common.arg_nonempty(request) catch (err) {
+    fail "update_task requires a request"
+  }
+  const task = run queue.get_task_by_header(header)
+  const state = run queue.state_json()
+  const result = prompt """
+    ${po_file_rule}
+
+    You are the product owner. Decide whether to apply this change
+    to the task. Keep the task standalone, with testable acceptance,
+    and do not steal scope from other tasks.
+
+    Task:
+    ${task}
+
+    Request:
+    ${request}
+
+    Full queue state (JSON):
+    ${state}
+
+    If accepted, body is the full new task body (markdown below the
+    heading; no ## heading line). If rejected, body is the reason.
+  """
+  returns "{ verdict: string, body: string }"
+
+  run common.str_equals("${result.verdict}", "accepted") catch (err) {
+    return "rejected: ${result.body}"
+  }
+  run common.arg_nonempty("${result.body}") catch (err) {
+    fail "accepted update_task requires a body"
+  }
+  const tmpdir = run common.jaiph_tmp_dir()
+  run common.mkdir_p_simple(tmpdir)
+  const body_file = "${tmpdir}/po_update_body.md"
+  run common.save_string_to_file(body_file, "${result.body}")
+  const title = run first_line_task(task)
+  run queue.set_task_description_from_file(title, body_file)
+  return "accepted: ${title}"
+}

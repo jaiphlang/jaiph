@@ -32,10 +32,17 @@ export type { RunStatus, RunRecord, ServeRequest, ServeResponse, ServeHandlerOpt
 /** 1 MiB cap on request bodies (design doc). */
 export const MAX_BODY_BYTES = 1024 * 1024;
 
-/** Default page size for `GET /v1/runs` when the caller gives no `limit`. */
+/** Default page size for `GET /runs` when the caller gives no `limit`. */
 export const DEFAULT_RUNS_PAGE = 100;
-/** Hard maximum page size for `GET /v1/runs` — a `limit` above this is clamped. */
+/** Hard maximum page size for `GET /runs` — a `limit` above this is clamped. */
 export const MAX_RUNS_PAGE = 1000;
+
+/** REST paths behind the same auth as `POST /mcp`. */
+function isRestApi(method: string, path: string): boolean {
+  if (path === "/defs" || path.startsWith("/defs/")) return true;
+  if (path === "/runs" || path.startsWith("/runs/")) return true;
+  return method === "POST" && /^\/[^/]+$/.test(path);
+}
 
 function isTerminal(status: RunStatus): boolean {
   return status === "succeeded" || status === "failed" || status === "cancelled" || status === "interrupted";
@@ -175,7 +182,7 @@ export class ServeHandler {
       principal: principal.subject,
       correlationId: correlationId || undefined,
       onCancelHandle: (cancelFn) => {
-        // Wrap so every cancel path (REST /v1/.../cancel, MCP
+        // Wrap so every cancel path (REST /runs/.../cancel, MCP
         // notifications/cancelled, SSE hangup, cancelAll) marks the shared
         // record before killing the child — otherwise an MCP-only cancel
         // would finalize as `failed` instead of `cancelled`.
@@ -254,20 +261,19 @@ export class ServeHandler {
       };
     }
 
-    // The MCP Streamable HTTP endpoint and everything under /v1 share one
-    // authentication boundary. A verified request carries a Principal
-    // (capabilities + ownership) + correlation id through an AsyncLocalStorage,
-    // so authorization, ownership, audit, and telemetry read one identity
-    // consistently across both transports.
+    // MCP and the REST surface share one authentication boundary. A verified
+    // request carries a Principal (capabilities + ownership) + correlation id
+    // through an AsyncLocalStorage, so authorization, ownership, audit, and
+    // telemetry read one identity consistently across both transports.
     if (path === "/mcp") {
       const auth = await this.auth.authenticate(req.headers["authorization"]);
       if (!auth.ok) return this.error(auth.status, auth.code, auth.message);
       return this.reqCtx.run({ principal: auth.principal, correlationId: this.correlationOf(req) }, () => this.handleMcp(req));
     }
-    if (path === "/v1" || path.startsWith("/v1/")) {
+    if (isRestApi(method, path)) {
       const auth = await this.auth.authenticate(req.headers["authorization"]);
       if (!auth.ok) return this.error(auth.status, auth.code, auth.message);
-      return this.reqCtx.run({ principal: auth.principal, correlationId: this.correlationOf(req) }, () => this.handleV1(req));
+      return this.reqCtx.run({ principal: auth.principal, correlationId: this.correlationOf(req) }, () => this.handleApi(req));
     }
 
     return this.error(404, "E_NOT_FOUND", `not found: ${path}`);
@@ -311,65 +317,65 @@ export class ServeHandler {
     return record;
   }
 
-  private handleV1(req: ServeRequest): ServeResponse | Promise<ServeResponse> {
+  private handleApi(req: ServeRequest): ServeResponse | Promise<ServeResponse> {
     const { method, path } = req;
     const { principal } = this.currentCtx();
 
-    if (path === "/v1/defs") {
+    if (path === "/defs") {
       if (method !== "GET") return this.methodNotAllowed();
       if (!principal.capabilities.has("inspect")) return this.forbidden("inspect");
       const defs = this.opts.getTools().map((t) => ({ name: t.name, description: t.description, params: t.params }));
       return this.json(200, { defs });
     }
 
-    const runPost = /^\/v1\/defs\/([^/]+)\/runs$/.exec(path);
-    if (runPost) {
-      if (method !== "POST") return this.methodNotAllowed();
-      if (!principal.capabilities.has("invoke")) return this.forbidden("invoke");
-      return this.createRun(req, decodeURIComponent(runPost[1]));
-    }
-
-    if (path === "/v1/runs") {
+    if (path === "/runs") {
       if (method !== "GET") return this.methodNotAllowed();
       if (!principal.capabilities.has("inspect")) return this.forbidden("inspect");
       return this.listRuns(req);
     }
 
-    const events = /^\/v1\/runs\/([^/]+)\/events$/.exec(path);
+    const events = /^\/runs\/([^/]+)\/events$/.exec(path);
     if (events) {
       if (method !== "GET") return this.methodNotAllowed();
       if (!principal.capabilities.has("inspect")) return this.forbidden("inspect");
       return this.runEvents(req, decodeURIComponent(events[1]));
     }
 
-    const artifactsList = /^\/v1\/runs\/([^/]+)\/artifacts$/.exec(path);
+    const artifactsList = /^\/runs\/([^/]+)\/artifacts$/.exec(path);
     if (artifactsList) {
       if (method !== "GET") return this.methodNotAllowed();
       if (!principal.capabilities.has("inspect")) return this.forbidden("inspect");
       return this.listRunArtifacts(decodeURIComponent(artifactsList[1]));
     }
 
-    const artifactGet = /^\/v1\/runs\/([^/]+)\/artifacts\/(.+)$/.exec(path);
+    const artifactGet = /^\/runs\/([^/]+)\/artifacts\/(.+)$/.exec(path);
     if (artifactGet) {
       if (method !== "GET") return this.methodNotAllowed();
       if (!principal.capabilities.has("inspect")) return this.forbidden("inspect");
       return this.downloadArtifact(decodeURIComponent(artifactGet[1]), artifactGet[2]);
     }
 
-    const cancel = /^\/v1\/runs\/([^/]+)\/cancel$/.exec(path);
+    const cancel = /^\/runs\/([^/]+)\/cancel$/.exec(path);
     if (cancel) {
       if (method !== "POST") return this.methodNotAllowed();
       if (!principal.capabilities.has("cancel")) return this.forbidden("cancel");
       return this.cancelRun(decodeURIComponent(cancel[1]));
     }
 
-    const getRun = /^\/v1\/runs\/([^/]+)$/.exec(path);
+    const getRun = /^\/runs\/([^/]+)$/.exec(path);
     if (getRun) {
       if (method !== "GET") return this.methodNotAllowed();
       if (!principal.capabilities.has("inspect")) return this.forbidden("inspect");
       const record = this.lookupRun(decodeURIComponent(getRun[1]));
       if (!record) return this.error(404, "E_NOT_FOUND", "unknown run id");
       return this.json(200, this.toRunObject(record));
+    }
+
+    // POST /{name} — invoke.
+    const invoke = /^\/([^/]+)$/.exec(path);
+    if (invoke && method === "POST") {
+      if (!principal.capabilities.has("invoke")) return this.forbidden("invoke");
+      return this.createRun(req, decodeURIComponent(invoke[1]));
     }
 
     return this.error(404, "E_NOT_FOUND", `not found: ${path}`);
@@ -465,7 +471,7 @@ export class ServeHandler {
     }
     return {
       status: 202,
-      headers: { "content-type": "application/json", location: `/v1/runs/${record.run_id}` },
+      headers: { "content-type": "application/json", location: `/runs/${record.run_id}` },
       body: JSON.stringify(this.toRunObject(record)),
     };
   }
@@ -561,7 +567,7 @@ export class ServeHandler {
   }
 
   /**
-   * `GET /v1/runs`: newest-first page of runs. `limit` defaults to
+   * `GET /runs`: newest-first page of runs. `limit` defaults to
    * {@link DEFAULT_RUNS_PAGE} and is clamped to `[1, MAX_RUNS_PAGE]`; `offset`
    * defaults to 0 (clamped to `>= 0`). The response can never be unbounded —
    * at most `MAX_RUNS_PAGE` records regardless of the query. Order is stable:
@@ -645,7 +651,7 @@ export class ServeHandler {
   }
 
   /**
-   * `GET /v1/runs/{id}/events`. Default: the run's `run_summary.jsonl` as
+   * `GET /runs/{id}/events`. Default: the run's `run_summary.jsonl` as
    * `application/x-ndjson`, streamed verbatim (never buffered whole), then
    * close. `Accept: text/event-stream`: SSE replay + live follow until the run
    * is terminal. The journal's own redaction is the redaction guarantee; raw
@@ -700,7 +706,7 @@ export class ServeHandler {
     };
   }
 
-  /** `GET /v1/runs/{id}/artifacts`: JSON list of published files (empty when none). */
+  /** `GET /runs/{id}/artifacts`: JSON list of published files (empty when none). */
   private listRunArtifacts(id: string): ServeResponse {
     const record = this.lookupRun(id);
     if (!record) return this.error(404, "E_NOT_FOUND", "unknown run id");
@@ -709,7 +715,7 @@ export class ServeHandler {
   }
 
   /**
-   * `GET /v1/runs/{id}/artifacts/{path}`: download one published file as
+   * `GET /runs/{id}/artifacts/{path}`: download one published file as
    * `application/octet-stream`, streamed with backpressure — the complete
    * artifact is never buffered, so an arbitrarily large file costs no server
    * memory. `maxArtifactBytes > 0` refuses larger files with 413.

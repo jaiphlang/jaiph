@@ -140,7 +140,7 @@ function delay(ms: number): Promise<void> {
 async function pollRun(baseUrl: string, id: string, timeoutMs = 20_000): Promise<any> {
   const start = Date.now();
   for (;;) {
-    const res = await fetch(`${baseUrl}/v1/runs/${id}`);
+    const res = await fetch(`${baseUrl}/runs/${id}`);
     assert.equal(res.status, 200);
     const run = await res.json();
     if (run.status !== "running") return run;
@@ -155,7 +155,7 @@ test("jaiph serve: wait=true round-trips a workflow return value as succeeded", 
   writeFileSync(jh, BASE_FIXTURE);
   const srv = await startServe(jh, root, serveEnv(join(root, ".jaiph/runs")));
   try {
-    const res = await fetch(`${srv.baseUrl}/v1/defs/greet/runs?wait=true`, {
+    const res = await fetch(`${srv.baseUrl}/greet?wait=true`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ name: "world" }),
@@ -177,7 +177,7 @@ test("jaiph serve: async POST returns 202 + Location and polling reaches the sam
   writeFileSync(jh, BASE_FIXTURE);
   const srv = await startServe(jh, root, serveEnv(join(root, ".jaiph/runs")));
   try {
-    const res = await fetch(`${srv.baseUrl}/v1/defs/greet/runs`, {
+    const res = await fetch(`${srv.baseUrl}/greet`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ name: "async" }),
@@ -186,7 +186,7 @@ test("jaiph serve: async POST returns 202 + Location and polling reaches the sam
     const location = res.headers.get("location");
     const started = await res.json();
     assert.equal(started.status, "running");
-    assert.equal(location, `/v1/runs/${started.run_id}`);
+    assert.equal(location, `/runs/${started.run_id}`);
 
     const run = await pollRun(srv.baseUrl, started.run_id);
     assert.equal(run.status, "succeeded");
@@ -204,7 +204,7 @@ test("jaiph serve: a failing workflow is HTTP 200 with status failed (not an HTT
   writeFileSync(jh, BASE_FIXTURE);
   const srv = await startServe(jh, root, serveEnv(join(root, ".jaiph/runs")));
   try {
-    const res = await fetch(`${srv.baseUrl}/v1/defs/boom/runs?wait=true`, {
+    const res = await fetch(`${srv.baseUrl}/boom?wait=true`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: "{}",
@@ -229,7 +229,7 @@ test("jaiph serve: hot reload surfaces a new workflow and a pre-reload run still
   const srv = await startServe(jh, root, serveEnv(join(root, ".jaiph/runs")));
   try {
     // Start a slow run against the current generation, then reload.
-    const startRes = await fetch(`${srv.baseUrl}/v1/defs/slow/runs`, {
+    const startRes = await fetch(`${srv.baseUrl}/slow`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: "{}",
@@ -243,12 +243,12 @@ test("jaiph serve: hot reload surfaces a new workflow and a pre-reload run still
     const start = Date.now();
     for (;;) {
       const doc = await (await fetch(`${srv.baseUrl}/openapi.json`)).json();
-      if (doc.paths["/v1/defs/extra/runs"]) break;
+      if (doc.paths["/extra"]) break;
       if (Date.now() - start > 15_000) throw new Error("reload did not surface the new workflow in /openapi.json");
       await delay(200);
     }
-    const wf = await (await fetch(`${srv.baseUrl}/v1/defs`)).json();
-    assert.ok(wf.defs.some((w: any) => w.name === "extra"), "/v1/defs lists the new workflow");
+    const wf = await (await fetch(`${srv.baseUrl}/defs`)).json();
+    assert.ok(wf.defs.some((w: any) => w.name === "extra"), "/defs lists the new workflow");
 
     // The run started before the reload still finishes successfully (its
     // generation's scripts dir survives until it completes — refcounted).
@@ -261,15 +261,15 @@ test("jaiph serve: hot reload surfaces a new workflow and a pre-reload run still
   }
 });
 
-test("jaiph serve: with a token, /v1/* needs the bearer while /healthz, /openapi.json, /docs stay open", async () => {
+test("jaiph serve: with a token, REST needs the bearer while /healthz, /openapi.json, /docs stay open", async () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-serve-auth-"));
   const jh = join(root, "tools.jh");
   writeFileSync(jh, BASE_FIXTURE);
   const srv = await startServe(jh, root, serveEnv(join(root, ".jaiph/runs"), { JAIPH_SERVE_TOKEN: "s3cret" }));
   try {
-    assert.equal((await fetch(`${srv.baseUrl}/v1/defs`)).status, 401);
-    assert.equal((await fetch(`${srv.baseUrl}/v1/defs`, { headers: { authorization: "Bearer wrong" } })).status, 401);
-    assert.equal((await fetch(`${srv.baseUrl}/v1/defs`, { headers: { authorization: "Bearer s3cret" } })).status, 200);
+    assert.equal((await fetch(`${srv.baseUrl}/defs`)).status, 401);
+    assert.equal((await fetch(`${srv.baseUrl}/defs`, { headers: { authorization: "Bearer wrong" } })).status, 401);
+    assert.equal((await fetch(`${srv.baseUrl}/defs`, { headers: { authorization: "Bearer s3cret" } })).status, 200);
 
     for (const path of ["/healthz", "/openapi.json", "/docs"]) {
       assert.equal((await fetch(`${srv.baseUrl}${path}`)).status, 200, `${path} is open without a token`);
@@ -295,8 +295,30 @@ test("jaiph serve: binding a non-loopback host without JAIPH_SERVE_TOKEN exits 1
     });
     assert.equal(result.status, 1, `expected exit 1, got ${result.status}\n${result.stderr}`);
     assert.match(result.stderr, /JAIPH_SERVE_TOKEN/);
+    assert.match(result.stderr, /--allow-anonymous/, "the error names the public opt-in");
     assert.doesNotMatch(result.stderr, /listening on/, "must not bind before failing");
   } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("jaiph serve: --allow-anonymous permits a non-loopback bind and warns it is open on the network", async () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-serve-noloop-anon-"));
+  const jh = join(root, "tools.jh");
+  writeFileSync(jh, BASE_FIXTURE);
+  const env = serveEnv(join(root, ".jaiph/runs"));
+  delete env.JAIPH_SERVE_TOKEN;
+  const srv = await startServe(jh, root, env, ["--host", "0.0.0.0"]);
+  try {
+    assert.match(
+      srv.stderr(),
+      /WARNING --allow-anonymous.*anyone who can reach the port/s,
+      "startup warns that a non-loopback anonymous bind is open on the network",
+    );
+    const health = await fetch(`${srv.baseUrl}/healthz`);
+    assert.equal(health.status, 200);
+  } finally {
+    await srv.close();
     rmSync(root, { recursive: true, force: true });
   }
 });
@@ -342,7 +364,7 @@ test("jaiph serve: --allow-anonymous starts, warns about open auth, and serves a
       /WARNING --allow-anonymous.*open to ALL local principals/s,
       "startup warns that the server is open to all local principals",
     );
-    const created = await fetch(`${srv.baseUrl}/v1/defs/greet/runs?wait=true`, {
+    const created = await fetch(`${srv.baseUrl}/greet?wait=true`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ name: "world" }),
@@ -378,7 +400,7 @@ test("jaiph serve: SSE events replay RUN_START, stream a STEP_END mid-run, then 
   const srv = await startServe(jh, root, serveEnv(join(root, ".jaiph/runs")));
   try {
     // Start async, then connect the event stream while the run is still going.
-    const startRes = await fetch(`${srv.baseUrl}/v1/defs/watchable/runs`, {
+    const startRes = await fetch(`${srv.baseUrl}/watchable`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: "{}",
@@ -386,7 +408,7 @@ test("jaiph serve: SSE events replay RUN_START, stream a STEP_END mid-run, then 
     assert.equal(startRes.status, 202);
     const runId = (await startRes.json()).run_id;
 
-    const evRes = await fetch(`${srv.baseUrl}/v1/runs/${runId}/events`, { headers: { accept: "text/event-stream" } });
+    const evRes = await fetch(`${srv.baseUrl}/runs/${runId}/events`, { headers: { accept: "text/event-stream" } });
     assert.equal(evRes.status, 200);
     assert.match(evRes.headers.get("content-type") ?? "", /text\/event-stream/);
 
@@ -432,7 +454,7 @@ test("jaiph serve: NDJSON events on a terminal run byte-match the journal; unkno
   const srv = await startServe(jh, root, serveEnv(join(root, ".jaiph/runs"), { JAIPH_SERVE_TOKEN: "t0ken" }));
   const auth = { authorization: "Bearer t0ken" };
   try {
-    const runRes = await fetch(`${srv.baseUrl}/v1/defs/greet/runs?wait=true`, {
+    const runRes = await fetch(`${srv.baseUrl}/greet?wait=true`, {
       method: "POST",
       headers: { "content-type": "application/json", ...auth },
       body: JSON.stringify({ name: "nd" }),
@@ -440,16 +462,16 @@ test("jaiph serve: NDJSON events on a terminal run byte-match the journal; unkno
     const run = await runRes.json();
     assert.equal(run.status, "succeeded");
 
-    const ev = await fetch(`${srv.baseUrl}/v1/runs/${run.run_id}/events`, { headers: auth });
+    const ev = await fetch(`${srv.baseUrl}/runs/${run.run_id}/events`, { headers: auth });
     assert.equal(ev.status, 200);
     assert.match(ev.headers.get("content-type") ?? "", /application\/x-ndjson/);
     const body = Buffer.from(await ev.arrayBuffer());
     assert.deepEqual(body, readFileSync(join(run.run_dir, "run_summary.jsonl")), "NDJSON is byte-identical to the journal");
 
     // Unknown run id → 404.
-    assert.equal((await fetch(`${srv.baseUrl}/v1/runs/does-not-exist/events`, { headers: auth })).status, 404);
+    assert.equal((await fetch(`${srv.baseUrl}/runs/does-not-exist/events`, { headers: auth })).status, 404);
     // Unauthenticated → 401.
-    assert.equal((await fetch(`${srv.baseUrl}/v1/runs/${run.run_id}/events`)).status, 401);
+    assert.equal((await fetch(`${srv.baseUrl}/runs/${run.run_id}/events`)).status, 401);
   } finally {
     await srv.close();
     rmSync(root, { recursive: true, force: true });
@@ -463,7 +485,7 @@ test("jaiph serve: a credential echoed by a run is [REDACTED] in the event strea
   const secret = "supersecretvalue123";
   const srv = await startServe(jh, root, serveEnv(join(root, ".jaiph/runs")), ["--env", `LEAK_API_KEY=${secret}`]);
   try {
-    const runRes = await fetch(`${srv.baseUrl}/v1/defs/leak_secret/runs?wait=true`, {
+    const runRes = await fetch(`${srv.baseUrl}/leak_secret?wait=true`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: "{}",
@@ -471,7 +493,7 @@ test("jaiph serve: a credential echoed by a run is [REDACTED] in the event strea
     const run = await runRes.json();
     assert.equal(run.status, "succeeded", `run failed: ${JSON.stringify(run)}`);
 
-    const ev = await fetch(`${srv.baseUrl}/v1/runs/${run.run_id}/events`);
+    const ev = await fetch(`${srv.baseUrl}/runs/${run.run_id}/events`);
     const journal = await ev.text();
     assert.ok(!journal.includes(secret), "the raw credential value must not appear in the event stream");
     assert.ok(journal.includes("[REDACTED]"), "the redaction marker is present where the value was");
@@ -488,7 +510,7 @@ test("jaiph serve: a credential passed as a step param is [REDACTED] in the even
   const secret = "supersecretparamvalue123";
   const srv = await startServe(jh, root, serveEnv(join(root, ".jaiph/runs")), ["--env", `LEAK_API_KEY=${secret}`]);
   try {
-    const runRes = await fetch(`${srv.baseUrl}/v1/defs/leak_param/runs?wait=true`, {
+    const runRes = await fetch(`${srv.baseUrl}/leak_param?wait=true`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ token: secret }),
@@ -496,7 +518,7 @@ test("jaiph serve: a credential passed as a step param is [REDACTED] in the even
     const run = await runRes.json();
     assert.equal(run.status, "succeeded", `run failed: ${JSON.stringify(run)}`);
 
-    const ev = await fetch(`${srv.baseUrl}/v1/runs/${run.run_id}/events`);
+    const ev = await fetch(`${srv.baseUrl}/runs/${run.run_id}/events`);
     const journal = await ev.text();
     assert.ok(!journal.includes(secret), "the raw credential value must not appear in step params in the event stream");
     assert.ok(journal.includes("[REDACTED]"), "the redaction marker is present where the value was");
@@ -506,14 +528,14 @@ test("jaiph serve: a credential passed as a step param is [REDACTED] in the even
   }
 });
 
-test("jaiph serve: a failing run's result_text is [REDACTED] via wait=true and GET /v1/runs/{id}", async () => {
+test("jaiph serve: a failing run's result_text is [REDACTED] via wait=true and GET /runs/{id}", async () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-serve-redact-fail-"));
   const jh = join(root, "tools.jh");
   writeFileSync(jh, REDACT_FIXTURE);
   const secret = "supersecretvalue123";
   const srv = await startServe(jh, root, serveEnv(join(root, ".jaiph/runs")), ["--env", `LEAK_API_KEY=${secret}`]);
   try {
-    const res = await fetch(`${srv.baseUrl}/v1/defs/leak_and_fail/runs?wait=true`, {
+    const res = await fetch(`${srv.baseUrl}/leak_and_fail?wait=true`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: "{}",
@@ -525,9 +547,9 @@ test("jaiph serve: a failing run's result_text is [REDACTED] via wait=true and G
     assert.ok(run.result_text.includes("[REDACTED]"), "diagnostic context is retained with the marker");
     assert.match(run.result_text, /failed step/, "failed-step diagnostics survive redaction");
 
-    const again = await (await fetch(`${srv.baseUrl}/v1/runs/${run.run_id}`)).json();
+    const again = await (await fetch(`${srv.baseUrl}/runs/${run.run_id}`)).json();
     assert.equal(again.status, "failed");
-    assert.ok(!again.result_text.includes(secret), "GET /v1/runs/{id} result_text must not contain the credential");
+    assert.ok(!again.result_text.includes(secret), "GET /runs/{id} result_text must not contain the credential");
     assert.ok(again.result_text.includes("[REDACTED]"), "the marker persists on the durable run object");
   } finally {
     await srv.close();
@@ -541,7 +563,7 @@ test("jaiph serve: artifacts round-trip — list then byte-identical download, t
   writeFileSync(jh, BASE_FIXTURE);
   const srv = await startServe(jh, root, serveEnv(join(root, ".jaiph/runs")));
   try {
-    const runRes = await fetch(`${srv.baseUrl}/v1/defs/make_artifact/runs?wait=true`, {
+    const runRes = await fetch(`${srv.baseUrl}/make_artifact?wait=true`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: "{}",
@@ -549,14 +571,14 @@ test("jaiph serve: artifacts round-trip — list then byte-identical download, t
     const run = await runRes.json();
     assert.equal(run.status, "succeeded", `run failed: ${JSON.stringify(run)}`);
 
-    const list = await (await fetch(`${srv.baseUrl}/v1/runs/${run.run_id}/artifacts`)).json();
+    const list = await (await fetch(`${srv.baseUrl}/runs/${run.run_id}/artifacts`)).json();
     assert.deepEqual(
       list.artifacts.map((a: any) => a.path),
       ["result.txt"],
       "the published file is listed",
     );
 
-    const dl = await fetch(`${srv.baseUrl}/v1/runs/${run.run_id}/artifacts/result.txt`);
+    const dl = await fetch(`${srv.baseUrl}/runs/${run.run_id}/artifacts/result.txt`);
     assert.equal(dl.status, 200);
     assert.match(dl.headers.get("content-type") ?? "", /application\/octet-stream/);
     assert.match(dl.headers.get("content-disposition") ?? "", /filename="result\.txt"/);
@@ -565,7 +587,7 @@ test("jaiph serve: artifacts round-trip — list then byte-identical download, t
     // Traversal battery: encoded `..`, `%2e%2e`, and an absolute path all 404,
     // and the run's own run_summary.jsonl (outside artifacts/) is unreachable.
     for (const escape of ["..%2Frun_summary.jsonl", "%2e%2e%2frun_summary.jsonl", "%2Fetc%2Fpasswd"]) {
-      const res = await fetch(`${srv.baseUrl}/v1/runs/${run.run_id}/artifacts/${escape}`);
+      const res = await fetch(`${srv.baseUrl}/runs/${run.run_id}/artifacts/${escape}`);
       assert.equal(res.status, 404, `traversal ${escape} → 404`);
     }
   } finally {
@@ -590,7 +612,7 @@ test(
     writeFileSync(jh, BASE_FIXTURE);
     const srv = await startServe(jh, root, serveEnv(join(root, ".jaiph/runs")));
     try {
-      const runRes = await fetch(`${srv.baseUrl}/v1/defs/make_artifact/runs?wait=true`, {
+      const runRes = await fetch(`${srv.baseUrl}/make_artifact?wait=true`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: "{}",
@@ -606,7 +628,7 @@ test(
       ftruncateSync(fd, SIZE);
       closeSync(fd);
 
-      const dl = await fetch(`${srv.baseUrl}/v1/runs/${run.run_id}/artifacts/big.bin`);
+      const dl = await fetch(`${srv.baseUrl}/runs/${run.run_id}/artifacts/big.bin`);
       assert.equal(dl.status, 200);
       assert.equal(dl.headers.get("content-length"), String(SIZE));
 

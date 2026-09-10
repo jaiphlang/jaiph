@@ -1,80 +1,87 @@
 #!/usr/bin/env jaiph
 
 #
-# Task/queue management for QUEUE.md.
-# Reads/modifies ${JAIPH_WORKSPACE:-.}/QUEUE.md.
+# Task/queue management.
+# Canonical store: ${JAIPH_QUEUE_STATE} or ${JAIPH_WORKSPACE:-.}/.jaiph/queue-state.md
+# QUEUE.md and DONE.md are generated views (never parsed after bootstrap).
 # Tags are #hashtags in ## headers (e.g. ## My Task #dev-ready).
 #
 # CLI usage:
 #   jaiph .jaiph/libs/jaiphlang/queue.jh headers
-#   jaiph .jaiph/libs/jaiphlang/queue.jh get dev-ready
+#   jaiph .jaiph/libs/jaiphlang/queue.jh get_available
 #   jaiph .jaiph/libs/jaiphlang/queue.jh json
-#   jaiph .jaiph/libs/jaiphlang/queue.jh add_from_file path/to/tasks.md
 #
 import script "./queue.py" as queue
 
-# Dispatches CLI arguments to the queue Python script.
 export def main(cmd, arg1, arg2) {
   const result = run queue(cmd, arg1, arg2)
   log result
 }
 
-# Append ## tasks from a markdown file into QUEUE.md. Titles already present
-# are skipped. Missing #dev-ready tags are added automatically.
 export def add_tasks_from_file(path) {
   run queue("add_from_file", path)
 }
 
-# Returns the full text block (header + body) of the first task.
+export def add_task_from_file(path) {
+  run queue("add", path)
+}
+
 export def get_first_task() {
   return run queue("get")
 }
 
-# Returns the first task whose header carries the given tag.
 export def next_task(tag) {
   return run queue("get", tag)
 }
 
-# Returns the full text block of a task identified by its title.
-# Accepts both clean titles and titles with #tags — tags are stripped
-# before matching so callers don't need to know the exact tag set.
+export def next_available() {
+  return run queue("get_available")
+}
+
 export def get_task_by_header(header) {
   return run queue("get_by_header", header)
 }
 
-# Returns all task titles as newline-separated text (without ## prefix).
-# Pass an optional tag to filter (e.g. "dev-ready").
 export def get_all_task_headers() {
   return run queue("headers")
 }
 
-# Adds #dev-ready to the header of the task matching the given title.
 export def mark_task_dev_ready(header) {
   run queue("mark", header, "dev-ready")
 }
 
-# Removes the task matching the given title from the queue file.
+export def mark_task_in_progress(header) {
+  run queue("mark", header, "in-progress")
+}
+
+export def unmark_task(header, tag) {
+  run queue("unmark", header, tag)
+}
+
 export def remove_completed_task(header) {
   run queue("complete_by_header", header)
 }
 
-# Replaces the body (markdown below the ## line) for the task matching the title.
-# `bodyPath` must be a UTF-8 file; header line and tags are unchanged.
+export def archive_to_done(header, notesPath) {
+  run queue("archive_to_done", header, notesPath)
+}
+
 export def set_task_description_from_file(header, bodyPath) {
   run queue("set_description", header, bodyPath)
 }
 
-# Passes when the queue has at least one task.
+export def state_json() {
+  return run queue("json")
+}
+
 export def has_tasks() {
   run queue("get")
 }
 
-# Passes when the task text has #dev-ready on its header line.
 export def task_is_dev_ready(task) {
   run queue("has_tag", task, "dev-ready")
 }
 
-# Passes only when every task in the queue carries #dev-ready.
 export def all_dev_ready() {
   run queue("check_all_tagged", "dev-ready")
 }

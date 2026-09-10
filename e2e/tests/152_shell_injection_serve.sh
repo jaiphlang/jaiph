@@ -67,14 +67,14 @@ fi
 base="http://127.0.0.1:${port}"
 
 # --- $(id) command substitution is not evaluated ---
-run_json="$(curl -s -X POST "${base}/v1/defs/greet_shell/runs?wait=true" \
+run_json="$(curl -s -X POST "${base}/greet_shell?wait=true" \
   -H 'content-type: application/json' -d '{"name":"$(id)"}')"
 run_id="$(printf '%s' "${run_json}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["run_id"])')"
 run_status="$(printf '%s' "${run_json}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["status"])')"
 e2e::assert_equals "${run_status}" "succeeded" "greet_shell run completes"
 
 art_file="${TEST_DIR}/downloaded_greeting.txt"
-curl -s "${base}/v1/runs/${run_id}/artifacts/greeting.txt" -o "${art_file}"
+curl -s "${base}/runs/${run_id}/artifacts/greeting.txt" -o "${art_file}"
 # Full-content equality: the $(id) text survives literally (shell-quoted), so
 # the byte content is fixed. If the substitution had run, this would contain the
 # host's `uid=…` and the equality would fail.
@@ -84,7 +84,7 @@ e2e::assert_equals "$(cat "${art_file}")" 'Hello $\(id\)' \
 # --- $(touch marker) does not create a file ---
 marker="${TEST_DIR}/pwned.txt"
 rm -f "${marker}"
-curl -s -X POST "${base}/v1/defs/greet_shell/runs?wait=true" \
+curl -s -X POST "${base}/greet_shell?wait=true" \
   -H 'content-type: application/json' \
   -d "{\"name\":\"\$(touch ${marker})\"}" >/dev/null
 if [[ -f "${marker}" ]]; then
