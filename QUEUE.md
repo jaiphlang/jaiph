@@ -16,26 +16,6 @@ Process rules:
 7. Acceptance criteria are non-negotiable. A task is not done until every
    acceptance bullet is verified by a test that fails when the contract is violated.
 
-## Point ensure_ci_passes at the existing step capture; do not pass recover bytes through argv #dev-ready
-
-Context: `.jaiph/ensure_ci_passes.jh` runs `npm_run_test_ci` under `recover (failure)`. On failure the recover body calls `common.save_string_to_file(ci_log_file, failure)`. `save_string_to_file` (`.jaiph/lib_common.jh`) takes content as `$2` / `sys.argv[2]`. Scripts have no stdin channel. The same bytes are already on disk as the failed step's stdout capture under `JAIPH_RUN_DIR` (`NNNNNN-script__npm_run_test_ci.out`, written incrementally by `executeManagedStep` in `src/runtime/kernel/node-workflow-runtime.ts`).
-
-Problem: a CI log larger than the OS spawn argument limit (macOS `ARG_MAX` is about 1 MB for args + environment; jaiph's sterile env still occupies part of that) never reaches the recover prompt. The write is redundant: recover rematerializes a file that already exists. Playwright `test:ci` output around 1.3 MB is a normal case, not an edge case.
-
-Remediation — implement exactly this:
-
-1. In `.jaiph/ensure_ci_passes.jh`, delete the `run common.save_string_to_file(ci_log_file, failure)` call. Do not pass the `failure` binding into any script argument.
-2. Resolve `JAIPH_RUN_DIR` with a tiny script that prints only that env value (no content argv). Point the recover prompt at the existing capture: `${run_dir}/*-script__npm_run_test_ci.out`. Tell the agent to `tail` that file. Drop the `.jaiph/tmp/ensure_ci_passes.last.log` copy, or keep a dest path only if a script copies via `cp` from the capture glob (path argv only).
-3. Replace `assert_nonempty_file_or_fail(ci_log_file)` with a check that the capture glob exists and is non-empty, still using only path argv.
-4. Do not change recover binding semantics, `save_string_to_file`, or the runtime in this task.
-
-### Acceptance criteria
-
-- `.jaiph/ensure_ci_passes.jh` has no `save_string_to_file` (or other script) call whose argument is the recover binding.
-- The recover prompt names the `JAIPH_RUN_DIR` capture (`*-script__npm_run_test_ci.out`) as the log to read.
-- A script in that recover body receives at most short paths / names as argv, never the failed step's stdout.
-- `npm run build` and `npm test` pass.
-
 ## Spawn and exec failures are failed steps; always emit STEP_END and RUN_END #dev-ready
 
 Context: `spawnAndCapture` (`src/runtime/kernel/node-workflow-runtime.ts`) calls `_scriptSpawn.spawn(command, args, …)` inside a Promise executor with no try/catch. The `'error'` handler settles `status: 1`, but a synchronous throw from `spawn` (including `E2BIG` when argv + env exceed `ARG_MAX`) rejects the Promise. `executeManagedStep` awaits `fn(stepIo)` and only `finally`-stops the idle watchdog; on throw it never writes `STEP_END`. `runRoot` awaits `executeDef` then emits `RUN_END`; on throw it never emits `RUN_END`. `runWorkflowRunner` (`.catch` in `src/runtime/kernel/node-workflow-runner.ts`) prints `jaiph node runner: …` and `process.exit(1)` with no journal close. Observed: `STEP_START` for the oversized script, empty `.out`/`.err`, no `STEP_END`, no `RUN_END`, heartbeat stops. `recover_limit` never applies because recover never sees a failed step.
@@ -107,3 +87,37 @@ Remediation — implement exactly this:
 - `save_string_to_file` / architect_review call sites compile under the new helper contract (path argv + stdin body).
 - Formatter round-trips `run name(args) stdin expr`.
 - `npm run build`, `npm test`, `npm run test:e2e`, and editor grammar tests (`plugins/vscode`, `plugins/zed` as already wired) pass.
+
+## jaiph format is a no-op on shebang + const = prompt triple-quoted def #dev-ready
+
+Context: `jaiph format` (`src/cli/commands/format.ts`) parses with trivia and re-emits via `emitModule` (`src/format/emit.ts`, `src/format/emit-steps.ts`). A `const name = prompt """ … """` step is a `const` whose RHS is `Expr.prompt`. Trivia on that expr carries `bodyKind: "triple_quoted"` and `rawBody` (author lines, including margin). Docs already state the contract: `docs/cli.md` (`jaiph format`) — shebang preserved, triple-quoted prompt blocks emit verbatim (author margin via trivia), a single blank line between steps is kept. `examples/say_hello.jh` uses this shape and `e2e/tests/128_examples_format_check.sh` checks every example, but no unit test pins the minimal file below. `src/format/emit.test.ts` has `const = prompt "…"` and top-level `const x = """`, not `const = prompt """` with a shebang.
+
+Problem: this exact source is a normal first-agent file. Format must leave it bit-for-bit unchanged (default `--indent 2`). A rewrite that collapses `"""` to `"…"`, re-indents the prompt body, moves the closing `"""`, drops the shebang, or drops the blank line before `return` is a contract break. Today's suite can stay green while that happens.
+
+Source that must be a no-op (trailing newline after `}`):
+
+```
+#!/usr/bin/env jaiph
+
+export def hello(name) {
+  const response = prompt """
+    Say hello to ${name} and provide a fun fact about a person with the same name.
+    Respond with a single line. Do not inspect files or run tools.
+  """
+
+  return response
+}
+```
+
+Remediation — implement exactly this:
+
+1. Add a unit test in `src/format/emit.test.ts`: `emitModule` of the def body (same steps, no shebang — shebang is CLI-only) equals the input bit-for-bit, including the 4-space prompt margin, the closing `"""` at 2 spaces, and the blank line before `return`.
+2. Add a CLI / e2e check (`e2e/tests/100_format_command.sh` or a sibling): write the full source above (with shebang) and assert `jaiph format --check` exits 0 and `jaiph format` does not change the bytes. A second format pass is also a no-op.
+3. If format currently rewrites this source, stop the rewrite. Do not collapse the prompt to a double-quoted string. Do not change `rawBody` / prompt trivia, recover bindings, or `stdin` in this task.
+
+### Acceptance criteria
+
+- Unit test: the `export def hello(name) { … }` body above (no shebang) round-trips through `parsejaiphWithTrivia` + `emitModule` with `assert.equal` to the original string. A formatter that emits `prompt "Say hello…"` or re-indents the two body lines must fail this test.
+- `jaiph format --check` on a file whose entire contents are the shebang source above exits 0. `jaiph format` on a copy leaves `cmp` equal.
+- `${name}` stays as authored interpolation in the formatted file (not substituted, not escaped away).
+- `npm run build` and `npm test` pass. If you add the e2e section, `npm run test:e2e` passes that file.
