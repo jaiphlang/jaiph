@@ -213,7 +213,7 @@ curl -s 'http://127.0.0.1:5247/runs?limit=100000' \
   | jq -e '.limit == 1000 and (.runs | length) <= 1000'
 ```
 
-Each `jq -e` check exits `0` when the contract holds. The run's durable record is under `.jaiph/runs/…/run_summary.jsonl`, whose path is `run_dir` in the response, and it uses the same artifact layout as `jaiph run`.
+Each `jq -e` check exits `0` when the contract holds. The `run_dir` field in the response is the run's directory under `.jaiph/runs/…/`. It holds the `run_summary.jsonl` timeline and uses the same artifact layout as `jaiph run`.
 
 ## Related
 

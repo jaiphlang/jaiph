@@ -23,7 +23,7 @@ jaiph mcp ./tools.jh
 
 The server speaks newline-delimited [JSON-RPC 2.0](https://www.jsonrpc.org/specification) over stdio, which is the MCP stdio transport. It runs until stdin closes or it receives `SIGINT` or `SIGTERM`. `jaiph --mcp ./tools.jh` is an equivalent alias.
 
-> **MCP over the network.** [`jaiph serve`](serve.md) exposes the same tools over MCP Streamable HTTP at `POST /mcp`, alongside its REST API. It shares one run registry, concurrency cap, hot reload, and bearer auth with the stdio server. Use `jaiph mcp` for a stdio client on the same machine, and use `jaiph serve` when an MCP client must reach the defs over HTTP. Everything below applies to both transports the same way: exposure rules, descriptions, input schema, result shape, progress, and cancel.
+> **MCP over the network.** [`jaiph serve`](serve.md) exposes the same tools over MCP Streamable HTTP at `POST /mcp`, alongside its REST API. Within `jaiph serve`, that `POST /mcp` endpoint shares one run registry, concurrency cap, hot reload, and bearer auth with its own REST API. `jaiph mcp` (stdio) and `jaiph serve` are separate processes and share no run registry or state. Use `jaiph mcp` for a stdio client on the same machine, and use `jaiph serve` when an MCP client must reach the defs over HTTP. Everything below applies to both transports the same way: exposure rules, descriptions, input schema, result shape, progress, and cancel.
 
 Add `--workspace <dir>` to set the import resolution root. By default Jaiph auto-detects it from the file's directory, the same as `jaiph run`.
 
@@ -62,23 +62,28 @@ Not every def in the file becomes a tool. `deriveTools` applies these rules to t
 2. Skip `main` unless it is the only export; then expose it under a tool name taken from the file's basename (`deploy.jh` becomes `deploy`). `main` stays the `jaiph run` entrypoint, not a public tool next to other exports.
 3. An exported channel-route handler is a tool, because the author exported it.
 
-The tool name for a named def is the def name itself. For a lone `main`, Jaiph builds the name from the file basename. It strips the `.jh` suffix, replaces any character outside `[A-Za-z0-9_-]` with `_`, and truncates the result to 128 characters.
+The tool name for a named def is the def name itself. For a lone `main`, Jaiph builds the name from the file basename. It strips the `.jh` suffix, replaces any character outside `[A-Za-z0-9_-]` with `_`, and truncates the result to 128 characters. If stripping leaves an empty name, Jaiph uses `def`.
 
 Jaiph logs every skip and exclusion as a warning on stderr at load time, and never on stdout.
 
 ## 4. Write tool descriptions as comments
 
-The description an agent reads when it decides whether to call a tool comes from the `#` comment lines directly above the def. Jaiph drops shebang lines (`#!…`), strips the leading `#` from each remaining line, and joins the lines with newlines. A client relies on the description to pick a tool, so write it for the calling agent.
+The description an agent reads when it decides whether to call a tool comes from the `#` comment lines directly above the def. Jaiph drops shebang lines (`#!…`), strips the leading `#` and one following space from each remaining line, drops any blank lines, and joins the rest with newlines. A client relies on the description to pick a tool, so write it for the calling agent.
 
 ```jaiph
+script deploy_sh {
+  ./deploy.sh "$1"
+}
+
 # Deploy the application to the named environment.
-# Runs the test suite first and aborts the deploy if it fails.
+# Returns a short confirmation message once the deploy finishes.
 export def deploy(environment) {
-  run tests_pass()
-  run `./deploy.sh ${environment}`()
+  run deploy_sh(environment)
   return "deployed to ${environment}"
 }
 ```
+
+Only `deploy` is exported, so `deploy_sh` stays a private script and never becomes a tool.
 
 If a def has no leading comment, the description falls back to `Run the "<name>" def from <basename>.`
 
@@ -126,10 +131,11 @@ As the def runs, Jaiph sends a `notifications/progress` back to the client at ea
 {"jsonrpc":"2.0","method":"notifications/progress","params":{"progressToken":"deploy-1","progress":1,"message":"def deploy"}}
 {"jsonrpc":"2.0","method":"notifications/progress","params":{"progressToken":"deploy-1","progress":2,"message":"script deploy_sh"}}
 {"jsonrpc":"2.0","method":"notifications/progress","params":{"progressToken":"deploy-1","progress":3,"message":"script deploy_sh"}}
+{"jsonrpc":"2.0","method":"notifications/progress","params":{"progressToken":"deploy-1","progress":4,"message":"def deploy"}}
 ```
 
-- `progress` is a counter that only increases. It is a running count of the step events seen so far, not a fraction of a known total. There is no `total`, because Jaiph does not know a def's step count up front. Both the start and the end of a step send a notification, so the counter goes up by two per step, and the `message` repeats across the start and end pair (above, the `deploy_sh` script step).
-- `message` is the step's kind and name, one of `def <name>`, `script <name>`, or `prompt <backend>`. For a prompt step the name is the backend rather than a step name, such as `prompt claude`. These are the same step events that `jaiph run` prints on stderr. The tool's own def is the first step (`def deploy` above), followed by its nested steps.
+- `progress` is a counter that only increases. It is a running count of the step events seen so far, not a fraction of a known total. There is no `total`, because Jaiph does not know a def's step count up front. Both the start and the end of a step send a notification, so the counter goes up by two per step, and the `message` repeats across the start and end pair. Above, the `def deploy` step reports at 1 and 4, and its nested `deploy_sh` script step reports at 2 and 3.
+- `message` is the step's kind and name, one of `def <name>`, `script <name>`, or `prompt <backend>`. For a prompt step the name is the backend rather than a step name, such as `prompt claude`. A named `script` uses the script name, and an inline script (`` run `…`() ``) uses a generated `__inline_<hash>` name. These are the same step events that `jaiph run` prints on stderr. The tool's own def is the first step (`def deploy` above), followed by its nested steps.
 - Notifications stop the moment the call's response is sent. No progress notification ever follows the result for that call.
 - A call without a `progressToken` receives no progress notifications at all, which is the same behavior as before you opted in.
 

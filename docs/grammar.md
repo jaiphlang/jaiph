@@ -18,7 +18,7 @@ This page is the authoritative syntactic reference for Jaiph: lexical rules, sta
 | Element | Rule |
 |---|---|
 | Identifier | `[A-Za-z_][A-Za-z0-9_]*`. |
-| Reserved keyword | The words `async`, `catch`, `channel`, `config`, `const`, `def`, `else`, `export`, `fail`, `false`, `for`, `if`, `import`, `in`, `log`, `logerr`, `logwarn`, `match`, `not`, `prompt`, `return`, `returns`, `run`, `script`, `send`, `true`, and `use`. A reserved word cannot be a parameter name or a top-level name in the unified namespace (`E_PARSE`). `not` is reserved but has no syntax yet. |
+| Reserved keyword | The words `async`, `catch`, `channel`, `config`, `const`, `def`, `else`, `export`, `fail`, `false`, `for`, `if`, `import`, `in`, `log`, `logerr`, `logwarn`, `match`, `not`, `prompt`, `return`, `returns`, `run`, `script`, `send`, `true`, and `use`. A reserved word cannot be a `def` parameter name or a top-level name in the unified namespace (`E_PARSE`). `not` is reserved but has no syntax yet. |
 | Reference | `IDENT` (local) or `IDENT.IDENT` (module-qualified). |
 | Comment | Full-line `#` comment. Trailing `#` on a step line is not a comment. |
 | Blank line | Preserved between steps inside def bodies (as `blank_line` trivia). `jaiph format` collapses multiple consecutive body blanks to one and trims trailing blanks before `}`. Top-level blank lines are not preserved — the formatter emits one blank line between emitted sections. |
@@ -127,7 +127,7 @@ param_list    = IDENT { "," IDENT } ;
 | Aspect | Rule |
 |---|---|
 | Definition parens | Required even when parameterless (e.g. `def check()`, `export def main()`). Omitting them is `E_PARSE` with a fix hint. |
-| Parameter names | Identifier syntax, no duplicates, no reserved keywords. |
+| Parameter names | `def` parameters must use identifier syntax, with no duplicates and no reserved keywords (`E_PARSE`). Named-prompt parameters are only checked for identifier syntax, so a duplicate or reserved-keyword parameter on a named prompt is not rejected. |
 | Def body | May begin with an optional nested `config { … }` (must precede the first step). |
 
 Script RHS:
@@ -244,7 +244,9 @@ nested `def` / named `prompt` closes over the enclosing scope at runtime; a nest
 run_stmt         = "run" ( call_ref | inline_script ) ;
 run_catch_stmt   = "run" ( call_ref | inline_script ) "catch" catch_bindings catch_body ;
 run_recover_stmt = "run" ( call_ref | inline_script ) "recover" recover_bindings recover_body ;
-run_async_stmt   = "run" "async" call_ref [ recover_suffix | catch_suffix ] ;
+run_async_stmt   = "run" "async" call_ref
+                   [ ( "catch" catch_bindings catch_body )
+                   | ( "recover" recover_bindings recover_body ) ] ;
 ```
 
 | Position | Allowed targets |
@@ -314,6 +316,7 @@ return_stmt  = "return" return_value ;
 return_value = double_quoted_string | triple_quoted_block | "$" IDENT | "${" IDENT "}"
              | IDENT
              | "run" ( call_ref | inline_script )
+             | "prompt" ( prompt_body | prompt_call ) [ returns_schema ]
              | "match" IDENT "{" { match_arm } "}" ;
 ```
 
@@ -379,8 +382,10 @@ if_operand     = double_quoted_string | "/" regex_source "/" ;
 ### `match`
 
 ```ebnf
-match_stmt      = "match" subject_ref "{" { match_arm } "}" ;
-match_arm       = match_pattern "=>" arm_body NEWLINE ;
+match_stmt      = "match" subject_ref "{" match_arms "}" ;
+match_arms      = match_arm { NEWLINE match_arm }        (* multiline: opening "{" ends the line, one arm per line *)
+                | match_arm { "," match_arm } ;          (* compact: whole match on one line, arms comma-separated *)
+match_arm       = match_pattern "=>" arm_body ;
 match_pattern   = match_alternand { "|" match_alternand } | "_" ;
 match_alternand = double_quoted_string | "/" regex_source "/" ;
 arm_body      = double_quoted_string | triple_quoted_block
@@ -395,7 +400,7 @@ arm_body      = double_quoted_string | triple_quoted_block
 | Subject | Bare identifier or `IDENT.IDENT`. Subject starting with `$` / `${}` is `E_PARSE`. |
 | Default arm | Exactly one `_` wildcard arm is required. |
 | Alternation | `"a" \| "b" \| /^c/ => body` — pipe-separated string literals and/or regexes on one arm. The arm matches if **any** alternand matches (OR); arm order still decides ties. String and regex alternands may be mixed. `_` cannot participate (`_ \| "x"` / `"x" \| _` are `E_PARSE`); a trailing `\|` before `=>` is `E_PARSE`. |
-| Arm delimiter | Newlines. Commas between or after arms are `E_PARSE` (`commas are not allowed in match arms; use one arm per line`). |
+| Arm delimiter | In the multiline form the opening `{` ends the line and each arm sits on its own line, so a comma between or after arms is `E_PARSE` (`commas are not allowed in match arms; use one arm per line`). In the compact one-line form (`match status { "ok" => "pass", _ => "fail" }`) the whole match fits on one line and commas separate the arms. A triple-quoted arm body needs the multiline form. |
 | Disallowed in arms | `return` (use `return match … { … }` at the outer level), inline scripts (use a named script with `run`), bare unknown identifiers (`E_VALIDATE: unknown identifier "…" in match arm body`). |
 | Expression form | Usable as `const x = match …` or `return match …`. |
 

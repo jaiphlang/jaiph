@@ -129,6 +129,17 @@ jaiph ./e2e/workflow_greeting.test.jh       # shorthand: a *.test.jh path is tre
 
 The runner discovers `*.test.jh` files recursively. A bare `jaiph test` walks every subdirectory under the workspace root, which includes installed libraries under `.jaiph/libs/`, so any test files that ship inside a library run too. Point `jaiph test` at your own directory (for example `jaiph test ./e2e`) when you want to run only your tests. When no files match, whether you ran a bare `jaiph test` or pointed it at a directory, it prints `jaiph test: no *.test.jh files found (nothing to do)` and exits 0, so you can call it from CI without checking first.
 
+### Grant `use` keys with `--env`
+
+A `script` step, or a named `prompt`, can declare a `use` clause that lists the environment variables it needs (see [Pass a host key to a script](script-env.md)). Under `jaiph test`, those keys are absent from the spawned subprocess unless you grant them with `--env`:
+
+```bash
+jaiph test --env API_TOKEN ./e2e            # forward the host value of API_TOKEN
+jaiph test --env API_TOKEN=secret ./e2e     # set an explicit value
+```
+
+`--env` is repeatable and can appear before the path. The bare `--env KEY` form forwards the value from the host environment, and it fails with `E_ENV_MISSING` when that variable is unset. The `--env KEY=VALUE` form sets the value directly. Unlike `jaiph run`, `jaiph test` runs no `use` pre-flight, so a key that a script needs but you did not grant is missing in the subprocess instead of failing before the test runs.
+
 ## Verification
 
 A passing run prints one block per case, then `✓ N test(s) passed`, and exits 0:
@@ -155,3 +166,4 @@ A failure prints the failing assertion and exits non-zero:
 - [Architecture, test runner integration](architecture.md#test-runner-integration-testjh-in-the-kernel). How `runTestFile` reuses the same module graph and runtime as `jaiph run`.
 - [Configure backend & model](configure-backend.md). Defs under test still read `config { … }`, so pin agent settings in env when CI must be deterministic.
 - [Authenticate agent backends](agent-auth.md). Only needed when a test reaches a live `prompt`. Fully mocked suites skip agent credentials and the `jaiph run` pre-flight.
+- [Pass a host key to a script](script-env.md). How `use` clauses and `--env` grant environment variables to script and named-prompt spawns.

@@ -20,7 +20,7 @@ You will write a file with one script step that prints a greeting, and a `return
 
 ## Prerequisites
 
-- A POSIX shell (`sh`, `bash`, `zsh`) with `curl` and either `shasum` or `sha256sum` available.
+- A POSIX shell (`sh`, `bash`, `zsh`) with `curl`, `minisign`, and either `shasum` or `sha256sum` available. The installer uses `minisign` to verify the release signature and `shasum` or `sha256sum` to verify the checksum. It fails closed if `minisign` is missing. See [Install and switch versions](setup.md) if you need to install without `minisign`.
 - About five minutes.
 
 Node and API keys are not required for this tutorial. `jaiph run` executes on the host.

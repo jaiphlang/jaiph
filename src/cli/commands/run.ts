@@ -39,7 +39,8 @@ const RUN_USAGE =
   "  --target <dir>     keep emitted scripts and run metadata under <dir>\n" +
   "  --raw              skip banner, progress tree, hooks, and failure footer; inherited stdio\n" +
   "  --workspace <dir>  workspace root for import resolution (default: auto-detect from the .jh file)\n" +
-  "  --env KEY=VALUE    define KEY=VALUE in the def env(repeatable); --env KEY forwards the host value\n" +
+  "  --env KEY=VALUE    grant KEY to matching `use` clauses (repeatable); --env KEY forwards the host value.\n" +
+  "                     Values are not placed on the runner process env, only into subprocesses that `use` the key.\n" +
   "  --                 end of jaiph flags; remaining args go to def main\n" +
   "  -h, --help         show this help\n\n" +
   "Examples:\n" +
