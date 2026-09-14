@@ -66,6 +66,7 @@ function makeEnv(root: string, scriptsDir: string): NodeJS.ProcessEnv {
     JAIPH_RUNS_DIR: join(root, ".jaiph", "runs"),
     JAIPH_SCRIPTS: scriptsDir,
     JAIPH_WORKSPACE: root,
+    JAIPH_QUEUE_STATE: join(root, ".jaiph", "queue-state.md"),
   };
 }
 
@@ -105,6 +106,11 @@ test("sterile: a script with no `use` never sees ambient host keys (incl. agent 
       assert.equal(child.PATH, process.env.PATH, "base env (PATH) is forwarded");
       assert.equal(child.JAIPH_WORKSPACE, root, "contract key JAIPH_WORKSPACE is forwarded");
       assert.equal(child.JAIPH_SCRIPTS, scriptsDir, "contract key JAIPH_SCRIPTS is forwarded");
+      assert.equal(
+        child.JAIPH_QUEUE_STATE,
+        join(root, ".jaiph", "queue-state.md"),
+        "contract key JAIPH_QUEUE_STATE is forwarded",
+      );
       assert.ok(child.JAIPH_RUN_DIR, "contract key JAIPH_RUN_DIR is forwarded");
       assert.ok(child.JAIPH_ARTIFACTS_DIR, "contract key JAIPH_ARTIFACTS_DIR is forwarded");
       assert.equal(child.JAIPH_AGENT_MODEL, "", "JAIPH_AGENT_MODEL stays defined (set -u scripts)");
