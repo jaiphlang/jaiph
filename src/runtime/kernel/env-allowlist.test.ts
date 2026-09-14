@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { scrubPromptEnv, buildRunnerBaseEnv, isRunnerEnvAllowed } from "./env-allowlist";
+import { scrubPromptEnv, buildRunnerBaseEnv, buildScriptEnv, isRunnerEnvAllowed } from "./env-allowlist";
 
 // scrubPromptEnv builds the env handed to every prompt backend subprocess
 // (runBackend in prompt.ts). Contract: base environment + JAIPH_* control keys
@@ -181,6 +181,32 @@ test("buildRunnerBaseEnv: backend credential keys pass; JAIPH_SERVE_* server key
   assert.equal(env.CURSOR_API_KEY, "cur");
   assert.equal(env.OPENAI_API_KEY, "sk-oai");
   assert.equal(env.JAIPH_SERVE_TOKEN, undefined, "host-only serve token stays off the runner");
+});
+
+test("buildScriptEnv: forwards JAIPH_QUEUE_STATE when the runner has it; omits it when unset", () => {
+  const grant = new Set<string>();
+  const withState = buildScriptEnv(
+    {
+      PATH: "/usr/bin",
+      JAIPH_WORKSPACE: "/work",
+      JAIPH_QUEUE_STATE: "/work/.jaiph/queue-state.md",
+      JAIPH_DEBUG: "true",
+    },
+    undefined,
+    grant,
+    {},
+  );
+  assert.equal(withState.JAIPH_QUEUE_STATE, "/work/.jaiph/queue-state.md");
+  assert.equal(withState.JAIPH_WORKSPACE, "/work");
+  assert.equal(withState.JAIPH_DEBUG, undefined, "non-contract JAIPH_* stays off the script");
+
+  const withoutState = buildScriptEnv(
+    { PATH: "/usr/bin", JAIPH_WORKSPACE: "/work" },
+    undefined,
+    grant,
+    {},
+  );
+  assert.equal(withoutState.JAIPH_QUEUE_STATE, undefined);
 });
 
 test("isRunnerEnvAllowed: matches base env, JAIPH_* control keys, and credentials only", () => {
