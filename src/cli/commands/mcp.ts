@@ -15,7 +15,7 @@ const MCP_USAGE =
   "Tool descriptions come from the `#` comment lines directly above each def.\n" +
   "Sources are re-validated on change and clients get notifications/tools/list_changed.\n\n" +
   "  --workspace <dir>  workspace root for import resolution (default: auto-detect)\n" +
-  "  --env KEY=VALUE    define KEY in every tool call's env (repeatable); --env KEY forwards the host value\n" +
+  "  --env KEY=VALUE    grant KEY to matching `use` clauses on every tool call (repeatable); --env KEY forwards the host value\n" +
   "  -h, --help         show this help\n\n" +
   "Example:\n" +
   "  claude mcp add mytools -- jaiph mcp ./tools.jh\n";

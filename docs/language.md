@@ -127,6 +127,7 @@ run `echo $1-$2`("hello", "world")   # => hello-world
 | `run async` | Not supported. |
 
 ### `run async` — concurrent execution with handles
+{: #run-async-concurrent-execution-with-handles}
 
 `run async ref(args)` starts the callee concurrently and returns a `Handle<T>` immediately. `T` is the same type a synchronous `run` would return.
 
@@ -143,7 +144,7 @@ export def main() {
 | Resolution trigger | First non-passthrough read — string interpolation, argument to `run`, comparison in `if` / `match`, prompt body referencing `${h}`, channel `send` payload referencing `${h}`, or `const copy = h` (bare-identifier RHS desugars to `"${h}"`). |
 | Passthrough | Initial capture (`const h = run async foo()`), bare `run async` with no capture name. |
 | Implicit join | When the enclosing `executeSteps` scope exits, all remaining unresolved handles created there are joined. Failures aggregate like a synchronous step. |
-| `recover` / `catch` | Both work with `run async`. `recover` uses the same retry-limit semantics as non-async `recover` (`run.recover_limit`). |
+| `recover` / `catch` | Both work with the statement form of `run async`, and `recover` uses the same retry-limit semantics as non-async `recover` (`run.recover_limit`). A captured `const h = run async foo()` cannot carry `catch` / `recover`. Wrap the target in a def if you need them on a captured handle. |
 | Inline scripts | Not supported with `run async`. |
 | Progress display | Each branch is prefixed with subscript digits (₁, ₂, …) at the call site's indent level, in dispatch order. Nested branches get their own numbering scope. |
 
@@ -276,7 +277,7 @@ const label = match status {
 
 | RHS form | Notes |
 |---|---|
-| Double-quoted string | Single-line. Multi-line double-quoted is `E_PARSE`. |
+| Double-quoted string | Single-line. A double-quoted value does not span lines. Use a triple-quoted block for multiline text. |
 | Triple-quoted block | Multiline; supports `${…}`. |
 | `run` call / `run async` call | Managed capture. |
 | `prompt` (any body form) | Optional `returns` schema. |
@@ -404,7 +405,7 @@ match cmd {
 | Subject | Bare identifier or `IDENT.IDENT`. `$var` / `${var}` is `E_PARSE`. |
 | Patterns | String literal (exact equality), `/regex/`, or `_` (wildcard — exactly one required). |
 | Alternation | `"a" \| "b" \| /^c/ => body` — pipe-separated string literals and/or regexes share one arm, which matches if **any** alternand matches (OR). String and regex alternands may be mixed. Arm order still decides ties (first matching arm wins). `_` cannot participate (`_ \| "x"` / `"x" \| _` are `E_PARSE`); a trailing `\|` before `=>` is `E_PARSE`. |
-| Arm delimiter | Newlines, or `;` to place more than one arm on a line. Commas between arms are `E_PARSE`. |
+| Arm delimiter | Two forms, with different delimiters. In the multiline block form (`match x { … }` spread over its own lines) arms are one per line, or `;` to place several on one line, and commas are `E_PARSE`. In the compact one-line form (`const x = match s { "a" => "b", _ => "c" }`) arms are comma-separated, and `;` or a newline is `E_PARSE`. |
 | Arm bodies | String literal, triple-quoted block, bare in-scope identifier, `$var` / `${var}`, `fail "…"`, `run ref(…)`. |
 | Disallowed in arms | `return` (use `return match … { … }` outside), inline scripts, unknown bare identifiers (`E_VALIDATE: unknown identifier "…" in match arm body; declare it with "const", use a capture, or add a parameter`). |
 | Expression form | Usable with `const x = match …` or `return match …`. |
@@ -428,7 +429,7 @@ for path in paths {
 |---|---|
 | Source variable | Must already hold a string (`const`, capture, parameter). Unknown name is `E_VALIDATE`. |
 | Line splitting | Splits on `\n` (normalises `\r\n`). A trailing newline does not yield an empty final line. Interior empty lines are yielded. |
-| Iterator name | Subject to the immutable-binding rules of the surrounding scope. After the loop, the iterator remains bound to the last line. |
+| Iterator name | Block-scoped to the loop body. After the loop it is out of scope, so naming it is `E_VALIDATE`. An iterator name that collides with an existing binding is `E_VALIDATE` (`for loop iterator "<x>" conflicts with an existing binding`). |
 | Allowed in | Defs. |
 
 ## String interpolation
@@ -487,7 +488,7 @@ Module `const` values are **not** automatically exported into script environment
 
 ## Recursion limit
 
-The runtime enforces a hard recursion depth limit of `256` (`MAX_RECURSION_DEPTH` in `src/runtime/kernel/runtime-arg-parser.ts`). Exceeding the limit produces a runtime error. The depth is the active def call chain (not script subprocesses). There is no environment variable override.
+The runtime enforces a hard recursion depth limit of `256` (`MAX_RECURSION_DEPTH` in `src/runtime/kernel/runtime-arg-parser.ts`). Exceeding the limit produces a runtime error. The depth counts the active chain of managed calls, which is the nested `run` calls to defs plus the current script leaf when one is running. A script runs as a subprocess and cannot call back into the runtime, so it adds at most one level and never recurses on its own. There is no environment variable override.
 
 ## Related
 

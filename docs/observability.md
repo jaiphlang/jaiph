@@ -92,14 +92,15 @@ Beyond the service name, every trace carries `jaiph.version`, `jaiph.run_id`,
 with `OTEL_RESOURCE_ATTRIBUTES`, and you can set the service name with
 `OTEL_SERVICE_NAME` (the default is `jaiph`).
 
-An authenticated `jaiph serve` run also carries the caller's identity as resource
+Every `jaiph serve` run also carries the caller's identity as resource
 attributes. `jaiph.principal` is the audit subject, which is the token `sub` (or
-`client_id` for `sub`-less machine tokens) in OIDC mode and `operator` or
-`anonymous` otherwise. `jaiph.correlation_id` is the
-request's `X-Correlation-Id` or `X-Request-Id`, or a generated UUID when neither is
-present. Both attributes are attached to every span of the trace, and neither is
-ever a bearer token or any value that carries a secret. They are absent for `jaiph
-run` and for anonymous callers.
+`client_id` for `sub`-less machine tokens) in OIDC mode, `operator` when a static
+operator token is set, and `anonymous` in open mode with no token.
+`jaiph.correlation_id` is the request's `X-Correlation-Id` or `X-Request-Id`, or a
+generated UUID when neither is present. Both attributes are attached to every span
+of the trace, and neither is ever a bearer token or any value that carries a
+secret. They are absent only for `jaiph run`, which has no serve request behind
+it.
 
 ## What happens when an export fails
 
@@ -167,7 +168,7 @@ report.
 - **`level`** is `error`, and **`platform`** is `node`.
 - **`tags`** include `jaiph.def`, `jaiph.source` (the source file basename),
   and the failing step's `jaiph.step.kind` and `jaiph.step.name` when they are
-  known. An authenticated `jaiph serve` run also tags `jaiph.principal` (the audit
+  known. Every `jaiph serve` run also tags `jaiph.principal` (the audit
   subject) and `jaiph.correlation_id` (the request id), never a token or any value
   that carries a secret.
 - **`extra`** holds `failing_step_detail` (the failing step's redacted `err` or

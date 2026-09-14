@@ -81,6 +81,16 @@ jaiph run ./flow.jh               # imports must resolve at compile time
 
 A clone with no `.jh` files anywhere in the tree is rejected with `lib "<name>" contains no .jh modules — not a jaiph library?` and the directory is removed before any lock entry is written.
 
+### 5. Update an installed library
+
+`jaiph install` skips any library directory that already exists, so re-running it does not fetch new commits on its own. To move a library to a different tag, branch, or commit, re-run the install with `--force`:
+
+```bash
+jaiph install https://github.com/you/queue-lib.git@v1.1 --force
+```
+
+`--force` deletes the existing clone, clones again at the new ref, and rewrites the `.jaiph/libs.lock` entry with the new commit. Commit the updated lockfile.
+
 ### Trust boundary for the execution binary
 
 An imported library cannot silently redirect which binary runs your `prompt` steps. The `agent.command` and `agent.backend` config keys set that binary, and Jaiph applies both keys **only** from your entry module's `config {}` block. An imported module that sets either key is ignored for that key. All other config keys (`agent.model`, `agent.trusted_workspace`, `agent.*_flags`, `run.*`) follow the normal cross-module scoping rules. See the [import trust boundary](configuration.md#import-trust-boundary) section of the configuration reference for the full contract and the advanced `JAIPH_AGENT_COMMAND_IMPORT_UNLOCK` and `JAIPH_AGENT_BACKEND_IMPORT_UNLOCK` opt-in.

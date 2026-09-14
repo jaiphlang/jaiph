@@ -6,7 +6,7 @@ diataxis: tutorial
 
 # Your first agent run
 
-This tutorial builds on [Your first run](first-run.md). You already have the `jaiph` CLI on your `PATH`, you have run a file that used only script steps, and you have looked at the artifacts under `.jaiph/runs/`. Here you will add a `prompt` step that calls an agent backend. `jaiph run` executes on the host. A `cursor` or `claude` prompt that can run tools runs as the same user as `jaiph` — sterile child `env` is not a sandbox. If you want a process sandbox, wrap jaiph in your own container or CI runner — see [Deploy jaiph](deploy.md).
+This tutorial builds on [Your first run](first-run.md). You already have the `jaiph` CLI on your `PATH`, you have run a file that used only script steps, and you have looked at the artifacts under `.jaiph/runs/`. Here you will add a `prompt` step that calls an agent backend. `jaiph run` executes on the host, so a `cursor` or `claude` prompt that can run tools runs as the same operating system user as `jaiph`. Jaiph hands each agent a reduced set of environment variables, but that is not a process sandbox. If you want a sandbox, wrap `jaiph` in your own container or CI runner. See [Deploy jaiph](deploy.md).
 
 ## What you will build
 
@@ -147,7 +147,7 @@ The record includes the resolved `backend`, the `model` (or `null` when the back
 You now have a working agent run. Here are some directions to go next:
 
 - [Pass a host key to a script](script-env.md) is the recipe for `use` and `--env`.
-- [Language reference](language.md) covers every step type, including `run async`, `match`, `for_lines`, `send`, and `if`.
+- [Language reference](language.md) covers every step type, including `run async`, `match`, `for`, `send`, and `if`.
 - [Run work concurrently](async.md) is the recipe for `run async`. [Async handles](spec-async-handles.md) is the value model.
 - [Inbox and dispatch](inbox.md) explains how to route work between defs without tight coupling.
 - [Deploy jaiph](deploy.md) shows a container, pod, or dedicated user if you want an outer boundary. The installer does not create that user.

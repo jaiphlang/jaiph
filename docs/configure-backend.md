@@ -22,7 +22,7 @@ Add a module-level `config { … }` block at the top of your `.jh` file:
 ```jh
 config {
   agent.backend = "claude"
-  agent.model = "sonnet-4"
+  agent.model = "sonnet"
 }
 
 export def main() {
@@ -31,9 +31,9 @@ export def main() {
 }
 ```
 
-The valid backend values are `"cursor"` (the default), `"claude"`, and `"codex"`. The model string is forwarded to the backend, so use a name the backend recognizes (e.g. `gpt-4o` for codex, `sonnet-4` for claude).
+The valid backend values are `"cursor"` (the default), `"claude"`, and `"codex"`. The model string is forwarded to the backend, so use a name the backend recognizes (e.g. `gpt-4o` for codex, `sonnet` for claude).
 
-Set `agent.backend` (and `agent.command`) only from the entry file. Jaiph ignores these two keys when an imported module sets them in its own `config { … }`, so a third-party module cannot redirect your `prompt` steps to a different binary. See [Import trust boundary](configuration.md#import-trust-boundary).
+Set `agent.backend` (and `agent.command`) only from the entry file. By default, Jaiph ignores these two keys when an imported module sets them in its own `config { … }`, so a third-party module cannot redirect your `prompt` steps to a different binary. See [Import trust boundary](configuration.md#import-trust-boundary).
 
 ## 2. Override per-def
 
@@ -55,7 +55,7 @@ A def-level block can set `agent.*` and `run.*` keys. The `module.*` keys are mo
 
 ```bash
 export JAIPH_AGENT_BACKEND="claude"
-export JAIPH_AGENT_MODEL="sonnet-4"
+export JAIPH_AGENT_MODEL="sonnet"
 jaiph run ./flow.jh
 ```
 
@@ -74,8 +74,10 @@ export JAIPH_CODEX_API_URL="https://api.example.com/v1/chat/completions"
 Each `prompt` step records the resolved backend and model in `run_summary.jsonl`. After the run, inspect the first `PROMPT_START` line:
 
 ```bash
-jq -c 'select(.type=="PROMPT_START")' .jaiph/runs/<date>/<time>-<entry>/run_summary.jsonl | head -1
+jq -c 'select(.type=="PROMPT_START")' .jaiph/runs/<YYYY-MM-DD>/<HH-MM-SS>-<source>/run_summary.jsonl | head -1
 ```
+
+The date and time segments are UTC, and `<source>` is the entry-file basename.
 
 The line includes `"backend":"<backend>"`, `"model"` (the resolved string, or `null` when the backend auto-selects), and `model_reason`:
 
