@@ -244,9 +244,7 @@ nested `def` / named `prompt` closes over the enclosing scope at runtime; a nest
 run_stmt         = "run" ( call_ref | inline_script ) ;
 run_catch_stmt   = "run" ( call_ref | inline_script ) "catch" catch_bindings catch_body ;
 run_recover_stmt = "run" ( call_ref | inline_script ) "recover" recover_bindings recover_body ;
-run_async_stmt   = "run" "async" call_ref
-                   [ ( "catch" catch_bindings catch_body )
-                   | ( "recover" recover_bindings recover_body ) ] ;
+run_async_stmt   = "run" "async" call_ref [ ( "catch" catch_bindings catch_body ) | ( "recover" recover_bindings recover_body ) ] ;
 ```
 
 | Position | Allowed targets |
@@ -313,8 +311,7 @@ const_rhs       = double_quoted_string | triple_quoted_block | bash_value_expr
 
 ```ebnf
 return_stmt  = "return" return_value ;
-return_value = double_quoted_string | triple_quoted_block | "$" IDENT | "${" IDENT "}"
-             | IDENT
+return_value = double_quoted_string | triple_quoted_block | "$" IDENT | "${" IDENT "}" | IDENT
              | "run" ( call_ref | inline_script )
              | "prompt" ( prompt_body | prompt_call ) [ returns_schema ]
              | "match" IDENT "{" { match_arm } "}" ;
@@ -327,8 +324,7 @@ return_value = double_quoted_string | triple_quoted_block | "$" IDENT | "${" IDE
 ```ebnf
 send_stmt = "send" send_rhs "->" (IDENT | IDENT "." IDENT) ;
 send_rhs  = double_quoted_string | triple_quoted_block | "$" IDENT | "${" … "}"
-          | "run" call_ref
-          | shell_fragment ;
+          | "run" call_ref | shell_fragment ;
 ```
 
 | Rule | Behaviour |
@@ -383,8 +379,7 @@ if_operand     = double_quoted_string | "/" regex_source "/" ;
 
 ```ebnf
 match_stmt      = "match" subject_ref "{" match_arms "}" ;
-match_arms      = match_arm { NEWLINE match_arm }        (* multiline: opening "{" ends the line, one arm per line *)
-                | match_arm { "," match_arm } ;          (* compact: whole match on one line, arms comma-separated *)
+match_arms      = match_arm { NEWLINE match_arm } | match_arm { "," match_arm } ;
 match_arm       = match_pattern "=>" arm_body ;
 match_pattern   = match_alternand { "|" match_alternand } | "_" ;
 match_alternand = double_quoted_string | "/" regex_source "/" ;
