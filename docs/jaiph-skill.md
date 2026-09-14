@@ -65,7 +65,7 @@ CLI quick reference:
 
 | Command | Purpose |
 |---|---|
-| `jaiph run [--target <dir>] [--raw] <file.jh> [--] [args…]` | Execute `export def main`; args bind to its named parameters |
+| `jaiph run [--target <dir>] [--raw] [--workspace <dir>] [--env KEY[=VALUE]]… <file.jh> [--] [args…]` | Execute `export def main`; args bind to its named parameters. `--env KEY[=VALUE]` grants a host key to matching `use` clauses (repeatable) |
 | `jaiph test [path]` | Run `*.test.jh` files (workspace, dir, or single file) |
 | `jaiph compile [--json] [--workspace <dir>] <paths…>` | Validate only — no execution, no side effects |
 | `jaiph format [--check] <file.jh …>` | Reformat (or verify formatting in CI) |
@@ -150,7 +150,7 @@ Script semantics:
 - Bodies are **opaque** to Jaiph orchestration — full shell/Python/whatever, heredocs included. The compiler strips the block's common leading whitespace at parse time (same idea as triple-quoted prompts); `jaiph format` re-adds one indent level for readability. The one check: do not call Jaiph symbols (`run`, def names) from inside a script body or `$(…)`.
 - **Capture = stdout.** `const v = run parse_json("pkg.json")` binds the script's stdout. Use `echo`/`printf` to return data; use exit codes (`return N` / `exit N`) for pass/fail.
 - **Arguments arrive as `$1`, `$2`, …** Module `const` values and def bindings are *not* exported into the subprocess environment — pass them explicitly as arguments.
-- **Script env is sterile.** A script sees only process basics (`PATH`, `HOME`, locale), the `JAIPH_WORKSPACE` / `JAIPH_SCRIPTS` / `JAIPH_RUN_DIR` / `JAIPH_ARTIFACTS_DIR` / `JAIPH_QUEUE_STATE` (when set) contract keys, and host keys it requests with a `use` clause: `script release use GITHUB_TOKEN = …` (also on `import script … as gh use GITHUB_TOKEN`). Each `use` key must be granted at run time with `--env KEY[=VALUE]` or `jaiph run` refuses to start (`E_ENV_MISSING`); host presence alone is not enough. `use` goes on a `script` declaration or a **named `prompt` definition** — never on defs, `run` / `prompt` call sites, or anonymous `prompt` steps. This is the child `env` Jaiph builds, not a sandbox: a tool-using `cursor` / `claude` prompt is the same user as `jaiph`. Operator recipe: [Pass a host key to a script](script-env.md). Why and the limit: [Why Jaiph](why-jaiph.md).
+- **Script env is sterile.** A script sees only process basics (`PATH`, `HOME`, locale), the `JAIPH_WORKSPACE` / `JAIPH_SCRIPTS` / `JAIPH_RUN_DIR` / `JAIPH_ARTIFACTS_DIR` contract keys (plus `JAIPH_AGENT_BACKEND` and `JAIPH_QUEUE_STATE` when set), and host keys it requests with a `use` clause: `script release use GITHUB_TOKEN = …` (also on `import script … as gh use GITHUB_TOKEN`). Each `use` key must be granted at run time with `--env KEY[=VALUE]` or `jaiph run` refuses to start (`E_ENV_MISSING`); host presence alone is not enough. `use` goes on a `script` declaration or a **named `prompt` definition** — never on defs, `run` / `prompt` call sites, or anonymous `prompt` steps. This is the child `env` Jaiph builds, not a sandbox: a tool-using `cursor` / `claude` prompt is the same user as `jaiph`. Operator recipe: [Pass a host key to a script](script-env.md). Why and the limit: [Why Jaiph](why-jaiph.md).
 - Alternatively a manual `#!` shebang as the first body line selects the interpreter (mutually exclusive with a fence tag).
 - A newline inside a single-backtick body is a parse error — use a fenced block.
 
@@ -183,7 +183,7 @@ def release(version) {
 
 - **Call arguments:** quoted literals (`"main"`), bare identifiers for in-scope variables (`version` — preferred style), bare `IDENT.IDENT` for typed-prompt fields (`result.role`), quoted strings that embed interpolation (`"${version}"`, `"v${version}"`), or explicit nested calls (`run outer(run inner())`, `run outer(run check())`). Unquoted `${…}` outside a string (`run greet(${name})`, `run to_lower(${result.role})`) is `E_VALIDATE` — use the bare form instead. Bare call shapes like `run outer(inner())` are rejected.
 - **Arity is checked** when the callee declares parameters: `run greet("a","b")` against `def greet(name)` is `E_VALIDATE`.
-- **`fail "reason"`** aborts with a non-zero exit. **`return`** accepts `"string"`, `"""…"""`, a bare identifier, `run ref()` / `run ref()`, an inline script, or a `match` expression.
+- **`fail "reason"`** aborts with a non-zero exit. **`return`** accepts `"string"`, `"""…"""`, a bare identifier, a `run ref()` call, a `prompt`, an inline script, or a `match` expression.
 - **`log` / `logerr` / `logwarn`** accept `"string"`, `"""…"""`, a bare identifier (`log status` ≡ `log "${status}"`), or `log run \`cmd\`()`. `logerr` writes a red line and `logwarn` a yellow warning line; both also appear on stderr.
 
 ### Nested declarations — helpers scoped to one def
@@ -321,7 +321,7 @@ for path in paths {                       # iterates LINES of the string `paths`
 
 - Subjects for `if` and `match` are bare identifiers (`if status == …`, `match status {`) or `IDENT.IDENT` reading a field from a typed prompt capture (`if r.verdict == "ok"`, `match r.verdict { … }`). `$status` / `${status}` as subject is still a parse error. Dot subjects on a non-typed-capture variable, or a field not in the prompt's `returns` schema, get the same `E_VALIDATE` errors as `${var.field}` interpolation. `for` iterators stay bare identifiers (`for x in lines`).
 - `if` supports optional `} else if <cond> {` arms and a final `} else {` branch — each keyword must be on **the same line** as the closing `}` of the preceding block. `else if` is sugar that desugars to nested `if`/`else` at parse time and chains to any depth (`if a == "x" { … } else if a == "y" { … } else { … }`); each arm uses the same condition grammar as `if`. `if` stays statement-only (no value production) — use `match` for value branching. An `else if` split onto its own line, without a condition, or with an empty body is `E_PARSE`.
-- `match`: arms are newline-separated (no commas), first match wins, exactly one `_` arm required. A pattern may be pipe-separated **alternation** (`"" | "check" => …`, `/^a/ | /^b/ => …`) that matches if any alternand matches; string and regex alternands may be mixed, `_` cannot join an alternation, and a trailing `|` is `E_PARSE`. Arm bodies: string, `"""…"""`, in-scope identifier, `${var}`, `fail "…"`, `run ref()`, `run ref()`. **Not** allowed in arms: `return` (write `return match x { … }`), `log`/`logerr`, inline scripts — capture the match result into a `const` and act on it after.
+- `match`: arms are newline-separated, or comma-separated on a single line (`match x { "a" => "1", _ => "0" }`); first match wins, and exactly one `_` arm is required. A pattern may be pipe-separated **alternation** (`"" | "check" => …`, `/^a/ | /^b/ => …`) that matches if any alternand matches; string and regex alternands may be mixed, `_` cannot join an alternation, and a trailing `|` is `E_PARSE`. Arm bodies: string, `"""…"""`, in-scope identifier, `${var}`, `fail "…"`, `run ref()`. **Not** allowed in arms: `return` (write `return match x { … }`), `log`/`logerr`, inline scripts — capture the match result into a `const` and act on it after.
 - `for` splits the source string on newlines (a trailing final newline does not produce an empty iteration). There is no numeric/while loop — iterate lines, use `recover`, or use recursive defs (depth limit 256).
 
 ### Channels — fan-out between defs
@@ -396,7 +396,7 @@ Precedence: **environment > def-level config > module-level config > defaults**.
 - **Run directory:** `.jaiph/runs/<UTC-date>/<UTC-time>-<file>/` with numbered `NNNNNN-<step>.out`/`.err` per step (written incrementally — `tail -f` works) and `run_summary.jsonl`, one JSON event per line (`RUN_START/END`, `STEP_START/END`, `LOG`, `INBOX_*`, `PROMPT_*`). When debugging a failed run, read the failure footer the CLI prints, then the referenced `.err`/`.out` files.
 - **Return value:** if `main` returns a string, the CLI prints it to stdout after the PASS line.
 - **Capture sources:** def → its explicit `return` value; script → stdout; prompt → the agent's answer.
-- Step environment: script env is sterile — process basics plus `JAIPH_WORKSPACE`, `JAIPH_SCRIPTS`, `JAIPH_RUN_DIR`, `JAIPH_ARTIFACTS_DIR`, `JAIPH_QUEUE_STATE` when set (and `JAIPH_AGENT_MODEL`, kept defined for `set -u`); host keys cross only via a `use` clause granted with `--env`. Def variables are **not** auto-exported — pass them as arguments.
+- Step environment: script env is sterile — process basics plus `JAIPH_WORKSPACE`, `JAIPH_SCRIPTS`, `JAIPH_RUN_DIR`, `JAIPH_ARTIFACTS_DIR`, and `JAIPH_AGENT_BACKEND` / `JAIPH_QUEUE_STATE` when set (and `JAIPH_AGENT_MODEL`, kept defined for `set -u`); host keys cross only via a `use` clause granted with `--env`. Def variables are **not** auto-exported — pass them as arguments.
 
 ## Testing your programs
 

@@ -40,7 +40,7 @@ jaiph run --env GITHUB_TOKEN release.jh
 
 `--env GITHUB_TOKEN` forwards the host value. `--env GITHUB_TOKEN=VALUE` sets an exact value (first `=` splits). Repeat `--env` for each key.
 
-`jaiph serve` and `jaiph mcp` take the same flag at **startup**. That grant applies to every call for the server's life. Extra `--env` keys nothing `use`s are allowed.
+`jaiph serve` and `jaiph mcp` take the same flag at **startup**. That grant applies to every call for the server's life. Any extra `--env` key that no `use` clause names is allowed.
 
 ## 3. Keep the key off everything else
 

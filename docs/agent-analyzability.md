@@ -75,7 +75,7 @@ Each package is a **deep module**: narrow public surface, large private capabili
 
 ### CLI slice isolation
 
-Treat these as vertical slices: `commands`, `run`, `serve`, `mcp`, `exec`, `telemetry`.
+Treat these as vertical slices: `commands`, `run`, `serve`, `mcp`, `exec`, `telemetry`. The `mcp` and `exec` slices no longer have their own directories (their code moved into `src/cli/shared`, see below), but the rule still reserves both names so a reintroduced private tree stays guarded.
 
 **`commands` is the composition root.** It wires the other slices together (each `jaiph` subcommand launches its feature), so `commands` may import any slice's private tree, which is orchestration and not peer coupling.
 

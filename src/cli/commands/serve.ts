@@ -79,7 +79,7 @@ const SERVE_USAGE =
   "                     runs). Permits loopback and non-loopback binds. Ignored when\n" +
   "                     JAIPH_SERVE_TOKEN or OIDC is set.\n" +
   "  --workspace <dir>  workspace root for import resolution (default: auto-detect)\n" +
-  "  --env KEY=VALUE    define KEY in every run's env (repeatable); --env KEY forwards the host value.\n" +
+  "  --env KEY=VALUE    grant KEY to matching `use` clauses on every run (repeatable); --env KEY forwards the host value.\n" +
   "  -h, --help         show this help\n\n" +
   "Example:\n" +
   "  JAIPH_SERVE_TOKEN=secret jaiph serve --host 0.0.0.0 ./tools.jh\n";

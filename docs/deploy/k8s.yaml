@@ -15,7 +15,7 @@
 #     --from-literal=ANTHROPIC_API_KEY="sk-ant-..."
 #
 # JAIPH_SERVE_TOKEN is mandatory: `jaiph serve` refuses to bind a non-loopback
-# host (0.0.0.0) without it, and every /v1/* request then requires
+# host (0.0.0.0) without it, and every REST and /mcp request then requires
 # `Authorization: Bearer <token>`. Backend credentials — add only the one(s)
 # your workflows use:
 #   claude  -> ANTHROPIC_API_KEY (or CLAUDE_CODE_OAUTH_TOKEN)
@@ -84,7 +84,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: jaiph
-          # Pin a version tag in production (`:0.15.0`, not `:latest`).
+          # Pin a version tag in production (`:0.14.0`, not `:latest`).
           image: ghcr.io/jaiphlang/jaiph-runtime:latest
           command: ["jaiph", "serve", "--host", "0.0.0.0", "/work/tools.jh"]
           securityContext:

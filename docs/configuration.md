@@ -210,7 +210,7 @@ Resolution order for a `prompt` step:
 | 3 | Flags model — `--model <name>` inside `agent.cursor_flags` / `agent.claude_flags`. | `model_reason: flags`. Codex has no flag channel; this step does not apply. |
 | 4 | Backend default — Cursor/Claude binaries pick their own. Codex defaults to `gpt-4o` in code. | `model_reason: backend-default`. |
 
-For the Claude backend, when `agent.model` is set and `agent.claude_flags` does not already contain `--model`, Jaiph passes `--model <value>` to the Claude CLI automatically. If both are set, the value in `agent.claude_flags` wins (appended last).
+For the Claude backend, when `agent.model` is set and `agent.claude_flags` does not already contain `--model`, Jaiph passes `--model <value>` to the Claude CLI automatically. When `agent.claude_flags` already contains its own `--model`, Jaiph does not add a second one, so the model in `agent.claude_flags` is the one the Claude CLI receives. When both are set this way, the `PROMPT_START` / `PROMPT_END` records still carry `model_reason: explicit` with the `agent.model` value, even though the Claude CLI ran with the model from `agent.claude_flags`.
 
 `PROMPT_START` / `PROMPT_END` records in `run_summary.jsonl` carry `model` (resolved string, or null when the backend auto-selects) and `model_reason` (`explicit`, `flags`, `backend-default`, or `none` for a [custom agent command](#custom-agent-commands), which has no model concept).
 

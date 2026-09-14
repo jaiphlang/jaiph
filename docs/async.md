@@ -17,7 +17,14 @@ This page is a recipe. The value model lives in [Async Handles](spec-async-handl
 
 ## 1. Start both sides, read late
 
-Hold each handle in its original binding. Do not interpolate, pass as a `run` argument, or use as an `if` / `match` subject until you need the value. An early read waits there and removes the overlap.
+Hold each handle in its original binding. Any read that needs the string resolves the handle, so avoid these until you want the value:
+
+- interpolating it, such as `log "${lint_h}"`;
+- passing it as a `run` argument, since a bare argument is rewritten to `${lint_h}` before the call;
+- using it as an `if` or `match` subject;
+- copying it with `const copy = lint_h`, since a bare copy is rewritten to `"${lint_h}"` and resolves too.
+
+An early read makes the def wait at that point, which removes the overlap.
 
 ```jaiph
 def lint() {
@@ -53,7 +60,7 @@ export def main() {
 
 `recover` retries inside that one branch. `catch` runs once; a successful catch counts the branch as joined-ok. A `catch` `return` becomes the parent def's return when the join adopts it.
 
-## 3. Avoid the `for` footgun
+## 3. Resolve a handle before a `for` loop
 
 `for line in h` does **not** resolve a handle. The loop iterates the token as one line, so you get one pass over `__JAIPH_HANDLE__…` instead of one pass per result line. Resolve first:
 

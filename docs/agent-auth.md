@@ -8,7 +8,7 @@ diataxis: how-to
 
 This guide shows how to set the credentials each agent backend needs, so the CLI's credential pre-flight passes and `prompt` steps can reach the model.
 
-`jaiph run` runs a host-side credential pre-flight before it spawns the runner. The pre-flight checks the backends the entry file declares. A missing `codex` credential is a hard failure with the error `E_AGENT_CREDENTIALS`, and the run stops before any runner is launched. A missing `cursor` credential produces only a `jaiph: warning:` line and the run still proceeds. `claude` is not checked — a stored Claude CLI login is the host path. The behavior is implemented in `src/cli/run/preflight-credentials.ts`.
+`jaiph run` runs a host-side credential pre-flight before it spawns the runner. The pre-flight checks the backends the entry file declares. A missing `codex` credential is a hard failure with the error `E_AGENT_CREDENTIALS`, and the run stops before any runner is launched. A missing `cursor` credential produces only a `jaiph: warning:` line and the run still proceeds. `claude` is not checked, because a stored Claude CLI login on the host already works. The behavior is implemented in `src/cli/run/preflight-credentials.ts`.
 
 ## Prerequisites
 
@@ -22,7 +22,7 @@ This guide shows how to set the credentials each agent backend needs, so the CLI
 | `cursor` | `CURSOR_API_KEY` | warn only (a stored `cursor-agent login` may still work) |
 | `codex`  | `OPENAI_API_KEY` | hard error `E_AGENT_CREDENTIALS` (no CLI-login fallback) |
 
-Set credentials on the host. Forward anything else one key at a time with `--env`.
+Set the credential on the host, or pass it with `--env KEY=VALUE`. The pre-flight reads the runtime environment, which includes both, because backend credential keys are allowed onto the runner environment. Forward any other host key the same way, one key at a time.
 
 ### Which backends get checked
 
@@ -34,6 +34,8 @@ The default is deduplicated against your declarations, so where you set the back
 - **Def scope only.** Putting `config { agent.backend = "claude" }` inside a def, with no module-level backend, leaves `cursor` as the default. The pre-flight then checks `cursor` and skips `claude`.
 
 To check only the backend you intend to use, set it at module scope or export `JAIPH_AGENT_BACKEND`. Either one becomes the default and absorbs the extra check. See [Configure backend/model](configure-backend.md) for the config scopes.
+
+The pre-flight scans only the entry file. A backend that an imported module sets in its own `config { }` block is not checked, so a `prompt` step in an imported def can still reach an unchecked backend. Set the credential on the host for any backend your imports use.
 
 ## 1. Authenticate Claude
 
@@ -83,6 +85,10 @@ The pre-flight runs before the banner. A hard failure (`codex` only) prints a st
 The pre-flight is skipped when the entry file neither declares an explicit backend nor uses any `prompt` step, because nothing would credential against.
 
 `jaiph run --raw` also skips the pre-flight.
+
+## Servers report every result as a warning
+
+`jaiph serve` and `jaiph mcp` run the same pre-flight once at startup, but they print every result as a warning, including the `codex` case that hard-fails under `jaiph run`. A server can start before its credentials are set, because it may outlive a credential fix, so a missing `OPENAI_API_KEY` prints a warning and the server still starts.
 
 ## Verification
 

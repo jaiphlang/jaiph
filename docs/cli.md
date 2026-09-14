@@ -59,7 +59,7 @@ Every run executes on the host. Isolation is an outer concern: wrap jaiph in a c
 | `--target` | `<dir>` | Keep emitted script files and run metadata under `<dir>` instead of a temp directory. |
 | `--raw` | — | Skip the banner, live progress tree, hooks, and PASS/FAIL footer. The runner child inherits stdio; `__JAIPH_EVENT__` JSON lines go to stderr unchanged. |
 | `--workspace` | `<dir>` | Override the workspace root used for library resolution. A missing value, missing path, or non-directory aborts with a specific message. There is no `JAIPH_WORKSPACE` env equivalent input — that name is reserved for the runner. |
-| `--env` | `KEY=VALUE` or `KEY` | Repeatable per-key flag, and the **only grant** for `use` clauses on scripts and [named prompts](language.md#named-prompts): a script runs in a sterile env, a named prompt's agent runs with the prompt env scrub, and each receives a host key iff its declaration `use`s it *and* `--env` names it (see [Environment variables — Script subprocess environment](env-vars.md#script-env)). The granted value is injected only into a subprocess whose declaration `use`s the key; it is not placed on the runner (workflow-leader) process environment, which Jaiph builds from an allowlist (process basics, `JAIPH_*` control keys, backend credentials) rather than a copy of the host environment, so an ungranted host key is absent from it. Pre-flight collects every `use` key in the import graph and aborts with `E_ENV_MISSING` if one was not granted; extra keys nothing `use`s are fine. `--env KEY=VALUE` defines `KEY` with that exact value (first `=` splits; the value may contain `=`; empty is allowed). `--env KEY` forwards the host's current value, aborting with `E_ENV_MISSING` before spawning if `KEY` is unset on the host. `KEY` must match `[A-Za-z_][A-Za-z0-9_]*` (else `E_ENV_INVALID`). Runtime-managed keys (`JAIPH_WORKSPACE`, `JAIPH_RUNS_DIR`, `JAIPH_RUN_ID`, `JAIPH_SCRIPTS`, `JAIPH_MODULE_GRAPH_FILE`, `JAIPH_SOURCE_ABS`, `JAIPH_META_FILE`, `JAIPH_ENV_GRANT`, `JAIPH_ENV_GRANT_FILE`, `JAIPH_AGENT_TRUSTED_WORKSPACE`, `JAIPH_TRUST_PROJECT_HOOKS`, `JAIPH_CHAIN_KEY`, `JAIPH_RUN_SUMMARY_FILE`) are rejected with `E_ENV_RESERVED`. Values are never path-remapped. `jaiph run --raw` applies the same grant but skips the graph-wide pre-flight. |
+| `--env` | `KEY=VALUE` or `KEY` | Repeatable per-key flag, and the **only grant** for `use` clauses on scripts and [named prompts](language.md#named-prompts): a script runs in a sterile env, a named prompt's agent runs with the prompt env scrub, and each receives a host key iff its declaration `use`s it *and* `--env` names it (see [Environment variables — Script subprocess environment](env-vars.md#script-env)). The granted value is injected only into a subprocess whose declaration `use`s the key; it is not placed on the runner (workflow-leader) process environment, which Jaiph builds from an allowlist (process basics, `JAIPH_*` control keys, backend credentials) rather than a copy of the host environment, so an ungranted host key is absent from it. Pre-flight collects every `use` key in the import graph and aborts with `E_ENV_MISSING` if one was not granted; extra keys nothing `use`s are fine. `--env KEY=VALUE` defines `KEY` with that exact value (first `=` splits; the value may contain `=`; empty is allowed). `--env KEY` forwards the host's current value, aborting with `E_ENV_MISSING` before spawning if `KEY` is unset on the host. `KEY` must match `[A-Za-z_][A-Za-z0-9_]*` (else `E_ENV_INVALID`). The runtime-managed keys the CLI owns (`JAIPH_WORKSPACE`, `JAIPH_RUNS_DIR`, and the rest of the reserved set listed in [Environment variables — Agent credentials](env-vars.md#agent-credentials)) are rejected with `E_ENV_RESERVED`. Values are never path-remapped. `jaiph run --raw` applies the same grant but skips the graph-wide pre-flight. |
 | `--` | — | End of Jaiph flags; remaining tokens are forwarded to `export def main`. |
 
 ### Pre-flight
@@ -81,7 +81,7 @@ After module-graph load, before the runner is spawned, the host CLI runs a crede
 
 PASS line: `✓ PASS def main (0.2s)`. TTY runs append a transient `▸ RUNNING def <name> (X.Xs)` line that is replaced by the PASS/FAIL line on exit. `--raw` and non-TTY modes skip both. Disable color globally with `NO_COLOR=1`.
 
-Non-TTY heartbeat cadence is controlled by `JAIPH_NON_TTY_HEARTBEAT_FIRST_SEC` (default `60`) and `JAIPH_NON_TTY_HEARTBEAT_INTERVAL_MS` (default `30000`, floor `250`). Leaf script and prompt steps emit a yellow `⚠` idle warning when they produce no stdout/stderr for `JAIPH_STEP_IDLE_WARN_SEC` (default `180`; `0` disables).
+Non-TTY heartbeat cadence is controlled by `JAIPH_NON_TTY_HEARTBEAT_FIRST_SEC` (default `60`) and `JAIPH_NON_TTY_HEARTBEAT_INTERVAL_MS` (default `30000`, minimum `250`). A value below `250`, or a value that is not a number, is not clamped up to `250`. Jaiph uses the `30000` default instead. Leaf script and prompt steps emit a yellow `⚠` idle warning when they produce no stdout/stderr for `JAIPH_STEP_IDLE_WARN_SEC` (default `180`; `0` disables).
 
 A leaf script step whose subprocess produces no stdout/stderr for `JAIPH_STEP_IDLE_KILL_SEC` (default `3600`, one hour; `0` disables) is terminated and fails. The runtime emits a red `LOGERR` line naming the step and how long it was silent, then kills the step's subprocess, so a stuck script cannot hold an overnight run open indefinitely. New output resets both the warn clock and the kill clock. The kill applies to script steps only; prompt steps get idle warnings but are not killed.
 
@@ -167,7 +167,7 @@ Paths must end with `.jh`. Formatting is idempotent. Comments and shebangs are p
 | `--indent` | `<n>` | `2` | Spaces per indent level. |
 | `--check` | — | — | Verify without writing. Exit `0` when files match canonical form, `1` when any file would change. |
 
-Top-level ordering: the formatter hoists `import`, `config`, and `channel` declarations to the top (in that order, preserving relative source order within each group). Other top-level definitions (`const`, `script`, `def`, `test`) keep their relative source order. Comments before a hoisted construct move with it; comments before non-hoisted definitions stay in place.
+Top-level ordering: the formatter hoists `import`, `config`, and `channel` declarations to the top (in that order, preserving relative source order within each group). Other top-level definitions (`const`, `script`, `prompt`, `def`, `test`) keep their relative source order. Comments before a hoisted construct move with it; comments before non-hoisted definitions stay in place.
 
 Top-level `const` quoting: the source delimiter is preserved per binding. Bare tokens stay bare, `"""…"""` values emit verbatim, and a double-quoted value stays double-quoted. The one exception is a double-quoted value whose content contains a `"` or a `\`: the formatter emits it as a `"""…"""` block so the text needs no escaping. The formatter never rewrites a quoted value as bare, or a bare token as quoted, based on the value's content (for example, whether it contains a space).
 
@@ -279,7 +279,7 @@ jaiph use <version|nightly>
 | Argument | Effect |
 |---|---|
 | `nightly` | Reinstalls from the rolling `nightly` prerelease. |
-| `<version>` (e.g. `0.13.0`) | Reinstalls the release binary for tag `v<version>`. |
+| `<version>` (e.g. `0.14.0`) | Reinstalls the release binary for tag `v<version>`. |
 
 Implementation: with no `JAIPH_INSTALL_COMMAND` override, `jaiph use` downloads the install script from `${JAIPH_SITE}/install` (default `https://jaiph.org`), verifies it against the published `${JAIPH_SITE}/install.sha256`, and only then runs it with `JAIPH_REPO_REF` set to `nightly` or `v<version>`. A mismatched or missing checksum fails closed rather than piping an unverified script to `bash`. Setting `JAIPH_INSTALL_COMMAND` overrides this with a verbatim command (forks, offline bundles, local scripts). The installer then downloads the matching per-platform binary plus `SHA256SUMS` (and its signature), verifies them, and replaces `~/.local/bin/jaiph` (or `JAIPH_BIN_DIR`).
 
@@ -432,7 +432,7 @@ See [Environment variables](env-vars.md) for the complete inventory. The variabl
 
 - `JAIPH_RUN_TIMEOUT` — parent-enforced wall-clock cap for a run.
 - `JAIPH_NON_TTY_HEARTBEAT_FIRST_SEC`, `JAIPH_NON_TTY_HEARTBEAT_INTERVAL_MS` — non-TTY progress cadence.
-- `JAIPH_RUNS_DIR`, `JAIPH_WORKSPACE`, `JAIPH_SOURCE_FILE` — run-layout inputs.
+- `JAIPH_RUNS_DIR`, `JAIPH_SOURCE_FILE` — run-layout inputs. `JAIPH_WORKSPACE` is runner-managed; set it with `--workspace`, not directly.
 - `JAIPH_INSTALL_COMMAND`, `JAIPH_REGISTRY`, `JAIPH_SKILL_PATH` — install / init inputs.
 - `NO_COLOR` — disable ANSI colour output.
 
