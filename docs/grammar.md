@@ -241,10 +241,11 @@ nested `def` / named `prompt` closes over the enclosing scope at runtime; a nest
 ### `run`
 
 ```ebnf
-run_stmt         = "run" ( call_ref | inline_script ) ;
-run_catch_stmt   = "run" ( call_ref | inline_script ) "catch" catch_bindings catch_body ;
-run_recover_stmt = "run" ( call_ref | inline_script ) "recover" recover_bindings recover_body ;
+run_stmt         = "run" ( call_ref | inline_script ) [ stdin_clause ] ;
+run_catch_stmt   = "run" ( call_ref | inline_script ) [ stdin_clause ] "catch" catch_bindings catch_body ;
+run_recover_stmt = "run" ( call_ref | inline_script ) [ stdin_clause ] "recover" recover_bindings recover_body ;
 run_async_stmt   = "run" "async" call_ref [ ( "catch" catch_bindings catch_body ) | ( "recover" recover_bindings recover_body ) ] ;
+stdin_clause     = "stdin" ( double_quoted_string | IDENT | IDENT "." IDENT | interp_ref ) ;
 ```
 
 | Position | Allowed targets |
@@ -253,7 +254,7 @@ run_async_stmt   = "run" "async" call_ref [ ( "catch" catch_bindings catch_body 
 | `run async` | Defs and named scripts. Inline scripts not supported. |
 | Inline script in `run` | Allowed. |
 
-Capture: a def callee yields the explicit `return` value; a script callee yields trimmed stdout.
+Capture: a def callee yields the explicit `return` value; a script callee yields trimmed stdout. The optional `stdin_clause` sits after `()` and before any `catch` / `recover`, and pipes its evaluated string to the script's stdin as UTF-8 instead of argv. It is legal only on a `run` of a script. For the full rules and error codes, see [Language](language.md#arguments-and-stdin).
 
 ### `catch` / `recover`
 

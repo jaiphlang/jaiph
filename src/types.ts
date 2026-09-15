@@ -199,6 +199,14 @@ export type StepDef =
       catch?: CatchBody;
       /** When set, retry with repair loop semantics (try → fail → recover body → retry). */
       recover?: CatchBody;
+      /**
+       * `run script(args) stdin <expr>`: the evaluated value is written to the
+       * child's stdin (UTF-8) instead of argv. Only valid on a `run` of a script
+       * (named or inline); rejected on defs, `run async`, and non-script targets.
+       * Always a `literal` Expr (the parser normalizes bare/interp forms to a
+       * quoted literal); the runtime interpolates it and strips outer quotes.
+       */
+      stdin?: Expr;
       loc: SourceLoc;
     }
   | {

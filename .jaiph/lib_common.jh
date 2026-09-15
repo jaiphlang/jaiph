@@ -4,15 +4,17 @@
 # Shared string/file helpers for the .jaiph orchestration workflows.
 # Import as: import "./lib_common.jh" as common
 #
-# Writes UTF-8 text to a path: $1 = path, $2 = content.
+# Writes UTF-8 text to a path: $1 = path, content = stdin.
+# Call as: run common.save_string_to_file(path) stdin content
 # python3 instead of `echo`, so backslashes and dash-leading content
-# are written verbatim. Content still travels through argv, so it is
-# subject to the OS ARG_MAX limit (~1 MB on macOS).
+# are written verbatim. Content arrives on stdin (not argv), so it is
+# not bounded by ARG_MAX and can be arbitrarily large.
 export script save_string_to_file = ```python3
 import sys
-if len(sys.argv) < 3:
+if len(sys.argv) < 2:
     sys.exit(2)
-path, content = sys.argv[1], sys.argv[2]
+path = sys.argv[1]
+content = sys.stdin.read()
 open(path, "w", encoding="utf-8").write(content)
 ```
 

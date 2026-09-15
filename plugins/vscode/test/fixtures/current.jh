@@ -36,6 +36,7 @@ export def main(task) {
     return "${x}"
   }
   const status = run setup_env()
+  run shout(task) stdin status
 
   if status == "ok" {
     log "ready"

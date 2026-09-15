@@ -1104,16 +1104,24 @@ export class NodeWorkflowRuntime {
           continue;
         }
         if (body.kind === "call") {
+          // Evaluate a `stdin <expr>` clause once, before any recover retries —
+          // the same bytes are piped to the child on every attempt.
+          let stdinValue: string | undefined;
+          if (step.stdin) {
+            const sr = await this.resolveStdin(scope, step.stdin);
+            if (!sr.ok) return this.mergeStepResult(accOut, accErr, sr.result);
+            stdinValue = sr.value;
+          }
           if (step.recover) {
             const limit = this.resolveRecoverLimit(scope.filePath);
             const ref = body.callee.value;
             const argsRaw = argsToRuntimeString(body.args);
-            let lastResult = await this.executeRunRef(scope, ref, argsRaw);
+            let lastResult = await this.executeRunRef(scope, ref, argsRaw, stdinValue);
             let attempt = 1;
             while (lastResult.status !== 0 && attempt <= limit) {
               const rr = await this.runRecoverBody(scope, step.recover, lastResult.outFile ?? "");
               if (rr.status !== 0 || rr.returnValue !== undefined) return this.mergeStepResult(accOut, accErr, rr);
-              lastResult = await this.executeRunRef(scope, ref, argsRaw);
+              lastResult = await this.executeRunRef(scope, ref, argsRaw, stdinValue);
               attempt += 1;
             }
             if (lastResult.status === 0) {
@@ -1125,7 +1133,9 @@ export class NodeWorkflowRuntime {
             }
             continue;
           }
-          const runResult = await this.executeRunRef(scope, body.callee.value, argsToRuntimeString(body.args));
+          const runResult = await this.executeRunRef(
+            scope, body.callee.value, argsToRuntimeString(body.args), stdinValue,
+          );
           if (runResult.status === 0) {
             if (step.captureName) {
               scope.vars.set(step.captureName, runResult.returnValue ?? runResult.output.trim());
@@ -1141,8 +1151,14 @@ export class NodeWorkflowRuntime {
         if (body.kind === "inline_script") {
           const shebang = body.lang ? `#!/usr/bin/env ${body.lang}` : undefined;
           const argsRaw = argsToRuntimeString(body.args);
+          let stdinValue: string | undefined;
+          if (step.stdin) {
+            const sr = await this.resolveStdin(scope, step.stdin);
+            if (!sr.ok) return this.mergeStepResult(accOut, accErr, sr.result);
+            stdinValue = sr.value;
+          }
           const runOnce = (): Promise<StepResult> =>
-            this.executeInlineScript(scope, body.body, shebang, argsRaw);
+            this.executeInlineScript(scope, body.body, shebang, argsRaw, stdinValue);
           if (step.recover) {
             const limit = this.resolveRecoverLimit(scope.filePath);
             let lastResult = await runOnce();
@@ -1437,7 +1453,28 @@ export class NodeWorkflowRuntime {
     return resolved;
   }
 
-  private async executeRunRef(scope: Scope, ref: string, argsRaw: string | string[]): Promise<StepResult> {
+  /**
+   * Evaluate a `run script(args) stdin <expr>` clause to the raw bytes written
+   * to the child's stdin. The stdin Expr is always a `literal` (the parser
+   * normalizes bare / interpolation forms to a quoted literal): interpolate it,
+   * then strip the outer quotes, exactly like a `const` string value.
+   */
+  private async resolveStdin(
+    scope: Scope,
+    stdinExpr: Expr,
+  ): Promise<{ ok: true; value: string } | { ok: false; result: StepResult }> {
+    const raw = stdinExpr.kind === "literal" ? stdinExpr.raw : "";
+    const ir = await this.interpolateWithCaptures(raw, scope);
+    if (!ir.ok) return { ok: false, result: ir.result };
+    return { ok: true, value: stripOuterQuotes(ir.value) };
+  }
+
+  private async executeRunRef(
+    scope: Scope,
+    ref: string,
+    argsRaw: string | string[],
+    stdin?: string,
+  ): Promise<StepResult> {
     const resolvedArgs = await this.resolveArgsRaw(scope, argsRaw);
     if (!Array.isArray(resolvedArgs)) return resolvedArgs;
     const args = resolvedArgs;
@@ -1457,7 +1494,7 @@ export class NodeWorkflowRuntime {
           "script",
           ref,
           args,
-          async (io) => this.executeScript(scope.filePath, fileName, args, scriptEnv, io),
+          async (io) => this.executeScript(scope.filePath, fileName, args, scriptEnv, io, stdin),
         );
       }
       // A local `prompt` reached via `run` is a validation error; fall through
@@ -1492,7 +1529,8 @@ export class NodeWorkflowRuntime {
         "script",
         ref,
         args,
-        async (io) => this.executeScript(resolvedScript.filePath, resolvedScript.script.name, args, scriptEnv, io),
+        async (io) =>
+          this.executeScript(resolvedScript.filePath, resolvedScript.script.name, args, scriptEnv, io, stdin),
       );
     }
     return { status: 1, output: "", error: `Unknown run target: ${ref}` };
@@ -1792,6 +1830,7 @@ export class NodeWorkflowRuntime {
     cwd: string,
     io: StepIO | undefined,
     interpreter?: string,
+    stdin?: string,
   ): Promise<StepResult> {
     return new Promise((resolve) => {
       let output = "";
@@ -1810,9 +1849,12 @@ export class NodeWorkflowRuntime {
       // the OS `ARG_MAX`) must fail the step exactly like the async `'error'`
       // event — never reject this Promise, or the run vanishes with no
       // STEP_END/RUN_END. Settle a status-1 failure with the same diagnostic.
+      // Only a `run script(args) stdin <expr>` step pipes stdin; every other
+      // step keeps stdin `ignore` so the child never blocks on a closed tty.
+      const stdinMode = stdin !== undefined ? "pipe" : "ignore";
       let child: ReturnType<typeof _scriptSpawn.spawn>;
       try {
-        child = _scriptSpawn.spawn(command, args, { cwd, env, stdio: ["ignore", "pipe", "pipe"] });
+        child = _scriptSpawn.spawn(command, args, { cwd, env, stdio: [stdinMode, "pipe", "pipe"] });
       } catch (err) {
         const msg = spawnFailureText(err, command, args, env, interpreter);
         error += msg;
@@ -1872,6 +1914,15 @@ export class NodeWorkflowRuntime {
           ...(status === 0 ? { returnValue: output.trim() } : {}),
         });
       });
+      // Feed the evaluated `stdin <expr>` bytes to the child, then close the
+      // stream. Written last, after the stdout/stderr readers are attached, so a
+      // payload larger than the pipe buffer (megabytes) never deadlocks a child
+      // that echoes its input. An EPIPE on a child that exits early is ignored:
+      // the exit code already settled the step.
+      if (stdin !== undefined && child.stdin) {
+        child.stdin.on("error", () => {});
+        child.stdin.end(stdin, "utf8");
+      }
     });
   }
 
@@ -1887,6 +1938,7 @@ export class NodeWorkflowRuntime {
     args: string[],
     env: NodeJS.ProcessEnv,
     io?: StepIO,
+    stdin?: string,
   ): Promise<StepResult> {
     const scriptsDir = env.JAIPH_SCRIPTS;
     if (!scriptsDir) {
@@ -1906,6 +1958,7 @@ export class NodeWorkflowRuntime {
       this.scriptCwd(env, filePath),
       io,
       interp.command,
+      stdin,
     );
   }
 
@@ -1948,6 +2001,7 @@ export class NodeWorkflowRuntime {
     body: string,
     shebang: string | undefined,
     argsRaw: string,
+    stdin?: string,
   ): Promise<StepResult> {
     const resolvedArgs = await this.resolveArgsRaw(scope, argsRaw);
     if (!Array.isArray(resolvedArgs)) return resolvedArgs;
@@ -1959,7 +2013,7 @@ export class NodeWorkflowRuntime {
       "script",
       scriptName,
       args,
-      async (io) => this.executeScript(scope.filePath, scriptName, args, scriptEnv, io),
+      async (io) => this.executeScript(scope.filePath, scriptName, args, scriptEnv, io, stdin),
     );
   }
 
