@@ -67,7 +67,7 @@ curl -s http://host:8080/defs -H 'authorization: Bearer secret' | jq
 
 ## 6. Connect an MCP client over HTTP
 
-The same process speaks MCP [Streamable HTTP](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports#streamable-http) at `POST /mcp`, the network sibling of [`jaiph mcp`](mcp.md) with the same exposure rules, run registry, hot reload, and bearer auth. One JSON-RPC message per POST; a request returns a single `application/json` reply and a notification returns `202`. Send `Accept: text/event-stream` on a `tools/call` with a `params._meta.progressToken` to receive [the same progress frames as stdio](mcp.md#6-stream-progress-and-cancel), followed by the result.
+The same process speaks MCP [Streamable HTTP](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports#streamable-http) at `POST /mcp`, the network sibling of [`jaiph mcp`](mcp.md) with the same exposure rules, run registry, hot reload, and bearer auth. One JSON-RPC message per POST; a request returns a single `application/json` reply and a notification returns `202`. Send `Accept: text/event-stream` on a `tools/call` with a `params._meta.progressToken` to receive [the same progress frames as stdio](mcp.md#7-stream-progress-and-cancel-a-long-call), followed by the result.
 
 ```bash
 curl -s -X POST http://127.0.0.1:5247/mcp -H 'content-type: application/json' -H 'authorization: Bearer secret' \
