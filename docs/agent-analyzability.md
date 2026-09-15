@@ -104,6 +104,7 @@ Docs obey the same budget discipline:
 2. **Size cap.** Prefer pages agents can load whole, and split a page when it outgrows a single topic. This is enforced by `integration/docs-structure.test.ts`, which fails any non-allowlisted `docs/*.md` whose body exceeds 500 lines (front matter excluded). An oversized single-topic page goes on the test's `DOC_SIZE_ALLOWLIST` with a justification rather than merging topics.
 3. **Summary first.** Every page opens with a short summary so an agent can skip the body from the header alone. The same test requires the first body line after the H1 to be a prose lead paragraph (this page labels its lead `**Summary.**`), not a subheading, list, or table.
 4. **Entry-point manifest.** The nav in `docs/_layouts/docs.html`, plus this page and [Architecture](architecture.md), are the structural maps. Do not bury contracts only in chat history or `QUEUE.md`.
+5. **One fact, one owner.** Each contract has one page that states the full rule. Every other page uses one sentence and a link. The owner table and the reject rule live in [ADR 0003](../design/0003-docs-one-fact-one-owner.md). New prose that restates an owned fact is a reject.
 
 ## Enforcement (CI)
 
