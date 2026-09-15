@@ -67,6 +67,50 @@ const HANDLE_PREFIX = "__JAIPH_HANDLE__";
  */
 export const _scriptSpawn = { spawn };
 
+/**
+ * Byte size of the argv + env block a spawn would have to pass to the kernel.
+ * Mirrors the exec(3) accounting the OS uses when it rejects with `E2BIG`:
+ * every argv string and every `KEY=VALUE` env pair costs its UTF-8 length plus
+ * one NUL terminator. Used only to annotate an oversized-argv failure with the
+ * attempted size — a diagnostic, not a hard limit check.
+ */
+function argvEnvByteSize(command: string, args: string[], env: NodeJS.ProcessEnv): number {
+  let bytes = Buffer.byteLength(command) + 1;
+  for (const a of args) bytes += Buffer.byteLength(a) + 1;
+  for (const key of Object.keys(env)) {
+    const val = env[key];
+    if (val === undefined) continue;
+    // KEY=VALUE plus the NUL terminator (the `=` is the +1 inside byteLength math below).
+    bytes += Buffer.byteLength(key) + 1 + Buffer.byteLength(val) + 1;
+  }
+  return bytes;
+}
+
+/**
+ * Diagnostic stderr text for a spawn failure, shared by the synchronous-throw
+ * and asynchronous `'error'`-event paths so both settle identically. `E2BIG`
+ * (argv + env exceed the OS `ARG_MAX`) maps to a stable `E_ARGV_TOO_LARGE`
+ * marker carrying the attempted byte count; a missing interpreter keeps its
+ * existing diagnosable wording; anything else falls back to the raw error text.
+ */
+function spawnFailureText(
+  err: unknown,
+  command: string,
+  args: string[],
+  env: NodeJS.ProcessEnv,
+  interpreter: string | undefined,
+): string {
+  const code = (err as NodeJS.ErrnoException).code;
+  if (code === "E2BIG") {
+    const bytes = argvEnvByteSize(command, args, env);
+    return `E_ARGV_TOO_LARGE: ${bytes} bytes (ARG_MAX exceeded)`;
+  }
+  if (code === "ENOENT" && interpreter) {
+    return `script interpreter "${interpreter}" not found — install it or fix the script shebang`;
+  }
+  return errText(err);
+}
+
 export function formatInvalidAsyncHandleError(handleId: string): string {
   return `invalid async handle "${handleId}" — the handle was never created or was already consumed`;
 }
@@ -479,44 +523,48 @@ export class NodeWorkflowRuntime {
    */
   async runRoot(defName: string, args: string[]): Promise<number> {
     this.emitter.emitRun("RUN_START", defName);
-    const rootEnv = this.scrubKernelKeys({ ...this.env });
-    const rootScope: Scope = {
-      filePath: this.graph.entryFile,
-      vars: this.newScopeVars(this.graph.entryFile, undefined, rootEnv),
-      env: rootEnv,
-    };
-    const resolved = resolveDefRef(this.graph, this.graph.entryFile, {
-      value: defName,
-      loc: { line: 1, col: 1 },
-    });
-    if (!resolved) {
-      process.stderr.write(
-        defName === "main"
-          ? "jaiph run requires `export def main` in the input file\n"
-          : `jaiph run: unknown def '${defName}' in the input file\n`,
-      );
+    // RUN_END and the heartbeat stop MUST happen even if the def body throws.
+    // A vanished process is not a handleable error: the durable contract is a
+    // terminal RUN_END, so emit it in `finally` regardless of how the body exits.
+    try {
+      const rootEnv = this.scrubKernelKeys({ ...this.env });
+      const rootScope: Scope = {
+        filePath: this.graph.entryFile,
+        vars: this.newScopeVars(this.graph.entryFile, undefined, rootEnv),
+        env: rootEnv,
+      };
+      const resolved = resolveDefRef(this.graph, this.graph.entryFile, {
+        value: defName,
+        loc: { line: 1, col: 1 },
+      });
+      if (!resolved) {
+        process.stderr.write(
+          defName === "main"
+            ? "jaiph run requires `export def main` in the input file\n"
+            : `jaiph run: unknown def '${defName}' in the input file\n`,
+        );
+        return 1;
+      }
+      // Bind CLI args to declared parameter names by position.
+      resolved.def.params.forEach((name, i) => {
+        if (i < args.length) rootScope.vars.set(name, args[i]);
+      });
+      const result = await this.executeDef(resolved.filePath, resolved.def.name, rootScope, args, false);
+      // Persist the workflow's return value so the CLI can print it after the run tree.
+      // Empty/undefined values are written as an empty file so the consumer can distinguish
+      // "ran with no return" from "no run happened".
+      if (result.status === 0 && result.returnValue !== undefined) {
+        try {
+          writeFileSync(join(this.runDir, "return_value.txt"), result.returnValue, "utf8");
+        } catch {
+          // Best-effort capture; the run succeeded regardless.
+        }
+      }
+      return result.status;
+    } finally {
       this.emitter.emitRun("RUN_END", defName);
       this.stopHeartbeat();
-      return 1;
     }
-    // Bind CLI args to declared parameter names by position.
-    resolved.def.params.forEach((name, i) => {
-      if (i < args.length) rootScope.vars.set(name, args[i]);
-    });
-    const result = await this.executeDef(resolved.filePath, resolved.def.name, rootScope, args, false);
-    // Persist the workflow's return value so the CLI can print it after the run tree.
-    // Empty/undefined values are written as an empty file so the consumer can distinguish
-    // "ran with no return" from "no run happened".
-    if (result.status === 0 && result.returnValue !== undefined) {
-      try {
-        writeFileSync(join(this.runDir, "return_value.txt"), result.returnValue, "utf8");
-      } catch {
-        // Best-effort capture; the run succeeded regardless.
-      }
-    }
-    this.emitter.emitRun("RUN_END", defName);
-    this.stopHeartbeat();
-    return result.status;
   }
 
   async runNamedDef(ref: string, args: string[]): Promise<{ status: number; output: string; error?: string; returnValue?: string }> {
@@ -1742,7 +1790,6 @@ export class NodeWorkflowRuntime {
     interpreter?: string,
   ): Promise<StepResult> {
     return new Promise((resolve) => {
-      const child = _scriptSpawn.spawn(command, args, { cwd, env, stdio: ["ignore", "pipe", "pipe"] });
       let output = "";
       let error = "";
       const killSignal = io?.killSignal;
@@ -1755,6 +1802,20 @@ export class NodeWorkflowRuntime {
         killSignal?.removeEventListener("abort", onIdleKill);
         resolve(result);
       };
+      // A synchronous throw from `spawn` (notably `E2BIG` when argv + env exceed
+      // the OS `ARG_MAX`) must fail the step exactly like the async `'error'`
+      // event — never reject this Promise, or the run vanishes with no
+      // STEP_END/RUN_END. Settle a status-1 failure with the same diagnostic.
+      let child: ReturnType<typeof _scriptSpawn.spawn>;
+      try {
+        child = _scriptSpawn.spawn(command, args, { cwd, env, stdio: ["ignore", "pipe", "pipe"] });
+      } catch (err) {
+        const msg = spawnFailureText(err, command, args, env, interpreter);
+        error += msg;
+        io?.appendErr(msg);
+        settle({ status: 1, output, error });
+        return;
+      }
       // Idle-output kill watchdog: when the step's kill signal fires the leaf
       // has produced no output for JAIPH_STEP_IDLE_KILL_SEC. Terminate the child
       // (SIGTERM → SIGKILL) and settle a failure immediately. We do NOT wait for
@@ -1793,10 +1854,7 @@ export class NodeWorkflowRuntime {
         io?.appendErr(chunk);
       });
       child.on("error", (err) => {
-        const code = (err as NodeJS.ErrnoException).code;
-        const msg = code === "ENOENT" && interpreter
-          ? `script interpreter "${interpreter}" not found — install it or fix the script shebang`
-          : errText(err);
+        const msg = spawnFailureText(err, command, args, env, interpreter);
         error += msg;
         io?.appendErr(msg);
         settle({ status: 1, output, error });
@@ -2076,9 +2134,16 @@ export class NodeWorkflowRuntime {
       params: buildStepDisplayParamPairs(args, declaredParamNames, { positionalStyle: "argN" }),
     });
     const started = Date.now();
+    // `result` must always be defined before the STEP_END emit below: a throw
+    // from `fn` (e.g. an unexpected runtime error, or a spawn seam that rejects)
+    // is converted to a status-1 failed step here so capture files and STEP_END
+    // are still written. Without this the step would leave a dangling STEP_START
+    // and the failure would never reach `recover` / `recover_limit`.
     let result: StepResult;
     try {
       result = await fn(stepIo);
+    } catch (err) {
+      result = { status: 1, output: "", error: errText(err) };
     } finally {
       idleWarn?.stop();
     }
