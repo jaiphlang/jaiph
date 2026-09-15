@@ -38,10 +38,15 @@ const SUMMARY_WINDOW = 20;
 // justification instead of relaxing the number.
 const BODY_LINE_CAP = 500;
 
-// filename -> justification. Empty today: every published page fits the cap.
-// Add an entry only for a page whose single topic genuinely cannot fit (never
-// to merge topics into an oversized file).
-const DOC_SIZE_ALLOWLIST: Record<string, string> = {};
+// filename -> justification. Add an entry only for a page whose single topic
+// genuinely cannot fit (never to merge topics into an oversized file).
+const DOC_SIZE_ALLOWLIST: Record<string, string> = {
+  // language.md is the single owner (design/0003) of every step semantic —
+  // run/const/match/prompt/if/for/send/log plus the stdin-clause section — so
+  // it is one topic that cannot be split without breaking one-fact-one-owner.
+  "language.md":
+    "single-owner reference for all step semantics; one topic, not splittable",
+};
 
 interface PageInfo {
   name: string;
