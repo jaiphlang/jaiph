@@ -26,7 +26,7 @@ The defaults are `--host 127.0.0.1` and `--port 5247`; all logs go to stderr. St
 
 ## 2. Discover and invoke a def
 
-`GET /defs` lists the exposed defs (needs `inspect`) and `GET /openapi.json` returns the full document; `GET /healthz` is an open liveness probe. `POST /{name}` starts a run — a durable resource — from a JSON object of the def's string parameters:
+`POST /{name}` starts a run from a JSON object of the def's string parameters; see [the `jaiph serve` reference](cli.md#jaiph-serve) for the full endpoint list, their capabilities, and the run resource:
 
 ```bash
 # Async: 202 + a Location header pointing at the run resource.
@@ -36,17 +36,15 @@ curl -si -X POST http://127.0.0.1:5247/greet -H 'content-type: application/json'
 curl -s -X POST 'http://127.0.0.1:5247/greet?wait=true' -H 'content-type: application/json' -d '{"name":"world"}' | jq
 ```
 
-The run object carries `run_id`, `def`, `status`, `result_text`, `run_dir`, `principal`, `correlation_id`, and the timing/exit fields. `result_text` is the same content an MCP client sees — the def's `return` value or its credential-redacted failure narrative (see [Architecture — Secret redaction](architecture.md#secret-redaction)). A def failure is not an HTTP error: a failed run comes back `200`/`202` with `status: "failed"`. Poll `GET /runs/{id}`, list with the paginated `GET /runs`, and stop a run with `POST /runs/{id}/cancel`.
+The run object's `result_text` is the same content an MCP client sees — the def's `return` value or its credential-redacted failure narrative (see [Architecture — Secret redaction](architecture.md#secret-redaction)). A def failure is not an HTTP error: a failed run comes back `200`/`202` with `status: "failed"`.
 
 ## 3. Watch a run and download artifacts
 
-`GET /runs/{id}/events` streams the run's durable journal (`run_summary.jsonl`), either as a one-shot snapshot or, with `accept: text/event-stream`, as live Server-Sent Events that replay then follow the run and close with `event: end`:
+`GET /runs/{id}/events` streams the run's durable journal (`run_summary.jsonl`) as a one-shot snapshot or, with `accept: text/event-stream`, as live Server-Sent Events; a def's published [artifacts](artifacts.md) stream from `GET /runs/{id}/artifacts`. See [the `jaiph serve` reference](cli.md#jaiph-serve) for the streaming, journal-integrity, and path-traversal contract.
 
 ```bash
 curl -sN -H 'accept: text/event-stream' http://127.0.0.1:5247/runs/$ID/events
 ```
-
-The snapshot verifies the journal's keyed integrity chain and fails `409 E_TAMPERED` when it does not verify (see [Architecture — Keyed hash chain](architecture.md#hash-chain)). Files a def publishes to `$JAIPH_ARTIFACTS_DIR` (see [artifacts](artifacts.md)) are listed at `GET /runs/{id}/artifacts` and streamed by relative path; the path is resolved strictly inside the run's `artifacts/` directory, so traversal returns `404`.
 
 ## 4. Use the Swagger UI
 
@@ -54,11 +52,7 @@ Open `http://127.0.0.1:5247/docs` for a live form for every def; the root `/` re
 
 ## 5. Authenticate and authorize {#7-authenticate-and-authorize}
 
-Credentials come from the environment, never argv. `jaiph serve` has two production auth modes plus an explicit anonymous opt-in; `/healthz`, `/docs`, and `/openapi.json` stay open. See [Environment variables](env-vars.md) for every name.
-
-- **Static token.** `JAIPH_SERVE_TOKEN` is a shared secret required on every REST and `/mcp` request as `Authorization: Bearer <token>`, compared in constant time. One operator holds every capability; there is no per-user identity.
-- **OIDC/JWT.** Set `JAIPH_SERVE_OIDC_ISSUER` and `JAIPH_SERVE_OIDC_AUDIENCE` to verify bearer tokens against the issuer's JWKS. Each token is authorized by the `jaiph:invoke`, `jaiph:inspect`, and `jaiph:cancel` scopes; a missing capability is `403`, and a principal may inspect or cancel only the runs it created. The `sub` and correlation id land on the run object, the audit log, and the telemetry attributes.
-- **Anonymous.** With no token and no OIDC, startup is refused unless you pass `--allow-anonymous`, which also permits a non-loopback bind and prints a startup warning.
+Credentials come from the environment, never argv. `jaiph serve` supports a static token, OIDC/JWT, and an explicit `--allow-anonymous` opt-in; see [the `jaiph serve` reference](cli.md#jaiph-serve) for the auth modes, scopes, and open endpoints, and [Environment variables](env-vars.md) for every name.
 
 ```bash
 JAIPH_SERVE_TOKEN=secret jaiph serve --host 0.0.0.0 --port 8080 ./tools.jh
@@ -86,15 +80,13 @@ curl -s -X POST http://127.0.0.1:5247/mcp -H 'content-type: application/json' -H
 curl -s http://127.0.0.1:5247/healthz | jq -e '.status == "ok"'
 
 # A synchronous run round-trips its return value with a durable run dir.
-curl -s -X POST 'http://127.0.0.1:5247/greet?wait=true' \
-  -H 'content-type: application/json' -d '{"name":"ok"}' \
-  | jq -e '.status == "succeeded" and (.run_dir | length > 0)'
+curl -s -X POST 'http://127.0.0.1:5247/greet?wait=true' -H 'content-type: application/json' -d '{"name":"ok"}' | jq -e '.status == "succeeded" and (.run_dir | length > 0)'
 
 # The run listing is bounded: a hostile limit is clamped to at most 1000 records.
 curl -s 'http://127.0.0.1:5247/runs?limit=100000' | jq -e '.limit == 1000 and (.runs | length) <= 1000'
 ```
 
-Each `jq -e` check exits `0` when the contract holds. `run_dir` points at the run's directory under `.jaiph/runs/…/`, using the same artifact layout as `jaiph run`.
+Each `jq -e` check exits `0` when the contract holds; `run_dir` points at the run's directory under `.jaiph/runs/…/`.
 
 ## Related
 
