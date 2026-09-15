@@ -6,185 +6,60 @@ diataxis: how-to
 
 # Export traces to an OTLP collector
 
-Every Jaiph run produces a complete event timeline with credentials redacted,
-written to `run_summary.jsonl` (see [Architecture](architecture.md#durable-artifact-layout)).
-The steps below turn that timeline into an OpenTelemetry trace, which is one span
-tree per run. Jaiph exports the trace over OTLP/HTTP with a JSON payload to any
-collector that accepts OTLP, such as a local
-[`otel-collector`](https://opentelemetry.io/docs/collector/), Grafana Tempo,
-Honeycomb, or Datadog.
+Every Jaiph run produces a complete, credential-redacted event timeline in `run_summary.jsonl` (see [Architecture](architecture.md#durable-artifact-layout)). The steps below turn that timeline into one OpenTelemetry trace per run, exported over OTLP/HTTP with a JSON payload to any collector that accepts OTLP (a local `otel-collector`, Grafana Tempo, Honeycomb, Datadog). Export runs on the host after a run reaches its terminal state.
 
-Export runs on the host after the run finishes. Once a run reaches its terminal
-state, the CLI reads that run's `run_summary.jsonl` and posts one trace.
+## Prerequisites
 
-## Enable it
+- A `.jh` file you can run, and a collector endpoint that accepts OTLP/HTTP.
+- The `OTEL_*` and `SENTRY_*` names Jaiph reads live in [the telemetry variables reference](env-vars.md#telemetry-variables); this recipe only shows which to set.
 
-Export stays off until you point Jaiph at a collector with the standard
-OpenTelemetry environment variables. You enable it with those variables, not with
-a `JAIPH_*` variable. Set either the traces endpoint, which Jaiph uses exactly as
-given, or the generic base endpoint, to which Jaiph appends `/v1/traces`:
+## 1. Point Jaiph at a collector
+
+Export stays off until you set a standard OpenTelemetry endpoint variable (not a `JAIPH_*` one). Set the generic base, to which Jaiph appends `/v1/traces`, or the traces-specific endpoint, used exactly as given (it wins if both are set):
 
 ```bash
-# Generic base — Jaiph appends /v1/traces
 export OTEL_EXPORTER_OTLP_ENDPOINT="http://localhost:4318"
-
-# …or the traces-specific endpoint, used exactly as given (wins if both are set)
-export OTEL_EXPORTER_OTLP_TRACES_ENDPOINT="http://localhost:4318/v1/traces"
-
 jaiph run ./flows/review.jh "review this diff"
 ```
 
-Every terminal run posts exactly one trace, covering an interactive `jaiph run`, a
-standalone `jaiph run --raw`, and every def invoked through `jaiph mcp` or
-`jaiph serve`.
+Every terminal run then posts exactly one trace, covering interactive `jaiph run`, standalone `jaiph run --raw`, and every def invoked through `jaiph mcp` or `jaiph serve`.
 
-### A local collector
-
-Run a collector that logs what it receives, then run a def against it:
+## 2. Try it against a local collector
 
 ```bash
 docker run --rm -p 4318:4318 otel/opentelemetry-collector:latest
 OTEL_EXPORTER_OTLP_ENDPOINT="http://localhost:4318" jaiph run ./hello.jh
 ```
 
-### A hosted backend (Honeycomb)
+A hosted backend usually wants the traces endpoint plus an auth header, both set through the same [telemetry variables](env-vars.md#telemetry-variables) (`OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`, `OTEL_EXPORTER_OTLP_HEADERS`, `OTEL_SERVICE_NAME`, `OTEL_RESOURCE_ATTRIBUTES`).
 
-A hosted backend usually wants the traces endpoint plus an auth header. Headers are
-a comma-separated list of `key=value` pairs:
+## 3. Read the trace
 
-```bash
-export OTEL_EXPORTER_OTLP_TRACES_ENDPOINT="https://api.honeycomb.io/v1/traces"
-export OTEL_EXPORTER_OTLP_HEADERS="x-honeycomb-team=YOUR_API_KEY"
-export OTEL_SERVICE_NAME="jaiph-ci"
-jaiph run ./deploy.jh
-```
+One run becomes one trace whose id is the run's UUID with the dashes removed, so a re-export never creates a second trace. The root span (`run <name>`) covers `RUN_START` to `RUN_END` and is ERROR on a nonzero exit or signal; one child step span per step, nested by the run tree, carries the `jaiph.step.*` attributes; a prompt span under its step carries the `jaiph.prompt.*` attributes. The payload comes entirely from the redacted `run_summary.jsonl`, so a secret arrives as `[REDACTED]`. Every trace carries `jaiph.version`, `jaiph.run_id`, `jaiph.def`, and `jaiph.source` as resource attributes, plus `jaiph.principal` and `jaiph.correlation_id` for a `jaiph serve` run.
 
-Set `OTEL_RESOURCE_ATTRIBUTES="deployment.environment=prod,team=platform"` to add
-extra resource attributes to every span.
+## 4. Report failed runs to Sentry {#report-failed-runs-to-sentry}
 
-## What maps to what
-
-One run becomes one trace. The trace id is the run's UUID with the dashes removed.
-Re-exporting the same run produces the same ids, so a retry never creates a second
-trace.
-
-- **Root span** (`run <name>`) covers the whole run, from `RUN_START` to
-  `RUN_END`. Its status is ERROR when the run exits nonzero or a signal
-  terminated it, and OK otherwise. Each `logerr` and `logwarn` becomes a span event
-  on this root span.
-- **Step spans**, one per step. Steps nest by the run tree, so a step's parent is
-  the step that invoked it, and top-level steps hang off the root. Each step span
-  carries these attributes: `jaiph.step.kind` (`def`, `script`, or
-  `prompt`), `jaiph.step.func`, `jaiph.step.name`, `jaiph.step.seq`,
-  `jaiph.step.depth`, `jaiph.step.status`, `jaiph.step.elapsed_ms`, and the redacted
-  `jaiph.step.out` and `jaiph.step.err` captures. A step with a nonzero status is an
-  ERROR span. A step with no end, which happens on a crash, closes at the last
-  event's time and is marked ERROR.
-- **Prompt spans** are a child of the step that issued the prompt. Each prompt span
-  carries `jaiph.prompt.backend`, `jaiph.prompt.model`, and `jaiph.prompt.status`.
-
-The exported payload comes entirely from `run_summary.jsonl`, which is already
-credential-redacted, so a secret in step output arrives as `[REDACTED]`. Jaiph
-never reads the raw per-step capture files for the export.
-
-Beyond the service name, every trace carries `jaiph.version`, `jaiph.run_id`,
-`jaiph.def`, and `jaiph.source` as resource attributes. You can add your own
-with `OTEL_RESOURCE_ATTRIBUTES`, and you can set the service name with
-`OTEL_SERVICE_NAME` (the default is `jaiph`).
-
-Every `jaiph serve` run also carries the caller's identity as resource
-attributes. `jaiph.principal` is the audit subject, which is the token `sub` (or
-`client_id` for `sub`-less machine tokens) in OIDC mode, `operator` when a static
-operator token is set, and `anonymous` in open mode with no token.
-`jaiph.correlation_id` is the request's `X-Correlation-Id` or `X-Request-Id`, or a
-generated UUID when neither is present. Both attributes are attached to every span
-of the trace, and neither is ever a bearer token or any value that carries a
-secret. They are absent only for `jaiph run`, which has no serve request behind
-it.
-
-## What happens when an export fails
-
-An export that fails never changes the run. If the collector is unreachable or
-returns an error, Jaiph writes exactly one warning line to stderr, and the run's
-exit code, output, and journal are unchanged. There are no retries and no queue. A
-run takes minutes, so batching the export at the end of the run is the normal OTLP
-pattern.
-
-Jaiph also skips an export when the run's journal fails its keyed integrity
-chain. Each exporter verifies the chain before it reads `run_summary.jsonl`.
-When the chain does not verify, because the journal was rewritten, truncated, or
-forged, Jaiph writes one warning line and skips the export, so a tampered
-timeline is never posted to the collector or to Sentry. A run with no persisted
-key cannot be verified and is exported normally. See
-[Architecture — Keyed hash chain](architecture.md#hash-chain).
-
-The OTLP-trace exporter and the Sentry exporter run concurrently under one total
-flush budget, set by `JAIPH_TELEMETRY_FLUSH_MS` with a default of 10 seconds, so
-the whole post-run flush is bounded by that budget rather than by the sum of two
-sequential timeouts. In the long-lived `jaiph serve` and `jaiph mcp` processes,
-delivery is detached. Jaiph marks the run terminal and releases its
-execution-concurrency slot before it attempts delivery, so an unreachable backend
-can never delay a terminal result or hold a slot. When detached delivery fails,
-Jaiph counts it as a bounded metric and prints a capped number of stderr warnings.
-
-Jaiph speaks only OTLP/HTTP with a JSON payload. If `OTEL_EXPORTER_OTLP_PROTOCOL`
-is set to anything other than `http/json`, for example `grpc`, Jaiph writes a
-warning and skips the export rather than send the wrong protocol.
-
-## Report failed runs to Sentry
-
-Traces cover every run. A Sentry error report covers only the runs that fail. When
-a run terminates unsuccessfully, from a nonzero exit or a signal, Jaiph posts one
-Sentry error event, which gives operators alerting and grouping without reading
-through run directories. A successful run sends nothing.
-
-Reporting stays off until you set a Sentry DSN. As with traces, you enable it with
-a standard variable, not a `JAIPH_*` variable:
+Traces cover every run; a Sentry error report covers only the runs that fail. Set a DSN — again a standard variable, not a `JAIPH_*` one — and each failing run posts one error event:
 
 ```bash
 export SENTRY_DSN="https://<key>@<host>/<projectId>"
-export SENTRY_ENVIRONMENT="prod"   # optional — sets the event's environment
-export SENTRY_RELEASE="jaiph@1.2.3" # optional — defaults to jaiph@<version>
-
 jaiph run ./deploy.jh
 ```
 
-The same host-side, end-of-run step that exports traces also sends the report. So
-`jaiph run` completions, including a standalone `jaiph run --raw`, and defs
-invoked through `jaiph mcp` or `jaiph serve` are all covered, and each one produces
-one Sentry event when it fails. If the DSN is malformed, Jaiph writes exactly one
-stderr warning and sends nothing.
+The `event_id` is the run's dashless UUID (so re-reporting keeps the id), the message names the exit or signal, and the `tags`, `extra`, and `fingerprint` come from the same redacted journal; a `jaiph serve` run also tags `jaiph.principal` and `jaiph.correlation_id`. `SENTRY_ENVIRONMENT` and `SENTRY_RELEASE` set the event's environment and release. A malformed DSN writes one stderr warning and sends nothing.
 
-### What the event carries
+## 5. Know the failure and integrity rules
 
-Everything comes from the run's `run_summary.jsonl`, which is already
-credential-redacted. Jaiph never reads the raw `.out` or `.err` captures for the
-report.
+An export or report never changes the run: an unreachable or erroring backend writes exactly one stderr warning, and the run's exit code, output, and journal are unchanged, with no retries. Jaiph skips an export when the run's journal fails its keyed integrity chain, so a tampered timeline is never posted (see [Architecture — Keyed hash chain](architecture.md#hash-chain)). The two exporters run concurrently under one flush budget, `JAIPH_TELEMETRY_FLUSH_MS` (default 10 s); in the long-lived `jaiph serve` and `jaiph mcp` processes, delivery is detached so an unreachable backend never delays a terminal result. Jaiph speaks only OTLP/HTTP with a JSON payload and skips the export if `OTEL_EXPORTER_OTLP_PROTOCOL` names anything but `http/json`.
 
-- **`event_id`** is the run's UUID with the dashes removed, so re-reporting the
-  same run keeps the same id.
-- **`message`** is `run <name> failed (exit N)`, or `run <name>
-  terminated by signal S`.
-- **`level`** is `error`, and **`platform`** is `node`.
-- **`tags`** include `jaiph.def`, `jaiph.source` (the source file basename),
-  and the failing step's `jaiph.step.kind` and `jaiph.step.name` when they are
-  known. Every `jaiph serve` run also tags `jaiph.principal` (the audit
-  subject) and `jaiph.correlation_id` (the request id), never a token or any value
-  that carries a secret.
-- **`extra`** holds `failing_step_detail` (the failing step's redacted `err` or
-  `out` excerpt) and `run_dir` (a pointer to the run directory for triage).
-- **`fingerprint`** is `["jaiph", <def>, <failing step name or "unknown">]`,
-  so re-occurrences group by def and failing step.
-- **`release`** and **`environment`** come from `SENTRY_RELEASE` and
-  `SENTRY_ENVIRONMENT`.
+## Verification
 
-### What happens when a report fails
+```bash
+docker run --rm -p 4318:4318 otel/opentelemetry-collector:latest &
+OTEL_EXPORTER_OTLP_ENDPOINT="http://localhost:4318" jaiph run ./hello.jh
+```
 
-Like a trace export, a Sentry report never affects a run. If Sentry is unreachable
-or returns an error, if the DSN is malformed, or if the send times out (bounded by
-the shared `JAIPH_TELEMETRY_FLUSH_MS` budget, default 10 seconds), Jaiph writes
-exactly one stderr warning line. The run's exit code, output, and journal are
-unchanged, and there are no retries.
+The collector logs one received trace whose root span is `run hello`, and the run's own stderr carries no export warning. A failing run with `SENTRY_DSN` set additionally produces one Sentry event whose `event_id` is the run's dashless UUID.
 
 ## Related
 
