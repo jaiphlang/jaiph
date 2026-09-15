@@ -12,6 +12,7 @@ import { join } from "node:path";
 
 const REPO_ROOT = process.cwd();
 const ENGINEER = join(REPO_ROOT, ".jaiph", "engineer.jh");
+const DOCS_PARITY = join(REPO_ROOT, ".jaiph", "docs_parity.jh");
 const AGENT_MD = join(REPO_ROOT, "AGENT.md");
 
 // Extract the `const code_philosophy = """ ... """` block so the assertions
@@ -42,6 +43,24 @@ test("engineer factory code_philosophy requires the arch:check gate", () => {
     philosophy,
     /arch:check/,
     "code_philosophy must tell implementers to run npm run arch:check alongside build/test",
+  );
+});
+
+test("engineer factory code_philosophy points at the docs-ownership ADR", () => {
+  const philosophy = readCodePhilosophy();
+  assert.match(
+    philosophy,
+    /0003-docs-one-fact-one-owner/,
+    "code_philosophy must reference design/0003-docs-one-fact-one-owner.md so implementers do not copy owned docs rules",
+  );
+});
+
+test("docs_parity.jh points at the docs-ownership ADR", () => {
+  const source = readFileSync(DOCS_PARITY, "utf8");
+  assert.match(
+    source,
+    /0003-docs-one-fact-one-owner/,
+    ".jaiph/docs_parity.jh must treat design/0003-docs-one-fact-one-owner.md as the owner-page rule",
   );
 });
 

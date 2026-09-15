@@ -80,8 +80,8 @@ const code_philosophy = """
      e2e::expect_run_file, or e2e::assert_equals). Use e2e::assert_contains
      only when full equality is not feasible (nondeterministic output, unbounded
      logs, or platform-dependent text) and add an inline comment explaining why.
-  9. Source code and docs/architecture.md are the single source of truth. Don't trust
-     documentation blindly.
+  9. Source code and docs/architecture.md are the single source of truth for
+     behavior and architecture. Don't trust documentation blindly.
   10. Agent analyzability (import graph). Before changing any src/ import
      structure, read docs/agent-analyzability.md. Import a package only through
      its public entry point (e.g. src/parser.ts, src/format/index.ts,
@@ -93,6 +93,9 @@ const code_philosophy = """
      raising a cap. When package.json defines them, run npm run arch:check and
      npm run lint in addition to npm run build and npm test; fix any new
      violations before continuing.
+  11. Docs ownership (ADR 0003). Published docs follow
+     design/0003-docs-one-fact-one-owner.md: one fact, one owner page. Do not
+     paste an owned rule onto a second page. Link instead.
 """
 
 const output_criteria = """
@@ -271,6 +274,8 @@ def implement(task, role_name) {
     You are working on the Jaiph codebase (https://github.com/jaiphlang/jaiph),
     a TypeScript compiler and runtime for a DSL that transpiles to Bash.
     docs/architecture.md is the source of truth for architecture and execution flow.
+    design/0003-docs-one-fact-one-owner.md is the source of truth for which
+    published docs page owns a contract.
 
     ## Code philosophy
     ${code_philosophy}
@@ -279,6 +284,9 @@ def implement(task, role_name) {
     Implement the following task by:
     - Reading docs/architecture.md first and keeping architecture boundaries and
       contracts intact unless task explicitly requires changing them.
+    - For documentation edits, reading design/0003-docs-one-fact-one-owner.md
+      and stating a fact only on its owner page (one sentence and a link
+      everywhere else).
     - Following the codebase's existing style and conventions precisely.
     - Following the code philosophy above for all new and modified code.
     - Adding or updating tests as needed for acceptance criteria.

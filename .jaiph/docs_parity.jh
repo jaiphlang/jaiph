@@ -12,9 +12,14 @@ const role = """
   Project-specific context for documenting Jaiph:
   - You read TypeScript and Bash fluently so you can verify documentation
     against the implementation.
-  - Source code and docs/architecture.md are the single source of truth.
-    Do not trust existing documentation blindly; verify claims against the
-    code before reproducing them.
+  - Source code is the source of truth for behavior. Verify claims against
+    the code before writing them down.
+  - docs/architecture.md is the source of truth for architecture boundaries
+    and execution flow.
+  - design/0003-docs-one-fact-one-owner.md is the source of truth for which
+    published page owns a contract. State a fact only on its owner page.
+    Every other page uses one sentence and a link. Do not paste an owned
+    rule onto a second page.
   - Navigation links between docs pages are provided by the Jekyll template
     (docs/_layouts/docs.html). Do not add manual navigation blocks (e.g.
     "More Documentation" sections) to individual markdown pages — inline
@@ -139,6 +144,9 @@ export def update_from_task(taskDesc) {
       src/cli/shared/usage.ts, and src/cli/commands/*.ts (help text / USAGE
       constants only — do not change command behavior).
       Do NOT modify tests, config, or unrelated source.
+    - Follow design/0003-docs-one-fact-one-owner.md. If the task already
+      states a fact on its owner page, do not copy that rule onto another
+      page. Link instead. Do not merge pages.
     - Navigation links between docs pages are provided by the Jekyll template.
       Do NOT add manual navigation blocks to individual markdown pages.
 
@@ -159,13 +167,17 @@ def docs_page(path) {
     language, runtime or a set of features:
     0. Use docs/architecture.md as the source of truth for architecture boundaries,
        contracts, and execution flow. Keep docs consistent with it.
+    0a. Use design/0003-docs-one-fact-one-owner.md as the source of truth for
+       which page owns a contract. If this page restates a rule that belongs
+       on another owner, replace the copy with one sentence and a link.
+       Do not add missing detail that the owner page already states.
     1. Check if it has approachable structure with overview, describing high
        level goals and concepts.
     2. Jaiph source code is the single source of truth for the language. Verify
        if the content is consistent with the source code and if it covers all
        relevant features and concepts.
-    3. Add missing information, fix inconsistencies, errors, warnings,
-       suggestions, improvements and other issues.
+    3. Fix inconsistencies, errors, and stale claims. Do not grow the page
+       by pasting another page's inventory.
     4. Keep examples (if present) executable and aligned with current behavior.
     5. Ensure the content is approachable and understandable by a human reader.
        After factual edits, revise the prose with the plain-writing skill
@@ -190,21 +202,25 @@ def docs_overview(docPaths) {
     </role>
     <task>
     Read all ${docPaths}, they contain all the documentation for the
-    project. Also read docs/architecture.md and treat it as architecture source of
-    truth. Please update docs in the following way:
+    project. Also read docs/architecture.md (architecture) and
+    design/0003-docs-one-fact-one-owner.md (which page owns each contract).
+    Please update docs in the following way:
     1. Ensure they are consistent with each other.
     1a.Ensure they are consistent with docs/architecture.md, especially:
        - runtime vs CLI responsibilities,
        - runtime/CLI contracts (__JAIPH_EVENT__ vs run artifacts),
        - channels and hooks behavior,
        - Jaiph runtime test lane (*.test.jh via jaiph test).
-    2. Ensure they are organized in a logical way. If needed, add new files,
-       merge existing files, or split them into smaller files, or move
-       the content between files.
+    1b.Ensure each contract is stated in full on its owner page only
+       (ADR 0003). Other pages keep one sentence and a link. Do not merge
+       pages to look smaller.
+    2. Ensure they stay in their Diátaxis quadrant. Do not add a new how-to
+       whose fact already has an owner. Split a page only when one topic
+       outgrew the file.
     3. Ensure they are interconnected and form a coherent whole.
-    4. Ensure there is no misleading or reduntant information. Typically you may
-       detect some leftovers from previous versions or low level details that
-       are no longer relevant or too detailed.
+    4. Ensure there is no misleading or redundant information. Typically you may
+       detect leftovers from previous versions or a restated inventory that
+       belongs on another owner page.
     5. Navigation links between docs pages are provided by the Jekyll template
        (docs/_layouts/docs.html). Do NOT add manual navigation blocks (like
        'More Documentation' sections) to individual markdown pages. Inline
