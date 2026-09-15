@@ -128,6 +128,45 @@ describe("emitModule", () => {
     assert.equal(roundTrip(source), source);
   });
 
+  it("round-trips run with a stdin clause (quoted literal is canonical)", () => {
+    const source = [
+      "export def main(content) {",
+      '  run save(path) stdin "${content}"',
+      "}",
+      "",
+    ].join("\n");
+    assert.equal(roundTrip(source), source);
+  });
+
+  it("normalizes a bare-identifier stdin operand to a quoted interpolation and then round-trips", () => {
+    const bare = [
+      "export def main(content) {",
+      "  run save(path) stdin content",
+      "}",
+      "",
+    ].join("\n");
+    const canonical = [
+      "export def main(content) {",
+      '  run save(path) stdin "${content}"',
+      "}",
+      "",
+    ].join("\n");
+    const once = roundTrip(bare);
+    assert.equal(once, canonical);
+    // Idempotent: formatting the canonical form again is a fixed point.
+    assert.equal(roundTrip(once), canonical);
+  });
+
+  it("emits a stdin clause on an inline script", () => {
+    const source = [
+      "export def main(content) {",
+      '  run `cat`() stdin "${content}"',
+      "}",
+      "",
+    ].join("\n");
+    assert.equal(roundTrip(source), source);
+  });
+
   it("formats return statement", () => {
     const source = [
       "export def main() {",

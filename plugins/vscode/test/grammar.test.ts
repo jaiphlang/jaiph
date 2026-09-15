@@ -28,6 +28,7 @@ test("current .jh constructs highlight with the expected scopes", async () => {
     ["logwarn", "keyword.control.command.jaiph"],
     ["catch", "keyword.control.command.jaiph"],
     ["recover", "keyword.control.command.jaiph"],
+    ["stdin", "keyword.control.command.jaiph"],
     ["fail", "keyword.control.command.jaiph"],
     ["return", "keyword.control.command.jaiph"],
     ["async", "keyword.control.async.jaiph"],

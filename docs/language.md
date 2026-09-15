@@ -104,6 +104,18 @@ Call arguments:
 
 **Hard error contract:** any line that begins with `run`, or `return` followed by `run` / `prompt` / `match`, is a managed form. A missing `)`, a `return run` without `()`, or a `return` RHS that is not a string, identifier, `run`, `prompt`, or `match` is `E_PARSE` — those lines are **never** silently treated as an inline shell step.
 
+### Arguments and `stdin`
+{: #arguments-and-stdin}
+
+Script arguments arrive as argv (`$1`, `$2`, … in bash, or `sys.argv` in Python). argv and the environment together are bounded by the OS `ARG_MAX` limit, which is about 1 MB on macOS, so the spawn fails when an argument is too large. To pass a large or arbitrary string to a **script**, add a `stdin` clause after the call's `()`, as in `run save_string_to_file(path) stdin content`. The operand is a normal string value, so it can be a bare identifier, a `${…}` interpolation, or a double-quoted string. Jaiph evaluates it in scope and writes it to the script's stdin as UTF-8, never as argv, so it is not bounded by `ARG_MAX`.
+
+The clause goes after the `()` and before any `catch` or `recover`. A trailing redirect (`>`, `>>`, `|`, or `&`) stays `E_PARSE`. The clause is legal only on a `run` of a script, named or inline, and Jaiph rejects it anywhere else:
+
+- A def or other non-script target is `E_VALIDATE`.
+- `stdin` on `run async` is `E_PARSE`.
+
+argv stays the default channel for small arguments, and a large argument is never moved to stdin for you.
+
 ### Inline scripts
 
 Inline scripts embed a script body in a step without a separate `script` definition. Use single backticks for one-liners, and triple backticks for multiline bodies or bodies written in another language.

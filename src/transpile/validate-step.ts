@@ -10,12 +10,14 @@
 import type { StepDef } from "../types";
 import { validateExpr, validateNamedPromptReturnsCapture, validateWorkflowShellExec } from "./validate-expr";
 import {
+  makeImportedKindLookup,
   validateChannelRef,
   validateDotFieldRefs,
   validateDotSubject,
   validateInlineStringCaptures,
   validateSubjectForwardConst,
 } from "./validate-step-helpers";
+import { lookupKind, type RefTargetKind } from "./validate-ref-resolution";
 import { validatePromptStepReturns } from "./validate-prompt-schema";
 import {
   stripDoubleQuotes,
@@ -163,8 +165,71 @@ function validateSayStep(s: StepDef, ctx: ValidatorCtx): void {
   );
 }
 
+/**
+ * Resolve which kind (`def` / `script` / `prompt`) a `run` target ref names, or
+ * `undefined` when it does not resolve (the call-ref validator reports those).
+ * Used by the `stdin` clause check, which is legal only on a script target.
+ */
+function runTargetKind(ref: string, ctx: ValidatorCtx): RefTargetKind | undefined {
+  const parts = ref.split(".");
+  if (parts.length === 1) {
+    const name = parts[0];
+    if (ctx.localScripts.has(name)) return "script";
+    if (ctx.localDefs.has(name)) return "def";
+    return lookupKind(ctx.ast, name);
+  }
+  if (parts.length === 2) {
+    return makeImportedKindLookup(ctx)(parts[0], parts[1]);
+  }
+  return undefined;
+}
+
+/**
+ * `run script(args) stdin <expr>`: legal only on a `run` of a script (named or
+ * inline). Rejects a def / prompt target and `run async`; also validates the
+ * stdin value string's interpolation refs like any const/exec value.
+ */
+function validateStdinClause(s: Extract<StepDef, { type: "exec" }>, ctx: ValidatorCtx): void {
+  const stdin = s.stdin;
+  if (!stdin) return;
+  validateExpr(stdin, s.loc, "const", ctx);
+  const body = s.body;
+  if (body.kind === "inline_script") return;
+  if (body.kind === "call") {
+    if (body.async) {
+      ctx.diag.error(
+        ctx.ast.filePath,
+        s.loc.line,
+        s.loc.col,
+        "E_VALIDATE",
+        "stdin is not supported on run async",
+      );
+      return;
+    }
+    const kind = runTargetKind(body.callee.value, ctx);
+    if (kind !== undefined && kind !== "script") {
+      ctx.diag.error(
+        ctx.ast.filePath,
+        s.loc.line,
+        s.loc.col,
+        "E_VALIDATE",
+        `stdin requires a run of a script; "${body.callee.value}" is a ${kind}`,
+      );
+    }
+    return;
+  }
+  ctx.diag.error(
+    ctx.ast.filePath,
+    s.loc.line,
+    s.loc.col,
+    "E_VALIDATE",
+    "stdin is only valid on a run of a script (named or inline)",
+  );
+}
+
 function validateExecStep(s: StepDef, ctx: ValidatorCtx): void {
   if (s.type !== "exec") return;
+  validateStdinClause(s, ctx);
   const body = s.body;
   if (body.kind === "prompt") {
     validateExpr(body, s.loc, "const", ctx);

@@ -299,6 +299,10 @@
     "named": false
   },
   {
+    "type": "stdin",
+    "named": false
+  },
+  {
     "type": "string",
     "named": true
   },

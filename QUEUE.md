@@ -16,33 +16,6 @@ Process rules:
 7. Acceptance criteria are non-negotiable. A task is not done until every
    acceptance bullet is verified by a test that fails when the contract is violated.
 
-## Scripts accept a large payload on stdin; save_string_to_file reads stdin #dev-ready
-
-Context: Script arguments are argv only (`$1` / `sys.argv`). That is the documented contract (`docs/jaiph-skill.md`, `docs/language.md`). `run foo() > file` is `E_PARSE`. `.jaiph/lib_common.jh` `save_string_to_file` already documents that content travels through argv and is subject to `ARG_MAX` (~1 MB on macOS). `spawnAndCapture` uses `stdio: ["ignore", "pipe", "pipe"]` — stdin is discarded. Recover path-binding does not help `run process(huge_json)` or any other large string that is not already a capture file.
-
-Problem: any `run script(big)` whose encoded argv + env exceeds the OS limit fails at `execve`. There is no supported way to hand a large string to a script.
-
-Remediation — implement exactly this:
-
-1. Language: optional `stdin <expr>` on a standalone `run` of a **script** (named or inline), after `()` and before `catch` / `recover`:
-
-   `run save_string_to_file(path) stdin content`
-
-   `stdin` is rejected (`E_PARSE` / `E_VALIDATE`) on `run` of a def, on `run async`, and on `run` without a script target. `<expr>` is a normal string expr (bare ident, quoted, interpolation). Trailing `>` / `>>` / `|` / `&` stay `E_PARSE`.
-2. Runtime: spawn that step with stdin piped; write the evaluated expr bytes (UTF-8) to the child's stdin and end the stream. Those bytes must not appear in argv. `spawnAndCapture` grows a stdin parameter; default remains `ignore` when the clause is absent.
-3. Change `.jaiph/lib_common.jh` `save_string_to_file` to `path = sys.argv[1]; content = sys.stdin.read()`. Update every in-repo call to `run common.save_string_to_file(path) stdin content` (`.jaiph/architect_review.jh` and any other caller). Comment the new contract; drop the ARG_MAX warning for this helper.
-4. Docs: `docs/language.md` (`run` / scripts), `docs/jaiph-skill.md` (arguments), `docs/grammar.md` (`run_stmt`). Editor grammars (VS Code TextMate, Zed/Tree-sitter) must highlight `stdin` as a `run` clause, not as a shell redirect.
-5. Keep argv as the default small-arg channel. Do not auto-promote large argv to stdin.
-
-### Acceptance criteria
-
-- Parse/validate tests: `run foo(a) stdin body` is accepted when `foo` is a script; `run someDef() stdin x` is `E_VALIDATE` (or `E_PARSE` if you reject earlier); `run foo() > file` remains `E_PARSE`; `run async foo() stdin x` is rejected.
-- Runtime test: `run echo_stdin() stdin payload` with `script echo_stdin = \`cat\`` returns `payload`; spawn argv does not contain `payload` (assert via `_scriptSpawn` spy).
-- Runtime test: a stdin payload larger than 1 MB is written in full and the step exits 0. Today's argv path cannot pass this.
-- `save_string_to_file` / architect_review call sites compile under the new helper contract (path argv + stdin body).
-- Formatter round-trips `run name(args) stdin expr`.
-- `npm run build`, `npm test`, `npm run test:e2e`, and editor grammar tests (`plugins/vscode`, `plugins/zed` as already wired) pass.
-
 ## jaiph format is a no-op on shebang + const = prompt triple-quoted def #dev-ready
 
 Context: `jaiph format` (`src/cli/commands/format.ts`) parses with trivia and re-emits via `emitModule` (`src/format/emit.ts`, `src/format/emit-steps.ts`). A `const name = prompt """ … """` step is a `const` whose RHS is `Expr.prompt`. Trivia on that expr carries `bodyKind: "triple_quoted"` and `rawBody` (author lines, including margin). Docs already state the contract: `docs/cli.md` (`jaiph format`) — shebang preserved, triple-quoted prompt blocks emit verbatim (author margin via trivia), a single blank line between steps is kept. `examples/say_hello.jh` uses this shape and `e2e/tests/128_examples_format_check.sh` checks every example, but no unit test pins the minimal file below. `src/format/emit.test.ts` has `const = prompt "…"` and top-level `const x = """`, not `const = prompt """` with a shebang.
