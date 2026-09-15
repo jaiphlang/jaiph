@@ -285,17 +285,17 @@ Backend is run-scoped: `agent.backend` = `cursor` (default) | `claude` | `codex`
 ```jaiph
 # catch — runs ONCE on failure, then continues
 run deploy(env) catch (err) {
-  logerr "deploy failed: ${err}"
+  logerr "deploy failed; see ${err}"
   run rollback(env)
 }
 
 # recover — repair-and-RETRY loop: run target → on failure run body → retry target
 run tests() recover (err) {
-  prompt "Tests failed. Fix the code. Failure output: ${err}"
+  prompt "Tests failed. Fix the code. Failure output saved to: ${err}"
 }
 ```
 
-- The binding (`err`) receives the merged stdout+stderr of the failed execution. Exactly one binding, always in parentheses — bare `catch {` is a parse error.
+- The binding (`err`) is the **absolute path** of the failed step's stdout capture (its `.out` file); stderr is the sibling `.err`. Read the log from disk (`tail -n 200 "${err}"`) — it is never passed as an argument, so a large log cannot hit `ARG_MAX`. See [Language — catch and recover](language.md#catch-and-recover). Exactly one binding, always in parentheses — bare `catch {` is a parse error.
 - `catch` and `recover` attach to `run` (including `run async`). They are mutually exclusive on one step.
 - `recover` retries until success or `run.recover_limit` (default **10**; def-level config overrides module-level).
 - A common pattern: a `catch` whose body is the "else branch" — note `return` inside a catch body returns from the **enclosing def**.
@@ -441,7 +441,7 @@ export def main(task) {
   run preconditions()          # fast checks first
   run implement(task)             # prompt-driven work
   run verify() recover (err) {    # verification with self-repair
-    prompt "Verification failed — fix it. Output: ${err}"
+    prompt "Verification failed — fix it. Output saved to: ${err}"
   }
 }
 ```

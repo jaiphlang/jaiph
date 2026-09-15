@@ -152,7 +152,7 @@ See [Run work concurrently](async.md) for the operator recipe and [Spec — Asyn
 
 ## `catch` and `recover`
 
-Both attach to `run` (any form). The binding receives the merged stdout+stderr from the failed execution.
+Both attach to `run` (any form). The binding receives the **absolute path** of the failed step's stdout capture (its `NNNNNN-*.out` file under `JAIPH_RUN_DIR`), not the log bytes. The file exists even when the step produced no stdout (it may be empty); stderr is in the sibling `.err` (same seq prefix). Read the log from disk (`cat "${err}"` / `tail -n 200 "${err}"`) — the recovery body never receives the log as an argument, so a multi-megabyte log cannot hit `ARG_MAX`.
 
 | Form | Loop | Allowed on |
 |---|---|---|
@@ -163,7 +163,7 @@ Both attach to `run` (any form). The binding receives the merged stdout+stderr f
 run deploy() catch (err) run rollback()
 
 run deploy(env) recover(err) {
-  log "deploy failed: ${err}"
+  logerr "deploy failed; see ${err}"
   run auto_repair(env)
 }
 ```
