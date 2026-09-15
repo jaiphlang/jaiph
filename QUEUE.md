@@ -16,29 +16,6 @@ Process rules:
 7. Acceptance criteria are non-negotiable. A task is not done until every
    acceptance bullet is verified by a test that fails when the contract is violated.
 
-## Spawn and exec failures are failed steps; always emit STEP_END and RUN_END #dev-ready
-
-Context: `spawnAndCapture` (`src/runtime/kernel/node-workflow-runtime.ts`) calls `_scriptSpawn.spawn(command, args, …)` inside a Promise executor with no try/catch. The `'error'` handler settles `status: 1`, but a synchronous throw from `spawn` (including `E2BIG` when argv + env exceed `ARG_MAX`) rejects the Promise. `executeManagedStep` awaits `fn(stepIo)` and only `finally`-stops the idle watchdog; on throw it never writes `STEP_END`. `runRoot` awaits `executeDef` then emits `RUN_END`; on throw it never emits `RUN_END`. `runWorkflowRunner` (`.catch` in `src/runtime/kernel/node-workflow-runner.ts`) prints `jaiph node runner: …` and `process.exit(1)` with no journal close. Observed: `STEP_START` for the oversized script, empty `.out`/`.err`, no `STEP_END`, no `RUN_END`, heartbeat stops. `recover_limit` never applies because recover never sees a failed step.
-
-Problem: `run save_string_to_file(path, big)` after a large script failure (CI log ≳ 1 MB on macOS) aborts the jaiph process instead of failing the step. From outside the run vanished; the child never started.
-
-Remediation — implement exactly this:
-
-1. Wrap `spawn` in `spawnAndCapture` so a synchronous throw settles the same way as the `'error'` event: `status: 1`, stderr text, Promise resolves (never rejects).
-2. Map `E2BIG` (throw or `'error'`) to a stable diagnostic on stderr: `E_ARGV_TOO_LARGE: <byte-count> bytes (ARG_MAX …)` (include the attempted argv+env size). Other spawn failures stay `status: 1` with `errText` (keep the existing ENOENT-interpreter message).
-3. `executeManagedStep`: if `fn` throws, convert to `StepResult` `{ status: 1, output: "", error: <message> }` and still write capture files + `STEP_END`. `result` must always be defined before emit.
-4. `runRoot`: emit `RUN_END` and stop the heartbeat in a `finally`, including when `executeDef` throws. A vanished process is not a handleable error.
-5. Do not add a new language form. Do not change recover binding contents.
-
-### Acceptance criteria
-
-- Unit test (spawn seam `_scriptSpawn`): `spawn` throwing `E2BIG` resolves the script step as `status: 1`; stderr matches `E_ARGV_TOO_LARGE` and includes a byte count; the Promise does not reject.
-- Unit test: `spawn` emitting `'error'` with `code: "E2BIG"` is the same failed-step contract (not a thrown run).
-- Unit test: `executeManagedStep` / `runRoot` still emit `STEP_END` (status 1) and `RUN_END` when the inner `fn` throws a generic `Error`. Today's control flow (no `STEP_END` / `RUN_END` on throw) must fail this test.
-- A `run script(huge)` whose argv would exceed `ARG_MAX` does not reject `runRoot`. After the step, `run_summary.jsonl` contains `STEP_END` for that script and a terminal `RUN_END`. Prefer the spawn mock; a live ≳1 MB argv is optional and must not be the only coverage.
-- `recover` on a later step still runs when the oversized spawn is itself the failed `run` (the step ends `status: 1`, so `recover_limit` applies). Add a runtime or e2e test that proves recover body runs after a mocked `E2BIG`.
-- `npm run build`, `npm test`, and `npm run test:e2e` pass.
-
 ## recover and catch bind the failed step capture path, not the output bytes #dev-ready
 
 Context: `runRecoverBody` (`src/runtime/kernel/node-workflow-runtime.ts`) sets the recover/catch binding to `` `${lastResult.output}${lastResult.error}` `` — the full merged stdout+stderr string. Docs (`docs/language.md` § catch/recover, `docs/jaiph-skill.md`, `docs/grammar.md`) say the same. The failed step already has those bytes on disk: `executeManagedStep` writes `JAIPH_RUN_DIR/NNNNNN-<kind>__<name>.out` and `.err` incrementally, then rewrites them at `STEP_END`. Call sites such as `.jaiph/ensure_ci_passes.jh` then pass that string into a script as argv (`save_string_to_file(path, failure)`), which hits `ARG_MAX` on a ~1 MB+ CI log. `run foo() > file` is `E_PARSE` (`src/parse/core.ts`); there is no `capture_to` form. Leave that ban in place.
