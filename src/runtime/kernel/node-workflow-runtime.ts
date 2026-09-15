@@ -1078,7 +1078,7 @@ export class NodeWorkflowRuntime {
               let lastResult = await this.executeRunRef(scope, ref, argsRaw);
               let attempt = 1;
               while (lastResult.status !== 0 && attempt <= recoverLimit) {
-                const rr = await this.runRecoverBody(scope, recover, `${lastResult.output}${lastResult.error}`);
+                const rr = await this.runRecoverBody(scope, recover, lastResult.outFile ?? "");
                 if (rr.status !== 0 || rr.returnValue !== undefined) return rr;
                 lastResult = await this.executeRunRef(scope, ref, argsRaw);
                 attempt += 1;
@@ -1090,7 +1090,7 @@ export class NodeWorkflowRuntime {
             promise = runInBranch(async () => {
               const result = await this.executeRunRef(scope, ref, argsRaw);
               if (result.status === 0) return result;
-              const rr = await this.runRecoverBody(scope, recover, `${result.output}${result.error}`);
+              const rr = await this.runRecoverBody(scope, recover, result.outFile ?? "");
               if (rr.status !== 0) return rr;
               if (rr.returnValue !== undefined) return { ...rr, recoverReturn: true };
               return { status: 0, output: result.output, error: result.error };
@@ -1111,7 +1111,7 @@ export class NodeWorkflowRuntime {
             let lastResult = await this.executeRunRef(scope, ref, argsRaw);
             let attempt = 1;
             while (lastResult.status !== 0 && attempt <= limit) {
-              const rr = await this.runRecoverBody(scope, step.recover, `${lastResult.output}${lastResult.error}`);
+              const rr = await this.runRecoverBody(scope, step.recover, lastResult.outFile ?? "");
               if (rr.status !== 0 || rr.returnValue !== undefined) return this.mergeStepResult(accOut, accErr, rr);
               lastResult = await this.executeRunRef(scope, ref, argsRaw);
               attempt += 1;
@@ -1131,7 +1131,7 @@ export class NodeWorkflowRuntime {
               scope.vars.set(step.captureName, runResult.returnValue ?? runResult.output.trim());
             }
           } else if (step.catch) {
-            const rr = await this.runRecoverBody(scope, step.catch, `${runResult.output}${runResult.error}`);
+            const rr = await this.runRecoverBody(scope, step.catch, runResult.outFile ?? "");
             if (rr.status !== 0 || rr.returnValue !== undefined) return this.mergeStepResult(accOut, accErr, rr);
           } else {
             return this.mergeStepResult(accOut, accErr, runResult);
@@ -1148,7 +1148,7 @@ export class NodeWorkflowRuntime {
             let lastResult = await runOnce();
             let attempt = 1;
             while (lastResult.status !== 0 && attempt <= limit) {
-              const rr = await this.runRecoverBody(scope, step.recover, `${lastResult.output}${lastResult.error}`);
+              const rr = await this.runRecoverBody(scope, step.recover, lastResult.outFile ?? "");
               if (rr.status !== 0 || rr.returnValue !== undefined) return this.mergeStepResult(accOut, accErr, rr);
               lastResult = await runOnce();
               attempt += 1;
@@ -1168,7 +1168,7 @@ export class NodeWorkflowRuntime {
               scope.vars.set(step.captureName, result.returnValue ?? result.output.trim());
             }
           } else if (step.catch) {
-            const rr = await this.runRecoverBody(scope, step.catch, `${result.output}${result.error}`);
+            const rr = await this.runRecoverBody(scope, step.catch, result.outFile ?? "");
             if (rr.status !== 0 || rr.returnValue !== undefined) return this.mergeStepResult(accOut, accErr, rr);
           } else {
             return this.mergeStepResult(accOut, accErr, result);
@@ -1765,13 +1765,17 @@ export class NodeWorkflowRuntime {
       | { single: StepDef }
       | { block: StepDef[] }
     ),
-    failurePayload: string,
+    failurePath: string,
   ): Promise<StepResult> {
     const recoverSteps = "single" in catchDef ? [catchDef.single] : catchDef.block;
     // A recover / catch body is its own block scope: copy `locals` (as well as
     // `vars`) so a nested decl inside the body does not leak past it.
     const bodyScope = blockChildScope(scope);
-    bodyScope.vars.set(catchDef.bindings.failure, failurePayload);
+    // Bind the failed step's stdout CAPTURE PATH, not its bytes. The runtime
+    // already wrote those bytes to `outFile` (stderr to the sibling `.err`), so
+    // the recover body reads them from disk instead of putting a ~1MB+ log on
+    // the next script's `execve` argv (which would hit `ARG_MAX`).
+    bodyScope.vars.set(catchDef.bindings.failure, failurePath);
     return this.executeSteps(bodyScope, recoverSteps);
   }
 
@@ -2170,6 +2174,9 @@ export class NodeWorkflowRuntime {
       err_content: result.status !== 0 ? (result.error ?? "").slice(0, MAX_EMBED) : "",
     });
     stack.pop();
-    return result;
+    // Stamp the capture paths so a failed `run` target's `catch`/`recover` can
+    // bind the stdout path (and locate the sibling `.err`) rather than copying
+    // the merged bytes into the recover body's argv.
+    return { ...result, outFile, errFile };
   }
 }

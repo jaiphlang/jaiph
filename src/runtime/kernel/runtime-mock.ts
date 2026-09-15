@@ -21,6 +21,16 @@ export type StepResult = {
   returnValue?: string;
   /** Set when a catch body executed a `return` statement. */
   recoverReturn?: boolean;
+  /**
+   * Absolute path of this step's stdout capture (`NNNNNN-*.out` under
+   * `JAIPH_RUN_DIR`), stamped by `executeManagedStep`. This is what a failed
+   * step's `catch`/`recover` binds so the recover body reads the bytes from
+   * disk instead of receiving a full stdout+stderr copy as argv. The sibling
+   * `.err` (`errFile`, same seq prefix) holds stderr. Absent on results that
+   * never ran as a managed step (e.g. an unresolved run target).
+   */
+  outFile?: string;
+  errFile?: string;
 };
 
 /**
