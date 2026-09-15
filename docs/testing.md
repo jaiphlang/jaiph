@@ -131,7 +131,7 @@ The runner discovers `*.test.jh` files recursively. A bare `jaiph test` walks ev
 
 ### Grant `use` keys with `--env`
 
-A `script` step, or a named `prompt`, can declare a `use` clause that lists the environment variables it needs (see [Pass a host key to a script](script-env.md)). Under `jaiph test`, those keys are absent from the spawned subprocess unless you grant them with `--env`:
+A `script` step, or a named `prompt`, can declare a `use` clause that lists the environment variables it needs (see [Pass a host key to a script](script-env.md); the reserved names and `E_ENV_*` codes are in [Environment variables — Script subprocess environment](env-vars.md#script-env)). Under `jaiph test`, those keys are absent from the spawned subprocess unless you grant them with `--env`:
 
 ```bash
 jaiph test --env API_TOKEN ./e2e            # forward the host value of API_TOKEN
