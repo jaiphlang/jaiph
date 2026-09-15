@@ -24,8 +24,8 @@ interface Cap {
 }
 
 const CAPS: Cap[] = [
-  { file: "mcp.md", max: 100, owners: ["cli.md", "env-vars.md"] },
-  { file: "serve.md", max: 120, owners: ["cli.md", "env-vars.md"] },
+  { file: "mcp.md", max: 80, owners: ["cli.md", "env-vars.md"] },
+  { file: "serve.md", max: 90, owners: ["cli.md", "env-vars.md"] },
   { file: "observability.md", max: 100, owners: ["env-vars.md"] },
   { file: "agent-auth.md", max: 100, owners: ["cli.md", "env-vars.md"] },
 ];

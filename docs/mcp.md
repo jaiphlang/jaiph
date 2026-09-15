@@ -41,38 +41,23 @@ The client sends `initialize`, then `tools/list`, then `tools/call`; the server 
 
 ## 3. Choose which defs are exposed
 
-`deriveTools` applies these rules to the entry file only, and never exposes imported modules:
-
-1. Candidates are exported defs only. Zero exports means no tools, plus a warning.
-2. Skip `main` unless it is the only export; then expose it under a tool name taken from the file's basename (`deploy.jh` becomes `deploy`).
-3. An exported channel-route handler is a tool.
-
-A named def's tool name is the def name. For a lone `main`, Jaiph strips `.jh`, replaces any character outside `[A-Za-z0-9_-]` with `_`, truncates to 128 characters, and falls back to `def` if that leaves an empty name. Every skip is a stderr warning.
+Jaiph derives tools from the entry file's exported defs; see [the `jaiph mcp` reference](cli.md#jaiph-mcp) for the exposure rules and how a tool name is formed.
 
 ## 4. Write tool descriptions as comments
 
-The description an agent reads comes from the `#` comment lines directly above the def: Jaiph drops shebang lines, strips the leading `#` and one space, drops blank lines, and joins the rest with newlines. With no leading comment, the description falls back to `Run the "<name>" def from <basename>.`
-
-```jaiph
-# Deploy the application to the named environment.
-# Returns a short confirmation once the deploy finishes.
-export def deploy(environment) {
-  run deploy_sh(environment)
-  return "deployed to ${environment}"
-}
-```
+A tool's description comes from the `#` comment lines directly above the def; see [the `jaiph mcp` reference](cli.md#jaiph-mcp) for how those comments are parsed and the fallback when none exist.
 
 ## 5. Understand the input and result
 
-Every parameter is a required string, so a tool's input schema is a flat object of string properties with `additionalProperties: false`. On `tools/call`, the server maps arguments to positional def arguments and runs the def on the host as a durable run under `.jaiph/runs/`. Success returns the def's `return` value as a text block; failure returns `isError: true` with the failing step, its captured output, and a `run dir:` pointer, credential-redacted. A def failure is a normal result, not a protocol error; JSON-RPC `-32602` is reserved for calls that never start (unknown tool, missing or non-string argument, unexpected key).
+Each parameter is a required string, and a successful `tools/call` returns the def's `return` value as a text block from a durable run under `.jaiph/runs/`; see [the `jaiph mcp` reference](cli.md#jaiph-mcp) for the input schema, failure results, and error codes.
 
 ## 6. Stream progress and cancel {#7-stream-progress-and-cancel-a-long-call}
 
-Include a `progressToken` in the call's `params._meta` to receive a `notifications/progress` at each step boundary (start and end), carrying an increasing counter and a `def <name>` / `script <name>` / `prompt <backend>` message. A call without a token receives none. To abandon a running call, send `notifications/cancelled` with its `requestId`; the server terminates that call's child process tree (`SIGINT`, then `SIGKILL`) and leaves its run directory in place. Other in-flight calls are untouched.
+Pass a `progressToken` in the call's `params._meta` for per-step `notifications/progress`, and send `notifications/cancelled` to abandon a call; see [the `jaiph mcp` reference](cli.md#jaiph-mcp) for the frame contents and cancellation behavior.
 
 ## 7. Hot reload and shutdown
 
-The server watches every source file in the module graph. On save it re-validates, re-derives the tools, and emits `notifications/tools/list_changed`; a compile error keeps the previous valid tool set serving, and a call in flight keeps running against its own generation. On stdin close or a signal the server drains in-flight calls, then exits `0`; a second signal terminates every in-flight child tree first.
+The server hot-reloads the module graph on save and drains in-flight calls on shutdown; see [the `jaiph mcp` reference](cli.md#jaiph-mcp) for the reload and shutdown contract.
 
 ## Verification
 
