@@ -203,6 +203,28 @@ describe("emitModule", () => {
     assert.equal(roundTrip(source), source);
   });
 
+  it("is a bit-for-bit no-op on a first-agent const = prompt triple-quoted def body", () => {
+    // The shebang is CLI-only trivia (see docs/cli.md), so the module body here
+    // omits it. A formatter that collapses `prompt """ … """` to a double-quoted
+    // string, re-indents the two body lines off the authored 4-space margin,
+    // moves the closing `"""` off 2 spaces, drops the blank line before `return`,
+    // or substitutes/escapes `${name}` must fail this test.
+    const source = [
+      "export def hello(name) {",
+      '  const response = prompt """',
+      "    Say hello to ${name} and provide a fun fact about a person with the same name.",
+      "    Respond with a single line. Do not inspect files or run tools.",
+      '  """',
+      "",
+      "  return response",
+      "}",
+      "",
+    ].join("\n");
+    assert.equal(roundTrip(source), source);
+    // Idempotent: a second pass is a fixed point.
+    assert.equal(roundTrip(roundTrip(source)), source);
+  });
+
   it("round-trips top-level const with quotes in a triple-quoted body", () => {
     const source = [
       "const prompt_text = \"\"\"",

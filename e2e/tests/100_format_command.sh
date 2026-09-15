@@ -238,3 +238,46 @@ def some_wf() {
 jaiph format "${TEST_DIR}/blank_lines.jh"
 blank_out2="$(cat "${TEST_DIR}/blank_lines.jh")"
 e2e::assert_equals "${blank_out}" "${blank_out2}" "blank line preservation is idempotent"
+
+# -------------------------------------------------------------------
+e2e::section "jaiph format is a no-op on a shebang + const = prompt triple-quoted def"
+
+# A normal first-agent file: shebang preserved, triple-quoted prompt block emitted
+# verbatim (author 4-space margin via trivia), closing """ at 2 spaces, blank line
+# before return kept, and ${name} left as authored interpolation.
+e2e::file "first_agent.jh" <<'EOF'
+#!/usr/bin/env jaiph
+
+export def hello(name) {
+  const response = prompt """
+    Say hello to ${name} and provide a fun fact about a person with the same name.
+    Respond with a single line. Do not inspect files or run tools.
+  """
+
+  return response
+}
+EOF
+
+# Keep a pristine copy to compare against after formatting in place.
+cp "${TEST_DIR}/first_agent.jh" "${TEST_DIR}/first_agent.orig.jh"
+
+first_agent_check_exit=0
+jaiph format --check "${TEST_DIR}/first_agent.jh" 2>/dev/null || first_agent_check_exit=$?
+e2e::assert_equals "${first_agent_check_exit}" "0" "--check exits 0 on first-agent prompt file"
+
+jaiph format "${TEST_DIR}/first_agent.jh"
+cmp_exit=0
+cmp "${TEST_DIR}/first_agent.orig.jh" "${TEST_DIR}/first_agent.jh" || cmp_exit=$?
+e2e::assert_equals "${cmp_exit}" "0" "format leaves first-agent prompt file byte-identical"
+
+# A second format pass is also a no-op.
+jaiph format "${TEST_DIR}/first_agent.jh"
+cmp_exit2=0
+cmp "${TEST_DIR}/first_agent.orig.jh" "${TEST_DIR}/first_agent.jh" || cmp_exit2=$?
+e2e::assert_equals "${cmp_exit2}" "0" "second format pass is also a no-op"
+
+# ${name} stays as authored interpolation (not substituted, not escaped away).
+# Full byte equality is already asserted via cmp above; assert_contains here is a
+# focused sub-assertion pinning the specific ${name} acceptance criterion.
+e2e::assert_contains "$(cat "${TEST_DIR}/first_agent.jh")" 'Say hello to ${name} and provide' \
+  "\${name} preserved as authored interpolation"
