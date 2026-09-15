@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 import { buildRuntimeGraph } from "./graph";
 import { NodeWorkflowRuntime } from "./node-workflow-runtime";
 
@@ -323,7 +323,7 @@ test("NodeWorkflowRuntime: failed prompt preserves backend stderr in artifacts a
   }
 });
 
-test("NodeWorkflowRuntime: run catch receives failure payload in catch scope (explicit binding)", async () => {
+test("NodeWorkflowRuntime: run catch binds the failed step's stdout capture PATH, stderr in sibling .err", async () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-node-wf-ensure-catch-"));
   try {
     const jh = join(root, "ensure_catch_payload.jh");
@@ -340,7 +340,9 @@ test("NodeWorkflowRuntime: run catch receives failure payload in catch scope (ex
         "  run check_ready_impl()",
         "}",
         "",
-        'script write_catch_received = `echo "$1" > catch_received.txt`',
+        // The recover body receives the CAPTURE PATH as `$1`; it copies that path
+        // string (not the log bytes) so the test can assert what was bound.
+        'script write_catch_received = `printf "%s" "$1" > catch_received.txt`',
         "",
         'script write_catch_arg2 = `echo "$1" > catch_arg2.txt`',
         "",
@@ -385,12 +387,108 @@ test("NodeWorkflowRuntime: run catch receives failure payload in catch scope (ex
     const status = await runtime.runMain(["original-arg1", "preserved-arg2"]);
     assert.equal(status, 0);
 
-    const catchPayload = readFileSync(join(root, "catch_received.txt"), "utf8");
-    assert.match(catchPayload, /analysis-stdout-log/);
-    assert.match(catchPayload, /analysis-stderr-log/);
+    // The binding is the ABSOLUTE PATH of the failed step's stdout capture, not
+    // the merged stdout+stderr text.
+    const boundPath = readFileSync(join(root, "catch_received.txt"), "utf8");
+    assert.ok(isAbsolute(boundPath), `binding must be an absolute path, got: ${boundPath}`);
+    assert.ok(boundPath.endsWith(".out"), `binding must be the .out capture, got: ${boundPath}`);
+    assert.ok(!boundPath.includes("analysis-stdout-log"), "binding must be a path, not the log content");
+
+    // readFileSync(failure) equals the failed step's stdout; the sibling .err
+    // (same seq prefix) equals its stderr.
+    assert.equal(readFileSync(boundPath, "utf8"), "analysis-stdout-log\n");
+    const errPath = `${boundPath.slice(0, -".out".length)}.err`;
+    assert.equal(readFileSync(errPath, "utf8"), "analysis-stderr-log\n");
 
     const catchArg2 = readFileSync(join(root, "catch_arg2.txt"), "utf8").trim();
     assert.equal(catchArg2, "preserved-arg2");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("NodeWorkflowRuntime: catch binding is a path even for >1MB stdout; recover body never gets the bytes as argv", async () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-node-wf-catch-big-"));
+  try {
+    // 2 MB of stdout — comfortably past any ARG_MAX. Under the old contract this
+    // would have been forced onto the recover script's execve argv and failed
+    // with E2BIG; the binding is now a path, so it stays tiny.
+    const lineCount = 40000; // 40000 * ~52 bytes ≈ 2 MB
+    const jh = join(root, "big_stdout.jh");
+    writeFileSync(
+      jh,
+      [
+        "script emit_big = ```",
+        `for i in $(seq 1 ${lineCount}); do`,
+        '  echo "log-line-payload-marker-$i-aaaaaaaaaaaaaaaaaaaa"',
+        "done",
+        'echo "big-stderr-marker" >&2',
+        "exit 1",
+        "```",
+        "",
+        // Copy the path bytes AND record the argv length so the test can prove
+        // the recover body received a short path, not the multi-megabyte log.
+        'script record_binding = `printf "%s" "$1" > binding_path.txt; printf "%s" "${#1}" > binding_len.txt`',
+        "",
+        "export def main() {",
+        "  run emit_big() catch (failure) {",
+        "    run record_binding(failure)",
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const scriptsDir = join(root, "scripts");
+    mkdirSync(scriptsDir, { recursive: true });
+    writeFileSync(
+      join(scriptsDir, "emit_big"),
+      [
+        "#!/usr/bin/env bash",
+        `for i in $(seq 1 ${lineCount}); do`,
+        '  echo "log-line-payload-marker-$i-aaaaaaaaaaaaaaaaaaaa"',
+        "done",
+        'echo "big-stderr-marker" >&2',
+        "exit 1",
+        "",
+      ].join("\n"),
+      { mode: 0o755 },
+    );
+    writeFileSync(
+      join(scriptsDir, "record_binding"),
+      '#!/usr/bin/env bash\nprintf "%s" "$1" > binding_path.txt\nprintf "%s" "${#1}" > binding_len.txt\n',
+      { mode: 0o755 },
+    );
+
+    const graph = buildRuntimeGraph(jh);
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      JAIPH_TEST_MODE: "1",
+      JAIPH_RUNS_DIR: join(root, ".jaiph", "runs"),
+      JAIPH_SCRIPTS: scriptsDir,
+      JAIPH_WORKSPACE: root,
+    };
+    const runtime = new NodeWorkflowRuntime(graph, { env, cwd: root, suppressLiveEvents: true });
+    const status = await runtime.runMain([]);
+    assert.equal(status, 0);
+
+    const boundPath = readFileSync(join(root, "binding_path.txt"), "utf8");
+    assert.ok(isAbsolute(boundPath) && boundPath.endsWith(".out"), `expected .out capture path, got: ${boundPath}`);
+
+    // The recover body's `$1` was the path (short), not the ~2MB log bytes.
+    const argvLen = Number(readFileSync(join(root, "binding_len.txt"), "utf8"));
+    assert.equal(argvLen, boundPath.length);
+    assert.ok(argvLen < 4096, `binding argv length must be a path, got ${argvLen} chars`);
+
+    // The bound file's size matches the failed step's full stdout (> 1 MB).
+    const captured = readFileSync(boundPath, "utf8");
+    assert.ok(captured.length > 1_000_000, `captured stdout should exceed 1MB, got ${captured.length}`);
+    assert.match(captured, /log-line-payload-marker-1-/);
+    assert.match(captured, new RegExp(`log-line-payload-marker-${lineCount}-`));
+
+    // stderr stays in the sibling .err, not merged into the bound stdout path.
+    const errPath = `${boundPath.slice(0, -".out".length)}.err`;
+    assert.equal(readFileSync(errPath, "utf8"), "big-stderr-marker\n");
+    assert.ok(!captured.includes("big-stderr-marker"), "stderr must not be merged into the stdout capture");
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

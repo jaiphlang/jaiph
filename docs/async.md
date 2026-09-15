@@ -52,7 +52,7 @@ A bare `run async lint()` with no capture still starts the work. The implicit jo
 ```jaiph
 export def main() {
   run async deploy() recover (err) {
-    log "repair: ${err}"
+    logerr "repair; see ${err}"
     run auto_repair()
   }
 }

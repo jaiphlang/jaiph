@@ -16,28 +16,6 @@ Process rules:
 7. Acceptance criteria are non-negotiable. A task is not done until every
    acceptance bullet is verified by a test that fails when the contract is violated.
 
-## recover and catch bind the failed step capture path, not the output bytes #dev-ready
-
-Context: `runRecoverBody` (`src/runtime/kernel/node-workflow-runtime.ts`) sets the recover/catch binding to `` `${lastResult.output}${lastResult.error}` `` — the full merged stdout+stderr string. Docs (`docs/language.md` § catch/recover, `docs/jaiph-skill.md`, `docs/grammar.md`) say the same. The failed step already has those bytes on disk: `executeManagedStep` writes `JAIPH_RUN_DIR/NNNNNN-<kind>__<name>.out` and `.err` incrementally, then rewrites them at `STEP_END`. Call sites such as `.jaiph/ensure_ci_passes.jh` then pass that string into a script as argv (`save_string_to_file(path, failure)`), which hits `ARG_MAX` on a ~1 MB+ CI log. `run foo() > file` is `E_PARSE` (`src/parse/core.ts`); there is no `capture_to` form. Leave that ban in place.
-
-Problem: the recover binding duplicates a file the runtime already wrote, then forces the next script to put those bytes on `execve`. The prompt already tells the agent to read a file. The binding should be that file's path.
-
-Remediation — implement exactly this (breaking):
-
-1. `catch (name)` and `recover (name)` bind `name` to the **absolute path** of the failed step's stdout capture (`out_file` / `NNNNNN-*.out` under `JAIPH_RUN_DIR`). Stderr stays in the sibling `.err` (same seq prefix). Do not concatenate stdout+stderr into the binding and do not copy the capture to a second file unless a test needs a merged witness — prefer `cp`/`cat` in the test script from the bound path.
-2. Plumb `outFile` (and `errFile` if needed) on `StepResult` from `executeManagedStep` so every `run` target that can carry `catch`/`recover` (named script, inline script, def, async branch) supplies a real path. A spawn that produced no stdout still binds the `.out` path (file exists; may be empty). Spawn diagnostics live in `.err`.
-3. Update docs to state the binding is a path: `docs/language.md` (catch and recover), `docs/jaiph-skill.md` (Failure handling), `docs/grammar.md` if it claims "merged stdout+stderr". Examples that interpolate `${err}` as log *content* should treat it as a path (`logerr "failed; see ${err}"` is fine).
-4. Update in-repo callers that treat the binding as content: `e2e/tests/101_ensure_recover_output_contract.sh` (and any sibling that `printf`s `$1` as the payload), `.jaiph/ensure_ci_passes.jh` if it still forwards the binding to a script. `.jaiph/gh_ci_passes.jh` `log "… ${failure}"` becomes a path line — acceptable. `examples/recover_loop.jh` does not use the binding as content.
-5. Do not add `run foo() > file` or `capture_to`. Do not add a stdin clause in this task.
-
-### Acceptance criteria
-
-- Runtime test: `run failing_script() catch (failure) { … }` binds `failure` to an absolute path; `readFileSync(failure)` equals the script's stdout; sibling `.err` equals stderr. Today's "binding === Hello\\nOops" content contract must fail and be rewritten.
-- Runtime or e2e: a script whose stdout is > 1 MB fails; the recover/catch binding is a path whose file size matches that stdout; no recover-body script receives the bytes as argv.
-- `e2e/tests/101_ensure_recover_output_contract.sh` (and `102_engineer_recover_contract.sh` if it assumes content) assert path + file contents, not the binding string itself being the log.
-- Docs listed above say the binding is the capture path, not merged stdout+stderr text.
-- `npm run build`, `npm test`, and `npm run test:e2e` pass.
-
 ## Scripts accept a large payload on stdin; save_string_to_file reads stdin #dev-ready
 
 Context: Script arguments are argv only (`$1` / `sys.argv`). That is the documented contract (`docs/jaiph-skill.md`, `docs/language.md`). `run foo() > file` is `E_PARSE`. `.jaiph/lib_common.jh` `save_string_to_file` already documents that content travels through argv and is subject to `ARG_MAX` (~1 MB on macOS). `spawnAndCapture` uses `stdio: ["ignore", "pipe", "pipe"]` — stdin is discarded. Recover path-binding does not help `run process(huge_json)` or any other large string that is not already a capture file.

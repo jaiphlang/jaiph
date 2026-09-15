@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 import { buildRuntimeGraph } from "./graph";
 import { NodeWorkflowRuntime, _scriptSpawn } from "./node-workflow-runtime";
 
@@ -321,10 +321,18 @@ test("runRoot: recover body runs after a mocked E2BIG on the recovered run step"
       (e) => e.type === "LOGERR" && typeof e.message === "string" && (e.message as string).includes("RECOVER_RAN"),
     );
     assert.ok(recoverLogs.length >= 1, "the recover body ran at least once after the E2BIG failure");
+    // The binding is the failed step's stdout CAPTURE PATH (empty here — the
+    // spawn threw before any stdout), NOT the failure text. The E2BIG
+    // diagnostic is a spawn diagnostic and lives in the sibling `.err`.
+    const boundPath = (recoverLogs[0]!.message as string).replace("RECOVER_RAN ", "");
+    assert.ok(isAbsolute(boundPath) && boundPath.endsWith(".out"), `binding must be a .out path, got: ${boundPath}`);
+    assert.ok(!boundPath.includes("E_ARGV_TOO_LARGE"), "binding must be a path, not the oversized-argv text");
+    assert.equal(readFileSync(boundPath, "utf8"), "", "a spawn that produced no stdout binds an empty .out");
+    const errPath = `${boundPath.slice(0, -".out".length)}.err`;
     assert.match(
-      recoverLogs[0]!.message as string,
+      readFileSync(errPath, "utf8"),
       /E_ARGV_TOO_LARGE/,
-      "recover received the oversized-argv failure payload",
+      "the oversized-argv spawn diagnostic lands in the sibling .err",
     );
     const last = events[events.length - 1];
     assert.equal(last!.type, "RUN_END", "the run still terminates with RUN_END");
