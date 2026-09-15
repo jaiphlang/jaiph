@@ -29,23 +29,48 @@ const VALID_DIATAXIS = new Set([
 // literal word "Summary", so no existing page has to be rewritten.
 const SUMMARY_WINDOW = 20;
 
-// Body-line cap: keep pages loadable in one shot. 500 body lines (front matter
-// excluded) is chosen because the largest current authoritative-reference page
-// (contributing.md) is ~481 body lines, so 500 fits every page today while
-// still failing a page that grows past a single loadable topic. Splitting a
-// page is preferred over merging unrelated topics to dodge the cap. A page that
-// legitimately must exceed the cap goes on DOC_SIZE_ALLOWLIST with a one-line
-// justification instead of relaxing the number.
-const BODY_LINE_CAP = 500;
+// Body-line caps by Diátaxis type: keep pages loadable in one shot. Now that
+// the ADR 0003 copy-cutting is done (no non-owner page restates an owned
+// inventory), each page type gets a cap sized to its shape. A how-to is
+// numbered steps plus links (150); a reference is a single-owner inventory
+// (350); a tutorial/explanation/contributor page carries more connective prose
+// (500). The caps sit below the surviving pages' sizes on purpose, so a page
+// that regrows an inventory fails this test. Splitting a page is preferred over
+// merging unrelated topics to dodge the cap. A page that legitimately must
+// exceed its cap goes on DOC_SIZE_ALLOWLIST with a one-line justification
+// instead of relaxing the number.
+const BODY_LINE_CAPS: Record<string, number> = {
+  "how-to": 150,
+  reference: 350,
+  tutorial: 500,
+  explanation: 500,
+  contributor: 500,
+};
+// Fallback cap for a page with no (or an unknown) diataxis value; the diataxis
+// lint test already fails such a page, so this is only a safety net.
+const DEFAULT_BODY_LINE_CAP = 500;
+
+function bodyLineCap(diataxis: string | null): number {
+  return (diataxis && BODY_LINE_CAPS[diataxis]) || DEFAULT_BODY_LINE_CAP;
+}
 
 // filename -> justification. Add an entry only for a page whose single topic
-// genuinely cannot fit (never to merge topics into an oversized file).
+// genuinely cannot fit (never to merge topics into an oversized file). Only
+// single-owner inventory references qualify; no how-to is allowlisted.
 const DOC_SIZE_ALLOWLIST: Record<string, string> = {
   // language.md is the single owner (design/0003) of every step semantic —
   // run/const/match/prompt/if/for/send/log plus the stdin-clause section — so
   // it is one topic that cannot be split without breaking one-fact-one-owner.
   "language.md":
     "single-owner reference for all step semantics; one topic, not splittable",
+  // cli.md is the single owner of the whole command inventory (every jaiph
+  // subcommand, its flags, and exit codes) — one topic, not splittable.
+  "cli.md":
+    "single-owner reference for every jaiph subcommand; one topic, not splittable",
+  // grammar.md is the single owner of the full surface grammar (every
+  // production in one EBNF listing) — one topic, not splittable.
+  "grammar.md":
+    "single-owner reference for the full surface grammar; one topic, not splittable",
 };
 
 interface PageInfo {
@@ -474,10 +499,11 @@ test("docs-lint: every published docs/*.md opens with a summary-first lead parag
   }
 });
 
-test("docs-lint: no non-allowlisted published doc exceeds the body-line cap", () => {
+test("docs-lint: no non-allowlisted published doc exceeds its body-line cap", () => {
   const pages = loadPages();
   for (const p of pages) {
-    const err = bodySizeError(p.name, p.body, BODY_LINE_CAP, DOC_SIZE_ALLOWLIST);
+    const cap = bodyLineCap(p.diataxis);
+    const err = bodySizeError(p.name, p.body, cap, DOC_SIZE_ALLOWLIST);
     assert.equal(err, null, err ?? "");
   }
   // Every allowlist entry must carry a non-empty justification.
@@ -570,16 +596,54 @@ test("docs-lint: summary-first guard rejects a page whose first block is a headi
 });
 
 test("docs-lint: body-line cap guard fails an over-cap page unless allowlisted", () => {
-  const big = Array.from({ length: BODY_LINE_CAP + 1 }, (_, i) => `line ${i}`).join(
-    "\n",
-  );
-  assert.ok(countBodyLines(big) > BODY_LINE_CAP);
-  assert.notEqual(bodySizeError("big.md", big, BODY_LINE_CAP, {}), null);
+  const big = Array.from(
+    { length: DEFAULT_BODY_LINE_CAP + 1 },
+    (_, i) => `line ${i}`,
+  ).join("\n");
+  assert.ok(countBodyLines(big) > DEFAULT_BODY_LINE_CAP);
+  assert.notEqual(bodySizeError("big.md", big, DEFAULT_BODY_LINE_CAP, {}), null);
   assert.equal(
-    bodySizeError("big.md", big, BODY_LINE_CAP, { "big.md": "justified" }),
+    bodySizeError("big.md", big, DEFAULT_BODY_LINE_CAP, { "big.md": "justified" }),
     null,
   );
 
   const small = "line 1\nline 2\n";
-  assert.equal(bodySizeError("small.md", small, BODY_LINE_CAP, {}), null);
+  assert.equal(bodySizeError("small.md", small, DEFAULT_BODY_LINE_CAP, {}), null);
+});
+
+// Per-diataxis caps: pin the tighter how-to (150) and reference (350) numbers so
+// a page that regrows an inventory just past the boundary fails, while the
+// looser 500 still applies to tutorial/explanation/contributor pages.
+test("docs-lint: per-diataxis caps flag a 151-line how-to and a 351-line reference", () => {
+  assert.equal(bodyLineCap("how-to"), 150);
+  assert.equal(bodyLineCap("reference"), 350);
+  assert.equal(bodyLineCap("tutorial"), 500);
+  assert.equal(bodyLineCap("explanation"), 500);
+  assert.equal(bodyLineCap("contributor"), 500);
+
+  const linesOf = (n: number) =>
+    Array.from({ length: n }, (_, i) => `line ${i}`).join("\n");
+
+  // A how-to of 151 body lines that is not allowlisted must fail at cap 150.
+  const howTo151 = linesOf(151);
+  assert.equal(countBodyLines(howTo151), 151);
+  assert.notEqual(
+    bodySizeError("regrown-how-to.md", howTo151, bodyLineCap("how-to"), {}),
+    null,
+  );
+
+  // A reference of 351 body lines that is not allowlisted must fail at cap 350.
+  const ref351 = linesOf(351);
+  assert.equal(countBodyLines(ref351), 351);
+  assert.notEqual(
+    bodySizeError("regrown-reference.md", ref351, bodyLineCap("reference"), {}),
+    null,
+  );
+
+  // A 500-line contributor page still passes its looser cap.
+  const contributor500 = linesOf(500);
+  assert.equal(
+    bodySizeError("contrib.md", contributor500, bodyLineCap("contributor"), {}),
+    null,
+  );
 });

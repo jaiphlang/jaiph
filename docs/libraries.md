@@ -23,29 +23,15 @@ A **Jaiph library** is a git repository with at least one `.jh` module anywhere 
 ### 1. Install by name or URL
 
 ```bash
-# Resolve a registry name (uses JAIPH_REGISTRY, default https://jaiph.org/registry)
-jaiph install jaiphlang
-
-# Pin a registry name to a version
-jaiph install mylib@v1.2
-
-# Clone a git URL directly into .jaiph/libs/<name>/
-jaiph install https://github.com/you/queue-lib.git
-
-# Pin a branch or tag
-jaiph install https://github.com/you/queue-lib.git@v1.0
-
-# Install several at once (names and URLs can be mixed)
-jaiph install jaiphlang mylib@v1.2 https://github.com/you/queue-lib.git
+jaiph install jaiphlang                                    # registry name (uses JAIPH_REGISTRY)
+jaiph install mylib@v1.2                                    # pin a registry name to a version
+jaiph install https://github.com/you/queue-lib.git@v1.0    # git URL, optional @<ref> for branch/tag
+jaiph install jaiphlang https://github.com/you/queue-lib.git  # several at once, names and URLs mixed
 ```
 
-Each argument is resolved independently, so a single command can mix registry names and git URLs, and missing libraries are cloned in parallel. The argument shape decides the path. A token matching `/^[A-Za-z0-9_-]+(@[A-Za-z0-9._+/-]+)?$/` with no `/` and no `:` is a **registry name** and is resolved through the index. Everything else is parsed as a **git URL** (optional `@<ref>` suffix for branch or tag).
+The argument shape decides the path: a token with no `/` and no `:` is a **registry name** resolved through the index, and everything else is a **git URL** (optional `@<ref>` suffix for a branch or tag). Registry names install into `.jaiph/libs/<name>/`; git URLs install into `.jaiph/libs/<last-path-segment-without-.git>/`, so for one repository a git-URL prefix may differ from its registry prefix. Existing directories are skipped unless you pass `--force`. Commit the resulting `.jaiph/libs.lock`.
 
-Registry names install into `.jaiph/libs/<name>/` using the registry key. Git URLs install into `.jaiph/libs/<derived-name>/`, where `<derived-name>` is the last URL path segment without the `.git` suffix. For the same repository, the import prefix from a git URL may differ from the prefix a registry name would give.
-
-`jaiph install` shallow-clones (`git clone --depth 1`) each missing library, removes the nested `.git` directory, and writes a `.jaiph/libs.lock` entry recording the resolved URL, optional version, and the 40-char commit captured before `.git` was removed. Existing directories are skipped unless you pass `--force`. Commit the lockfile.
-
-Remote library URLs must use `https://` or `ssh://`. An `http://` URL, or any other disallowed scheme, is rejected before Jaiph clones anything. When you install by registry name, the registry entry **must** pin the exact commit (and may include a signature). An entry with no pinned `commit` is refused before any clone — pass `--allow-unpinned` to install it anyway after a warning. When the entry pins a commit, the first install checks that the cloned commit matches the pinned one (and, if present, that the signature is valid), and the install fails if either check does not pass. See [CLI — `jaiph install`](cli.md#jaiph-install) for the full list of post-clone checks and their error messages.
+See [CLI — `jaiph install`](cli.md#jaiph-install) for the argument-resolution rules, the allowed URL schemes, the shallow-clone behavior, and the commit/signature verification with its error messages.
 
 ### 2. Restore from the lockfile
 
@@ -93,7 +79,7 @@ jaiph install https://github.com/you/queue-lib.git@v1.1 --force
 
 ### Trust boundary for the execution binary
 
-An imported library cannot silently redirect which binary runs your `prompt` steps. The `agent.command` and `agent.backend` config keys set that binary, and Jaiph applies both keys **only** from your entry module's `config {}` block. An imported module that sets either key is ignored for that key. All other config keys (`agent.model`, `agent.trusted_workspace`, `agent.*_flags`, `run.*`) follow the normal cross-module scoping rules. See the [import trust boundary](configuration.md#import-trust-boundary) section of the configuration reference for the full contract and the advanced `JAIPH_AGENT_COMMAND_IMPORT_UNLOCK` and `JAIPH_AGENT_BACKEND_IMPORT_UNLOCK` opt-in.
+An imported library cannot silently redirect which binary runs your `prompt` steps: Jaiph honors the `agent.command` and `agent.backend` keys only from your entry module. See the [import trust boundary](configuration.md#import-trust-boundary) section of the configuration reference for the full cross-module scoping contract and the advanced import-unlock opt-ins.
 
 ## Part B. Publish a library
 

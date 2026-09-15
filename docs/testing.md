@@ -17,8 +17,6 @@ Mock every `prompt` step, and stub imported defs or scripts when you need to. If
 
 A pattern-based `mock prompt { … }` block does not fall through. An unmatched prompt fails the test unless a `_` default arm catches it.
 
-The goal is to give the def fixed inputs and outputs you can check, so that refactors and CI catch regressions the same way every time.
-
 ## Prerequisites
 
 - The def under test lives in a separate `.jh` file you can import (recommended, and it keeps test files small).
@@ -122,23 +120,13 @@ The second argument is either a double-quoted literal or a test-block `const` na
 
 ```bash
 jaiph test                            # discover *.test.jh under the workspace
-jaiph test ./e2e                      # restrict to a directory
-jaiph test ./e2e/workflow_greeting.test.jh  # single file
-jaiph ./e2e/workflow_greeting.test.jh       # shorthand: a *.test.jh path is treated as jaiph test
 ```
 
-The runner discovers `*.test.jh` files recursively. A bare `jaiph test` walks every subdirectory under the workspace root, which includes installed libraries under `.jaiph/libs/`, so any test files that ship inside a library run too. Point `jaiph test` at your own directory (for example `jaiph test ./e2e`) when you want to run only your tests. When no files match, whether you ran a bare `jaiph test` or pointed it at a directory, it prints `jaiph test: no *.test.jh files found (nothing to do)` and exits 0, so you can call it from CI without checking first.
+The runner discovers `*.test.jh` files recursively. A bare `jaiph test` walks every subdirectory under the workspace root, which includes installed libraries under `.jaiph/libs/`, so any test files that ship inside a library run too. Pass a directory (`jaiph test ./e2e`) or a single `*.test.jh` file to narrow the run, and see [CLI — `jaiph test`](cli.md#jaiph-test) for every invocation form and the exit-0-on-no-match behavior.
 
 ### Grant `use` keys with `--env`
 
-A `script` step, or a named `prompt`, can declare a `use` clause that lists the environment variables it needs (see [Pass a host key to a script](script-env.md); the reserved names and `E_ENV_*` codes are in [Environment variables — Script subprocess environment](env-vars.md#script-env)). Under `jaiph test`, those keys are absent from the spawned subprocess unless you grant them with `--env`:
-
-```bash
-jaiph test --env API_TOKEN ./e2e            # forward the host value of API_TOKEN
-jaiph test --env API_TOKEN=secret ./e2e     # set an explicit value
-```
-
-`--env` is repeatable and can appear before the path. The bare `--env KEY` form forwards the value from the host environment, and it fails with `E_ENV_MISSING` when that variable is unset. The `--env KEY=VALUE` form sets the value directly. Unlike `jaiph run`, `jaiph test` runs no `use` pre-flight, so a key that a script needs but you did not grant is missing in the subprocess instead of failing before the test runs.
+Unlike `jaiph run`, `jaiph test` runs no `use` pre-flight, so a script's declared `use` keys are absent from the spawned subprocess unless you grant them with `--env`. See [Environment variables — Script subprocess environment](env-vars.md#script-env) for the `--env KEY` / `--env KEY=VALUE` grammar and the `E_ENV_*` codes.
 
 ## Verification
 
