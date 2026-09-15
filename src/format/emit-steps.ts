@@ -242,18 +242,21 @@ function emitStep(step: StepDef, pad: string, currentIndent: string, trivia: Tri
       return lines;
     }
     const capture = step.captureName ? `${step.captureName} = ` : "";
+    // `stdin <expr>` sits after the call `()` and before any catch/recover.
+    const stdinClause = step.stdin && step.stdin.kind === "literal" ? ` stdin ${step.stdin.raw}` : "";
     if (body.kind === "call") {
       const ref = emitRef(body.callee, body.args);
       const asyncPrefix = body.async ? "async " : "";
+      const head = `run ${asyncPrefix}${ref}${stdinClause}`;
       if (step.recover) {
         const b = step.recover.bindings;
         const bindStr = `(${b.failure})`;
         if ("single" in step.recover) {
           const recoverLines = emitStep(step.recover.single, pad, "", trivia);
           const recoverText = recoverLines.map((l) => l.trim()).join("\n");
-          lines.push(`${ci}${capture}run ${asyncPrefix}${ref} recover ${bindStr} ${recoverText}`);
+          lines.push(`${ci}${capture}${head} recover ${bindStr} ${recoverText}`);
         } else {
-          lines.push(`${ci}${capture}run ${asyncPrefix}${ref} recover ${bindStr} {`);
+          lines.push(`${ci}${capture}${head} recover ${bindStr} {`);
           lines.push(...emitSteps(step.recover.block, pad, ci + pad, trivia));
           lines.push(`${ci}}`);
         }
@@ -263,21 +266,24 @@ function emitStep(step: StepDef, pad: string, currentIndent: string, trivia: Tri
         if ("single" in step.catch) {
           const recoverLines = emitStep(step.catch.single, pad, "", trivia);
           const recoverText = recoverLines.map((l) => l.trim()).join("\n");
-          lines.push(`${ci}${capture}run ${asyncPrefix}${ref} catch ${bindStr} ${recoverText}`);
+          lines.push(`${ci}${capture}${head} catch ${bindStr} ${recoverText}`);
         } else {
-          lines.push(`${ci}${capture}run ${asyncPrefix}${ref} catch ${bindStr} {`);
+          lines.push(`${ci}${capture}${head} catch ${bindStr} {`);
           lines.push(...emitSteps(step.catch.block, pad, ci + pad, trivia));
           lines.push(`${ci}}`);
         }
       } else {
-        lines.push(`${ci}${capture}run ${asyncPrefix}${ref}`);
+        lines.push(`${ci}${capture}${head}`);
       }
       return lines;
     }
     if (body.kind === "inline_script") {
-      lines.push(
-        ...emitInlineScriptLines(`${ci}${capture}run`, body.body, body.lang, body.args, ci, `${ci}${pad}`),
+      const inlineLines = emitInlineScriptLines(
+        `${ci}${capture}run`, body.body, body.lang, body.args, ci, `${ci}${pad}`,
       );
+      // Append the `stdin` clause to the closing `)` line of the inline script.
+      if (stdinClause) inlineLines[inlineLines.length - 1] += stdinClause;
+      lines.push(...inlineLines);
       return lines;
     }
     if (body.kind === "prompt") {

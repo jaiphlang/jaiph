@@ -925,7 +925,7 @@
         },
         {
           "name": "keyword.control.command.jaiph",
-          "match": "\\b(run|prompt|log|logerr|logwarn|recover|catch|fail|return|send)\\b"
+          "match": "\\b(run|prompt|log|logerr|logwarn|recover|catch|stdin|fail|return|send)\\b"
         },
         {
           "comment": "use clause (script / import script / named prompt)",

@@ -40,7 +40,7 @@ module.exports = grammar({
         "def", "test", "use",
         // command keywords
         "const", "run", "prompt", "log", "logerr", "logwarn",
-        "fail", "return", "send", "recover", "catch",
+        "fail", "return", "send", "recover", "catch", "stdin",
         // control keywords
         "if", "else", "for", "in", "match", "async", "returns", "not",
         // test-block keywords

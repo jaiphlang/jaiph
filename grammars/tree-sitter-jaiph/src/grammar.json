@@ -127,6 +127,10 @@
         },
         {
           "type": "STRING",
+          "value": "stdin"
+        },
+        {
+          "type": "STRING",
           "value": "if"
         },
         {

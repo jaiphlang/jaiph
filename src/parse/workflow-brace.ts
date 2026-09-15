@@ -167,20 +167,97 @@ export function parseBraceBlockBody(
   fail(filePath, 'unterminated block, expected "}"', openerLineNo);
 }
 
-/** Build an `exec` step from a value expression and optional capture/catch/recover. */
+/** Build an `exec` step from a value expression and optional capture/catch/recover/stdin. */
 function execStep(
   body: Expr,
   loc: { line: number; col: number },
-  extras: { captureName?: string; catch?: CatchBody; recover?: CatchBody } = {},
+  extras: { captureName?: string; catch?: CatchBody; recover?: CatchBody; stdin?: Expr } = {},
 ): StepDef {
   return {
     type: "exec",
     body,
     ...(extras.captureName ? { captureName: extras.captureName } : {}),
+    ...(extras.stdin ? { stdin: extras.stdin } : {}),
     ...(extras.catch ? { catch: extras.catch } : {}),
     ...(extras.recover ? { recover: extras.recover } : {}),
     loc,
   };
+}
+
+/** True when the text after a `run` call's `)` opens a `stdin` clause. */
+function isStdinClause(rest: string): boolean {
+  return /^stdin(?:\s|$)/.test(rest.trimStart());
+}
+
+/**
+ * Split the first `stdin` operand token off `after` (the text following the
+ * `stdin` keyword). A double-quoted string runs to its closing quote (may
+ * contain spaces); any other token runs to the next whitespace.
+ */
+function takeStdinOperand(after: string): { operand: string; rest: string } {
+  if (after.startsWith('"')) {
+    const close = indexOfClosingDoubleQuote(after, 1);
+    if (close === -1) return { operand: after, rest: "" };
+    return { operand: after.slice(0, close + 1), rest: after.slice(close + 1).trim() };
+  }
+  const sp = after.search(/\s/);
+  if (sp === -1) return { operand: after, rest: "" };
+  return { operand: after.slice(0, sp), rest: after.slice(sp).trim() };
+}
+
+/**
+ * Normalize a `stdin` operand into a `literal` Expr. Quoted strings are kept
+ * verbatim; a bare identifier / `IDENT.IDENT` / `${…}` ref is wrapped as a
+ * quoted interpolation so the runtime resolves it exactly like a value string.
+ */
+function stdinOperandToExpr(
+  filePath: string,
+  innerNo: number,
+  col: number,
+  operand: string,
+): Expr {
+  const t = operand.trim();
+  if (t.startsWith('"')) {
+    if (!hasUnescapedClosingQuote(t, 1)) {
+      fail(filePath, 'multiline strings use triple quotes: stdin """..."""', innerNo, col);
+    }
+    return { kind: "literal", raw: t };
+  }
+  if (t.startsWith("'")) {
+    fail(filePath, SINGLE_QUOTE_MESSAGE, innerNo, col);
+  }
+  if (isJaiphInterpolationRef(t)) return { kind: "literal", raw: `"${t}"` };
+  if (isBareDottedIdentifierReturn(t)) return { kind: "literal", raw: dottedReturnToQuotedString(t) };
+  if (isBareIdentifierReturn(t)) return { kind: "literal", raw: bareIdentifierToQuotedString(t) };
+  fail(filePath, 'stdin value must be a string, identifier, or ${...} interpolation', innerNo, col);
+}
+
+/**
+ * Extract an optional leading `stdin <expr>` clause from the text after a
+ * `run` call's `)`. Returns the parsed stdin Expr (if any) plus the remaining
+ * text (catch/recover clause or trailing content the caller then rejects).
+ * `stdin` is `E_PARSE` on `run async`.
+ */
+function extractStdin(
+  filePath: string,
+  innerNo: number,
+  innerRaw: string,
+  isAsync: boolean,
+  rest: string,
+): { stdin?: Expr; rest: string } {
+  const t = rest.trimStart();
+  if (!isStdinClause(t)) return { rest };
+  const stdinCol = innerRaw.indexOf("stdin") + 1;
+  if (isAsync) {
+    fail(filePath, "stdin is not supported with run async", innerNo, stdinCol);
+  }
+  const after = t.replace(/^stdin\s*/, "");
+  if (after === "") {
+    fail(filePath, "stdin requires a value expression: run ref() stdin <expr>", innerNo, stdinCol);
+  }
+  const { operand, rest: remaining } = takeStdinOperand(after);
+  const stdin = stdinOperandToExpr(filePath, innerNo, stdinCol, operand);
+  return { stdin, rest: remaining };
 }
 
 /**
@@ -247,10 +324,11 @@ function parseRun(
   }
 
   // Fall back to plain parsing when the call before catch/recover has
-  // trailing content, preserving the legacy "unexpected content" error shape.
+  // trailing content other than a `stdin` clause, preserving the legacy
+  // "unexpected content" error shape.
   if (attached) {
     const probe = parseCallRef(attached.left);
-    if (!probe || probe.rest.trim()) {
+    if (!probe || (probe.rest.trim() && !isStdinClause(probe.rest))) {
       attached = null;
     }
   }
@@ -264,10 +342,11 @@ function parseRun(
         innerNo,
       );
     }
-    rejectTrailingContent(filePath, innerNo, hostName, call.rest);
+    const { stdin, rest } = extractStdin(filePath, innerNo, innerRaw, isAsync, call.rest);
+    rejectTrailingContent(filePath, innerNo, hostName, rest);
     const callee = { value: call.ref, loc: stepLoc };
     const body: Expr = { kind: "call", callee, args: call.args, ...(isAsync ? { async: true as const } : {}) };
-    return { step: execStep(body, stepLoc, { captureName }), nextIdx: call.nextLineIdx };
+    return { step: execStep(body, stepLoc, { captureName, stdin }), nextIdx: call.nextLineIdx };
   }
 
   const call = parseCallRef(attached.left);
@@ -278,7 +357,8 @@ function parseRun(
       innerNo,
     );
   }
-  rejectTrailingContent(filePath, innerNo, hostName, call.rest);
+  const { stdin, rest } = extractStdin(filePath, innerNo, innerRaw, isAsync, call.rest);
+  rejectTrailingContent(filePath, innerNo, hostName, rest);
   const callee = { value: call.ref, loc: stepLoc };
   const body: Expr = { kind: "call", callee, args: call.args, ...(isAsync ? { async: true as const } : {}) };
 
@@ -286,8 +366,8 @@ function parseRun(
     filePath, lines, idx, innerNo, innerRaw, attached.keyword, attached.after, trivia, opts,
   );
   const extras = attached.keyword === "catch"
-    ? { captureName, catch: result.body }
-    : { captureName, recover: result.body };
+    ? { captureName, stdin, catch: result.body }
+    : { captureName, stdin, recover: result.body };
   return { step: execStep(body, stepLoc, extras), nextIdx: result.nextIdx };
 }
 
@@ -550,9 +630,14 @@ function parseInlineScriptTail(
   body: Expr,
   stepLoc: { line: number; col: number },
 ): BlockResult {
-  const trimmed = result.trailing.trimStart();
+  const closingRaw = c.lines[result.closingLineIdx]!;
+  const closingNo = result.closingLineIdx + 1;
+  // An optional `stdin <expr>` clause precedes any catch/recover (inline
+  // scripts are always non-async, so stdin is allowed).
+  const { stdin, rest } = extractStdin(c.filePath, closingNo, closingRaw, false, result.trailing);
+  const trimmed = rest.trimStart();
   if (trimmed === "") {
-    return { step: execStep(body, stepLoc), nextIdx: result.nextLineIdx };
+    return { step: execStep(body, stepLoc, { stdin }), nextIdx: result.nextLineIdx };
   }
   const recoverMatch = trimmed.match(/^recover([\s(].*)$/s);
   const catchMatch = trimmed.match(/^catch(\s.*)$/s);
@@ -570,13 +655,13 @@ function parseInlineScriptTail(
       c.innerRaw.indexOf("run") + 1,
     );
   }
-  const closingRaw = c.lines[result.closingLineIdx]!;
-  const closingNo = result.closingLineIdx + 1;
   const block = parseAttachedBlock(
     c.filePath, c.lines, result.closingLineIdx, closingNo, closingRaw,
     attached.keyword, attached.after, c.trivia, c.opts,
   );
-  const extras = attached.keyword === "catch" ? { catch: block.body } : { recover: block.body };
+  const extras = attached.keyword === "catch"
+    ? { stdin, catch: block.body }
+    : { stdin, recover: block.body };
   return { step: execStep(body, stepLoc, extras), nextIdx: block.nextIdx };
 }
 

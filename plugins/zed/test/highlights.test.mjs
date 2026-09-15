@@ -55,7 +55,7 @@ test("keywords, comments, and strings highlight in current.jh", () => {
   const keywords = [
     "import", "export", "config", "channel", "script", "def", "use",
     "const", "run", "prompt", "log", "logerr", "logwarn", "fail",
-    "return", "recover", "catch", "if", "else", "for", "in", "match", "async",
+    "return", "recover", "catch", "stdin", "if", "else", "for", "in", "match", "async",
     "returns",
   ];
   for (const kw of keywords) {
