@@ -50,7 +50,7 @@ Only the declaration that `use`s the key receives it.
 - Another script in the same def, with no `use GITHUB_TOKEN`, does not see it.
 - An anonymous `prompt "…"` never receives `--env` secrets. A named prompt does, and only for keys it `use`s.
 - Backend credentials (`ANTHROPIC_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`, `CURSOR_API_KEY`, `OPENAI_API_KEY`) stay the prompt default. Do not write them as `use`.
-- Runner keys (`JAIPH_CHAIN_KEY`, `JAIPH_RUN_SUMMARY_FILE`, `JAIPH_WORKSPACE`, …) are reserved. `use` or `--env` of those names is `E_ENV_RESERVED`.
+- Runtime-managed keys are reserved: `use` or `--env` of one is `E_ENV_RESERVED`. The reserved list lives with the [environment variable reference](env-vars.md#script-env).
 
 `jaiph test` does not pre-flight missing `--env`. Pass `--env` on `jaiph test` when a real (unmocked) script must see the key.
 
