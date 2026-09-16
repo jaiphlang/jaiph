@@ -8,7 +8,7 @@ redirect_from:
 
 # Inbox and dispatch
 
-A def often needs to hand work off to other defs without calling them directly. A def is a callable unit in Jaiph, written with `def` and invoked with `run`. A def that produces a finding should not have to know which other defs react to it, or in what order. Jaiph solves this with channels. A channel is a small message-passing feature that runs inside the same runtime as everything else, so there is no separate process or broker.
+A def often needs to hand work off to other defs without calling them directly. A def is a callable unit in Jaiph, written with `def` and invoked with a bare call `name(args)`. A def that produces a finding should not have to know which other defs react to it, or in what order. Jaiph solves this with channels. A channel is a small message-passing feature that runs inside the same runtime as everything else, so there is no separate process or broker.
 
 The rest of this page explains how channels behave and why the design works the way it does. For the syntax, see the [Language](language.md#send-channel-message) and [Grammar](grammar.md) references. For the runtime implementation, see [Architecture](architecture.md#channels-and-hooks-in-context).
 
@@ -27,7 +27,7 @@ A `send` does not run the route targets at the moment the line executes. Instead
 
 The runtime picks the queue by walking outward from the sender through the stack of running defs. It uses the nearest frame that declares routes for the channel. When no frame declares routes, it uses the sender's own frame (see [Routed and unrouted sends](#routed-and-unrouted-sends)).
 
-The runtime drains a frame's queue only after that frame's step list finishes successfully. If the def fails, the runtime returns the failure and never drains the queue, so its sends are not delivered. Finishing the step list includes the implicit join of any `run async` handles that the step list created (see [Spec: Async Handles](spec-async-handles.md)). Only after the step list finishes does the runtime run each route target, one at a time, in the order the routes are declared.
+The runtime drains a frame's queue only after that frame's step list finishes successfully. If the def fails, the runtime returns the failure and never drains the queue, so its sends are not delivered. Finishing the step list includes the implicit join of any `async` handles that the step list created (see [Spec: Async Handles](spec-async-handles.md)). Only after the step list finishes does the runtime run each route target, one at a time, in the order the routes are declared.
 
 The runtime delays delivery on purpose. The delay gives the following properties:
 
@@ -35,7 +35,7 @@ The runtime delays delivery on purpose. The delay gives the following properties
 - Producers run to completion before any consumer starts. A def that sends five findings runs all of its steps first. No route target interrupts it partway through the step list.
 - Delivery is deterministic. For a given send order, the dispatch order is fixed.
 
-The trade-off is that channels are not a fast notification tool. Delivery only happens after a step list finishes. When you need one def to react to another right away, call it directly with `run`.
+The trade-off is that channels are not a fast notification tool. Delivery only happens after a step list finishes. When you need one def to react to another right away, call it directly.
 
 ## Routes are declared on the channel
 
@@ -64,7 +64,7 @@ Routes are top-level data on `ChannelDef`, not statements inside a def body. Dec
 1. **There is one list of subscribers per channel.** The compiler checks every target when it compiles the module. Each target must be a `def` that declares 1 to 3 parameters (message, then channel, then sender). A script is rejected, and so is a def with 0 or more than 3 parameters. An unknown name fails with `E_VALIDATE` at compile time, not at dispatch time.
 2. **The routes are visible at the top of the module.** You can see which defs listen on `findings` without reading through def bodies to find the connections. The list of listeners is next to the channel it belongs to.
 
-The runtime registers routes only on the entry frame, which is the first def the run starts. When that frame starts, the runtime reads the `channel … ->` declarations from that def's module. A nested `run` frame always keeps an empty route map. Because of this, a `send` from a nested def walks the stack outward until it reaches the entry frame that registered the channel.
+The runtime registers routes only on the entry frame, which is the first def the run starts. When that frame starts, the runtime reads the `channel … ->` declarations from that def's module. A nested call frame always keeps an empty route map. Because of this, a `send` from a nested def walks the stack outward until it reaches the entry frame that registered the channel.
 
 A `channel <name>` line without `->` still defines the channel name, so a `send` to it passes validation. The channel never enters any route map, so a `send` on it has no consumer. The message is still added to a queue, and the runtime still records an `INBOX_ENQUEUE` event in `run_summary.jsonl` for the timeline.
 
@@ -82,7 +82,7 @@ For each delivery, the runtime writes two events to `run_summary.jsonl`: an `INB
 
 Each frame's drain pass has a limit on how many messages it will dispatch. The default is 1000, and you can change it with `JAIPH_INBOX_MAX_DISPATCH`. When a drain pass hits the limit, it stops with `E_INBOX_DISPATCH_LIMIT` instead of running forever, which catches a circular send loop.
 
-When you need concurrency inside dispatch, use `run async` inside a target's body. Dispatch across targets is always sequential and does not give you concurrency.
+When you need concurrency inside dispatch, use `async` inside a target's body. Dispatch across targets is always sequential and does not give you concurrency.
 
 ## Routed and unrouted sends
 

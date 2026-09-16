@@ -54,7 +54,7 @@ def valid_name(name_arg) {
 }
 
 export def main(name_arg) {
-  const name = run valid_name(name_arg)
+  const name = valid_name(name_arg)
 
   const response = prompt """
     Say hello to ${name} and add one fun fact about a person with the same name.
@@ -68,7 +68,7 @@ export def main(name_arg) {
 The file uses some syntax that [Your first run](first-run.md) did not:
 
 - `config { agent.backend = "claude" }` selects the agent backend at module scope. Leave the block out to use the `cursor` default, or set `JAIPH_AGENT_BACKEND` in the environment to override either form. The environment value wins when both are set. See [Configure backend & model](configure-backend.md).
-- `def valid_name(name_arg) { … }` checks the shape of its input with `match`. `run valid_name(name_arg)` runs that def, and if any arm matches `fail`, it stops the run and prints the failure message. The `match` arms are tried from top to bottom, and the first one that matches wins. The regex `/[A-Z][a-z]+/` matches any name with an uppercase letter followed by lowercase letters, so `Adam` passes while `adam` and `ADAM` fall through to `_`. The `""` arm catches an empty name, and `_` catches everything else.
+- `def valid_name(name_arg) { … }` checks the shape of its input with `match`. `valid_name(name_arg)` runs that def, and if any arm matches `fail`, it stops the run and prints the failure message. The `match` arms are tried from top to bottom, and the first one that matches wins. The regex `/[A-Z][a-z]+/` matches any name with an uppercase letter followed by lowercase letters, so `Adam` passes while `adam` and `ADAM` fall through to `_`. The `""` arm catches an empty name, and `_` catches everything else.
 - `prompt """ … """` is a managed agent call. The triple-quoted body is dedented when the file is parsed and then sent to the selected backend's CLI. The agent's stdout becomes the value of the step. The `${name}` reference is substituted before the prompt is sent.
 
 Save the file as `greet.jh`.
@@ -147,8 +147,8 @@ The record includes the resolved `backend`, the `model` (or `null` when the back
 You now have a working agent run. Here are some directions to go next:
 
 - [Pass a host key to a script](script-env.md) is the recipe for `use` and `--env`.
-- [Language reference](language.md) covers every step type, including `run async`, `match`, `for`, `send`, and `if`.
-- [Run work concurrently](async.md) is the recipe for `run async`. [Async handles](spec-async-handles.md) is the value model.
+- [Language reference](language.md) covers every step type, including `async`, `match`, `for`, `send`, and `if`.
+- [Run work concurrently](async.md) is the recipe for `async`. [Async handles](spec-async-handles.md) is the value model.
 - [Inbox and dispatch](inbox.md) explains how to route work between defs without tight coupling.
 - [Deploy jaiph](deploy.md) shows a container, pod, or dedicated user if you want an outer boundary. The installer does not create that user.
 - [Write and run tests](testing.md) shows how to author a `*.test.jh` file with mock prompts so the program stays deterministic in CI.

@@ -31,7 +31,7 @@ import "workflow_greeting.jh" as w
 
 test "runs happy path and prints PASS" {
   mock prompt "e2e-greeting-mock"
-  const response = run w.main()
+  const response = w.main()
   expect_contain response "e2e-greeting-mock"
   expect_contain response "done"
 }
@@ -98,13 +98,13 @@ An empty `()` ignores any arguments passed at the call site.
 ## 4. Run the def and capture output
 
 ```jh
-const response = run w.main()
-const response = run w.main("my input")            # with one argument
-const response = run w.main("first", "second")     # comma-separated arguments
-const response = run w.main() allow_failure        # accept non-zero exit
+const response = w.main()
+const response = w.main("my input")            # with one argument
+const response = w.main("first", "second")     # comma-separated arguments
+const response = w.main() allow_failure        # accept non-zero exit
 ```
 
-`run` captures the def's return value when the exit code is 0 and the return value is not empty. When the exit code is non-zero, it captures the runtime error string instead. In any other case, it captures the def's `*.out` files, read in sorted order and joined together.
+The call captures the def's return value when the exit code is 0 and the return value is not empty. When the exit code is non-zero, it captures the runtime error string instead. In any other case, it captures the def's `*.out` files, read in sorted order and joined together.
 
 ## 5. Assert on the captured value
 

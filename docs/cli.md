@@ -77,7 +77,7 @@ After module-graph load, before the runner is spawned, the host CLI runs a crede
 | `!` | `logerr` message (red; rendered on stdout with the progress tree). |
 | `⚠` | `logwarn` message and automatic leaf-step idle warnings (yellow; rendered on stdout with the progress tree). |
 | `·` | Continuation marker (heartbeat lines in non-TTY mode). |
-| ` ₁`, ` ₂`, … | Subscript prefix for `run async` branch numbering. |
+| ` ₁`, ` ₂`, … | Subscript prefix for `async` branch numbering. |
 
 PASS line: `✓ PASS def main (0.2s)`. TTY runs append a transient `▸ RUNNING def <name> (X.Xs)` line that is replaced by the PASS/FAIL line on exit. `--raw` and non-TTY modes skip both. Disable color globally with `NO_COLOR=1`.
 

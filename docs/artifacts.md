@@ -29,12 +29,12 @@ import "jaiphlang/artifacts" as artifacts
 ```jh
 export def main() {
   # ... produce ./build/output.bin somehow ...
-  const dest = run artifacts.save("./build/output.bin")
+  const dest = artifacts.save("./build/output.bin")
   log "saved to ${dest}"
 }
 ```
 
-`save` copies the source path into `${JAIPH_ARTIFACTS_DIR}/...` preserving the relative layout (the leading `./` is stripped). Absolute source paths are copied using `basename` only. The `run` step returns the absolute destination path.
+`save` copies the source path into `${JAIPH_ARTIFACTS_DIR}/...` preserving the relative layout (the leading `./` is stripped). Absolute source paths are copied using `basename` only. The `save` call returns the absolute destination path.
 
 ## 3. Save several files at once
 
@@ -46,7 +46,7 @@ export def main() {
   a.txt
   b/nested.txt
   """
-  const dests = run artifacts.save(paths)
+  const dests = artifacts.save(paths)
   log "${dests}"
 }
 ```
@@ -64,7 +64,7 @@ script save_report = ```
 ```
 
 export def main() {
-  run save_report()
+  save_report()
 }
 ```
 
