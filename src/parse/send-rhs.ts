@@ -4,7 +4,7 @@ import { fail, hasUnescapedClosingQuote, indexOfClosingDoubleQuote, isRef, parse
 import { dedentTripleQuotedBody, parseTripleQuoteBlock, tripleQuoteBodyToRaw } from "./triple-quote";
 
 const SEND_RHS_HINT =
-  'send right-hand side must be a quoted string ("..."), a variable ($name or ${...}), or "run <ref> [args]" — not raw shell; use a script or use const';
+  'send right-hand side must be a quoted string ("..."), a variable ($name or ${...}), or a call "ref(args)" — not raw shell; use a script or use const';
 
 /**
  * Parse the payload of `send <payload> -> channel`. Returns the parsed payload
@@ -46,10 +46,10 @@ export function parseSendRhs(
     }
     return { value: { kind: "literal", raw: t.slice(0, close + 1) }, nextIdx: defaultNext };
   }
-  if (t.startsWith("run ")) {
-    const call = parseCallRef(t.slice("run ".length).trim());
+  if (/^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?\s*\(/.test(t)) {
+    const call = parseCallRef(t);
     if (call) {
-      rejectTrailingContent(filePath, lineNo, "run", call.rest);
+      rejectTrailingContent(filePath, lineNo, "send", call.rest);
       const callee: DefRef = { value: call.ref, loc: { line: lineNo, col } };
       return {
         value: { kind: "call", callee, ...(call.args ? { args: call.args } : {}) },

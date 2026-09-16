@@ -18,14 +18,14 @@ script check_ready_impl = ```
 echo "rule-stdout-check"
 ```
 def check_ready() {
-  run check_ready_impl()
+  check_ready_impl()
   return "ready-value"
 }
 
 script echo_captured = `echo "captured=$1"`
 export def main() {
-  const val = run check_ready()
-  run echo_captured(val)
+  const val = check_ready()
+  echo_captured(val)
 }
 EOF
 rm -rf "${TEST_DIR}/runs_rcap"
@@ -60,13 +60,13 @@ echo "analysis-stdout-log"
 exit 1
 ```
 def analyze() {
-  run analyze_impl()
+  analyze_impl()
 }
 
 script recover_handler = `printf '%s' "$1" > recover_received.txt`
 export def main() {
-  run analyze() catch (failure) {
-    run recover_handler(failure)
+  analyze() catch (failure) {
+    recover_handler(failure)
   }
 }
 EOF

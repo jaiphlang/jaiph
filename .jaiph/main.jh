@@ -32,52 +32,52 @@ config {
 # Review every QUEUE.md task for clarity, architecture fit, and #dev-ready.
 # Marks ready tasks; fails if any still need work.
 export def architect_review() {
-  run arch_mod.main()
+  arch_mod.main()
 }
 
 # Bring docs/ and CLI usage strings in line with the current TypeScript/Bash source.
 # Requires a clean worktree; edits docs and related usage surfaces only.
 export def docs_parity() {
-  run docs_mod.main()
+  docs_mod.main()
 }
 
 # Implement a task end-to-end: code, CI, docs, commit patch. Pass the full task
 # markdown (must start with a ## header). Does not read or write QUEUE.md —
 # queue-driven overnight runs use `.jaiph/engineer.jh` directly instead.
 export def engineer(task) {
-  return run eng_mod.implement_from_task(task)
+  return eng_mod.implement_from_task(task)
 }
 
 # Run npm run test:ci and loop with an agent until it passes (or recover_limit).
 export def ensure_ci_passes() {
-  run ci_mod.main()
+  ci_mod.main()
 }
 
 # Wait for GitHub Actions CI on the branch, pull failure logs, and repair until green.
 # branch="" uses the current branch; workflow_name="" defaults to "CI". Needs GITHUB_TOKEN.
 export def gh_ci_passes(branch, workflow_name) {
-  run gh_ci_mod.main(branch, workflow_name)
+  gh_ci_mod.main(branch, workflow_name)
 }
 
 # OWASP ASI Top 10 security review; report under .jaiph/tmp/, HIGH/MEDIUM →
 # #dev-ready QUEUE.md tasks (committed when the queue changes). Overnight-safe.
 # scope: ""|"codebase"|"full" for whole tree, "diff" for uncommitted, or a git range.
 export def security_review(scope) {
-  run sec_mod.main(scope)
+  sec_mod.main(scope)
 }
 
 # Find and apply safe simplifications (no test/e2e edits), CI, commit if changed.
 export def simplifier() {
-  run simp_mod.main()
+  simp_mod.main()
 }
 
 # Stage a release: CHANGELOG review, version bump, installer ref, rebuild, registry.
 # version="" bumps the next patch from package.json; otherwise pass X.Y.Z. No tag/push.
 export def prepare_release(version) {
-  return run rel_mod.main(version)
+  return rel_mod.main(version)
 }
 
 # Find test-coverage gaps, write missing tests, CI, commit if changed.
 export def qa() {
-  run qa_mod.main()
+  qa_mod.main()
 }

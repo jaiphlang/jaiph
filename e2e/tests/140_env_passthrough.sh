@@ -19,7 +19,7 @@ TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 e2e::file "env_show.jh" <<'EOF'
 script show_impl use GREETING = `echo "$GREETING"`
 export def main() {
-  const g = run show_impl()
+  const g = show_impl()
   return "${g}"
 }
 EOF

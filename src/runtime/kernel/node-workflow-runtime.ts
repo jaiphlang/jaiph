@@ -720,10 +720,10 @@ export class NodeWorkflowRuntime {
     };
   }
 
-  private static readonly INLINE_CAPTURE_RE = /\$\{(run)\s+([^}]+)\}/g;
+  private static readonly INLINE_CAPTURE_RE = /\$\{([A-Za-z_][A-Za-z0-9_.]*\s*\([^}]*\))\}/g;
 
   /**
-   * Interpolate `${var}` refs and inline `${run ref [args]}`
+   * Interpolate `${var}` refs and inline `${ref(args)}`
    * captures: each capture is executed and replaced with its output, then regular
    * `${var}` interpolation runs. Returns { ok: true, value } or { ok: false, result }.
    *
@@ -750,7 +750,7 @@ export class NodeWorkflowRuntime {
     let m: RegExpExecArray | null;
     while ((m = re.exec(input)) !== null) {
       result += input.slice(lastIndex, m.index);
-      const { ref, argsRaw } = parseInlineCaptureCall(m[2]);
+      const { ref, argsRaw } = parseInlineCaptureCall(m[1]);
       const r = await this.executeRunRef(scope, ref, argsRaw);
       if (r.status !== 0) return { ok: false, result: r };
       const captured = r.returnValue ?? r.output.trim();
@@ -783,8 +783,8 @@ export class NodeWorkflowRuntime {
           return { ok: false, result: { status: 1, output: "", error: stripOuterQuotes(msgIr.value) } };
         }
 
-        // run ref(args) — execute script/workflow and capture return value
-        const runM = body.match(/^run\s+([A-Za-z_][A-Za-z0-9_.]*)\(([^)]*)\)\s*$/);
+        // ref(args) — execute script/workflow and capture return value
+        const runM = body.match(/^([A-Za-z_][A-Za-z0-9_.]*)\(([^)]*)\)\s*$/);
         if (runM) {
           const result = await this.executeRunRef(scope, runM[1]!, commaArgsToInterpolated(runM[2]!));
           if (result.status !== 0) return { ok: false, result };

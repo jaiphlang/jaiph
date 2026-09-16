@@ -18,7 +18,7 @@ e2e::section "jaiph ./file.jh routes to run"
 e2e::file "hello.jh" <<'EOF'
 script hello_impl = `echo "hello-shorthand"`
 export def main() {
-  const msg = run hello_impl()
+  const msg = hello_impl()
   return "${msg}"
 }
 EOF
@@ -57,7 +57,7 @@ e2e::file "lib.test.jh" <<'EOF'
 import "lib.jh" as lib
 
 test "greet logs message" {
-  const out = run lib.greet()
+  const out = lib.greet()
   expect_contain out "hello from lib"
 }
 EOF
@@ -92,7 +92,7 @@ cat > "${TEST_DIR}/subdir/inner_lib.test.jh" <<'EOF'
 import "inner_lib.jh" as lib
 
 test "inner test" {
-  const out = run lib.inner()
+  const out = lib.inner()
   expect_contain out "inner workflow"
 }
 EOF

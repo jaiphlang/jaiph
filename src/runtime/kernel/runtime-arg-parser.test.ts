@@ -124,29 +124,27 @@ describe("parseInlineScriptAt", () => {
 });
 
 describe("parseManagedArgAt", () => {
-  it("parses `run ref(args)` form (bare idents already wrapped by parseCallRef)", () => {
-    const result = parseManagedArgAt("run greet(x)", 0);
+  it("parses bare `ref(args)` form (bare idents already wrapped by parseCallRef)", () => {
+    const result = parseManagedArgAt("greet(x)", 0);
     assert.ok(result);
     assert.equal(result!.token.kind, "managed");
     if (result!.token.kind === "managed") {
-      assert.equal(result!.token.managedKind, "run");
       assert.equal(result!.token.ref, "greet");
       assert.equal(result!.token.argsRaw, "${x}");
     }
   });
 
-  it("parses `run ref(args)` form", () => {
-    const result = parseManagedArgAt("run check(a, b)", 0);
+  it("parses bare `ref(args)` form", () => {
+    const result = parseManagedArgAt("check(a, b)", 0);
     assert.ok(result);
     if (result!.token.kind === "managed") {
-      assert.equal(result!.token.managedKind, "run");
       assert.equal(result!.token.ref, "check");
       assert.equal(result!.token.argsRaw, "${a} ${b}");
     }
   });
 
-  it("parses `run \\`body\\`(args)` as inline script", () => {
-    const result = parseManagedArgAt("run `echo hi`(x)", 0);
+  it("parses bare `\\`body\\`(args)` as inline script", () => {
+    const result = parseManagedArgAt("`echo hi`(x)", 0);
     assert.ok(result);
     if (result!.token.kind === "managed_inline_script") {
       assert.equal(result!.token.body, "echo hi");
@@ -168,8 +166,8 @@ describe("parseArgTokens", () => {
     assert.deepEqual(tokens.map((t) => t.kind), ["literal", "literal", "literal"]);
   });
 
-  it("recognises managed run/run tokens within a list", () => {
-    const tokens = parseArgTokens("foo run greet(x) bar");
+  it("recognises bare managed call tokens within a list", () => {
+    const tokens = parseArgTokens("foo greet(x) bar");
     assert.equal(tokens.length, 3);
     assert.equal(tokens[0].kind, "literal");
     assert.equal(tokens[1].kind, "managed");

@@ -36,19 +36,19 @@ import "verdict.jh" as v
 
 test "ok verdict selects then-branch and ok arm" {
   mock prompt "{\"verdict\":\"ok\"}"
-  const out = run v.classify()
+  const out = v.classify()
   expect_equal out "approved-arm"
 }
 
 test "reject verdict selects else-branch and reject arm" {
   mock prompt "{\"verdict\":\"reject\"}"
-  const out = run v.classify()
+  const out = v.classify()
   expect_equal out "rejected-arm"
 }
 
 test "unknown verdict selects else-branch and wildcard arm" {
   mock prompt "{\"verdict\":\"maybe\"}"
-  const out = run v.classify()
+  const out = v.classify()
   expect_equal out "unknown-arm"
 }
 EOF

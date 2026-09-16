@@ -186,21 +186,21 @@
     "line": 2,
     "col": 3,
     "code": "E_PARSE",
-    "message": "assignment without \"const\" is no longer supported; use \"const x = run async some_wf()\""
+    "message": "assignment without \"const\" is no longer supported; use \"const x = async some_wf()\""
   },
   "run async with inline script rejected": {
     "file": "input.jh",
     "line": 2,
     "col": 3,
     "code": "E_PARSE",
-    "message": "run async is not supported with inline scripts"
+    "message": "async is not supported with inline scripts"
   },
   "old inline script syntax rejected": {
     "file": "input.jh",
     "line": 2,
     "col": 1,
     "code": "E_PARSE",
-    "message": "inline script syntax has changed: use run `body`(args) instead of run script(args) \"body\""
+    "message": "unexpected content after call call: '\"echo hello\"'; shell redirection (>, |, &) is not supported — use a script block"
   },
   "invalid agent.backend value": {
     "file": "input.jh",
@@ -293,13 +293,6 @@
     "code": "E_PARSE",
     "message": "duplicate name \"helper\" — variable name collides with script of the same name"
   },
-  "const rejects bare call-like rhs without run": {
-    "file": "input.jh",
-    "line": 3,
-    "col": 13,
-    "code": "E_PARSE",
-    "message": "Script calls in const assignments must use run. Use: const x = run some_script(\"${arg}\")"
-  },
   "unsupported top-level statement": {
     "file": "input.jh",
     "line": 1,
@@ -326,7 +319,7 @@
     "line": 2,
     "col": 1,
     "code": "E_PARSE",
-    "message": "run must target a valid reference: run ref() or run ref(args) — parentheses are required"
+    "message": "call must target a valid reference: call ref() or call ref(args) — parentheses are required"
   },
   "prompt with returns without capture name": {
     "file": "<no-error>",
@@ -338,28 +331,28 @@
   "run catch with args after catch": {
     "file": "input.jh",
     "line": 6,
-    "col": 19,
+    "col": 15,
     "code": "E_PARSE",
     "message": "catch requires explicit bindings: catch (<name>) { ... }"
   },
   "run catch with multiple args after catch": {
     "file": "input.jh",
     "line": 6,
-    "col": 22,
+    "col": 18,
     "code": "E_PARSE",
     "message": "catch requires explicit bindings: catch (<name>) { ... }"
   },
   "run catch without block": {
     "file": "input.jh",
     "line": 6,
-    "col": 30,
+    "col": 26,
     "code": "E_PARSE",
     "message": "catch requires explicit bindings and a body: catch (<name>) { ... }"
   },
   "run catch without bindings (bare catch block)": {
     "file": "input.jh",
     "line": 5,
-    "col": 15,
+    "col": 11,
     "code": "E_PARSE",
     "message": "catch requires explicit bindings: catch (<name>) { ... }"
   },
@@ -475,13 +468,6 @@
     "code": "OK",
     "message": "compilation succeeded but fixture expected a parse error"
   },
-  "invalid inline run reference bad identifier": {
-    "file": "<no-error>",
-    "line": 0,
-    "col": 0,
-    "code": "OK",
-    "message": "compilation succeeded but fixture expected a parse error"
-  },
   "match: unterminated string in pattern": {
     "file": "input.jh",
     "line": 4,
@@ -550,7 +536,7 @@
     "line": 5,
     "col": 1,
     "code": "E_PARSE",
-    "message": "run async must target a valid reference: run async ref() or run async ref(args) — parentheses are required"
+    "message": "async must target a valid reference: async ref() or async ref(args) — parentheses are required"
   },
   "log format not double-quoted": {
     "file": "input.jh",
@@ -704,21 +690,21 @@
     "line": 2,
     "col": 1,
     "code": "E_PARSE",
-    "message": "run must target a valid reference: run ref() or run ref(args) — parentheses are required"
+    "message": "invalid script declaration"
   },
   "inline script without parentheses": {
     "file": "input.jh",
     "line": 2,
     "col": 1,
     "code": "E_PARSE",
-    "message": "run must target a valid reference: run ref() or run ref(args) — parentheses are required"
+    "message": "invalid script declaration"
   },
   "old inline script empty body rejected": {
-    "file": "input.jh",
-    "line": 2,
-    "col": 1,
-    "code": "E_PARSE",
-    "message": "inline script syntax has changed: use run `body`(args) instead of run script(args) \"body\""
+    "file": "<no-error>",
+    "line": 0,
+    "col": 0,
+    "code": "OK",
+    "message": "compilation succeeded but fixture expected a parse error"
   },
   "inline script unterminated backtick": {
     "file": "input.jh",
@@ -830,7 +816,7 @@
     "line": 5,
     "col": 1,
     "code": "E_PARSE",
-    "message": "run async must target a valid reference: run async ref() or run async ref(args) — parentheses are required"
+    "message": "async must target a valid reference: async ref() or async ref(args) — parentheses are required"
   },
   "config block with content on same line as opening": {
     "file": "input.jh",
@@ -865,7 +851,7 @@
     "line": 2,
     "col": 13,
     "code": "E_PARSE",
-    "message": "const value cannot use command substitution \"$(...)\"; use a script and const name = run ref"
+    "message": "const value cannot use command substitution \"$(...)\"; use a script and const name = ref()"
   },
   "workflow const with bash percent expansion": {
     "file": "input.jh",
@@ -896,11 +882,11 @@
     "message": "shell fallback syntax (e.g. ${var:-default}) is not supported; use conditional logic or named params instead"
   },
   "run without parentheses in workflow requires parens": {
-    "file": "input.jh",
-    "line": 3,
-    "col": 1,
-    "code": "E_PARSE",
-    "message": "run must target a valid reference: run ref() or run ref(args) — parentheses are required"
+    "file": "<no-error>",
+    "line": 0,
+    "col": 0,
+    "code": "OK",
+    "message": "compilation succeeded but fixture expected a parse error"
   },
   "return with single-quoted string": {
     "file": "input.jh",
@@ -923,19 +909,12 @@
     "code": "E_PARSE",
     "message": "invalid if syntax; expected: if <identifier> <op> <operand> { ... } where op is ==, !=, =~, or !~ and operand is \"string\" or /regex/"
   },
-  "capture run without parentheses requires const": {
-    "file": "input.jh",
-    "line": 3,
-    "col": 3,
-    "code": "E_PARSE",
-    "message": "assignment without \"const\" is no longer supported; use \"const x = run helper\""
-  },
   "const run without parentheses requires parens": {
-    "file": "input.jh",
-    "line": 5,
-    "col": 13,
-    "code": "E_PARSE",
-    "message": "const ... = run must target a valid reference"
+    "file": "<no-error>",
+    "line": 0,
+    "col": 0,
+    "code": "OK",
+    "message": "compilation succeeded but fixture expected a parse error"
   },
   "triple-backtick prompt is rejected": {
     "file": "input.jh",
@@ -1056,33 +1035,19 @@
     "code": "E_PARSE",
     "message": "match subject must be a valid identifier, got: 123"
   },
-  "const run with invalid reference": {
-    "file": "input.jh",
-    "line": 2,
-    "col": 13,
-    "code": "E_PARSE",
-    "message": "const ... = run must target a valid reference"
-  },
   "const run cannot use catch": {
     "file": "input.jh",
     "line": 2,
     "col": 1,
     "code": "E_PARSE",
-    "message": "unexpected content after run call: 'catch {'; shell redirection (>, |, &) is not supported — use a script block"
-  },
-  "run with invalid reference in workflow": {
-    "file": "input.jh",
-    "line": 2,
-    "col": 1,
-    "code": "E_PARSE",
-    "message": "run must target a valid reference: run ref() or run ref(args) — parentheses are required"
+    "message": "unexpected content after const call: 'catch {'; shell redirection (>, |, &) is not supported — use a script block"
   },
   "run async with invalid reference in workflow": {
     "file": "input.jh",
     "line": 2,
     "col": 1,
     "code": "E_PARSE",
-    "message": "run async must target a valid reference: run async ref() or run async ref(args) — parentheses are required"
+    "message": "async must target a valid reference: async ref() or async ref(args) — parentheses are required"
   },
   "empty parameter name in parameter list": {
     "file": "input.jh",
@@ -1185,7 +1150,7 @@
   "unterminated multiline catch block": {
     "file": "input.jh",
     "line": 5,
-    "col": 15,
+    "col": 11,
     "code": "E_PARSE",
     "message": "unterminated catch block, expected \"}\""
   },
@@ -1220,16 +1185,9 @@
   "empty multiline catch block": {
     "file": "input.jh",
     "line": 5,
-    "col": 15,
+    "col": 11,
     "code": "E_PARSE",
     "message": "catch block must contain at least one statement"
-  },
-  "run with invalid reference": {
-    "file": "input.jh",
-    "line": 2,
-    "col": 1,
-    "code": "E_PARSE",
-    "message": "run must target a valid reference: run ref() or run ref(args) — parentheses are required"
   },
   "config line without equals sign": {
     "file": "input.jh",
@@ -1273,13 +1231,6 @@
     "code": "E_PARSE",
     "message": "use 'send <payload> -> <channel>'"
   },
-  "capture run with invalid reference in workflow": {
-    "file": "input.jh",
-    "line": 2,
-    "col": 3,
-    "code": "E_PARSE",
-    "message": "assignment without \"const\" is no longer supported; use \"const x = run 123bad\""
-  },
   "fenced script with shell parameter expansion is valid": {
     "file": "<no-error>",
     "line": 0,
@@ -1290,7 +1241,7 @@
   "empty inline catch block": {
     "file": "input.jh",
     "line": 5,
-    "col": 15,
+    "col": 11,
     "code": "E_PARSE",
     "message": "catch block must contain at least one statement"
   },
@@ -1320,14 +1271,14 @@
     "line": 4,
     "col": 3,
     "code": "E_PARSE",
-    "message": "use \"const out = run lib.default(…)\" to capture def output"
+    "message": "use \"const out = lib.default(…)\" to capture def output"
   },
   "test: bare workflow call without run rejected": {
     "file": "input.test.jh",
     "line": 4,
     "col": 3,
     "code": "E_PARSE",
-    "message": "use \"run lib.default(…)\" to call a def in tests"
+    "message": "use \"lib.default(…)\" to call a def in tests"
   },
   "test: mock def without parens rejected": {
     "file": "input.test.jh",
@@ -1353,35 +1304,35 @@
   "run catch with unterminated bindings paren": {
     "file": "input.jh",
     "line": 5,
-    "col": 16,
+    "col": 12,
     "code": "E_PARSE",
     "message": "unterminated catch bindings: expected \")\""
   },
   "run catch with empty bindings": {
     "file": "input.jh",
     "line": 5,
-    "col": 16,
+    "col": 12,
     "code": "E_PARSE",
     "message": "catch requires exactly one binding: catch (<name>) { ... }"
   },
   "run catch with invalid binding name": {
     "file": "input.jh",
     "line": 5,
-    "col": 16,
+    "col": 12,
     "code": "E_PARSE",
     "message": "invalid catch binding name: \"123bad\" — must be a valid identifier"
   },
   "run catch with no body after bindings": {
     "file": "input.jh",
     "line": 5,
-    "col": 16,
+    "col": 12,
     "code": "E_PARSE",
     "message": "catch requires a body after bindings"
   },
   "run catch with multiple bindings rejected": {
     "file": "input.jh",
     "line": 5,
-    "col": 16,
+    "col": 12,
     "code": "E_PARSE",
     "message": "catch accepts exactly one binding: catch (<name>) — the second binding (attempt) has been removed"
   },
@@ -1551,7 +1502,7 @@
     "line": 1,
     "col": 1,
     "code": "E_PARSE",
-    "message": "parameter name \"run\" is a reserved keyword"
+    "message": "parameter name \"stdin\" is a reserved keyword"
   },
   "log triple-quote with trailing content": {
     "file": "input.jh",
@@ -1600,7 +1551,7 @@
     "line": 6,
     "col": 5,
     "code": "E_PARSE",
-    "message": "assignment without \"const\" is no longer supported; use \"const x = run helper()\""
+    "message": "assignment without \"const\" is no longer supported; use \"const x = helper()\""
   },
   "catch block: prompt assign without const": {
     "file": "input.jh",
@@ -1612,9 +1563,9 @@
   "const run with old inline script syntax": {
     "file": "input.jh",
     "line": 2,
-    "col": 13,
+    "col": 1,
     "code": "E_PARSE",
-    "message": "inline script syntax has changed: use const name = run `body`(args) instead of run script(args) \"body\""
+    "message": "unexpected content after const call: '\"echo hello\"'; shell redirection (>, |, &) is not supported — use a script block"
   },
   "top-level const with invalid name": {
     "file": "input.jh",
@@ -1642,7 +1593,7 @@
     "line": 3,
     "col": 1,
     "code": "E_PARSE",
-    "message": "unexpected content after run call: '| grep ok'; shell redirection (>, |, &) is not supported — use a script block"
+    "message": "unexpected content after const call: '| grep ok'; shell redirection (>, |, &) is not supported — use a script block"
   },
   "shell redirection after send run call rejected": {
     "file": "input.jh",
@@ -1710,14 +1661,14 @@
   "inline catch return without value": {
     "file": "input.jh",
     "line": 5,
-    "col": 15,
+    "col": 11,
     "code": "E_PARSE",
     "message": "catch requires explicit bindings: catch (<name>) { ... }"
   },
   "run catch unterminated multiline block": {
     "file": "input.jh",
     "line": 5,
-    "col": 15,
+    "col": 11,
     "code": "E_PARSE",
     "message": "unterminated catch block, expected \"}\""
   },
@@ -1759,7 +1710,7 @@
   "run catch without bindings bare catch block": {
     "file": "input.jh",
     "line": 5,
-    "col": 16,
+    "col": 12,
     "code": "E_PARSE",
     "message": "catch requires explicit bindings: catch (<name>) { ... }"
   },
@@ -1873,14 +1824,14 @@
     "line": 2,
     "col": 13,
     "code": "E_PARSE",
-    "message": "run async is not supported with inline scripts"
+    "message": "async is not supported with inline scripts"
   },
   "const run async with invalid reference": {
     "file": "input.jh",
     "line": 2,
     "col": 13,
     "code": "E_PARSE",
-    "message": "const ... = run async must target a valid reference"
+    "message": "const ... = async must target a valid reference"
   },
   "if/else on its own line without preceding closing brace": {
     "file": "input.jh",

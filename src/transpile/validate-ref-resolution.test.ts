@@ -88,7 +88,7 @@ test("validateRef: rejects local script with DEF_REF_EXPECT", () => {
   const ctx = makeCtx({ localScripts: new Set(["build"]) });
   assert.throws(
     () => validateRef(ref("build"), mod, ctx, { mode: "expect", expect: DEF_REF_EXPECT }),
-    /script "build" cannot be called with run/,
+    /script "build" cannot be called as a def/,
   );
 });
 
@@ -119,7 +119,7 @@ test("validateRef: rejects three-part reference", () => {
   const ctx = makeCtx();
   assert.throws(
     () => validateRef(ref("a.b.c"), mod, ctx, { mode: "expect", expect: RUN_TARGET_REF_EXPECT }),
-    /invalid run target reference "a.b.c"/,
+    /invalid call target reference "a.b.c"/,
   );
 });
 
@@ -133,7 +133,7 @@ test("validateRef: bare_send_rhs rejects local def", () => {
         bareSend: BARE_SEND_REF_MSG,
         lookupImportedKind: () => undefined,
       }),
-    /def "deploy" must be called with run/,
+    /def "deploy" must be called as deploy\(\)/
   );
 });
 
@@ -149,7 +149,7 @@ test("validateRef: bare_send_rhs rejects local script", () => {
         bareSend: BARE_SEND_REF_MSG,
         lookupImportedKind: () => undefined,
       }),
-    /script "build" must be called with run/,
+    /script "build" must be called as build\(\)/
   );
 });
 

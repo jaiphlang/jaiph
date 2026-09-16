@@ -19,7 +19,7 @@ test "pick_task claims the preferred first available task" {
   mock prompt {
     _ => "{\"title\":\"First\",\"notes\":\"\"}"
   }
-  const out = run po.pick_task()
+  const out = po.pick_task()
   expect_contain out "First"
   expect_contain out "in-progress"
 }
@@ -40,7 +40,7 @@ test "pick_task may claim a later available task" {
   mock prompt {
     _ => "{\"title\":\"Second\",\"notes\":\"First is blocked on a merge\"}"
   }
-  const out = run po.pick_task()
+  const out = po.pick_task()
   expect_contain out "Second"
   expect_contain out "in-progress"
 }
@@ -49,7 +49,7 @@ test "pick_task fails when the queue has no available task" {
   mock def queue.next_available() {
     fail "no #dev-ready task is available"
   }
-  const out = run po.pick_task() allow_failure
+  const out = po.pick_task() allow_failure
   expect_contain out "no #dev-ready task is available"
 }
 
@@ -63,7 +63,7 @@ test "propose_task reject does not write" {
   mock prompt {
     _ => "{\"verdict\":\"rejected\",\"title\":\"\",\"body\":\"needs acceptance\",\"tags\":\"\"}"
   }
-  const out = run po.propose_task("vague idea")
+  const out = po.propose_task("vague idea")
   expect_contain out "rejected"
 }
 
@@ -77,7 +77,7 @@ test "propose_task accept writes via add_task_from_file" {
   mock prompt {
     _ => "{\"verdict\":\"accepted\",\"title\":\"New Task\",\"body\":\"Do it.\",\"tags\":\"dev-ready\"}"
   }
-  const out = run po.propose_task("## New Task
+  const out = po.propose_task("## New Task
 
 Do it.")
   expect_contain out "accepted: New Task"
@@ -99,7 +99,7 @@ test "report_completed_task needs-work does not archive" {
   mock prompt {
     _ => "{\"verdict\":\"needs-work\",\"notes\":\"merge main\"}"
   }
-  const out = run po.report_completed_task("Claimed", "")
+  const out = po.report_completed_task("Claimed", "")
   expect_contain out "needs-work"
   expect_contain out "merge main"
 }
@@ -117,7 +117,7 @@ test "report_completed_task accepted archives" {
   mock prompt {
     _ => "{\"verdict\":\"accepted\",\"notes\":\"ok\"}"
   }
-  const out = run po.report_completed_task("Claimed", "done")
+  const out = po.report_completed_task("Claimed", "done")
   expect_contain out "accepted: Claimed"
 }
 
@@ -134,7 +134,7 @@ test "update_task reject does not write" {
   mock prompt {
     _ => "{\"verdict\":\"rejected\",\"body\":\"steals later task\"}"
   }
-  const out = run po.update_task("Claimed", "also do the next task")
+  const out = po.update_task("Claimed", "also do the next task")
   expect_contain out "rejected"
 }
 
@@ -151,6 +151,6 @@ test "task_details persists an answer" {
   mock prompt {
     _ => "{\"verdict\":\"ok\",\"notes\":\"use the public entry\"}"
   }
-  const out = run po.task_details("Claimed", "which file?")
+  const out = po.task_details("Claimed", "which file?")
   expect_contain out "use the public entry"
 }

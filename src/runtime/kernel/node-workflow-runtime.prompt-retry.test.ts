@@ -244,7 +244,7 @@ test("prompt retry: enclosing run+catch fires after retries are exhausted (compo
         "}",
         "",
         "export def main() {",
-        "  run inner() catch (failure) {",
+        "  inner() catch (failure) {",
         '    return "recovered"',
         "  }",
         "}",

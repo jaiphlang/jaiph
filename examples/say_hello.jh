@@ -11,7 +11,7 @@ def valid_name(name_arg) {
 
 # export def main is the jaiph run entry
 export def main(name_arg) {
-  const name = run valid_name(name_arg)
+  const name = valid_name(name_arg)
 
   # prompts call agents - cursor by default, but it's configurable
   const response = prompt """

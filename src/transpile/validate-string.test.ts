@@ -60,7 +60,7 @@ test("valid: $1 in script body (shell context)", () => {
     writeJh(root, "m.jh", [
       'script greet = `echo "Hello $1"`',
       "export def main() {",
-      '  run greet("world")',
+      '  greet("world")',
       "}",
     ]);
     buildScripts(join(root, "m.jh"), join(root, "out"));
@@ -273,7 +273,7 @@ test("reject ${var:-fallback} in rule log", () => {
       '  log "${x:-fallback}"',
       "}",
       "export def main() {",
-      "  run check()",
+      "  check()",
       "}",
     ]);
     assert.throws(
@@ -284,112 +284,112 @@ test("reject ${var:-fallback} in rule log", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Inline capture interpolation: ${run ref} / ${run ref}
+// Inline capture interpolation: ${ref} / ${ref}
 // ---------------------------------------------------------------------------
 
-test("valid: ${run ref} inline capture in log", () => {
+test("valid: ${ref} inline capture in log", () => {
   withTempDir("jaiph-str-ic-run-", (root) => {
     writeJh(root, "m.jh", [
       'script greet = `echo "hello"`',
       "export def main() {",
-      '  log "got: ${run greet()}"',
+      '  log "got: ${greet()}"',
       "}",
     ]);
     buildScripts(join(root, "m.jh"), join(root, "out"));
   });
 });
 
-test("valid: ${run ref} inline capture in log", () => {
+test("valid: ${ref} inline capture in log", () => {
   withTempDir("jaiph-str-ic-ensure-", (root) => {
     writeJh(root, "m.jh", [
       "def check() {",
       '  return "ok"',
       "}",
       "export def main() {",
-      '  log "status: ${run check()}"',
+      '  log "status: ${check()}"',
       "}",
     ]);
     buildScripts(join(root, "m.jh"), join(root, "out"));
   });
 });
 
-test("valid: ${run ref args} inline capture with args", () => {
+test("valid: ${ref args} inline capture with args", () => {
   withTempDir("jaiph-str-ic-run-args-", (root) => {
     writeJh(root, "m.jh", [
       'script greet = `echo "hello $1"`',
       "export def main() {",
-      '  log "got: ${run greet(world)}"',
+      '  log "got: ${greet(world)}"',
       "}",
     ]);
     buildScripts(join(root, "m.jh"), join(root, "out"));
   });
 });
 
-test("valid: ${run ref} inline capture in return", () => {
+test("valid: ${ref} inline capture in return", () => {
   withTempDir("jaiph-str-ic-return-", (root) => {
     writeJh(root, "m.jh", [
       'script greet = `echo "hello"`',
       "def helper() {",
-      '  return "${run greet()}"',
+      '  return "${greet()}"',
       "}",
       "export def main() {",
-      "  run helper()",
+      "  helper()",
       "}",
     ]);
     buildScripts(join(root, "m.jh"), join(root, "out"));
   });
 });
 
-test("valid: ${run ref} inline capture in rule log", () => {
+test("valid: ${ref} inline capture in rule log", () => {
   withTempDir("jaiph-str-ic-rule-", (root) => {
     writeJh(root, "m.jh", [
       'script greet = `echo "hello"`',
       "def check() {",
-      '  log "got: ${run greet()}"',
+      '  log "got: ${greet()}"',
       "}",
       "export def main() {",
-      "  run check()",
+      "  check()",
       "}",
     ]);
     buildScripts(join(root, "m.jh"), join(root, "out"));
   });
 });
 
-test("rejected: nested inline capture ${run ... ${run ...}}", () => {
+test("rejected: nested inline capture ${... ${...}}", () => {
   withTempDir("jaiph-str-ic-nested-", (root) => {
     writeJh(root, "m.jh", [
       'script foo = `echo "a"`',
       'script bar = `echo "b"`',
       "export def main() {",
-      '  log "got: ${run foo(${run bar()})}"',
+      '  log "got: ${foo(${bar()})}"',
       "}",
     ]);
     assert.throws(
       () => buildScripts(join(root, "m.jh"), join(root, "out")),
-      /E_PARSE.*invalid inline run reference/,
+      /E_PARSE.*invalid inline call reference/,
     );
   });
 });
 
-test("rejected: ${run invalid-ref} in log", () => {
+test("rejected: ${invalid-ref} in log", () => {
   withTempDir("jaiph-str-ic-bad-ref-", (root) => {
     writeJh(root, "m.jh", [
       "export def main() {",
-      '  log "got: ${run 123bad()}"',
+      '  log "got: ${a.b.c()}"',
       "}",
     ]);
     assert.throws(
       () => buildScripts(join(root, "m.jh"), join(root, "out")),
-      /E_PARSE.*invalid inline run reference/,
+      /E_PARSE.*invalid inline call reference/,
     );
   });
 });
 
-test("rejected: ${run ref} with unknown ref in workflow", () => {
+test("rejected: ${ref} with unknown ref in workflow", () => {
   withTempDir("jaiph-str-ic-unknown-", (root) => {
     writeJh(root, "m.jh", [
       "export def main() {",
-      '  log "got: ${run nonexistent()}"',
+      '  log "got: ${nonexistent()}"',
       "}",
     ]);
     assert.throws(
@@ -399,12 +399,12 @@ test("rejected: ${run ref} with unknown ref in workflow", () => {
   });
 });
 
-test("extractInlineCaptures extracts run and run with typed Arg[]", () => {
+test("extractInlineCaptures extracts call refs with typed Arg[]", () => {
   const { extractInlineCaptures } = require("./validate-string");
-  const result = extractInlineCaptures('prefix ${run greet(world)} middle ${run check()} suffix');
+  const result = extractInlineCaptures('prefix ${greet(world)} middle ${check()} suffix');
   assert.deepEqual(result, [
-    { kind: "run", ref: "greet", args: [{ kind: "var", name: "world" }] },
-    { kind: "run", ref: "check", args: undefined },
+    { ref: "greet", args: [{ kind: "var", name: "world" }] },
+    { ref: "check", args: undefined },
   ]);
 });
 

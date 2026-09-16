@@ -136,9 +136,9 @@ test("duplicate parameter name is rejected", () => {
 
 test("reserved keyword as parameter name is rejected", () => {
   assert.throws(
-    () => parsejaiph("def greet(run) {\n}", "test.jh"),
+    () => parsejaiph("def greet(async) {\n}", "test.jh"),
     (err: Error) =>
-      err.message.includes("E_PARSE") && err.message.includes('parameter name "run" is a reserved keyword'),
+      err.message.includes("E_PARSE") && err.message.includes('parameter name "async" is a reserved keyword'),
   );
 });
 
@@ -157,7 +157,7 @@ test("log accepts a bare identifier (stored as interpolation Expr.literal)", () 
 
 test("import script parses into scriptImports", () => {
   const mod = parsejaiph(
-    'import script "./queue.py" as queue\n\nexport def main() {\n  run queue("get")\n}\n',
+    'import script "./queue.py" as queue\n\nexport def main() {\n  queue("get")\n}\n',
     "/tmp/test.jh",
   );
   assert.equal(mod.scriptImports?.length, 1);
@@ -174,7 +174,7 @@ test("import script name collides with inline script", () => {
 
 test("import script does not conflict with module imports", () => {
   const mod = parsejaiph(
-    'import script "./helper.sh" as helper\nimport "other" as other\n\ndef w() {\n  run helper("x")\n}\n',
+    'import script "./helper.sh" as helper\nimport "other" as other\n\ndef w() {\n  helper("x")\n}\n',
     "/tmp/test.jh",
   );
   assert.equal(mod.scriptImports?.length, 1);

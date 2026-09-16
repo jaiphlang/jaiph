@@ -22,19 +22,19 @@ e2e::file "lib.jh" <<'EOF'
 script validate_impl = `[ -n "$1" ] && echo "valid"`
 
 def validate(input) {
-  run validate_impl(input)
+  validate_impl(input)
 }
 
 script deploy_impl = `echo "deployed"`
 
 def deploy() {
-  run deploy_impl()
+  deploy_impl()
 }
 
 export def main(input) {
-  run validate(input)
+  validate(input)
   const response = prompt "summarize deployment"
-  run deploy()
+  deploy()
 }
 EOF
 
@@ -53,7 +53,7 @@ test "full orchestration with all mock types" {
     return "mock-deployed"
   }
 
-  const out = run lib.main("prod")
+  const out = lib.main("prod")
   expect_contain out "deployment summary"
   expect_contain out "mock-deployed"
 }
@@ -65,7 +65,7 @@ test "mock script replaces script body" {
     echo "stubbed-validate"
   }
 
-  const out = run lib.main("prod")
+  const out = lib.main("prod")
   expect_contain out "stubbed-validate"
 }
 EOF
@@ -94,7 +94,7 @@ e2e::file "fail_lib.jh" <<'EOF'
 script greet_impl = `echo "hello world"`
 
 export def main() {
-  run greet_impl()
+  greet_impl()
 }
 EOF
 
@@ -102,12 +102,12 @@ e2e::file "fail_lib.test.jh" <<'EOF'
 import "fail_lib.jh" as f
 
 test "passes when output matches" {
-  const out = run f.main()
+  const out = f.main()
   expect_contain out "hello world"
 }
 
 test "fails on wrong expectation" {
-  const out = run f.main()
+  const out = f.main()
   expect_equal out "goodbye world"
 }
 EOF
@@ -151,7 +151,7 @@ e2e::file "old_syntax.jh" <<'EOF'
 script helper = `echo "real"`
 
 export def main() {
-  run helper()
+  helper()
 }
 EOF
 
@@ -163,7 +163,7 @@ test "uses deprecated mock function" {
     echo "stubbed"
   }
 
-  const out = run app.main()
+  const out = app.main()
   expect_contain out "stubbed"
 }
 EOF

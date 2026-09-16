@@ -23,11 +23,11 @@ test("multiple test blocks with test_run_def share a single graph build", async 
 }
 
 test "block A" {
-  run greet()
+  greet()
 }
 
 test "block B" {
-  run greet()
+  greet()
 }
 `,
     );
@@ -70,7 +70,7 @@ test("test runner resolves `const` bindings inside `mock prompt <ident>` and `ex
 test "const drives mock and expect" {
   const expected = "Hello Alice!"
   mock prompt expected
-  const response = run ask()
+  const response = ask()
   expect_equal response expected
 }
 `,
@@ -114,7 +114,7 @@ test("test runner reports a clear error when an expect_* step references an unde
 }
 
 test "undefined const ref" {
-  const response = run noop()
+  const response = noop()
   expect_equal response missing
 }
 `,
@@ -156,7 +156,7 @@ test("test runner rejects bare `response` reference when `run` was not captured 
 }
 
 test "no implicit response" {
-  run greet("world")
+  greet("world")
   expect_equal response "hello world"
 }
 `,

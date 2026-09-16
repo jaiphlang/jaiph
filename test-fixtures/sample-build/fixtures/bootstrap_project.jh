@@ -1,7 +1,7 @@
 #!/usr/bin/env jaiph
 
 export def nodejs() {
-  run nodejs_impl()
+  nodejs_impl()
 }
 
 script nodejs_impl = ```

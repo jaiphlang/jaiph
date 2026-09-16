@@ -190,10 +190,10 @@ def review_changelog(version) {
     agent.model = "opus"
     agent.claude_flags = "--permission-mode bypassPermissions"
   }
-  const latest_tag = run latest_release_tag()
-  const commit_list = run commits_since_latest_tag()
-  const unreleased_block = run read_changelog_unreleased()
-  const existing_section = run read_changelog_version_section(version)
+  const latest_tag = latest_release_tag()
+  const commit_list = commits_since_latest_tag()
+  const unreleased_block = read_changelog_unreleased()
+  const existing_section = read_changelog_version_section(version)
 
   prompt """
     ${changelog_reviewer_role}
@@ -240,45 +240,45 @@ def review_changelog(version) {
     </task>
   """
 
-  run assert_changelog_stamped(version)
+  assert_changelog_stamped(version)
   log "CHANGELOG.md stamped for v${version}"
 }
 
 export def resolve_version(arg) {
-  const pkg_version = run read_pkg_version()
+  const pkg_version = read_pkg_version()
   const resolved = match arg {
-    "" => run compute_next_patch(pkg_version)
+    "" => compute_next_patch(pkg_version)
     _ => arg
   }
-  run assert_version_format(resolved)
+  assert_version_format(resolved)
   return resolved
 }
 
 export def preflight(version) {
-  run assert_git_tree_clean()
-  run assert_tag_does_not_exist(version)
+  assert_git_tree_clean()
+  assert_tag_does_not_exist(version)
 }
 
 def apply_version_change(old_version, new_version) {
-  run npm_version_no_tag(new_version)
-  run update_install_release_ref(old_version, new_version)
+  npm_version_no_tag(new_version)
+  update_install_release_ref(old_version, new_version)
 }
 
 export def check_displayed_version(version) {
-  run run_npm_build()
-  run assert_built_cli_version_equals(version)
+  run_npm_build()
+  assert_built_cli_version_equals(version)
 }
 
 export def main(arg) {
-  const version = run resolve_version(arg)
-  const old_version = run read_pkg_version()
+  const version = resolve_version(arg)
+  const old_version = read_pkg_version()
   log "Preparing release v${version} (current: v${old_version})"
 
-  run preflight(version)
-  run review_changelog(version)
-  run apply_version_change(old_version, version)
-  run check_displayed_version(version)
-  run run_registry_build()
+  preflight(version)
+  review_changelog(version)
+  apply_version_change(old_version, version)
+  check_displayed_version(version)
+  run_registry_build()
 
   log """
     prepare_release: staged release v${version}

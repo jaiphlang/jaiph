@@ -20,11 +20,11 @@ e2e::file "tty_tree.jh" <<'EOF'
 script leaf_fn = `sleep 4`
 
 def leaf() {
-  run leaf_fn()
+  leaf_fn()
 }
 
 export def main() {
-  run leaf()
+  leaf()
 }
 EOF
 

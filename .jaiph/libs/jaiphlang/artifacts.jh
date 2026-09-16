@@ -10,14 +10,14 @@
 #
 #   export def main() {
 #     # Single file:
-#     run artifacts.save("./build/output.bin")
+#     artifacts.save("./build/output.bin")
 #
 #     # Or several files: newline-separated list of paths.
 #     const paths = """
 #     a.txt
 #     b/nested.txt
 #     """
-#     run artifacts.save(paths)
+#     artifacts.save(paths)
 #   }
 #
 
@@ -61,5 +61,5 @@ script save_script = ```
 # (leading `./` stripped; absolute paths use basename only).
 # Returns the absolute destination paths, one per line, in the same order.
 export def save(paths) {
-  return run save_script(paths)
+  return save_script(paths)
 }

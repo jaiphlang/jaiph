@@ -17,11 +17,11 @@ test("compiler: extracts script bodies for a simple module", () => {
         'script f_ok = `echo ok`',
         "",
         "def ok() {",
-        "  run f_ok()",
+        "  f_ok()",
         "}",
         "",
         "export def main() {",
-        "  run ok()",
+        "  ok()",
         "  log \"done\"",
         "}",
         "",
@@ -101,8 +101,8 @@ test("parser: assignment capture parses for ensure, run, and const run capture",
     "  return \"ok\"",
     "}",
     "export def main() {",
-    "  const response = run tests_pass()",
-    "  const out = run say_hello()",
+    "  const response = tests_pass()",
+    "  const out = say_hello()",
     "}",
   ].join("\n");
   const mod = parsejaiph(source, "/fake/entry.jh");
@@ -365,7 +365,7 @@ test("parser: run ... catch parses correctly", () => {
   const source = [
     'script helper = `echo ok`',
     "export def main() {",
-    "  run helper() catch (err) {",
+    "  helper() catch (err) {",
     '    log "failed"',
     "  }",
     "}",
@@ -404,7 +404,7 @@ test("parser: const string expr and const run capture parse", () => {
     'script noop = `:`',
     "export def main() {",
     '  const msg = "hi"',
-    "  const out = run noop()",
+    "  const out = noop()",
     "}",
   ].join("\n");
   const mod = parsejaiph(source, "/fake/entry.jh");
@@ -425,24 +425,24 @@ test("parser: const string expr and const run capture parse", () => {
   }
 });
 
-test("parser: const rejects bare call-like rhs without run", () => {
+test("parser: const captures a bare call-like rhs", () => {
   const source = [
     'script some_script = `echo "$1"`',
     "export def main() {",
     '  const x = some_script("${arg}")',
     "}",
   ].join("\n");
-  assert.throws(
-    () => parsejaiph(source, "/fake/entry.jh"),
-    /Script calls in const assignments must use run/,
-  );
+  const mod = parsejaiph(source, "/fake/entry.jh");
+  const step = mod.defs.find((d) => d.name === "main")!.steps[0];
+  assert.equal(step.type, "const");
+  if (step.type === "const") assert.equal(step.value.kind, "call");
 });
 
 test("parser: const allows run-wrapped script call with args", () => {
   const source = [
     'script some_script = `echo "$1"`',
     "export def main() {",
-    '  const x = run some_script(arg1)',
+    '  const x = some_script(arg1)',
     "}",
   ].join("\n");
   const mod = parsejaiph(source, "/fake/entry.jh");
@@ -752,7 +752,7 @@ test("parser: top-level const name collision with rule is E_PARSE", () => {
     "  return \"ok\"",
     "}",
     "export def main() {",
-    "  run foo()",
+    "  foo()",
     "}",
   ].join("\n");
   assert.throws(
@@ -779,7 +779,7 @@ test("parser: top-level const name collision with script is E_PARSE", () => {
     'const helper = "val"',
     'script helper = `echo ok`',
     "export def main() {",
-    "  run helper()",
+    "  helper()",
     "}",
   ].join("\n");
   assert.throws(
@@ -803,7 +803,7 @@ test("compiler golden: standalone script file has no env shims (isolation)", () 
         'script helper = `echo $greeting`',
         "",
         "export def main() {",
-        "  run helper()",
+        "  helper()",
         "}",
         "",
       ].join("\n"),
@@ -835,7 +835,7 @@ test("compiler golden: multiline double-quoted strings are not corrupted by emit
         "```",
         "",
         "export def main() {",
-        "  run multiline_str()",
+        "  multiline_str()",
         "}",
         "",
       ].join("\n"),
@@ -866,7 +866,7 @@ test("compiler golden: script bodies are opaque bash (cross-script name compiles
         'script caller = `helper`',
         "",
         "export def main() {",
-        "  run caller()",
+        "  caller()",
         "}",
         "",
       ].join("\n"),
@@ -890,7 +890,7 @@ test("compiler golden: script calling itself is allowed", () => {
         'script recurse = `recurse`',
         "",
         "export def main() {",
-        "  run recurse()",
+        "  recurse()",
         "}",
         "",
       ].join("\n"),
@@ -917,7 +917,7 @@ test("compiler: import script emits external file verbatim as script artifact", 
         'import script "./helper.py" as helper',
         "",
         "export def main() {",
-        '  run helper("arg")',
+        '  helper("arg")',
         "}",
         "",
       ].join("\n"),
@@ -943,7 +943,7 @@ test("compiler golden: nested script emits under __nested_* and does not collide
         "",
         "export def main() {",
         `  script foo = \`${nestedBody}\``,
-        "  run foo()",
+        "  foo()",
         "}",
         "",
       ].join("\n"),
@@ -975,7 +975,7 @@ test("compiler: import script fails when target file is missing", () => {
         'import script "./nonexistent.py" as helper',
         "",
         "export def main() {",
-        '  run helper("arg")',
+        '  helper("arg")',
         "}",
         "",
       ].join("\n"),

@@ -165,10 +165,10 @@ describe("run_summary.jsonl keyed hash chain", () => {
       emitter.emitRun("RUN_END", "main");
       writeChainKey(dir, TEST_KEY);
 
-      assert.ok(!existsSync(join(dir, ".chain-key")), "run dir must not contain a .chain-key file");
+      assert.ok(!existsSync(join(dir, ".chain-key")), "dir must not contain a .chain-key file");
       assert.ok(
         !readdirSync(dir).some((n) => n.includes("chain-key")),
-        "run dir must hold no chain-key artifact at all",
+        "dir must hold no chain-key artifact at all",
       );
       const keyFile = chainKeyPath(dir);
       assert.ok(!keyFile.startsWith(dir), "the key store must live outside the run dir");

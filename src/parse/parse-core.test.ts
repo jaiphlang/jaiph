@@ -181,8 +181,8 @@ test("isBareIdentifier: accepts underscore-prefixed identifier", () => {
   assert.equal(isBareIdentifier("_result"), true);
 });
 
-test("isBareIdentifier: rejects keyword 'run'", () => {
-  assert.equal(isBareIdentifier("run"), false);
+test("isBareIdentifier: rejects keyword 'async'", () => {
+  assert.equal(isBareIdentifier("async"), false);
 });
 
 test("isBareIdentifier: accepts former keyword 'ensure'", () => {
@@ -231,10 +231,10 @@ test("parseCallRef: multiple bare identifiers", () => {
 });
 
 test("parseCallRef: keyword arg is stored as literal (not var)", () => {
-  const result = parseCallRef("foo(run)");
+  const result = parseCallRef("foo(async)");
   assert.ok(result);
   assert.equal(result.ref, "foo");
-  assert.deepEqual(result.args, [{ kind: "literal", raw: "run" }]);
+  assert.deepEqual(result.args, [{ kind: "literal", raw: "async" }]);
 });
 
 test("parseCallRef: quoted string arg is stored as literal", () => {

@@ -117,7 +117,7 @@ test("parseConstRhs: bare dotted identifier is sugar for interpolated literal", 
 });
 
 test("parseConstRhs: parses run capture as Expr.call", () => {
-  const result = parseConstRhs("test.jh", ["const x = run my_script()"], 0, "run my_script()", 1, 1, "x");
+  const result = parseConstRhs("test.jh", ["const x = my_script()"], 0, "my_script()", 1, 1, "x");
   assert.equal(result.value.kind, "call");
   if (result.value.kind === "call") {
     assert.equal(result.value.callee.value, "my_script");
@@ -125,7 +125,7 @@ test("parseConstRhs: parses run capture as Expr.call", () => {
 });
 
 test("parseConstRhs: parses run capture with args as Expr.call", () => {
-  const result = parseConstRhs("test.jh", ['const x = run my_script("arg")'], 0, 'run my_script("arg")', 1, 1, "x");
+  const result = parseConstRhs("test.jh", ['const x = my_script("arg")'], 0, 'my_script("arg")', 1, 1, "x");
   assert.equal(result.value.kind, "call");
   if (result.value.kind === "call") {
     assert.equal(result.value.callee.value, "my_script");
@@ -133,45 +133,29 @@ test("parseConstRhs: parses run capture with args as Expr.call", () => {
   }
 });
 
-test("parseConstRhs: run without parens rejects (parens required)", () => {
-  assert.throws(
-    () => parseConstRhs("test.jh", ["const x = run my_script"], 0, "run my_script", 1, 1, "x"),
-    /must target a valid reference/,
-  );
+test("parseConstRhs: bare identifier without parens is a literal value, not a call", () => {
+  const result = parseConstRhs("test.jh", ["const x = my_script"], 0, "my_script", 1, 1, "x");
+  assert.equal(result.value.kind, "literal");
 });
 
-test("parseConstRhs: parses run capture as Expr.call", () => {
-  const result = parseConstRhs("test.jh", ["const x = run my_rule()"], 0, "run my_rule()", 1, 1, "x");
+test("parseConstRhs: parses call capture as Expr.call", () => {
+  const result = parseConstRhs("test.jh", ["const x = my_rule()"], 0, "my_rule()", 1, 1, "x");
   assert.equal(result.value.kind, "call");
   if (result.value.kind === "call") {
     assert.equal(result.value.callee.value, "my_rule");
   }
 });
 
-test("parseConstRhs: run without parens rejects (parens required)", () => {
+test("parseConstRhs: call with trailing content throws", () => {
   assert.throws(
-    () => parseConstRhs("test.jh", ["const x = run my_rule"], 0, "run my_rule", 1, 1, "x"),
-    /must target a valid reference/,
-  );
-});
-
-test("parseConstRhs: run with catch throws", () => {
-  assert.throws(
-    () => parseConstRhs("test.jh", ["const x = run my_rule() catch fail"], 0, "run my_rule() catch fail", 1, 1, "x"),
-    /unexpected content after run call/,
+    () => parseConstRhs("test.jh", ["const x = my_rule() catch fail"], 0, "my_rule() catch fail", 1, 1, "x"),
+    /unexpected content after const call/,
   );
 });
 
 test("parseConstRhs: prompt capture is allowed in def", () => {
   const result = parseConstRhs("test.jh", ['const x = prompt "hello"'], 0, 'prompt "hello"', 1, 1, "x");
   assert.equal(result.value.kind, "prompt");
-});
-
-test("parseConstRhs: bare call without run suggests fix", () => {
-  assert.throws(
-    () => parseConstRhs("test.jh", ["const x = my_script()"], 0, "my_script()", 1, 1, "x"),
-    /must use run/,
-  );
 });
 
 test("parseConstRhs: parses prompt capture as Expr.prompt", () => {

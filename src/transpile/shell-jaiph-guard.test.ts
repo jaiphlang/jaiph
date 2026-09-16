@@ -79,19 +79,6 @@ test("classifyJaiphShellRefToken: returns 'none' for three-part dotted name", ()
 
 // --- assertKeywordFirstShellFragment ---
 
-test("assertKeywordFirstShellFragment: rejects 'run' keyword", () => {
-  assert.throws(
-    () => assertKeywordFirstShellFragment("run my_wf", makeEnv()),
-    /cannot use Jaiph keyword "run"/,
-  );
-});
-
-test("assertKeywordFirstShellFragment: rejects 'ensure' keyword", () => {
-  assert.throws(
-    () => assertKeywordFirstShellFragment("run my_rule", makeEnv()),
-    /cannot use Jaiph keyword "run"/,
-  );
-});
 
 test("assertKeywordFirstShellFragment: rejects channel send operator", () => {
   assert.throws(
@@ -148,25 +135,11 @@ test("assertKeywordFirstShellFragment: allows plain shell commands", () => {
 
 // --- assertNoJaiphLeadCommandWord ---
 
-test("assertNoJaiphLeadCommandWord: rejects 'run' keyword", () => {
-  assert.throws(
-    () => assertNoJaiphLeadCommandWord("run something", makeEnv()),
-    /Jaiph keyword "run"/,
-  );
-});
-
-test("assertNoJaiphLeadCommandWord: rejects 'ensure' keyword", () => {
-  assert.throws(
-    () => assertNoJaiphLeadCommandWord("run check", makeEnv()),
-    /Jaiph keyword "run"/,
-  );
-});
-
 test("assertNoJaiphLeadCommandWord: rejects def as leading command", () => {
   const env = makeEnv({ localDefs: new Set(["my_rule"]) });
   assert.throws(
     () => assertNoJaiphLeadCommandWord("my_rule arg", env),
-    /def "my_rule" must be called with run/,
+    /def "my_rule" must be called as a managed step/,
   );
 });
 
@@ -174,7 +147,7 @@ test("assertNoJaiphLeadCommandWord: rejects workflow as leading command", () => 
   const env = makeEnv({ localDefs: new Set(["my_wf"]) });
   assert.throws(
     () => assertNoJaiphLeadCommandWord("my_wf arg", env),
-    /def "my_wf" must be called with run/,
+    /def "my_wf" must be called as a managed step/,
   );
 });
 
@@ -214,6 +187,6 @@ test("assertNoJaiphLeadCommandWord: handles env assigns before command", () => {
   const env = makeEnv({ localDefs: new Set(["my_rule"]) });
   assert.throws(
     () => assertNoJaiphLeadCommandWord("FOO=bar my_rule", env),
-    /def "my_rule" must be called with run/,
+    /def "my_rule" must be called as a managed step/,
   );
 });

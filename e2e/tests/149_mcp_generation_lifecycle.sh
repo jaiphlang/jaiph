@@ -85,8 +85,8 @@ script stamp = \`echo "${marker}"\`
 
 # Waits for the gate file, then reports its generation's marker.
 export def slow() {
-  run pause()
-  const out = run stamp()
+  pause()
+  const out = stamp()
   return out
 }
 EOF
@@ -210,7 +210,7 @@ script hang_forever = \`echo \$\$ > "${pid3}"; sleep 300\`
 
 # Hangs until cancelled.
 export def hang() {
-  run hang_forever()
+  hang_forever()
   return "unreachable"
 }
 EOF

@@ -54,7 +54,7 @@ async function runScriptStep(
       `script ${scriptName} = \`echo unused\``,
       "",
       "export def main() {",
-      `  run ${scriptName}()`,
+      `  ${scriptName}()`,
       "}",
       "",
     ].join("\n"),

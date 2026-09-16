@@ -56,8 +56,8 @@ function selfRecursiveRunSiteCount(mod: jaiphModule, defName: string): number {
 /** Short surface label for an Expr value (used in `return` / `const` rows). */
 function exprLabel(expr: Expr): string {
   if (expr.kind === "literal") return expr.raw;
-  if (expr.kind === "call") return `run ${expr.callee.value}(...)`;
-  if (expr.kind === "inline_script") return "run `...`(...)";
+  if (expr.kind === "call") return `${expr.callee.value}(...)`;
+  if (expr.kind === "inline_script") return "`...`(...)";
   if (expr.kind === "prompt") return `prompt ${expr.raw}`;
   if (expr.kind === "match") return `match ${expr.match.subject}`;
   if (expr.kind === "shell") return expr.command;
@@ -138,7 +138,7 @@ export function collectDefChildren(
       if (s.value.kind === "match") {
         for (const arm of s.value.match.arms) {
           const body = arm.body.trimStart();
-          const runM = body.match(/^run\s+([A-Za-z_][A-Za-z0-9_.]*)\(/);
+          const runM = body.match(/^([A-Za-z_][A-Za-z0-9_.]*)\(/);
           if (runM) {
             constItems.push({ label: `def ${runM[1]}`, nested: runM[1] });
           }

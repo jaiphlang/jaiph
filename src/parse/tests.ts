@@ -308,15 +308,15 @@ export function parseTestBlock(
       continue;
     }
 
-    // --- const capture = run ref("args") [allow_failure] ---
+    // --- const capture = ref("args") [allow_failure] ---
     const constRunMatch = inner.match(
-      /^const\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*run\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)\s*\(([^)]*)\)(?:\s+(allow_failure))?\s*$/,
+      /^const\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)\s*\(([^)]*)\)(?:\s+(allow_failure))?\s*$/,
     );
     if (constRunMatch) {
       const captureName = constRunMatch[1];
       const defRef = constRunMatch[2];
       if (!isRef(defRef)) {
-        fail(filePath, "const ... = run must target a valid reference: const name = run ref(args)", innerNo, col);
+        fail(filePath, "const ... = must target a valid reference: const name = ref(args)", innerNo, col);
       }
       const argsRaw = constRunMatch[3].trim();
       const args: string[] = argsRaw ? parseTestCallArgs(argsRaw) : [];
@@ -332,14 +332,14 @@ export function parseTestBlock(
       continue;
     }
 
-    // --- run ref("args") [allow_failure] (no capture) ---
+    // --- ref("args") [allow_failure] (no capture) ---
     const runMatch = inner.match(
-      /^run\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)\s*\(([^)]*)\)(?:\s+(allow_failure))?\s*$/,
+      /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)\s*\(([^)]*)\)(?:\s+(allow_failure))?\s*$/,
     );
     if (runMatch) {
       const defRef = runMatch[1];
       if (!isRef(defRef)) {
-        fail(filePath, "run in test must target a valid reference: run ref(args)", innerNo, col);
+        fail(filePath, "test call must target a valid reference: ref(args)", innerNo, col);
       }
       const argsRaw = runMatch[2].trim();
       const args: string[] = argsRaw ? parseTestCallArgs(argsRaw) : [];
@@ -354,16 +354,16 @@ export function parseTestBlock(
       continue;
     }
 
-    // --- Reject old syntax: bare assignment without const/run ---
+    // --- Reject old syntax: bare assignment without const ---
     const oldAssignMatch = inner.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)(?:\s|$)/);
     if (oldAssignMatch) {
-      fail(filePath, `use "const ${oldAssignMatch[1]} = run ${oldAssignMatch[2]}(…)" to capture def output`, innerNo, col);
+      fail(filePath, `use "const ${oldAssignMatch[1]} = ${oldAssignMatch[2]}(…)" to capture def output`, innerNo, col);
     }
 
-    // --- Reject old syntax: bare workflow call without run ---
+    // --- Reject a bare def reference without parentheses ---
     const oldBareCallMatch = inner.match(/^([A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*)(?:\s|$)/);
     if (oldBareCallMatch) {
-      fail(filePath, `use "run ${oldBareCallMatch[1]}(…)" to call a def in tests`, innerNo, col);
+      fail(filePath, `use "${oldBareCallMatch[1]}(…)" to call a def in tests`, innerNo, col);
     }
 
     // --- No fallback: reject unrecognized lines ---

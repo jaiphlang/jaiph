@@ -19,7 +19,7 @@ def helper() {
 }
 
 export def main() {
-  const r = run helper()
+  const r = helper()
   log "got: ${r}"
 }
 EOF
@@ -48,7 +48,7 @@ def echo_back(val) {
 }
 
 export def main() {
-  const r = run echo_back("param-ok")
+  const r = echo_back("param-ok")
   log "got: ${r}"
 }
 EOF
@@ -78,7 +78,7 @@ def helper() {
 }
 
 export def main() {
-  const r = run helper()
+  const r = helper()
   log "got: ${r}"
 }
 EOF

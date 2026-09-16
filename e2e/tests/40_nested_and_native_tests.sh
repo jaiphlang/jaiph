@@ -18,7 +18,7 @@ script nested_inner_impl = ```
 echo "e2e-nested-inner"
 ```
 export def main() {
-  run nested_inner_impl()
+  nested_inner_impl()
 }
 EOF
 
@@ -29,8 +29,8 @@ script nested_outer_impl = ```
 echo "e2e-nested-outer"
 ```
 export def main() {
-  run inner.main()
-  run nested_outer_impl()
+  inner.main()
+  nested_outer_impl()
 }
 EOF
 
@@ -70,7 +70,7 @@ echo "done"
 ```
 export def main() {
   prompt "e2e-greeting-prompt"
-  run done_impl()
+  done_impl()
 }
 EOF
 
@@ -83,7 +83,7 @@ test "runs happy path and prints PASS" {
   mock prompt "e2e-greeting-mock"
 
   # When
-  const response = run w.main()
+  const response = w.main()
 
   # Then
   expect_contain response "e2e-greeting-mock"
@@ -111,7 +111,7 @@ printf '%s' "$1"
 ```
 export def main() {
   const result = prompt "e2e-unmatched-prompt-never-mocked"
-  run print_result("$result")
+  print_result("$result")
 }
 EOF
 
@@ -123,7 +123,7 @@ test "unmatched prompt never mocked" {
   mock prompt {
     /other/ => "x"
   }
-  const response = run p.main()
+  const response = p.main()
   expect_contain response "x"
 }
 EOF
@@ -187,12 +187,12 @@ script echo_response = ```
 echo "$1"
 ```
 def check_arg(name) {
-  run check_arg_impl(name)
+  check_arg_impl(name)
 }
 export def main(name) {
-  run check_arg(name)
+  check_arg(name)
   const response = prompt "e2e-param-prompt-text"
-  run echo_response(response)
+  echo_response(response)
 }
 EOF
 
@@ -202,7 +202,7 @@ import "param_demo.jh" as w
 
 test "parametrized workflow and rule show params in tree; prompt shows value only" {
   mock prompt "e2e-param-mock-response"
-  const response = run w.main("Alice")
+  const response = w.main("Alice")
   expect_contain response "e2e-param-mock-response"
 }
 EOF
@@ -227,11 +227,11 @@ script param_done_impl = ```
 echo "e2e-param-done"
 ```
 def need_one(name) {
-  run need_one_impl(name)
+  need_one_impl(name)
 }
 export def main(name) {
-  run need_one(name)
-  run param_done_impl()
+  need_one(name)
+  param_done_impl()
 }
 EOF
 

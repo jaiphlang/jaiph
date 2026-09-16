@@ -26,8 +26,8 @@ script write_role = `echo "$1" > role_out.txt`
 script write_greeting = `echo "$1" > greeting_out.txt`
 
 export def main() {
-  run write_role(role)
-  run write_greeting(greeting)
+  write_role(role)
+  write_greeting(greeting)
 }
 EOF
 
@@ -64,7 +64,7 @@ test -n "$1"
 ```
 
 def check_msg() {
-  run check_msg_impl(msg)
+  check_msg_impl(msg)
 }
 
 script write_msg = `echo "${msg:-}" > func_msg.txt`
@@ -72,9 +72,9 @@ script write_msg = `echo "${msg:-}" > func_msg.txt`
 script write_wf_msg = `echo "$1" > wf_msg.txt`
 
 export def main() {
-  run check_msg()
-  run write_msg()
-  run write_wf_msg(msg)
+  check_msg()
+  write_msg()
+  write_wf_msg(msg)
 }
 EOF
 

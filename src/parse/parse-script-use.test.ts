@@ -95,7 +95,7 @@ test("use clauses round-trip through the formatter", () => {
     "```",
     "",
     "export def main() {",
-    "  run aaa()",
+    "  aaa()",
     "}",
   ].join("\n");
   const mod = parsejaiph(src, "test.jh");

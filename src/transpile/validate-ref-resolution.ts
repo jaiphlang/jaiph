@@ -209,24 +209,24 @@ export const DEF_REF_EXPECT: RefExpectMessages = {
   unknownLocal: (rv) => `unknown local def reference "${rv}"`,
   missingImported: (rv) => `imported def "${rv}" does not exist`,
   wrongLocal: {
-    script: (name) => `script "${name}" cannot be called with run`,
+    script: (name) => `script "${name}" cannot be called as a def`,
   },
   wrongImported: {
-    script: (rv) => `script "${rv}" cannot be called with run`,
+    script: (rv) => `script "${rv}" cannot be called as a def`,
   },
 };
 
 export const RUN_TARGET_REF_EXPECT: RefExpectMessages = {
   allowedKinds: new Set<RefTargetKind>(["def", "script"]),
-  invalidSplitRef: (rv) => `invalid run target reference "${rv}"`,
-  unknownImportAlias: (alias, rv) => `unknown import alias "${alias}" for run target "${rv}"`,
+  invalidSplitRef: (rv) => `invalid call target reference "${rv}"`,
+  unknownImportAlias: (alias, rv) => `unknown import alias "${alias}" for call target "${rv}"`,
   unknownLocal: (rv) => `unknown local def or script reference "${rv}"`,
   missingImported: (rv) => `imported def or script "${rv}" does not exist`,
   wrongLocal: {
-    prompt: (name) => `prompt "${name}" cannot be called with run; invoke it with prompt ${name}(...)`,
+    prompt: (name) => `prompt "${name}" cannot be called as a script or def; invoke it with prompt ${name}(...)`,
   },
   wrongImported: {
-    prompt: (rv) => `prompt "${rv}" cannot be called with run; invoke it with prompt ${rv}(...)`,
+    prompt: (rv) => `prompt "${rv}" cannot be called as a script or def; invoke it with prompt ${rv}(...)`,
   },
 };
 
@@ -238,21 +238,21 @@ export const PROMPT_REF_EXPECT: RefExpectMessages = {
   unknownLocal: (rv) => `unknown local prompt reference "${rv}"`,
   missingImported: (rv) => `imported prompt "${rv}" does not exist`,
   wrongLocal: {
-    def: (name) => `"${name}" is a def, not a prompt; call it with run ${name}(...)`,
-    script: (name) => `"${name}" is a script, not a prompt; call it with run ${name}(...)`,
+    def: (name) => `"${name}" is a def, not a prompt; call it: ${name}(...)`,
+    script: (name) => `"${name}" is a script, not a prompt; call it: ${name}(...)`,
   },
   wrongImported: {
-    def: (rv) => `"${rv}" is a def, not a prompt; call it with run ${rv}(...)`,
-    script: (rv) => `"${rv}" is a script, not a prompt; call it with run ${rv}(...)`,
+    def: (rv) => `"${rv}" is a def, not a prompt; call it: ${rv}(...)`,
+    script: (rv) => `"${rv}" is a script, not a prompt; call it: ${rv}(...)`,
   },
 };
 
 export const BARE_SEND_REF_MSG: BareSendRefMessages = {
   unknownImportAlias: (alias, rv) => `unknown import alias "${alias}" for send reference "${rv}"`,
   unknownLocal: (rv) => `unknown symbol "${rv}" in send right-hand side`,
-  wrongDefLocal: (rv) => `def "${rv}" must be called with run`,
-  wrongScriptLocal: (rv) => `script "${rv}" must be called with run`,
-  wrongDefImported: (rv) => `def "${rv}" must be called with run`,
-  wrongScriptImported: (rv) => `script "${rv}" must be called with run`,
+  wrongDefLocal: (rv) => `def "${rv}" must be called as ${rv}()`,
+  wrongScriptLocal: (rv) => `script "${rv}" must be called as ${rv}()`,
+  wrongDefImported: (rv) => `def "${rv}" must be called as ${rv}()`,
+  wrongScriptImported: (rv) => `script "${rv}" must be called as ${rv}()`,
   unknownSymbolImported: (rv) => `unknown symbol "${rv}" in send right-hand side`,
 };

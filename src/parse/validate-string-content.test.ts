@@ -39,20 +39,20 @@ test("validateJaiphStringContent rejects numeric ${N}", () => {
   );
 });
 
-test("validateJaiphStringContent rejects a malformed inline run reference", () => {
+test("validateJaiphStringContent rejects a malformed inline call reference", () => {
   assert.throws(
-    () => validateJaiphStringContent("${run 123bad()}", FILE, 1, 1, "prompt"),
-    /invalid inline run reference/,
+    () => validateJaiphStringContent("${a.b.c()}", FILE, 1, 1, "prompt"),
+    /invalid inline call reference/,
   );
 });
 
-test("extractInlineCaptures pulls run and run refs", () => {
-  const result = extractInlineCaptures("prefix ${run greet(world)} mid ${run check()} suffix");
+test("extractInlineCaptures pulls call refs", () => {
+  const result = extractInlineCaptures("prefix ${greet(world)} mid ${check()} suffix");
   assert.deepEqual(
-    result.map((c) => ({ kind: c.kind, ref: c.ref })),
+    result.map((c) => ({ ref: c.ref })),
     [
-      { kind: "run", ref: "greet" },
-      { kind: "run", ref: "check" },
+      { ref: "greet" },
+      { ref: "check" },
     ],
   );
 });

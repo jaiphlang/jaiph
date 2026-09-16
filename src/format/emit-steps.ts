@@ -56,12 +56,12 @@ function emitInlineScriptLines(
   const argsStr = formatArgs(args);
   if (lang || body.includes("\n")) {
     const langTag = lang ?? "";
-    const result = [`${prefix} \`\`\`${langTag}`];
+    const result = [`${prefix}\`\`\`${langTag}`];
     result.push(...emitFencedScriptBodyLines(body, bodyIndent));
     result.push(`${closeIndent}\`\`\`(${argsStr})`);
     return result;
   }
-  return [`${prefix} \`${body}\`(${argsStr})`];
+  return [`${prefix}\`${body}\`(${argsStr})`];
 }
 
 function emitMatchPattern(p: MatchPatternDef): string {
@@ -113,7 +113,7 @@ function emitExprFirstLine(
   }
   if (expr.kind === "call") {
     const asyncMod = expr.async ? "async " : "";
-    return { head: `run ${asyncMod}${emitRef(expr.callee, expr.args)}`, tail: [] };
+    return { head: `${asyncMod}${emitRef(expr.callee, expr.args)}`, tail: [] };
   }
   if (expr.kind === "inline_script") {
     if (expr.lang || expr.body.includes("\n")) {
@@ -121,9 +121,9 @@ function emitExprFirstLine(
       const bodyIndent = `${ci}${pad}`;
       const tail = emitFencedScriptBodyLines(expr.body, bodyIndent);
       tail.push(`${ci}\`\`\`(${formatArgs(expr.args)})`);
-      return { head: `run \`\`\`${langTag}`, tail };
+      return { head: `\`\`\`${langTag}`, tail };
     }
-    return { head: `run \`${expr.body}\`(${formatArgs(expr.args)})`, tail: [] };
+    return { head: `\`${expr.body}\`(${formatArgs(expr.args)})`, tail: [] };
   }
   if (expr.kind === "prompt") {
     if (expr.name !== undefined) {
@@ -203,7 +203,7 @@ function emitStep(step: StepDef, pad: string, currentIndent: string, trivia: Tri
     const verb = step.level;
     if (message.kind === "inline_script") {
       lines.push(
-        ...emitInlineScriptLines(`${ci}${verb} run`, message.body, message.lang, message.args, ci, `${ci}${pad}`),
+        ...emitInlineScriptLines(`${ci}${verb} `, message.body, message.lang, message.args, ci, `${ci}${pad}`),
       );
       return lines;
     }
@@ -241,13 +241,13 @@ function emitStep(step: StepDef, pad: string, currentIndent: string, trivia: Tri
       }
       return lines;
     }
-    const capture = step.captureName ? `${step.captureName} = ` : "";
-    // `stdin <expr>` sits after the call `()` and before any catch/recover.
-    const stdinClause = step.stdin && step.stdin.kind === "literal" ? ` stdin ${step.stdin.raw}` : "";
+    const capture = step.captureName ? `const ${step.captureName} = ` : "";
+    // `stdin <expr> -> ` sits before the call target as a connect clause.
+    const stdinPrefix = step.stdin && step.stdin.kind === "literal" ? `stdin ${step.stdin.raw} -> ` : "";
     if (body.kind === "call") {
       const ref = emitRef(body.callee, body.args);
       const asyncPrefix = body.async ? "async " : "";
-      const head = `run ${asyncPrefix}${ref}${stdinClause}`;
+      const head = stdinPrefix ? `${stdinPrefix}${ref}` : `${asyncPrefix}${ref}`;
       if (step.recover) {
         const b = step.recover.bindings;
         const bindStr = `(${b.failure})`;
@@ -279,10 +279,8 @@ function emitStep(step: StepDef, pad: string, currentIndent: string, trivia: Tri
     }
     if (body.kind === "inline_script") {
       const inlineLines = emitInlineScriptLines(
-        `${ci}${capture}run`, body.body, body.lang, body.args, ci, `${ci}${pad}`,
+        `${ci}${capture}${stdinPrefix}`, body.body, body.lang, body.args, ci, `${ci}${pad}`,
       );
-      // Append the `stdin` clause to the closing `)` line of the inline script.
-      if (stdinClause) inlineLines[inlineLines.length - 1] += stdinClause;
       lines.push(...inlineLines);
       return lines;
     }

@@ -17,7 +17,7 @@ script ok_step_impl = ```
 echo "ok-out"
 ```
 def ok_step() {
-  run ok_step_impl()
+  ok_step_impl()
 }
 
 script failing_step_impl = ```
@@ -26,12 +26,12 @@ echo "bad-err" >&2
 exit 1
 ```
 def failing_step() {
-  run failing_step_impl()
+  failing_step_impl()
 }
 
 export def main() {
-  run ok_step()
-  run failing_step()
+  ok_step()
+  failing_step()
 }
 EOF
 rm -rf "${TEST_DIR}/runs_out"
@@ -73,7 +73,7 @@ echo "script-step-out"
 ```
 export def main() {
   const _ = prompt "e2e-artifacts-prompt-line"
-  run echo_line_impl()
+  echo_line_impl()
 }
 EOF
 rm -rf "${TEST_DIR}/runs_prompt_script"

@@ -202,7 +202,7 @@ function validateStdinClause(s: Extract<StepDef, { type: "exec" }>, ctx: Validat
         s.loc.line,
         s.loc.col,
         "E_VALIDATE",
-        "stdin is not supported on run async",
+        "stdin is not supported with async",
       );
       return;
     }
@@ -213,7 +213,7 @@ function validateStdinClause(s: Extract<StepDef, { type: "exec" }>, ctx: Validat
         s.loc.line,
         s.loc.col,
         "E_VALIDATE",
-        `stdin requires a run of a script; "${body.callee.value}" is a ${kind}`,
+        `stdin requires a script target; "${body.callee.value}" is a ${kind}`,
       );
     }
     return;
@@ -223,7 +223,7 @@ function validateStdinClause(s: Extract<StepDef, { type: "exec" }>, ctx: Validat
     s.loc.line,
     s.loc.col,
     "E_VALIDATE",
-    "stdin is only valid on a run of a script (named or inline)",
+    "stdin is only valid on a script call (named or inline)",
   );
 }
 

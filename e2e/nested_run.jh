@@ -2,6 +2,6 @@
 # E2E fixture: main workflow that runs nested_inner.default then echoes.
 import "nested_inner.jh" as inner
 export def main() {
-  run inner.main()
+  inner.main()
   echo "e2e-nested-outer"
 }

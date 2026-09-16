@@ -76,7 +76,7 @@ test("collectDefChildren: returns empty for unknown def", () => {
 test("collectDefChildren: collects run step as workflow row", () => {
   const mod = modFor([
     "export def main() {",
-    "  run deploy()",
+    "  deploy()",
     "}",
     "def deploy() {",
     "  log \"d\"",
@@ -91,7 +91,7 @@ test("collectDefChildren: collects run step as workflow row", () => {
 test("collectDefChildren: collects async run with prefix", () => {
   const mod = modFor([
     "export def main() {",
-    "  run async deploy()",
+    "  async deploy()",
     "}",
     "def deploy() {",
     "  log \"d\"",
@@ -107,7 +107,7 @@ test("collectDefChildren: collects run step as rule row", () => {
     "  return \"ok\"",
     "}",
     "export def main() {",
-    "  run gate()",
+    "  gate()",
     "}",
   ].join("\n"));
   const items = collectDefChildren(mod, "main");
@@ -166,7 +166,7 @@ test("collectDefChildren: collects const and return rows", () => {
 test("collectDefChildren: collects inline script as 'script (inline)'", () => {
   const mod = modFor([
     "export def main() {",
-    "  run `echo hi`()",
+    "  `echo hi`()",
     "}",
   ].join("\n"));
   const items = collectDefChildren(mod, "main");
@@ -206,8 +206,8 @@ test("collectDefChildren: const = match expression walks arms for run/run target
     "}",
     "export def main(name) {",
     "  const result = match name {",
-    '    "x" => run other()',
-    '    _ => run gate()',
+    '    "x" => other()',
+    '    _ => gate()',
     "  }",
     "}",
   ].join("\n"));
@@ -223,7 +223,7 @@ test("collectDefChildren: const = match expression walks arms for run/run target
 test("buildRunTreeRows: includes root and children", () => {
   const mod = modFor([
     "export def main() {",
-    "  run deploy()",
+    "  deploy()",
     "}",
     "def deploy() {",
     "  log \"d\"",
@@ -237,10 +237,10 @@ test("buildRunTreeRows: includes root and children", () => {
 test("buildRunTreeRows: prefix indents 4 spaces per nesting level", () => {
   const mod = modFor([
     "export def main() {",
-    "  run a()",
+    "  a()",
     "}",
     "def a() {",
-    "  run b()",
+    "  b()",
     "}",
     "def b() {",
     "  log \"deep\"",
@@ -258,11 +258,11 @@ test("buildRunTreeRows: prefix indents 4 spaces per nesting level", () => {
 test("buildRunTreeRows: self-recursive workflow expands exactly one level then stops", () => {
   const mod = modFor([
     "export def main() {",
-    "  run rec()",
+    "  rec()",
     "}",
     "def rec() {",
     "  log \"x\"",
-    "  run rec()",
+    "  rec()",
     "}",
   ].join("\n"));
   const rows = buildRunTreeRows(mod);
@@ -281,7 +281,7 @@ test("buildRunTreeRows: imported workflow renders with alias label and stepFunc"
     [
       'import "lib.jh" as lib',
       "export def main() {",
-      "  run lib.helper()",
+      "  lib.helper()",
       "}",
     ].join("\n"),
     "/tmp/proj/main.jh",
@@ -308,13 +308,13 @@ test("buildRunTreeRows: imported workflow renders with alias label and stepFunc"
 test("buildRunTreeRows: mutual-reference cycle is bounded by the visited guard", () => {
   const mod = modFor([
     "export def main() {",
-    "  run a()",
+    "  a()",
     "}",
     "def a() {",
-    "  run b()",
+    "  b()",
     "}",
     "def b() {",
-    "  run a()",
+    "  a()",
     "}",
   ].join("\n"));
   const rows = buildRunTreeRows(mod);
@@ -330,8 +330,8 @@ test("buildRunTreeRows: mutual-reference cycle is bounded by the visited guard",
 test("collectDefChildren: recover steps flatten as sibling rows", () => {
   const mod = modFor([
     "export def main() {",
-    "  run risky() recover(e) {",
-    "    run fallback()",
+    "  risky() recover(e) {",
+    "    fallback()",
     "  }",
     "}",
     "def risky() {",
@@ -351,7 +351,7 @@ test("collectDefChildren: recover steps flatten as sibling rows", () => {
 test("collectDefChildren: catch steps flatten as sibling rows", () => {
   const mod = modFor([
     "export def main() {",
-    "  run risky() catch (e) {",
+    "  risky() catch (e) {",
     '    log "caught"',
     "  }",
     "}",
@@ -385,17 +385,17 @@ test("collectDefChildren: prompt preview escapes embedded double-quotes", () => 
   assert.equal(items[0].label, 'prompt "Say \\"hi\\" now"');
 });
 
-test("collectDefChildren: return run and return match label variants", () => {
+test("collectDefChildren: return and return match label variants", () => {
   const mod = modFor([
     "def other() {",
     '  log "o"',
     "}",
     "export def main(name) {",
-    "  return run other()",
+    "  return other()",
     "}",
   ].join("\n"));
   const items = collectDefChildren(mod, "main");
-  assert.ok(items.some((i) => i.label === "return run other(...)"));
+  assert.ok(items.some((i) => i.label === "return other(...)"));
 
   const matchMod = modFor([
     "export def main(name) {",
@@ -481,12 +481,12 @@ test("formatRunningBottomLine: renders status with elapsed", () => {
 test("buildRunTreeRows: workflow with two self-recursive call sites expands bounded per-site", () => {
   const mod = modFor([
     "export def main() {",
-    "  run rec()",
+    "  rec()",
     "}",
     "def rec() {",
     '  log "x"',
-    "  run rec()",
-    "  run rec()",
+    "  rec()",
+    "  rec()",
     "}",
   ].join("\n"));
   const rows = buildRunTreeRows(mod);

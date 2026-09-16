@@ -25,7 +25,7 @@ e2e::file "main_shell.jh" <<'EOF'
 import script "./greet.sh" as greet
 
 export def main() {
-  run greet()
+  greet()
 }
 EOF
 
@@ -63,8 +63,8 @@ import script "./emit.sh" as emit
 script consume = `echo "consumed: $1"`
 
 export def main() {
-  const val = run emit()
-  run consume(val)
+  const val = emit()
+  consume(val)
 }
 EOF
 
@@ -97,7 +97,7 @@ e2e::file "main_missing.jh" <<'EOF'
 import script "./does_not_exist.py" as ghost
 
 export def main() {
-  run ghost()
+  ghost()
 }
 EOF
 
@@ -127,7 +127,7 @@ EOF
 import script "./queue.py" as queue
 
 export def main() {
-  run queue()
+  queue()
 }
 EOF
 

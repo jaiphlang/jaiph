@@ -15,19 +15,19 @@ e2e::section "run catch branch behavior"
 e2e::file "ensure_run_branch.jh" <<'EOF'
 script always_fail_impl = `false`
 def always_fail() {
-  run always_fail_impl()
+  always_fail_impl()
 }
 
 script recovery_impl = ```
 echo "recovery-ran" > recovery_ran.txt
 ```
 def recovery() {
-  run recovery_impl()
+  recovery_impl()
 }
 
 export def main() {
-  run always_fail() catch (err) {
-    run recovery()
+  always_fail() catch (err) {
+    recovery()
   }
 }
 EOF
@@ -35,7 +35,7 @@ EOF
 e2e::file "ensure_shell_branch.jh" <<'EOF'
 script always_fail_impl = `false`
 def always_fail() {
-  run always_fail_impl()
+  always_fail_impl()
 }
 
 script shell_ran_impl = ```
@@ -43,8 +43,8 @@ echo "shell-ran" > shell_ran.txt
 ```
 
 export def main() {
-  run always_fail() catch (err) {
-    run shell_ran_impl()
+  always_fail() catch (err) {
+    shell_ran_impl()
   }
 }
 EOF
@@ -52,7 +52,7 @@ EOF
 e2e::file "ensure_pass_branch.jh" <<'EOF'
 script always_ok_impl = `true`
 def always_ok() {
-  run always_ok_impl()
+  always_ok_impl()
 }
 
 script should_not_run_impl = ```
@@ -60,8 +60,8 @@ echo "should-not-run" > should_not_run.txt
 ```
 
 export def main() {
-  run always_ok() catch (err) {
-    run should_not_run_impl()
+  always_ok() catch (err) {
+    should_not_run_impl()
   }
 }
 EOF

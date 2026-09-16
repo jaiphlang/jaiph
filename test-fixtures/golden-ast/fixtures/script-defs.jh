@@ -11,6 +11,6 @@ echo "${PATH:-/usr/bin}"
 ```
 
 export def main() {
-  run greet()
-  run multiline()
+  greet()
+  multiline()
 }

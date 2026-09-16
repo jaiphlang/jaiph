@@ -21,10 +21,10 @@ config {
 }
 script ok_impl = `echo ok`
 def ok() {
-  run ok_impl()
+  ok_impl()
 }
 export def main() {
-  run ok()
+  ok()
 }
 EOF
 
@@ -49,10 +49,10 @@ config {
 }
 script ok_impl = `echo ok`
 def ok() {
-  run ok_impl()
+  ok_impl()
 }
 export def main() {
-  run ok()
+  ok()
 }
 EOF
 

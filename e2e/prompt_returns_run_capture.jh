@@ -8,11 +8,11 @@ def classify_like(task) {
 
 # Same pattern as engineer.jh default: capture role from nested workflow.
 export def pick_role(task) {
-  const role_name = run classify_like(task)
+  const role_name = classify_like(task)
   return "${role_name}"
 }
 
 export def main(subject) {
-  const chosen = run classify_like(subject)
+  const chosen = classify_like(subject)
   log "chosen=${chosen}"
 }

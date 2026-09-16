@@ -63,7 +63,7 @@ test("AC2: same for-loop inside catch body parses identically", () => {
     '  return "ok"',
     "}",
     "def w(items) {",
-    "  run check() catch (e) {",
+    "  check() catch (e) {",
     ...FOR_BODY,
     "  }",
     "}",
@@ -86,7 +86,7 @@ test("AC2: same for-loop inside recover body parses identically", () => {
     '  log "target"',
     "}",
     "def w(items) {",
-    "  run target() recover(e) {",
+    "  target() recover(e) {",
     ...FOR_BODY,
     "  }",
     "}",
@@ -113,65 +113,65 @@ type ErrSnap = { name: string; src: string; expected: string };
 const ERR_SNAPSHOTS: ErrSnap[] = [
   // Bindings paren missing
   {
-    name: "run catch: missing bindings paren (EOL)",
-    src: "def w() {\n  run r() catch\n}\n",
-    expected: 'fixture.jh:2:11 E_PARSE catch requires explicit bindings and a body: catch (<name>) { ... }',
+    name: "catch: missing bindings paren (EOL)",
+    src: "def w() {\n  r() catch\n}\n",
+    expected: 'fixture.jh:2:7 E_PARSE catch requires explicit bindings and a body: catch (<name>) { ... }',
   },
   {
-    name: "run catch: bindings open after `{`",
-    src: "def w() {\n  run r() catch {\n}\n",
-    expected: 'fixture.jh:2:11 E_PARSE catch requires explicit bindings: catch (<name>) { ... }',
+    name: "catch: bindings open after `{`",
+    src: "def w() {\n  r() catch {\n}\n",
+    expected: 'fixture.jh:2:7 E_PARSE catch requires explicit bindings: catch (<name>) { ... }',
   },
   {
-    name: "run catch: missing bindings paren (EOL)",
-    src: "def w() {\n  run r() catch\n}\n",
-    expected: 'fixture.jh:2:11 E_PARSE catch requires explicit bindings and a body: catch (<name>) { ... }',
+    name: "catch: missing bindings paren (EOL)",
+    src: "def w() {\n  r() catch\n}\n",
+    expected: 'fixture.jh:2:7 E_PARSE catch requires explicit bindings and a body: catch (<name>) { ... }',
   },
   {
-    name: "run recover: missing bindings paren (EOL)",
-    src: "def w() {\n  run r() recover\n}\n",
-    expected: 'fixture.jh:2:11 E_PARSE recover requires explicit bindings and a body: recover(<name>) { ... }',
+    name: "recover: missing bindings paren (EOL)",
+    src: "def w() {\n  r() recover\n}\n",
+    expected: 'fixture.jh:2:7 E_PARSE recover requires explicit bindings and a body: recover(<name>) { ... }',
   },
   {
-    name: "run recover: bindings open after `{`",
-    src: "def w() {\n  run r() recover {\n}\n",
-    expected: 'fixture.jh:2:11 E_PARSE recover requires explicit bindings: recover(<name>) { ... }',
+    name: "recover: bindings open after `{`",
+    src: "def w() {\n  r() recover {\n}\n",
+    expected: 'fixture.jh:2:7 E_PARSE recover requires explicit bindings: recover(<name>) { ... }',
   },
 
   // Too many bindings
   {
-    name: "run catch: two bindings rejected",
-    src: 'def w() {\n  run r() catch (a, b) { log "x" }\n}\n',
-    expected: 'fixture.jh:2:11 E_PARSE catch accepts exactly one binding: catch (<name>) — the second binding (attempt) has been removed',
+    name: "catch: two bindings rejected",
+    src: 'def w() {\n  r() catch (a, b) { log "x" }\n}\n',
+    expected: 'fixture.jh:2:7 E_PARSE catch accepts exactly one binding: catch (<name>) — the second binding (attempt) has been removed',
   },
   {
-    name: "run recover: two bindings rejected",
-    src: 'def w() {\n  run r() recover(a, b) { log "x" }\n}\n',
-    expected: 'fixture.jh:2:11 E_PARSE recover accepts exactly one binding: recover(<name>)',
+    name: "recover: two bindings rejected",
+    src: 'def w() {\n  r() recover(a, b) { log "x" }\n}\n',
+    expected: 'fixture.jh:2:7 E_PARSE recover accepts exactly one binding: recover(<name>)',
   },
 
   // Empty body
   {
-    name: "run catch: empty inline block rejected",
-    src: "def w() {\n  run r() catch (e) { }\n}\n",
-    expected: 'fixture.jh:2:11 E_PARSE catch block must contain at least one statement',
+    name: "catch: empty inline block rejected",
+    src: "def w() {\n  r() catch (e) { }\n}\n",
+    expected: 'fixture.jh:2:7 E_PARSE catch block must contain at least one statement',
   },
   {
-    name: "run catch: empty multiline block rejected",
-    src: "def w() {\n  run r() catch (e) {\n  }\n}\n",
-    expected: 'fixture.jh:2:11 E_PARSE catch block must contain at least one statement',
+    name: "catch: empty multiline block rejected",
+    src: "def w() {\n  r() catch (e) {\n  }\n}\n",
+    expected: 'fixture.jh:2:7 E_PARSE catch block must contain at least one statement',
   },
   {
-    name: "run recover: empty inline block rejected",
-    src: "def w() {\n  run r() recover(e) { }\n}\n",
-    expected: 'fixture.jh:2:11 E_PARSE recover block must contain at least one statement',
+    name: "recover: empty inline block rejected",
+    src: "def w() {\n  r() recover(e) { }\n}\n",
+    expected: 'fixture.jh:2:7 E_PARSE recover block must contain at least one statement',
   },
 
   // Unterminated multiline block
   {
-    name: "run catch: unterminated multiline block",
-    src: 'def w() {\n  run r() catch (e) {\n    log "x"\n',
-    expected: 'fixture.jh:2:11 E_PARSE unterminated catch block, expected "}"',
+    name: "catch: unterminated multiline block",
+    src: 'def w() {\n  r() catch (e) {\n    log "x"\n',
+    expected: 'fixture.jh:2:7 E_PARSE unterminated catch block, expected "}"',
   },
 ];
 

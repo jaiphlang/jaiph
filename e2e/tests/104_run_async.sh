@@ -19,16 +19,16 @@ script write_a = `echo "a" > a.txt`
 script write_b = `echo "b" > b.txt`
 
 def do_a() {
-  run write_a()
+  write_a()
 }
 
 def do_b() {
-  run write_b()
+  write_b()
 }
 
 export def main() {
-  run async do_a()
-  run async do_b()
+  async do_a()
+  async do_b()
   log "done"
 }
 EOF
@@ -76,8 +76,8 @@ def fail_b() {
 }
 
 export def main() {
-  run async fail_a()
-  run async fail_b()
+  async fail_a()
+  async fail_b()
 }
 EOF
 
@@ -110,8 +110,8 @@ def slow() {
 }
 
 export def main() {
-  run async slow()
-  run write_marker()
+  async slow()
+  write_marker()
 }
 EOF
 
@@ -149,7 +149,7 @@ def helper() {
 }
 
 export def main() {
-  const x = run async helper()
+  const x = async helper()
   log x
 }
 EOF
@@ -174,16 +174,16 @@ script write_x = `echo "x" > x.txt`
 script write_y = `echo "y" > y.txt`
 
 def branch_x() {
-  run write_x()
+  write_x()
 }
 
 def branch_y() {
-  run write_y()
+  write_y()
 }
 
 export def main() {
-  run async branch_x()
-  run async branch_y()
+  async branch_x()
+  async branch_y()
 }
 EOF
 
@@ -220,8 +220,8 @@ def beta() {
 }
 
 export def main() {
-  run async alpha()
-  run async beta()
+  async alpha()
+  async beta()
 }
 EOF
 
@@ -261,8 +261,8 @@ def inner_b() {
 }
 
 def outer() {
-  run async inner_a()
-  run async inner_b()
+  async inner_a()
+  async inner_b()
 }
 
 def side() {
@@ -270,8 +270,8 @@ def side() {
 }
 
 export def main() {
-  run async outer()
-  run async side()
+  async outer()
+  async side()
 }
 EOF
 

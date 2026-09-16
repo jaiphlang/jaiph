@@ -41,22 +41,22 @@ script emit_payload = `echo "contract-payload"`
 
 def sender() {
   log "contract-sender-log"
-  send run emit_payload() -> ch
+  send emit_payload() -> ch
 }
 
 script write_a = `echo "a:$1" > contract_a.txt`
 def receiver_a(message, chan, sender) {
-  run write_a(message)
+  write_a(message)
 }
 
 script write_b = `echo "b:$1" > contract_b.txt`
 def receiver_b(message, chan, sender) {
-  run write_b(message)
+  write_b(message)
 }
 
 export def main() {
   log "contract-root-log"
-  run sender()
+  sender()
 }
 EOF
 

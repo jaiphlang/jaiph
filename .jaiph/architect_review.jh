@@ -71,33 +71,33 @@ def architect_agent_review(task) {
 }
 
 def review_one_header(header) {
-  run common.arg_nonempty(header) catch (err) {
+  common.arg_nonempty(header) catch (err) {
     return ""
   }
-  const task = run queue.get_task_by_header(header)
-  run queue.task_is_dev_ready(task) catch (err) {
-    const packed = run architect_agent_review(task)
-    const verdict = run common.first_line_str(packed)
-    const updated_description = run common.rest_lines_str(packed)
-    const body_file = run jaiph_review_body_file()
-    run common.mkdir_p_simple(run common.jaiph_tmp_dir())
-    run common.str_equals(verdict, "dev-ready") catch (err) {
-      run common.arg_nonempty(updated_description) catch (err) {
+  const task = queue.get_task_by_header(header)
+  queue.task_is_dev_ready(task) catch (err) {
+    const packed = architect_agent_review(task)
+    const verdict = common.first_line_str(packed)
+    const updated_description = common.rest_lines_str(packed)
+    const body_file = jaiph_review_body_file()
+    common.mkdir_p_simple(common.jaiph_tmp_dir())
+    common.str_equals(verdict, "dev-ready") catch (err) {
+      common.arg_nonempty(updated_description) catch (err) {
         fail "needs-work requires a non-empty updated_description (questions for the author)."
       }
-      run common.save_string_to_file(body_file) stdin "${updated_description}"
-      run queue.set_task_description_from_file(header, body_file)
+      stdin "${updated_description}" -> common.save_string_to_file(body_file)
+      queue.set_task_description_from_file(header, body_file)
       log "Needs work (description updated): ${header}"
       return ""
     }
-    run common.arg_nonempty(updated_description) catch (err) {
-      run queue.mark_task_dev_ready(header)
+    common.arg_nonempty(updated_description) catch (err) {
+      queue.mark_task_dev_ready(header)
       log "Marked dev-ready: ${header}"
       return ""
     }
-    run common.save_string_to_file(body_file) stdin "${updated_description}"
-    run queue.set_task_description_from_file(header, body_file)
-    run queue.mark_task_dev_ready(header)
+    stdin "${updated_description}" -> common.save_string_to_file(body_file)
+    queue.set_task_description_from_file(header, body_file)
+    queue.mark_task_dev_ready(header)
     log "Marked dev-ready: ${header}"
     return ""
   }
@@ -105,28 +105,28 @@ def review_one_header(header) {
 }
 
 def process_headers_recursive(header, remaining) {
-  run review_one_header(header)
-  run common.arg_nonempty(remaining) catch (err) {
+  review_one_header(header)
+  common.arg_nonempty(remaining) catch (err) {
     return ""
   }
-  const next = run common.first_line_str(remaining)
-  const rest = run common.rest_lines_str(remaining)
-  run process_headers_recursive(next, rest)
+  const next = common.first_line_str(remaining)
+  const rest = common.rest_lines_str(remaining)
+  process_headers_recursive(next, rest)
 }
 
 def maybe_process_headers(first, rest) {
-  run common.arg_nonempty(first) catch (err) {
+  common.arg_nonempty(first) catch (err) {
     return ""
   }
-  run process_headers_recursive(first, rest)
+  process_headers_recursive(first, rest)
 }
 
 export def main() {
-  const headers = run queue.get_all_task_headers()
-  const first = run common.first_line_str(headers)
-  const rest = run common.rest_lines_str(headers)
-  run maybe_process_headers(first, rest)
-  run queue.all_dev_ready() catch (err) {
+  const headers = queue.get_all_task_headers()
+  const first = common.first_line_str(headers)
+  const rest = common.rest_lines_str(headers)
+  maybe_process_headers(first, rest)
+  queue.all_dev_ready() catch (err) {
     fail "One or more tasks need work. Review the agent output above."
   }
 }

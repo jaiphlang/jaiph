@@ -19,7 +19,7 @@ e2e::file "ic_run_log.jh" <<'EOF'
 script greet = `echo "hello"`
 
 export def main() {
-  log "got: ${run greet()}"
+  log "got: ${greet()}"
 }
 EOF
 
@@ -46,7 +46,7 @@ def check() {
 }
 
 export def main() {
-  log "status: ${run check()}"
+  log "status: ${check()}"
 }
 EOF
 
@@ -68,7 +68,7 @@ e2e::file "ic_run_args.jh" <<'EOF'
 script greet = `echo "hi $1"`
 
 export def main() {
-  log "said: ${run greet(world)}"
+  log "said: ${greet(world)}"
 }
 EOF
 
@@ -90,11 +90,11 @@ e2e::file "ic_return.jh" <<'EOF'
 script greet = `echo "hello"`
 
 def helper() {
-  return "${run greet()}"
+  return "${greet()}"
 }
 
 export def main() {
-  const r = run helper()
+  const r = helper()
   log "returned: ${r}"
 }
 EOF
@@ -120,7 +120,7 @@ exit 1
 ```
 
 export def main() {
-  log "got: ${run bad()}"
+  log "got: ${bad()}"
   log "should not reach"
 }
 EOF
@@ -142,7 +142,7 @@ script greet = `echo "hello"`
 
 export def main() {
   const name = "world"
-  log "${run greet()} ${name}"
+  log "${greet()} ${name}"
 }
 EOF
 
@@ -164,7 +164,7 @@ e2e::file "ic_nested.jh" <<'EOF'
 script foo = `echo "a"`
 script bar = `echo "b"`
 export def main() {
-  log "got: ${run foo(${run bar()})}"
+  log "got: ${foo(${bar()})}"
 }
 EOF
 
@@ -181,7 +181,7 @@ e2e::section "compile rejects unknown inline capture ref"
 
 e2e::file "ic_unknown.jh" <<'EOF'
 export def main() {
-  log "got: ${run nonexistent()}"
+  log "got: ${nonexistent()}"
 }
 EOF
 
@@ -207,15 +207,15 @@ def check_ok() {
 }
 
 def run_capture_log() {
-  log "got: ${run greet()}"
+  log "got: ${greet()}"
 }
 
 def ensure_capture_log() {
-  log "status: ${run check_ok()}"
+  log "status: ${check_ok()}"
 }
 
 def capture_return() {
-  return "${run greet()}"
+  return "${greet()}"
 }
 EOF
 
@@ -223,17 +223,17 @@ e2e::file "ic_lib.test.jh" <<'EOF'
 import "ic_lib.jh" as ic
 
 test "inline run capture in log" {
-  const out = run ic.run_capture_log()
+  const out = ic.run_capture_log()
   expect_contain out "got: hello"
 }
 
 test "inline run capture in log" {
-  const out = run ic.ensure_capture_log()
+  const out = ic.ensure_capture_log()
   expect_contain out "status: ok"
 }
 
 test "inline capture in return value" {
-  const out = run ic.capture_return()
+  const out = ic.capture_return()
   expect_equal out "hello"
 }
 EOF

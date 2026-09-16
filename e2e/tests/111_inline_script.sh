@@ -15,7 +15,7 @@ e2e::section "basic inline script execution"
 
 e2e::file "inline_basic.jh" <<'EOF'
 export def main() {
-  run `echo inline-ok`()
+  `echo inline-ok`()
 }
 EOF
 
@@ -47,7 +47,7 @@ e2e::section "inline script with arguments"
 
 e2e::file "inline_args.jh" <<'EOF'
 export def main() {
-  run `echo $1-$2`("hello", "world")
+  `echo $1-$2`("hello", "world")
 }
 EOF
 
@@ -74,8 +74,8 @@ echo "got: $1"
 ```
 
 export def main() {
-  const x = run `echo captured-value`()
-  run show(x)
+  const x = `echo captured-value`()
+  show(x)
 }
 EOF
 
@@ -102,8 +102,8 @@ echo "const: $1"
 ```
 
 export def main() {
-  const val = run `echo const-value`()
-  run show_const(val)
+  const val = `echo const-value`()
+  show_const(val)
 }
 EOF
 
@@ -149,7 +149,7 @@ e2e::file "inline_iso.jh" <<'EOF'
 const secret = "parent-secret"
 
 export def main() {
-  run `echo "secret=${secret:-}"`()
+  `echo "secret=${secret:-}"`()
 }
 EOF
 

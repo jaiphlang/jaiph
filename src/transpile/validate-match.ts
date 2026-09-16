@@ -50,7 +50,7 @@ export function validateMatchExpr(
         expr.loc.line,
         expr.loc.col,
         "E_VALIDATE",
-        `inline scripts are not allowed in match arm bodies; use a named script with "run script_name(…)" instead`,
+        `inline scripts are not allowed in match arm bodies; use a named script with "script_name(…)" instead`,
       );
     }
     if (!arm.tripleQuotedBody) {
@@ -60,14 +60,16 @@ export function validateMatchExpr(
         const after = bodyTrimmed.slice(ident.length);
         const startsCall = after.startsWith("(");
         const startsArgs = /^\s+\S/.test(after);
-        if ((startsCall || startsArgs) && ident !== "fail" && ident !== "run") {
+        // A bare call `ref(...)` is a valid arm; `verb args` (space, no parens)
+        // other than `fail "..."` is an unknown verb.
+        if (startsArgs && ident !== "fail") {
           const hint = ident === "error" ? ` did you mean "fail"?` : "";
           diag.error(
             filePath,
             expr.loc.line,
             expr.loc.col,
             "E_VALIDATE",
-            `unknown match arm verb "${ident}"; allowed: fail "...", run ref(...).${hint}`,
+            `unknown match arm verb "${ident}"; allowed: fail "...", ref(...).${hint}`,
           );
         }
         if (!startsCall && !startsArgs && after.trim() === "" && !knownVars.has(ident)) {

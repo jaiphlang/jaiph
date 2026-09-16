@@ -103,12 +103,6 @@ export function classifyJaiphShellRefToken(
  */
 export function assertKeywordFirstShellFragment(inner: string, env: SubstitutionValidateEnv): void {
   const trimmed = inner.trim();
-  if (/^run\s/.test(trimmed)) {
-    throwJaiphInSubstitution(
-      env,
-      'command substitution cannot use Jaiph keyword "run"; use managed steps outside $(...)',
-    );
-  }
   if (hasSendOperatorOutsideQuotes(inner)) {
     throwJaiphInSubstitution(
       env,
@@ -120,13 +114,13 @@ export function assertKeywordFirstShellFragment(inner: string, env: Substitution
   if (cls === "def") {
     throwJaiphInSubstitution(
       env,
-      `command substitution cannot invoke def "${word}"; use run ${word} ... in a def step`,
+      `command substitution cannot invoke def "${word}"; call ${word}(...) in a def step`,
     );
   }
   if (cls === "script") {
     throwJaiphInSubstitution(
       env,
-      `command substitution cannot invoke script "${word}"; use run ${word} ... for managed calls (or use pure shell inside $(...))`,
+      `command substitution cannot invoke script "${word}"; call ${word}(...) for managed calls (or use pure shell inside $(...))`,
     );
   }
   if (cls === "unknown") {
@@ -140,24 +134,18 @@ export function assertKeywordFirstShellFragment(inner: string, env: Substitution
 /** Reject Jaiph rule/workflow/script used as the first command word of a shell line. */
 export function assertNoJaiphLeadCommandWord(fragment: string, env: SubstitutionValidateEnv): void {
   const trimmed = fragment.trim();
-  if (/^run\s/.test(trimmed)) {
-    throwJaiphInSubstitution(
-      env,
-      'def shell cannot use Jaiph keyword "run" as the shell command; use managed steps',
-    );
-  }
   const word = firstCommandWord(trimmed);
   const cls = classifyJaiphShellRefToken(word, env);
   if (cls === "def") {
     throwJaiphInSubstitution(
       env,
-      `def "${word}" must be called with run, not as a shell command`,
+      `def "${word}" must be called as a managed step (${word}(...)), not as a shell command`,
     );
   }
   if (cls === "script") {
     throwJaiphInSubstitution(
       env,
-      `direct script call "${word}"; use run ${word} ... instead`,
+      `direct script call "${word}"; call ${word}(...) instead`,
     );
   }
   if (cls === "unknown") {

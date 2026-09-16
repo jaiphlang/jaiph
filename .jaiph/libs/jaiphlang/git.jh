@@ -8,9 +8,6 @@ script git_porcelain_nonempty = `test -n "$(git status --porcelain)"`
 
 script git_mark_workspace_safe = `git config --global --add safe.directory "$(pwd)"`
 
-# format-patch emits real diff to stdout only with --stdout; otherwise git writes *.patch files and stdout is only the path.
-script git_create_patch_from_commit = `git config --global --add safe.directory "$(pwd)" && git format-patch -1 HEAD --stdout > $1`
-
 # Push local HEAD to origin. This is a trusted, deterministic step so the push
 # target is controlled by the caller, not by agent output. With an explicit
 # branch ($1), force the remote ref (HEAD:refs/heads/<branch>) so the push
@@ -26,27 +23,27 @@ script git_push_head = ```
 ```
 
 export def in_git_repo() {
-  run git_mark_workspace_safe()
-  run git_inside_worktree() catch (err) {
+  git_mark_workspace_safe()
+  git_inside_worktree() catch (err) {
     fail "not inside a git repository"
   }
 }
 
 export def branch_clean() {
-  run git_porcelain_empty() catch (err) {
+  git_porcelain_empty() catch (err) {
     fail "git working tree is not clean"
   }
 }
 
 export def has_changes() {
-  run git_porcelain_nonempty() catch (err) {
+  git_porcelain_nonempty() catch (err) {
     fail "git working tree has no changes"
   }
 }
 
 export def is_clean() {
-  run in_git_repo()
-  run branch_clean()
+  in_git_repo()
+  branch_clean()
 }
 
 export def commit(task) {
@@ -57,57 +54,44 @@ export def commit(task) {
     agent.backend = "claude"
     agent.claude_flags = "--permission-mode bypassPermissions"
   }
+  in_git_repo()
+  has_changes()
 
-  run in_git_repo()
-  run has_changes()
+  prompt """
+    Please commit current changes and respond with the commit message.
 
-  const response = prompt """
-    Please commit current changes and respond with a commit message and
-    suggested patch file name (excluding extension).
-  
     Requirements for commit message:
     1. Write a commit message - first line in imperative mood, under 72 chars.
     2. Start with the common prefix like 'Feat:', 'Fix:', 'Refactor:' etc.
     3. Write a body paragraph with more details about the change.
-  
+
     Requirements for commit:
     1. Review current git changes (git diff --stat, git status).
     2. Stage all relevant changes with git add.
     3. Create exactly one commit.
     4. Do not push.
     5. Remove files that are not relevant to the commit and not git ignored.
-  
+
     Changes were made for the following task:
     ${task}
   """
-  returns "{ message: string, patch_file_name: string }"
-
-  const patch_file_name = "${response.patch_file_name}.patch"
-
-  run git_create_patch_from_commit(patch_file_name)
-
-  return patch_file_name
+  returns "{ message: string }"
 }
 
 # Like commit(), but no-ops when the worktree is clean (overnight loops).
-# Deletes the generated .patch from the worktree so the next loop starts clean.
 export def commit_if_changes(task) {
-  run has_changes() catch (err) {
+  has_changes() catch (err) {
     log "No changes to commit."
     return ""
   }
-  const patch_file = run commit(task)
-  run git_rm_patch(patch_file)
-  return patch_file
+  commit(task)
 }
 
-script git_rm_patch = `rm -f -- "$1"`
-
 export def push(branch) {
-  run in_git_repo()
-  run git_push_head(branch)
+  in_git_repo()
+  git_push_head(branch)
 }
 
 export def main(task) {
-  return run commit(task)
+  commit(task)
 }

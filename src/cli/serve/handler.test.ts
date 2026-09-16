@@ -595,7 +595,7 @@ test("persistRun fires with the terminal record at finalize", async () => {
   assert.equal(persisted[0].run_dir, "/runs/x");
 });
 
-// === run inspection ===
+// === inspection ===
 
 test("GET /runs/{id} for an unknown id is 404, and lists newest first", async () => {
   const h = makeHandler({ tools: [NOARG_TOOL], callTool: async () => ({ text: "ok", isError: false, exitStatus: 0 }) });
@@ -611,7 +611,7 @@ test("GET /runs/{id} for an unknown id is 404, and lists newest first", async ()
   assert.equal(list.runs[1].run_id, "run-0");
 });
 
-// === run retention (bounded in-memory registry) ===
+// === retention (bounded in-memory registry) ===
 
 test("count retention evicts only the oldest terminal records, keeping the newest", async () => {
   const h = makeHandler({ tools: [NOARG_TOOL], retainRuns: 2, callTool: async () => ({ text: "ok", isError: false, exitStatus: 0 }) });

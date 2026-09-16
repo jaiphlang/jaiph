@@ -40,7 +40,7 @@ export function validateSimpleInterpolationIdentifiers(
   scopeLabel: "def",
   /** Typed prompt captures: map capture name → returns schema field names (for `${base}` / `${base_field}`). */
   promptFieldSchemas?: Map<string, string[]>,
-  /** Extra variable names from `run … catch` bindings. */
+  /** Extra variable names from `call() catch` bindings. */
   recoverBindings?: Set<string>,
   /** Script names in the current module — `${scriptName}` is rejected because scripts cannot be interpolated. */
   localScripts?: Set<string>,

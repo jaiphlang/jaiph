@@ -91,7 +91,7 @@ export async function runTest(rest: string[]): Promise<number> {
 
   process.stderr.write(
     "jaiph test requires a *.test.jh file. Example:\n" +
-      "  test \"...\" { mock prompt \"response\"; const r = run w.main(); expect_contain r \"...\"; }\n",
+      "  test \"...\" { mock prompt \"response\"; const r = w.main(); expect_contain r \"...\"; }\n",
   );
   return 1;
 }

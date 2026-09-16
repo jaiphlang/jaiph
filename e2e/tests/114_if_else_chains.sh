@@ -16,14 +16,14 @@ e2e::section "run recover: rule fails → catch body runs"
 e2e::file "ensure_fail_recover.jh" <<'EOF'
 script fail_impl = `false`
 def fail_rule() {
-  run fail_impl()
+  fail_impl()
 }
 
 script then_action = `echo "then-ran" > then_ran.txt`
 
 export def main() {
-  run fail_rule() catch (err) {
-    run then_action()
+  fail_rule() catch (err) {
+    then_action()
   }
 }
 EOF
@@ -56,16 +56,16 @@ e2e::section "run recover: rule passes → catch skipped"
 e2e::file "ensure_pass_no_recover.jh" <<'EOF'
 script ok_impl = `true`
 def ok_rule() {
-  run ok_impl()
+  ok_impl()
 }
 
 script else_action = `echo "else-ran" > else_ran.txt`
 
 export def main() {
-  run ok_rule() catch (err) {
+  ok_rule() catch (err) {
     log "should-not-run"
   }
-  run else_action()
+  else_action()
 }
 EOF
 
@@ -97,24 +97,24 @@ e2e::section "chained run recover: first fails, second passes"
 e2e::file "chained_recover.jh" <<'EOF'
 script fail_impl = `false`
 def first_check() {
-  run fail_impl()
+  fail_impl()
 }
 
 script ok_impl = `true`
 def second_check() {
-  run ok_impl()
+  ok_impl()
 }
 
 script second_action = `echo "second-ran" > second_ran.txt`
 
 export def main() {
-  run first_check() catch (err) {
+  first_check() catch (err) {
     log "first-recovered"
   }
-  run second_check() catch (err) {
+  second_check() catch (err) {
     log "should-not-run"
   }
-  run second_action()
+  second_action()
 }
 EOF
 

@@ -28,8 +28,8 @@ process.stdout.write("hello-from-node\n");
 script plain_bash = `echo bash-ok`
 
 export def main() {
-  run greet()
-  run plain_bash()
+  greet()
+  plain_bash()
 }
 EOF
 
@@ -68,7 +68,7 @@ sys.exit(0)
 ```
 
 export def main() {
-  run py_greet()
+  py_greet()
 }
 EOF
 
@@ -100,7 +100,7 @@ script:golang my_script {
 }
 
 export def main() {
-  run my_script()
+  my_script()
 }
 EOF
 
@@ -124,7 +124,7 @@ console.log("hi");
 ```
 
 export def main() {
-  run my_script()
+  my_script()
 }
 EOF
 

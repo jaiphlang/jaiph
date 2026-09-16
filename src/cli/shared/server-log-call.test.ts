@@ -71,7 +71,7 @@ test("a host call emits a start banner (run_id) and an end line with status/elap
   assert.ok(!result.text.includes("Running main"), "operator banner is not in the call result text");
 });
 
-test("run log is NOT mirrored to the operator sink by default", async () => {
+test("log is NOT mirrored to the operator sink by default", async () => {
   const lines: string[] = [];
   await runWith(
     ["export def main() {", '  log "operator visible hi"', "}", ""].join("\n"),
@@ -106,7 +106,7 @@ test("mirrored operator lines are credential-redacted (never print a fixture sec
     [
       'script read_secret use LEAK_API_KEY = `printf %s "$LEAK_API_KEY"`',
       "export def main() {",
-      "  const secret = run read_secret()",
+      "  const secret = read_secret()",
       '  log "leaked ${secret}"',
       "}",
       "",

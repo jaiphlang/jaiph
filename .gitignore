@@ -61,6 +61,12 @@ e2e/assign_capture.sh
 
 .obsidian/
 
+# Playwright local output (last-run cache + failure artifacts)
+test-results/
+
+# Engineer `git format-patch` leftovers at repo root (also saved under .jaiph/runs)
+/*.patch
+
 # debug / temp directories (never commit)
 docker-*/
 nested-*/

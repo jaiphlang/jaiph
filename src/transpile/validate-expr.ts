@@ -26,7 +26,6 @@ import {
   validateDotFieldRefs,
   validateDotSubject,
   validateInlineStringCaptures,
-  validateNestedManagedCallArgs,
   validateNoShellRedirection,
   validateSubjectForwardConst,
 } from "./validate-step-helpers";
@@ -232,7 +231,6 @@ function validateNamedPromptCall(
   const ref = expr.name!;
   const loc = expr.loc;
   validateNoShellRedirection(ctx.diag, ctx.ast.filePath, loc, "prompt", expr.args);
-  validateNestedManagedCallArgs(ctx.diag, ctx.ast.filePath, loc, expr.args);
   validateRef({ value: ref, loc }, ctx.ast, ctx.refCtx, { mode: "expect", expect: PROMPT_REF_EXPECT });
   const def = resolvePromptDef(ref, ctx.ast, ctx.refCtx);
   if (def) {
@@ -279,8 +277,7 @@ export function validateNamedPromptReturnsCapture(
 function validateCallable(expr: Expr, ctx: ValidatorCtx): void {
   if (expr.kind === "call") {
     const loc = expr.callee.loc;
-    validateNoShellRedirection(ctx.diag, ctx.ast.filePath, loc, "run", expr.args);
-    validateNestedManagedCallArgs(ctx.diag, ctx.ast.filePath, loc, expr.args);
+    validateNoShellRedirection(ctx.diag, ctx.ast.filePath, loc, "call", expr.args);
     if (
       !expr.callee.value.includes(".") &&
       ctx.knownVars.has(expr.callee.value) &&
@@ -321,7 +318,7 @@ function warnPromptInShellLine(
         body.loc.col,
         "W_PROMPT_IN_SHELL",
         `prompt capture "${varName}" is interpolated into a shell line without quoting or validation; ` +
-          `prefer passing it as a script argument: run my_script(${varName}) — ` +
+          `prefer passing it as a script argument: my_script(${varName}) — ` +
           `scripts receive arguments as $1 $2 … (argv), which bypasses shell word-splitting. ` +
           `See: language.md`,
       );
@@ -344,7 +341,7 @@ export function validateWorkflowShellExec(
           body.loc.line,
           body.loc.col,
           "E_VALIDATE",
-          `use run ${t}() — a bare name that refers to a script or workflow must use a managed run step`,
+          `use ${t}() — a bare name that refers to a script or workflow must be called as a managed step`,
         );
       }
     } else {
@@ -357,7 +354,7 @@ export function validateWorkflowShellExec(
         body.loc.line,
         body.loc.col,
         "E_VALIDATE",
-        `use run ${t}() — "${t}" is a valid script or def reference; use a managed run step`,
+        `use ${t}() — "${t}" is a valid script or def reference; call it as a managed step`,
       );
     }
   }

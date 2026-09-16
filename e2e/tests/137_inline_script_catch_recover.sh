@@ -18,8 +18,8 @@ e2e::section "inline script catch: failing body, catch body runs once with merge
 # disk (cat the `.out` and its sibling `.err`) instead of receiving the bytes.
 e2e::file "inline_catch.jh" <<'EOF'
 export def main() {
-  run `echo "bad" 1>&2; exit 3`() catch (err) {
-    const failed = run ```
+  `echo "bad" 1>&2; exit 3`() catch (err) {
+    const failed = ```
 cat "$1" "${1%.out}.err"
 ```(err)
     log "caught: ${failed}"
@@ -45,8 +45,8 @@ rm -f "${COUNTER}" "${COUNTER}.done"
 
 e2e::file "inline_recover.jh" <<EOF
 export def main() {
-  run \`test -f "${COUNTER}.done"\`() recover(err) {
-    run \`\`\`
+  \`test -f "${COUNTER}.done"\`() recover(err) {
+    \`\`\`
 count=\$(cat "${COUNTER}" 2>/dev/null || echo 0)
 count=\$((count+1))
 echo "\${count}" > "${COUNTER}"
@@ -72,12 +72,12 @@ e2e::section "inline script catch in rule body"
 e2e::file "inline_catch_rule.jh" <<'EOF'
 script noop = `true`
 def gate() {
-  run `exit 5`() catch (err) {
-    run noop()
+  `exit 5`() catch (err) {
+    noop()
   }
 }
 export def main() {
-  run gate()
+  gate()
 }
 EOF
 

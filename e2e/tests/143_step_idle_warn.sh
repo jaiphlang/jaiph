@@ -14,7 +14,7 @@ e2e::section "leaf script idle output warning"
 e2e::file "idle_warn.jh" <<'EOF'
 script quiet = `echo start; sleep 3; echo done`
 export def main() {
-  run quiet()
+  quiet()
 }
 EOF
 rm -rf "${TEST_DIR}/runs_idle"

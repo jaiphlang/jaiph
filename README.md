@@ -20,7 +20,7 @@
 
 ## Features
 
-- **Defs** — Compose `prompt`, `run`, channel sends, conditionals, `run async` with implicit join, `catch`, and repair-and-retry `recover`. `jaiph run` enters at `export def main`.
+- **Defs** — Compose `prompt`, bare calls, channel sends, conditionals, `async` calls with implicit join, `catch`, and repair-and-retry `recover`. `jaiph run` enters at `export def main`.
 - **Scripts** — **`script`** steps run bash or polyglot code as subprocesses.
 - **Agents** — Backends include Cursor, Claude, Codex (HTTP), or a custom `agent.command`.
 - **Testing** — `*.test.jh` files run in-process (`jaiph test`) with mocks and `expect_*` assertions ([Write & run tests](docs/testing.md)).
@@ -106,14 +106,14 @@ Full flags and environment variables: [CLI](docs/cli.md), [Environment variables
 script check_deps = `test -f "package.json"`
 
 def deps_exist() {
-  run check_deps() catch (err) {
+  check_deps() catch (err) {
     fail "Missing package.json"
   }
 }
 
 export def main(task) {
-  run deps_exist()
-  const ts = run `date +%s`()
+  deps_exist()
+  const ts = `date +%s`()
   prompt "Build the application: ${task}"
 }
 ```

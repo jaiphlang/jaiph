@@ -61,8 +61,8 @@ script format_task_file = ```
 # Claim one available task. Prefers the first #dev-ready that is not
 # #in-progress; may claim a later one. HTTP 200 either way — empty queue is fail.
 export def pick_task() {
-  const preferred = run queue.next_available()
-  const state = run queue.state_json()
+  const preferred = queue.next_available()
+  const state = queue.state_json()
   const result = prompt """
     ${po_file_rule}
 
@@ -84,23 +84,23 @@ export def pick_task() {
   """
   returns "{ title: string, notes: string }"
 
-  run common.arg_nonempty("${result.title}") catch (err) {
+  common.arg_nonempty("${result.title}") catch (err) {
     fail "pick_task requires a title"
   }
-  const task = run queue.get_task_by_header("${result.title}")
-  const header = run first_line_task(task)
-  run queue.mark_task_in_progress(header)
-  return run queue.get_task_by_header(header)
+  const task = queue.get_task_by_header("${result.title}")
+  const header = first_line_task(task)
+  queue.mark_task_in_progress(header)
+  return queue.get_task_by_header(header)
 }
 
 # Propose a task from a brief or markdown spec. Reject leaves the queue unchanged.
 # Verdict is in the return text (accepted: / rejected:). HTTP stays 200.
 # fail is only a broken call (empty spec, accepted with no title).
 export def propose_task(spec) {
-  run common.arg_nonempty(spec) catch (err) {
+  common.arg_nonempty(spec) catch (err) {
     fail "propose_task requires a non-empty spec"
   }
-  const state = run queue.state_json()
+  const state = queue.state_json()
   const result = prompt """
     ${po_file_rule}
 
@@ -124,29 +124,29 @@ export def propose_task(spec) {
   """
   returns "{ verdict: string, title: string, body: string, tags: string }"
 
-  run common.str_equals("${result.verdict}", "accepted") catch (err) {
+  common.str_equals("${result.verdict}", "accepted") catch (err) {
     return "rejected: ${result.body}"
   }
-  run common.arg_nonempty("${result.title}") catch (err) {
+  common.arg_nonempty("${result.title}") catch (err) {
     fail "accepted propose_task requires a title"
   }
-  const tmpdir = run common.jaiph_tmp_dir()
-  run common.mkdir_p_simple(tmpdir)
+  const tmpdir = common.jaiph_tmp_dir()
+  common.mkdir_p_simple(tmpdir)
   const spec_file = "${tmpdir}/po_propose_task.md"
-  run format_task_file("${result.title}", "${result.tags}", "${result.body}", spec_file)
-  run queue.add_task_from_file(spec_file)
+  format_task_file("${result.title}", "${result.tags}", "${result.body}", spec_file)
+  queue.add_task_from_file(spec_file)
   return "accepted: ${result.title}"
 }
 
 # Report a claimed task as done. Archive or send back (needs-work).
 # Verdict is in the return text. HTTP stays 200. fail is a broken call.
 export def report_completed_task(header, notes) {
-  run common.arg_nonempty(header) catch (err) {
+  common.arg_nonempty(header) catch (err) {
     fail "report_completed_task requires a task header"
   }
-  const task = run queue.get_task_by_header(header)
-  const state = run queue.state_json()
-  const evidence = run git_evidence()
+  const task = queue.get_task_by_header(header)
+  const state = queue.state_json()
+  const evidence = git_evidence()
   const result = prompt """
     ${po_file_rule}
 
@@ -172,36 +172,36 @@ export def report_completed_task(header, notes) {
   """
   returns "{ verdict: string, notes: string }"
 
-  const tmpdir = run common.jaiph_tmp_dir()
-  run common.mkdir_p_simple(tmpdir)
+  const tmpdir = common.jaiph_tmp_dir()
+  common.mkdir_p_simple(tmpdir)
   const notes_file = "${tmpdir}/po_complete_notes.md"
-  run common.str_equals("${result.verdict}", "accepted") catch (err) {
-    run common.arg_nonempty("${result.notes}") catch (err) {
+  common.str_equals("${result.verdict}", "accepted") catch (err) {
+    common.arg_nonempty("${result.notes}") catch (err) {
       fail "needs-work requires notes"
     }
-    const rest = run common.rest_lines_str(task)
+    const rest = common.rest_lines_str(task)
     const updated = "${rest}\n\n### PO notes\n\n${result.notes}\n"
-    run common.save_string_to_file(notes_file) stdin "${updated}"
-    const clean = run first_line_task(task)
-    run queue.set_task_description_from_file(clean, notes_file)
+    stdin "${updated}" -> common.save_string_to_file(notes_file)
+    const clean = first_line_task(task)
+    queue.set_task_description_from_file(clean, notes_file)
     return "needs-work: ${result.notes}"
   }
-  run common.save_string_to_file(notes_file) stdin "${result.notes}"
-  const title = run first_line_task(task)
-  run queue.archive_to_done(title, notes_file)
+  stdin "${result.notes}" -> common.save_string_to_file(notes_file)
+  const title = first_line_task(task)
+  queue.archive_to_done(title, notes_file)
   return "accepted: ${title}"
 }
 
 # Answer a question about a task. Persist Q and A on the task body.
 export def task_details(header, question) {
-  run common.arg_nonempty(header) catch (err) {
+  common.arg_nonempty(header) catch (err) {
     fail "task_details requires a task header"
   }
-  run common.arg_nonempty(question) catch (err) {
+  common.arg_nonempty(question) catch (err) {
     fail "task_details requires a question"
   }
-  const task = run queue.get_task_by_header(header)
-  const state = run queue.state_json()
+  const task = queue.get_task_by_header(header)
+  const state = queue.state_json()
   const result = prompt """
     ${po_file_rule}
 
@@ -221,31 +221,31 @@ export def task_details(header, question) {
   """
   returns "{ verdict: string, notes: string }"
 
-  run common.arg_nonempty("${result.notes}") catch (err) {
+  common.arg_nonempty("${result.notes}") catch (err) {
     fail "task_details requires an answer"
   }
-  const tmpdir = run common.jaiph_tmp_dir()
-  run common.mkdir_p_simple(tmpdir)
+  const tmpdir = common.jaiph_tmp_dir()
+  common.mkdir_p_simple(tmpdir)
   const body_file = "${tmpdir}/po_details_body.md"
-  const rest = run common.rest_lines_str(task)
+  const rest = common.rest_lines_str(task)
   const updated = "${rest}\n\n### PO note\n\nQ: ${question}\n\nA: ${result.notes}\n"
-  run common.save_string_to_file(body_file) stdin "${updated}"
-  const title = run first_line_task(task)
-  run queue.set_task_description_from_file(title, body_file)
+  stdin "${updated}" -> common.save_string_to_file(body_file)
+  const title = first_line_task(task)
+  queue.set_task_description_from_file(title, body_file)
   return "${result.notes}"
 }
 
 # Apply a requested change to a task after validation. Reject leaves the file unchanged.
 # Verdict is in the return text. HTTP stays 200.
 export def update_task(header, request) {
-  run common.arg_nonempty(header) catch (err) {
+  common.arg_nonempty(header) catch (err) {
     fail "update_task requires a task header"
   }
-  run common.arg_nonempty(request) catch (err) {
+  common.arg_nonempty(request) catch (err) {
     fail "update_task requires a request"
   }
-  const task = run queue.get_task_by_header(header)
-  const state = run queue.state_json()
+  const task = queue.get_task_by_header(header)
+  const state = queue.state_json()
   const result = prompt """
     ${po_file_rule}
 
@@ -267,17 +267,17 @@ export def update_task(header, request) {
   """
   returns "{ verdict: string, body: string }"
 
-  run common.str_equals("${result.verdict}", "accepted") catch (err) {
+  common.str_equals("${result.verdict}", "accepted") catch (err) {
     return "rejected: ${result.body}"
   }
-  run common.arg_nonempty("${result.body}") catch (err) {
+  common.arg_nonempty("${result.body}") catch (err) {
     fail "accepted update_task requires a body"
   }
-  const tmpdir = run common.jaiph_tmp_dir()
-  run common.mkdir_p_simple(tmpdir)
+  const tmpdir = common.jaiph_tmp_dir()
+  common.mkdir_p_simple(tmpdir)
   const body_file = "${tmpdir}/po_update_body.md"
-  run common.save_string_to_file(body_file) stdin "${result.body}"
-  const title = run first_line_task(task)
-  run queue.set_task_description_from_file(title, body_file)
+  stdin "${result.body}" -> common.save_string_to_file(body_file)
+  const title = first_line_task(task)
+  queue.set_task_description_from_file(title, body_file)
   return "accepted: ${title}"
 }

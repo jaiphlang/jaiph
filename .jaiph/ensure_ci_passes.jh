@@ -52,14 +52,14 @@ script save_ci_log_from_capture = ```
 export def ensure_ci_passes() {
   const ci_log_dir = ".jaiph/tmp"
   const ci_log_file = "${ci_log_dir}/ensure_ci_passes.last.log"
-  run common.mkdir_p_simple(ci_log_dir)
+  common.mkdir_p_simple(ci_log_dir)
 
   # recover = repair-and-retry loop: run the CI script, on failure save the
   # log and prompt for a fix, then retry — bounded by run.recover_limit
   # (default 10) instead of unbounded workflow recursion.
-  run npm_run_test_ci() recover (failure) {
-    run save_ci_log_from_capture(failure, ci_log_file)
-    run assert_nonempty_file_or_fail(ci_log_file)
+  npm_run_test_ci() recover (failure) {
+    save_ci_log_from_capture(failure, ci_log_file)
+    assert_nonempty_file_or_fail(ci_log_file)
     prompt """
       <role>
         You are a software engineer fixing a failing CI build.
@@ -80,9 +80,9 @@ export def ensure_ci_passes() {
     """
   }
 
-  run common.rm_file_simple(ci_log_file)
+  common.rm_file_simple(ci_log_file)
 }
 
 export def main() {
-  run ensure_ci_passes()
+  ensure_ci_passes()
 }

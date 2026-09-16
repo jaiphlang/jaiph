@@ -1,6 +1,6 @@
 import "lib.jh" as lib
 
 export def main() {
-  run lib.setup()
-  run lib.check()
+  lib.setup()
+  lib.check()
 }

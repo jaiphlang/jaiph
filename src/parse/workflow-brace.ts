@@ -184,11 +184,6 @@ function execStep(
   };
 }
 
-/** True when the text after a `run` call's `)` opens a `stdin` clause. */
-function isStdinClause(rest: string): boolean {
-  return /^stdin(?:\s|$)/.test(rest.trimStart());
-}
-
 /**
  * Split the first `stdin` operand token off `after` (the text following the
  * `stdin` keyword). A double-quoted string runs to its closing quote (may
@@ -233,41 +228,18 @@ function stdinOperandToExpr(
 }
 
 /**
- * Extract an optional leading `stdin <expr>` clause from the text after a
- * `run` call's `)`. Returns the parsed stdin Expr (if any) plus the remaining
- * text (catch/recover clause or trailing content the caller then rejects).
- * `stdin` is `E_PARSE` on `run async`.
- */
-function extractStdin(
-  filePath: string,
-  innerNo: number,
-  innerRaw: string,
-  isAsync: boolean,
-  rest: string,
-): { stdin?: Expr; rest: string } {
-  const t = rest.trimStart();
-  if (!isStdinClause(t)) return { rest };
-  const stdinCol = innerRaw.indexOf("stdin") + 1;
-  if (isAsync) {
-    fail(filePath, "stdin is not supported with run async", innerNo, stdinCol);
-  }
-  const after = t.replace(/^stdin\s*/, "");
-  if (after === "") {
-    fail(filePath, "stdin requires a value expression: run ref() stdin <expr>", innerNo, stdinCol);
-  }
-  const { operand, rest: remaining } = takeStdinOperand(after);
-  const stdin = stdinOperandToExpr(filePath, innerNo, stdinCol, operand);
-  return { stdin, rest: remaining };
-}
-
-/**
- * Parse `run [async] <ref>(args)`, optionally followed by
- * `catch (binding) { ... }` or `recover(binding) { ... }`.
+ * Parse a bare call statement `<ref>(args)` (or `async <ref>(args)`),
+ * optionally followed by `catch (binding) { ... }` or `recover(binding) { ... }`.
+ *
+ * `hostBody` is the invoke text with no leading keyword. `stdin`, when set, is
+ * the value already parsed from a leading `stdin <expr> -> ` connect clause and
+ * carried onto the resulting exec step. `hostName` / `hostCol` name and locate
+ * the form for error messages.
  *
  * The catch/recover clause is parsed via the unified `parseAttachedBlock`, whose
  * body uses the same `parseBlockStatement` as the top-level dispatcher.
  */
-function parseRun(
+function parseCallStatement(
   filePath: string,
   lines: string[],
   idx: number,
@@ -276,11 +248,12 @@ function parseRun(
   hostBody: string,
   isAsync: boolean,
   captureName: string | undefined,
+  stdin: Expr | undefined,
+  hostName: string,
+  hostCol: number,
   trivia: Trivia,
   opts?: BlockParseOpts,
 ): { step: StepDef; nextIdx: number } {
-  const hostName = isAsync ? "run async" : "run";
-  const hostCol = innerRaw.indexOf("run") + 1;
   const stepLoc = { line: innerNo, col: hostCol };
 
   if (/\scatch$/.test(hostBody)) {
@@ -323,12 +296,11 @@ function parseRun(
     }
   }
 
-  // Fall back to plain parsing when the call before catch/recover has
-  // trailing content other than a `stdin` clause, preserving the legacy
-  // "unexpected content" error shape.
+  // Fall back to plain parsing when the call before catch/recover has trailing
+  // content, preserving the "unexpected content" error shape.
   if (attached) {
     const probe = parseCallRef(attached.left);
-    if (!probe || (probe.rest.trim() && !isStdinClause(probe.rest))) {
+    if (!probe || probe.rest.trim()) {
       attached = null;
     }
   }
@@ -342,8 +314,7 @@ function parseRun(
         innerNo,
       );
     }
-    const { stdin, rest } = extractStdin(filePath, innerNo, innerRaw, isAsync, call.rest);
-    rejectTrailingContent(filePath, innerNo, hostName, rest);
+    rejectTrailingContent(filePath, innerNo, hostName, call.rest);
     const callee = { value: call.ref, loc: stepLoc };
     const body: Expr = { kind: "call", callee, args: call.args, ...(isAsync ? { async: true as const } : {}) };
     return { step: execStep(body, stepLoc, { captureName, stdin }), nextIdx: call.nextLineIdx };
@@ -357,8 +328,7 @@ function parseRun(
       innerNo,
     );
   }
-  const { stdin, rest } = extractStdin(filePath, innerNo, innerRaw, isAsync, call.rest);
-  rejectTrailingContent(filePath, innerNo, hostName, rest);
+  rejectTrailingContent(filePath, innerNo, hostName, call.rest);
   const callee = { value: call.ref, loc: stepLoc };
   const body: Expr = { kind: "call", callee, args: call.args, ...(isAsync ? { async: true as const } : {}) };
 
@@ -369,6 +339,54 @@ function parseRun(
     ? { captureName, stdin, catch: result.body }
     : { captureName, stdin, recover: result.body };
   return { step: execStep(body, stepLoc, extras), nextIdx: result.nextIdx };
+}
+
+/**
+ * Parse the `stdin <expr> -> <call>` connect form. `afterStdin` is the text
+ * after the `stdin` keyword; `captureName` is set when the form is the RHS of a
+ * `const` binding. The value is bound to the exec step's `stdin` field and the
+ * `-> ` target must be a script call (named or inline `` `body`() ``); `async`
+ * after the arrow is `E_PARSE`.
+ */
+export function parseStdinConnect(
+  filePath: string,
+  lines: string[],
+  idx: number,
+  innerNo: number,
+  innerRaw: string,
+  afterStdin: string,
+  captureName: string | undefined,
+  stdinCol: number,
+  trivia: Trivia,
+  opts?: BlockParseOpts,
+): { step: StepDef; nextIdx: number } {
+  const t = afterStdin.trimStart();
+  if (t === "") {
+    fail(filePath, "stdin requires a value expression: stdin <expr> -> ref()", innerNo, stdinCol);
+  }
+  const { operand, rest } = takeStdinOperand(t);
+  const stdin = stdinOperandToExpr(filePath, innerNo, stdinCol, operand);
+  const afterOperand = rest.trimStart();
+  if (!afterOperand.startsWith("->")) {
+    fail(filePath, "stdin requires '-> ref()' after the value: stdin <expr> -> ref()", innerNo, stdinCol);
+  }
+  const target = afterOperand.slice(2).trimStart();
+  if (target === "") {
+    fail(filePath, "stdin requires a call target: stdin <expr> -> ref()", innerNo, stdinCol);
+  }
+  if (/^async(?:\s|$)/.test(target)) {
+    fail(filePath, "async is not supported with stdin", innerNo, stdinCol);
+  }
+  if (target.startsWith("`")) {
+    const result = parseAnonymousInlineScript(filePath, lines, idx, target, innerNo, stdinCol, true);
+    const body = makeInlineScriptExpr(result);
+    const stepLoc = { line: innerNo, col: stdinCol };
+    const c: BlockCtx = { filePath, lines, idx, innerRaw, inner: innerRaw.trim(), innerNo, trivia, opts };
+    return parseInlineScriptTail(c, result, body, stepLoc, stdinCol, stdin, captureName);
+  }
+  return parseCallStatement(
+    filePath, lines, idx, innerNo, innerRaw, target, false, captureName, stdin, "stdin", stdinCol, trivia, opts,
+  );
 }
 
 export type BlockCtx = {
@@ -488,6 +506,15 @@ function tryParseConst(c: BlockCtx): BlockResult | null {
   if (!m) return null;
   const name = m[1];
   const rhs = m[2].trim();
+  // const out = stdin <expr> -> ref()  →  an exec step that captures into `out`.
+  if (rhs === "stdin" || rhs.startsWith("stdin ")) {
+    const eqIdx = c.innerRaw.indexOf("=");
+    const stdinCol = c.innerRaw.indexOf("stdin", eqIdx) + 1;
+    const after = rhs === "stdin" ? "" : rhs.slice("stdin ".length);
+    return parseStdinConnect(
+      c.filePath, c.lines, c.idx, c.innerNo, c.innerRaw, after, name, stdinCol, c.trivia, c.opts,
+    );
+  }
   const { value, nextLineIdx } = parseConstRhs(
     c.filePath, c.lines, c.idx, rhs, c.innerNo, c.innerRaw.indexOf(rhs) + 1, name, c.trivia,
   );
@@ -613,31 +640,37 @@ function tryParseWait(c: BlockCtx): BlockResult | null {
 
 function tryParseEnsureRemoved(c: BlockCtx): BlockResult | null {
   if (!c.inner.startsWith("ensure ") && c.inner !== "ensure") return null;
-  fail(c.filePath, "'ensure' is not a keyword; use 'run'", c.innerNo, c.innerRaw.indexOf("ensure") + 1);
+  fail(
+    c.filePath,
+    "'ensure' is not a keyword; call the target directly (e.g. name(args))",
+    c.innerNo,
+    c.innerRaw.indexOf("ensure") + 1,
+  );
 }
 
 /**
- * After `run \`body\`(args)` / `run \`\`\`...\`\`\`(args)`, optionally parse an
- * attached `catch (...) { ... }` or `recover(...) { ... }` clause. Same
- * semantics and bindings as named-ref `run`. `recover` and `catch` are
- * mutually exclusive — when both appear on the same step the leftover
- * keyword falls through and is rejected with the existing "unexpected
- * content after anonymous inline script" error.
+ * After a bare `` `body`(args) `` / `` ```...```(args) `` inline script,
+ * optionally parse an attached `catch (...) { ... }` or `recover(...) { ... }`
+ * clause. Same semantics and bindings as a named-ref call. `recover` and
+ * `catch` are mutually exclusive — when both appear on the same step the
+ * leftover keyword falls through and is rejected with the existing "unexpected
+ * content after anonymous inline script" error. `stdin` / `captureName` are
+ * carried through from a leading `stdin` connect or `const` binding.
  */
 function parseInlineScriptTail(
   c: BlockCtx,
   result: { closingLineIdx: number; trailing: string; nextLineIdx: number },
   body: Expr,
   stepLoc: { line: number; col: number },
+  hostCol: number,
+  stdin?: Expr,
+  captureName?: string,
 ): BlockResult {
   const closingRaw = c.lines[result.closingLineIdx]!;
   const closingNo = result.closingLineIdx + 1;
-  // An optional `stdin <expr>` clause precedes any catch/recover (inline
-  // scripts are always non-async, so stdin is allowed).
-  const { stdin, rest } = extractStdin(c.filePath, closingNo, closingRaw, false, result.trailing);
-  const trimmed = rest.trimStart();
+  const trimmed = result.trailing.trimStart();
   if (trimmed === "") {
-    return { step: execStep(body, stepLoc, { stdin }), nextIdx: result.nextLineIdx };
+    return { step: execStep(body, stepLoc, { stdin, captureName }), nextIdx: result.nextLineIdx };
   }
   const recoverMatch = trimmed.match(/^recover([\s(].*)$/s);
   const catchMatch = trimmed.match(/^catch(\s.*)$/s);
@@ -652,7 +685,7 @@ function parseInlineScriptTail(
       c.filePath,
       `unexpected content after anonymous inline script: '${trimmed}'`,
       result.closingLineIdx + 1,
-      c.innerRaw.indexOf("run") + 1,
+      hostCol,
     );
   }
   const block = parseAttachedBlock(
@@ -660,35 +693,74 @@ function parseInlineScriptTail(
     attached.keyword, attached.after, c.trivia, c.opts,
   );
   const extras = attached.keyword === "catch"
-    ? { stdin, catch: block.body }
-    : { stdin, recover: block.body };
+    ? { stdin, captureName, catch: block.body }
+    : { stdin, captureName, recover: block.body };
   return { step: execStep(body, stepLoc, extras), nextIdx: block.nextIdx };
 }
 
-function tryParseRun(c: BlockCtx): BlockResult | null {
-  if (!c.inner.startsWith("run ")) return null;
-  const runCol = c.innerRaw.indexOf("run") + 1;
-  if (c.inner.startsWith("run async ")) {
-    const runBody = c.inner.slice("run async ".length).trim();
-    if (runBody.startsWith("`")) {
-      fail(c.filePath, "run async is not supported with inline scripts", c.innerNo, runCol);
-    }
-    return parseRun(
-      c.filePath, c.lines, c.idx, c.innerNo, c.innerRaw, runBody, true, undefined, c.trivia, c.opts,
-    );
+/**
+ * Tombstone: `run` is no longer the invoke keyword. `run(...)` / bare `run`
+ * fall through so a symbol literally named `run` can still be called; anything
+ * else that begins `run <…>` is the removed keyword form and is `E_PARSE`.
+ */
+function tryParseRunKeywordRemoved(c: BlockCtx): BlockResult | null {
+  if (c.inner === "run" || /^run\s*\(/.test(c.inner)) return null;
+  fail(
+    c.filePath,
+    "'run' is not a keyword; call the target directly (e.g. name(args)) instead of 'run name(args)'",
+    c.innerNo,
+    c.innerRaw.indexOf("run") + 1,
+  );
+}
+
+/** `async <ref>(args)` — an async capture in statement position. */
+function tryParseAsync(c: BlockCtx): BlockResult | null {
+  if (c.inner !== "async" && !c.inner.startsWith("async ")) return null;
+  const col = c.innerRaw.indexOf("async") + 1;
+  const rest = c.inner === "async" ? "" : c.inner.slice("async ".length).trim();
+  if (rest.startsWith("`")) {
+    fail(c.filePath, "async is not supported with inline scripts", c.innerNo, col);
   }
-  const runBody = c.inner.slice("run ".length).trim();
-  if (runBody.startsWith("`")) {
-    const result = parseAnonymousInlineScript(c.filePath, c.lines, c.idx, runBody, c.innerNo, runCol, true);
+  if (rest === "stdin" || rest.startsWith("stdin ")) {
+    fail(c.filePath, "async is not supported with stdin", c.innerNo, col);
+  }
+  return parseCallStatement(
+    c.filePath, c.lines, c.idx, c.innerNo, c.innerRaw, rest, true, undefined, undefined, "async", col, c.trivia, c.opts,
+  );
+}
+
+/** `stdin <expr> -> <call>` connect form in statement position. */
+function tryParseStdin(c: BlockCtx): BlockResult | null {
+  if (c.inner !== "stdin" && !c.inner.startsWith("stdin ")) return null;
+  const stdinCol = c.innerRaw.indexOf("stdin") + 1;
+  const after = c.inner === "stdin" ? "" : c.inner.slice("stdin ".length);
+  return parseStdinConnect(
+    c.filePath, c.lines, c.idx, c.innerNo, c.innerRaw, after, undefined, stdinCol, c.trivia, c.opts,
+  );
+}
+
+/**
+ * A bare call statement: `` `body`(args) `` inline script or `ref(args)` managed
+ * call, optionally with an attached `catch` / `recover`. Fires only after the
+ * keyword dispatch table misses, so a keyword line never reaches here. Returns
+ * null for any line that is not call-shaped so it falls through to shell.
+ */
+function tryBareCall(c: BlockCtx): BlockResult | null {
+  const inner = c.inner;
+  if (inner.startsWith("`")) {
+    const col = colFromRaw(c.innerRaw);
+    const result = parseAnonymousInlineScript(c.filePath, c.lines, c.idx, inner, c.innerNo, col, true);
     const body = makeInlineScriptExpr(result);
-    const stepLoc = { line: c.innerNo, col: runCol };
-    return parseInlineScriptTail(c, result, body, stepLoc);
+    const stepLoc = { line: c.innerNo, col };
+    return parseInlineScriptTail(c, result, body, stepLoc, col);
   }
-  if (runBody.startsWith("script(") || runBody.startsWith("script (")) {
-    fail(c.filePath, 'inline script syntax has changed: use run `body`(args) instead of run script(args) "body"', c.innerNo);
-  }
-  return parseRun(
-    c.filePath, c.lines, c.idx, c.innerNo, c.innerRaw, runBody, false, undefined, c.trivia, c.opts,
+  // Any `ident(.ident)*(` is a call attempt; a malformed ref shape (e.g. a
+  // three-part `a.b.c(`) then fails in parseCallStatement rather than silently
+  // becoming a shell line.
+  if (!/^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*\s*\(/.test(inner)) return null;
+  const col = colFromRaw(c.innerRaw);
+  return parseCallStatement(
+    c.filePath, c.lines, c.idx, c.innerNo, c.innerRaw, inner, false, undefined, undefined, "call", col, c.trivia, c.opts,
   );
 }
 
@@ -712,14 +784,10 @@ function parseSayBody(
   const arg = c.inner.slice(level.length).trimStart();
   const col = c.innerRaw.indexOf(level) + 1;
   const stepLoc = { line: c.innerNo, col };
-  if (arg.startsWith("run ") && arg.slice("run ".length).trimStart().startsWith("`")) {
-    const runBody = arg.slice("run ".length).trim();
-    const result = parseAnonymousInlineScript(c.filePath, c.lines, c.idx, runBody, c.innerNo, col);
+  if (arg.startsWith("`")) {
+    const result = parseAnonymousInlineScript(c.filePath, c.lines, c.idx, arg, c.innerNo, col);
     const message = makeInlineScriptExpr(result);
     return { step: { type: "say", level, message, loc: stepLoc }, nextIdx: result.nextLineIdx };
-  }
-  if (arg.startsWith("`") || arg.startsWith("```")) {
-    fail(c.filePath, `bare inline scripts in ${level} are not allowed; use "${level} run \`...\`()" to execute a managed inline script`, c.innerNo, col);
   }
   if (arg.startsWith('"""')) {
     const { body, nextIdx } = consumeTripleQuotedArg(c.filePath, c.lines, c.idx, arg);
@@ -791,37 +859,35 @@ function tryParseReturn(c: BlockCtx): BlockResult | null {
       nextIdx: result.nextLineIdx > c.idx ? result.nextLineIdx + 1 : c.idx + 1,
     };
   }
-  if (returnValue.startsWith("run ")) {
-    const runBody = returnValue.slice("run ".length).trim();
-    if (runBody.startsWith("`")) {
-      const result = parseAnonymousInlineScript(c.filePath, c.lines, c.idx, runBody, c.innerNo, c.innerRaw.indexOf("run") + 1);
-      const value = makeInlineScriptExpr(result);
-      return { step: { type: "return", value, loc: retLoc }, nextIdx: result.nextLineIdx };
-    }
-    // parseCallRefMultiline returns null only when runBody does not start with ref(.
-    // When runBody starts with ref( but the call is incomplete (unclosed paren),
-    // it calls fail() so the line never falls through to a shell step.
-    const call = parseCallRefMultiline(c.filePath, c.lines, c.idx, runBody);
+  if (returnValue.startsWith("run ") && !/^run\s*\(/.test(returnValue)) {
+    fail(
+      c.filePath,
+      "'run' is not a keyword; return the call directly: return name(...)",
+      c.innerNo,
+      c.innerRaw.indexOf("run") + 1,
+    );
+  }
+  if (returnValue.startsWith("ensure ")) {
+    fail(c.filePath, "'ensure' is not a keyword; return the call directly: return name(...)", c.innerNo, c.innerRaw.indexOf("ensure") + 1);
+  }
+  if (returnValue.startsWith("`")) {
+    const result = parseAnonymousInlineScript(c.filePath, c.lines, c.idx, returnValue, c.innerNo, retLoc.col);
+    const value = makeInlineScriptExpr(result);
+    return { step: { type: "return", value, loc: retLoc }, nextIdx: result.nextLineIdx };
+  }
+  // Bare call `return ref(args)`. parseCallRefMultiline returns null when the
+  // value does not start with `ref(`; when it starts with `ref(` but the call
+  // is incomplete it calls fail() so the line never becomes a shell step.
+  if (/^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?\s*\(/.test(returnValue)) {
+    const call = parseCallRefMultiline(c.filePath, c.lines, c.idx, returnValue);
     if (call) {
-      rejectTrailingContent(c.filePath, c.innerNo, "run", call.rest);
+      rejectTrailingContent(c.filePath, c.innerNo, "return", call.rest);
       const callee = { value: call.ref, loc: retLoc };
       return {
         step: { type: "return", value: { kind: "call", callee, args: call.args }, loc: retLoc },
         nextIdx: call.nextLineIdx,
       };
     }
-    fail(
-      c.filePath,
-      "return run requires a call: return run name(...)",
-      c.innerNo,
-      c.innerRaw.indexOf("run") + 1,
-    );
-  }
-  if (returnValue.startsWith("ensure ")) {
-    fail(c.filePath, "'ensure' is not a keyword; use 'run'", c.innerNo, c.innerRaw.indexOf("ensure") + 1);
-  }
-  if (returnValue.startsWith("`") || returnValue.startsWith("```")) {
-    fail(c.filePath, 'bare inline scripts in return are not allowed; use "return run `...`()" to execute a managed inline script', c.innerNo, retLoc.col);
   }
   if (returnValue.startsWith("'")) {
     fail(c.filePath, SINGLE_QUOTE_MESSAGE, c.innerNo, retLoc.col);
@@ -858,7 +924,7 @@ function tryParseReturn(c: BlockCtx): BlockResult | null {
   }
   fail(
     c.filePath,
-    'return value must be a string, identifier, run …, prompt …, or match …',
+    'return value must be a string, identifier, call, prompt …, or match …',
     c.innerNo,
     retLoc.col,
   );
@@ -911,7 +977,9 @@ export const STATEMENT: Record<string, BlockHandler> = {
   fail: tryParseFail,
   wait: tryParseWait,
   ensure: tryParseEnsureRemoved,
-  run: tryParseRun,
+  run: tryParseRunKeywordRemoved,
+  async: tryParseAsync,
+  stdin: tryParseStdin,
   prompt: tryParsePrompt,
   log: tryParseLog,
   logerr: tryParseLogerr,
@@ -949,7 +1017,14 @@ function applyAssignmentGuards(c: BlockCtx): void {
         c.innerRaw.indexOf(captureName) + 1,
       );
     }
-    if (rest.startsWith("run ") || rest.startsWith("ensure ")) {
+    const looksInvoke =
+      rest.startsWith("run ") ||
+      rest.startsWith("ensure ") ||
+      rest.startsWith("async ") ||
+      rest.startsWith("stdin ") ||
+      rest.startsWith("`") ||
+      /^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?\s*\(/.test(rest);
+    if (looksInvoke) {
       fail(
         c.filePath,
         `assignment without "const" is no longer supported; use "const ${captureName} = ${rest}"`,
@@ -1042,7 +1117,7 @@ export function parseBlockStatement(
     }
   }
 
-  return tryLegacySend(c) ?? shellFallthrough(c);
+  return tryBareCall(c) ?? tryLegacySend(c) ?? shellFallthrough(c);
 }
 
 const KEYWORD_EXAMPLE = {
