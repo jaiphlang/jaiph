@@ -55,15 +55,15 @@ Create a fresh directory and write a file named `hello.jh`:
 script greet = `echo "Hello, ${1:-world}!"`
 
 export def main(who) {
-  return run greet(who)
+  return greet(who)
 }
 ```
 
 Here is what each line does:
 
-- `script greet` declares a managed script. The body in the example is a single-line bash command. It uses shell positional arguments such as `$1` and `$2`, not Jaiph `${name}` interpolation. `${1:-world}` is bash default expansion, which supplies `world` when `run greet(...)` passes no value. For a multi-line body or another interpreter, see [the Script RHS section of the grammar reference](grammar.md#definitions).
+- `script greet` declares a managed script. The body in the example is a single-line bash command. It uses shell positional arguments such as `$1` and `$2`, not Jaiph `${name}` interpolation. `${1:-world}` is bash default expansion, which supplies `world` when `greet(...)` passes no value. For a multi-line body or another interpreter, see [the Script RHS section of the grammar reference](grammar.md#definitions).
 - `export def main(who)` is the run entry. Every `.jh` file invoked with `jaiph run` enters at `export def main`. The `who` parameter is bound by position from the CLI arguments after the file path.
-- `return run greet(who)` calls the script with `who` as `${1}`, captures its stdout as the step value, and returns it as the run's return value.
+- `return greet(who)` calls the script with `who` as `${1}`, captures its stdout as the step value, and returns it as the run's return value.
 
 ## 3. Run it
 
@@ -125,7 +125,7 @@ Replace the script body with one that exits non-zero:
 script greet = `echo "Hello, ${1:-world}!" && exit 7`
 
 export def main(who) {
-  return run greet(who)
+  return greet(who)
 }
 ```
 

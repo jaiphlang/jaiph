@@ -157,7 +157,7 @@ find src -type f \( -name '*.test.ts' -o -name '*.acceptance.test.ts' \) | sort
 
 | Area | Typical location | What it usually covers |
 |------|------------------|------------------------|
-| Parser and tokenizer helpers | `src/parse/*.test.ts`, `src/parse/dedent.test.ts` | `.jh` / `.test.jh` surface: imports, config, steps, strings, channels, fences, `run async`, … |
+| Parser and tokenizer helpers | `src/parse/*.test.ts`, `src/parse/dedent.test.ts` | `.jh` / `.test.jh` surface: imports, config, steps, strings, channels, fences, `async`, … |
 | CLI and terminal UX | `src/cli/**/*.test.ts` | Commands, `jaiph run` lifecycle, progress, hooks, `resolve-env` |
 | Transpiler and validation | `src/transpile/*.test.ts` + `*.acceptance.test.ts` | `validateModule`, `emit`, golden compiler (`compiler-golden.test.ts`), cross-module edge cases (`compiler-edge.acceptance.test.ts`) |
 | Formatter | `src/format/*.test.ts` | `jaiph format` |
@@ -186,7 +186,7 @@ Tests that span multiple modules, require subprocess/PTY harnesses, exercise pro
 | `integration/sample-build/run-core.test.ts` | Integration | Core runtime execution — workflow runs, step sequencing, artifacts |
 | `integration/sample-build/run-prompt-agent.test.ts` | Integration | Prompt and agent interaction in sample workflows |
 | `integration/sample-build/recover-handle.test.ts` | Integration | `recover` / `Handle<T>` async behavior in sample workflows |
-| `integration/sample-build/async-handle-edges.test.ts` | Integration | `run async` / `Handle<T>` edge cases in sample workflows — catch on an async branch, failed handle reads, `for_lines` over a handle token, early-return joins, if-body joins, and cross-branch `send` delivery |
+| `integration/sample-build/async-handle-edges.test.ts` | Integration | `async` / `Handle<T>` edge cases in sample workflows — catch on an async branch, failed handle reads, `for_lines` over a handle token, early-return joins, if-body joins, and cross-branch `send` delivery |
 | `integration/sample-build/test-advanced.test.ts` | Integration | Advanced test harness behavior — mocks, channels, edge cases |
 | `integration/sample-build/test-framework.test.ts` | Integration | Test framework basics — `mock prompt`, `expect_*`, test block lifecycle |
 | `integration/run-summary-jsonl.test.ts` | Integration | Runs the CLI on a small workflow and asserts structure and fields of `run_summary.jsonl` under `.jaiph/runs/` |
@@ -358,7 +358,7 @@ e2e::section "Feature under test"
 e2e::file "hello.jh" <<'EOF'
 script hello_impl = `echo "hello-jh"`
 export def main() {
-  const msg = run hello_impl()
+  const msg = hello_impl()
   return "${msg}"
 }
 EOF

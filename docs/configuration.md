@@ -104,7 +104,7 @@ script release use GITHUB_TOKEN NPM_TOKEN = `gh release create …`
 jaiph run --env GITHUB_TOKEN --env NPM_TOKEN publish.jh
 ```
 
-The `use` request lives on a script declaration (named `script`, `export script`, or `import script … as alias use KEY`) or on a [named prompt](language.md#named-prompts) definition (`prompt analyze(log) use GITHUB_TOKEN = …`) — never on defs, `run` / `prompt` call sites, or anonymous `prompt` steps. Anonymous prompt subprocesses keep the fail-closed `scrubPromptEnv` allowlist and never receive `--env` secrets in their child `env`; a named prompt's granted `use` keys are injected into its agent subprocess on top of that scrub. That is spawn-env, not a sandbox — see [Why Jaiph](why-jaiph.md). Recipe: [Pass a host key to a script](script-env.md). Also [Language — Subprocess environment](language.md#subprocess-environment) and [Environment variables](env-vars.md#script-env).
+The `use` request lives on a script declaration (named `script`, `export script`, or `import script … as alias use KEY`) or on a [named prompt](language.md#named-prompts) definition (`prompt analyze(log) use GITHUB_TOKEN = …`) — never on defs, call or `prompt` sites, or anonymous `prompt` steps. Anonymous prompt subprocesses keep the fail-closed `scrubPromptEnv` allowlist and never receive `--env` secrets in their child `env`; a named prompt's granted `use` keys are injected into its agent subprocess on top of that scrub. That is spawn-env, not a sandbox — see [Why Jaiph](why-jaiph.md). Recipe: [Pass a host key to a script](script-env.md). Also [Language — Subprocess environment](language.md#subprocess-environment) and [Environment variables](env-vars.md#script-env).
 
 ## Precedence
 {: #precedence}
@@ -123,8 +123,8 @@ The `use` request lives on a script declaration (named `script`, `export script`
 | Call type | Scope behaviour |
 |---|---|
 | Root entry (`jaiph run file.jh`) | Full module + def metadata applied with normal precedence. |
-| Same-module `run` | Callee's def-level `config` is layered on top of the caller's effective env. Module-level config is not re-applied. |
-| Cross-module `run` (e.g. `run alias.main()`) | Callee's module-level config is layered, then def-level on top — same as root-entry precedence, respecting `${NAME}_LOCKED`. **`agent.command` and `agent.backend` are not applied from imported modules** (see [Import trust boundary](#import-trust-boundary)). |
+| Same-module call | Callee's def-level `config` is layered on top of the caller's effective env. Module-level config is not re-applied. |
+| Cross-module call (e.g. `alias.main()`) | Callee's module-level config is layered, then def-level on top — same as root-entry precedence, respecting `${NAME}_LOCKED`. **`agent.command` and `agent.backend` are not applied from imported modules** (see [Import trust boundary](#import-trust-boundary)). |
 
 After any nested call returns, the caller's scope is restored exactly as before.
 

@@ -49,8 +49,8 @@ The clone directory name is the import prefix. For `jaiph install jaiphlang`, th
 import "jaiphlang/queue" as q
 
 export def main() {
-  run q.has_tasks()
-  const t = run q.get_first_task()
+  q.has_tasks()
+  const t = q.get_first_task()
   log "${t}"
 }
 ```
