@@ -142,7 +142,7 @@ process.stdout.write("node-step-output\n");
 export def main() {
   const who = "Windows"
   echo "inline shell for ${who}"
-  run node_step()
+  node_step()
   log "smoke greeting for ${who}"
 }
 '@
@@ -173,7 +173,7 @@ setInterval(() => {}, 1000);
 ```
 
 export def main() {
-  run long_sleep()
+  long_sleep()
 }
 '@
 
