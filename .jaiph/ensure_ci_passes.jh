@@ -8,45 +8,45 @@ config {
 }
 
 script npm_run_test_ci = ```
-while IFS= read -r _v; do
-  unset "$_v" 2>/dev/null || true
-done < <(compgen -e | grep '^JAIPH_' || true)
-# Heartbeat so JAIPH_STEP_IDLE_KILL_SEC cannot kill a long-but-live test:ci
-# when individual e2e scripts go quiet.
-(
-  elapsed=0
-  while true; do
-    sleep 30
-    elapsed=$((elapsed + 30))
-    printf 'ensure_ci_passes: test:ci still running (%ds elapsed)\n' "${elapsed}"
-  done
-) &
-hb_pid=$!
-trap 'kill "${hb_pid}" >/dev/null 2>&1 || true' EXIT
-npm run test:ci
-rc=$?
-kill "${hb_pid}" >/dev/null 2>&1 || true
-exit "${rc}"
+  while IFS= read -r _v; do
+    unset "$_v" 2>/dev/null || true
+  done < <(compgen -e | grep '^JAIPH_' || true)
+  # Heartbeat so JAIPH_STEP_IDLE_KILL_SEC cannot kill a long-but-live test:ci
+  # when individual e2e scripts go quiet.
+  (
+    elapsed=0
+    while true; do
+      sleep 30
+      elapsed=$((elapsed + 30))
+      printf 'ensure_ci_passes: test:ci still running (%ds elapsed)\n' "${elapsed}"
+    done
+  ) &
+  hb_pid=$!
+  trap 'kill "${hb_pid}" >/dev/null 2>&1 || true' EXIT
+  npm run test:ci
+  rc=$?
+  kill "${hb_pid}" >/dev/null 2>&1 || true
+  exit "${rc}"
 ```
 
 script assert_nonempty_file_or_fail = ```
-test -s "$1" || {
-  echo "jaiph: ci failure log is empty at $1" >&2
-  exit 1
-}
+  test -s "$1" || {
+    echo "jaiph: ci failure log is empty at $1" >&2
+    exit 1
+  }
 ```
 
 # recover binds `failure` to the failed step's stdout CAPTURE PATH (an absolute
 # *.out under JAIPH_RUN_DIR); stderr is the sibling *.err. Copy those bytes from
 # disk into ci_log_file — never forward the ~1MB+ log through argv (ARG_MAX).
 script save_ci_log_from_capture = ```
-out_path="$1"
-dest="$2"
-cp "$out_path" "$dest"
-err_path="${out_path%.out}.err"
-if [ -f "$err_path" ]; then
-  cat "$err_path" >> "$dest"
-fi
+  out_path="$1"
+  dest="$2"
+  cp "$out_path" "$dest"
+  err_path="${out_path%.out}.err"
+  if [ -f "$err_path" ]; then
+    cat "$err_path" >> "$dest"
+  fi
 ```
 
 export def ensure_ci_passes() {

@@ -181,7 +181,7 @@ export def report_completed_task(header, notes) {
     }
     const rest = run common.rest_lines_str(task)
     const updated = "${rest}\n\n### PO notes\n\n${result.notes}\n"
-    run common.save_string_to_file(notes_file) stdin updated
+    run common.save_string_to_file(notes_file) stdin "${updated}"
     const clean = run first_line_task(task)
     run queue.set_task_description_from_file(clean, notes_file)
     return "needs-work: ${result.notes}"
@@ -229,7 +229,7 @@ export def task_details(header, question) {
   const body_file = "${tmpdir}/po_details_body.md"
   const rest = run common.rest_lines_str(task)
   const updated = "${rest}\n\n### PO note\n\nQ: ${question}\n\nA: ${result.notes}\n"
-  run common.save_string_to_file(body_file) stdin updated
+  run common.save_string_to_file(body_file) stdin "${updated}"
   const title = run first_line_task(task)
   run queue.set_task_description_from_file(title, body_file)
   return "${result.notes}"

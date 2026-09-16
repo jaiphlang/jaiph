@@ -73,14 +73,14 @@ const reviewer_role = """
 """
 
 script git_diff_uncommitted = ```
-{
-  git diff --cached
-  git diff
-  git ls-files --others --exclude-standard | while IFS= read -r f; do
-    [ -z "$f" ] && continue
-    git diff --no-index -- /dev/null "$f" || true
-  done
-}
+  {
+    git diff --cached
+    git diff
+    git ls-files --others --exclude-standard | while IFS= read -r f; do
+      [ -z "$f" ] && continue
+      git diff --no-index -- /dev/null "$f" || true
+    done
+  }
 ```
 
 script git_diff_range = `git diff "$1"`

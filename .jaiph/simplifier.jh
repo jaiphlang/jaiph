@@ -43,21 +43,21 @@ const simplifier_principles = """
 """
 
 script assert_no_test_or_e2e_in_changed = ```
-local bad=0
-while IFS= read -r f; do
-  [ -z "$f" ] && continue
-  if [[ "$f" == test/* ]] || [[ "$f" == e2e/* ]]; then
-    echo "Simplifier workflow must not modify tests or e2e: $f" >&2
-    bad=1
-  fi
-done < <(
-  {
-    git diff --name-only --cached
-    git diff --name-only
-    git ls-files --others --exclude-standard
-  } | sort -u
-)
-return $bad
+  local bad=0
+  while IFS= read -r f; do
+    [ -z "$f" ] && continue
+    if [[ "$f" == test/* ]] || [[ "$f" == e2e/* ]]; then
+      echo "Simplifier workflow must not modify tests or e2e: $f" >&2
+      bad=1
+    fi
+  done < <(
+    {
+      git diff --name-only --cached
+      git diff --name-only
+      git ls-files --others --exclude-standard
+    } | sort -u
+  )
+  return $bad
 ```
 
 def no_test_or_e2e_paths_changed() {
@@ -100,7 +100,7 @@ def find_simplifications() {
     Sort by (risk ascending, then impact descending). Skip cosmetic-only edits.
     </task>
     </role>
-"""
+  """
 
   run save_simplifier_report(report)
   log "Simplification report saved to .jaiph/tmp/simplifier_report.md"
@@ -141,7 +141,7 @@ def apply_simplifications() {
     Report:
     ${report}
     </task>
-"""
+  """
 
   run no_test_or_e2e_paths_changed()
 }
