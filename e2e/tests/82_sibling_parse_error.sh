@@ -15,7 +15,7 @@ e2e::section "Single-file run ignores sibling parse errors"
 e2e::file "valid.jh" <<'EOF'
 script say_ok = `echo "valid-ok"`
 export def main() {
-  run say_ok()
+  say_ok()
 }
 EOF
 

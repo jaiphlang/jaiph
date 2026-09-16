@@ -44,10 +44,10 @@ function makeRuntime(root: string, jhBody: string): NodeWorkflowRuntime {
   return new NodeWorkflowRuntime(graph, { env, cwd: root, suppressLiveEvents: true });
 }
 
-// AC: `run echo_stdin() stdin payload` with `script echo_stdin = `cat`` delivers
+// AC: `echo_stdin() stdin payload` with `script echo_stdin = `cat`` delivers
 // the payload on the child's stdin (cat echoes it to stdout), and the payload
 // never appears in the spawn argv.
-test("run script() stdin payload: payload arrives on stdin, not argv", async () => {
+test("script() stdin payload: payload arrives on stdin, not argv", async () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-stdin-echo-"));
   try {
     const runtime = makeRuntime(
@@ -55,7 +55,7 @@ test("run script() stdin payload: payload arrives on stdin, not argv", async () 
       [
         "script echo_stdin = `cat`",
         "export def main(payload) {",
-        "  run echo_stdin() stdin payload",
+        "  stdin payload -> echo_stdin()",
         "}",
         "",
       ].join("\n"),
@@ -85,7 +85,7 @@ test("run script() stdin payload: payload arrives on stdin, not argv", async () 
 
 // AC: a stdin payload larger than 1 MB (which argv/ARG_MAX could not carry) is
 // written to the child in full, and the step exits 0.
-test("run script() stdin: a payload > 1 MB is written in full and the step exits 0", async () => {
+test("script() stdin: a payload > 1 MB is written in full and the step exits 0", async () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-stdin-big-"));
   try {
     const runtime = makeRuntime(
@@ -93,7 +93,7 @@ test("run script() stdin: a payload > 1 MB is written in full and the step exits
       [
         'script save = `cat > "$1"`',
         "export def main(path, payload) {",
-        "  run save(path) stdin payload",
+        "  stdin payload -> save(path)",
         "}",
         "",
       ].join("\n"),
@@ -111,14 +111,14 @@ test("run script() stdin: a payload > 1 MB is written in full and the step exits
 });
 
 // AC: an inline-script run also pipes stdin.
-test("run `cat`() stdin payload: inline script receives stdin", async () => {
+test("`cat`() stdin payload: inline script receives stdin", async () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-stdin-inline-"));
   try {
     const runtime = makeRuntime(
       root,
       [
         "export def main(payload) {",
-        "  run `cat`() stdin payload",
+        "  stdin payload -> `cat`()",
         "}",
         "",
       ].join("\n"),

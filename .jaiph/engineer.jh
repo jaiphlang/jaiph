@@ -1,7 +1,7 @@
 #!/usr/bin/env jaiph
 
 #
-# Implement a task: code, CI, docs, commit patch.
+# Implement a task: code, CI, docs, commit.
 #
 # CLI / overnight (queue-driven):
 #   jaiph run .jaiph/engineer.jh
@@ -10,7 +10,6 @@
 # Hub / serve / mcp (task parameter, no QUEUE.md):
 #   export def implement_from_task(task) — used by .jaiph/main.jh engineer(task)
 #
-import "jaiphlang/artifacts" as artifacts
 import "jaiphlang/claude" as claude
 import "jaiphlang/git" as git
 import "jaiphlang/queue" as queue
@@ -35,6 +34,8 @@ const safety_constraints = """
     jaiph .jaiph/docs_parity.jh, or any jaiph command targeting .jaiph/*.jh.
   - Treat .jaiph/*.jh as orchestration-only workflows that must not be called
     from inside this implementation prompt.
+  - Do not edit, format, or rewrite `.jaiph/**` (including `*.jh`). Parent owns
+    those files. Changing them can recurse into nested Claude sessions.
   - NEVER launch a nested Claude/Cursor agent session from inside this workflow.
     Nested sessions share runtime resources and can crash active sessions.
   - Do not attempt to bypass nested-session guards (for example by unsetting
@@ -246,7 +247,7 @@ def classify_role(task) {
   # Normalize the free-text classifier answer (case, extra words like
   # "surgical engineer") to a canonical role name before select_role.
   const role_raw = "${result.role}"
-  const role_lc = run common.to_lower(role_raw)
+  const role_lc = common.to_lower(role_raw)
   return match role_lc {
     /surgical/ => "surgical"
     /reduction/ => "reductionist"
@@ -260,11 +261,11 @@ def implement(task, role_name) {
   config {
     agent.model = "opus"
   }
-  run task_text_has_header(task) catch (err) {
+  task_text_has_header(task) catch (err) {
     fail "Provided task does not contain a '## [text]' header"
   }
 
-  const role = run select_role(role_name)
+  const role = select_role(role_name)
 
   prompt """
     ## Role
@@ -329,58 +330,52 @@ def implement(task, role_name) {
   """
 }
 
-# Shared post-implement path: CI, docs parity from the task text, commit, artifact.
+# Shared post-implement path: CI, docs parity from the task text, commit.
 # Callers that touch QUEUE.md must do so before this (so the commit includes it).
 def verify_docs_and_commit(task) {
-  run ci.ensure_ci_passes()
-  run docs.update_from_task(task)
-  const patch_file = run git.commit(task)
-  run artifacts.save(patch_file)
-  return patch_file
+  ci.ensure_ci_passes()
+  docs.update_from_task(task)
+  git.commit(task)
 }
 
 # Task-parameter entry for serve/mcp hub. Does not read or write QUEUE.md.
 export def implement_from_task(task) {
-  run common.arg_nonempty(task) catch (err) {
+  common.arg_nonempty(task) catch (err) {
     fail "engineer.implement_from_task requires a non-empty task parameter (markdown with a ## header)"
   }
 
-  run claude.ensure_usage()
+  claude.ensure_usage()
 
-  const task_header = run first_line_task(task)
+  const task_header = first_line_task(task)
   log "Implementing task: ${task_header}"
 
-  const role_name = run classify_role(task)
+  const role_name = classify_role(task)
   log "Role: ${role_name}"
 
-  run implement(task, role_name)
+  implement(task, role_name)
 
-  const patch_file = run verify_docs_and_commit(task)
-  log "Patch file: ${patch_file}"
-  return patch_file
+  verify_docs_and_commit(task)
 }
 
 # Queue-driven entry for CLI / overnight loops. Always auto-classifies the role.
 export def implement_from_queue() {
-  run claude.ensure_usage()
+  claude.ensure_usage()
 
-  const task = run queue.get_first_task()
-  run queue.task_is_dev_ready(task)
-  const task_header = run first_line_task(task)
+  const task = queue.get_first_task()
+  queue.task_is_dev_ready(task)
+  const task_header = first_line_task(task)
   log "Implementing task: ${task_header}"
 
-  const role_name = run classify_role(task)
+  const role_name = classify_role(task)
   log "Role: ${role_name}"
 
-  run implement(task, role_name)
+  implement(task, role_name)
 
-  run queue.remove_completed_task(task_header)
+  queue.remove_completed_task(task_header)
 
-  const patch_file = run verify_docs_and_commit(task)
-  log "Patch file: ${patch_file}"
-  return patch_file
+  verify_docs_and_commit(task)
 }
 
 export def main() {
-  return run implement_from_queue()
+  implement_from_queue()
 }

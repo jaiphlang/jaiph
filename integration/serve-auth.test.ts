@@ -26,7 +26,7 @@ const FIXTURE = [
   "",
   "# Sleeps briefly so a run is observably in-flight.",
   "export def slow() {",
-  "  run sleeper()",
+  "  sleeper()",
   '  return "woke"',
   "}",
   "",

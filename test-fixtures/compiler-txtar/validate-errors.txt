@@ -2,14 +2,14 @@
 # @expect error E_VALIDATE "unknown local def or script reference" @2:3
 --- input.jh
 export def main() {
-  run missing_rule()
+  missing_rule()
 }
 
 === unknown local def or script reference in run
 # @expect error E_VALIDATE "unknown local def or script reference" @2:3
 --- input.jh
 export def main() {
-  run missing_workflow()
+  missing_workflow()
 }
 
 === unknown local channel in send
@@ -30,7 +30,7 @@ def example() {
 }
 
 export def main() {
-  run example()
+  example()
 }
 
 === rule with multi-line brace group fails shell-step ban
@@ -44,7 +44,7 @@ def example() {
 }
 
 export def main() {
-  run example()
+  example()
 }
 
 === unsupported type in returns schema
@@ -55,7 +55,7 @@ export def main() {
 }
 
 === workflow raw shell that names a script must use run
-# @expect error E_VALIDATE "use run f() — a bare name that refers to a script or workflow must use a managed" @3:3
+# @expect error E_VALIDATE "use f() — a bare name that refers to a script or workflow must be called as a managed step" @3:3
 --- input.jh
 script f = `printf '%s' 'x'`
 export def main() {
@@ -63,23 +63,23 @@ export def main() {
 }
 
 === workflow raw shell that names a workflow must use run
-# @expect error E_VALIDATE "use run w() — a bare name that refers to a script or workflow must use a managed" @6:3
+# @expect error E_VALIDATE "use w() — a bare name that refers to a script or workflow must be called as a managed step" @6:3
 --- input.jh
 script w_impl = `echo x`
 def w() {
-  run w_impl()
+  w_impl()
 }
 export def main() {
   w
 }
 
 === send RHS cannot invoke workflow via shell
-# @expect error E_VALIDATE "must be called with run" @7:8
+# @expect error E_VALIDATE "must be called as" @7:8
 --- input.jh
 channel c
 script w_impl = `echo x`
 def w() {
-  run w_impl()
+  w_impl()
 }
 export def main() {
   send w -> c
@@ -90,7 +90,7 @@ export def main() {
 --- input.jh
 script greet = `echo "hello $1"`
 export def main() {
-  run greet(unknown_var)
+  greet(unknown_var)
 }
 
 === run async is rejected in rules
@@ -100,10 +100,10 @@ def helper() {
   log "hi"
 }
 def check() {
-  run async helper()
+  async helper()
 }
 export def main() {
-  run check()
+  check()
 }
 
 === route with unknown def
@@ -119,7 +119,7 @@ export def main() {
 --- input.jh
 channel findings -> check
 def check() {
-  run check_impl()
+  check_impl()
 }
 script check_impl = `true`
 export def main() {
@@ -137,7 +137,7 @@ export def main() {
 # @expect error E_VALIDATE "unknown local def or script reference" @2:3
 --- input.jh
 export def main() {
-  log "got: ${run nonexistent()}"
+  log "got: ${nonexistent()}"
 }
 
 === dot field ref where var has no schema
@@ -159,7 +159,7 @@ export def main() {
 # @expect error E_VALIDATE "unknown import alias" @2:3
 --- input.jh
 export def main() {
-  run ghost.guard()
+  ghost.guard()
 }
 
 === match: missing wildcard arm
@@ -186,13 +186,13 @@ export def main() {
 }
 
 === shell redirection in run args rejected
-# @expect error E_PARSE "unexpected content after run call: '| grep ok'; shell redirection (>, |, &) is n" @5:1
+# @expect error E_PARSE "unexpected content after call call: '| grep ok'; shell redirection (>, |, &) is n" @5:1
 --- input.jh
 def check() {
   return "ok"
 }
 export def main() {
-  run check() | grep ok
+  check() | grep ok
 }
 
 === run in workflow targeting a rule is rejected
@@ -202,7 +202,7 @@ def check() {
   return "ok"
 }
 export def main() {
-  run check()
+  check()
 }
 
 === run in rule targeting a rule is rejected
@@ -212,10 +212,10 @@ def other_rule() {
   return "ok"
 }
 def check() {
-  run other_rule()
+  other_rule()
 }
 export def main() {
-  run check()
+  check()
 }
 
 === run rejects local script reference
@@ -223,7 +223,7 @@ export def main() {
 --- input.jh
 script my_script = `echo ok`
 export def main() {
-  run my_script()
+  my_script()
 }
 
 === run async is rejected in rules
@@ -233,10 +233,10 @@ def helper() {
   log "hi"
 }
 def check() {
-  run async helper()
+  async helper()
 }
 export def main() {
-  run check()
+  check()
 }
 
 === const prompt in rules (caught at parse time)
@@ -248,7 +248,7 @@ def check() {
   const x = prompt "ask"
 }
 export def main() {
-  run check()
+  check()
 }
 
 === returns schema cannot be empty
@@ -291,7 +291,7 @@ export def main() {
 --- main.jh
 import "lib.jh" as lib
 export def main() {
-  run lib.check()
+  lib.check()
 }
 --- lib.jh
 export def check() {
@@ -303,7 +303,7 @@ export def check() {
 --- main.jh
 import "lib.jh" as lib
 export def main() {
-  run lib.deploy()
+  lib.deploy()
 }
 --- lib.jh
 export def deploy() {
@@ -315,7 +315,7 @@ export def deploy() {
 --- main.jh
 import "lib.jh" as lib
 export def main() {
-  run lib.helper()
+  lib.helper()
 }
 --- lib.jh
 script helper = `echo "ok"`
@@ -328,10 +328,10 @@ def dummy() {
 --- main.jh
 import "lib.jh" as lib
 def check() {
-  run lib.deploy()
+  lib.deploy()
 }
 export def main() {
-  run check()
+  check()
 }
 --- lib.jh
 export def deploy() {
@@ -358,7 +358,7 @@ def helper(a, b) {
   log "ok"
 }
 export def main() {
-  run helper("one")
+  helper("one")
 }
 
 === arity mismatch: too many args to workflow
@@ -368,7 +368,7 @@ def helper(a) {
   log "ok"
 }
 export def main() {
-  run helper("one", "two")
+  helper("one", "two")
 }
 
 === arity mismatch: zero args to workflow expecting two
@@ -378,7 +378,7 @@ def helper(a, b) {
   log "ok"
 }
 export def main() {
-  run helper()
+  helper()
 }
 
 === arity mismatch: too few args to rule
@@ -388,7 +388,7 @@ def check(x) {
   return "ok"
 }
 export def main() {
-  run check()
+  check()
 }
 
 === route target with wrong parameter count
@@ -417,7 +417,7 @@ export def main() {
 # @expect error E_VALIDATE "unknown local def or script reference" @2:3
 --- input.jh
 export def main() {
-  log "got: ${run nonexistent()}"
+  log "got: ${nonexistent()}"
 }
 
 === match: missing wildcard arm with single pattern
@@ -431,7 +431,7 @@ export def main() {
 }
 
 === send RHS with local rule bare ref
-# @expect error E_VALIDATE "must be called with run" @6:8
+# @expect error E_VALIDATE "must be called as" @6:8
 --- input.jh
 channel c
 def check() {
@@ -442,32 +442,32 @@ export def main() {
 }
 
 === shell redirection in run args rejected in rule
-# @expect error E_PARSE "unexpected content after run call: '| grep ok'; shell redirection (>, |, &) is n" @3:1
+# @expect error E_PARSE "unexpected content after call call: '| grep ok'; shell redirection (>, |, &) is n" @3:1
 --- input.jh
 script impl = `true`
 def check() {
-  run impl() | grep ok
+  impl() | grep ok
 }
 export def main() {
-  run check()
+  check()
 }
 
 === shell redirection in run args rejected in workflow
-# @expect error E_PARSE "unexpected content after run call: '> /tmp/out'; shell redirection (>, |, &) is " @3:1
+# @expect error E_PARSE "unexpected content after call call: '> /tmp/out'; shell redirection (>, |, &) is " @3:1
 --- input.jh
 script impl = `true`
 export def main() {
-  run impl() > /tmp/out
+  impl() > /tmp/out
 }
 
 === shell redirection in run args rejected in workflow
-# @expect error E_PARSE "unexpected content after run call: '| grep ok'; shell redirection (>, |, &) is n" @5:1
+# @expect error E_PARSE "unexpected content after call call: '| grep ok'; shell redirection (>, |, &) is n" @5:1
 --- input.jh
 def check() {
   return "ok"
 }
 export def main() {
-  run check() | grep ok
+  check() | grep ok
 }
 
 === channel ref with unknown import alias
@@ -500,10 +500,10 @@ export def handler(a, b, c, d) {
 --- input.jh
 const greeting = "hello"
 def check() {
-  const x = run greeting()
+  const x = greeting()
 }
 export def main() {
-  run check()
+  check()
 }
 
 === channel reference with three dot parts is rejected
@@ -541,7 +541,7 @@ def check() {
   const x = helper
 }
 export def main() {
-  run check()
+  check()
 }
 
 === scripts are not values in workflow const
@@ -585,7 +585,7 @@ export def main() {
 export def main() {
   const x = "hello"
   return match x {
-    "hello" => run `echo yes`()
+    "hello" => `echo yes`()
     _ => "no"
   }
 }
@@ -595,7 +595,7 @@ export def main() {
 --- input.jh
 export def main() {
   const name = "hello"
-  run name()
+  name()
 }
 
 === const run of string variable in rule rejected
@@ -603,10 +603,10 @@ export def main() {
 --- input.jh
 def check() {
   const name = "hello"
-  const x = run name()
+  const x = name()
 }
 export def main() {
-  run check()
+  check()
 }
 
 === match arm body cannot start with return in const context
@@ -634,7 +634,7 @@ def check() {
   log "value: ${ghost}"
 }
 export def main() {
-  run check()
+  check()
 }
 
 === unknown identifier in send literal
@@ -646,7 +646,7 @@ export def main() {
 }
 
 === send RHS with local script bare ref requires run
-# @expect error E_VALIDATE "must be called with run" @4:8
+# @expect error E_VALIDATE "must be called as" @4:8
 --- input.jh
 channel c
 script helper = `echo ok`
@@ -697,7 +697,7 @@ export def main() {
 --- input.jh
 export def main() {
   const name = "hello"
-  const x = run name()
+  const x = name()
 }
 
 === run rejects local workflow reference
@@ -707,7 +707,7 @@ def helper() {
   log "ok"
 }
 export def main() {
-  run helper()
+  helper()
 }
 
 === run async is rejected in rules with imported workflow
@@ -715,10 +715,10 @@ export def main() {
 --- main.jh
 import "lib.jh" as lib
 def check() {
-  run async lib.helper()
+  async lib.helper()
 }
 export def main() {
-  run check()
+  check()
 }
 --- lib.jh
 export def helper() {
@@ -738,7 +738,7 @@ export def main() {
 # @expect error E_VALIDATE "unknown local def or script reference" @2:3
 --- input.jh
 export def main() {
-  log "got: ${run nonexistent_script()}"
+  log "got: ${nonexistent_script()}"
 }
 
 === strings are not executable in rule run
@@ -746,10 +746,10 @@ export def main() {
 --- input.jh
 const greeting = "hello"
 def check() {
-  const x = run greeting()
+  const x = greeting()
 }
 export def main() {
-  run check()
+  check()
 }
 
 === unknown identifier in workflow log string
@@ -768,7 +768,7 @@ def check() {
 export def main() {
   const x = "hello"
   const result = match x {
-    "hello" => run check()
+    "hello" => check()
     _ => "fallback"
   }
 }
@@ -787,7 +787,7 @@ export def main() {
 import "lib.jh" as m
 
 test "no implicit response" {
-  run m.greet("world")
+  m.greet("world")
   expect_equal response "hello world"
 }
 --- lib.jh
@@ -801,7 +801,7 @@ def greet(name) {
 import "lib.jh" as m
 
 test "missing const ref" {
-  const response = run m.greet()
+  const response = m.greet()
   expect_equal response expected
 }
 --- lib.jh
@@ -816,7 +816,7 @@ import "lib.jh" as m
 
 test "mock prompt undeclared" {
   mock prompt reply
-  const response = run m.ask()
+  const response = m.ask()
   expect_equal response "x"
 }
 --- lib.jh
@@ -833,7 +833,7 @@ import "lib.jh" as m
 test "explicit capture" {
   const expected = "Hello!"
   mock prompt expected
-  const response = run m.ask()
+  const response = m.ask()
   expect_equal response expected
 }
 --- lib.jh
@@ -859,11 +859,11 @@ script noop = `:`
 def check() {
   const x = "test"
   if x =~ /[bad(/ {
-    run noop()
+    noop()
   }
 }
 export def main() {
-  run check()
+  check()
 }
 
 === import script resolves to missing file
@@ -871,11 +871,11 @@ export def main() {
 --- input.jh
 import script "./missing.py" as queue
 export def main() {
-  run queue()
+  queue()
 }
 
 === bare imported workflow as shell line must use run
-# @expect error E_VALIDATE "use run lib.deploy() —" @3:3
+# @expect error E_VALIDATE "use lib.deploy() —" @3:3
 --- main.jh
 import "lib.jh" as lib
 export def main() {
@@ -887,7 +887,7 @@ export def deploy() {
 }
 
 === bare imported script as shell line must use run
-# @expect error E_VALIDATE "use run lib.helper() —" @3:3
+# @expect error E_VALIDATE "use lib.helper() —" @3:3
 --- main.jh
 import "lib.jh" as lib
 export def main() {
@@ -930,7 +930,7 @@ def check(value) {
   }
 }
 export def main(value) {
-  run check(value)
+  check(value)
 }
 
 === if dot subject where var is not a typed prompt capture
@@ -983,7 +983,7 @@ export def main() {
 script to_lower = `printf '%s' "$1" | tr '[:upper:]' '[:lower:]'`
 export def main() {
   const result = "plain"
-  run to_lower(result.role)
+  to_lower(result.role)
 }
 
 === bare dotted call arg with unknown field
@@ -992,7 +992,7 @@ export def main() {
 script to_lower = `printf '%s' "$1" | tr '[:upper:]' '[:lower:]'`
 export def main() {
   const result = prompt "Classify" returns "{ role: string }"
-  run to_lower(result.bogus)
+  to_lower(result.bogus)
 }
 
 === unquoted ${var.field} call arg is rejected
@@ -1001,7 +1001,7 @@ export def main() {
 script to_lower = `printf '%s' "$1" | tr '[:upper:]' '[:lower:]'`
 export def main() {
   const result = prompt "Classify" returns "{ role: string }"
-  run to_lower(${result.role})
+  to_lower(${result.role})
 }
 
 === unquoted ${var} call arg is rejected
@@ -1010,7 +1010,7 @@ export def main() {
 script greet = `echo "hello $1"`
 export def main() {
   const name = "world"
-  run greet(${name})
+  greet(${name})
 }
 
 === test block: mix mock prompt block with queued mock prompt (block first)
@@ -1024,7 +1024,7 @@ test "mixed mock prompt" {
     _ => "default"
   }
   mock prompt "queued"
-  const response = run m.ask()
+  const response = m.ask()
   expect_contain response "hello"
 }
 --- lib.jh
@@ -1044,7 +1044,7 @@ test "mixed mock prompt" {
     /hi/ => "hello"
     _ => "default"
   }
-  const response = run m.ask()
+  const response = m.ask()
   expect_contain response "hello"
 }
 --- lib.jh
@@ -1077,25 +1077,17 @@ export def main(items) {
 # @expect error E_VALIDATE "unknown local def or script reference" @2:3
 --- input.jh
 def check() {
-  run nope()
+  nope()
 }
 export def main() {
-  run check()
+  check()
 }
 
 === channel route targeting a script is rejected
-# @expect error E_VALIDATE "cannot be called with run" @1:21
+# @expect error E_VALIDATE "cannot be called as a def" @1:21
 --- input.jh
 channel findings -> myscript
 script myscript = `true`
 export def main() {
   log "ok"
-}
-
-=== log with nested inline capture rejected
-# @expect error E_PARSE "log cannot contain nested inline captures; extract to a const variable" @3:3
---- input.jh
-script foo = `echo a`
-export def main() {
-  log "x ${run foo('${run y')}"
 }

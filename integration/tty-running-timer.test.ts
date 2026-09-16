@@ -82,7 +82,7 @@ test("ACCEPTANCE: TTY running timer updates and ends with PASS", () => {
       'echo "tty-output-ok"',
       "```",
       "export def main() {",
-      "  run sleep_impl()",
+      "  sleep_impl()",
       "}",
     ].join("\n"),
   );

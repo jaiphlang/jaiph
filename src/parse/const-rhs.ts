@@ -24,7 +24,7 @@ export function validateConstBashExpr(filePath: string, expr: string, lineNo: nu
   if (/\$\(/.test(t)) {
     fail(
       filePath,
-      'const value cannot use command substitution "$(...)"; use a script and const name = run ref',
+      'const value cannot use command substitution "$(...)"; use a script and const name = ref()',
       lineNo,
       col,
     );
@@ -86,53 +86,41 @@ export function parseConstRhs(
     }
     return { value: promptBody, nextLineIdx: result.nextLineIdx };
   }
-  if (head.startsWith("run ")) {
-    const rest = head.slice("run ".length).trim();
-    // const x = run async ref() — async capture returning a handle
-    if (rest.startsWith("async ")) {
-      const asyncRest = rest.slice("async ".length).trim();
-      if (asyncRest.startsWith("`")) {
-        fail(filePath, "run async is not supported with inline scripts", lineNo, col);
-      }
-      const call = parseCallRef(asyncRest);
-      if (!call) {
-        fail(filePath, "const ... = run async must target a valid reference", lineNo, col);
-      }
-      rejectTrailingContent(filePath, lineNo, "run async", call.rest);
-      const callee: DefRef = { value: call.ref, loc: { line: lineNo, col } };
-      return {
-        value: { kind: "call", callee, args: call.args, async: true },
-        nextLineIdx: lineIdx,
-      };
-    }
-    if (rest.startsWith("`")) {
-      const result = parseAnonymousInlineScript(filePath, lines, lineIdx, rest, lineNo, col);
-      return {
-        value: {
-          kind: "inline_script",
-          body: result.body,
-          ...(result.lang ? { lang: result.lang } : {}),
-          args: result.args,
-        },
-        nextLineIdx: result.nextLineIdx - 1,
-      };
-    }
-    if (rest.startsWith("script(") || rest.startsWith("script (")) {
-      fail(filePath, 'inline script syntax has changed: use const name = run `body`(args) instead of run script(args) "body"', lineNo, col);
-    }
-    const call = parseCallRefMultiline(filePath, lines, lineIdx, rest);
-    if (!call) {
-      fail(filePath, "const ... = run must target a valid reference", lineNo, col);
-    }
-    rejectTrailingContent(filePath, lineNo, "run", call.rest);
-    const callee: DefRef = { value: call.ref, loc: { line: lineNo, col } };
-    return {
-      value: { kind: "call", callee, args: call.args },
-      nextLineIdx: call.nextLineIdx - 1,
-    };
+  if (head.startsWith("run ") && !/^run\s*\(/.test(head)) {
+    fail(filePath, "'run' is not a keyword; capture the call directly: const name = ref(args)", lineNo, col);
   }
   if (head.startsWith("ensure ")) {
-    fail(filePath, "'ensure' is not a keyword; use 'run'", lineNo, col);
+    fail(filePath, "'ensure' is not a keyword; capture the call directly: const name = ref(args)", lineNo, col);
+  }
+  // const x = async ref() — async capture returning a handle
+  if (head === "async" || head.startsWith("async ")) {
+    const asyncRest = head === "async" ? "" : head.slice("async ".length).trim();
+    if (asyncRest.startsWith("`")) {
+      fail(filePath, "async is not supported with inline scripts", lineNo, col);
+    }
+    const call = parseCallRef(asyncRest);
+    if (!call) {
+      fail(filePath, "const ... = async must target a valid reference", lineNo, col);
+    }
+    rejectTrailingContent(filePath, lineNo, "async", call.rest);
+    const callee: DefRef = { value: call.ref, loc: { line: lineNo, col } };
+    return {
+      value: { kind: "call", callee, args: call.args, async: true },
+      nextLineIdx: lineIdx,
+    };
+  }
+  // const x = `body`(args) — inline script
+  if (head.startsWith("`")) {
+    const result = parseAnonymousInlineScript(filePath, lines, lineIdx, head, lineNo, col);
+    return {
+      value: {
+        kind: "inline_script",
+        body: result.body,
+        ...(result.lang ? { lang: result.lang } : {}),
+        args: result.args,
+      },
+      nextLineIdx: result.nextLineIdx - 1,
+    };
   }
   // const name = match var { ... }  (compact one-line or multiline `{` opener)
   if (head.startsWith("match ") || head === "match") {
@@ -152,14 +140,15 @@ export function parseConstRhs(
     trivia.setNode(value, { tripleQuoted: true, rawBody: body });
     return { value, nextLineIdx: nextIdx - 1 };
   }
-  const callLike = head.includes("(") ? parseCallRef(head.trimEnd()) : null;
-  if (callLike) {
-    fail(
-      filePath,
-      `Script calls in const assignments must use run. Use: const ${constName} = run ${head.trimEnd()}`,
-      lineNo,
-      col,
-    );
+  // const x = ref(args) — managed call
+  const call = head.includes("(") ? parseCallRefMultiline(filePath, lines, lineIdx, head) : null;
+  if (call) {
+    rejectTrailingContent(filePath, lineNo, "const", call.rest);
+    const callee: DefRef = { value: call.ref, loc: { line: lineNo, col } };
+    return {
+      value: { kind: "call", callee, args: call.args },
+      nextLineIdx: call.nextLineIdx - 1,
+    };
   }
   validateConstBashExpr(filePath, head, lineNo, col);
   const isBareDotted = isBareDottedIdentifierReturn(head);

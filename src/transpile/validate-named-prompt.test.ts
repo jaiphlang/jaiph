@@ -76,13 +76,13 @@ test("E_VALIDATE: run name() when the name is a named prompt", () => {
       'prompt classify(x) = "Classify ${x}"',
       "export def main() {",
       '  const c = "hi"',
-      "  run classify(c)",
+      "  classify(c)",
       "}",
     ],
     (entry, out) => {
       assert.throws(
         () => buildScripts(entry, out),
-        /E_VALIDATE.*prompt "classify" cannot be called with run/,
+        /E_VALIDATE.*prompt "classify" cannot be called as a script or def/,
       );
     },
   );

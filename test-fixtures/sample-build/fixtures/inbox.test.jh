@@ -1,16 +1,16 @@
 import "inbox.jh" as inbox
 
 test "researcher sends findings to inbox" {
-  const out = run inbox.researcher()
+  const out = inbox.researcher()
   expect_contain out "## findings"
 }
 
 test "analyst receives message as first argument" {
-  const out = run inbox.analyst("test input")
+  const out = inbox.analyst("test input")
   expect_contain out "Summary of findings"
 }
 
 test "reviewer prefixes message with reviewed tag" {
-  const out = run inbox.reviewer("some summary")
+  const out = inbox.reviewer("some summary")
   expect_contain out "[reviewed] some summary"
 }

@@ -15,7 +15,7 @@ e2e::file "source_named.jh" <<'EOF'
 #!/usr/bin/env jaiph
 script done_impl = `echo done`
 export def main() {
-  run done_impl()
+  done_impl()
 }
 EOF
 chmod +x "${TEST_DIR}/source_named.jh"

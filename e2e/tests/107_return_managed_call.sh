@@ -16,11 +16,11 @@ e2e::file "return_run.jh" <<'EOF'
 script greet = `echo "hello-direct"`
 
 def helper() {
-  return run greet()
+  return greet()
 }
 
 export def main() {
-  const r = run helper()
+  const r = helper()
   log "got: ${r}"
 }
 EOF
@@ -51,11 +51,11 @@ e2e::file "return_ensure.jh" <<'EOF'
 script check_impl = `echo "rule-ok"`
 
 def check() {
-  return run check_impl()
+  return check_impl()
 }
 
 export def main() {
-  const r = run check()
+  const r = check()
   log "got: ${r}"
 }
 EOF
@@ -86,11 +86,11 @@ e2e::file "return_run_args.jh" <<'EOF'
 script echo_arg = `echo "$1"`
 
 def helper() {
-  return run echo_arg("passed-arg")
+  return echo_arg("passed-arg")
 }
 
 export def main() {
-  const r = run helper()
+  const r = helper()
   log "got: ${r}"
 }
 EOF
@@ -123,11 +123,11 @@ def inner() {
 }
 
 def outer() {
-  return run inner()
+  return inner()
 }
 
 export def main() {
-  const r = run outer()
+  const r = outer()
   log "got: ${r}"
 }
 EOF
@@ -154,7 +154,7 @@ e2e::section "return run with unknown ref fails at compile time"
 # Given
 e2e::file "return_run_unknown.jh" <<'EOF'
 export def main() {
-  return run nonexistent()
+  return nonexistent()
 }
 EOF
 

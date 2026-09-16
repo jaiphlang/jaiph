@@ -5,17 +5,17 @@ import "a.jh" as mod
 import "b.jh" as mod
 
 export def main() {
-  run mod.one()
+  mod.one()
 }
 --- a.jh
 script one_impl = `echo one`
 def one() {
-  run one_impl()
+  one_impl()
 }
 --- b.jh
 script two_impl = `echo two`
 def two() {
-  run two_impl()
+  two_impl()
 }
 
 === imported workflow missing
@@ -24,12 +24,12 @@ def two() {
 import "lib.jh" as lib
 
 export def main() {
-  run lib.missing()
+  lib.missing()
 }
 --- lib.jh
 script existing_impl = `echo ok`
 def existing() {
-  run existing_impl()
+  existing_impl()
 }
 
 === send RHS with unknown imported symbol
@@ -62,7 +62,7 @@ def analyst() {
 # @expect error E_VALIDATE "unknown import alias" @2:3
 --- main.jh
 export def main() {
-  run ghost.deploy()
+  ghost.deploy()
 }
 
 === imported script does not exist
@@ -70,7 +70,7 @@ export def main() {
 --- main.jh
 import "lib.jh" as lib
 export def main() {
-  run lib.nonexistent()
+  lib.nonexistent()
 }
 --- lib.jh
 script existing = `echo "ok"`
@@ -83,10 +83,10 @@ def dummy() {
 --- main.jh
 import "lib.jh" as lib
 def local_check() {
-  run lib.other_rule()
+  lib.other_rule()
 }
 export def main() {
-  run local_check()
+  local_check()
 }
 --- lib.jh
 export def other_rule() {
@@ -98,7 +98,7 @@ export def other_rule() {
 --- main.jh
 import "nonexistent.jh" as lib
 export def main() {
-  run lib.deploy()
+  lib.deploy()
 }
 
 === arity mismatch on imported workflow
@@ -106,7 +106,7 @@ export def main() {
 --- main.jh
 import "lib.jh" as lib
 export def main() {
-  run lib.helper("one")
+  lib.helper("one")
 }
 --- lib.jh
 export def helper(a, b) {
@@ -128,7 +128,7 @@ def dummy() {
 }
 
 === send RHS with imported rule bare ref
-# @expect error E_VALIDATE "must be called with run" @4:8
+# @expect error E_VALIDATE "must be called as" @4:8
 --- main.jh
 import "lib.jh" as lib
 channel c
@@ -161,7 +161,7 @@ def dummy() {
 --- main.jh
 import "lib.jh" as lib
 export def main() {
-  run lib.private_check()
+  lib.private_check()
 }
 --- lib.jh
 export def public_check() {
@@ -176,7 +176,7 @@ def private_check() {
 --- main.jh
 import "lib.jh" as lib
 export def main() {
-  run lib.private_wf()
+  lib.private_wf()
 }
 --- lib.jh
 export def public_wf() {
@@ -204,7 +204,7 @@ def dummy() {
 --- main.jh
 import "lib.jh" as lib
 export def main() {
-  run lib.private_script()
+  lib.private_script()
 }
 --- lib.jh
 export script public_script = `echo public`
@@ -234,7 +234,7 @@ def private_wf() {
 --- main.jh
 import "lib.jh" as lib
 export def main() {
-  run lib.check("one")
+  lib.check("one")
 }
 --- lib.jh
 export def check(a, b) {
@@ -261,7 +261,7 @@ def dummy() {
 --- main.jh
 import "lib.jh" as lib
 export def main() {
-  const x = run lib.deploy()
+  const x = lib.deploy()
 }
 --- lib.jh
 export def deploy() {

@@ -23,10 +23,10 @@ script emit_stdout = `echo "stdout-log"`
 script emit_stderr = `echo "stderr-log" >&2`
 script emit_captured = `echo "captured=$1"`
 export def main() {
-  const out = run emit_value()
-  run emit_stdout()
-  run emit_stderr()
-  run emit_captured(out)
+  const out = emit_value()
+  emit_stdout()
+  emit_stderr()
+  emit_captured(out)
 }
 EOF
 rm -rf "${TEST_DIR}/runs_shell"
@@ -68,13 +68,13 @@ e2e::section "run rule: captures return value only, stdout to artifacts"
 e2e::file "contract_ensure.jh" <<'EOF'
 script compute_echo = `echo "rule-stdout-goes-to-artifacts"`
 def compute(input) {
-  run compute_echo()
+  compute_echo()
   return "${input}-processed"
 }
 script echo_captured_ensure = `echo "captured=$1"`
 export def main() {
-  const val = run compute("input")
-  run echo_captured_ensure(val)
+  const val = compute("input")
+  echo_captured_ensure(val)
 }
 EOF
 rm -rf "${TEST_DIR}/runs_ensure"
@@ -110,13 +110,13 @@ e2e::section "run workflow: captures return value only, stdout to artifacts"
 e2e::file "contract_run.jh" <<'EOF'
 script greeter_impl = `echo "workflow-stdout-goes-to-artifacts"`
 def greeter() {
-  run greeter_impl()
+  greeter_impl()
   return "hello-from-workflow"
 }
 script echo_captured_run = `echo "captured=$1"`
 export def main() {
-  const val = run greeter()
-  run echo_captured_run(val)
+  const val = greeter()
+  echo_captured_run(val)
 }
 EOF
 rm -rf "${TEST_DIR}/runs_run"
@@ -156,8 +156,8 @@ echo "hash-abc123"
 ```
 script echo_captured_fn = `echo "captured=$1"`
 export def main() {
-  const val = run compute_hash()
-  run echo_captured_fn(val)
+  const val = compute_hash()
+  echo_captured_fn(val)
 }
 EOF
 rm -rf "${TEST_DIR}/runs_fn"
@@ -188,7 +188,7 @@ config {
 script echo_captured_prompt = `echo "captured=$1"`
 export def main() {
   const answer = prompt "What is 2+2?"
-  run echo_captured_prompt(answer)
+  echo_captured_prompt(answer)
 }
 EOF
 rm -rf "${TEST_DIR}/runs_prompt"
@@ -223,7 +223,7 @@ script echo_done = `echo "done"`
 export def main() {
   log "info-message"
   logerr "error-message"
-  run echo_done()
+  echo_done()
 }
 EOF
 rm -rf "${TEST_DIR}/runs_log"

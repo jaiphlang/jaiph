@@ -110,9 +110,9 @@ export function braceDepthDelta(line: string): number {
 
 /** Jaiph keywords that cannot be used as bare identifier arguments. */
 const JAIPH_KEYWORDS = new Set([
-  "run", "prompt", "return", "fail", "log", "logerr", "logwarn",
+  "prompt", "return", "fail", "log", "logerr", "logwarn",
   "if", "else", "not", "const", "match", "import", "export",
-  "def", "script", "channel", "config", "catch", "async",
+  "def", "script", "channel", "config", "catch", "async", "stdin",
   "returns", "send", "true", "false", "for", "in", "use",
 ]);
 

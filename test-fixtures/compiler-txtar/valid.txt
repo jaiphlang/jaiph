@@ -9,13 +9,13 @@ export def main() {
 # @expect ok
 --- input.jh
 def check() {
-  run checker()
+  checker()
 }
 
 script checker = `echo ok`
 
 export def main() {
-  run check()
+  check()
   log "done"
 }
 
@@ -51,11 +51,11 @@ export def main() {
 import "lib.jh" as lib
 
 export def main() {
-  run lib.check()
+  lib.check()
 }
 --- lib.jh
 export def check() {
-  run check_impl()
+  check_impl()
 }
 
 script check_impl = `true`
@@ -66,7 +66,7 @@ script check_impl = `true`
 script noop = `:`
 
 export def main() {
-  run async noop()
+  async noop()
 }
 
 === multiple workflows
@@ -84,7 +84,7 @@ def helper() {
 # @expect ok
 --- input.jh
 export def main() {
-  run `echo hello`()
+  `echo hello`()
 }
 
 === rule with empty braced body
@@ -194,7 +194,7 @@ def helper() {
   log "ok"
 }
 export def main() {
-  return run helper()
+  return helper()
 }
 
 === return run with args
@@ -204,7 +204,7 @@ def helper(a, b) {
   log "ok"
 }
 export def main() {
-  return run helper("a", "b")
+  return helper("a", "b")
 }
 
 === return run with dotted ref
@@ -212,7 +212,7 @@ export def main() {
 --- main.jh
 import "lib.jh" as lib
 export def main() {
-  return run lib.helper()
+  return lib.helper()
 }
 --- lib.jh
 export def helper() {
@@ -226,7 +226,7 @@ def check() {
   return "ok"
 }
 export def main() {
-  return run check()
+  return check()
 }
 
 === return run with args
@@ -236,7 +236,7 @@ def check(x) {
   return "ok"
 }
 export def main() {
-  return run check("x")
+  return check("x")
 }
 
 === return run in rule
@@ -244,7 +244,7 @@ export def main() {
 --- input.jh
 script helper = `echo "ok"`
 def my_rule() {
-  return run helper()
+  return helper()
 }
 
 === return run in rule
@@ -254,7 +254,7 @@ def sub_rule() {
   return "ok"
 }
 def my_rule() {
-  return run sub_rule()
+  return sub_rule()
 }
 
 === return with string value
@@ -278,7 +278,7 @@ def some_wf() {
   log "ok"
 }
 export def main() {
-  run async some_wf()
+  async some_wf()
 }
 
 === run async with args
@@ -288,7 +288,7 @@ def other_wf(a, b) {
   log "ok"
 }
 export def main() {
-  run async other_wf("hello", "$x")
+  async other_wf("hello", "$x")
 }
 
 === run async with qualified ref
@@ -296,7 +296,7 @@ export def main() {
 --- main.jh
 import "mod.jh" as mod
 export def main() {
-  run async mod.some_wf()
+  async mod.some_wf()
 }
 --- mod.jh
 export def some_wf() {
@@ -310,35 +310,35 @@ def some_wf() {
   log "ok"
 }
 export def main() {
-  run some_wf()
+  some_wf()
 }
 
 === inline script with args
 # @expect ok
 --- input.jh
 export def main() {
-  run `echo $1`("arg1", "arg2")
+  `echo $1`("arg1", "arg2")
 }
 
 === inline script with capture form
 # @expect ok
 --- input.jh
 export def main() {
-  const x = run `echo hello`()
+  const x = `echo hello`()
 }
 
 === inline script const capture form
 # @expect ok
 --- input.jh
 export def main() {
-  const x = run `echo hello`()
+  const x = `echo hello`()
 }
 
 === inline script with shebang
 # @expect ok
 --- input.jh
 export def main() {
-  run ```python3
+  ```python3
 print('hello')
 ```()
 }
@@ -352,8 +352,8 @@ def tests_pass() {
   return "ok"
 }
 export def main() {
-  const response = run tests_pass()
-  const out = run say_hello()
+  const response = tests_pass()
+  const out = say_hello()
 }
 
 === config block parses metadata
@@ -431,7 +431,7 @@ export def main() {
 script noop = `:`
 export def main() {
   const msg = "hi"
-  const out = run noop()
+  const out = noop()
 }
 
 === const allows run-wrapped script call with args
@@ -439,7 +439,7 @@ export def main() {
 --- input.jh
 script some_script = `echo "$1"`
 export def main(arg1) {
-  const x = run some_script(arg1)
+  const x = some_script(arg1)
 }
 
 === const prompt capture
@@ -546,11 +546,11 @@ export def main() {
 script f_ok = `echo ok`
 
 def ok() {
-  run f_ok()
+  f_ok()
 }
 
 export def main() {
-  run ok()
+  ok()
   log "done"
 }
 
@@ -562,7 +562,7 @@ script helper = `echo ok`
 script caller = `helper`
 
 export def main() {
-  run caller()
+  caller()
 }
 
 === script calling itself is allowed
@@ -571,7 +571,7 @@ export def main() {
 script recurse = `recurse`
 
 export def main() {
-  run recurse()
+  recurse()
 }
 
 === top-level const with env shim isolation
@@ -582,7 +582,7 @@ const greeting = "hello world"
 script helper = `echo $greeting`
 
 export def main() {
-  run helper()
+  helper()
 }
 
 === multiline double-quoted strings in scripts
@@ -594,7 +594,7 @@ b"
 ```
 
 export def main() {
-  run multiline_str()
+  multiline_str()
 }
 
 === prompt with returns schema single-line
@@ -617,7 +617,7 @@ export def main() {
 # @expect ok
 --- input.jh
 def ci_passes(repo_dir) {
-  run ci_passes_impl()
+  ci_passes_impl()
 }
 script ci_passes_impl = `true`
 
@@ -626,8 +626,8 @@ def fix_it() {
 }
 
 export def main() {
-  run ci_passes("$repo_dir") catch (failure) {
-    run fix_it()
+  ci_passes("$repo_dir") catch (failure) {
+    fix_it()
   }
 }
 
@@ -635,17 +635,17 @@ export def main() {
 # @expect ok
 --- input.jh
 def gate() {
-  run noop()
+  noop()
 }
 script noop = `true`
 
 export def main() {
-  run gate() catch (err) {
+  gate() catch (err) {
     prompt """
       fix the build
     """
     # after prompt
-    run noop()
+    noop()
   }
 }
 
@@ -657,12 +657,12 @@ def sub_rule() {
 }
 script fallback_impl = `echo "fallback"`
 def check() {
-  run sub_rule() catch (err) {
-    run fallback_impl()
+  sub_rule() catch (err) {
+    fallback_impl()
   }
 }
 export def main() {
-  run check()
+  check()
 }
 
 === valid ${name} interpolation in log
@@ -691,7 +691,7 @@ export def main() {
 --- input.jh
 script greet = `echo "Hello $1"`
 export def main() {
-  run greet("world")
+  greet("world")
 }
 
 === valid inline run capture in log
@@ -699,7 +699,7 @@ export def main() {
 --- input.jh
 script greet = `echo "hello"`
 export def main() {
-  log "got: ${run greet()}"
+  log "got: ${greet()}"
 }
 
 === valid inline run capture in log
@@ -709,7 +709,7 @@ def check() {
   return "ok"
 }
 export def main() {
-  log "status: ${run check()}"
+  log "status: ${check()}"
 }
 
 === valid inline run capture with args
@@ -717,7 +717,7 @@ export def main() {
 --- input.jh
 script greet = `echo "hello $1"`
 export def main() {
-  log "got: ${run greet(world)}"
+  log "got: ${greet(world)}"
 }
 
 === valid inline run capture in return
@@ -725,10 +725,10 @@ export def main() {
 --- input.jh
 script greet = `echo "hello"`
 def helper() {
-  return "${run greet()}"
+  return "${greet()}"
 }
 export def main() {
-  run helper()
+  helper()
 }
 
 === valid inline run capture in rule log
@@ -736,10 +736,10 @@ export def main() {
 --- input.jh
 script greet = `echo "hello"`
 def check() {
-  log "got: ${run greet()}"
+  log "got: ${greet()}"
 }
 export def main() {
-  run check()
+  check()
 }
 
 === valid dot field ref in log compiles
@@ -755,7 +755,7 @@ export def main() {
 --- input.jh
 script f = `printf '%s' 'ok'`
 export def main() {
-  const x = run f()
+  const x = f()
   return "${x}"
 }
 
@@ -765,7 +765,7 @@ export def main() {
 script greet = `echo "hello $1"`
 export def main() {
   const name = "world"
-  run greet(name)
+  greet(name)
 }
 
 === bare identifier arg capture variable passes
@@ -774,8 +774,8 @@ export def main() {
 script get_name = `echo "world"`
 script greet = `echo "hello $1"`
 export def main() {
-  const result = run get_name()
-  run greet(result)
+  const result = get_name()
+  greet(result)
 }
 
 === bare identifier arg argN matches positional param
@@ -783,7 +783,7 @@ export def main() {
 --- input.jh
 script greet = `echo "hello $1"`
 export def main(arg1) {
-  run greet(arg1)
+  greet(arg1)
 }
 
 === bare identifier arg top-level const passes
@@ -792,7 +792,7 @@ export def main(arg1) {
 const REPO = "my-project"
 script greet = `echo "hello $1"`
 export def main() {
-  run greet(REPO)
+  greet(REPO)
 }
 
 === run async is accepted in workflows
@@ -802,7 +802,7 @@ def helper() {
   log "hi"
 }
 export def main() {
-  run async helper()
+  async helper()
 }
 
 === logerr step in workflow
@@ -819,7 +819,7 @@ def helper() {
   log "helping"
 }
 export def main() {
-  run helper()
+  helper()
 }
 
 === rule with multiple steps
@@ -828,11 +828,11 @@ export def main() {
 script check_a = `true`
 script check_b = `true`
 def validate() {
-  run check_a()
-  run check_b()
+  check_a()
+  check_b()
 }
 export def main() {
-  run validate()
+  validate()
 }
 
 === prompt step in workflow
@@ -864,23 +864,23 @@ script summarize_findings = `echo "Summary of findings"`
 script review_summary = `echo "[reviewed] $1"`
 
 def researcher() {
-  send run emit_findings() -> findings
+  send emit_findings() -> findings
 }
 
 script write_findings_file = `echo "$1" > findings_file.md`
 
 def analyst(message, chan, sender) {
-  run write_findings_file(message)
-  const summary = run summarize_findings()
+  write_findings_file(message)
+  const summary = summarize_findings()
   send "${summary}" -> summary
 }
 
 def reviewer(message, chan, sender) {
-  send run review_summary(message) -> final_summary
+  send review_summary(message) -> final_summary
 }
 
 export def main() {
-  run researcher()
+  researcher()
 }
 
 === prompt with identifier body
@@ -948,8 +948,8 @@ def fallback() {
   log "fallback"
 }
 export def main() {
-  run helper() catch (failure) {
-    run fallback()
+  helper() catch (failure) {
+    fallback()
   }
 }
 
@@ -970,7 +970,7 @@ def my_custom() {
   log "testing custom root"
 }
 export def main() {
-  run my_custom()
+  my_custom()
 }
 
 === workflow with logerr step
@@ -988,7 +988,7 @@ def helper() {
   log "ok"
 }
 export def main() {
-  run helper() catch (err) {
+  helper() catch (err) {
     log "recovery: ${err}"
     fail "unrecoverable"
   }
@@ -1001,7 +1001,7 @@ def check() {
   return "ok"
 }
 export def main() {
-  run check() catch (err) log "recovered: ${err}"
+  check() catch (err) log "recovered: ${err}"
 }
 
 === inline run catch with single fail statement
@@ -1011,7 +1011,7 @@ def check() {
   return "ok"
 }
 export def main() {
-  run check() catch (err) fail "unrecoverable: ${err}"
+  check() catch (err) fail "unrecoverable: ${err}"
 }
 
 === catch block with return string statement
@@ -1021,7 +1021,7 @@ def helper() {
   log "ok"
 }
 export def main() {
-  run helper() catch (err) {
+  helper() catch (err) {
     return "fallback"
   }
 }
@@ -1036,8 +1036,8 @@ def fallback() {
   return "ok"
 }
 export def main() {
-  run helper() catch (err) {
-    return run fallback()
+  helper() catch (err) {
+    return fallback()
   }
 }
 
@@ -1049,8 +1049,8 @@ def helper() {
   log "ok"
 }
 export def main() {
-  run helper() catch (err) {
-    const fix = run get_fix()
+  helper() catch (err) {
+    const fix = get_fix()
     log "applied: ${fix}"
   }
 }
@@ -1060,7 +1060,7 @@ export def main() {
 --- input.jh
 export script helper = `echo ok`
 export def main() {
-  run helper()
+  helper()
 }
 
 === inline run catch with single log statement
@@ -1070,7 +1070,7 @@ def helper() {
   log "ok"
 }
 export def main() {
-  run helper() catch (err) log "recovered: ${err}"
+  helper() catch (err) log "recovered: ${err}"
 }
 
 === catch block with bare return
@@ -1080,7 +1080,7 @@ def helper() {
   log "ok"
 }
 export def main() {
-  run helper() catch (err) {
+  helper() catch (err) {
     return
   }
 }
@@ -1095,8 +1095,8 @@ def helper() {
   log "ok"
 }
 export def main() {
-  run helper() catch (err) {
-    return run check()
+  helper() catch (err) {
+    return check()
   }
 }
 
@@ -1118,7 +1118,7 @@ script get_val = `echo "matched"`
 export def main() {
   const x = "hello"
   const result = match x {
-    "hello" => run get_val()
+    "hello" => get_val()
     _ => "fallback"
   }
 }
@@ -1131,8 +1131,8 @@ def check() {
   return "ok"
 }
 export def main() {
-  run check() catch (failure) {
-    run fix(failure)
+  check() catch (failure) {
+    fix(failure)
   }
 }
 
@@ -1195,7 +1195,7 @@ def check(value) {
 }
 
 export def main(value) {
-  run check(value)
+  check(value)
 }
 
 === if/else nested if in else block
@@ -1217,7 +1217,7 @@ export def main(mode) {
 # @expect ok
 --- input.jh
 export def main() {
-  run `false`() catch (err) {
+  `false`() catch (err) {
     log "caught: ${err}"
   }
 }
@@ -1226,8 +1226,8 @@ export def main() {
 # @expect ok
 --- input.jh
 export def main() {
-  run `test -f .gate`() recover(err) {
-    run `touch .gate`()
+  `test -f .gate`() recover(err) {
+    `touch .gate`()
   }
 }
 
@@ -1236,12 +1236,12 @@ export def main() {
 --- input.jh
 script noop = `true`
 def check() {
-  run `false`() catch (err) {
-    run noop()
+  `false`() catch (err) {
+    noop()
   }
 }
 export def main() {
-  run check()
+  check()
 }
 
 === inline script recover in rule
@@ -1249,19 +1249,19 @@ export def main() {
 --- input.jh
 script noop = `true`
 def check() {
-  run `test -f .gate`() recover(err) {
-    run noop()
+  `test -f .gate`() recover(err) {
+    noop()
   }
 }
 export def main() {
-  run check()
+  check()
 }
 
 === fenced inline script catch in workflow
 # @expect ok
 --- input.jh
 export def main() {
-  run ```
+  ```
 exit 1
 ```() catch (err) {
     log "fenced caught: ${err}"
@@ -1272,7 +1272,7 @@ exit 1
 # @expect ok
 --- input.jh
 export def main() {
-  run `false $1`("x") catch (err) {
+  `false $1`("x") catch (err) {
     log "caught: ${err}"
   }
 }
@@ -1281,7 +1281,7 @@ export def main() {
 # @expect ok
 --- input.jh
 export def main() {
-  run `false`() catch (err) log "recovered: ${err}"
+  `false`() catch (err) log "recovered: ${err}"
 }
 
 === if with dot-notation subject on typed prompt capture
@@ -1312,7 +1312,7 @@ export def main() {
 script to_lower = `printf '%s' "$1" | tr '[:upper:]' '[:lower:]'`
 export def main() {
   const result = prompt "Classify" returns "{ role: string }"
-  const role_lc = run to_lower(result.role)
+  const role_lc = to_lower(result.role)
   return "${role_lc}"
 }
 
@@ -1326,13 +1326,13 @@ test "uses pattern-dispatch mock" {
     /hi/ => "hello"
     _ => "default"
   }
-  const response = run m.ask()
+  const response = m.ask()
   expect_contain response "hello"
 }
 
 test "uses queue-style mock" {
   mock prompt "queued"
-  const response = run m.ask()
+  const response = m.ask()
   expect_contain response "queued"
 }
 --- lib.jh

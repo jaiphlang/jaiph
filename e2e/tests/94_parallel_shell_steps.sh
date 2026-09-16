@@ -165,7 +165,7 @@ def handler(message, chan, sender) {
 }
 
 export def main() {
-  run sender()
+  sender()
 }
 EOF
 

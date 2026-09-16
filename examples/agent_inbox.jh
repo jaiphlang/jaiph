@@ -17,5 +17,5 @@ def reviewer(msg) {
 }
 
 export def main() {
-  run scanner()
+  scanner()
 }

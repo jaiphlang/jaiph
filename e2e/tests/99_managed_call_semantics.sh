@@ -20,8 +20,8 @@ echo "captured-value"
 script print_capture = `echo "out=x=$1"`
 
 export def main() {
-  const x = run give()
-  run print_capture("$x")
+  const x = give()
+  print_capture("$x")
 }
 EOF
 
@@ -84,14 +84,14 @@ e2e::file "ensure_run_smoke.jh" <<'EOF'
 script ok_impl = `true`
 
 def ok() {
-  run ok_impl()
+  ok_impl()
 }
 def child() {
-  run ok()
+  ok()
 }
 export def main() {
-  run ok()
-  run child()
+  ok()
+  child()
 }
 EOF
 

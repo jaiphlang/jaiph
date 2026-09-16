@@ -13,9 +13,9 @@ fi
 ```
 
 def current_branch(branch) {
-  run current_branch_impl(branch)
+  current_branch_impl(branch)
 }
 
 export def main(branch) {
-  run current_branch(branch)
+  current_branch(branch)
 }

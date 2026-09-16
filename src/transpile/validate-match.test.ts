@@ -113,7 +113,7 @@ test("match arm with run ref body is accepted", () => {
         "export def main() {",
         '  const x = "ok"',
         "  return match x {",
-        '    "ok" => run helper()',
+        '    "ok" => helper()',
         '    _ => "default"',
         "  }",
         "}",
@@ -153,26 +153,24 @@ test("match arm with unknown verb (e.g. error) is rejected with hint", () => {
   }
 });
 
-test("match arm with bare function-call form (error(\"...\")) is rejected", () => {
+test("match arm with a bare call form (helper()) is accepted (not an unknown verb)", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-val-match-bare-call-"));
   try {
     writeFileSync(
       join(root, "m.jh"),
       [
+        'script helper = `echo hi`',
         "export def main() {",
         '  const x = "ok"',
         "  return match x {",
-        '    "" => error("missing")',
-        "    _ => true",
+        '    "" => helper("missing")',
+        '    _ => "no"',
         "  }",
         "}",
         "",
       ].join("\n"),
     );
-    assert.throws(
-      () => buildScripts(join(root, "m.jh"), join(root, "out")),
-      { message: /unknown match arm verb "error"/ },
-    );
+    buildScripts(join(root, "m.jh"), join(root, "out"));
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

@@ -84,7 +84,7 @@ test("sterile: a script with no `use` never sees ambient host keys (incl. agent 
     const jh = writeFlow(root, "flow.jh", [
       "script show = `echo x`",
       "export def main() {",
-      "  run show()",
+      "  show()",
       "}",
     ]);
     const env = {
@@ -130,7 +130,7 @@ test("use + grant: the key crosses only when named in JAIPH_ENV_GRANT", async ()
     const jh = writeFlow(root, "flow.jh", [
       "script show use GITHUB_TOKEN = `echo x`",
       "export def main() {",
-      "  run show()",
+      "  show()",
       "}",
     ]);
     const base = { ...makeEnv(root, scriptsDir), GITHUB_TOKEN: "host-secret" };
@@ -174,7 +174,7 @@ test("constructed the way jaiph run/test will: the grant value is off `env` but 
     const jh = writeFlow(root, "flow.jh", [
       "script show use GITHUB_TOKEN = `echo x`",
       "export def main() {",
-      "  run show()",
+      "  show()",
       "}",
     ]);
     // No GITHUB_TOKEN on the env object — only the grant NAMES. (The env type
@@ -209,7 +209,7 @@ test("import script: `use` on the import line has the same spawn contract as a n
     const jh = writeFlow(root, "flow.jh", [
       'import script "./gh.sh" as gh use GITHUB_TOKEN',
       "export def main() {",
-      "  run gh()",
+      "  gh()",
       "}",
     ]);
     const env = {
@@ -242,11 +242,11 @@ test("no def-level leak: a callee def's script without `use` stays sterile even 
       "script with_use use GITHUB_TOKEN = `echo x`",
       "script without_use = `echo x`",
       "def callee() {",
-      "  run without_use()",
+      "  without_use()",
       "}",
       "export def main() {",
-      "  run with_use()",
-      "  run callee()",
+      "  with_use()",
+      "  callee()",
       "}",
     ]);
     const env = {
@@ -313,7 +313,7 @@ test("shell-fallthrough def lines spawn `sh -c` with the sterile script env", as
   }
 });
 
-test("cross-module use: `run lib.publish()` forwards the imported module's use key", async () => {
+test("cross-module use: `lib.publish()` forwards the imported module's use key", async () => {
   // `use` lives on the definition: the entry file imports lib.jh with no `use`
   // of its own, and the granted key still reaches lib's script subprocess.
   const root = mkdtempSync(join(tmpdir(), "jaiph-script-env-cross-"));
@@ -326,7 +326,7 @@ test("cross-module use: `run lib.publish()` forwards the imported module's use k
     const jh = writeFlow(root, "flow.jh", [
       'import "./lib.jh" as lib',
       "export def main() {",
-      "  run lib.publish()",
+      "  lib.publish()",
       "}",
     ]);
     const env = {
@@ -361,7 +361,7 @@ test("inline scripts have no use clause and get the sterile base only", async ()
     writeScriptFile(scriptsDir, inlineScriptName("echo hi", undefined));
     const jh = writeFlow(root, "flow.jh", [
       "export def main() {",
-      "  run `echo hi`()",
+      "  `echo hi`()",
       "}",
     ]);
     const env = {

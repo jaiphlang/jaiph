@@ -33,8 +33,8 @@ sys.exit(0)
 script bash_marker = `echo bash-script-ran`
 
 export def main() {
-  run py_echo_ok()
-  run bash_marker()
+  py_echo_ok()
+  bash_marker()
 }
 EOF
 
@@ -77,8 +77,8 @@ process.exit(0);
 script bash_marker = `echo bash-script-ran`
 
 export def main() {
-  run node_echo_ok()
-  run bash_marker()
+  node_echo_ok()
+  bash_marker()
 }
 EOF
 

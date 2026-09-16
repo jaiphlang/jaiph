@@ -13,7 +13,7 @@ script 123bad = `echo x`
 # @expect error E_PARSE "'rule' is not a keyword; use 'def'" @1:1
 --- input.jh
 rule 123bad {
-  run foo()
+  foo()
 }
 
 === invalid workflow declaration
@@ -68,7 +68,7 @@ export def main() {
 }
 
 === command substitution in prompt
-# @expect error E_PARSE "prompt cannot contain command substitution ($( ... )); use a script and run inst" @2:3
+# @expect error E_PARSE "prompt cannot contain command substitution ($( ... )); use a script instead" @2:3
 --- input.jh
 export def main() {
   prompt "Show host $(uname)"
@@ -187,21 +187,21 @@ script:node transform
 # @expect error E_PARSE "assignment without" @2:3
 --- input.jh
 export def main() {
-  x = run async some_wf()
+  x = async some_wf()
 }
 
 === run async with inline script rejected
-# @expect error E_PARSE "run async is not supported with inline scripts" @2:3
+# @expect error E_PARSE "async is not supported with inline scripts" @2:3
 --- input.jh
 export def main() {
-  run async `echo hello`()
+  async `echo hello`()
 }
 
 === old inline script syntax rejected
-# @expect error E_PARSE "inline script syntax has changed: use run `body`(args) instead of run script(arg" @2:1
+# @expect error E_PARSE "unexpected content after call call:" @2:1
 --- input.jh
 export def main() {
-  run script() "echo hello"
+  script() "echo hello"
 }
 
 === invalid agent.backend value
@@ -304,7 +304,7 @@ def foo() {
   return "ok"
 }
 export def main() {
-  run foo()
+  foo()
 }
 
 === top-level const name collision with workflow
@@ -321,15 +321,7 @@ export def main() {
 const helper = "val"
 script helper = `echo ok`
 export def main() {
-  run helper()
-}
-
-=== const rejects bare call-like rhs without run
-# @expect error E_PARSE "Script calls in const assignments must use run. Use: const x = run some_script(" @3:13
---- input.jh
-script some_script = `echo "$1"`
-export def main() {
-  const x = some_script("${arg}")
+  helper()
 }
 
 === unterminated block
@@ -357,7 +349,7 @@ export def main() {
 # @expect error E_PARSE "invalid if syntax; expected: if <identifier> <op> <operand> { ... } where op is " @6:3
 --- input.jh
 def gate() {
-  run gate_impl()
+  gate_impl()
 }
 script gate_impl = `false`
 export def main() {
@@ -367,10 +359,10 @@ export def main() {
 }
 
 === invalid workflow reference shape with extra dots
-# @expect error E_PARSE "run must target a valid reference: run ref() or run ref(args) — parentheses are " @2:1
+# @expect error E_PARSE "call must target a valid reference: call ref() or call ref(args) — parentheses are required" @2:1
 --- input.jh
 export def main() {
-  run bad.ref.shape()
+  bad.ref.shape()
 }
 
 === prompt with returns without capture name
@@ -381,50 +373,50 @@ export def main() {
 }
 
 === run catch with args after catch
-# @expect error E_PARSE "catch requires explicit bindings: catch (<name>) { ... }" @6:19
+# @expect error E_PARSE "catch requires explicit bindings: catch (<name>) { ... }" @6:15
 --- input.jh
 def ci_passes() {
-  run ci_passes_impl()
+  ci_passes_impl()
 }
 script ci_passes_impl = `true`
 export def main() {
-  run ci_passes() catch "$repo_dir" {
+  ci_passes() catch "$repo_dir" {
     prompt "Apply the smallest safe fix."
   }
 }
 
 === run catch with multiple args after catch
-# @expect error E_PARSE "catch requires explicit bindings: catch (<name>) { ... }" @6:22
+# @expect error E_PARSE "catch requires explicit bindings: catch (<name>) { ... }" @6:18
 --- input.jh
 def some_rule() {
   true
 }
 
 export def main() {
-  run some_rule("a") catch "b" {
+  some_rule("a") catch "b" {
     log "should not parse"
   }
 }
 
 === run catch without block
-# @expect error E_PARSE "catch requires explicit bindings and a body: catch (<name>) { ... }" @6:30
+# @expect error E_PARSE "catch requires explicit bindings and a body: catch (<name>) { ... }" @6:26
 --- input.jh
 def ci_passes() {
   true
 }
 
 export def main() {
-  run ci_passes("$repo_dir") catch
+  ci_passes("$repo_dir") catch
 }
 
 === run catch without bindings (bare catch block)
-# @expect error E_PARSE "catch requires explicit bindings: catch (<name>) { ... }" @5:15
+# @expect error E_PARSE "catch requires explicit bindings: catch (<name>) { ... }" @5:11
 --- input.jh
 def check() {
   return "ok"
 }
 export def main() {
-  run check() catch {
+  check() catch {
     log "catching"
   }
 }
@@ -514,14 +506,14 @@ export def main() {
 }
 
 === reject command substitution in log
-# @expect error E_PARSE "log cannot contain command substitution ($( ... )); use a script and run instead" @2:3
+# @expect error E_PARSE "log cannot contain command substitution ($( ... )); use a script instead" @2:3
 --- input.jh
 export def main() {
   log "host is $(uname)"
 }
 
 === reject command substitution in logerr
-# @expect error E_PARSE "logerr cannot contain command substitution ($( ... )); use a script and run inst" @2:3
+# @expect error E_PARSE "logerr cannot contain command substitution ($( ... )); use a script instead" @2:3
 --- input.jh
 export def main() {
   logerr "host is $(uname)"
@@ -535,23 +527,16 @@ def check() {
   log "${x:-fallback}"
 }
 export def main() {
-  run check()
+  check()
 }
 
 === nested inline capture rejected
-# @expect error E_PARSE "log contains invalid inline run reference" @4:3
+# @expect error E_PARSE "log contains invalid inline call reference" @4:3
 --- input.jh
 script foo = `echo "a"`
 script bar = `echo "b"`
 export def main() {
-  log "got: ${run foo(${run bar()})}"
-}
-
-=== invalid inline run reference bad identifier
-# @expect error E_PARSE "log contains invalid inline run reference" @2:3
---- input.jh
-export def main() {
-  log "got: ${run 123bad()}"
+  log "got: ${foo(${bar()})}"
 }
 
 === match: unterminated string in pattern
@@ -654,13 +639,13 @@ export def main() {
 }
 
 === run async without parentheses requires parens
-# @expect error E_PARSE "run async must target a valid reference: run async ref() or run async ref(args) " @5:1
+# @expect error E_PARSE "async must target a valid reference: async ref() or async ref(args) — parentheses are required" @5:1
 --- input.jh
 def helper() {
   log "hi"
 }
 export def main() {
-  run async helper
+  async helper
 }
 
 === log format not double-quoted
@@ -725,7 +710,7 @@ def check() {
   wait
 }
 export def main() {
-  run check()
+  check()
 }
 
 === brace-if: prompt in rules
@@ -735,7 +720,7 @@ def check() {
   prompt "ask something"
 }
 export def main() {
-  run check()
+  check()
 }
 
 === brace-if: send in rules
@@ -746,7 +731,7 @@ def check() {
   send "data" -> findings
 }
 export def main() {
-  run check()
+  check()
 }
 
 === if keyword with else branch produces error
@@ -770,7 +755,7 @@ def check() {
   const x = prompt "ask"
 }
 export def main() {
-  run check()
+  check()
 }
 
 === unterminated script block
@@ -816,7 +801,7 @@ config {
 import "lib.jh" as lib
 
 test "broken test" {
-  const out = run lib.main()
+  const out = lib.main()
 --- lib.jh
 export def main() {
   log "ok"
@@ -831,12 +816,12 @@ test "deprecated mock" {
   mock function some_func {
     echo "mocked"
   }
-  const out = run lib.main()
+  const out = lib.main()
 }
 --- lib.jh
 script some_func = `echo "real"`
 export def main() {
-  run some_func()
+  some_func()
 }
 
 === send rhs: unterminated braced interpolation
@@ -859,35 +844,35 @@ export def main() {
 # @expect error E_PARSE "unexpected content after anonymous inline script: 'extra_stuff'" @2:3
 --- input.jh
 export def main() {
-  run `echo hello`() extra_stuff
+  `echo hello`() extra_stuff
 }
 
 === inline script: unterminated parentheses
-# @expect error E_PARSE "run must target a valid reference: run ref() or run ref(args) — parentheses are " @2:1
+# @expect error E_PARSE "invalid script declaration" @2:1
 --- input.jh
 export def main() {
-  run script "echo hello"
+  script "echo hello"
 }
 
 === inline script without parentheses
-# @expect error E_PARSE "run must target a valid reference: run ref() or run ref(args) — parentheses are " @2:1
+# @expect error E_PARSE "invalid script declaration" @2:1
 --- input.jh
 export def main() {
-  run script "echo hello"
+  script "echo hello"
 }
 
 === old inline script empty body rejected
-# @expect error E_PARSE "inline script syntax has changed: use run `body`(args) instead of run script(arg" @2:1
+# @expect error E_VALIDATE "unknown local def or script reference" @2:3
 --- input.jh
 export def main() {
-  run script()
+  script()
 }
 
 === inline script unterminated backtick
 # @expect error E_PARSE "unterminated inline script backtick — missing closing `" @2:3
 --- input.jh
 export def main() {
-  run `echo hello
+  `echo hello
 }
 
 === match: invalid pattern type
@@ -927,7 +912,7 @@ def check() {
   return "ok"
 }
 export def main() {
-  run check() catch (failure) {
+  check() catch (failure) {
     fail reason
   }
 }
@@ -939,7 +924,7 @@ def check() {
   return "ok"
 }
 export def main() {
-  run check() catch (failure) {
+  check() catch (failure) {
     fail "reason
   }
 }
@@ -951,7 +936,7 @@ def check() {
   return "ok"
 }
 export def main() {
-  run check() catch (failure) {
+  check() catch (failure) {
     log reason why
   }
 }
@@ -963,7 +948,7 @@ def check() {
   return "ok"
 }
 export def main() {
-  run check() catch (failure) {
+  check() catch (failure) {
     log "reason
   }
 }
@@ -975,7 +960,7 @@ def check() {
   return "ok"
 }
 export def main() {
-  run check() catch (failure) {
+  check() catch (failure) {
     logerr reason why
   }
 }
@@ -987,7 +972,7 @@ def check() {
   return "ok"
 }
 export def main() {
-  run check() catch (failure) {
+  check() catch (failure) {
     logerr "reason
   }
 }
@@ -1000,7 +985,7 @@ import "lib.jh" as lib
 test "bad mock" {
   mock prompt {
   }
-  const out = run lib.main()
+  const out = lib.main()
 }
 --- lib.jh
 export def main() {
@@ -1028,7 +1013,7 @@ import "lib.jh" as lib
 
 test "bad mock" {
   mock prompt 123-not-a-string
-  const out = run lib.main()
+  const out = lib.main()
 }
 --- lib.jh
 export def main() {
@@ -1044,7 +1029,7 @@ test "bad ref" {
   mock def a.b.c {
     return "mocked"
   }
-  const out = run lib.main()
+  const out = lib.main()
 }
 --- lib.jh
 export def main() {
@@ -1060,7 +1045,7 @@ test "bad ref" {
   mock def a.b.c {
     return "mocked"
   }
-  const out = run lib.main()
+  const out = lib.main()
 }
 --- lib.jh
 export def main() {
@@ -1076,7 +1061,7 @@ test "bad ref" {
   mock script a.b.c {
     echo mocked
   }
-  const out = run lib.main()
+  const out = lib.main()
 }
 --- lib.jh
 export def main() {
@@ -1085,13 +1070,13 @@ export def main() {
 
 
 === run async without parens in workflow requires parens
-# @expect error E_PARSE "run async must target a valid reference: run async ref() or run async ref(args) " @5:1
+# @expect error E_PARSE "async must target a valid reference: async ref() or async ref(args) — parentheses are required" @5:1
 --- input.jh
 def helper() {
   log "hi"
 }
 export def main() {
-  run async helper
+  async helper
 }
 
 
@@ -1160,11 +1145,11 @@ export def main() {
 }
 
 === run without parentheses in workflow requires parens
-# @expect error E_PARSE "run must target a valid reference: run ref() or run ref(args) — parentheses are " @3:1
+# @expect error E_VALIDATE "use helper() — a bare name that refers to a script or workflow must be called as a managed step" @3:3
 --- input.jh
 script helper = `echo "hi"`
 export def main() {
-  run helper
+  helper
 }
 
 === return with single-quoted string
@@ -1193,37 +1178,29 @@ export def main() {
 }
 
 === run without parentheses in workflow requires parens
-# @expect error E_PARSE "run must target a valid reference: run ref() or run ref(args) — parentheses are " @3:1
+# @expect error E_VALIDATE "use helper() — a bare name that refers to a script or workflow must be called as a managed step" @3:3
 --- input.jh
 script helper = `echo "hi"`
 export def main() {
-  run helper
-}
-
-=== capture run without parentheses requires const
-# @expect error E_PARSE "assignment without" @3:3
---- input.jh
-script helper = `echo "hi"`
-export def main() {
-  x = run helper
+  helper
 }
 
 === const run without parentheses requires parens
-# @expect error E_PARSE "const ... = run must target a valid reference" @3:13
+# @expect error E_VALIDATE "scripts are not values;" @3:3
 --- input.jh
 script helper = `echo "hi"`
 export def main() {
-  const x = run helper
+  const x = helper
 }
 
 === const run without parentheses requires parens
-# @expect error E_PARSE "const ... = run must target a valid reference" @5:13
+# @expect error E_VALIDATE "in const; declare it with" @5:3
 --- input.jh
 def check() {
   return "ok"
 }
 export def main() {
-  const x = run check
+  const x = check
 }
 
 === triple-backtick prompt is rejected
@@ -1281,7 +1258,7 @@ script broken = `echo ok` extra
 # @expect error E_PARSE "anonymous inline script requires argument list after closing fence: ```(args) or" @4:3
 --- input.jh
 export def main() {
-  run ```
+  ```
 echo hello
 ```
 }
@@ -1290,7 +1267,7 @@ echo hello
 # @expect error E_PARSE "already sets the shebang — remove the manual" @2:3
 --- input.jh
 export def main() {
-  run ```node
+  ```node
 #!/usr/bin/env node
 console.log("hi");
 ```()
@@ -1300,7 +1277,7 @@ console.log("hi");
 # @expect error E_PARSE "unterminated fenced block: no closing ``` before end of file" @2:1
 --- input.jh
 export def main() {
-  run ```
+  ```
 echo hello
 }
 
@@ -1308,14 +1285,14 @@ echo hello
 # @expect error E_PARSE "anonymous inline script requires argument list after closing backtick: `body`(ar" @2:3
 --- input.jh
 export def main() {
-  run `echo hello`
+  `echo hello`
 }
 
 === inline script fenced with invalid lang token
 # @expect error E_PARSE "invalid opening fence: only a single lang token is allowed after ```" @2:1
 --- input.jh
 export def main() {
-  run ```not a lang```()
+  ```not a lang```()
 }
 
 === config block unterminated
@@ -1352,41 +1329,20 @@ export def main() {
   }
 }
 
-=== const run with invalid reference
-# @expect error E_PARSE "const ... = run must target a valid reference" @2:13
---- input.jh
-export def main() {
-  const x = run 123bad
-}
-
-=== const run with invalid reference
-# @expect error E_PARSE "const ... = run must target a valid reference" @2:13
---- input.jh
-export def main() {
-  const x = run 123bad
-}
-
 === const run cannot use catch
-# @expect error E_PARSE "unexpected content after run call: 'catch {'; shell redirection (>, |, &) is not" @2:1
+# @expect error E_PARSE "unexpected content after const call: 'catch {'" @2:1
 --- input.jh
 export def main() {
-  const x = run check() catch {
+  const x = check() catch {
     log "no"
   }
 }
 
-=== run with invalid reference in workflow
-# @expect error E_PARSE "run must target a valid reference: run ref() or run ref(args) — parentheses are " @2:1
---- input.jh
-export def main() {
-  run 123bad
-}
-
 === run async with invalid reference in workflow
-# @expect error E_PARSE "run async must target a valid reference: run async ref() or run async ref(args) " @2:1
+# @expect error E_PARSE "async must target a valid reference: async ref() or async ref(args) — parentheses are required" @2:1
 --- input.jh
 export def main() {
-  run async 123bad()
+  async 123bad()
 }
 
 === empty parameter name in parameter list
@@ -1447,7 +1403,7 @@ def check() {
   return "ok"
 }
 export def main() {
-  run check() catch (failure) {
+  check() catch (failure) {
     x = prompt "fix"
   }
 }
@@ -1498,13 +1454,13 @@ export def main() {
 }
 
 === unterminated multiline catch block
-# @expect error E_PARSE "unterminated catch block, expected" @5:15
+# @expect error E_PARSE "unterminated catch block, expected" @5:11
 --- input.jh
 def check() {
   return "ok"
 }
 export def main() {
-  run check() catch (failure) {
+  check() catch (failure) {
     log "catching"
 
 === duplicate name: rule and workflow
@@ -1551,21 +1507,14 @@ export def main() {
 }
 
 === empty multiline catch block
-# @expect error E_PARSE "catch block must contain at least one statement" @5:15
+# @expect error E_PARSE "catch block must contain at least one statement" @5:11
 --- input.jh
 def check() {
   return "ok"
 }
 export def main() {
-  run check() catch (failure) {
+  check() catch (failure) {
   }
-}
-
-=== run with invalid reference
-# @expect error E_PARSE "run must target a valid reference: run ref() or run ref(args) — parentheses are " @2:1
---- input.jh
-export def main() {
-  run 123bad
 }
 
 === config line without equals sign
@@ -1619,13 +1568,6 @@ export def main() {
   findings <- "hello" extra
 }
 
-=== capture run with invalid reference in workflow
-# @expect error E_PARSE "assignment without" @2:3
---- input.jh
-export def main() {
-  x = run 123bad
-}
-
 === fenced script with shell parameter expansion is valid
 # @expect ok
 --- input.jh
@@ -1634,17 +1576,17 @@ echo "Installing ${PKG_NAME:-default}"
 echo "Version: ${VERSION}"
 ```
 export def main() {
-  run deploy()
+  deploy()
 }
 
 === empty inline catch block
-# @expect error E_PARSE "catch block must contain at least one statement" @5:15
+# @expect error E_PARSE "catch block must contain at least one statement" @5:11
 --- input.jh
 def check() {
   return "ok"
 }
 export def main() {
-  run check() catch (failure) { }
+  check() catch (failure) { }
 }
 
 === test: old camelCase expectContain rejected
@@ -1687,7 +1629,7 @@ export def main() {
 }
 
 === test: bare assignment without const/run rejected
-# @expect error E_PARSE "const out = run lib.default(…)" @4:3
+# @expect error E_PARSE "const out = lib.default(…)" @4:3
 --- input.test.jh
 import "lib.jh" as lib
 
@@ -1700,7 +1642,7 @@ export def main() {
 }
 
 === test: bare workflow call without run rejected
-# @expect error E_PARSE "run lib.default(…)" @4:3
+# @expect error E_PARSE "lib.default(…)" @4:3
 --- input.test.jh
 import "lib.jh" as lib
 
@@ -1775,117 +1717,117 @@ export def main() {
 }
 
 === run catch with unterminated bindings paren
-# @expect error E_PARSE "unterminated catch bindings: expected" @5:15
+# @expect error E_PARSE "unterminated catch bindings: expected" @5:11
 --- input.jh
 def check() {
   return "ok"
 }
 export def main() {
-  run check() catch (failure {
+  check() catch (failure {
     log "catching"
   }
 }
 
 === run catch with empty bindings
-# @expect error E_PARSE "catch requires exactly one binding: catch (<name>) { ... }" @5:15
+# @expect error E_PARSE "catch requires exactly one binding: catch (<name>) { ... }" @5:11
 --- input.jh
 def check() {
   return "ok"
 }
 export def main() {
-  run check() catch () {
+  check() catch () {
     log "catching"
   }
 }
 
 === run catch with invalid binding name
-# @expect error E_PARSE "invalid catch binding name:" @5:15
+# @expect error E_PARSE "invalid catch binding name:" @5:11
 --- input.jh
 def check() {
   return "ok"
 }
 export def main() {
-  run check() catch (123bad) {
+  check() catch (123bad) {
     log "catching"
   }
 }
 
 === run catch with no body after bindings
-# @expect error E_PARSE "catch requires a body after bindings" @5:15
+# @expect error E_PARSE "catch requires a body after bindings" @5:11
 --- input.jh
 def check() {
   return "ok"
 }
 export def main() {
-  run check() catch (failure)
+  check() catch (failure)
 }
 
 === run catch with unterminated bindings paren
-# @expect error E_PARSE "unterminated catch bindings: expected" @5:16
+# @expect error E_PARSE "unterminated catch bindings: expected" @5:12
 --- input.jh
 def helper() {
   log "ok"
 }
 export def main() {
-  run helper() catch (failure {
+  helper() catch (failure {
     log "catching"
   }
 }
 
 === run catch with empty bindings
-# @expect error E_PARSE "catch requires exactly one binding: catch (<name>) { ... }" @5:16
+# @expect error E_PARSE "catch requires exactly one binding: catch (<name>) { ... }" @5:12
 --- input.jh
 def helper() {
   log "ok"
 }
 export def main() {
-  run helper() catch () {
+  helper() catch () {
     log "catching"
   }
 }
 
 === run catch with invalid binding name
-# @expect error E_PARSE "invalid catch binding name:" @5:16
+# @expect error E_PARSE "invalid catch binding name:" @5:12
 --- input.jh
 def helper() {
   log "ok"
 }
 export def main() {
-  run helper() catch (123bad) {
+  helper() catch (123bad) {
     log "catching"
   }
 }
 
 === run catch with no body after bindings
-# @expect error E_PARSE "catch requires a body after bindings" @5:16
+# @expect error E_PARSE "catch requires a body after bindings" @5:12
 --- input.jh
 def helper() {
   log "ok"
 }
 export def main() {
-  run helper() catch (failure)
+  helper() catch (failure)
 }
 
 === run catch with multiple bindings rejected
-# @expect error E_PARSE "catch accepts exactly one binding: catch (<name>) — the second binding (attempt)" @5:15
+# @expect error E_PARSE "catch accepts exactly one binding: catch (<name>) — the second binding (attempt)" @5:11
 --- input.jh
 def check() {
   return "ok"
 }
 export def main() {
-  run check() catch (failure, attempt) {
+  check() catch (failure, attempt) {
     log "catching"
   }
 }
 
 === run catch with multiple bindings rejected
-# @expect error E_PARSE "catch accepts exactly one binding: catch (<name>) — the second binding (attempt)" @5:16
+# @expect error E_PARSE "catch accepts exactly one binding: catch (<name>) — the second binding (attempt)" @5:12
 --- input.jh
 def helper() {
   log "ok"
 }
 export def main() {
-  run helper() catch (failure, attempt) {
+  helper() catch (failure, attempt) {
     log "catching"
   }
 }
@@ -1897,7 +1839,7 @@ def check() {
   return "ok"
 }
 export def main() {
-  run check() catch (failure) fail reason
+  check() catch (failure) fail reason
 }
 
 === inline catch unterminated fail string
@@ -1907,7 +1849,7 @@ def check() {
   return "ok"
 }
 export def main() {
-  run check() catch (failure) fail "reason
+  check() catch (failure) fail "reason
 }
 
 === inline config block missing equals sign
@@ -1979,7 +1921,7 @@ export def main() { config { agent.backend = "claude" } }
 def check() { run foo()
 }
 export def main() {
-  run check()
+  check()
 }
 
 === prompt triple-quote closing with invalid trailing content
@@ -2079,7 +2021,7 @@ import "lib.jh" as lib
 
 test "bad mock" {
   mock prompt 'answer'
-  const out = run lib.main()
+  const out = lib.main()
 }
 --- lib.jh
 export def main() {
@@ -2093,7 +2035,7 @@ def check() {
   return "ok"
 }
 export def main() {
-  run check() catch (err) {
+  check() catch (err) {
     wait
   }
 }
@@ -2101,7 +2043,7 @@ export def main() {
 === reserved keyword as parameter name
 # @expect error E_PARSE "parameter name" @1:1
 --- input.jh
-def myWorkflow(run) {
+def myWorkflow(stdin) {
   log "hello"
 }
 
@@ -2158,7 +2100,7 @@ def check() {
   return "ok"
 }
 export def main() {
-  run check() catch (err) wait
+  check() catch (err) wait
 }
 
 === catch block: assignment without const rejected
@@ -2168,8 +2110,8 @@ def helper() {
   log "ok"
 }
 export def main() {
-  run helper() catch (err) {
-    x = run helper()
+  helper() catch (err) {
+    x = helper()
   }
 }
 
@@ -2180,16 +2122,16 @@ def check() {
   return "ok"
 }
 export def main() {
-  run check() catch (failure) {
+  check() catch (failure) {
     x = prompt "fix"
   }
 }
 
 === const run with old inline script syntax
-# @expect error E_PARSE "inline script syntax has changed: use const name = run `body`(args) instead of r" @2:13
+# @expect error E_PARSE "unexpected content after const call:" @2:1
 --- input.jh
 export def main() {
-  const x = run script() "echo hello"
+  const x = script() "echo hello"
 }
 
 === top-level const with invalid name
@@ -2216,11 +2158,11 @@ export def main() {
 }
 
 === shell redirection after const run call rejected
-# @expect error E_PARSE "unexpected content after run call: '| grep ok'; shell redirection (>, |, &) is n" @3:1
+# @expect error E_PARSE "unexpected content after const call: '| grep ok'" @3:1
 --- input.jh
 script helper = `echo ok`
 export def main() {
-  const x = run helper() | grep ok
+  const x = helper() | grep ok
 }
 
 === shell redirection after send run call rejected
@@ -2302,44 +2244,44 @@ hello world
 script broken = `echo hello
 
 === inline catch return without value
-# @expect error E_PARSE "catch requires explicit bindings: catch (<name>) { ... }" @5:15
+# @expect error E_PARSE "catch requires explicit bindings: catch (<name>) { ... }" @5:11
 --- input.jh
 def check() {
   return "ok"
 }
 export def main() {
-  run check() catch return
+  check() catch return
 }
 
 === run catch unterminated multiline block
-# @expect error E_PARSE "unterminated catch block, expected" @5:16
+# @expect error E_PARSE "unterminated catch block, expected" @5:12
 --- input.jh
 def helper() {
   log "ok"
 }
 export def main() {
-  run helper() catch (err) {
+  helper() catch (err) {
     log "catching"
 
 === run catch unterminated multiline block
-# @expect error E_PARSE "unterminated catch block, expected" @5:15
+# @expect error E_PARSE "unterminated catch block, expected" @5:11
 --- input.jh
 def check() {
   return "ok"
 }
 export def main() {
-  run check() catch (err) {
+  check() catch (err) {
     log "catching"
 
 === inline script fenced unterminated in rule body
 # @expect error E_PARSE "unterminated fenced block: no closing ``` before end of file" @2:1
 --- input.jh
 def check() {
-  run ```
+  ```
 echo hello
 }
 export def main() {
-  run check()
+  check()
 }
 
 === fail triple-quote opening with content on same line
@@ -2375,13 +2317,13 @@ export def main() {
 payload data
 
 === run catch without bindings bare catch block
-# @expect error E_PARSE "catch requires explicit bindings: catch (<name>) { ... }" @5:16
+# @expect error E_PARSE "catch requires explicit bindings: catch (<name>) { ... }" @5:12
 --- input.jh
 def helper() {
   log "ok"
 }
 export def main() {
-  run helper() catch {
+  helper() catch {
     log "catching"
   }
 }
@@ -2437,7 +2379,7 @@ def helper() {
   log "ok"
 }
 export def main() {
-  run helper() catch (err) fail "uncatchable: ${err}"
+  helper() catch (err) fail "uncatchable: ${err}"
 }
 
 === send rhs with run to workflow
@@ -2448,7 +2390,7 @@ def helper() {
   return "data"
 }
 export def main() {
-  send run helper() -> c
+  send helper() -> c
 }
 
 === send rhs with run to script
@@ -2457,7 +2399,7 @@ export def main() {
 channel c
 script helper = `echo "data"`
 export def main() {
-  send run helper() -> c
+  send helper() -> c
 }
 
 === return with bash exit code rejected in workflow
@@ -2511,17 +2453,17 @@ export def main(x) {
 }
 
 === const run async with inline script rejected
-# @expect error E_PARSE "run async is not supported with inline scripts" @2:13
+# @expect error E_PARSE "async is not supported with inline scripts" @2:13
 --- input.jh
 export def main() {
-  const x = run async `echo hello`()
+  const x = async `echo hello`()
 }
 
 === const run async with invalid reference
-# @expect error E_PARSE "const ... = run async must target a valid reference" @2:13
+# @expect error E_PARSE "const ... = async must target a valid reference" @2:13
 --- input.jh
 export def main() {
-  const x = run async 123bad()
+  const x = async 123bad()
 }
 
 === if/else on its own line without preceding closing brace
@@ -2585,28 +2527,28 @@ export def main(x) {
 # @expect error E_PARSE "unexpected content after log string: '} catch (e) { log" @2:1
 --- input.jh
 export def main() {
-  run `false`() recover(e) { log "r" } catch (e) { log "c" }
+  `false`() recover(e) { log "r" } catch (e) { log "c" }
 }
 
 === return run with unclosed paren is E_PARSE not shell
 # @expect error E_PARSE "unterminated multiline call — missing closing" @2:1
 --- input.jh
 export def main() {
-  return run missing_close(
+  return missing_close(
 }
 
 === return run with unclosed paren is E_PARSE not shell
 # @expect error E_PARSE "unterminated multiline call — missing closing" @2:1
 --- input.jh
 export def main() {
-  return run missing_close(
+  return missing_close(
 }
 
 === multiline call content before triple-quoted argument
 # @expect error E_PARSE "unexpected content before triple-quoted call argument" @4:1
 --- input.jh
 export def main() {
-  const x = run foo(
+  const x = foo(
 junk
 """
 body
@@ -2647,7 +2589,7 @@ export def main() {
 --- input.jh
 script aaa use 1BAD = `echo x`
 export def main() {
-  run aaa()
+  aaa()
 }
 
 === script use key must not be reserved
@@ -2655,7 +2597,7 @@ export def main() {
 --- input.jh
 script aaa use JAIPH_WORKSPACE = `echo x`
 export def main() {
-  run aaa()
+  aaa()
 }
 
 === use is reserved as a script name

@@ -2,5 +2,5 @@
 # E2E fixture: minimal workflow for compiler golden test.
 script say_hello = `echo hello`
 export def main() {
-  run say_hello()
+  say_hello()
 }

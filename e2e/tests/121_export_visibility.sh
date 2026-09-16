@@ -28,7 +28,7 @@ e2e::file "vis_main.jh" <<'EOF'
 import "vis_lib.jh" as lib
 
 export def main() {
-  run lib.private_wf()
+  lib.private_wf()
 }
 EOF
 
@@ -57,11 +57,11 @@ e2e::file "rule_lib.jh" <<'EOF'
 script check_impl = `true`
 
 export def public_rule() {
-  run check_impl()
+  check_impl()
 }
 
 def private_rule() {
-  run check_impl()
+  check_impl()
 }
 EOF
 
@@ -69,7 +69,7 @@ e2e::file "rule_main.jh" <<'EOF'
 import "rule_lib.jh" as lib
 
 export def main() {
-  run lib.private_rule()
+  lib.private_rule()
 }
 EOF
 
@@ -99,7 +99,7 @@ script public_script = `echo "public"`
 script private_script = `echo "private"`
 
 export def dummy() {
-  run public_script()
+  public_script()
 }
 EOF
 
@@ -107,7 +107,7 @@ e2e::file "script_main.jh" <<'EOF'
 import "script_lib.jh" as lib
 
 export def main() {
-  run lib.private_script()
+  lib.private_script()
 }
 EOF
 
@@ -136,7 +136,7 @@ e2e::file "vis_ok.jh" <<'EOF'
 import "vis_lib.jh" as lib
 
 export def main() {
-  run lib.public_wf()
+  lib.public_wf()
 }
 EOF
 

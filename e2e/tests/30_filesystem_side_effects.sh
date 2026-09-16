@@ -18,7 +18,7 @@ script write_workflow_file = ```
 echo "abc" > workflow_wrote.txt
 ```
 export def main() {
-  run write_workflow_file()
+  write_workflow_file()
 }
 EOF
 rm -f "${TEST_DIR}/workflow_wrote.txt"
@@ -49,11 +49,11 @@ script write_attempt_impl = ```
 echo "abc" > rule_wrote.txt
 ```
 def write_attempt() {
-  run write_attempt_impl()
+  write_attempt_impl()
 }
 
 export def main() {
-  run write_attempt()
+  write_attempt()
 }
 EOF
 rm -f "${TEST_DIR}/rule_wrote.txt"

@@ -18,7 +18,7 @@ echo "fn-called" > script_called.txt
 ```
 
 export def main() {
-  run changed_files()
+  changed_files()
 }
 EOF
 rm -f "${TEST_DIR}/script_called.txt"
@@ -48,7 +48,7 @@ e2e::file "args_forwarding.jh" <<'EOF'
 script expect_args_impl = `return 0`
 
 def expect_args(a, b) {
-  run expect_args_impl()
+  expect_args_impl()
 }
 
 script write_args = ```
@@ -60,13 +60,13 @@ printf "%s|%s\n" "$1" "$2" > workflow_args.txt
 ```
 
 def called(a, b) {
-  run expect_args(a, b)
-  run write_args(a, b)
-  run write_workflow_args(a, b)
+  expect_args(a, b)
+  write_args(a, b)
+  write_workflow_args(a, b)
 }
 
 export def main() {
-  run called("one", "two words")
+  called("one", "two words")
 }
 EOF
 rm -f "${TEST_DIR}/script_args.txt" "${TEST_DIR}/workflow_args.txt"

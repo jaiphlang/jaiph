@@ -5,7 +5,7 @@
 # Import as: import "./lib_common.jh" as common
 #
 # Writes UTF-8 text to a path: $1 = path, content = stdin.
-# Call as: run common.save_string_to_file(path) stdin content
+# Call as: stdin content -> common.save_string_to_file(path)
 # python3 instead of `echo`, so backslashes and dash-leading content
 # are written verbatim. Content arrives on stdin (not argv), so it is
 # not bounded by ARG_MAX and can be arbitrarily large.

@@ -8,7 +8,7 @@ fi
 ```
 
 def ensure_is_number(value) {
-  run ensure_is_number_impl(value)
+  ensure_is_number_impl(value)
 }
 
 script fib = ```
@@ -32,7 +32,7 @@ echo "$result"
 ```
 
 export def main(n) {
-  run ensure_is_number(n)
-  const result = run fib(n)
+  ensure_is_number(n)
+  const result = fib(n)
   log "${result}"
 }

@@ -3,7 +3,7 @@ def greet(name, greeting) {
 }
 
 def validate(input) {
-  run checker()
+  checker()
 }
 
 script checker = `echo ok`

@@ -23,7 +23,7 @@ test("ACCEPTANCE: duplicate import alias fails with E_VALIDATE", () => {
       [
         'script one_impl = `echo one`',
         "def one() {",
-        "  run one_impl()",
+        "  one_impl()",
         "}",
         "",
       ].join("\n"),
@@ -33,7 +33,7 @@ test("ACCEPTANCE: duplicate import alias fails with E_VALIDATE", () => {
       [
         'script two_impl = `echo two`',
         "def two() {",
-        "  run two_impl()",
+        "  two_impl()",
         "}",
         "",
       ].join("\n"),
@@ -45,7 +45,7 @@ test("ACCEPTANCE: duplicate import alias fails with E_VALIDATE", () => {
         'import "b.jh" as mod',
         "",
         "export def main() {",
-        "  run mod.one()",
+        "  mod.one()",
         "}",
         "",
       ].join("\n"),
@@ -61,7 +61,7 @@ test("ACCEPTANCE: unknown local rule reference fails deterministically", () => {
       join(root, "main.jh"),
       [
         "export def main() {",
-        "  run missing_rule()",
+        "  missing_rule()",
         "}",
         "",
       ].join("\n"),
@@ -77,13 +77,13 @@ test("ACCEPTANCE: unknown import alias in rule reference fails deterministically
       join(root, "main.jh"),
       [
         "export def main() {",
-        "  run ghost.guard()",
+        "  ghost.guard()",
         "}",
         "",
       ].join("\n"),
     );
 
-    assert.throws(() => buildScripts(root, join(root, "out")), /E_VALIDATE unknown import alias "ghost" for run target "ghost\.guard"/);
+    assert.throws(() => buildScripts(root, join(root, "out")), /E_VALIDATE unknown import alias "ghost" for call target "ghost\.guard"/);
   });
 });
 
@@ -93,7 +93,7 @@ test("ACCEPTANCE: unknown local workflow reference in run fails deterministicall
       join(root, "main.jh"),
       [
         "export def main() {",
-        "  run missing_workflow()",
+        "  missing_workflow()",
         "}",
         "",
       ].join("\n"),
@@ -109,13 +109,13 @@ test("ACCEPTANCE: invalid workflow reference shape fails at parse stage", () => 
       join(root, "main.jh"),
       [
         "export def main() {",
-        "  run bad.ref.shape()",
+        "  bad.ref.shape()",
         "}",
         "",
       ].join("\n"),
     );
 
-    assert.throws(() => buildScripts(root, join(root, "out")), /E_PARSE.*run must target a valid reference/);
+    assert.throws(() => buildScripts(root, join(root, "out")), /E_PARSE.*must target a valid reference/);
   });
 });
 
@@ -126,7 +126,7 @@ test("ACCEPTANCE: imported workflow missing fails with E_VALIDATE", () => {
       [
         'script existing_impl = `echo ok`',
         "def existing() {",
-        "  run existing_impl()",
+        "  existing_impl()",
         "}",
         "",
       ].join("\n"),
@@ -137,7 +137,7 @@ test("ACCEPTANCE: imported workflow missing fails with E_VALIDATE", () => {
         'import "lib.jh" as lib',
         "",
         "export def main() {",
-        "  run lib.missing()",
+        "  lib.missing()",
         "}",
         "",
       ].join("\n"),
@@ -176,7 +176,7 @@ test("ACCEPTANCE: if keyword with old syntax produces E_PARSE error", () => {
       join(root, "main.jh"),
       [
         "def gate() {",
-        "  run gate_impl()",
+        "  gate_impl()",
         "}",
         'script gate_impl = `false`',
         "",
@@ -199,7 +199,7 @@ test("ACCEPTANCE: run catch then-branch allows mixed prompt and run", () => {
       join(root, "main.jh"),
       [
         "def gate() {",
-        "  run gate_impl()",
+        "  gate_impl()",
         "}",
         'script gate_impl = `false`',
         "",
@@ -208,9 +208,9 @@ test("ACCEPTANCE: run catch then-branch allows mixed prompt and run", () => {
         "}",
         "",
         "export def main() {",
-        "  run gate() catch (err) {",
+        "  gate() catch (err) {",
         '    const _ = prompt "recover"',
-        "    run fix_build()",
+        "    fix_build()",
         "  }",
         "}",
         "",
@@ -283,7 +283,7 @@ test("ACCEPTANCE: def with inline brace group cmd || { ... } compiles", () => {
         "}",
         "",
         "export def main() {",
-        "  run example()",
+        "  example()",
         "}",
         "",
       ].join("\n"),
@@ -302,7 +302,7 @@ test("ACCEPTANCE: def with single-line || { ... } compiles", () => {
         "}",
         "",
         "export def main() {",
-        "  run example()",
+        "  example()",
         "}",
         "",
       ].join("\n"),
@@ -452,7 +452,7 @@ test("ACCEPTANCE: jaiph test typed prompt — valid JSON passes and raw result i
         "",
         'test "typed prompt accepts valid JSON" {',
         '  mock prompt "{\\"type\\":\\"fix\\",\\"risk\\":\\"low\\"}"',
-        "  const out = run w.main()",
+        "  const out = w.main()",
         '  expect_contain out "raw={\\"type\\":\\"fix\\",\\"risk\\":\\"low\\"}"',
         "}",
         "",
@@ -491,7 +491,7 @@ test("ACCEPTANCE: jaiph test typed prompt — invalid JSON fails with parse erro
         "",
         'test "invalid JSON fails" {',
         '  mock prompt "not valid json"',
-        "  const out = run w.main()",
+        "  const out = w.main()",
         '  expect_contain out "done"',
         "}",
         "",
@@ -531,7 +531,7 @@ test("ACCEPTANCE: jaiph test typed prompt — missing field fails with schema er
         "",
         'test "missing field fails" {',
         '  mock prompt "{\\"type\\":\\"fix\\"}"',
-        "  const out = run w.main()",
+        "  const out = w.main()",
         '  expect_contain out "done"',
         "}",
         "",
@@ -572,7 +572,7 @@ test("ACCEPTANCE: jaiph test typed prompt — wrong type fails", () => {
         "",
         'test "type error fails" {',
         '  mock prompt "{\\"type\\":123,\\"risk\\":\\"low\\"}"',
-        "  const out = run w.main()",
+        "  const out = w.main()",
         '  expect_contain out "done"',
         "}",
         "",
@@ -618,7 +618,7 @@ test("ACCEPTANCE: route with rule ref fails E_VALIDATE", () => {
       [
         "channel findings -> check",
         "def check() {",
-        "  run check_impl()",
+        "  check_impl()",
         "}",
         'script check_impl = `true`',
         "export def main() {",
@@ -679,23 +679,23 @@ test("ACCEPTANCE: inbox.jh fixture builds successfully", () => {
         'script review_summary = `echo "[reviewed] $1"`',
         "",
         "def researcher() {",
-        "  send run emit_findings() -> findings",
+        "  send emit_findings() -> findings",
         "}",
         "",
         'script write_findings_file = `echo "$1" > findings_file.md`',
         "",
         "def analyst(message, chan, sender) {",
-        '  run write_findings_file(message)',
-        '  const summary = run summarize_findings()',
+        '  write_findings_file(message)',
+        '  const summary = summarize_findings()',
         '  send "${summary}" -> summary',
         "}",
         "",
         "def reviewer(message, chan, sender) {",
-        '  send run review_summary(message) -> final_summary',
+        '  send review_summary(message) -> final_summary',
         "}",
         "",
         "export def main() {",
-        "  run researcher()",
+        "  researcher()",
         "}",
         "",
       ].join("\n"),
@@ -704,7 +704,7 @@ test("ACCEPTANCE: inbox.jh fixture builds successfully", () => {
   });
 });
 
-// === run ... catch validation ===
+// === ... catch validation ===
 
 test("ACCEPTANCE: run catch with args after catch fails with E_PARSE", () => {
   withTempDir("jaiph-acc-catch-args-after-", (root) => {
@@ -712,12 +712,12 @@ test("ACCEPTANCE: run catch with args after catch fails with E_PARSE", () => {
       join(root, "main.jh"),
       [
         "def ci_passes() {",
-        "  run ci_passes_impl()",
+        "  ci_passes_impl()",
         "}",
         'script ci_passes_impl = `true`',
         "",
         "export def main() {",
-        '  run ci_passes() catch "$repo_dir" {',
+        '  ci_passes() catch "$repo_dir" {',
         '    prompt "Apply the smallest safe fix."',
         "  }",
         "}",
@@ -741,7 +741,7 @@ test("ACCEPTANCE: run catch with multiple args after catch fails with E_PARSE", 
         "}",
         "",
         "export def main() {",
-        '  run some_rule("a") catch "b" {',
+        '  some_rule("a") catch "b" {',
         '    log "should not parse"',
         "  }",
         "}",
@@ -765,7 +765,7 @@ test("ACCEPTANCE: run catch without block fails with E_PARSE", () => {
           "}",
           "",
           "export def main() {",
-          '  run ci_passes("$repo_dir") catch',
+          '  ci_passes("$repo_dir") catch',
           "}",
           "",
         ].join("\n"),
@@ -817,7 +817,7 @@ test("ACCEPTANCE: valid run catch block still works", () => {
       join(root, "main.jh"),
       [
         "def ci_passes(repo_dir) {",
-        "  run ci_passes_impl()",
+        "  ci_passes_impl()",
         "}",
         'script ci_passes_impl = `true`',
         "",
@@ -826,8 +826,8 @@ test("ACCEPTANCE: valid run catch block still works", () => {
         "}",
         "",
         "export def main() {",
-        '  run ci_passes("$repo_dir") catch (failure) {',
-        "    run fix_it()",
+        '  ci_passes("$repo_dir") catch (failure) {',
+        "    fix_it()",
         "  }",
         "}",
         "",

@@ -243,7 +243,7 @@ test("runRoot: emits a terminal RUN_END even when executeDef throws", async () =
   }
 });
 
-// AC: a `run script(huge)` whose argv would exceed ARG_MAX does not reject
+// AC: a `script(huge)` whose argv would exceed ARG_MAX does not reject
 // runRoot. After the step, the journal has STEP_END for that script and a
 // terminal RUN_END (spawn mock; no live 1MB argv needed).
 test("runRoot: an oversized-argv script spawn does not reject; journal has STEP_END + terminal RUN_END", async () => {
@@ -251,7 +251,7 @@ test("runRoot: an oversized-argv script spawn does not reject; journal has STEP_
   try {
     const { runtime, scriptsDir } = makeRuntime(
       root,
-      ["script big = ```", 'echo "unreachable"', "```", "", "export def main() {", "  run big()", "}", ""].join("\n"),
+      ["script big = ```", 'echo "unreachable"', "```", "", "export def main() {", "  big()", "}", ""].join("\n"),
     );
     writeFileSync(join(scriptsDir, "big"), '#!/usr/bin/env bash\necho "unreachable"\n');
     const throwSpawn = (() => {
@@ -296,7 +296,7 @@ test("runRoot: recover body runs after a mocked E2BIG on the recovered run step"
         "```",
         "",
         "export def main() {",
-        "  run big() recover (failure) {",
+        "  big() recover (failure) {",
         '    logerr "RECOVER_RAN ${failure}"',
         "  }",
         "}",

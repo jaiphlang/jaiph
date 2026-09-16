@@ -50,12 +50,12 @@ const TOOLS = [
   "  echo Hello ${name} > greeting_bare.txt",
   "}",
   "",
-  // Inline `${run …}` capture spliced into a shell body: the captured value is
+  // Inline `${…}` capture spliced into a shell body: the captured value is
   // also caller-influenced and must be shell-quoted (the old warn-only guard
   // inspected prompt captures only and missed this provenance).
   "script emit_danger = `printf '$(id)'`",
   "def cap() {",
-  '  echo "captured ${run emit_danger()}" > cap.txt',
+  '  echo "captured ${emit_danger()}" > cap.txt',
   "}",
   "",
 ].join("\n");
@@ -115,7 +115,7 @@ test("shell injection: '; touch … #' in a param creates no file (unquoted body
 });
 
 // The `capture` provenance the old prompt-only guard missed: an inline
-// `${run …}` result carrying `$(id)` is shell-quoted before it re-enters sh.
+// `${…}` result carrying `$(id)` is shell-quoted before it re-enters sh.
 test("shell injection: an inline capture value is shell-quoted, not re-evaluated", async () => {
   const { root, jh } = setup("jaiph-shinj-capture-");
   try {

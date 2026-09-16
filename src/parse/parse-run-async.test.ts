@@ -2,10 +2,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { parsejaiph } from "../parser";
 
-test("parse: run async produces exec/call with async flag on the body", () => {
+test("parse: async produces exec/call with async flag on the body", () => {
   const src = [
     "export def main() {",
-    "  run async some_wf()",
+    "  async some_wf()",
     "}",
   ].join("\n");
   const mod = parsejaiph(src, "test.jh");
@@ -17,10 +17,10 @@ test("parse: run async produces exec/call with async flag on the body", () => {
   }
 });
 
-test("parse: run async with args", () => {
+test("parse: async with args", () => {
   const src = [
     "export def main() {",
-    '  run async other_wf("hello", "$x")',
+    '  async other_wf("hello", "$x")',
     "}",
   ].join("\n");
   const mod = parsejaiph(src, "test.jh");
@@ -36,10 +36,10 @@ test("parse: run async with args", () => {
   }
 });
 
-test("parse: run async with qualified ref", () => {
+test("parse: async with qualified ref", () => {
   const src = [
     "export def main() {",
-    "  run async mod.some_wf()",
+    "  async mod.some_wf()",
     "}",
   ].join("\n");
   const mod = parsejaiph(src, "test.jh");
@@ -54,7 +54,7 @@ test("parse: run async with qualified ref", () => {
 test("parse: regular run does not have async flag", () => {
   const src = [
     "export def main() {",
-    "  run some_wf()",
+    "  some_wf()",
     "}",
   ].join("\n");
   const mod = parsejaiph(src, "test.jh");
@@ -65,10 +65,10 @@ test("parse: regular run does not have async flag", () => {
   }
 });
 
-test("parse: capture + run async is rejected without const", () => {
+test("parse: capture + async is rejected without const", () => {
   const src = [
     "export def main() {",
-    "  x = run async some_wf()",
+    "  x = async some_wf()",
     "}",
   ].join("\n");
   assert.throws(
@@ -77,10 +77,10 @@ test("parse: capture + run async is rejected without const", () => {
   );
 });
 
-test("parse: const capture + run async produces Expr.call with async flag", () => {
+test("parse: const capture + async produces Expr.call with async flag", () => {
   const src = [
     "export def main() {",
-    "  const h = run async some_wf()",
+    "  const h = async some_wf()",
     "}",
   ].join("\n");
   const mod = parsejaiph(src, "test.jh");
@@ -93,10 +93,10 @@ test("parse: const capture + run async produces Expr.call with async flag", () =
   }
 });
 
-test("parse: const capture + run async with args", () => {
+test("parse: const capture + async with args", () => {
   const src = [
     "export def main() {",
-    '  const h = run async other_wf("hello")',
+    '  const h = async other_wf("hello")',
     "}",
   ].join("\n");
   const mod = parsejaiph(src, "test.jh");
@@ -109,10 +109,10 @@ test("parse: const capture + run async with args", () => {
   }
 });
 
-test("parse: run async with recover block", () => {
+test("parse: async with recover block", () => {
   const src = [
     "export def main() {",
-    '  run async foo() recover(err) { log "repair" }',
+    '  async foo() recover(err) { log "repair" }',
     "}",
   ].join("\n");
   const mod = parsejaiph(src, "test.jh");
@@ -130,12 +130,12 @@ test("parse: run async with recover block", () => {
   }
 });
 
-test("parse: run async with multi-line recover block", () => {
+test("parse: async with multi-line recover block", () => {
   const src = [
     "export def main() {",
-    "  run async foo() recover(err) {",
+    "  async foo() recover(err) {",
     '    log "repairing"',
-    "    run fix_it()",
+    "    fix_it()",
     "  }",
     "}",
   ].join("\n");
@@ -151,10 +151,10 @@ test("parse: run async with multi-line recover block", () => {
   }
 });
 
-test("parse: run async with catch block", () => {
+test("parse: async with catch block", () => {
   const src = [
     "export def main() {",
-    '  run async bar() catch (e) { log "caught" }',
+    '  async bar() catch (e) { log "caught" }',
     "}",
   ].join("\n");
   const mod = parsejaiph(src, "test.jh");

@@ -17,16 +17,16 @@ channel greetings -> receiver
 
 script emit_hello = `echo "hello from sender"`
 def sender() {
-  send run emit_hello() -> greetings
+  send emit_hello() -> greetings
 }
 
 script write_received = `echo "$1" > received.txt`
 def receiver(message, chan, sender) {
-  run write_received(message)
+  write_received(message)
 }
 
 export def main() {
-  run sender()
+  sender()
 }
 EOF
 
@@ -49,21 +49,21 @@ channel results -> consumer_a, consumer_b
 
 script emit_payload = `echo "data-payload"`
 def producer() {
-  send run emit_payload() -> results
+  send emit_payload() -> results
 }
 
 script write_consumer_a = `echo "A got: $1" > consumer_a.txt`
 def consumer_a(message, chan, sender) {
-  run write_consumer_a(message)
+  write_consumer_a(message)
 }
 
 script write_consumer_b = `echo "B got: $1" > consumer_b.txt`
 def consumer_b(message, chan, sender) {
-  run write_consumer_b(message)
+  write_consumer_b(message)
 }
 
 export def main() {
-  run producer()
+  producer()
 }
 EOF
 
@@ -84,16 +84,16 @@ channel some_channel -> dummy
 
 script emit_dropped = `echo "dropped"`
 def sender() {
-  send run emit_dropped() -> unknown_channel
+  send emit_dropped() -> unknown_channel
 }
 
 script never_called_impl = `echo "never called" > dummy.txt`
 def dummy(message, chan, sender) {
-  run never_called_impl()
+  never_called_impl()
 }
 
 export def main() {
-  run sender()
+  sender()
 }
 EOF
 
@@ -121,16 +121,16 @@ channel audit -> auditor
 
 script emit_inbox_content = `echo "inbox-content-check"`
 def writer() {
-  send run emit_inbox_content() -> audit
+  send emit_inbox_content() -> audit
 }
 
 script write_audited = `echo "$1" > audited.txt`
 def auditor(message, chan, sender) {
-  run write_audited(message)
+  write_audited(message)
 }
 
 export def main() {
-  run writer()
+  writer()
 }
 EOF
 
@@ -154,21 +154,21 @@ channel report -> reviewer
 
 script emit_findings = `echo "Found 3 issues in auth module"`
 def scanner() {
-  send run emit_findings() -> findings
+  send emit_findings() -> findings
 }
 
 script emit_summary = `echo "Summary: $1"`
 def analyst(message, chan, sender) {
-  send run emit_summary(message) -> report
+  send emit_summary(message) -> report
 }
 
 script print_reviewed = `echo "[reviewed] $1"`
 def reviewer(message, chan, sender) {
-  run print_reviewed(message)
+  print_reviewed(message)
 }
 
 export def main() {
-  run scanner()
+  scanner()
 }
 EOF
 
@@ -209,7 +209,7 @@ channel events -> consumer
 
 script emit_payload = `echo "payload-data"`
 def producer() {
-  send run emit_payload() -> events
+  send emit_payload() -> events
 }
 
 script write_receiver_args = ```
@@ -218,11 +218,11 @@ echo "channel=$2" >> args.txt
 echo "sender=$3" >> args.txt
 ```
 def consumer(message, chan, sender) {
-  run write_receiver_args(message, chan, sender)
+  write_receiver_args(message, chan, sender)
 }
 
 export def main() {
-  run producer()
+  producer()
 }
 EOF
 
@@ -242,21 +242,21 @@ channel results -> consumer_a, consumer_b
 
 script emit_parallel_payload = `echo "parallel-payload"`
 def producer() {
-  send run emit_parallel_payload() -> results
+  send emit_parallel_payload() -> results
 }
 
 script write_consumer_a_par = `echo "A got: $1" > consumer_a_par.txt`
 def consumer_a(message, chan, sender) {
-  run write_consumer_a_par(message)
+  write_consumer_a_par(message)
 }
 
 script write_consumer_b_par = `echo "B got: $1" > consumer_b_par.txt`
 def consumer_b(message, chan, sender) {
-  run write_consumer_b_par(message)
+  write_consumer_b_par(message)
 }
 
 export def main() {
-  run producer()
+  producer()
 }
 EOF
 
@@ -277,22 +277,22 @@ channel data -> sink
 
 script emit_from_a = `echo "from-a"`
 def sender_a() {
-  send run emit_from_a() -> data
+  send emit_from_a() -> data
 }
 
 script emit_from_b = `echo "from-b"`
 def sender_b() {
-  send run emit_from_b() -> data
+  send emit_from_b() -> data
 }
 
 script append_sink_log = `echo "$1" >> sink_log.txt`
 def sink(message, chan, sender) {
-  run append_sink_log(message)
+  append_sink_log(message)
 }
 
 export def main() {
-  run sender_a()
-  run sender_b()
+  sender_a()
+  sender_b()
 }
 EOF
 
@@ -323,21 +323,21 @@ channel ch -> good_target, bad_target
 
 script emit_msg = `echo "msg"`
 def producer() {
-  send run emit_msg() -> ch
+  send emit_msg() -> ch
 }
 
 script fail_target_impl = `exit 1`
 def bad_target(message, chan, sender) {
-  run fail_target_impl()
+  fail_target_impl()
 }
 
 script write_good_par = `echo "ok" > good_par.txt`
 def good_target(message, chan, sender) {
-  run write_good_par()
+  write_good_par()
 }
 
 export def main() {
-  run producer()
+  producer()
 }
 EOF
 
@@ -359,21 +359,21 @@ channel events -> handler_a, handler_b
 
 script emit_e1 = `echo "e1"`
 def sender() {
-  send run emit_e1() -> events
+  send emit_e1() -> events
 }
 
 script handle_a_impl = `echo "handled-a"`
 def handler_a(message, chan, sender) {
-  run handle_a_impl()
+  handle_a_impl()
 }
 
 script handle_b_impl = `echo "handled-b"`
 def handler_b(message, chan, sender) {
-  run handle_b_impl()
+  handle_b_impl()
 }
 
 export def main() {
-  run sender()
+  sender()
 }
 EOF
 
@@ -410,7 +410,7 @@ channel topic -> handler
 
 script write_imported_received = `echo "$1" > imported_received.txt`
 def handler(message, chan, sender) {
-  run write_imported_received(message)
+  write_imported_received(message)
 }
 
 export def main() {

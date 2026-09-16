@@ -42,12 +42,12 @@ exit 1
 ${CAPTURE_SCRIPT}
 
 def simple_echo_rule() {
-  run simple_echo()
+  simple_echo()
 }
 
 export def main() {
-  run simple_echo_rule() catch (failure) {
-    run capture_recover(failure, "binding_simple.txt", "out_simple.txt", "err_simple.txt")
+  simple_echo_rule() catch (failure) {
+    capture_recover(failure, "binding_simple.txt", "out_simple.txt", "err_simple.txt")
   }
 }
 EOF
@@ -83,17 +83,17 @@ exit 1
 ${CAPTURE_SCRIPT}
 
 def inner() {
-  run failing_script()
+  failing_script()
 }
 
 def outer() {
   log "outer start"
-  run inner()
+  inner()
 }
 
 export def main() {
-  run outer() catch (failure) {
-    run capture_recover(failure, "binding_nested.txt", "out_nested.txt", "err_nested.txt")
+  outer() catch (failure) {
+    capture_recover(failure, "binding_nested.txt", "out_nested.txt", "err_nested.txt")
   }
 }
 EOF
@@ -123,12 +123,12 @@ exit 1
 ${CAPTURE_SCRIPT}
 
 def ci_passes() {
-  run npm_run_test_ci()
+  npm_run_test_ci()
 }
 
 export def main() {
-  run ci_passes() catch (failure) {
-    run capture_recover(failure, "binding_ci.txt", "out_ci.txt", "err_ci.txt")
+  ci_passes() catch (failure) {
+    capture_recover(failure, "binding_ci.txt", "out_ci.txt", "err_ci.txt")
   }
 }
 EOF
@@ -155,12 +155,12 @@ exit 1
 ${CAPTURE_SCRIPT}
 
 def check_rule() {
-  run emit_attempt()
+  emit_attempt()
 }
 
 export def main() {
-  run check_rule() catch (failure) {
-    run capture_recover(failure, "binding_single.txt", "out_single.txt", "err_single.txt")
+  check_rule() catch (failure) {
+    capture_recover(failure, "binding_single.txt", "out_single.txt", "err_single.txt")
   }
 }
 EOF
@@ -184,12 +184,12 @@ script say_ok = \`echo "all good"\`
 ${CAPTURE_SCRIPT}
 
 def passes_first_try() {
-  run say_ok()
+  say_ok()
 }
 
 export def main() {
-  run passes_first_try() catch (failure) {
-    run capture_recover(failure, "binding_false.txt", "out_false.txt", "err_false.txt")
+  passes_first_try() catch (failure) {
+    capture_recover(failure, "binding_false.txt", "out_false.txt", "err_false.txt")
   }
 }
 EOF

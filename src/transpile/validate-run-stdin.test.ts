@@ -16,30 +16,30 @@ function compile(body: string): void {
   }
 }
 
-test("validate: run script(args) stdin body is accepted for a script target", () => {
+test("validate: stdin body -> script(args) is accepted for a script target", () => {
   compile(
     [
       "script save = `cat > \"$1\"`",
       "export def main(path, content) {",
-      "  run save(path) stdin content",
+      "  stdin content -> save(path)",
       "}",
       "",
     ].join("\n"),
   );
 });
 
-test("validate: run `cat`() stdin body is accepted for an inline script", () => {
+test("validate: stdin body -> `cat`() is accepted for an inline script", () => {
   compile(
     [
       "export def main(content) {",
-      "  run `cat`() stdin content",
+      "  stdin content -> `cat`()",
       "}",
       "",
     ].join("\n"),
   );
 });
 
-test("validate: run someDef() stdin x is E_VALIDATE (def target)", () => {
+test("validate: stdin body -> someDef() is E_VALIDATE (def target)", () => {
   assert.throws(
     () =>
       compile(
@@ -48,12 +48,12 @@ test("validate: run someDef() stdin x is E_VALIDATE (def target)", () => {
           '  log "hi"',
           "}",
           "export def main(x) {",
-          "  run helper() stdin x",
+          "  stdin x -> helper()",
           "}",
           "",
         ].join("\n"),
       ),
-    /stdin requires a run of a script; "helper" is a def/,
+    /stdin requires a script target; "helper" is a def/,
   );
 });
 
@@ -64,7 +64,7 @@ test("validate: stdin value must reference an in-scope binding", () => {
         [
           "script save = `cat > \"$1\"`",
           "export def main(path) {",
-          "  run save(path) stdin missing",
+          "  stdin missing -> save(path)",
           "}",
           "",
         ].join("\n"),

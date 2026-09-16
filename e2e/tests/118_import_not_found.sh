@@ -17,7 +17,7 @@ e2e::file "broken_import.jh" <<'EOF'
 import "nonexistent.jh" as lib
 
 export def main() {
-  run lib.deploy()
+  lib.deploy()
 }
 EOF
 

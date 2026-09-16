@@ -337,7 +337,7 @@ mkdir -p "${WORK_DIR}"
 cat > "${WORK_DIR}/sample.jh" <<'EOF'
 script say_hello = `echo hello-from-local`
 export def main() {
-  const msg = run say_hello()
+  const msg = say_hello()
   return "${msg}"
 }
 EOF

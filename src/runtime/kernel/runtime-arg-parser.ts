@@ -3,7 +3,7 @@
  *
  * Pure functions only — no I/O, no class state. The runtime composes these to
  * resolve interpolated strings, parse call argument lists (including managed
- * `run` and inline-script forms), and validate prompt return schemas.
+ * calls and inline-script forms), and validate prompt return schemas.
  */
 import { argsToRuntimeString, parseCallRef } from "../../parser";
 import { interpolate } from "../../config";
@@ -21,7 +21,7 @@ export const MAX_RECURSION_DEPTH = 256;
 
 export type ParsedArgToken =
   | { kind: "literal"; value: string }
-  | { kind: "managed"; managedKind: "run"; ref: string; argsRaw: string }
+  | { kind: "managed"; ref: string; argsRaw: string }
   | { kind: "managed_inline_script"; body: string; lang?: string; argsRaw: string };
 
 export type PromptSchemaField = { name: string; type: "string" | "number" | "boolean" };
@@ -34,7 +34,7 @@ export function nowIso(): string {
   return formatUtcTimestamp();
 }
 
-/** Body after "run" in ${run ...} (e.g. greet(), greet(x), or greet x). */
+/** Body of an interpolation capture `${greet()}` (e.g. greet(), greet(x), or greet x). */
 export function parseInlineCaptureCall(body: string): { ref: string; argsRaw: string } {
   const trimmed = body.trim();
   const paren = trimmed.match(/^([\w.]+)\s*\(([^)]*)\)\s*$/);
@@ -121,38 +121,39 @@ export function parseInlineScriptAt(s: string): { body: string; argsRaw: string;
   return { body, argsRaw: argsContent, consumed: skippedWs + closeIdx + 1 + i };
 }
 
+/**
+ * Recognize a bare nested managed call in argument position: an inline script
+ * `` `body`(args) `` or a `ref(args)` call. A quoted string or a bare `${var}`
+ * is not a call and returns null so the caller stores it as a literal token.
+ */
 export function parseManagedArgAt(raw: string, start: number): { token: ParsedArgToken; next: number } | null {
-  const tail = raw.slice(start);
-  const keyword = tail.startsWith("run ") ? "run" : null;
-  if (!keyword) return null;
-  const afterKeyword = raw.slice(start + keyword.length).trimStart();
-  const skipped = raw.slice(start + keyword.length).length - afterKeyword.length;
-  const call = parseCallRef(afterKeyword);
+  const rest = raw.slice(start);
+  const afterWs = rest.trimStart();
+  const skipped = rest.length - afterWs.length;
+  // Inline script form: `body`(args)
+  const inlineResult = parseInlineScriptAt(afterWs);
+  if (inlineResult) {
+    return {
+      token: {
+        kind: "managed_inline_script",
+        body: inlineResult.body,
+        argsRaw: inlineResult.argsRaw,
+      },
+      next: start + skipped + inlineResult.consumed,
+    };
+  }
+  // Bare managed call form: ref(args)
+  const call = parseCallRef(afterWs);
   if (call && (call.rest.length === 0 || /^\s/.test(call.rest))) {
-    const consumed = afterKeyword.length - call.rest.length;
+    const consumed = afterWs.length - call.rest.length;
     return {
       token: {
         kind: "managed",
-        managedKind: keyword,
         ref: call.ref,
         argsRaw: argsToRuntimeString(call.args),
       },
-      next: start + keyword.length + skipped + consumed,
+      next: start + skipped + consumed,
     };
-  }
-  // Try inline script form: run `body`(args)
-  if (keyword === "run") {
-    const inlineResult = parseInlineScriptAt(afterKeyword);
-    if (inlineResult) {
-      return {
-        token: {
-          kind: "managed_inline_script",
-          body: inlineResult.body,
-          argsRaw: inlineResult.argsRaw,
-        },
-        next: start + keyword.length + skipped + inlineResult.consumed,
-      };
-    }
   }
   return null;
 }

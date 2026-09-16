@@ -7,7 +7,7 @@ import { parseTestBlock } from "./tests";
 test("parseTestBlock: parses basic test block header", () => {
   const lines = [
     'test "my test" {',
-    '  run lib.greet()',
+    '  lib.greet()',
     '}',
   ];
   const { testBlock, nextIndex } = parseTestBlock("test.jh", lines, 0);
@@ -27,7 +27,7 @@ test("parseTestBlock: rejects malformed header", () => {
 test("parseTestBlock: unterminated block throws", () => {
   const lines = [
     'test "open" {',
-    '  run lib.greet()',
+    '  lib.greet()',
   ];
   assert.throws(
     () => parseTestBlock("test.jh", lines, 0),
@@ -379,7 +379,7 @@ test("parseTestBlock: rejects old camelCase expectEqual", () => {
 test("parseTestBlock: parses const capture with run", () => {
   const lines = [
     'test "t1" {',
-    '  const result = run lib.greet()',
+    '  const result = lib.greet()',
     '}',
   ];
   const { testBlock } = parseTestBlock("test.jh", lines, 0);
@@ -393,7 +393,7 @@ test("parseTestBlock: parses const capture with run", () => {
 test("parseTestBlock: parses const capture with run and args", () => {
   const lines = [
     'test "t1" {',
-    '  const result = run lib.greet("world")',
+    '  const result = lib.greet("world")',
     '}',
   ];
   const { testBlock } = parseTestBlock("test.jh", lines, 0);
@@ -405,7 +405,7 @@ test("parseTestBlock: parses const capture with run and args", () => {
 test("parseTestBlock: parses const capture with allow_failure", () => {
   const lines = [
     'test "t1" {',
-    '  const result = run lib.greet() allow_failure',
+    '  const result = lib.greet() allow_failure',
     '}',
   ];
   const { testBlock } = parseTestBlock("test.jh", lines, 0);
@@ -417,7 +417,7 @@ test("parseTestBlock: parses const capture with allow_failure", () => {
 test("parseTestBlock: parses run without capture", () => {
   const lines = [
     'test "t1" {',
-    '  run lib.greet()',
+    '  lib.greet()',
     '}',
   ];
   const { testBlock } = parseTestBlock("test.jh", lines, 0);
@@ -431,7 +431,7 @@ test("parseTestBlock: parses run without capture", () => {
 test("parseTestBlock: parses run with args", () => {
   const lines = [
     'test "t1" {',
-    '  run lib.greet("Alice")',
+    '  lib.greet("Alice")',
     '}',
   ];
   const { testBlock } = parseTestBlock("test.jh", lines, 0);
@@ -443,7 +443,7 @@ test("parseTestBlock: parses run with args", () => {
 test("parseTestBlock: parses run with multiple args", () => {
   const lines = [
     'test "t1" {',
-    '  run lib.deploy("prod", "v2")',
+    '  lib.deploy("prod", "v2")',
     '}',
   ];
   const { testBlock } = parseTestBlock("test.jh", lines, 0);
@@ -474,7 +474,7 @@ test("parseTestBlock: rejects bare workflow call without run", () => {
   ];
   assert.throws(
     () => parseTestBlock("test.jh", lines, 0),
-    /use "run/,
+    /to call a def in tests/,
   );
 });
 
@@ -497,7 +497,7 @@ test("parseTestBlock: preserves comments and blank lines as steps", () => {
     'test "t1" {',
     '',
     '  # this is a comment',
-    '  run lib.greet()',
+    '  lib.greet()',
     '',
     '}',
   ];
@@ -514,7 +514,7 @@ test("parseTestBlock: parses multiple steps", () => {
   const lines = [
     'test "multi" {',
     '  mock prompt "yes"',
-    '  const result = run lib.ask()',
+    '  const result = lib.ask()',
     '  expect_contain result "yes"',
     '}',
   ];

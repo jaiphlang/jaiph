@@ -244,7 +244,7 @@ test("jaiph mcp: compile diagnostics go to stderr with exit 1 and nothing on std
   try {
     const jh = join(root, "broken.jh");
     // Reference to an undeclared workflow — a recoverable compile diagnostic.
-    writeFileSync(jh, ["export def main() {", "  run nonexistent()", "}", ""].join("\n"));
+    writeFileSync(jh, ["export def main() {", "  nonexistent()", "}", ""].join("\n"));
     const result = spawnSync("node", [CLI_PATH, "mcp", jh], {
       encoding: "utf8",
       cwd: root,
@@ -288,7 +288,7 @@ const ENV_ECHO_FIXTURE = [
   'script echo_impl use GREETING = `printf %s "${GREETING:-}"`',
   "# Returns the GREETING env var the workflow process sees.",
   "export def show() {",
-  "  const g = run echo_impl()",
+  "  const g = echo_impl()",
   '  return "${g}"',
   "}",
   "",
@@ -323,7 +323,7 @@ const LEAK_FAIL_FIXTURE = [
   'script leak_fail use LEAK_API_KEY = `echo "stdout token $LEAK_API_KEY"; echo "stderr token $LEAK_API_KEY" >&2; exit 1`',
   "# Echoes a credential to both streams then fails, to exercise tool-result redaction.",
   "export def leak_and_fail() {",
-  "  run leak_fail()",
+  "  leak_fail()",
   "}",
   "",
 ].join("\n");
@@ -435,8 +435,8 @@ const MULTI_STEP_FIXTURE = [
   "script step_impl = `true`",
   "# Runs two steps so progress notifications can be observed.",
   "export def steps() {",
-  "  run step_impl()",
-  "  run step_impl()",
+  "  step_impl()",
+  "  step_impl()",
   '  return "done"',
   "}",
   "",
@@ -510,7 +510,7 @@ const CANCEL_FIXTURE = [
   'script slow_impl = `sleep 3 && printf done > "$JAIPH_WORKSPACE/done.txt"`',
   "# Sleeps, then writes a completion marker (skipped when cancelled).",
   "export def slow() {",
-  "  run slow_impl()",
+  "  slow_impl()",
   '  return "woke"',
   "}",
   "",

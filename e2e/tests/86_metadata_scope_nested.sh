@@ -20,7 +20,7 @@ config {
 }
 script log_backend use JAIPH_META_SCOPE_FILE = `printf '%s:%s\n' "$1" "$JAIPH_AGENT_BACKEND" >> "$JAIPH_META_SCOPE_FILE"`
 export def main() {
-  run log_backend("child")
+  log_backend("child")
 }
 EOF
 
@@ -32,9 +32,9 @@ config {
 }
 script log_backend use JAIPH_META_SCOPE_FILE = `printf '%s:%s\n' "$1" "$JAIPH_AGENT_BACKEND" >> "$JAIPH_META_SCOPE_FILE"`
 export def main() {
-  run log_backend("parent_before")
-  run child.main()
-  run log_backend("parent_after")
+  log_backend("parent_before")
+  child.main()
+  log_backend("parent_after")
 }
 EOF
 

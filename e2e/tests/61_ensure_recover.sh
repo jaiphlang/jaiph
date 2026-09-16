@@ -18,18 +18,18 @@ script dep_impl = ```
 test -f "ready.txt"
 ```
 def dep() {
-  run dep_impl()
+  dep_impl()
 }
 
 script install_deps_impl = ```
 touch "ready.txt"
 ```
 def install_deps() {
-  run install_deps_impl()
+  install_deps_impl()
 }
 
 export def main() {
-  run dep() catch (failure) run install_deps()
+  dep() catch (failure) install_deps()
 }
 EOF
 
@@ -65,7 +65,7 @@ rm -f "${TEST_DIR}/ready2.txt" "${TEST_DIR}/recover_ran.txt"
 e2e::file "retry_block.jh" <<'EOF'
 script ready_impl = `test -f ready2.txt`
 def ready() {
-  run ready_impl()
+  ready_impl()
 }
 
 script recover_echo = ```
@@ -74,9 +74,9 @@ echo "recovering" > recover_ran.txt
 script recover_touch = `touch ready2.txt`
 
 export def main() {
-  run ready() catch (failure) {
-    run recover_echo()
-    run recover_touch()
+  ready() catch (failure) {
+    recover_echo()
+    recover_touch()
   }
 }
 EOF
@@ -114,11 +114,11 @@ e2e::section "run without catch exits 1 on failure"
 e2e::file "ensure_fail.jh" <<'EOF'
 script never_ok_impl = `test -f never_created.txt`
 def never_ok() {
-  run never_ok_impl()
+  never_ok_impl()
 }
 
 export def main() {
-  run never_ok()
+  never_ok()
 }
 EOF
 
@@ -147,15 +147,15 @@ const ci_log_file = "/tmp/ci.log"
 
 script check_ready_impl = `test -f ready3.txt`
 def check_ready() {
-  run check_ready_impl()
+  check_ready_impl()
 }
 
 script mark_ready3 = `touch ready3.txt`
 
 export def main() {
-  run check_ready() catch (failure) {
+  check_ready() catch (failure) {
     prompt "The CI build failed. Please inspect the log file at ${ci_log_file} and suggest a fix."
-    run mark_ready3()
+    mark_ready3()
   }
 }
 EOF

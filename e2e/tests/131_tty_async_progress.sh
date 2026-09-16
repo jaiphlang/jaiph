@@ -23,21 +23,21 @@ script slow_b = `sleep 1 && echo "b-script-done"`
 
 def branch_a() {
   log "a-start"
-  run slow_a()
+  slow_a()
   log "a-end"
   return "result-a"
 }
 
 def branch_b() {
   log "b-start"
-  run slow_b()
+  slow_b()
   log "b-end"
   return "result-b"
 }
 
 export def main() {
-  const ha = run async branch_a()
-  const hb = run async branch_b()
+  const ha = async branch_a()
+  const hb = async branch_b()
   log ha
   log hb
 }

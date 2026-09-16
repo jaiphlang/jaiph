@@ -3,6 +3,6 @@ import "dot_notation.jh" as dn
 
 test "dot notation resolves typed prompt field" {
   mock prompt "{\"category\":\"bugfix\",\"confidence\":42}"
-  const got = run dn.classify()
+  const got = dn.classify()
   expect_equal got "bugfix"
 }

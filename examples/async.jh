@@ -20,6 +20,6 @@ def claude_say_hello(name) {
 
 # surrounding workflow waits for all to complete
 export def main(name) {
-  run async cursor_say_hello(name)
-  run async claude_say_hello(name)
+  async cursor_say_hello(name)
+  async claude_say_hello(name)
 }

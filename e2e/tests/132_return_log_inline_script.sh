@@ -15,11 +15,11 @@ e2e::section "return run inline script zero-arg"
 
 e2e::file "return_inline.jh" <<'EOF'
 def helper() {
-  return run `echo inline-return-ok`()
+  return `echo inline-return-ok`()
 }
 
 export def main() {
-  const r = run helper()
+  const r = helper()
   log "got: ${r}"
 }
 EOF
@@ -39,11 +39,11 @@ e2e::section "return run inline script with args"
 
 e2e::file "return_inline_args.jh" <<'EOF'
 def helper() {
-  return run `echo $1`("inline-arg-val")
+  return `echo $1`("inline-arg-val")
 }
 
 export def main() {
-  const r = run helper()
+  const r = helper()
   log "got: ${r}"
 }
 EOF
@@ -62,7 +62,7 @@ e2e::section "log run inline script zero-arg"
 
 e2e::file "log_inline.jh" <<'EOF'
 export def main() {
-  log run `echo log-inline-ok`()
+  log `echo log-inline-ok`()
 }
 EOF
 
@@ -81,7 +81,7 @@ e2e::section "log run inline script with args"
 
 e2e::file "log_inline_args.jh" <<'EOF'
 export def main() {
-  log run `echo $1`("log-arg-val")
+  log `echo $1`("log-arg-val")
 }
 EOF
 
@@ -92,33 +92,3 @@ e2e::assert_contains "${log_inline_args_out}" "log-arg-val" "log run inline scri
 e2e::assert_contains "${log_inline_args_out}" "PASS def main" "workflow passes"
 
 e2e::pass "log run inline script with args"
-
-# ---------------------------------------------------------------------------
-e2e::section "bare inline script in return is rejected"
-# ---------------------------------------------------------------------------
-
-e2e::file "return_bare_inline.jh" <<'EOF'
-export def main() {
-  return `echo bad`()
-}
-EOF
-
-if jaiph run "${TEST_DIR}/return_bare_inline.jh" >/dev/null 2>&1; then
-  e2e::fail "expected compile-time failure for bare inline script in return"
-fi
-e2e::pass "bare inline script in return rejected"
-
-# ---------------------------------------------------------------------------
-e2e::section "bare inline script in log is rejected"
-# ---------------------------------------------------------------------------
-
-e2e::file "log_bare_inline.jh" <<'EOF'
-export def main() {
-  log `echo bad`()
-}
-EOF
-
-if jaiph run "${TEST_DIR}/log_bare_inline.jh" >/dev/null 2>&1; then
-  e2e::fail "expected compile-time failure for bare inline script in log"
-fi
-e2e::pass "bare inline script in log rejected"

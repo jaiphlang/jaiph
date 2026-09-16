@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { buildScripts } from "../transpiler";
 
-test("E_VALIDATE: run async is accepted in any def", () => {
+test("E_VALIDATE: async is accepted in any def", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-val-async-rule-"));
   try {
     writeFileSync(
@@ -14,10 +14,10 @@ test("E_VALIDATE: run async is accepted in any def", () => {
         '  log "hi"',
         "}",
         "def check() {",
-        "  run async helper()",
+        "  async helper()",
         "}",
         "export def main() {",
-        "  run check()",
+        "  check()",
         "}",
         "",
       ].join("\n"),
@@ -28,7 +28,7 @@ test("E_VALIDATE: run async is accepted in any def", () => {
   }
 });
 
-test("E_VALIDATE: run async is accepted in workflows", () => {
+test("E_VALIDATE: async is accepted in workflows", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-val-async-wf-"));
   try {
     writeFileSync(
@@ -38,7 +38,7 @@ test("E_VALIDATE: run async is accepted in workflows", () => {
         '  log "hi"',
         "}",
         "export def main() {",
-        "  run async helper()",
+        "  async helper()",
         "}",
         "",
       ].join("\n"),

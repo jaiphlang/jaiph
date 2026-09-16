@@ -16,17 +16,17 @@ rm -f "${TEST_DIR}/.gate_passed"
 e2e::file "recover_repair.jh" <<'EOF'
 script check_gate = `test -f .gate_passed`
 def check() {
-  run check_gate()
+  check_gate()
 }
 
 script do_fix = `touch .gate_passed`
 def fix() {
-  run do_fix()
+  do_fix()
 }
 
 export def main() {
-  run check() recover(err) {
-    run fix()
+  check() recover(err) {
+    fix()
   }
 }
 EOF
@@ -65,11 +65,11 @@ config {
 
 script always_fail = `exit 1`
 def failing() {
-  run always_fail()
+  always_fail()
 }
 
 export def main() {
-  run failing() recover(err) {
+  failing() recover(err) {
     log "repair attempt"
   }
 }
@@ -88,11 +88,11 @@ e2e::section "recover loop: success on first attempt skips body"
 e2e::file "recover_pass.jh" <<'EOF'
 script ok_impl = `echo ok`
 def ok() {
-  run ok_impl()
+  ok_impl()
 }
 
 export def main() {
-  run ok() recover(err) {
+  ok() recover(err) {
     log "should not appear"
   }
 }

@@ -71,13 +71,6 @@ test("validateSubstitutionInner: allows plain shell commands", () => {
   validateSubstitutionInner("date +%s", makeEnv());
 });
 
-test("validateSubstitutionInner: rejects 'run' keyword", () => {
-  assert.throws(
-    () => validateSubstitutionInner("run deploy", makeEnv()),
-    /cannot use Jaiph keyword "run"/,
-  );
-});
-
 test("validateSubstitutionInner: rejects local def", () => {
   const env = makeEnv({ localDefs: new Set(["my_rule"]) });
   assert.throws(
@@ -94,13 +87,6 @@ test("validateNoJaiphCommandSubstitution: allows text without substitutions", ()
 
 test("validateNoJaiphCommandSubstitution: allows plain shell in $()", () => {
   validateNoJaiphCommandSubstitution("echo $(date)", makeEnv());
-});
-
-test("validateNoJaiphCommandSubstitution: rejects Jaiph keyword in $()", () => {
-  assert.throws(
-    () => validateNoJaiphCommandSubstitution("x=$(run deploy)", makeEnv()),
-    /cannot use Jaiph keyword "run"/,
-  );
 });
 
 test("validateNoJaiphCommandSubstitution: rejects def in $()", () => {
@@ -121,14 +107,7 @@ test("validateManagedWorkflowShell: rejects def as leading command", () => {
   const env = makeEnv({ localDefs: new Set(["my_rule"]) });
   assert.throws(
     () => validateManagedWorkflowShell("my_rule arg", env),
-    /def "my_rule" must be called with run/,
-  );
-});
-
-test("validateManagedWorkflowShell: rejects Jaiph keyword in $() inside managed shell", () => {
-  assert.throws(
-    () => validateManagedWorkflowShell("echo $(run deploy)", makeEnv()),
-    /cannot use Jaiph keyword "run"/,
+    /def "my_rule" must be called as a managed step/,
   );
 });
 
@@ -136,6 +115,6 @@ test("validateManagedWorkflowShell: rejects workflow as leading command", () => 
   const env = makeEnv({ localDefs: new Set(["deploy"]) });
   assert.throws(
     () => validateManagedWorkflowShell("deploy arg", env),
-    /def "deploy" must be called with run/,
+    /def "deploy" must be called as a managed step/,
   );
 });

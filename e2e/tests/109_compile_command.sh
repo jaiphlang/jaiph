@@ -24,7 +24,7 @@ e2e::section "jaiph compile fails on validation error"
 
 e2e::file "bad.jh" <<'EOF'
 export def main() {
-  run missing_workflow()
+  missing_workflow()
 }
 EOF
 

@@ -53,7 +53,7 @@ JAIPH_BIN="${STAGE_DIR}/jaiph"
 cat > "${WORK_DIR}/sample.jh" <<'EOF'
 script say_hello = `echo hello-standalone`
 export def main() {
-  const msg = run say_hello()
+  const msg = say_hello()
   return "${msg}"
 }
 EOF

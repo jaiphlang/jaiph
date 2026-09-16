@@ -1,12 +1,12 @@
 def ok() {
-  run ok_impl()
+  ok_impl()
 }
 
 script ok_impl = `true`
 script save = `printf '%s' "$1" > "$2"`
 
 export def main() {
-  run ok() catch (err) {
-    run save(err, "error.log")
+  ok() catch (err) {
+    save(err, "error.log")
   }
 }

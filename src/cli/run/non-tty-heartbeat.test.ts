@@ -23,11 +23,11 @@ test("ACCEPTANCE: non-TTY long step emits gray heartbeat before completion", () 
       'script sleep_impl = `sleep 3`',
       "",
       "def inner() {",
-      "  run sleep_impl()",
+      "  sleep_impl()",
       "}",
       "",
       "export def main() {",
-      "  run inner()",
+      "  inner()",
       "}",
     ].join("\n"),
   );

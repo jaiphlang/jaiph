@@ -53,7 +53,7 @@ test("parseSendRhs: trailing content after quoted string throws", () => {
 // === parseSendRhs: call ===
 
 test("parseSendRhs: run call returns Expr.call", () => {
-  const { value } = parseSendRhs("test.jh", "run my_script()", 1, 5);
+  const { value } = parseSendRhs("test.jh", "my_script()", 1, 5);
   assert.equal(value.kind, "call");
   if (value.kind === "call") {
     assert.equal(value.callee.value, "my_script");
@@ -63,7 +63,7 @@ test("parseSendRhs: run call returns Expr.call", () => {
 });
 
 test("parseSendRhs: run call with args", () => {
-  const { value } = parseSendRhs("test.jh", 'run my_script("arg1")', 1, 1);
+  const { value } = parseSendRhs("test.jh", 'my_script("arg1")', 1, 1);
   assert.equal(value.kind, "call");
   if (value.kind === "call") {
     assert.equal(value.callee.value, "my_script");
@@ -72,7 +72,7 @@ test("parseSendRhs: run call with args", () => {
 });
 
 test("parseSendRhs: run call with dotted ref", () => {
-  const { value } = parseSendRhs("test.jh", "run lib.process()", 1, 1);
+  const { value } = parseSendRhs("test.jh", "lib.process()", 1, 1);
   assert.equal(value.kind, "call");
   if (value.kind === "call") {
     assert.equal(value.callee.value, "lib.process");

@@ -24,9 +24,9 @@ def review(name) {
 }
 
 export def main() {
-  const first = run review("alpha")
-  const second = run review("beta")
-  const third = run review("gamma")
+  const first = review("alpha")
+  const second = review("beta")
+  const third = review("gamma")
 }
 EOF
 
