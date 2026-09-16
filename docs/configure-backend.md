@@ -45,7 +45,7 @@ def fast_check() {
     agent.backend = "cursor"
     agent.model = "gpt-3.5"
   }
-  run review()
+  review()
 }
 ```
 

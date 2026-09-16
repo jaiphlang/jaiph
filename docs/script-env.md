@@ -12,18 +12,18 @@ This page is the recipe. The key list and error codes live in [Environment varia
 
 ## Prerequisites
 
-- An entry file with `export def main` that `run`s a named script, an `import script`, or a named prompt that needs a host key.
+- An entry file with `export def main` that calls a named script, an `import script`, or a named prompt that needs a host key.
 - The key already exists on the host, or you will pass an explicit `--env KEY=VALUE`.
 
 ## 1. Request the key on the declaration
 
-Put `use` on the script (or named prompt) that must see the key. Not on the `run` line, not on a `def`, not on an anonymous `prompt "…"`.
+Put `use` on the script (or named prompt) that must see the key. Not on the call line, not on a `def`, not on an anonymous `prompt "…"`.
 
 ```jaiph
 script release use GITHUB_TOKEN = `gh release create "$1"`
 
 export def main(tag) {
-  run release(tag)
+  release(tag)
 }
 ```
 
@@ -65,7 +65,7 @@ These rules apply to the environment Jaiph builds for each child. They are not a
 ## Related
 
 - [Environment variables — Script subprocess environment](env-vars.md#script-env) — sterile base set, reserved names, `E_ENV_*`.
-- [Language — Subprocess environment](language.md#subprocess-environment) — what a `run` of a script vs a def vs a shell line sees.
+- [Language — Subprocess environment](language.md#subprocess-environment) — what a call to a script vs a def vs a shell line sees.
 - [Configuration — Script env keys](configuration.md#trusted-envs) — `trusted_envs` is gone; `use` + `--env` replaced it.
 - [Authenticate agent backends](agent-auth.md) — backend credentials, not `--env`.
 - [Deploy jaiph](deploy.md) — container, pod, or a dedicated user you create; the installer does not.

@@ -222,7 +222,7 @@ def valid_name(name_arg) {
 
 # export def main is the jaiph run entry
 export def main(name_arg) {
-  const name = run valid_name(name_arg)
+  const name = valid_name(name_arg)
 
   # prompts call agents - cursor by default, but it's configurable
   const response = prompt """
@@ -284,7 +284,7 @@ import "say_hello.jh" as hello
 # is correct.
 test "without name, main fails with validation message" {
   # When
-  const response = run hello.main() allow_failure
+  const response = hello.main() allow_failure
 
   # Then
   expect_equal response "You didn't provide your name"
@@ -296,7 +296,7 @@ test "with name, returns greeting and logs response" {
   mock prompt expected_response
 
   # When
-  const response = run hello.main("Alice")
+  const response = hello.main("Alice")
 
   # Then
   expect_equal response expected_response
@@ -331,13 +331,13 @@ export def main() {
   # Recovery in loop: when check_report_exists() fails, the recovery body
   # is executed to fix it, and then check_report_exists() is retried.
   # By default, the retry limit is 10.
-  run check_report_exists() recover(failure) {
+  check_report_exists() recover(failure) {
     logerr "Failed to check report.txt"
     prompt "report.txt is missing. Create it with a short dummy summary."
   }
 
   # scripts can be also executed inline
-  return run `cat report.txt`()
+  return `cat report.txt`()
 }</code></pre>
                     <p>First attempt fails, the agent creates the file, retry passes.
                         For a one-shot handler, use <code>catch</code>.</p>
@@ -393,7 +393,7 @@ def reviewer(msg) {
 }
 
 export def main() {
-  run scanner()
+  scanner()
 }</code></pre>
                     <p>Running the file:</p>
                     <pre><code class="jaiph-run" data-sample-output="run"><span class="run-command">➜  ./agent_inbox.jh</span>
@@ -414,7 +414,7 @@ Jaiph: Running agent_inbox.jh
                 </div>
 
                 <div class="code-tab-panel" data-panel="async-jh" data-sample="async" data-sample-file="async.jh">
-                    <p>Two prompts in parallel, Cursor and Claude. <code>run async</code> fans out;
+                    <p>Two prompts in parallel, Cursor and Claude. <code>async</code> fans out;
                         the parent waits for both.</p>
                     <pre><code class="language-jaiph" data-sample-source>#!/usr/bin/env jaiph
 
@@ -434,8 +434,8 @@ def claude_say_hello(name) {
 
 # surrounding def waits for all to complete
 export def main(name) {
-  run async cursor_say_hello(name)
-  run async claude_say_hello(name)
+  async cursor_say_hello(name)
+  async claude_say_hello(name)
 }</code></pre>
                     <p>Running the file:</p>
                     <pre><code class="jaiph-run" data-sample-output="run"><span class="run-command">➜  ./async.jh</span>
