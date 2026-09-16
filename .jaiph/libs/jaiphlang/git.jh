@@ -58,7 +58,7 @@ export def commit(task) {
   has_changes()
 
   prompt """
-    Please commit current changes and respond with the commit message.
+    Please commit current changes.
 
     Requirements for commit message:
     1. Write a commit message - first line in imperative mood, under 72 chars.
@@ -75,7 +75,6 @@ export def commit(task) {
     Changes were made for the following task:
     ${task}
   """
-  returns "{ message: string }"
 }
 
 # Like commit(), but no-ops when the worktree is clean (overnight loops).
