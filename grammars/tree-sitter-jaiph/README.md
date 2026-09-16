@@ -30,6 +30,17 @@ npm run generate     # regenerates src/ from grammar.js
 
 Commit the regenerated `src/` alongside the `grammar.js` change.
 
+## Tests
+
+Corpus tests under `test/corpus/` pin the token shapes editor highlighting
+relies on — bare-call invoke (`save(path)`, `async save(path)`), stdin connect
+(`stdin x -> save(path)`), and that `run` tokenizes as an ordinary identifier
+(there is no `run` invoke keyword):
+
+```bash
+npm test             # regenerates, then runs the corpus tests
+```
+
 ## Highlight queries
 
 The highlight / injection queries live with the editor that consumes them —

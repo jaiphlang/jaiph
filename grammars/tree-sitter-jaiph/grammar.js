@@ -13,10 +13,12 @@
 // giving distinct nodes for every construct the highlight queries care about.
 //
 // Keyword literals are extracted from `identifier` via the `word` directive, so
-// e.g. `run` is only a keyword when it stands alone, never inside `runner`.
-// Dotted names (`agent.model`, `helpers.scan`) tokenize as `qualified_identifier`
-// so a leading segment like `run` in `run.recover_limit` is not mis-highlighted
-// as the `run` command keyword.
+// e.g. `stdin` is only a keyword when it stands alone, never inside `stdinput`.
+// `run` is NOT a keyword — it is an ordinary identifier, so a call is bare
+// (`save(path)`, `async save(path)`) and `stdin x -> save(path)` connects stdin
+// to a call. Dotted names (`agent.model`, `helpers.scan`) tokenize as
+// `qualified_identifier` so a leading segment like `run` in `run.recover_limit`
+// is not mis-highlighted as a keyword.
 
 module.exports = grammar({
   name: "jaiph",
@@ -38,8 +40,8 @@ module.exports = grammar({
         // declaration keywords
         "import", "export", "as", "config", "channel", "script",
         "def", "test", "use",
-        // command keywords
-        "const", "run", "prompt", "log", "logerr", "logwarn",
+        // command keywords (no `run` — calls are bare)
+        "const", "prompt", "log", "logerr", "logwarn",
         "fail", "return", "send", "recover", "catch", "stdin",
         // control keywords
         "if", "else", "for", "in", "match", "async", "returns", "not",

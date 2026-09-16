@@ -23,7 +23,6 @@ test("current .jh constructs highlight with the expected scopes", async () => {
     ["prompt", "storage.type.prompt.jaiph"],
     ["gh", "entity.name.namespace.jaiph"],
     // Command keywords (including ones the old extension never knew)
-    ["run", "keyword.control.command.jaiph"],
     ["prompt", "keyword.control.command.jaiph"],
     ["logwarn", "keyword.control.command.jaiph"],
     ["catch", "keyword.control.command.jaiph"],
@@ -75,6 +74,27 @@ test("current .jh constructs highlight with the expected scopes", async () => {
     scopeCount(t, "analyze", "entity.name.function.prompt.jaiph") >= 2,
     "`analyze` must scope as a prompt function at both its definition and its call site",
   );
+
+  // Bare call invoke `setup_env()` (no `run` keyword): the callee scopes as a
+  // function. It appears at several call sites, so require at least one.
+  assert.ok(
+    hasScope(t, "setup_env", "entity.name.function.jaiph"),
+    "bare call `setup_env()` must scope its callee as a function",
+  );
+
+  // Bare inline-script call `` `echo hello`() ``: the backtick body scopes as an
+  // unquoted script, proving the inline call no longer needs a `run` prefix.
+  assert.ok(
+    hasScope(t, "`echo hello`", "string.unquoted.script.jaiph"),
+    "bare inline-script call must scope its backtick body as a script",
+  );
+
+  // `stdin status -> shout(task)` connect: `stdin` is a command keyword, the
+  // connect arrow `->` shares the send operator class, and the target callee
+  // scopes as a function.
+  assert.ok(hasScope(t, "stdin", "keyword.control.command.jaiph"), "`stdin` must scope as a command keyword");
+  assert.ok(hasScope(t, "->", "keyword.operator.send.jaiph"), "connect arrow `->` must share the send operator class");
+  assert.ok(hasScope(t, "shout", "entity.name.function.jaiph"), "stdin-connect target must scope its callee as a function");
 });
 
 test("current *.test.jh test-block keywords highlight", async () => {
@@ -96,7 +116,7 @@ test("stale surface from the old extension is not highlighted", async () => {
   // Regression: keys/keywords the old extension assumed no longer exist. If the
   // grammar re-adds any of them, these fail.
   const t = await tokenizeFixture("regression.jh");
-  for (const stale of ["wait", "local", "rule", "workflow", "ensure", "inbox"]) {
+  for (const stale of ["wait", "local", "rule", "workflow", "ensure", "inbox", "run"]) {
     assert.ok(
       !hasScope(t, stale, "keyword.control.command.jaiph"),
       `\`${stale}\` must not be scoped as a command keyword`,

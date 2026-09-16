@@ -11,7 +11,8 @@ Tree-sitter syntax highlighting for Jaiph (`.jh` and `*.test.jh`) in
 Highlights the current Jaiph surface: `import` / `import script`, `config`,
 `channel` (`->` routes, `send … ->` sends), `script` (backtick and fenced,
 optional `use KEY …`), `def`, named `prompt name(params) [use KEY …] = …`,
-`run` / `run async`, `catch` / `recover`, anonymous `prompt … returns`, `match`
+bare calls (`name(args)`, `async name(args)`), stdin connect
+(`stdin … -> name(args)`), `catch` / `recover`, anonymous `prompt … returns`, `match`
 (`=>`, `_` wildcard), `if` / `else if`, `for … in`, `const`, `log` / `logerr` /
 `logwarn`, `fail`, `return`, and `test` blocks (`mock`, `allow_failure`,
 `expect_contain` / `expect_not_contain` / `expect_equal`), plus comments,

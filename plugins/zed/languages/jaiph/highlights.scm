@@ -4,7 +4,7 @@
 ; Keywords: declarations, commands, control flow, and test-block constructs.
 [
   "import" "export" "as" "config" "channel" "script" "def" "test" "use"
-  "const" "run" "prompt" "log" "logerr" "logwarn" "fail" "return"
+  "const" "prompt" "log" "logerr" "logwarn" "fail" "return"
   "send" "recover" "catch" "stdin"
   "if" "else" "for" "in" "match" "async" "returns" "not"
   "mock" "allow_failure" "expect_contain" "expect_not_contain" "expect_equal"

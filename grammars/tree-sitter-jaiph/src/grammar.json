@@ -87,10 +87,6 @@
         },
         {
           "type": "STRING",
-          "value": "run"
-        },
-        {
-          "type": "STRING",
           "value": "prompt"
         },
         {
