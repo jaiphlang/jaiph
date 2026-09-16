@@ -28,16 +28,16 @@ def first() {
   config {
     agent.backend = "claude"
   }
-  run log_scope_backend("first")
+  log_scope_backend("first")
 }
 
 def second() {
-  run log_scope_backend("second")
+  log_scope_backend("second")
 }
 
 export def main() {
-  run first()
-  run second()
+  first()
+  second()
 }
 EOF
 
@@ -70,23 +70,23 @@ printf 'rule_backend:%s\n' "$JAIPH_AGENT_BACKEND" >> "$JAIPH_OVERRIDE_LOG"
 ```
 
 def check_config() {
-  run log_rule_config()
+  log_rule_config()
 }
 
 def with_override() {
   config {
     agent.model = "workflow-model"
   }
-  run check_config()
+  check_config()
 }
 
 def without_override() {
-  run check_config()
+  check_config()
 }
 
 export def main() {
-  run with_override()
-  run without_override()
+  with_override()
+  without_override()
 }
 EOF
 
@@ -120,7 +120,7 @@ config {
 script log_nested_backend use JAIPH_NESTED_LOG = `printf '%s:%s\n' "$1" "$JAIPH_AGENT_BACKEND" >> "$JAIPH_NESTED_LOG"`
 
 export def main() {
-  run log_nested_backend("child_backend")
+  log_nested_backend("child_backend")
 }
 EOF
 
@@ -137,13 +137,13 @@ def caller() {
   config {
     agent.backend = "claude"
   }
-  run log_nested_backend("parent_before")
-  run child.main()
-  run log_nested_backend("parent_after")
+  log_nested_backend("parent_before")
+  child.main()
+  log_nested_backend("parent_after")
 }
 
 export def main() {
-  run caller()
+  caller()
 }
 EOF
 
@@ -173,7 +173,7 @@ export def main() {
   config {
     agent.backend = "claude"
   }
-  run log_env_backend()
+  log_env_backend()
 }
 EOF
 
@@ -206,19 +206,19 @@ def alpha() {
     agent.model = "alpha-model"
     agent.backend = "claude"
   }
-  run log_sibling_env("alpha")
+  log_sibling_env("alpha")
 }
 
 def beta() {
   config {
     agent.model = "beta-model"
   }
-  run log_sibling_env("beta")
+  log_sibling_env("beta")
 }
 
 export def main() {
-  run alpha()
-  run beta()
+  alpha()
+  beta()
 }
 EOF
 
@@ -246,11 +246,11 @@ def implement(model) {
   config {
     agent.model = model
   }
-  run log_model()
+  log_model()
 }
 
 export def main() {
-  run implement("param-model")
+  implement("param-model")
 }
 EOF
 

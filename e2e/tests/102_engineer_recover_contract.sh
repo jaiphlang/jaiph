@@ -32,20 +32,20 @@ exit 1
 ```
 
 def ci_passes() {
-  run failing_ci_impl()
+  failing_ci_impl()
 }
 
 def implement(task, role) {
   const the_task = "${task}"
-  run ci_passes() catch (failure) {
-    run mkdir_p_simple(".jaiph/tmp")
-    run copy_captures(failure, ".jaiph/tmp/ensure_ci_passes.last.log", ".jaiph/tmp/ensure_ci_passes.last.err")
-    run save_string_to_file(role, ".jaiph/tmp/recover.role")
+  ci_passes() catch (failure) {
+    mkdir_p_simple(".jaiph/tmp")
+    copy_captures(failure, ".jaiph/tmp/ensure_ci_passes.last.log", ".jaiph/tmp/ensure_ci_passes.last.err")
+    save_string_to_file(role, ".jaiph/tmp/recover.role")
   }
 }
 
 export def main() {
-  run implement("original-task", "surgical")
+  implement("original-task", "surgical")
 }
 EOF
 

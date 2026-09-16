@@ -18,7 +18,7 @@ echo "good" > good.txt
 ```
 
 def good() {
-  run good_impl()
+  good_impl()
 }
 
 def bad() {
@@ -26,8 +26,8 @@ def bad() {
 }
 
 export def main() {
-  run async good()
-  run async bad()
+  async good()
+  async bad()
 }
 EOF
 

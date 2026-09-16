@@ -2,9 +2,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { parsejaiph } from "../parser";
 
-test("return run parses Expr.call", () => {
+test("return parses Expr.call", () => {
   const mod = parsejaiph(
-    `export def main() {\n  return run helper()\n}`,
+    `export def main() {\n  return helper()\n}`,
     "test.jh",
   );
   const step = mod.defs[0].steps[0];
@@ -18,9 +18,9 @@ test("return run parses Expr.call", () => {
   }
 });
 
-test("return run parses Expr.call with args", () => {
+test("return parses Expr.call with args", () => {
   const mod = parsejaiph(
-    `export def main() {\n  return run helper("a", "b")\n}`,
+    `export def main() {\n  return helper("a", "b")\n}`,
     "test.jh",
   );
   const step = mod.defs[0].steps[0];
@@ -34,9 +34,9 @@ test("return run parses Expr.call with args", () => {
   }
 });
 
-test("return run parses dotted ref", () => {
+test("return parses dotted ref", () => {
   const mod = parsejaiph(
-    `export def main() {\n  return run lib.helper()\n}`,
+    `export def main() {\n  return lib.helper()\n}`,
     "test.jh",
   );
   const step = mod.defs[0].steps[0];
@@ -46,9 +46,9 @@ test("return run parses dotted ref", () => {
   }
 });
 
-test("return run parses Expr.call", () => {
+test("return parses Expr.call", () => {
   const mod = parsejaiph(
-    `export def main() {\n  return run check()\n}`,
+    `export def main() {\n  return check()\n}`,
     "test.jh",
   );
   const step = mod.defs[0].steps[0];
@@ -62,9 +62,9 @@ test("return run parses Expr.call", () => {
   }
 });
 
-test("return run parses Expr.call with args", () => {
+test("return parses Expr.call with args", () => {
   const mod = parsejaiph(
-    `export def main() {\n  return run check("x")\n}`,
+    `export def main() {\n  return check("x")\n}`,
     "test.jh",
   );
   const step = mod.defs[0].steps[0];
@@ -74,9 +74,9 @@ test("return run parses Expr.call with args", () => {
   }
 });
 
-test("return run in rule parses Expr.call", () => {
+test("return in rule parses Expr.call", () => {
   const mod = parsejaiph(
-    `script helper = \`echo "ok"\`\ndef my_rule() {\n  return run helper()\n}`,
+    `script helper = \`echo "ok"\`\ndef my_rule() {\n  return helper()\n}`,
     "test.jh",
   );
   const step = mod.defs[0].steps[0];
@@ -86,9 +86,9 @@ test("return run in rule parses Expr.call", () => {
   }
 });
 
-test("return run in rule parses Expr.call", () => {
+test("return in rule parses Expr.call", () => {
   const mod = parsejaiph(
-    `def sub_rule() {\n  return "ok"\n}\ndef my_rule() {\n  return run sub_rule()\n}`,
+    `def sub_rule() {\n  return "ok"\n}\ndef my_rule() {\n  return sub_rule()\n}`,
     "test.jh",
   );
   const myRule = mod.defs.find(r => r.name === "my_rule")!;
@@ -129,9 +129,9 @@ test("bare return is Expr.literal with empty string", () => {
   }
 });
 
-test("return run inline script parses Expr.inline_script", () => {
+test("return inline script parses Expr.inline_script", () => {
   const mod = parsejaiph(
-    "export def main() {\n  return run `cat report.txt`()\n}",
+    "export def main() {\n  return `cat report.txt`()\n}",
     "test.jh",
   );
   const step = mod.defs[0].steps[0];
@@ -144,9 +144,9 @@ test("return run inline script parses Expr.inline_script", () => {
   }
 });
 
-test("return run inline script with args", () => {
+test("return inline script with args", () => {
   const mod = parsejaiph(
-    'export def main() {\n  return run `echo $1`("x")\n}',
+    'export def main() {\n  return `echo $1`("x")\n}',
     "test.jh",
   );
   const step = mod.defs[0].steps[0];
@@ -157,16 +157,9 @@ test("return run inline script with args", () => {
   }
 });
 
-test("return bare inline script is rejected", () => {
-  assert.throws(
-    () => parsejaiph("export def main() {\n  return `cat report.txt`()\n}", "test.jh"),
-    /bare inline scripts in return are not allowed/,
-  );
-});
-
-test("log run inline script parses say with inline_script message", () => {
+test("log inline script parses say with inline_script message", () => {
   const mod = parsejaiph(
-    "export def main() {\n  log run `cat report.txt`()\n}",
+    "export def main() {\n  log `cat report.txt`()\n}",
     "test.jh",
   );
   const step = mod.defs[0].steps[0];
@@ -181,9 +174,9 @@ test("log run inline script parses say with inline_script message", () => {
   }
 });
 
-test("log run inline script with args", () => {
+test("log inline script with args", () => {
   const mod = parsejaiph(
-    'export def main() {\n  log run `echo $1`("x")\n}',
+    'export def main() {\n  log `echo $1`("x")\n}',
     "test.jh",
   );
   const step = mod.defs[0].steps[0];
@@ -192,20 +185,6 @@ test("log run inline script with args", () => {
     assert.equal(step.message.body, "echo $1");
     assert.deepEqual(step.message.args, [{ kind: "literal", raw: '"x"' }]);
   }
-});
-
-test("log bare inline script is rejected", () => {
-  assert.throws(
-    () => parsejaiph("export def main() {\n  log `cat report.txt`()\n}", "test.jh"),
-    /bare inline scripts in log are not allowed/,
-  );
-});
-
-test("logerr bare inline script is rejected", () => {
-  assert.throws(
-    () => parsejaiph("export def main() {\n  logerr `cat report.txt`()\n}", "test.jh"),
-    /bare inline scripts in logerr are not allowed/,
-  );
 });
 
 test("return bare identifier is sugar for interpolated literal", () => {
@@ -250,7 +229,7 @@ test("return bare identifier in catch/recover block", () => {
       '  return "yes"',
       "}",
       "export def main() {",
-      "  run check() catch (err) {",
+      "  check() catch (err) {",
       "    return err",
       "  }",
       "}",
@@ -271,7 +250,7 @@ test("return bare identifier in catch/recover block", () => {
   }
 });
 
-test("return run in run recover block", () => {
+test("return in run recover block", () => {
   const mod = parsejaiph(
     [
       'script helper = `echo "ok"`',
@@ -279,8 +258,8 @@ test("return run in run recover block", () => {
       '  return "yes"',
       "}",
       "export def main() {",
-      "  run check() catch (err) {",
-      "    return run helper()",
+      "  check() catch (err) {",
+      "    return helper()",
       "  }",
       "}",
     ].join("\n"),

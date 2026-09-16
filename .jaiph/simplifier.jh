@@ -61,7 +61,7 @@ script assert_no_test_or_e2e_in_changed = ```
 ```
 
 def no_test_or_e2e_paths_changed() {
-  run assert_no_test_or_e2e_in_changed()
+  assert_no_test_or_e2e_in_changed()
 }
 
 script report_file_nonempty = `test -s ".jaiph/tmp/simplifier_report.md"`
@@ -102,9 +102,9 @@ def find_simplifications() {
     </role>
   """
 
-  run save_simplifier_report(report)
+  save_simplifier_report(report)
   log "Simplification report saved to .jaiph/tmp/simplifier_report.md"
-  run no_test_or_e2e_paths_changed()
+  no_test_or_e2e_paths_changed()
 }
 
 script save_simplifier_report = `printf '%s\n' "$1" > .jaiph/tmp/simplifier_report.md`
@@ -112,10 +112,10 @@ script save_simplifier_report = `printf '%s\n' "$1" > .jaiph/tmp/simplifier_repo
 script read_simplifier_report = `cat .jaiph/tmp/simplifier_report.md`
 
 def apply_simplifications() {
-  run report_file_nonempty() catch (err) {
+  report_file_nonempty() catch (err) {
     fail "No report at .jaiph/tmp/simplifier_report.md. Run find_simplifications first."
   }
-  const report = run read_simplifier_report()
+  const report = read_simplifier_report()
 
   prompt """
     <role>
@@ -143,7 +143,7 @@ def apply_simplifications() {
     </task>
   """
 
-  run no_test_or_e2e_paths_changed()
+  no_test_or_e2e_paths_changed()
 }
 
 script mkdir_tmp_jaiph = `mkdir -p .jaiph/tmp`
@@ -154,11 +154,11 @@ const commit_task = """
 """
 
 export def main() {
-  run git.is_clean()
-  run mkdir_tmp_jaiph()
-  run find_simplifications()
-  run apply_simplifications()
-  run ci.ensure_ci_passes()
-  run no_test_or_e2e_paths_changed()
-  run git.commit_if_changes(commit_task)
+  git.is_clean()
+  mkdir_tmp_jaiph()
+  find_simplifications()
+  apply_simplifications()
+  ci.ensure_ci_passes()
+  no_test_or_e2e_paths_changed()
+  git.commit_if_changes(commit_task)
 }

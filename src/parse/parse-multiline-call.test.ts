@@ -10,7 +10,7 @@ test("triple-quoted call arg stored as Arg literal, not shell", () => {
     '  return "${prompt_text}"',
     "}",
     "export def main() {",
-    '  return run helper(',
+    '  return helper(',
     '    "x",',
     '    """',
     "    line1",
@@ -38,15 +38,15 @@ test("triple-quoted call arg stored as Arg literal, not shell", () => {
   assert.deepEqual(args[2], { kind: "var", name: "x" });
 });
 
-// ─── positive: multiline form with return run ────────────────────────────────
+// ─── positive: multiline form with return ────────────────────────────────
 
-test("return run multiline call parses — three args including triple-quoted", () => {
+test("return multiline call parses — three args including triple-quoted", () => {
   const src = [
     "def helper(a, b, c) {",
     '  return "${a}"',
     "}",
     "export def main() {",
-    "  return run helper(",
+    "  return helper(",
     '    "codebase",',
     '    """',
     "    Review the ENTIRE repository",
@@ -79,7 +79,7 @@ test("standalone run multiline call parses", () => {
     '  return "${a}"',
     "}",
     "export def main() {",
-    "  run helper(",
+    "  helper(",
     '    "first",',
     '    """',
     "    second",
@@ -109,7 +109,7 @@ test("standalone run multiline call parses", () => {
     '  return "${a}"',
     "}",
     "export def main() {",
-    "  run checker(",
+    "  checker(",
     '    "arg"',
     "  )",
     "}",
@@ -122,15 +122,15 @@ test("standalone run multiline call parses", () => {
   assert.equal(step.body.kind, "call");
 });
 
-// ─── positive: return run multiline ───────────────────────────────────────
+// ─── positive: return multiline ───────────────────────────────────────
 
-test("return run multiline call parses", () => {
+test("return multiline call parses", () => {
   const src = [
     "def checker(a) {",
     '  return "${a}"',
     "}",
     "export def main() {",
-    "  return run checker(",
+    "  return checker(",
     '    "arg"',
     "  )",
     "}",
@@ -143,15 +143,15 @@ test("return run multiline call parses", () => {
   assert.equal(step.value.kind, "call");
 });
 
-// ─── positive: const = run multiline ─────────────────────────────────────────
+// ─── positive: const = multiline ─────────────────────────────────────────
 
-test("const = run multiline call parses", () => {
+test("const = multiline call parses", () => {
   const src = [
     "def helper(a, b) {",
     '  return "${a}"',
     "}",
     "export def main() {",
-    "  const result = run helper(",
+    "  const result = helper(",
     '    "x",',
     '    """',
     "    body",
@@ -176,13 +176,13 @@ test("const = run multiline call parses", () => {
 
 // ─── negative: incomplete managed call → E_PARSE, not shell ─────────────────
 
-test("return run with unclosed paren is E_PARSE, not shell", () => {
+test("return with unclosed paren is E_PARSE, not shell", () => {
   assert.throws(
     () =>
       parsejaiph(
         [
           "export def main() {",
-          "  return run missing_close(",
+          "  return missing_close(",
           "}",
         ].join("\n"),
         "test.jh",
@@ -196,13 +196,13 @@ test("return run with unclosed paren is E_PARSE, not shell", () => {
   );
 });
 
-test("return run with unclosed paren is E_PARSE, not shell", () => {
+test("return with unclosed paren is E_PARSE, not shell", () => {
   assert.throws(
     () =>
       parsejaiph(
         [
           "export def main() {",
-          "  return run missing_close(",
+          "  return missing_close(",
           "}",
         ].join("\n"),
         "test.jh",
@@ -224,7 +224,7 @@ test("standalone run with unclosed paren is E_PARSE, not shell", () => {
           '  return "ok"',
           "}",
           "export def main() {",
-          "  run helper(",
+          "  helper(",
           "}",
         ].join("\n"),
         "test.jh",
@@ -237,31 +237,11 @@ test("standalone run with unclosed paren is E_PARSE, not shell", () => {
   );
 });
 
-// ─── regression: bare-identifier return run is E_PARSE, not shell ────────────
-
-test("return run bare identifier (no parens) is E_PARSE, not shell", () => {
-  assert.throws(
-    () => parsejaiph(`export def main() {\n  return run helper\n}`, "test.jh"),
-    /return run requires a call/,
-  );
-});
-
-test("return run bare identifier (no parens) on a known def is E_PARSE, not shell", () => {
-  assert.throws(
-    () =>
-      parsejaiph(
-        `def check() {\n  return "ok"\n}\nexport def main() {\n  return run check\n}`,
-        "test.jh",
-      ),
-    /return run requires a call/,
-  );
-});
-
 // ─── existing single-line calls still work unchanged ─────────────────────────
 
 test("single-line run with double-quoted args still works", () => {
   const mod = parsejaiph(
-    'def deploy(env, ver) {\n  return "${env}"\n}\nexport def main() {\n  run deploy("prod", "v1")\n}',
+    'def deploy(env, ver) {\n  return "${env}"\n}\nexport def main() {\n  deploy("prod", "v1")\n}',
     "test.jh",
   );
   const step = mod.defs.find((w) => w.name === "main")!.steps[0];

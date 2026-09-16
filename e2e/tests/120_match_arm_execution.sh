@@ -19,7 +19,7 @@ script safe_name = `printf '%s\n' "$1" | tr '/:' '--'`
 export def main(name_param) {
   const name = match name_param {
     "" => fail "usage: provide a name"
-    _ => run safe_name(name_param)
+    _ => safe_name(name_param)
   }
   log name
 }
@@ -49,7 +49,7 @@ script safe_name = `printf '%s\n' "$1" | tr '/:' '--'`
 export def main(name_param) {
   const name = match name_param {
     "" => fail "usage: provide a name"
-    _ => run safe_name(name_param)
+    _ => safe_name(name_param)
   }
   log name
 }

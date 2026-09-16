@@ -233,7 +233,7 @@ def validate(input) {
 }
 
 export def main(val) {
-  run validate(val)
+  validate(val)
   log "validated"
 }
 EOF

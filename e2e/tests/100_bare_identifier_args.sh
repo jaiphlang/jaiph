@@ -16,7 +16,7 @@ script greet = `echo "hello $1"`
 
 export def main() {
   const name = "world"
-  run greet(name)
+  greet(name)
 }
 EOF
 
@@ -30,12 +30,12 @@ e2e::file "bare_ensure.jh" <<'EOF'
 script check_impl = `true`
 
 def check(value) {
-  run check_impl($1)
+  check_impl($1)
 }
 
 export def main() {
   const status = "ok"
-  run check(status)
+  check(status)
 }
 EOF
 
@@ -49,7 +49,7 @@ script combine = `echo "$1 $2"`
 
 export def main() {
   const tag = "v1"
-  run combine(tag, "release")
+  combine(tag, "release")
 }
 EOF
 
@@ -62,7 +62,7 @@ e2e::file "bare_unknown.jh" <<'EOF'
 script greet = `echo "hello $1"`
 
 export def main() {
-  run greet(unknown_var)
+  greet(unknown_var)
 }
 EOF
 

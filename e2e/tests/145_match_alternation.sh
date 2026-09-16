@@ -18,8 +18,8 @@ script bar = `echo "ran-bar"`
 
 export def main(cmd) {
   const result = match cmd {
-    "" | "check" => run foo()
-    "wait" => run bar()
+    "" | "check" => foo()
+    "wait" => bar()
     _ => fail "bad"
   }
   log result

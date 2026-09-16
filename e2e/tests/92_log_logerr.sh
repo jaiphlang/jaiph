@@ -17,7 +17,7 @@ script done_impl = `echo "done"`
 export def main() {
   log "artifact-stdout"
   logerr "artifact-stderr"
-  run done_impl()
+  done_impl()
 }
 EOF
 rm -rf "${TEST_DIR}/runs_log"

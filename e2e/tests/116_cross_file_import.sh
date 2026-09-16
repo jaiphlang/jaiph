@@ -18,7 +18,7 @@ e2e::file "lib.jh" <<'EOF'
 script greet_impl = `echo "hello from lib"`
 
 export def greet() {
-  run greet_impl()
+  greet_impl()
 }
 EOF
 
@@ -26,7 +26,7 @@ e2e::file "main_wf.jh" <<'EOF'
 import "lib.jh" as lib
 
 export def main() {
-  run lib.greet()
+  lib.greet()
 }
 EOF
 
@@ -68,7 +68,7 @@ e2e::file "main_script.jh" <<'EOF'
 import "scriptlib.jh" as slib
 
 export def main() {
-  run slib.echo_msg()
+  slib.echo_msg()
 }
 EOF
 
@@ -100,7 +100,7 @@ e2e::section "cross-file import: run exported rule"
 e2e::file "rulelib.jh" <<'EOF'
 script check_impl = `true`
 export def passes() {
-  run check_impl()
+  check_impl()
 }
 EOF
 
@@ -108,7 +108,7 @@ e2e::file "main_rule.jh" <<'EOF'
 import "rulelib.jh" as rlib
 
 export def main() {
-  run rlib.passes()
+  rlib.passes()
   log "rule passed"
 }
 EOF
@@ -151,8 +151,8 @@ import "caplib.jh" as clib
 script show = `echo "got: $1"`
 
 export def main() {
-  const val = run clib.get_value()
-  run show(val)
+  const val = clib.get_value()
+  show(val)
 }
 EOF
 

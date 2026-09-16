@@ -76,7 +76,7 @@ prompt classify(x) = "Classify ${x}"
 
 export def main() {
   const c = "hi"
-  run classify(c)
+  classify(c)
 }
 EOF
 
@@ -85,7 +85,7 @@ if run_prompt_out="$(e2e::run "run_prompt.jh" 2>&1)"; then
   e2e::fail "run on a named prompt should be rejected"
 fi
 e2e::assert_contains "${run_prompt_out}" "E_VALIDATE" "run-on-prompt: rejected with E_VALIDATE"
-e2e::assert_contains "${run_prompt_out}" 'prompt "classify" cannot be called with run' \
+e2e::assert_contains "${run_prompt_out}" 'prompt "classify" cannot be called as a script or def' \
   "run-on-prompt: message steers to prompt classify(...)"
 
 e2e::pass "named prompt use/env, interpolation, preflight, and run-rejection contracts hold"

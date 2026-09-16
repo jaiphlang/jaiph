@@ -47,7 +47,7 @@ export def boom() {
 script publish = `printf 'artifact-payload' > "$JAIPH_ARTIFACTS_DIR/result.txt"`
 # Publishes a file into the run's artifacts dir.
 export def make_artifact() {
-  run publish()
+  publish()
   return "published"
 }
 EOF

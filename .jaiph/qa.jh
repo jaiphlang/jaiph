@@ -154,26 +154,26 @@ def analyze_gaps() {
   config {
     agent.model = "opus"
   }
-  const report_path = run new_qa_gap_report_path()
-  const contributing_docs = run read_contributing_docs()
-  const txtar_format = run read_txtar_format_spec()
-  const txtar_names = run read_txtar_fixture_names()
+  const report_path = new_qa_gap_report_path()
+  const contributing_docs = read_contributing_docs()
+  const txtar_format = read_txtar_format_spec()
+  const txtar_names = read_txtar_fixture_names()
 
   const gap_report = prompt analyze_gaps_prompt
 
-  run save_gap_report_file(gap_report, report_path)
-  run write_gap_report_pointer(report_path)
+  save_gap_report_file(gap_report, report_path)
+  write_gap_report_pointer(report_path)
   log "Gap report saved to ${report_path}"
 }
 
 def write_tests() {
-  run gap_report_nonempty() catch (err) {
+  gap_report_nonempty() catch (err) {
     fail "No gap report found (see .jaiph/tmp/qa_gap_report_active.txt). Run analyze_gaps first."
   }
-  const gap_report = run read_gap_report()
-  const contributing_docs = run read_contributing_docs()
-  const txtar_format = run read_txtar_format_spec()
-  const txtar_fixtures = run read_txtar_fixtures()
+  const gap_report = read_gap_report()
+  const contributing_docs = read_contributing_docs()
+  const txtar_format = read_txtar_format_spec()
+  const txtar_fixtures = read_txtar_fixtures()
 
   prompt """
     <role>
@@ -240,10 +240,10 @@ const commit_task = """
 """
 
 export def main() {
-  run git.is_clean()
-  run mkdir_tmp_jaiph_qa()
-  run analyze_gaps()
-  run write_tests()
-  run ci.ensure_ci_passes()
-  run git.commit_if_changes(commit_task)
+  git.is_clean()
+  mkdir_tmp_jaiph_qa()
+  analyze_gaps()
+  write_tests()
+  ci.ensure_ci_passes()
+  git.commit_if_changes(commit_task)
 }

@@ -45,7 +45,7 @@ function emitTestStep(step: TestStepDef, pad: string, trivia: Trivia): string[] 
       const capture = step.captureName ? `const ${step.captureName} = ` : "";
       const args = step.args && step.args.length > 0 ? step.args.map((a) => `"${a}"`).join(", ") : "";
       const allow = step.allowFailure ? " allow_failure" : "";
-      return [`${pad}${capture}run ${step.defRef}(${args})${allow}`];
+      return [`${pad}${capture}${step.defRef}(${args})${allow}`];
     }
     case "test_expect_contain":
       return step.substringVar

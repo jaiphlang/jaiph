@@ -16,18 +16,18 @@ e2e::file "app.jh" <<'EOF'
 #!/usr/bin/env jaiph
 script policy_check_impl = `echo real-policy`
 def policy_check() {
-  run policy_check_impl()
+  policy_check_impl()
 }
 script changed_files = `echo real_files`
 script build_impl = ```
 echo "real build"
 ```
 def build() {
-  run build_impl()
+  build_impl()
 }
 export def main() {
-  run policy_check()
-  run build()
+  policy_check()
+  build()
 }
 EOF
 
@@ -51,7 +51,7 @@ test "isolated orchestration" {
     echo "b.ts"
   }
 
-  const out = run app.main()
+  const out = app.main()
   expect_contain out "policy ok"
   expect_contain out "build ok"
 }

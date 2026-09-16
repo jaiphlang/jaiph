@@ -4,7 +4,7 @@ import "bootstrap_project.jh" as bootstrap
 
 # Validates local build prerequisites.
 def project_ready() {
-  run project_ready_impl()
+  project_ready_impl()
 }
 
 script project_ready_impl = ```
@@ -14,7 +14,7 @@ test -n "$NODE_ENV"
 
 # Verifies the project compiles successfully.
 def build_passes() {
-  run build_passes_impl()
+  build_passes_impl()
 }
 
 script build_passes_impl = `npm run build`
@@ -23,8 +23,8 @@ script build_passes_impl = `npm run build`
 # Arguments:
 #   $1: Feature requirements passed to the prompt.
 export def main(requirements) {
-  run project_ready() catch (err) {
-    run bootstrap.nodejs()
+  project_ready() catch (err) {
+    bootstrap.nodejs()
   }
   
   const _ = prompt """
@@ -32,9 +32,9 @@ export def main(requirements) {
     Follow requirements: ${requirements}
 """
   
-  run build_passes()
+  build_passes()
 
-  run update_docs()
+  update_docs()
 }
 
 # Refreshes documentation after a successful build.

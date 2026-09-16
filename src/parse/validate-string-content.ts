@@ -1,6 +1,6 @@
 /**
  * Validate Jaiph string content (log, logerr, fail, prompt, return, send literal)
- * and extract inline `${run …}` captures.
+ * and extract inline `${greet()}` captures.
  *
  * These live in the parse layer because they need `parseCallRef` (a parse
  * primitive) to interpret inline captures, and because config parsing
@@ -99,25 +99,23 @@ function findBracedNumeric(s: string): { index: number; match: string; hint: str
   return null;
 }
 
-const INLINE_CAPTURE_RE = /\$\{(run)\s+([^}]+)\}/g;
+const INLINE_CAPTURE_RE = /\$\{([A-Za-z_][A-Za-z0-9_.]*\s*\([^}]*\))\}/g;
 
 export interface InlineCapture {
-  kind: "run";
   ref: string;
   args?: Arg[];
 }
 
-/** Extract ${run ref [args]} from string content (unquoted). */
+/** Extract inline call captures `${ref(args)}` from string content (unquoted). */
 export function extractInlineCaptures(content: string): InlineCapture[] {
   const captures: InlineCapture[] = [];
   const re = new RegExp(INLINE_CAPTURE_RE.source, "g");
   let m: RegExpExecArray | null;
   while ((m = re.exec(content)) !== null) {
-    const kind = m[1] as "run";
-    const body = m[2].trim();
+    const body = m[1].trim();
     const call = parseCallRef(body);
     if (!call) continue;
-    captures.push({ kind, ref: call.ref, args: call.args });
+    captures.push({ ref: call.ref, args: call.args });
   }
   return captures;
 }
@@ -151,7 +149,7 @@ export function validateJaiphStringContent(
       line,
       col,
       "E_PARSE",
-      `${context} cannot contain command substitution ($( ... )); use a script and run instead`,
+      `${context} cannot contain command substitution ($( ... )); use a script instead`,
     );
   }
 
@@ -177,22 +175,21 @@ export function validateJaiphStringContent(
     );
   }
 
-  // Validate inline captures: ${run ref()} / ${run ref(args)}
+  // Validate inline call captures: ${ref()} / ${ref(args)}
   const inlineRe = new RegExp(INLINE_CAPTURE_RE.source, "g");
   let icm: RegExpExecArray | null;
   while ((icm = inlineRe.exec(content)) !== null) {
-    const kind = icm[1];
-    const body = icm[2].trim();
+    const body = icm[1].trim();
     const call = parseCallRef(body);
 
     if (!call) {
       throw jaiphError(
         filePath, line, col, "E_PARSE",
-        `${context} contains invalid inline ${kind} reference "${body}"`,
+        `${context} contains invalid inline call reference "${body}"`,
       );
     }
 
-    if (call.args?.some((a) => a.kind === "literal" && /\$\{run\s/.test(a.raw))) {
+    if (call.args?.some((a) => a.kind === "literal" && /\$\{[A-Za-z_][A-Za-z0-9_.]*\s*\(/.test(a.raw))) {
       throw jaiphError(
         filePath, line, col, "E_PARSE",
         `${context} cannot contain nested inline captures; extract to a const variable`,

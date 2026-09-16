@@ -24,11 +24,11 @@ echo "line-3"
 echo "err-3" >&2
 ```
 def slow_writer() {
-  run slow_writer_impl()
+  slow_writer_impl()
 }
 
 export def main() {
-  run slow_writer()
+  slow_writer()
 }
 WORKFLOW
 

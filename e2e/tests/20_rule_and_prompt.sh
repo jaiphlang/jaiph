@@ -19,14 +19,14 @@ e2e::file "rule_pass.jh" <<'EOF'
 #!/usr/bin/env jaiph
 script check_passes_impl = `mock_ok`
 def check_passes() {
-  run check_passes_impl()
+  check_passes_impl()
 }
 script done_impl = ```
 echo "e2e-rule-pass-done"
 ```
 export def main() {
-  run check_passes()
-  const msg = run done_impl()
+  check_passes()
+  const msg = done_impl()
   return "${msg}"
 }
 EOF
@@ -62,11 +62,11 @@ script unreachable_impl = ```
 echo "unreachable"
 ```
 def check_fails() {
-  run check_fails_impl()
+  check_fails_impl()
 }
 export def main() {
-  run check_fails()
-  run unreachable_impl()
+  check_fails()
+  unreachable_impl()
 }
 EOF
 
@@ -90,14 +90,14 @@ e2e::file "ensure_fail.jh" <<'EOF'
 script step_ok_impl = `mock_ok`
 script step_fail_impl = `mock_fail`
 def step_ok() {
-  run step_ok_impl()
+  step_ok_impl()
 }
 def step_fail() {
-  run step_fail_impl()
+  step_fail_impl()
 }
 export def main() {
-  run step_ok()
-  run step_fail()
+  step_ok()
+  step_fail()
 }
 EOF
 
@@ -129,7 +129,7 @@ import "prompt_flow.jh" as p
 
 test "prompt returns mock response" {
   mock prompt "e2e-prompt-mock-response"
-  const response = run p.main()
+  const response = p.main()
   expect_contain response "e2e-prompt-mock-response"
 }
 EOF
@@ -228,8 +228,8 @@ def right() {
   prompt "async-right"
 }
 export def main() {
-  run async left()
-  run async right()
+  async left()
+  async right()
 }
 EOF
 
@@ -267,7 +267,7 @@ export def main() {
   prompt """
     Line one and line two.
 """
-  run done_impl()
+  done_impl()
 }
 EOF
 
@@ -303,7 +303,7 @@ e2e::file "prompt_unmatched.test.jh" <<'EOF'
 import "prompt_unmatched.jh" as p
 
 test "when no mock, backend runs" {
-  const response = run p.main()
+  const response = p.main()
   expect_contain response "e2e-backend-no-mock-output"
 }
 EOF

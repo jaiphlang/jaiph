@@ -64,7 +64,7 @@ test("JAIPH_MAX_STEPS: a runaway loop trips the circuit breaker and the run ends
   const root = mkdtempSync(join(tmpdir(), "jaiph-maxsteps-trip-"));
   try {
     const { status, summary, aborted } = await runAndReadJournal(root, { JAIPH_MAX_STEPS: "3" });
-    assert.notEqual(status, 0, "run must fail once the step cap is exceeded");
+    assert.notEqual(status, 0, "must fail once the step cap is exceeded");
     assert.equal(aborted, true, "the breaker aborts the runtime");
     assert.match(summary, /E_MAX_STEPS/, "the durable journal records the breaker trip");
     // The breaker stopped execution early: not every loop iteration ran.
@@ -78,7 +78,7 @@ test("JAIPH_MAX_STEPS: unset — the same loop runs to completion (breaker disab
   const root = mkdtempSync(join(tmpdir(), "jaiph-maxsteps-off-"));
   try {
     const { status, summary } = await runAndReadJournal(root, { JAIPH_MAX_STEPS: undefined });
-    assert.equal(status, 0, "run completes when the breaker is disabled");
+    assert.equal(status, 0, "completes when the breaker is disabled");
     assert.doesNotMatch(summary, /E_MAX_STEPS/);
     assert.equal(distinctItemsLogged(summary), 8, "every loop iteration ran");
   } finally {

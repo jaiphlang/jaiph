@@ -33,7 +33,7 @@ test("planUseEnvs: an ungranted use key is E_ENV_MISSING naming the script and t
     const entry = writeFlow(root, "flow.jh", [
       "script gh use GITHUB_TOKEN = `gh pr list`",
       "export def main() {",
-      "  run gh()",
+      "  gh()",
       "}",
     ]);
     const plan = planUseEnvs(loadModuleGraph(entry, root), new Set());
@@ -52,7 +52,7 @@ test("planUseEnvs: a granted key passes; extra --env keys are allowed", () => {
     const entry = writeFlow(root, "flow.jh", [
       "script gh use GITHUB_TOKEN = `gh pr list`",
       "export def main() {",
-      "  run gh()",
+      "  gh()",
       "}",
     ]);
     const plan = planUseEnvs(loadModuleGraph(entry, root), new Set(["GITHUB_TOKEN", "UNUSED_EXTRA"]));
@@ -68,7 +68,7 @@ test("planUseEnvs: a graph with no use requires no --env", () => {
     const entry = writeFlow(root, "flow.jh", [
       "script show = `echo x`",
       "export def main() {",
-      "  run show()",
+      "  show()",
       "}",
     ]);
     const plan = planUseEnvs(loadModuleGraph(entry, root), new Set());
@@ -85,15 +85,15 @@ test("planUseEnvs: use keys are collected across the whole import graph, incl. i
     writeFlow(root, "lib.jh", [
       "export script publish use NPM_TOKEN = `npm publish`",
       "export def pub() {",
-      "  run publish()",
+      "  publish()",
       "}",
     ]);
     const entry = writeFlow(root, "flow.jh", [
       'import "lib.jh" as lib',
       'import script "./gh.sh" as gh use GITHUB_TOKEN',
       "export def main() {",
-      "  run gh()",
-      "  run lib.pub()",
+      "  gh()",
+      "  lib.pub()",
       "}",
     ]);
     const plan = planUseEnvs(loadModuleGraph(entry, root), new Set(["GITHUB_TOKEN"]));

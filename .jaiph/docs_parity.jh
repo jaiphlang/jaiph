@@ -55,7 +55,7 @@ script assert_newline_paths_are_files = ```
 ```
 
 def docs_files_present(list) {
-  run assert_newline_paths_are_files(list)
+  assert_newline_paths_are_files(list)
 }
 
 script assert_worktree_clean_for_docs = ```
@@ -76,7 +76,7 @@ script assert_worktree_clean_for_docs = ```
 ```
 
 def worktree_is_clean() {
-  run assert_worktree_clean_for_docs()
+  assert_worktree_clean_for_docs()
 }
 
 script assert_only_allowed_changed = ```
@@ -100,7 +100,7 @@ script assert_only_allowed_changed = ```
 ```
 
 def only_expected_docs_changed_after_prompt(allowed) {
-  run assert_only_allowed_changed(allowed)
+  assert_only_allowed_changed(allowed)
 }
 
 script list_docs_md_paths = ```
@@ -250,18 +250,18 @@ def docs_overview(docPaths) {
 }
 
 export def main() {
-  run claude.ensure_usage()
-  run worktree_is_clean()
-  const allowed_list = run build_allowed_paths_block()
-  run docs_files_present(allowed_list)
-  const docs_md_list = run list_docs_md_paths()
+  claude.ensure_usage()
+  worktree_is_clean()
+  const allowed_list = build_allowed_paths_block()
+  docs_files_present(allowed_list)
+  const docs_md_list = list_docs_md_paths()
   for path in docs_md_list {
     if path != "" {
-      run claude.ensure_usage()
-      run docs_page(path)
+      claude.ensure_usage()
+      docs_page(path)
     }
   }
-  run claude.ensure_usage()
-  run docs_overview(docs_md_list)
-  run only_expected_docs_changed_after_prompt(allowed_list)
+  claude.ensure_usage()
+  docs_overview(docs_md_list)
+  only_expected_docs_changed_after_prompt(allowed_list)
 }

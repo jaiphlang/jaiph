@@ -4,6 +4,6 @@ def check_fails() {
   mock_fail
 }
 export def main() {
-  run check_fails()
+  check_fails()
   echo "unreachable"
 }

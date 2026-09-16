@@ -9,8 +9,8 @@ export def main(who) {
     return msg
   }
   prompt describe(x) = "Tell ${who} about ${x}"
-  const h = run helper("bob")
+  const h = helper("bob")
   const d = prompt describe("today")
-  run shout(greeting)
+  shout(greeting)
   return "${h} ${d}"
 }

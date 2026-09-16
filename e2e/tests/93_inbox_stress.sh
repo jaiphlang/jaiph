@@ -86,62 +86,62 @@ script emit_m9 = `echo "m9"`
 script emit_m10 = `echo "m10"`
 
 def s1() {
-  send run emit_m1() -> data
+  send emit_m1() -> data
 }
 
 def s2() {
-  send run emit_m2() -> data
+  send emit_m2() -> data
 }
 
 def s3() {
-  send run emit_m3() -> data
+  send emit_m3() -> data
 }
 
 def s4() {
-  send run emit_m4() -> data
+  send emit_m4() -> data
 }
 
 def s5() {
-  send run emit_m5() -> data
+  send emit_m5() -> data
 }
 
 def s6() {
-  send run emit_m6() -> data
+  send emit_m6() -> data
 }
 
 def s7() {
-  send run emit_m7() -> data
+  send emit_m7() -> data
 }
 
 def s8() {
-  send run emit_m8() -> data
+  send emit_m8() -> data
 }
 
 def s9() {
-  send run emit_m9() -> data
+  send emit_m9() -> data
 }
 
 def s10() {
-  send run emit_m10() -> data
+  send emit_m10() -> data
 }
 
 script sink_impl = `echo "$1" >> sink_all.txt`
 
 def sink(message, chan, sender) {
-  run sink_impl(message)
+  sink_impl(message)
 }
 
 export def main() {
-  run s1()
-  run s2()
-  run s3()
-  run s4()
-  run s5()
-  run s6()
-  run s7()
-  run s8()
-  run s9()
-  run s10()
+  s1()
+  s2()
+  s3()
+  s4()
+  s5()
+  s6()
+  s7()
+  s8()
+  s9()
+  s10()
 }
 EOF
 
@@ -175,39 +175,39 @@ script emit_pb = `echo "pb"`
 script emit_pc = `echo "pc"`
 
 def producer_a() {
-  send run emit_pa() -> ch
+  send emit_pa() -> ch
 }
 
 def producer_b() {
-  send run emit_pb() -> ch
+  send emit_pb() -> ch
 }
 
 def producer_c() {
-  send run emit_pc() -> ch
+  send emit_pc() -> ch
 }
 
 script target_x_impl = `echo "x:$1" >> fanout_log.txt`
 
 def target_x(message, chan, sender) {
-  run target_x_impl(message)
+  target_x_impl(message)
 }
 
 script target_y_impl = `echo "y:$1" >> fanout_log.txt`
 
 def target_y(message, chan, sender) {
-  run target_y_impl(message)
+  target_y_impl(message)
 }
 
 script target_z_impl = `echo "z:$1" >> fanout_log.txt`
 
 def target_z(message, chan, sender) {
-  run target_z_impl(message)
+  target_z_impl(message)
 }
 
 export def main() {
-  run producer_a()
-  run producer_b()
-  run producer_c()
+  producer_a()
+  producer_b()
+  producer_c()
 }
 EOF
 
@@ -255,21 +255,21 @@ script emit_raw = `echo "raw-data"`
 script emit_processed = `echo "processed:$1"`
 
 def sender() {
-  send run emit_raw() -> ch_raw
+  send emit_raw() -> ch_raw
 }
 
 def processor(message, chan, sender) {
-  send run emit_processed(message) -> ch_processed
+  send emit_processed(message) -> ch_processed
 }
 
 script nested_sink_impl = `echo "$1" > nested_result.txt`
 
 def sink(message, chan, sender) {
-  run nested_sink_impl(message)
+  nested_sink_impl(message)
 }
 
 export def main() {
-  run sender()
+  sender()
 }
 EOF
 
@@ -297,7 +297,7 @@ channel ch -> good, fail_a, fail_b
 script emit_msg = `echo "msg"`
 
 def producer() {
-  send run emit_msg() -> ch
+  send emit_msg() -> ch
 }
 
 script fail_a_impl = ```
@@ -306,7 +306,7 @@ exit 1
 ```
 
 def fail_a(message, chan, sender) {
-  run fail_a_impl()
+  fail_a_impl()
 }
 
 script fail_b_impl = ```
@@ -315,17 +315,17 @@ exit 1
 ```
 
 def fail_b(message, chan, sender) {
-  run fail_b_impl()
+  fail_b_impl()
 }
 
 script good_impl = `echo "ok" > fail_good_ran.txt`
 
 def good(message, chan, sender) {
-  run good_impl()
+  good_impl()
 }
 
 export def main() {
-  run producer()
+  producer()
 }
 EOF
 
@@ -357,43 +357,43 @@ script emit_e4 = `echo "e4"`
 script emit_e5 = `echo "e5"`
 
 def s1() {
-  send run emit_e1() -> ev
+  send emit_e1() -> ev
 }
 
 def s2() {
-  send run emit_e2() -> ev
+  send emit_e2() -> ev
 }
 
 def s3() {
-  send run emit_e3() -> ev
+  send emit_e3() -> ev
 }
 
 def s4() {
-  send run emit_e4() -> ev
+  send emit_e4() -> ev
 }
 
 def s5() {
-  send run emit_e5() -> ev
+  send emit_e5() -> ev
 }
 
 script t1_impl = `echo "t1:$1" >> artifact_log.txt`
 
 def t1(message, chan, sender) {
-  run t1_impl(message)
+  t1_impl(message)
 }
 
 script t2_impl = `echo "t2:$1" >> artifact_log.txt`
 
 def t2(message, chan, sender) {
-  run t2_impl(message)
+  t2_impl(message)
 }
 
 export def main() {
-  run s1()
-  run s2()
-  run s3()
-  run s4()
-  run s5()
+  s1()
+  s2()
+  s3()
+  s4()
+  s5()
 }
 EOF
 
@@ -433,33 +433,33 @@ script soak_emit_i2 = `echo "i2"`
 script soak_emit_i3 = `echo "i3"`
 
 def s1() {
-  send run soak_emit_i1() -> ch
+  send soak_emit_i1() -> ch
 }
 
 def s2() {
-  send run soak_emit_i2() -> ch
+  send soak_emit_i2() -> ch
 }
 
 def s3() {
-  send run soak_emit_i3() -> ch
+  send soak_emit_i3() -> ch
 }
 
 script soak_t1_impl = `echo "t1:$1" >> soak_log.txt`
 
 def t1(message, chan, sender) {
-  run soak_t1_impl(message)
+  soak_t1_impl(message)
 }
 
 script soak_t2_impl = `echo "t2:$1" >> soak_log.txt`
 
 def t2(message, chan, sender) {
-  run soak_t2_impl(message)
+  soak_t2_impl(message)
 }
 
 export def main() {
-  run s1()
-  run s2()
-  run s3()
+  s1()
+  s2()
+  s3()
 }
 EOF
 
@@ -524,62 +524,62 @@ script seq_emit_m9 = `echo "m9"`
 script seq_emit_m10 = `echo "m10"`
 
 def s1() {
-  send run seq_emit_m1() -> data
+  send seq_emit_m1() -> data
 }
 
 def s2() {
-  send run seq_emit_m2() -> data
+  send seq_emit_m2() -> data
 }
 
 def s3() {
-  send run seq_emit_m3() -> data
+  send seq_emit_m3() -> data
 }
 
 def s4() {
-  send run seq_emit_m4() -> data
+  send seq_emit_m4() -> data
 }
 
 def s5() {
-  send run seq_emit_m5() -> data
+  send seq_emit_m5() -> data
 }
 
 def s6() {
-  send run seq_emit_m6() -> data
+  send seq_emit_m6() -> data
 }
 
 def s7() {
-  send run seq_emit_m7() -> data
+  send seq_emit_m7() -> data
 }
 
 def s8() {
-  send run seq_emit_m8() -> data
+  send seq_emit_m8() -> data
 }
 
 def s9() {
-  send run seq_emit_m9() -> data
+  send seq_emit_m9() -> data
 }
 
 def s10() {
-  send run seq_emit_m10() -> data
+  send seq_emit_m10() -> data
 }
 
 script seq_sink_impl = `echo "$1" >> seq_sink_all.txt`
 
 def sink(message, chan, sender) {
-  run seq_sink_impl(message)
+  seq_sink_impl(message)
 }
 
 export def main() {
-  run s1()
-  run s2()
-  run s3()
-  run s4()
-  run s5()
-  run s6()
-  run s7()
-  run s8()
-  run s9()
-  run s10()
+  s1()
+  s2()
+  s3()
+  s4()
+  s5()
+  s6()
+  s7()
+  s8()
+  s9()
+  s10()
 }
 EOF
 

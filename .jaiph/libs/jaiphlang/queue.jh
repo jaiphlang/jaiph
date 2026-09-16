@@ -14,74 +14,74 @@
 import script "./queue.py" as queue
 
 export def main(cmd, arg1, arg2) {
-  const result = run queue(cmd, arg1, arg2)
+  const result = queue(cmd, arg1, arg2)
   log result
 }
 
 export def add_tasks_from_file(path) {
-  run queue("add_from_file", path)
+  queue("add_from_file", path)
 }
 
 export def add_task_from_file(path) {
-  run queue("add", path)
+  queue("add", path)
 }
 
 export def get_first_task() {
-  return run queue("get")
+  return queue("get")
 }
 
 export def next_task(tag) {
-  return run queue("get", tag)
+  return queue("get", tag)
 }
 
 export def next_available() {
-  return run queue("get_available")
+  return queue("get_available")
 }
 
 export def get_task_by_header(header) {
-  return run queue("get_by_header", header)
+  return queue("get_by_header", header)
 }
 
 export def get_all_task_headers() {
-  return run queue("headers")
+  return queue("headers")
 }
 
 export def mark_task_dev_ready(header) {
-  run queue("mark", header, "dev-ready")
+  queue("mark", header, "dev-ready")
 }
 
 export def mark_task_in_progress(header) {
-  run queue("mark", header, "in-progress")
+  queue("mark", header, "in-progress")
 }
 
 export def unmark_task(header, tag) {
-  run queue("unmark", header, tag)
+  queue("unmark", header, tag)
 }
 
 export def remove_completed_task(header) {
-  run queue("complete_by_header", header)
+  queue("complete_by_header", header)
 }
 
 export def archive_to_done(header, notesPath) {
-  run queue("archive_to_done", header, notesPath)
+  queue("archive_to_done", header, notesPath)
 }
 
 export def set_task_description_from_file(header, bodyPath) {
-  run queue("set_description", header, bodyPath)
+  queue("set_description", header, bodyPath)
 }
 
 export def state_json() {
-  return run queue("json")
+  return queue("json")
 }
 
 export def has_tasks() {
-  run queue("get")
+  queue("get")
 }
 
 export def task_is_dev_ready(task) {
-  run queue("has_tag", task, "dev-ready")
+  queue("has_tag", task, "dev-ready")
 }
 
 export def all_dev_ready() {
-  run queue("check_all_tagged", "dev-ready")
+  queue("check_all_tagged", "dev-ready")
 }

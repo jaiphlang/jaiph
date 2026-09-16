@@ -1,7 +1,7 @@
 #!/usr/bin/env jaiph
 
 def always_ok() {
-  run always_ok_impl()
+  always_ok_impl()
 }
 
 script always_ok_impl = `echo ok`
@@ -18,14 +18,14 @@ def wf_const() {
 }
 
 def wf_async() {
-  run async noop()
+  async noop()
 }
 
 def wf_brace_if() {
-  run always_ok()
+  always_ok()
   log "then"
 }
 
 export def main() {
-  run always_ok()
+  always_ok()
 }

@@ -180,8 +180,8 @@ async function runTestBlock(
           grantValues: extraEnv,
         });
         const result = await runtime.runNamedDef(step.defRef, step.args ?? []);
-        // Resolve the captured value following production `run_capture` semantics.
-        // Only an explicit `const X = run …` binding introduces a variable; there is no
+        // Resolve the captured value following production call-capture semantics.
+        // Only an explicit `const X = call(…)` binding introduces a variable; there is no
         // implicit alias — `expect_*` must reference an explicitly-captured name.
         if (step.captureName) {
           let runValue: string | undefined;

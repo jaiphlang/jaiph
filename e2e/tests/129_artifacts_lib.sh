@@ -22,7 +22,7 @@ e2e::file "artifacts_e2e.jh" <<'EOF'
 import "jaiphlang/artifacts" as artifacts
 
 export def main() {
-  const save_path = run artifacts.save("./build_output.txt")
+  const save_path = artifacts.save("./build_output.txt")
   log save_path
 }
 EOF

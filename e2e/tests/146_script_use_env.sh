@@ -25,7 +25,7 @@ e2e::section "sterile — a script with no use never sees a host key"
 e2e::file "sterile_show.jh" <<'EOF'
 script show_impl = `echo "UE_TOKEN=[${UE_TOKEN:-<unset>}]"`
 export def main() {
-  const t = run show_impl()
+  const t = show_impl()
   return "${t}"
 }
 EOF
@@ -48,7 +48,7 @@ e2e::section "use + --env KEY — the granted host value reaches the script"
 e2e::file "use_show.jh" <<'EOF'
 script show_impl use UE_TOKEN = `echo "UE_TOKEN=[${UE_TOKEN:-<unset>}]"`
 export def main() {
-  const t = run show_impl()
+  const t = show_impl()
   return "${t}"
 }
 EOF
@@ -99,12 +99,12 @@ e2e::file "use_sub.jh" <<'EOF'
 script main_show use UE_TOKEN = `echo "MAIN=[${UE_TOKEN:-<unset>}]"`
 script sub_show = `echo "SUB=[${UE_TOKEN:-<unset>}]"`
 def sub() {
-  const s = run sub_show()
+  const s = sub_show()
   return "${s}"
 }
 export def main() {
-  const m = run main_show()
-  const s = run sub()
+  const m = main_show()
+  const s = sub()
   return "${m} ${s}"
 }
 EOF
@@ -131,11 +131,11 @@ e2e::section "jaiph test does not pre-flight use keys (exit 0 without --env)"
 e2e::file "use_lane.test.jh" <<'EOF'
 script show_impl use UE_TOKEN = `echo "UE_TOKEN=[${UE_TOKEN:-<unset>}]"`
 export def main() {
-  const t = run show_impl()
+  const t = show_impl()
   return "${t}"
 }
 test "use key absent without --env grant" {
-  const r = run main()
+  const r = main()
   expect_contain r "UE_TOKEN=[<unset>]"
 }
 EOF
@@ -148,7 +148,7 @@ e2e::section "reserved keys in use are rejected at parse time"
 e2e::file "use_reserved.jh" <<'EOF'
 script bad use JAIPH_WORKSPACE = `echo never`
 export def main() {
-  run bad()
+  bad()
 }
 EOF
 

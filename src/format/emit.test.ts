@@ -37,7 +37,7 @@ describe("emitModule", () => {
     const source = [
       "# Validates prerequisites.",
       "def project_ready(name) {",
-      '  run check(arg1)',
+      '  check(arg1)',
       "}",
       "",
     ].join("\n");
@@ -71,7 +71,7 @@ describe("emitModule", () => {
       "```",
       "",
       "export def main() {",
-      "  run ```bash",
+      "  ```bash",
       "  echo inline",
       "  ```()",
       "}",
@@ -85,7 +85,7 @@ describe("emitModule", () => {
       "```",
       "",
       "export def main() {",
-      "  run ```bash",
+      "  ```bash",
       "    echo inline",
       "  ```()",
       "}",
@@ -98,7 +98,7 @@ describe("emitModule", () => {
     const source = [
       "export def main(name) {",
       '  const n = "${arg1}"',
-      '  const out = run helper(n)',
+      '  const out = helper(n)',
       "  log out",
       "}",
       "",
@@ -109,7 +109,7 @@ describe("emitModule", () => {
   it("formats run with catch block", () => {
     const source = [
       "export def main() {",
-      "  run ci_passes() catch (failure) {",
+      "  ci_passes() catch (failure) {",
       '    prompt "fix it"',
       "  }",
       "}",
@@ -121,17 +121,17 @@ describe("emitModule", () => {
   it("formats async run", () => {
     const source = [
       "export def main() {",
-      "  run async worker()",
+      "  async worker()",
       "}",
       "",
     ].join("\n");
     assert.equal(roundTrip(source), source);
   });
 
-  it("round-trips run with a stdin clause (quoted literal is canonical)", () => {
+  it("round-trips a stdin connect form (quoted literal is canonical)", () => {
     const source = [
       "export def main(content) {",
-      '  run save(path) stdin "${content}"',
+      '  stdin "${content}" -> save(path)',
       "}",
       "",
     ].join("\n");
@@ -141,13 +141,13 @@ describe("emitModule", () => {
   it("normalizes a bare-identifier stdin operand to a quoted interpolation and then round-trips", () => {
     const bare = [
       "export def main(content) {",
-      "  run save(path) stdin content",
+      "  stdin content -> save(path)",
       "}",
       "",
     ].join("\n");
     const canonical = [
       "export def main(content) {",
-      '  run save(path) stdin "${content}"',
+      '  stdin "${content}" -> save(path)',
       "}",
       "",
     ].join("\n");
@@ -157,10 +157,10 @@ describe("emitModule", () => {
     assert.equal(roundTrip(once), canonical);
   });
 
-  it("emits a stdin clause on an inline script", () => {
+  it("emits a stdin connect form on an inline script", () => {
     const source = [
       "export def main(content) {",
-      '  run `cat`() stdin "${content}"',
+      '  stdin "${content}" -> `cat`()',
       "}",
       "",
     ].join("\n");
@@ -309,7 +309,7 @@ describe("emitModule", () => {
       "}",
       "",
       "def r() {",
-      "  run w()",
+      "  w()",
       "}",
       "",
       "script s = `echo s`",
@@ -323,7 +323,7 @@ describe("emitModule", () => {
       "# About this module",
       "",
       "def r() {",
-      "  run w()",
+      "  w()",
       "}",
       "",
       "def w() {",
@@ -335,7 +335,7 @@ describe("emitModule", () => {
     const expected = [
       "# About this module",
       "def r() {",
-      "  run w()",
+      "  w()",
       "}",
       "",
       "def w() {",
@@ -350,11 +350,11 @@ describe("emitModule", () => {
     const source = [
       "# A comment",
       "def check() {",
-      "  run impl()",
+      "  impl()",
       "}",
       "",
       "export def main() {",
-      "  run check()",
+      "  check()",
       '  log "done"',
       "}",
       "",
@@ -416,7 +416,7 @@ describe("emitModule", () => {
       "channel findings -> analyst",
       "",
       "export def main() {",
-      "  run scanner()",
+      "  scanner()",
       "}",
       "",
     ].join("\n");
@@ -437,8 +437,8 @@ describe("emitModule", () => {
   it("formats const captures", () => {
     const source = [
       "export def main() {",
-      "  const response = run check()",
-      "  const out = run helper()",
+      "  const response = check()",
+      "  const out = helper()",
       "  log response",
       "}",
       "",
@@ -470,7 +470,7 @@ describe("emitModule", () => {
       "}",
       "",
       "def is_ready() {",
-      "  run dispatch()",
+      "  dispatch()",
       "}",
       "",
       "script helper = `echo ok`",
@@ -492,7 +492,7 @@ describe("emitModule", () => {
       "",
       "# A rule",
       "def r() {",
-      "  run w()",
+      "  w()",
       "}",
       "",
       "# A script",
@@ -524,7 +524,7 @@ describe("emitModule", () => {
       'import "lib.jh" as lib',
       "",
       "def middle() {",
-      "  run first()",
+      "  first()",
       "}",
       "",
       "channel events",
@@ -542,7 +542,7 @@ describe("emitModule", () => {
       "}",
       "",
       "def middle() {",
-      "  run first()",
+      "  first()",
       "}",
       "",
       "script last = `echo last`",
@@ -568,7 +568,7 @@ describe("emitModule", () => {
   it("round-trips run with single recover statement", () => {
     const source = [
       "export def main() {",
-      '  run deploy() recover (err) log "fixing"',
+      '  deploy() recover (err) log "fixing"',
       "}",
       "",
     ].join("\n");
@@ -578,9 +578,9 @@ describe("emitModule", () => {
   it("round-trips run with multiline recover block", () => {
     const source = [
       "export def main() {",
-      "  run deploy() recover (err) {",
+      "  deploy() recover (err) {",
       '    log "fixing"',
-      "    run fix()",
+      "    fix()",
       "  }",
       "}",
       "",
@@ -605,17 +605,17 @@ describe("emitModule", () => {
   it("round-trips const capture with run async", () => {
     const source = [
       "export def main() {",
-      "  const h = run async foo()",
+      "  const h = async foo()",
       "}",
       "",
     ].join("\n");
     assert.equal(roundTrip(source), source);
   });
 
-  it("round-trips run async with recover block", () => {
+  it("round-trips async with recover block", () => {
     const source = [
       "export def main() {",
-      "  run async foo() recover (err) {",
+      "  async foo() recover (err) {",
       '    log "repair"',
       "  }",
       "}",
@@ -624,12 +624,12 @@ describe("emitModule", () => {
     assert.equal(roundTrip(source), source);
   });
 
-  it("round-trips run async with multi-line recover block", () => {
+  it("round-trips async with multi-line recover block", () => {
     const source = [
       "export def main() {",
-      "  run async foo() recover (err) {",
+      "  async foo() recover (err) {",
       '    log "repairing"',
-      "    run fix_it()",
+      "    fix_it()",
       "  }",
       "}",
       "",

@@ -30,16 +30,16 @@ script assert_nonempty_file_or_fail = ```
 def ensure_gh_ci_passes(branch, workflow_name) {
   const ci_log_dir = ".jaiph/tmp"
   const ci_log_file = "${ci_log_dir}/gh_ci_passes.last.log"
-  run common.mkdir_p_simple(ci_log_dir)
+  common.mkdir_p_simple(ci_log_dir)
 
   # Empty commit => always resolve HEAD, so each recover retry tracks the new
   # push instead of re-checking a stale SHA.
   const commit = ""
 
-  run gh.token_set()
+  gh.token_set()
 
-  run gh.check_ci(branch, commit, workflow_name, ci_log_file) recover (failure) {
-    run assert_nonempty_file_or_fail(ci_log_file)
+  gh.check_ci(branch, commit, workflow_name, ci_log_file) recover (failure) {
+    assert_nonempty_file_or_fail(ci_log_file)
     log "CI failure summary: ${failure}"
     prompt """
       <role>
@@ -64,7 +64,7 @@ def ensure_gh_ci_passes(branch, workflow_name) {
         - Do NOT invoke Jaiph orchestration workflows from .jaiph/.
       </task>
     """
-    run git.in_git_repo()
+    git.in_git_repo()
     prompt """
       Commit the CI fix locally so Jaiph can push it. Do NOT push — Jaiph
       performs the push in a trusted step after this.
@@ -75,18 +75,18 @@ def ensure_gh_ci_passes(branch, workflow_name) {
       3. Create exactly one commit with a clear imperative message.
       4. Do NOT push, and do NOT amend commits already on the remote.
     """
-    run git.push(branch)
+    git.push(branch)
   }
 
-  run common.rm_file_simple(ci_log_file)
+  common.rm_file_simple(ci_log_file)
 }
 
 def pull_latest_logs(branch, workflow_name) {
   const ci_log_dir = ".jaiph/tmp"
   const ci_log_file = "${ci_log_dir}/gh_ci.latest.log"
-  run common.mkdir_p_simple(ci_log_dir)
-  run gh.pull_logs(branch, "", workflow_name, ci_log_file, "1")
-  run assert_nonempty_file_or_fail(ci_log_file)
+  common.mkdir_p_simple(ci_log_dir)
+  gh.pull_logs(branch, "", workflow_name, ci_log_file, "1")
+  assert_nonempty_file_or_fail(ci_log_file)
   return ci_log_file
 }
 
@@ -95,5 +95,5 @@ export def main(branch, workflow_name) {
     "" => "CI"
     _ => workflow_name
   }
-  run ensure_gh_ci_passes(branch, wf)
+  ensure_gh_ci_passes(branch, wf)
 }

@@ -83,7 +83,7 @@ def helper(a, b) {
   log "ok"
 }
 export def main() {
-  run helper("one")
+  helper("one")
 }
 EOF
 

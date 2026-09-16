@@ -18,7 +18,7 @@ def ci_passes() {
 }
 
 export def main() {
-  run ci_passes() catch "$repo_dir" {
+  ci_passes() catch "$repo_dir" {
     echo "should not parse"
   }
 }
@@ -50,7 +50,7 @@ def some_rule(input) {
 }
 
 export def main() {
-  run some_rule("a") catch "b" {
+  some_rule("a") catch "b" {
     echo "should not parse"
   }
 }
@@ -82,7 +82,7 @@ def ci_passes(repo_dir) {
 }
 
 export def main() {
-  run ci_passes("$repo_dir") catch
+  ci_passes("$repo_dir") catch
 }
 EOF
 

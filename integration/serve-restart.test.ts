@@ -16,7 +16,7 @@ const FIXTURE = [
   "script long = `sleep 3`",
   "# Long enough to be caught mid-flight before a hard kill.",
   "export def longflow() {",
-  "  run long()",
+  "  long()",
   '  return "done"',
   "}",
   "",

@@ -7,11 +7,11 @@ script shell_capture = `echo shell-capture`
 script format_output = `printf '%s\n' "response=$1" "out=$2"`
 
 def echo_line() {
-  run echo_line_impl()
+  echo_line_impl()
   return "captured-value"
 }
 export def main() {
-  const response = run echo_line()
-  const out = run shell_capture()
-  run format_output(response, out)
+  const response = echo_line()
+  const out = shell_capture()
+  format_output(response, out)
 }

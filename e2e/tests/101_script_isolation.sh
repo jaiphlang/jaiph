@@ -21,7 +21,7 @@ echo "secret=${secret:-EMPTY}"
 ```
 
 export def main() {
-  run leak_check()
+  leak_check()
 }
 EOF
 
@@ -51,7 +51,7 @@ process.stdout.write('node-ok');
 ```
 
 export def main() {
-  run use_node()
+  use_node()
 }
 EOF
 

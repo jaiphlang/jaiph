@@ -43,8 +43,8 @@ export def main() {
   def inner(name) {
     return "inner-sees-${who}-${name}"
   }
-  const a = run inner("bob")
-  const b = run greet(who)
+  const a = inner("bob")
+  const b = greet(who)
   return "${a} ${b}"
 }
 EOF
@@ -70,7 +70,7 @@ e2e::section "a nested script use KEY without --env fails the same pre-flight as
 e2e::file "nested_use.jh" <<'EOF'
 export def main() {
   script show_impl use UE_TOKEN = `echo "UE_TOKEN=[${UE_TOKEN:-<unset>}]"`
-  const t = run show_impl()
+  const t = show_impl()
   return "${t}"
 }
 EOF
@@ -103,10 +103,10 @@ e2e::section "a nested name is not reachable from another def (E_VALIDATE)"
 e2e::file "cross_def.jh" <<'EOF'
 export def main() {
   script nested_helper = `echo hi`
-  run other()
+  other()
 }
 def other() {
-  run nested_helper()
+  nested_helper()
 }
 EOF
 
@@ -123,7 +123,7 @@ e2e::section "export on a nested declaration is E_PARSE"
 e2e::file "nested_export.jh" <<'EOF'
 export def main() {
   export script foo = `echo hi`
-  run foo()
+  foo()
 }
 EOF
 
@@ -148,7 +148,7 @@ export def main() {
     const msg = "${greeting}-${name}"
     return msg
   }
-  const h = run inner("bob")
+  const h = inner("bob")
   return "${h}|${note}"
 }
 EOF
@@ -240,7 +240,7 @@ e2e::section "using a const before its declaration is E_VALIDATE (bare call argu
 
 e2e::file "seq_arg.jh" <<'EOF'
 export def main() {
-  run consumer(later)
+  consumer(later)
   const later = "ok"
 }
 def consumer(v) {
@@ -263,7 +263,7 @@ export def main() {
   def helper() {
     return "${later}"
   }
-  const x = run helper()
+  const x = helper()
   const later = "hi"
   return x
 }
@@ -285,7 +285,7 @@ e2e::file "branch_if.jh" <<'EOF'
 export def main(flag) {
   if flag == "y" {
     script s = `printf YES`
-    return run s()
+    return s()
   }
   return "none"
 }
@@ -299,10 +299,10 @@ e2e::file "branch_else.jh" <<'EOF'
 export def main(flag) {
   if flag == "y" {
     script s = `printf YES`
-    return run s()
+    return s()
   } else {
     script t = `printf NO`
-    return run t()
+    return t()
   }
 }
 EOF
@@ -317,7 +317,7 @@ export def main(flag) {
   if flag == "y" {
     script s = `echo YES`
   }
-  return run s()
+  return s()
 }
 EOF
 
@@ -336,10 +336,10 @@ script s = `printf OUTER`
 export def main(flag) {
   if flag == "y" {
     script s = `printf INNER`
-    const inner = run s()
+    const inner = s()
     log "inner=${inner}"
   }
-  return run s()
+  return s()
 }
 EOF
 

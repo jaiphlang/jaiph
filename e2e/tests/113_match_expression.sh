@@ -17,7 +17,7 @@ e2e::file "match_string.jh" <<'EOF'
 script get_status = `echo "error"`
 
 export def main() {
-  const status = run get_status()
+  const status = get_status()
   return match status {
     "ok" => "all good"
     "error" => "something broke"
@@ -51,7 +51,7 @@ e2e::file "match_wildcard.jh" <<'EOF'
 script get_mode = `echo "unknown-mode"`
 
 export def main() {
-  const mode = run get_mode()
+  const mode = get_mode()
   return match mode {
     "fast" => "speed"
     "safe" => "safety"
@@ -85,7 +85,7 @@ e2e::file "match_regex.jh" <<'EOF'
 script get_input = `echo "ERROR: something failed"`
 
 export def main() {
-  const msg = run get_input()
+  const msg = get_input()
   return match msg {
     /^ERROR/ => "error"
     /^WARN/ => "warning"
@@ -119,7 +119,7 @@ e2e::file "match_return.jh" <<'EOF'
 script get_code = `echo "200"`
 
 export def main() {
-  const code = run get_code()
+  const code = get_code()
   return match code {
     "200" => "success"
     "404" => "not found"

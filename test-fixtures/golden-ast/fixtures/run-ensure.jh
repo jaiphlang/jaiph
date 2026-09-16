@@ -1,12 +1,12 @@
 def check() {
-  run validator()
+  validator()
 }
 
 script validator = `true`
 
 export def main() {
-  run check()
-  run helper()
+  check()
+  helper()
 }
 
 def helper() {

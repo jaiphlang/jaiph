@@ -165,7 +165,7 @@ echo "world"
 ```
 
 export def main() {
-  run ```bash
+  ```bash
 echo "inline"
 echo "script"
 ```()
@@ -210,7 +210,7 @@ export def main() {
   log "second"
   log "third"
 
-  run some_wf()
+  some_wf()
 }
 
 def some_wf() {
@@ -227,7 +227,7 @@ e2e::assert_equals "${blank_out}" 'export def main() {
   log "second"
   log "third"
 
-  run some_wf()
+  some_wf()
 }
 
 def some_wf() {

@@ -63,7 +63,7 @@ test("E_VALIDATE: run a string const in workflow", () => {
       [
         'const greeting = "hello"',
         "export def main() {",
-        "  run greeting()",
+        "  greeting()",
         "}",
         "",
       ].join("\n"),
@@ -82,7 +82,7 @@ test("E_VALIDATE: run a def-level const in workflow", () => {
       [
         "export def main() {",
         '  const msg = "hello"',
-        "  run msg()",
+        "  msg()",
         "}",
         "",
       ].join("\n"),
@@ -94,14 +94,14 @@ test("E_VALIDATE: run a def-level const in workflow", () => {
   });
 });
 
-test("E_VALIDATE: const = run a string const in workflow", () => {
+test("E_VALIDATE: const = a string const in workflow", () => {
   withTempDir("jaiph-type-cross-", (root) => {
     writeFileSync(
       join(root, "m.jh"),
       [
         'const greeting = "hello"',
         "export def main() {",
-        "  const x = run greeting()",
+        "  const x = greeting()",
         "}",
         "",
       ].join("\n"),
@@ -120,7 +120,7 @@ test("E_VALIDATE: run a string const in rule", () => {
       [
         'const greeting = "hello"',
         "def check() {",
-        "  run greeting()",
+        "  greeting()",
         "}",
         "",
       ].join("\n"),
@@ -256,7 +256,7 @@ test("valid: run with script works", () => {
       [
         "script save = `echo ok`",
         "export def main() {",
-        "  run save()",
+        "  save()",
         "}",
         "",
       ].join("\n"),

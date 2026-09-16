@@ -4,6 +4,6 @@ def check_passes() {
   mock_ok
 }
 export def main() {
-  run check_passes()
+  check_passes()
   echo "e2e-rule-pass-done"
 }

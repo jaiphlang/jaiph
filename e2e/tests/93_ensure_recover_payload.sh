@@ -40,23 +40,23 @@ exit 1
 script mark_recovered = `touch .jaiph/tmp/recovered`
 
 def deep_rule() {
-  run emit_deep_step_then_fail_until_recovered()
+  emit_deep_step_then_fail_until_recovered()
 }
 
 def nested_rule() {
-  run emit_nested_step()
-  run deep_rule()
+  emit_nested_step()
+  deep_rule()
 }
 
 def top_rule() {
-  run emit_root_step()
-  run nested_rule()
+  emit_root_step()
+  nested_rule()
 }
 
 export def main() {
-  run top_rule() catch (failure) {
-    run save_string_to_file("recovered-on-retry", "witness_failed_payload.txt")
-    run mark_recovered()
+  top_rule() catch (failure) {
+    save_string_to_file("recovered-on-retry", "witness_failed_payload.txt")
+    mark_recovered()
   }
 }
 EOF

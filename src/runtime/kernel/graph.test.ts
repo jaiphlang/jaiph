@@ -28,7 +28,7 @@ export def inner() {
       main,
       `import "./lib.jh" as lib
 export def main() {
-  run lib.inner()
+  lib.inner()
 }`,
     );
     const g = buildRuntimeGraph(main);
@@ -63,7 +63,7 @@ def local_check() {
 }
 script local_script = \`echo local\`
 export def main() {
-  run lib.inner()
+  lib.inner()
 }`,
     );
     const g = buildRuntimeGraph(main);

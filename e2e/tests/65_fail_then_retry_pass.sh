@@ -20,39 +20,39 @@ rm -f "${TEST_DIR}/.gate1_passed" "${TEST_DIR}/.gate2_passed"
 e2e::file "make_pass.jh" <<'EOF'
 script gate1_impl = `test -f .gate1_passed`
 def gate1() {
-  run gate1_impl()
+  gate1_impl()
 }
 
 script gate2_impl = `test -f .gate2_passed`
 def gate2() {
-  run gate2_impl()
+  gate2_impl()
 }
 
 script remediate1_impl = `touch .gate1_passed`
 def remediate1() {
-  run remediate1_impl()
+  remediate1_impl()
 }
 
 script remediate2_impl = `touch .gate2_passed`
 def remediate2() {
-  run remediate2_impl()
+  remediate2_impl()
 }
 
 def make_pass() {
-  run gate1() catch (err) {
-    run remediate1()
-    run make_pass()
+  gate1() catch (err) {
+    remediate1()
+    make_pass()
     return
   }
-  run gate2() catch (err) {
-    run remediate2()
-    run make_pass()
+  gate2() catch (err) {
+    remediate2()
+    make_pass()
     return
   }
 }
 
 export def main() {
-  run make_pass()
+  make_pass()
 }
 EOF
 
@@ -113,20 +113,20 @@ rm -f "${TEST_DIR}/.gate_passed"
 # Given
 e2e::file "make_pass_bash.jh" <<'EOF'
 def gate() {
-  run check_gate()
+  check_gate()
 }
 script check_gate = `test -f .gate_passed`
 script mark_gate = `touch .gate_passed`
 def make_pass() {
-  run gate() catch (err) {
-    run mark_gate()
-    run make_pass()
+  gate() catch (err) {
+    mark_gate()
+    make_pass()
     return
   }
 }
 
 export def main() {
-  run make_pass()
+  make_pass()
 }
 EOF
 

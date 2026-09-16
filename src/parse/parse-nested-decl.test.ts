@@ -20,8 +20,8 @@ const NESTED_SRC = [
   '    return "helped-${name}"',
   "  }",
   '  prompt describe(x) = "Tell me about ${x}"',
-  '  const h = run helper("bob")',
-  "  run shout(greeting)",
+  '  const h = helper("bob")',
+  "  shout(greeting)",
   "}",
   "",
 ].join("\n");
@@ -52,9 +52,9 @@ const TEMPLATE_SRC = [
   "  prompt describe_block(x) = \"\"\"",
   "    Tell ${who} about ${x}",
   "  \"\"\"",
-  '  const h = run helper("bob")',
+  '  const h = helper("bob")',
   '  const d = prompt describe("today")',
-  "  run shout(greeting)",
+  "  shout(greeting)",
   '  return "${h} ${d}"',
   "}",
   "",
@@ -113,7 +113,7 @@ test("format: nested declarations round-trip bit-for-bit", () => {
 
 test("E_PARSE: export on a nested script is rejected", () => {
   assert.throws(
-    () => parsejaiph("export def main() {\n  export script foo = `echo hi`\n  run foo()\n}\n", "t.jh"),
+    () => parsejaiph("export def main() {\n  export script foo = `echo hi`\n  foo()\n}\n", "t.jh"),
     /E_PARSE.*nested script declarations cannot be exported/,
   );
 });
@@ -183,7 +183,7 @@ test("E_PARSE: import inside a catch body of a nested def is rejected", () => {
   const src = [
     "def outer() {",
     "  def inner() {",
-    "    run s() catch (e) {",
+    "    s() catch (e) {",
     '      import "x.jh" as y',
     "    }",
     "  }",
@@ -200,7 +200,7 @@ test("E_PARSE: import inside a recover body of a nested def is rejected", () => 
   const src = [
     "def outer() {",
     "  def inner() {",
-    "    run s() recover(e) {",
+    "    s() recover(e) {",
     '      import "x.jh" as y',
     "    }",
     "  }",
@@ -217,7 +217,7 @@ test("E_PARSE: config inside a catch body of a nested def is rejected", () => {
   const src = [
     "def outer() {",
     "  def inner() {",
-    "    run s() catch (e) {",
+    "    s() catch (e) {",
     "      config {",
     '        agent.backend = "claude"',
     "      }",
@@ -233,7 +233,7 @@ test("E_PARSE: config inside a catch body of a nested def is rejected", () => {
 });
 
 test("E_PARSE: inline catch `{ import … }` in a nested def is rejected", () => {
-  const src = 'def outer() {\n  def inner() {\n    run s() catch (e) { import "x.jh" as y }\n  }\n}\n';
+  const src = 'def outer() {\n  def inner() {\n    s() catch (e) { import "x.jh" as y }\n  }\n}\n';
   assert.throws(
     () => parsejaiph(src, "t.jh"),
     /E_PARSE.*import declarations are not allowed inside a nested def/,
@@ -241,7 +241,7 @@ test("E_PARSE: inline catch `{ import … }` in a nested def is rejected", () =>
 });
 
 test("E_PARSE: single-statement catch import in a nested def is rejected", () => {
-  const src = 'def outer() {\n  def inner() {\n    run s() catch (e) import "x.jh" as y\n  }\n}\n';
+  const src = 'def outer() {\n  def inner() {\n    s() catch (e) import "x.jh" as y\n  }\n}\n';
   assert.throws(
     () => parsejaiph(src, "t.jh"),
     /E_PARSE.*import declarations are not allowed inside a nested def/,
@@ -250,7 +250,7 @@ test("E_PARSE: single-statement catch import in a nested def is rejected", () =>
 
 test("top-level def catch body: `import` still falls through to shell (unchanged)", () => {
   const ast = parsejaiph(
-    'export def main() {\n  run s() catch (e) {\n    import photo.png\n  }\n}\n',
+    'export def main() {\n  s() catch (e) {\n    import photo.png\n  }\n}\n',
     "t.jh",
   );
   const step = ast.defs[0].steps.find((s) => s.type === "exec");
@@ -269,9 +269,9 @@ test("a nested def with only run / const / nested script still compiles", () => 
     "  def inner() {",
     '    const x = "1"',
     "    script s = `echo hi`",
-    "    run s()",
+    "    s()",
     "  }",
-    "  run inner()",
+    "  inner()",
     "}",
     "",
   ].join("\n");
@@ -308,10 +308,10 @@ const IN_BRANCH_SRC = [
   "  for line in src {",
   '    const c = "1"',
   "  }",
-  "  run s() catch (e) {",
+  "  s() catch (e) {",
   "    script cs = `echo recovered`",
   "  }",
-  "  run s() recover (e) {",
+  "  s() recover (e) {",
   "    def rf() {",
   '      return "ok"',
   "    }",

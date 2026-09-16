@@ -68,7 +68,7 @@ def check(value) {
 }
 
 export def main(value) {
-  run check(value)
+  check(value)
   log "validated"
 }
 EOF

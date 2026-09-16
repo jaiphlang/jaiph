@@ -19,7 +19,7 @@ cat > "${TEST_DIR}/.jaiph/libs/mylib/greet.jh" <<'EOF'
 export script hello = `echo "hello from lib"`
 
 export def say_hello() {
-  run hello()
+  hello()
 }
 EOF
 
@@ -28,7 +28,7 @@ e2e::file "main_lib.jh" <<'EOF'
 import "mylib/greet" as greet
 
 export def main() {
-  run greet.hello()
+  greet.hello()
 }
 EOF
 
@@ -60,7 +60,7 @@ e2e::file "main_lib_wf.jh" <<'EOF'
 import "mylib/greet" as greet
 
 export def main() {
-  run greet.say_hello()
+  greet.say_hello()
 }
 EOF
 
@@ -99,7 +99,7 @@ e2e::file "main_relative.jh" <<'EOF'
 import "local_lib" as loc
 
 export def main() {
-  run loc.local_msg()
+  loc.local_msg()
 }
 EOF
 
@@ -129,7 +129,7 @@ e2e::file "export_script.jh" <<'EOF'
 export script greet = `echo "hi"`
 
 export def main() {
-  run greet()
+  greet()
 }
 EOF
 

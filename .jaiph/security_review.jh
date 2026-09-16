@@ -154,7 +154,7 @@ def review_codebase(report_file) {
     env/secrets handling, artifacts/run logs, installers, and skills.
     Do not limit yourself to a diff — this is a full codebase scan.
   """
-  return run review_scope("codebase", scope_detail, report_file)
+  return review_scope("codebase", scope_detail, report_file)
 }
 
 def review_diff_text(mode, scope_label, diff_text, report_file) {
@@ -171,7 +171,7 @@ def review_diff_text(mode, scope_label, diff_text, report_file) {
     Code changes under review:
     ${diff_text}
   """
-  return run review_scope(mode, scope_detail, report_file)
+  return review_scope(mode, scope_detail, report_file)
 }
 
 def finish_report(verdict, report_file, fingerprint_before) {
@@ -181,24 +181,24 @@ def finish_report(verdict, report_file, fingerprint_before) {
   }
 
   # The reviewer must be read-only apart from the (gitignored) report file.
-  const fingerprint_after = run worktree_fingerprint()
-  run common.str_equals(fingerprint_before, fingerprint_after) catch (err) {
+  const fingerprint_after = worktree_fingerprint()
+  common.str_equals(fingerprint_before, fingerprint_after) catch (err) {
     fail "Security review must not modify the worktree, but git status changed during review. Inspect git status before trusting this run."
   }
 
-  run report_file_nonempty(report_file) catch (err) {
+  report_file_nonempty(report_file) catch (err) {
     fail "Security review did not write a report at ${report_file}."
   }
-  run artifacts.save(report_file)
+  artifacts.save(report_file)
   log "Security review report ready: ${report_file}"
 }
 
 script truncate_file = `: > "$1"`
 
 def queue_findings(report_file) {
-  const tasks_file = run security_review_tasks_path()
+  const tasks_file = security_review_tasks_path()
   # Default to empty so a no-finding pass is a clean no-op for add_from_file.
-  run truncate_file(tasks_file)
+  truncate_file(tasks_file)
 
   prompt """
     <role>
@@ -243,7 +243,7 @@ def queue_findings(report_file) {
     </task>
   """
 
-  run queue.add_tasks_from_file(tasks_file)
+  queue.add_tasks_from_file(tasks_file)
 }
 
 const commit_task = """
@@ -253,18 +253,18 @@ const commit_task = """
 
 def dispatch_review(mode, scope, report_file) {
   if mode == "codebase" {
-    return run review_codebase(report_file)
+    return review_codebase(report_file)
   } else if mode == "diff" {
-    const uncommitted = run git_diff_uncommitted()
-    return run review_diff_text("diff", "uncommitted changes", uncommitted, report_file)
+    const uncommitted = git_diff_uncommitted()
+    return review_diff_text("diff", "uncommitted changes", uncommitted, report_file)
   } else {
-    const ranged = run git_diff_range(scope)
-    return run review_diff_text("range", scope, ranged, report_file)
+    const ranged = git_diff_range(scope)
+    return review_diff_text("range", scope, ranged, report_file)
   }
 }
 
 export def main(scope) {
-  run git.in_git_repo()
+  git.in_git_repo()
 
   const mode = match scope {
     "" | "codebase" | "full" => "codebase"
@@ -276,31 +276,31 @@ export def main(scope) {
   # commit only contains queued findings. Diff mode reviews an existing dirty
   # tree and updates QUEUE.md without committing.
   if mode != "diff" {
-    run git.branch_clean()
+    git.branch_clean()
   }
 
-  run common.mkdir_p_simple(".jaiph/tmp")
-  const report_file = run new_security_review_report_path()
-  run write_security_review_pointer(report_file)
-  const fingerprint_before = run worktree_fingerprint()
+  common.mkdir_p_simple(".jaiph/tmp")
+  const report_file = new_security_review_report_path()
+  write_security_review_pointer(report_file)
+  const fingerprint_before = worktree_fingerprint()
 
-  const verdict = run dispatch_review(mode, scope, report_file)
-  run finish_report(verdict, report_file, fingerprint_before)
+  const verdict = dispatch_review(mode, scope, report_file)
+  finish_report(verdict, report_file, fingerprint_before)
 
   if verdict == "skip" {
     return ""
   }
 
-  run queue_findings(report_file)
+  queue_findings(report_file)
 
   if mode == "diff" {
-    run git.has_changes() catch (err) {
+    git.has_changes() catch (err) {
       log "Security review finished (no QUEUE.md changes). Report: ${report_file}"
       return ""
     }
     log "QUEUE.md updated; commit skipped in diff mode. Report: ${report_file}"
   } else {
-    run git.commit_if_changes(commit_task)
+    git.commit_if_changes(commit_task)
     if verdict == "fail" {
       log "Security review found HIGH findings — queued as #dev-ready tasks (see QUEUE.md and ${report_file})."
     } else {

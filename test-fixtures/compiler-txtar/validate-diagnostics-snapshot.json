@@ -51,7 +51,7 @@
       "line": 3,
       "col": 3,
       "code": "E_VALIDATE",
-      "message": "use run f() — a bare name that refers to a script or workflow must use a managed run step"
+      "message": "use f() — a bare name that refers to a script or workflow must be called as a managed step"
     }
   ],
   "validate-errors.txt > workflow raw shell that names a workflow must use run": [
@@ -60,7 +60,7 @@
       "line": 6,
       "col": 3,
       "code": "E_VALIDATE",
-      "message": "use run w() — a bare name that refers to a script or workflow must use a managed run step"
+      "message": "use w() — a bare name that refers to a script or workflow must be called as a managed step"
     }
   ],
   "validate-errors.txt > send RHS cannot invoke workflow via shell": [
@@ -69,7 +69,7 @@
       "line": 7,
       "col": 8,
       "code": "E_VALIDATE",
-      "message": "def \"w\" must be called with run"
+      "message": "def \"w\" must be called as w()"
     }
   ],
   "validate-errors.txt > bare identifier arg unknown name fails": [
@@ -142,7 +142,7 @@
       "line": 2,
       "col": 3,
       "code": "E_VALIDATE",
-      "message": "unknown import alias \"ghost\" for run target \"ghost.guard\""
+      "message": "unknown import alias \"ghost\" for call target \"ghost.guard\""
     }
   ],
   "validate-errors.txt > match: missing wildcard arm": [
@@ -169,7 +169,7 @@
       "line": 5,
       "col": 1,
       "code": "E_PARSE",
-      "message": "unexpected content after run call: '| grep ok'; shell redirection (>, |, &) is not supported — use a script block"
+      "message": "unexpected content after call call: '| grep ok'; shell redirection (>, |, &) is not supported — use a script block"
     }
   ],
   "validate-errors.txt > run in workflow targeting a rule is rejected": [],
@@ -320,7 +320,7 @@
       "line": 6,
       "col": 8,
       "code": "E_VALIDATE",
-      "message": "def \"check\" must be called with run"
+      "message": "def \"check\" must be called as check()"
     }
   ],
   "validate-errors.txt > shell redirection in run args rejected in rule": [
@@ -329,7 +329,7 @@
       "line": 3,
       "col": 1,
       "code": "E_PARSE",
-      "message": "unexpected content after run call: '| grep ok'; shell redirection (>, |, &) is not supported — use a script block"
+      "message": "unexpected content after call call: '| grep ok'; shell redirection (>, |, &) is not supported — use a script block"
     }
   ],
   "validate-errors.txt > shell redirection in run args rejected in workflow": [
@@ -338,7 +338,7 @@
       "line": 5,
       "col": 1,
       "code": "E_PARSE",
-      "message": "unexpected content after run call: '| grep ok'; shell redirection (>, |, &) is not supported — use a script block"
+      "message": "unexpected content after call call: '| grep ok'; shell redirection (>, |, &) is not supported — use a script block"
     }
   ],
   "validate-errors.txt > channel ref with unknown import alias": [
@@ -383,7 +383,7 @@
       "line": 6,
       "col": 8,
       "code": "E_VALIDATE",
-      "message": "command substitution cannot invoke def \"helper\"; use run helper ... in a def step"
+      "message": "command substitution cannot invoke def \"helper\"; call helper(...) in a def step"
     }
   ],
   "validate-errors.txt > command substitution invokes script in send shell RHS": [
@@ -392,7 +392,7 @@
       "line": 4,
       "col": 8,
       "code": "E_VALIDATE",
-      "message": "command substitution cannot invoke script \"helper\"; use run helper ... for managed calls (or use pure shell inside $(...))"
+      "message": "command substitution cannot invoke script \"helper\"; call helper(...) for managed calls (or use pure shell inside $(...))"
     }
   ],
   "validate-errors.txt > scripts are not values in rule const": [
@@ -446,7 +446,7 @@
       "line": 3,
       "col": 3,
       "code": "E_VALIDATE",
-      "message": "inline scripts are not allowed in match arm bodies; use a named script with \"run script_name(…)\" instead"
+      "message": "inline scripts are not allowed in match arm bodies; use a named script with \"script_name(…)\" instead"
     }
   ],
   "validate-errors.txt > strings are not executable in workflow run": [
@@ -500,7 +500,7 @@
       "line": 4,
       "col": 8,
       "code": "E_VALIDATE",
-      "message": "script \"helper\" must be called with run"
+      "message": "script \"helper\" must be called as helper()"
     }
   ],
   "validate-errors.txt > unknown identifier in workflow logerr string": [
@@ -673,7 +673,7 @@
       "line": 3,
       "col": 3,
       "code": "E_VALIDATE",
-      "message": "use run lib.deploy() — \"lib.deploy\" is a valid script or def reference; use a managed run step"
+      "message": "use lib.deploy() — \"lib.deploy\" is a valid script or def reference; call it as a managed step"
     }
   ],
   "validate-errors.txt > bare imported script as shell line must use run": [
@@ -682,7 +682,7 @@
       "line": 3,
       "col": 3,
       "code": "E_VALIDATE",
-      "message": "use run lib.helper() — \"lib.helper\" is a valid script or def reference; use a managed run step"
+      "message": "use lib.helper() — \"lib.helper\" is a valid script or def reference; call it as a managed step"
     }
   ],
   "validate-errors.txt > command substitution invokes rule in send shell RHS": [
@@ -691,7 +691,7 @@
       "line": 6,
       "col": 8,
       "code": "E_VALIDATE",
-      "message": "command substitution cannot invoke def \"check\"; use run check ... in a def step"
+      "message": "command substitution cannot invoke def \"check\"; call check(...) in a def step"
     }
   ],
   "validate-errors.txt > command substitution contains channel send": [
@@ -827,16 +827,7 @@
       "line": 1,
       "col": 21,
       "code": "E_VALIDATE",
-      "message": "script \"myscript\" cannot be called with run"
-    }
-  ],
-  "validate-errors.txt > log with nested inline capture rejected": [
-    {
-      "file": "input.jh",
-      "line": 3,
-      "col": 3,
-      "code": "E_PARSE",
-      "message": "log cannot contain nested inline captures; extract to a const variable"
+      "message": "script \"myscript\" cannot be called as a def"
     }
   ],
   "validate-errors-multi-module.txt > duplicate import alias": [
@@ -888,7 +879,7 @@
       "line": 2,
       "col": 3,
       "code": "E_VALIDATE",
-      "message": "unknown import alias \"ghost\" for run target \"ghost.deploy\""
+      "message": "unknown import alias \"ghost\" for call target \"ghost.deploy\""
     }
   ],
   "validate-errors-multi-module.txt > imported script does not exist": [
@@ -934,7 +925,7 @@
       "line": 4,
       "col": 8,
       "code": "E_VALIDATE",
-      "message": "def \"lib.check\" must be called with run"
+      "message": "def \"lib.check\" must be called as lib.check()"
     }
   ],
   "validate-errors-multi-module.txt > imported channel name not found": [

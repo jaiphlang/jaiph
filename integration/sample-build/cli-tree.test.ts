@@ -110,8 +110,8 @@ test("jaiph run tree includes function calls from workflow shell steps", () => {
         "\`\`\`",
         "",
         "export def main() {",
-        "  const VALUE = run changed_files()",
-        '  run print_value(VALUE)',
+        "  const VALUE = changed_files()",
+        '  print_value(VALUE)',
         "}",
         "",
       ].join("\n"),
@@ -165,14 +165,14 @@ test("jaiph run tree shows workflow params inline when run has key=value args", 
   try {
     writeFileSync(
       join(root, "sub.jh"),
-      ["script done_impl = `echo done`", "export def main(path, mode) {", "  run done_impl()", "}", ""].join("\n"),
+      ["script done_impl = `echo done`", "export def main(path, mode) {", "  done_impl()", "}", ""].join("\n"),
     );
     writeFileSync(
       join(root, "main.jh"),
       [
         'import "sub.jh" as sub',
         "export def main() {",
-        '  run sub.main(path="docs/cli.md", mode="strict")',
+        '  sub.main(path="docs/cli.md", mode="strict")',
         "}",
         "",
       ].join("\n"),
@@ -202,7 +202,7 @@ test("jaiph run tree shows function step; params shown when runtime includes the
         "printf '%s %s\\n' \"$1\" \"$2\"",
         "\`\`\`",
         "export def main() {",
-        '  run echo_args("first" "second")',
+        '  echo_args("first" "second")',
         "}",
         "",
       ].join("\n"),
@@ -226,14 +226,14 @@ test("jaiph run tree truncates param values over 32 chars when params present", 
     const longValue = "a".repeat(40);
     writeFileSync(
       join(root, "sub.jh"),
-      ["script done_impl = `echo done`", "export def main(longparam) {", "  run done_impl()", "}", ""].join("\n"),
+      ["script done_impl = `echo done`", "export def main(longparam) {", "  done_impl()", "}", ""].join("\n"),
     );
     writeFileSync(
       join(root, "main.jh"),
       [
         'import "sub.jh" as sub',
         "export def main() {",
-        `  run sub.main(longparam="${longValue}")`,
+        `  sub.main(longparam="${longValue}")`,
         "}",
         "",
       ].join("\n"),
@@ -259,7 +259,7 @@ test("buildRunTreeRows expands nested workflow from imported module", () => {
   const mainSource = [
     'import "sub.jh" as sub',
     "export def main() {",
-    "  run sub.main()",
+    "  sub.main()",
     "}",
     "",
   ].join("\n");
@@ -301,7 +301,7 @@ test("jaiph run shows nested workflow subtree and step timing", () => {
       [
         'import "sub.jh" as sub',
         "export def main() {",
-        "  run sub.main()",
+        "  sub.main()",
         "}",
         "",
       ].join("\n"),
@@ -313,7 +313,7 @@ test("jaiph run shows nested workflow subtree and step timing", () => {
         "",
         'test "nested workflow" {',
         '  mock prompt "mocked"',
-        "  const response = run m.main()",
+        "  const response = m.main()",
         '  expect_contain response "mocked"',
         "}",
         "",

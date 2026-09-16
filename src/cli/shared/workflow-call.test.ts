@@ -43,7 +43,7 @@ test("composeResult redacts the credential from every failure part but keeps con
   assert.ok(result.text.includes("token is [REDACTED]"), "step detail keeps context around the marker");
   assert.ok(result.text.includes("stderr saw [REDACTED]"), "raw stderr is redacted");
   assert.ok(result.text.includes("log output:\nlog saw [REDACTED]"), "collected logs are redacted");
-  assert.ok(result.text.includes("run dir: /runs/x"), "run dir pointer is retained");
+  assert.ok(result.text.includes("dir: /runs/x"), "dir pointer is retained");
 });
 
 test("composeResult redacts raw stdout on failure when it is the only detail", () => {

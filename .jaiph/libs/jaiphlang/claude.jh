@@ -5,7 +5,7 @@
 #
 # Usage:
 #   import "jaiphlang/claude" as claude
-#   run claude.ensure_usage()
+#   claude.ensure_usage()
 #
 # Polls `claude -p "/usage"` until current session usage is at or below 90%,
 # sleeping 10 minutes between recoveries (recover_limit 1000 ≈ 7 days).
@@ -36,7 +36,7 @@ script check_capacity = ```
 ```
 
 def probe_and_log() {
-  const status = run check_capacity()
+  const status = check_capacity()
   log status
 }
 
@@ -46,8 +46,8 @@ export def ensure_usage() {
     run.recover_limit = 1000
   }
 
-  run probe_and_log() recover (failure) {
+  probe_and_log() recover (failure) {
     logwarn "${failure}. Checking again in 10 minutes."
-    run `sleep 600`()
+    `sleep 600`()
   }
 }

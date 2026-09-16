@@ -17,7 +17,7 @@ script a_impl = ```
 echo "A"
 ```
 export def main() {
-  run a_impl()
+  a_impl()
 }
 EOF
 
@@ -25,7 +25,7 @@ e2e::file "ok_a.test.jh" <<'EOF'
 import "ok_a.jh" as w
 
 test "A passes" {
-  const out = run w.main()
+  const out = w.main()
   expect_contain out "A"
 }
 EOF
@@ -35,7 +35,7 @@ script b_impl = ```
 echo "B"
 ```
 export def main() {
-  run b_impl()
+  b_impl()
 }
 EOF
 
@@ -43,7 +43,7 @@ e2e::file "ok_b.test.jh" <<'EOF'
 import "ok_b.jh" as w
 
 test "B passes" {
-  const out = run w.main()
+  const out = w.main()
   expect_contain out "B"
 }
 EOF
@@ -87,7 +87,7 @@ script no_default_impl = ```
 echo "no default here"
 ```
 def docs() {
-  run no_default_impl()
+  no_default_impl()
 }
 EOF
 
@@ -138,7 +138,7 @@ script greet = ```
 echo "hello"
 ```
 export def main() {
-  run greet() > out.txt
+  greet() > out.txt
 }
 EOF
 
@@ -166,7 +166,7 @@ script greet = ```
 echo "hello"
 ```
 export def main() {
-  run greet() | tr a-z A-Z
+  greet() | tr a-z A-Z
 }
 EOF
 
@@ -192,7 +192,7 @@ script greet = ```
 echo "hello"
 ```
 export def main() {
-  run greet() &
+  greet() &
 }
 EOF
 

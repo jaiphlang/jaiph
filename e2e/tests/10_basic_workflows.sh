@@ -15,7 +15,7 @@ e2e::section "Basic workflow execution"
 e2e::file "hello.jh" <<'EOF'
 script hello_impl = `echo "hello-jh"`
 export def main() {
-  const msg = run hello_impl()
+  const msg = hello_impl()
   return "${msg}"
 }
 EOF
@@ -43,7 +43,7 @@ e2e::expect_out "hello.jh" "hello_impl" "hello-jh"
 e2e::file "lib.jh" <<'EOF'
 script ready_impl = `echo "from-lib"`
 export def ready() {
-  const result = run ready_impl()
+  const result = ready_impl()
   return "${result}"
 }
 EOF
@@ -52,8 +52,8 @@ e2e::file "app.jh" <<'EOF'
 import "lib.jh" as lib
 script mixed_ok_impl = `echo "mixed-ok"`
 export def main() {
-  run lib.ready()
-  const msg = run mixed_ok_impl()
+  lib.ready()
+  const msg = mixed_ok_impl()
   return "${msg}"
 }
 EOF
@@ -107,11 +107,11 @@ if [ "$(git branch --show-current)" != "$1" ]; then
 fi
 ```
 def current_branch(branch) {
-  run current_branch_impl(branch)
+  current_branch_impl(branch)
 }
 
 export def main(branch) {
-  run current_branch(branch)
+  current_branch(branch)
 }
 EOF
 

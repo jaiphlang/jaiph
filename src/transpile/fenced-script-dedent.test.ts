@@ -19,7 +19,7 @@ test("emit: dedented fenced script preserves heredoc delimiter at column 0", () 
       "```",
       "",
       "export def main(tmp_dir) {",
-      "  run write_queue(tmp_dir)",
+      "  write_queue(tmp_dir)",
       "}",
       "",
     ].join("\n");

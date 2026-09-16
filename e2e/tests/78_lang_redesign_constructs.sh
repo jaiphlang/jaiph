@@ -40,7 +40,7 @@ e2e::file "const_run.jh" <<'EOF'
 script greet = `echo "hi from fn"`
 
 export def main() {
-  const val = run greet()
+  const val = greet()
   log "${val}"
 }
 EOF
@@ -68,7 +68,7 @@ def always_pass() {
 }
 
 export def main() {
-  const r = run always_pass()
+  const r = always_pass()
   log "${r}"
 }
 EOF
@@ -115,11 +115,11 @@ e2e::file "wait_step.jh" <<'EOF'
 script write_marker = `echo "waited" > waited.txt`
 
 def bg_job() {
-  run write_marker()
+  write_marker()
 }
 
 export def main() {
-  run async bg_job()
+  async bg_job()
   log "wait-done"
 }
 EOF
@@ -149,11 +149,11 @@ e2e::section "run with catch on failure"
 e2e::file "ensure_recover.jh" <<'EOF'
 script always_fail_impl = `false`
 def always_fail() {
-  run always_fail_impl()
+  always_fail_impl()
 }
 
 export def main() {
-  run always_fail() catch (err) {
+  always_fail() catch (err) {
     log "recovered"
   }
   log "continued"
@@ -184,7 +184,7 @@ e2e::file "run_recover.jh" <<'EOF'
 script returns_false = `return 1`
 
 export def main() {
-  run returns_false() catch (err) {
+  returns_false() catch (err) {
     log "else-branch-ok"
   }
 }
@@ -213,13 +213,13 @@ e2e::file "structured_rule.jh" <<'EOF'
 script check_ok = `return 0`
 
 def require_name() {
-  run check_ok() catch (err) {
+  check_ok() catch (err) {
     fail "name is required"
   }
 }
 
 export def main() {
-  run require_name()
+  require_name()
   log "passed"
 }
 EOF
@@ -247,13 +247,13 @@ e2e::file "structured_rule_fail.jh" <<'EOF'
 script check_fail = `return 1`
 
 def require_name() {
-  run check_fail() catch (err) {
+  check_fail() catch (err) {
     fail "name is required"
   }
 }
 
 export def main() {
-  run require_name()
+  require_name()
 }
 EOF
 
