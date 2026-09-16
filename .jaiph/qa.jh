@@ -154,7 +154,6 @@ def analyze_gaps() {
   config {
     agent.model = "opus"
   }
-
   const report_path = run new_qa_gap_report_path()
   const contributing_docs = run read_contributing_docs()
   const txtar_format = run read_txtar_format_spec()
@@ -230,7 +229,7 @@ def write_tests() {
     ${gap_report}
     </task>
     </role>
-   """
+  """
 }
 
 script mkdir_tmp_jaiph_qa = `mkdir -p .jaiph/tmp`

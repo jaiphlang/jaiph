@@ -77,7 +77,9 @@ test "propose_task accept writes via add_task_from_file" {
   mock prompt {
     _ => "{\"verdict\":\"accepted\",\"title\":\"New Task\",\"body\":\"Do it.\",\"tags\":\"dev-ready\"}"
   }
-  const out = run po.propose_task("## New Task\n\nDo it.")
+  const out = run po.propose_task("## New Task
+
+Do it.")
   expect_contain out "accepted: New Task"
 }
 

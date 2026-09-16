@@ -85,7 +85,7 @@ def review_one_header(header) {
       run common.arg_nonempty(updated_description) catch (err) {
         fail "needs-work requires a non-empty updated_description (questions for the author)."
       }
-      run common.save_string_to_file(body_file) stdin updated_description
+      run common.save_string_to_file(body_file) stdin "${updated_description}"
       run queue.set_task_description_from_file(header, body_file)
       log "Needs work (description updated): ${header}"
       return ""
@@ -95,7 +95,7 @@ def review_one_header(header) {
       log "Marked dev-ready: ${header}"
       return ""
     }
-    run common.save_string_to_file(body_file) stdin updated_description
+    run common.save_string_to_file(body_file) stdin "${updated_description}"
     run queue.set_task_description_from_file(header, body_file)
     run queue.mark_task_dev_ready(header)
     log "Marked dev-ready: ${header}"

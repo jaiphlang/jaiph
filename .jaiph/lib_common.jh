@@ -10,12 +10,12 @@
 # are written verbatim. Content arrives on stdin (not argv), so it is
 # not bounded by ARG_MAX and can be arbitrarily large.
 export script save_string_to_file = ```python3
-import sys
-if len(sys.argv) < 2:
-    sys.exit(2)
-path = sys.argv[1]
-content = sys.stdin.read()
-open(path, "w", encoding="utf-8").write(content)
+  import sys
+  if len(sys.argv) < 2:
+      sys.exit(2)
+  path = sys.argv[1]
+  content = sys.stdin.read()
+  open(path, "w", encoding="utf-8").write(content)
 ```
 
 export script first_line_str = `printf '%s\n' "$1" | head -n 1`
