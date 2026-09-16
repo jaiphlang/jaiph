@@ -287,10 +287,6 @@
     "named": false
   },
   {
-    "type": "run",
-    "named": false
-  },
-  {
     "type": "script",
     "named": false
   },

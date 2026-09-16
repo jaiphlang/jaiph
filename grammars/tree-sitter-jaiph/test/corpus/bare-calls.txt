@@ -1,0 +1,62 @@
+==================
+Bare call invoke
+==================
+
+save(path)
+
+---
+
+(source_file
+  (identifier)
+  (identifier))
+
+==================
+Async bare call invoke
+==================
+
+async save(path)
+
+---
+
+(source_file
+  (identifier)
+  (identifier))
+
+==================
+Inline-script bare call invoke
+==================
+
+`echo hello`()
+
+---
+
+(source_file
+  (backtick_string))
+
+==================
+Stdin connect to a call
+==================
+
+stdin content -> save(path)
+
+---
+
+(source_file
+  (identifier)
+  (operator)
+  (identifier)
+  (identifier))
+
+==================
+run is an ordinary identifier, not the invoke keyword
+==================
+
+run save()
+run.recover_limit
+
+---
+
+(source_file
+  (identifier)
+  (identifier)
+  (qualified_identifier))

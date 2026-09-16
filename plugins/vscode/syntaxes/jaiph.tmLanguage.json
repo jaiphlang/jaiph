@@ -20,9 +20,11 @@
     { "include": "#if-statement" },
     { "include": "#conditionals" },
     { "include": "#recover-bindings" },
+    { "include": "#stdin-connect" },
     { "include": "#channels" },
     { "include": "#match-patterns" },
     { "include": "#keywords" },
+    { "include": "#calls" },
     { "include": "#returns-clause" },
     { "include": "#constants" },
     { "include": "#inline-script-backtick" },
@@ -292,16 +294,15 @@
     "inline-script-fenced-blocks": {
       "patterns": [
         {
-          "comment": "[const name =] run ```python3 ... ```(args)",
+          "comment": "[const name =] ```python3 ... ```(args)",
           "name": "meta.inline-script.fenced.python.jaiph",
-          "begin": "(?:(?:(const)\\s+)?([A-Za-z_][A-Za-z0-9_]*)\\s*(=)\\s*)?(run)\\s+(```)(python3|python)\\s*$",
+          "begin": "(?:(?:(const)\\s+)?([A-Za-z_][A-Za-z0-9_]*)\\s*(=)\\s*)?(```)(python3|python)\\s*$",
           "beginCaptures": {
             "1": { "name": "storage.modifier.jaiph" },
             "2": { "name": "variable.other.jaiph" },
             "3": { "name": "keyword.operator.assignment.jaiph" },
-            "4": { "name": "keyword.control.command.jaiph" },
-            "5": { "name": "punctuation.definition.fence.begin.jaiph" },
-            "6": { "name": "entity.name.tag.language.jaiph" }
+            "4": { "name": "punctuation.definition.fence.begin.jaiph" },
+            "5": { "name": "entity.name.tag.language.jaiph" }
           },
           "end": "^\\s*(```)(\\()(.*?)(\\))\\s*$",
           "endCaptures": {
@@ -314,16 +315,15 @@
           "patterns": [{ "include": "source.python" }]
         },
         {
-          "comment": "[const name =] run ```node ... ```(args)",
+          "comment": "[const name =] ```node ... ```(args)",
           "name": "meta.inline-script.fenced.javascript.jaiph",
-          "begin": "(?:(?:(const)\\s+)?([A-Za-z_][A-Za-z0-9_]*)\\s*(=)\\s*)?(run)\\s+(```)(node)\\s*$",
+          "begin": "(?:(?:(const)\\s+)?([A-Za-z_][A-Za-z0-9_]*)\\s*(=)\\s*)?(```)(node)\\s*$",
           "beginCaptures": {
             "1": { "name": "storage.modifier.jaiph" },
             "2": { "name": "variable.other.jaiph" },
             "3": { "name": "keyword.operator.assignment.jaiph" },
-            "4": { "name": "keyword.control.command.jaiph" },
-            "5": { "name": "punctuation.definition.fence.begin.jaiph" },
-            "6": { "name": "entity.name.tag.language.jaiph" }
+            "4": { "name": "punctuation.definition.fence.begin.jaiph" },
+            "5": { "name": "entity.name.tag.language.jaiph" }
           },
           "end": "^\\s*(```)(\\()(.*?)(\\))\\s*$",
           "endCaptures": {
@@ -336,16 +336,15 @@
           "patterns": [{ "include": "source.js" }]
         },
         {
-          "comment": "[const name =] run ```ruby ... ```(args)",
+          "comment": "[const name =] ```ruby ... ```(args)",
           "name": "meta.inline-script.fenced.ruby.jaiph",
-          "begin": "(?:(?:(const)\\s+)?([A-Za-z_][A-Za-z0-9_]*)\\s*(=)\\s*)?(run)\\s+(```)(ruby)\\s*$",
+          "begin": "(?:(?:(const)\\s+)?([A-Za-z_][A-Za-z0-9_]*)\\s*(=)\\s*)?(```)(ruby)\\s*$",
           "beginCaptures": {
             "1": { "name": "storage.modifier.jaiph" },
             "2": { "name": "variable.other.jaiph" },
             "3": { "name": "keyword.operator.assignment.jaiph" },
-            "4": { "name": "keyword.control.command.jaiph" },
-            "5": { "name": "punctuation.definition.fence.begin.jaiph" },
-            "6": { "name": "entity.name.tag.language.jaiph" }
+            "4": { "name": "punctuation.definition.fence.begin.jaiph" },
+            "5": { "name": "entity.name.tag.language.jaiph" }
           },
           "end": "^\\s*(```)(\\()(.*?)(\\))\\s*$",
           "endCaptures": {
@@ -358,16 +357,15 @@
           "patterns": [{ "include": "source.ruby" }]
         },
         {
-          "comment": "[const name =] run ```perl ... ```(args)",
+          "comment": "[const name =] ```perl ... ```(args)",
           "name": "meta.inline-script.fenced.perl.jaiph",
-          "begin": "(?:(?:(const)\\s+)?([A-Za-z_][A-Za-z0-9_]*)\\s*(=)\\s*)?(run)\\s+(```)(perl)\\s*$",
+          "begin": "(?:(?:(const)\\s+)?([A-Za-z_][A-Za-z0-9_]*)\\s*(=)\\s*)?(```)(perl)\\s*$",
           "beginCaptures": {
             "1": { "name": "storage.modifier.jaiph" },
             "2": { "name": "variable.other.jaiph" },
             "3": { "name": "keyword.operator.assignment.jaiph" },
-            "4": { "name": "keyword.control.command.jaiph" },
-            "5": { "name": "punctuation.definition.fence.begin.jaiph" },
-            "6": { "name": "entity.name.tag.language.jaiph" }
+            "4": { "name": "punctuation.definition.fence.begin.jaiph" },
+            "5": { "name": "entity.name.tag.language.jaiph" }
           },
           "end": "^\\s*(```)(\\()(.*?)(\\))\\s*$",
           "endCaptures": {
@@ -380,16 +378,15 @@
           "patterns": [{ "include": "source.perl" }]
         },
         {
-          "comment": "[const name =] run ```lua ... ```(args)",
+          "comment": "[const name =] ```lua ... ```(args)",
           "name": "meta.inline-script.fenced.lua.jaiph",
-          "begin": "(?:(?:(const)\\s+)?([A-Za-z_][A-Za-z0-9_]*)\\s*(=)\\s*)?(run)\\s+(```)(lua)\\s*$",
+          "begin": "(?:(?:(const)\\s+)?([A-Za-z_][A-Za-z0-9_]*)\\s*(=)\\s*)?(```)(lua)\\s*$",
           "beginCaptures": {
             "1": { "name": "storage.modifier.jaiph" },
             "2": { "name": "variable.other.jaiph" },
             "3": { "name": "keyword.operator.assignment.jaiph" },
-            "4": { "name": "keyword.control.command.jaiph" },
-            "5": { "name": "punctuation.definition.fence.begin.jaiph" },
-            "6": { "name": "entity.name.tag.language.jaiph" }
+            "4": { "name": "punctuation.definition.fence.begin.jaiph" },
+            "5": { "name": "entity.name.tag.language.jaiph" }
           },
           "end": "^\\s*(```)(\\()(.*?)(\\))\\s*$",
           "endCaptures": {
@@ -402,16 +399,15 @@
           "patterns": [{ "include": "source.lua" }]
         },
         {
-          "comment": "[const name =] run ```pwsh|powershell ... ```(args)",
+          "comment": "[const name =] ```pwsh|powershell ... ```(args)",
           "name": "meta.inline-script.fenced.powershell.jaiph",
-          "begin": "(?:(?:(const)\\s+)?([A-Za-z_][A-Za-z0-9_]*)\\s*(=)\\s*)?(run)\\s+(```)(pwsh|powershell)\\s*$",
+          "begin": "(?:(?:(const)\\s+)?([A-Za-z_][A-Za-z0-9_]*)\\s*(=)\\s*)?(```)(pwsh|powershell)\\s*$",
           "beginCaptures": {
             "1": { "name": "storage.modifier.jaiph" },
             "2": { "name": "variable.other.jaiph" },
             "3": { "name": "keyword.operator.assignment.jaiph" },
-            "4": { "name": "keyword.control.command.jaiph" },
-            "5": { "name": "punctuation.definition.fence.begin.jaiph" },
-            "6": { "name": "entity.name.tag.language.jaiph" }
+            "4": { "name": "punctuation.definition.fence.begin.jaiph" },
+            "5": { "name": "entity.name.tag.language.jaiph" }
           },
           "end": "^\\s*(```)(\\()(.*?)(\\))\\s*$",
           "endCaptures": {
@@ -424,16 +420,15 @@
           "patterns": [{ "include": "source.powershell" }]
         },
         {
-          "comment": "[const name =] run ```deno ... ```(args)",
+          "comment": "[const name =] ```deno ... ```(args)",
           "name": "meta.inline-script.fenced.deno.jaiph",
-          "begin": "(?:(?:(const)\\s+)?([A-Za-z_][A-Za-z0-9_]*)\\s*(=)\\s*)?(run)\\s+(```)(deno)\\s*$",
+          "begin": "(?:(?:(const)\\s+)?([A-Za-z_][A-Za-z0-9_]*)\\s*(=)\\s*)?(```)(deno)\\s*$",
           "beginCaptures": {
             "1": { "name": "storage.modifier.jaiph" },
             "2": { "name": "variable.other.jaiph" },
             "3": { "name": "keyword.operator.assignment.jaiph" },
-            "4": { "name": "keyword.control.command.jaiph" },
-            "5": { "name": "punctuation.definition.fence.begin.jaiph" },
-            "6": { "name": "entity.name.tag.language.jaiph" }
+            "4": { "name": "punctuation.definition.fence.begin.jaiph" },
+            "5": { "name": "entity.name.tag.language.jaiph" }
           },
           "end": "^\\s*(```)(\\()(.*?)(\\))\\s*$",
           "endCaptures": {
@@ -446,16 +441,15 @@
           "patterns": [{ "include": "source.js" }]
         },
         {
-          "comment": "[const name =] run ```typescript ... ```(args)",
+          "comment": "[const name =] ```typescript ... ```(args)",
           "name": "meta.inline-script.fenced.typescript.jaiph",
-          "begin": "(?:(?:(const)\\s+)?([A-Za-z_][A-Za-z0-9_]*)\\s*(=)\\s*)?(run)\\s+(```)(typescript)\\s*$",
+          "begin": "(?:(?:(const)\\s+)?([A-Za-z_][A-Za-z0-9_]*)\\s*(=)\\s*)?(```)(typescript)\\s*$",
           "beginCaptures": {
             "1": { "name": "storage.modifier.jaiph" },
             "2": { "name": "variable.other.jaiph" },
             "3": { "name": "keyword.operator.assignment.jaiph" },
-            "4": { "name": "keyword.control.command.jaiph" },
-            "5": { "name": "punctuation.definition.fence.begin.jaiph" },
-            "6": { "name": "entity.name.tag.language.jaiph" }
+            "4": { "name": "punctuation.definition.fence.begin.jaiph" },
+            "5": { "name": "entity.name.tag.language.jaiph" }
           },
           "end": "^\\s*(```)(\\()(.*?)(\\))\\s*$",
           "endCaptures": {
@@ -468,16 +462,15 @@
           "patterns": [{ "include": "source.ts" }]
         },
         {
-          "comment": "[const name =] run ```bun ... ```(args)",
+          "comment": "[const name =] ```bun ... ```(args)",
           "name": "meta.inline-script.fenced.bun.jaiph",
-          "begin": "(?:(?:(const)\\s+)?([A-Za-z_][A-Za-z0-9_]*)\\s*(=)\\s*)?(run)\\s+(```)(bun)\\s*$",
+          "begin": "(?:(?:(const)\\s+)?([A-Za-z_][A-Za-z0-9_]*)\\s*(=)\\s*)?(```)(bun)\\s*$",
           "beginCaptures": {
             "1": { "name": "storage.modifier.jaiph" },
             "2": { "name": "variable.other.jaiph" },
             "3": { "name": "keyword.operator.assignment.jaiph" },
-            "4": { "name": "keyword.control.command.jaiph" },
-            "5": { "name": "punctuation.definition.fence.begin.jaiph" },
-            "6": { "name": "entity.name.tag.language.jaiph" }
+            "4": { "name": "punctuation.definition.fence.begin.jaiph" },
+            "5": { "name": "entity.name.tag.language.jaiph" }
           },
           "end": "^\\s*(```)(\\()(.*?)(\\))\\s*$",
           "endCaptures": {
@@ -490,16 +483,15 @@
           "patterns": [{ "include": "source.js" }]
         },
         {
-          "comment": "[const name =] run ```php ... ```(args)",
+          "comment": "[const name =] ```php ... ```(args)",
           "name": "meta.inline-script.fenced.php.jaiph",
-          "begin": "(?:(?:(const)\\s+)?([A-Za-z_][A-Za-z0-9_]*)\\s*(=)\\s*)?(run)\\s+(```)(php)\\s*$",
+          "begin": "(?:(?:(const)\\s+)?([A-Za-z_][A-Za-z0-9_]*)\\s*(=)\\s*)?(```)(php)\\s*$",
           "beginCaptures": {
             "1": { "name": "storage.modifier.jaiph" },
             "2": { "name": "variable.other.jaiph" },
             "3": { "name": "keyword.operator.assignment.jaiph" },
-            "4": { "name": "keyword.control.command.jaiph" },
-            "5": { "name": "punctuation.definition.fence.begin.jaiph" },
-            "6": { "name": "entity.name.tag.language.jaiph" }
+            "4": { "name": "punctuation.definition.fence.begin.jaiph" },
+            "5": { "name": "entity.name.tag.language.jaiph" }
           },
           "end": "^\\s*(```)(\\()(.*?)(\\))\\s*$",
           "endCaptures": {
@@ -512,16 +504,15 @@
           "patterns": [{ "include": "source.php" }]
         },
         {
-          "comment": "[const name =] run ```[tag]? ... ```(args) (shell default)",
+          "comment": "[const name =] ```[tag]? ... ```(args) (shell default)",
           "name": "meta.inline-script.fenced.shell.jaiph",
-          "begin": "(?:(?:(const)\\s+)?([A-Za-z_][A-Za-z0-9_]*)\\s*(=)\\s*)?(run)\\s+(```)([A-Za-z_][A-Za-z0-9_]*)?\\s*$",
+          "begin": "(?:(?:(const)\\s+)?([A-Za-z_][A-Za-z0-9_]*)\\s*(=)\\s*)?(```)([A-Za-z_][A-Za-z0-9_]*)?\\s*$",
           "beginCaptures": {
             "1": { "name": "storage.modifier.jaiph" },
             "2": { "name": "variable.other.jaiph" },
             "3": { "name": "keyword.operator.assignment.jaiph" },
-            "4": { "name": "keyword.control.command.jaiph" },
-            "5": { "name": "punctuation.definition.fence.begin.jaiph" },
-            "6": { "name": "entity.name.tag.language.jaiph" }
+            "4": { "name": "punctuation.definition.fence.begin.jaiph" },
+            "5": { "name": "entity.name.tag.language.jaiph" }
           },
           "end": "^\\s*(```)(\\()(.*?)(\\))\\s*$",
           "endCaptures": {
@@ -609,14 +600,13 @@
           "match": "\\\\."
         },
         {
-          "comment": "Inline capture: ${run ref()}",
+          "comment": "Inline capture: ${ref()} — bare call in an interpolation",
           "name": "meta.interpolation.capture.jaiph",
-          "match": "(\\$\\{)\\s*(run)\\s+([A-Za-z_][A-Za-z0-9_.]*\\([^)]*\\))\\s*(\\})",
+          "match": "(\\$\\{)\\s*([A-Za-z_][A-Za-z0-9_.]*\\([^)]*\\))\\s*(\\})",
           "captures": {
             "1": { "name": "punctuation.definition.interpolation.begin.jaiph" },
-            "2": { "name": "keyword.control.command.jaiph" },
-            "3": { "name": "entity.name.function.jaiph" },
-            "4": { "name": "punctuation.definition.interpolation.end.jaiph" }
+            "2": { "name": "entity.name.function.jaiph" },
+            "3": { "name": "punctuation.definition.interpolation.end.jaiph" }
           }
         },
         {
@@ -862,6 +852,34 @@
       ]
     },
 
+    "stdin-connect": {
+      "patterns": [
+        {
+          "comment": "stdin PAYLOAD -> call(args): connect stdin to a call. `stdin` is a keyword; the connect arrow shares the send operator class.",
+          "name": "meta.stdin-connect.jaiph",
+          "match": "\\b(stdin)\\b.+?(->)\\s*([A-Za-z_][A-Za-z0-9_.]*)(?=\\s*\\()",
+          "captures": {
+            "1": { "name": "keyword.control.command.jaiph" },
+            "2": { "name": "keyword.operator.send.jaiph" },
+            "3": { "name": "entity.name.function.jaiph" }
+          }
+        }
+      ]
+    },
+
+    "calls": {
+      "patterns": [
+        {
+          "comment": "bare call: name( … ) — the callee is a function (no `run` keyword)",
+          "name": "meta.call.jaiph",
+          "match": "\\b([A-Za-z_][A-Za-z0-9_]*)(?=\\s*\\()",
+          "captures": {
+            "1": { "name": "entity.name.function.jaiph" }
+          }
+        }
+      ]
+    },
+
     "channels": {
       "patterns": [
         {
@@ -915,17 +933,13 @@
     "keywords": {
       "patterns": [
         {
-          "comment": "run async (must come before generic run)",
-          "name": "meta.run-async.jaiph",
-          "match": "\\b(run)\\b\\s+\\b(async)\\b",
-          "captures": {
-            "1": { "name": "keyword.control.command.jaiph" },
-            "2": { "name": "keyword.control.async.jaiph" }
-          }
+          "comment": "async modifier on a bare call (`async name()`)",
+          "name": "keyword.control.async.jaiph",
+          "match": "\\b(async)\\b"
         },
         {
           "name": "keyword.control.command.jaiph",
-          "match": "\\b(run|prompt|log|logerr|logwarn|recover|catch|stdin|fail|return|send)\\b"
+          "match": "\\b(prompt|log|logerr|logwarn|recover|catch|stdin|fail|return|send)\\b"
         },
         {
           "comment": "use clause (script / import script / named prompt)",
@@ -981,18 +995,17 @@
     "inline-script-backtick": {
       "patterns": [
         {
-          "comment": "[const name =] run `body`(args) — single-line inline script",
+          "comment": "[const name =] `body`(args) — single-line inline script",
           "name": "meta.inline-script.backtick.jaiph",
-          "match": "(?:(?:(const)\\s+)?([A-Za-z_][A-Za-z0-9_]*)\\s*(=)\\s*)?(run)\\s+(`[^`]*`)(\\()([^)]*)(\\))",
+          "match": "(?:(?:(const)\\s+)?([A-Za-z_][A-Za-z0-9_]*)\\s*(=)\\s*)?(`[^`]*`)(\\()([^)]*)(\\))",
           "captures": {
             "1": { "name": "storage.modifier.jaiph" },
             "2": { "name": "variable.other.jaiph" },
             "3": { "name": "keyword.operator.assignment.jaiph" },
-            "4": { "name": "keyword.control.command.jaiph" },
-            "5": { "name": "string.unquoted.script.jaiph" },
-            "6": { "name": "punctuation.section.parens.begin.jaiph" },
-            "7": { "name": "variable.parameter.jaiph" },
-            "8": { "name": "punctuation.section.parens.end.jaiph" }
+            "4": { "name": "string.unquoted.script.jaiph" },
+            "5": { "name": "punctuation.section.parens.begin.jaiph" },
+            "6": { "name": "variable.parameter.jaiph" },
+            "7": { "name": "punctuation.section.parens.end.jaiph" }
           }
         }
       ]

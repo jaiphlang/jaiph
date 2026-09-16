@@ -54,13 +54,24 @@ test("keywords, comments, and strings highlight in current.jh", () => {
 
   const keywords = [
     "import", "export", "config", "channel", "script", "def", "use",
-    "const", "run", "prompt", "log", "logerr", "logwarn", "fail",
+    "const", "prompt", "log", "logerr", "logwarn", "fail",
     "return", "recover", "catch", "stdin", "if", "else", "for", "in", "match", "async",
     "returns",
   ];
   for (const kw of keywords) {
     assert.ok(has(caps, "keyword", kw), `expected "${kw}" to highlight as @keyword`);
   }
+
+  // `run` is not a keyword: calls are bare (`setup_env()`), so `run` never
+  // highlights as @keyword anywhere in a .jh file.
+  assert.ok(!has(caps, "keyword", "run"), "`run` must not highlight as @keyword");
+
+  // Bare call target (`setup_env()`) is an ordinary identifier → @variable.
+  assert.ok(has(caps, "variable", "setup_env"), "bare call target should be @variable");
+
+  // `stdin value -> call(...)` connect: `stdin` is @keyword and the connect
+  // arrow `->` is the same @operator token class as a `send … ->` arrow.
+  assert.ok(has(caps, "operator", "->"), "connect/send arrow `->` should be @operator");
 
   // Comments (shebang line is a comment too).
   assert.ok(
@@ -100,7 +111,7 @@ test("test-block keywords highlight in current.test.jh", () => {
 
 test("stale removed keywords are not highlighted as @keyword", () => {
   const caps = runQuery("highlights.scm", "regression.jh");
-  for (const stale of ["wait", "local", "rule", "workflow", "ensure", "inbox"]) {
+  for (const stale of ["wait", "local", "rule", "workflow", "ensure", "inbox", "run"]) {
     assert.ok(!has(caps, "keyword", stale), `\`${stale}\` was removed; must not be @keyword`);
     assert.ok(has(caps, "variable", stale), `\`${stale}\` should highlight as a plain @variable`);
   }
