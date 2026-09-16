@@ -18,7 +18,7 @@ This page is the authoritative syntactic reference for Jaiph: lexical rules, sta
 | Element | Rule |
 |---|---|
 | Identifier | `[A-Za-z_][A-Za-z0-9_]*`. |
-| Reserved keyword | The words `async`, `catch`, `channel`, `config`, `const`, `def`, `else`, `export`, `fail`, `false`, `for`, `if`, `import`, `in`, `log`, `logerr`, `logwarn`, `match`, `not`, `prompt`, `return`, `returns`, `run`, `script`, `send`, `true`, and `use`. A reserved word cannot be a `def` parameter name or a top-level name in the unified namespace (`E_PARSE`). `not` is reserved but has no syntax yet. |
+| Reserved keyword | The words `async`, `catch`, `channel`, `config`, `const`, `def`, `else`, `export`, `fail`, `false`, `for`, `if`, `import`, `in`, `log`, `logerr`, `logwarn`, `match`, `not`, `prompt`, `return`, `returns`, `script`, `send`, `stdin`, `true`, and `use`. A reserved word cannot be a `def` parameter name or a top-level name in the unified namespace (`E_PARSE`). `not` is reserved but has no syntax yet. `run` is **not** reserved — it is an ordinary identifier, so `run()` calls a symbol named `run`. |
 | Reference | `IDENT` (local) or `IDENT.IDENT` (module-qualified). |
 | Comment | Full-line `#` comment. Trailing `#` on a step line is not a comment. |
 | Blank line | Preserved between steps inside def bodies (as `blank_line` trivia). `jaiph format` collapses multiple consecutive body blanks to one and trims trailing blanks before `}`. Top-level blank lines are not preserved — the formatter emits one blank line between emitted sections. |
@@ -27,7 +27,7 @@ This page is the authoritative syntactic reference for Jaiph: lexical rules, sta
 | Multiline string | Triple-quoted `"""…"""`. The opening `"""` must end the line; the closing `"""` must be on its own line. |
 | Script body (single-line) | Backtick `` `…` ``. Jaiph `${identifier}` / `${identifier.field}` interpolation is `E_PARSE`; bash parameter expansion (for example `${var:-default}`) passes through. |
 | Script body (fenced) | Triple-backtick `` ``` ``…`` ``` ``. Optional lang tag `` ```<tag> ``. `${…}` passes through to the shell. |
-| Required parentheses | All `run` call sites require parentheses, including zero-argument calls. Bare `run setup` is `E_PARSE`. |
+| Required parentheses | All call sites require parentheses, including zero-argument calls (`setup()`). A name with no `()` is not a call: on a statement line it falls through to the shell executor, and in a value position it is a string reference. |
 
 ## File structure
 
@@ -106,9 +106,9 @@ Jaiph has two structurally distinct primitive types:
 | Type | Operations |
 |---|---|
 | `string` | Interpolate (`${…}`), pass as argument, assign to `const`, send to `prompt`. |
-| `script` | Invoke with `run`. Not interpolatable, not assignable to `const` by name, not a valid `prompt` body. |
+| `script` | Invoke with a bare call `name(args)`. Not interpolatable, not assignable to `const` by name, not a valid `prompt` body. |
 
-Crossings (`run` on a string, `prompt` on a script, `const x = scriptName`, `${scriptName}`) are `E_VALIDATE`; see [Language — Value types](language.md#value-types).
+Crossings (calling a string, `prompt` on a script, `const x = scriptName`, `${scriptName}`) are `E_VALIDATE`; see [Language — Value types](language.md#value-types).
 
 ## Definitions
 
@@ -131,7 +131,7 @@ fenced_script_block  = "```" [ LANG_TAG ] newline { script_line newline } "```" 
 LANG_TAG             = IDENT ;
 ```
 
-The optional `use` clause (`script aaa use GITHUB_TOKEN NPM_TOKEN = …`) sits between the name and `=`: one clause, space-separated env key identifiers. It requests host keys for this script's subprocess; each key must also be granted with `--env KEY[=VALUE]` at run time or `jaiph run` / `serve` / `mcp` refuse to start (`E_ENV_MISSING`). Script env is otherwise sterile — see [Environment variables](env-vars.md#script-env). Invalid key names are `E_ENV_INVALID`; reserved keys are `E_ENV_RESERVED` (same set as `--env`). The identical `use` clause is available on a **named prompt definition** (see below); it is not syntax on defs, `run` / `prompt` call sites, or anonymous `prompt` steps.
+The optional `use` clause (`script aaa use GITHUB_TOKEN NPM_TOKEN = …`) sits between the name and `=`: one clause, space-separated env key identifiers. It requests host keys for this script's subprocess; each key must also be granted with `--env KEY[=VALUE]` at run time or `jaiph run` / `serve` / `mcp` refuse to start (`E_ENV_MISSING`). Script env is otherwise sterile — see [Environment variables](env-vars.md#script-env). Invalid key names are `E_ENV_INVALID`; reserved keys are `E_ENV_RESERVED` (same set as `--env`). The identical `use` clause is available on a **named prompt definition** (see below); it is not syntax on defs, plain call sites, `prompt` call sites, or anonymous `prompt` steps.
 
 ### Named prompts
 
@@ -148,7 +148,7 @@ call_arg      = double_quoted_string
               | triple_quoted_block               (* multiline literal; must start on its own line *)
               | IDENT                            (* bare identifier: in-scope variable *)
               | IDENT "." IDENT                  (* typed-prompt field access *)
-              | "run" ( call_ref | inline_script ) ;
+              | call_ref | inline_script ;       (* nested call in argument position: foo(bar()) *)
 inline_script = backtick_script_body "(" [ call_args ] ")"
               | fenced_script_block "(" [ call_args ] ")" ;
 ```
@@ -159,20 +159,21 @@ opens `"""` as the first non-whitespace character on its own line. A `triple_quo
 normalised to an inline double-quoted string by the formatter (intentional — `Arg` nodes do not
 carry Trivia).
 
-**Hard error contract:** any line that begins with `run`/`return run`
-followed by a valid identifier and `(` is treated as a managed call start. If the matching `)` is
+**Hard error contract:** a def-body line whose leading token is a call — an identifier or dotted
+ref (or an inline-script body) immediately followed by `(` — is a call start. If the matching `)` is
 never found (e.g. the file ends or the block closes first), the compiler emits `E_PARSE` and the
-line is **never** silently treated as a def shell step (`sh_line_*`).
-Intentionally free-form shell lines that are not prefixed with a managed-call keyword continue to
-fall through to the shell executor unchanged.
+line is **never** silently treated as a def shell step (`sh_line_*`). A leading `run`
+(`run name(args)`, `return run name()`) is the removed keyword form and is `E_PARSE`
+(`'run' is not a keyword`). Lines that are not call-shaped continue to fall through to the shell
+executor unchanged.
 
-For per-argument rules — bare identifiers, dotted field access, unquoted interpolation, nested managed calls, arity, and shell redirection — see [Language — `run`](language.md#run-execute-a-def-or-script) and the [Validation catalog](#validation-catalog).
+For per-argument rules — bare identifiers, dotted field access, unquoted interpolation, nested calls, arity, and shell redirection — see [Language — Calls](language.md#run-execute-a-def-or-script) and the [Validation catalog](#validation-catalog).
 
 ## Def body statements
 {: #def-body-statements}
 
 ```ebnf
-def_step = run_stmt | run_catch_stmt | run_recover_stmt | run_async_stmt
+def_step = call_stmt | async_stmt | stdin_connect
               | prompt_stmt | const_decl_step | nested_decl_step | return_stmt
               | fail_stmt | log_stmt | logerr_stmt | logwarn_stmt | send_stmt
               | match_stmt | if_stmt | for_lines_stmt | comment_line ;
@@ -187,17 +188,18 @@ Any line that does not match a managed form becomes a **shell** step in a def.
 
 A `nested_decl_step` reuses the module-level `script_decl` / `def_decl` / `prompt_decl` surface inside a def body (nested `const` stays a `const_decl_step`), with one restriction: **no `export`** (`E_PARSE`). For scope, shadowing, in-branch declarations, and the per-form runtime behaviour, see [Language — Nested declarations](language.md#nested-declarations).
 
-### `run`
+### Calls
 
 ```ebnf
-run_stmt         = "run" ( call_ref | inline_script ) [ stdin_clause ] ;
-run_catch_stmt   = "run" ( call_ref | inline_script ) [ stdin_clause ] "catch" catch_bindings catch_body ;
-run_recover_stmt = "run" ( call_ref | inline_script ) [ stdin_clause ] "recover" recover_bindings recover_body ;
-run_async_stmt   = "run" "async" call_ref [ ( "catch" catch_bindings catch_body ) | ( "recover" recover_bindings recover_body ) ] ;
-stdin_clause     = "stdin" ( double_quoted_string | IDENT | IDENT "." IDENT | interp_ref ) ;
+call_stmt      = ( call_ref | inline_script ) [ recovery ] ;
+async_stmt     = "async" call_ref [ recovery ] ;
+stdin_connect  = "stdin" stdin_value "->" ( call_ref | inline_script ) [ recovery ] ;
+stdin_value    = double_quoted_string | IDENT | IDENT "." IDENT | interp_ref ;
+recovery       = "catch" catch_bindings catch_body
+               | "recover" recover_bindings recover_body ;
 ```
 
-For target rules and capture, `run async` resolution, and the `stdin` clause, see [Language — `run`](language.md#run-execute-a-def-or-script), [`run async`](language.md#run-async-concurrent-execution-with-handles), and [Arguments and `stdin`](language.md#arguments-and-stdin).
+`async` takes no `stdin` and no inline-script target (both `E_PARSE`). For target rules and capture, `async` resolution, and the `stdin` connect form, see [Language — Calls](language.md#run-execute-a-def-or-script), [`async`](language.md#run-async-concurrent-execution-with-handles), and [Arguments and `stdin`](language.md#arguments-and-stdin).
 
 ### `catch` / `recover`
 
@@ -226,7 +228,8 @@ For body forms, `returns` schemas, the capture requirement, and named-prompt inv
 ```ebnf
 const_decl_step = "const" IDENT "=" const_rhs ;
 const_rhs       = double_quoted_string | triple_quoted_block | bash_value_expr
-                | "run" ( call_ref | inline_script ) | "run" "async" call_ref
+                | call_ref | inline_script | "async" call_ref
+                | "stdin" stdin_value "->" ( call_ref | inline_script )
                 | "prompt" ( prompt_body | prompt_call ) [ returns_schema ]
                 | "match" IDENT "{" { match_arm } "}" ;
 ```
@@ -238,7 +241,7 @@ For the RHS forms and the immutable-binding rules, see [Language — `const`](la
 ```ebnf
 return_stmt  = "return" return_value ;
 return_value = double_quoted_string | triple_quoted_block | "$" IDENT | "${" IDENT "}" | IDENT
-             | "run" ( call_ref | inline_script )
+             | call_ref | inline_script
              | "prompt" ( prompt_body | prompt_call ) [ returns_schema ]
              | "match" IDENT "{" { match_arm } "}" ;
 ```
@@ -250,7 +253,7 @@ For the return forms and their desugaring, see [Language — `return`](language.
 ```ebnf
 send_stmt = "send" send_rhs "->" (IDENT | IDENT "." IDENT) ;
 send_rhs  = double_quoted_string | triple_quoted_block | "$" IDENT | "${" … "}"
-          | "run" call_ref | shell_fragment ;
+          | call_ref | shell_fragment ;
 ```
 
 For payload forms and dispatch, see [Language — `send`](language.md#send-channel-message).
@@ -258,9 +261,9 @@ For payload forms and dispatch, see [Language — `send`](language.md#send-chann
 ### `log` / `logerr` / `logwarn`
 
 ```ebnf
-log_stmt     = "log" ( double_quoted_string | triple_quoted_block | IDENT | "${" IDENT [ "." IDENT ] "}" | "run" inline_script ) ;
-logerr_stmt  = "logerr" ( double_quoted_string | triple_quoted_block | IDENT | "${" IDENT [ "." IDENT ] "}" | "run" inline_script ) ;
-logwarn_stmt = "logwarn" ( double_quoted_string | triple_quoted_block | IDENT | "${" IDENT [ "." IDENT ] "}" | "run" inline_script ) ;
+log_stmt     = "log" ( double_quoted_string | triple_quoted_block | IDENT | "${" IDENT [ "." IDENT ] "}" | inline_script ) ;
+logerr_stmt  = "logerr" ( double_quoted_string | triple_quoted_block | IDENT | "${" IDENT [ "." IDENT ] "}" | inline_script ) ;
+logwarn_stmt = "logwarn" ( double_quoted_string | triple_quoted_block | IDENT | "${" IDENT [ "." IDENT ] "}" | inline_script ) ;
 ```
 
 For the bare-identifier and inline-script forms, see [Language — `log` / `logerr` / `logwarn` / `fail`](language.md#log-logerr-logwarn-fail).
@@ -299,7 +302,7 @@ arm_body      = double_quoted_string | triple_quoted_block
               | IDENT
               | "$" IDENT | "${" IDENT "}"
               | "fail" double_quoted_string
-              | "run" call_ref ;
+              | call_ref ;
 ```
 
 For subject rules, alternation, arm delimiters, arm bodies, and the expression form, see [Language — `match`](language.md#match-pattern-match).
@@ -335,11 +338,11 @@ Validator entry points (`src/transpile/validate.ts` for the outer layer; `src/tr
 
 | Code | Triggers |
 |---|---|
-| `E_PARSE` | Duplicate config; duplicate top-level names in the unified namespace; invalid keys/values; `$(…)` in orchestration strings; Jaiph `${identifier}` interpolation in single-line backtick script bodies; `prompt … returns` without `const` capture; `name = prompt …` / non-`const` capture; bare `ref(args)` on `const` RHS (use `run` / `prompt`); top-level `local`; invalid send RHS; trailing shell redirection after `run`; arguments after `catch` / `recover`; bare `catch` / `recover` without binding; nested inline captures; removed `wait` keyword; invalid parameter names; missing `{` on definition line. |
+| `E_PARSE` | Duplicate config; duplicate top-level names in the unified namespace; invalid keys/values; `$(…)` in orchestration strings; Jaiph `${identifier}` interpolation in single-line backtick script bodies; `prompt … returns` without `const` capture; `name = prompt …` / non-`const` capture; leading `run` (removed keyword — `run name()`, `return run name()`, `const x = run name()`); assignment without `const`; top-level `local`; invalid send RHS; trailing shell redirection after a call; arguments after `catch` / `recover`; bare `catch` / `recover` without binding; nested inline captures; removed `wait` keyword; invalid parameter names; missing `{` on definition line. |
 | `E_SCHEMA` | Invalid `returns` schema — empty, non-flat, unsupported type. |
-| `E_VALIDATE` | Unknown def / script; duplicate import alias; forbidden Jaiph usage inside `$(…)`; dot notation on non-prompt variable or invalid field name; bare identifier argument referencing an unknown variable; unquoted `${…}` in call-argument position; `${ident}` referencing an unknown variable in orchestration strings; arity mismatch; shell redirection (`>`, `>>`, `|`, `&`) inside unquoted call-argument text; bare nested managed calls; bare nested inline-script calls; type crossings (`prompt` on a script, `run` on a string, `const x = scriptName`, `${scriptName}`). |
+| `E_VALIDATE` | Unknown def / script; duplicate import alias; forbidden Jaiph usage inside `$(…)`; dot notation on non-prompt variable or invalid field name; bare identifier argument referencing an unknown variable; unquoted `${…}` in call-argument position; `${ident}` referencing an unknown variable in orchestration strings; arity mismatch; shell redirection (`>`, `>>`, `|`, `&`) inside unquoted call-argument text; `stdin` connect targeting a non-script; type crossings (`prompt` on a script, calling a string, `const x = scriptName`, `${scriptName}`). |
 | `E_IMPORT_NOT_FOUND` | Import target does not exist (module or script). |
-| `W_PROMPT_IN_SHELL` | A prompt capture (`const x = prompt …`) is interpolated as `${x}` directly into a raw shell step. The diagnostic steers you to pass it as a script argument (`run my_script(x)` → `$1`) instead. Only shell steps are flagged. See [Language](language.md). |
+| `W_PROMPT_IN_SHELL` | A prompt capture (`const x = prompt …`) is interpolated as `${x}` directly into a raw shell step. The diagnostic steers you to pass it as a script argument (`my_script(x)` → `$1`) instead. Only shell steps are flagged. See [Language](language.md). |
 
 ### Validation rules
 
@@ -347,12 +350,12 @@ Validator entry points (`src/transpile/validate.ts` for the outer layer; `src/tr
 2. Config values are type-checked. `agent.backend` must be `cursor`, `claude`, or `codex`.
 3. Import aliases must be unique. Import targets must exist.
 4. Unified per-module namespace: channels, defs, scripts, script-import aliases, and top-level `const` share one namespace. Duplicate top-level names fail at parse time (`E_PARSE`); duplicate import aliases fail in validation (`E_VALIDATE`).
-5. `run` targets a def or a script. Same rules apply to `return run` and `${run …}`. `recover` is legal on every `run`.
+5. A call targets a def or a script. The same rules apply to `return ref()` and `${ref()}`. `recover` is legal on every call.
 6. Channel references in `send` must resolve to declared channels. Route targets must be defs with 1 to 3 parameters (message, channel, sender). Inline routes in def bodies are `E_PARSE`.
 7. `catch` / `recover` argument ordering — all call args appear before `catch` / `recover`.
-8. Shell redirection (`>`, `>>`, `|`, `&`) on `run` is rejected — trailing operators are `E_PARSE`; operators in unquoted call-argument text are `E_VALIDATE`.
+8. Shell redirection (`>`, `>>`, `|`, `&`) on a call is rejected — trailing operators are `E_PARSE`; operators in unquoted call-argument text are `E_VALIDATE`.
 9. Type crossings produce specific `E_VALIDATE` messages (see [Types](#types)).
-10. Nested managed calls require explicit `run` keywords. Bare nested forms are `E_VALIDATE`.
+10. Nested calls appear bare in argument position (`foo(bar())`); there is no `run` keyword.
 11. `for iter in source` — `source` must name an in-scope variable.
 
 ## Build artifacts
@@ -363,7 +366,7 @@ Validator entry points (`src/transpile/validate.ts` for the outer layer; `src/tr
 |---|---|
 | `script name = \`…\`` (single-line) | `scripts/<name>` with `#!/usr/bin/env bash` (or the fence-tag / manual shebang). |
 | `script name = \`\`\`<tag>…\`\`\`` (fenced) | `scripts/<name>` with `#!/usr/bin/env <tag>` or the manual `#!` line. |
-| `` run `body`(args) `` / `` run ```lang body```(args) `` | `scripts/__inline_<12-hex>` with the deterministic name from `inlineScriptName`. |
+| `` `body`(args) `` / `` ```lang body```(args) `` | `scripts/__inline_<12-hex>` with the deterministic name from `inlineScriptName`. |
 | `script name = …` **nested inside a def** | `scripts/__nested_<12-hex>` with the deterministic name from `nestedScriptName` (hash of name, lang tag, `use` keys, and body). Same interpreter/shebang path as a top-level script; the OS exec bit is not required. |
 | `import script "path" as name` | Copied verbatim to `scripts/<name>` with its original shebang preserved; the runtime resolves it through `JAIPH_SCRIPTS` like any other script. |
 
