@@ -10,11 +10,13 @@ config {
 
 export def main() {
   # Removed keywords must highlight as plain identifiers, not commands.
+  # `run` is no longer reserved: calls are bare, so `run` is an ordinary name.
   wait for_something
   local
   rule
   workflow
   ensure
+  run
   send "payload" -> inbox
   # The reverse arrow below is invalid (the send arrow is right-pointing only);
   # it must not scope as a send or route operator.

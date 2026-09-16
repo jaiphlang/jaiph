@@ -20,7 +20,8 @@
     "src"
   ],
   "scripts": {
-    "generate": "tree-sitter generate"
+    "generate": "tree-sitter generate",
+    "test": "tree-sitter generate && tree-sitter test"
   },
   "devDependencies": {
     "tree-sitter-cli": "^0.24.0"

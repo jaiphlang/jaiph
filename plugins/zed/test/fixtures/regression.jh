@@ -2,12 +2,14 @@
 
 export def main() {
   # Removed keywords must highlight as plain identifiers, not @keyword.
+  # `run` is no longer reserved: a bare call invokes; `run` is an ordinary name.
   wait for_something
   local
   rule
   workflow
   ensure
   inbox
+  run
   # The reverse arrow below is invalid (the send arrow is right-pointing only);
   # it must not tokenize as an operator.
   send "legacy" <- alerts

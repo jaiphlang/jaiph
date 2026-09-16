@@ -11,7 +11,8 @@ Syntax highlighting, compiler diagnostics, and formatting for Jaiph (`.jh` and
 - Highlights the current Jaiph surface for `.jh` / `*.test.jh`: `import` /
   `import script`, `config`, `channel` (`->` routes, `send … ->` sends),
   `script` (backtick and fenced, optional `use KEY …`), `def`, named
-  `prompt name(params) [use KEY …] = …`, `run` / `run async`, `catch` /
+  `prompt name(params) [use KEY …] = …`, bare calls (`name(args)`,
+  `async name(args)`), stdin connect (`stdin … -> name(args)`), `catch` /
   `recover`, anonymous `prompt … returns`, `match`, `if` / `else if`,
   `for … in`, `const`, `log` / `logerr` / `logwarn`, `fail`, `return`, and
   `test` blocks (`mock …`, `allow_failure`, `expect_contain` /
