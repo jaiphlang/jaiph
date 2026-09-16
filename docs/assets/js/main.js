@@ -18,7 +18,7 @@
         "use",
         "test",
         "const",
-        "run",
+        "stdin",
         "prompt",
         "log",
         "logerr",
@@ -338,13 +338,45 @@
             }
         }
 
-        if (firstValue === "run") {
-            let nameAt = 1;
-            if (significant[1] && significant[1].token.value === "async") {
-                nameAt = 2;
+        // Invoke statements: bare call `save(...)`, `async save(...)`, and
+        // stdin connect `stdin operand -> save(...)`. Replaces the old `run`
+        // callee special case now that `run` is not a keyword.
+        if (firstValue === "stdin") {
+            let arrowAt = -1;
+            for (let i = 1; i < significant.length; i += 1) {
+                if (significant[i].token.type === "arrow") {
+                    arrowAt = i;
+                    break;
+                }
             }
-            if (significant[nameAt] && significant[nameAt].token.type === "identifier") {
-                annotated[significant[nameAt].index].kind = "identifier";
+            if (arrowAt >= 0) {
+                for (let i = 1; i < arrowAt; i += 1) {
+                    if (
+                        significant[i].token.type === "identifier" &&
+                        annotated[significant[i].index].kind === "plainIdentifier"
+                    ) {
+                        annotated[significant[i].index].kind = "identifier";
+                    }
+                }
+                if (significant[arrowAt + 1] && significant[arrowAt + 1].token.type === "identifier") {
+                    annotated[significant[arrowAt + 1].index].kind = "identifier";
+                }
+            }
+        } else {
+            let calleeAt = -1;
+            if (firstValue === "async" && significant[1] && significant[1].token.type === "identifier") {
+                calleeAt = 1;
+            } else if (
+                first.token.type === "identifier" &&
+                annotated[first.index].kind !== "keyword" &&
+                significant[1] &&
+                significant[1].token.type === "symbol" &&
+                significant[1].token.value === "("
+            ) {
+                calleeAt = 0;
+            }
+            if (calleeAt >= 0 && significant[calleeAt].token.type === "identifier") {
+                annotated[significant[calleeAt].index].kind = "identifier";
             }
         }
 
