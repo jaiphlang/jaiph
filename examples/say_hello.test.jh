@@ -3,15 +3,15 @@
 import "say_hello.jh" as hello
 
 # We expect this test to fail due to mismatch in error message
-# between the prompt and the error message in the test file.
-# We use it to verify the test works and the error message output
-# is correct.
+# between the actual failure and the expected string in the test file:
+# the expected string drops the trailing ":(". We use it to verify the
+# test works and the error message output is correct.
 test "without name, main fails with validation message" {
   # When
   const response = hello.main() allow_failure
 
   # Then
-  expect_equal response "You didn't provide your name"
+  expect_equal response "You provided an invalid name"
 }
 
 test "with name, returns greeting and logs response" {
