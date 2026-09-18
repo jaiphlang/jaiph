@@ -208,8 +208,11 @@ test("stdin wrap() -> bar(): a def producer feeds the same bytes as the script p
   }
 });
 
-// AC: catch on a pipeline is a one-shot handler. A non-zero intermediate stage
-// stops the pipeline; the attached catch runs once and the def succeeds.
+// AC: catch on a pipeline is a one-shot handler. Stages now stream
+// concurrently, so a non-zero stage is the pipeline failure and the attached
+// catch runs once for it while the def still succeeds. The final stage starts
+// (a live pipe, not a materialize-then-spawn chain) but reads EOF from the
+// failed upstream and produces empty output.
 test("stdin gen() -> boom() -> sink() catch: a failing middle stage runs the one-shot catch", async () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-stdin-catch-"));
   try {
@@ -235,10 +238,65 @@ test("stdin gen() -> boom() -> sink() catch: a failing middle stage runs the one
     );
     const status = await runtime.runRoot("main", []);
     assert.equal(status, 0, "catch handled the middle-stage failure");
-    // sink never ran (later stages do not start after the first non-zero stage).
+    // sink starts (concurrent live pipe) but reads EOF from the failed boom, so
+    // its capture is empty — the boom failure is what the one-shot catch handled.
     const runDir = runtime.getRunDir();
     const sinkOut = readdirSync(runDir).find((f) => f.endsWith(".out") && f.includes("sink"));
-    assert.equal(sinkOut, undefined, "sink stage did not start");
+    assert.ok(sinkOut, "sink stage ran as a concurrent pipe stage");
+    assert.equal(readFileSync(join(runDir, sinkOut!), "utf8"), "", "sink produced no output from the failed upstream");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// AC (overlap): a pipeline streams stage-to-stage through a bounded buffer, so
+// producer and consumer run concurrently. Proof by handshake deadlock: the
+// producer prints `start`, then BLOCKS until the consumer — on seeing `start` —
+// creates an `ack` file, then prints `end`. If the runtime slurped the producer
+// to a string and only then spawned the consumer (materialize-then-spawn), the
+// producer would block forever waiting for an ack the not-yet-started consumer
+// can't write, and the run would stall for the full ack wait. Overlap makes it
+// finish in milliseconds. `printf` in bash write(2)s straight to the pipe
+// (unbuffered), so this exercises Jaiph's streaming, not libc buffering.
+test("stdin prod() -> cons(): producer and consumer overlap (streamed, not materialized)", async () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-stdin-overlap-"));
+  try {
+    const runtime = makeRuntime(
+      root,
+      [
+        "script prod = ```bash",
+        "printf 'start\\n'",
+        'for i in $(seq 1 400); do [ -f "$1/ack" ] && break; sleep 0.05; done',
+        "printf 'end\\n'",
+        "```",
+        "script cons = ```bash",
+        "while IFS= read -r line; do",
+        "  printf 'saw %s\\n' \"$line\"",
+        '  [ "$line" = "start" ] && : > "$1/ack"',
+        "done",
+        "exit 0  # a while-read loop otherwise exits 1 on the EOF read",
+        "```",
+        "export def main(dir) {",
+        "  stdin prod(dir) -> cons(dir)",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const started = Date.now();
+    const status = await runtime.runRoot("main", [root]);
+    const elapsed = Date.now() - started;
+    assert.equal(status, 0, "pipeline ran to completion");
+    // Overlap finishes in ms; a materialize-then-spawn chain would block on the
+    // ack for the full ~20 s producer wait. 8 s is a wide margin either way.
+    assert.ok(elapsed < 8000, `producer and consumer must overlap (took ${elapsed} ms)`);
+    const runDir = runtime.getRunDir();
+    const consOut = readdirSync(runDir).find((f) => f.endsWith(".out") && f.includes("cons"));
+    assert.ok(consOut, "expected a cons .out capture");
+    assert.equal(
+      readFileSync(join(runDir, consOut!), "utf8"),
+      "saw start\nsaw end\n",
+      "consumer saw each line as it streamed in",
+    );
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

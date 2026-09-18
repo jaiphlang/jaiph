@@ -183,11 +183,11 @@ Jaiph: Running stream.jh
 
 def main
   ▸ script gen
+  ·   ▸ script upper
+  ·   ·   ▸ script count
   ✓ script gen (<time>)
-  ▸ script upper
-  ✓ script upper (<time>)
-  ▸ script count
-  ✓ script count (<time>)
+  ·   ✓ script upper (<time>)
+  ·   ·   ✓ script count (<time>)
 ✓ PASS def main (<time>)
 
 3
