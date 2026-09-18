@@ -122,209 +122,9 @@ A task is not done until every bullet is verified by a test that fails when the 
 - The new docs-highlighter test fails if `const name = valid_name(name_arg)` leaves `valid_name` unclassed, and fails if `catch (err)` paints `catch` as a call.
 - `run` is not a keyword: existing Zed/VS Code assertions for that stay green.
 
-## Add stdin call pipelines and a stream landing sample #dev-ready
-
-Extend the `stdin` connect form so the left-hand side can be a call, and so several script calls can be chained with `->`. Add a landing-page sample named `stream`.
-
-This task is about the language surface and correct byte flow on small data. Overlap, OS-pipe backpressure, and large-payload RSS bounds are out of scope.
-
-### Surface
-
-Legal forms:
-
-```jh
-stdin content -> save(path)              # existing: value -> script
-stdin foo() -> bar()                     # call -> script
-stdin foo() -> bar() -> baz()            # three or more script stages
-stdin foo(x) -> bar(y) -> baz()          # each stage is a normal call
-stdin content -> bar() -> baz()          # value, then two or more scripts
-stdin `gen`() -> `tr a-z A-Z`()          # inline scripts allowed
-const n = stdin foo() -> count()         # last stage should reduce
-```
-
-A **pipeline** is any stdin form whose producer is a call, or that has two or more `->` stages. `stdin content -> save(path)` (one value, one script) is the existing connect, not a pipeline.
-
-Rules:
-
-- `stdin` still requires at least one `->` and a call target (`E_PARSE` otherwise). `stdin foo()` with no `->` is `E_PARSE`.
-- Every stage after the first `->` is a script call (named or inline). A def or other non-script in the chain is `E_VALIDATE`.
-- The operand left of the first `->` is either a value (today's `stdin_value`) or a script call. A def as the producer is `E_VALIDATE`.
-- `async` anywhere on a stdin pipeline is `E_PARSE` (`async is not supported with stdin`).
-- **No `recover` on a pipeline.** `stdin foo() -> bar() recover (…) { … }` and `stdin foo() -> bar() -> baz() recover (…) { … }` are a compiler error (`E_PARSE` or `E_VALIDATE`). A compiler/unit test must reject both. Do not retry the producer. The existing single-script connect may still take `recover`: `stdin content -> save(path) recover (e) { … }` stays legal (`src/parse/parse-run-stdin.test.ts` already pins it). `catch` on a pipeline is allowed (one-shot, no retry).
-- `const` / `return` of a pipeline names the **last** stage. That stage should **reduce** (count, checksum, `head`, write-to-path and print the path) so the user-visible result is short. The landing sample and the run pin check that visible result (CLI print / last-stage `.out`), not an in-memory copy of a pass-through stream.
-- First non-zero stage stops the pipeline. Later stages do not start.
-- The progress tree shows each script stage as its own step.
-
-Existing `stdin <value> -> script()` must keep working. Format/emit must round-trip the new forms.
-
-### Sample
-
-Add `examples/stream.jh`. Agent-free. Teach the pipeline with small, deterministic scripts: generate a few lines, transform, **reduce** (e.g. line count). `export def main` returns that last stage. No `prompt`. No `recover` on the pipeline.
-
-Add a Samples tab on `docs/index.html`:
-
-- button label `stream.jh`
-- `data-sample="stream"`
-- `data-sample-file="stream.jh"`
-- `[data-sample-source]` byte-for-byte with `examples/stream.jh` (landing source-parity in `docs/contributing.md`)
-- one `[data-sample-output]` run block whose command is `➜  ./stream.jh` and whose tree matches a real `jaiph run` of that file
-
-Do not put this tab in Playwright `SKIP_OUTPUT`. Wire `e2e/tests/110_examples.sh` (or an equivalent e2e) so `examples/stream.jh` is executed and its normalized tree is pinned.
-
-### Docs
-
-`docs/language.md` owns the meaning (`Arguments and stdin`), including: pipeline vs single-script connect, and no `recover` on a pipeline. `docs/grammar.md` owns the EBNF. Other pages get one sentence plus a link (ADR 0003).
-
-### Files that must not change
-
-- Do not change argv/`ARG_MAX` policy for ordinary `script(arg)` calls.
-- Do not require OS-pipe overlap or a bound on resident memory. A later task owns that.
-- Do not edit `examples/say_hello.jh` or other landing samples except to add the new tab.
-- Do not change highlighter grammars unless a parse/format test cannot land without it.
-
-### Acceptance
-
-A task is not done until every bullet is verified by a test that fails when the contract is violated:
-
-- `stdin foo() -> bar()` and `stdin foo() -> bar() -> baz()` parse. A compiler/unit test pins the AST (producer call + N script stages).
-- `stdin foo()` (no `->`) is `E_PARSE`. A def anywhere in the chain is `E_VALIDATE`. `async` + stdin is `E_PARSE`.
-- `stdin foo() -> bar() recover (e) { log e }` is a compiler error. `stdin foo() -> bar() -> baz() recover (e) { log e }` is a compiler error. A compiler test fails if either is accepted. `stdin content -> save(path) recover (e) { … }` still parses.
-- A run test: `foo` writes `a\nb\n`, `bar` uppercases stdin, `baz` counts lines (or equivalent reduce). `jaiph run` of `stdin foo() -> bar() -> baz()` (or `return` of that) shows `2` as the user-visible result. Swapping or dropping a stage fails the assertion.
-- Existing `stdin content -> save(path)` still passes its current tests (`src/parse/parse-run-stdin.test.ts` and format round-trip).
-- `examples/stream.jh` exists, has no `prompt` and no `recover`, ends in a reduce, and `jaiph run examples/stream.jh` matches the landing `[data-sample-output]` after the existing Playwright `normalize()`. Source-parity against `data-sample-file` passes. `SKIP_OUTPUT` does not include `stream`.
-
-## Stream stdin pipelines with bounded buffers and overlap #dev-ready
-
-A stdin pipeline must move bytes between script stages through a bounded buffer (OS pipe or equivalent), not by collecting one stage's full stdout into a JavaScript string and then `stdin.end(whole)`. Producer and consumer overlap.
-
-Today's single-script spawn (`spawnAndCapture`) both appends `.out` on disk **and** concatenates `output += chunk` in RAM. A pipeline must not do that dual hold. `.out` is append-only on disk (streamed, backpressured). There is no JS string of a piped stage's body — including the last stage.
-
-Surface (this task does not invent a different syntax):
-
-```jh
-stdin foo() -> bar()
-stdin foo() -> bar() -> baz()
-stdin content -> bar() -> baz()
-```
-
-If that form is not in the grammar yet, do not ship a substitute (`|`, implicit pipes, hidden temp files as the user-facing model). Implement or wait for the pipeline form; then change only **how** stages are executed.
-
-**No `recover` on a pipeline** — compiler error. This task does not add recover-retry for pipes.
-
-`const out = stdin foo() -> bar()` names the last stage (a reduce). It must not load that stage's `.out` into a JS string to "finish" the pipe. A pipeline used as a statement with no capture must not keep stdout as one in-memory string just to run the pipe.
-
-A 50 MB log through `stdin fetch() -> analyze()` is the product case. A large-payload test is a correctness proof, not the reason the form exists.
-
-Do not add a stringify size cap. Size must not change whether a pipeline succeeds.
-
-### Overlap (sleeps)
-
-Add an e2e (bash) that fails if stages are sequential materialize-then-spawn:
-
-- Producer is **line-buffered / unbuffered** (`stdbuf -oL`, `python3 -u`, or equivalent). Document which, so libc pipe buffering is not the thing under test.
-- Producer prints `start`, sleeps ~2s, prints `end`.
-- Consumer reads lines and prints `saw <line>` as each line arrives.
-- The test asserts `saw start` is observed **before** the sleep finishes — i.e. before the producer process exits. If `bar` only starts after `foo` closes stdout, the test fails.
-
-A wall-clock assertion with a generous margin is fine (`saw start` within ~0.5s of pipeline start; producer still alive or sleep not elapsed). Do not use a tiny payload that fits in an OS pipe buffer and a consumer that only reads after EOF — that cannot distinguish streaming from buffering.
-
-### Volume
-
-A second test pushes a large payload (at least 64 MiB; 1 GiB is optional if CI time allows). Producer writes N bytes; consumer counts or writes to a file (reduce / sink). Assert:
-
-- consumer sees exactly N bytes
-- the jaiph process does not hold those N bytes as a JS string. Fail if peak extra RSS tracks payload size (document the bound, e.g. peak extra RSS < 16 MiB for a 64 MiB payload).
-
-Do not satisfy this by spooling the whole payload into one runtime-owned temp file and then reading it. Per-stage `.out` may exist only if it is streamed to disk with backpressure and is **not** also held as a string. If a stage's `.out` would force a full in-memory copy, skip full-body capture for intermediate piped stages and say so in `docs/language.md` (one owner).
-
-### Files that must not change
-
-- Landing `examples/stream.jh` copy and `docs/index.html` sample text, unless a progress-tree change forces a match update. Do not add a new sample.
-- Argv/`ARG_MAX` for non-pipeline `script(arg)` calls.
-- Prompt / agent backends.
-- Do not make `const` lazy.
-
-### Acceptance
-
-A task is not done until every bullet is verified by a test that fails when the contract is violated:
-
-- The sleep/overlap e2e fails if the runtime resolves `foo()` to a string, then spawns `bar()` with `stdin.end(thatString)`.
-- The volume e2e fails if the runtime concatenates the payload into one string (`output += chunk` across the whole producer stdout) or if peak extra RSS tracks payload size.
-- A piped stage has no full-body JS string. A test that would pass under today's `output += chunk` plus `appendFileSync` dual-hold must fail.
-- `stdin foo() -> bar() -> baz()` on a small deterministic payload still shows the same user-visible result as a correct sequential pipe (regression). Last stage in that pin is a reduce.
-- `docs/language.md` states that pipeline stages stream; `.out` is disk-only.
-
-## Never hold script stdio as a JavaScript string #dev-ready
-
-Hard rule: a script's stdout/stderr is not held as a JavaScript string **unless the author captured it**.
-
-```jh
-`echo hi`()              # statement: stream to .out / .err, no JS body
-const x = `echo hi`()    # capture: materialize trimmed stdout into x (a string)
-return `echo hi`()       # capture: materialize (this is the def's string value)
-```
-
-No `read()`. No file-backed type. No compile-time ban on `${x}` after a capture. `x` is a string, like today.
-
-If they capture a huge stream, the process can OOM. That is the author asking for the bytes. Do **not** add a language-level size cap that fails `const x = fetch()` at 256 KiB — that is a Heisenbug. An optional **serve/runtime** memory or max-capture-bytes knob (DDoS on `jaiph serve` / MCP) is allowed as a host limit, documented next to the existing `JAIPH_SERVE_*` caps, not as a second string type.
-
-This is a spawn-path change. Today's `spawnAndCapture` always does `output += chunk` / `error += chunk` and `returnValue: output.trim()`, even for a discarded statement. Kill that for the non-capture path. Capture still builds the string (and still writes `.out` / `.err` on disk).
-
-Prompt / agent buffering is out of scope. Do not make `const` lazy.
-
-### What materializes (capture)
-
-These all produce a string in JS (and can OOM):
-
-- `const x = script()` / `const x = \`echo hi\`()`
-- `return script()` and `def wrap() { return fetch() }` then `const y = wrap()`
-- `foo(bar())` when `bar` is a script (nested call arg)
-- `${script()}` inline capture
-- match-arm `=> script()`
-- `const x = stdin foo() -> count()` (last stage captured)
-- async handle resolve when the handle was captured (`const h = async script()` then a resolving read)
-
-### What must not materialize
-
-- Statement `script()` / `` `echo hi`() `` — disk + exit code only. No `StepResult.output` equal to the body.
-- Pipeline stages that are not captured — OS pipe / disk, no JS body. `stdin foo() -> bar()` with no `const` does not build foo's or bar's stdout as a string.
-- `recover` / `catch` binding — stays a **path** to `.out`, not the log bytes (already the language).
-
-A def that only *calls* a script as a statement does not inherit that script's stdout as a string. `return fetch()` is a capture and does.
-
-### Hard constraints
-
-1. Statement-form script spawn has no `output += chunk` / `error += chunk` (or join/concat of the whole stream) into a JS string.
-2. Capture-form may build a string of stdout (trimmed, like today). Stderr of a captured script still must not be concatenated into a leftover JS string if it is only on disk (`.err`).
-3. No `read()` keyword or stdlib.
-4. No file-backed capture type. No `E_VALIDATE` on `log "${x}"` when `x` came from `const x = script()`.
-5. No language-level stringify cap. OOM on huge `const` is acceptable. Optional host DDoS limit is not a language rule.
-
-### Tests (each must fail if the contract is violated)
-
-- **Statement RSS:** `` `dd … 64MiB`() `` (or equivalent) as a statement. Peak extra RSS does not track 64 MiB. Fails on today's always-`output += chunk`. Sibling case for large stderr, statement form.
-- **Capture is a string:** `const x = \`echo hi\`()` then `expect_equal x "hi"` and `log "${x}"` work with no `read()`. A compiler/unit test fails if this is `E_VALIDATE`.
-- **Capture can be large:** `const x = big()` of 64 MiB either holds the string (RSS may grow — that is allowed) or the process OOMs / hits an optional host max. The task is not failed by RSS growth on this path. The statement-form test must still pass in the same binary.
-- **Def statement vs return:** `def a() { big() }` then `a()` — no 64 MiB string. `def b() { return big() }` then `const y = b()` — `y` is the bytes (or OOM).
-- **Static / unit:** statement spawn path does not return `{ output: <full stdout> }`. Capture path does provide the trimmed stdout string.
-
-### Docs
-
-`docs/language.md` owns: statement vs capture; capture is a string; huge capture may OOM; recover binding remains a path. No `read`. ADR 0003: one owner.
-
-### Files that must not change
-
-- Do not add lazy `const`.
-- Do not change prompt backends.
-- Do not invent a second pipeline syntax. If `stdin foo() -> bar()` exists, uncaptured stages obey the statement rule; a `const` of the pipeline is a capture of the last stage.
-
-### Acceptance
-
-A task is not done until every bullet is verified by a test that fails when the contract is violated. If a statement-form script still builds a full-body JS string, the task is not done. If `const x = \`echo hi\`()` is not a string, the task is not done.
-
 ## Treat every call result as an output handle; slurp only at force sites #dev-ready
 
-Top-level idea (write this in docs so an agent can load one page and get it):
+Top-level idea (one page an agent can load):
 
 **A call always runs now. Its result is an output handle, not a string. The bytes stay on disk (or in a pipe) until a force site slurps them into a JavaScript string. `stdin` and an unused result do not slurp.**
 
@@ -332,16 +132,18 @@ This is not lazy `const` (do not skip the script/def/prompt). This is lazy **slu
 
 Applies to every callee: named script, inline script, def, prompt. `recover` / `catch` bindings are the same type. When an `async` handle resolves, the result is this same output handle, then the same force rules. Do not invent a second handle kind.
 
-No `read()`. No language-level byte cap that fails `const x = fetch()` at 256 KiB (Heisenbug). Huge slurp may OOM; that is the author asking for the bytes. An optional `jaiph serve` / MCP host memory knob is allowed; it is not a second value type.
+No `read()`. No language-level byte cap that fails `const x = fetch()` at 256 KiB. Huge slurp may OOM; that is the author asking for the bytes. An optional `jaiph serve` / MCP host memory knob is allowed; it is not a second value type.
 
 Hard rewrite. Today's `spawnAndCapture` always does `output += chunk` / `error += chunk` even for a discarded statement. Today's `recover` binding is a run-dir **path string** (leaks `.jaiph/runs/…/NNNNNN-*.out`). Both go away.
+
+This task owns the **type**, **force/keep rules**, **docs**, **slurp tests**, and the **one-hop** connect `stdin <handle-or-call> -> script()` so those tests can run. It does not add multi-stage `-> a() -> b() -> c()`, a landing `stream` sample, OS-pipe overlap, or a 64 MiB pipeline volume pin.
 
 ### Force vs keep
 
 **Force (slurp → `string`, can OOM):**
 
 - `const x = <call>()`
-- `return <call>()` (the caller’s `const` / `if` / `${…}` then force that returned handle, or slurp if the entry def’s return is printed as text — prefer streaming the file to the user; do not slurp into V8 just to print)
+- `return <call>()` — the callee yields a handle; the caller slurps only at a force site. Printing an entry def’s return should stream the file to the user, not slurp into V8 just to print.
 - `if` / `match` subject
 - `${x}` interpolation, argv, `log` / `logerr` / `logwarn`, `expect_*`
 - `prompt """ … ${x} … """` (interpolation is a slurp)
@@ -349,19 +151,19 @@ Hard rewrite. Today's `spawnAndCapture` always does `output += chunk` / `error +
 **Keep as output handle (no JS body):**
 
 - Statement call: `` `echo hi`() `` / `fetch_log()`
-- `stdin <handle> -> script()` — stream the handle’s bytes into the child
-- `prompt <handle>` (identifier form) and `prompt analyze(<handle>)` when the arg is a handle — feed the file to the agent (backend stdin or equivalent), do not build a JS string of the log
+- `stdin <handle> -> script()` and `stdin <call>() -> script()` — stream bytes into the child
+- `prompt <handle>` (identifier form) and `prompt analyze(<handle>)` when the arg is a handle — feed the file to the agent, do not build a JS string of the log
 - Unused result
-- `recover (failure)` / `catch (err)` binding — `failure` is a handle, not a path, not a string
+- `recover (failure)` / `catch (err)` binding — handle, not a path, not a string
 
 ```jh
 fetch_log()                       # handle, discarded
-stdin fetch_log() -> analyze()    # handle → pipe (def/script/prompt all legal producers)
+stdin fetch_log() -> analyze()    # handle → pipe; producer may be def or script
 const x = fetch_log()             # slurp; x is a string
 stdin x -> analyze()              # too late: x is already a string
 ```
 
-`stdin foo() -> bar()` (call as producer) is the same handle rule. If that surface is not in the grammar yet, this task still ships `stdin <handle-or-ident> -> script()` for a bound handle and for today’s `stdin <value> -> script()`. Do not invent `|` or a second connect syntax.
+One-hop `stdin wrap() -> sink()` is required here (`wrap` is a def that `return`s a script). Multi-stage chains are out of scope.
 
 ### Value types (`docs/language.md` owns this)
 
@@ -373,13 +175,13 @@ Today the page says every value is `string` or `script` (the declaration). Add *
 | `script` | The declaration (unchanged). | Bare call `name(args)`. |
 | output handle | Result of a script / def / prompt call, and of `recover` / `catch` bindings. | `stdin h -> script()`, `prompt h`. Force sites slurp to `string`. |
 
-Crossings: interpolating / `if` / argv on a handle **is** the slurp (runtime), not `E_VALIDATE`, except you must not interpolate a handle as if it were a filesystem path. After slurp, it is a `string`. `script` still cannot be interpolated (`E_VALIDATE`).
+Crossings: interpolating / `if` / argv on a handle **is** the slurp (runtime). After slurp, it is a `string`. Do not interpolate a handle as a filesystem path. `script` still cannot be interpolated (`E_VALIDATE`).
 
-`docs/language.md` is the owner (existing **Value types** section). Opening blurb that says “values are strings” must change. `docs/grammar.md` does not restate the table. `docs/jaiph-skill.md` gets **one sentence** plus a link to that section (ADR 0003): agents must treat a call result as a handle until `const` / `if` / `${…}`. `docs/why-jaiph.md` may get one sentence + link, not a second essay.
+`docs/language.md` **Value types** is the owner. Opening blurb that says “values are strings” must change. `docs/grammar.md` does not restate the table. `docs/jaiph-skill.md` gets **one sentence** plus a link (ADR 0003). `docs/why-jaiph.md` may get one sentence + link.
 
 ### Recover / catch
 
-Binding is an output handle (stdio of the failed step: stdout at least; if `.err` is the useful stream, the handle must include it or the docs must say stdout-only — pick one and test it). Author never sees `…/NNNNNN-*.out`.
+Binding is an output handle (failed step stdout at least; if `.err` is required, document and test that). Author never sees `…/NNNNNN-*.out`.
 
 ```jh
 check_report_exists() recover (failure) {
@@ -389,35 +191,168 @@ check_report_exists() recover (failure) {
 }
 ```
 
-`logerr "${failure}"` slurps (or, if you ban `${handle}` and only allow `prompt failure` / `stdin failure ->`, that is stricter — **do not ban** `${failure}` if `const x = \`echo hi\`()` still slurps via `${x}`; one rule for all handles). Path leak is a failed task: a test fails if the bound value matches `\.jaiph/runs/.+\.out`.
+`logerr "${failure}"` slurps **contents**, not a path. One rule for all handles (same as `${x}` after `const x = \`echo hi\`()`). A test fails if the bound value matches `\.jaiph/runs/.+\.out`.
 
 ### Hard constraints
 
 1. Statement-form script/def/prompt does not concatenate stdio into a JS string.
 2. `const x = \`echo hi\`()` is the string `hi`. No `read()`. `expect_equal x "hi"` works.
-3. `stdin <handle> -> script()` does not slurp the handle into a JS string first.
+3. `stdin <handle-or-call> -> script()` does not slurp the producer into a JS string first.
 4. `def wrap() { return big() }` then `stdin wrap() -> sink()` streams; `const y = wrap()` slurps (RSS may grow / OOM — allowed).
 5. No lazy execution. The call runs at the call site.
 6. No `read()` keyword.
+7. Producer of one-hop `stdin <call>() -> script()` may be a **def or a script**. Consumer is a script. `async` + `stdin` stays `E_PARSE`.
 
 ### Tests (each must fail if the contract is violated)
 
-- **Statement no-slurp:** a script writes ≥ 64 MiB as a statement. Peak extra RSS of jaiph does not track 64 MiB (document the bound, e.g. extra RSS < 16 MiB). Fails on today’s `output += chunk`.
+- **Statement no-slurp:** a script writes ≥ 64 MiB as a statement. Peak extra RSS of jaiph does not track 64 MiB (bound e.g. extra RSS < 16 MiB). Fails on today’s `output += chunk`.
 - **Const slurp:** `const x = \`echo hi\`()` then `expect_equal x "hi"` and `log "${x}"`. Fails if this is `E_VALIDATE` or requires `read()`.
-- **Const slurp is real:** `const x = big()` of 64 MiB — RSS may grow or process OOMs. A probe that `x` is a JS string (length N) or that interpolation succeeded with N bytes. This path is allowed to be expensive.
-- **Stdin no-slurp:** `stdin big() -> sink()` (or `const h` only if `h` is still a handle — it is not, after `const`; so the producer must be a call or a recover binding). Sink sees N bytes. Peak extra RSS does not track N. Fails if `resolveStdin` builds a JS string of the body.
+- **Const slurp is real:** `const x = big()` of 64 MiB — RSS may grow or OOM. A probe that `x` is a JS string of length N. Allowed to be expensive.
+- **Stdin no-slurp:** `stdin big() -> sink()` — sink sees N bytes; peak extra RSS does not track N. Fails if `resolveStdin` builds a JS string of the body.
 - **Def is a handle:** `def wrap() { return big() }` + `stdin wrap() -> sink()` — same no-slurp RSS pin. `const y = wrap()` slurps (opposite pin).
-- **Recover is a handle:** recover body `stdin failure -> sink()` copies failed-step stdout (or the documented stream) without the binding matching a run-dir `.out` path. `logerr "${failure}"` slurps contents, not a path.
-- **Force sites slurp:** `if` / `${}` on a small script capture behave as today (string compare / interpolate).
-- **Docs:** `docs/language.md` Value types lists output handle and the force/keep table. `docs/jaiph-skill.md` has the one-sentence + link. A docs/structure or grep test fails if the skill page restates the full table.
+- **Recover is a handle:** `stdin failure -> sink()` copies failed-step stdout (or the documented stream) without the binding matching a run-dir `.out` path. `logerr "${failure}"` slurps contents, not a path.
+- **Force sites slurp:** `if` / `${}` on a small script capture behave as today.
+- **Docs:** `docs/language.md` Value types lists output handle and the force/keep table. `docs/jaiph-skill.md` has the one-sentence + link. A grep/docs test fails if the skill page restates the full table.
 
 ### Files that must not change
 
-- Do not add `read()` or a stringify cap in the language.
-- Do not change highlighter grammars unless a new keyword appears (none should).
-- Do not add a landing `stream` sample here (separate task if the pipeline tab is in the queue).
+- Do not add `read()` or a stringify cap.
+- Do not add multi-stage `foo() -> bar() -> baz()` or `examples/stream.jh`.
+- Do not add highlighter work.
 - Do not make `const` skip the call.
 
 ### Acceptance
 
 A task is not done until every bullet is verified by a test that fails when the contract is violated. If an agent reading only `docs/language.md` **Value types** plus `docs/jaiph-skill.md` cannot state “call result is a handle; `const` / `if` / `${}` slurp; `stdin` does not,” the docs are not done.
+
+## Add stdin call pipelines and a stream landing sample #dev-ready
+
+Extend `stdin` so a producer can be a **call** (def or script) and so several **script** stages can be chained with `->`. Add a landing-page sample named `stream`.
+
+Value model this task assumes (restate, do not depend on another task): a call result is an **output handle**. Uncaptured stages do not slurp into a JS string. `const` / `return` of a pipeline names the last stage and **slurps** that stage (so the last stage should reduce). Recover/catch bindings are handles, not run-dir paths. If that model is not in the runtime yet, this task still ships the **syntax**, AST, validator, format, small-data byte flow, sample, and docs for the pipeline form. It may buffer small fixtures. It does not own 64 MiB RSS, sleep/overlap, or OS-pipe backpressure.
+
+### Surface
+
+```jh
+stdin content -> save(path)              # existing: string/value -> script
+stdin foo() -> bar()                     # one hop: def or script -> script
+stdin wrap() -> analyze()                # def producer (handle) -> script
+stdin foo() -> bar() -> baz()            # three or more script consumers
+stdin foo(x) -> bar(y) -> baz()
+stdin content -> bar() -> baz()          # value, then two or more scripts
+stdin `gen`() -> `tr a-z A-Z`()
+const n = stdin foo() -> count()         # slurps last stage; last stage should reduce
+```
+
+A **pipeline** is any stdin form whose producer is a call, or that has two or more `->` stages. `stdin content -> save(path)` (one value, one script) is the existing connect, not a pipeline.
+
+Rules:
+
+- `stdin` requires at least one `->` and a call target (`E_PARSE` otherwise). `stdin foo()` with no `->` is `E_PARSE`.
+- The producer (left of the first `->`) is a value (today’s `stdin_value`) **or** a call to a **def or script**. A prompt call as producer is `E_VALIDATE` unless you also implement `prompt` as a handle producer and test it.
+- Every stage **after** the first `->` is a **script** call (named or inline). A def in a consumer slot is `E_VALIDATE`.
+- `async` anywhere on a stdin pipeline is `E_PARSE` (`async is not supported with stdin`).
+- **No `recover` on a pipeline.** `stdin foo() -> bar() recover (…) { … }` and `stdin foo() -> bar() -> baz() recover (…) { … }` are a compiler error. Compiler tests must reject both. Existing `stdin content -> save(path) recover (e) { … }` stays legal. `catch` on a pipeline is allowed (one-shot).
+- First non-zero stage stops the pipeline. Later stages do not start.
+- Progress tree: each script/def stage is its own step.
+
+Format/emit must round-trip. Existing `stdin <value> -> script()` tests stay green.
+
+### Sample
+
+Add `examples/stream.jh`. Agent-free. Generate a few lines, transform, **reduce** (e.g. line count). `export def main` returns that last stage. No `prompt`. No `recover`.
+
+`docs/index.html` Samples tab:
+
+- button `stream.jh`
+- `data-sample="stream"`
+- `data-sample-file="stream.jh"`
+- `[data-sample-source]` byte-for-byte with `examples/stream.jh`
+- `[data-sample-output]` for `➜  ./stream.jh` matching a real `jaiph run`
+
+Not in Playwright `SKIP_OUTPUT`. Pin the run in `e2e/tests/110_examples.sh` (or equivalent).
+
+### Docs
+
+`docs/language.md` owns pipeline meaning under **Arguments and stdin** (and links **Value types** for handle/slurp — do not copy the type table). `docs/grammar.md` owns EBNF. ADR 0003.
+
+### Files that must not change
+
+- Do not change argv/`ARG_MAX` for ordinary `script(arg)`.
+- Do not require OS-pipe overlap or a 64 MiB RSS bound.
+- Do not edit `examples/say_hello.jh` except if a shared landing fixture forces it; do not change other sample tabs except adding `stream`.
+- Do not change highlighter grammars unless parse/format cannot land without it.
+
+### Acceptance
+
+A task is not done until every bullet is verified by a test that fails when the contract is violated:
+
+- `stdin foo() -> bar()`, `stdin wrap() -> bar()` (def producer), and `stdin foo() -> bar() -> baz()` parse. A compiler/unit test pins the AST.
+- `stdin foo()` (no `->`) is `E_PARSE`. A **def in a consumer slot** is `E_VALIDATE`. `async` + stdin is `E_PARSE`.
+- `stdin foo() -> bar() recover (e) { log e }` and the three-stage recover form are compiler errors. `stdin content -> save(path) recover (e) { … }` still parses.
+- Run: `foo` writes `a\nb\n`, `bar` uppercases stdin, `baz` counts lines. User-visible result of `stdin foo() -> bar() -> baz()` (or `return` of it) is `2`. Swapping or dropping a stage fails the assertion.
+- Run: `def wrap() { return foo() }` + `stdin wrap() -> bar()` produces the same transform as `stdin foo() -> bar()` on that small fixture.
+- Existing `stdin content -> save(path)` parse/format tests still pass.
+- `examples/stream.jh` has no `prompt` / `recover`, ends in a reduce, matches landing source-parity and `[data-sample-output]` after Playwright `normalize()`. `SKIP_OUTPUT` does not include `stream`.
+
+## Stream stdin pipelines with bounded buffers and overlap #dev-ready
+
+A stdin pipeline must move bytes between stages through a bounded buffer (OS pipe or equivalent), not by collecting one stage’s full stdout into a JavaScript string and then `stdin.end(whole)`. Producer and consumer overlap.
+
+Value model (restate): a call result is an **output handle**. Uncaptured pipeline stages do **not** slurp. `const n = stdin foo() -> count()` **does** slurp the last stage (a reduce — small). Statement / uncaptured `stdin foo() -> bar() -> baz()` must not build those bodies as JS strings.
+
+Surface this task requires (same form; no `|`, no hidden temp-file UX). If the grammar does not have it yet, **add it** — do not wait, do not invent a different syntax:
+
+```jh
+stdin foo() -> bar()
+stdin wrap() -> analyze()          # def producer
+stdin foo() -> bar() -> baz()
+stdin content -> bar() -> baz()
+```
+
+Rules (restate): producer is a value or a **def/script** call; every stage after the first `->` is a **script**; `async` + stdin is `E_PARSE`; **no `recover` on a pipeline** (compiler error). `catch` may attach.
+
+Do not add a stringify size cap. Size must not change whether a pipeline **succeeds**. `const` of a huge last stage may OOM — that is slurp, not this task’s volume pin.
+
+The product case is a 50 MB log through `stdin fetch() -> analyze()`. The volume test is a correctness proof.
+
+This task does not add `examples/stream.jh` or a new landing tab. If that sample already exists, do not rewrite it unless the progress tree forces a match update.
+
+### Overlap (sleeps)
+
+E2e that fails if stages are sequential materialize-then-spawn:
+
+- Producer is **line-buffered / unbuffered** (`stdbuf -oL`, `python3 -u`, or equivalent). Document which (test Jaiph, not libc).
+- Producer prints `start`, sleeps ~2s, prints `end`.
+- Consumer prints `saw <line>` as each line arrives.
+- `saw start` is observed **before** the sleep finishes / before the producer exits.
+
+Do not use a tiny payload that fits in the OS pipe buffer and a consumer that only reads after EOF.
+
+### Volume
+
+≥ 64 MiB (1 GiB optional if CI allows). Producer writes N bytes; consumer counts or writes a file (reduce / sink). Assert:
+
+- consumer sees exactly N bytes
+- jaiph peak extra RSS does not track N (bound e.g. extra RSS < 16 MiB)
+
+Do not spool the whole payload into one runtime-owned temp file and reread it. Per-stage `.out` only if streamed to disk with backpressure and **not** also held as a string. If `.out` would force a full in-memory copy, skip full-body capture for uncaptured piped stages and say so in `docs/language.md` (one owner, one sentence + link to Value types / stdin).
+
+### Files that must not change
+
+- Landing `stream` sample copy unless the tree output is forced to change.
+- Argv/`ARG_MAX` for non-pipeline `script(arg)`.
+- Prompt backends.
+- Do not make `const` lazy (skip the call).
+- Do not add `read()`.
+
+### Acceptance
+
+A task is not done until every bullet is verified by a test that fails when the contract is violated:
+
+- Sleep/overlap e2e fails if the runtime slurps `foo()` to a string, then spawns `bar()` with `stdin.end(thatString)`.
+- Volume e2e fails if the runtime concatenates the payload (`output += chunk` across producer stdout) or peak extra RSS tracks N.
+- Uncaptured piped stages have no full-body JS string.
+- Small regression: `stdin foo() -> bar() -> baz()` with a reduce last stage still shows the same user-visible result as a correct sequential pipe.
+- `const n = stdin foo() -> count()` on a tiny fixture still yields the count string (slurp of the last stage is required, not forbidden).
+- `docs/language.md` states uncaptured pipeline stages stream; `.out` is disk-only when captured for audit.
