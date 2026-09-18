@@ -194,16 +194,18 @@ function blockChildScope(scope: Scope): Scope {
  * `bytes`; an output handle from a completed producer (a def call, or a bound
  * `recover`/`catch` failure) is `file` — the child reads it as a stream from
  * disk, so a multi-megabyte producer is never slurped into a JS string first.
- * A `stream` source is the still-running previous stage's live stdout: in a
- * pipeline (`stdin gen() -> upper() -> count()`) the stages run concurrently
- * and each stage's stdout is piped into the next through a bounded, back-
- * pressured buffer, so producer and consumer overlap and no stage's full body
- * is spooled to a temp file and reread before the next stage starts.
+ * An `fd` source is the still-running previous stage's live stdout, handed to
+ * the next stage as its stdin file descriptor: in a pipeline
+ * (`stdin gen() -> upper() -> count()`) the stages run concurrently and each
+ * stage's stdout fd is inherited directly by the next stage's stdin, so bytes
+ * flow kernel-to-kernel and never enter the JS heap — producer and consumer
+ * overlap and peak RSS is independent of the payload size, with no stage's full
+ * body spooled to a temp file and reread before the next stage starts.
  */
 type StdinSource =
   | { kind: "bytes"; bytes: string }
   | { kind: "file"; path: string }
-  | { kind: "stream"; stream: Readable };
+  | { kind: "fd"; stream: Readable };
 
 type StepIO = {
   // Accept `Buffer` so a leaf's stdout can be streamed to disk without decoding
@@ -1648,7 +1650,7 @@ export class NodeWorkflowRuntime {
     scope: Scope,
     stage: Expr,
     source: StdinSource | undefined,
-    onSpawn: (child: ChildProcess) => void,
+    onSpawn?: (child: ChildProcess) => void,
   ): Promise<StepResult> {
     if (stage.kind === "inline_script") {
       const shebang = stage.lang ? `#!/usr/bin/env ${stage.lang}` : undefined;
@@ -1687,15 +1689,15 @@ export class NodeWorkflowRuntime {
   }
 
   /**
-   * Execute a streaming stdin pipeline. Every script/inline stage spawns in one
-   * tick and runs concurrently: each stage's live stdout is piped into the next
-   * stage's stdin through a bounded, backpressured `PassThrough`, so producer
-   * and consumers overlap and no stage's full body is spooled to a temp file and
-   * reread before the next stage starts. A def producer runs to completion first
-   * (its on-disk handle streams in); a value producer resolves to bytes. The
-   * pipeline result is the first non-zero stage, or the final stage on success
-   * (which feeds `const` capture / `return`). `catch` is applied by the caller;
-   * `recover` is rejected at parse time.
+   * Execute a streaming stdin pipeline. Every script/inline stage runs
+   * concurrently: each stage's live stdout file descriptor is inherited directly
+   * as the next stage's stdin, so bytes flow kernel-to-kernel and never enter the
+   * JS heap — producer and consumer overlap and peak RSS stays independent of the
+   * payload, with no stage's full body spooled to a temp file and reread first. A
+   * def producer runs to completion first (its on-disk handle streams in); a
+   * value producer resolves to bytes. The pipeline result is the first non-zero
+   * stage, or the final stage on success (which feeds `const` capture / `return`).
+   * `catch` is applied by the caller; `recover` is rejected at parse time.
    */
   private async executePipeline(
     scope: Scope,
@@ -1718,24 +1720,37 @@ export class NodeWorkflowRuntime {
     for (const stage of step.stages ?? []) liveStages.push(stage);
     liveStages.push(step.body);
 
-    // One PassThrough per adjacent pair. Pre-created so a stage's stdin source
-    // is known before that stage spawns (the spawn happens after each stage's
-    // own arg resolution, i.e. not synchronously in this loop). Each stage's
-    // onSpawn tees its live stdout into the downstream link; the link is force-
-    // ended if a stage never spawns or produces nothing, so a downstream child
-    // always reaches stdin EOF and the pipeline cannot hang.
-    const links: PassThrough[] = liveStages.slice(1).map(() => new PassThrough());
-    const running = liveStages.map((stage, i) => {
-      const source: StdinSource | undefined =
-        i === 0 ? upstream : { kind: "stream", stream: links[i - 1]! };
-      const downstream = links[i];
-      const onSpawn = (child: ChildProcess): void => {
-        if (downstream && child.stdout) child.stdout.pipe(downstream);
-      };
-      return this.runPipelineStage(scope, stage, source, onSpawn).then((r) => {
-        if (downstream && !downstream.writableEnded) downstream.end();
-        return r;
-      });
+    // One promise per adjacent pair, resolved with the upstream stage's live
+    // stdout the moment it spawns. The downstream stage awaits it and inherits
+    // that stdout as its stdin fd, so all stages still spawn back-to-back (arg
+    // resolution is fast) and run concurrently. Each promise is also resolved
+    // with `undefined` when its stage settles, so a stage that never spawns (an
+    // arg-resolution failure) can't hang the downstream — it just reads EOF.
+    const boundaries = liveStages.length - 1;
+    const stdoutResolvers: Array<(s: Readable | undefined) => void> = [];
+    const upstreamStdout: Array<Promise<Readable | undefined>> = Array.from(
+      { length: boundaries },
+      (_unused, j) => new Promise<Readable | undefined>((res) => { stdoutResolvers[j] = res; }),
+    );
+    const running = liveStages.map(async (stage, i) => {
+      const hasDownstream = i < boundaries;
+      let source: StdinSource | undefined;
+      if (i === 0) {
+        source = upstream;
+      } else {
+        const prev = await upstreamStdout[i - 1]!;
+        source = prev ? { kind: "fd", stream: prev } : undefined;
+      }
+      // A non-terminal stage hands its stdout to the next stage the instant it
+      // spawns; the terminal stage gets no onSpawn, so it captures normally.
+      const onSpawn = hasDownstream
+        ? (child: ChildProcess): void => stdoutResolvers[i]!(child.stdout ?? undefined)
+        : undefined;
+      try {
+        return await this.runPipelineStage(scope, stage, source, onSpawn);
+      } finally {
+        if (hasDownstream) stdoutResolvers[i]!(undefined);
+      }
     });
 
     const settled = await Promise.all(running);
@@ -2262,12 +2277,18 @@ export class NodeWorkflowRuntime {
       // the OS `ARG_MAX`) must fail the step exactly like the async `'error'`
       // event — never reject this Promise, or the run vanishes with no
       // STEP_END/RUN_END. Settle a status-1 failure with the same diagnostic.
-      // Only a `run script(args) stdin <expr>` step pipes stdin; every other
-      // step keeps stdin `ignore` so the child never blocks on a closed tty.
-      const stdinMode = stdin !== undefined ? "pipe" : "ignore";
+      // stdin[0]: an `fd` source (a live pipeline stage's stdout) is inherited
+      // directly so bytes flow kernel-to-kernel, never through the JS heap; a
+      // `bytes`/`file` source is fed as `pipe`; every other step keeps stdin
+      // `ignore` so the child never blocks on a closed tty.
+      // A non-terminal pipeline stage (`onSpawn` set) hands its stdout to the
+      // next stage's stdin fd, so its own stdout is NOT captured to disk here.
+      const handOff = onSpawn !== undefined;
+      const stdinTarget: "pipe" | "ignore" | Readable =
+        stdin?.kind === "fd" ? stdin.stream : stdin !== undefined ? "pipe" : "ignore";
       let child: ReturnType<typeof _scriptSpawn.spawn>;
       try {
-        child = _scriptSpawn.spawn(command, args, { cwd, env, stdio: [stdinMode, "pipe", "pipe"] });
+        child = _scriptSpawn.spawn(command, args, { cwd, env, stdio: [stdinTarget, "pipe", "pipe"] });
       } catch (err) {
         const msg = spawnFailureText(err, command, args, env, interpreter);
         error += msg;
@@ -2275,11 +2296,22 @@ export class NodeWorkflowRuntime {
         settle({ status: 1, output: "", error, streamed: true });
         return;
       }
-      // Expose the live child so a pipeline can pipe this stage's stdout into
-      // the next stage's stdin. Runs before any handler is attached; the stdout
-      // 'data' capture handler below and the next stage's pipe both consume the
-      // same stream (a tee), with backpressure governed by the downstream pipe.
+      // Expose the live child so a pipeline can inherit this stage's stdout fd
+      // as the next stage's stdin. Runs before any stdout handler is attached so
+      // the fd is handed off cleanly (this stage's stdout is not also captured).
       onSpawn?.(child);
+      // This child dup'd the inherited stdin fd during `spawn`, so release the
+      // parent's own copy of the upstream stage's stdout now. The child keeps its
+      // dup and reads every byte; closing the parent's copy lets the upstream's
+      // stdout socket reach EOF so the upstream step's `close` fires (a paused,
+      // un-read socket never would) and frees the fd.
+      if (stdin?.kind === "fd") {
+        try {
+          stdin.stream.destroy();
+        } catch {
+          // best-effort: upstream may have already gone away
+        }
+      }
       // Idle-output kill watchdog: when the step's kill signal fires the leaf
       // has produced no output for JAIPH_STEP_IDLE_KILL_SEC. Terminate the child
       // (SIGTERM → SIGKILL) and settle a failure immediately. We do NOT wait for
@@ -2312,9 +2344,14 @@ export class NodeWorkflowRuntime {
       // small and accumulated for diagnostics.
       child.stderr?.setEncoding("utf8");
       // Stream stdout to the `.out` capture only — no in-memory accumulation.
-      child.stdout?.on("data", (chunk: Buffer) => {
-        io?.appendOut(chunk);
-      });
+      // A non-terminal pipeline stage hands its stdout fd to the next stage
+      // (`handOff`), so it is neither read nor captured here — that is what keeps
+      // a large payload off the JS heap and peak RSS independent of its size.
+      if (!handOff) {
+        child.stdout?.on("data", (chunk: Buffer) => {
+          io?.appendOut(chunk);
+        });
+      }
       child.stderr?.on("data", (chunk: string) => {
         error += chunk;
         io?.appendErr(chunk);
@@ -2336,14 +2373,16 @@ export class NodeWorkflowRuntime {
       // larger than the pipe buffer (megabytes) never deadlocks a child that
       // echoes its input. A `file` source is piped as a read stream — the
       // producer's bytes are never slurped into a JS string (the stdin no-slurp
-      // pin). An EPIPE on a child that exits early is ignored: the exit code
-      // already settled the step.
-      if (stdin !== undefined && child.stdin) {
+      // pin). An `fd` source (a live pipeline stage's stdout) is already wired to
+      // this child's stdin at spawn time, so there is nothing to do in JS. An
+      // EPIPE on a child that exits early is ignored: the exit code already
+      // settled the step.
+      if (stdin !== undefined && stdin.kind !== "fd" && child.stdin) {
         const childStdin = child.stdin;
         childStdin.on("error", () => {});
         if (stdin.kind === "bytes") {
           childStdin.end(stdin.bytes, "utf8");
-        } else if (stdin.kind === "file") {
+        } else {
           const rs = createReadStream(stdin.path);
           rs.on("error", () => {
             try {
@@ -2353,18 +2392,6 @@ export class NodeWorkflowRuntime {
             }
           });
           rs.pipe(childStdin);
-        } else {
-          // Live upstream stage stdout: `pipe` respects backpressure (pausing
-          // the source when this child's stdin fills), so bytes never pile up
-          // in the JS heap. An upstream error just closes this child's stdin.
-          stdin.stream.on("error", () => {
-            try {
-              childStdin.end();
-            } catch {
-              // best-effort: child may have already exited
-            }
-          });
-          stdin.stream.pipe(childStdin);
         }
       }
     });
