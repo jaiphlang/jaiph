@@ -4,7 +4,6 @@
 def valid_name(name_arg) {
   return match name_arg {
     /[A-Z][a-z]+/ => name_arg
-    "" => fail "You didn't provide your name :("
     _ => fail "You provided an invalid name :("
   }
 }
