@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { tokenizeFixture, hasScope, scopeCount } from "./tmgrammar";
+import { tokenizeFixture, tokenizeSource, hasScope, scopeCount } from "./tmgrammar";
 
 // Each assertion pins a construct that exists in the CURRENT .jh grammar
 // (docs/grammar.md + parser sources), so the test breaks if the shipped
@@ -106,6 +106,34 @@ test("current .jh constructs highlight with the expected scopes", async () => {
   assert.ok(hasScope(t, "stdin", "keyword.control.command.jaiph"), "`stdin` must scope as a command keyword");
   assert.ok(hasScope(t, "->", "keyword.operator.send.jaiph"), "connect arrow `->` must share the send operator class");
   assert.ok(hasScope(t, "shout", "entity.name.function.jaiph"), "stdin-connect target must scope its callee as a function");
+});
+
+test("a multi-hop stdin pipeline scopes every arrow and every stage callee", async () => {
+  // `stdin gen() -> upper() -> count()` is a two-hop pipeline: BOTH `->` must
+  // share the send operator class and EVERY stage callee must scope as a
+  // function, as a plain statement and as a `const … =` binding. Fails if only
+  // the first arrow/callee is scoped (the pre-begin/end one-hop-only behaviour).
+  for (const line of [
+    "stdin gen() -> upper() -> count()",
+    "const n = stdin gen() -> upper() -> count()",
+  ]) {
+    const t = await tokenizeSource(`${line}\n`);
+    assert.equal(
+      scopeCount(t, "->", "keyword.operator.send.jaiph"),
+      2,
+      `both connect arrows on \`${line}\` must share the send operator class`,
+    );
+    for (const callee of ["gen", "upper", "count"]) {
+      assert.ok(
+        hasScope(t, callee, "entity.name.function.jaiph"),
+        `stage callee \`${callee}\` on \`${line}\` must scope as a function`,
+      );
+    }
+    assert.ok(
+      hasScope(t, "stdin", "keyword.control.command.jaiph"),
+      "`stdin` must stay a command keyword on a pipeline line",
+    );
+  }
 });
 
 test("current *.test.jh test-block keywords highlight", async () => {

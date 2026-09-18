@@ -40,6 +40,7 @@ export def main(task) {
   }
   const status = setup_env()
   stdin status -> shout(task)
+  stdin gen() -> upper() -> count()
 
   if status == "ok" {
     log "ready"

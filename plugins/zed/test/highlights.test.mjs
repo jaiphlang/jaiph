@@ -103,6 +103,26 @@ test("keywords, comments, and strings highlight in current.jh", () => {
   assert.ok(has(caps, "function", "analyze"), "named prompt callee should be @function");
 });
 
+test("a multi-hop stdin pipeline captures every arrow and every stage callee", () => {
+  const caps = runQuery("highlights.scm", "current.jh");
+  // `stdin gen() -> upper() -> count()`: locate the line via its unique last
+  // stage callee, then assert BOTH `->` are @operator and all three stage
+  // callees are @function on that row. Fails if only the first hop is captured.
+  const anchor = caps.find((c) => c.name === "function" && c.text === "count");
+  assert.ok(anchor, "`count` stage callee must capture as a @function");
+  const row = anchor.startRow;
+  const arrows = caps.filter(
+    (c) => c.name === "operator" && c.text === "->" && c.startRow === row,
+  );
+  assert.equal(arrows.length, 2, "both connect arrows on the pipeline line must be @operator");
+  for (const callee of ["gen", "upper", "count"]) {
+    assert.ok(
+      caps.some((c) => c.name === "function" && c.text === callee && c.startRow === row),
+      `stage callee \`${callee}\` on the pipeline line must be @function`,
+    );
+  }
+});
+
 test("test-block keywords highlight in current.test.jh", () => {
   const caps = runQuery("highlights.scm", "current.test.jh");
   for (const kw of [
