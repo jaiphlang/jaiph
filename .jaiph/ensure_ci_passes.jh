@@ -23,7 +23,7 @@ script npm_run_test_ci = ```
   ) &
   hb_pid=$!
   trap 'kill "${hb_pid}" >/dev/null 2>&1 || true' EXIT
-  npm run test:ci
+  npm run test:ci 2>&1
   rc=$?
   kill "${hb_pid}" >/dev/null 2>&1 || true
   exit "${rc}"
@@ -36,18 +36,9 @@ script assert_nonempty_file_or_fail = ```
   }
 ```
 
-# recover binds `failure` to the failed step's stdout CAPTURE PATH (an absolute
-# *.out under JAIPH_RUN_DIR); stderr is the sibling *.err. Copy those bytes from
-# disk into ci_log_file — never forward the ~1MB+ log through argv (ARG_MAX).
-script save_ci_log_from_capture = ```
-  out_path="$1"
-  dest="$2"
-  cp "$out_path" "$dest"
-  err_path="${out_path%.out}.err"
-  if [ -f "$err_path" ]; then
-    cat "$err_path" >> "$dest"
-  fi
-```
+# recover binds `failure` to the failed step's stdout as an output handle.
+# Stream it into dest — never argv (ARG_MAX), never treat it as a path.
+script save_ci_log = `cat > "$1"`
 
 export def ensure_ci_passes() {
   const ci_log_dir = ".jaiph/tmp"
@@ -58,7 +49,7 @@ export def ensure_ci_passes() {
   # log and prompt for a fix, then retry — bounded by run.recover_limit
   # (default 10) instead of unbounded workflow recursion.
   npm_run_test_ci() recover (failure) {
-    save_ci_log_from_capture(failure, ci_log_file)
+    stdin failure -> save_ci_log(ci_log_file)
     assert_nonempty_file_or_fail(ci_log_file)
     prompt """
       <role>
