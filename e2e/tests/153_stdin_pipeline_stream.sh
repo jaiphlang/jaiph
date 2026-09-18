@@ -147,8 +147,11 @@ e2e::assert_equals "$(cat "${out1}")" "${N1}" "sink counted all 64 MiB streamed 
 e2e::assert_equals "$(cat "${out2}")" "${N2}" "sink counted all 128 MiB streamed through the pipeline"
 
 # gen() is a live pipeline stage: its `.out` is the teed payload, not empty.
+# The two runs share a source file, so if they land in the same UTC second the
+# second run's dir is disambiguated to `<time>-volume.jh-<suffix>`; match the
+# optional suffix (trailing `*`) so both captures are always found.
 shopt -s nullglob
-gen_outs=( "${TEST_DIR}/.jaiph/runs/"*/*volume.jh/*script__gen.out )
+gen_outs=( "${TEST_DIR}/.jaiph/runs/"*/*volume.jh*/*script__gen.out )
 shopt -u nullglob
 [[ ${#gen_outs[@]} -eq 2 ]] || e2e::fail "expected two volume gen .out captures, got ${#gen_outs[@]}"
 got1="$(wc -c < "${gen_outs[0]}" | tr -d ' ')"
