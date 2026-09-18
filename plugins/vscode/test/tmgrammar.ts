@@ -42,11 +42,10 @@ function loadGrammar(): Promise<vsctm.IGrammar> {
   return grammarPromise;
 }
 
-/** Tokenize a fixture file, returning one flat list of tokens across all lines. */
-export async function tokenizeFixture(fixtureName: string): Promise<Token[]> {
+/** Tokenize raw source text, returning one flat list of tokens across all lines. */
+export async function tokenizeSource(source: string): Promise<Token[]> {
   const grammar = await loadGrammar();
-  const text = fs.readFileSync(path.join(FIXTURES_DIR, fixtureName), "utf8");
-  const lines = text.split(/\r?\n/);
+  const lines = source.split(/\r?\n/);
   let ruleStack = vsctm.INITIAL;
   const tokens: Token[] = [];
   for (const line of lines) {
@@ -57,6 +56,11 @@ export async function tokenizeFixture(fixtureName: string): Promise<Token[]> {
     ruleStack = result.ruleStack;
   }
   return tokens;
+}
+
+/** Tokenize a fixture file, returning one flat list of tokens across all lines. */
+export async function tokenizeFixture(fixtureName: string): Promise<Token[]> {
+  return tokenizeSource(fs.readFileSync(path.join(FIXTURES_DIR, fixtureName), "utf8"));
 }
 
 /** True if any token whose trimmed text equals `text` carries `scope`. */

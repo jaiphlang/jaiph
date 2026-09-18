@@ -41,6 +41,27 @@ test("a name immediately followed by `(` paints the callee as a function", () =>
     "qualified call `async helpers.scan()` last segment must be a function");
 });
 
+// Count the `->` arrow/operator spans in rendered HTML (`>` is escaped).
+function arrowCount(html) {
+  return (html.match(/<span class="ralph-operator">-&gt;<\/span>/g) || []).length;
+}
+
+test("a multi-hop stdin pipeline paints every arrow and every stage callee", () => {
+  // `stdin gen() -> upper() -> count()`: BOTH `->` are arrow/operator spans and
+  // EVERY stage callee is a function/identifier span, as a plain statement and
+  // as a `const … =` binding. Fails if only the first hop is painted.
+  for (const line of [
+    "stdin gen() -> upper() -> count()",
+    "const n = stdin gen() -> upper() -> count()",
+  ]) {
+    const html = highlightJaiphWithParser(line);
+    assert.equal(arrowCount(html), 2, `both arrows on \`${line}\` must be operator spans`);
+    for (const callee of ["gen", "upper", "count"]) {
+      assert.ok(isCall(html, callee), `stage callee \`${callee}\` on \`${line}\` must be a function span`);
+    }
+  }
+});
+
 test("keywords before `(` stay keywords, not calls", () => {
   const html = highlightJaiphWithParser("check_deps() catch (failure) {");
   assert.ok(isKeyword(html, "catch"), "`catch` before `(` must stay a keyword");

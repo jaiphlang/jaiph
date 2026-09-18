@@ -855,14 +855,25 @@
     "stdin-connect": {
       "patterns": [
         {
-          "comment": "stdin PAYLOAD -> call(args): connect stdin to a call. `stdin` is a keyword; the connect arrow shares the send operator class.",
+          "comment": "stdin pipeline: `stdin PAYLOAD -> stage() -> stage()`. `stdin` is a command keyword; the block spans the rest of the line so EVERY connect arrow shares the send operator class and EVERY stage callee scopes as a function, not just the first hop.",
           "name": "meta.stdin-connect.jaiph",
-          "match": "\\b(stdin)\\b.+?(->)\\s*([A-Za-z_][A-Za-z0-9_.]*)(?=\\s*\\()",
-          "captures": {
-            "1": { "name": "keyword.control.command.jaiph" },
-            "2": { "name": "keyword.operator.send.jaiph" },
-            "3": { "name": "entity.name.function.jaiph" }
-          }
+          "begin": "\\b(stdin)\\b",
+          "beginCaptures": {
+            "1": { "name": "keyword.control.command.jaiph" }
+          },
+          "end": "$",
+          "patterns": [
+            { "include": "#strings" },
+            {
+              "comment": "connect arrow between pipeline stages",
+              "match": "->",
+              "name": "keyword.operator.send.jaiph"
+            },
+            { "include": "#calls" },
+            { "include": "#variable-reference" },
+            { "include": "#references" },
+            { "include": "#constants" }
+          ]
         }
       ]
     },
