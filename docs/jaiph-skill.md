@@ -19,7 +19,7 @@ This page is your checklist for authoring Jaiph programs — it is not a languag
 | `prompt` | A task delegated to an AI agent; capture its answer with `const` |
 | `channel` | A message queue with declared def listeners, drained after the sending def finishes |
 
-A call result is an output handle: `const` / `if` / `${…}` slurp it into a string, while `stdin` streams it — see [Value types](https://jaiph.org/reference/language#value-types). Every step is logged; every run leaves durable artifacts under `.jaiph/runs/`. See [https://jaiph.org/reference/language](https://jaiph.org/reference/language) for what each construct means and [https://jaiph.org/reference/grammar](https://jaiph.org/reference/grammar) for the exact syntax.
+A call result is an output handle: `const` / `if` / `${…}` slurp it into a string, while `stdin` and `prompt x` stream it — see [Value types](https://jaiph.org/reference/language#value-types). Every step is logged; every run leaves durable artifacts under `.jaiph/runs/`. See [https://jaiph.org/reference/language](https://jaiph.org/reference/language) for what each construct means and [https://jaiph.org/reference/grammar](https://jaiph.org/reference/grammar) for the exact syntax.
 
 ## Smallest working example
 

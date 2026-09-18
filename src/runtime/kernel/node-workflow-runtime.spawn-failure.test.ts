@@ -321,14 +321,14 @@ test("runRoot: recover body runs after a mocked E2BIG on the recovered run step"
       (e) => e.type === "LOGERR" && typeof e.message === "string" && (e.message as string).includes("RECOVER_RAN"),
     );
     assert.ok(recoverLogs.length >= 1, "the recover body ran at least once after the E2BIG failure");
-    // The binding is an output handle; `${failure}` slurps the failed step's
-    // stdout CONTENTS — empty here, since the spawn threw before any stdout — so
-    // the message is `RECOVER_RAN ` with no path and no oversized-argv text. The
-    // E2BIG diagnostic is a spawn diagnostic that stays in the step's own `.err`.
+    // The binding is an output handle for the failed step's stdout THEN stderr,
+    // merged into one stream; `${failure}` slurps the merged CONTENTS. stdout is
+    // empty here (the spawn threw before any stdout), so the merge is just the
+    // E2BIG spawn diagnostic that landed on stderr — proving a stderr-only
+    // failure is now visible through the recover binding, still never a path.
     const bound = (recoverLogs[0]!.message as string).replace("RECOVER_RAN ", "");
-    assert.equal(bound, "", "a spawn that produced no stdout slurps to empty contents");
+    assert.match(bound, /E_ARGV_TOO_LARGE: \d+ bytes \(ARG_MAX exceeded\)/, "stderr-only failure surfaces the E2BIG diagnostic in the merged handle");
     assert.doesNotMatch(bound, /\.jaiph\/runs\/.+\.out/, "binding must never be a run-dir capture path");
-    assert.ok(!bound.includes("E_ARGV_TOO_LARGE"), "binding must be contents, not the oversized-argv text");
     const last = events[events.length - 1];
     assert.equal(last!.type, "RUN_END", "the run still terminates with RUN_END");
   } finally {
