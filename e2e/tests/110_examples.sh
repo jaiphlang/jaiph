@@ -25,6 +25,7 @@ COVERED_RUN=(
   "agent_inbox.jh"
   "say_hello.jh"       # failure path only; success needs a real agent
   "recover_loop.jh"    # success path only (report.txt pre-created); recovery needs a real agent
+  "stream.jh"          # stdin pipeline: gen -> upper -> count reduces to a line count
 )
 # Covered via `jaiph test`:
 COVERED_TEST=(
@@ -164,6 +165,32 @@ testing recover_loop.test.jh
   ▸ report exists on first attempt skips catch
   ✓ <time>
 ✓ 1 test(s) passed
+EOF
+
+# ── stream.jh — stdin pipeline ──────────────────────────────────────────────
+# gen() streams a few lines, upper() uppercases them, count() reduces to the
+# line count. Each stage is its own progress step; main returns the last stage.
+
+e2e::section "examples/stream.jh — stdin pipeline reduces to a line count"
+
+# When
+stream_out="$(e2e::run "stream.jh")"
+
+# Then
+e2e::expect_stdout "${stream_out}" <<'EOF'
+
+Jaiph: Running stream.jh
+
+def main
+  ▸ script gen
+  ✓ script gen (<time>)
+  ▸ script upper
+  ✓ script upper (<time>)
+  ▸ script count
+  ✓ script count (<time>)
+✓ PASS def main (<time>)
+
+3
 EOF
 
 # ── Orphan guard ─────────────────────────────────────────────────────────────

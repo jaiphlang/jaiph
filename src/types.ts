@@ -205,8 +205,18 @@ export type StepDef =
        * (named or inline); rejected on defs, `run async`, and non-script targets.
        * Always a `literal` Expr (the parser normalizes bare/interp forms to a
        * quoted literal); the runtime interpolates it and strips outer quotes.
+       * A `stdin` pipeline (`stdin p() -> s1() -> s2()`) instead carries a `call`
+       * / `inline_script` producer here plus the intermediate consumer stages in
+       * `stages`; `body` is the final consumer stage.
        */
       stdin?: Expr;
+      /**
+       * `stdin` pipeline: consumer script stages between the producer (`stdin`)
+       * and the final stage (`body`), in order. Absent for a plain `stdin
+       * <value> -> script()` connect or a single-hop `stdin p() -> script()`.
+       * Every stage is a `call` (to a script) or `inline_script`.
+       */
+      stages?: Expr[];
       loc: SourceLoc;
     }
   | {

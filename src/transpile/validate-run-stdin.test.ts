@@ -70,6 +70,57 @@ test("validate: stdin <script>() -> script() producer call is accepted", () => {
   );
 });
 
+test("validate: stdin foo() -> bar() -> baz() three-stage pipeline of scripts is accepted", () => {
+  compile(
+    [
+      "script foo = `echo hi`",
+      "script bar = `cat`",
+      "script baz = `cat`",
+      "export def main() {",
+      "  stdin foo() -> bar() -> baz()",
+      "}",
+      "",
+    ].join("\n"),
+  );
+});
+
+test("validate: a def in an intermediate consumer slot is E_VALIDATE", () => {
+  assert.throws(
+    () =>
+      compile(
+        [
+          "script foo = `echo hi`",
+          "script baz = `cat`",
+          "def mid() {",
+          '  log "hi"',
+          "}",
+          "export def main() {",
+          "  stdin foo() -> mid() -> baz()",
+          "}",
+          "",
+        ].join("\n"),
+      ),
+    /stdin pipeline stage requires a script; "mid" is a def/,
+  );
+});
+
+test("validate: a prompt producer is E_VALIDATE", () => {
+  assert.throws(
+    () =>
+      compile(
+        [
+          "script sink = `cat`",
+          'prompt greet() = "say hi"',
+          "export def main() {",
+          "  stdin greet() -> sink()",
+          "}",
+          "",
+        ].join("\n"),
+      ),
+    /prompt "greet" cannot be called as a script or def/,
+  );
+});
+
 test("validate: stdin <def>() -> script() producer call is accepted (producer may be a def)", () => {
   compile(
     [

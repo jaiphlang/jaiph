@@ -110,6 +110,140 @@ test("script() stdin: a payload > 1 MB is written in full and the step exits 0",
   }
 });
 
+/** Read the run's return_value.txt (written on a successful returning def). */
+function returnValue(runtime: NodeWorkflowRuntime): string {
+  return readFileSync(join(runtime.getRunDir(), "return_value.txt"), "utf8");
+}
+
+// AC: foo writes `a\nb\n`, bar uppercases, baz counts the uppercase lines. The
+// user-visible result of `stdin foo() -> bar() -> baz()` is 2, and each stage
+// is its own progress step. `baz` counts only UPPERCASE-leading lines so that
+// dropping or swapping a stage changes the number and fails the assertion.
+const PIPE_MODULE = [
+  "script foo = ```bash",
+  "printf 'a\\nb\\n'",
+  "```",
+  "script bar = ```bash",
+  "tr 'a-z' 'A-Z'",
+  "```",
+  "script baz = ```bash",
+  "grep -c '^[A-Z]' || true",
+  "```",
+].join("\n");
+
+test("stdin foo() -> bar() -> baz(): three-stage pipeline reduces to 2", async () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-stdin-pipe-"));
+  try {
+    const runtime = makeRuntime(
+      root,
+      [
+        PIPE_MODULE,
+        "export def main() {",
+        "  const n = stdin foo() -> bar() -> baz()",
+        "  return n",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const status = await runtime.runRoot("main", []);
+    assert.equal(status, 0, "pipeline ran to completion");
+    assert.equal(returnValue(runtime), "2", "last stage reduces to the line count");
+
+    // The middle stage ran on the producer's output (uppercased a\nb → A\nB).
+    const runDir = runtime.getRunDir();
+    const barOut = readdirSync(runDir).find((f) => f.endsWith(".out") && f.includes("bar"));
+    assert.ok(barOut, "expected a bar .out capture");
+    assert.equal(readFileSync(join(runDir, barOut!), "utf8"), "A\nB\n");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("stdin foo() -> baz(): dropping the uppercase stage changes the result (not 2)", async () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-stdin-pipe-drop-"));
+  try {
+    const runtime = makeRuntime(
+      root,
+      [
+        PIPE_MODULE,
+        "export def main() {",
+        "  const n = stdin foo() -> baz()",
+        "  return n",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const status = await runtime.runRoot("main", []);
+    assert.equal(status, 0);
+    assert.equal(returnValue(runtime), "0", "no uppercase lines when bar is dropped");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("stdin wrap() -> bar(): a def producer feeds the same bytes as the script producer", async () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-stdin-wrap-"));
+  try {
+    const runtime = makeRuntime(
+      root,
+      [
+        PIPE_MODULE,
+        "def wrap() {",
+        "  return foo()",
+        "}",
+        "export def main() {",
+        "  stdin wrap() -> bar()",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const status = await runtime.runRoot("main", []);
+    assert.equal(status, 0);
+    const runDir = runtime.getRunDir();
+    const barOut = readdirSync(runDir).find((f) => f.endsWith(".out") && f.includes("bar"));
+    assert.ok(barOut, "expected a bar .out capture");
+    assert.equal(readFileSync(join(runDir, barOut!), "utf8"), "A\nB\n", "wrap() -> bar() == foo() -> bar()");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// AC: catch on a pipeline is a one-shot handler. A non-zero intermediate stage
+// stops the pipeline; the attached catch runs once and the def succeeds.
+test("stdin gen() -> boom() -> sink() catch: a failing middle stage runs the one-shot catch", async () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-stdin-catch-"));
+  try {
+    const runtime = makeRuntime(
+      root,
+      [
+        "script gen = ```bash",
+        "echo hi",
+        "```",
+        "script boom = ```bash",
+        "exit 3",
+        "```",
+        "script sink = ```bash",
+        "cat",
+        "```",
+        "export def main() {",
+        "  stdin gen() -> boom() -> sink() catch (e) {",
+        '    log "recovered"',
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const status = await runtime.runRoot("main", []);
+    assert.equal(status, 0, "catch handled the middle-stage failure");
+    // sink never ran (later stages do not start after the first non-zero stage).
+    const runDir = runtime.getRunDir();
+    const sinkOut = readdirSync(runDir).find((f) => f.endsWith(".out") && f.includes("sink"));
+    assert.equal(sinkOut, undefined, "sink stage did not start");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 // AC: an inline-script run also pipes stdin.
 test("`cat`() stdin payload: inline script receives stdin", async () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-stdin-inline-"));
