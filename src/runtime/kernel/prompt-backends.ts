@@ -17,6 +17,7 @@ import {
   DEFAULT_PROMPT_IDLE_TIMEOUT_MS,
   DEFAULT_PROMPT_MAX_DURATION_MS,
   type PromptConfig,
+  type PromptSource,
 } from "./prompt-config";
 import { commandExists, prepareClaudeEnv } from "./prompt-claude";
 import { runCodexBackend } from "./prompt-codex";
@@ -156,6 +157,21 @@ export function installPromptWatchdog(
   };
 }
 
+/**
+ * Consume a handle-sourced prompt body to a string at the send site. Used only
+ * by the codex HTTP backend, which must build a JSON body and so cannot stream;
+ * this reads the handle stream once, here, never earlier in `runPromptStep`.
+ */
+function consumePromptSource(source: PromptSource): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    const rs = source.open();
+    rs.on("data", (chunk: Buffer) => chunks.push(Buffer.from(chunk)));
+    rs.on("error", reject);
+    rs.on("end", () => resolve(Buffer.concat(chunks).toString("utf8") + source.suffix));
+  });
+}
+
 /** Run the backend process and parse its streaming output. */
 export function runBackend(
   config: PromptConfig,
@@ -165,13 +181,23 @@ export function runBackend(
   stderr: NodeJS.WritableStream = process.stderr,
   /** Named-prompt `use` keys (granted host secrets) injected on top of the scrubbed env. */
   useEnv?: NodeJS.ProcessEnv,
+  /**
+   * A kept output-handle body (`prompt x` / `prompt ${x}`). Stdin backends
+   * (claude / custom) stream the file at `promptSource.path` into the child so a
+   * multi-megabyte handle is never slurped into a JS string; codex / cursor read
+   * it at the send site.
+   */
+  promptSource?: PromptSource,
 ): Promise<{ final: string; status: number }> {
   // Codex uses HTTP API, not a CLI subprocess, but the named-prompt `use`
   // contract is identical: the request env is the scrubbed env plus the
   // granted `use` keys, injected last.
   if (config.backend === "codex") {
     const requestEnv = applyUseEnv(scrubPromptEnv(execEnv, config.backend), useEnv);
-    return _codexBackend.run(config, promptText, writer, stderr, requestEnv);
+    if (!promptSource) return _codexBackend.run(config, promptText, writer, stderr, requestEnv);
+    return consumePromptSource(promptSource).then((text) =>
+      _codexBackend.run(config, text, writer, stderr, requestEnv),
+    );
   }
 
   // Pre-flight check for claude backend
@@ -258,8 +284,22 @@ export function runBackend(
     });
 
     if (useStdin && child.stdin) {
-      child.stdin.write(promptText);
-      child.stdin.end();
+      if (promptSource) {
+        // Kept handle: stream the bytes into the child's stdin so the body is
+        // never slurped into a JS string, then append any `returns` schema
+        // instruction. Mirrors the `stdin <handle> -> script()` source.
+        const stdin = child.stdin;
+        const rs = promptSource.open();
+        rs.on("error", () => stdin.end());
+        rs.on("end", () => {
+          if (promptSource.suffix) stdin.write(promptSource.suffix);
+          stdin.end();
+        });
+        rs.pipe(stdin, { end: false });
+      } else {
+        child.stdin.write(promptText);
+        child.stdin.end();
+      }
     }
 
     // Custom commands: collect raw stdout without JSON stream parsing.

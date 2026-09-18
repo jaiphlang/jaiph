@@ -323,7 +323,7 @@ test("NodeWorkflowRuntime: failed prompt preserves backend stderr in artifacts a
   }
 });
 
-test("NodeWorkflowRuntime: run catch binds the failed step's stdout capture PATH, stderr in sibling .err", async () => {
+test("NodeWorkflowRuntime: run catch binds the failed step's stdout then stderr merged as one handle", async () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-node-wf-ensure-catch-"));
   try {
     const jh = join(root, "ensure_catch_payload.jh");
@@ -340,8 +340,9 @@ test("NodeWorkflowRuntime: run catch binds the failed step's stdout capture PATH
         "  check_ready_impl()",
         "}",
         "",
-        // The recover binding is an OUTPUT HANDLE; passing it as an argv arg is a
-        // force site, so `$1` is the failed step's stdout CONTENTS (not a path).
+        // The recover binding is an OUTPUT HANDLE for the failed step's stdout
+        // then stderr; passing it as an argv arg is a force site, so `$1` is the
+        // merged CONTENTS (not a path).
         'script write_catch_received = `printf "%s" "$1" > catch_received.txt`',
         "",
         'script write_catch_arg2 = `echo "$1" > catch_arg2.txt`',
@@ -388,9 +389,10 @@ test("NodeWorkflowRuntime: run catch binds the failed step's stdout capture PATH
     assert.equal(status, 0);
 
     // The binding is an output handle: slurped at the argv force site to the
-    // failed step's stdout CONTENTS (trimmed), never a run-dir `.out` path.
+    // failed step's stdout then stderr merged CONTENTS (trimmed), never a
+    // run-dir `.out` path.
     const bound = readFileSync(join(root, "catch_received.txt"), "utf8");
-    assert.equal(bound, "analysis-stdout-log", "binding slurps the failed step's stdout contents");
+    assert.equal(bound, "analysis-stdout-log\nanalysis-stderr-log", "binding slurps the failed step's merged stdout+stderr contents");
     assert.doesNotMatch(bound, /\.jaiph\/runs\/.+\.out/, "binding must never be a run-dir capture path");
     assert.ok(!bound.endsWith(".out"), `binding must be contents, not a .out path, got: ${bound}`);
 
@@ -405,9 +407,10 @@ test("NodeWorkflowRuntime: recover handle streams a >1MB failed stdout via `stdi
   const root = mkdtempSync(join(tmpdir(), "jaiph-node-wf-catch-big-"));
   try {
     // 2 MB of stdout — comfortably past any ARG_MAX. The recover binding is an
-    // output handle; `stdin failure -> record()` streams the failed step's
-    // stdout capture straight into the child, so the multi-megabyte log never
-    // touches argv (which would E2BIG) and is never slurped into a JS string.
+    // output handle for the failed step's stdout then stderr; `stdin failure ->
+    // record()` streams the merged capture straight into the child, so the
+    // multi-megabyte log never touches argv (which would E2BIG) and is never
+    // slurped into a JS string.
     const lineCount = 40000; // 40000 * ~52 bytes ≈ 2 MB
     const jh = join(root, "big_stdout.jh");
     writeFileSync(
@@ -461,13 +464,17 @@ test("NodeWorkflowRuntime: recover handle streams a >1MB failed stdout via `stdi
     const status = await runtime.runMain([]);
     assert.equal(status, 0);
 
-    // The sink received the full >1MB failed stdout via stdin (streamed, not argv).
+    // The sink received the full >1MB merged failure via stdin (streamed, not argv).
     const captured = readFileSync(join(root, "captured.txt"), "utf8");
     assert.ok(captured.length > 1_000_000, `streamed stdin should exceed 1MB, got ${captured.length}`);
     assert.match(captured, /log-line-payload-marker-1-/);
     assert.match(captured, new RegExp(`log-line-payload-marker-${lineCount}-`));
-    // stderr stayed on the failed step's own .err; only stdout is the handle.
-    assert.ok(!captured.includes("big-stderr-marker"), "stderr must not be part of the stdout handle");
+    // stderr is merged onto the handle after the stdout bytes.
+    assert.match(captured, /big-stderr-marker/, "stderr is merged onto the handle after stdout");
+    assert.ok(
+      captured.indexOf("big-stderr-marker") > captured.lastIndexOf("log-line-payload-marker-"),
+      "stderr bytes come after the stdout bytes in the merged stream",
+    );
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

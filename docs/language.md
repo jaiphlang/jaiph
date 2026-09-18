@@ -25,7 +25,7 @@ For the formal grammar (EBNF, lexical rules, and the validation catalog) see [Gr
 |---|---|---|
 | `string` | Text. Literals, params, slurped handles. | `${…}` interpolation, call arguments, `const`, `prompt` body, `send` payload, `return`. |
 | `script` | The declaration. | Invocable with a bare call `name(args)`. |
-| output handle | The result of a script / def / prompt call, and of a `recover` / `catch` binding. Its bytes live on disk (or in a pipe) until a force site slurps them. | `stdin h -> script()` streams it; a force site slurps it to a `string`. |
+| output handle | The result of a script / def / prompt call, and of a `recover` / `catch` binding. Its bytes live on disk (or in a pipe) until a force site slurps them. | `stdin h -> script()` and a `prompt h` / `prompt ${h}` body stream it; a force site slurps it to a `string`. |
 
 A call **always runs at the call site** — this is lazy *slurp*, not lazy execution. The result is an output handle, not a string; the bytes are read into memory only at a force site. A huge slurp may exhaust memory — that is you asking for the bytes.
 
@@ -33,13 +33,14 @@ A call **always runs at the call site** — this is lazy *slurp*, not lazy execu
 
 - `const x = <call>()`
 - `if` / `match` subject, `${x}` interpolation, a call argument, `log` / `logerr` / `logwarn`
-- a `prompt` body that references a handle (`prompt "… ${x} …"` or the `prompt x` identifier form) — the agent is sent the slurped contents, never a path
+- an **interpolated** `prompt` body that embeds a handle inside a constructed string (`prompt "… ${x} …"` or `prompt """… ${x} …"""`) — building the string slurps the handle, and the agent is sent that built string, never a path
 - `return <call>()` yields a handle to the caller; the caller slurps only at *its* force site. Printing the entry def's return streams the file to you rather than pulling it through memory.
 
 **Keep as an output handle (no in-memory string):**
 
 - A statement call whose result is unused (`` `echo hi`() ``, `fetch_log()`)
 - `stdin <handle> -> script()` and `stdin <call>() -> script()` — the bytes stream into the child from disk
+- A `prompt x` / `prompt ${x}` body that is exactly a handle (the identifier or bare-ref form, not embedded in a larger string) — the handle's bytes stream into the agent transport instead of being slurped, the same keep-as-handle rule as `stdin`
 - A `recover (failure)` / `catch (err)` binding — until a force site reads it
 
 Crossings: interpolating, an `if` subject, or a call argument on a handle **is** the slurp — after it, the value is a `string`. A `string` cannot be invoked as a call (`E_VALIDATE: strings are not executable`). A `script` is not interpolatable, not `const`-assignable by name, and not a valid `prompt` body. Do not interpolate a handle as a filesystem path. Crossings produce specific `E_VALIDATE` messages identifying the violated rule.
@@ -175,7 +176,7 @@ export def main() {
 
 | Aspect | Behaviour |
 |---|---|
-| Resolution trigger | First non-passthrough read — string interpolation, argument to a call, comparison in `if` / `match`, prompt body referencing `${h}`, channel `send` payload referencing `${h}`, or `const copy = h` (bare-identifier RHS desugars to `"${h}"`). |
+| Resolution trigger | First non-passthrough read — string interpolation, argument to a call, comparison in `if` / `match`, an interpolated prompt body embedding `${h}` in a larger string (a bare `prompt ${h}` streams instead — see [Value types](#value-types)), channel `send` payload referencing `${h}`, or `const copy = h` (bare-identifier RHS desugars to `"${h}"`). |
 | Passthrough | Initial capture (`const h = async foo()`), bare `async` with no capture name. |
 | Implicit join | When the enclosing `executeSteps` scope exits, all remaining unresolved handles created there are joined. Failures aggregate like a synchronous step. |
 | `recover` / `catch` | Both work with the statement form of `async`, and `recover` uses the same retry-limit semantics as non-async `recover` (`run.recover_limit`). A captured `const h = async foo()` cannot carry `catch` / `recover`. Wrap the target in a def if you need them on a captured handle. |
@@ -186,7 +187,7 @@ See [Run work concurrently](async.md) for the operator recipe and [Spec — Asyn
 
 ## `catch` and `recover`
 
-Both attach to a call (any form). The binding is an **output handle** for the failed step's stdout ([Value types](#value-types)) — not a path and not an eager string. Force it and it slurps the failed stdout **contents** (`logerr "${failure}"`, a call argument, an `if` subject); connect it and it streams (`stdin failure -> tail_log()`), so a multi-megabyte failed log never hits `ARG_MAX`. The handle's bytes live on the failed step's stdout capture on disk; the recovery body never sees a `.jaiph/runs/…/NNNNNN-*.out` path.
+Both attach to a call (any form). The binding is an **output handle** for the failed step's **stdout then stderr merged into one stream** ([Value types](#value-types)) — not a path and not an eager string. Force it and it slurps the merged **contents** (`logerr "${failure}"`, a call argument, an `if` subject); connect it and it streams (`stdin failure -> tail_log()`), so a multi-megabyte failed log never hits `ARG_MAX`. A typical Unix failure writes the useful text to stderr, so the merge means `${failure}` is non-empty even when the producer never did `2>&1` (that redirect stays legal and gives chronological interleave when the author wants it). The handle's bytes live in one on-disk capture; the recovery body never sees a `.jaiph/runs/…/NNNNNN-*.out` path.
 
 ```jaiph
 check_report_exists() recover (failure) {

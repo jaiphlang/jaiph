@@ -322,3 +322,70 @@ test("recover binding: ${failure} slurps failed stdout contents, not a .out path
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+// The binding is the failed step's stdout THEN stderr, merged into one handle.
+// A force site (argv) slurps the merged contents (trimmed); `stdin failure ->`
+// streams the merged capture verbatim.
+test("recover binding: handle is merged stdout then stderr", async () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-slurp-recover-merge-"));
+  try {
+    const runtime = makeRuntime(
+      root,
+      [
+        "script boom = ```",
+        'echo "out-line"',
+        'echo "err-line" >&2',
+        "exit 1",
+        "```",
+        'script record = `printf "%s" "$1" > seen.txt`',
+        'script save = `cat > streamed.txt`',
+        "export def main() {",
+        "  boom() catch (failure) {",
+        "    stdin failure -> save()",
+        "    record(failure)",
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const status = await runtime.runRoot("main", []);
+    assert.equal(status, 0);
+    const seen = readFileSync(join(root, "seen.txt"), "utf8");
+    assert.equal(seen, "out-line\nerr-line", "argv force slurps merged stdout+stderr (trimmed)");
+    assert.doesNotMatch(seen, /\.jaiph\/runs\/.+\.out/, "binding must never be a run-dir capture path");
+    const streamed = readFileSync(join(root, "streamed.txt"), "utf8");
+    assert.equal(streamed, "out-line\nerr-line\n", "stdin streams the merged capture verbatim");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// A Unix failure that writes only to stderr still yields a non-empty handle,
+// trimmed the same way a stdout handle is — no `2>&1` required on the producer.
+test("recover binding: stderr-only failure yields the stderr text", async () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-slurp-recover-stderr-"));
+  try {
+    const runtime = makeRuntime(
+      root,
+      [
+        "script boom = ```",
+        'echo "boom" >&2',
+        "exit 1",
+        "```",
+        'script record = `printf "%s" "$1" > seen.txt`',
+        "export def main() {",
+        "  boom() catch (failure) {",
+        "    record(failure)",
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const status = await runtime.runRoot("main", []);
+    assert.equal(status, 0);
+    const seen = readFileSync(join(root, "seen.txt"), "utf8");
+    assert.equal(seen, "boom", "binding is the stderr text when stdout is empty");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

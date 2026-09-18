@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { errText } from "../../errors";
-import { appendFileSync, closeSync, copyFileSync, createReadStream, mkdirSync, openSync, readFileSync, readSync, writeFileSync } from "node:fs";
+import { appendFileSync, closeSync, copyFileSync, createReadStream, mkdirSync, openSync, readFileSync, readSync, writeFileSync, writeSync } from "node:fs";
 import { basename, dirname, join, resolve as resolvePath } from "node:path";
 import { PassThrough, type Readable } from "node:stream";
 import { randomUUID } from "node:crypto";
@@ -15,11 +15,13 @@ import type { CatchBody, Def, Expr, LocalDecl, MatchExprDef, MatchPatternDef, St
 import {
   executePrompt,
   modelForStepEvent,
+  promptBodyOffArgv,
   resolveConfig,
   resolveModel,
   resolvePromptConfig,
   resolvePromptStepName,
   shellQuote,
+  type PromptSource,
 } from "./prompt";
 import { appendRunSummaryLine, CHAIN_KEY_ENV } from "./emit";
 import { buildStepDisplayParamPairs } from "./format-params";
@@ -249,6 +251,7 @@ export class NodeWorkflowRuntime {
   private readonly mockBodies: Map<string, MockBodyDef>;
   private handleRegistry = new Map<string, AsyncHandle>();
   private handleIdCounter = 0;
+  private recoverMergeCounter = 0;
   private readonly abortController = new AbortController();
   /**
    * Optional max-step circuit breaker (`JAIPH_MAX_STEPS`, `0` = disabled).
@@ -1914,6 +1917,52 @@ export class NodeWorkflowRuntime {
     return Object.keys(out).length > 0 ? out : undefined;
   }
 
+  /**
+   * `prompt x` / `prompt ${x}` (identifier / bare-ref body, raw `"${ident}"`)
+   * naming a bound output handle keeps the handle: resolve it to its on-disk
+   * capture so the transport streams the bytes instead of slurping a
+   * (possibly multi-megabyte) file into a JS string. Mirrors `stdin <handle> ->`.
+   * Returns `null` when the body is not a bare handle ref (a plain string, an
+   * interpolated `"… ${x} …"`, or a non-handle var) so the caller interpolates
+   * normally — that path is a slurp by design. An eager (in-memory) handle value
+   * returns as bytes; the file case returns a path for streaming.
+   */
+  private async resolvePromptHandleSource(
+    scope: Scope,
+    raw: string,
+  ): Promise<
+    | { ok: true; source: null }
+    | { ok: true; source: { kind: "bytes"; bytes: string } }
+    | { ok: true; source: { kind: "file"; path: string } }
+    | { ok: false; result: StepResult }
+  > {
+    const bare = raw.match(/^"\$\{([A-Za-z_][A-Za-z0-9_]*)\}"$/);
+    if (!bare) return { ok: true, source: null };
+    const bound = scope.vars.get(bare[1]!);
+    if (!bound || !this.isHandle(bound)) return { ok: true, source: null };
+    const r = await this.resolveHandleResult(bound);
+    if (r.status !== 0) return { ok: false, result: r };
+    if (r.returnValue !== undefined) return { ok: true, source: { kind: "bytes", bytes: r.returnValue } };
+    if (r.valueFile) return { ok: true, source: { kind: "file", path: r.valueFile } };
+    return { ok: true, source: { kind: "bytes", bytes: (r.output ?? "").trim() } };
+  }
+
+  /** First up-to-`limit` bytes of a file as a preview string (bounded read, never a slurp). */
+  private readFilePreview(path: string, limit: number): string {
+    try {
+      const fd = openSync(path, "r");
+      try {
+        const buf = Buffer.alloc(limit);
+        const n = readSync(fd, buf, 0, limit, 0);
+        return buf.subarray(0, n).toString("utf8");
+      } finally {
+        closeSync(fd);
+      }
+    } catch {
+      return "";
+    }
+  }
+
   private async runPromptStep(
     scope: Scope,
     raw: string,
@@ -1922,21 +1971,43 @@ export class NodeWorkflowRuntime {
     io: StepIO | undefined,
     useEnv?: NodeJS.ProcessEnv,
   ): Promise<{ ok: true; output: string } | { ok: false; result: StepResult; output: string }> {
-    const promptIr = await this.interpolateWithCaptures(raw, scope);
-    if (!promptIr.ok) return { ok: false, result: promptIr.result, output: "" };
-    let promptText = promptIr.value;
     const promptConfig = resolvePromptConfig(scope.env, this.resolveConfigAgentModel(scope, scope.filePath));
     const backend = promptConfig.backend || "cursor";
     const stepName = resolvePromptStepName(promptConfig);
     const modelRes = resolveModel(promptConfig);
+    const handleRes = await this.resolvePromptHandleSource(scope, raw);
+    if (!handleRes.ok) return { ok: false, result: handleRes.result, output: "" };
+    // A file-sourced handle streams into the backend and is never slurped here —
+    // except for the cursor-agent backend, which delivers the body on argv and
+    // so must materialize it like any argv value (interpolated below). An eager
+    // (in-memory) handle value and every other body interpolate to a string.
+    const fileSource =
+      handleRes.source?.kind === "file" && promptBodyOffArgv(promptConfig) ? handleRes.source : undefined;
+    let promptText: string;
+    if (handleRes.source?.kind === "bytes") {
+      promptText = handleRes.source.bytes;
+    } else if (fileSource) {
+      promptText = "";
+    } else {
+      const promptIr = await this.interpolateWithCaptures(raw, scope);
+      if (!promptIr.ok) return { ok: false, result: promptIr.result, output: "" };
+      promptText = promptIr.value;
+    }
     let schemaFields: PromptSchemaField[] | undefined;
+    let schemaSuffix = "";
     if (returns !== undefined) {
       schemaFields = parsePromptSchema(returns);
       const schemaObject = Object.fromEntries(schemaFields.map((f) => [f.name, f.type]));
-      promptText +=
+      schemaSuffix =
         "\n\nRespond with exactly one line of valid JSON (no markdown, no explanation) matching this schema: " +
         JSON.stringify(schemaObject);
+      // A file source appends the schema after the streamed bytes (see
+      // `promptSource.suffix`); every other body appends to the string here.
+      if (!fileSource) promptText += schemaSuffix;
     }
+    const promptSource: PromptSource | undefined = fileSource
+      ? { open: () => createReadStream(fileSource.path), suffix: schemaSuffix }
+      : undefined;
     const delaysRes = this.getPromptRetryDelays();
     if (!delaysRes.ok) {
       this.emitter.emitLog("LOGERR", `prompt retry config invalid: ${delaysRes.error}`);
@@ -1967,7 +2038,7 @@ export class NodeWorkflowRuntime {
         backend,
         model: modelRes.model || undefined,
         model_reason: modelRes.reason,
-        preview: promptText.slice(0, 120),
+        preview: fileSource ? this.readFilePreview(fileSource.path, 120) : promptText.slice(0, 120),
       });
       const out = new PassThrough();
       const chunks: string[] = [];
@@ -1988,7 +2059,7 @@ export class NodeWorkflowRuntime {
           io?.appendErr(chunk);
           if (chunk.length > 0) idleWarn?.bump();
         });
-        const result = await executePrompt(promptText, promptConfig, out, scope.env, err, useEnv);
+        const result = await executePrompt(promptText, promptConfig, out, scope.env, err, useEnv, promptSource);
         const promptErr = errChunks.join("");
         this.emitter.emitPromptStepEnd(promptStep, result.status, chunks.join(""), promptErr);
         this.emitter.emitPromptEvent("PROMPT_END", {
@@ -2070,6 +2141,51 @@ export class NodeWorkflowRuntime {
     return { ok: true, output: lastOutput };
   }
 
+  /**
+   * Merge the failed step's stdout then stderr into one on-disk capture and
+   * return its path — the byte source for a `recover` / `catch` handle. The
+   * handle is a single stream (stdout followed by stderr), so a force site
+   * slurps the merged contents and `stdin failure -> script()` streams them.
+   * The two captures are concatenated on disk in bounded chunks and never
+   * slurped into one JS string, so a multi-megabyte failure stays out of the
+   * heap. The `.merged` name is deliberately not `.out`, so the recovery body
+   * never binds a `.jaiph/runs/…/NNNNNN-*.out` path.
+   */
+  private writeRecoverMerge(stdoutFile: string | undefined, errFile: string | undefined): string {
+    this.recoverMergeCounter += 1;
+    const seq = String(this.recoverMergeCounter).padStart(6, "0");
+    const mergedFile = join(this.runDir, `${seq}-recover.merged`);
+    const dest = openSync(mergedFile, "w");
+    try {
+      this.copyFileBytes(dest, stdoutFile);
+      this.copyFileBytes(dest, errFile);
+    } finally {
+      closeSync(dest);
+    }
+    return mergedFile;
+  }
+
+  /** Append a source file's bytes into an open fd in bounded chunks (never a slurp). */
+  private copyFileBytes(destFd: number, srcPath: string | undefined): void {
+    if (!srcPath) return;
+    let src: number;
+    try {
+      src = openSync(srcPath, "r");
+    } catch {
+      return;
+    }
+    try {
+      const buf = Buffer.alloc(64 * 1024);
+      let n = readSync(src, buf, 0, buf.length, null);
+      while (n > 0) {
+        writeSync(destFd, buf, 0, n);
+        n = readSync(src, buf, 0, buf.length, null);
+      }
+    } finally {
+      closeSync(src);
+    }
+  }
+
   /** Run a recover/catch body with `failure` bound to the failed step's payload. */
   private async runRecoverBody(
     scope: Scope,
@@ -2084,22 +2200,22 @@ export class NodeWorkflowRuntime {
     // `vars`) so a nested decl inside the body does not leak past it.
     const bodyScope = blockChildScope(scope);
     // Bind the failed step as an OUTPUT HANDLE, not a run-dir path: a status-0
-    // handle whose `valueFile` is the failed step's stdout capture. So
-    // `${failure}` / a bare-arg / `if failure` slurps the failed step's stdout
-    // CONTENTS, and `stdin failure -> sink()` streams that file — the author
-    // never sees a `.jaiph/runs/…/NNNNNN-*.out` path. (stderr stays in the
-    // sibling `.err`, `failed.errFile`.)
-    // The handle's bytes are the failed step's stdout: a leaf script's own
+    // handle whose `valueFile` is the failed step's stdout THEN stderr merged
+    // into one capture. So `${failure}` / a bare-arg / `if failure` slurps the
+    // merged CONTENTS, and `stdin failure -> sink()` streams that file — the
+    // author never sees a `.jaiph/runs/…/NNNNNN-*.out` path. A Unix failure that
+    // writes only to stderr still yields a non-empty handle without any `2>&1`.
+    // The stdout bytes are the failed step's stdout: a leaf script's own
     // capture, or — when a def failed because an inner call failed — the inner
-    // stdout propagated up as `valueFile`. The def's own capture is empty.
+    // stdout propagated up as `valueFile`. The stderr bytes are the failed
+    // step's accumulated `.err` capture.
     const stdoutFile = failed.valueFile ?? failed.outFile;
+    const mergedFile = this.writeRecoverMerge(stdoutFile, failed.errFile);
     const handleId = this.createResolvedHandle(catchDef.bindings.failure, {
       status: 0,
       output: "",
       error: "",
-      ...(failed.outFile ? { outFile: failed.outFile } : {}),
-      ...(stdoutFile ? { valueFile: stdoutFile } : {}),
-      ...(failed.errFile ? { errFile: failed.errFile } : {}),
+      valueFile: mergedFile,
     });
     bodyScope.vars.set(catchDef.bindings.failure, handleId);
     return this.executeSteps(bodyScope, recoverSteps);
