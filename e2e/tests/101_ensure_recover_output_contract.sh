@@ -9,28 +9,23 @@ trap e2e::cleanup EXIT
 e2e::prepare_test_env "ensure_recover_output_contract"
 TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 
-# catch/recover bind the failed step's stdout CAPTURE PATH (a `NNNNNN-*.out`
-# file under JAIPH_RUN_DIR), not the merged stdout+stderr bytes. Stderr stays
-# in the sibling `.err`. Recover bodies read the bytes from disk (cp/cat the
-# bound path) instead of receiving them as argv, so a huge log never hits
-# ARG_MAX. Each section below cp's the bound `.out` and its sibling `.err` into
-# witness files and asserts their full contents.
+# catch/recover bind the failed step's stdout as an OUTPUT HANDLE (see Value
+# types in docs/language.md): its bytes live on the failed step's stdout capture
+# on disk. `stdin failure -> save()` STREAMS those bytes into the recover body's
+# script (never argv, so a huge log cannot hit ARG_MAX); passing `failure` as an
+# argv arg is a force site that SLURPS the same stdout contents. The binding is
+# never a `.jaiph/runs/…/*.out` path. Each section streams the handle into a
+# witness file and asserts its full contents.
 
-# Shared recover helper: `$1` is the bound stdout-capture path.
-#   $2 <- the raw binding (must be an absolute *.out path)
-#   $3 <- a copy of the stdout capture
-#   $4 <- a copy of the sibling stderr capture
-CAPTURE_SCRIPT='script capture_recover = ```
-binding="$1"
-printf "%s" "$binding" > "$2"
-cp "$binding" "$3"
-cp "${binding%.out}.err" "$4"
-```'
+# Shared helpers: `save` copies its stdin to $1; `record` copies its $1 (a force
+# site — the slurped stdout contents) to $2.
+HELPERS='script save = `cat > "$1"`
+script record = `printf "%s" "$1" > "$2"`'
 
 # ===================================================================
-# 1. Simple script failure through rule: stdout capture path + sibling .err
+# 1. Simple script failure: stream the failed stdout; binding is contents
 # ===================================================================
-e2e::section "recover binds the stdout capture path; stderr in sibling .err"
+e2e::section "recover streams the failed stdout; the binding is contents, not a path"
 
 e2e::file "simple_echo.jh" <<EOF
 script simple_echo = \`\`\`
@@ -39,7 +34,7 @@ echo "Oops" >&2
 exit 1
 \`\`\`
 
-${CAPTURE_SCRIPT}
+${HELPERS}
 
 def simple_echo_rule() {
   simple_echo()
@@ -47,31 +42,30 @@ def simple_echo_rule() {
 
 export def main() {
   simple_echo_rule() catch (failure) {
-    capture_recover(failure, "binding_simple.txt", "out_simple.txt", "err_simple.txt")
+    stdin failure -> save("out_simple.txt")
+    record(failure, "binding_simple.txt")
   }
 }
 EOF
 
-rm -f "${TEST_DIR}/binding_simple.txt" "${TEST_DIR}/out_simple.txt" "${TEST_DIR}/err_simple.txt"
+rm -f "${TEST_DIR}/binding_simple.txt" "${TEST_DIR}/out_simple.txt"
 e2e::run "simple_echo.jh" >/dev/null 2>&1 || true
 
 e2e::assert_file_exists "${TEST_DIR}/binding_simple.txt" "recover ran and recorded the binding"
 binding="$(<"${TEST_DIR}/binding_simple.txt")"
 case "${binding}" in
-  /*.out) : ;;
-  *) e2e::fail "binding must be an absolute *.out capture path, got: ${binding}" ;;
+  *.jaiph/runs/*.out) e2e::fail "binding must be contents, never a run-dir capture path: ${binding}" ;;
 esac
-if [[ "${binding}" == *Hello* ]]; then
-  e2e::fail "binding must be a path, not the log content: ${binding}"
-fi
-e2e::assert_equals "$(<"${TEST_DIR}/out_simple.txt")" "$(printf 'Hello')" "stdout capture holds script stdout"
-e2e::assert_equals "$(<"${TEST_DIR}/err_simple.txt")" "$(printf 'Oops')" "sibling .err holds script stderr"
-e2e::pass "simple script failure: stdout capture path + sibling .err"
+# Force site (argv) slurps the stdout contents (trimmed); stream keeps the
+# verbatim capture (with the trailing newline).
+e2e::assert_equals "${binding}" "Hello" "argv force slurps the failed stdout contents"
+e2e::assert_equals "$(<"${TEST_DIR}/out_simple.txt")" "$(printf 'Hello\n')" "stdin streams the failed stdout capture"
+e2e::pass "simple script failure: streamed stdout + contents binding"
 
 # ===================================================================
-# 2. Nested rule + script failure aggregation
+# 2. Nested rule + script failure: the failed step's stdout is the inner script
 # ===================================================================
-e2e::section "recover capture aggregates nested rule log + script output"
+e2e::section "recover handle streams the innermost failing script's stdout"
 
 e2e::file "nested_payload.jh" <<EOF
 script failing_script = \`\`\`
@@ -80,7 +74,7 @@ echo "nested-stderr" >&2
 exit 1
 \`\`\`
 
-${CAPTURE_SCRIPT}
+${HELPERS}
 
 def inner() {
   failing_script()
@@ -93,23 +87,22 @@ def outer() {
 
 export def main() {
   outer() catch (failure) {
-    capture_recover(failure, "binding_nested.txt", "out_nested.txt", "err_nested.txt")
+    stdin failure -> save("out_nested.txt")
   }
 }
 EOF
 
-rm -f "${TEST_DIR}/binding_nested.txt" "${TEST_DIR}/out_nested.txt" "${TEST_DIR}/err_nested.txt"
+rm -f "${TEST_DIR}/out_nested.txt"
 e2e::run "nested_payload.jh" >/dev/null 2>&1 || true
 
-e2e::assert_file_exists "${TEST_DIR}/out_nested.txt" "recover copied nested stdout capture"
-e2e::assert_equals "$(<"${TEST_DIR}/out_nested.txt")" "$(printf 'outer start\nnested-stdout')" "stdout capture aggregates rule log + script stdout"
-e2e::assert_equals "$(<"${TEST_DIR}/err_nested.txt")" "$(printf 'nested-stderr')" "sibling .err holds nested script stderr"
-e2e::pass "nested rule+script failure: aggregated stdout capture + sibling .err"
+e2e::assert_file_exists "${TEST_DIR}/out_nested.txt" "recover streamed the failed stdout"
+e2e::assert_equals "$(<"${TEST_DIR}/out_nested.txt")" "$(printf 'nested-stdout\n')" "handle streams the innermost failing script's stdout"
+e2e::pass "nested rule+script failure: innermost stdout streamed"
 
 # ===================================================================
 # 3. CI-style failure payload (multi-line test output)
 # ===================================================================
-e2e::section "recover capture holds multi-line CI failure output"
+e2e::section "recover handle streams multi-line CI failure output"
 
 e2e::file "ci_payload.jh" <<EOF
 script npm_run_test_ci = \`\`\`
@@ -120,7 +113,7 @@ echo "Tests: 1 failed, 3 passed, 4 total" >&2
 exit 1
 \`\`\`
 
-${CAPTURE_SCRIPT}
+${HELPERS}
 
 def ci_passes() {
   npm_run_test_ci()
@@ -128,18 +121,17 @@ def ci_passes() {
 
 export def main() {
   ci_passes() catch (failure) {
-    capture_recover(failure, "binding_ci.txt", "out_ci.txt", "err_ci.txt")
+    stdin failure -> save("out_ci.txt")
   }
 }
 EOF
 
-rm -f "${TEST_DIR}/binding_ci.txt" "${TEST_DIR}/out_ci.txt" "${TEST_DIR}/err_ci.txt"
+rm -f "${TEST_DIR}/out_ci.txt"
 e2e::run "ci_payload.jh" >/dev/null 2>&1 || true
 
-e2e::assert_file_exists "${TEST_DIR}/out_ci.txt" "recover copied CI stdout capture"
-e2e::assert_equals "$(<"${TEST_DIR}/out_ci.txt")" "$(printf 'FAIL src/app.test.ts\n  Expected: 200\n  Received: 500')" "stdout capture matches CI stdout"
-e2e::assert_equals "$(<"${TEST_DIR}/err_ci.txt")" "$(printf 'Tests: 1 failed, 3 passed, 4 total')" "sibling .err matches CI stderr"
-e2e::pass "CI-style failure: multi-line stdout capture + sibling .err"
+e2e::assert_file_exists "${TEST_DIR}/out_ci.txt" "recover streamed the CI stdout"
+e2e::assert_equals "$(<"${TEST_DIR}/out_ci.txt")" "$(printf 'FAIL src/app.test.ts\n  Expected: 200\n  Received: 500\n')" "handle streams the full CI stdout"
+e2e::pass "CI-style failure: multi-line stdout streamed"
 
 # ===================================================================
 # 4. Recover runs once (single attempt, no retry loop)
@@ -152,7 +144,7 @@ echo "attempt-output"
 exit 1
 \`\`\`
 
-${CAPTURE_SCRIPT}
+${HELPERS}
 
 def check_rule() {
   emit_attempt()
@@ -160,17 +152,16 @@ def check_rule() {
 
 export def main() {
   check_rule() catch (failure) {
-    capture_recover(failure, "binding_single.txt", "out_single.txt", "err_single.txt")
+    stdin failure -> save("out_single.txt")
   }
 }
 EOF
 
-rm -f "${TEST_DIR}/binding_single.txt" "${TEST_DIR}/out_single.txt" "${TEST_DIR}/err_single.txt"
+rm -f "${TEST_DIR}/out_single.txt"
 e2e::run "single_attempt.jh" >/dev/null 2>&1 || true
 
-e2e::assert_file_exists "${TEST_DIR}/out_single.txt" "recover copied the failed stdout capture"
-e2e::assert_equals "$(<"${TEST_DIR}/out_single.txt")" "attempt-output" "stdout capture holds the failure output"
-e2e::assert_equals "$(<"${TEST_DIR}/err_single.txt")" "" "sibling .err is empty when the script wrote no stderr"
+e2e::assert_file_exists "${TEST_DIR}/out_single.txt" "recover streamed the failed stdout"
+e2e::assert_equals "$(<"${TEST_DIR}/out_single.txt")" "$(printf 'attempt-output\n')" "handle streams the failure stdout"
 e2e::pass "recover runs exactly once on failure"
 
 # ===================================================================
@@ -181,7 +172,7 @@ e2e::section "no catch payload when rule succeeds"
 e2e::file "success_no_payload.jh" <<EOF
 script say_ok = \`echo "all good"\`
 
-${CAPTURE_SCRIPT}
+${HELPERS}
 
 def passes_first_try() {
   say_ok()
@@ -189,15 +180,15 @@ def passes_first_try() {
 
 export def main() {
   passes_first_try() catch (failure) {
-    capture_recover(failure, "binding_false.txt", "out_false.txt", "err_false.txt")
+    stdin failure -> save("out_false.txt")
   }
 }
 EOF
 
-rm -f "${TEST_DIR}/binding_false.txt" "${TEST_DIR}/out_false.txt" "${TEST_DIR}/err_false.txt"
+rm -f "${TEST_DIR}/out_false.txt"
 e2e::run "success_no_payload.jh" >/dev/null 2>&1
 
-if [[ -f "${TEST_DIR}/binding_false.txt" ]]; then
+if [[ -f "${TEST_DIR}/out_false.txt" ]]; then
   e2e::fail "recover block should NOT run when rule succeeds"
 fi
 e2e::pass "no false payload on success"

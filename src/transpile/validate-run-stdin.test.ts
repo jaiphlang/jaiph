@@ -57,6 +57,51 @@ test("validate: stdin body -> someDef() is E_VALIDATE (def target)", () => {
   );
 });
 
+test("validate: stdin <script>() -> script() producer call is accepted", () => {
+  compile(
+    [
+      "script big = `echo hi`",
+      'script sink = `cat`',
+      "export def main() {",
+      "  stdin big() -> sink()",
+      "}",
+      "",
+    ].join("\n"),
+  );
+});
+
+test("validate: stdin <def>() -> script() producer call is accepted (producer may be a def)", () => {
+  compile(
+    [
+      "script big = `echo hi`",
+      'script sink = `cat`',
+      "def wrap() {",
+      "  return big()",
+      "}",
+      "export def main() {",
+      "  stdin wrap() -> sink()",
+      "}",
+      "",
+    ].join("\n"),
+  );
+});
+
+test("validate: stdin producer call resolves its ref (unknown producer is E_VALIDATE)", () => {
+  assert.throws(
+    () =>
+      compile(
+        [
+          'script sink = `cat`',
+          "export def main() {",
+          "  stdin nope() -> sink()",
+          "}",
+          "",
+        ].join("\n"),
+      ),
+    /nope/,
+  );
+});
+
 test("validate: stdin value must reference an in-scope binding", () => {
   assert.throws(
     () =>

@@ -16,18 +16,39 @@ export type MockBodyDef =
 
 export type StepResult = {
   status: number;
+  /**
+   * In-memory stdout copy. Populated for defs (accumulated `log` lines) and
+   * mock bodies, but left empty for a leaf `script`/inline-script subprocess:
+   * its stdout is streamed straight to `outFile` on disk and never held in a
+   * JS string (see the output-handle model — a call result keeps its bytes on
+   * disk until a force site slurps them). Read the forced value through
+   * `forceValue`, not this field.
+   */
   output: string;
   error: string;
   returnValue?: string;
+  /**
+   * The file whose bytes are this result's forced value when `returnValue` is
+   * unset — the "output handle" byte source. For a leaf script it is the
+   * step's own stdout capture; for a def that did `return <call>()` it is the
+   * callee's `valueFile`, propagated up so `stdin wrap() -> sink()` streams the
+   * bytes and `const y = wrap()` slurps them. Absent when `returnValue` holds
+   * an eager string (def `return "…"`, prompt answer, match value).
+   */
+  valueFile?: string;
+  /**
+   * True when the leaf subprocess already streamed its stdout/stderr to
+   * `outFile`/`errFile` (via `spawnAndCapture`'s `io`), so `executeManagedStep`
+   * must not overwrite those files from the empty in-memory `output`.
+   */
+  streamed?: boolean;
   /** Set when a catch body executed a `return` statement. */
   recoverReturn?: boolean;
   /**
    * Absolute path of this step's stdout capture (`NNNNNN-*.out` under
-   * `JAIPH_RUN_DIR`), stamped by `executeManagedStep`. This is what a failed
-   * step's `catch`/`recover` binds so the recover body reads the bytes from
-   * disk instead of receiving a full stdout+stderr copy as argv. The sibling
-   * `.err` (`errFile`, same seq prefix) holds stderr. Absent on results that
-   * never ran as a managed step (e.g. an unresolved run target).
+   * `JAIPH_RUN_DIR`), stamped by `executeManagedStep`. The sibling `.err`
+   * (`errFile`, same seq prefix) holds stderr. Absent on results that never
+   * ran as a managed step (e.g. an unresolved run target).
    */
   outFile?: string;
   errFile?: string;

@@ -364,9 +364,25 @@ export function parseStdinConnect(
   if (t === "") {
     fail(filePath, "stdin requires a value expression: stdin <expr> -> ref()", innerNo, stdinCol);
   }
-  const { operand, rest } = takeStdinOperand(t);
-  const stdin = stdinOperandToExpr(filePath, innerNo, stdinCol, operand);
-  const afterOperand = rest.trimStart();
+  // One-hop producer `stdin <call>() -> script()`: the value is a def/script
+  // call whose output handle is streamed into the child. Detected before the
+  // string/identifier operand path so `foo()` becomes a `call` Expr, not a bare
+  // token. (A bare identifier or `${…}` has no `(` and falls through below.)
+  let stdin: Expr;
+  let afterOperand: string;
+  const producerCall = parseCallRef(t);
+  if (producerCall) {
+    stdin = {
+      kind: "call",
+      callee: { value: producerCall.ref, loc: { line: innerNo, col: stdinCol } },
+      ...(producerCall.args ? { args: producerCall.args } : {}),
+    };
+    afterOperand = producerCall.rest.trimStart();
+  } else {
+    const { operand, rest } = takeStdinOperand(t);
+    stdin = stdinOperandToExpr(filePath, innerNo, stdinCol, operand);
+    afterOperand = rest.trimStart();
+  }
   if (!afterOperand.startsWith("->")) {
     fail(filePath, "stdin requires '-> ref()' after the value: stdin <expr> -> ref()", innerNo, stdinCol);
   }
