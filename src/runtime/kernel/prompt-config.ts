@@ -1,4 +1,5 @@
 import { basename } from "node:path";
+import type { Readable } from "node:stream";
 
 // Prompt configuration, model resolution, and backend argument building. Split
 // out of `prompt.ts` so each prompt concern stays under the analyzability line
@@ -51,6 +52,29 @@ function parseSecondsMs(raw: string | undefined, defaultMs: number): number {
   const seconds = Number(raw);
   if (!Number.isFinite(seconds) || seconds < 0) return defaultMs;
   return Math.floor(seconds * 1000);
+}
+
+/**
+ * A prompt body kept as an output handle (`prompt x` / `prompt ${x}`). `open()`
+ * returns a fresh read stream over the handle's on-disk bytes each time it is
+ * called (once per transport attempt, so retries re-stream cleanly); the fs
+ * access stays in the runtime, which already owns `createReadStream`. A stdin
+ * backend (claude / custom) pipes the stream straight into the child so a
+ * multi-megabyte handle is never slurped into a JS string; a buffering backend
+ * (codex HTTP) consumes it to a string at its own send site. `suffix` carries
+ * any `returns` schema instruction appended after the handle bytes. Mirrors the
+ * `stdin <handle> -> script()` file source.
+ */
+export type PromptSource = { open: () => Readable; suffix: string };
+
+/**
+ * True when the backend receives the prompt body off argv — claude / custom on
+ * stdin, codex over HTTP. Only real `cursor-agent` passes the prompt as an argv
+ * argument (bounded by `ARG_MAX`, like `script(arg)`), so a kept handle streams
+ * for every backend except that one, where it materializes like any argv value.
+ */
+export function promptBodyOffArgv(config: PromptConfig): boolean {
+  return config.backend !== "cursor" || isCustomCommand(config);
 }
 
 export type ModelResolution = {

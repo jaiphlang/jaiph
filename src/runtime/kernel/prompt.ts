@@ -15,6 +15,7 @@ import {
   resolveConfig,
   shellQuote,
   type PromptConfig,
+  type PromptSource,
 } from "./prompt-config";
 import { runBackend } from "./prompt-backends";
 
@@ -26,13 +27,14 @@ export {
   buildBackendArgs,
   isCustomCommand,
   modelForStepEvent,
+  promptBodyOffArgv,
   resolveConfig,
   resolveModel,
   resolvePromptConfig,
   resolvePromptStepName,
   shellQuote,
 } from "./prompt-config";
-export type { ModelResolution, PromptConfig } from "./prompt-config";
+export type { ModelResolution, PromptConfig, PromptSource } from "./prompt-config";
 export { prepareClaudeEnv, resolveClaudeFallbackConfigDir } from "./prompt-claude";
 export type { ClaudeEnvPreparation } from "./prompt-claude";
 export { installPromptWatchdog, runBackend } from "./prompt-backends";
@@ -76,7 +78,15 @@ function writePromptTranscriptHeader(
   stdout: NodeJS.WritableStream,
   config: PromptConfig,
   promptText: string,
+  promptSource?: PromptSource,
 ): void {
+  if (promptSource) {
+    // Handle-sourced body: it streams from disk and must never be slurped into a
+    // JS string just to log it. Emit a marker, not the body and not the run-dir
+    // capture path (which would leak `.jaiph/runs/…/*.out` into the transcript).
+    stdout.write(`Prompt:\n<streamed from output handle>\n\n`);
+    return;
+  }
   if (!promptText) return;
   const { command, args } = buildBackendArgs(config, promptText);
   let commandLog: string;
@@ -105,8 +115,14 @@ export async function executePrompt(
    * subprocess on top of `scrubPromptEnv`. Anonymous prompts pass nothing.
    */
   useEnv?: NodeJS.ProcessEnv,
+  /**
+   * A kept output-handle body (`prompt x` / `prompt ${x}`). When set the body
+   * streams from `promptSource.path` into the backend rather than being slurped
+   * into `promptText`; the transcript omits the full-body dump.
+   */
+  promptSource?: PromptSource,
 ): Promise<{ final: string; status: number }> {
-  writePromptTranscriptHeader(stdout, config, promptText);
+  writePromptTranscriptHeader(stdout, config, promptText, promptSource);
 
   // Test mode: check mocks first
   if (isTestMode(execEnv)) {
@@ -140,7 +156,7 @@ export async function executePrompt(
     writeFinal: (text) => stdout.write(text),
   };
 
-  const result = await runBackend(config, promptText, writer, execEnv, stderr, useEnv);
+  const result = await runBackend(config, promptText, writer, execEnv, stderr, useEnv, promptSource);
   const final =
     config.backend === "cursor"
       ? trimSurroundingBlankLines(result.final)
