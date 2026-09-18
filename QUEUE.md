@@ -16,45 +16,6 @@ Process rules:
 7. Acceptance criteria are non-negotiable. A task is not done until every
    acceptance bullet is verified by a test that fails when the contract is violated.
 
-## Highlight bare def and script calls in all three highlighters #dev-ready
-
-`run` is not a keyword. A call is a name followed by `(`: `setup_env()`, `valid_name(name_arg)`, `const x = check_deps(path)`, `async helpers.scan()`, `stdin status -> shout(task)`. Highlight every such callee as a function in all three highlighters. Do not look up whether the name is defined — an unknown call is a compiler error, not a highlighter job.
-
-The rule is mechanical: an identifier or qualified identifier immediately followed by `(` is a call. Declaration names that happen to sit before `(` (`def check_deps(path)`, `export prompt analyze(log)`) may use the same function scope. Keywords before `(` (`catch (err)`, `recover (err)`) stay keywords.
-
-### Current
-
-- VS Code TextMate (`plugins/vscode/syntaxes/jaiph.tmLanguage.json` `#calls`) already scopes a bare `name(` as `entity.name.function.jaiph` and the stdin-connect target the same way. Keep that rule. Add missing pins for a **def** call (`check_deps(` / `helper(`) and a **qualified** call (`helpers.scan(`). `run` must stay a non-keyword.
-- Zed Tree-sitter (`plugins/zed/languages/jaiph/highlights.scm`) treats every identifier as `@variable`. `plugins/zed/test/highlights.test.mjs` currently **requires** `setup_env` to be `@variable`. Flip that: a callee before `(` is `@function`. A qualified callee (`helpers.scan(`) is `@function` (or `@function` on the qualified token), not `@property`. A non-call identifier (`status`, `item`, a stale `run` standing alone) stays `@variable`. Named `prompt analyze(` may keep its existing `@function` capture.
-- Docs highlighter (`docs/assets/js/main.js`, used by `docs/index.html` and the Jekyll layout) only special-cases statement-start `name(`, `async name(`, and `stdin … -> name(`, and paints them as `ralph-identifier`. Expression-position calls (`const name = valid_name(name_arg)`) depend on a known-symbol set. Apply the same paren rule **anywhere on the line** and paint the callee with the existing function/identifier span (`ralph-identifier` is fine; do not invent a new CSS class unless a test needs it).
-
-### Files that must change
-
-1. `plugins/zed/languages/jaiph/highlights.scm` — query: identifier or `qualified_identifier` immediately followed by `"("`.
-2. `plugins/zed/test/highlights.test.mjs` — and fixtures under `plugins/zed/test/fixtures/` if a needed call site is missing.
-3. `plugins/vscode/syntaxes/jaiph.tmLanguage.json` — only if the existing `#calls` / stdin-connect patterns miss def or qualified callees.
-4. `plugins/vscode/test/grammar.test.ts` — and `plugins/vscode/test/fixtures/` if needed.
-5. `docs/assets/js/main.js` — paren rule for every `ident(` / `alias.name(`, not only statement start.
-6. A **new** test that drives the docs highlighter (there is none today). A small Node test that feeds `.jh` snippets through the highlighter and asserts the callee is wrapped in `ralph-identifier` (or the class you keep) is enough. Extract a testable function if the IIFE blocks import. Do not rely on a visual check of `index.html`.
-
-### Files that must not change
-
-- The TypeScript compiler / parser / validator (`src/parse/**`, `src/transpile/**`). Highlighting is not a language change.
-- `grammars/tree-sitter-jaiph/grammar.js` unless a query cannot see `ident` + `(` on the existing flat token stream. Prefer a query-only Zed fix. If the grammar must change, keep it lexer-style and update `grammars/tree-sitter-jaiph/test/corpus/` plus `plugins/zed` pins.
-- `examples/**`, landing sample copy, and the `valid_name` fail-message wording. Those are a different task.
-- Other editor features (formatting, diagnostics, language-configuration).
-
-### Acceptance
-
-A task is not done until every bullet is verified by a test that fails when the contract is violated:
-
-- In all three highlighters, `setup_env()`, `const status = setup_env()`, `check_deps("package.json")`, and `async helpers.scan()` paint the callee as a function. Zed: `@function`. VS Code: `entity.name.function.jaiph` (qualified may be that scope on the last segment or on the whole `helpers.scan` token). Docs: the callee HTML uses the function/identifier class, including the expression-position form.
-- `run` is not a keyword in any of the three. A lone `run` or `run.recover_limit` does not pick up call/function scope. `run save()` may highlight `save` as a call (it is `save()`); `run` itself stays an identifier/variable.
-- Zed `plugins/zed/test/highlights.test.mjs` no longer asserts that `setup_env` is `@variable`. It asserts `@function` for that callee and for at least one def call and one qualified call from the fixture.
-- VS Code `plugins/vscode/test/grammar.test.ts` pins a def-call callee and a qualified-call callee, not only `setup_env`.
-- The new docs-highlighter test fails if `const name = valid_name(name_arg)` leaves `valid_name` unclassed, and fails if `catch (err)` paints `catch` as a call.
-- `run` is not a keyword: existing Zed/VS Code assertions for that stay green.
-
 ## Treat every call result as an output handle; slurp only at force sites #dev-ready
 
 Top-level idea (one page an agent can load):

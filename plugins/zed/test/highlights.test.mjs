@@ -66,8 +66,12 @@ test("keywords, comments, and strings highlight in current.jh", () => {
   // highlights as @keyword anywhere in a .jh file.
   assert.ok(!has(caps, "keyword", "run"), "`run` must not highlight as @keyword");
 
-  // Bare call target (`setup_env()`) is an ordinary identifier → @variable.
-  assert.ok(has(caps, "variable", "setup_env"), "bare call target should be @variable");
+  // A call is a name immediately followed by `(`: the callee is @function.
+  // Bare call (`setup_env()`), def call (`check_deps(...)`), and qualified call
+  // (`helpers.scan(...)`) all paint the callee as a function; `run` never does.
+  assert.ok(has(caps, "function", "setup_env"), "bare call callee should be @function");
+  assert.ok(has(caps, "function", "check_deps"), "def call callee should be @function");
+  assert.ok(has(caps, "function", "helpers.scan"), "qualified call callee should be @function");
 
   // `stdin value -> call(...)` connect: `stdin` is @keyword and the connect
   // arrow `->` is the same @operator token class as a `send … ->` arrow.

@@ -870,6 +870,16 @@
     "calls": {
       "patterns": [
         {
+          "comment": "qualified call: alias.name( … ) — the last segment is the function (no `run` keyword)",
+          "name": "meta.call.qualified.jaiph",
+          "match": "\\b([A-Za-z_][A-Za-z0-9_]*)(\\.)([A-Za-z_][A-Za-z0-9_]*)(?=\\s*\\()",
+          "captures": {
+            "1": { "name": "entity.name.namespace.jaiph" },
+            "2": { "name": "punctuation.accessor.dot.jaiph" },
+            "3": { "name": "entity.name.function.jaiph" }
+          }
+        },
+        {
           "comment": "bare call: name( … ) — the callee is a function (no `run` keyword)",
           "name": "meta.call.jaiph",
           "match": "\\b([A-Za-z_][A-Za-z0-9_]*)(?=\\s*\\()",

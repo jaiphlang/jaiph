@@ -37,6 +37,14 @@
 
 (identifier) @variable
 
+; A call is a name immediately followed by `(` — the callee is a function.
+; `run` is not a keyword, so bare calls (`setup_env()`), def calls
+; (`check_deps(`), and qualified calls (`helpers.scan(`) all match here; a lone
+; `run` (no `(`) stays @variable. Placed after the generic identifier/property
+; rules so the function scope wins for a callee.
+(source_file (identifier) @function . "(")
+(source_file (qualified_identifier) @function . "(")
+
 ; Named prompt invocation / definition: the callee after `prompt` is a function.
 ; The grammar is flat, so `prompt` and its callee are adjacent children.
 (source_file
