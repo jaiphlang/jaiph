@@ -1651,13 +1651,14 @@ export class NodeWorkflowRuntime {
     stage: Expr,
     source: StdinSource | undefined,
     onSpawn?: (child: ChildProcess) => void,
+    endGate?: Promise<unknown>,
   ): Promise<StepResult> {
     if (stage.kind === "inline_script") {
       const shebang = stage.lang ? `#!/usr/bin/env ${stage.lang}` : undefined;
-      return this.executeInlineScript(scope, stage.body, shebang, argsToRuntimeString(stage.args), source, onSpawn);
+      return this.executeInlineScript(scope, stage.body, shebang, argsToRuntimeString(stage.args), source, onSpawn, endGate);
     }
     if (stage.kind === "call") {
-      return this.executeRunRef(scope, stage.callee.value, argsToRuntimeString(stage.args), source, onSpawn);
+      return this.executeRunRef(scope, stage.callee.value, argsToRuntimeString(stage.args), source, onSpawn, endGate);
     }
     return Promise.resolve({ status: 1, output: "", error: "internal: invalid stdin pipeline stage" });
   }
@@ -1732,26 +1733,36 @@ export class NodeWorkflowRuntime {
       { length: boundaries },
       (_unused, j) => new Promise<Readable | undefined>((res) => { stdoutResolvers[j] = res; }),
     );
-    const running = liveStages.map(async (stage, i) => {
+    // Built in order so stage `i` can gate its STEP_END emit on stage `i - 1`'s
+    // completion. The stages still run fully concurrently — each stage's process
+    // spawns and streams inside `runPipelineStage`; only the progress-tree
+    // STEP_END emit waits on the upstream stage, so completions render in pipeline
+    // order regardless of how the childrens' `close` events race across platforms.
+    const running: Array<Promise<StepResult>> = [];
+    for (let i = 0; i < liveStages.length; i++) {
+      const stage = liveStages[i]!;
       const hasDownstream = i < boundaries;
-      let source: StdinSource | undefined;
-      if (i === 0) {
-        source = upstream;
-      } else {
-        const prev = await upstreamStdout[i - 1]!;
-        source = prev ? { kind: "fd", stream: prev } : undefined;
-      }
-      // A non-terminal stage hands its stdout to the next stage the instant it
-      // spawns; the terminal stage gets no onSpawn, so it captures normally.
-      const onSpawn = hasDownstream
-        ? (child: ChildProcess): void => stdoutResolvers[i]!(child.stdout ?? undefined)
-        : undefined;
-      try {
-        return await this.runPipelineStage(scope, stage, source, onSpawn);
-      } finally {
-        if (hasDownstream) stdoutResolvers[i]!(undefined);
-      }
-    });
+      const endGate = i > 0 ? running[i - 1] : undefined;
+      running.push((async () => {
+        let source: StdinSource | undefined;
+        if (i === 0) {
+          source = upstream;
+        } else {
+          const prev = await upstreamStdout[i - 1]!;
+          source = prev ? { kind: "fd", stream: prev } : undefined;
+        }
+        // A non-terminal stage hands its stdout to the next stage the instant it
+        // spawns; the terminal stage gets no onSpawn, so it captures normally.
+        const onSpawn = hasDownstream
+          ? (child: ChildProcess): void => stdoutResolvers[i]!(child.stdout ?? undefined)
+          : undefined;
+        try {
+          return await this.runPipelineStage(scope, stage, source, onSpawn, endGate);
+        } finally {
+          if (hasDownstream) stdoutResolvers[i]!(undefined);
+        }
+      })());
+    }
 
     const settled = await Promise.all(running);
     for (const r of settled) {
@@ -1766,6 +1777,7 @@ export class NodeWorkflowRuntime {
     argsRaw: string | string[],
     stdin?: StdinSource,
     onSpawn?: (child: ChildProcess) => void,
+    endGate?: Promise<unknown>,
   ): Promise<StepResult> {
     const resolvedArgs = await this.resolveArgsRaw(scope, argsRaw);
     if (!Array.isArray(resolvedArgs)) return resolvedArgs;
@@ -1787,6 +1799,8 @@ export class NodeWorkflowRuntime {
           ref,
           args,
           async (io) => this.executeScript(scope.filePath, fileName, args, scriptEnv, io, stdin, onSpawn),
+          undefined,
+          endGate,
         );
       }
       // A local `prompt` reached via `run` is a validation error; fall through
@@ -1823,6 +1837,8 @@ export class NodeWorkflowRuntime {
         args,
         async (io) =>
           this.executeScript(resolvedScript.filePath, resolvedScript.script.name, args, scriptEnv, io, stdin, onSpawn),
+        undefined,
+        endGate,
       );
     }
     return { status: 1, output: "", error: `Unknown run target: ${ref}` };
@@ -2476,6 +2492,7 @@ export class NodeWorkflowRuntime {
     argsRaw: string,
     stdin?: StdinSource,
     onSpawn?: (child: ChildProcess) => void,
+    endGate?: Promise<unknown>,
   ): Promise<StepResult> {
     const resolvedArgs = await this.resolveArgsRaw(scope, argsRaw);
     if (!Array.isArray(resolvedArgs)) return resolvedArgs;
@@ -2488,6 +2505,8 @@ export class NodeWorkflowRuntime {
       scriptName,
       args,
       async (io) => this.executeScript(scope.filePath, scriptName, args, scriptEnv, io, stdin, onSpawn),
+      undefined,
+      endGate,
     );
   }
 
@@ -2602,6 +2621,12 @@ export class NodeWorkflowRuntime {
     args: string[],
     fn: (io: StepIO) => Promise<StepResult>,
     declaredParamNames?: string[],
+    // Ordering gate for a pipeline stage: resolves once the upstream stage has
+    // emitted its own STEP_END. A stage's work still runs concurrently (its own
+    // process spawns and streams in `fn`); only this stage's STEP_END emit waits
+    // on it, so the progress tree reports completions in pipeline order even
+    // though child `close` events race across platforms.
+    endGate?: Promise<unknown>,
   ): Promise<StepResult> {
     const seq = this.emitter.allocStepSeq();
     const safe = sanitizeName(`${kind}__${name}`);
@@ -2694,6 +2719,17 @@ export class NodeWorkflowRuntime {
     const outContent = result.streamed
       ? this.readCapturePreview(outFile, MAX_EMBED)
       : (result.output ?? "").slice(0, MAX_EMBED);
+    // Hold this stage's STEP_END until its upstream stage has emitted its own, so
+    // pipeline completions render in stage order. `elapsed_ms` above already
+    // captured this stage's real duration, so the gate wait never inflates it. An
+    // upstream failure still lets us finish (the gate rejection is swallowed).
+    if (endGate) {
+      try {
+        await endGate;
+      } catch {
+        // upstream stage failed; still emit this stage's STEP_END in order
+      }
+    }
     this.emitter.emitStep({
       type: "STEP_END",
       func: name,
