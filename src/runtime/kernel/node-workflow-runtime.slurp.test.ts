@@ -188,11 +188,11 @@ test("stdin producer does not slurp: 64 MiB streams to the sink off the JS heap"
   }
 });
 
-// A 3-stage pipeline streams 64 MiB producer -> pass-through -> sink. The
-// uncaptured result is discarded, so no stage holds its full body as a JS
-// string, even though the intermediate stage tees its stdout to its `.out`
-// capture (streamed to disk, never a string). The sink counts exactly N bytes;
-// peak extra RSS must not track the payload through the extra pipe hop.
+// A 3-stage pipeline streams 64 MiB producer -> pass-through -> sink. Each
+// stage's stdout is inherited directly as the next stage's stdin (fd-level, off
+// the JS heap), so no stage holds its full body — as a JS string or a disk
+// spool — and the bytes flow kernel-to-kernel through the extra pipe hop. The
+// sink counts exactly N bytes; peak extra RSS must not track the payload.
 test("stdin big() -> pass() -> sink(): 64 MiB streams through an intermediate stage off the JS heap", async () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-slurp-pipe3-"));
   try {
