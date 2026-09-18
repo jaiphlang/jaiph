@@ -2331,7 +2331,7 @@ export class NodeWorkflowRuntime {
         handoff.on("drain", () => child.stdout?.resume());
         child.stdout?.on("end", () => handoff.end());
         child.stdout?.on("error", () => handoff.destroy());
-        onSpawn(handoff);
+        onSpawn?.(handoff);
       } else if (onSpawn) {
         onSpawn(undefined);
       }
