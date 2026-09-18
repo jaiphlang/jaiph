@@ -134,6 +134,8 @@ The `stdin <value> ->` prefix precedes the call; a `const` capture (`const out =
 - `async` with `stdin` (either order) is `E_PARSE` (`async is not supported with stdin`).
 - `stdin` with no value, or without a `-> ref()` target, is `E_PARSE`.
 
+Chain more stages with `->` to build a **pipeline**, as in `stdin gen() -> upper() -> count()`. A pipeline is any `stdin` form whose producer is a call, or that has two or more `->` stages. A plain `stdin <value> -> script()` (one value, one script) is the connect form above, not a pipeline. The producer (left of the first `->`) is a value or a call to a **def or script**. Every stage after the first `->` is a **script** (named or inline), so a def in a consumer slot is `E_VALIDATE`. Each stage's output handle ([Value types](#value-types)) streams into the next stage's stdin, and each script or def stage is its own step in the progress tree. The first non-zero stage stops the pipeline, so later stages do not start. A `const` or `return` names and slurps the **last** stage, as in `const n = stdin gen() -> count()`, so the last stage should reduce. A pipeline takes **no** `recover` (`E_PARSE`). A one-shot `catch` is allowed and runs once for the first failing stage.
+
 This is a connect form — not a shell pipe (`|`) and not a `run` suffix. argv stays the default channel for small arguments, and a large argument is never moved to stdin for you.
 
 ### Inline scripts

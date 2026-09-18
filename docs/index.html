@@ -202,6 +202,7 @@ layout: null
                     <button type="button" class="code-tab-button"
                         data-target="inbox-pipeline-jh">agent_inbox.jh</button>
                     <button type="button" class="code-tab-button" data-target="async-jh">async.jh</button>
+                    <button type="button" class="code-tab-button" data-target="stream-jh">stream.jh</button>
                 </div>
 
                 <div class="code-tab-panel is-active" data-panel="say-hello-jh" data-sample="say-hello"
@@ -455,6 +456,53 @@ Jaiph: Running async.jh
 
 <span class="run-pass">✓ PASS</span> <span class="run-keyword">def</span> main <span class="run-time">(4.6s)</span></code></pre>
                     <p>Cursor finished first in this run.</p>
+                </div>
+
+                <div class="code-tab-panel" data-panel="stream-jh" data-sample="stream"
+                    data-sample-file="stream.jh">
+                    <p>A <code>stdin</code> pipeline streams one stage's output into the next with
+                        <code>-&gt;</code>. The producer is a call; every stage after it is a
+                        <code>script</code> that reads stdin and writes stdout. The final
+                        <code>const</code> names and reduces the last stage.</p>
+                    <pre><code class="language-jaiph" data-sample-source>#!/usr/bin/env jaiph
+
+# A stdin pipeline streams one stage's output into the next. The producer
+# (left of the first -&gt;) is a call whose result is an output handle; every
+# stage after it is a script that reads stdin and writes stdout. No stage is
+# slurped into memory until the final `const` names and reduces it.
+script gen = ```bash
+  printf 'alpha\nbeta\ngamma\n'
+```
+
+script upper = ```bash
+  tr 'a-z' 'A-Z'
+```
+
+script count = ```bash
+  wc -l | tr -d ' '
+```
+
+export def main() {
+  # generate lines -&gt; uppercase them -&gt; reduce to a line count
+  const n = stdin gen() -&gt; upper() -&gt; count()
+  return n
+}</code></pre>
+                    <p>Each stage is its own step; <code>main</code> returns the line count:</p>
+                    <pre><code class="jaiph-run" data-sample-output="run"><span class="run-command">➜  ./stream.jh</span>
+
+Jaiph: Running stream.jh
+
+<span class="run-keyword">def</span> main
+  <span class="run-marker">▸</span> <span class="run-keyword">script</span> gen
+  <span class="run-pass">✓</span> <span class="run-time">script gen (0s)</span>
+  <span class="run-marker">▸</span> <span class="run-keyword">script</span> upper
+  <span class="run-pass">✓</span> <span class="run-time">script upper (0s)</span>
+  <span class="run-marker">▸</span> <span class="run-keyword">script</span> count
+  <span class="run-pass">✓</span> <span class="run-time">script count (0s)</span>
+
+<span class="run-pass">✓ PASS</span> <span class="run-keyword">def</span> main <span class="run-time">(0.1s)</span>
+
+3</code></pre>
                 </div>
 
             </div>
