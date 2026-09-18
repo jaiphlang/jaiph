@@ -31,8 +31,8 @@ e2e::expect_stdout "${say_hello_out}" <<'EOF'
 testing say_hello.test.jh
   ▸ without name, main fails with validation message
   ✗ expect_equal failed: <time>
-    - You didn't provide your name
-    + You didn't provide your name :(
+    - You provided an invalid name
+    + You provided an invalid name :(
 
   ▸ with name, returns greeting and logs response
   ✓ <time>

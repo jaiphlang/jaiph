@@ -48,7 +48,6 @@ config {
 def valid_name(name_arg) {
   return match name_arg {
     /[A-Z][a-z]+/ => name_arg
-    "" => fail "You didn't provide your name :("
     _ => fail "You provided an invalid name :("
   }
 }
@@ -68,7 +67,7 @@ export def main(name_arg) {
 The file uses some syntax that [Your first run](first-run.md) did not:
 
 - `config { agent.backend = "claude" }` selects the agent backend at module scope. Leave the block out to use the `cursor` default, or set `JAIPH_AGENT_BACKEND` in the environment to override either form. The environment value wins when both are set. See [Configure backend & model](configure-backend.md).
-- `def valid_name(name_arg) { … }` checks the shape of its input with `match`. `valid_name(name_arg)` runs that def, and if any arm matches `fail`, it stops the run and prints the failure message. The `match` arms are tried from top to bottom, and the first one that matches wins. The regex `/[A-Z][a-z]+/` matches any name with an uppercase letter followed by lowercase letters, so `Adam` passes while `adam` and `ADAM` fall through to `_`. The `""` arm catches an empty name, and `_` catches everything else.
+- `def valid_name(name_arg) { … }` checks the shape of its input with `match`. `valid_name(name_arg)` runs that def, and if any arm matches `fail`, it stops the run and prints the failure message. The `match` arms are tried from top to bottom, and the first one that matches wins. The regex `/[A-Z][a-z]+/` matches any name with an uppercase letter followed by lowercase letters, so `Adam` passes while an empty name, `adam`, and `ADAM` all fall through to `_`. The `_` arm is the only reject arm, so every invalid name gets the same failure message.
 - `prompt """ … """` is a managed agent call. The triple-quoted body is dedented when the file is parsed and then sent to the selected backend's CLI. The agent's stdout becomes the value of the step. The `${name}` reference is substituted before the prompt is sent.
 
 Save the file as `greet.jh`.
@@ -108,7 +107,7 @@ The banner and the step lines each tell you something:
 
 ## 3. Make `valid_name` reject a bad name
 
-Re-run with an empty string so `valid_name` matches the `""` arm:
+Re-run with an empty string so `valid_name` falls through to the `_` arm:
 
 ```bash
 jaiph run ./greet.jh ""
@@ -127,7 +126,7 @@ The output ends with the failure footer:
     err: …/000002-def__valid_name.err
 
   Output of failed step:
-    You didn't provide your name :(
+    You provided an invalid name :(
 ```
 
 The `prompt` step never runs, because `valid_name` failed. The `.err` file holds the text shown under `Output of failed step:`.

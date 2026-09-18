@@ -215,7 +215,6 @@ layout: null
 def valid_name(name_arg) {
   return match name_arg {
     /[A-Z][a-z]+/ =&gt; name_arg
-    "" =&gt; fail "You didn't provide your name :("
     _ =&gt; fail "You provided an invalid name :("
   }
 }
@@ -262,7 +261,7 @@ Jaiph: Running say_hello.jh
     err: &lt;path&gt;
 
   Output of failed step:
-    You didn't provide your name :(</code></pre>
+    You provided an invalid name :(</code></pre>
                     <p>Need a JSON shape? <code>prompt "..." returns "{ hello: string, fact: string }"</code>
                         then read <code>${response.hello}</code>.</p>
                 </div>
@@ -279,15 +278,15 @@ Jaiph: Running say_hello.jh
 import "say_hello.jh" as hello
 
 # We expect this test to fail due to mismatch in error message
-# between the prompt and the error message in the test file.
-# We use it to verify the test works and the error message output
-# is correct.
+# between the actual failure and the expected string in the test file:
+# the expected string drops the trailing ":(". We use it to verify the
+# test works and the error message output is correct.
 test "without name, main fails with validation message" {
   # When
   const response = hello.main() allow_failure
 
   # Then
-  expect_equal response "You didn't provide your name"
+  expect_equal response "You provided an invalid name"
 }
 
 test "with name, returns greeting and logs response" {
@@ -306,8 +305,8 @@ test "with name, returns greeting and logs response" {
 testing say_hello.test.jh
   <span class="run-marker">▸</span> without name, main fails with validation message
   <span class="run-fail">✗</span> expect_equal failed: <span class="run-time">0s</span>
-    <span class="run-diff-minus">- You didn't provide your name</span>
-    <span class="run-diff-plus">+ You didn't provide your name :(</span>
+    <span class="run-diff-minus">- You provided an invalid name</span>
+    <span class="run-diff-plus">+ You provided an invalid name :(</span>
 
   <span class="run-marker">▸</span> with name, returns greeting and logs response
   <span class="run-pass">✓</span> <span class="run-time">0s</span>
