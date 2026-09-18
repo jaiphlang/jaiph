@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { errText } from "../../errors";
-import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, closeSync, copyFileSync, createReadStream, mkdirSync, openSync, readFileSync, readSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve as resolvePath } from "node:path";
 import { PassThrough } from "node:stream";
 import { randomUUID } from "node:crypto";
@@ -186,9 +186,22 @@ function blockChildScope(scope: Scope): Scope {
   };
 }
 
+/**
+ * Where a `stdin <value> -> script()` connect gets the bytes it feeds to the
+ * child. A small value already resolved in scope (a string, a `${…}` ref) is
+ * `bytes`; an output handle (a producer call, or a bound `recover`/`catch`
+ * failure) is `file` — the child reads it as a stream from disk, so a
+ * multi-megabyte producer is never slurped into a JS string first.
+ */
+type StdinSource = { kind: "bytes"; bytes: string } | { kind: "file"; path: string };
+
 type StepIO = {
-  appendOut: (chunk: string) => void;
-  appendErr: (chunk: string) => void;
+  // Accept `Buffer` so a leaf's stdout can be streamed to disk without decoding
+  // each chunk into a V8 string — 64 MiB of stdout would otherwise churn the JS
+  // heap with transient string garbage and inflate peak RSS even though nothing
+  // is retained. `log` lines and prompt output still pass strings.
+  appendOut: (chunk: string | Buffer) => void;
+  appendErr: (chunk: string | Buffer) => void;
   /**
    * When set, aborting this signal terminates the leaf-step subprocess spawned
    * in `spawnAndCapture` (SIGTERM → SIGKILL) so the idle-output kill watchdog
@@ -277,6 +290,58 @@ export class NodeWorkflowRuntime {
     return value.startsWith(HANDLE_PREFIX);
   }
 
+  /**
+   * Slurp a step result's output handle to the string a force site sees
+   * (`const x = call()`, `${x}` interpolation, argv, `if`/`match` subject).
+   * An eager `returnValue` (def `return "…"`, prompt answer, match value) wins;
+   * otherwise the bytes live in `valueFile` on disk and are read + trimmed here
+   * — this is the one place a call result is materialized into V8, and it may
+   * be a multi-megabyte (OOM-able) read by design. Falls back to the in-memory
+   * `output` for results that never wrote a capture file.
+   */
+  private forceValue(r: StepResult): string {
+    if (r.returnValue !== undefined) return r.returnValue;
+    if (r.valueFile) {
+      try {
+        return readFileSync(r.valueFile, "utf8").trim();
+      } catch {
+        return "";
+      }
+    }
+    return (r.output ?? "").trim();
+  }
+
+  /**
+   * Register an already-resolved output handle (no pending promise). Used for a
+   * `recover`/`catch` binding: the failed step's stdout capture becomes a
+   * status-0 handle so `${failure}` slurps its CONTENTS and `stdin failure ->`
+   * streams the file — never a run-dir path.
+   */
+  private createResolvedHandle(ref: string, result: StepResult): string {
+    this.handleIdCounter += 1;
+    const handleId = `${HANDLE_PREFIX}${this.handleIdCounter}`;
+    this.handleRegistry.set(handleId, { ref, promise: Promise.resolve(result), resolved: result });
+    return handleId;
+  }
+
+  /**
+   * True when a step result represents an executed `return` statement (as
+   * opposed to falling off the end of a body). A `return "…"` sets an eager
+   * `returnValue`; a `return <call>()` propagates an output handle via
+   * `valueFile` with no eager value — both mean "this body returned", which
+   * `if`/`for`/`catch`/`recover` bodies must detect to stop and propagate.
+   */
+  private stepReturned(r: StepResult): boolean {
+    return r.returnValue !== undefined || r.valueFile !== undefined;
+  }
+
+  /** The stdin source a resolved output handle feeds to a `stdin -> script()` child. */
+  private handleStdinSource(r: StepResult): StdinSource {
+    if (r.returnValue !== undefined) return { kind: "bytes", bytes: r.returnValue };
+    if (r.valueFile) return { kind: "file", path: r.valueFile };
+    return { kind: "bytes", bytes: (r.output ?? "").trim() };
+  }
+
   /** Resolve a handle to its StepResult. Caches the result for subsequent reads. */
   private async resolveHandleResult(handleId: string): Promise<StepResult> {
     const handle = this.handleRegistry.get(handleId);
@@ -295,7 +360,7 @@ export class NodeWorkflowRuntime {
     if (!val || !this.isHandle(val)) return { status: 0, output: "", error: "" };
     const result = await this.resolveHandleResult(val);
     if (result.status === 0) {
-      scope.vars.set(varName, result.returnValue ?? result.output.trim());
+      scope.vars.set(varName, this.forceValue(result));
     } else {
       scope.vars.set(varName, "");
     }
@@ -552,10 +617,17 @@ export class NodeWorkflowRuntime {
       const result = await this.executeDef(resolved.filePath, resolved.def.name, rootScope, args, false);
       // Persist the workflow's return value so the CLI can print it after the run tree.
       // Empty/undefined values are written as an empty file so the consumer can distinguish
-      // "ran with no return" from "no run happened".
-      if (result.status === 0 && result.returnValue !== undefined) {
+      // "ran with no return" from "no run happened". When the return is an output
+      // handle (`return <call>()`), copy its bytes at the OS level — the entry
+      // def's return is streamed to the user, never slurped through V8 to print.
+      if (result.status === 0 && (result.returnValue !== undefined || result.valueFile)) {
+        const returnFile = join(this.runDir, "return_value.txt");
         try {
-          writeFileSync(join(this.runDir, "return_value.txt"), result.returnValue, "utf8");
+          if (result.returnValue !== undefined) {
+            writeFileSync(returnFile, result.returnValue, "utf8");
+          } else if (result.valueFile) {
+            copyFileSync(result.valueFile, returnFile);
+          }
         } catch {
           // Best-effort capture; the run succeeded regardless.
         }
@@ -717,6 +789,9 @@ export class NodeWorkflowRuntime {
       output: accOut + (r.output ?? ""),
       error: accErr + (r.error ?? ""),
       returnValue: r.returnValue,
+      // Propagate a `return <call>()` output handle up through the def body so
+      // the caller can stream it (`valueFile`) instead of slurping.
+      ...(r.valueFile ? { valueFile: r.valueFile } : {}),
     };
   }
 
@@ -753,7 +828,7 @@ export class NodeWorkflowRuntime {
       const { ref, argsRaw } = parseInlineCaptureCall(m[1]);
       const r = await this.executeRunRef(scope, ref, argsRaw);
       if (r.status !== 0) return { ok: false, result: r };
-      const captured = r.returnValue ?? r.output.trim();
+      const captured = this.forceValue(r);
       result += quoteValue ? quoteValue(captured) : captured;
       lastIndex = m.index + m[0].length;
     }
@@ -788,7 +863,7 @@ export class NodeWorkflowRuntime {
         if (runM) {
           const result = await this.executeRunRef(scope, runM[1]!, commaArgsToInterpolated(runM[2]!));
           if (result.status !== 0) return { ok: false, result };
-          return { ok: true, value: result.returnValue ?? result.output.trim() };
+          return { ok: true, value: this.forceValue(result) };
         }
 
         // Bare in-scope identifier (e.g. `=> name_arg`) — sugar for `=> "${name_arg}"`.
@@ -832,13 +907,13 @@ export class NodeWorkflowRuntime {
     if (expr.kind === "call") {
       const r = await this.executeRunRef(scope, expr.callee.value, argsToRuntimeString(expr.args));
       if (r.status !== 0) return { ok: false, result: r, output: "" };
-      return { ok: true, value: r.returnValue ?? r.output.trim(), output: "" };
+      return { ok: true, value: this.forceValue(r), output: "" };
     }
     if (expr.kind === "inline_script") {
       const shebang = expr.lang ? `#!/usr/bin/env ${expr.lang}` : undefined;
       const r = await this.executeInlineScript(scope, expr.body, shebang, argsToRuntimeString(expr.args));
       if (r.status !== 0) return { ok: false, result: r, output: "" };
-      return { ok: true, value: r.returnValue ?? r.output.trim(), output: "" };
+      return { ok: true, value: this.forceValue(r), output: "" };
     }
     if (expr.kind === "match") {
       const mr = await this.evaluateMatch(scope, expr.match);
@@ -909,7 +984,7 @@ export class NodeWorkflowRuntime {
           const shebang = step.message.lang ? `#!/usr/bin/env ${step.message.lang}` : undefined;
           const result = await this.executeInlineScript(scope, step.message.body, shebang, argsToRuntimeString(step.message.args));
           if (result.status !== 0) return this.mergeStepResult(accOut, accErr, result);
-          message = result.returnValue ?? result.output.trim();
+          message = this.forceValue(result);
         } else if (step.message.kind === "literal") {
           const ir = await this.interpolateWithCaptures(step.message.raw, scope);
           if (!ir.ok) return this.mergeStepResult(accOut, accErr, ir.result);
@@ -949,6 +1024,30 @@ export class NodeWorkflowRuntime {
           returnValue = stripOuterQuotes(retIr.value);
           return this.mergeStepResult(accOut, accErr, { status: 0, output: "", error: "", returnValue });
         }
+        // `return <call>()` / `return <inline_script>()` propagates the callee's
+        // output handle: the def's return value is the callee's bytes on disk
+        // (`valueFile`), NOT slurped here. The caller slurps only at its own
+        // force site — so `stdin wrap() -> sink()` streams the file while
+        // `const y = wrap()` reads it. Printing the entry def's return streams
+        // the file to the user rather than pulling it through V8.
+        if (value.kind === "call" || value.kind === "inline_script") {
+          const r = value.kind === "call"
+            ? await this.executeRunRef(scope, value.callee.value, argsToRuntimeString(value.args))
+            : await this.executeInlineScript(
+                scope,
+                value.body,
+                value.lang ? `#!/usr/bin/env ${value.lang}` : undefined,
+                argsToRuntimeString(value.args),
+              );
+          if (r.status !== 0) return this.mergeStepResult(accOut, accErr, r);
+          return this.mergeStepResult(accOut, accErr, {
+            status: 0,
+            output: "",
+            error: "",
+            ...(r.returnValue !== undefined ? { returnValue: r.returnValue } : {}),
+            ...(r.valueFile ? { valueFile: r.valueFile } : {}),
+          });
+        }
         const r = await this.evaluateExpr(scope, value, undefined, io);
         accOut += r.output;
         if (!r.ok) return this.mergeStepResult(accOut, accErr, r.result);
@@ -973,7 +1072,7 @@ export class NodeWorkflowRuntime {
         } else if (sendValue.kind === "call") {
           const r = await this.executeRunRef(scope, sendValue.callee.value, argsToRuntimeString(sendValue.args));
           if (r.status !== 0) return this.mergeStepResult(accOut, accErr, r);
-          payload = r.returnValue ?? r.output.trim();
+          payload = this.forceValue(r);
         } else {
           return this.mergeStepResult(accOut, accErr, {
             status: 1,
@@ -1078,8 +1177,8 @@ export class NodeWorkflowRuntime {
               let lastResult = await this.executeRunRef(scope, ref, argsRaw);
               let attempt = 1;
               while (lastResult.status !== 0 && attempt <= recoverLimit) {
-                const rr = await this.runRecoverBody(scope, recover, lastResult.outFile ?? "");
-                if (rr.status !== 0 || rr.returnValue !== undefined) return rr;
+                const rr = await this.runRecoverBody(scope, recover, lastResult);
+                if (rr.status !== 0 || this.stepReturned(rr)) return rr;
                 lastResult = await this.executeRunRef(scope, ref, argsRaw);
                 attempt += 1;
               }
@@ -1090,9 +1189,9 @@ export class NodeWorkflowRuntime {
             promise = runInBranch(async () => {
               const result = await this.executeRunRef(scope, ref, argsRaw);
               if (result.status === 0) return result;
-              const rr = await this.runRecoverBody(scope, recover, result.outFile ?? "");
+              const rr = await this.runRecoverBody(scope, recover, result);
               if (rr.status !== 0) return rr;
-              if (rr.returnValue !== undefined) return { ...rr, recoverReturn: true };
+              if (this.stepReturned(rr)) return { ...rr, recoverReturn: true };
               return { status: 0, output: result.output, error: result.error };
             });
           } else {
@@ -1105,28 +1204,29 @@ export class NodeWorkflowRuntime {
         }
         if (body.kind === "call") {
           // Evaluate a `stdin <expr>` clause once, before any recover retries —
-          // the same bytes are piped to the child on every attempt.
-          let stdinValue: string | undefined;
+          // the same source (bytes, or a producer's on-disk handle) is piped to
+          // the child on every attempt.
+          let stdinSource: StdinSource | undefined;
           if (step.stdin) {
             const sr = await this.resolveStdin(scope, step.stdin);
             if (!sr.ok) return this.mergeStepResult(accOut, accErr, sr.result);
-            stdinValue = sr.value;
+            stdinSource = sr.source;
           }
           if (step.recover) {
             const limit = this.resolveRecoverLimit(scope.filePath);
             const ref = body.callee.value;
             const argsRaw = argsToRuntimeString(body.args);
-            let lastResult = await this.executeRunRef(scope, ref, argsRaw, stdinValue);
+            let lastResult = await this.executeRunRef(scope, ref, argsRaw, stdinSource);
             let attempt = 1;
             while (lastResult.status !== 0 && attempt <= limit) {
-              const rr = await this.runRecoverBody(scope, step.recover, lastResult.outFile ?? "");
-              if (rr.status !== 0 || rr.returnValue !== undefined) return this.mergeStepResult(accOut, accErr, rr);
-              lastResult = await this.executeRunRef(scope, ref, argsRaw, stdinValue);
+              const rr = await this.runRecoverBody(scope, step.recover, lastResult);
+              if (rr.status !== 0 || this.stepReturned(rr)) return this.mergeStepResult(accOut, accErr, rr);
+              lastResult = await this.executeRunRef(scope, ref, argsRaw, stdinSource);
               attempt += 1;
             }
             if (lastResult.status === 0) {
               if (step.captureName) {
-                scope.vars.set(step.captureName, lastResult.returnValue ?? lastResult.output.trim());
+                scope.vars.set(step.captureName, this.forceValue(lastResult));
               }
             } else {
               return this.mergeStepResult(accOut, accErr, lastResult);
@@ -1134,15 +1234,15 @@ export class NodeWorkflowRuntime {
             continue;
           }
           const runResult = await this.executeRunRef(
-            scope, body.callee.value, argsToRuntimeString(body.args), stdinValue,
+            scope, body.callee.value, argsToRuntimeString(body.args), stdinSource,
           );
           if (runResult.status === 0) {
             if (step.captureName) {
-              scope.vars.set(step.captureName, runResult.returnValue ?? runResult.output.trim());
+              scope.vars.set(step.captureName, this.forceValue(runResult));
             }
           } else if (step.catch) {
-            const rr = await this.runRecoverBody(scope, step.catch, runResult.outFile ?? "");
-            if (rr.status !== 0 || rr.returnValue !== undefined) return this.mergeStepResult(accOut, accErr, rr);
+            const rr = await this.runRecoverBody(scope, step.catch, runResult);
+            if (rr.status !== 0 || this.stepReturned(rr)) return this.mergeStepResult(accOut, accErr, rr);
           } else {
             return this.mergeStepResult(accOut, accErr, runResult);
           }
@@ -1151,27 +1251,27 @@ export class NodeWorkflowRuntime {
         if (body.kind === "inline_script") {
           const shebang = body.lang ? `#!/usr/bin/env ${body.lang}` : undefined;
           const argsRaw = argsToRuntimeString(body.args);
-          let stdinValue: string | undefined;
+          let stdinSource: StdinSource | undefined;
           if (step.stdin) {
             const sr = await this.resolveStdin(scope, step.stdin);
             if (!sr.ok) return this.mergeStepResult(accOut, accErr, sr.result);
-            stdinValue = sr.value;
+            stdinSource = sr.source;
           }
           const runOnce = (): Promise<StepResult> =>
-            this.executeInlineScript(scope, body.body, shebang, argsRaw, stdinValue);
+            this.executeInlineScript(scope, body.body, shebang, argsRaw, stdinSource);
           if (step.recover) {
             const limit = this.resolveRecoverLimit(scope.filePath);
             let lastResult = await runOnce();
             let attempt = 1;
             while (lastResult.status !== 0 && attempt <= limit) {
-              const rr = await this.runRecoverBody(scope, step.recover, lastResult.outFile ?? "");
-              if (rr.status !== 0 || rr.returnValue !== undefined) return this.mergeStepResult(accOut, accErr, rr);
+              const rr = await this.runRecoverBody(scope, step.recover, lastResult);
+              if (rr.status !== 0 || this.stepReturned(rr)) return this.mergeStepResult(accOut, accErr, rr);
               lastResult = await runOnce();
               attempt += 1;
             }
             if (lastResult.status === 0) {
               if (step.captureName) {
-                scope.vars.set(step.captureName, lastResult.returnValue ?? lastResult.output.trim());
+                scope.vars.set(step.captureName, this.forceValue(lastResult));
               }
             } else {
               return this.mergeStepResult(accOut, accErr, lastResult);
@@ -1181,11 +1281,11 @@ export class NodeWorkflowRuntime {
           const result = await runOnce();
           if (result.status === 0) {
             if (step.captureName) {
-              scope.vars.set(step.captureName, result.returnValue ?? result.output.trim());
+              scope.vars.set(step.captureName, this.forceValue(result));
             }
           } else if (step.catch) {
-            const rr = await this.runRecoverBody(scope, step.catch, result.outFile ?? "");
-            if (rr.status !== 0 || rr.returnValue !== undefined) return this.mergeStepResult(accOut, accErr, rr);
+            const rr = await this.runRecoverBody(scope, step.catch, result);
+            if (rr.status !== 0 || this.stepReturned(rr)) return this.mergeStepResult(accOut, accErr, rr);
           } else {
             return this.mergeStepResult(accOut, accErr, result);
           }
@@ -1231,7 +1331,7 @@ export class NodeWorkflowRuntime {
             (io) => this.executeShLine(scope, cmdIr.value, io),
           );
           if (step.captureName && result.status === 0) {
-            scope.vars.set(step.captureName, result.returnValue ?? result.output.trim());
+            scope.vars.set(step.captureName, this.forceValue(result));
           }
           if (result.status !== 0) return this.mergeStepResult(accOut, accErr, result);
           continue;
@@ -1259,7 +1359,7 @@ export class NodeWorkflowRuntime {
         const branch = condMet ? step.body : step.elseBody;
         if (branch) {
           const bodyResult = await this.executeSteps(blockChildScope(scope), branch, io);
-          if (bodyResult.status !== 0 || bodyResult.returnValue !== undefined) {
+          if (bodyResult.status !== 0 || this.stepReturned(bodyResult)) {
             return this.mergeStepResult(accOut, accErr, bodyResult);
           }
           accOut += bodyResult.output;
@@ -1278,7 +1378,7 @@ export class NodeWorkflowRuntime {
           const iterScope = blockChildScope(scope);
           iterScope.vars.set(step.iterVar, line);
           const bodyResult = await this.executeSteps(iterScope, step.body, io);
-          if (bodyResult.status !== 0 || bodyResult.returnValue !== undefined) {
+          if (bodyResult.status !== 0 || this.stepReturned(bodyResult)) {
             return this.mergeStepResult(accOut, accErr, bodyResult);
           }
           accOut += bodyResult.output;
@@ -1441,14 +1541,14 @@ export class NodeWorkflowRuntime {
       if (token.kind === "managed_inline_script") {
         const result = await this.executeInlineScript(scope, token.body, undefined, token.argsRaw);
         if (result.status !== 0) return result;
-        resolved.push(result.returnValue ?? result.output.trim());
+        resolved.push(this.forceValue(result));
         continue;
       }
       const result = await this.executeRunRef(scope, token.ref, token.argsRaw);
       if (result.status !== 0) {
         return result;
       }
-      resolved.push(result.returnValue ?? result.output.trim());
+      resolved.push(this.forceValue(result));
     }
     return resolved;
   }
@@ -1462,18 +1562,44 @@ export class NodeWorkflowRuntime {
   private async resolveStdin(
     scope: Scope,
     stdinExpr: Expr,
-  ): Promise<{ ok: true; value: string } | { ok: false; result: StepResult }> {
+  ): Promise<{ ok: true; source: StdinSource } | { ok: false; result: StepResult }> {
+    // One-hop producer `stdin <call>() -> script()`: run the producer (a def or
+    // a script) now and stream its output handle into the child — its bytes are
+    // never slurped into a JS string first.
+    if (stdinExpr.kind === "call") {
+      const r = await this.executeRunRef(scope, stdinExpr.callee.value, argsToRuntimeString(stdinExpr.args));
+      if (r.status !== 0) return { ok: false, result: r };
+      return { ok: true, source: this.handleStdinSource(r) };
+    }
+    if (stdinExpr.kind === "inline_script") {
+      const shebang = stdinExpr.lang ? `#!/usr/bin/env ${stdinExpr.lang}` : undefined;
+      const r = await this.executeInlineScript(scope, stdinExpr.body, shebang, argsToRuntimeString(stdinExpr.args));
+      if (r.status !== 0) return { ok: false, result: r };
+      return { ok: true, source: this.handleStdinSource(r) };
+    }
     const raw = stdinExpr.kind === "literal" ? stdinExpr.raw : "";
+    // A bare `"${ident}"` naming an output-handle var (a `recover`/`catch`
+    // binding) streams that handle's file — `stdin failure -> sink()` never
+    // slurps the failed step's stdout into memory.
+    const bare = raw.match(/^"\$\{([A-Za-z_][A-Za-z0-9_]*)\}"$/);
+    if (bare) {
+      const bound = scope.vars.get(bare[1]!);
+      if (bound && this.isHandle(bound)) {
+        const r = await this.resolveHandleResult(bound);
+        if (r.status !== 0) return { ok: false, result: r };
+        return { ok: true, source: this.handleStdinSource(r) };
+      }
+    }
     const ir = await this.interpolateWithCaptures(raw, scope);
     if (!ir.ok) return { ok: false, result: ir.result };
-    return { ok: true, value: stripOuterQuotes(ir.value) };
+    return { ok: true, source: { kind: "bytes", bytes: stripOuterQuotes(ir.value) } };
   }
 
   private async executeRunRef(
     scope: Scope,
     ref: string,
     argsRaw: string | string[],
-    stdin?: string,
+    stdin?: StdinSource,
   ): Promise<StepResult> {
     const resolvedArgs = await this.resolveArgsRaw(scope, argsRaw);
     if (!Array.isArray(resolvedArgs)) return resolvedArgs;
@@ -1803,17 +1929,31 @@ export class NodeWorkflowRuntime {
       | { single: StepDef }
       | { block: StepDef[] }
     ),
-    failurePath: string,
+    failed: StepResult,
   ): Promise<StepResult> {
     const recoverSteps = "single" in catchDef ? [catchDef.single] : catchDef.block;
     // A recover / catch body is its own block scope: copy `locals` (as well as
     // `vars`) so a nested decl inside the body does not leak past it.
     const bodyScope = blockChildScope(scope);
-    // Bind the failed step's stdout CAPTURE PATH, not its bytes. The runtime
-    // already wrote those bytes to `outFile` (stderr to the sibling `.err`), so
-    // the recover body reads them from disk instead of putting a ~1MB+ log on
-    // the next script's `execve` argv (which would hit `ARG_MAX`).
-    bodyScope.vars.set(catchDef.bindings.failure, failurePath);
+    // Bind the failed step as an OUTPUT HANDLE, not a run-dir path: a status-0
+    // handle whose `valueFile` is the failed step's stdout capture. So
+    // `${failure}` / a bare-arg / `if failure` slurps the failed step's stdout
+    // CONTENTS, and `stdin failure -> sink()` streams that file — the author
+    // never sees a `.jaiph/runs/…/NNNNNN-*.out` path. (stderr stays in the
+    // sibling `.err`, `failed.errFile`.)
+    // The handle's bytes are the failed step's stdout: a leaf script's own
+    // capture, or — when a def failed because an inner call failed — the inner
+    // stdout propagated up as `valueFile`. The def's own capture is empty.
+    const stdoutFile = failed.valueFile ?? failed.outFile;
+    const handleId = this.createResolvedHandle(catchDef.bindings.failure, {
+      status: 0,
+      output: "",
+      error: "",
+      ...(failed.outFile ? { outFile: failed.outFile } : {}),
+      ...(stdoutFile ? { valueFile: stdoutFile } : {}),
+      ...(failed.errFile ? { errFile: failed.errFile } : {}),
+    });
+    bodyScope.vars.set(catchDef.bindings.failure, handleId);
     return this.executeSteps(bodyScope, recoverSteps);
   }
 
@@ -1830,10 +1970,15 @@ export class NodeWorkflowRuntime {
     cwd: string,
     io: StepIO | undefined,
     interpreter?: string,
-    stdin?: string,
+    stdin?: StdinSource,
   ): Promise<StepResult> {
     return new Promise((resolve) => {
-      let output = "";
+      // Output handle: the child's stdout is streamed straight to disk through
+      // `io.appendOut` (the step's `.out` capture) and is NEVER accumulated into
+      // a JS string here. A discarded statement call therefore holds no bytes in
+      // memory (the 64 MiB no-slurp pin); a force site reads the capture back
+      // via `forceValue`. `streamed: true` tells `executeManagedStep` the files
+      // are already written. stderr stays small and is kept for diagnostics.
       let error = "";
       const killSignal = io?.killSignal;
       // Single-settle guard shared by the normal close/error paths and the
@@ -1859,7 +2004,7 @@ export class NodeWorkflowRuntime {
         const msg = spawnFailureText(err, command, args, env, interpreter);
         error += msg;
         io?.appendErr(msg);
-        settle({ status: 1, output, error });
+        settle({ status: 1, output: "", error, streamed: true });
         return;
       }
       // Idle-output kill watchdog: when the step's kill signal fires the leaf
@@ -1883,16 +2028,18 @@ export class NodeWorkflowRuntime {
         }
         const msg =
           "step terminated: no new output within the idle-output kill timeout (JAIPH_STEP_IDLE_KILL_SEC)";
-        settle({ status: 1, output, error: error ? `${error}\n${msg}` : msg });
+        settle({ status: 1, output: "", error: error ? `${error}\n${msg}` : msg, streamed: true });
       }
       if (killSignal) {
         if (killSignal.aborted) onIdleKill();
         else killSignal.addEventListener("abort", onIdleKill, { once: true });
       }
-      child.stdout?.setEncoding("utf8");
+      // Leave stdout undecoded (Buffer chunks) so streaming a large capture to
+      // disk never allocates a matching JS string. stderr stays utf8 — it is
+      // small and accumulated for diagnostics.
       child.stderr?.setEncoding("utf8");
-      child.stdout?.on("data", (chunk: string) => {
-        output += chunk;
+      // Stream stdout to the `.out` capture only — no in-memory accumulation.
+      child.stdout?.on("data", (chunk: Buffer) => {
         io?.appendOut(chunk);
       });
       child.stderr?.on("data", (chunk: string) => {
@@ -1903,25 +2050,37 @@ export class NodeWorkflowRuntime {
         const msg = spawnFailureText(err, command, args, env, interpreter);
         error += msg;
         io?.appendErr(msg);
-        settle({ status: 1, output, error });
+        settle({ status: 1, output: "", error, streamed: true });
       });
       child.on("close", (code) => {
         const status = typeof code === "number" ? code : 1;
-        settle({
-          status,
-          output,
-          error,
-          ...(status === 0 ? { returnValue: output.trim() } : {}),
-        });
+        // No `returnValue`: a successful call's value is its stdout on disk, read
+        // back by `forceValue` only at a force site. `output` stays empty.
+        settle({ status, output: "", error, streamed: true });
       });
-      // Feed the evaluated `stdin <expr>` bytes to the child, then close the
-      // stream. Written last, after the stdout/stderr readers are attached, so a
-      // payload larger than the pipe buffer (megabytes) never deadlocks a child
-      // that echoes its input. An EPIPE on a child that exits early is ignored:
-      // the exit code already settled the step.
+      // Feed the `stdin <value> -> script()` source to the child, then close the
+      // stream. Attached last, after the stdout/stderr readers, so a payload
+      // larger than the pipe buffer (megabytes) never deadlocks a child that
+      // echoes its input. A `file` source is piped as a read stream — the
+      // producer's bytes are never slurped into a JS string (the stdin no-slurp
+      // pin). An EPIPE on a child that exits early is ignored: the exit code
+      // already settled the step.
       if (stdin !== undefined && child.stdin) {
-        child.stdin.on("error", () => {});
-        child.stdin.end(stdin, "utf8");
+        const childStdin = child.stdin;
+        childStdin.on("error", () => {});
+        if (stdin.kind === "bytes") {
+          childStdin.end(stdin.bytes, "utf8");
+        } else {
+          const rs = createReadStream(stdin.path);
+          rs.on("error", () => {
+            try {
+              childStdin.end();
+            } catch {
+              // best-effort: child may have already exited
+            }
+          });
+          rs.pipe(childStdin);
+        }
       }
     });
   }
@@ -1938,7 +2097,7 @@ export class NodeWorkflowRuntime {
     args: string[],
     env: NodeJS.ProcessEnv,
     io?: StepIO,
-    stdin?: string,
+    stdin?: StdinSource,
   ): Promise<StepResult> {
     const scriptsDir = env.JAIPH_SCRIPTS;
     if (!scriptsDir) {
@@ -2001,7 +2160,7 @@ export class NodeWorkflowRuntime {
     body: string,
     shebang: string | undefined,
     argsRaw: string,
-    stdin?: string,
+    stdin?: StdinSource,
   ): Promise<StepResult> {
     const resolvedArgs = await this.resolveArgsRaw(scope, argsRaw);
     if (!Array.isArray(resolvedArgs)) return resolvedArgs;
@@ -2145,10 +2304,10 @@ export class NodeWorkflowRuntime {
     writeFileSync(outFile, "");
     writeFileSync(errFile, "");
     const io: StepIO = {
-      appendOut: (chunk: string) => {
+      appendOut: (chunk: string | Buffer) => {
         if (chunk.length > 0) appendFileSync(outFile, chunk);
       },
-      appendErr: (chunk: string) => {
+      appendErr: (chunk: string | Buffer) => {
         if (chunk.length > 0) appendFileSync(errFile, chunk);
       },
     };
@@ -2163,11 +2322,11 @@ export class NodeWorkflowRuntime {
       : null;
     const stepIo: StepIO = idleWarn || killController
       ? {
-          appendOut: (chunk: string) => {
+          appendOut: (chunk: string | Buffer) => {
             io.appendOut(chunk);
             if (chunk.length > 0) idleWarn?.bump();
           },
-          appendErr: (chunk: string) => {
+          appendErr: (chunk: string | Buffer) => {
             io.appendErr(chunk);
             if (chunk.length > 0) idleWarn?.bump();
           },
@@ -2206,8 +2365,20 @@ export class NodeWorkflowRuntime {
       idleWarn?.stop();
     }
     const elapsed = Date.now() - started;
-    writeFileSync(outFile, result.output ?? "");
-    writeFileSync(errFile, result.error ?? "");
+    // A streamed leaf already wrote its stdout/stderr to disk chunk-by-chunk
+    // (`io.appendOut`/`appendErr`); rewriting from the empty in-memory `output`
+    // would erase the capture. Only non-streamed results (defs, mock bodies)
+    // persist their in-memory `output` here.
+    if (!result.streamed) {
+      writeFileSync(outFile, result.output ?? "");
+      writeFileSync(errFile, result.error ?? "");
+    }
+    // Bounded stdout preview for the run tree / telemetry. For a streamed leaf
+    // this reads at most MAX_EMBED bytes off disk rather than slurping the whole
+    // (possibly multi-megabyte) capture into memory.
+    const outContent = result.streamed
+      ? this.readCapturePreview(outFile, MAX_EMBED)
+      : (result.output ?? "").slice(0, MAX_EMBED);
     this.emitter.emitStep({
       type: "STEP_END",
       func: name,
@@ -2224,13 +2395,35 @@ export class NodeWorkflowRuntime {
       depth,
       run_id: this.runId,
       params: buildStepDisplayParamPairs(args, declaredParamNames, { positionalStyle: "argN" }),
-      out_content: (result.output ?? "").slice(0, MAX_EMBED),
+      out_content: outContent,
       err_content: result.status !== 0 ? (result.error ?? "").slice(0, MAX_EMBED) : "",
     });
     stack.pop();
-    // Stamp the capture paths so a failed `run` target's `catch`/`recover` can
-    // bind the stdout path (and locate the sibling `.err`) rather than copying
-    // the merged bytes into the recover body's argv.
-    return { ...result, outFile, errFile };
+    // Stamp the capture paths, and the output-handle byte source (`valueFile`):
+    // a leaf script's own stdout capture, or a propagated `return <call>()`
+    // handle for a def. A force site reads `valueFile` through `forceValue`; a
+    // `catch`/`recover` binds the failed step's `outFile` as a handle.
+    const valueFile = result.valueFile ?? (kind === "script" ? outFile : undefined);
+    return { ...result, outFile, errFile, ...(valueFile ? { valueFile } : {}) };
+  }
+
+  /**
+   * Read at most `max` bytes from a capture file without slurping the whole
+   * (possibly multi-megabyte) file into memory. Used for the bounded run-tree
+   * stdout preview of a streamed leaf.
+   */
+  private readCapturePreview(path: string, max: number): string {
+    try {
+      const fd = openSync(path, "r");
+      try {
+        const buf = Buffer.allocUnsafe(max);
+        const n = readSync(fd, buf, 0, max, 0);
+        return buf.subarray(0, n).toString("utf8");
+      } finally {
+        closeSync(fd);
+      }
+    } catch {
+      return "";
+    }
   }
 }

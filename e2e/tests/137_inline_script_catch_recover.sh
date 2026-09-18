@@ -13,16 +13,13 @@ TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 e2e::section "inline script catch: failing body, catch body runs once with merged output"
 # ---------------------------------------------------------------------------
 
-# `err` binds the failed inline script's stdout CAPTURE PATH; "bad" went to
-# stderr, which is the sibling `.err`. The catch body reads both captures from
-# disk (cat the `.out` and its sibling `.err`) instead of receiving the bytes.
+# `err` binds the failed inline script's stdout as an OUTPUT HANDLE; forcing it
+# (`${err}` interpolation) slurps the failed step's stdout CONTENTS — never a
+# run-dir path.
 e2e::file "inline_catch.jh" <<'EOF'
 export def main() {
-  `echo "bad" 1>&2; exit 3`() catch (err) {
-    const failed = ```
-cat "$1" "${1%.out}.err"
-```(err)
-    log "caught: ${failed}"
+  `echo "bad"; exit 3`() catch (err) {
+    log "caught: ${err}"
   }
 }
 EOF
@@ -31,7 +28,7 @@ catch_out="$(e2e::run "inline_catch.jh")"
 
 # assert_contains: inline script hash name is content-dependent and not predictable in heredoc
 e2e::assert_contains "${catch_out}" "script __inline_" "tree shows inline script step"
-e2e::assert_contains "${catch_out}" "caught: bad" "catch body read the failed step's stderr capture from the bound path"
+e2e::assert_contains "${catch_out}" "caught: bad" "catch body slurped the failed step's stdout contents"
 e2e::assert_contains "${catch_out}" "PASS def main" "catch absorbed the failure"
 
 e2e::pass "inline script catch: single-shot recovery"

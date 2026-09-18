@@ -186,7 +186,9 @@ test("nested script inside a taken `if` body runs and its return is the def resu
   );
   try {
     assert.equal(status, 0);
-    assert.equal(value, "YES");
+    // `return s()` propagates s's output handle; the entry def streams it to
+    // return_value.txt verbatim (a force site like `const y = s()` would trim).
+    assert.equal(value, "YES\n");
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -209,7 +211,8 @@ test("nested script inside the taken `else` body runs and its return is the def 
   );
   try {
     assert.equal(status, 0);
-    assert.equal(value, "NO");
+    // Streamed output handle from `return t()` — verbatim at the entry.
+    assert.equal(value, "NO\n");
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -252,7 +255,8 @@ test("a nested script inside a `catch` body runs on failure and its return is th
   ]);
   try {
     assert.equal(status, 0);
-    assert.equal(value, "recovered");
+    // `return s()` in the catch body streams s's output handle to the entry.
+    assert.equal(value, "recovered\n");
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

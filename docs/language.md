@@ -9,11 +9,11 @@ redirect_from:
 
 # Language
 
-Jaiph is a small language for writing defs. A `def` is a function whose body is steps and whose values are strings. You invoke it with a bare call — `greet(name)` — you do not pass it around. Each step either runs something (a script, another def, or an agent prompt), binds a value to a name, returns or logs a value, makes a decision with `if` or `match`, loops over lines of text with `for`, or sends a message on a channel.
+Jaiph is a small language for writing defs. A `def` is a function whose body is steps. You invoke it with a bare call — `greet(name)` — you do not pass it around. Each step either runs something (a script, another def, or an agent prompt), binds a value to a name, returns or logs a value, makes a decision with `if` or `match`, loops over lines of text with `for`, or sends a message on a channel.
 
 You write a Jaiph program as one or more modules. Each `.jh` module holds top-level definitions: defs, scripts, channels, constants, imports, and an optional `config` block. The rest of this page describes what you can write inside those definitions.
 
-Every value in a def is either a `string` or a `script`. A `string` is ordinary text that you can interpolate, pass as an argument, and return. A `script` is an executable body that you invoke with a bare call. The Value types table below lists what you can do with each and which uses the validator rejects.
+A value in a def is a `string`, a `script`, or an **output handle**. A `string` is ordinary text that you can interpolate, pass as an argument, and return. A `script` is an executable body that you invoke with a bare call. An **output handle** is what a call returns: its bytes stay on disk (or in a pipe) until a **force site** slurps them into a string; `stdin` and an unused result do not slurp. The Value types table below lists what you can do with each and which uses the validator rejects.
 
 The def runtime (`src/runtime/kernel/node-workflow-runtime.ts`) executes these definitions. It dispatches on `StepDef.type` and evaluates every value through one private `evaluateExpr` over `Expr.kind` (seven expression kinds). See [Architecture](architecture.md#core-components).
 
@@ -21,12 +21,28 @@ For the formal grammar (EBNF, lexical rules, and the validation catalog) see [Gr
 
 ## Value types
 
-| Type | Operations | Crossings |
+| Type | What it is | Operations |
 |---|---|---|
-| `string` | `${…}` interpolation, call arguments, `const`, `prompt` body, `send` payload, `return`. | Cannot be invoked as a call (`E_VALIDATE: strings are not executable`). |
-| `script` | Invocable with a bare call `name(args)`. | Not interpolatable, not `const`-assignable by name, not a valid `prompt` body. |
+| `string` | Text. Literals, params, slurped handles. | `${…}` interpolation, call arguments, `const`, `prompt` body, `send` payload, `return`. |
+| `script` | The declaration. | Invocable with a bare call `name(args)`. |
+| output handle | The result of a script / def / prompt call, and of a `recover` / `catch` binding. Its bytes live on disk (or in a pipe) until a force site slurps them. | `stdin h -> script()` streams it; a force site slurps it to a `string`. |
 
-Crossings produce specific `E_VALIDATE` messages identifying the violated rule.
+A call **always runs at the call site** — this is lazy *slurp*, not lazy execution. The result is an output handle, not a string; the bytes are read into memory only at a force site. A huge slurp may exhaust memory — that is you asking for the bytes.
+
+**Force (slurp the handle → `string`):**
+
+- `const x = <call>()`
+- `if` / `match` subject, `${x}` interpolation, a call argument, `log` / `logerr` / `logwarn`
+- a `prompt` body that references a handle (`prompt "… ${x} …"` or the `prompt x` identifier form) — the agent is sent the slurped contents, never a path
+- `return <call>()` yields a handle to the caller; the caller slurps only at *its* force site. Printing the entry def's return streams the file to you rather than pulling it through memory.
+
+**Keep as an output handle (no in-memory string):**
+
+- A statement call whose result is unused (`` `echo hi`() ``, `fetch_log()`)
+- `stdin <handle> -> script()` and `stdin <call>() -> script()` — the bytes stream into the child from disk
+- A `recover (failure)` / `catch (err)` binding — until a force site reads it
+
+Crossings: interpolating, an `if` subject, or a call argument on a handle **is** the slurp — after it, the value is a `string`. A `string` cannot be invoked as a call (`E_VALIDATE: strings are not executable`). A `script` is not interpolatable, not `const`-assignable by name, and not a valid `prompt` body. Do not interpolate a handle as a filesystem path. Crossings produce specific `E_VALIDATE` messages identifying the violated rule.
 
 ## Module surface
 
@@ -110,9 +126,9 @@ Call arguments:
 ### Arguments and `stdin`
 {: #arguments-and-stdin}
 
-Script arguments arrive as argv (`$1`, `$2`, … in bash, or `sys.argv` in Python). argv and the environment together are bounded by the OS `ARG_MAX` limit, which is about 1 MB on macOS, so the spawn fails when an argument is too large. To pass a large or arbitrary string to a **script**, connect it to the call's stdin with the `stdin <value> -> ref()` form, as in `stdin content -> save_string_to_file(path)`. The value is a normal string, so it can be a bare identifier, a `${…}` interpolation, or a double-quoted string. Jaiph evaluates it in scope and writes it to the script's stdin as UTF-8, never as argv, so it is not bounded by `ARG_MAX`.
+Script arguments arrive as argv (`$1`, `$2`, … in bash, or `sys.argv` in Python). argv and the environment together are bounded by the OS `ARG_MAX` limit, which is about 1 MB on macOS, so the spawn fails when an argument is too large. To pass a large or arbitrary value to a **script**, connect it to the call's stdin with the `stdin <value> -> ref()` form, as in `stdin content -> save_string_to_file(path)`. The value can be a string (bare identifier, `${…}` interpolation, or double-quoted), an output handle ([Value types](#value-types)) such as a `recover` / `catch` binding, or a **one-hop producer call** `stdin <call>() -> ref()` (the producer may be a def or a script). Jaiph writes the bytes to the script's stdin as UTF-8, never as argv, so the transfer is not bounded by `ARG_MAX`; a handle or producer streams from disk without being slurped into memory first.
 
-The `stdin <value> ->` prefix precedes the call; a `const` capture (`const out = stdin content -> save(path)`) and a trailing `catch` / `recover` on the call both attach as usual. The connect form is legal only on a call to a script, named or inline (`` stdin content -> `cat`() ``), and Jaiph rejects it anywhere else:
+The `stdin <value> ->` prefix precedes the call; a `const` capture (`const out = stdin content -> save(path)`) and a trailing `catch` / `recover` on the call both attach as usual. Once a value is a `const` string it is already slurped — `const x = fetch_log()` then `stdin x -> ref()` sends the in-memory string, whereas `stdin fetch_log() -> ref()` streams. The connect **target** is legal only on a call to a script, named or inline (`` stdin content -> `cat`() ``), and Jaiph rejects it anywhere else:
 
 - A def or other non-script target is `E_VALIDATE`.
 - `async` with `stdin` (either order) is `E_PARSE` (`async is not supported with stdin`).
@@ -168,7 +184,14 @@ See [Run work concurrently](async.md) for the operator recipe and [Spec — Asyn
 
 ## `catch` and `recover`
 
-Both attach to a call (any form). The binding receives the **absolute path** of the failed step's stdout capture (its `NNNNNN-*.out` file under `JAIPH_RUN_DIR`), not the log bytes. The file exists even when the step produced no stdout (it may be empty); stderr is in the sibling `.err` (same seq prefix). Read the log from disk (`cat "${err}"` / `tail -n 200 "${err}"`) — the recovery body never receives the log as an argument, so a multi-megabyte log cannot hit `ARG_MAX`.
+Both attach to a call (any form). The binding is an **output handle** for the failed step's stdout ([Value types](#value-types)) — not a path and not an eager string. Force it and it slurps the failed stdout **contents** (`logerr "${failure}"`, a call argument, an `if` subject); connect it and it streams (`stdin failure -> tail_log()`), so a multi-megabyte failed log never hits `ARG_MAX`. The handle's bytes live on the failed step's stdout capture on disk; the recovery body never sees a `.jaiph/runs/…/NNNNNN-*.out` path.
+
+```jaiph
+check_report_exists() recover (failure) {
+  logerr "report.txt is missing"
+  stdin failure -> tail_log()
+}
+```
 
 | Form | Loop | Allowed on |
 |---|---|---|

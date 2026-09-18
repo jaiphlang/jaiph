@@ -87,3 +87,20 @@ test("jaiph-skill.md does not restate owner-owned strings", () => {
     );
   }
 });
+
+test("jaiph-skill.md names the output handle in one sentence + link, without restating the force/keep table", () => {
+  const body = bodyLines(readFileSync(SKILL_PATH, "utf8")).join("\n");
+  // One sentence naming the concept, linked to the owner section.
+  assert.match(body, /output handle/i, "skill page must name the output handle");
+  assert.match(
+    body,
+    /reference\/language#value-types/,
+    "skill page must link the output-handle concept to its owner section",
+  );
+  // But it must NOT paste the owner's force/keep table (ADR 0003: link, don't copy).
+  assert.doesNotMatch(
+    body,
+    /Keep as an output handle/,
+    "docs/jaiph-skill.md restates the force/keep table — link to Value types instead (ADR 0003)",
+  );
+});
