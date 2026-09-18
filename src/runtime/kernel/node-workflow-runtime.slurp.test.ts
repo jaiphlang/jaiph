@@ -188,6 +188,40 @@ test("stdin producer does not slurp: 64 MiB streams to the sink off the JS heap"
   }
 });
 
+// A 3-stage pipeline streams 64 MiB producer -> pass-through -> sink. The
+// uncaptured result is discarded, so no stage holds its full body as a JS
+// string, even though the intermediate stage tees its stdout to its `.out`
+// capture (streamed to disk, never a string). The sink counts exactly N bytes;
+// peak extra RSS must not track the payload through the extra pipe hop.
+test("stdin big() -> pass() -> sink(): 64 MiB streams through an intermediate stage off the JS heap", async () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-slurp-pipe3-"));
+  try {
+    const n = 64 * MIB;
+    const runtime = makeRuntime(
+      root,
+      [
+        `script big = \`head -c ${n} /dev/zero | tr '\\0' a\``,
+        "script pass = `cat`",
+        'script sink = `wc -c | tr -d " \\n" > "$1"`',
+        "export def main(out) {",
+        "  stdin big() -> pass() -> sink(out)",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const outPath = join(root, "count.txt");
+    const { status, peakDeltaBytes } = await runWithRssWatch(runtime, "main", [outPath]);
+    assert.equal(status, 0);
+    assert.equal(readFileSync(outPath, "utf8"), String(n), "sink counted all N bytes through the pipeline");
+    assert.ok(
+      peakDeltaBytes < 40 * MIB,
+      `intermediate stage must stream, not slurp (peak +${(peakDeltaBytes / MIB).toFixed(1)} MiB)`,
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 // A def is a handle: `def wrap() { return big() }` propagates big's handle.
 // `stdin wrap() -> sink()` streams it (no-slurp); the producer may be a def.
 test("def return is an output handle: stdin wrap() -> sink() streams without slurping", async () => {

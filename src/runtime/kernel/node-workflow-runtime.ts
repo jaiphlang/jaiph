@@ -1,8 +1,8 @@
-import { spawn } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
 import { errText } from "../../errors";
 import { appendFileSync, closeSync, copyFileSync, createReadStream, mkdirSync, openSync, readFileSync, readSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve as resolvePath } from "node:path";
-import { PassThrough } from "node:stream";
+import { PassThrough, type Readable } from "node:stream";
 import { randomUUID } from "node:crypto";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { inlineScriptName, nestedScriptName } from "../../inline-script-name";
@@ -189,11 +189,19 @@ function blockChildScope(scope: Scope): Scope {
 /**
  * Where a `stdin <value> -> script()` connect gets the bytes it feeds to the
  * child. A small value already resolved in scope (a string, a `${…}` ref) is
- * `bytes`; an output handle (a producer call, or a bound `recover`/`catch`
- * failure) is `file` — the child reads it as a stream from disk, so a
- * multi-megabyte producer is never slurped into a JS string first.
+ * `bytes`; an output handle from a completed producer (a def call, or a bound
+ * `recover`/`catch` failure) is `file` — the child reads it as a stream from
+ * disk, so a multi-megabyte producer is never slurped into a JS string first.
+ * A `stream` source is the still-running previous stage's live stdout: in a
+ * pipeline (`stdin gen() -> upper() -> count()`) the stages run concurrently
+ * and each stage's stdout is piped into the next through a bounded, back-
+ * pressured buffer, so producer and consumer overlap and no stage's full body
+ * is spooled to a temp file and reread before the next stage starts.
  */
-type StdinSource = { kind: "bytes"; bytes: string } | { kind: "file"; path: string };
+type StdinSource =
+  | { kind: "bytes"; bytes: string }
+  | { kind: "file"; path: string }
+  | { kind: "stream"; stream: Readable };
 
 type StepIO = {
   // Accept `Buffer` so a leaf's stdout can be streamed to disk without decoding
@@ -1203,16 +1211,34 @@ export class NodeWorkflowRuntime {
           continue;
         }
         if (body.kind === "call") {
-          // Evaluate a `stdin <expr>` clause once, before any recover retries —
-          // the same source (bytes, or a producer's on-disk handle) is piped to
-          // the child on every attempt.
+          // Streaming pipeline (`stdin gen() -> upper() -> count()`): stages run
+          // concurrently through bounded buffers and overlap. `recover` is
+          // rejected at parse time, so only capture and a one-shot `catch` apply.
+          if (step.stdin && this.isPipeline(step)) {
+            const runResult = await this.executePipeline(scope, step);
+            if (runResult.status === 0) {
+              if (step.captureName) scope.vars.set(step.captureName, this.forceValue(runResult));
+            } else if (step.catch) {
+              const rr = await this.runRecoverBody(scope, step.catch, runResult);
+              if (rr.status !== 0 || this.stepReturned(rr)) return this.mergeStepResult(accOut, accErr, rr);
+            } else {
+              return this.mergeStepResult(accOut, accErr, runResult);
+            }
+            continue;
+          }
+          // Plain `stdin <value> -> script()` connect: resolve the value / bound
+          // handle once, before any recover retries — the same source (bytes, or
+          // an on-disk handle) is piped to the child on every attempt.
           let stdinSource: StdinSource | undefined;
           if (step.stdin) {
-            const sr = await this.resolvePipelineInput(scope, step);
+            const sr = await this.resolveStdin(scope, step.stdin);
             if (!sr.ok) {
-              const handled = await this.handlePipelineInputFailure(scope, step, accOut, accErr, sr.result);
-              if (handled) return handled;
-              continue;
+              if (step.catch) {
+                const rr = await this.runRecoverBody(scope, step.catch, sr.result);
+                if (rr.status !== 0 || this.stepReturned(rr)) return this.mergeStepResult(accOut, accErr, rr);
+                continue;
+              }
+              return this.mergeStepResult(accOut, accErr, sr.result);
             }
             stdinSource = sr.source;
           }
@@ -1255,13 +1281,30 @@ export class NodeWorkflowRuntime {
         if (body.kind === "inline_script") {
           const shebang = body.lang ? `#!/usr/bin/env ${body.lang}` : undefined;
           const argsRaw = argsToRuntimeString(body.args);
+          // Streaming pipeline whose final stage is an inline script; stages run
+          // concurrently through bounded buffers. `recover` is rejected at parse.
+          if (step.stdin && this.isPipeline(step)) {
+            const runResult = await this.executePipeline(scope, step);
+            if (runResult.status === 0) {
+              if (step.captureName) scope.vars.set(step.captureName, this.forceValue(runResult));
+            } else if (step.catch) {
+              const rr = await this.runRecoverBody(scope, step.catch, runResult);
+              if (rr.status !== 0 || this.stepReturned(rr)) return this.mergeStepResult(accOut, accErr, rr);
+            } else {
+              return this.mergeStepResult(accOut, accErr, runResult);
+            }
+            continue;
+          }
           let stdinSource: StdinSource | undefined;
           if (step.stdin) {
-            const sr = await this.resolvePipelineInput(scope, step);
+            const sr = await this.resolveStdin(scope, step.stdin);
             if (!sr.ok) {
-              const handled = await this.handlePipelineInputFailure(scope, step, accOut, accErr, sr.result);
-              if (handled) return handled;
-              continue;
+              if (step.catch) {
+                const rr = await this.runRecoverBody(scope, step.catch, sr.result);
+                if (rr.status !== 0 || this.stepReturned(rr)) return this.mergeStepResult(accOut, accErr, rr);
+                continue;
+              }
+              return this.mergeStepResult(accOut, accErr, sr.result);
             }
             stdinSource = sr.source;
           }
@@ -1562,29 +1605,18 @@ export class NodeWorkflowRuntime {
   }
 
   /**
-   * Evaluate a `run script(args) stdin <expr>` clause to the raw bytes written
-   * to the child's stdin. The stdin Expr is always a `literal` (the parser
-   * normalizes bare / interpolation forms to a quoted literal): interpolate it,
-   * then strip the outer quotes, exactly like a `const` string value.
+   * Resolve a plain `stdin <value> -> script()` connect operand to the bytes /
+   * on-disk handle fed to the child. The operand is always a `literal` (the
+   * parser normalizes bare / interpolation forms to a quoted literal); a call /
+   * inline-script producer is a pipeline and streams live through
+   * `executePipeline` instead, never here. A bare `"${ident}"` naming a bound
+   * output handle (a `recover` / `catch` failure) streams that handle's file;
+   * any other value interpolates and strips the outer quotes like a `const`.
    */
   private async resolveStdin(
     scope: Scope,
     stdinExpr: Expr,
   ): Promise<{ ok: true; source: StdinSource } | { ok: false; result: StepResult }> {
-    // One-hop producer `stdin <call>() -> script()`: run the producer (a def or
-    // a script) now and stream its output handle into the child — its bytes are
-    // never slurped into a JS string first.
-    if (stdinExpr.kind === "call") {
-      const r = await this.executeRunRef(scope, stdinExpr.callee.value, argsToRuntimeString(stdinExpr.args));
-      if (r.status !== 0) return { ok: false, result: r };
-      return { ok: true, source: this.handleStdinSource(r) };
-    }
-    if (stdinExpr.kind === "inline_script") {
-      const shebang = stdinExpr.lang ? `#!/usr/bin/env ${stdinExpr.lang}` : undefined;
-      const r = await this.executeInlineScript(scope, stdinExpr.body, shebang, argsToRuntimeString(stdinExpr.args));
-      if (r.status !== 0) return { ok: false, result: r };
-      return { ok: true, source: this.handleStdinSource(r) };
-    }
     const raw = stdinExpr.kind === "literal" ? stdinExpr.raw : "";
     // A bare `"${ident}"` naming an output-handle var (a `recover`/`catch`
     // binding) streams that handle's file — `stdin failure -> sink()` never
@@ -1604,62 +1636,110 @@ export class NodeWorkflowRuntime {
   }
 
   /**
-   * Run one intermediate pipeline stage (a script call or inline script) with
-   * the previous stage's output handle on its stdin, returning its StepResult.
-   * Each stage is its own managed step in the progress tree.
+   * Run one live pipeline stage (a script call or inline script) with `source`
+   * on its stdin. `onSpawn` fires the moment the child is spawned so the caller
+   * can tee this stage's live stdout into the next stage's link. Each stage is
+   * its own managed step in the progress tree.
    */
-  private async runPipelineStage(scope: Scope, stage: Expr, source: StdinSource): Promise<StepResult> {
+  private runPipelineStage(
+    scope: Scope,
+    stage: Expr,
+    source: StdinSource | undefined,
+    onSpawn: (child: ChildProcess) => void,
+  ): Promise<StepResult> {
     if (stage.kind === "inline_script") {
       const shebang = stage.lang ? `#!/usr/bin/env ${stage.lang}` : undefined;
-      return this.executeInlineScript(scope, stage.body, shebang, argsToRuntimeString(stage.args), source);
+      return this.executeInlineScript(scope, stage.body, shebang, argsToRuntimeString(stage.args), source, onSpawn);
     }
     if (stage.kind === "call") {
-      return this.executeRunRef(scope, stage.callee.value, argsToRuntimeString(stage.args), source);
+      return this.executeRunRef(scope, stage.callee.value, argsToRuntimeString(stage.args), source, onSpawn);
     }
-    return { status: 1, output: "", error: "internal: invalid stdin pipeline stage" };
+    return Promise.resolve({ status: 1, output: "", error: "internal: invalid stdin pipeline stage" });
   }
 
   /**
-   * Resolve the stdin source feeding an exec step's `body`: run the producer
-   * (`step.stdin`) and each intermediate `step.stages` stage in order, streaming
-   * each stage's output handle into the next. The first non-zero stage stops the
-   * pipeline; later stages do not start.
+   * True when the exec step's `stdin` clause is a streaming pipeline (producer
+   * is a call, or there is at least one intermediate stage) rather than a plain
+   * `stdin <value> -> script()` connect. Mirrors the parser's pipeline test.
    */
-  private async resolvePipelineInput(
-    scope: Scope,
-    step: Extract<StepDef, { type: "exec" }>,
-  ): Promise<{ ok: true; source: StdinSource } | { ok: false; result: StepResult }> {
-    const sr = await this.resolveStdin(scope, step.stdin!);
-    if (!sr.ok) return sr;
-    let source = sr.source;
-    for (const stage of step.stages ?? []) {
-      const r = await this.runPipelineStage(scope, stage, source);
-      if (r.status !== 0) return { ok: false, result: r };
-      source = this.handleStdinSource(r);
-    }
-    return { ok: true, source };
+  private isPipeline(step: Extract<StepDef, { type: "exec" }>): boolean {
+    const p = step.stdin;
+    if (!p) return false;
+    if ((step.stages?.length ?? 0) > 0) return true;
+    return p.kind === "call" || p.kind === "inline_script";
   }
 
   /**
-   * A producer or intermediate pipeline stage failed (the first non-zero stage
-   * stops the pipeline). Run the step's one-shot `catch` if present — a pipeline
-   * takes no `recover` — mirroring the body-failure catch path. Returns a
-   * StepResult to propagate, or `undefined` when `catch` handled it and the step
-   * should be skipped.
+   * True when a producer call ref resolves to a `def`. A def is not a single
+   * subprocess, so a def producer runs to completion and feeds its on-disk
+   * output handle into the live chain; a script producer streams live.
    */
-  private async handlePipelineInputFailure(
+  private producerIsDef(scope: Scope, ref: string): boolean {
+    if (!ref.includes(".")) {
+      const local = scope.locals?.get(ref);
+      if (local?.kind === "def") return true;
+      if (local?.kind === "script") return false;
+    }
+    return resolveDefRef(this.graph, scope.filePath, { value: ref, loc: { line: 1, col: 1 } }) !== null;
+  }
+
+  /**
+   * Execute a streaming stdin pipeline. Every script/inline stage spawns in one
+   * tick and runs concurrently: each stage's live stdout is piped into the next
+   * stage's stdin through a bounded, backpressured `PassThrough`, so producer
+   * and consumers overlap and no stage's full body is spooled to a temp file and
+   * reread before the next stage starts. A def producer runs to completion first
+   * (its on-disk handle streams in); a value producer resolves to bytes. The
+   * pipeline result is the first non-zero stage, or the final stage on success
+   * (which feeds `const` capture / `return`). `catch` is applied by the caller;
+   * `recover` is rejected at parse time.
+   */
+  private async executePipeline(
     scope: Scope,
     step: Extract<StepDef, { type: "exec" }>,
-    accOut: string,
-    accErr: string,
-    failure: StepResult,
-  ): Promise<StepResult | undefined> {
-    if (step.catch) {
-      const rr = await this.runRecoverBody(scope, step.catch, failure);
-      if (rr.status !== 0 || this.stepReturned(rr)) return this.mergeStepResult(accOut, accErr, rr);
-      return undefined;
+  ): Promise<StepResult> {
+    const producer = step.stdin!;
+    const liveStages: Expr[] = [];
+    let upstream: StdinSource | undefined;
+    if (producer.kind === "call" && this.producerIsDef(scope, producer.callee.value)) {
+      const r = await this.executeRunRef(scope, producer.callee.value, argsToRuntimeString(producer.args));
+      if (r.status !== 0) return r;
+      upstream = this.handleStdinSource(r);
+    } else if (producer.kind === "call" || producer.kind === "inline_script") {
+      liveStages.push(producer);
+    } else {
+      const sr = await this.resolveStdin(scope, producer);
+      if (!sr.ok) return sr.result;
+      upstream = sr.source;
     }
-    return this.mergeStepResult(accOut, accErr, failure);
+    for (const stage of step.stages ?? []) liveStages.push(stage);
+    liveStages.push(step.body);
+
+    // One PassThrough per adjacent pair. Pre-created so a stage's stdin source
+    // is known before that stage spawns (the spawn happens after each stage's
+    // own arg resolution, i.e. not synchronously in this loop). Each stage's
+    // onSpawn tees its live stdout into the downstream link; the link is force-
+    // ended if a stage never spawns or produces nothing, so a downstream child
+    // always reaches stdin EOF and the pipeline cannot hang.
+    const links: PassThrough[] = liveStages.slice(1).map(() => new PassThrough());
+    const running = liveStages.map((stage, i) => {
+      const source: StdinSource | undefined =
+        i === 0 ? upstream : { kind: "stream", stream: links[i - 1]! };
+      const downstream = links[i];
+      const onSpawn = (child: ChildProcess): void => {
+        if (downstream && child.stdout) child.stdout.pipe(downstream);
+      };
+      return this.runPipelineStage(scope, stage, source, onSpawn).then((r) => {
+        if (downstream && !downstream.writableEnded) downstream.end();
+        return r;
+      });
+    });
+
+    const settled = await Promise.all(running);
+    for (const r of settled) {
+      if (r.status !== 0) return r; // first non-zero stage is the pipeline failure
+    }
+    return settled[settled.length - 1]!;
   }
 
   private async executeRunRef(
@@ -1667,6 +1747,7 @@ export class NodeWorkflowRuntime {
     ref: string,
     argsRaw: string | string[],
     stdin?: StdinSource,
+    onSpawn?: (child: ChildProcess) => void,
   ): Promise<StepResult> {
     const resolvedArgs = await this.resolveArgsRaw(scope, argsRaw);
     if (!Array.isArray(resolvedArgs)) return resolvedArgs;
@@ -1687,7 +1768,7 @@ export class NodeWorkflowRuntime {
           "script",
           ref,
           args,
-          async (io) => this.executeScript(scope.filePath, fileName, args, scriptEnv, io, stdin),
+          async (io) => this.executeScript(scope.filePath, fileName, args, scriptEnv, io, stdin, onSpawn),
         );
       }
       // A local `prompt` reached via `run` is a validation error; fall through
@@ -1723,7 +1804,7 @@ export class NodeWorkflowRuntime {
         ref,
         args,
         async (io) =>
-          this.executeScript(resolvedScript.filePath, resolvedScript.script.name, args, scriptEnv, io, stdin),
+          this.executeScript(resolvedScript.filePath, resolvedScript.script.name, args, scriptEnv, io, stdin, onSpawn),
       );
     }
     return { status: 1, output: "", error: `Unknown run target: ${ref}` };
@@ -2038,6 +2119,10 @@ export class NodeWorkflowRuntime {
     io: StepIO | undefined,
     interpreter?: string,
     stdin?: StdinSource,
+    // Invoked synchronously the moment the child is spawned, before any await.
+    // A pipeline uses it to grab this stage's live stdout and wire it into the
+    // next stage's stdin, so all stages spawn in one tick and overlap.
+    onSpawn?: (child: ChildProcess) => void,
   ): Promise<StepResult> {
     return new Promise((resolve) => {
       // Output handle: the child's stdout is streamed straight to disk through
@@ -2074,6 +2159,11 @@ export class NodeWorkflowRuntime {
         settle({ status: 1, output: "", error, streamed: true });
         return;
       }
+      // Expose the live child so a pipeline can pipe this stage's stdout into
+      // the next stage's stdin. Runs before any handler is attached; the stdout
+      // 'data' capture handler below and the next stage's pipe both consume the
+      // same stream (a tee), with backpressure governed by the downstream pipe.
+      onSpawn?.(child);
       // Idle-output kill watchdog: when the step's kill signal fires the leaf
       // has produced no output for JAIPH_STEP_IDLE_KILL_SEC. Terminate the child
       // (SIGTERM → SIGKILL) and settle a failure immediately. We do NOT wait for
@@ -2137,7 +2227,7 @@ export class NodeWorkflowRuntime {
         childStdin.on("error", () => {});
         if (stdin.kind === "bytes") {
           childStdin.end(stdin.bytes, "utf8");
-        } else {
+        } else if (stdin.kind === "file") {
           const rs = createReadStream(stdin.path);
           rs.on("error", () => {
             try {
@@ -2147,6 +2237,18 @@ export class NodeWorkflowRuntime {
             }
           });
           rs.pipe(childStdin);
+        } else {
+          // Live upstream stage stdout: `pipe` respects backpressure (pausing
+          // the source when this child's stdin fills), so bytes never pile up
+          // in the JS heap. An upstream error just closes this child's stdin.
+          stdin.stream.on("error", () => {
+            try {
+              childStdin.end();
+            } catch {
+              // best-effort: child may have already exited
+            }
+          });
+          stdin.stream.pipe(childStdin);
         }
       }
     });
@@ -2165,6 +2267,7 @@ export class NodeWorkflowRuntime {
     env: NodeJS.ProcessEnv,
     io?: StepIO,
     stdin?: StdinSource,
+    onSpawn?: (child: ChildProcess) => void,
   ): Promise<StepResult> {
     const scriptsDir = env.JAIPH_SCRIPTS;
     if (!scriptsDir) {
@@ -2185,6 +2288,7 @@ export class NodeWorkflowRuntime {
       io,
       interp.command,
       stdin,
+      onSpawn,
     );
   }
 
@@ -2228,6 +2332,7 @@ export class NodeWorkflowRuntime {
     shebang: string | undefined,
     argsRaw: string,
     stdin?: StdinSource,
+    onSpawn?: (child: ChildProcess) => void,
   ): Promise<StepResult> {
     const resolvedArgs = await this.resolveArgsRaw(scope, argsRaw);
     if (!Array.isArray(resolvedArgs)) return resolvedArgs;
@@ -2239,7 +2344,7 @@ export class NodeWorkflowRuntime {
       "script",
       scriptName,
       args,
-      async (io) => this.executeScript(scope.filePath, scriptName, args, scriptEnv, io, stdin),
+      async (io) => this.executeScript(scope.filePath, scriptName, args, scriptEnv, io, stdin, onSpawn),
     );
   }
 
