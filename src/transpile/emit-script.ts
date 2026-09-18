@@ -85,6 +85,9 @@ function collectInlineScripts(
   for (const s of steps) {
     if (s.type === "exec") {
       emitInlineFromExpr(s.body, seen, out);
+      // A `stdin` pipeline can carry inline scripts as its producer and stages.
+      if (s.stdin) emitInlineFromExpr(s.stdin, seen, out);
+      for (const stage of s.stages ?? []) emitInlineFromExpr(stage, seen, out);
       if (s.catch) {
         const recoverSteps = "single" in s.catch ? [s.catch.single] : s.catch.block;
         collectInlineScripts(recoverSteps, seen, out);

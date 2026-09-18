@@ -342,11 +342,53 @@ function parseCallStatement(
 }
 
 /**
- * Parse the `stdin <expr> -> <call>` connect form. `afterStdin` is the text
- * after the `stdin` keyword; `captureName` is set when the form is the RHS of a
- * `const` binding. The value is bound to the exec step's `stdin` field and the
- * `-> ` target must be a script call (named or inline `` `body`() ``); `async`
- * after the arrow is `E_PARSE`.
+ * Parse a single pipeline stage (a script call or a single-line inline script)
+ * off the start of `s`. Returns the parsed `Expr` and the text after it, or
+ * `null` when `s` is not a bare call / single-line inline script (it is then the
+ * final stage, which may carry a trailing `catch` / fenced body). Fenced and
+ * multiline inline scripts are only supported as the final stage.
+ */
+function tryParsePipelineStage(
+  filePath: string,
+  lines: string[],
+  idx: number,
+  innerNo: number,
+  col: number,
+  s: string,
+): { expr: Expr; rest: string } | null {
+  const t = s.trimStart();
+  if (t.startsWith("```")) return null;
+  if (t.startsWith("`")) {
+    const res = parseAnonymousInlineScript(filePath, lines, idx, t, innerNo, col, true);
+    if (res.closingLineIdx !== idx) return null;
+    return { expr: makeInlineScriptExpr(res), rest: res.trailing };
+  }
+  const call = parseCallRef(t);
+  if (!call) return null;
+  return {
+    expr: {
+      kind: "call",
+      callee: { value: call.ref, loc: { line: innerNo, col } },
+      ...(call.args ? { args: call.args } : {}),
+    },
+    rest: call.rest,
+  };
+}
+
+/**
+ * Parse the `stdin <producer> -> <stage> [-> <stage>...]` connect / pipeline
+ * form. `afterStdin` is the text after the `stdin` keyword; `captureName` is set
+ * when the form is the RHS of a `const` binding.
+ *
+ * The producer (left of the first `->`) is a value (`stdin_value`) or a call to
+ * a def / script / inline script whose output handle streams into the chain.
+ * Each stage after the first `->` is a script (named or inline); the final stage
+ * becomes the exec step's `body`, and any intermediate stages are collected into
+ * `step.stages`.
+ *
+ * A **pipeline** — a call producer, or two or more `->` stages — rejects
+ * `recover` (`E_PARSE`); `catch` stays legal as a one-shot. `async` anywhere is
+ * `E_PARSE`. A plain `stdin <value> -> script()` connect keeps `recover`.
  */
 export function parseStdinConnect(
   filePath: string,
@@ -364,45 +406,83 @@ export function parseStdinConnect(
   if (t === "") {
     fail(filePath, "stdin requires a value expression: stdin <expr> -> ref()", innerNo, stdinCol);
   }
-  // One-hop producer `stdin <call>() -> script()`: the value is a def/script
-  // call whose output handle is streamed into the child. Detected before the
-  // string/identifier operand path so `foo()` becomes a `call` Expr, not a bare
-  // token. (A bare identifier or `${…}` has no `(` and falls through below.)
+  // Producer: an inline-script / def / script call whose output handle streams
+  // into the chain, or a value (string / identifier / `${…}`). A call producer
+  // makes this a pipeline (recover is then rejected below).
   let stdin: Expr;
   let afterOperand: string;
-  const producerCall = parseCallRef(t);
-  if (producerCall) {
-    stdin = {
-      kind: "call",
-      callee: { value: producerCall.ref, loc: { line: innerNo, col: stdinCol } },
-      ...(producerCall.args ? { args: producerCall.args } : {}),
-    };
-    afterOperand = producerCall.rest.trimStart();
+  let producerIsCall = false;
+  if (t.startsWith("`")) {
+    const res = parseAnonymousInlineScript(filePath, lines, idx, t, innerNo, stdinCol, true);
+    stdin = makeInlineScriptExpr(res);
+    afterOperand = res.trailing.trimStart();
+    producerIsCall = true;
   } else {
-    const { operand, rest } = takeStdinOperand(t);
-    stdin = stdinOperandToExpr(filePath, innerNo, stdinCol, operand);
-    afterOperand = rest.trimStart();
+    const producerCall = parseCallRef(t);
+    if (producerCall) {
+      stdin = {
+        kind: "call",
+        callee: { value: producerCall.ref, loc: { line: innerNo, col: stdinCol } },
+        ...(producerCall.args ? { args: producerCall.args } : {}),
+      };
+      afterOperand = producerCall.rest.trimStart();
+      producerIsCall = true;
+    } else {
+      const { operand, rest } = takeStdinOperand(t);
+      stdin = stdinOperandToExpr(filePath, innerNo, stdinCol, operand);
+      afterOperand = rest.trimStart();
+    }
   }
   if (!afterOperand.startsWith("->")) {
     fail(filePath, "stdin requires '-> ref()' after the value: stdin <expr> -> ref()", innerNo, stdinCol);
   }
-  const target = afterOperand.slice(2).trimStart();
-  if (target === "") {
+  let remaining = afterOperand.slice(2).trimStart();
+  if (remaining === "") {
     fail(filePath, "stdin requires a call target: stdin <expr> -> ref()", innerNo, stdinCol);
   }
+  // Collect intermediate consumer stages: each bare call / single-line inline
+  // script followed by another `->`. The first stage not followed by `->` (or a
+  // final stage with a trailing catch / fenced body) is left in `remaining` for
+  // the shared final-target logic below.
+  const stages: Expr[] = [];
+  while (true) {
+    const stage = tryParsePipelineStage(filePath, lines, idx, innerNo, stdinCol, remaining);
+    if (!stage) break;
+    const after = stage.rest.trimStart();
+    if (!after.startsWith("->")) break;
+    stages.push(stage.expr);
+    remaining = after.slice(2).trimStart();
+    if (remaining === "") {
+      fail(filePath, "stdin requires a call target: stdin <expr> -> ref()", innerNo, stdinCol);
+    }
+  }
+
+  const isPipeline = producerIsCall || stages.length > 0;
+  const target = remaining;
   if (/^async(?:\s|$)/.test(target)) {
     fail(filePath, "async is not supported with stdin", innerNo, stdinCol);
   }
+  let result: { step: StepDef; nextIdx: number };
   if (target.startsWith("`")) {
-    const result = parseAnonymousInlineScript(filePath, lines, idx, target, innerNo, stdinCol, true);
-    const body = makeInlineScriptExpr(result);
+    const res = parseAnonymousInlineScript(filePath, lines, idx, target, innerNo, stdinCol, true);
+    const body = makeInlineScriptExpr(res);
     const stepLoc = { line: innerNo, col: stdinCol };
     const c: BlockCtx = { filePath, lines, idx, innerRaw, inner: innerRaw.trim(), innerNo, trivia, opts };
-    return parseInlineScriptTail(c, result, body, stepLoc, stdinCol, stdin, captureName);
+    result = parseInlineScriptTail(c, res, body, stepLoc, stdinCol, stdin, captureName);
+  } else {
+    result = parseCallStatement(
+      filePath, lines, idx, innerNo, innerRaw, target, false, captureName, stdin, "stdin", stdinCol, trivia, opts,
+    );
   }
-  return parseCallStatement(
-    filePath, lines, idx, innerNo, innerRaw, target, false, captureName, stdin, "stdin", stdinCol, trivia, opts,
-  );
+
+  // Pipeline invariants: recover is rejected; intermediate stages are attached.
+  if (isPipeline && result.step.type === "exec" && result.step.recover) {
+    fail(filePath, "recover is not supported on a stdin pipeline; use catch", innerNo, stdinCol);
+  }
+  if (stages.length > 0 && result.step.type === "exec") {
+    result.step.stages = stages;
+  }
+  return result;
 }
 
 export type BlockCtx = {

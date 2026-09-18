@@ -1208,8 +1208,12 @@ export class NodeWorkflowRuntime {
           // the child on every attempt.
           let stdinSource: StdinSource | undefined;
           if (step.stdin) {
-            const sr = await this.resolveStdin(scope, step.stdin);
-            if (!sr.ok) return this.mergeStepResult(accOut, accErr, sr.result);
+            const sr = await this.resolvePipelineInput(scope, step);
+            if (!sr.ok) {
+              const handled = await this.handlePipelineInputFailure(scope, step, accOut, accErr, sr.result);
+              if (handled) return handled;
+              continue;
+            }
             stdinSource = sr.source;
           }
           if (step.recover) {
@@ -1253,8 +1257,12 @@ export class NodeWorkflowRuntime {
           const argsRaw = argsToRuntimeString(body.args);
           let stdinSource: StdinSource | undefined;
           if (step.stdin) {
-            const sr = await this.resolveStdin(scope, step.stdin);
-            if (!sr.ok) return this.mergeStepResult(accOut, accErr, sr.result);
+            const sr = await this.resolvePipelineInput(scope, step);
+            if (!sr.ok) {
+              const handled = await this.handlePipelineInputFailure(scope, step, accOut, accErr, sr.result);
+              if (handled) return handled;
+              continue;
+            }
             stdinSource = sr.source;
           }
           const runOnce = (): Promise<StepResult> =>
@@ -1593,6 +1601,65 @@ export class NodeWorkflowRuntime {
     const ir = await this.interpolateWithCaptures(raw, scope);
     if (!ir.ok) return { ok: false, result: ir.result };
     return { ok: true, source: { kind: "bytes", bytes: stripOuterQuotes(ir.value) } };
+  }
+
+  /**
+   * Run one intermediate pipeline stage (a script call or inline script) with
+   * the previous stage's output handle on its stdin, returning its StepResult.
+   * Each stage is its own managed step in the progress tree.
+   */
+  private async runPipelineStage(scope: Scope, stage: Expr, source: StdinSource): Promise<StepResult> {
+    if (stage.kind === "inline_script") {
+      const shebang = stage.lang ? `#!/usr/bin/env ${stage.lang}` : undefined;
+      return this.executeInlineScript(scope, stage.body, shebang, argsToRuntimeString(stage.args), source);
+    }
+    if (stage.kind === "call") {
+      return this.executeRunRef(scope, stage.callee.value, argsToRuntimeString(stage.args), source);
+    }
+    return { status: 1, output: "", error: "internal: invalid stdin pipeline stage" };
+  }
+
+  /**
+   * Resolve the stdin source feeding an exec step's `body`: run the producer
+   * (`step.stdin`) and each intermediate `step.stages` stage in order, streaming
+   * each stage's output handle into the next. The first non-zero stage stops the
+   * pipeline; later stages do not start.
+   */
+  private async resolvePipelineInput(
+    scope: Scope,
+    step: Extract<StepDef, { type: "exec" }>,
+  ): Promise<{ ok: true; source: StdinSource } | { ok: false; result: StepResult }> {
+    const sr = await this.resolveStdin(scope, step.stdin!);
+    if (!sr.ok) return sr;
+    let source = sr.source;
+    for (const stage of step.stages ?? []) {
+      const r = await this.runPipelineStage(scope, stage, source);
+      if (r.status !== 0) return { ok: false, result: r };
+      source = this.handleStdinSource(r);
+    }
+    return { ok: true, source };
+  }
+
+  /**
+   * A producer or intermediate pipeline stage failed (the first non-zero stage
+   * stops the pipeline). Run the step's one-shot `catch` if present — a pipeline
+   * takes no `recover` — mirroring the body-failure catch path. Returns a
+   * StepResult to propagate, or `undefined` when `catch` handled it and the step
+   * should be skipped.
+   */
+  private async handlePipelineInputFailure(
+    scope: Scope,
+    step: Extract<StepDef, { type: "exec" }>,
+    accOut: string,
+    accErr: string,
+    failure: StepResult,
+  ): Promise<StepResult | undefined> {
+    if (step.catch) {
+      const rr = await this.runRecoverBody(scope, step.catch, failure);
+      if (rr.status !== 0 || this.stepReturned(rr)) return this.mergeStepResult(accOut, accErr, rr);
+      return undefined;
+    }
+    return this.mergeStepResult(accOut, accErr, failure);
   }
 
   private async executeRunRef(

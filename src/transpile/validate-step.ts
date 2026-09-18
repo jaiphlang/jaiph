@@ -192,7 +192,25 @@ function runTargetKind(ref: string, ctx: ValidatorCtx): RefTargetKind | undefine
 function validateStdinClause(s: Extract<StepDef, { type: "exec" }>, ctx: ValidatorCtx): void {
   const stdin = s.stdin;
   if (!stdin) return;
+  // Validates the producer resolves; a prompt producer is rejected here by the
+  // shared call-shape check ("prompt … cannot be called as a script or def").
   validateExpr(stdin, s.loc, "const", ctx);
+  // Intermediate pipeline stages are consumers: each must be a script.
+  for (const stage of s.stages ?? []) {
+    validateExpr(stage, s.loc, "const", ctx);
+    if (stage.kind === "call") {
+      const kind = runTargetKind(stage.callee.value, ctx);
+      if (kind !== undefined && kind !== "script") {
+        ctx.diag.error(
+          ctx.ast.filePath,
+          s.loc.line,
+          s.loc.col,
+          "E_VALIDATE",
+          `stdin pipeline stage requires a script; "${stage.callee.value}" is a ${kind}`,
+        );
+      }
+    }
+  }
   const body = s.body;
   if (body.kind === "inline_script") return;
   if (body.kind === "call") {

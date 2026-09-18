@@ -64,6 +64,20 @@ function emitInlineScriptLines(
   return [`${prefix}\`${body}\`(${argsStr})`];
 }
 
+/**
+ * Render a `stdin` producer / pipeline stage on a single line: a `literal`
+ * value verbatim, a `call` via `emitRef`, or a single-line inline script as
+ * `` `body`(args) ``. Pipeline producers and intermediate stages are always
+ * single-line (fenced inline scripts are only allowed as the final stage, which
+ * emits through the normal body path).
+ */
+function emitStageInline(expr: Expr): string {
+  if (expr.kind === "literal") return expr.raw;
+  if (expr.kind === "call") return emitRef(expr.callee, expr.args);
+  if (expr.kind === "inline_script") return `\`${expr.body}\`(${formatArgs(expr.args)})`;
+  return "";
+}
+
 function emitMatchPattern(p: MatchPatternDef): string {
   if (p.kind === "string_literal") return `"${p.value}"`;
   if (p.kind === "regex") return `/${p.source}/`;
@@ -242,14 +256,13 @@ function emitStep(step: StepDef, pad: string, currentIndent: string, trivia: Tri
       return lines;
     }
     const capture = step.captureName ? `const ${step.captureName} = ` : "";
-    // `stdin <expr> -> ` sits before the call target as a connect clause. The
-    // value is a `literal` (string / `${…}` ref) or a one-hop producer `call`.
+    // `stdin <producer> -> [stage -> ...]` sits before the call target as a
+    // connect / pipeline clause. The producer is a `literal` (string / `${…}`
+    // ref), a `call`, or an inline script; each intermediate stage renders as
+    // `<stage> -> ` between the producer and the final target.
+    const stagesPrefix = (step.stages ?? []).map((s) => `${emitStageInline(s)} -> `).join("");
     const stdinPrefix = step.stdin
-      ? step.stdin.kind === "literal"
-        ? `stdin ${step.stdin.raw} -> `
-        : step.stdin.kind === "call"
-          ? `stdin ${emitRef(step.stdin.callee, step.stdin.args)} -> `
-          : ""
+      ? `stdin ${emitStageInline(step.stdin)} -> ${stagesPrefix}`
       : "";
     if (body.kind === "call") {
       const ref = emitRef(body.callee, body.args);

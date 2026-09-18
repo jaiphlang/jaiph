@@ -193,13 +193,15 @@ A `nested_decl_step` reuses the module-level `script_decl` / `def_decl` / `promp
 ```ebnf
 call_stmt      = ( call_ref | inline_script ) [ recovery ] ;
 async_stmt     = "async" call_ref [ recovery ] ;
-stdin_connect  = "stdin" stdin_value "->" ( call_ref | inline_script ) [ recovery ] ;
+stdin_connect  = "stdin" stdin_producer "->" stdin_stage { "->" stdin_stage } [ recovery ] ;
+stdin_producer = stdin_value | call_ref | inline_script ;
+stdin_stage    = call_ref | inline_script ;
 stdin_value    = double_quoted_string | IDENT | IDENT "." IDENT | interp_ref ;
 recovery       = "catch" catch_bindings catch_body
                | "recover" recover_bindings recover_body ;
 ```
 
-`async` takes no `stdin` and no inline-script target (both `E_PARSE`). For target rules and capture, `async` resolution, and the `stdin` connect form, see [Language — Calls](language.md#run-execute-a-def-or-script), [`async`](language.md#run-async-concurrent-execution-with-handles), and [Arguments and `stdin`](language.md#arguments-and-stdin).
+`async` takes no `stdin` and no inline-script target (both `E_PARSE`). A **pipeline** (a call producer, or two or more `->` stages) takes only `catch`, never `recover`. For target rules and capture, `async` resolution, and the `stdin` connect / pipeline form, see [Language — Calls](language.md#run-execute-a-def-or-script), [`async`](language.md#run-async-concurrent-execution-with-handles), and [Arguments and `stdin`](language.md#arguments-and-stdin).
 
 ### `catch` / `recover`
 
@@ -229,7 +231,7 @@ For body forms, `returns` schemas, the capture requirement, and named-prompt inv
 const_decl_step = "const" IDENT "=" const_rhs ;
 const_rhs       = double_quoted_string | triple_quoted_block | bash_value_expr
                 | call_ref | inline_script | "async" call_ref
-                | "stdin" stdin_value "->" ( call_ref | inline_script )
+                | "stdin" stdin_producer "->" stdin_stage { "->" stdin_stage }
                 | "prompt" ( prompt_body | prompt_call ) [ returns_schema ]
                 | "match" IDENT "{" { match_arm } "}" ;
 ```
