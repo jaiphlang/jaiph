@@ -70,6 +70,20 @@ const HANDLE_PREFIX = "__JAIPH_HANDLE__";
 export const _scriptSpawn = { spawn };
 
 /**
+ * True under the bun runtime (dev `bun` or the `bun --compile` standalone).
+ *
+ * Bun cannot inherit a live `stream.Readable` (a previous pipeline stage's
+ * stdout) as a child's `stdio[0]` — it throws "Passing a stream.Readable
+ * without an underlying file descriptor as stdio[0] is not yet implemented in
+ * Bun". Node dups the stream's underlying fd, so it inherits kernel-to-kernel;
+ * bun must instead relay the bytes through a backpressured `.pipe()`. Mirrors
+ * the bun check in `workflow-launch.ts`.
+ */
+function isBunRuntime(): boolean {
+  return typeof (globalThis as { Bun?: unknown }).Bun !== "undefined";
+}
+
+/**
  * Byte size of the argv + env block a spawn would have to pass to the kernel.
  * Mirrors the exec(3) accounting the OS uses when it rejects with `E2BIG`:
  * every argv string and every `KEY=VALUE` env pair costs its UTF-8 length plus
@@ -2294,14 +2308,19 @@ export class NodeWorkflowRuntime {
       // event — never reject this Promise, or the run vanishes with no
       // STEP_END/RUN_END. Settle a status-1 failure with the same diagnostic.
       // stdin[0]: an `fd` source (a live pipeline stage's stdout) is inherited
-      // directly so bytes flow kernel-to-kernel, never through the JS heap; a
-      // `bytes`/`file` source is fed as `pipe`; every other step keeps stdin
-      // `ignore` so the child never blocks on a closed tty.
+      // directly on Node so bytes flow kernel-to-kernel, never through the JS
+      // heap. Bun cannot inherit a Readable without an underlying fd as
+      // stdio[0], so there it falls back to `pipe` and the source stream is
+      // relayed into the child's stdin through a backpressured `.pipe()` below
+      // (still streamed, bounded RSS — just one heap hop). A `bytes`/`file`
+      // source is fed as `pipe`; every other step keeps stdin `ignore` so the
+      // child never blocks on a closed tty.
       // A non-terminal pipeline stage (`onSpawn` set) hands its stdout to the
       // next stage's stdin fd, so its own stdout is NOT captured to disk here.
       const handOff = onSpawn !== undefined;
+      const inheritFd = stdin?.kind === "fd" && !isBunRuntime();
       const stdinTarget: "pipe" | "ignore" | Readable =
-        stdin?.kind === "fd" ? stdin.stream : stdin !== undefined ? "pipe" : "ignore";
+        inheritFd ? (stdin as { stream: Readable }).stream : stdin !== undefined ? "pipe" : "ignore";
       let child: ReturnType<typeof _scriptSpawn.spawn>;
       try {
         child = _scriptSpawn.spawn(command, args, { cwd, env, stdio: [stdinTarget, "pipe", "pipe"] });
@@ -2309,6 +2328,16 @@ export class NodeWorkflowRuntime {
         const msg = spawnFailureText(err, command, args, env, interpreter);
         error += msg;
         io?.appendErr(msg);
+        // The child never spawned, so drain the upstream stage's stdout (an `fd`
+        // source) here or it would hang, un-read, and the upstream never reaches
+        // `close`.
+        if (stdin?.kind === "fd") {
+          try {
+            stdin.stream.destroy();
+          } catch {
+            // best-effort: upstream may have already gone away
+          }
+        }
         settle({ status: 1, output: "", error, streamed: true });
         return;
       }
@@ -2320,10 +2349,12 @@ export class NodeWorkflowRuntime {
       // parent's own copy of the upstream stage's stdout now. The child keeps its
       // dup and reads every byte; closing the parent's copy lets the upstream's
       // stdout socket reach EOF so the upstream step's `close` fires (a paused,
-      // un-read socket never would) and frees the fd.
-      if (stdin?.kind === "fd") {
+      // un-read socket never would) and frees the fd. When the fd was NOT
+      // inherited (bun) the parent must instead keep the stream and relay it into
+      // the child's stdin below, so it is not destroyed here.
+      if (inheritFd) {
         try {
-          stdin.stream.destroy();
+          (stdin as { stream: Readable }).stream.destroy();
         } catch {
           // best-effort: upstream may have already gone away
         }
@@ -2389,15 +2420,20 @@ export class NodeWorkflowRuntime {
       // larger than the pipe buffer (megabytes) never deadlocks a child that
       // echoes its input. A `file` source is piped as a read stream — the
       // producer's bytes are never slurped into a JS string (the stdin no-slurp
-      // pin). An `fd` source (a live pipeline stage's stdout) is already wired to
-      // this child's stdin at spawn time, so there is nothing to do in JS. An
+      // pin). An inherited `fd` source (a live pipeline stage's stdout on Node)
+      // is already wired to this child's stdin at spawn time, so there is nothing
+      // to do in JS; a non-inherited `fd` source (bun) is relayed here through a
+      // backpressured `.pipe()`, still streamed chunk by chunk (bounded RSS). An
       // EPIPE on a child that exits early is ignored: the exit code already
       // settled the step.
-      if (stdin !== undefined && stdin.kind !== "fd" && child.stdin) {
+      if (stdin !== undefined && !inheritFd && child.stdin) {
         const childStdin = child.stdin;
         childStdin.on("error", () => {});
         if (stdin.kind === "bytes") {
           childStdin.end(stdin.bytes, "utf8");
+        } else if (stdin.kind === "fd") {
+          stdin.stream.on("error", () => {});
+          stdin.stream.pipe(childStdin);
         } else {
           const rs = createReadStream(stdin.path);
           rs.on("error", () => {
