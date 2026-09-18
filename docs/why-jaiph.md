@@ -29,7 +29,7 @@ Jaiph is built from three parts, and a program is what you get when you combine 
 - **`script`** — a named block of code you can run (shell, Python, Node, or anything with a shebang line). A def body can also run inline shell or a `` `body`(args) `` step, but shell you want to reuse belongs in a `script`. A script does not inherit module-level `const` bindings, so pass any values it needs as positional arguments.
 - **`prompt`** — a task you hand to an AI agent. Jaiph fills in any variables in the body, captures the agent's stdout, and, when you declare a shape with `returns "{ field: type }"`, parses that output and checks it against the shape.
 
-Every value in a def is a string, every step is logged, and every run leaves lasting files under `.jaiph/runs/`, including a `.out` and `.err` capture for each step and an append-only `run_summary.jsonl`. A program written this way gives you automation you can repeat, inspect, and test, unlike shell you wire together by hand.
+A call result is an output handle whose bytes a force site slurps into a string (see [Value types](language.md#value-types)), every step is logged, and every run leaves lasting files under `.jaiph/runs/`, including a `.out` and `.err` capture for each step and an append-only `run_summary.jsonl`. A program written this way gives you automation you can repeat, inspect, and test, unlike shell you wire together by hand.
 
 ## Design commitments
 

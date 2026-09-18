@@ -49,7 +49,7 @@ fi
 e2e::pass "run capture: return value only"
 
 # ===================================================================
-e2e::section "ensure...recover: catch block binds the failed rule's stdout capture PATH"
+e2e::section "ensure...recover: catch binding is an output handle for the failed rule's stdout"
 # ===================================================================
 
 rm -f "${TEST_DIR}/recover_received.txt"
@@ -74,16 +74,16 @@ rm -rf "${TEST_DIR}/runs_rrv"
 
 JAIPH_RUNS_DIR="runs_rrv" e2e::run "recover_receives_output.jh" >/dev/null 2>&1
 
-# The catch binding is the failed step's stdout CAPTURE PATH (a `.out` file),
-# not the log bytes; the recover body reads the content from that path.
+# The catch binding is an OUTPUT HANDLE; passing it as an argv arg is a force
+# site, so the recover body receives the failed rule's stdout CONTENTS (not a
+# run-dir path).
 e2e::assert_file_exists "${TEST_DIR}/recover_received.txt" "recover block ran"
-bound_path="$(<"${TEST_DIR}/recover_received.txt")"
-case "${bound_path}" in
-  /*.out) : ;;
-  *) e2e::fail "binding must be an absolute *.out capture path, got: ${bound_path}" ;;
+bound="$(<"${TEST_DIR}/recover_received.txt")"
+case "${bound}" in
+  *.jaiph/runs/*.out) e2e::fail "binding must be contents, never a run-dir capture path: ${bound}" ;;
 esac
-e2e::assert_equals "$(<"${bound_path}")" "analysis-stdout-log" "bound path's file holds the failed rule stdout"
-e2e::pass "ensure...recover: catch block binds the capture path"
+e2e::assert_equals "${bound}" "analysis-stdout-log" "binding slurps the failed rule's stdout contents"
+e2e::pass "ensure...recover: catch binding is the failed stdout contents"
 
 # ===================================================================
 e2e::section "ensure...recover: rule stdout goes to artifacts"

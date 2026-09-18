@@ -167,6 +167,21 @@ describe("emitModule", () => {
     assert.equal(roundTrip(source), source);
   });
 
+  it("round-trips a one-hop stdin producer call (stdin <call>() -> script())", () => {
+    const source = [
+      "script producer = `echo hi`",
+      "",
+      "script sink = `cat`",
+      "",
+      "export def main(text) {",
+      "  stdin producer() -> sink()",
+      "  stdin analyze(text) -> sink()",
+      "}",
+      "",
+    ].join("\n");
+    assert.equal(roundTrip(source), source);
+  });
+
   it("formats return statement", () => {
     const source = [
       "export def main() {",

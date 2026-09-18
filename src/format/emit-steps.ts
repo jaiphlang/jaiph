@@ -242,8 +242,15 @@ function emitStep(step: StepDef, pad: string, currentIndent: string, trivia: Tri
       return lines;
     }
     const capture = step.captureName ? `const ${step.captureName} = ` : "";
-    // `stdin <expr> -> ` sits before the call target as a connect clause.
-    const stdinPrefix = step.stdin && step.stdin.kind === "literal" ? `stdin ${step.stdin.raw} -> ` : "";
+    // `stdin <expr> -> ` sits before the call target as a connect clause. The
+    // value is a `literal` (string / `${…}` ref) or a one-hop producer `call`.
+    const stdinPrefix = step.stdin
+      ? step.stdin.kind === "literal"
+        ? `stdin ${step.stdin.raw} -> `
+        : step.stdin.kind === "call"
+          ? `stdin ${emitRef(step.stdin.callee, step.stdin.args)} -> `
+          : ""
+      : "";
     if (body.kind === "call") {
       const ref = emitRef(body.callee, body.args);
       const asyncPrefix = body.async ? "async " : "";
