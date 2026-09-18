@@ -1,6 +1,6 @@
 import test, { before } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildRuntimeGraph } from "./graph";
@@ -189,10 +189,8 @@ test("stdin producer does not slurp: 64 MiB streams to the sink off the JS heap"
 });
 
 // A 3-stage pipeline streams 64 MiB producer -> pass-through -> sink. Each
-// stage's stdout is inherited directly as the next stage's stdin (fd-level, off
-// the JS heap), so no stage holds its full body — as a JS string or a disk
-// spool — and the bytes flow kernel-to-kernel through the extra pipe hop. The
-// sink counts exactly N bytes; peak extra RSS must not track the payload.
+// stage tees stdout to its `.out` and into the next stdin (chunks, not a JS
+// string). The sink counts exactly N bytes; peak extra RSS must not track N.
 test("stdin big() -> pass() -> sink(): 64 MiB streams through an intermediate stage off the JS heap", async () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-slurp-pipe3-"));
   try {
@@ -213,6 +211,9 @@ test("stdin big() -> pass() -> sink(): 64 MiB streams through an intermediate st
     const { status, peakDeltaBytes } = await runWithRssWatch(runtime, "main", [outPath]);
     assert.equal(status, 0);
     assert.equal(readFileSync(outPath, "utf8"), String(n), "sink counted all N bytes through the pipeline");
+    const passOut = readdirSync(runtime.getRunDir()).find((f) => f.endsWith(".out") && f.includes("pass"));
+    assert.ok(passOut, "middle stage still has a .out capture");
+    assert.equal(statSync(join(runtime.getRunDir(), passOut!)).size, n, "middle stage .out tees the full payload");
     assert.ok(
       peakDeltaBytes < 40 * MIB,
       `intermediate stage must stream, not slurp (peak +${(peakDeltaBytes / MIB).toFixed(1)} MiB)`,

@@ -193,6 +193,9 @@ def main
 3
 EOF
 
+e2e::expect_out "stream.jh" "gen" "$(printf 'alpha\nbeta\ngamma\n')"
+e2e::expect_out "stream.jh" "upper" "$(printf 'ALPHA\nBETA\nGAMMA\n')"
+
 # ── Orphan guard ─────────────────────────────────────────────────────────────
 # Fail if an example file exists that is not covered or explicitly excluded.
 
