@@ -149,16 +149,12 @@ test("stdin foo() -> bar() -> baz(): three-stage pipeline reduces to 2", async (
     assert.equal(status, 0, "pipeline ran to completion");
     assert.equal(returnValue(runtime), "2", "last stage reduces to the line count");
 
-    // The middle stage's stdout is inherited directly as the next stage's stdin
-    // (fd-level, off the JS heap), so its body streams kernel-to-kernel and is
-    // never spooled to its own .out capture. That the middle stage ran and
-    // transformed a→A is proven by the reduced result above: baz counts only
-    // uppercase-leading lines, and the sibling drop-the-stage test shows the
-    // count differs when bar is absent.
+    // Middle stage tees: `.out` holds the transformed body, and the same bytes
+    // stream into baz (the reduce is 2). Dropping bar changes the count.
     const runDir = runtime.getRunDir();
     const barOut = readdirSync(runDir).find((f) => f.endsWith(".out") && f.includes("bar"));
     assert.ok(barOut, "the middle stage is still its own managed step");
-    assert.equal(readFileSync(join(runDir, barOut!), "utf8"), "", "an inherited-fd stage does not spool its body to disk");
+    assert.equal(readFileSync(join(runDir, barOut!), "utf8"), "A\nB\n", "middle stage .out is the teed stdout, not empty");
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

@@ -12,6 +12,9 @@
 #    had not run yet), failing the assertion. The producer uses bash `printf`,
 #    which write(2)s straight to the pipe (unbuffered), so this tests Jaiph's
 #    streaming, not libc buffering.
+#  - Tee: each stage writes its stdout to its `.out` while the same bytes go
+#    to the next stage. A runtime that handed the pipe away without copying
+#    leaves the middle `.out` empty.
 #  - Volume: 64 MiB and 128 MiB flow producer -> sink. The sink counts exactly N
 #    bytes each time, and peak RSS of the jaiph process tree does not track N:
 #    doubling the payload leaves the peak essentially unchanged. A runtime that
@@ -58,6 +61,34 @@ e2e::run "overlap.jh" "${TEST_DIR}" >/dev/null
 # producer emitted `end:overlap`), and each line was seen as it streamed in.
 e2e::assert_equals "$(cat "${TEST_DIR}/result.txt")" "$(printf 'saw start\nsaw end:overlap')" \
   "consumer streamed each line live; producer observed overlap"
+e2e::expect_out "overlap.jh" "producer" "$(printf 'start\nend:overlap\n')"
+
+# ---------------------------------------------------------------------------
+e2e::section "Tee: middle stage .out holds the streamed body"
+# ---------------------------------------------------------------------------
+
+e2e::file "tee.jh" <<'EOF'
+script foo = ```bash
+printf 'a\nb\n'
+```
+
+script bar = ```bash
+tr 'a-z' 'A-Z'
+```
+
+script baz = ```bash
+grep -c '^[A-Z]' || true
+```
+
+export def main() {
+  const n = stdin foo() -> bar() -> baz()
+  return n
+}
+EOF
+
+e2e::run "tee.jh" >/dev/null
+e2e::expect_out "tee.jh" "foo" "$(printf 'a\nb\n')"
+e2e::expect_out "tee.jh" "bar" "$(printf 'A\nB\n')"
 
 # ---------------------------------------------------------------------------
 e2e::section "Volume: 64 MiB streams through the pipeline off the JS heap"
@@ -114,6 +145,19 @@ peak2="$(measure_peak_rss "${N2}" "${out2}")"
 # The sink counted exactly N bytes each time — the full payload streamed through.
 e2e::assert_equals "$(cat "${out1}")" "${N1}" "sink counted all 64 MiB streamed through the pipeline"
 e2e::assert_equals "$(cat "${out2}")" "${N2}" "sink counted all 128 MiB streamed through the pipeline"
+
+# gen() is a live pipeline stage: its `.out` is the teed payload, not empty.
+shopt -s nullglob
+gen_outs=( "${TEST_DIR}/.jaiph/runs/"*/*volume.jh/*script__gen.out )
+shopt -u nullglob
+[[ ${#gen_outs[@]} -eq 2 ]] || e2e::fail "expected two volume gen .out captures, got ${#gen_outs[@]}"
+got1="$(wc -c < "${gen_outs[0]}" | tr -d ' ')"
+got2="$(wc -c < "${gen_outs[1]}" | tr -d ' ')"
+if { [ "${got1}" = "${N1}" ] && [ "${got2}" = "${N2}" ]; } || { [ "${got1}" = "${N2}" ] && [ "${got2}" = "${N1}" ]; }; then
+  e2e::pass "volume gen .out tees the full payload (${N1} and ${N2} bytes)"
+else
+  e2e::fail "volume gen .out sizes must be ${N1} and ${N2}, got ${got1} and ${got2}"
+fi
 
 # Doubling the payload (+64 MiB) must not grow peak RSS by anything like N. A
 # concatenating runtime would hold the whole payload as a JS string, so the
