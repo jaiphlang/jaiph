@@ -338,9 +338,9 @@
             }
         }
 
-        // Invoke statements: bare call `save(...)`, `async save(...)`, and
-        // stdin connect `stdin operand -> save(...)`. Replaces the old `run`
-        // callee special case now that `run` is not a keyword.
+        // Connect-statement payload: `stdin PAYLOAD -> call(...)`. Mark the
+        // payload identifiers before the arrow as references; the callee after
+        // the arrow is a call, handled by the mechanical paren rule below.
         if (firstValue === "stdin") {
             let arrowAt = -1;
             for (let i = 1; i < significant.length; i += 1) {
@@ -358,25 +358,28 @@
                         annotated[significant[i].index].kind = "identifier";
                     }
                 }
-                if (significant[arrowAt + 1] && significant[arrowAt + 1].token.type === "identifier") {
-                    annotated[significant[arrowAt + 1].index].kind = "identifier";
-                }
             }
-        } else {
-            let calleeAt = -1;
-            if (firstValue === "async" && significant[1] && significant[1].token.type === "identifier") {
-                calleeAt = 1;
-            } else if (
-                first.token.type === "identifier" &&
-                annotated[first.index].kind !== "keyword" &&
-                significant[1] &&
-                significant[1].token.type === "symbol" &&
-                significant[1].token.value === "("
+        }
+
+        // Mechanical call rule: any identifier immediately followed by `(` is a
+        // callee → paint as a function/identifier. Applies anywhere on the line
+        // (statement start `setup_env()`, `const x = valid_name(arg)`,
+        // `async helpers.scan()` where the qualified callee's last segment sits
+        // before `(`, and `stdin … -> shout(task)` connect targets). `run` is
+        // not a keyword, so `run save()` paints only `save`. Keywords before `(`
+        // (`catch (err)`, `recover (err)`) keep their keyword kind, and
+        // declaration names keep their definition kind.
+        for (let i = 0; i < significant.length - 1; i += 1) {
+            const curr = significant[i];
+            const next = significant[i + 1];
+            if (
+                curr.token.type === "identifier" &&
+                annotated[curr.index].kind !== "keyword" &&
+                annotated[curr.index].kind !== "definition" &&
+                next.token.type === "symbol" &&
+                next.token.value === "("
             ) {
-                calleeAt = 0;
-            }
-            if (calleeAt >= 0 && significant[calleeAt].token.type === "identifier") {
-                annotated[significant[calleeAt].index].kind = "identifier";
+                annotated[curr.index].kind = "identifier";
             }
         }
 
@@ -1011,9 +1014,22 @@
         }
     }
 
-    // Auto-run on DOM ready
-    if (document.readyState === "loading") {
-        document.addEventListener("DOMContentLoaded", function () {
+    // Auto-run on DOM ready (browser only; skipped under Node so the highlighter
+    // can be imported and unit-tested without a DOM).
+    if (typeof document !== "undefined") {
+        if (document.readyState === "loading") {
+            document.addEventListener("DOMContentLoaded", function () {
+                restructureDocSections();
+                wrapTablesInScrollContainer();
+                startComparisonDistinctPulse();
+                highlightAll();
+                attachCopyButtons();
+                attachCodeTabs();
+                attachOsSwitch();
+                attachDocsNavToggle();
+                attachThemeToggle();
+            });
+        } else {
             restructureDocSections();
             wrapTablesInScrollContainer();
             startComparisonDistinctPulse();
@@ -1023,17 +1039,13 @@
             attachOsSwitch();
             attachDocsNavToggle();
             attachThemeToggle();
-        });
-    } else {
-        restructureDocSections();
-        wrapTablesInScrollContainer();
-        startComparisonDistinctPulse();
-        highlightAll();
-        attachCopyButtons();
-        attachCodeTabs();
-        attachOsSwitch();
-        attachDocsNavToggle();
-        attachThemeToggle();
+        }
+    }
+
+    // Expose the pure highlighter to Node test runners; harmless in the browser
+    // (no CommonJS `module`).
+    if (typeof module !== "undefined" && module.exports) {
+        module.exports = { highlightJaiphWithParser: highlightJaiphWithParser };
     }
 
 })();

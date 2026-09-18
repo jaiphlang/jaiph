@@ -75,11 +75,22 @@ test("current .jh constructs highlight with the expected scopes", async () => {
     "`analyze` must scope as a prompt function at both its definition and its call site",
   );
 
-  // Bare call invoke `setup_env()` (no `run` keyword): the callee scopes as a
-  // function. It appears at several call sites, so require at least one.
+  // A call is a name immediately followed by `(`: the callee scopes as a
+  // function. This holds for a bare call (`setup_env()`), a def call
+  // (`check_deps(...)`), and a qualified call (`helpers.scan(...)`, where the
+  // last segment is the function). `run` is not a keyword, so none of these
+  // needs a leading command word.
   assert.ok(
     hasScope(t, "setup_env", "entity.name.function.jaiph"),
     "bare call `setup_env()` must scope its callee as a function",
+  );
+  assert.ok(
+    hasScope(t, "check_deps", "entity.name.function.jaiph"),
+    "def call `check_deps(...)` must scope its callee as a function",
+  );
+  assert.ok(
+    hasScope(t, "scan", "entity.name.function.jaiph"),
+    "qualified call `helpers.scan(...)` must scope its last segment as a function",
   );
 
   // Bare inline-script call `` `echo hello`() ``: the backtick body scopes as an
