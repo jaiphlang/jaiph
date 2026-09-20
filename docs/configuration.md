@@ -97,7 +97,7 @@ Informational metadata only; does not affect execution. Allowed in module-level 
 The `trusted_envs` config key is **removed** (`E_PARSE unknown config key`). Scripts are sterile by default: a script subprocess receives only process mechanics, the `JAIPH_*` script contract keys, and the host keys its own declaration requests with a `use` clause — and a `use` key crosses only when the operator granted it with `--env KEY[=VALUE]`:
 
 ```jaiph
-script release use GITHUB_TOKEN NPM_TOKEN = `gh release create …`
+script release use GITHUB_TOKEN NPM_TOKEN = 'gh release create …'
 ```
 
 ```sh

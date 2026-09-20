@@ -166,7 +166,7 @@ test("collectDefChildren: collects const and return rows", () => {
 test("collectDefChildren: collects inline script as 'script (inline)'", () => {
   const mod = modFor([
     "export def main() {",
-    "  `echo hi`()",
+    "  'echo hi'()",
     "}",
   ].join("\n"));
   const items = collectDefChildren(mod, "main");

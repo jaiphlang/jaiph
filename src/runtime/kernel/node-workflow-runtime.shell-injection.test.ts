@@ -53,7 +53,9 @@ const TOOLS = [
   // Inline `${…}` capture spliced into a shell body: the captured value is
   // also caller-influenced and must be shell-quoted (the old warn-only guard
   // inspected prompt captures only and missed this provenance).
-  "script emit_danger = `printf '$(id)'`",
+  "script emit_danger = '''",
+  "printf '$(id)'",
+  "'''",
   "def cap() {",
   '  echo "captured ${emit_danger()}" > cap.txt',
   "}",

@@ -20,8 +20,13 @@ TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 
 # Shared helpers: `save` copies its stdin to $1; `record` copies its $1 (a force
 # site — the slurped stdout contents) to $2.
-HELPERS='script save = `cat > "$1"`
-script record = `printf "%s" "$1" > "$2"`'
+HELPERS=$(cat <<'JH'
+script save = 'cat > "$1"'
+script record = '''
+printf "%s" "$1" > "$2"
+'''
+JH
+)
 
 # ===================================================================
 # 1. Simple script failure: stream the failed stdout; binding is contents
@@ -29,11 +34,11 @@ script record = `printf "%s" "$1" > "$2"`'
 e2e::section "recover streams the failed stdout then stderr; the binding is contents, not a path"
 
 e2e::file "simple_echo.jh" <<EOF
-script simple_echo = \`\`\`
+script simple_echo = '''
 echo "Hello"
 echo "Oops" >&2
 exit 1
-\`\`\`
+'''
 
 ${HELPERS}
 
@@ -69,11 +74,11 @@ e2e::pass "simple script failure: streamed stdout+stderr + contents binding"
 e2e::section "recover handle streams the innermost failing script's stdout then stderr"
 
 e2e::file "nested_payload.jh" <<EOF
-script failing_script = \`\`\`
+script failing_script = '''
 echo "nested-stdout"
 echo "nested-stderr" >&2
 exit 1
-\`\`\`
+'''
 
 ${HELPERS}
 
@@ -106,13 +111,13 @@ e2e::pass "nested rule+script failure: innermost stdout+stderr streamed"
 e2e::section "recover handle streams multi-line CI failure output"
 
 e2e::file "ci_payload.jh" <<EOF
-script npm_run_test_ci = \`\`\`
+script npm_run_test_ci = '''
 echo "FAIL src/app.test.ts"
 echo "  Expected: 200"
 echo "  Received: 500"
 echo "Tests: 1 failed, 3 passed, 4 total" >&2
 exit 1
-\`\`\`
+'''
 
 ${HELPERS}
 
@@ -140,10 +145,10 @@ e2e::pass "CI-style failure: multi-line stdout+stderr streamed"
 e2e::section "recover runs exactly once on failure"
 
 e2e::file "single_attempt.jh" <<EOF
-script emit_attempt = \`\`\`
+script emit_attempt = '''
 echo "attempt-output"
 exit 1
-\`\`\`
+'''
 
 ${HELPERS}
 
@@ -171,7 +176,7 @@ e2e::pass "recover runs exactly once on failure"
 e2e::section "no catch payload when rule succeeds"
 
 e2e::file "success_no_payload.jh" <<EOF
-script say_ok = \`echo "all good"\`
+script say_ok = 'echo "all good"'
 
 ${HELPERS}
 
@@ -200,10 +205,10 @@ e2e::pass "no false payload on success"
 e2e::section "recover sees stderr even when the producer never redirected 2>&1"
 
 e2e::file "stderr_only.jh" <<EOF
-script stderr_only = \`\`\`
+script stderr_only = '''
 echo "boom" >&2
 exit 1
-\`\`\`
+'''
 
 ${HELPERS}
 
@@ -234,10 +239,10 @@ e2e::pass "stderr-only failure: recover is usable without 2>&1"
 e2e::section "success handle stays stdout only (const and stdin producer)"
 
 e2e::file "success_stdout_only.jh" <<EOF
-script ok_noise = \`\`\`
+script ok_noise = '''
 echo "ok"
 echo "noise" >&2
-\`\`\`
+'''
 
 ${HELPERS}
 

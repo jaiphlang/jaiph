@@ -54,7 +54,7 @@ e2e::section "referencing non-exported rule from module with exports"
 
 # Given
 e2e::file "rule_lib.jh" <<'EOF'
-script check_impl = `true`
+script check_impl = 'true'
 
 export def public_rule() {
   check_impl()
@@ -95,8 +95,8 @@ e2e::section "referencing non-exported script from module with exports"
 
 # Given
 e2e::file "script_lib.jh" <<'EOF'
-script public_script = `echo "public"`
-script private_script = `echo "private"`
+script public_script = 'echo "public"'
+script private_script = 'echo "private"'
 
 export def dummy() {
   public_script()

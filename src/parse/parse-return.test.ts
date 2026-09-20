@@ -76,7 +76,7 @@ test("return parses Expr.call with args", () => {
 
 test("return in rule parses Expr.call", () => {
   const mod = parsejaiph(
-    `script helper = \`echo "ok"\`\ndef my_rule() {\n  return helper()\n}`,
+    `script helper = 'echo "ok"'\ndef my_rule() {\n  return helper()\n}`,
     "test.jh",
   );
   const step = mod.defs[0].steps[0];
@@ -131,7 +131,7 @@ test("bare return is Expr.literal with empty string", () => {
 
 test("return inline script parses Expr.inline_script", () => {
   const mod = parsejaiph(
-    "export def main() {\n  return `cat report.txt`()\n}",
+    "export def main() {\n  return 'cat report.txt'()\n}",
     "test.jh",
   );
   const step = mod.defs[0].steps[0];
@@ -146,7 +146,7 @@ test("return inline script parses Expr.inline_script", () => {
 
 test("return inline script with args", () => {
   const mod = parsejaiph(
-    'export def main() {\n  return `echo $1`("x")\n}',
+    "export def main() {\n  return 'echo $1'(\"x\")\n}",
     "test.jh",
   );
   const step = mod.defs[0].steps[0];
@@ -159,7 +159,7 @@ test("return inline script with args", () => {
 
 test("log inline script parses say with inline_script message", () => {
   const mod = parsejaiph(
-    "export def main() {\n  log `cat report.txt`()\n}",
+    "export def main() {\n  log 'cat report.txt'()\n}",
     "test.jh",
   );
   const step = mod.defs[0].steps[0];
@@ -176,7 +176,7 @@ test("log inline script parses say with inline_script message", () => {
 
 test("log inline script with args", () => {
   const mod = parsejaiph(
-    'export def main() {\n  log `echo $1`("x")\n}',
+    "export def main() {\n  log 'echo $1'(\"x\")\n}",
     "test.jh",
   );
   const step = mod.defs[0].steps[0];
@@ -253,7 +253,7 @@ test("return bare identifier in catch/recover block", () => {
 test("return in run recover block", () => {
   const mod = parsejaiph(
     [
-      'script helper = `echo "ok"`',
+      "script helper = 'echo \"ok\"'",
       "def check() {",
       '  return "yes"',
       "}",

@@ -12,7 +12,7 @@ TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 e2e::section "leaf script idle output warning"
 
 e2e::file "idle_warn.jh" <<'EOF'
-script quiet = `echo start; sleep 3; echo done`
+script quiet = 'echo start; sleep 3; echo done'
 export def main() {
   quiet()
 }

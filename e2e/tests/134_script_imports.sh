@@ -60,7 +60,7 @@ chmod +x "${JAIPH_E2E_TEST_DIR}/emit.sh"
 e2e::file "main_capture.jh" <<'EOF'
 import script "./emit.sh" as emit
 
-script consume = `echo "consumed: $1"`
+script consume = 'echo "consumed: $1"'
 
 export def main() {
   const val = emit()

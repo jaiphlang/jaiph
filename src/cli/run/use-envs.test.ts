@@ -31,7 +31,7 @@ test("planUseEnvs: an ungranted use key is E_ENV_MISSING naming the script and t
   const root = mkdtempSync(join(tmpdir(), "jaiph-use-envs-"));
   try {
     const entry = writeFlow(root, "flow.jh", [
-      "script gh use GITHUB_TOKEN = `gh pr list`",
+      "script gh use GITHUB_TOKEN = 'gh pr list'",
       "export def main() {",
       "  gh()",
       "}",
@@ -50,7 +50,7 @@ test("planUseEnvs: a granted key passes; extra --env keys are allowed", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-use-envs-ok-"));
   try {
     const entry = writeFlow(root, "flow.jh", [
-      "script gh use GITHUB_TOKEN = `gh pr list`",
+      "script gh use GITHUB_TOKEN = 'gh pr list'",
       "export def main() {",
       "  gh()",
       "}",
@@ -66,7 +66,7 @@ test("planUseEnvs: a graph with no use requires no --env", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-use-envs-none-"));
   try {
     const entry = writeFlow(root, "flow.jh", [
-      "script show = `echo x`",
+      "script show = 'echo x'",
       "export def main() {",
       "  show()",
       "}",
@@ -83,7 +83,7 @@ test("planUseEnvs: use keys are collected across the whole import graph, incl. i
   try {
     writeFileSync(join(root, "gh.sh"), "#!/usr/bin/env bash\necho x\n");
     writeFlow(root, "lib.jh", [
-      "export script publish use NPM_TOKEN = `npm publish`",
+      "export script publish use NPM_TOKEN = 'npm publish'",
       "export def pub() {",
       "  publish()",
       "}",

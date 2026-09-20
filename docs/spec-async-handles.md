@@ -69,7 +69,7 @@ The trade-off is that overlapping a long-running async task with later steps tak
 
 `async` is allowed in any `def`, with two limits on what it can target:
 
-- **Inline scripts are not supported.** Inline `` `body`(args) `` is shorthand for a one-off shell step. To run it concurrently, move the body into a named `script` and call `async` on that script.
+- **Inline scripts are not supported.** Inline `` 'body'(args) `` is shorthand for a one-off shell step. To run it concurrently, move the body into a named `script` and call `async` on that script.
 - **An `async` call must be a real reference with parentheses.** A bare name cannot be run with `async`.
 
 The parser or the validator enforces both restrictions at compile time, not at runtime.

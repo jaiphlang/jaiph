@@ -13,8 +13,8 @@ TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 # another arm, and any other subject falls through to the wildcard.
 
 e2e::file "match_dispatch.jh" <<'EOF'
-script foo = `echo "ran-foo"`
-script bar = `echo "ran-bar"`
+script foo = 'echo "ran-foo"'
+script bar = 'echo "ran-bar"'
 
 export def main(cmd) {
   const result = match cmd {

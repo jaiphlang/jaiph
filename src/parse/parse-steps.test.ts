@@ -240,7 +240,7 @@ test("parsejaiph: def with run catch and multiline triple-quoted prompt", () => 
     "def gate() {",
     "  noop()",
     "}",
-    "script noop = `true`",
+    "script noop = 'true'",
     "def w() {",
     "  gate() catch (err) {",
     '    prompt """',

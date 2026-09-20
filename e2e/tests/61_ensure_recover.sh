@@ -14,16 +14,16 @@ rm -f "${TEST_DIR}/ready.txt"
 
 # Given
 e2e::file "retry_single.jh" <<'EOF'
-script dep_impl = ```
+script dep_impl = '''
 test -f "ready.txt"
-```
+'''
 def dep() {
   dep_impl()
 }
 
-script install_deps_impl = ```
+script install_deps_impl = '''
 touch "ready.txt"
-```
+'''
 def install_deps() {
   install_deps_impl()
 }
@@ -63,15 +63,15 @@ rm -f "${TEST_DIR}/ready2.txt" "${TEST_DIR}/recover_ran.txt"
 
 # Given
 e2e::file "retry_block.jh" <<'EOF'
-script ready_impl = `test -f ready2.txt`
+script ready_impl = 'test -f ready2.txt'
 def ready() {
   ready_impl()
 }
 
-script recover_echo = ```
+script recover_echo = '''
 echo "recovering" > recover_ran.txt
-```
-script recover_touch = `touch ready2.txt`
+'''
+script recover_touch = 'touch ready2.txt'
 
 export def main() {
   ready() catch (failure) {
@@ -112,7 +112,7 @@ e2e::section "run without catch exits 1 on failure"
 
 # Given
 e2e::file "ensure_fail.jh" <<'EOF'
-script never_ok_impl = `test -f never_created.txt`
+script never_ok_impl = 'test -f never_created.txt'
 def never_ok() {
   never_ok_impl()
 }
@@ -145,12 +145,12 @@ rm -f "${TEST_DIR}/ready3.txt"
 e2e::file "recover_multiline_prompt.jh" <<'EOF'
 const ci_log_file = "/tmp/ci.log"
 
-script check_ready_impl = `test -f ready3.txt`
+script check_ready_impl = 'test -f ready3.txt'
 def check_ready() {
   check_ready_impl()
 }
 
-script mark_ready3 = `touch ready3.txt`
+script mark_ready3 = 'touch ready3.txt'
 
 export def main() {
   check_ready() catch (failure) {

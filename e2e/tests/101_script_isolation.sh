@@ -16,9 +16,9 @@ e2e::section "script cannot access parent scope variables"
 e2e::file "isolation.jh" <<'EOF'
 const secret = "parent-secret-value"
 
-script leak_check = ```
+script leak_check = '''
 echo "secret=${secret:-EMPTY}"
-```
+'''
 
 export def main() {
   leak_check()
@@ -43,12 +43,12 @@ e2e::section "opaque script body: embedded JS line starting with const"
 # ---------------------------------------------------------------------------
 
 e2e::file "node_const.jh" <<'EOF'
-script use_node = ```
+script use_node = '''
 node -e "
 const fs = require('fs');
 process.stdout.write('node-ok');
 "
-```
+'''
 
 export def main() {
   use_node()

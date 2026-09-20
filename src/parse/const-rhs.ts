@@ -95,7 +95,7 @@ export function parseConstRhs(
   // const x = async ref() — async capture returning a handle
   if (head === "async" || head.startsWith("async ")) {
     const asyncRest = head === "async" ? "" : head.slice("async ".length).trim();
-    if (asyncRest.startsWith("`")) {
+    if (asyncRest.startsWith("'") || asyncRest.startsWith("`")) {
       fail(filePath, "async is not supported with inline scripts", lineNo, col);
     }
     const call = parseCallRef(asyncRest);
@@ -109,8 +109,8 @@ export function parseConstRhs(
       nextLineIdx: lineIdx,
     };
   }
-  // const x = `body`(args) — inline script
-  if (head.startsWith("`")) {
+  // const x = 'body'(args) — inline script
+  if (head.startsWith("'") || head.startsWith("`")) {
     const result = parseAnonymousInlineScript(filePath, lines, lineIdx, head, lineNo, col);
     return {
       value: {

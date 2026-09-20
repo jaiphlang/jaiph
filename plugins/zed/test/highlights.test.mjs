@@ -83,8 +83,9 @@ test("keywords, comments, and strings highlight in current.jh", () => {
     "expected at least one @comment",
   );
 
-  // Double-quoted strings.
+  // Double-quoted strings and one-line `'…'` script bodies.
   assert.ok(has(caps, "string", '"my-project"'), 'expected "my-project" as @string');
+  assert.ok(has(caps, "string", "'echo x'"), "one-line script body should be @string");
   // A triple-quoted string spans multiple lines (proves triple_string works).
   assert.ok(
     caps.some((c) => c.name === "string" && c.endRow > c.startRow),

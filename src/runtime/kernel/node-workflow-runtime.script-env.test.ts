@@ -82,7 +82,7 @@ test("sterile: a script with no `use` never sees ambient host keys (incl. agent 
     const { scriptsDir } = setup(root);
     writeScriptFile(scriptsDir, "show");
     const jh = writeFlow(root, "flow.jh", [
-      "script show = `echo x`",
+      "script show = 'echo x'",
       "export def main() {",
       "  show()",
       "}",
@@ -128,7 +128,7 @@ test("use + grant: the key crosses only when named in JAIPH_ENV_GRANT", async ()
     const { scriptsDir } = setup(root);
     writeScriptFile(scriptsDir, "show");
     const jh = writeFlow(root, "flow.jh", [
-      "script show use GITHUB_TOKEN = `echo x`",
+      "script show use GITHUB_TOKEN = 'echo x'",
       "export def main() {",
       "  show()",
       "}",
@@ -172,7 +172,7 @@ test("constructed the way jaiph run/test will: the grant value is off `env` but 
     const { scriptsDir } = setup(root);
     writeScriptFile(scriptsDir, "show");
     const jh = writeFlow(root, "flow.jh", [
-      "script show use GITHUB_TOKEN = `echo x`",
+      "script show use GITHUB_TOKEN = 'echo x'",
       "export def main() {",
       "  show()",
       "}",
@@ -239,8 +239,8 @@ test("no def-level leak: a callee def's script without `use` stays sterile even 
     writeScriptFile(scriptsDir, "with_use");
     writeScriptFile(scriptsDir, "without_use");
     const jh = writeFlow(root, "flow.jh", [
-      "script with_use use GITHUB_TOKEN = `echo x`",
-      "script without_use = `echo x`",
+      "script with_use use GITHUB_TOKEN = 'echo x'",
+      "script without_use = 'echo x'",
       "def callee() {",
       "  without_use()",
       "}",
@@ -321,7 +321,7 @@ test("cross-module use: `lib.publish()` forwards the imported module's use key",
     const { scriptsDir } = setup(root);
     writeScriptFile(scriptsDir, "publish");
     writeFlow(root, "lib.jh", [
-      "export script publish use UE_TOKEN = `echo x`",
+      "export script publish use UE_TOKEN = 'echo x'",
     ]);
     const jh = writeFlow(root, "flow.jh", [
       'import "./lib.jh" as lib',
@@ -361,7 +361,7 @@ test("inline scripts have no use clause and get the sterile base only", async ()
     writeScriptFile(scriptsDir, inlineScriptName("echo hi", undefined));
     const jh = writeFlow(root, "flow.jh", [
       "export def main() {",
-      "  `echo hi`()",
+      "  'echo hi'()",
       "}",
     ]);
     const env = {

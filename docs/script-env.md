@@ -20,7 +20,7 @@ This page is the recipe. The key list and error codes live in [Environment varia
 Put `use` on the script (or named prompt) that must see the key. Not on the call line, not on a `def`, not on an anonymous `prompt "…"`.
 
 ```jaiph
-script release use GITHUB_TOKEN = `gh release create "$1"`
+script release use GITHUB_TOKEN = 'gh release create "$1"'
 
 export def main(tag) {
   release(tag)
@@ -60,7 +60,7 @@ These rules apply to the environment Jaiph builds for each child. They are not a
 
 1. Run without the flag: `jaiph run release.jh`. Expect `E_ENV_MISSING` naming `GITHUB_TOKEN` before the runner starts.
 2. Run with the flag: `jaiph run --env GITHUB_TOKEN release.jh`. The script that `use`s the key can read `$GITHUB_TOKEN`. A second script in the same file with no `use` must not print that value.
-3. Confirm a reserved name fails closed: `script leak use JAIPH_CHAIN_KEY = \`…\`` is `E_ENV_RESERVED` at parse.
+3. Confirm a reserved name fails closed: `script leak use JAIPH_CHAIN_KEY = '…'` is `E_ENV_RESERVED` at parse.
 
 ## Related
 

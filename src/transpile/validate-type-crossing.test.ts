@@ -21,7 +21,7 @@ test("E_VALIDATE: prompt with script identifier body", () => {
     writeFileSync(
       join(root, "m.jh"),
       [
-        "script save = `echo ok`",
+        "script save = 'echo ok'",
         "export def main() {",
         "  prompt save",
         "}",
@@ -40,7 +40,7 @@ test("E_VALIDATE: const = prompt with script identifier body", () => {
     writeFileSync(
       join(root, "m.jh"),
       [
-        "script save = `echo ok`",
+        "script save = 'echo ok'",
         "export def main() {",
         "  const x = prompt save",
         "}",
@@ -139,7 +139,7 @@ test("E_VALIDATE: const assignment from script name in workflow", () => {
     writeFileSync(
       join(root, "m.jh"),
       [
-        "script save = `echo ok`",
+        "script save = 'echo ok'",
         "export def main() {",
         "  const x = save",
         "}",
@@ -158,7 +158,7 @@ test("E_VALIDATE: const assignment from script name in rule", () => {
     writeFileSync(
       join(root, "m.jh"),
       [
-        "script save = `echo ok`",
+        "script save = 'echo ok'",
         "def check() {",
         "  const x = save",
         "}",
@@ -179,7 +179,7 @@ test("E_VALIDATE: script interpolation in log", () => {
     writeFileSync(
       join(root, "m.jh"),
       [
-        "script save = `echo ok`",
+        "script save = 'echo ok'",
         "export def main() {",
         '  log "result: ${save}"',
         "}",
@@ -198,7 +198,7 @@ test("E_VALIDATE: script interpolation in prompt string", () => {
     writeFileSync(
       join(root, "m.jh"),
       [
-        "script save = `echo ok`",
+        "script save = 'echo ok'",
         "export def main() {",
         '  prompt "do ${save}"',
         "}",
@@ -217,7 +217,7 @@ test("E_VALIDATE: script interpolation in rule log", () => {
     writeFileSync(
       join(root, "m.jh"),
       [
-        "script save = `echo ok`",
+        "script save = 'echo ok'",
         "def check() {",
         '  log "result: ${save}"',
         "}",
@@ -254,7 +254,7 @@ test("valid: run with script works", () => {
     writeFileSync(
       join(root, "m.jh"),
       [
-        "script save = `echo ok`",
+        "script save = 'echo ok'",
         "export def main() {",
         "  save()",
         "}",
@@ -285,7 +285,7 @@ test("valid: const with string value works", () => {
     writeFileSync(
       join(root, "m.jh"),
       [
-        "script save = `echo ok`",
+        "script save = 'echo ok'",
         "export def main() {",
         '  const x = "hello"',
         "}",

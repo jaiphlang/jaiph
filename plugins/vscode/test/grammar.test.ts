@@ -93,11 +93,11 @@ test("current .jh constructs highlight with the expected scopes", async () => {
     "qualified call `helpers.scan(...)` must scope its last segment as a function",
   );
 
-  // Bare inline-script call `` `echo hello`() ``: the backtick body scopes as an
+  // Bare inline-script call `'echo hello'()`: the one-line body scopes as an
   // unquoted script, proving the inline call no longer needs a `run` prefix.
   assert.ok(
-    hasScope(t, "`echo hello`", "string.unquoted.script.jaiph"),
-    "bare inline-script call must scope its backtick body as a script",
+    hasScope(t, "'echo hello'", "string.unquoted.script.jaiph"),
+    "bare inline-script call must scope its one-line body as a script",
   );
 
   // `stdin status -> shout(task)` connect: `stdin` is a command keyword, the

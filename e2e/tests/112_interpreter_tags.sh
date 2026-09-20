@@ -21,11 +21,11 @@ else
   e2e::prepare_test_env "interpreter_tag_node"
 
   e2e::file "tag_node.jh" <<'EOF'
-script greet = ```node
+script greet = '''node
 process.stdout.write("hello-from-node\n");
-```
+'''
 
-script plain_bash = `echo bash-ok`
+script plain_bash = 'echo bash-ok'
 
 export def main() {
   greet()
@@ -61,11 +61,11 @@ else
   e2e::prepare_test_env "interpreter_tag_python3"
 
   e2e::file "tag_python.jh" <<'EOF'
-script py_greet = ```python3
+script py_greet = '''python3
 import sys
 sys.stdout.write("hello-from-python\n")
 sys.exit(0)
-```
+'''
 
 export def main() {
   py_greet()
@@ -118,10 +118,10 @@ e2e::section "Interpreter tag: duplicate shebang rejected"
 e2e::prepare_test_env "interpreter_tag_dup_shebang"
 
 e2e::file "dup_shebang.jh" <<'EOF'
-script my_script = ```node
+script my_script = '''node
 #!/usr/bin/env node
 console.log("hi");
-```
+'''
 
 export def main() {
   my_script()

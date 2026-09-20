@@ -18,22 +18,22 @@ rm -f "${TEST_DIR}/.gate1_passed" "${TEST_DIR}/.gate2_passed"
 
 # Given
 e2e::file "make_pass.jh" <<'EOF'
-script gate1_impl = `test -f .gate1_passed`
+script gate1_impl = 'test -f .gate1_passed'
 def gate1() {
   gate1_impl()
 }
 
-script gate2_impl = `test -f .gate2_passed`
+script gate2_impl = 'test -f .gate2_passed'
 def gate2() {
   gate2_impl()
 }
 
-script remediate1_impl = `touch .gate1_passed`
+script remediate1_impl = 'touch .gate1_passed'
 def remediate1() {
   remediate1_impl()
 }
 
-script remediate2_impl = `touch .gate2_passed`
+script remediate2_impl = 'touch .gate2_passed'
 def remediate2() {
   remediate2_impl()
 }
@@ -115,8 +115,8 @@ e2e::file "make_pass_bash.jh" <<'EOF'
 def gate() {
   check_gate()
 }
-script check_gate = `test -f .gate_passed`
-script mark_gate = `touch .gate_passed`
+script check_gate = 'test -f .gate_passed'
+script mark_gate = 'touch .gate_passed'
 def make_pass() {
   gate() catch (err) {
     mark_gate()

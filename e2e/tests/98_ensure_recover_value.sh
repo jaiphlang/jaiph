@@ -14,15 +14,15 @@ e2e::section "run capture = return value from successful rule"
 # ===================================================================
 
 e2e::file "capture_success.jh" <<'EOF'
-script check_ready_impl = ```
+script check_ready_impl = '''
 echo "rule-stdout-check"
-```
+'''
 def check_ready() {
   check_ready_impl()
   return "ready-value"
 }
 
-script echo_captured = `echo "captured=$1"`
+script echo_captured = 'echo "captured=$1"'
 export def main() {
   const val = check_ready()
   echo_captured(val)
@@ -55,15 +55,17 @@ e2e::section "ensure...recover: catch binding is an output handle for the failed
 rm -f "${TEST_DIR}/recover_received.txt"
 
 e2e::file "recover_receives_output.jh" <<'EOF'
-script analyze_impl = ```
+script analyze_impl = '''
 echo "analysis-stdout-log"
 exit 1
-```
+'''
 def analyze() {
   analyze_impl()
 }
 
-script recover_handler = `printf '%s' "$1" > recover_received.txt`
+script recover_handler = '''
+printf '%s' "$1" > recover_received.txt
+'''
 export def main() {
   analyze() catch (failure) {
     recover_handler(failure)

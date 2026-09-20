@@ -12,7 +12,7 @@ def check() {
   checker()
 }
 
-script checker = `echo ok`
+script checker = 'echo ok'
 
 export def main() {
   check()
@@ -58,12 +58,12 @@ export def check() {
   check_impl()
 }
 
-script check_impl = `true`
+script check_impl = 'true'
 
 === workflow with async run
 # @expect ok
 --- input.jh
-script noop = `:`
+script noop = ':'
 
 export def main() {
   async noop()
@@ -84,7 +84,7 @@ def helper() {
 # @expect ok
 --- input.jh
 export def main() {
-  `echo hello`()
+  'echo hello'()
 }
 
 === rule with empty braced body
@@ -96,7 +96,7 @@ def check() {
 === script with empty braced body
 # @expect ok
 --- input.jh
-script noop = ``
+script noop = ''
 
 === workflow with empty braced body
 # @expect ok
@@ -156,36 +156,36 @@ def b() {
 === script:node interpreter tag
 # @expect ok
 --- input.jh
-script transform = ```node
+script transform = '''node
 console.log('hi');
-```
+'''
 
 === script:python3 interpreter tag
 # @expect ok
 --- input.jh
-script analyze = ```python3
+script analyze = '''python3
 print('hello')
-```
+'''
 
 === script:bash interpreter tag
 # @expect ok
 --- input.jh
-script setup = ```bash
+script setup = '''bash
 echo hello
-```
+'''
 
 === plain script without interpreter tag
 # @expect ok
 --- input.jh
-script setup = `echo hello`
+script setup = 'echo hello'
 
 === plain script with manual shebang
 # @expect ok
 --- input.jh
-script analyze = ```
+script analyze = '''
 #!/usr/bin/env python3
 print('hi')
-```
+'''
 
 === return run in workflow
 # @expect ok
@@ -242,7 +242,7 @@ export def main() {
 === return run in rule
 # @expect ok
 --- input.jh
-script helper = `echo "ok"`
+script helper = 'echo "ok"'
 def my_rule() {
   return helper()
 }
@@ -317,36 +317,36 @@ export def main() {
 # @expect ok
 --- input.jh
 export def main() {
-  `echo $1`("arg1", "arg2")
+  'echo $1'("arg1", "arg2")
 }
 
 === inline script with capture form
 # @expect ok
 --- input.jh
 export def main() {
-  const x = `echo hello`()
+  const x = 'echo hello'()
 }
 
 === inline script const capture form
 # @expect ok
 --- input.jh
 export def main() {
-  const x = `echo hello`()
+  const x = 'echo hello'()
 }
 
 === inline script with shebang
 # @expect ok
 --- input.jh
 export def main() {
-  ```python3
+  '''python3
 print('hello')
-```()
+'''()
 }
 
 === assignment capture parses for run and const run
 # @expect ok
 --- input.jh
-script say_hello = `echo hello`
+script say_hello = 'echo hello'
 
 def tests_pass() {
   return "ok"
@@ -428,7 +428,7 @@ export def main() {
 === const string expr and const run capture
 # @expect ok
 --- input.jh
-script noop = `:`
+script noop = ':'
 export def main() {
   const msg = "hi"
   const out = noop()
@@ -437,7 +437,7 @@ export def main() {
 === const allows run-wrapped script call with args
 # @expect ok
 --- input.jh
-script some_script = `echo "$1"`
+script some_script = 'echo "$1"'
 export def main(arg1) {
   const x = some_script(arg1)
 }
@@ -543,7 +543,7 @@ export def main() {
 === script extracts bodies for simple module
 # @expect ok
 --- input.jh
-script f_ok = `echo ok`
+script f_ok = 'echo ok'
 
 def ok() {
   f_ok()
@@ -557,9 +557,9 @@ export def main() {
 === script bodies are opaque bash
 # @expect ok
 --- input.jh
-script helper = `echo ok`
+script helper = 'echo ok'
 
-script caller = `helper`
+script caller = 'helper'
 
 export def main() {
   caller()
@@ -568,7 +568,7 @@ export def main() {
 === script calling itself is allowed
 # @expect ok
 --- input.jh
-script recurse = `recurse`
+script recurse = 'recurse'
 
 export def main() {
   recurse()
@@ -579,7 +579,7 @@ export def main() {
 --- input.jh
 const greeting = "hello world"
 
-script helper = `echo $greeting`
+script helper = 'echo $greeting'
 
 export def main() {
   helper()
@@ -588,10 +588,10 @@ export def main() {
 === multiline double-quoted strings in scripts
 # @expect ok
 --- input.jh
-script multiline_str = ```
+script multiline_str = '''
 local x="a
 b"
-```
+'''
 
 export def main() {
   multiline_str()
@@ -619,7 +619,7 @@ export def main() {
 def ci_passes(repo_dir) {
   ci_passes_impl()
 }
-script ci_passes_impl = `true`
+script ci_passes_impl = 'true'
 
 def fix_it() {
   prompt "fix"
@@ -637,7 +637,7 @@ export def main() {
 def gate() {
   noop()
 }
-script noop = `true`
+script noop = 'true'
 
 export def main() {
   gate() catch (err) {
@@ -655,7 +655,7 @@ export def main() {
 def sub_rule() {
   return "ok"
 }
-script fallback_impl = `echo "fallback"`
+script fallback_impl = 'echo "fallback"'
 def check() {
   sub_rule() catch (err) {
     fallback_impl()
@@ -689,7 +689,7 @@ export def main() {
 === valid $1 in script body shell context
 # @expect ok
 --- input.jh
-script greet = `echo "Hello $1"`
+script greet = 'echo "Hello $1"'
 export def main() {
   greet("world")
 }
@@ -697,7 +697,7 @@ export def main() {
 === valid inline run capture in log
 # @expect ok
 --- input.jh
-script greet = `echo "hello"`
+script greet = 'echo "hello"'
 export def main() {
   log "got: ${greet()}"
 }
@@ -715,7 +715,7 @@ export def main() {
 === valid inline run capture with args
 # @expect ok
 --- input.jh
-script greet = `echo "hello $1"`
+script greet = 'echo "hello $1"'
 export def main() {
   log "got: ${greet(world)}"
 }
@@ -723,7 +723,7 @@ export def main() {
 === valid inline run capture in return
 # @expect ok
 --- input.jh
-script greet = `echo "hello"`
+script greet = 'echo "hello"'
 def helper() {
   return "${greet()}"
 }
@@ -734,7 +734,7 @@ export def main() {
 === valid inline run capture in rule log
 # @expect ok
 --- input.jh
-script greet = `echo "hello"`
+script greet = 'echo "hello"'
 def check() {
   log "got: ${greet()}"
 }
@@ -753,7 +753,9 @@ export def main() {
 === buildScripts extracts script for run with capture
 # @expect ok
 --- input.jh
-script f = `printf '%s' 'ok'`
+script f = '''
+printf '%s' 'ok'
+'''
 export def main() {
   const x = f()
   return "${x}"
@@ -762,7 +764,7 @@ export def main() {
 === bare identifier arg known const passes
 # @expect ok
 --- input.jh
-script greet = `echo "hello $1"`
+script greet = 'echo "hello $1"'
 export def main() {
   const name = "world"
   greet(name)
@@ -771,8 +773,8 @@ export def main() {
 === bare identifier arg capture variable passes
 # @expect ok
 --- input.jh
-script get_name = `echo "world"`
-script greet = `echo "hello $1"`
+script get_name = 'echo "world"'
+script greet = 'echo "hello $1"'
 export def main() {
   const result = get_name()
   greet(result)
@@ -781,7 +783,7 @@ export def main() {
 === bare identifier arg argN matches positional param
 # @expect ok
 --- input.jh
-script greet = `echo "hello $1"`
+script greet = 'echo "hello $1"'
 export def main(arg1) {
   greet(arg1)
 }
@@ -790,7 +792,7 @@ export def main(arg1) {
 # @expect ok
 --- input.jh
 const REPO = "my-project"
-script greet = `echo "hello $1"`
+script greet = 'echo "hello $1"'
 export def main() {
   greet(REPO)
 }
@@ -825,8 +827,8 @@ export def main() {
 === rule with multiple steps
 # @expect ok
 --- input.jh
-script check_a = `true`
-script check_b = `true`
+script check_a = 'true'
+script check_b = 'true'
 def validate() {
   check_a()
   check_b()
@@ -857,17 +859,19 @@ channel findings -> analyst
 channel summary -> reviewer
 channel final_summary
 
-script emit_findings = `echo '## findings'`
+script emit_findings = '''
+echo '## findings'
+'''
 
-script summarize_findings = `echo "Summary of findings"`
+script summarize_findings = 'echo "Summary of findings"'
 
-script review_summary = `echo "[reviewed] $1"`
+script review_summary = 'echo "[reviewed] $1"'
 
 def researcher() {
   send emit_findings() -> findings
 }
 
-script write_findings_file = `echo "$1" > findings_file.md`
+script write_findings_file = 'echo "$1" > findings_file.md'
 
 def analyst(message, chan, sender) {
   write_findings_file(message)
@@ -1044,7 +1048,7 @@ export def main() {
 === catch block with const capture
 # @expect ok
 --- input.jh
-script get_fix = `echo "fix applied"`
+script get_fix = 'echo "fix applied"'
 def helper() {
   log "ok"
 }
@@ -1058,7 +1062,7 @@ export def main() {
 === export script definition
 # @expect ok
 --- input.jh
-export script helper = `echo ok`
+export script helper = 'echo ok'
 export def main() {
   helper()
 }
@@ -1114,7 +1118,7 @@ export def main() {
 === match with run arm body in const context
 # @expect ok
 --- input.jh
-script get_val = `echo "matched"`
+script get_val = 'echo "matched"'
 export def main() {
   const x = "hello"
   const result = match x {
@@ -1126,7 +1130,7 @@ export def main() {
 === catch binding used in bare identifier arg
 # @expect ok
 --- input.jh
-script fix = `echo "fixing $1"`
+script fix = 'echo "fixing $1"'
 def check() {
   return "ok"
 }
@@ -1217,7 +1221,7 @@ export def main(mode) {
 # @expect ok
 --- input.jh
 export def main() {
-  `false`() catch (err) {
+  'false'() catch (err) {
     log "caught: ${err}"
   }
 }
@@ -1226,17 +1230,17 @@ export def main() {
 # @expect ok
 --- input.jh
 export def main() {
-  `test -f .gate`() recover(err) {
-    `touch .gate`()
+  'test -f .gate'() recover(err) {
+    'touch .gate'()
   }
 }
 
 === inline script catch in rule
 # @expect ok
 --- input.jh
-script noop = `true`
+script noop = 'true'
 def check() {
-  `false`() catch (err) {
+  'false'() catch (err) {
     noop()
   }
 }
@@ -1247,9 +1251,9 @@ export def main() {
 === inline script recover in rule
 # @expect ok
 --- input.jh
-script noop = `true`
+script noop = 'true'
 def check() {
-  `test -f .gate`() recover(err) {
+  'test -f .gate'() recover(err) {
     noop()
   }
 }
@@ -1261,9 +1265,9 @@ export def main() {
 # @expect ok
 --- input.jh
 export def main() {
-  ```
+  '''
 exit 1
-```() catch (err) {
+'''() catch (err) {
     log "fenced caught: ${err}"
   }
 }
@@ -1272,7 +1276,7 @@ exit 1
 # @expect ok
 --- input.jh
 export def main() {
-  `false $1`("x") catch (err) {
+  'false $1'("x") catch (err) {
     log "caught: ${err}"
   }
 }
@@ -1281,7 +1285,7 @@ export def main() {
 # @expect ok
 --- input.jh
 export def main() {
-  `false`() catch (err) log "recovered: ${err}"
+  'false'() catch (err) log "recovered: ${err}"
 }
 
 === if with dot-notation subject on typed prompt capture
@@ -1309,7 +1313,9 @@ export def main() {
 === bare dotted call arg on typed prompt capture
 # @expect ok
 --- input.jh
-script to_lower = `printf '%s' "$1" | tr '[:upper:]' '[:lower:]'`
+script to_lower = '''
+printf '%s' "$1" | tr '[:upper:]' '[:lower:]'
+'''
 export def main() {
   const result = prompt "Classify" returns "{ role: string }"
   const role_lc = to_lower(result.role)

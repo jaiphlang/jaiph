@@ -21,7 +21,7 @@
 #   }
 #
 
-script save_script = ```
+script save_script = '''
   set -euo pipefail
   ARTIFACTS_DIR="${JAIPH_ARTIFACTS_DIR:?JAIPH_ARTIFACTS_DIR is not set}"
   paths_list="$1"
@@ -54,8 +54,7 @@ script save_script = ```
     exit 1
   fi
   printf '%s' "$out"
-```
-
+'''
 # `paths` is a single file path or a newline-separated list of file paths.
 # Each file is copied under the same relative name as in the list
 # (leading `./` stripped; absolute paths use basename only).

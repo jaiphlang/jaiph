@@ -19,7 +19,7 @@ export type ConfigBodyPart =
  *   re-emits the bare form instead of `"${foo}"`.
  * - `bodyKind` (prompt): `"string" | "identifier" | "triple_quoted"`.
  * - `bodyIdentifier` (prompt): identifier name when `bodyKind === "identifier"`.
- * - `scriptBodyKind` (script): `"backtick" | "fenced"`.
+ * - `scriptBodyKind` (script): `"oneline" | "fenced"`.
  * - `leadingComments`: `#` lines immediately before an import / channel /
  *   test block / env decl.
  */
@@ -29,7 +29,7 @@ export interface NodeTrivia {
   bareSource?: string;
   bodyKind?: "string" | "identifier" | "triple_quoted";
   bodyIdentifier?: string;
-  scriptBodyKind?: "backtick" | "fenced";
+  scriptBodyKind?: "oneline" | "fenced";
   leadingComments?: string[];
   /** Order and comment lines inside `config { … }`; keyed on the metadata object. */
   configBodySequence?: ConfigBodyPart[];

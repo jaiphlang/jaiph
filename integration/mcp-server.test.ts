@@ -285,7 +285,7 @@ test("jaiph --mcp dispatches to the same command as jaiph mcp", async () => {
 });
 
 const ENV_ECHO_FIXTURE = [
-  'script echo_impl use GREETING = `printf %s "${GREETING:-}"`',
+  "script echo_impl use GREETING = 'printf %s \"${GREETING:-}\"'",
   "# Returns the GREETING env var the workflow process sees.",
   "export def show() {",
   "  const g = echo_impl()",
@@ -320,7 +320,7 @@ test("jaiph mcp --env GREETING=hi: every tools/call sees the var in the result t
 });
 
 const LEAK_FAIL_FIXTURE = [
-  'script leak_fail use LEAK_API_KEY = `echo "stdout token $LEAK_API_KEY"; echo "stderr token $LEAK_API_KEY" >&2; exit 1`',
+  "script leak_fail use LEAK_API_KEY = 'echo \"stdout token $LEAK_API_KEY\"; echo \"stderr token $LEAK_API_KEY\" >&2; exit 1'",
   "# Echoes a credential to both streams then fails, to exercise tool-result redaction.",
   "export def leak_and_fail() {",
   "  leak_fail()",
@@ -432,7 +432,7 @@ test("jaiph run regression: a default workflow exits 0 and prints its return val
 // Two script steps → four STEP_START/STEP_END events, enough to observe a
 // monotonic progress stream.
 const MULTI_STEP_FIXTURE = [
-  "script step_impl = `true`",
+  "script step_impl = 'true'",
   "# Runs two steps so progress notifications can be observed.",
   "export def steps() {",
   "  step_impl()",
@@ -507,7 +507,7 @@ test("jaiph mcp: a call without a progressToken emits no progress notifications"
 // A step that sleeps, then writes a completion marker. Cancelling mid-sleep
 // kills the run before the `&&` chain reaches the marker.
 const CANCEL_FIXTURE = [
-  'script slow_impl = `sleep 3 && printf done > "$JAIPH_WORKSPACE/done.txt"`',
+  "script slow_impl = 'sleep 3 && printf done > \"$JAIPH_WORKSPACE/done.txt\"'",
   "# Sleeps, then writes a completion marker (skipped when cancelled).",
   "export def slow() {",
   "  slow_impl()",

@@ -30,13 +30,13 @@ export function emitScriptDecl(
   const prefix = exported ? "export " : "";
   const useClause = emitUseClause(script.use);
   const bodyKind = tn(trivia, script).scriptBodyKind;
-  if (bodyKind === "fenced" || script.lang || script.body.includes("\n")) {
+  if (bodyKind === "fenced" || script.lang || script.body.includes("\n") || script.body.includes("'")) {
     const langTag = script.lang ?? "";
-    lines.push(`${ci}${prefix}script ${script.name}${useClause} = \`\`\`${langTag}`);
+    lines.push(`${ci}${prefix}script ${script.name}${useClause} = '''${langTag}`);
     lines.push(...emitFencedScriptBodyLines(script.body, `${ci}${pad}`));
-    lines.push(`${ci}\`\`\``);
+    lines.push(`${ci}'''`);
   } else {
-    lines.push(`${ci}${prefix}script ${script.name}${useClause} = \`${script.body}\``);
+    lines.push(`${ci}${prefix}script ${script.name}${useClause} = '${script.body}'`);
   }
   return lines;
 }

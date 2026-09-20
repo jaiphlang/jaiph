@@ -1,17 +1,16 @@
 #!/usr/bin/env jaiph
 
-script ensure_is_number_impl = ```
+script ensure_is_number_impl = '''
 if ! [[ "$1" =~ ^[0-9]+$ ]]; then
   echo "Expected a non-negative integer, got: $1" >&2
   exit 1
 fi
-```
-
+'''
 def ensure_is_number(value) {
   ensure_is_number_impl(value)
 }
 
-script fib = ```
+script fib = '''
 local n="$1"
 fib_impl() {
   local x="$1"
@@ -29,8 +28,7 @@ fib_impl() {
 local result
 result="$(fib_impl "$n")"
 echo "$result"
-```
-
+'''
 export def main(n) {
   ensure_is_number(n)
   const result = fib(n)

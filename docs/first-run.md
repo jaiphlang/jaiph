@@ -52,7 +52,7 @@ export PATH="$HOME/.local/bin:$PATH"
 Create a fresh directory and write a file named `hello.jh`:
 
 ```jh
-script greet = `echo "Hello, ${1:-world}!"`
+script greet = 'echo "Hello, ${1:-world}!"'
 
 export def main(who) {
   return greet(who)
@@ -90,7 +90,7 @@ def main (who="Adam")
 Hello, Adam!
 ```
 
-The first line is the run banner. The `def main` row and the indented `▸` and `✓` rows are the live progress tree. A `▸` marks a step that has started, a `✓` marks a step that has finished, and `(0s)` is the elapsed time for that step. The root row is static, and only nested steps print `▸` and `✓` lines. The `Hello, Adam!` line after `PASS` is the return value of `export def main`, which `jaiph run` prints on stdout after a successful run.
+The first line is the run banner. The `def main` row and the indented `▸` and `✓` rows are the live progress tree. A `▸` marks a step that has started, a `✓' marks a step that has finished, and '(0s)` is the elapsed time for that step. The root row is static, and only nested steps print `▸` and `✓` lines. The `Hello, Adam!` line after `PASS` is the return value of `export def main`, which `jaiph run` prints on stdout after a successful run.
 
 ## 4. Inspect the run artifacts
 
@@ -122,7 +122,7 @@ Both should match the line printed after `PASS`. The full artifact layout is doc
 Replace the script body with one that exits non-zero:
 
 ```jh
-script greet = `echo "Hello, ${1:-world}!" && exit 7`
+script greet = 'echo "Hello, ${1:-world}!" && exit 7'
 
 export def main(who) {
   return greet(who)

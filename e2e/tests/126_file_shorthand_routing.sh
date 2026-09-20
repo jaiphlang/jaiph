@@ -16,7 +16,7 @@ TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 e2e::section "jaiph ./file.jh routes to run"
 
 e2e::file "hello.jh" <<'EOF'
-script hello_impl = `echo "hello-shorthand"`
+script hello_impl = 'echo "hello-shorthand"'
 export def main() {
   const msg = hello_impl()
   return "${msg}"

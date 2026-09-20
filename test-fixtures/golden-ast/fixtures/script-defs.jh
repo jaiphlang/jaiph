@@ -1,15 +1,13 @@
-script greet = `echo hello`
+script greet = 'echo hello'
 
-script multiline = ```
+script multiline = '''
 echo "line 1"
 echo "line 2"
-```
-
-script with_shell_expansion = ```
+'''
+script with_shell_expansion = '''
 echo "Hello ${USER}"
 echo "${PATH:-/usr/bin}"
-```
-
+'''
 export def main() {
   greet()
   multiline()

@@ -8,7 +8,7 @@ import { dirname, join } from "node:path";
 const CLI_PATH = join(process.cwd(), "dist/src/cli.js");
 
 const BASE_FIXTURE = [
-  "script sleeper = `sleep 1`",
+  "script sleeper = 'sleep 1'",
   "# Greets the given name.",
   "export def greet(name) {",
   '  return "hello ${name}"',
@@ -25,8 +25,8 @@ const BASE_FIXTURE = [
   '  return "woke"',
   "}",
   "",
-  "script step_one = `sleep 0.4; echo one`",
-  "script step_two = `sleep 0.4; echo two`",
+  "script step_one = 'sleep 0.4; echo one'",
+  "script step_two = 'sleep 0.4; echo two'",
   "# Two slow steps so a STEP_END is observable before the run is terminal.",
   "export def watchable() {",
   "  step_one()",
@@ -45,7 +45,9 @@ const BASE_FIXTURE = [
   '  return "done"',
   "}",
   "",
-  'script publish = `printf \'artifact-payload\' > "$JAIPH_ARTIFACTS_DIR/result.txt"`',
+  "script publish = '''",
+  "printf 'artifact-payload' > \"$JAIPH_ARTIFACTS_DIR/result.txt\"",
+  "'''",
   "# Publishes a file into the run's artifacts dir.",
   "export def make_artifact() {",
   "  publish()",
@@ -60,14 +62,14 @@ const BASE_FIXTURE = [
 // must keep serving without any --env.
 const REDACT_FIXTURE = [
   BASE_FIXTURE,
-  'script leak use LEAK_API_KEY = `echo "token is $LEAK_API_KEY"`',
+  "script leak use LEAK_API_KEY = 'echo \"token is $LEAK_API_KEY\"'",
   "# Echoes a credential value to stdout to exercise journal redaction.",
   "export def leak_secret() {",
   "  leak()",
   '  return "done"',
   "}",
   "",
-  'script leak_fail use LEAK_API_KEY = `echo "stdout token $LEAK_API_KEY"; echo "stderr token $LEAK_API_KEY" >&2; exit 1`',
+  "script leak_fail use LEAK_API_KEY = 'echo \"stdout token $LEAK_API_KEY\"; echo \"stderr token $LEAK_API_KEY\" >&2; exit 1'",
   "# Echoes a credential to both streams then fails, to exercise result_text redaction.",
   "export def leak_and_fail() {",
   "  leak_fail()",

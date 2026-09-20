@@ -51,7 +51,7 @@ async function runScriptStep(
   writeFileSync(
     jh,
     [
-      `script ${scriptName} = \`echo unused\``,
+      `script ${scriptName} = 'echo unused'`,
       "",
       "export def main() {",
       `  ${scriptName}()`,

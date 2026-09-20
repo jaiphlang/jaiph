@@ -20,13 +20,12 @@ config {
   agent.claude_flags = "--permission-mode bypassPermissions"
 }
 
-script assert_nonempty_file_or_fail = ```
+script assert_nonempty_file_or_fail = '''
   test -s "$1" || {
     echo "jaiph: ci failure log is empty at $1" >&2
     exit 1
   }
-```
-
+'''
 def ensure_gh_ci_passes(branch, workflow_name) {
   const ci_log_dir = ".jaiph/tmp"
   const ci_log_file = "${ci_log_dir}/gh_ci_passes.last.log"

@@ -38,7 +38,7 @@ A call **always runs at the call site** — this is lazy *slurp*, not lazy execu
 
 **Keep as an output handle (no in-memory string):**
 
-- A statement call whose result is unused (`` `echo hi`() ``, `fetch_log()`)
+- A statement call whose result is unused (`` 'echo hi'() ``, `fetch_log()`)
 - `stdin <handle> -> script()` and `stdin <call>() -> script()` — the bytes stream into the child from disk
 - A `prompt x` / `prompt ${x}` body that is exactly a handle (the identifier or bare-ref form, not embedded in a larger string) — the handle's bytes stream into the agent transport instead of being slurped, the same keep-as-handle rule as `stdin`
 - A `recover (failure)` / `catch (err)` binding — until a force site reads it
@@ -87,7 +87,7 @@ Every value position (`const` RHS, `return`, `send` RHS, `log` / `logerr` / `fai
 |---|---|---|
 | `literal` | `"…"`, `"""…"""`, `${var}`, post-dedent triple-quoted body | Interpolated against the current scope; `${ref(args)}` performs inline managed calls. |
 | `call` | `ref(args)`, `async ref(args)` | Managed def/script call. `async: true` on the `async` capture position. |
-| `inline_script` | `` `body`(args) `` / `` ```lang...body...```(args) `` | Inline script body emitted as `scripts/__inline_<hash>`. |
+| `inline_script` | `` 'body'(args) `` / `'''lang...body...'''(args)` | Inline script body emitted as `scripts/__inline_<hash>`. |
 | `prompt` | `prompt body [returns "<schema>"]` | Sends body to the agent backend; JSON-quoted in transport. |
 | `match` | `match <subject> { … }` | Walks arms top-to-bottom; first match wins. |
 | `shell` | Free-form def body line; raw shell fragment on a `send` payload | An unparsed line becomes an inline-shell `exec` step. Send: a raw shell fragment (e.g. `send echo "$payload" -> findings`) is a valid managed shell payload. `send` is the only position that accepts `shell`; it is `E_VALIDATE` anywhere else. |
@@ -96,7 +96,7 @@ Every value position (`const` RHS, `return`, `send` RHS, `log` / `logerr` / `fai
 ## Calls — execute a def or script
 {: #run-execute-a-def-or-script}
 
-Invoke a def or script with a **bare call**: the name (or an inline-script body) followed by `()` with any arguments. There is no `run` keyword. `save(path)`, `const x = save(path)`, `return save(path)`, `async save(path)`, and `` `echo hello`() `` are all calls. `run` is an ordinary identifier — `run()` calls a symbol named `run` — separate from the CLI verb `jaiph run` and the `run.recover_limit` config key.
+Invoke a def or script with a **bare call**: the name (or an inline-script body) followed by `()` with any arguments. There is no `run` keyword. `save(path)`, `const x = save(path)`, `return save(path)`, `async save(path)`, and `` 'echo hello'() `` are all calls. `run` is an ordinary identifier — `run()` calls a symbol named `run` — separate from the CLI verb `jaiph run` and the `run.recover_limit` config key.
 
 | Position | Allowed target |
 |---|---|
@@ -129,7 +129,7 @@ Call arguments:
 
 Script arguments arrive as argv (`$1`, `$2`, … in bash, or `sys.argv` in Python). argv and the environment together are bounded by the OS `ARG_MAX` limit, which is about 1 MB on macOS, so the spawn fails when an argument is too large. To pass a large or arbitrary value to a **script**, connect it to the call's stdin with the `stdin <value> -> ref()` form, as in `stdin content -> save_string_to_file(path)`. The value can be a string (bare identifier, `${…}` interpolation, or double-quoted), an output handle ([Value types](#value-types)) such as a `recover` / `catch` binding, or a **one-hop producer call** `stdin <call>() -> ref()` (the producer may be a def or a script). Jaiph writes the bytes to the script's stdin as UTF-8, never as argv, so the transfer is not bounded by `ARG_MAX`; a handle or producer streams from disk without being slurped into memory first.
 
-The `stdin <value> ->` prefix precedes the call; a `const` capture (`const out = stdin content -> save(path)`) and a trailing `catch` / `recover` on the call both attach as usual. Once a value is a `const` string it is already slurped — `const x = fetch_log()` then `stdin x -> ref()` sends the in-memory string, whereas `stdin fetch_log() -> ref()` streams. The connect **target** is legal only on a call to a script, named or inline (`` stdin content -> `cat`() ``), and Jaiph rejects it anywhere else:
+The `stdin <value> ->` prefix precedes the call; a `const` capture (`const out = stdin content -> save(path)`) and a trailing `catch` / `recover` on the call both attach as usual. Once a value is a `const` string it is already slurped — `const x = fetch_log()` then `stdin x -> ref()` sends the in-memory string, whereas `stdin fetch_log() -> ref()` streams. The connect **target** is legal only on a call to a script, named or inline (`` stdin content -> 'cat'() ``), and Jaiph rejects it anywhere else:
 
 - A def or other non-script target is `E_VALIDATE`.
 - `async` with `stdin` (either order) is `E_PARSE` (`async is not supported with stdin`).
@@ -141,19 +141,22 @@ This is a connect form — not a shell pipe (`|`) and not a `run` suffix. argv s
 
 ### Inline scripts
 
-Inline scripts embed a script body in a step without a separate `script` definition. Use single backticks for one-liners, and triple backticks for multiline bodies or bodies written in another language.
+Inline scripts embed a script body in a step without a separate `script` definition. Use single quotes for one-liners, and triple single quotes for multiline bodies or bodies written in another language. A one-liner cannot contain `'`; use a block.
 
 ```jaiph
-`echo hello`()
-const x = `echo captured`()
-const y = `date +%s`()
-`echo $1-$2`("hello", "world")   # => hello-world
+'echo hello'()
+const x = 'echo captured'()
+const y = 'date +%s'()
+'echo $1-$2'("hello", "world")   # => hello-world
+'''python3
+print("hi")
+'''()
 ```
 
 | Aspect | Rule |
 |---|---|
-| Backtick form | `${…}` Jaiph interpolation is `E_PARSE`. Use `$1`, `$2`, … |
-| Fenced form | `${…}` passes through to the shell. Optional lang tag selects the interpreter (`` ```python3 `` → `#!/usr/bin/env python3`). |
+| One-liner | `'…'()`. No `'` in the body and no escapes. `${…}` Jaiph interpolation is `E_PARSE`. Use `$1`, `$2`, …. One-line backticks are `E_PARSE`. |
+| Fenced form | `${…}` passes through to the shell. Optional lang tag selects the interpreter (`'''python3` → `#!/usr/bin/env python3`). Triple backticks and one-line backticks are `E_PARSE`. |
 | Mixing fence tag + manual shebang | Error. |
 | Default shebang | `#!/usr/bin/env bash` when neither tag nor `#!` line is present. |
 | Emitted name | `scripts/__inline_<12-hex>`; deterministic across runs. |
@@ -260,7 +263,7 @@ export def main() {
 
 | Aspect | Rule |
 |---|---|
-| Body | Same forms as an anonymous `prompt` step — double-quoted single line or `"""…"""`. No triple-backtick fence. `${name}` in the body resolves against the prompt's own parameters and module-level `const`s (caller locals are not visible). |
+| Body | Same forms as an anonymous `prompt` step — double-quoted single line or `"""…"""`. No script fence. `${name}` in the body resolves against the prompt's own parameters and module-level `const`s (caller locals are not visible). |
 | `returns` | Optional, on the definition (not the call site), same schema rules as a step-level `returns`. Invoking a `returns` named prompt without a `const` capture is `E_PARSE`. |
 | `export` | Allowed (`export prompt …`), same visibility rules as `export script` / `export def`. |
 | Invocation | `prompt name(args)` or `const x = prompt name(args)`; `prompt name()` for zero args. Bare `prompt name` (no `()`) is the identifier-as-body form. A bare call `name()` on a named prompt (without `prompt`) is `E_VALIDATE`. Arity must match (`E_VALIDATE`), including `()`. |
@@ -277,7 +280,7 @@ uses it instead of the module namespace:
 export def main() {
   const greeting = "hi"
 
-  script shout = `echo "$1"`
+  script shout = 'echo "$1"'
 
   def helper(name) {
     return "helped-${greeting}-${name}"
@@ -341,7 +344,7 @@ return helper()
 return check(input)
 return match status { "ok" => "pass", _ => "fail" }
 return prompt "summarize ${log}"
-return `cat report.txt`()
+return 'cat report.txt'()
 ```
 
 | Form | Notes |
@@ -349,7 +352,7 @@ return `cat report.txt`()
 | String / triple-quoted | Verbatim with interpolation. |
 | Bare identifier | Sugar for `return "${ident}"`. Unknown identifier is `E_VALIDATE`. |
 | `return ref()` | Managed direct return. Requires `()`. `return helper` without parens is `E_PARSE`; leading `return run helper()` is `E_PARSE` (`'run' is not a keyword`). |
-| `` return `…`(args) `` | Inline-script direct return. |
+| `` return '…'(args) `` | Inline-script direct return. |
 | `return match … { … }` | Match expression as the return value — compact one-line or multiline `{` opener. `return` inside an arm body is forbidden. |
 | `return prompt …` | Prompt expression as the return value (same body forms as `const x = prompt …`). |
 | Position | Only in `def` bodies. Script bodies use `echo`/`printf`; bare `return 0` / `return $?` in a script are shell exit codes. |
@@ -383,7 +386,7 @@ logerr "Error: ${name} not found"
 logwarn "Slow response from ${name}"
 log status                       # bare identifier — same as log "${status}"
 log ${status}                    # bare ref — same as log "${status}"
-log `date +%s`()                 # inline-script form (bare call)
+log 'date +%s'()                 # inline-script form (bare call)
 log """
   Build started at ${timestamp}
 """
@@ -398,7 +401,7 @@ fail ${error_msg}                # bare ref — same as fail "${error_msg}"
 | `logwarn` | Writes to stderr. Displayed with `⚠` marker in the progress tree. |
 | `fail` | Aborts the def with a stderr message and non-zero exit. |
 
-An inline script in `log` / `logerr` / `logwarn` uses the bare-call form (`` log `…`(args) ``); there is no `run` prefix.
+An inline script in `log` / `logerr` / `logwarn` uses the bare-call form (`` log '…'(args) ``); there is no `run` prefix.
 
 ## `if` — conditional guard
 
@@ -495,8 +498,8 @@ No string-RHS site accepts two of these but rejects the third.
 | `${ref(args)}` | Inline capture — executes and inlines stdout / return value. | All orchestration strings. |
 | `$ident` (no braces) | `E_PARSE` in `log` / `logerr` / `logwarn` / `fail` / `prompt` / `return` / `send` / `config`. In a `const` RHS a bare `$` is stored verbatim, not treated as a reference. | — |
 | `$1`, `$2`, … | Positional args | `script` bodies only (interpretation depends on the interpreter). |
-| `${var:-fallback}` (and `:+`, `:=`, `:?`) | `E_PARSE` in every orchestration string (`const`, `log`, `logerr`, `logwarn`, `fail`, `prompt`, `return`, `send`, `config`). Passes through unchanged in backtick and fenced scripts. | — |
-| `${var%%…}`, `${var//…}`, `${#var}` | `E_PARSE` in `const` RHS only. In other orchestration strings and in backtick / fenced scripts they pass through unchanged. | — |
+| `${var:-fallback}` (and `:+`, `:=`, `:?`) | `E_PARSE` in every orchestration string (`const`, `log`, `logerr`, `logwarn`, `fail`, `prompt`, `return`, `send`, `config`). Passes through unchanged in one-line and fenced scripts. | — |
+| `${var%%…}`, `${var//…}`, `${#var}` | `E_PARSE` in `const` RHS only. In other orchestration strings and in one-line / fenced scripts they pass through unchanged. | — |
 | `$(…)` | `E_PARSE` in orchestration strings. | — |
 
 If an inline capture fails, the enclosing step fails. Nested inline captures (`${foo(${bar()})}`) are `E_PARSE` — extract the inner call to a `const`.
@@ -515,7 +518,7 @@ Module `const` values are **not** automatically exported into script environment
 |---|---|---|---|
 | Call (def) | def exit code | explicit `return` value | def artifacts |
 | Call (script, named) | script exit code | trimmed stdout | script `.out` / `.err` |
-| `` `…`() `` (inline) | script exit code | trimmed stdout | script `.out` / `.err` |
+| `` '…'() `` (inline) | script exit code | trimmed stdout | script `.out` / `.err` |
 | `prompt` | prompt exit code | final assistant answer | transcript artifacts |
 | `log` / `logerr` / `logwarn` | always 0 | empty | event stream + stdout/stderr |
 | `fail` | non-zero (abort) | empty | stderr |

@@ -83,7 +83,7 @@ test("E_PARSE: script name colliding with top-level const is rejected at parse t
       [
         'const greet = "hello"',
         "",
-        "script greet = `echo hi`",
+        "script greet = 'echo hi'",
         "",
         "export def main() {",
         '  return "${greet}"',
@@ -106,9 +106,9 @@ test("E_PARSE: duplicate script declarations are rejected at parse time", () => 
     writeFileSync(
       join(root, "m.jh"),
       [
-        "script greet = `echo hi`",
+        "script greet = 'echo hi'",
         "",
-        "script greet = `echo hello`",
+        "script greet = 'echo hello'",
         "",
         "export def main() {",
         "  greet()",

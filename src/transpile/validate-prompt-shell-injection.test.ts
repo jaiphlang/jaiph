@@ -66,9 +66,9 @@ test("W_PROMPT_IN_SHELL: passing prompt capture as script arg does not produce d
     writeFileSync(
       join(root, "m.jh"),
       [
-        "script greet = ```",
+        "script greet = '''",
         "echo $1",
-        "```",
+        "'''",
         "",
         "export def main() {",
         '  const x = prompt "What is your name?"',
@@ -96,9 +96,9 @@ test("W_PROMPT_IN_SHELL: non-prompt variable interpolated in shell step is not f
     writeFileSync(
       join(root, "m.jh"),
       [
-        "script compute = ```",
+        "script compute = '''",
         "echo hello",
-        "```",
+        "'''",
         "",
         "export def main() {",
         "  const output = compute()",

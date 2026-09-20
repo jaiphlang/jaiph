@@ -92,12 +92,12 @@ export function parseArgsRaw(raw: string, vars: Map<string, string>, env?: NodeJ
   return out;
 }
 
-/** Try to parse `\`body\`(args)` from a string at a given position. */
+/** Try to parse `'body'(args)` from a string at a given position. */
 export function parseInlineScriptAt(s: string): { body: string; argsRaw: string; consumed: number } | null {
   const t = s.trimStart();
   const skippedWs = s.length - t.length;
-  if (!t.startsWith("`")) return null;
-  const closeIdx = t.indexOf("`", 1);
+  if (!t.startsWith("'") || t.startsWith("'''")) return null;
+  const closeIdx = t.indexOf("'", 1);
   if (closeIdx === -1) return null;
   const body = t.slice(1, closeIdx);
   const afterClose = t.slice(closeIdx + 1);
@@ -123,14 +123,14 @@ export function parseInlineScriptAt(s: string): { body: string; argsRaw: string;
 
 /**
  * Recognize a bare nested managed call in argument position: an inline script
- * `` `body`(args) `` or a `ref(args)` call. A quoted string or a bare `${var}`
+ * `'body'(args)` or a `ref(args)` call. A quoted string or a bare `${var}`
  * is not a call and returns null so the caller stores it as a literal token.
  */
 export function parseManagedArgAt(raw: string, start: number): { token: ParsedArgToken; next: number } | null {
   const rest = raw.slice(start);
   const afterWs = rest.trimStart();
   const skipped = rest.length - afterWs.length;
-  // Inline script form: `body`(args)
+  // Inline script form: 'body'(args)
   const inlineResult = parseInlineScriptAt(afterWs);
   if (inlineResult) {
     return {

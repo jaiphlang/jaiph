@@ -14,7 +14,9 @@ TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 e2e::section "match arm fail aborts workflow"
 
 e2e::file "match_fail.jh" <<'EOF'
-script safe_name = `printf '%s\n' "$1" | tr '/:' '--'`
+script safe_name = '''
+printf '%s\n' "$1" | tr '/:' '--'
+'''
 
 export def main(name_param) {
   const name = match name_param {
@@ -44,7 +46,9 @@ e2e::pass "no fake log line for fail arm"
 e2e::section "match arm run executes script"
 
 e2e::file "match_run.jh" <<'EOF'
-script safe_name = `printf '%s\n' "$1" | tr '/:' '--'`
+script safe_name = '''
+printf '%s\n' "$1" | tr '/:' '--'
+'''
 
 export def main(name_param) {
   const name = match name_param {

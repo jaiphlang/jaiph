@@ -12,7 +12,9 @@ test("buildScripts accepts subshell capture in workflow shell line", () => {
     writeFileSync(
       join(root, "m.jh"),
       [
-        "script f = `printf '%s' 'x'`",
+        "script f = '''",
+        "printf '%s' 'x'",
+        "'''",
         "export def main() {",
         '  x="$(f)"',
         "}",
@@ -31,7 +33,9 @@ test("E_VALIDATE: bare script name as raw shell line must be called as f()", () 
     writeFileSync(
       join(root, "m.jh"),
       [
-        "script f = `printf '%s' 'x'`",
+        "script f = '''",
+        "printf '%s' 'x'",
+        "'''",
         "export def main() {",
         "  f",
         "}",
@@ -74,7 +78,9 @@ test("bare dotted call arg: result.role resolves as typed-prompt field", () => {
     writeFileSync(
       join(root, "m.jh"),
       [
-        'script to_lower = `printf \'%s\' "$1" | tr \'[:upper:]\' \'[:lower:]\'`',
+        "script to_lower = '''",
+        "printf '%s' \"$1\" | tr '[:upper:]' '[:lower:]'",
+        "'''",
         "export def main() {",
         '  const result = prompt "x" returns "{ role: string }"',
         "  const role_lc = to_lower(result.role)",
@@ -95,7 +101,9 @@ test("bare dotted call arg: unknown field fails E_VALIDATE", () => {
     writeFileSync(
       join(root, "m.jh"),
       [
-        'script to_lower = `printf \'%s\' "$1" | tr \'[:upper:]\' \'[:lower:]\'`',
+        "script to_lower = '''",
+        "printf '%s' \"$1\" | tr '[:upper:]' '[:lower:]'",
+        "'''",
         "export def main() {",
         '  const result = prompt "x" returns "{ role: string }"',
         "  to_lower(result.bogus)",
@@ -118,7 +126,9 @@ test("bare dotted call arg: non-prompt base fails E_VALIDATE", () => {
     writeFileSync(
       join(root, "m.jh"),
       [
-        'script to_lower = `printf \'%s\' "$1" | tr \'[:upper:]\' \'[:lower:]\'`',
+        "script to_lower = '''",
+        "printf '%s' \"$1\" | tr '[:upper:]' '[:lower:]'",
+        "'''",
         "export def main() {",
         '  const result = "not-a-prompt"',
         "  to_lower(result.role)",
@@ -141,7 +151,9 @@ test("${var.field} call arg: unquoted interpolation is E_VALIDATE", () => {
     writeFileSync(
       join(root, "m.jh"),
       [
-        'script to_lower = `printf \'%s\' "$1" | tr \'[:upper:]\' \'[:lower:]\'`',
+        "script to_lower = '''",
+        "printf '%s' \"$1\" | tr '[:upper:]' '[:lower:]'",
+        "'''",
         "export def main() {",
         '  const result = prompt "x" returns "{ role: string }"',
         "  to_lower(${result.role})",
@@ -164,7 +176,7 @@ test("${var} call arg: unquoted interpolation is E_VALIDATE", () => {
     writeFileSync(
       join(root, "m.jh"),
       [
-        'script greet = `echo "hello $1"`',
+        "script greet = 'echo \"hello $1\"'",
         "export def main() {",
         '  const name = "world"',
         "  greet(${name})",
@@ -188,7 +200,9 @@ test("buildScripts extracts script for run with capture workflow", () => {
     writeFileSync(
       join(root, "m.jh"),
       [
-        "script f = `printf '%s' 'ok'`",
+        "script f = '''",
+        "printf '%s' 'ok'",
+        "'''",
         "export def main() {",
         "  const x = f()",
         '  return "${x}"',
@@ -211,7 +225,7 @@ test("E_VALIDATE: bare workflow name as raw shell line must be called as w()", (
     writeFileSync(
       join(root, "m.jh"),
       [
-        'script w_impl = `echo x`',
+        "script w_impl = 'echo x'",
         "def w() {",
         "  w_impl()",
         "}",
@@ -237,7 +251,7 @@ test("E_VALIDATE: send RHS cannot invoke Jaiph workflow via shell", () => {
       join(root, "m.jh"),
       [
         "channel c",
-        'script w_impl = `echo x`',
+        "script w_impl = 'echo x'",
         "def w() {",
         "  w_impl()",
         "}",
@@ -260,7 +274,7 @@ test("bare identifier arg: known const passes validation", () => {
     writeFileSync(
       join(root, "m.jh"),
       [
-        'script greet = `echo "hello $1"`',
+        "script greet = 'echo \"hello $1\"'",
         "export def main() {",
         '  const name = "world"',
         "  greet(name)",
@@ -280,7 +294,7 @@ test("bare identifier arg: unknown name fails E_VALIDATE", () => {
     writeFileSync(
       join(root, "m.jh"),
       [
-        'script greet = `echo "hello $1"`',
+        "script greet = 'echo \"hello $1\"'",
         "export def main() {",
         "  greet(unknown_var)",
         "}",
@@ -302,8 +316,8 @@ test("nested bare call arg foo(bar()) is a managed call and is accepted", () => 
     writeFileSync(
       join(root, "m.jh"),
       [
-        'script mkdir_p_simple = `mkdir -p "$1"`',
-        'script jaiph_tmp_dir = `printf "%s\\n" "$JAIPH_WORKSPACE/.jaiph/tmp"`',
+        "script mkdir_p_simple = 'mkdir -p \"$1\"'",
+        "script jaiph_tmp_dir = 'printf \"%s\\\\n\" \"$JAIPH_WORKSPACE/.jaiph/tmp\"'",
         "export def main() {",
         "  mkdir_p_simple(jaiph_tmp_dir())",
         "}",
@@ -323,8 +337,8 @@ test("bare identifier arg: capture variable passes validation", () => {
     writeFileSync(
       join(root, "m.jh"),
       [
-        'script get_name = `echo "world"`',
-        'script greet = `echo "hello $1"`',
+        "script get_name = 'echo \"world\"'",
+        "script greet = 'echo \"hello $1\"'",
         "export def main() {",
         "  const result = get_name()",
         "  greet(result)",
@@ -345,7 +359,7 @@ test("bare identifier arg: named param valid when workflow declares a parameter"
     writeFileSync(
       join(root, "m.jh"),
       [
-        'script greet = `echo "hello $1"`',
+        "script greet = 'echo \"hello $1\"'",
         "export def main(name) {",
         "  greet(name)",
         "}",
@@ -366,7 +380,7 @@ test("bare identifier arg: top-level const passes validation", () => {
       join(root, "m.jh"),
       [
         'const REPO = "my-project"',
-        'script greet = `echo "hello $1"`',
+        "script greet = 'echo \"hello $1\"'",
         "export def main() {",
         "  greet(REPO)",
         "}",
@@ -387,7 +401,7 @@ test("E_VALIDATE: braced parameter name in run args is rejected (use bare identi
     writeFileSync(
       join(root, "m.jh"),
       [
-        'script delay = `sleep "$1"`',
+        "script delay = 'sleep \"$1\"'",
         "def w(seconds) {",
         '  delay("${seconds}")',
         "}",
@@ -407,7 +421,7 @@ test("buildScripts accepts run delay(seconds) with bare workflow parameter", () 
     writeFileSync(
       join(root, "m.jh"),
       [
-        'script delay = `sleep "$1"`',
+        "script delay = 'sleep \"$1\"'",
         "def w(seconds) {",
         "  delay(seconds)",
         "}",
@@ -428,7 +442,7 @@ test("E_VALIDATE: braced const name in run args is rejected (use bare identifier
     writeFileSync(
       join(root, "m.jh"),
       [
-        'script greet = `echo "hello $1"`',
+        "script greet = 'echo \"hello $1\"'",
         "export def main() {",
         '  const name = "world"',
         '  greet("${name}")',
@@ -450,7 +464,7 @@ test("E_VALIDATE: braced argN in run args is rejected (use bare identifier)", ()
     writeFileSync(
       join(root, "m.jh"),
       [
-        'script greet = `echo "hello $1"`',
+        "script greet = 'echo \"hello $1\"'",
         "export def main() {",
         '  greet("${arg1}")',
         "}",
@@ -470,7 +484,7 @@ test("quoted string with extra text around interpolation is allowed in args", ()
     writeFileSync(
       join(root, "m.jh"),
       [
-        'script greet = `echo "hello $1"`',
+        "script greet = 'echo \"hello $1\"'",
         "export def main() {",
         '  const name = "world"',
         '  greet("hello_${name}")',
@@ -490,7 +504,7 @@ test("E_VALIDATE: arg1 bare argument requires a workflow parameter", () => {
     writeFileSync(
       join(root, "m.jh"),
       [
-        'script noop = `:`',
+        "script noop = ':'",
         "export def main() {",
         "  noop(arg1)",
         "}",
@@ -533,7 +547,7 @@ test("bare identifier arg: unknown name error does not suggest interpolation wor
     writeFileSync(
       join(root, "m.jh"),
       [
-        'script greet = `echo "hello $1"`',
+        "script greet = 'echo \"hello $1\"'",
         "export def main() {",
         "  greet(ghost)",
         "}",
@@ -583,8 +597,8 @@ test("buildScripts accepts foo(bar()) — nested managed call", () => {
     writeFileSync(
       join(root, "m.jh"),
       [
-        'script mkdir_p_simple = `mkdir -p "$1"`',
-        'script jaiph_tmp_dir = `printf "%s\\n" "/tmp/jaiph"`',
+        "script mkdir_p_simple = 'mkdir -p \"$1\"'",
+        "script jaiph_tmp_dir = 'printf \"%s\\\\n\" \"/tmp/jaiph\"'",
         "export def main() {",
         "  mkdir_p_simple(jaiph_tmp_dir())",
         "}",
@@ -604,7 +618,7 @@ test("buildScripts accepts foo(check_ok()) — nested def call", () => {
     writeFileSync(
       join(root, "m.jh"),
       [
-        'script do_work = `echo "$1"`',
+        "script do_work = 'echo \"$1\"'",
         "def check_ok() {",
         '  do_work("ok")',
         "}",
@@ -620,16 +634,16 @@ test("buildScripts accepts foo(check_ok()) — nested def call", () => {
   }
 });
 
-test("buildScripts accepts foo(`echo aaa`()) — nested inline script", () => {
+test("buildScripts accepts foo('echo aaa'()) — nested inline script", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-val-nested-run-inline-"));
   const out = join(root, "out");
   try {
     writeFileSync(
       join(root, "m.jh"),
       [
-        'script do_work = `echo "$1"`',
+        "script do_work = 'echo \"$1\"'",
         "export def main() {",
-        "  do_work(`echo aaa`())",
+        "  do_work('echo aaa'())",
         "}",
         "",
       ].join("\n"),
@@ -647,8 +661,8 @@ test("buildScripts accepts const x = bar() (a call capture) followed by foo(x)",
     writeFileSync(
       join(root, "m.jh"),
       [
-        'script bar = `echo "hello"`',
-        'script foo = `echo "$1"`',
+        "script bar = 'echo \"hello\"'",
+        "script foo = 'echo \"$1\"'",
         "export def main() {",
         "  const x = bar()",
         "  foo(x)",

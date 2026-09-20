@@ -105,21 +105,21 @@ describe("parseArgsRaw", () => {
 });
 
 describe("parseInlineScriptAt", () => {
-  it("parses inline-script form `body`(args)", () => {
-    const result = parseInlineScriptAt("`echo hi`(arg1 arg2) rest");
+  it("parses inline-script form 'body'(args)", () => {
+    const result = parseInlineScriptAt("'echo hi'(arg1 arg2) rest");
     assert.ok(result);
     assert.equal(result!.body, "echo hi");
     assert.equal(result!.argsRaw, "arg1 arg2");
     // consumed includes everything up to and including the closing paren
-    assert.equal(result!.consumed, "`echo hi`(arg1 arg2)".length);
+    assert.equal(result!.consumed, "'echo hi'(arg1 arg2)".length);
   });
 
-  it("returns null when input does not start with backtick", () => {
-    assert.equal(parseInlineScriptAt("not backtick"), null);
+  it("returns null when input does not start with a one-line script", () => {
+    assert.equal(parseInlineScriptAt("not a script"), null);
   });
 
   it("returns null when paren is unbalanced", () => {
-    assert.equal(parseInlineScriptAt("`body`(unclosed"), null);
+    assert.equal(parseInlineScriptAt("'body'(unclosed"), null);
   });
 });
 
@@ -143,8 +143,8 @@ describe("parseManagedArgAt", () => {
     }
   });
 
-  it("parses bare `\\`body\\`(args)` as inline script", () => {
-    const result = parseManagedArgAt("`echo hi`(x)", 0);
+  it("parses bare `\'body\'(args)` as inline script", () => {
+    const result = parseManagedArgAt("'echo hi'(x)", 0);
     assert.ok(result);
     if (result!.token.kind === "managed_inline_script") {
       assert.equal(result!.token.body, "echo hi");

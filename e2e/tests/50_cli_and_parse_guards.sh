@@ -13,9 +13,9 @@ e2e::section "jaiph test discovery and empty-directory failure"
 
 # Given
 e2e::file "ok_a.jh" <<'EOF'
-script a_impl = ```
+script a_impl = '''
 echo "A"
-```
+'''
 export def main() {
   a_impl()
 }
@@ -31,9 +31,9 @@ test "A passes" {
 EOF
 
 e2e::file "ok_b.jh" <<'EOF'
-script b_impl = ```
+script b_impl = '''
 echo "B"
-```
+'''
 export def main() {
   b_impl()
 }
@@ -83,9 +83,9 @@ e2e::section "jaiph run requires export def main"
 
 # Given
 e2e::file "no_default.jh" <<'EOF'
-script no_default_impl = ```
+script no_default_impl = '''
 echo "no default here"
-```
+'''
 def docs() {
   no_default_impl()
 }
@@ -134,9 +134,9 @@ e2e::section "shell redirection around run/run is rejected"
 
 # Given — run with stdout redirect
 e2e::file "run_redirect.jh" <<'EOF'
-script greet = ```
+script greet = '''
 echo "hello"
-```
+'''
 export def main() {
   greet() > out.txt
 }
@@ -162,9 +162,9 @@ e2e::assert_contains "${redirect_out}" "script block" "run redirect error sugges
 
 # Given — run with pipe
 e2e::file "run_pipe.jh" <<'EOF'
-script greet = ```
+script greet = '''
 echo "hello"
-```
+'''
 export def main() {
   greet() | tr a-z A-Z
 }
@@ -188,9 +188,9 @@ e2e::assert_contains "${pipe_out}" "shell redirection" "run pipe error mentions 
 
 # Given — run with background &
 e2e::file "run_bg.jh" <<'EOF'
-script greet = ```
+script greet = '''
 echo "hello"
-```
+'''
 export def main() {
   greet() &
 }

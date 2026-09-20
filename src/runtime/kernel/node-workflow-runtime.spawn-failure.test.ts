@@ -251,7 +251,7 @@ test("runRoot: an oversized-argv script spawn does not reject; journal has STEP_
   try {
     const { runtime, scriptsDir } = makeRuntime(
       root,
-      ["script big = ```", 'echo "unreachable"', "```", "", "export def main() {", "  big()", "}", ""].join("\n"),
+      ["script big = '''", 'echo "unreachable"', "'''", "", "export def main() {", "  big()", "}", ""].join("\n"),
     );
     writeFileSync(join(scriptsDir, "big"), '#!/usr/bin/env bash\necho "unreachable"\n');
     const throwSpawn = (() => {
@@ -291,9 +291,9 @@ test("runRoot: recover body runs after a mocked E2BIG on the recovered run step"
     const { runtime, scriptsDir } = makeRuntime(
       root,
       [
-        "script big = ```",
+        "script big = '''",
         'echo "unreachable"',
-        "```",
+        "'''",
         "",
         "export def main() {",
         "  big() recover (failure) {",

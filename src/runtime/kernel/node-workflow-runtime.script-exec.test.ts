@@ -102,9 +102,9 @@ test("executeScript: script with exec bit stripped (0o644) still executes throug
     writeFileSync(
       jh,
       [
-        "script write_marker = ```",
+        "script write_marker = '''",
         'printf "ran-ok" > marker.txt',
-        "```",
+        "'''",
         "",
         "export def main() {",
         "  write_marker()",
@@ -149,9 +149,9 @@ test("executeScript: missing interpreter fails with a diagnosable error naming t
     writeFileSync(
       jh,
       [
-        "script run_bad = ```",
+        "script run_bad = '''",
         'echo "unreachable"',
-        "```",
+        "'''",
         "",
         "export def main() {",
         "  run_bad()",
@@ -192,8 +192,8 @@ test("executeScript: a use + --env-granted key reaches the script; an un-used ke
     writeFileSync(
       jh,
       [
-        'script show_token use GITHUB_TOKEN = `echo "token=${GITHUB_TOKEN:-}"`',
-        'script show_bare = `echo "bare=${GITHUB_TOKEN:-}"`',
+        "script show_token use GITHUB_TOKEN = 'echo \"token=${GITHUB_TOKEN:-}\"'",
+        "script show_bare = 'echo \"bare=${GITHUB_TOKEN:-}\"'",
         "",
         "export def main() {",
         "  const t = show_token()",

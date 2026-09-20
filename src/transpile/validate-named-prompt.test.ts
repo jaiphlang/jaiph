@@ -37,7 +37,7 @@ test("valid: named prompt call parses and validates", () => {
 test("E_VALIDATE: prompt name() when the name is a script (wrong kind)", () => {
   withFlow(
     [
-      "script sh = `echo x`",
+      "script sh = 'echo x'",
       "export def main() {",
       "  prompt sh()",
       "}",

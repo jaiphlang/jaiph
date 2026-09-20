@@ -10,13 +10,13 @@ test("emit: dedented fenced script preserves heredoc delimiter at column 0", () 
   try {
     const input = join(root, "heredoc.jh");
     const source = [
-      "script write_queue = ```",
+      "script write_queue = '''",
       "  tmp_dir=\"$1\"",
       "  cat > \"$tmp_dir/QUEUE.md\" <<'EOF'",
       "  # Queue",
       "  roundtrip-ok",
       "  EOF",
-      "```",
+      "'''",
       "",
       "export def main(tmp_dir) {",
       "  write_queue(tmp_dir)",

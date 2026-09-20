@@ -21,9 +21,9 @@ You are an expert.
 
 const greeting = "hello world"
 
-script write_role = `echo "$1" > role_out.txt`
+script write_role = 'echo "$1" > role_out.txt'
 
-script write_greeting = `echo "$1" > greeting_out.txt`
+script write_greeting = 'echo "$1" > greeting_out.txt'
 
 export def main() {
   write_role(role)
@@ -58,18 +58,18 @@ e2e::section "top-level const accessible in rules and workflows (not scripts)"
 e2e::file "env_all.jh" <<'EOF'
 const msg = "shared-value"
 
-script check_msg_impl = ```
+script check_msg_impl = '''
 echo "$1" > rule_msg.txt
 test -n "$1"
-```
+'''
 
 def check_msg() {
   check_msg_impl(msg)
 }
 
-script write_msg = `echo "${msg:-}" > func_msg.txt`
+script write_msg = 'echo "${msg:-}" > func_msg.txt'
 
-script write_wf_msg = `echo "$1" > wf_msg.txt`
+script write_wf_msg = 'echo "$1" > wf_msg.txt'
 
 export def main() {
   check_msg()

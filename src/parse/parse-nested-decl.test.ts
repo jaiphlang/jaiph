@@ -14,7 +14,7 @@ function roundtrip(src: string): string {
 const NESTED_SRC = [
   "export def main() {",
   '  const greeting = "hi"',
-  "  script shout = `echo \"SHOUT: $1\"`",
+  "  script shout = 'echo \"SHOUT: $1\"'",
   "  def helper(name) {",
   '    log "helper sees ${greeting} and ${name}"',
   '    return "helped-${name}"',
@@ -43,7 +43,7 @@ const TEMPLATE_SRC = [
   "  const note = \"\"\"",
   "    note for ${who}",
   "  \"\"\"",
-  '  script shout = `echo "$1"`',
+  "  script shout = 'echo \"$1\"'",
   "  def helper(name) {",
   '    const msg = "${greeting}-${name}"',
   "    return msg",
@@ -113,7 +113,7 @@ test("format: nested declarations round-trip bit-for-bit", () => {
 
 test("E_PARSE: export on a nested script is rejected", () => {
   assert.throws(
-    () => parsejaiph("export def main() {\n  export script foo = `echo hi`\n  foo()\n}\n", "t.jh"),
+    () => parsejaiph("export def main() {\n  export script foo = 'echo hi'\n  foo()\n}\n", "t.jh"),
     /E_PARSE.*nested script declarations cannot be exported/,
   );
 });
@@ -268,7 +268,7 @@ test("a nested def with only run / const / nested script still compiles", () => 
     "export def main() {",
     "  def inner() {",
     '    const x = "1"',
-    "    script s = `echo hi`",
+    "    script s = 'echo hi'",
     "    s()",
     "  }",
     "  inner()",
@@ -297,7 +297,7 @@ test("top-level def body: `import` still falls through to shell (unchanged)", ()
 const IN_BRANCH_SRC = [
   "export def main(flag, src) {",
   '  if flag == "y" {',
-  "    script s = `echo YES`",
+  "    script s = 'echo YES'",
   "  } else if flag == \"m\" {",
   "    def d() {",
   '      return "x"',
@@ -309,7 +309,7 @@ const IN_BRANCH_SRC = [
   '    const c = "1"',
   "  }",
   "  s() catch (e) {",
-  "    script cs = `echo recovered`",
+  "    script cs = 'echo recovered'",
   "  }",
   "  s() recover (e) {",
   "    def rf() {",

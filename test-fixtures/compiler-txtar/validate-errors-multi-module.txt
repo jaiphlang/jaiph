@@ -8,12 +8,12 @@ export def main() {
   mod.one()
 }
 --- a.jh
-script one_impl = `echo one`
+script one_impl = 'echo one'
 def one() {
   one_impl()
 }
 --- b.jh
-script two_impl = `echo two`
+script two_impl = 'echo two'
 def two() {
   two_impl()
 }
@@ -27,7 +27,7 @@ export def main() {
   lib.missing()
 }
 --- lib.jh
-script existing_impl = `echo ok`
+script existing_impl = 'echo ok'
 def existing() {
   existing_impl()
 }
@@ -73,7 +73,7 @@ export def main() {
   lib.nonexistent()
 }
 --- lib.jh
-script existing = `echo "ok"`
+script existing = 'echo "ok"'
 def dummy() {
   log "ok"
 }
@@ -122,7 +122,7 @@ export def main() {
   send lib.helper -> c
 }
 --- lib.jh
-script helper = `echo "ok"`
+script helper = 'echo "ok"'
 def dummy() {
   log "ok"
 }
@@ -194,7 +194,7 @@ export def main() {
   lib.nonexistent_thing
 }
 --- lib.jh
-script helper = `echo ok`
+script helper = 'echo ok'
 def dummy() {
   log "ok"
 }
@@ -207,8 +207,8 @@ export def main() {
   lib.private_script()
 }
 --- lib.jh
-export script public_script = `echo public`
-script private_script = `echo private`
+export script public_script = 'echo public'
+script private_script = 'echo private'
 def dummy() {
   log "ok"
 }
@@ -250,8 +250,8 @@ export def main() {
   send lib.private_script -> c
 }
 --- lib.jh
-export script public_script = `echo public`
-script private_script = `echo private`
+export script public_script = 'echo public'
+script private_script = 'echo private'
 def dummy() {
   log "ok"
 }

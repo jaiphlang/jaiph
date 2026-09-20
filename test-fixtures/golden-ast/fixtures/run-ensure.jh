@@ -2,7 +2,7 @@ def check() {
   validator()
 }
 
-script validator = `true`
+script validator = 'true'
 
 export def main() {
   check()

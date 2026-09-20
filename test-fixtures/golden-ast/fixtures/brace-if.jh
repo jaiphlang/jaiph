@@ -2,8 +2,10 @@ def ok() {
   ok_impl()
 }
 
-script ok_impl = `true`
-script save = `printf '%s' "$1" > "$2"`
+script ok_impl = 'true'
+script save = '''
+printf '%s' "$1" > "$2"
+'''
 
 export def main() {
   ok() catch (err) {

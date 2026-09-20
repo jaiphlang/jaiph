@@ -6,4 +6,4 @@ def validate(input) {
   checker()
 }
 
-script checker = `echo ok`
+script checker = 'echo ok'

@@ -64,7 +64,7 @@ test("a nested script does not see the enclosing binding unless passed as argv",
   const { status, value, root } = await runReturn([
     "export def main() {",
     '  const secret = "TOPSECRET"',
-    "  script probe = `printf \"argv=[${1:-}] env=[${secret:-UNSET}]\"`",
+    "  script probe = 'printf \"argv=[${1:-}] env=[${secret:-UNSET}]\"'",
     "  const noarg = probe()",
     "  const witharg = probe(secret)",
     '  return "${noarg}||${witharg}"',
@@ -86,9 +86,9 @@ test("a nested script does not see the enclosing binding unless passed as argv",
 
 test("a nested `script foo` shadows a module-level `script foo` (the nested body runs)", async () => {
   const { status, value, root } = await runReturn([
-    "script foo = `printf MODULE`",
+    "script foo = 'printf MODULE'",
     "export def main() {",
-    "  script foo = `printf NESTED`",
+    "  script foo = 'printf NESTED'",
     "  return foo()",
     "}",
   ]);
@@ -176,7 +176,7 @@ test("nested script inside a taken `if` body runs and its return is the def resu
     [
       "export def main(flag) {",
       '  if flag == "y" {',
-      "    script s = `echo YES`",
+      "    script s = 'echo YES'",
       "    return s()",
       "  }",
       '  return "none"',
@@ -199,10 +199,10 @@ test("nested script inside the taken `else` body runs and its return is the def 
     [
       "export def main(flag) {",
       '  if flag == "y" {',
-      "    script s = `echo YES`",
+      "    script s = 'echo YES'",
       "    return s()",
       "  } else {",
-      "    script t = `echo NO`",
+      "    script t = 'echo NO'",
       "    return t()",
       "  }",
       "}",
@@ -222,9 +222,9 @@ test("a `for` body nested script receives the iterator via argv and runs once pe
   const { status, value, root } = await runReturn(
     [
       "export def main(src) {",
-      "  script show = `cat trace.txt`",
+      "  script show = 'cat trace.txt'",
       "  for line in src {",
-      '    script emit = `printf "[%s]" "$1" >> trace.txt`',
+      "    script emit = 'printf \"[%s]\" \"$1\" >> trace.txt'",
       "    emit(line)",
       "  }",
       "  return show()",
@@ -245,9 +245,9 @@ test("a `for` body nested script receives the iterator via argv and runs once pe
 test("a nested script inside a `catch` body runs on failure and its return is the catch result", async () => {
   const { status, value, root } = await runReturn([
     "export def main() {",
-    "  script boom = `exit 3`",
+    "  script boom = 'exit 3'",
     "  boom() catch (e) {",
-    "    script s = `echo recovered`",
+    "    script s = 'echo recovered'",
     "    return s()",
     "  }",
     '  return "x"',
@@ -265,10 +265,10 @@ test("a nested script inside a `catch` body runs on failure and its return is th
 test("a script shadowed inside a taken `if` does not leak; the enclosing script runs after", async () => {
   const { status, value, root } = await runReturn(
     [
-      "script s = `printf OUTER`",
+      "script s = 'printf OUTER'",
       "export def main(flag) {",
       '  if flag == "y" {',
-      "    script s = `printf INNER`",
+      "    script s = 'printf INNER'",
       "    const inner = s()",
       '    log "${inner}"',
       "  }",
@@ -297,7 +297,7 @@ test("a nested def with a base case recurses on itself and returns the computed 
     '    if n == "0" {',
     '      return "done"',
     "    }",
-    '    script dec = `echo $(( $1 - 1 ))`',
+    "    script dec = 'echo $(( $1 - 1 ))'",
     "    const m = dec(n)",
     "    return countdown(m)",
     "  }",

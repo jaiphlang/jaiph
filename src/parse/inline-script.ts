@@ -1,5 +1,11 @@
-import { fail, parseParenArgs, parseSingleBacktickBody } from "./core";
-import { parseFencedScriptBlock } from "./fence";
+import { fail, parseParenArgs, parseSingleQuoteScriptBody } from "./core";
+import {
+  parseFencedScriptBlock,
+  rejectRemovedOnelineBacktick,
+  rejectRemovedScriptFence,
+  SCRIPT_FENCE,
+  startsScriptFence,
+} from "./fence";
 import { validateScriptBodyNoInterpolation } from "./scripts";
 import type { Arg } from "../types";
 
@@ -16,12 +22,12 @@ export interface InlineScriptParsed {
 }
 
 /**
- * Parse an anonymous inline script after `run `.
- * `afterRun` is the remaining text after `run ` and starts with a backtick.
+ * Parse an anonymous inline script.
+ * `afterRun` is the remaining text and starts with `'` or a removed backtick.
  *
  * Two forms:
- *   1. Single backtick: run `body`(args)
- *   2. Fenced block:    run ```lang\n...\n```(args)
+ *   1. One-liner:  'body'(args)
+ *   2. Fenced:     '''lang\n...\n'''(args)
  *
  * When `allowTrailing` is true the caller is responsible for handling any
  * non-empty `trailing` text (e.g. `catch (...) { ... }`). When false (default)
@@ -38,8 +44,11 @@ export function parseAnonymousInlineScript(
 ): InlineScriptParsed {
   const t = afterRun.trimStart();
 
-  // Triple backtick (fenced block)
-  if (t.startsWith("```")) {
+  rejectRemovedScriptFence(filePath, t, lineNo, col);
+  rejectRemovedOnelineBacktick(filePath, t, lineNo, col);
+
+  // Triple single-quote (fenced block)
+  if (startsScriptFence(t)) {
     const fenceLines = [...lines];
     fenceLines[lineIdx] = t;
     const { body, lang, afterClose, nextIdx } = parseFencedScriptBlock(filePath, fenceLines, lineIdx);
@@ -47,7 +56,7 @@ export function parseAnonymousInlineScript(
     if (!argsResult) {
       fail(
         filePath,
-        "anonymous inline script requires argument list after closing fence: ```(args) or ```()",
+        `anonymous inline script requires argument list after closing fence: ${SCRIPT_FENCE}(args) or ${SCRIPT_FENCE}()`,
         nextIdx,
         col,
       );
@@ -78,14 +87,14 @@ export function parseAnonymousInlineScript(
     };
   }
 
-  // Single backtick (inline, one line)
-  if (t.startsWith("`")) {
-    const { body, restAfterClose } = parseSingleBacktickBody(t, filePath, lineNo, col);
+  // One-line single-quote script
+  if (t.startsWith("'")) {
+    const { body, restAfterClose } = parseSingleQuoteScriptBody(t, filePath, lineNo, col);
     const argsResult = parseParenArgs(restAfterClose);
     if (!argsResult) {
       fail(
         filePath,
-        "anonymous inline script requires argument list after closing backtick: `body`(args) or `body`()",
+        "anonymous inline script requires argument list after closing quote: 'body'(args) or 'body'()",
         lineNo,
         col,
       );
@@ -110,5 +119,5 @@ export function parseAnonymousInlineScript(
     };
   }
 
-  fail(filePath, "expected backtick or triple backtick for inline script body", lineNo, col);
+  fail(filePath, `expected '...' or ${SCRIPT_FENCE} for inline script body`, lineNo, col);
 }

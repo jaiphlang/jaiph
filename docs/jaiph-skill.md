@@ -24,8 +24,8 @@ A call result is an output handle: `const` / `if` / `${…}` slurp it into a str
 ## Smallest working example
 
 ```jaiph
-script list_todos = `grep -rn "TODO" src/ || true`
-script worktree_clean = `test -z "$(git status --porcelain)"`
+script list_todos = 'grep -rn "TODO" src/ || true'
+script worktree_clean = 'test -z "$(git status --porcelain)"'
 
 def git_clean() {
   worktree_clean() catch (err) {

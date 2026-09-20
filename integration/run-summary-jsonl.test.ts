@@ -53,7 +53,7 @@ test("run_summary.jsonl: workflow, steps, log, inbox dispatch stream", () => {
       [
         "channel greetings -> receiver",
         "",
-        'script emit_greeting = `echo "hello-inbox"`',
+        "script emit_greeting = 'echo \"hello-inbox\"'",
         "",
         "def sender() {",
         "  log \"sending\"",
@@ -61,7 +61,7 @@ test("run_summary.jsonl: workflow, steps, log, inbox dispatch stream", () => {
         "  send emit_greeting() -> greetings",
         "}",
         "",
-        'script write_received_file = `echo "$1" > received.txt`',
+        "script write_received_file = 'echo \"$1\" > received.txt'",
         "",
         "def receiver(message, chan, sender) {",
         "  write_received_file(message)",
@@ -153,7 +153,7 @@ test("run_summary.jsonl: STEP_END remains parseable for legacy consumers (event_
     const jh = join(root, "t.jh");
     writeFileSync(
       jh,
-      ['script emit_x = `echo "x"`', "export def main() {", "  emit_x()", "}", ""].join("\n"),
+      ["script emit_x = 'echo \"x\"'", "export def main() {", "  emit_x()", "}", ""].join("\n"),
     );
     const runsRoot = join(root, ".jaiph/runs");
     const runResult = spawnSync("node", [cliPath, "run", jh], {

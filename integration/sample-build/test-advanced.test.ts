@@ -32,9 +32,9 @@ test("jaiph run prompt capture: variable accessible in subsequent shell step", (
     writeFileSync(
       filePath,
       [
-        "script print_captured = \`\`\`",
+        "script print_captured = '''",
         "printf 'captured:%s\\n' \"$1\"",
-        "\`\`\`",
+        "'''",
         "export def main() {",
         '  const result = prompt "Summarize"',
         '  print_captured(result)',
@@ -86,9 +86,9 @@ test("jaiph run prompt capture stores only final answer in assigned variable", (
     writeFileSync(
       filePath,
       [
-        "script print_captured = \`\`\`",
+        "script print_captured = '''",
         "printf 'captured:%s\\n' \"$1\"",
-        "\`\`\`",
+        "'''",
         "export def main() {",
         '  const result = prompt "Summarize"',
         '  print_captured(result)',
@@ -128,9 +128,9 @@ test("jaiph test with agent.backend = claude uses mock and does not invoke claud
     writeFileSync(
       join(root, "flow.jh"),
       [
-        "script print_got = \`\`\`",
+        "script print_got = '''",
         "printf 'got:%s\\n' \"$1\"",
-        "\`\`\`",
+        "'''",
         "config {",
         '  agent.backend = "claude"',
         "}",
@@ -189,9 +189,9 @@ test("jaiph test when prompt is not mocked runs selected backend", () => {
     writeFileSync(
       join(root, "flow.jh"),
       [
-        "script print_got = \`\`\`",
+        "script print_got = '''",
         "printf 'got:%s\\n' \"$1\"",
-        "\`\`\`",
+        "'''",
         "config {",
         '  agent.backend = "cursor"',
         "}",
@@ -239,7 +239,7 @@ test("jaiph test passes for workflow using run only with mocks", () => {
     writeFileSync(
       join(root, "ensure_only.jh"),
       [
-        "script ready_impl = `echo ok`",
+        "script ready_impl = 'echo ok'",
         "def ready() {",
         "  ready_impl()",
         "}",
@@ -376,14 +376,14 @@ test("jaiph test runs *.test.jh with mock def, rule, and script", () => {
     writeFileSync(
       join(root, "app.jh"),
       [
-        "script policy_check_impl = `echo real-policy`",
+        "script policy_check_impl = 'echo real-policy'",
         "def policy_check() {",
         "  policy_check_impl()",
         "}",
-        "script changed_files = `echo real_files`",
-        "script build_impl = \`\`\`",
+        "script changed_files = 'echo real_files'",
+        "script build_impl = '''",
         'echo "real build"',
-        "\`\`\`",
+        "'''",
         "def build() {",
         "  build_impl()",
         "}",

@@ -51,7 +51,7 @@ JAIPH_BIN="${STAGE_DIR}/jaiph"
 
 # Deterministic sample workflow: no prompts, no network — runs to completion.
 cat > "${WORK_DIR}/sample.jh" <<'EOF'
-script say_hello = `echo hello-standalone`
+script say_hello = 'echo hello-standalone'
 export def main() {
   const msg = say_hello()
   return "${msg}"

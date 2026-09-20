@@ -14,9 +14,9 @@ test("jaiph run compiles and executes workflow with args", () => {
     writeFileSync(
       filePath,
       [
-        "script print_arg = \`\`\`",
+        "script print_arg = '''",
         "printf '%s\\n' \"$1\"",
-        "\`\`\`",
+        "'''",
         "export def main(name) {",
         "  print_arg(name)",
         "}",
@@ -46,12 +46,12 @@ test("jaiph run resolves nested managed call arguments", () => {
     writeFileSync(
       filePath,
       [
-        "script mkdir_p_simple = ```",
+        "script mkdir_p_simple = '''",
         'mkdir -p "$1"',
-        "```",
-        "script jaiph_tmp_dir = ```",
+        "'''",
+        "script jaiph_tmp_dir = '''",
         'printf "%s\\n" "$JAIPH_WORKSPACE/.jaiph/tmp"',
-        "```",
+        "'''",
         "export def main() {",
         "  mkdir_p_simple(jaiph_tmp_dir())",
         "}",
@@ -82,9 +82,9 @@ test("executable .jh invokes jaiph run semantics", () => {
       [
         "#!/usr/bin/env jaiph",
         "",
-        "script print_exec_arg = \`\`\`",
+        "script print_exec_arg = '''",
         "printf 'exec-arg:%s\\n' \"$1\"",
-        "\`\`\`",
+        "'''",
         "export def main(name) {",
         "  print_exec_arg(name)",
         "}",
@@ -114,9 +114,9 @@ test("jaiph run enables xtrace when JAIPH_DEBUG=true", () => {
     writeFileSync(
       filePath,
       [
-        "script print_debug_arg = \`\`\`",
+        "script print_debug_arg = '''",
         "printf 'debug-run:%s\\n' \"$1\"",
-        "\`\`\`",
+        "'''",
         "export def main(name) {",
         "  print_debug_arg(name)",
         "}",
@@ -145,9 +145,9 @@ test("jaiph run fails when export def main is missing", () => {
     writeFileSync(
       filePath,
       [
-        "script print_fallback = \`\`\`",
+        "script print_fallback = '''",
         "printf 'fallback:%s\\n' \"$1\"",
-        "\`\`\`",
+        "'''",
         "def main(name) {",
         "  print_fallback(name)",
         "}",
@@ -176,8 +176,8 @@ test("jaiph run fails fast on command errors inside workflow", () => {
     writeFileSync(
       filePath,
       [
-        "script always_fail = `false`",
-        "script should_not_run = `echo after-false`",
+        "script always_fail = 'false'",
+        "script should_not_run = 'echo after-false'",
         "export def main() {",
         "  always_fail()",
         "  should_not_run()",
@@ -239,12 +239,12 @@ test("jaiph run fails when required arg is missing and rule handles it", () => {
     writeFileSync(
       filePath,
       [
-        "script require_name = \`\`\`",
+        "script require_name = '''",
         "if [ -z \"$1\" ]; then",
         "  echo \"missing-name\" >&2",
         "  exit 1",
         "fi",
-        "\`\`\`",
+        "'''",
         "def name_provided(name) {",
         "  require_name(name)",
         "}",
@@ -281,10 +281,10 @@ test("jaiph run allows rules to call top-level helper functions in readonly mode
     writeFileSync(
       filePath,
       [
-        "script helper_value = `echo ok`",
-        "script helper_is_ok_impl = \`\`\`",
+        "script helper_value = 'echo ok'",
+        "script helper_is_ok_impl = '''",
         'test "ok" = "ok"',
-        "\`\`\`",
+        "'''",
         "",
         "def helper_is_ok() {",
         "  helper_is_ok_impl()",
@@ -318,10 +318,10 @@ test("jaiph run prints rule tree and fail summary", () => {
     writeFileSync(
       filePath,
       [
-        "script current_branch_impl = \`\`\`",
+        "script current_branch_impl = '''",
         "echo \"Current branch is not 'main'.\" >&2",
         "exit 1",
-        "\`\`\`",
+        "'''",
         "def current_branch() {",
         "  current_branch_impl()",
         "}",

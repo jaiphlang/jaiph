@@ -14,9 +14,9 @@ TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 e2e::section "run async fanout with implicit join"
 
 e2e::file "fanout.jh" <<'EOF'
-script write_a = `echo "a" > a.txt`
+script write_a = 'echo "a" > a.txt'
 
-script write_b = `echo "b" > b.txt`
+script write_b = 'echo "b" > b.txt'
 
 def do_a() {
   write_a()
@@ -103,7 +103,7 @@ e2e::expect_out "multi_fail.jh" "fail_b" ""
 e2e::section "run async with interleaved sync steps"
 
 e2e::file "async_interleave.jh" <<'EOF'
-script write_marker = `echo "ran" > sync_marker.txt`
+script write_marker = 'echo "ran" > sync_marker.txt'
 
 def slow() {
   log "slow-done"
@@ -169,9 +169,9 @@ e2e::expect_out "capture_async.jh" "main" "hello"
 e2e::section "run async sibling workflows have same tree depth"
 
 e2e::file "sibling_depth.jh" <<'EOF'
-script write_x = `echo "x" > x.txt`
+script write_x = 'echo "x" > x.txt'
 
-script write_y = `echo "y" > y.txt`
+script write_y = 'echo "y" > y.txt'
 
 def branch_x() {
   write_x()

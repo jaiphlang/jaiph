@@ -159,16 +159,16 @@ e2e::assert_equals "${first_pass}" "${second_pass}" "multiline string format is 
 e2e::section "jaiph format multiline script idempotency"
 
 e2e::file "multiline_script.jh" <<'EOF'
-script greet = ```bash
+script greet = '''bash
 echo "hello"
 echo "world"
-```
+'''
 
 export def main() {
-  ```bash
+  '''bash
 echo "inline"
 echo "script"
-```()
+'''()
 }
 EOF
 

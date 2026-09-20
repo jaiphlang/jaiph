@@ -14,7 +14,7 @@ test("compiler: extracts script bodies for a simple module", () => {
     writeFileSync(
       input,
       [
-        'script f_ok = `echo ok`',
+        "script f_ok = 'echo ok'",
         "",
         "def ok() {",
         "  f_ok()",
@@ -40,7 +40,7 @@ test("compiler: extracts script bodies for a simple module", () => {
 
 test("compiler golden: parser error message is deterministic", () => {
   assert.throws(
-    () => parsejaiph('script 123bad = `echo x`\n', "/fake/main.jh"),
+    () => parsejaiph("script 123bad = 'echo x'\n", "/fake/main.jh"),
     /\/fake\/main\.jh:1:1 E_PARSE invalid script declaration/,
   );
 });
@@ -95,7 +95,7 @@ test("compiler corpus: representative e2e workflows compile", () => {
 
 test("parser: assignment capture parses for ensure, run, and const run capture", () => {
   const source = [
-    'script say_hello = `echo hello`',
+    "script say_hello = 'echo hello'",
     "",
     "def tests_pass() {",
     "  return \"ok\"",
@@ -363,7 +363,7 @@ test("parser: if keyword with old syntax produces E_PARSE", () => {
 
 test("parser: run ... catch parses correctly", () => {
   const source = [
-    'script helper = `echo ok`',
+    "script helper = 'echo ok'",
     "export def main() {",
     "  helper() catch (err) {",
     '    log "failed"',
@@ -401,7 +401,7 @@ test("parser: fail step parses quoted message", () => {
 
 test("parser: const string expr and const run capture parse", () => {
   const source = [
-    'script noop = `:`',
+    "script noop = ':'",
     "export def main() {",
     '  const msg = "hi"',
     "  const out = noop()",
@@ -427,7 +427,7 @@ test("parser: const string expr and const run capture parse", () => {
 
 test("parser: const captures a bare call-like rhs", () => {
   const source = [
-    'script some_script = `echo "$1"`',
+    "script some_script = 'echo \"$1\"'",
     "export def main() {",
     '  const x = some_script("${arg}")',
     "}",
@@ -440,7 +440,7 @@ test("parser: const captures a bare call-like rhs", () => {
 
 test("parser: const allows run-wrapped script call with args", () => {
   const source = [
-    'script some_script = `echo "$1"`',
+    "script some_script = 'echo \"$1\"'",
     "export def main() {",
     '  const x = some_script(arg1)',
     "}",
@@ -487,7 +487,7 @@ test("parser: brace-style if with old syntax produces E_PARSE", () => {
     "def ok() {",
     "  return \"ok\"",
     "}",
-    'script check = `true`',
+    "script check = 'true'",
     "export def main() {",
     "  if not run ok() {",
     "    log \"neg\"",
@@ -777,7 +777,7 @@ test("parser: top-level const name collision with workflow is E_PARSE", () => {
 test("parser: top-level const name collision with script is E_PARSE", () => {
   const source = [
     'const helper = "val"',
-    'script helper = `echo ok`',
+    "script helper = 'echo ok'",
     "export def main() {",
     "  helper()",
     "}",
@@ -800,7 +800,7 @@ test("compiler golden: standalone script file has no env shims (isolation)", () 
       [
         'const greeting = "hello world"',
         "",
-        'script helper = `echo $greeting`',
+        "script helper = 'echo $greeting'",
         "",
         "export def main() {",
         "  helper()",
@@ -829,10 +829,10 @@ test("compiler golden: multiline double-quoted strings are not corrupted by emit
     writeFileSync(
       input,
       [
-        "script multiline_str = ```",
+        "script multiline_str = '''",
         'local x="a',
         'b"',
-        "```",
+        "'''",
         "",
         "export def main() {",
         "  multiline_str()",
@@ -861,9 +861,9 @@ test("compiler golden: script bodies are opaque bash (cross-script name compiles
     writeFileSync(
       input,
       [
-        'script helper = `echo ok`',
+        "script helper = 'echo ok'",
         "",
-        'script caller = `helper`',
+        "script caller = 'helper'",
         "",
         "export def main() {",
         "  caller()",
@@ -887,7 +887,7 @@ test("compiler golden: script calling itself is allowed", () => {
     writeFileSync(
       input,
       [
-        'script recurse = `recurse`',
+        "script recurse = 'recurse'",
         "",
         "export def main() {",
         "  recurse()",
@@ -939,10 +939,10 @@ test("compiler golden: nested script emits under __nested_* and does not collide
     writeFileSync(
       input,
       [
-        "script foo = `printf MODULE`",
+        "script foo = 'printf MODULE'",
         "",
         "export def main() {",
-        `  script foo = \`${nestedBody}\``,
+        `  script foo = '${nestedBody}'`,
         "  foo()",
         "}",
         "",

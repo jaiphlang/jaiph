@@ -58,7 +58,7 @@ test("valid: escaped backtick in prompt", () => {
 test("valid: $1 in script body (shell context)", () => {
   withTempDir("jaiph-str-ok-script-dollar1-", (root) => {
     writeJh(root, "m.jh", [
-      'script greet = `echo "Hello $1"`',
+      "script greet = 'echo \"Hello $1\"'",
       "export def main() {",
       '  greet("world")',
       "}",
@@ -268,7 +268,7 @@ test("reject $(...) in logerr message", () => {
 test("reject ${var:-fallback} in rule log", () => {
   withTempDir("jaiph-str-bad-fallback-rule-", (root) => {
     writeJh(root, "m.jh", [
-      'script noop = `true`',
+      "script noop = 'true'",
       "def check() {",
       '  log "${x:-fallback}"',
       "}",
@@ -290,7 +290,7 @@ test("reject ${var:-fallback} in rule log", () => {
 test("valid: ${ref} inline capture in log", () => {
   withTempDir("jaiph-str-ic-run-", (root) => {
     writeJh(root, "m.jh", [
-      'script greet = `echo "hello"`',
+      "script greet = 'echo \"hello\"'",
       "export def main() {",
       '  log "got: ${greet()}"',
       "}",
@@ -316,7 +316,7 @@ test("valid: ${ref} inline capture in log", () => {
 test("valid: ${ref args} inline capture with args", () => {
   withTempDir("jaiph-str-ic-run-args-", (root) => {
     writeJh(root, "m.jh", [
-      'script greet = `echo "hello $1"`',
+      "script greet = 'echo \"hello $1\"'",
       "export def main() {",
       '  log "got: ${greet(world)}"',
       "}",
@@ -328,7 +328,7 @@ test("valid: ${ref args} inline capture with args", () => {
 test("valid: ${ref} inline capture in return", () => {
   withTempDir("jaiph-str-ic-return-", (root) => {
     writeJh(root, "m.jh", [
-      'script greet = `echo "hello"`',
+      "script greet = 'echo \"hello\"'",
       "def helper() {",
       '  return "${greet()}"',
       "}",
@@ -343,7 +343,7 @@ test("valid: ${ref} inline capture in return", () => {
 test("valid: ${ref} inline capture in rule log", () => {
   withTempDir("jaiph-str-ic-rule-", (root) => {
     writeJh(root, "m.jh", [
-      'script greet = `echo "hello"`',
+      "script greet = 'echo \"hello\"'",
       "def check() {",
       '  log "got: ${greet()}"',
       "}",
@@ -358,8 +358,8 @@ test("valid: ${ref} inline capture in rule log", () => {
 test("rejected: nested inline capture ${... ${...}}", () => {
   withTempDir("jaiph-str-ic-nested-", (root) => {
     writeJh(root, "m.jh", [
-      'script foo = `echo "a"`',
-      'script bar = `echo "b"`',
+      "script foo = 'echo \"a\"'",
+      "script bar = 'echo \"b\"'",
       "export def main() {",
       '  log "got: ${foo(${bar()})}"',
       "}",

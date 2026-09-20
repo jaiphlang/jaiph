@@ -14,7 +14,7 @@ TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 e2e::section "match with string literal and wildcard"
 
 e2e::file "match_string.jh" <<'EOF'
-script get_status = `echo "error"`
+script get_status = 'echo "error"'
 
 export def main() {
   const status = get_status()
@@ -48,7 +48,7 @@ e2e::pass "match with string literal arm"
 e2e::section "match falls through to wildcard"
 
 e2e::file "match_wildcard.jh" <<'EOF'
-script get_mode = `echo "unknown-mode"`
+script get_mode = 'echo "unknown-mode"'
 
 export def main() {
   const mode = get_mode()
@@ -82,7 +82,7 @@ e2e::pass "match wildcard arm"
 e2e::section "match with regex pattern"
 
 e2e::file "match_regex.jh" <<'EOF'
-script get_input = `echo "ERROR: something failed"`
+script get_input = 'echo "ERROR: something failed"'
 
 export def main() {
   const msg = get_input()
@@ -116,7 +116,7 @@ e2e::pass "match regex arm"
 e2e::section "match in return with captured variable"
 
 e2e::file "match_return.jh" <<'EOF'
-script get_code = `echo "200"`
+script get_code = 'echo "200"'
 
 export def main() {
   const code = get_code()

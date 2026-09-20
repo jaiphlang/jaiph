@@ -78,9 +78,9 @@ async function runWithRssWatch(
 // or `prompt ${failure}` or an interpolated wrapper).
 function catchPromptFlow(payloadScript: string[], promptBody: string): string {
   return [
-    "script boom = ```",
+    "script boom = '''",
     ...payloadScript,
-    "```",
+    "'''",
     "export def main() {",
     "  boom() catch (failure) {",
     `    ${promptBody}`,

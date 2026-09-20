@@ -152,10 +152,10 @@ function baseEnv(runsRoot: string): NodeJS.ProcessEnv {
 }
 
 /** A workflow whose one step fails with a nonzero exit, so the run fails. */
-const FAIL_FIXTURE = ['script boom = `echo "step output"; exit 3`', "export def main() {", "  boom()", "}", ""].join("\n");
+const FAIL_FIXTURE = ["script boom = 'echo \"step output\"; exit 3'", "export def main() {", "  boom()", "}", ""].join("\n");
 
 /** A workflow that succeeds. */
-const OK_FIXTURE = ['script ok = `echo "hi"`', "export def main() {", "  ok()", '  return "done"', "}", ""].join("\n");
+const OK_FIXTURE = ["script ok = 'echo \"hi\"'", "export def main() {", "  ok()", '  return "done"', "}", ""].join("\n");
 
 function sentryWarnings(stderr: string): string[] {
   return stderr.split("\n").filter((l) => l.includes("Sentry error report"));
@@ -262,7 +262,7 @@ test("jaiph serve: a failed HTTP run delivers exactly one Sentry event via the s
   try {
     const jh = join(root, "tools.jh");
     // A named workflow (serve requires named tools) whose one step fails.
-    writeFileSync(jh, ['script boom = `echo "step output"; exit 3`', "# Fails on purpose.", "export def crash() {", "  boom()", "}", ""].join("\n"));
+    writeFileSync(jh, ["script boom = 'echo \"step output\"; exit 3'", "# Fails on purpose.", "export def crash() {", "  boom()", "}", ""].join("\n"));
     const serve = await startServe(jh, root, { ...baseEnv(join(root, ".jaiph/runs")), SENTRY_DSN: dsn(sentry.port) });
     try {
       const res = await fetch(`${serve.baseUrl}/crash?wait=true`, {
@@ -369,7 +369,7 @@ test("redaction: a credential in the failing step's output reaches the event onl
       jh,
       // The leak script must `use` the key and the run must grant it with
       // --env: script env is sterile, host presence alone no longer crosses.
-      ['script leak use SECRET_API_KEY = `printf %s "$SECRET_API_KEY"; exit 1`', "export def main() {", "  leak()", "}", ""].join("\n"),
+      ["script leak use SECRET_API_KEY = 'printf %s \"$SECRET_API_KEY\"; exit 1'", "export def main() {", "  leak()", "}", ""].join("\n"),
     );
     const result = await runCli(["run", "--env", "SECRET_API_KEY", jh], {
       cwd: root,

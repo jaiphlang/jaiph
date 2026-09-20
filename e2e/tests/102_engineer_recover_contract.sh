@@ -17,17 +17,17 @@ e2e::section "engineer-style catch streams the CI stdout+stderr handle and prese
 # argv, so a huge log cannot hit ARG_MAX — mirroring the real engineer workflow
 # that reads the CI log. A sibling role argument still binds normally.
 e2e::file "engineer_recover_contract.jh" <<'EOF'
-script save_string_to_file = `echo "$1" > "$2"`
+script save_string_to_file = 'echo "$1" > "$2"'
 
-script mkdir_p_simple = `mkdir -p "$1"`
+script mkdir_p_simple = 'mkdir -p "$1"'
 
-script save_log = `cat > "$1"`
+script save_log = 'cat > "$1"'
 
-script failing_ci_impl = ```
+script failing_ci_impl = '''
 echo "ci failure: tests failed"
 echo "details: expected 0 but got 1" >&2
 exit 1
-```
+'''
 
 def ci_passes() {
   failing_ci_impl()

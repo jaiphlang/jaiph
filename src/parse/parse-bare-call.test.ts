@@ -52,7 +52,7 @@ test("async bare call", () => {
 });
 
 test("inline script bare call", () => {
-  const step = firstStep("`echo hello`()");
+  const step = firstStep("'echo hello'()");
   assert.equal(step.type, "exec");
   assert.equal(step.type === "exec" && step.body.kind, "inline_script");
 });

@@ -15,7 +15,7 @@ e2e::section "cross-file import: run exported workflow"
 
 # Given — a library module with an exported workflow and a main file that imports it
 e2e::file "lib.jh" <<'EOF'
-script greet_impl = `echo "hello from lib"`
+script greet_impl = 'echo "hello from lib"'
 
 export def greet() {
   greet_impl()
@@ -58,7 +58,7 @@ e2e::section "cross-file import: run exported script"
 
 # Given
 e2e::file "scriptlib.jh" <<'EOF'
-export script echo_msg = `echo "script-lib-msg"`
+export script echo_msg = 'echo "script-lib-msg"'
 def dummy() {
   log "ok"
 }
@@ -98,7 +98,7 @@ e2e::section "cross-file import: run exported rule"
 
 # Given
 e2e::file "rulelib.jh" <<'EOF'
-script check_impl = `true`
+script check_impl = 'true'
 export def passes() {
   check_impl()
 }
@@ -139,7 +139,7 @@ e2e::section "cross-file import: capture from exported script"
 
 # Given
 e2e::file "caplib.jh" <<'EOF'
-export script get_value = `echo "captured-value"`
+export script get_value = 'echo "captured-value"'
 def dummy() {
   log "ok"
 }
@@ -148,7 +148,7 @@ EOF
 e2e::file "main_capture.jh" <<'EOF'
 import "caplib.jh" as clib
 
-script show = `echo "got: $1"`
+script show = 'echo "got: $1"'
 
 export def main() {
   const val = clib.get_value()

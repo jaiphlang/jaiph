@@ -5,7 +5,7 @@ import { parsejaiph, parsejaiphWithTrivia } from "../parser";
 // === Accepted: fenced block with lang tag ===
 
 test("fenced block with python3 lang tag parses correctly", () => {
-  const { ast: mod, trivia } = parsejaiphWithTrivia('script transform = ```python3\nprint("hi")\n```', "test.jh");
+  const { ast: mod, trivia } = parsejaiphWithTrivia("script transform = '''python3\nprint(\"hi\")\n'''", "test.jh");
   assert.equal(mod.scripts.length, 1);
   assert.equal(mod.scripts[0].name, "transform");
   assert.equal(mod.scripts[0].lang, "python3");
@@ -14,7 +14,7 @@ test("fenced block with python3 lang tag parses correctly", () => {
 });
 
 test("fenced block with node lang tag parses correctly", () => {
-  const { ast: mod, trivia } = parsejaiphWithTrivia("script transform = ```node\nconsole.log('hi');\n```", "test.jh");
+  const { ast: mod, trivia } = parsejaiphWithTrivia("script transform = '''node\nconsole.log('hi');\n'''", "test.jh");
   assert.equal(mod.scripts.length, 1);
   assert.equal(mod.scripts[0].name, "transform");
   assert.equal(mod.scripts[0].lang, "node");
@@ -23,7 +23,7 @@ test("fenced block with node lang tag parses correctly", () => {
 });
 
 test("any arbitrary lang tag is valid (no allowlist)", () => {
-  const { ast: mod, trivia } = parsejaiphWithTrivia("script run_deno = ```deno\nconsole.log('hi');\n```", "test.jh");
+  const { ast: mod, trivia } = parsejaiphWithTrivia("script run_deno = '''deno\nconsole.log('hi');\n'''", "test.jh");
   assert.equal(mod.scripts.length, 1);
   assert.equal(mod.scripts[0].lang, "deno");
   assert.equal(trivia.getNode(mod.scripts[0])?.scriptBodyKind, "fenced");
@@ -32,16 +32,16 @@ test("any arbitrary lang tag is valid (no allowlist)", () => {
 // === Accepted: plain script without lang tag ===
 
 test("plain script without lang tag has no lang", () => {
-  const { ast: mod, trivia } = parsejaiphWithTrivia('script setup = `echo hello`', "test.jh");
+  const { ast: mod, trivia } = parsejaiphWithTrivia("script setup = 'echo hello'", "test.jh");
   assert.equal(mod.scripts[0].lang, undefined);
   assert.equal(mod.scripts[0].body, "echo hello");
-  assert.equal(trivia.getNode(mod.scripts[0])?.scriptBodyKind, "backtick");
+  assert.equal(trivia.getNode(mod.scripts[0])?.scriptBodyKind, "oneline");
 });
 
 // === Accepted: manual shebang in fenced body (no lang tag) ===
 
 test("manual shebang in fenced body without lang tag works", () => {
-  const { ast: mod, trivia } = parsejaiphWithTrivia('script analyze = ```\n#!/usr/bin/env ruby\nputs "hi"\n```', "test.jh");
+  const { ast: mod, trivia } = parsejaiphWithTrivia("script analyze = '''\n#!/usr/bin/env ruby\nputs \"hi\"\n'''", "test.jh");
   assert.equal(mod.scripts[0].lang, undefined);
   assert.equal(mod.scripts[0].body, '#!/usr/bin/env ruby\nputs "hi"');
   assert.equal(trivia.getNode(mod.scripts[0])?.scriptBodyKind, "fenced");
@@ -51,7 +51,7 @@ test("manual shebang in fenced body without lang tag works", () => {
 
 test("fence tag with manual shebang is rejected", () => {
   assert.throws(
-    () => parsejaiph("script transform = ```node\n#!/usr/bin/env node\nconsole.log('hi');\n```", "test.jh"),
+    () => parsejaiph("script transform = '''node\n#!/usr/bin/env node\nconsole.log('hi');\n'''", "test.jh"),
     (err: any) =>
       err.message.includes("E_PARSE") &&
       err.message.includes("already sets the shebang"),

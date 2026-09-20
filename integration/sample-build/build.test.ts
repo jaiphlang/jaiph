@@ -27,7 +27,7 @@ test("build validates imported rule references with deterministic errors", () =>
       [
         'import "./mod.jh" as mod',
         "",
-        "script local_impl = `echo ok`",
+        "script local_impl = 'echo ok'",
         "def local() {",
         "  local_impl()",
         "}",
@@ -41,7 +41,7 @@ test("build validates imported rule references with deterministic errors", () =>
     writeFileSync(
       join(root, "mod.jh"),
       [
-        "script existing_impl = `echo hi`",
+        "script existing_impl = 'echo hi'",
         "def existing() {",
         "  existing_impl()",
         "}",
@@ -115,7 +115,7 @@ test("buildScripts accepts files with no workflows", () => {
     writeFileSync(
       filePath,
       [
-        "script only_rule_impl = `echo ok`",
+        "script only_rule_impl = 'echo ok'",
         "def only_rule() {",
         "  only_rule_impl()",
         "}",
@@ -139,9 +139,9 @@ test("buildScripts extracts scripts for ensure-with-args workflow", () => {
     writeFileSync(
       filePath,
       [
-        "script check_branch_impl = \`\`\`",
+        "script check_branch_impl = '''",
         "test \"$1\" = \"main\"",
-        "\`\`\`",
+        "'''",
         "def check_branch(branch) {",
         "  check_branch_impl(branch)",
         "}",
@@ -169,10 +169,12 @@ test("buildScripts writes multiple script stubs", () => {
     writeFileSync(
       filePath,
       [
-        "script changed_files = `printf '%s' 'from-function'`",
-        "script print_value = \`\`\`",
+        "script changed_files = '''",
+        "printf '%s' 'from-function'",
+        "'''",
+        "script print_value = '''",
         "printf '%s\\n' \"$1\"",
-        "\`\`\`",
+        "'''",
         "",
         "export def main() {",
         "  const VALUE = changed_files()",
@@ -258,7 +260,7 @@ test("buildScripts accepts run inside a rule block", () => {
     writeFileSync(
       filePath,
       [
-        "script dep_impl = `echo dep`",
+        "script dep_impl = 'echo dep'",
         "def dep() {",
         "  dep_impl()",
         "}",
@@ -286,12 +288,12 @@ test("buildScripts extracts scripts for run ... catch workflow", () => {
     writeFileSync(
       filePath,
       [
-        "script dep_impl = `test -f ready.txt`",
+        "script dep_impl = 'test -f ready.txt'",
         "def dep() {",
         "  dep_impl()",
         "}",
         "",
-        "script install_deps_impl = `touch ready.txt`",
+        "script install_deps_impl = 'touch ready.txt'",
         "",
         "def install_deps() {",
         "  install_deps_impl()",
@@ -320,7 +322,7 @@ test("build accepts run catch body with raw shell lines", () => {
     writeFileSync(
       filePath,
       [
-        "script ready_impl = `test -f ready.txt`",
+        "script ready_impl = 'test -f ready.txt'",
         "def ready() {",
         "  ready_impl()",
         "}",

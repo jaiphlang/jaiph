@@ -1,7 +1,13 @@
 import type { ScriptDef } from "../types";
 import { createTrivia, type Trivia } from "./trivia";
-import { fail, parseSingleBacktickBody } from "./core";
-import { parseFencedScriptBlock } from "./fence";
+import { fail, parseSingleQuoteScriptBody } from "./core";
+import {
+  parseFencedScriptBlock,
+  rejectRemovedOnelineBacktick,
+  rejectRemovedScriptFence,
+  SCRIPT_FENCE,
+  startsScriptFence,
+} from "./fence";
 import { ENV_KEY_RE, isReservedEnvKey } from "../env-reserved";
 
 /**
@@ -90,7 +96,7 @@ export function parseScriptBlock(
     if (/^(export\s+)?script\s+[A-Za-z_][A-Za-z0-9_]*\s*\{/.test(line)) {
       fail(
         filePath,
-        "brace-style script bodies are no longer supported; use: script name = `...` or script name = ```...```",
+        `brace-style script bodies are no longer supported; use: script name = '...' or script name = ${SCRIPT_FENCE}...${SCRIPT_FENCE}`,
         lineNo,
       );
     }
@@ -98,7 +104,7 @@ export function parseScriptBlock(
       const nameM = line.match(/^(?:export\s+)?script\s+([A-Za-z_][A-Za-z0-9_]*)/);
       fail(
         filePath,
-        `definitions must not use parentheses: script ${nameM?.[1] ?? "name"} = \`...\``,
+        `definitions must not use parentheses: script ${nameM?.[1] ?? "name"} = '...'`,
         lineNo,
       );
     }
@@ -106,7 +112,7 @@ export function parseScriptBlock(
       const nameM = line.match(/^(?:export\s+)?script\s+([A-Za-z_][A-Za-z0-9_]*)/);
       fail(
         filePath,
-        `script definitions require = after the name: script ${nameM?.[1] ?? "name"} = \`...\``,
+        `script definitions require = after the name: script ${nameM?.[1] ?? "name"} = '...'`,
         lineNo,
       );
     }
@@ -121,8 +127,11 @@ export function parseScriptBlock(
   const useKeys = match[3] !== undefined ? parseUseClauseKeys(filePath, match[3], lineNo) : undefined;
   const rhs = match[4].trimStart();
 
-  // Case 1: Fenced block — opening ``` must be on the same line as script name =
-  if (rhs.startsWith("```")) {
+  rejectRemovedScriptFence(filePath, rhs, lineNo);
+  rejectRemovedOnelineBacktick(filePath, rhs, lineNo);
+
+  // Case 1: Fenced block — opening ''' must be on the same line as script name =
+  if (startsScriptFence(rhs)) {
     const fenceLines = [...lines];
     fenceLines[startIndex] = rhs;
     const { body, lang, nextIdx, afterClose } = parseFencedScriptBlock(filePath, fenceLines, startIndex);
@@ -156,12 +165,12 @@ export function parseScriptBlock(
     };
   }
 
-  // Case 2: Single backtick — inline one-line script body
-  if (rhs.startsWith("`")) {
-    const { body, restAfterClose } = parseSingleBacktickBody(rhs, filePath, lineNo, 1);
+  // Case 2: One-line single-quote script body
+  if (rhs.startsWith("'")) {
+    const { body, restAfterClose } = parseSingleQuoteScriptBody(rhs, filePath, lineNo, 1);
     const trailing = restAfterClose.trim();
     if (trailing) {
-      fail(filePath, `unexpected content after script body backtick: '${trailing}'`, lineNo);
+      fail(filePath, `unexpected content after script body: '${trailing}'`, lineNo);
     }
 
     validateScriptBodyNoInterpolation(body, filePath, lineNo, 1);
@@ -173,7 +182,7 @@ export function parseScriptBlock(
       ...(useKeys ? { use: useKeys } : {}),
       loc: { line: lineNo, col: 1 },
     };
-    trivia.setNode(scriptDef, { scriptBodyKind: "backtick" });
+    trivia.setNode(scriptDef, { scriptBodyKind: "oneline" });
     return {
       scriptDef,
       nextIndex: startIndex + 1,
@@ -185,7 +194,7 @@ export function parseScriptBlock(
   if (rhs.startsWith('"')) {
     fail(
       filePath,
-      `script bodies use backticks: script ${scriptName} = \`...\``,
+      `script bodies use single quotes: script ${scriptName} = '...'`,
       lineNo,
     );
   }
@@ -194,14 +203,14 @@ export function parseScriptBlock(
   if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(rhs)) {
     fail(
       filePath,
-      `script bodies must be backtick or fenced block: script ${scriptName} = \`...\` or script ${scriptName} = \`\`\`...\`\`\``,
+      `script bodies must be a one-liner or fenced block: script ${scriptName} = '...' or script ${scriptName} = ${SCRIPT_FENCE}...${SCRIPT_FENCE}`,
       lineNo,
     );
   }
 
   fail(
     filePath,
-    `script body must be a backtick or fenced block: script ${scriptName} = \`...\` or script ${scriptName} = \`\`\`...\`\`\``,
+    `script body must be a one-liner or fenced block: script ${scriptName} = '...' or script ${scriptName} = ${SCRIPT_FENCE}...${SCRIPT_FENCE}`,
     lineNo,
   );
 }

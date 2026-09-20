@@ -1,27 +1,26 @@
 #!/usr/bin/env jaiph
 
-script git_inside_worktree = `git rev-parse --is-inside-work-tree 2>&1`
+script git_inside_worktree = 'git rev-parse --is-inside-work-tree 2>&1'
 
-script git_porcelain_empty = `test -z "$(git status --porcelain)"`
+script git_porcelain_empty = 'test -z "$(git status --porcelain)"'
 
-script git_porcelain_nonempty = `test -n "$(git status --porcelain)"`
+script git_porcelain_nonempty = 'test -n "$(git status --porcelain)"'
 
-script git_mark_workspace_safe = `git config --global --add safe.directory "$(pwd)"`
+script git_mark_workspace_safe = 'git config --global --add safe.directory "$(pwd)"'
 
 # Push local HEAD to origin. This is a trusted, deterministic step so the push
 # target is controlled by the caller, not by agent output. With an explicit
 # branch ($1), force the remote ref (HEAD:refs/heads/<branch>) so the push
 # cannot be retargeted by whatever branch happens to be checked out; with no
 # branch, push HEAD to its tracking branch (matches `git push -u origin HEAD`).
-script git_push_head = ```
+script git_push_head = '''
   git config --global --add safe.directory "$(pwd)"
   if [ -n "$1" ]; then
     git push -u origin "HEAD:refs/heads/$1"
   else
     git push -u origin HEAD
   fi
-```
-
+'''
 export def in_git_repo() {
   git_mark_workspace_safe()
   git_inside_worktree() catch (err) {

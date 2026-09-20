@@ -59,8 +59,8 @@ function frontMatterList(fm: string, key: string): string[] {
 function extractFencedBlocks(body: string, lang: string): string[] {
   // CommonMark: a fenced block opens with ```<lang> on its own line and
   // closes on the next line that is exactly ``` (allowing trailing space).
-  // The tutorial deliberately uses single-backtick script bodies so no
-  // nested ``` appears inside ```jh blocks — keep this extractor simple.
+  // Tutorial .jh samples use `'…'` one-liners, so they nest inside ```jh
+  // CommonMark fences. Keep this extractor simple.
   const lines = body.split("\n");
   const blocks: string[] = [];
   let i = 0;

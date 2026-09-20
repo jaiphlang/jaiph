@@ -18,7 +18,7 @@ const CLI_PATH = join(process.cwd(), "dist/src/cli.js");
 const AUDIENCE = "jaiph-serve";
 
 const FIXTURE = [
-  "script sleeper = `sleep 1`",
+  "script sleeper = 'sleep 1'",
   "# Greets the given name.",
   "export def greet(name) {",
   '  return "hi ${name}"',

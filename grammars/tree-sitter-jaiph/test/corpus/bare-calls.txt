@@ -26,12 +26,12 @@ async save(path)
 Inline-script bare call invoke
 ==================
 
-`echo hello`()
+'echo hello'()
 
 ---
 
 (source_file
-  (backtick_string))
+  (quote_script))
 
 ==================
 Stdin connect to a call

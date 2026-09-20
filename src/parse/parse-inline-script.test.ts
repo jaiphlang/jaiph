@@ -5,7 +5,7 @@ import { parsejaiph } from "../parser";
 test("parser: run with backtick inline script", () => {
   const src = `
 export def main() {
-  \`echo hello\`()
+  'echo hello'()
 }
 `;
   const ast = parsejaiph(src, "test.jh");
@@ -23,7 +23,7 @@ export def main() {
 test("parser: run with backtick inline script and args", () => {
   const src = `
 export def main() {
-  \`echo $1\`("arg1", "arg2")
+  'echo $1'("arg1", "arg2")
 }
 `;
   const ast = parsejaiph(src, "test.jh");
@@ -38,19 +38,19 @@ export def main() {
   }
 });
 
-test("parser: capture form — x = `body`() rejected without const", () => {
+test("parser: capture form — x = 'body'() rejected without const", () => {
   const src = `
 export def main() {
-  x = \`echo hello\`()
+  x = 'echo hello'()
 }
 `;
   assert.throws(() => parsejaiph(src, "test.jh"), /assignment without "const"/);
 });
 
-test("parser: const capture form — const x = `body`()", () => {
+test("parser: const capture form — const x = 'body'()", () => {
   const src = `
 export def main() {
-  const x = \`echo hello\`()
+  const x = 'echo hello'()
 }
 `;
   const ast = parsejaiph(src, "test.jh");
@@ -64,9 +64,9 @@ export def main() {
 test("parser: run script() with fenced block and lang tag", () => {
   const src = [
     "export def main() {",
-    "  ```python3",
+    "  '''python3",
     "print('hello')",
-    "```()",
+    "'''()",
     "}",
   ].join("\n");
   const ast = parsejaiph(src, "test.jh");
@@ -81,21 +81,21 @@ test("parser: run script() with fenced block and lang tag", () => {
 test("parser: async with backtick inline script is rejected", () => {
   const src = `
 export def main() {
-  async \`echo hello\`()
+  async 'echo hello'()
 }
 `;
   assert.throws(() => parsejaiph(src, "test.jh"), /not supported with inline scripts/);
 });
 
-test("parser: def body supports multiline fenced run ```", () => {
+test("parser: def body supports multiline fenced run '''", () => {
   const src = [
     "def check(name) {",
-    "  ```",
+    "  '''",
     "    if [ -z \"$1\" ]; then",
     "      echo fail >&2",
     "      exit 1",
     "    fi",
-    "  ```(name)",
+    "  '''(name)",
     "}",
     "export def main() {",
     "  check()",
@@ -114,12 +114,12 @@ test("parser: def body supports multiline fenced run ```", () => {
 
 test("parser: if keyword with old syntax in def produces E_PARSE", () => {
   const src = [
-    'script ok = `true`',
+    "script ok = 'true'",
     "def r() {",
     "  if run ok() {",
-    "    ```",
+    "    '''",
     "echo in-branch",
-    "```()",
+    "'''()",
     "  }",
     "}",
     "export def main() {",

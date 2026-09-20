@@ -17,9 +17,9 @@ fi
 
 # Given — two async branches, each emitting multiple progress events over time
 e2e::file "tty_async.jh" <<'EOF'
-script slow_a = `sleep 1 && echo "a-script-done"`
+script slow_a = 'sleep 1 && echo "a-script-done"'
 
-script slow_b = `sleep 1 && echo "b-script-done"`
+script slow_b = 'sleep 1 && echo "b-script-done"'
 
 def branch_a() {
   log "a-start"

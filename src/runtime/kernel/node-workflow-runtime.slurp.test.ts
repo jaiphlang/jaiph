@@ -64,8 +64,10 @@ before(async () => {
     const runtime = makeRuntime(
       root,
       [
-        "script warm = `head -c 4194304 /dev/zero | tr '\\0' a`",
-        'script sink = `wc -c > /dev/null`',
+        "script warm = '''",
+        "head -c 4194304 /dev/zero | tr '\\0' a",
+        "'''",
+        "script sink = 'wc -c > /dev/null'",
         "export def main() {",
         "  const w = warm()",
         "  stdin warm() -> sink()",
@@ -88,7 +90,9 @@ test("statement call does not slurp: 64 MiB discarded stays off the JS heap", as
     const runtime = makeRuntime(
       root,
       [
-        "script big = `head -c 67108864 /dev/zero | tr '\\0' a`",
+        "script big = '''",
+        "head -c 67108864 /dev/zero | tr '\\0' a",
+        "'''",
         "export def main() {",
         "  big()",
         "}",
@@ -106,7 +110,7 @@ test("statement call does not slurp: 64 MiB discarded stays off the JS heap", as
   }
 });
 
-// `const x = `echo hi`()` binds the string "hi" (slurped + trimmed). No read(),
+// `const x = 'echo hi'()` binds the string "hi" (slurped + trimmed). No read(),
 // no E_VALIDATE, and it interpolates like any string.
 test("const slurps a small call result to a trimmed string", async () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-slurp-const-"));
@@ -115,7 +119,7 @@ test("const slurps a small call result to a trimmed string", async () => {
       root,
       [
         "export def main() {",
-        "  const x = `echo hi`()",
+        "  const x = 'echo hi'()",
         '  return "[${x}]"',
         "}",
         "",
@@ -138,8 +142,12 @@ test("const slurp is a real string of the producer's full byte length", async ()
     const runtime = makeRuntime(
       root,
       [
-        `script big = \`head -c ${n} /dev/zero | tr '\\0' a\``,
-        "script count = `wc -c | tr -d ' \\n'`",
+        `script big = '''`,
+        `head -c ${n} /dev/zero | tr '\\0' a`,
+        `'''`,
+        "script count = '''",
+        "wc -c | tr -d ' \\n'",
+        "'''",
         "export def main() {",
         "  const x = big()",
         "  const len = stdin x -> count()",
@@ -167,8 +175,10 @@ test("stdin producer does not slurp: 64 MiB streams to the sink off the JS heap"
     const runtime = makeRuntime(
       root,
       [
-        `script big = \`head -c ${n} /dev/zero | tr '\\0' a\``,
-        'script sink = `wc -c | tr -d " \\n" > "$1"`',
+        `script big = '''`,
+        `head -c ${n} /dev/zero | tr '\\0' a`,
+        `'''`,
+        "script sink = 'wc -c | tr -d \" \\\\n\" > \"$1\"'",
         "export def main(out) {",
         "  stdin big() -> sink(out)",
         "}",
@@ -198,9 +208,11 @@ test("stdin big() -> pass() -> sink(): 64 MiB streams through an intermediate st
     const runtime = makeRuntime(
       root,
       [
-        `script big = \`head -c ${n} /dev/zero | tr '\\0' a\``,
-        "script pass = `cat`",
-        'script sink = `wc -c | tr -d " \\n" > "$1"`',
+        `script big = '''`,
+        `head -c ${n} /dev/zero | tr '\\0' a`,
+        `'''`,
+        "script pass = 'cat'",
+        "script sink = 'wc -c | tr -d \" \\\\n\" > \"$1\"'",
         "export def main(out) {",
         "  stdin big() -> pass() -> sink(out)",
         "}",
@@ -232,8 +244,10 @@ test("def return is an output handle: stdin wrap() -> sink() streams without slu
     const runtime = makeRuntime(
       root,
       [
-        `script big = \`head -c ${n} /dev/zero | tr '\\0' a\``,
-        'script sink = `wc -c | tr -d " \\n" > "$1"`',
+        `script big = '''`,
+        `head -c ${n} /dev/zero | tr '\\0' a`,
+        `'''`,
+        "script sink = 'wc -c | tr -d \" \\\\n\" > \"$1\"'",
         "def wrap() {",
         "  return big()",
         "}",
@@ -265,8 +279,12 @@ test("const y = wrap() forces the def handle: the bytes are slurped into a strin
     const runtime = makeRuntime(
       root,
       [
-        `script big = \`head -c ${n} /dev/zero | tr '\\0' a\``,
-        "script count = `wc -c | tr -d ' \\n'`",
+        `script big = '''`,
+        `head -c ${n} /dev/zero | tr '\\0' a`,
+        `'''`,
+        "script count = '''",
+        "wc -c | tr -d ' \\n'",
+        "'''",
         "def wrap() {",
         "  return big()",
         "}",
@@ -301,11 +319,11 @@ test("recover binding: ${failure} slurps failed stdout contents, not a .out path
     const runtime = makeRuntime(
       root,
       [
-        "script boom = ```",
+        "script boom = '''",
         'echo "the-failure-stdout"',
         "exit 1",
-        "```",
-        'script record = `printf "%s" "$1" > seen.txt`',
+        "'''",
+        "script record = 'printf \"%s\" \"$1\" > seen.txt'",
         "export def main() {",
         "  boom() catch (failure) {",
         "    record(failure)",
@@ -333,13 +351,13 @@ test("recover binding: handle is merged stdout then stderr", async () => {
     const runtime = makeRuntime(
       root,
       [
-        "script boom = ```",
+        "script boom = '''",
         'echo "out-line"',
         'echo "err-line" >&2',
         "exit 1",
-        "```",
-        'script record = `printf "%s" "$1" > seen.txt`',
-        'script save = `cat > streamed.txt`',
+        "'''",
+        "script record = 'printf \"%s\" \"$1\" > seen.txt'",
+        "script save = 'cat > streamed.txt'",
         "export def main() {",
         "  boom() catch (failure) {",
         "    stdin failure -> save()",
@@ -369,11 +387,11 @@ test("recover binding: stderr-only failure yields the stderr text", async () => 
     const runtime = makeRuntime(
       root,
       [
-        "script boom = ```",
+        "script boom = '''",
         'echo "boom" >&2',
         "exit 1",
-        "```",
-        'script record = `printf "%s" "$1" > seen.txt`',
+        "'''",
+        "script record = 'printf \"%s\" \"$1\" > seen.txt'",
         "export def main() {",
         "  boom() catch (failure) {",
         "    record(failure)",

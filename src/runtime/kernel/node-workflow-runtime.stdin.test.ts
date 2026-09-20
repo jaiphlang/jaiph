@@ -44,7 +44,7 @@ function makeRuntime(root: string, jhBody: string): NodeWorkflowRuntime {
   return new NodeWorkflowRuntime(graph, { env, cwd: root, suppressLiveEvents: true });
 }
 
-// AC: `echo_stdin() stdin payload` with `script echo_stdin = `cat`` delivers
+// AC: `echo_stdin() stdin payload` with `script echo_stdin = 'cat'` delivers
 // the payload on the child's stdin (cat echoes it to stdout), and the payload
 // never appears in the spawn argv.
 test("script() stdin payload: payload arrives on stdin, not argv", async () => {
@@ -53,7 +53,7 @@ test("script() stdin payload: payload arrives on stdin, not argv", async () => {
     const runtime = makeRuntime(
       root,
       [
-        "script echo_stdin = `cat`",
+        "script echo_stdin = 'cat'",
         "export def main(payload) {",
         "  stdin payload -> echo_stdin()",
         "}",
@@ -91,7 +91,7 @@ test("script() stdin: a payload > 1 MB is written in full and the step exits 0",
     const runtime = makeRuntime(
       root,
       [
-        'script save = `cat > "$1"`',
+        "script save = 'cat > \"$1\"'",
         "export def main(path, payload) {",
         "  stdin payload -> save(path)",
         "}",
@@ -120,15 +120,15 @@ function returnValue(runtime: NodeWorkflowRuntime): string {
 // is its own progress step. `baz` counts only UPPERCASE-leading lines so that
 // dropping or swapping a stage changes the number and fails the assertion.
 const PIPE_MODULE = [
-  "script foo = ```bash",
+  "script foo = '''bash",
   "printf 'a\\nb\\n'",
-  "```",
-  "script bar = ```bash",
+  "'''",
+  "script bar = '''bash",
   "tr 'a-z' 'A-Z'",
-  "```",
-  "script baz = ```bash",
+  "'''",
+  "script baz = '''bash",
   "grep -c '^[A-Z]' || true",
-  "```",
+  "'''",
 ].join("\n");
 
 test("stdin foo() -> bar() -> baz(): three-stage pipeline reduces to 2", async () => {
@@ -220,15 +220,15 @@ test("stdin gen() -> boom() -> sink() catch: a failing middle stage runs the one
     const runtime = makeRuntime(
       root,
       [
-        "script gen = ```bash",
+        "script gen = '''bash",
         "echo hi",
-        "```",
-        "script boom = ```bash",
+        "'''",
+        "script boom = '''bash",
         "exit 3",
-        "```",
-        "script sink = ```bash",
+        "'''",
+        "script sink = '''bash",
         "cat",
-        "```",
+        "'''",
         "export def main() {",
         "  stdin gen() -> boom() -> sink() catch (e) {",
         '    log "recovered"',
@@ -265,18 +265,18 @@ test("stdin prod() -> cons(): producer and consumer overlap (streamed, not mater
     const runtime = makeRuntime(
       root,
       [
-        "script prod = ```bash",
+        "script prod = '''bash",
         "printf 'start\\n'",
         'for i in $(seq 1 400); do [ -f "$1/ack" ] && break; sleep 0.05; done',
         "printf 'end\\n'",
-        "```",
-        "script cons = ```bash",
+        "'''",
+        "script cons = '''bash",
         "while IFS= read -r line; do",
         "  printf 'saw %s\\n' \"$line\"",
         '  [ "$line" = "start" ] && : > "$1/ack"',
         "done",
         "exit 0  # a while-read loop otherwise exits 1 on the EOF read",
-        "```",
+        "'''",
         "export def main(dir) {",
         "  stdin prod(dir) -> cons(dir)",
         "}",
@@ -304,14 +304,14 @@ test("stdin prod() -> cons(): producer and consumer overlap (streamed, not mater
 });
 
 // AC: an inline-script run also pipes stdin.
-test("`cat`() stdin payload: inline script receives stdin", async () => {
+test("'cat'() stdin payload: inline script receives stdin", async () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-stdin-inline-"));
   try {
     const runtime = makeRuntime(
       root,
       [
         "export def main(payload) {",
-        "  stdin payload -> `cat`()",
+        "  stdin payload -> 'cat'()",
         "}",
         "",
       ].join("\n"),
