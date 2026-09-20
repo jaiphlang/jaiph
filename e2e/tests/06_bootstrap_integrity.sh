@@ -54,6 +54,8 @@ e2e::assert_contains "${install_body}" 'if [ -f "${tmp_dir}/src/package-lock.jso
   "install script guards on a present package-lock.json"
 e2e::assert_contains "${install_body}" 'cd "${tmp_dir}/src" && npm ci' \
   "install script runs npm ci in the lockfile branch"
+e2e::assert_contains "${install_body}" "--exclude '.jaiph/runs'" \
+  "local-source copy skips .jaiph/runs"
 
 # ── Runtime dependency `jose` is exact-pinned (no range operator) ─────────────
 
