@@ -19,11 +19,11 @@ Multi-line note for ${REPO}
 channel alerts
 channel findings -> handler
 
-script setup_env = ```bash
+script setup_env = '''bash
 mkdir -p out
-```
+'''
 
-script publish use NPM_TOKEN = `echo x`
+script publish use NPM_TOKEN = 'echo x'
 
 export prompt analyze(log) use GITHUB_TOKEN = "Look at ${log}"
 
@@ -33,7 +33,7 @@ def check_deps(path) {
 }
 
 export def main(task) {
-  script shout use UE_TOKEN = `echo "$1"`
+  script shout use UE_TOKEN = 'echo "$1"'
   prompt describe(x) = "Tell me about ${x}"
   def helper(x) {
     return "${x}"
@@ -64,9 +64,9 @@ export def main(task) {
 
   async helpers.scan()
 
-  const script_out = ```python3
+  const script_out = '''python3
 print("inline")
-```(task)
+'''(task)
 
   const answer = prompt "Summarize ${task}" returns "{ risk: string }"
   log "risk: ${answer.risk}"

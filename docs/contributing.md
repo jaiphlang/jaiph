@@ -356,7 +356,7 @@ e2e::section "Feature under test"
 
 # Given — create the file inline (script + def; same shape as e2e/tests/10_basic_workflows.sh)
 e2e::file "hello.jh" <<'EOF'
-script hello_impl = `echo "hello-jh"`
+script hello_impl = 'echo "hello-jh"'
 export def main() {
   const msg = hello_impl()
   return "${msg}"

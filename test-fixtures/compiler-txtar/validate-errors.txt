@@ -55,9 +55,11 @@ export def main() {
 }
 
 === workflow raw shell that names a script must use run
-# @expect error E_VALIDATE "use f() — a bare name that refers to a script or workflow must be called as a managed step" @3:3
+# @expect error E_VALIDATE "use f() — a bare name that refers to a script or workflow must be called as a managed step" @5:3
 --- input.jh
-script f = `printf '%s' 'x'`
+script f = '''
+printf '%s' 'x'
+'''
 export def main() {
   f
 }
@@ -65,7 +67,7 @@ export def main() {
 === workflow raw shell that names a workflow must use run
 # @expect error E_VALIDATE "use w() — a bare name that refers to a script or workflow must be called as a managed step" @6:3
 --- input.jh
-script w_impl = `echo x`
+script w_impl = 'echo x'
 def w() {
   w_impl()
 }
@@ -77,7 +79,7 @@ export def main() {
 # @expect error E_VALIDATE "must be called as" @7:8
 --- input.jh
 channel c
-script w_impl = `echo x`
+script w_impl = 'echo x'
 def w() {
   w_impl()
 }
@@ -88,7 +90,7 @@ export def main() {
 === bare identifier arg unknown name fails
 # @expect error E_VALIDATE "unknown identifier" @3:3
 --- input.jh
-script greet = `echo "hello $1"`
+script greet = 'echo "hello $1"'
 export def main() {
   greet(unknown_var)
 }
@@ -121,7 +123,7 @@ channel findings -> check
 def check() {
   check_impl()
 }
-script check_impl = `true`
+script check_impl = 'true'
 export def main() {
   log "ok"
 }
@@ -221,7 +223,7 @@ export def main() {
 === run rejects local script reference
 # @expect ok
 --- input.jh
-script my_script = `echo ok`
+script my_script = 'echo ok'
 export def main() {
   my_script()
 }
@@ -318,7 +320,7 @@ export def main() {
   lib.helper()
 }
 --- lib.jh
-script helper = `echo "ok"`
+script helper = 'echo "ok"'
 def dummy() {
   log "ok"
 }
@@ -444,7 +446,7 @@ export def main() {
 === shell redirection in run args rejected in rule
 # @expect error E_PARSE "unexpected content after call call: '| grep ok'; shell redirection (>, |, &) is n" @3:1
 --- input.jh
-script impl = `true`
+script impl = 'true'
 def check() {
   impl() | grep ok
 }
@@ -455,7 +457,7 @@ export def main() {
 === shell redirection in run args rejected in workflow
 # @expect error E_PARSE "unexpected content after call call: '> /tmp/out'; shell redirection (>, |, &) is " @3:1
 --- input.jh
-script impl = `true`
+script impl = 'true'
 export def main() {
   impl() > /tmp/out
 }
@@ -528,7 +530,7 @@ export def main() {
 # @expect error E_VALIDATE "command substitution cannot invoke script" @4:8
 --- input.jh
 channel c
-script helper = `echo ok`
+script helper = 'echo ok'
 export def main() {
   send $(helper) -> c
 }
@@ -536,7 +538,7 @@ export def main() {
 === scripts are not values in rule const
 # @expect error E_VALIDATE "scripts are not values;" @3:3
 --- input.jh
-script helper = `echo ok`
+script helper = 'echo ok'
 def check() {
   const x = helper
 }
@@ -547,7 +549,7 @@ export def main() {
 === scripts are not values in workflow const
 # @expect error E_VALIDATE "scripts are not values;" @3:3
 --- input.jh
-script helper = `echo ok`
+script helper = 'echo ok'
 export def main() {
   const x = helper
 }
@@ -555,7 +557,7 @@ export def main() {
 === scripts are not promptable in workflow
 # @expect error E_VALIDATE "scripts are not promptable;" @3:3
 --- input.jh
-script helper = `echo ok`
+script helper = 'echo ok'
 export def main() {
   const _ = prompt helper
 }
@@ -563,7 +565,7 @@ export def main() {
 === scripts cannot be interpolated in log
 # @expect error E_VALIDATE "scripts cannot be interpolated;" @3:3
 --- input.jh
-script helper = `echo ok`
+script helper = 'echo ok'
 export def main() {
   log "result: ${helper}"
 }
@@ -585,7 +587,7 @@ export def main() {
 export def main() {
   const x = "hello"
   return match x {
-    "hello" => `echo yes`()
+    "hello" => 'echo yes'()
     _ => "no"
   }
 }
@@ -649,7 +651,7 @@ export def main() {
 # @expect error E_VALIDATE "must be called as" @4:8
 --- input.jh
 channel c
-script helper = `echo ok`
+script helper = 'echo ok'
 export def main() {
   send helper -> c
 }
@@ -671,7 +673,7 @@ export def main() {
 === scripts cannot be interpolated in logerr
 # @expect error E_VALIDATE "scripts cannot be interpolated;" @3:3
 --- input.jh
-script helper = `echo ok`
+script helper = 'echo ok'
 export def main() {
   logerr "error: ${helper}"
 }
@@ -679,7 +681,7 @@ export def main() {
 === scripts cannot be interpolated in fail
 # @expect error E_VALIDATE "scripts cannot be interpolated;" @3:3
 --- input.jh
-script helper = `echo ok`
+script helper = 'echo ok'
 export def main() {
   fail "error: ${helper}"
 }
@@ -687,7 +689,7 @@ export def main() {
 === scripts cannot be interpolated in return
 # @expect error E_VALIDATE "scripts cannot be interpolated;" @3:3
 --- input.jh
-script helper = `echo ok`
+script helper = 'echo ok'
 export def main() {
   return "result: ${helper}"
 }
@@ -729,7 +731,7 @@ export def helper() {
 # @expect error E_VALIDATE "scripts cannot be interpolated;" @4:1
 --- input.jh
 channel c
-script helper = `echo ok`
+script helper = 'echo ok'
 export def main() {
   send "result: ${helper}" -> c
 }
@@ -855,7 +857,7 @@ export def main() {
 === invalid regex in if condition in rule
 # @expect error E_VALIDATE "invalid regex in if condition: /[bad(/" @4:3
 --- input.jh
-script noop = `:`
+script noop = ':'
 def check() {
   const x = "test"
   if x =~ /[bad(/ {
@@ -894,7 +896,7 @@ export def main() {
   lib.helper
 }
 --- lib.jh
-export script helper = `echo ok`
+export script helper = 'echo ok'
 def dummy() {
   log "ok"
 }
@@ -978,27 +980,33 @@ export def main() {
 }
 
 === bare dotted call arg where var is not a typed prompt capture
-# @expect error E_VALIDATE "${result.role}:" @4:3
+# @expect error E_VALIDATE "${result.role}:" @6:3
 --- input.jh
-script to_lower = `printf '%s' "$1" | tr '[:upper:]' '[:lower:]'`
+script to_lower = '''
+printf '%s' "$1" | tr '[:upper:]' '[:lower:]'
+'''
 export def main() {
   const result = "plain"
   to_lower(result.role)
 }
 
 === bare dotted call arg with unknown field
-# @expect error E_VALIDATE "${result.bogus}: field" @4:3
+# @expect error E_VALIDATE "${result.bogus}: field" @6:3
 --- input.jh
-script to_lower = `printf '%s' "$1" | tr '[:upper:]' '[:lower:]'`
+script to_lower = '''
+printf '%s' "$1" | tr '[:upper:]' '[:lower:]'
+'''
 export def main() {
   const result = prompt "Classify" returns "{ role: string }"
   to_lower(result.bogus)
 }
 
 === unquoted ${var.field} call arg is rejected
-# @expect error E_VALIDATE "call arguments cannot use unquoted interpolation ${result.role}; use bare field " @4:3
+# @expect error E_VALIDATE "call arguments cannot use unquoted interpolation ${result.role}; use bare field " @6:3
 --- input.jh
-script to_lower = `printf '%s' "$1" | tr '[:upper:]' '[:lower:]'`
+script to_lower = '''
+printf '%s' "$1" | tr '[:upper:]' '[:lower:]'
+'''
 export def main() {
   const result = prompt "Classify" returns "{ role: string }"
   to_lower(${result.role})
@@ -1007,7 +1015,7 @@ export def main() {
 === unquoted ${var} call arg is rejected
 # @expect error E_VALIDATE "call arguments cannot use unquoted interpolation ${name}; use bare identifier: ." @4:3
 --- input.jh
-script greet = `echo "hello $1"`
+script greet = 'echo "hello $1"'
 export def main() {
   const name = "world"
   greet(${name})
@@ -1057,7 +1065,7 @@ def ask() {
 === const inside workflow shadows module script name
 # @expect error E_VALIDATE "cannot rebind immutable name" @3:3
 --- input.jh
-script greet = `echo hi`
+script greet = 'echo hi'
 export def main() {
   const greet = "x"
   log "done"
@@ -1087,7 +1095,7 @@ export def main() {
 # @expect error E_VALIDATE "cannot be called as a def" @1:21
 --- input.jh
 channel findings -> myscript
-script myscript = `true`
+script myscript = 'true'
 export def main() {
   log "ok"
 }

@@ -1,6 +1,6 @@
 #!/usr/bin/env jaiph
 
-script current_branch_impl = ```
+script current_branch_impl = '''
 if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   echo "Not inside a git repository." >&2
   exit 1
@@ -10,8 +10,7 @@ if [ "$(git branch --show-current)" != "$1" ]; then
   echo "Current branch is not '$1'." >&2
   exit 1
 fi
-```
-
+'''
 def current_branch(branch) {
   current_branch_impl(branch)
 }

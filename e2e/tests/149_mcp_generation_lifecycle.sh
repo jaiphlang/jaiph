@@ -80,8 +80,8 @@ PY
 write_fixture() {
   local file="$1" marker="$2" pidfile="$3" gate="$4"
   cat > "${file}" <<EOF
-script pause = \`echo \$\$ > "${pidfile}"; while [ ! -f "${gate}" ]; do sleep 0.2; done\`
-script stamp = \`echo "${marker}"\`
+script pause = 'echo \$\$ > "${pidfile}"; while [ ! -f "${gate}" ]; do sleep 0.2; done'
+script stamp = 'echo "${marker}"'
 
 # Waits for the gate file, then reports its generation's marker.
 export def slow() {
@@ -206,7 +206,7 @@ e2e::section "second SIGTERM cancels in-flight calls without orphaning children"
 pid3="${TEST_DIR}/pause_cancel.pid"
 done3="${TEST_DIR}/done3"
 cat > "${TEST_DIR}/tools_cancel.jh" <<EOF
-script hang_forever = \`echo \$\$ > "${pid3}"; sleep 300\`
+script hang_forever = 'echo \$\$ > "${pid3}"; sleep 300'
 
 # Hangs until cancelled.
 export def hang() {

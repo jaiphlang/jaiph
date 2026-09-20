@@ -330,11 +330,11 @@ test("NodeWorkflowRuntime: run catch binds the failed step's stdout then stderr 
     writeFileSync(
       jh,
       [
-        "script check_ready_impl = ```",
+        "script check_ready_impl = '''",
         'echo "analysis-stdout-log"',
         'echo "analysis-stderr-log" >&2',
         "test -f ready.txt",
-        "```",
+        "'''",
         "",
         "def check_ready() {",
         "  check_ready_impl()",
@@ -343,11 +343,11 @@ test("NodeWorkflowRuntime: run catch binds the failed step's stdout then stderr 
         // The recover binding is an OUTPUT HANDLE for the failed step's stdout
         // then stderr; passing it as an argv arg is a force site, so `$1` is the
         // merged CONTENTS (not a path).
-        'script write_catch_received = `printf "%s" "$1" > catch_received.txt`',
+        "script write_catch_received = 'printf \"%s\" \"$1\" > catch_received.txt'",
         "",
-        'script write_catch_arg2 = `echo "$1" > catch_arg2.txt`',
+        "script write_catch_arg2 = 'echo \"$1\" > catch_arg2.txt'",
         "",
-        'script mark_ready = `touch ready.txt`',
+        "script mark_ready = 'touch ready.txt'",
         "",
         "export def main(name, extra) {",
         "  check_ready() catch (failure) {",
@@ -416,16 +416,16 @@ test("NodeWorkflowRuntime: recover handle streams a >1MB failed stdout via `stdi
     writeFileSync(
       jh,
       [
-        "script emit_big = ```",
+        "script emit_big = '''",
         `for i in $(seq 1 ${lineCount}); do`,
         '  echo "log-line-payload-marker-$i-aaaaaaaaaaaaaaaaaaaa"',
         "done",
         'echo "big-stderr-marker" >&2',
         "exit 1",
-        "```",
+        "'''",
         "",
         // Reads the failed stdout on its own stdin and copies it to $1.
-        'script record_binding = `cat > "$1"`',
+        "script record_binding = 'cat > \"$1\"'",
         "",
         "export def main() {",
         "  emit_big() catch (failure) {",

@@ -60,13 +60,17 @@
 
         if (state.inFence) {
             const trimmed = line.trim();
-            if (trimmed === "```") {
+            if (trimmed.startsWith("'''")) {
                 state.inFence = false;
                 const leading = line.match(/^(\s*)/);
                 if (leading && leading[1]) {
                     tokens.push({ type: "whitespace", value: leading[1], kind: "plain" });
                 }
-                tokens.push({ type: "fence", value: "```", kind: "string" });
+                tokens.push({ type: "fence", value: "'''", kind: "string" });
+                const after = trimmed.slice(3);
+                if (after) {
+                    tokens.push({ type: "string", value: after, kind: "string" });
+                }
                 return tokens;
             }
             tokens.push({ type: "string", value: line, kind: "string" });
@@ -192,17 +196,17 @@
                 continue;
             }
 
-            if (ch === "`" && line[i + 1] === "`" && line[i + 2] === "`") {
-                tokens.push({ type: "fence", value: "```", kind: "string" });
+            if (ch === "'" && line[i + 1] === "'" && line[i + 2] === "'") {
+                tokens.push({ type: "fence", value: "'''", kind: "string" });
                 i += 3;
                 state.inFence = true;
                 continue;
             }
 
-            if (ch === "`") {
+            if (ch === "'") {
                 const start = i;
                 i += 1;
-                while (i < line.length && line[i] !== "`") {
+                while (i < line.length && line[i] !== "'") {
                     i += 1;
                 }
                 if (i < line.length) {

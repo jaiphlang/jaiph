@@ -104,10 +104,12 @@ test("jaiph run tree includes function calls from workflow shell steps", () => {
     writeFileSync(
       filePath,
       [
-        "script changed_files = `printf '%s' 'from-function'`",
-        "script print_value = \`\`\`",
+        "script changed_files = '''",
+        "printf '%s' 'from-function'",
+        "'''",
+        "script print_value = '''",
         "printf '%s\\n' \"$1\"",
-        "\`\`\`",
+        "'''",
         "",
         "export def main() {",
         "  const VALUE = changed_files()",
@@ -165,7 +167,7 @@ test("jaiph run tree shows workflow params inline when run has key=value args", 
   try {
     writeFileSync(
       join(root, "sub.jh"),
-      ["script done_impl = `echo done`", "export def main(path, mode) {", "  done_impl()", "}", ""].join("\n"),
+      ["script done_impl = 'echo done'", "export def main(path, mode) {", "  done_impl()", "}", ""].join("\n"),
     );
     writeFileSync(
       join(root, "main.jh"),
@@ -198,9 +200,9 @@ test("jaiph run tree shows function step; params shown when runtime includes the
     writeFileSync(
       join(root, "main.jh"),
       [
-        "script echo_args = \`\`\`",
+        "script echo_args = '''",
         "printf '%s %s\\n' \"$1\" \"$2\"",
-        "\`\`\`",
+        "'''",
         "export def main() {",
         '  echo_args("first" "second")',
         "}",
@@ -226,7 +228,7 @@ test("jaiph run tree truncates param values over 32 chars when params present", 
     const longValue = "a".repeat(40);
     writeFileSync(
       join(root, "sub.jh"),
-      ["script done_impl = `echo done`", "export def main(longparam) {", "  done_impl()", "}", ""].join("\n"),
+      ["script done_impl = 'echo done'", "export def main(longparam) {", "  done_impl()", "}", ""].join("\n"),
     );
     writeFileSync(
       join(root, "main.jh"),

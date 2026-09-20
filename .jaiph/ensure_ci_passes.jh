@@ -7,7 +7,7 @@ config {
   agent.claude_flags = "--permission-mode bypassPermissions"
 }
 
-script npm_run_test_ci = ```
+script npm_run_test_ci = '''
   while IFS= read -r _v; do
     unset "$_v" 2>/dev/null || true
   done < <(compgen -e | grep '^JAIPH_' || true)
@@ -27,18 +27,16 @@ script npm_run_test_ci = ```
   rc=$?
   kill "${hb_pid}" >/dev/null 2>&1 || true
   exit "${rc}"
-```
-
-script assert_nonempty_file_or_fail = ```
+'''
+script assert_nonempty_file_or_fail = '''
   test -s "$1" || {
     echo "jaiph: ci failure log is empty at $1" >&2
     exit 1
   }
-```
-
+'''
 # recover binds `failure` to the failed step's stdout as an output handle.
 # Stream it into dest — never argv (ARG_MAX), never treat it as a path.
-script save_ci_log = `cat > "$1"`
+script save_ci_log = 'cat > "$1"'
 
 export def ensure_ci_passes() {
   const ci_log_dir = ".jaiph/tmp"

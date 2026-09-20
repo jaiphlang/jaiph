@@ -83,7 +83,7 @@ export type Arg =
  *   (post-dedent for triple-quoted bodies; the formatter consults trivia for surface form).
  * - `call`: a managed def/script call `ref(args)`. `async` is set when the source said
  *   `run async ref(...)` in capture position.
- * - `inline_script`: an inline-script call (`` `body`(args) `` or fenced).
+ * - `inline_script`: an inline-script call (`` 'body'(args) `` or fenced).
  * - `prompt`: a prompt body. `raw` carries the JSON-quoted prompt text (or `"${identifier}"`
  *   sugar) for the anonymous / identifier forms. `returns` carries an optional flat returns
  *   schema. When `name` is set the expression is a **named-prompt invocation**

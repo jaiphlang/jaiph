@@ -4,17 +4,17 @@
 # (left of the first ->) is a call whose result is an output handle; every
 # stage after it is a script that reads stdin and writes stdout. No stage is
 # slurped into memory until the final `const` names and reduces it.
-script gen = ```bash
+script gen = '''bash
   printf 'alpha\nbeta\ngamma\n'
-```
+'''
 
-script upper = ```bash
+script upper = '''bash
   tr 'a-z' 'A-Z'
-```
+'''
 
-script count = ```bash
+script count = '''bash
   wc -l | tr -d ' '
-```
+'''
 
 export def main() {
   # generate lines -> uppercase them -> reduce to a line count

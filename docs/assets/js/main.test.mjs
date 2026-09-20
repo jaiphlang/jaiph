@@ -68,6 +68,22 @@ test("keywords before `(` stay keywords, not calls", () => {
   assert.ok(!isCall(html, "catch"), "`catch (failure)` must not paint catch as a call");
 });
 
+test("one-line `'…'` and fenced `'''` script bodies paint as strings", () => {
+  const one = highlightJaiphWithParser("'echo hello'()");
+  assert.ok(
+    one.includes('<span class="ralph-string">&#39;echo hello&#39;</span>') ||
+      one.includes(`<span class="ralph-string">'echo hello'</span>`),
+    "one-line script body `'echo hello'` must be a string span",
+  );
+
+  const fence = highlightJaiphWithParser("script greet = '''bash");
+  assert.ok(
+    fence.includes('<span class="ralph-string">&#39;&#39;&#39;</span>') ||
+      fence.includes(`<span class="ralph-string">'''</span>`),
+    "opening `'''` fence must be a string span",
+  );
+});
+
 test("`run` is not a keyword and does not pick up call/function scope", () => {
   // A lone `run` before `(` in `run save()` must not become a call; only save is.
   const html = highlightJaiphWithParser("run save()");

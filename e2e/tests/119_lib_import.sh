@@ -16,7 +16,7 @@ e2e::section "lib import: resolve from .jaiph/libs/"
 # Given — a lib installed under .jaiph/libs/mylib/ with an exported script
 mkdir -p "${TEST_DIR}/.jaiph/libs/mylib"
 cat > "${TEST_DIR}/.jaiph/libs/mylib/greet.jh" <<'EOF'
-export script hello = `echo "hello from lib"`
+export script hello = 'echo "hello from lib"'
 
 export def say_hello() {
   hello()
@@ -89,7 +89,7 @@ e2e::section "lib import: relative imports still work"
 
 # Given — a relative import (should resolve before lib fallback)
 e2e::file "local_lib.jh" <<'EOF'
-export script local_msg = `echo "local module"`
+export script local_msg = 'echo "local module"'
 def dummy() {
   log "ok"
 }
@@ -126,7 +126,7 @@ e2e::section "export script: parse and format round-trip"
 
 # Given — a file with export script
 e2e::file "export_script.jh" <<'EOF'
-export script greet = `echo "hi"`
+export script greet = 'echo "hi"'
 
 export def main() {
   greet()

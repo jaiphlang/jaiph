@@ -7,7 +7,7 @@
 # that fails when the contract is violated:
 #
 #   1. A sample workflow runs covering an inline
-#      shell line, a `script` step with a non-bash lang tag (```node), string
+#      shell line, a `script` step with a non-bash lang tag ('''node), string
 #      interpolation, and `log` output. Assertions run against the real jaiph.exe
 #      stdout (exit code + expected `log` lines).
 #   2. A mid-run cancellation cleans up the process tree: we start `jaiph run`,
@@ -135,9 +135,9 @@ try {
 
   $sampleWf = Join-Path $Work "sample.jh"
   Set-Content -LiteralPath $sampleWf -Encoding utf8 -Value @'
-script node_step = ```node
+script node_step = '''node
 process.stdout.write("node-step-output\n");
-```
+'''
 
 export def main() {
   const who = "Windows"
@@ -168,9 +168,9 @@ export def main() {
 
   $cancelWf = Join-Path $Work "cancel.jh"
   Set-Content -LiteralPath $cancelWf -Encoding utf8 -Value @'
-script long_sleep = ```node
+script long_sleep = '''node
 setInterval(() => {}, 1000);
-```
+'''
 
 export def main() {
   long_sleep()

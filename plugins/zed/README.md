@@ -9,7 +9,7 @@ Tree-sitter syntax highlighting for Jaiph (`.jh` and `*.test.jh`) in
 ## Features
 
 Highlights the current Jaiph surface: `import` / `import script`, `config`,
-`channel` (`->` routes, `send … ->` sends), `script` (backtick and fenced,
+`channel` (`->` routes, `send … ->` sends), `script` (one-line `'…'` and fenced,
 optional `use KEY …`), `def`, named `prompt name(params) [use KEY …] = …`,
 bare calls (`name(args)`, `async name(args)`), stdin connect
 (`stdin … -> name(args)`), `catch` / `recover`, anonymous `prompt … returns`, `match`
@@ -18,7 +18,7 @@ bare calls (`name(args)`, `async name(args)`), stdin connect
 `expect_contain` / `expect_not_contain` / `expect_equal`), plus comments,
 double- and triple-quoted strings, regex patterns, numbers, and booleans.
 
-Fenced and inline script bodies (```` ```bash ````, ```` ```python3 ````, …)
+Fenced and inline script bodies (`'''bash`, `'''python3`, …)
 inject the embedded language via `languages/jaiph/injections.scm`; a bare fence
 defaults to shell, matching the Jaiph runtime.
 

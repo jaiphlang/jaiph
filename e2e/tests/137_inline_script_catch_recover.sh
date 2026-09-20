@@ -18,7 +18,7 @@ e2e::section "inline script catch: failing body, catch body runs once with merge
 # run-dir path.
 e2e::file "inline_catch.jh" <<'EOF'
 export def main() {
-  `echo "bad"; exit 3`() catch (err) {
+  'echo "bad"; exit 3'() catch (err) {
     log "caught: ${err}"
   }
 }
@@ -42,13 +42,13 @@ rm -f "${COUNTER}" "${COUNTER}.done"
 
 e2e::file "inline_recover.jh" <<EOF
 export def main() {
-  \`test -f "${COUNTER}.done"\`() recover(err) {
-    \`\`\`
+  'test -f "${COUNTER}.done"'() recover(err) {
+    '''
 count=\$(cat "${COUNTER}" 2>/dev/null || echo 0)
 count=\$((count+1))
 echo "\${count}" > "${COUNTER}"
 if [ "\${count}" -ge 2 ]; then touch "${COUNTER}.done"; fi
-\`\`\`()
+'''()
   }
 }
 EOF
@@ -67,9 +67,9 @@ e2e::section "inline script catch in rule body"
 # ---------------------------------------------------------------------------
 
 e2e::file "inline_catch_rule.jh" <<'EOF'
-script noop = `true`
+script noop = 'true'
 def gate() {
-  `exit 5`() catch (err) {
+  'exit 5'() catch (err) {
     noop()
   }
 }

@@ -21,6 +21,7 @@ import { consumeTripleQuotedArg, dedentTripleQuotedBody, parseTripleQuoteBlock, 
 import { parseCallRefMultiline } from "./call-args";
 import { parseConstRhs } from "./const-rhs";
 import { parseAnonymousInlineScript } from "./inline-script";
+import { startsInlineScript, startsScriptFence } from "./fence";
 import { parseConfigBlock } from "./metadata";
 import { splitStatementsOnSemicolons } from "./statement-split";
 import { parsePromptStep } from "./prompt";
@@ -357,8 +358,8 @@ function tryParsePipelineStage(
   s: string,
 ): { expr: Expr; rest: string } | null {
   const t = s.trimStart();
-  if (t.startsWith("```")) return null;
-  if (t.startsWith("`")) {
+  if (startsScriptFence(t)) return null;
+  if (startsInlineScript(t)) {
     const res = parseAnonymousInlineScript(filePath, lines, idx, t, innerNo, col, true);
     if (res.closingLineIdx !== idx) return null;
     return { expr: makeInlineScriptExpr(res), rest: res.trailing };
@@ -412,7 +413,7 @@ export function parseStdinConnect(
   let stdin: Expr;
   let afterOperand: string;
   let producerIsCall = false;
-  if (t.startsWith("`")) {
+  if (startsInlineScript(t)) {
     const res = parseAnonymousInlineScript(filePath, lines, idx, t, innerNo, stdinCol, true);
     stdin = makeInlineScriptExpr(res);
     afterOperand = res.trailing.trimStart();
@@ -463,7 +464,7 @@ export function parseStdinConnect(
     fail(filePath, "async is not supported with stdin", innerNo, stdinCol);
   }
   let result: { step: StepDef; nextIdx: number };
-  if (target.startsWith("`")) {
+  if (startsInlineScript(target)) {
     const res = parseAnonymousInlineScript(filePath, lines, idx, target, innerNo, stdinCol, true);
     const body = makeInlineScriptExpr(res);
     const stepLoc = { line: innerNo, col: stdinCol };
@@ -745,7 +746,7 @@ function tryParseEnsureRemoved(c: BlockCtx): BlockResult | null {
 }
 
 /**
- * After a bare `` `body`(args) `` / `` ```...```(args) `` inline script,
+ * After a bare `` 'body'(args) `` / `'''...'''(args)` inline script,
  * optionally parse an attached `catch (...) { ... }` or `recover(...) { ... }`
  * clause. Same semantics and bindings as a named-ref call. `recover` and
  * `catch` are mutually exclusive — when both appear on the same step the
@@ -814,7 +815,7 @@ function tryParseAsync(c: BlockCtx): BlockResult | null {
   if (c.inner !== "async" && !c.inner.startsWith("async ")) return null;
   const col = c.innerRaw.indexOf("async") + 1;
   const rest = c.inner === "async" ? "" : c.inner.slice("async ".length).trim();
-  if (rest.startsWith("`")) {
+  if (startsInlineScript(rest)) {
     fail(c.filePath, "async is not supported with inline scripts", c.innerNo, col);
   }
   if (rest === "stdin" || rest.startsWith("stdin ")) {
@@ -836,14 +837,14 @@ function tryParseStdin(c: BlockCtx): BlockResult | null {
 }
 
 /**
- * A bare call statement: `` `body`(args) `` inline script or `ref(args)` managed
+ * A bare call statement: `` 'body'(args) `` inline script or `ref(args)` managed
  * call, optionally with an attached `catch` / `recover`. Fires only after the
  * keyword dispatch table misses, so a keyword line never reaches here. Returns
  * null for any line that is not call-shaped so it falls through to shell.
  */
 function tryBareCall(c: BlockCtx): BlockResult | null {
   const inner = c.inner;
-  if (inner.startsWith("`")) {
+  if (startsInlineScript(inner)) {
     const col = colFromRaw(c.innerRaw);
     const result = parseAnonymousInlineScript(c.filePath, c.lines, c.idx, inner, c.innerNo, col, true);
     const body = makeInlineScriptExpr(result);
@@ -880,7 +881,7 @@ function parseSayBody(
   const arg = c.inner.slice(level.length).trimStart();
   const col = c.innerRaw.indexOf(level) + 1;
   const stepLoc = { line: c.innerNo, col };
-  if (arg.startsWith("`")) {
+  if (startsInlineScript(arg)) {
     const result = parseAnonymousInlineScript(c.filePath, c.lines, c.idx, arg, c.innerNo, col);
     const message = makeInlineScriptExpr(result);
     return { step: { type: "say", level, message, loc: stepLoc }, nextIdx: result.nextLineIdx };
@@ -966,7 +967,7 @@ function tryParseReturn(c: BlockCtx): BlockResult | null {
   if (returnValue.startsWith("ensure ")) {
     fail(c.filePath, "'ensure' is not a keyword; return the call directly: return name(...)", c.innerNo, c.innerRaw.indexOf("ensure") + 1);
   }
-  if (returnValue.startsWith("`")) {
+  if (startsInlineScript(returnValue)) {
     const result = parseAnonymousInlineScript(c.filePath, c.lines, c.idx, returnValue, c.innerNo, retLoc.col);
     const value = makeInlineScriptExpr(result);
     return { step: { type: "return", value, loc: retLoc }, nextIdx: result.nextLineIdx };
@@ -1118,7 +1119,7 @@ function applyAssignmentGuards(c: BlockCtx): void {
       rest.startsWith("ensure ") ||
       rest.startsWith("async ") ||
       rest.startsWith("stdin ") ||
-      rest.startsWith("`") ||
+      startsInlineScript(rest) ||
       /^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?\s*\(/.test(rest);
     if (looksInvoke) {
       fail(

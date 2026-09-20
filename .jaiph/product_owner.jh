@@ -24,15 +24,14 @@ const po_file_rule = """
   jaiph workflows or agent sessions.
 """
 
-script first_line_task = ```
+script first_line_task = '''
   local line
   line="$(printf '%s\n' "$1" | awk 'NR==1 { print; exit }')"
   line="${line#\#\# }"
   line="$(printf '%s\n' "$line" | sed 's/ *#[A-Za-z0-9_-]*//g')"
   printf '%s\n' "$line"
-```
-
-script git_evidence = ```
+'''
+script git_evidence = '''
   git log -5 --oneline 2>/dev/null || true
   echo "---"
   git status --porcelain 2>/dev/null || true
@@ -40,9 +39,8 @@ script git_evidence = ```
   git log -1 --format=fuller 2>/dev/null || true
   echo "---"
   git diff --stat HEAD~1 2>/dev/null || true
-```
-
-script format_task_file = ```
+'''
+script format_task_file = '''
   title="$1"
   tags="$2"
   body="$3"
@@ -56,8 +54,7 @@ script format_task_file = ```
     printf '%s\n\n' "$out"
     printf '%s\n' "$body"
   } > "$dest"
-```
-
+'''
 # Claim one available task. Prefers the first #dev-ready that is not
 # #in-progress; may claim a later one. HTTP 200 either way — empty queue is fail.
 export def pick_task() {

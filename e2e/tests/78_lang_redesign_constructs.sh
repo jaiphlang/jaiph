@@ -37,7 +37,7 @@ EXPECTED
 e2e::section "const with run capture"
 
 e2e::file "const_run.jh" <<'EOF'
-script greet = `echo "hi from fn"`
+script greet = 'echo "hi from fn"'
 
 export def main() {
   const val = greet()
@@ -112,7 +112,7 @@ e2e::assert_contains "${bad_out}" 'command substitution' "error mentions command
 e2e::section "wait step joins async run"
 
 e2e::file "wait_step.jh" <<'EOF'
-script write_marker = `echo "waited" > waited.txt`
+script write_marker = 'echo "waited" > waited.txt'
 
 def bg_job() {
   write_marker()
@@ -147,7 +147,7 @@ e2e::assert_file_exists "${TEST_DIR}/waited.txt" "async job wrote marker file"
 e2e::section "run with catch on failure"
 
 e2e::file "ensure_recover.jh" <<'EOF'
-script always_fail_impl = `false`
+script always_fail_impl = 'false'
 def always_fail() {
   always_fail_impl()
 }
@@ -181,7 +181,7 @@ EXPECTED
 e2e::section "run with catch on failure"
 
 e2e::file "run_recover.jh" <<'EOF'
-script returns_false = `return 1`
+script returns_false = 'return 1'
 
 export def main() {
   returns_false() catch (err) {
@@ -210,7 +210,7 @@ EXPECTED
 e2e::section "structured rule with run catch and fail"
 
 e2e::file "structured_rule.jh" <<'EOF'
-script check_ok = `return 0`
+script check_ok = 'return 0'
 
 def require_name() {
   check_ok() catch (err) {
@@ -244,7 +244,7 @@ EXPECTED
 e2e::section "structured rule fails correctly"
 
 e2e::file "structured_rule_fail.jh" <<'EOF'
-script check_fail = `return 1`
+script check_fail = 'return 1'
 
 def require_name() {
   check_fail() catch (err) {

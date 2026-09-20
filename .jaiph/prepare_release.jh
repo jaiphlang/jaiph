@@ -13,9 +13,11 @@
 # The workflow never creates a commit or git tag — it stages edits for the
 # operator to review, commit, tag, and push manually.
 #
-script read_pkg_version = `node -p "require('./package.json').version"`
+script read_pkg_version = '''
+node -p "require('./package.json').version"
+'''
 
-script assert_version_format = ```
+script assert_version_format = '''
   v="$1"
   case "${v}" in
     *[!0-9.]*) printf 'version must match X.Y.Z (digits only); got: %s\n' "${v}" >&2; exit 1 ;;
@@ -24,9 +26,8 @@ script assert_version_format = ```
     printf 'version must match X.Y.Z (digits only); got: %s\n' "${v}" >&2
     exit 1
   }
-```
-
-script compute_next_patch = ```python3
+'''
+script compute_next_patch = '''python3
   import sys
   v = sys.argv[1]
   parts = v.split('.')
@@ -35,27 +36,24 @@ script compute_next_patch = ```python3
       sys.exit(1)
   parts[-1] = str(int(parts[-1]) + 1)
   print('.'.join(parts))
-```
-
-script assert_git_tree_clean = ```
+'''
+script assert_git_tree_clean = '''
   if [ -n "$(git status --porcelain)" ]; then
     echo "git tree is dirty; commit or stash before running prepare_release" >&2
     git status --short >&2
     exit 1
   fi
-```
-
-script assert_tag_does_not_exist = ```
+'''
+script assert_tag_does_not_exist = '''
   v="$1"
   if git rev-parse -q --verify "refs/tags/v${v}" >/dev/null 2>&1; then
     printf 'tag v%s already exists\n' "${v}" >&2
     exit 1
   fi
-```
+'''
+script npm_version_no_tag = 'npm version "$1" --no-git-tag-version --allow-same-version >/dev/null'
 
-script npm_version_no_tag = `npm version "$1" --no-git-tag-version --allow-same-version >/dev/null`
-
-script update_install_release_ref = ```python3
+script update_install_release_ref = '''python3
   import sys
   old, new = sys.argv[1], sys.argv[2]
   needle = f"v{old}"
@@ -72,11 +70,10 @@ script update_install_release_ref = ```python3
           f.write(src.replace(needle, f"v{new}"))
       total += count
   print(total)
-```
+'''
+script run_npm_build = 'npm run build >&2'
 
-script run_npm_build = `npm run build >&2`
-
-script assert_built_cli_version_equals = ```
+script assert_built_cli_version_equals = '''
   v="$1"
   expected="jaiph ${v}"
   actual="$(node dist/src/cli.js --version)"
@@ -84,22 +81,22 @@ script assert_built_cli_version_equals = ```
     printf 'displayed --version mismatch\nexpected: %s\nactual:   %s\n' "${expected}" "${actual}" >&2
     exit 1
   fi
-```
+'''
+script run_registry_build = 'node scripts/build-registry.mjs >&2'
 
-script run_registry_build = `node scripts/build-registry.mjs >&2`
+script latest_release_tag = '''
+git tag -l 'v*' | sort -V | tail -1
+'''
 
-script latest_release_tag = `git tag -l 'v*' | sort -V | tail -1`
-
-script commits_since_latest_tag = ```
+script commits_since_latest_tag = '''
   tag="$(git tag -l 'v*' | sort -V | tail -1)"
   if [ -z "${tag}" ]; then
     git log --oneline
   else
     git log "${tag}"..HEAD --oneline
   fi
-```
-
-script read_changelog_unreleased = ```python3
+'''
+script read_changelog_unreleased = '''python3
   import re
   import sys
 
@@ -120,9 +117,8 @@ script read_changelog_unreleased = ```python3
           out.append(line)
 
   sys.stdout.write("".join(out))
-```
-
-script read_changelog_version_section = ```python3
+'''
+script read_changelog_version_section = '''python3
   import re
   import sys
 
@@ -147,9 +143,8 @@ script read_changelog_version_section = ```python3
           out.append(line)
 
   sys.stdout.write("".join(out))
-```
-
-script assert_changelog_stamped = ```
+'''
+script assert_changelog_stamped = '''
   v="$1"
   grep -Eq '^# Unreleased$' CHANGELOG.md || {
     echo "CHANGELOG.md: missing # Unreleased header at top" >&2
@@ -159,8 +154,7 @@ script assert_changelog_stamped = ```
     echo "CHANGELOG.md: missing stamped # ${v} section" >&2
     exit 1
   }
-```
-
+'''
 const changelog_reviewer_role = """
   You are a release engineer preparing Jaiph for publication. You edit
   CHANGELOG.md in the repo root — the operator runs prepare_release next

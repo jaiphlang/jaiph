@@ -24,7 +24,7 @@ test("valid: nested script/def/prompt declared then used later in the same body"
   withFlow(
     [
       "export def main() {",
-      "  script sh = `echo hi`",
+      "  script sh = 'echo hi'",
       "  def helper(name) {",
       '    return "hi-${name}"',
       "  }",
@@ -46,7 +46,7 @@ test("E_VALIDATE: a nested name used before its declaration is unknown", () => {
     [
       "export def main() {",
       "  foo()",
-      "  script foo = `echo hi`",
+      "  script foo = 'echo hi'",
       "}",
     ],
     (entry, out) => {
@@ -62,7 +62,7 @@ test("E_VALIDATE: another def cannot run a name declared only inside a sibling d
   withFlow(
     [
       "export def main() {",
-      "  script nested_helper = `echo hi`",
+      "  script nested_helper = 'echo hi'",
       "  other()",
       "}",
       "def other() {",
@@ -85,7 +85,7 @@ test("E_VALIDATE: a nested declaration colliding with a parameter is rejected", 
       '  inner("x")',
       "}",
       "def inner(name) {",
-      "  script name = `echo hi`",
+      "  script name = 'echo hi'",
       "}",
     ],
     (entry, out) => {
@@ -100,9 +100,9 @@ test("E_VALIDATE: a nested declaration colliding with a parameter is rejected", 
 test("valid: a nested script shadows a module-level script of the same name", () => {
   withFlow(
     [
-      "script foo = `echo module`",
+      "script foo = 'echo module'",
       "export def main() {",
-      "  script foo = `echo nested`",
+      "  script foo = 'echo nested'",
       "  foo()",
       "}",
     ],
@@ -331,7 +331,7 @@ test("E_VALIDATE: a script declared inside `if` is not visible after the `if`", 
     [
       "export def main(flag) {",
       '  if flag == "y" {',
-      "    script s = `echo YES`",
+      "    script s = 'echo YES'",
       "  }",
       "  return s()",
       "}",
@@ -350,7 +350,7 @@ test("valid: a script declared and used inside the same `if` body", () => {
     [
       "export def main(flag) {",
       '  if flag == "y" {',
-      "    script s = `echo YES`",
+      "    script s = 'echo YES'",
       "    return s()",
       "  }",
       '  return "none"',
@@ -367,9 +367,9 @@ test("E_VALIDATE: independent `if`/`else` scripts are not visible after the bran
     [
       "export def main(flag) {",
       '  if flag == "y" {',
-      "    script s = `echo YES`",
+      "    script s = 'echo YES'",
       "  } else {",
-      "    script s = `echo NO`",
+      "    script s = 'echo NO'",
       "  }",
       "  return s()",
       "}",
@@ -388,10 +388,10 @@ test("valid: `if` and `else` each declare their own `s` (two independent locals)
     [
       "export def main(flag) {",
       '  if flag == "y" {',
-      "    script s = `echo YES`",
+      "    script s = 'echo YES'",
       "    return s()",
       "  } else {",
-      "    script s = `echo NO`",
+      "    script s = 'echo NO'",
       "    return s()",
       "  }",
       "}",
@@ -407,7 +407,7 @@ test("valid: a script declared in a `for` body is used inside the loop", () => {
     [
       "export def main(src) {",
       "  for line in src {",
-      '    script s = `echo "$1"`',
+      "    script s = 'echo \"$1\"'",
       "    s(line)",
       "  }",
       '  return "done"',
@@ -424,7 +424,7 @@ test("E_VALIDATE: a `for`-body script is not visible after the loop", () => {
     [
       "export def main(src) {",
       "  for line in src {",
-      '    script s = `echo "$1"`',
+      "    script s = 'echo \"$1\"'",
       "  }",
       "  return s()",
       "}",
@@ -442,9 +442,9 @@ test("valid: a script declared in a `catch` body is used inside the catch", () =
   withFlow(
     [
       "export def main() {",
-      "  script boom = `exit 1`",
+      "  script boom = 'exit 1'",
       "  boom() catch (e) {",
-      "    script s = `echo recovered`",
+      "    script s = 'echo recovered'",
       "    return s()",
       "  }",
       '  return "x"',
@@ -460,9 +460,9 @@ test("E_VALIDATE: a `catch`-body script is not visible after the catch", () => {
   withFlow(
     [
       "export def main() {",
-      "  script boom = `exit 1`",
+      "  script boom = 'exit 1'",
       "  boom() catch (e) {",
-      "    script s = `echo recovered`",
+      "    script s = 'echo recovered'",
       "  }",
       "  return s()",
       "}",
@@ -480,7 +480,7 @@ test("valid: a def declared in a `recover` body is used inside the recover", () 
   withFlow(
     [
       "export def main() {",
-      "  script boom = `exit 1`",
+      "  script boom = 'exit 1'",
       "  boom() recover (e) {",
       "    def fix() {",
       '      return "ok"',
@@ -500,7 +500,7 @@ test("E_VALIDATE: a `recover`-body def is not visible after the recover", () => 
   withFlow(
     [
       "export def main() {",
-      "  script boom = `exit 1`",
+      "  script boom = 'exit 1'",
       "  boom() recover (e) {",
       "    def fix() {",
       '      return "ok"',
@@ -521,10 +521,10 @@ test("E_VALIDATE: a `recover`-body def is not visible after the recover", () => 
 test("valid: an `if` body shadows an enclosing script; the outer name resolves after", () => {
   withFlow(
     [
-      "script s = `echo OUTER`",
+      "script s = 'echo OUTER'",
       "export def main(flag) {",
       '  if flag == "y" {',
-      "    script s = `echo INNER`",
+      "    script s = 'echo INNER'",
       "    s()",
       "  }",
       "  return s()",

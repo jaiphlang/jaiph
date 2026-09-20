@@ -93,7 +93,7 @@ test("def with empty braced body is accepted", () => {
 });
 
 test("script with empty string body is accepted", () => {
-  const mod = parsejaiph("script noop = ``", "test.jh");
+  const mod = parsejaiph("script noop = ''", "test.jh");
   assert.equal(mod.scripts.length, 1);
   assert.equal(mod.scripts[0].name, "noop");
 });
@@ -167,7 +167,7 @@ test("import script parses into scriptImports", () => {
 
 test("import script name collides with inline script", () => {
   assert.throws(
-    () => parsejaiph('import script "./q.py" as q\n\nscript q = `echo hi`\n', "/tmp/test.jh"),
+    () => parsejaiph("import script \"./q.py\" as q\n\nscript q = 'echo hi'\n", "/tmp/test.jh"),
     /duplicate name "q"/,
   );
 });

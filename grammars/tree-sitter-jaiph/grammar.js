@@ -33,7 +33,7 @@ module.exports = grammar({
         $.triple_string,
         $.string,
         $.fenced_block,
-        $.backtick_string,
+        $.quote_script,
         $.regex,
         $.number,
         $.qualified_identifier,
@@ -76,21 +76,23 @@ module.exports = grammar({
     triple_string: ($) =>
       token(seq('"""', repeat(choice(/[^"]/, /"[^"]/, /""[^"]/)), '"""')),
 
-    backtick_string: ($) => token(seq("`", /[^`]*/, "`")),
+    // One-line script body `'…'`. Lower precedence than `fenced_block` so
+    // `'''` is not tokenized as an empty quote_script plus a leftover `'`.
+    quote_script: ($) => token(prec(-1, seq("'", /[^'\n]*/, "'"))),
 
-    // Fenced script / inline-script body: ```lang ... ``` . The optional
+    // Fenced script / inline-script body: '''lang ... ''' . The optional
     // language tag drives injection (see injections.scm); the body is aliased
     // to `embedded` so a query can hand it to another grammar.
     fenced_block: ($) =>
-      seq(
-        "```",
+      prec(1, seq(
+        "'''",
         optional(field("language", alias($.fence_language, $.language))),
         optional(field("body", alias($.fence_content, $.embedded))),
-        "```",
-      ),
+        "'''",
+      )),
 
     fence_language: ($) => token.immediate(/[A-Za-z0-9_]+/),
 
-    fence_content: ($) => token(prec(-1, /([^`]|`[^`]|``[^`])+/)),
+    fence_content: ($) => token(prec(-1, /([^']|'[^']|''[^'])+/)),
   },
 });

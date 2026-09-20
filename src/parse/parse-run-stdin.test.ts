@@ -63,7 +63,7 @@ test("parse: stdin -> ref() with attached recover captures both", () => {
 });
 
 test("parse: stdin -> inline script", () => {
-  const step = stepOf("stdin content -> `cat`()");
+  const step = stepOf("stdin content -> 'cat'()");
   assert.equal(step.type, "exec");
   if (step.type !== "exec") return;
   assert.equal(step.body.kind, "inline_script");
@@ -178,7 +178,7 @@ test("parse: catch on a pipeline is allowed (one-shot)", () => {
 });
 
 test("parse: inline-script producer and stages round-trip through the AST", () => {
-  const step = stepOf("stdin `gen`() -> `tr a-z A-Z`()");
+  const step = stepOf("stdin 'gen'() -> 'tr a-z A-Z'()");
   assert.equal(step.type, "exec");
   if (step.type !== "exec") return;
   assert.equal(step.stdin?.kind, "inline_script");

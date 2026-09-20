@@ -6,13 +6,15 @@ export def researcher() {
   send emit_findings() -> findings
 }
 
-script emit_findings = `echo '## findings'`
+script emit_findings = '''
+echo '## findings'
+'''
 
-script write_findings_file = `echo "$1" > findings_file.md`
+script write_findings_file = 'echo "$1" > findings_file.md'
 
-script summarize_findings = `echo "Summary of findings"`
+script summarize_findings = 'echo "Summary of findings"'
 
-script review_summary = `echo "[reviewed] $1"`
+script review_summary = 'echo "[reviewed] $1"'
 
 export def analyst(message, chan, sender) {
   write_findings_file(message)

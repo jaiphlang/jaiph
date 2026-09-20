@@ -14,12 +14,12 @@ e2e::section "recover loop: fail first, repair, pass on retry"
 rm -f "${TEST_DIR}/.gate_passed"
 
 e2e::file "recover_repair.jh" <<'EOF'
-script check_gate = `test -f .gate_passed`
+script check_gate = 'test -f .gate_passed'
 def check() {
   check_gate()
 }
 
-script do_fix = `touch .gate_passed`
+script do_fix = 'touch .gate_passed'
 def fix() {
   do_fix()
 }
@@ -63,7 +63,7 @@ config {
   run.recover_limit = 2
 }
 
-script always_fail = `exit 1`
+script always_fail = 'exit 1'
 def failing() {
   always_fail()
 }
@@ -86,7 +86,7 @@ e2e::assert_contains "${out_exhaust}" "FAIL" "workflow fails after retry limit e
 e2e::section "recover loop: success on first attempt skips body"
 
 e2e::file "recover_pass.jh" <<'EOF'
-script ok_impl = `echo ok`
+script ok_impl = 'echo ok'
 def ok() {
   ok_impl()
 }

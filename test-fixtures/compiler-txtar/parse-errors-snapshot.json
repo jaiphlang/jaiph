@@ -102,21 +102,21 @@
     "line": 1,
     "col": 1,
     "code": "E_PARSE",
-    "message": "script definitions require = after the name: script greet = `...`"
+    "message": "script definitions require = after the name: script greet = '...'"
   },
   "script with parentheses": {
     "file": "input.jh",
     "line": 1,
     "col": 1,
     "code": "E_PARSE",
-    "message": "definitions must not use parentheses: script greet = `...`"
+    "message": "definitions must not use parentheses: script greet = '...'"
   },
   "script with parens but no braces": {
     "file": "input.jh",
     "line": 1,
     "col": 1,
     "code": "E_PARSE",
-    "message": "definitions must not use parentheses: script greet = `...`"
+    "message": "definitions must not use parentheses: script greet = '...'"
   },
   "workflow without braces": {
     "file": "input.jh",
@@ -627,7 +627,7 @@
     "line": 1,
     "col": 1,
     "code": "E_PARSE",
-    "message": "unterminated fenced block: no closing ``` before end of file"
+    "message": "unterminated fenced block: no closing ''' before end of file"
   },
   "metadata: runtime.workspace array rejected (single-quoted element)": {
     "file": "input.jh",
@@ -706,12 +706,12 @@
     "code": "OK",
     "message": "compilation succeeded but fixture expected a parse error"
   },
-  "inline script unterminated backtick": {
+  "inline script unterminated one-liner": {
     "file": "input.jh",
     "line": 2,
     "col": 3,
     "code": "E_PARSE",
-    "message": "unterminated inline script backtick — missing closing `"
+    "message": "unterminated one-line script — missing closing '"
   },
   "match: invalid pattern type": {
     "file": "input.jh",
@@ -893,7 +893,7 @@
     "line": 2,
     "col": 3,
     "code": "E_PARSE",
-    "message": "single-quoted strings are not supported; use double quotes (\"...\") instead"
+    "message": "anonymous inline script requires argument list after closing quote: 'body'(args) or 'body'()"
   },
   "capture and send combined in workflow body": {
     "file": "input.jh",
@@ -916,12 +916,19 @@
     "code": "OK",
     "message": "compilation succeeded but fixture expected a parse error"
   },
-  "triple-backtick prompt is rejected": {
+  "triple-single-quote prompt is rejected": {
     "file": "input.jh",
     "line": 2,
     "col": 3,
     "code": "E_PARSE",
-    "message": "prompt blocks use triple quotes: prompt \"\"\"...\"\"\"; triple backticks are for scripts"
+    "message": "prompt blocks use triple quotes: prompt \"\"\"...\"\"\"; script bodies use triple single quotes"
+  },
+  "triple-backtick script fence is rejected": {
+    "file": "input.jh",
+    "line": 1,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "script bodies use triple single quotes: '''...''' (triple backticks are markdown fences)"
   },
   "unterminated triple-quoted prompt block": {
     "file": "input.jh",
@@ -942,7 +949,7 @@
     "line": 1,
     "col": 1,
     "code": "E_PARSE",
-    "message": "script bodies use backticks: script broken = `...`"
+    "message": "script bodies use single quotes: script broken = '...'"
   },
   "script body with Jaiph interpolation rejected": {
     "file": "input.jh",
@@ -956,28 +963,28 @@
     "line": 1,
     "col": 1,
     "code": "E_PARSE",
-    "message": "brace-style script bodies are no longer supported; use: script name = `...` or script name = ```...```"
+    "message": "brace-style script bodies are no longer supported; use: script name = '...' or script name = '''...'''"
   },
   "script body with bare identifier rejected": {
     "file": "input.jh",
     "line": 1,
     "col": 1,
     "code": "E_PARSE",
-    "message": "script bodies must be backtick or fenced block: script broken = `...` or script broken = ```...```"
+    "message": "script bodies must be a one-liner or fenced block: script broken = '...' or script broken = '''...'''"
   },
   "script body with trailing content after backtick": {
     "file": "input.jh",
     "line": 1,
     "col": 1,
     "code": "E_PARSE",
-    "message": "unexpected content after script body backtick: 'extra'"
+    "message": "unexpected content after script body: 'extra'"
   },
   "inline script fenced without argument list": {
     "file": "input.jh",
     "line": 4,
     "col": 3,
     "code": "E_PARSE",
-    "message": "anonymous inline script requires argument list after closing fence: ```(args) or ```()"
+    "message": "anonymous inline script requires argument list after closing fence: '''(args) or '''()"
   },
   "inline script fenced with shebang and lang tag conflict": {
     "file": "input.jh",
@@ -991,21 +998,21 @@
     "line": 2,
     "col": 1,
     "code": "E_PARSE",
-    "message": "unterminated fenced block: no closing ``` before end of file"
+    "message": "unterminated fenced block: no closing ''' before end of file"
   },
-  "inline script single backtick without argument list": {
+  "inline script one-liner without argument list": {
     "file": "input.jh",
     "line": 2,
     "col": 3,
     "code": "E_PARSE",
-    "message": "anonymous inline script requires argument list after closing backtick: `body`(args) or `body`()"
+    "message": "anonymous inline script requires argument list after closing quote: 'body'(args) or 'body'()"
   },
   "inline script fenced with invalid lang token": {
     "file": "input.jh",
     "line": 2,
     "col": 1,
     "code": "E_PARSE",
-    "message": "invalid opening fence: only a single lang token is allowed after ```"
+    "message": "invalid opening fence: only a single lang token is allowed after '''"
   },
   "config block unterminated": {
     "file": "input.jh",
@@ -1446,7 +1453,7 @@
     "line": 1,
     "col": 1,
     "code": "E_PARSE",
-    "message": "script body must be a backtick or fenced block: script broken = `...` or script broken = ```...```"
+    "message": "script body must be a one-liner or fenced block: script broken = '...' or script broken = '''...'''"
   },
   "match triple-quote arm closing with trailing content": {
     "file": "input.jh",
@@ -1651,12 +1658,19 @@
     "code": "OK",
     "message": "compilation succeeded but fixture expected a parse error"
   },
-  "top-level script single backtick unterminated": {
+  "top-level script one-liner unterminated": {
     "file": "input.jh",
     "line": 1,
     "col": 1,
     "code": "E_PARSE",
-    "message": "unterminated inline script backtick — missing closing `"
+    "message": "unterminated one-line script — missing closing '"
+  },
+  "one-line backtick script is rejected": {
+    "file": "input.jh",
+    "line": 1,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "script one-liners use single quotes: '...' (backticks are removed)"
   },
   "inline catch return without value": {
     "file": "input.jh",
@@ -1677,7 +1691,7 @@
     "line": 2,
     "col": 1,
     "code": "E_PARSE",
-    "message": "unterminated fenced block: no closing ``` before end of file"
+    "message": "unterminated fenced block: no closing ''' before end of file"
   },
   "fail triple-quote opening with content on same line": {
     "file": "input.jh",

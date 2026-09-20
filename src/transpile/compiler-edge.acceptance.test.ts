@@ -21,7 +21,7 @@ test("ACCEPTANCE: duplicate import alias fails with E_VALIDATE", () => {
     writeFileSync(
       join(root, "a.jh"),
       [
-        'script one_impl = `echo one`',
+        "script one_impl = 'echo one'",
         "def one() {",
         "  one_impl()",
         "}",
@@ -31,7 +31,7 @@ test("ACCEPTANCE: duplicate import alias fails with E_VALIDATE", () => {
     writeFileSync(
       join(root, "b.jh"),
       [
-        'script two_impl = `echo two`',
+        "script two_impl = 'echo two'",
         "def two() {",
         "  two_impl()",
         "}",
@@ -124,7 +124,7 @@ test("ACCEPTANCE: imported workflow missing fails with E_VALIDATE", () => {
     writeFileSync(
       join(root, "lib.jh"),
       [
-        'script existing_impl = `echo ok`',
+        "script existing_impl = 'echo ok'",
         "def existing() {",
         "  existing_impl()",
         "}",
@@ -178,7 +178,7 @@ test("ACCEPTANCE: if keyword with old syntax produces E_PARSE error", () => {
         "def gate() {",
         "  gate_impl()",
         "}",
-        'script gate_impl = `false`',
+        "script gate_impl = 'false'",
         "",
         "export def main() {",
         "  if not run gate() {",
@@ -201,7 +201,7 @@ test("ACCEPTANCE: run catch then-branch allows mixed prompt and run", () => {
         "def gate() {",
         "  gate_impl()",
         "}",
-        'script gate_impl = `false`',
+        "script gate_impl = 'false'",
         "",
         "def fix_build() {",
         '  const _ = prompt "fix build"',
@@ -331,7 +331,7 @@ test("ACCEPTANCE: inline shell short-circuit in workflow compiles", () => {
     writeFileSync(
       join(root, "main.jh"),
       [
-        'script gate_impl = `true`',
+        "script gate_impl = 'true'",
         "",
         "export def main() {",
         '  other || { echo "err"; exit 1; }',
@@ -620,7 +620,7 @@ test("ACCEPTANCE: route with rule ref fails E_VALIDATE", () => {
         "def check() {",
         "  check_impl()",
         "}",
-        'script check_impl = `true`',
+        "script check_impl = 'true'",
         "export def main() {",
         "  log \"ok\"",
         "}",
@@ -672,17 +672,19 @@ test("ACCEPTANCE: inbox.jh fixture builds successfully", () => {
         "channel summary -> reviewer",
         "channel final_summary",
         "",
-        "script emit_findings = `echo '## findings'`",
+        "script emit_findings = '''",
+        "echo '## findings'",
+        "'''",
         "",
-        'script summarize_findings = `echo "Summary of findings"`',
+        "script summarize_findings = 'echo \"Summary of findings\"'",
         "",
-        'script review_summary = `echo "[reviewed] $1"`',
+        "script review_summary = 'echo \"[reviewed] $1\"'",
         "",
         "def researcher() {",
         "  send emit_findings() -> findings",
         "}",
         "",
-        'script write_findings_file = `echo "$1" > findings_file.md`',
+        "script write_findings_file = 'echo \"$1\" > findings_file.md'",
         "",
         "def analyst(message, chan, sender) {",
         '  write_findings_file(message)',
@@ -714,7 +716,7 @@ test("ACCEPTANCE: run catch with args after catch fails with E_PARSE", () => {
         "def ci_passes() {",
         "  ci_passes_impl()",
         "}",
-        'script ci_passes_impl = `true`',
+        "script ci_passes_impl = 'true'",
         "",
         "export def main() {",
         '  ci_passes() catch "$repo_dir" {',
@@ -792,7 +794,7 @@ test("ACCEPTANCE: script named main is E_VALIDATE", () => {
   withTempDir("jaiph-acc-script-main-", (root) => {
     writeFileSync(
       join(root, "lib.jh"),
-      ["script main = `echo hi`", ""].join("\n"),
+      ["script main = 'echo hi'", ""].join("\n"),
     );
     assert.throws(
       () => buildScripts(join(root, "lib.jh"), join(root, "out")),
@@ -819,7 +821,7 @@ test("ACCEPTANCE: valid run catch block still works", () => {
         "def ci_passes(repo_dir) {",
         "  ci_passes_impl()",
         "}",
-        'script ci_passes_impl = `true`',
+        "script ci_passes_impl = 'true'",
         "",
         "def fix_it() {",
         '  prompt "fix"',

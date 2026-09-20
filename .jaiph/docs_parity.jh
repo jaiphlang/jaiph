@@ -45,20 +45,19 @@ const skills_preamble = """
      optional /tmp revision HTML artifact from that skill.
 """
 
-script assert_newline_paths_are_files = ```
+script assert_newline_paths_are_files = '''
   while IFS= read -r f; do
     f="${f#"${f%%[![:space:]]*}"}"
     f="${f%"${f##*[![:space:]]}"}"
     [ -z "$f" ] && continue
     test -f "$f" || return 1
   done <<< "$1"
-```
-
+'''
 def docs_files_present(list) {
   assert_newline_paths_are_files(list)
 }
 
-script assert_worktree_clean_for_docs = ```
+script assert_worktree_clean_for_docs = '''
   local current_changed_files
   current_changed_files="$(
     {
@@ -73,13 +72,12 @@ script assert_worktree_clean_for_docs = ```
     echo "$current_changed_files" >&2
     return 1
   fi
-```
-
+'''
 def worktree_is_clean() {
   assert_worktree_clean_for_docs()
 }
 
-script assert_only_allowed_changed = ```
+script assert_only_allowed_changed = '''
   local allowed="$1"
   local after_changed_files
   after_changed_files="$(
@@ -97,13 +95,12 @@ script assert_only_allowed_changed = ```
     echo "Unexpected file changed by docs prompt: $changed_file" >&2
     return 1
   done <<< "$after_changed_files"
-```
-
+'''
 def only_expected_docs_changed_after_prompt(allowed) {
   assert_only_allowed_changed(allowed)
 }
 
-script list_docs_md_paths = ```
+script list_docs_md_paths = '''
   local out="" f
   for f in docs/*.md; do
     if [ -z "$out" ]; then
@@ -113,19 +110,17 @@ script list_docs_md_paths = ```
     fi
   done
   printf '%s\n' "$out"
-```
-
+'''
 # Docs surfaces the agent may edit: markdown/HTML, CHANGELOG, CLI usage/help
 # strings in usage.ts and per-command USAGE constants (e.g. run.ts).
-script build_allowed_paths_block = ```
+script build_allowed_paths_block = '''
   local out f
   out="$(printf '%s\n' README.md CHANGELOG.md docs/index.html docs/_layouts/docs.html src/cli/shared/usage.ts)"
   for f in docs/*.md src/cli/commands/*.ts; do
     out="$out"$'\n'"$f"
   done
   printf '%s\n' "$out"
-```
-
+'''
 export def update_from_task(taskDesc) {
   prompt """
     ${skills_preamble}

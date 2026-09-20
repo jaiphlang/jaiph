@@ -23,7 +23,7 @@ unset UE_TOKEN || true
 e2e::section "sterile — a script with no use never sees a host key"
 
 e2e::file "sterile_show.jh" <<'EOF'
-script show_impl = `echo "UE_TOKEN=[${UE_TOKEN:-<unset>}]"`
+script show_impl = 'echo "UE_TOKEN=[${UE_TOKEN:-<unset>}]"'
 export def main() {
   const t = show_impl()
   return "${t}"
@@ -46,7 +46,7 @@ EOF
 e2e::section "use + --env KEY — the granted host value reaches the script"
 
 e2e::file "use_show.jh" <<'EOF'
-script show_impl use UE_TOKEN = `echo "UE_TOKEN=[${UE_TOKEN:-<unset>}]"`
+script show_impl use UE_TOKEN = 'echo "UE_TOKEN=[${UE_TOKEN:-<unset>}]"'
 export def main() {
   const t = show_impl()
   return "${t}"
@@ -96,8 +96,8 @@ e2e::assert_contains "${missing_out}" "--env UE_TOKEN" "use: E_ENV_MISSING names
 e2e::section "no def-level leak — a callee's script without use stays sterile despite the grant"
 
 e2e::file "use_sub.jh" <<'EOF'
-script main_show use UE_TOKEN = `echo "MAIN=[${UE_TOKEN:-<unset>}]"`
-script sub_show = `echo "SUB=[${UE_TOKEN:-<unset>}]"`
+script main_show use UE_TOKEN = 'echo "MAIN=[${UE_TOKEN:-<unset>}]"'
+script sub_show = 'echo "SUB=[${UE_TOKEN:-<unset>}]"'
 def sub() {
   const s = sub_show()
   return "${s}"
@@ -129,7 +129,7 @@ EOF
 e2e::section "jaiph test does not pre-flight use keys (exit 0 without --env)"
 
 e2e::file "use_lane.test.jh" <<'EOF'
-script show_impl use UE_TOKEN = `echo "UE_TOKEN=[${UE_TOKEN:-<unset>}]"`
+script show_impl use UE_TOKEN = 'echo "UE_TOKEN=[${UE_TOKEN:-<unset>}]"'
 export def main() {
   const t = show_impl()
   return "${t}"
@@ -146,7 +146,7 @@ UE_TOKEN=host-secret jaiph test "${TEST_DIR}/use_lane.test.jh" \
 e2e::section "reserved keys in use are rejected at parse time"
 
 e2e::file "use_reserved.jh" <<'EOF'
-script bad use JAIPH_WORKSPACE = `echo never`
+script bad use JAIPH_WORKSPACE = 'echo never'
 export def main() {
   bad()
 }

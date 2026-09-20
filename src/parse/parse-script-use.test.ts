@@ -8,17 +8,17 @@ import assert from "node:assert/strict";
 import { parsejaiph } from "../parser";
 import { emitModule } from "../format";
 
-test("script use: single key on a backtick script", () => {
-  const mod = parsejaiph("script aaa use GITHUB_TOKEN = `gh pr list`", "test.jh");
+test("script use: single key on a one-line script", () => {
+  const mod = parsejaiph("script aaa use GITHUB_TOKEN = 'gh pr list'", "test.jh");
   assert.equal(mod.scripts[0].name, "aaa");
   assert.deepEqual(mod.scripts[0].use, ["GITHUB_TOKEN"]);
 });
 
 test("script use: multiple space-separated keys, exported script", () => {
   const src = [
-    "export script aaa use GITHUB_TOKEN NPM_TOKEN = ```",
+    "export script aaa use GITHUB_TOKEN NPM_TOKEN = '''",
     "gh pr list",
-    "```",
+    "'''",
   ].join("\n");
   const mod = parsejaiph(src, "test.jh");
   assert.deepEqual(mod.scripts[0].use, ["GITHUB_TOKEN", "NPM_TOKEN"]);
@@ -26,12 +26,12 @@ test("script use: multiple space-separated keys, exported script", () => {
 });
 
 test("script use: absent clause leaves `use` unset", () => {
-  const mod = parsejaiph("script aaa = `echo x`", "test.jh");
+  const mod = parsejaiph("script aaa = 'echo x'", "test.jh");
   assert.equal(mod.scripts[0].use, undefined);
 });
 
 test("script use: body containing = still parses with a use clause", () => {
-  const mod = parsejaiph("script aaa use K = `echo a=b`", "test.jh");
+  const mod = parsejaiph("script aaa use K = 'echo a=b'", "test.jh");
   assert.deepEqual(mod.scripts[0].use, ["K"]);
   assert.equal(mod.scripts[0].body, "echo a=b");
 });
@@ -45,18 +45,18 @@ test("import script use: clause after the alias", () => {
 
 test("use key must be a valid env var name (E_ENV_INVALID)", () => {
   assert.throws(
-    () => parsejaiph("script aaa use 1BAD = `echo x`", "test.jh"),
+    () => parsejaiph("script aaa use 1BAD = 'echo x'", "test.jh"),
     /E_ENV_INVALID use key "1BAD" is not a valid environment variable name/,
   );
   assert.throws(
-    () => parsejaiph('script aaa use "GITHUB_TOKEN" = `echo x`', "test.jh"),
+    () => parsejaiph("script aaa use \"GITHUB_TOKEN\" = 'echo x'", "test.jh"),
     /E_ENV_INVALID/,
   );
 });
 
 test("use key must not be reserved (E_ENV_RESERVED, same rule as --env)", () => {
   assert.throws(
-    () => parsejaiph("script aaa use JAIPH_WORKSPACE = `echo x`", "test.jh"),
+    () => parsejaiph("script aaa use JAIPH_WORKSPACE = 'echo x'", "test.jh"),
     /E_ENV_RESERVED use cannot request reserved key "JAIPH_WORKSPACE"/,
   );
   assert.throws(
@@ -64,18 +64,18 @@ test("use key must not be reserved (E_ENV_RESERVED, same rule as --env)", () => 
     /E_ENV_RESERVED/,
   );
   assert.throws(
-    () => parsejaiph("script leak use JAIPH_CHAIN_KEY = `echo x`", "test.jh"),
+    () => parsejaiph("script leak use JAIPH_CHAIN_KEY = 'echo x'", "test.jh"),
     /E_ENV_RESERVED use cannot request reserved key "JAIPH_CHAIN_KEY"/,
   );
   assert.throws(
-    () => parsejaiph("script leak use JAIPH_RUN_SUMMARY_FILE = `echo x`", "test.jh"),
+    () => parsejaiph("script leak use JAIPH_RUN_SUMMARY_FILE = 'echo x'", "test.jh"),
     /E_ENV_RESERVED/,
   );
 });
 
 test("`use` is reserved as a script name and import alias", () => {
   assert.throws(
-    () => parsejaiph("script use = `echo x`", "test.jh"),
+    () => parsejaiph("script use = 'echo x'", "test.jh"),
     /"use" is reserved/,
   );
   assert.throws(
@@ -88,11 +88,11 @@ test("use clauses round-trip through the formatter", () => {
   const src = [
     'import script "./gh.sh" as gh use GITHUB_TOKEN',
     "",
-    "script aaa use GITHUB_TOKEN NPM_TOKEN = `gh pr list`",
+    "script aaa use GITHUB_TOKEN NPM_TOKEN = 'gh pr list'",
     "",
-    "export script bbb use NPM_TOKEN = ```",
+    "export script bbb use NPM_TOKEN = '''",
     "npm publish",
-    "```",
+    "'''",
     "",
     "export def main() {",
     "  aaa()",

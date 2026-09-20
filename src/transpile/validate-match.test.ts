@@ -39,7 +39,7 @@ test("E_VALIDATE: inline script in match arm body is rejected", () => {
         "export def main() {",
         '  const x = "ok"',
         "  return match x {",
-        "    \"ok\" => `echo yes`()",
+        "    \"ok\" => 'echo yes'()",
         '    _ => "no"',
         "  }",
         "}",
@@ -109,7 +109,7 @@ test("match arm with run ref body is accepted", () => {
     writeFileSync(
       join(root, "m.jh"),
       [
-        "script helper = `echo ok`",
+        "script helper = 'echo ok'",
         "export def main() {",
         '  const x = "ok"',
         "  return match x {",
@@ -159,7 +159,7 @@ test("match arm with a bare call form (helper()) is accepted (not an unknown ver
     writeFileSync(
       join(root, "m.jh"),
       [
-        'script helper = `echo hi`',
+        "script helper = 'echo hi'",
         "export def main() {",
         '  const x = "ok"',
         "  return match x {",

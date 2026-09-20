@@ -58,10 +58,10 @@ The returned value is the newline-separated list of absolute destination paths, 
 If you need full control of layout or names, write to `$JAIPH_ARTIFACTS_DIR` from a `script` step:
 
 ```jh
-script save_report = ```
+script save_report = '''
   mkdir -p "$JAIPH_ARTIFACTS_DIR/reports"
   cp ./report.html "$JAIPH_ARTIFACTS_DIR/reports/"
-```
+'''
 
 export def main() {
   save_report()

@@ -54,27 +54,27 @@ function emitInlineScriptLines(
   bodyIndent: string,
 ): string[] {
   const argsStr = formatArgs(args);
-  if (lang || body.includes("\n")) {
+  if (lang || body.includes("\n") || body.includes("'")) {
     const langTag = lang ?? "";
-    const result = [`${prefix}\`\`\`${langTag}`];
+    const result = [`${prefix}'''${langTag}`];
     result.push(...emitFencedScriptBodyLines(body, bodyIndent));
-    result.push(`${closeIndent}\`\`\`(${argsStr})`);
+    result.push(`${closeIndent}'''(${argsStr})`);
     return result;
   }
-  return [`${prefix}\`${body}\`(${argsStr})`];
+  return [`${prefix}'${body}'(${argsStr})`];
 }
 
 /**
  * Render a `stdin` producer / pipeline stage on a single line: a `literal`
  * value verbatim, a `call` via `emitRef`, or a single-line inline script as
- * `` `body`(args) ``. Pipeline producers and intermediate stages are always
+ * `'body'(args)`. Pipeline producers and intermediate stages are always
  * single-line (fenced inline scripts are only allowed as the final stage, which
  * emits through the normal body path).
  */
 function emitStageInline(expr: Expr): string {
   if (expr.kind === "literal") return expr.raw;
   if (expr.kind === "call") return emitRef(expr.callee, expr.args);
-  if (expr.kind === "inline_script") return `\`${expr.body}\`(${formatArgs(expr.args)})`;
+  if (expr.kind === "inline_script") return `'${expr.body}'(${formatArgs(expr.args)})`;
   return "";
 }
 
@@ -134,10 +134,10 @@ function emitExprFirstLine(
       const langTag = expr.lang ?? "";
       const bodyIndent = `${ci}${pad}`;
       const tail = emitFencedScriptBodyLines(expr.body, bodyIndent);
-      tail.push(`${ci}\`\`\`(${formatArgs(expr.args)})`);
-      return { head: `\`\`\`${langTag}`, tail };
+      tail.push(`${ci}'''(${formatArgs(expr.args)})`);
+      return { head: `'''${langTag}`, tail };
     }
-    return { head: `\`${expr.body}\`(${formatArgs(expr.args)})`, tail: [] };
+    return { head: `'${expr.body}'(${formatArgs(expr.args)})`, tail: [] };
   }
   if (expr.kind === "prompt") {
     if (expr.name !== undefined) {

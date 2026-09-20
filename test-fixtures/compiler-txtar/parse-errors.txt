@@ -7,7 +7,7 @@ export def main() {
 === invalid script declaration
 # @expect error E_PARSE "invalid script declaration" @1:1
 --- input.jh
-script 123bad = `echo x`
+script 123bad = 'echo x'
 
 === invalid rule declaration
 # @expect error E_PARSE "'rule' is not a keyword; use 'def'" @1:1
@@ -100,17 +100,17 @@ export def bar
 def gate()
 
 === script without braces
-# @expect error E_PARSE "script definitions require = after the name: script greet = `...`" @1:1
+# @expect error E_PARSE "script definitions require = after the name: script greet = '...'" @1:1
 --- input.jh
 script greet
 
 === script with parentheses
-# @expect error E_PARSE "definitions must not use parentheses: script greet = `...`" @1:1
+# @expect error E_PARSE "definitions must not use parentheses: script greet = '...'" @1:1
 --- input.jh
 script greet() {
 
 === script with parens but no braces
-# @expect error E_PARSE "definitions must not use parentheses: script greet = `...`" @1:1
+# @expect error E_PARSE "definitions must not use parentheses: script greet = '...'" @1:1
 --- input.jh
 script greet()
 
@@ -168,10 +168,10 @@ export def main() {
 === script tag with manual shebang conflict
 # @expect error E_PARSE "already sets the shebang — remove the manual" @1:1
 --- input.jh
-script transform = ```node
+script transform = '''node
 #!/usr/bin/env node
 console.log('hi');
-```
+'''
 
 === script tag with parentheses
 # @expect error E_PARSE "unsupported top-level statement: script:node transform() {" @1:1
@@ -194,7 +194,7 @@ export def main() {
 # @expect error E_PARSE "async is not supported with inline scripts" @2:3
 --- input.jh
 export def main() {
-  async `echo hello`()
+  async 'echo hello'()
 }
 
 === old inline script syntax rejected
@@ -319,7 +319,7 @@ export def main() {
 # @expect error E_PARSE "duplicate name" @1:1
 --- input.jh
 const helper = "val"
-script helper = `echo ok`
+script helper = 'echo ok'
 export def main() {
   helper()
 }
@@ -351,7 +351,7 @@ export def main() {
 def gate() {
   gate_impl()
 }
-script gate_impl = `false`
+script gate_impl = 'false'
 export def main() {
   if not run gate() {
     log "fallback"
@@ -378,7 +378,7 @@ export def main() {
 def ci_passes() {
   ci_passes_impl()
 }
-script ci_passes_impl = `true`
+script ci_passes_impl = 'true'
 export def main() {
   ci_passes() catch "$repo_dir" {
     prompt "Apply the smallest safe fix."
@@ -522,7 +522,7 @@ export def main() {
 === reject shell fallback in rule log
 # @expect error E_PARSE "log cannot use shell fallback syntax (e.g. ${var:-default}); use conditional log" @3:3
 --- input.jh
-script noop = `true`
+script noop = 'true'
 def check() {
   log "${x:-fallback}"
 }
@@ -533,8 +533,8 @@ export def main() {
 === nested inline capture rejected
 # @expect error E_PARSE "log contains invalid inline call reference" @4:3
 --- input.jh
-script foo = `echo "a"`
-script bar = `echo "b"`
+script foo = 'echo "a"'
+script bar = 'echo "b"'
 export def main() {
   log "got: ${foo(${bar()})}"
 }
@@ -759,9 +759,9 @@ export def main() {
 }
 
 === unterminated script block
-# @expect error E_PARSE "unterminated fenced block: no closing ``` before end of file" @1:1
+# @expect error E_PARSE "unterminated fenced block: no closing ''' before end of file" @1:1
 --- input.jh
-script broken = ```
+script broken = '''
 echo hello
 
 === metadata: runtime.workspace array rejected (single-quoted element)
@@ -819,7 +819,7 @@ test "deprecated mock" {
   const out = lib.main()
 }
 --- lib.jh
-script some_func = `echo "real"`
+script some_func = 'echo "real"'
 export def main() {
   some_func()
 }
@@ -844,7 +844,7 @@ export def main() {
 # @expect error E_PARSE "unexpected content after anonymous inline script: 'extra_stuff'" @2:3
 --- input.jh
 export def main() {
-  `echo hello`() extra_stuff
+  'echo hello'() extra_stuff
 }
 
 === inline script: unterminated parentheses
@@ -868,11 +868,11 @@ export def main() {
   script()
 }
 
-=== inline script unterminated backtick
-# @expect error E_PARSE "unterminated inline script backtick — missing closing `" @2:3
+=== inline script unterminated one-liner
+# @expect error E_PARSE "unterminated one-line script — missing closing '" @2:3
 --- input.jh
 export def main() {
-  `echo hello
+  'echo hello
 }
 
 === match: invalid pattern type
@@ -1001,7 +1001,7 @@ test "bad mock" {
   mock script lib.helper() {
     echo mocked
 --- lib.jh
-script helper = `echo real`
+script helper = 'echo real'
 export def main() {
   log "ok"
 }
@@ -1147,13 +1147,13 @@ export def main() {
 === run without parentheses in workflow requires parens
 # @expect error E_VALIDATE "use helper() — a bare name that refers to a script or workflow must be called as a managed step" @3:3
 --- input.jh
-script helper = `echo "hi"`
+script helper = 'echo "hi"'
 export def main() {
   helper
 }
 
 === return with single-quoted string
-# @expect error E_PARSE "single-quoted strings are not supported; use double quotes (" @2:3
+# @expect error E_PARSE "anonymous inline script requires argument list after closing quote: 'body'(args" @2:3
 --- input.jh
 export def main() {
   return 'hello'
@@ -1180,7 +1180,7 @@ export def main() {
 === run without parentheses in workflow requires parens
 # @expect error E_VALIDATE "use helper() — a bare name that refers to a script or workflow must be called as a managed step" @3:3
 --- input.jh
-script helper = `echo "hi"`
+script helper = 'echo "hi"'
 export def main() {
   helper
 }
@@ -1188,7 +1188,7 @@ export def main() {
 === const run without parentheses requires parens
 # @expect error E_VALIDATE "scripts are not values;" @3:3
 --- input.jh
-script helper = `echo "hi"`
+script helper = 'echo "hi"'
 export def main() {
   const x = helper
 }
@@ -1203,14 +1203,21 @@ export def main() {
   const x = check
 }
 
-=== triple-backtick prompt is rejected
+=== triple-single-quote prompt is rejected
 # @expect error E_PARSE "prompt blocks use triple quotes: prompt" @2:3
 --- input.jh
 export def main() {
-  prompt ```
+  prompt '''
   Hello multiline
-```
+'''
 }
+
+=== triple-backtick script fence is rejected
+# @expect error E_PARSE "script bodies use triple single quotes" @1:1
+--- input.jh
+script broken = ```
+echo hello
+```
 
 === unterminated triple-quoted prompt block
 # @expect error E_PARSE "unterminated triple-quoted block: no closing" @2:1
@@ -1223,76 +1230,76 @@ export def main() {
 === script with returns on closing fence rejected
 # @expect error E_PARSE "unexpected content after closing fence: 'returns" @1:1
 --- input.jh
-script transform = ```
+script transform = '''
 echo hello
-``` returns "{ x: string }"
+''' returns "{ x: string }"
 
 === script with double-quoted body rejected
-# @expect error E_PARSE "script bodies use backticks: script broken = `...`" @1:1
+# @expect error E_PARSE "script bodies use single quotes: script broken = '...'" @1:1
 --- input.jh
 script broken = "echo hello"
 
 === script body with Jaiph interpolation rejected
 # @expect error E_PARSE "script bodies cannot contain Jaiph interpolation (${name}); use $1, $2 positiona" @1:1
 --- input.jh
-script broken = `echo ${name}`
+script broken = 'echo ${name}'
 
 === script with brace-style body rejected
-# @expect error E_PARSE "brace-style script bodies are no longer supported; use: script name = `...` or s" @1:1
+# @expect error E_PARSE "brace-style script bodies are no longer supported; use: script name = '...' or s" @1:1
 --- input.jh
 script broken {
   echo hello
 }
 
 === script body with bare identifier rejected
-# @expect error E_PARSE "script bodies must be backtick or fenced block: script broken = `...` or script " @1:1
+# @expect error E_PARSE "script bodies must be a one-liner or fenced block: script broken = '...' or script " @1:1
 --- input.jh
 script broken = hello
 
 === script body with trailing content after backtick
-# @expect error E_PARSE "unexpected content after script body backtick: 'extra'" @1:1
+# @expect error E_PARSE "unexpected content after script body: 'extra'" @1:1
 --- input.jh
-script broken = `echo ok` extra
+script broken = 'echo ok' extra
 
 === inline script fenced without argument list
-# @expect error E_PARSE "anonymous inline script requires argument list after closing fence: ```(args) or" @4:3
+# @expect error E_PARSE "anonymous inline script requires argument list after closing fence: '''(args) or" @4:3
 --- input.jh
 export def main() {
-  ```
+  '''
 echo hello
-```
+'''
 }
 
 === inline script fenced with shebang and lang tag conflict
 # @expect error E_PARSE "already sets the shebang — remove the manual" @2:3
 --- input.jh
 export def main() {
-  ```node
+  '''node
 #!/usr/bin/env node
 console.log("hi");
-```()
+'''()
 }
 
 === inline script fenced unterminated in workflow
-# @expect error E_PARSE "unterminated fenced block: no closing ``` before end of file" @2:1
+# @expect error E_PARSE "unterminated fenced block: no closing ''' before end of file" @2:1
 --- input.jh
 export def main() {
-  ```
+  '''
 echo hello
 }
 
-=== inline script single backtick without argument list
-# @expect error E_PARSE "anonymous inline script requires argument list after closing backtick: `body`(ar" @2:3
+=== inline script one-liner without argument list
+# @expect error E_PARSE "anonymous inline script requires argument list after closing quote: 'body'(args" @2:3
 --- input.jh
 export def main() {
-  `echo hello`
+  'echo hello'
 }
 
 === inline script fenced with invalid lang token
-# @expect error E_PARSE "invalid opening fence: only a single lang token is allowed after ```" @2:1
+# @expect error E_PARSE "invalid opening fence: only a single lang token is allowed after '''" @2:1
 --- input.jh
 export def main() {
-  ```not a lang```()
+  '''not a lang'''()
 }
 
 === config block unterminated
@@ -1479,7 +1486,7 @@ export def main() {
 === duplicate name: script and workflow
 # @expect error E_PARSE "duplicate name" @2:1
 --- input.jh
-script helper = `echo ok`
+script helper = 'echo ok'
 def helper() {
   log "ok"
 }
@@ -1493,7 +1500,7 @@ export def main() {
 def foo() {
   return "ok"
 }
-script foo = `echo ok`
+script foo = 'echo ok'
 export def main() {
   log "ok"
 }
@@ -1571,10 +1578,10 @@ export def main() {
 === fenced script with shell parameter expansion is valid
 # @expect ok
 --- input.jh
-script deploy = ```
+script deploy = '''
 echo "Installing ${PKG_NAME:-default}"
 echo "Version: ${VERSION}"
-```
+'''
 export def main() {
   deploy()
 }
@@ -1698,7 +1705,7 @@ test "old syntax" {
   }
 }
 --- lib.jh
-script helper = `echo real`
+script helper = 'echo real'
 export def main() {
   log "ok"
 }
@@ -1958,7 +1965,7 @@ export def main() {
 }
 
 === script body with invalid rhs character
-# @expect error E_PARSE "script body must be a backtick or fenced block: script broken = `...` or script " @1:1
+# @expect error E_PARSE "script body must be a one-liner or fenced block: script broken = '...' or script " @1:1
 --- input.jh
 script broken = @invalid
 
@@ -2160,7 +2167,7 @@ export def main() {
 === shell redirection after const run call rejected
 # @expect error E_PARSE "unexpected content after const call: '| grep ok'" @3:1
 --- input.jh
-script helper = `echo ok`
+script helper = 'echo ok'
 export def main() {
   const x = helper() | grep ok
 }
@@ -2169,7 +2176,7 @@ export def main() {
 # @expect error E_PARSE "use 'send <payload> -> <channel>'" @4:1
 --- input.jh
 channel findings
-script helper = `echo ok`
+script helper = 'echo ok'
 export def main() {
   findings <- run helper() > output.txt
 }
@@ -2238,10 +2245,15 @@ hello world
 """ -> c
 }
 
-=== top-level script single backtick unterminated
-# @expect error E_PARSE "unterminated inline script backtick — missing closing `" @1:1
+=== top-level script one-liner unterminated
+# @expect error E_PARSE "unterminated one-line script — missing closing '" @1:1
 --- input.jh
-script broken = `echo hello
+script broken = 'echo hello
+
+=== one-line backtick script is rejected
+# @expect error E_PARSE "script one-liners use single quotes" @1:1
+--- input.jh
+script broken = `echo hello`
 
 === inline catch return without value
 # @expect error E_PARSE "catch requires explicit bindings: catch (<name>) { ... }" @5:11
@@ -2274,10 +2286,10 @@ export def main() {
     log "catching"
 
 === inline script fenced unterminated in rule body
-# @expect error E_PARSE "unterminated fenced block: no closing ``` before end of file" @2:1
+# @expect error E_PARSE "unterminated fenced block: no closing ''' before end of file" @2:1
 --- input.jh
 def check() {
-  ```
+  '''
 echo hello
 }
 export def main() {
@@ -2397,7 +2409,7 @@ export def main() {
 # @expect ok
 --- input.jh
 channel c
-script helper = `echo "data"`
+script helper = 'echo "data"'
 export def main() {
   send helper() -> c
 }
@@ -2456,7 +2468,7 @@ export def main(x) {
 # @expect error E_PARSE "async is not supported with inline scripts" @2:13
 --- input.jh
 export def main() {
-  const x = async `echo hello`()
+  const x = async 'echo hello'()
 }
 
 === const run async with invalid reference
@@ -2527,7 +2539,7 @@ export def main(x) {
 # @expect error E_PARSE "unexpected content after log string: '} catch (e) { log" @2:1
 --- input.jh
 export def main() {
-  `false`() recover(e) { log "r" } catch (e) { log "c" }
+  'false'() recover(e) { log "r" } catch (e) { log "c" }
 }
 
 === return run with unclosed paren is E_PARSE not shell
@@ -2587,7 +2599,7 @@ export def main() {
 === script use key must be a valid env var name
 # @expect error E_PARSE "E_ENV_INVALID use key" @1:1
 --- input.jh
-script aaa use 1BAD = `echo x`
+script aaa use 1BAD = 'echo x'
 export def main() {
   aaa()
 }
@@ -2595,7 +2607,7 @@ export def main() {
 === script use key must not be reserved
 # @expect error E_PARSE "E_ENV_RESERVED use cannot request reserved key" @1:1
 --- input.jh
-script aaa use JAIPH_WORKSPACE = `echo x`
+script aaa use JAIPH_WORKSPACE = 'echo x'
 export def main() {
   aaa()
 }
@@ -2603,7 +2615,7 @@ export def main() {
 === use is reserved as a script name
 # @expect error E_PARSE "is reserved and cannot be a script name" @1:1
 --- input.jh
-script use = `echo x`
+script use = 'echo x'
 export def main() {
   log "ok"
 }

@@ -57,7 +57,7 @@ function selfRecursiveRunSiteCount(mod: jaiphModule, defName: string): number {
 function exprLabel(expr: Expr): string {
   if (expr.kind === "literal") return expr.raw;
   if (expr.kind === "call") return `${expr.callee.value}(...)`;
-  if (expr.kind === "inline_script") return "`...`(...)";
+  if (expr.kind === "inline_script") return "'...'(...)";
   if (expr.kind === "prompt") return `prompt ${expr.raw}`;
   if (expr.kind === "match") return `match ${expr.match.subject}`;
   if (expr.kind === "shell") return expr.command;

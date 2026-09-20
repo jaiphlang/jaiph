@@ -40,10 +40,6 @@
       "required": false,
       "types": [
         {
-          "type": "backtick_string",
-          "named": true
-        },
-        {
           "type": "comment",
           "named": true
         },
@@ -68,6 +64,10 @@
           "named": true
         },
         {
+          "type": "quote_script",
+          "named": true
+        },
+        {
           "type": "regex",
           "named": true
         },
@@ -88,6 +88,10 @@
   },
   {
     "type": "!~",
+    "named": false
+  },
+  {
+    "type": "'''",
     "named": false
   },
   {
@@ -135,10 +139,6 @@
     "named": false
   },
   {
-    "type": "```",
-    "named": false
-  },
-  {
     "type": "allow_failure",
     "named": false
   },
@@ -149,10 +149,6 @@
   {
     "type": "async",
     "named": false
-  },
-  {
-    "type": "backtick_string",
-    "named": true
   },
   {
     "type": "catch",
@@ -268,6 +264,10 @@
   },
   {
     "type": "qualified_identifier",
+    "named": true
+  },
+  {
+    "type": "quote_script",
     "named": true
   },
   {

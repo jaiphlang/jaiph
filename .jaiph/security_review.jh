@@ -30,11 +30,13 @@ config {
   agent.claude_flags = "--permission-mode bypassPermissions"
 }
 
-script new_security_review_report_path = `echo ".jaiph/tmp/security_review_$(date +%Y-%m-%d_%H-%M-%S).md"`
+script new_security_review_report_path = 'echo ".jaiph/tmp/security_review_$(date +%Y-%m-%d_%H-%M-%S).md"'
 
-script write_security_review_pointer = `printf '%s\n' "$1" > .jaiph/tmp/security_review_active.txt`
+script write_security_review_pointer = '''
+printf '%s\n' "$1" > .jaiph/tmp/security_review_active.txt
+'''
 
-script security_review_tasks_path = `echo ".jaiph/tmp/security_review_queue_tasks.md"`
+script security_review_tasks_path = 'echo ".jaiph/tmp/security_review_queue_tasks.md"'
 
 const reviewer_role = """
   You are a senior security engineer reviewing Jaiph — a workflow DSL,
@@ -72,7 +74,7 @@ const reviewer_role = """
   - Findings without a concrete exploit scenario.
 """
 
-script git_diff_uncommitted = ```
+script git_diff_uncommitted = '''
   {
     git diff --cached
     git diff
@@ -81,13 +83,12 @@ script git_diff_uncommitted = ```
       git diff --no-index -- /dev/null "$f" || true
     done
   }
-```
+'''
+script git_diff_range = 'git diff "$1"'
 
-script git_diff_range = `git diff "$1"`
+script worktree_fingerprint = 'git status --porcelain | sort | cksum'
 
-script worktree_fingerprint = `git status --porcelain | sort | cksum`
-
-script report_file_nonempty = `test -s "$1"`
+script report_file_nonempty = 'test -s "$1"'
 
 def review_scope(mode, scope_detail, report_file) {
   const result = prompt """
@@ -193,7 +194,7 @@ def finish_report(verdict, report_file, fingerprint_before) {
   log "Security review report ready: ${report_file}"
 }
 
-script truncate_file = `: > "$1"`
+script truncate_file = ': > "$1"'
 
 def queue_findings(report_file) {
   const tasks_file = security_review_tasks_path()

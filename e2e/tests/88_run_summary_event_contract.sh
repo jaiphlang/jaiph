@@ -37,19 +37,19 @@ e2e::section "run_summary.jsonl contract under multi-target inbox dispatch"
 e2e::file "summary_contract.jh" <<'EOF'
 channel ch -> receiver_a, receiver_b
 
-script emit_payload = `echo "contract-payload"`
+script emit_payload = 'echo "contract-payload"'
 
 def sender() {
   log "contract-sender-log"
   send emit_payload() -> ch
 }
 
-script write_a = `echo "a:$1" > contract_a.txt`
+script write_a = 'echo "a:$1" > contract_a.txt'
 def receiver_a(message, chan, sender) {
   write_a(message)
 }
 
-script write_b = `echo "b:$1" > contract_b.txt`
+script write_b = 'echo "b:$1" > contract_b.txt'
 def receiver_b(message, chan, sender) {
   write_b(message)
 }

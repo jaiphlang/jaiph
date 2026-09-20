@@ -187,11 +187,11 @@ export function parsePromptStep(
 ): { step: StepDef; nextLineIdx: number } {
   const lineNo = lineIdx + 1;
 
-  // --- Reject triple-backtick fences for prompts ---
-  if (promptArg.startsWith("```")) {
+  // --- Reject script fences for prompts (''' now, ``` previously) ---
+  if (promptArg.startsWith("'''") || promptArg.startsWith("```")) {
     fail(
       filePath,
-      'prompt blocks use triple quotes: prompt """..."""; triple backticks are for scripts',
+      'prompt blocks use triple quotes: prompt """..."""; script bodies use triple single quotes',
       lineNo,
       promptCol,
     );

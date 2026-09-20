@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { parseFencedBlock, parseFencedScriptBlock } from "./fence";
 
 test("fence: basic body extraction", () => {
-  const lines = ["```", "line one", "line two", "```"];
+  const lines = ["'''", "line one", "line two", "'''"];
   const result = parseFencedBlock("test.jh", lines, 0);
   assert.equal(result.body, "line one\nline two");
   assert.equal(result.lang, undefined);
@@ -11,21 +11,21 @@ test("fence: basic body extraction", () => {
 });
 
 test("fence: single-line body", () => {
-  const lines = ["```", "hello world", "```"];
+  const lines = ["'''", "hello world", "'''"];
   const result = parseFencedBlock("test.jh", lines, 0);
   assert.equal(result.body, "hello world");
   assert.equal(result.nextIdx, 3);
 });
 
 test("fence: empty body", () => {
-  const lines = ["```", "```"];
+  const lines = ["'''", "'''"];
   const result = parseFencedBlock("test.jh", lines, 0);
   assert.equal(result.body, "");
   assert.equal(result.nextIdx, 2);
 });
 
 test("fence: lang extraction", () => {
-  const lines = ["```python3", "print('hi')", "```"];
+  const lines = ["'''python3", "print('hi')", "'''"];
   const result = parseFencedBlock("test.jh", lines, 0);
   assert.equal(result.body, "print('hi')");
   assert.equal(result.lang, "python3");
@@ -33,13 +33,13 @@ test("fence: lang extraction", () => {
 });
 
 test("fence: lang token with various values", () => {
-  const lines = ["```node", "console.log(1)", "```"];
+  const lines = ["'''node", "console.log(1)", "'''"];
   const result = parseFencedBlock("test.jh", lines, 0);
   assert.equal(result.lang, "node");
 });
 
 test("fence: fenceLineIdx not at start", () => {
-  const lines = ["some preamble", "```bash", "echo hello", "```", "after"];
+  const lines = ["some preamble", "'''bash", "echo hello", "'''", "after"];
   const result = parseFencedBlock("test.jh", lines, 1);
   assert.equal(result.body, "echo hello");
   assert.equal(result.lang, "bash");
@@ -47,34 +47,34 @@ test("fence: fenceLineIdx not at start", () => {
 });
 
 test("fence: raw body extraction keeps source indentation", () => {
-  const lines = ["```", "  indented", "    more", "```"];
+  const lines = ["'''", "  indented", "    more", "'''"];
   const result = parseFencedBlock("test.jh", lines, 0);
   assert.equal(result.body, "  indented\n    more");
 });
 
 test("fenced script block: dedents common leading whitespace", () => {
   const lines = [
-    "```",
+    "'''",
     "  line1",
     "    line2",
     "  cat <<'EOF'",
     "  content",
     "  EOF",
-    "```",
+    "'''",
   ];
   const result = parseFencedScriptBlock("test.jh", lines, 0);
   assert.equal(result.body, "line1\n  line2\ncat <<'EOF'\ncontent\nEOF");
 });
 
 test("fenced script block: python3 lang tag with uniform margin", () => {
-  const lines = ["```python3", "  import sys", "  print(sys.argv[1])", "```"];
+  const lines = ["'''python3", "  import sys", "  print(sys.argv[1])", "'''"];
   const result = parseFencedScriptBlock("test.jh", lines, 0);
   assert.equal(result.body, "import sys\nprint(sys.argv[1])");
   assert.equal(result.lang, "python3");
 });
 
 test("fence: error on unterminated fence", () => {
-  const lines = ["```", "body", "no closing"];
+  const lines = ["'''", "body", "no closing"];
   assert.throws(
     () => parseFencedBlock("test.jh", lines, 0),
     /unterminated fenced block/,
@@ -82,7 +82,7 @@ test("fence: error on unterminated fence", () => {
 });
 
 test("fence: error on text after opening backticks that isn't single token", () => {
-  const lines = ["```python3 extra", "body", "```"];
+  const lines = ["'''python3 extra", "body", "'''"];
   assert.throws(
     () => parseFencedBlock("test.jh", lines, 0),
     /invalid opening fence/,
@@ -90,14 +90,14 @@ test("fence: error on text after opening backticks that isn't single token", () 
 });
 
 test("fence: trailing content on closing fence is returned via afterClose", () => {
-  const lines = ["```", "body", "``` extra"];
+  const lines = ["'''", "body", "''' extra"];
   const result = parseFencedBlock("test.jh", lines, 0);
   assert.equal(result.body, "body");
   assert.equal(result.afterClose, " extra");
 });
 
-test("fence: closing line may include returns schema on same line as ```", () => {
-  const lines = ['```', "body", '``` returns "{ role: string }"'];
+test("fence: closing line may include returns schema on same line as '''", () => {
+  const lines = ["'''", "body", "''' returns \"{ role: string }\""];
   const result = parseFencedBlock("test.jh", lines, 0);
   assert.equal(result.body, "body");
   assert.equal(result.afterClose, ' returns "{ role: string }"');
@@ -105,15 +105,23 @@ test("fence: closing line may include returns schema on same line as ```", () =>
 });
 
 test("fence: same-line trailing content with lang on opening fence", () => {
-  const lines = ["```text", "x", '``` (args)'];
+  const lines = ["'''text", "x", "''' (args)"];
   const result = parseFencedBlock("test.jh", lines, 0);
   assert.equal(result.body, "x");
   assert.equal(result.lang, "text");
-  assert.equal(result.afterClose, ' (args)');
+  assert.equal(result.afterClose, " (args)");
+});
+
+test("fence: triple-backtick opener is rejected", () => {
+  const lines = ["```", "body", "```"];
+  assert.throws(
+    () => parseFencedBlock("test.jh", lines, 0),
+    /script bodies use triple single quotes/,
+  );
 });
 
 test("fence: closing fence with surrounding whitespace is accepted", () => {
-  const lines = ["```", "body", "  ```  "];
+  const lines = ["'''", "body", "  '''  "];
   const result = parseFencedBlock("test.jh", lines, 0);
   assert.equal(result.body, "body");
   assert.equal(result.nextIdx, 3);

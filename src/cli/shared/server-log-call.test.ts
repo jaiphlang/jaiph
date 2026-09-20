@@ -104,7 +104,7 @@ test("mirrored operator lines are credential-redacted (never print a fixture sec
   // interpolates that binding — the same shape a real credential leak takes.
   await runWith(
     [
-      'script read_secret use LEAK_API_KEY = `printf %s "$LEAK_API_KEY"`',
+      "script read_secret use LEAK_API_KEY = 'printf %s \"$LEAK_API_KEY\"'",
       "export def main() {",
       "  const secret = read_secret()",
       '  log "leaked ${secret}"',

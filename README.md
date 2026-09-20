@@ -103,7 +103,7 @@ Full flags and environment variables: [CLI](docs/cli.md), [Environment variables
 ```jaiph
 #!/usr/bin/env jaiph
 
-script check_deps = `test -f "package.json"`
+script check_deps = 'test -f "package.json"'
 
 def deps_exist() {
   check_deps() catch (err) {
@@ -113,7 +113,7 @@ def deps_exist() {
 
 export def main(task) {
   deps_exist()
-  const ts = `date +%s`()
+  const ts = 'date +%s'()
   prompt "Build the application: ${task}"
 }
 ```

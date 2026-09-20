@@ -12,12 +12,12 @@ TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 e2e::section "run script: stdout capture and step artifacts"
 
 e2e::file "run_fn_ok.jh" <<'EOF'
-script give = ```
+script give = '''
 echo "log-to-artifacts"
 echo "captured-value"
-```
+'''
 
-script print_capture = `echo "out=x=$1"`
+script print_capture = 'echo "out=x=$1"'
 
 export def main() {
   const x = give()
@@ -53,7 +53,7 @@ e2e::pass "run script success path"
 e2e::section "compiler rejects direct function call in workflow"
 
 e2e::file "direct_fn.jh" <<'EOF'
-script f = `return "x"`
+script f = 'return "x"'
 export def main() {
   f
 }
@@ -67,7 +67,7 @@ e2e::pass "direct function invocation rejected"
 e2e::section "compiler rejects Jaiph function inside command substitution"
 
 e2e::file "sub_fn.jh" <<'EOF'
-script f = `return "x"`
+script f = 'return "x"'
 export def main() {
   x="$(f)"
 }
@@ -81,7 +81,7 @@ e2e::pass "command substitution with Jaiph function rejected"
 e2e::section "run and run workflows still build"
 
 e2e::file "ensure_run_smoke.jh" <<'EOF'
-script ok_impl = `true`
+script ok_impl = 'true'
 
 def ok() {
   ok_impl()

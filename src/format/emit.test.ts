@@ -46,17 +46,17 @@ describe("emitModule", () => {
 
   it("formats scripts with shebang", () => {
     const source = [
-      "script my_script = ```",
+      "script my_script = '''",
       "#!/usr/bin/env python3",
       'print("hello")',
-      "```",
+      "'''",
       "",
     ].join("\n");
     const expected = [
-      "script my_script = ```",
+      "script my_script = '''",
       "  #!/usr/bin/env python3",
       '  print("hello")',
-      "```",
+      "'''",
       "",
     ].join("\n");
     assert.equal(roundTrip(source), expected);
@@ -64,30 +64,30 @@ describe("emitModule", () => {
 
   it("dedents indented fenced script bodies and re-indents on format", () => {
     const source = [
-      "script heredoc_demo = ```",
+      "script heredoc_demo = '''",
       "  cat <<'EOF'",
       "  line one",
       "  EOF",
-      "```",
+      "'''",
       "",
       "export def main() {",
-      "  ```bash",
+      "  '''bash",
       "  echo inline",
-      "  ```()",
+      "  '''()",
       "}",
       "",
     ].join("\n");
     const expected = [
-      "script heredoc_demo = ```",
+      "script heredoc_demo = '''",
       "  cat <<'EOF'",
       "  line one",
       "  EOF",
-      "```",
+      "'''",
       "",
       "export def main() {",
-      "  ```bash",
+      "  '''bash",
       "    echo inline",
-      "  ```()",
+      "  '''()",
       "}",
       "",
     ].join("\n");
@@ -160,7 +160,7 @@ describe("emitModule", () => {
   it("emits a stdin connect form on an inline script", () => {
     const source = [
       "export def main(content) {",
-      '  stdin "${content}" -> `cat`()',
+      "  stdin \"${content}\" -> 'cat'()",
       "}",
       "",
     ].join("\n");
@@ -169,9 +169,9 @@ describe("emitModule", () => {
 
   it("round-trips a one-hop stdin producer call (stdin <call>() -> script())", () => {
     const source = [
-      "script producer = `echo hi`",
+      "script producer = 'echo hi'",
       "",
-      "script sink = `cat`",
+      "script sink = 'cat'",
       "",
       "export def main(text) {",
       "  stdin producer() -> sink()",
@@ -327,7 +327,7 @@ describe("emitModule", () => {
       "  w()",
       "}",
       "",
-      "script s = `echo s`",
+      "script s = 'echo s'",
       "",
     ].join("\n");
     assert.equal(roundTrip(source), source);
@@ -488,7 +488,7 @@ describe("emitModule", () => {
       "  dispatch()",
       "}",
       "",
-      "script helper = `echo ok`",
+      "script helper = 'echo ok'",
       "",
       "def finalize() {",
       '  log "done"',
@@ -511,7 +511,7 @@ describe("emitModule", () => {
       "}",
       "",
       "# A script",
-      "script s = `echo s`",
+      "script s = 'echo s'",
       "",
     ].join("\n");
     assert.equal(roundTrip(source), source);
@@ -544,7 +544,7 @@ describe("emitModule", () => {
       "",
       "channel events",
       "",
-      "script last = `echo last`",
+      "script last = 'echo last'",
       "",
     ].join("\n");
     const expected = [
@@ -560,7 +560,7 @@ describe("emitModule", () => {
       "  first()",
       "}",
       "",
-      "script last = `echo last`",
+      "script last = 'echo last'",
       "",
     ].join("\n");
     assert.equal(roundTrip(source), expected);

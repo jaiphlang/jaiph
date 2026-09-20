@@ -14,7 +14,7 @@ e2e::section "double-dash passes positional args to workflow"
 
 # Given — a workflow that echoes its positional parameter
 e2e::file "greet.jh" <<'EOF'
-script greet_impl = `echo "hello $1"`
+script greet_impl = 'echo "hello $1"'
 export def main(name) {
   greet_impl(name)
 }

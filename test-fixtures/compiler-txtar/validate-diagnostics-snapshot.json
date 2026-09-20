@@ -48,7 +48,7 @@
   "validate-errors.txt > workflow raw shell that names a script must use run": [
     {
       "file": "input.jh",
-      "line": 3,
+      "line": 5,
       "col": 3,
       "code": "E_VALIDATE",
       "message": "use f() — a bare name that refers to a script or workflow must be called as a managed step"
@@ -743,7 +743,7 @@
   "validate-errors.txt > bare dotted call arg where var is not a typed prompt capture": [
     {
       "file": "input.jh",
-      "line": 4,
+      "line": 6,
       "col": 3,
       "code": "E_VALIDATE",
       "message": "${result.role}: \"result\" is not a typed prompt capture; dot notation requires a prompt with \"returns\" schema"
@@ -752,7 +752,7 @@
   "validate-errors.txt > bare dotted call arg with unknown field": [
     {
       "file": "input.jh",
-      "line": 4,
+      "line": 6,
       "col": 3,
       "code": "E_VALIDATE",
       "message": "${result.bogus}: field \"bogus\" is not defined in the returns schema for \"result\"; available fields: role"
@@ -761,7 +761,7 @@
   "validate-errors.txt > unquoted ${var.field} call arg is rejected": [
     {
       "file": "input.jh",
-      "line": 4,
+      "line": 6,
       "col": 3,
       "code": "E_VALIDATE",
       "message": "call arguments cannot use unquoted interpolation ${result.role}; use bare field access: ...(result.role)"

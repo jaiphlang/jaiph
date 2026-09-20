@@ -27,7 +27,7 @@ test("handle: catch on run async treats a recovered branch as a successful join"
   const root = mkdtempSync(join(tmpdir(), "jaiph-async-catch-"));
   try {
     const r = runJh(root, [
-      "script always_fail = `exit 1`",
+      "script always_fail = 'exit 1'",
       "def failing() {",
       "  always_fail()",
       "}",
@@ -49,7 +49,7 @@ test("handle: catch return on run async becomes the parent def return", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-async-catch-ret-"));
   try {
     const r = runJh(root, [
-      "script always_fail = `exit 1`",
+      "script always_fail = 'exit 1'",
       "def failing() {",
       "  always_fail()",
       "}",
@@ -70,7 +70,7 @@ test("handle: failed ${h} read empties the binding so a later catch sees empty",
   const root = mkdtempSync(join(tmpdir(), "jaiph-async-empty-"));
   try {
     const r = runJh(root, [
-      "script always_fail = `exit 1`",
+      "script always_fail = 'exit 1'",
       "def boom() {",
       "  always_fail()",
       "}",
@@ -96,12 +96,16 @@ test("handle: for_lines iterates the token as one line, not the resolved lines",
   const root = mkdtempSync(join(tmpdir(), "jaiph-async-for-"));
   try {
     const r = runJh(root, [
-      "script three = `printf 'a\\nb\\nc\\n'`",
+      "script three = '''",
+      "printf 'a\\nb\\nc\\n'",
+      "'''",
       "def producer() {",
       "  return three()",
       "}",
-      "script bump = `echo x >> .n`",
-      "script count = `wc -l < .n | tr -d ' '`",
+      "script bump = 'echo x >> .n'",
+      "script count = '''",
+      "wc -l < .n | tr -d ' '",
+      "'''",
       "export def main() {",
       "  const h = async producer()",
       "  for line in h {",
@@ -124,7 +128,7 @@ test("handle: early return skips implicit join of unread async work", () => {
     const r = runJh(
       root,
       [
-        "script slow = `sleep 30; echo done`",
+        "script slow = 'sleep 30; echo done'",
         "def bg() {",
         "  slow()",
         "}",
@@ -146,8 +150,8 @@ test("handle: if-body async work joins before the step after the if", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-async-if-join-"));
   try {
     const r = runJh(root, [
-      "script mark = `sleep 1; echo done > .marker`",
-      "script check_mark = `test -f .marker && echo yes || echo no`",
+      "script mark = 'sleep 1; echo done > .marker'",
+      "script check_mark = 'test -f .marker && echo yes || echo no'",
       "def bg() {",
       "  mark()",
       "}",

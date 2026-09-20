@@ -44,7 +44,7 @@ export function validateMatchExpr(
         `match arm body must not start with "return"; the match expression itself produces the value — use the expression directly after =>`,
       );
     }
-    if (/`[^`]*`\s*\(/.test(bodyTrimmed) || bodyTrimmed.startsWith("```")) {
+    if (/'[^']*'\s*\(/.test(bodyTrimmed) || /`[^`]*`\s*\(/.test(bodyTrimmed) || bodyTrimmed.startsWith("'''") || bodyTrimmed.startsWith("```")) {
       diag.error(
         filePath,
         expr.loc.line,

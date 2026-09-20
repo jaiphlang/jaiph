@@ -64,7 +64,7 @@ test("harness exists and runs the built exe (not a Node fallback)", () => {
 
 test("sample run asserts exit code and expected log lines against stdout", () => {
   // The sample workflow covers every required construct.
-  assert.match(HARNESS, /script node_step = ```node/, "script step with a non-bash lang tag");
+  assert.match(HARNESS, /script node_step = '''node/, "script step with a non-bash lang tag");
   assert.match(HARNESS, /echo "inline shell for \$\{who\}"/, "inline shell line with interpolation");
   assert.match(HARNESS, /log "smoke greeting for \$\{who\}"/, "log output with interpolation");
   // Assertions read stdout (redirected to a file), not merged output, and check

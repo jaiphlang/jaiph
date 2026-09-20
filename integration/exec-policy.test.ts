@@ -21,8 +21,12 @@ const CLI_PATH = join(process.cwd(), "dist/src/cli.js");
 // key would fail the pre-flight before any hook fires).
 function fixtureSource(useClause: string): string {
   return [
-    `script env_probe${useClause} = \`printf '%s|%s' "\${PROBE_A:-unset}" "\${PROBE_B:-unset}"\``,
-    'script write_marker = `printf \'marker\' > "$JAIPH_WORKSPACE/written.txt"`',
+    `script env_probe${useClause} = '''`,
+    `printf '%s|%s' "\${PROBE_A:-unset}" "\${PROBE_B:-unset}"`,
+    "'''",
+    "script write_marker = '''",
+    "printf 'marker' > \"$JAIPH_WORKSPACE/written.txt\"",
+    "'''",
     "# Writes a workspace marker, then reports probe env values.",
     "export def probe_and_write() {",
     "  write_marker()",

@@ -15,7 +15,7 @@ e2e::section "return run inline script zero-arg"
 
 e2e::file "return_inline.jh" <<'EOF'
 def helper() {
-  return `echo inline-return-ok`()
+  return 'echo inline-return-ok'()
 }
 
 export def main() {
@@ -39,7 +39,7 @@ e2e::section "return run inline script with args"
 
 e2e::file "return_inline_args.jh" <<'EOF'
 def helper() {
-  return `echo $1`("inline-arg-val")
+  return 'echo $1'("inline-arg-val")
 }
 
 export def main() {
@@ -62,7 +62,7 @@ e2e::section "log run inline script zero-arg"
 
 e2e::file "log_inline.jh" <<'EOF'
 export def main() {
-  log `echo log-inline-ok`()
+  log 'echo log-inline-ok'()
 }
 EOF
 
@@ -81,7 +81,7 @@ e2e::section "log run inline script with args"
 
 e2e::file "log_inline_args.jh" <<'EOF'
 export def main() {
-  log `echo $1`("log-arg-val")
+  log 'echo $1'("log-arg-val")
 }
 EOF
 

@@ -65,23 +65,26 @@ export function colFromRaw(raw: string): number {
 }
 
 /**
- * Parse a single-backtick body `…` from the start of `text`.
- * Errors if missing closing backtick or if the body spans multiple lines.
- * Returns the body and the text remaining after the closing backtick.
+ * Parse a one-line script body `'…'` from the start of `text`.
+ * No escapes: the first `'` after the opener closes. A body that needs `'`
+ * must use a `'''` block. Errors if the closer is missing or the body spans lines.
  */
-export function parseSingleBacktickBody(
+export function parseSingleQuoteScriptBody(
   text: string,
   filePath: string,
   lineNo: number,
   col: number,
 ): { body: string; restAfterClose: string } {
-  const closeIdx = text.indexOf("`", 1);
+  if (!text.startsWith("'")) {
+    fail(filePath, "expected opening ' for a one-line script body", lineNo, col);
+  }
+  const closeIdx = text.indexOf("'", 1);
   if (closeIdx === -1) {
-    fail(filePath, "unterminated inline script backtick — missing closing `", lineNo, col);
+    fail(filePath, "unterminated one-line script — missing closing '", lineNo, col);
   }
   const body = text.slice(1, closeIdx);
   if (body.includes("\n")) {
-    fail(filePath, "single backtick script body must be one line — use triple backtick for multiline", lineNo, col);
+    fail(filePath, "one-line script body must be one line — use ''' for multiline", lineNo, col);
   }
   return { body, restAfterClose: text.slice(closeIdx + 1) };
 }
@@ -292,7 +295,7 @@ export function parseCallRef(s: string): { ref: string; args?: Arg[]; rest: stri
 }
 
 /**
- * Parse a parenthesized argument list `(args)` or `()` at the start of a string.
+ * Parse a parenthesized argument list `(args)' or '()` at the start of a string.
  * Returns typed `Arg[]` and remaining text after `)`. Returns null if the string
  * doesn't start with `(`.
  */

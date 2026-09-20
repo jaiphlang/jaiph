@@ -17,7 +17,7 @@
 [
   (string)
   (triple_string)
-  (backtick_string)
+  (quote_script)
 ] @string
 
 (regex) @string.regex

@@ -14,12 +14,12 @@ TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 e2e::section "run recover: rule fails → catch body runs"
 
 e2e::file "ensure_fail_recover.jh" <<'EOF'
-script fail_impl = `false`
+script fail_impl = 'false'
 def fail_rule() {
   fail_impl()
 }
 
-script then_action = `echo "then-ran" > then_ran.txt`
+script then_action = 'echo "then-ran" > then_ran.txt'
 
 export def main() {
   fail_rule() catch (err) {
@@ -54,12 +54,12 @@ e2e::pass "run recover: run fails → catch body runs"
 e2e::section "run recover: rule passes → catch skipped"
 
 e2e::file "ensure_pass_no_recover.jh" <<'EOF'
-script ok_impl = `true`
+script ok_impl = 'true'
 def ok_rule() {
   ok_impl()
 }
 
-script else_action = `echo "else-ran" > else_ran.txt`
+script else_action = 'echo "else-ran" > else_ran.txt'
 
 export def main() {
   ok_rule() catch (err) {
@@ -95,17 +95,17 @@ e2e::pass "run recover: run passes → catch skipped"
 e2e::section "chained run recover: first fails, second passes"
 
 e2e::file "chained_recover.jh" <<'EOF'
-script fail_impl = `false`
+script fail_impl = 'false'
 def first_check() {
   fail_impl()
 }
 
-script ok_impl = `true`
+script ok_impl = 'true'
 def second_check() {
   ok_impl()
 }
 
-script second_action = `echo "second-ran" > second_ran.txt`
+script second_action = 'echo "second-ran" > second_ran.txt'
 
 export def main() {
   first_check() catch (err) {

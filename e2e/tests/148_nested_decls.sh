@@ -36,10 +36,10 @@ unset UE_TOKEN || true
 e2e::section "nested def closes over the enclosing scope; nested script shadows + takes argv"
 
 e2e::file "nd.jh" <<'EOF'
-script greet = `printf MODULE`
+script greet = 'printf MODULE'
 export def main() {
   const who = "world"
-  script greet = `printf "NESTED:$1"`
+  script greet = 'printf "NESTED:$1"'
   def inner(name) {
     return "inner-sees-${who}-${name}"
   }
@@ -69,7 +69,7 @@ e2e::section "a nested script use KEY without --env fails the same pre-flight as
 
 e2e::file "nested_use.jh" <<'EOF'
 export def main() {
-  script show_impl use UE_TOKEN = `echo "UE_TOKEN=[${UE_TOKEN:-<unset>}]"`
+  script show_impl use UE_TOKEN = 'echo "UE_TOKEN=[${UE_TOKEN:-<unset>}]"'
   const t = show_impl()
   return "${t}"
 }
@@ -102,7 +102,7 @@ e2e::section "a nested name is not reachable from another def (E_VALIDATE)"
 
 e2e::file "cross_def.jh" <<'EOF'
 export def main() {
-  script nested_helper = `echo hi`
+  script nested_helper = 'echo hi'
   other()
 }
 def other() {
@@ -122,7 +122,7 @@ e2e::section "export on a nested declaration is E_PARSE"
 
 e2e::file "nested_export.jh" <<'EOF'
 export def main() {
-  export script foo = `echo hi`
+  export script foo = 'echo hi'
   foo()
 }
 EOF
@@ -284,7 +284,7 @@ e2e::section "in-branch nested decls are block-scoped to the declaring body"
 e2e::file "branch_if.jh" <<'EOF'
 export def main(flag) {
   if flag == "y" {
-    script s = `printf YES`
+    script s = 'printf YES'
     return s()
   }
   return "none"
@@ -298,10 +298,10 @@ e2e::expect_run_file "branch_if.jh" "return_value.txt" "YES"
 e2e::file "branch_else.jh" <<'EOF'
 export def main(flag) {
   if flag == "y" {
-    script s = `printf YES`
+    script s = 'printf YES'
     return s()
   } else {
-    script t = `printf NO`
+    script t = 'printf NO'
     return t()
   }
 }
@@ -315,7 +315,7 @@ e2e::expect_run_file "branch_else.jh" "return_value.txt" "NO"
 e2e::file "branch_miss.jh" <<'EOF'
 export def main(flag) {
   if flag == "y" {
-    script s = `echo YES`
+    script s = 'echo YES'
   }
   return s()
 }
@@ -332,10 +332,10 @@ e2e::assert_contains "${branch_miss_out}" 'unknown local def or script reference
 # A branch that shadows the module `s` does not leak: after the `if`, the module
 # `s` runs again.
 e2e::file "branch_shadow.jh" <<'EOF'
-script s = `printf OUTER`
+script s = 'printf OUTER'
 export def main(flag) {
   if flag == "y" {
-    script s = `printf INNER`
+    script s = 'printf INNER'
     const inner = s()
     log "inner=${inner}"
   }

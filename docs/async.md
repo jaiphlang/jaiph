@@ -13,7 +13,7 @@ This page is a recipe. The value model lives in [Async Handles](spec-async-handl
 ## Prerequisites
 
 - An entry file with `export def main`.
-- Two independent callees (defs or named scripts). Inline `` `…`() `` cannot be `async` — move the body into a named `script`.
+- Two independent callees (defs or named scripts). Inline `` '…'() `` cannot be `async` — move the body into a named `script`.
 
 ## 1. Start both sides, read late
 

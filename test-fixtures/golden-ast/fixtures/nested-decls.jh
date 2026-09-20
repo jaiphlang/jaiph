@@ -3,7 +3,7 @@ export def main(who) {
   const note = """
     note for ${who}
   """
-  script shout = `echo "$1"`
+  script shout = 'echo "$1"'
   def helper(name) {
     const msg = "${greeting}-${name}"
     return msg

@@ -19,7 +19,7 @@ test("buildRuntimeGraph loads entry module and imports", () => {
       `export def check() {
   echo ok
 }
-export script helper = \`echo hi\`
+export script helper = 'echo hi'
 export def inner() {
   echo ok
 }`,
@@ -50,7 +50,7 @@ test("lookup helpers resolve local and imported symbols", () => {
       `export def check() {
   echo ok
 }
-export script helper = \`echo hi\`
+export script helper = 'echo hi'
 export def inner() {
   echo ok
 }`,
@@ -61,7 +61,7 @@ export def inner() {
 def local_check() {
   echo local
 }
-script local_script = \`echo local\`
+script local_script = 'echo local'
 export def main() {
   lib.inner()
 }`,

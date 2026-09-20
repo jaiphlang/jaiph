@@ -12,7 +12,7 @@ TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 e2e::section "run script with bare identifier arg (const)"
 
 e2e::file "bare_const.jh" <<'EOF'
-script greet = `echo "hello $1"`
+script greet = 'echo "hello $1"'
 
 export def main() {
   const name = "world"
@@ -27,7 +27,7 @@ e2e::pass "run script with bare identifier const arg compiles and runs"
 e2e::section "run rule with bare identifier arg"
 
 e2e::file "bare_ensure.jh" <<'EOF'
-script check_impl = `true`
+script check_impl = 'true'
 
 def check(value) {
   check_impl($1)
@@ -45,7 +45,7 @@ e2e::pass "run rule with bare identifier arg"
 e2e::section "mixed bare and quoted args"
 
 e2e::file "bare_mixed.jh" <<'EOF'
-script combine = `echo "$1 $2"`
+script combine = 'echo "$1 $2"'
 
 export def main() {
   const tag = "v1"
@@ -59,7 +59,7 @@ e2e::pass "mixed bare and quoted args"
 e2e::section "unknown bare identifier fails validation"
 
 e2e::file "bare_unknown.jh" <<'EOF'
-script greet = `echo "hello $1"`
+script greet = 'echo "hello $1"'
 
 export def main() {
   greet(unknown_var)

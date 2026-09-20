@@ -19,7 +19,7 @@ function compile(body: string): void {
 test("validate: stdin body -> script(args) is accepted for a script target", () => {
   compile(
     [
-      "script save = `cat > \"$1\"`",
+      "script save = 'cat > \"$1\"'",
       "export def main(path, content) {",
       "  stdin content -> save(path)",
       "}",
@@ -28,11 +28,11 @@ test("validate: stdin body -> script(args) is accepted for a script target", () 
   );
 });
 
-test("validate: stdin body -> `cat`() is accepted for an inline script", () => {
+test("validate: stdin body -> 'cat'() is accepted for an inline script", () => {
   compile(
     [
       "export def main(content) {",
-      "  stdin content -> `cat`()",
+      "  stdin content -> 'cat'()",
       "}",
       "",
     ].join("\n"),
@@ -60,8 +60,8 @@ test("validate: stdin body -> someDef() is E_VALIDATE (def target)", () => {
 test("validate: stdin <script>() -> script() producer call is accepted", () => {
   compile(
     [
-      "script big = `echo hi`",
-      'script sink = `cat`',
+      "script big = 'echo hi'",
+      "script sink = 'cat'",
       "export def main() {",
       "  stdin big() -> sink()",
       "}",
@@ -73,9 +73,9 @@ test("validate: stdin <script>() -> script() producer call is accepted", () => {
 test("validate: stdin foo() -> bar() -> baz() three-stage pipeline of scripts is accepted", () => {
   compile(
     [
-      "script foo = `echo hi`",
-      "script bar = `cat`",
-      "script baz = `cat`",
+      "script foo = 'echo hi'",
+      "script bar = 'cat'",
+      "script baz = 'cat'",
       "export def main() {",
       "  stdin foo() -> bar() -> baz()",
       "}",
@@ -89,8 +89,8 @@ test("validate: a def in an intermediate consumer slot is E_VALIDATE", () => {
     () =>
       compile(
         [
-          "script foo = `echo hi`",
-          "script baz = `cat`",
+          "script foo = 'echo hi'",
+          "script baz = 'cat'",
           "def mid() {",
           '  log "hi"',
           "}",
@@ -109,7 +109,7 @@ test("validate: a prompt producer is E_VALIDATE", () => {
     () =>
       compile(
         [
-          "script sink = `cat`",
+          "script sink = 'cat'",
           'prompt greet() = "say hi"',
           "export def main() {",
           "  stdin greet() -> sink()",
@@ -124,8 +124,8 @@ test("validate: a prompt producer is E_VALIDATE", () => {
 test("validate: stdin <def>() -> script() producer call is accepted (producer may be a def)", () => {
   compile(
     [
-      "script big = `echo hi`",
-      'script sink = `cat`',
+      "script big = 'echo hi'",
+      "script sink = 'cat'",
       "def wrap() {",
       "  return big()",
       "}",
@@ -142,7 +142,7 @@ test("validate: stdin producer call resolves its ref (unknown producer is E_VALI
     () =>
       compile(
         [
-          'script sink = `cat`',
+          "script sink = 'cat'",
           "export def main() {",
           "  stdin nope() -> sink()",
           "}",
@@ -158,7 +158,7 @@ test("validate: stdin value must reference an in-scope binding", () => {
     () =>
       compile(
         [
-          "script save = `cat > \"$1\"`",
+          "script save = 'cat > \"$1\"'",
           "export def main(path) {",
           "  stdin missing -> save(path)",
           "}",

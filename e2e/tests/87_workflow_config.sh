@@ -22,7 +22,9 @@ config {
   agent.backend = "cursor"
 }
 
-script log_scope_backend use JAIPH_SCOPE_LOG = `printf '%s:%s\n' "$1" "$JAIPH_AGENT_BACKEND" >> "$JAIPH_SCOPE_LOG"`
+script log_scope_backend use JAIPH_SCOPE_LOG = '''
+printf '%s:%s\n' "$1" "$JAIPH_AGENT_BACKEND" >> "$JAIPH_SCOPE_LOG"
+'''
 
 def first() {
   config {
@@ -64,10 +66,10 @@ config {
   agent.backend = "cursor"
 }
 
-script log_rule_config use JAIPH_OVERRIDE_LOG = ```
+script log_rule_config use JAIPH_OVERRIDE_LOG = '''
 printf 'rule_model:%s\n' "$JAIPH_AGENT_MODEL" >> "$JAIPH_OVERRIDE_LOG"
 printf 'rule_backend:%s\n' "$JAIPH_AGENT_BACKEND" >> "$JAIPH_OVERRIDE_LOG"
-```
+'''
 
 def check_config() {
   log_rule_config()
@@ -117,7 +119,9 @@ config {
   agent.backend = "cursor"
 }
 
-script log_nested_backend use JAIPH_NESTED_LOG = `printf '%s:%s\n' "$1" "$JAIPH_AGENT_BACKEND" >> "$JAIPH_NESTED_LOG"`
+script log_nested_backend use JAIPH_NESTED_LOG = '''
+printf '%s:%s\n' "$1" "$JAIPH_AGENT_BACKEND" >> "$JAIPH_NESTED_LOG"
+'''
 
 export def main() {
   log_nested_backend("child_backend")
@@ -131,7 +135,9 @@ config {
   agent.backend = "cursor"
 }
 
-script log_nested_backend use JAIPH_NESTED_LOG = `printf '%s:%s\n' "$1" "$JAIPH_AGENT_BACKEND" >> "$JAIPH_NESTED_LOG"`
+script log_nested_backend use JAIPH_NESTED_LOG = '''
+printf '%s:%s\n' "$1" "$JAIPH_AGENT_BACKEND" >> "$JAIPH_NESTED_LOG"
+'''
 
 def caller() {
   config {
@@ -167,7 +173,9 @@ ENV_LOG="${TEST_DIR}/env.log"
 export JAIPH_ENV_LOG="${ENV_LOG}"
 
 e2e::file "env_wins.jh" <<'EOF'
-script log_env_backend use JAIPH_ENV_LOG = `printf 'backend:%s\n' "$JAIPH_AGENT_BACKEND" >> "$JAIPH_ENV_LOG"`
+script log_env_backend use JAIPH_ENV_LOG = '''
+printf 'backend:%s\n' "$JAIPH_AGENT_BACKEND" >> "$JAIPH_ENV_LOG"
+'''
 
 export def main() {
   config {
@@ -199,7 +207,9 @@ config {
   agent.backend = "cursor"
 }
 
-script log_sibling_env use JAIPH_SIBLING_LOG = `printf '%s:model=%s,backend=%s\n' "$1" "$JAIPH_AGENT_MODEL" "$JAIPH_AGENT_BACKEND" >> "$JAIPH_SIBLING_LOG"`
+script log_sibling_env use JAIPH_SIBLING_LOG = '''
+printf '%s:model=%s,backend=%s\n' "$1" "$JAIPH_AGENT_MODEL" "$JAIPH_AGENT_BACKEND" >> "$JAIPH_SIBLING_LOG"
+'''
 
 def alpha() {
   config {
@@ -240,7 +250,9 @@ PARAM_LOG="${TEST_DIR}/param.log"
 export JAIPH_PARAM_LOG="${PARAM_LOG}"
 
 e2e::file "param_config.jh" <<'EOF'
-script log_model use JAIPH_PARAM_LOG = `printf 'model:%s\n' "$JAIPH_AGENT_MODEL" >> "$JAIPH_PARAM_LOG"`
+script log_model use JAIPH_PARAM_LOG = '''
+printf 'model:%s\n' "$JAIPH_AGENT_MODEL" >> "$JAIPH_PARAM_LOG"
+'''
 
 def implement(model) {
   config {

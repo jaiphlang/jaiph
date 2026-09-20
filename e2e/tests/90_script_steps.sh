@@ -13,9 +13,9 @@ e2e::section "script calls in workflow tree and side effects"
 
 # Given
 e2e::file "scripts.jh" <<'EOF'
-script changed_files = ```
+script changed_files = '''
 echo "fn-called" > script_called.txt
-```
+'''
 
 export def main() {
   changed_files()
@@ -45,19 +45,19 @@ e2e::section "run, ensure, and script argument forwarding"
 
 # Given
 e2e::file "args_forwarding.jh" <<'EOF'
-script expect_args_impl = `return 0`
+script expect_args_impl = 'return 0'
 
 def expect_args(a, b) {
   expect_args_impl()
 }
 
-script write_args = ```
+script write_args = '''
 printf "%s|%s\n" "$1" "$2" > script_args.txt
-```
+'''
 
-script write_workflow_args = ```
+script write_workflow_args = '''
 printf "%s|%s\n" "$1" "$2" > workflow_args.txt
-```
+'''
 
 def called(a, b) {
   expect_args(a, b)

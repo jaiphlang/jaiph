@@ -74,16 +74,16 @@ e2e::section "High-volume send: 10 senders, sequence IDs gapless and unique"
 e2e::file "stress_highvol.jh" <<'EOF'
 channel data -> sink
 
-script emit_m1 = `echo "m1"`
-script emit_m2 = `echo "m2"`
-script emit_m3 = `echo "m3"`
-script emit_m4 = `echo "m4"`
-script emit_m5 = `echo "m5"`
-script emit_m6 = `echo "m6"`
-script emit_m7 = `echo "m7"`
-script emit_m8 = `echo "m8"`
-script emit_m9 = `echo "m9"`
-script emit_m10 = `echo "m10"`
+script emit_m1 = 'echo "m1"'
+script emit_m2 = 'echo "m2"'
+script emit_m3 = 'echo "m3"'
+script emit_m4 = 'echo "m4"'
+script emit_m5 = 'echo "m5"'
+script emit_m6 = 'echo "m6"'
+script emit_m7 = 'echo "m7"'
+script emit_m8 = 'echo "m8"'
+script emit_m9 = 'echo "m9"'
+script emit_m10 = 'echo "m10"'
 
 def s1() {
   send emit_m1() -> data
@@ -125,7 +125,7 @@ def s10() {
   send emit_m10() -> data
 }
 
-script sink_impl = `echo "$1" >> sink_all.txt`
+script sink_impl = 'echo "$1" >> sink_all.txt'
 
 def sink(message, chan, sender) {
   sink_impl(message)
@@ -170,9 +170,9 @@ e2e::section "Fan-out correctness: 3 messages x 3 targets = 9 invocations"
 e2e::file "stress_fanout.jh" <<'EOF'
 channel ch -> target_x, target_y, target_z
 
-script emit_pa = `echo "pa"`
-script emit_pb = `echo "pb"`
-script emit_pc = `echo "pc"`
+script emit_pa = 'echo "pa"'
+script emit_pb = 'echo "pb"'
+script emit_pc = 'echo "pc"'
 
 def producer_a() {
   send emit_pa() -> ch
@@ -186,19 +186,19 @@ def producer_c() {
   send emit_pc() -> ch
 }
 
-script target_x_impl = `echo "x:$1" >> fanout_log.txt`
+script target_x_impl = 'echo "x:$1" >> fanout_log.txt'
 
 def target_x(message, chan, sender) {
   target_x_impl(message)
 }
 
-script target_y_impl = `echo "y:$1" >> fanout_log.txt`
+script target_y_impl = 'echo "y:$1" >> fanout_log.txt'
 
 def target_y(message, chan, sender) {
   target_y_impl(message)
 }
 
-script target_z_impl = `echo "z:$1" >> fanout_log.txt`
+script target_z_impl = 'echo "z:$1" >> fanout_log.txt'
 
 def target_z(message, chan, sender) {
   target_z_impl(message)
@@ -251,8 +251,8 @@ e2e::file "stress_nested.jh" <<'EOF'
 channel ch_raw -> processor
 channel ch_processed -> sink
 
-script emit_raw = `echo "raw-data"`
-script emit_processed = `echo "processed:$1"`
+script emit_raw = 'echo "raw-data"'
+script emit_processed = 'echo "processed:$1"'
 
 def sender() {
   send emit_raw() -> ch_raw
@@ -262,7 +262,7 @@ def processor(message, chan, sender) {
   send emit_processed(message) -> ch_processed
 }
 
-script nested_sink_impl = `echo "$1" > nested_result.txt`
+script nested_sink_impl = 'echo "$1" > nested_result.txt'
 
 def sink(message, chan, sender) {
   nested_sink_impl(message)
@@ -294,31 +294,31 @@ e2e::section "Failure aggregation: multiple failing targets"
 e2e::file "stress_failagg.jh" <<'EOF'
 channel ch -> good, fail_a, fail_b
 
-script emit_msg = `echo "msg"`
+script emit_msg = 'echo "msg"'
 
 def producer() {
   send emit_msg() -> ch
 }
 
-script fail_a_impl = ```
+script fail_a_impl = '''
 echo "a ran" > fail_a_ran.txt
 exit 1
-```
+'''
 
 def fail_a(message, chan, sender) {
   fail_a_impl()
 }
 
-script fail_b_impl = ```
+script fail_b_impl = '''
 echo "b ran" > fail_b_ran.txt
 exit 1
-```
+'''
 
 def fail_b(message, chan, sender) {
   fail_b_impl()
 }
 
-script good_impl = `echo "ok" > fail_good_ran.txt`
+script good_impl = 'echo "ok" > fail_good_ran.txt'
 
 def good(message, chan, sender) {
   good_impl()
@@ -350,11 +350,11 @@ e2e::section "Concurrent artifact integrity: inbox + summary under load"
 e2e::file "stress_artifacts.jh" <<'EOF'
 channel ev -> t1, t2
 
-script emit_e1 = `echo "e1"`
-script emit_e2 = `echo "e2"`
-script emit_e3 = `echo "e3"`
-script emit_e4 = `echo "e4"`
-script emit_e5 = `echo "e5"`
+script emit_e1 = 'echo "e1"'
+script emit_e2 = 'echo "e2"'
+script emit_e3 = 'echo "e3"'
+script emit_e4 = 'echo "e4"'
+script emit_e5 = 'echo "e5"'
 
 def s1() {
   send emit_e1() -> ev
@@ -376,13 +376,13 @@ def s5() {
   send emit_e5() -> ev
 }
 
-script t1_impl = `echo "t1:$1" >> artifact_log.txt`
+script t1_impl = 'echo "t1:$1" >> artifact_log.txt'
 
 def t1(message, chan, sender) {
   t1_impl(message)
 }
 
-script t2_impl = `echo "t2:$1" >> artifact_log.txt`
+script t2_impl = 'echo "t2:$1" >> artifact_log.txt'
 
 def t2(message, chan, sender) {
   t2_impl(message)
@@ -428,9 +428,9 @@ SOAK_ITERATIONS=5
 e2e::file "stress_soak.jh" <<'EOF'
 channel ch -> t1, t2
 
-script soak_emit_i1 = `echo "i1"`
-script soak_emit_i2 = `echo "i2"`
-script soak_emit_i3 = `echo "i3"`
+script soak_emit_i1 = 'echo "i1"'
+script soak_emit_i2 = 'echo "i2"'
+script soak_emit_i3 = 'echo "i3"'
 
 def s1() {
   send soak_emit_i1() -> ch
@@ -444,13 +444,13 @@ def s3() {
   send soak_emit_i3() -> ch
 }
 
-script soak_t1_impl = `echo "t1:$1" >> soak_log.txt`
+script soak_t1_impl = 'echo "t1:$1" >> soak_log.txt'
 
 def t1(message, chan, sender) {
   soak_t1_impl(message)
 }
 
-script soak_t2_impl = `echo "t2:$1" >> soak_log.txt`
+script soak_t2_impl = 'echo "t2:$1" >> soak_log.txt'
 
 def t2(message, chan, sender) {
   soak_t2_impl(message)
@@ -512,16 +512,16 @@ e2e::section "High-volume replay: second 10-sender workflow matches inbox invari
 e2e::file "stress_seq_mode.jh" <<'EOF'
 channel data -> sink
 
-script seq_emit_m1 = `echo "m1"`
-script seq_emit_m2 = `echo "m2"`
-script seq_emit_m3 = `echo "m3"`
-script seq_emit_m4 = `echo "m4"`
-script seq_emit_m5 = `echo "m5"`
-script seq_emit_m6 = `echo "m6"`
-script seq_emit_m7 = `echo "m7"`
-script seq_emit_m8 = `echo "m8"`
-script seq_emit_m9 = `echo "m9"`
-script seq_emit_m10 = `echo "m10"`
+script seq_emit_m1 = 'echo "m1"'
+script seq_emit_m2 = 'echo "m2"'
+script seq_emit_m3 = 'echo "m3"'
+script seq_emit_m4 = 'echo "m4"'
+script seq_emit_m5 = 'echo "m5"'
+script seq_emit_m6 = 'echo "m6"'
+script seq_emit_m7 = 'echo "m7"'
+script seq_emit_m8 = 'echo "m8"'
+script seq_emit_m9 = 'echo "m9"'
+script seq_emit_m10 = 'echo "m10"'
 
 def s1() {
   send seq_emit_m1() -> data
@@ -563,7 +563,7 @@ def s10() {
   send seq_emit_m10() -> data
 }
 
-script seq_sink_impl = `echo "$1" >> seq_sink_all.txt`
+script seq_sink_impl = 'echo "$1" >> seq_sink_all.txt'
 
 def sink(message, chan, sender) {
   seq_sink_impl(message)

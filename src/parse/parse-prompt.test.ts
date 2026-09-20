@@ -181,7 +181,19 @@ test("parsePromptStep: triple-backtick fence is rejected with guidance", () => {
   ];
   assert.throws(
     () => parsePromptStep("test.jh", lines, 0, "```", 3, undefined, trivia),
-    /prompt blocks use triple quotes.*triple backticks are for scripts/,
+    /prompt blocks use triple quotes.*script bodies use triple single quotes/,
+  );
+});
+
+test("parsePromptStep: triple-single-quote script fence is rejected with guidance", () => {
+  const lines = [
+    "  prompt '''",
+    "Hello multiline",
+    "'''",
+  ];
+  assert.throws(
+    () => parsePromptStep("test.jh", lines, 0, "'''", 3, undefined, trivia),
+    /prompt blocks use triple quotes.*script bodies use triple single quotes/,
   );
 });
 

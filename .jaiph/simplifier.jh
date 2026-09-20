@@ -42,7 +42,7 @@ const simplifier_principles = """
     existing tests unchanged.
 """
 
-script assert_no_test_or_e2e_in_changed = ```
+script assert_no_test_or_e2e_in_changed = '''
   local bad=0
   while IFS= read -r f; do
     [ -z "$f" ] && continue
@@ -58,13 +58,12 @@ script assert_no_test_or_e2e_in_changed = ```
     } | sort -u
   )
   return $bad
-```
-
+'''
 def no_test_or_e2e_paths_changed() {
   assert_no_test_or_e2e_in_changed()
 }
 
-script report_file_nonempty = `test -s ".jaiph/tmp/simplifier_report.md"`
+script report_file_nonempty = 'test -s ".jaiph/tmp/simplifier_report.md"'
 
 def find_simplifications() {
   const report = prompt """
@@ -107,9 +106,11 @@ def find_simplifications() {
   no_test_or_e2e_paths_changed()
 }
 
-script save_simplifier_report = `printf '%s\n' "$1" > .jaiph/tmp/simplifier_report.md`
+script save_simplifier_report = '''
+printf '%s\n' "$1" > .jaiph/tmp/simplifier_report.md
+'''
 
-script read_simplifier_report = `cat .jaiph/tmp/simplifier_report.md`
+script read_simplifier_report = 'cat .jaiph/tmp/simplifier_report.md'
 
 def apply_simplifications() {
   report_file_nonempty() catch (err) {
@@ -146,7 +147,7 @@ def apply_simplifications() {
   no_test_or_e2e_paths_changed()
 }
 
-script mkdir_tmp_jaiph = `mkdir -p .jaiph/tmp`
+script mkdir_tmp_jaiph = 'mkdir -p .jaiph/tmp'
 
 const commit_task = """
   Simplifier pass: apply safe code simplifications from

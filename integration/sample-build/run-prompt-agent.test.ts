@@ -234,9 +234,9 @@ test("jaiph run agent.backend = claude uses Claude CLI and captures output", () 
     writeFileSync(
       filePath,
       [
-        "script print_captured = \`\`\`",
+        "script print_captured = '''",
         "printf 'captured:%s\\n' \"$1\"",
-        "\`\`\`",
+        "'''",
         "config {",
         '  agent.backend = "claude"',
         '  agent.claude_flags = "--model sonnet-4"',
@@ -341,9 +341,9 @@ test("jaiph run JAIPH_AGENT_BACKEND env overrides file default", () => {
     writeFileSync(
       filePath,
       [
-        "script print_out = \`\`\`",
+        "script print_out = '''",
         "printf 'out:%s\\n' \"$1\"",
-        "\`\`\`",
+        "'''",
         "config {",
         '  agent.backend = "claude"',
         "}",
@@ -397,9 +397,9 @@ test("jaiph run defaults Cursor trusted workspace to project root", () => {
     writeFileSync(
       filePath,
       [
-        "script print_out = \`\`\`",
+        "script print_out = '''",
         "printf 'out:%s\\n' \"$1\"",
-        "\`\`\`",
+        "'''",
         "export def main() {",
         '  const result = prompt "hi"',
         '  print_out(result)',
@@ -450,9 +450,9 @@ test("jaiph run JAIPH_AGENT_TRUSTED_WORKSPACE env overrides metadata", () => {
     writeFileSync(
       filePath,
       [
-        "script print_out = \`\`\`",
+        "script print_out = '''",
         "printf 'out:%s\\n' \"$1\"",
-        "\`\`\`",
+        "'''",
         "config {",
         '  agent.trusted_workspace = ".jaiph/.."',
         "}",

@@ -13,7 +13,7 @@ e2e::section "Basic workflow execution"
 
 # Given
 e2e::file "hello.jh" <<'EOF'
-script hello_impl = `echo "hello-jh"`
+script hello_impl = 'echo "hello-jh"'
 export def main() {
   const msg = hello_impl()
   return "${msg}"
@@ -41,7 +41,7 @@ e2e::expect_out "hello.jh" "hello_impl" "hello-jh"
 
 # Given
 e2e::file "lib.jh" <<'EOF'
-script ready_impl = `echo "from-lib"`
+script ready_impl = 'echo "from-lib"'
 export def ready() {
   const result = ready_impl()
   return "${result}"
@@ -50,7 +50,7 @@ EOF
 
 e2e::file "app.jh" <<'EOF'
 import "lib.jh" as lib
-script mixed_ok_impl = `echo "mixed-ok"`
+script mixed_ok_impl = 'echo "mixed-ok"'
 export def main() {
   lib.ready()
   const msg = mixed_ok_impl()
@@ -95,7 +95,7 @@ else
 # Given
 e2e::file "current_branch.jh" <<'EOF'
 #!/usr/bin/env jaiph
-script current_branch_impl = ```
+script current_branch_impl = '''
 if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   echo "Not inside a git repository." >&2
   exit 1
@@ -105,7 +105,7 @@ if [ "$(git branch --show-current)" != "$1" ]; then
   echo "Current branch is not '$1'." >&2
   exit 1
 fi
-```
+'''
 def current_branch(branch) {
   current_branch_impl(branch)
 }
