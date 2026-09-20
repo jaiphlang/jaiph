@@ -5,6 +5,7 @@
 script check_report_exists = '''
   test -f report.txt
 '''
+
 export def main() {
   # Recovery in loop: when check_report_exists() fails, the recovery body
   # is executed to fix it, and then check_report_exists() is retried.
