@@ -38,7 +38,7 @@ jaiph --version
 jaiph --help
 ```
 
-The script builds the self-contained standalone binary via `docs/install` (`npm ci` when a lockfile is present, else `npm install`, plus `npm run build:standalone`, including uncommitted changes) and installs `dist/jaiph` to `~/.local/bin` by default (or `JAIPH_BIN_DIR` if set). It does **not** build the linux runner image.
+The script builds the self-contained standalone binary via `docs/install` (`npm ci` when a lockfile is present, else `npm install`, plus `npm run build:standalone`, including uncommitted changes; the copy skips `.git`, `node_modules`, and `.jaiph/runs`) and installs `dist/jaiph` to `~/.local/bin` by default (or `JAIPH_BIN_DIR` if set). It does **not** build the linux runner image.
 
 To build a local `ghcr.io/jaiphlang/jaiph-runtime` (linux binaries + `runtime/Dockerfile`):
 

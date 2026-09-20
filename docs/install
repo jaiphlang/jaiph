@@ -147,8 +147,14 @@ if [ -n "${JAIPH_FROM_LOCAL}" ]; then
   trap 'rm -rf "${tmp_dir}"' EXIT
 
   print_step "Copying (includes uncommitted changes)..."
-  cp -R "${JAIPH_REPO_URL}" "${tmp_dir}/src"
-  rm -rf "${tmp_dir}/src/.git" "${tmp_dir}/src/node_modules"
+  mkdir -p "${tmp_dir}/src"
+  # Skip .git, node_modules, and .jaiph/runs — none are standalone-build
+  # inputs, and runs can be hundreds of megabytes of host artifacts.
+  tar -C "${JAIPH_REPO_URL}" \
+    --exclude '.git' \
+    --exclude 'node_modules' \
+    --exclude '.jaiph/runs' \
+    -cf - . | tar -C "${tmp_dir}/src" -xf -
 
   # Prefer a clean-room `npm ci` for exact lockfile enforcement. Fall back to
   # `npm install` only when the checkout has no package-lock.json to honor.
