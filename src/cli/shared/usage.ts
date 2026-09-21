@@ -71,15 +71,14 @@ export function printUsage(): void {
       "  access needed). Exposure mirrors `jaiph mcp`. Runs are durable resources",
       "  under .jaiph/runs/: inspect one with GET /runs/{id}, stream its event journal",
       "  (NDJSON or SSE) via GET /runs/{id}/events, and list/download published files via",
-      "  GET /runs/{id}/artifacts[/{path}]. Set JAIPH_SERVE_TOKEN to",
-      "  require a bearer token on REST and /mcp. With no JAIPH_SERVE_TOKEN and no OIDC, startup",
-      "  is refused unless --allow-anonymous is passed (permits loopback and non-loopback).",
-      "  JAIPH_SERVE_MAX_CONCURRENT (default 4) caps simultaneous runs.",
+      "  GET /runs/{id}/artifacts[/{path}]. Auth is off by default (same as `jaiph mcp`",
+      "  stdio). Set JAIPH_SERVE_TOKEN to require a bearer token on REST and /mcp.",
+      "  --allow-anonymous is only needed to bind a non-loopback address with no token",
+      "  and no OIDC. JAIPH_SERVE_MAX_CONCURRENT (default 4) caps simultaneous runs.",
       "  --host <addr>      listen address (default: 127.0.0.1)",
       "  --port <n>         listen port (default: 5247)",
-      "  --allow-anonymous  run open with no auth (every caller gets all capabilities over",
-      "                     all runs). Permits loopback and non-loopback. Ignored when",
-      "                     JAIPH_SERVE_TOKEN or OIDC is set.",
+      "  --allow-anonymous  bind a non-loopback address with no auth (default bind is already",
+      "                     open). Ignored when JAIPH_SERVE_TOKEN or OIDC is set.",
       "  --workspace <dir>  workspace root for import resolution (default: auto-detect).",
       "  --env KEY=VALUE    grant KEY to matching `use` clauses on every run (repeatable); --env KEY forwards the host value.",
       "",
@@ -202,7 +201,7 @@ export interface ParsedArgs {
   target?: string;
   raw?: boolean;
   workspace?: string;
-  /** `jaiph serve` explicit opt-in to run open (anonymous) with no configured auth. */
+  /** `jaiph serve` opt-in to bind a non-loopback address with no configured auth. */
   allowAnonymous?: boolean;
   /** `jaiph serve` listen host. */
   host?: string;

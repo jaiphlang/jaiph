@@ -25,7 +25,7 @@ COVERED_RUN=(
   "agent_inbox.jh"
   "say_hello.jh"       # failure path only; success needs a real agent
   "recover_loop.jh"    # success path only (report.txt pre-created); recovery needs a real agent
-  "stream.jh"          # stdin pipeline: gen -> upper -> count reduces to a line count
+  "stdin.jh"           # stdin pipeline: gen -> upper -> count reduces to a line count
 )
 # Covered via `jaiph test`:
 COVERED_TEST=(
@@ -167,19 +167,19 @@ testing recover_loop.test.jh
 ✓ 1 test(s) passed
 EOF
 
-# ── stream.jh — stdin pipeline ──────────────────────────────────────────────
+# ── stdin.jh — stdin pipeline ───────────────────────────────────────────────
 # gen() streams a few lines, upper() uppercases them, count() reduces to the
 # line count. Each stage is its own progress step; main returns the last stage.
 
-e2e::section "examples/stream.jh — stdin pipeline reduces to a line count"
+e2e::section "examples/stdin.jh — stdin pipeline reduces to a line count"
 
 # When
-stream_out="$(e2e::run "stream.jh")"
+stdin_out="$(e2e::run "stdin.jh")"
 
 # Then
-e2e::expect_stdout "${stream_out}" <<'EOF'
+e2e::expect_stdout "${stdin_out}" <<'EOF'
 
-Jaiph: Running stream.jh
+Jaiph: Running stdin.jh
 
 def main
   ▸ script gen
@@ -193,8 +193,8 @@ def main
 3
 EOF
 
-e2e::expect_out "stream.jh" "gen" "$(printf 'alpha\nbeta\ngamma\n')"
-e2e::expect_out "stream.jh" "upper" "$(printf 'ALPHA\nBETA\nGAMMA\n')"
+e2e::expect_out "stdin.jh" "gen" "$(printf 'alpha\nbeta\ngamma\n')"
+e2e::expect_out "stdin.jh" "upper" "$(printf 'ALPHA\nBETA\nGAMMA\n')"
 
 # ── Orphan guard ─────────────────────────────────────────────────────────────
 # Fail if an example file exists that is not covered or explicitly excluded.

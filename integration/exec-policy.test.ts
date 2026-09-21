@@ -78,12 +78,12 @@ function runDirect(ws: string, fixture: string, flags: string[], env: NodeJS.Pro
 
 /**
  * HTTP mode: start `jaiph serve`, POST the workflow with ?wait=true, shut down.
- * `--allow-anonymous` opts into the no-auth loopback default, which is now a
- * startup error without the flag (finding M-2); it does not affect the
- * exec-policy posture this table observes.
+ * Loopback with no token is open by default; this helper does not pass
+ * `--allow-anonymous`. The flag does not affect the exec-policy posture this
+ * table observes.
  */
 async function runServeMode(ws: string, fixture: string, flags: string[], env: NodeJS.ProcessEnv): Promise<ModeOutcome> {
-  const child = spawn("node", [CLI_PATH, "serve", "--port", "0", "--allow-anonymous", ...flags, fixture], {
+  const child = spawn("node", [CLI_PATH, "serve", "--port", "0", ...flags, fixture], {
     cwd: ws,
     env,
     stdio: ["ignore", "pipe", "pipe"],

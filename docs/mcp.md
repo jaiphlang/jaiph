@@ -19,7 +19,7 @@ Turn a `.jh` file into an [MCP](https://modelcontextprotocol.io/) server so any 
 jaiph mcp ./tools.jh
 ```
 
-The server speaks newline-delimited JSON-RPC 2.0 over stdio and runs until stdin closes or it receives `SIGINT`/`SIGTERM`. stdout carries only protocol JSON; every banner, warning, and compile diagnostic goes to stderr, and a compile error exits `1` with nothing on stdout. For `--workspace`, `--env`, exit behavior, and error codes, see [the `jaiph mcp` reference](cli.md#jaiph-mcp).
+The server speaks newline-delimited JSON-RPC 2.0 over stdio and runs until stdin closes or it receives `SIGINT`/`SIGTERM`. There is no authentication — the parent MCP client is the only caller. stdout carries only protocol JSON; every banner, warning, and compile diagnostic goes to stderr, and a compile error exits `1` with nothing on stdout. For `--workspace`, `--env`, exit behavior, and error codes, see [the `jaiph mcp` reference](cli.md#jaiph-mcp).
 
 ## 2. Register the server with a client
 

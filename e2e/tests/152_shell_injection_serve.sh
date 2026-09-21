@@ -47,9 +47,8 @@ e2e::section "jaiph serve param does not inject shell commands into a shell body
 serve_err="${TEST_DIR}/serve_stderr.txt"
 : >"${serve_err}"
 
-# No JAIPH_SERVE_TOKEN/OIDC here, so --allow-anonymous is required to bind even
-# loopback with no auth (finding M-2).
-jaiph serve --port 0 --allow-anonymous "${TEST_DIR}/tools.jh" >/dev/null 2>"${serve_err}" &
+# Loopback with no token is open by default.
+jaiph serve --port 0 "${TEST_DIR}/tools.jh" >/dev/null 2>"${serve_err}" &
 E2E_SERVER_PID="$!"
 
 port=""
