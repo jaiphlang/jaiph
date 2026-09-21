@@ -125,10 +125,10 @@ layout: null
         <section>
             <h2>What is Jaiph?</h2>
             <div class="card doc-content">
-                <p><strong>Jaiph</strong> is a language and runtime for defining and orchestrating
-                    AI agent calls, with strict checks and custom scripts.</p>
-                <p>You write a Jaiph file, and you can run it as a command-line agentic app, an MCP
-                    server, or an HTTP server, with isolation of secrets and recorded outputs.</p>
+                <p><strong>Jaiph</strong> is a language and runtime for composing native workflow control,
+                    scripts in any language, and AI prompts.</p>
+                <p>One Jaiph file can run as a command-line app, an MCP server over stdio, or an HTTP API
+                    with OpenAPI and HTTP MCP, with explicit secret grants and recorded outputs.</p>
             </div>
         </section>
 
@@ -149,7 +149,7 @@ layout: null
                 </a>
                 <a class="path-card" href="/how-to/serve">
                     <h3>HTTP API in one command</h3>
-                    <p><code>jaiph serve ./tools.jh</code> — OpenAPI, Swagger UI, same defs.</p>
+                    <p><code>jaiph serve ./tools.jh</code> — REST, OpenAPI, Swagger UI, and HTTP MCP.</p>
                 </a>
                 <a class="path-card" href="/how-to/testing">
                     <h3>Test your programs</h3>
@@ -175,7 +175,7 @@ layout: null
                     </div>
                     <div class="comparison-col">
                         <h3>Tooling</h3>
-                        <p>One file: CLI, MCP server, or HTTP API</p>
+                        <p>One file: CLI, stdio MCP, or HTTP API with MCP</p>
                         <p>Runs on your machine. Put it in a container if you want a sandbox</p>
                         <p>Built-in tests with prompt mocks</p>
                         <p>Every agent response is saved</p>

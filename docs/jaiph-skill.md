@@ -20,7 +20,7 @@ Classify every operation before writing code:
 |---|---|
 | Composition, branching, loops, concurrency, recovery, or data flow | Native Jaiph in a `def` |
 | Deterministic computation, filesystem/process access, or an existing CLI/library | `script` in Bash, Python, Node, or another interpreter |
-| Work requiring model judgment or generation | `prompt`; capture the result with `const` when another step needs it |
+| Work requiring model judgment or generation | `prompt`; capture the result with `const`, and use [typed returns](https://jaiph.org/reference/language#prompt-agent-interaction) when downstream steps need fields |
 | Decoupled message dispatch | `channel` and `send` |
 
 Do not hide orchestration in a large shell or Python script. Do not use a prompt for work that a deterministic script can perform. Reuse imported modules and nearby definitions before adding another implementation. Prefer small named `def`, `script`, and named `prompt` units when logic is reused.
@@ -60,26 +60,35 @@ export def main(root, output) {
     Explain this source-tree composition and identify likely maintenance risks:
     ${counts}
   """
-  stdin "${report}" -> write_report(output)
+  stdin report -> write_report(output)
   return report
 }
 ```
 
-This keeps sequencing and data flow in Jaiph, deterministic inspection in Python, model judgment in a prompt, and file writing in Node. `const report = prompt …` intentionally materializes the result because the workflow both writes and returns it. The following `stdin "${report}"` passes that already-materialized string safely to Node; it does not turn the string back into an output handle. For script fences, argv, prompt capture, and `stdin`, use [Language](https://jaiph.org/reference/language).
+This keeps sequencing and data flow in Jaiph, deterministic inspection in Python, model judgment in a prompt, and file writing in Node. For script fences, arguments, prompt capture, and data transfer, follow [Language](https://jaiph.org/reference/language).
 
-## Choose materialization boundaries intentionally
+## Handle data deliberately
 
-A call result is an output handle until a force site materializes it. `const`, interpolation, comparisons, and call arguments force handles; `stdin producer() -> consumer()` and a prompt whose entire body is a handle can stream. Passing an already-materialized string through `stdin` avoids argv limits but does not restore streaming. For large or arbitrary data, preserve the handle when possible and connect the producer directly. See [Value types](https://jaiph.org/reference/language#value-types) and [Arguments and stdin](https://jaiph.org/reference/language#arguments-and-stdin).
+Calls return an output handle. Before capturing, interpolating, passing, or streaming one, follow [Value types](https://jaiph.org/reference/language#value-types) and [Arguments and stdin](https://jaiph.org/reference/language#arguments-and-stdin).
+
+## Choose how users invoke it
+
+The same `.jh` program can run from the CLI, expose tools over MCP, or serve an HTTP API. Treat exported def names, comments, and parameters as a public interface.
+
+- Use `jaiph run <file.jh> [args…]` for a command-line program with `export def main`; see [CLI](https://jaiph.org/reference/cli).
+- Use `jaiph mcp <file.jh>` to expose exported defs as MCP tools over stdio; see [MCP server in 30 seconds](https://jaiph.org/how-to/mcp).
+- Use `jaiph serve <file.jh>` to expose exported defs through REST, OpenAPI, Swagger UI, and HTTP MCP; see [Serve defs over HTTP](https://jaiph.org/how-to/serve).
 
 ## Your authoring loop
 
 1. Inspect nearby `.jh` and `*.test.jh` files for reusable imports, defs, scripts, prompts, and project conventions.
-2. Classify each operation using the table above; make inputs, outputs, and failure paths explicit.
+2. Classify each operation using the table above; make inputs, outputs, failure paths, and the intended CLI, MCP, or HTTP surface explicit.
 3. Write the smallest coherent change. Read the owner page instead of guessing syntax.
 4. Format: `jaiph format <file…>`.
 5. Compile: `jaiph compile <file-or-dir>`. Fix every reported diagnostic.
 6. Add or update `*.test.jh` coverage. Mock every prompt, then run `jaiph test <file-or-dir>`.
 7. Run `jaiph run <file.jh> [args…]` for an end-to-end check when its external effects and agent calls are intended.
+8. Inspect recorded outputs under `.jaiph/runs/` when debugging or validating behavior; see [Save artifacts](https://jaiph.org/how-to/artifacts).
 
 Do not claim completion until formatting, compilation, and relevant tests pass. The full command surface and flags live at [CLI](https://jaiph.org/reference/cli).
 
@@ -102,3 +111,6 @@ This skill is published independently of the Jaiph repository. Open the absolute
 - [https://jaiph.org/reference/cli](https://jaiph.org/reference/cli) — commands, flags, and invocation.
 - [https://jaiph.org/reference/configuration](https://jaiph.org/reference/configuration) — config keys and precedence.
 - [https://jaiph.org/how-to/testing](https://jaiph.org/how-to/testing) — write and run `*.test.jh` tests.
+- [https://jaiph.org/how-to/mcp](https://jaiph.org/how-to/mcp) — expose exported defs as MCP tools.
+- [https://jaiph.org/how-to/serve](https://jaiph.org/how-to/serve) — expose exported defs over HTTP and HTTP MCP.
+- [https://jaiph.org/how-to/artifacts](https://jaiph.org/how-to/artifacts) — inspect recorded outputs and publish artifacts.
