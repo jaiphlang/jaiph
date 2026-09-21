@@ -25,11 +25,12 @@ The published set is about 6,100 lines across 27 pages. Three pages teach the la
 | Environment variable inventory | `docs/env-vars.md` |
 | Config keys and scopes | `docs/configuration.md` |
 | Why and trade-offs | `docs/why-jaiph.md` |
+| Agent authoring decisions and verification loop | `docs/jaiph-skill.md` |
 | How to do one job | the matching how-to |
 
 A how-to is numbered steps plus links. It does not restate an inventory. `async.md` and `spec-async-handles.md` stay a pair (recipe and model). `configure-backend.md` and `configuration.md` stay a pair (recipe and keys).
 
-`docs/jaiph-skill.md` is an agent checklist. It is not a third language book. It ships inside the binary (`src/runtime/embedded-assets.ts`), so its size is paid by every `jaiph init` and every standalone build.
+`docs/jaiph-skill.md` owns the agent decision procedure: how to divide work among native Jaiph, scripts, prompts, and channels, then how to verify the result. It may carry one compact example and high-value guardrails, but it is not a third language book. Syntax and construct semantics stay on their owner pages. The skill ships inside the binary (`src/runtime/embedded-assets.ts`), so its size is paid by every `jaiph init` and every standalone build.
 
 `docs/architecture.md` is the implementation map for contributors. Validator internals, visitor tables, and file-size justifications belong there or in `docs/contributing.md`, not on user how-tos.
 
@@ -50,7 +51,7 @@ A change that restates an owned fact is a reject. Point at the owner instead.
 ## Consequences
 
 - `docs/agent-analyzability.md` points here as the docs ownership rule.
-- `docs/jaiph-skill.md` shrinks to a checklist and keeps pointing at `language.md` and `grammar.md`.
+- `docs/jaiph-skill.md` stays a compact, operational checklist and keeps syntax and semantic detail in `language.md` and `grammar.md`.
 - `docs/grammar.md` keeps EBNF, lexical rules, and the validation catalog. Semantic tables move out or become a sentence plus a link to `language.md`.
 - How-tos such as `mcp.md`, `serve.md`, `observability.md`, and `agent-auth.md` drop restated inventories.
 - `--env` has one essay, on `docs/env-vars.md`. `cli.md` and `why-jaiph.md` keep one sentence and a link.

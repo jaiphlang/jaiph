@@ -44,6 +44,7 @@ export function emitScriptDecl(
 export function emitPromptDecl(
   prompt: PromptDef,
   ci: string,
+  pad: string,
   exported: boolean,
   trivia: Trivia,
 ): string[] {
@@ -54,9 +55,9 @@ export function emitPromptDecl(
   const header = `${ci}${prefix}prompt ${prompt.name}(${prompt.params.join(", ")})${useClause} = `;
   const returns = prompt.returns ? ` returns "${prompt.returns}"` : "";
   if (tn(trivia, prompt).bodyKind === "triple_quoted") {
-    const inner = tn(trivia, prompt).rawBody ?? decodeTripleQuotedInner(prompt.raw);
+    const inner = decodeTripleQuotedInner(prompt.raw);
     lines.push(`${header}"""`);
-    for (const bl of inner.split("\n")) lines.push(bl);
+    lines.push(...emitFencedScriptBodyLines(inner, `${ci}${pad}`));
     lines.push(`${ci}"""`);
     if (prompt.returns) lines.push(`${ci}returns "${prompt.returns}"`);
   } else {

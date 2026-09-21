@@ -125,7 +125,7 @@ export function emitModule(
     }
     if (item.kind === "prompt") {
       const p = mod.prompts![item.index];
-      sections.push(emitPromptDecl(p, "", exportedNames.has(p.name), trivia).join("\n"));
+      sections.push(emitPromptDecl(p, "", pad, exportedNames.has(p.name), trivia).join("\n"));
       continue;
     }
     if (item.kind === "def") {

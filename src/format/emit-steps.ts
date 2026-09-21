@@ -66,13 +66,16 @@ function emitInlineScriptLines(
 
 /**
  * Render a `stdin` producer / pipeline stage on a single line: a `literal`
- * value verbatim, a `call` via `emitRef`, or a single-line inline script as
- * `'body'(args)`. Pipeline producers and intermediate stages are always
- * single-line (fenced inline scripts are only allowed as the final stage, which
- * emits through the normal body path).
+ * value (bare via trivia, otherwise `raw`), a `call` via `emitRef`, or a
+ * single-line inline script as `'body'(args)`. Pipeline producers and
+ * intermediate stages are always single-line (fenced inline scripts are only
+ * allowed as the final stage, which emits through the normal body path).
  */
-function emitStageInline(expr: Expr): string {
-  if (expr.kind === "literal") return expr.raw;
+function emitStageInline(expr: Expr, trivia: Trivia): string {
+  if (expr.kind === "literal") {
+    const bare = tn(trivia, expr).bareSource;
+    return bare ?? expr.raw;
+  }
   if (expr.kind === "call") return emitRef(expr.callee, expr.args);
   if (expr.kind === "inline_script") return `'${expr.body}'(${formatArgs(expr.args)})`;
   return "";
@@ -148,9 +151,8 @@ function emitExprFirstLine(
       return { head: `prompt ${valueTrivia.bodyIdentifier}${returns}`, tail: [] };
     }
     if (valueTrivia.bodyKind === "triple_quoted") {
-      const inner = valueTrivia.rawBody ?? decodeTripleQuotedInner(expr.raw);
-      const tail: string[] = [];
-      for (const bl of inner.split("\n")) tail.push(bl);
+      const inner = decodeTripleQuotedInner(expr.raw);
+      const tail = emitFencedScriptBodyLines(inner, `${ci}${pad}`);
       tail.push(`${ci}"""`);
       if (expr.returns) {
         tail.push(`${ci}returns "${expr.returns}"`);
@@ -260,9 +262,9 @@ function emitStep(step: StepDef, pad: string, currentIndent: string, trivia: Tri
     // connect / pipeline clause. The producer is a `literal` (string / `${…}`
     // ref), a `call`, or an inline script; each intermediate stage renders as
     // `<stage> -> ` between the producer and the final target.
-    const stagesPrefix = (step.stages ?? []).map((s) => `${emitStageInline(s)} -> `).join("");
+    const stagesPrefix = (step.stages ?? []).map((s) => `${emitStageInline(s, trivia)} -> `).join("");
     const stdinPrefix = step.stdin
-      ? `stdin ${emitStageInline(step.stdin)} -> ${stagesPrefix}`
+      ? `stdin ${emitStageInline(step.stdin, trivia)} -> ${stagesPrefix}`
       : "";
     if (body.kind === "call") {
       const ref = emitRef(body.callee, body.args);
@@ -314,9 +316,9 @@ function emitStep(step: StepDef, pad: string, currentIndent: string, trivia: Tri
       if (bodyTrivia.bodyKind === "identifier" && bodyTrivia.bodyIdentifier) {
         lines.push(`${ci}${capture}prompt ${bodyTrivia.bodyIdentifier}${returns}`);
       } else if (bodyTrivia.bodyKind === "triple_quoted") {
-        const inner = bodyTrivia.rawBody ?? decodeTripleQuotedInner(body.raw);
+        const inner = decodeTripleQuotedInner(body.raw);
         lines.push(`${ci}${capture}prompt """`);
-        for (const bl of inner.split("\n")) lines.push(bl);
+        lines.push(...emitFencedScriptBodyLines(inner, `${ci}${pad}`));
         lines.push(`${ci}"""`);
         if (body.returns) lines.push(`${ci}returns "${body.returns}"`);
       } else {
@@ -397,7 +399,7 @@ function emitStep(step: StepDef, pad: string, currentIndent: string, trivia: Tri
   if (step.type === "local_decl") {
     const decl = step.decl;
     if (decl.kind === "script") return emitScriptDecl(decl.script, ci, pad, false, trivia);
-    if (decl.kind === "prompt") return emitPromptDecl(decl.prompt, ci, false, trivia);
+    if (decl.kind === "prompt") return emitPromptDecl(decl.prompt, ci, pad, false, trivia);
     return emitLocalDef(decl.def, pad, ci, trivia);
   }
 

@@ -205,12 +205,15 @@ function takeStdinOperand(after: string): { operand: string; rest: string } {
  * Normalize a `stdin` operand into a `literal` Expr. Quoted strings are kept
  * verbatim; a bare identifier / `IDENT.IDENT` / `${…}` ref is wrapped as a
  * quoted interpolation so the runtime resolves it exactly like a value string.
+ * Bare forms also stash `bareSource` on trivia so the formatter re-emits them
+ * without rewriting to `"${…}"` (same pattern as `return foo`).
  */
 function stdinOperandToExpr(
   filePath: string,
   innerNo: number,
   col: number,
   operand: string,
+  trivia: Trivia,
 ): Expr {
   const t = operand.trim();
   if (t.startsWith('"')) {
@@ -223,8 +226,16 @@ function stdinOperandToExpr(
     fail(filePath, SINGLE_QUOTE_MESSAGE, innerNo, col);
   }
   if (isJaiphInterpolationRef(t)) return { kind: "literal", raw: `"${t}"` };
-  if (isBareDottedIdentifierReturn(t)) return { kind: "literal", raw: dottedReturnToQuotedString(t) };
-  if (isBareIdentifierReturn(t)) return { kind: "literal", raw: bareIdentifierToQuotedString(t) };
+  if (isBareDottedIdentifierReturn(t)) {
+    const expr: Expr = { kind: "literal", raw: dottedReturnToQuotedString(t) };
+    trivia.setNode(expr, { bareSource: t });
+    return expr;
+  }
+  if (isBareIdentifierReturn(t)) {
+    const expr: Expr = { kind: "literal", raw: bareIdentifierToQuotedString(t) };
+    trivia.setNode(expr, { bareSource: t });
+    return expr;
+  }
   fail(filePath, 'stdin value must be a string, identifier, or ${...} interpolation', innerNo, col);
 }
 
@@ -430,7 +441,7 @@ export function parseStdinConnect(
       producerIsCall = true;
     } else {
       const { operand, rest } = takeStdinOperand(t);
-      stdin = stdinOperandToExpr(filePath, innerNo, stdinCol, operand);
+      stdin = stdinOperandToExpr(filePath, innerNo, stdinCol, operand, trivia);
       afterOperand = rest.trimStart();
     }
   }

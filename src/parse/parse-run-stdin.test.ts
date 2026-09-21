@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parsejaiph } from "../parser";
+import { parsejaiph, parsejaiphWithTrivia } from "../parser";
 
 /** Parse a def body line and return its single step. */
 function stepOf(line: string) {
@@ -16,6 +16,15 @@ test("parse: stdin <bare ident> -> ref() binds a quoted-interp literal", () => {
   assert.equal(step.body.kind, "call");
   assert.ok(step.stdin, "stdin bound");
   assert.deepEqual(step.stdin, { kind: "literal", raw: '"${content}"' });
+});
+
+test("parse: stdin <bare ident> stashes bareSource trivia for the formatter", () => {
+  const src = ["export def main(content) {", "  stdin content -> save(path)", "}"].join("\n");
+  const { ast, trivia } = parsejaiphWithTrivia(src, "test.jh");
+  const step = ast.defs[0]!.steps[0]!;
+  assert.equal(step.type, "exec");
+  if (step.type !== "exec" || !step.stdin) return;
+  assert.equal(trivia.getNode(step.stdin)?.bareSource, "content");
 });
 
 test("parse: stdin \"...\" -> ref() keeps the literal verbatim", () => {

@@ -128,7 +128,7 @@ describe("emitModule", () => {
     assert.equal(roundTrip(source), source);
   });
 
-  it("round-trips a stdin connect form (quoted literal is canonical)", () => {
+  it("round-trips a stdin connect form (quoted literal is preserved)", () => {
     const source = [
       "export def main(content) {",
       '  stdin "${content}" -> save(path)',
@@ -138,23 +138,26 @@ describe("emitModule", () => {
     assert.equal(roundTrip(source), source);
   });
 
-  it("normalizes a bare-identifier stdin operand to a quoted interpolation and then round-trips", () => {
+  it("preserves a bare-identifier stdin operand (does not rewrite to quoted interpolation)", () => {
     const bare = [
       "export def main(content) {",
       "  stdin content -> save(path)",
       "}",
       "",
     ].join("\n");
-    const canonical = [
-      "export def main(content) {",
-      '  stdin "${content}" -> save(path)',
+    assert.equal(roundTrip(bare), bare);
+    // Idempotent: a second pass is a fixed point.
+    assert.equal(roundTrip(roundTrip(bare)), bare);
+  });
+
+  it("preserves a bare dotted stdin operand", () => {
+    const source = [
+      "export def main() {",
+      "  stdin result.notes -> save(path)",
       "}",
       "",
     ].join("\n");
-    const once = roundTrip(bare);
-    assert.equal(once, canonical);
-    // Idempotent: formatting the canonical form again is a fixed point.
-    assert.equal(roundTrip(once), canonical);
+    assert.equal(roundTrip(source), source);
   });
 
   it("emits a stdin connect form on an inline script", () => {
@@ -221,9 +224,10 @@ describe("emitModule", () => {
   it("is a bit-for-bit no-op on a first-agent const = prompt triple-quoted def body", () => {
     // The shebang is CLI-only trivia (see docs/cli.md), so the module body here
     // omits it. A formatter that collapses `prompt """ … """` to a double-quoted
-    // string, re-indents the two body lines off the authored 4-space margin,
-    // moves the closing `"""` off 2 spaces, drops the blank line before `return`,
-    // or substitutes/escapes `${name}` must fail this test.
+    // string, moves the closing `"""` off 2 spaces, drops the blank line before
+    // `return`, or substitutes/escapes `${name}` must fail this test. Body lines
+    // at the canonical one-level indent (relative to the surrounding scope) are
+    // a fixed point.
     const source = [
       "export def hello(name) {",
       '  const response = prompt """',
@@ -238,6 +242,31 @@ describe("emitModule", () => {
     assert.equal(roundTrip(source), source);
     // Idempotent: a second pass is a fixed point.
     assert.equal(roundTrip(roundTrip(source)), source);
+  });
+
+  it("re-indents under-indented triple-quoted prompt bodies by one level", () => {
+    const under = [
+      "export def main(counts) {",
+      '  const report = prompt """',
+      "  Explain this source-tree composition:",
+      "  ${counts}",
+      '  """',
+      "  return report",
+      "}",
+      "",
+    ].join("\n");
+    const canonical = [
+      "export def main(counts) {",
+      '  const report = prompt """',
+      "    Explain this source-tree composition:",
+      "    ${counts}",
+      '  """',
+      "  return report",
+      "}",
+      "",
+    ].join("\n");
+    assert.equal(roundTrip(under), canonical);
+    assert.equal(roundTrip(canonical), canonical);
   });
 
   it("round-trips top-level const with quotes in a triple-quoted body", () => {

@@ -2,12 +2,15 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { emitModule } from "../src/format";
+import { parsejaiphWithTrivia } from "../src/parser";
 
-// ADR 0003 (design/0003-docs-one-fact-one-owner.md): docs/jaiph-skill.md is an
-// agent checklist, not a third language book. It ships inside the binary
-// (src/runtime/embedded-assets.ts) and is read by external projects, so every
-// restated rule is paid by every `jaiph init` and standalone build. These
-// guards keep it a checklist: a hard body-line cap, the required anchors, and
+// ADR 0003 (design/0003-docs-one-fact-one-owner.md): docs/jaiph-skill.md owns
+// the agent authoring decision procedure and verification loop, but it is not
+// a third language book. It ships inside the binary (src/runtime/embedded-assets.ts)
+// and is read by external projects, so every restated rule is paid by every
+// `jaiph init` and standalone build. These guards keep it an operational
+// checklist: a hard body-line cap, required anchors, valid skill metadata, and
 // a ban on owner-owned strings that only belong on their owner pages.
 // Owner links must be absolute https://jaiph.org/… URLs — this file is
 // published independently of the Jaiph repo.
@@ -55,9 +58,36 @@ test("jaiph-skill.md body is at most 120 lines (checklist, not a language book)"
   );
 });
 
-test("jaiph-skill.md keeps the H1, a jaiph example with export def main, and owner links", () => {
+test("jaiph-skill.md has discoverable agent-skill metadata", () => {
+  const source = readFileSync(SKILL_PATH, "utf8");
+  assert.match(source, /^---\nname: write-jaiph-programs$/m, "missing skill name");
+  assert.match(
+    source,
+    /^description: .+Use when .+\.jh.+\.test\.jh files\.$/m,
+    "skill description must say what it does and when to use it",
+  );
+});
+
+test("jaiph-skill.md examples are canonical jaiph format output", () => {
+  const source = readFileSync(SKILL_PATH, "utf8");
+  const examples = [...source.matchAll(/```jaiph\n([\s\S]*?)```/g)].map((match) => match[1]);
+  assert.ok(examples.length > 0, "missing jaiph example");
+
+  for (const [index, example] of examples.entries()) {
+    const parsed = parsejaiphWithTrivia(example, `jaiph-skill-example-${index + 1}.jh`);
+    assert.equal(
+      emitModule(parsed.ast, parsed.trivia),
+      example,
+      `jaiph example ${index + 1} is not canonical; run jaiph format before publishing it`,
+    );
+  }
+});
+
+test("jaiph-skill.md keeps its workflow, example, verification loop, and owner links", () => {
   const body = bodyLines(readFileSync(SKILL_PATH, "utf8")).join("\n");
-  assert.match(body, /^# Jaiph Skill \(for Agents\)$/m, "missing H1");
+  assert.match(body, /^# Write Jaiph programs$/m, "missing H1");
+  assert.match(body, /^## Design the workflow first$/m, "missing decision procedure");
+  assert.match(body, /^## Your authoring loop$/m, "missing verification loop");
   assert.match(
     body,
     /```jaiph[\s\S]*export def main[\s\S]*```/,
