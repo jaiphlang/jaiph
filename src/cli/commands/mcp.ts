@@ -10,6 +10,8 @@ import { VERSION } from "../../version";
 const MCP_USAGE =
   "Usage: jaiph mcp [--workspace <dir>] [--env KEY[=VALUE]]... <file.jh>\n\n" +
   "Serve the file's exported defs as MCP tools over stdio (newline-delimited JSON-RPC).\n" +
+  "No authentication — the parent MCP client is the only caller. For HTTP MCP with\n" +
+  "optional bearer/OIDC, use `jaiph serve` (`POST /mcp`).\n" +
   "Exposure: exported defs only. `main` is exposed only when it is the only export,\n" +
   "under a tool name derived from the file's basename.\n" +
   "Tool descriptions come from the `#` comment lines directly above each def.\n" +

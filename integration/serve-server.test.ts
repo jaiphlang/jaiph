@@ -95,12 +95,11 @@ interface ServeProc {
 
 /**
  * Spawn `jaiph serve --port 0`, resolving once it logs its bound listen URL.
- * `--allow-anonymous` is passed by default so these loopback tests can run
- * without configured auth (a bare no-auth loopback bind is now a startup error,
- * finding M-2); it is a no-op when a token/OIDC is configured via `env`.
+ * Loopback with no token is the default (open). Pass `--allow-anonymous` in
+ * `extraArgv` when the test binds a non-loopback host without auth.
  */
 function startServe(fixture: string, cwd: string, env: NodeJS.ProcessEnv, extraArgv: string[] = []): Promise<ServeProc> {
-  const child = spawn("node", [CLI_PATH, "serve", "--port", "0", "--allow-anonymous", ...extraArgv, fixture], {
+  const child = spawn("node", [CLI_PATH, "serve", "--port", "0", ...extraArgv, fixture], {
     cwd,
     env,
     stdio: ["ignore", "pipe", "pipe"],
@@ -310,7 +309,7 @@ test("jaiph serve: --allow-anonymous permits a non-loopback bind and warns it is
   writeFileSync(jh, BASE_FIXTURE);
   const env = serveEnv(join(root, ".jaiph/runs"));
   delete env.JAIPH_SERVE_TOKEN;
-  const srv = await startServe(jh, root, env, ["--host", "0.0.0.0"]);
+  const srv = await startServe(jh, root, env, ["--host", "0.0.0.0", "--allow-anonymous"]);
   try {
     assert.match(
       srv.stderr(),
@@ -325,46 +324,18 @@ test("jaiph serve: --allow-anonymous permits a non-loopback bind and warns it is
   }
 });
 
-test("jaiph serve: loopback with no auth and no --allow-anonymous exits 1 before listening (finding M-2)", () => {
-  const root = mkdtempSync(join(tmpdir(), "jaiph-serve-anon-refuse-"));
-  try {
-    const jh = join(root, "tools.jh");
-    writeFileSync(jh, BASE_FIXTURE);
-    // No JAIPH_SERVE_TOKEN, no OIDC, default loopback host, and no
-    // --allow-anonymous: startup must fail closed rather than open the API to
-    // every local principal.
-    const env = serveEnv(join(root, ".jaiph/runs"));
-    delete env.JAIPH_SERVE_TOKEN;
-    const result = spawnSync("node", [CLI_PATH, "serve", "--port", "0", jh], {
-      encoding: "utf8",
-      cwd: root,
-      env,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    assert.equal(result.status, 1, `expected exit 1, got ${result.status}\n${result.stderr}`);
-    assert.equal(result.stdout, "", `stdout must stay clean, got: ${JSON.stringify(result.stdout)}`);
-    assert.match(result.stderr, /--allow-anonymous/, "the error names the opt-in flag");
-    assert.match(result.stderr, /JAIPH_SERVE_TOKEN/, "the error names the token alternative");
-    assert.doesNotMatch(result.stderr, /listening on/, "must not bind before failing");
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test("jaiph serve: --allow-anonymous starts, warns about open auth, and serves an anonymous request", async () => {
+test("jaiph serve: loopback with no auth starts and serves an anonymous request", async () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-serve-anon-ok-"));
   const jh = join(root, "tools.jh");
   writeFileSync(jh, BASE_FIXTURE);
   const env = serveEnv(join(root, ".jaiph/runs"));
   delete env.JAIPH_SERVE_TOKEN;
-  // startServe already passes --allow-anonymous; the server must start and log
-  // the open-auth warning, then serve an unauthenticated request as before.
   const srv = await startServe(jh, root, env);
   try {
-    assert.match(
+    assert.doesNotMatch(
       srv.stderr(),
-      /WARNING --allow-anonymous.*open to ALL local principals/s,
-      "startup warns that the server is open to all local principals",
+      /WARNING --allow-anonymous/,
+      "loopback default is open and does not warn",
     );
     const created = await fetch(`${srv.baseUrl}/greet?wait=true`, {
       method: "POST",

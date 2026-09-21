@@ -60,9 +60,8 @@ serve_err="${TEST_DIR}/serve_stderr.txt"
 : >"${serve_err}"
 
 # `--port 0` binds a free port; the startup line on stderr carries it.
-# No JAIPH_SERVE_TOKEN/OIDC here, so --allow-anonymous is required to bind even
-# loopback with no auth (finding M-2).
-jaiph serve --port 0 --allow-anonymous "${TEST_DIR}/tools.jh" >/dev/null 2>"${serve_err}" &
+# Loopback with no token is open by default.
+jaiph serve --port 0 "${TEST_DIR}/tools.jh" >/dev/null 2>"${serve_err}" &
 # Reuse the harness's server-pid slot so e2e::cleanup tears the server down.
 E2E_SERVER_PID="$!"
 

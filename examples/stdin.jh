@@ -1,9 +1,7 @@
 #!/usr/bin/env jaiph
 
-# A stdin pipeline streams one stage's output into the next. The producer
-# (left of the first ->) is a call whose result is an output handle; every
-# stage after it is a script that reads stdin and writes stdout. No stage is
-# slurped into memory until the final `const` names and reduces it.
+# Jaiph streams stdin pipelines so a script can produce a lot of data
+# without loading it all into memory. Chain stages with ->.
 script gen = '''bash
   printf 'alpha\nbeta\ngamma\n'
 '''

@@ -8,7 +8,7 @@ diataxis: how-to
 
 Turn a `.jh` file into an HTTP API. `jaiph serve ./tools.jh` exposes the file's defs as endpoints, publishes an [OpenAPI 3.1](https://spec.openapis.org/oas/v3.1.0) document, and serves a Swagger UI, so any HTTP client — a CI job, another service, or a browser — can invoke the tested defs and inspect their runs. It reuses the same validation, host execution, and `.jaiph/runs/` artifacts as [`jaiph run`](cli.md#jaiph-run) and the same exposure rules as [`jaiph mcp`](mcp.md); the stdio sibling binds to a parent process, while `jaiph serve` reaches the defs over the network.
 
-> **Security.** An exposed def is arbitrary shell that anyone who can reach the port can run. With no token or OIDC the server has no auth and refuses to start unless you pass `--allow-anonymous`. For anything beyond a single operator, configure auth (step 5), front the server with a TLS-terminating reverse proxy (step 7), and treat the run directory as sensitive.
+> **Security.** An exposed def is arbitrary shell that anyone who can reach the port can run. Auth is off by default on loopback (same as `jaiph mcp` stdio). Set a token or OIDC for anything beyond a single operator, pass `--allow-anonymous` only when you must bind off-loopback without auth, front the server with a TLS-terminating reverse proxy (step 7), and treat the run directory as sensitive.
 
 ## Prerequisites
 
@@ -52,7 +52,7 @@ Open `http://127.0.0.1:5247/docs` for a live form for every def; the root `/` re
 
 ## 5. Authenticate and authorize {#7-authenticate-and-authorize}
 
-Credentials come from the environment, never argv. `jaiph serve` supports a static token, OIDC/JWT, and an explicit `--allow-anonymous` opt-in; see [the `jaiph serve` reference](cli.md#jaiph-serve) for the auth modes, scopes, and open endpoints, and [Environment variables](env-vars.md) for every name.
+Credentials come from the environment, never argv. The default is no auth. `jaiph serve` also supports a static token, OIDC/JWT, and `--allow-anonymous` to bind off-loopback without a token; see [the `jaiph serve` reference](cli.md#jaiph-serve) for the auth modes, scopes, and open endpoints, and [Environment variables](env-vars.md) for every name.
 
 ```bash
 JAIPH_SERVE_TOKEN=secret jaiph serve --host 0.0.0.0 --port 8080 ./tools.jh
@@ -61,10 +61,10 @@ curl -s http://host:8080/defs -H 'authorization: Bearer secret' | jq
 
 ## 6. Connect an MCP client over HTTP
 
-The same process speaks MCP [Streamable HTTP](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports#streamable-http) at `POST /mcp`, the network sibling of [`jaiph mcp`](mcp.md) with the same exposure rules, run registry, hot reload, and bearer auth. One JSON-RPC message per POST; a request returns a single `application/json` reply and a notification returns `202`. Send `Accept: text/event-stream` on a `tools/call` with a `params._meta.progressToken` to receive [the same progress frames as stdio](mcp.md#7-stream-progress-and-cancel-a-long-call), followed by the result.
+The same process speaks MCP [Streamable HTTP](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports#streamable-http) at `POST /mcp`, the network sibling of [`jaiph mcp`](mcp.md) with the same exposure rules, run registry, hot reload, and the same auth as REST (off by default; bearer when a token or OIDC is set). One JSON-RPC message per POST; a request returns a single `application/json` reply and a notification returns `202`. Send `Accept: text/event-stream` on a `tools/call` with a `params._meta.progressToken` to receive [the same progress frames as stdio](mcp.md#7-stream-progress-and-cancel-a-long-call), followed by the result.
 
 ```bash
-curl -s -X POST http://127.0.0.1:5247/mcp -H 'content-type: application/json' -H 'authorization: Bearer secret' \
+curl -s -X POST http://127.0.0.1:5247/mcp -H 'content-type: application/json' \
   -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"greet","arguments":{"name":"world"}}}'
 ```
 
