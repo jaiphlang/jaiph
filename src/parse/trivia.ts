@@ -13,10 +13,13 @@ export type ConfigBodyPart =
  * - `tripleQuoted`: the literal/return/log/logerr/fail/send/const was written
  *   as `"""..."""`. The AST string is the *dedented* form (so runtime &
  *   validator don't need this flag); the original raw body is in `rawBody`.
- * - `rawBody`: original triple-quoted body (without surrounding `"""`), used
- *   by the formatter to re-emit the author's exact indentation.
- * - `bareSource`: `return foo` and `return foo.bar` sugar — formatter
- *   re-emits the bare form instead of `"${foo}"`.
+ * - `rawBody`: original triple-quoted body (without surrounding `"""`).
+ *   Non-prompt triple-quoted forms (`const` / `log` / …) re-emit this verbatim
+ *   so author margin is preserved; triple-quoted **prompt** bodies are
+ *   re-indented from the dedented AST string instead.
+ * - `bareSource`: `return foo`, `return foo.bar`, and `stdin foo` /
+ *   `stdin foo.bar` sugar — formatter re-emits the bare form instead of
+ *   `"${foo}"`.
  * - `bodyKind` (prompt): `"string" | "identifier" | "triple_quoted"`.
  * - `bodyIdentifier` (prompt): identifier name when `bodyKind === "identifier"`.
  * - `scriptBodyKind` (script): `"oneline" | "fenced"`.

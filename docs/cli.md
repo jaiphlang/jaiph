@@ -160,7 +160,7 @@ Reformat `.jh` / `.test.jh` files into canonical style.
 jaiph format [--check] [--indent <n>] <path.jh ...>
 ```
 
-Paths must end with `.jh`. Formatting is idempotent. Comments and shebangs are preserved. Triple-quoted bodies and prompt blocks emit verbatim (author margin preserved via trivia). Fenced script bodies are stored dedented in the AST; the formatter re-indents inner lines by one level relative to the surrounding scope.
+Paths must end with `.jh`. Formatting is idempotent. Comments and shebangs are preserved. Non-prompt triple-quoted bodies (`const` / `log` / …) emit verbatim (author margin preserved via trivia). Triple-quoted **prompt** bodies and fenced script bodies are stored dedented in the AST; the formatter re-indents inner lines by one level relative to the surrounding scope. A bare `stdin name` / `stdin name.field` operand is preserved (not rewritten to `"${…}"`); an already-quoted operand stays quoted.
 
 | Flag | Argument | Default | Effect |
 |---|---|---|---|
