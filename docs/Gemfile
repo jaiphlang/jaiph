@@ -6,3 +6,5 @@ gem "jekyll", "~> 3.9"
 gem "kramdown-parser-gfm"
 gem "jekyll-relative-links"
 gem "jekyll-redirect-from"
+
+gem "concurrent-ruby", ">= 1.3.7"
