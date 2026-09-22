@@ -10,7 +10,7 @@ redirect_from:
 
 # Write Jaiph programs
 
-Use this checklist when creating or changing Jaiph programs. Jaiph is the orchestration layer: keep workflow control in Jaiph, deterministic implementation in scripts, and judgment-driven work in prompts. This skill is not a language reference. Exact syntax lives at [https://jaiph.org/reference/grammar](https://jaiph.org/reference/grammar); semantics live at [https://jaiph.org/reference/language](https://jaiph.org/reference/language). When this page and the compiler disagree, the compiler wins.
+Use this checklist when creating or changing Jaiph programs. Jaiph turns an agent's usual mix of prompts, Bash or `sed`, Python, Node, and other tools into a repeatable program. Keep workflow control in Jaiph, deterministic implementation in scripts, and judgment-driven work in prompts. This skill is not a language reference. Exact syntax lives at [https://jaiph.org/reference/grammar](https://jaiph.org/reference/grammar); semantics live at [https://jaiph.org/reference/language](https://jaiph.org/reference/language). When this page and the compiler disagree, the compiler wins.
 
 ## Design the workflow first
 
@@ -23,7 +23,7 @@ Classify every operation before writing code:
 | Work requiring model judgment or generation | `prompt`; capture the result with `const`, and use [typed returns](https://jaiph.org/reference/language#prompt-agent-interaction) when downstream steps need fields |
 | Decoupled message dispatch | `channel` and `send` |
 
-Do not hide orchestration in a large shell or Python script. Do not use a prompt for work that a deterministic script can perform. Reuse imported modules and nearby definitions before adding another implementation. Prefer small named `def`, `script`, and named `prompt` units when logic is reused.
+When a task would normally produce nested one-off Python, `sed`, Node, or Bash calls, lift each repeatable operation into a small named `script` and compose those scripts with prompts in a `def`. The result should run again without reconstructing the command chain. Reuse imported modules and nearby definitions before adding another implementation. Do not use a prompt for deterministic work.
 
 Native orchestration includes `if`, `match`, `for`, `async`, `stdin` pipelines, `catch`, `recover`, `return`, logging, and failure. Read [Language](https://jaiph.org/reference/language) before recreating any of these inside a script.
 
