@@ -26,6 +26,23 @@ script assert_nonempty_file_or_fail = '''
     exit 1
   }
 '''
+
+# Prefer the log file written by check_ci. When log download fails (empty or
+# missing file), persist the failed step's stdout+stderr so recover still has
+# a run URL / job id / gh error for the agent.
+script persist_failure_if_log_empty = '''
+  dest="$1"
+  if test -s "$dest"; then
+    cat >/dev/null
+    exit 0
+  fi
+  cat >"$dest"
+  test -s "$dest" || {
+    echo "jaiph: ci failure log is empty at $dest" >&2
+    exit 1
+  }
+'''
+
 def ensure_gh_ci_passes(branch, workflow_name) {
   const ci_log_dir = ".jaiph/tmp"
   const ci_log_file = "${ci_log_dir}/gh_ci_passes.last.log"
@@ -38,7 +55,7 @@ def ensure_gh_ci_passes(branch, workflow_name) {
   gh.token_set()
 
   gh.check_ci(branch, commit, workflow_name, ci_log_file) recover (failure) {
-    assert_nonempty_file_or_fail(ci_log_file)
+    stdin failure -> persist_failure_if_log_empty(ci_log_file)
     log "CI failure summary: ${failure}"
     prompt """
       <role>

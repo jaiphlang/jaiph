@@ -1,0 +1,54 @@
+#!/usr/bin/env jaiph
+
+import "./gh_ci_passes.jh" as passes
+import "./lib_common.jh" as common
+import "jaiphlang/gh_actions" as actions
+import "jaiphlang/git" as git
+
+# check-ci can fail after writing nothing (gh: log not found). Recover must
+# persist the failure text and retry instead of dying on an empty log file.
+test "recover continues when check-ci leaves an empty log" {
+  mock script common.mkdir_p_simple() {
+    mkdir -p "$1"
+    rm -f "$1/gh_ci_passes.last.log" "$1/gh_ci_passes.last.log.attempted"
+  }
+  mock script actions.gh() {
+    case "$1" in
+      require-token)
+        exit 0
+        ;;
+      check-ci)
+        dest="${5:-}"
+        state="${dest}.attempted"
+        if [ -f "$state" ]; then
+          if grep -q "log not found: 106717181723" "$dest"; then
+            echo "CI succeeded after recover persisted failure log"
+            exit 0
+          fi
+          echo "recover left empty or wrong log at $dest" >&2
+          exit 1
+        fi
+        mkdir -p "$(dirname "$dest")"
+        : >"$dest"
+        : >"$state"
+        echo "log not found: 106717181723" >&2
+        exit 1
+        ;;
+      *)
+        echo "unexpected gh command: $*" >&2
+        exit 2
+        ;;
+    esac
+  }
+  mock def git.in_git_repo() {
+    return ""
+  }
+  mock def git.push() {
+    return ""
+  }
+  mock prompt {
+    _ => "fixed"
+  }
+  const out = passes.main("nightly", "CI")
+  expect_contain out "CI succeeded after recover persisted failure log"
+}

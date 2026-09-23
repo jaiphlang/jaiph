@@ -38,8 +38,10 @@ pull-logs options:
   -f, --failed-only       Fetch only failed job/step logs
 
 check-ci options:
-  -o, --out FILE          Write full --log-failed output to FILE (default:
-                          ${JAIPH_WORKSPACE:-.}/.jaiph/tmp/gh_actions.check_ci.log)
+  -o, --out FILE          Write --log-failed output to FILE (default:
+                          ${JAIPH_WORKSPACE:-.}/.jaiph/tmp/gh_actions.check_ci.log).
+                          If job logs are missing (gh: log not found), FILE
+                          still gets the gh error and `gh run view` metadata.
                           Stdout gets only a short summary plus the last
                           GH_ACTIONS_LOG_TAIL lines (default: 10).
 
@@ -325,15 +327,12 @@ cmd_pull_logs() {
       run_id="$(resolve_run_id "$workflow" "$branch" "$commit" 1)" \
         || die "no ${workflow} run found for the given ref"
     fi
-    local -a log_args=(run view "$run_id" --log)
-    if [ "$failed_only" = "1" ]; then
-      log_args=(run view "$run_id" --log-failed)
-    fi
     if [ -n "$out_file" ]; then
-      gh_cmd "${log_args[@]}" >"$out_file"
+      : >"$out_file"
+      append_run_logs "$run_id" "$out_file" "$failed_only"
       printf '%s\n' "$out_file"
     else
-      gh_cmd "${log_args[@]}"
+      append_run_logs "$run_id" /dev/stdout "$failed_only"
     fi
     return 0
   fi
@@ -357,21 +356,49 @@ cmd_pull_logs() {
       || die "no ${workflow} run found for the given ref"
   fi
 
-  local -a log_args=(run view "$run_id" --log)
-  if [ "$failed_only" = "1" ]; then
-    log_args=(run view "$run_id" --log-failed)
-  fi
-
   if [ -n "$out_file" ]; then
-    gh_cmd "${log_args[@]}" >"$out_file"
+    : >"$out_file"
+    append_run_logs "$run_id" "$out_file" "$failed_only"
     printf '%s\n' "$out_file"
   else
-    gh_cmd "${log_args[@]}"
+    append_run_logs "$run_id" /dev/stdout "$failed_only"
   fi
 }
 
 default_ci_log_file() {
   printf '%s\n' "${JAIPH_WORKSPACE:-.}/.jaiph/tmp/gh_actions.check_ci.log"
+}
+
+# Append workflow logs for $run_id to $dest. A runner that dies mid-step often
+# leaves no job logs (`gh run view --log-failed` → `log not found: <job id>`).
+# Write that error plus `gh run view` metadata so callers still have a nonempty
+# report (run URL, job names, conclusions) instead of an empty file.
+append_run_logs() {
+  local run_id="$1"
+  local dest="$2"
+  local failed_only="$3"
+  local err
+  local -a log_args=(run view "$run_id" --log)
+  if [ "$failed_only" = "1" ]; then
+    log_args=(run view "$run_id" --log-failed)
+  fi
+  err="$(mktemp)"
+  if gh_cmd "${log_args[@]}" >>"$dest" 2>"$err"; then
+    rm -f "$err"
+    return 0
+  fi
+  {
+    printf '\ngh could not download workflow logs for run %s:\n' "$run_id"
+    cat "$err"
+    printf '\n--- gh run view %s ---\n' "$run_id"
+  } >>"$dest"
+  if ! gh_cmd run view "$run_id" >>"$dest" 2>"$err"; then
+    {
+      printf 'gh run view %s also failed:\n' "$run_id"
+      cat "$err"
+    } >>"$dest"
+  fi
+  rm -f "$err"
 }
 
 emit_failed_ci_report() {
@@ -382,7 +409,11 @@ emit_failed_ci_report() {
   local tail_lines="$GH_ACTIONS_LOG_TAIL"
 
   mkdir -p "$(dirname "$log_file")"
-  gh_cmd run view "$run_id" --log-failed >"$log_file"
+  {
+    printf 'CI failed (%s): %s (run %s)\n' "$conclusion" "$url" "$run_id"
+    printf 'Full log: %s\n' "$log_file"
+  } >"$log_file"
+  append_run_logs "$run_id" "$log_file" "1"
 
   printf 'CI failed (%s): %s (run %s)\n' "$conclusion" "$url" "$run_id"
   printf 'Full log: %s\n\n' "$log_file"
