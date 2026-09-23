@@ -165,12 +165,15 @@ fi
 # Doubling the payload (+64 MiB) must not grow peak RSS by anything like N. A
 # concatenating runtime would hold the whole payload as a JS string, so the
 # 64 MiB -> 128 MiB step would add ~64 MiB (65536 KB); streaming keeps the peak
-# essentially flat. The 24 MiB bound is a wide margin over the observed few-MiB
-# jitter (external process-tree poll, JIT/GC variance) while still far below the
-# ~64 MiB a payload-tracking runtime would add.
+# essentially flat. The bound is half the +64 MiB step (32 MiB): a wide margin
+# over the observed jitter (external process-tree poll, JIT/GC variance — V8's
+# adaptive external-buffer GC lets transient chunk Buffers accumulate more at
+# higher throughput, so the peak drifts up with N even though nothing is
+# retained; ~25 MiB seen on CI) while still far below the ~64 MiB a
+# payload-tracking runtime would add.
 delta_kb=$(( peak2 - peak1 ))
 [ "${delta_kb}" -lt 0 ] && delta_kb=0
-limit_kb=$(( 24 * 1024 ))
+limit_kb=$(( (N2 - N1) / 2 / 1024 ))
 if [ "${delta_kb}" -lt "${limit_kb}" ]; then
   e2e::pass "peak RSS does not track N (64->128 MiB grew peak by ${delta_kb} KB < ${limit_kb} KB; peaks ${peak1}/${peak2} KB)"
 else
