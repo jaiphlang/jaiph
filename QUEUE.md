@@ -15,20 +15,3 @@ Process rules:
 6. Hard rewrite semantics: breaking changes are allowed unless a task says otherwise.
 7. Acceptance criteria are non-negotiable. A task is not done until every
    acceptance bullet is verified by a test that fails when the contract is violated.
-
-## Gate imported agent trust and flags like agent.command #dev-ready
-
-Context: `applyMetadataScope` in `src/runtime/kernel/node-workflow-runtime.ts` applies `agent.command` and `agent.backend` from an imported module only when `fromEntryModule` is true or the matching `IMPORT_UNLOCK` env var is set. `docs/configuration.md` states that `agent.trusted_workspace`, `agent.cursor_flags`, `agent.claude_flags`, and `run.logs_dir` are not restricted.
-
-Problem: Those four keys are copied from any module onto the workflow env. `buildBackendArgs` in `src/runtime/kernel/prompt-config.ts` passes `trustedWorkspace` as Cursor `--trust` and appends `cursorFlags` and `claudeFlags` to the agent argv. An imported module can change the agent trust path, agent argv, and run directory for its own prompt steps without the entry-module gate used for the binary selector.
-
-Location: `src/runtime/kernel/node-workflow-runtime.ts` `applyMetadataScope`; `docs/configuration.md` Import trust boundary.
-
-Remediation: Apply the same entry-module gate to `agent.trusted_workspace`, `agent.cursor_flags`, `agent.claude_flags`, and `run.logs_dir`. Add unlock env vars parallel to `JAIPH_AGENT_COMMAND_IMPORT_UNLOCK`. Keep the existing `*_LOCKED` flags winning over unlock. Update the import-trust section of `docs/configuration.md` to match.
-
-### Acceptance criteria
-- A runtime test imports a child module that sets `agent.trusted_workspace`, `agent.cursor_flags`, and `run.logs_dir`. Without unlock env vars, the child scope does not receive those values. With the new unlock vars set, the child scope does.
-- The entry module can still set the same keys with no unlock var.
-- `JAIPH_AGENT_TRUSTED_WORKSPACE_LOCKED=1` still blocks an overwrite from metadata, including when unlock is set.
-- `docs/configuration.md` no longer says those keys are unrestricted on cross-module calls.
-- The test fails if `applyMetadataScope` assigns those keys when `fromEntryModule` is false and unlock is unset.

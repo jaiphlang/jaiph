@@ -42,15 +42,18 @@ The long-lived servers `jaiph serve` and `jaiph mcp` resolve the effective env o
 | `JAIPH_AGENT_BACKEND_IMPORT_UNLOCK` | host | bool | — | — | Set to `1` to allow imported modules to set `agent.backend`. Disabled by default; see [Import trust boundary](configuration.md#import-trust-boundary). |
 | `JAIPH_AGENT_BACKEND_LOCKED` | internal | bool | — | — | Set to `1` by the CLI when `JAIPH_AGENT_BACKEND` was inherited; blocks lower-precedence layers from overriding. |
 | `JAIPH_AGENT_CLAUDE_FLAGS` | host, runtime | string (whitespace-split) | — | `agent.claude_flags` | Extra flags appended to the Claude CLI invocation. |
+| `JAIPH_AGENT_CLAUDE_FLAGS_IMPORT_UNLOCK` | host | bool | — | — | Set to `1` to allow imported modules to set `agent.claude_flags`. Disabled by default; see [Import trust boundary](configuration.md#import-trust-boundary). |
 | `JAIPH_AGENT_CLAUDE_FLAGS_LOCKED` | internal | bool | — | — | Lock flag for `JAIPH_AGENT_CLAUDE_FLAGS`. |
 | `JAIPH_AGENT_COMMAND` | host, runtime | string | `cursor-agent` | `agent.command` | Executable line for the Cursor backend. A basename other than `cursor-agent` selects custom-command mode (stdin → command → stdout). |
 | `JAIPH_AGENT_COMMAND_IMPORT_UNLOCK` | host | bool | — | — | Set to `1` to allow imported modules to set `agent.command`. Disabled by default; see [Import trust boundary](configuration.md#import-trust-boundary). |
 | `JAIPH_AGENT_COMMAND_LOCKED` | internal | bool | — | — | Lock flag for `JAIPH_AGENT_COMMAND`. |
 | `JAIPH_AGENT_CURSOR_FLAGS` | host, runtime | string (whitespace-split) | — | `agent.cursor_flags` | Extra flags appended to the Cursor backend invocation. |
+| `JAIPH_AGENT_CURSOR_FLAGS_IMPORT_UNLOCK` | host | bool | — | — | Set to `1` to allow imported modules to set `agent.cursor_flags`. Disabled by default; see [Import trust boundary](configuration.md#import-trust-boundary). |
 | `JAIPH_AGENT_CURSOR_FLAGS_LOCKED` | internal | bool | — | — | Lock flag for `JAIPH_AGENT_CURSOR_FLAGS`. |
 | `JAIPH_AGENT_MODEL` | host, runtime | string | — | _(no in-file key — set in shell to override all prompts)_ | Optional run-wide model override for every `prompt` step. In-file `agent.model` does not populate this variable. |
 | `JAIPH_AGENT_MODEL_LOCKED` | internal | bool | — | — | Lock flag for `JAIPH_AGENT_MODEL`. |
 | `JAIPH_AGENT_TRUSTED_WORKSPACE` | host, runtime | path | workspace root | `agent.trusted_workspace` | Directory passed to Cursor as `--trust`. |
+| `JAIPH_AGENT_TRUSTED_WORKSPACE_IMPORT_UNLOCK` | host | bool | — | — | Set to `1` to allow imported modules to set `agent.trusted_workspace`. Disabled by default; see [Import trust boundary](configuration.md#import-trust-boundary). |
 | `JAIPH_AGENT_TRUSTED_WORKSPACE_LOCKED` | internal | bool | — | — | Lock flag for `JAIPH_AGENT_TRUSTED_WORKSPACE`. |
 | `JAIPH_ARTIFACTS_DIR` | runtime | path | `<run_dir>/artifacts` | — | Absolute path to the writable artifacts directory for the current run. Set by the runtime; read by `jaiphlang/artifacts` and user scripts. |
 | `JAIPH_AUDIT_KEY_DIR` | host | path | `~/.jaiph/audit-keys` | — | Operator-side directory that holds per-run audit-chain HMAC keys, keyed by run-directory identity. Lives outside the agent-writable run directory so a program cannot squat the key path or delete its own tamper evidence. Read by the CLI only, when persisting the key after a run and when verifying a journal at a read/export boundary. |
@@ -85,6 +88,7 @@ The long-lived servers `jaiph serve` and `jaiph mcp` resolve the effective env o
 | `JAIPH_RUN_SUMMARY_FILE` | internal | path | `<run_dir>/run_summary.jsonl` | — | Absolute path the runtime writes durable summary events to. |
 | `JAIPH_RUN_TIMEOUT` | host | int (seconds) | `0` (disabled) | — | Parent-enforced wall-clock timeout for a run (`jaiph run`, and the host spawn used by `jaiph serve` / `jaiph mcp` calls). On expiry the run child's process group is terminated (SIGTERM → SIGKILL) without a manual Ctrl-C, and the failure footer shows `E_RUN_TIMEOUT`. `0`, empty, or invalid disables it. |
 | `JAIPH_RUNS_DIR` | host, runtime | path | `.jaiph/runs` under the workspace | `run.logs_dir` | Root directory for run logs. |
+| `JAIPH_RUNS_DIR_IMPORT_UNLOCK` | host | bool | — | — | Set to `1` to allow imported modules to set `run.logs_dir`. Disabled by default; see [Import trust boundary](configuration.md#import-trust-boundary). |
 | `JAIPH_RUNS_DIR_LOCKED` | internal | bool | — | — | Lock flag for `JAIPH_RUNS_DIR`. |
 | `JAIPH_SCRIPTS` | internal | path | — | — | Directory of emitted `script` files for this run. Set after `buildScripts()`. Any parent-shell value is cleared before launch. |
 | `JAIPH_SERVE_EXPOSE_DOCS` | host | bool | `true` | — | `jaiph serve` — expose `GET /docs` (a self-contained Swagger UI whose assets are embedded in the binary, so it needs no browser internet access) and `GET /openapi.json`. Set `false` (or `0`) to return `404` for `/docs`, its embedded assets, and `/openapi.json`, so a hardened deployment hides its API surface. `/healthz` is always available and credential-free. |

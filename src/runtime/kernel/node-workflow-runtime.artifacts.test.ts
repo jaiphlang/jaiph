@@ -1494,6 +1494,178 @@ test("NodeWorkflowRuntime: imported module cannot override agent.command by defa
   }
 });
 
+test("NodeWorkflowRuntime: imported module cannot override trust/argv/run-dir keys by default (IMPORT_UNLOCK opts in)", async () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-node-import-trust-lock-"));
+  try {
+    const childJh = join(root, "child.jh");
+    const parentJh = join(root, "parent.jh");
+    const scopeFile = join(root, "scope.log");
+    writeFileSync(
+      childJh,
+      [
+        "config {",
+        '  agent.trusted_workspace = "child-trust"',
+        '  agent.cursor_flags = "--child-flag"',
+        '  run.logs_dir = "child-runs"',
+        "}",
+        "export def main() {",
+        "  echo child-tw:${JAIPH_AGENT_TRUSTED_WORKSPACE} >> ${JAIPH_META_SCOPE_FILE}",
+        "  echo child-cf:${JAIPH_AGENT_CURSOR_FLAGS} >> ${JAIPH_META_SCOPE_FILE}",
+        "  echo child-rd:${JAIPH_RUNS_DIR} >> ${JAIPH_META_SCOPE_FILE}",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    writeFileSync(
+      parentJh,
+      [
+        "config {",
+        '  agent.trusted_workspace = "entry-trust"',
+        '  agent.cursor_flags = "--entry-flag"',
+        '  run.logs_dir = "entry-runs"',
+        "}",
+        'import "child.jh" as child',
+        "",
+        "export def main() {",
+        "  echo parent-tw:${JAIPH_AGENT_TRUSTED_WORKSPACE} >> ${JAIPH_META_SCOPE_FILE}",
+        "  echo parent-cf:${JAIPH_AGENT_CURSOR_FLAGS} >> ${JAIPH_META_SCOPE_FILE}",
+        "  echo parent-rd:${JAIPH_RUNS_DIR} >> ${JAIPH_META_SCOPE_FILE}",
+        "  child.main()",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const scriptsDir = join(root, "scripts");
+    mkdirSync(scriptsDir, { recursive: true });
+
+    const graph = buildRuntimeGraph(parentJh);
+    // Base env: none of the three keys locked or unlocked. JAIPH_RUNS_DIR is set
+    // (needed for the run dir) but overridden in scope by the entry module.
+    const baseEnv = (): NodeJS.ProcessEnv => {
+      const e: NodeJS.ProcessEnv = {
+        ...process.env,
+        JAIPH_TEST_MODE: "1",
+        JAIPH_RUNS_DIR: join(root, ".jaiph", "runs"),
+        JAIPH_SCRIPTS: scriptsDir,
+        JAIPH_META_SCOPE_FILE: scopeFile,
+      };
+      delete e.JAIPH_AGENT_TRUSTED_WORKSPACE;
+      delete e.JAIPH_AGENT_TRUSTED_WORKSPACE_LOCKED;
+      delete e.JAIPH_AGENT_TRUSTED_WORKSPACE_IMPORT_UNLOCK;
+      delete e.JAIPH_AGENT_CURSOR_FLAGS;
+      delete e.JAIPH_AGENT_CURSOR_FLAGS_LOCKED;
+      delete e.JAIPH_AGENT_CURSOR_FLAGS_IMPORT_UNLOCK;
+      delete e.JAIPH_RUNS_DIR_LOCKED;
+      delete e.JAIPH_RUNS_DIR_IMPORT_UNLOCK;
+      return e;
+    };
+
+    // Run 1: no unlock. Entry module's own keys apply (parent-*), but the
+    // imported child's keys are blocked — the child scope inherits the parent's
+    // effective values, never the child's injected ones. This assertion fails if
+    // applyMetadataScope assigns these keys when fromEntryModule is false and
+    // unlock is unset.
+    const runtime1 = new NodeWorkflowRuntime(graph, { env: baseEnv(), cwd: root, suppressLiveEvents: true });
+    assert.equal(await runtime1.runMain([]), 0);
+    assert.equal(
+      readFileSync(scopeFile, "utf8"),
+      [
+        "parent-tw:entry-trust",
+        "parent-cf:--entry-flag",
+        "parent-rd:entry-runs",
+        "child-tw:entry-trust",
+        "child-cf:--entry-flag",
+        "child-rd:entry-runs",
+        "",
+      ].join("\n"),
+    );
+
+    // Run 2: all three unlock vars set — the imported child's keys now apply.
+    writeFileSync(scopeFile, "");
+    const env2 = baseEnv();
+    env2.JAIPH_AGENT_TRUSTED_WORKSPACE_IMPORT_UNLOCK = "1";
+    env2.JAIPH_AGENT_CURSOR_FLAGS_IMPORT_UNLOCK = "1";
+    env2.JAIPH_RUNS_DIR_IMPORT_UNLOCK = "1";
+    const runtime2 = new NodeWorkflowRuntime(graph, { env: env2, cwd: root, suppressLiveEvents: true });
+    assert.equal(await runtime2.runMain([]), 0);
+    assert.equal(
+      readFileSync(scopeFile, "utf8"),
+      [
+        "parent-tw:entry-trust",
+        "parent-cf:--entry-flag",
+        "parent-rd:entry-runs",
+        "child-tw:child-trust",
+        "child-cf:--child-flag",
+        "child-rd:child-runs",
+        "",
+      ].join("\n"),
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("NodeWorkflowRuntime: JAIPH_AGENT_TRUSTED_WORKSPACE_LOCKED blocks metadata overwrite even with IMPORT_UNLOCK", async () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-node-trust-locked-"));
+  try {
+    const childJh = join(root, "child.jh");
+    const parentJh = join(root, "parent.jh");
+    const scopeFile = join(root, "scope.log");
+    writeFileSync(
+      childJh,
+      [
+        "config {",
+        '  agent.trusted_workspace = "child-trust"',
+        "}",
+        "export def main() {",
+        "  echo child-tw:${JAIPH_AGENT_TRUSTED_WORKSPACE} >> ${JAIPH_META_SCOPE_FILE}",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    writeFileSync(
+      parentJh,
+      [
+        "config {",
+        '  agent.trusted_workspace = "entry-trust"',
+        "}",
+        'import "child.jh" as child',
+        "",
+        "export def main() {",
+        "  echo parent-tw:${JAIPH_AGENT_TRUSTED_WORKSPACE} >> ${JAIPH_META_SCOPE_FILE}",
+        "  child.main()",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const scriptsDir = join(root, "scripts");
+    mkdirSync(scriptsDir, { recursive: true });
+
+    const graph = buildRuntimeGraph(parentJh);
+    // LOCKED wins over both the entry module's metadata and an imported module's
+    // metadata, even when IMPORT_UNLOCK is set. Both scopes keep the host value.
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      JAIPH_TEST_MODE: "1",
+      JAIPH_RUNS_DIR: join(root, ".jaiph", "runs"),
+      JAIPH_SCRIPTS: scriptsDir,
+      JAIPH_META_SCOPE_FILE: scopeFile,
+      JAIPH_AGENT_TRUSTED_WORKSPACE: "host-trust",
+      JAIPH_AGENT_TRUSTED_WORKSPACE_LOCKED: "1",
+      JAIPH_AGENT_TRUSTED_WORKSPACE_IMPORT_UNLOCK: "1",
+    };
+
+    const runtime = new NodeWorkflowRuntime(graph, { env, cwd: root, suppressLiveEvents: true });
+    assert.equal(await runtime.runMain([]), 0);
+    assert.equal(
+      readFileSync(scopeFile, "utf8"),
+      ["parent-tw:host-trust", "child-tw:host-trust", ""].join("\n"),
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("NodeWorkflowRuntime: entry module agent.command config is applied", async () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-node-entry-cmd-"));
   try {
