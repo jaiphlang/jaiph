@@ -15,3 +15,52 @@ Process rules:
 6. Hard rewrite semantics: breaking changes are allowed unless a task says otherwise.
 7. Acceptance criteria are non-negotiable. A task is not done until every
    acceptance bullet is verified by a test that fails when the contract is violated.
+
+## Namespace OIDC serve subjects #dev-ready
+
+Context: `jaiph serve` OIDC mode isolates runs and idempotency keys by `principal.subject` alone. Static mode stores `operator` and open mode stores `anonymous`.
+
+Problem: `principalSubject` in `src/cli/serve/auth.ts` returns the raw JWT `sub`, or else the raw `client_id`, with no claim-type prefix and no reserved-name check. `lookupRun` and the idempotency composite in `src/cli/serve/handler.ts` compare that string to `record.principal`. A token whose `sub` equals another token's `client_id`, or whose subject equals `operator` or `anonymous`, shares that other principal's runs, artifacts, and idempotency namespace.
+
+Location: `src/cli/serve/auth.ts` `principalSubject`; `src/cli/serve/handler.ts` `lookupRun` and idempotency composite.
+
+Remediation: Namespace the subject by claim type (`sub:` vs `client_id:`) and reject or prefix the sentinel values `operator` and `anonymous` so they cannot equal the static or open principals. Keep `ownsAllRuns` false for OIDC.
+
+### Acceptance criteria
+- A unit test builds two OIDC principals, one from `sub` `alice` and one from `client_id` `alice`, and shows `lookupRun` and idempotency-key reuse do not cross between them.
+- A unit test shows a verified token with `sub` `operator` or `anonymous` does not match a run record whose `principal` is the static or open sentinel.
+- Existing OIDC tests that use a normal `sub` still pass, including scope checks and 403 when no `jaiph:*` scope is present.
+- The test fails if `principalSubject` returns the raw claim text unchanged.
+
+## Require a commit pin on library lockfile restore #dev-ready
+
+Context: `jaiph install <name>` refuses a registry entry with no commit unless `--allow-unpinned`, and verifies `entry.signature` when present. `jaiph install` with no arguments restores from `.jaiph/libs.lock` and does not re-read the registry.
+
+Problem: `specToLockEntry` in `src/cli/commands/install.ts` never writes `signature`. No-arg restore builds specs without `signature` and with `expectedCommit` only when the lock has `commit`. `postCloneHygiene` checks a commit only when `expectedCommit` is set and verifies a signature only when `spec.signature` is set. A lock entry with no `commit` clones the mutable ref. The test `install: legacy lockfile without commit field still restores` currently expects that restore to succeed.
+
+Location: `src/cli/commands/install.ts` `specToLockEntry`, no-arg restore in `runInstall`, `postCloneHygiene`.
+
+Remediation: Persist `signature` on the lock entry when the install spec has one. On restore, refuse an entry that has no `commit`. When a signature is present, verify it against the cloned commit with the same registry public key as named install. A lock entry that has a commit and no signature still restores only when the cloned commit matches.
+
+### Acceptance criteria
+- Change `install: legacy lockfile without commit field still restores` so a lock entry without `commit` makes `runInstall([])` exit non-zero and does not leave the lib directory.
+- A test named-installs a fixture whose registry entry has a commit and a signature, then asserts `.jaiph/libs.lock` contains that signature. Delete the lib dir, corrupt the stored signature, run no-arg restore, and assert non-zero exit and no leftover lib dir.
+- A test restores a lock entry that has a matching `commit` and no `signature`, and asserts success. A different cloned commit still fails the existing mismatch check.
+- Named install of an unpinned registry entry still fails unless `--allow-unpinned`.
+
+## Gate imported agent trust and flags like agent.command #dev-ready
+
+Context: `applyMetadataScope` in `src/runtime/kernel/node-workflow-runtime.ts` applies `agent.command` and `agent.backend` from an imported module only when `fromEntryModule` is true or the matching `IMPORT_UNLOCK` env var is set. `docs/configuration.md` states that `agent.trusted_workspace`, `agent.cursor_flags`, `agent.claude_flags`, and `run.logs_dir` are not restricted.
+
+Problem: Those four keys are copied from any module onto the workflow env. `buildBackendArgs` in `src/runtime/kernel/prompt-config.ts` passes `trustedWorkspace` as Cursor `--trust` and appends `cursorFlags` and `claudeFlags` to the agent argv. An imported module can change the agent trust path, agent argv, and run directory for its own prompt steps without the entry-module gate used for the binary selector.
+
+Location: `src/runtime/kernel/node-workflow-runtime.ts` `applyMetadataScope`; `docs/configuration.md` Import trust boundary.
+
+Remediation: Apply the same entry-module gate to `agent.trusted_workspace`, `agent.cursor_flags`, `agent.claude_flags`, and `run.logs_dir`. Add unlock env vars parallel to `JAIPH_AGENT_COMMAND_IMPORT_UNLOCK`. Keep the existing `*_LOCKED` flags winning over unlock. Update the import-trust section of `docs/configuration.md` to match.
+
+### Acceptance criteria
+- A runtime test imports a child module that sets `agent.trusted_workspace`, `agent.cursor_flags`, and `run.logs_dir`. Without unlock env vars, the child scope does not receive those values. With the new unlock vars set, the child scope does.
+- The entry module can still set the same keys with no unlock var.
+- `JAIPH_AGENT_TRUSTED_WORKSPACE_LOCKED=1` still blocks an overwrite from metadata, including when unlock is set.
+- `docs/configuration.md` no longer says those keys are unrestricted on cross-module calls.
+- The test fails if `applyMetadataScope` assigns those keys when `fromEntryModule` is false and unlock is unset.
