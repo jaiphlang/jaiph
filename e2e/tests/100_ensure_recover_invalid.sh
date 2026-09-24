@@ -14,7 +14,7 @@ e2e::section "run catch with args after catch fails at parse time"
 # Given
 e2e::file "args_after_recover.jh" <<'EOF'
 def ci_passes() {
-  true
+  return "ok"
 }
 
 export def main() {
@@ -46,7 +46,7 @@ e2e::section "run catch with multiple args after catch fails at parse time"
 # Given
 e2e::file "multi_args_after_recover.jh" <<'EOF'
 def some_rule(input) {
-  true
+  return "ok"
 }
 
 export def main() {
@@ -78,7 +78,7 @@ e2e::section "run catch without block fails at parse time"
 # Given
 e2e::file "recover_no_block.jh" <<'EOF'
 def ci_passes(repo_dir) {
-  true
+  return "ok"
 }
 
 export def main() {
