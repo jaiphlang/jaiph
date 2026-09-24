@@ -187,7 +187,7 @@ def private_wf() {
 }
 
 === shell line with unknown imported symbol in workflow
-# @expect error E_VALIDATE "imported def or script" @3:3
+# @expect error E_PARSE "not a statement; put the command in a script" @3:3
 --- main.jh
 import "lib.jh" as lib
 export def main() {

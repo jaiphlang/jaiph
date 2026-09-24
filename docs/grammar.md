@@ -27,7 +27,7 @@ This page is the authoritative syntactic reference for Jaiph: lexical rules, sta
 | Multiline string | Triple-quoted `"""…"""`. The opening `"""` must end the line; the closing `"""` must be on its own line. |
 | Script body (single-line) | Single quotes `'…'`. No escapes: the first `'` closes. A body that needs `'` must use a fenced block. Jaiph `${identifier}` / `${identifier.field}` interpolation is `E_PARSE`; bash parameter expansion (for example `${var:-default}`) passes through. One-line backticks are `E_PARSE`. |
 | Script body (fenced) | Triple single quotes `'''`…`'''`. Optional lang tag `'''<tag>`. `${…}` passes through to the shell. Triple backticks are `E_PARSE`. The closer is any trimmed line that starts with `'''` (no tagged closer). |
-| Required parentheses | All call sites require parentheses, including zero-argument calls (`setup()`). A name with no `()` is not a call: on a statement line it falls through to the shell executor, and in a value position it is a string reference. |
+| Required parentheses | All call sites require parentheses, including zero-argument calls (`setup()`). A name with no `()` is not a call: on a statement line it is `E_PARSE`, and in a value position it is a string reference. |
 
 ## File structure
 
@@ -164,8 +164,8 @@ ref (or an inline-script body) immediately followed by `(` — is a call start. 
 never found (e.g. the file ends or the block closes first), the compiler emits `E_PARSE` and the
 line is **never** silently treated as a def shell step (`sh_line_*`). A leading `run`
 (`run name(args)`, `return run name()`) is the removed keyword form and is `E_PARSE`
-(`'run' is not a keyword`). Lines that are not call-shaped continue to fall through to the shell
-executor unchanged.
+(`'run' is not a keyword`). A line that is not a statement is `E_PARSE`
+(`not a statement; put the command in a script`).
 
 For per-argument rules — bare identifiers, dotted field access, unquoted interpolation, nested calls, arity, and shell redirection — see [Language — Calls](language.md#run-execute-a-def-or-script) and the [Validation catalog](#validation-catalog).
 
@@ -181,7 +181,7 @@ def_step = call_stmt | async_stmt | stdin_connect
 nested_decl_step = script_decl | def_decl | prompt_decl ;
 ```
 
-Any line that does not match a managed form becomes a **shell** step in a def.
+A line that does not match a statement is `E_PARSE` (`not a statement; put the command in a script`).
 
 ### Nested declarations
 {: #nested-declarations}
@@ -344,7 +344,6 @@ Validator entry points (`src/transpile/validate.ts` for the outer layer; `src/tr
 | `E_SCHEMA` | Invalid `returns` schema — empty, non-flat, unsupported type. |
 | `E_VALIDATE` | Unknown def / script; duplicate import alias; forbidden Jaiph usage inside `$(…)`; dot notation on non-prompt variable or invalid field name; bare identifier argument referencing an unknown variable; unquoted `${…}` in call-argument position; `${ident}` referencing an unknown variable in orchestration strings; arity mismatch; shell redirection (`>`, `>>`, `|`, `&`) inside unquoted call-argument text; `stdin` connect targeting a non-script; type crossings (`prompt` on a script, calling a string, `const x = scriptName`, `${scriptName}`). |
 | `E_IMPORT_NOT_FOUND` | Import target does not exist (module or script). |
-| `W_PROMPT_IN_SHELL` | A prompt capture (`const x = prompt …`) is interpolated as `${x}` directly into a raw shell step. The diagnostic steers you to pass it as a script argument (`my_script(x)` → `$1`) instead. Only shell steps are flagged. See [Language](language.md). |
 
 ### Validation rules
 

@@ -29,7 +29,7 @@ export def main(tag) {
 
 The same clause works on `import script "./gh.sh" as gh use GITHUB_TOKEN` and on `prompt analyze(log) use GITHUB_TOKEN = "…"`. Identifiers only — no quotes, no `${…}`.
 
-A free-form shell line in a def body has no declaration, so it cannot carry `use`. Move that line into a named `script` if it needs a secret.
+A command that needs a secret belongs in a named `script` with a `use` clause.
 
 ## 2. Grant it on the command line
 

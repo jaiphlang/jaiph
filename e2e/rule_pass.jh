@@ -1,9 +1,11 @@
 #!/usr/bin/env jaiph
 # E2E fixture: rule that runs mock_ok (deterministic pass).
+script check_passes_impl = 'mock_ok'
+script done_impl = 'echo "e2e-rule-pass-done"'
 def check_passes() {
-  mock_ok
+  check_passes_impl()
 }
 export def main() {
   check_passes()
-  echo "e2e-rule-pass-done"
+  done_impl()
 }

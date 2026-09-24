@@ -1,9 +1,9 @@
 #!/usr/bin/env jaiph
 # E2E fixture: rule that runs mock_fail (deterministic fail).
+script check_fails_impl = 'mock_fail'
 def check_fails() {
-  mock_fail
+  check_fails_impl()
 }
 export def main() {
   check_fails()
-  echo "unreachable"
 }

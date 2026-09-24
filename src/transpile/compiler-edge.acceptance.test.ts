@@ -149,7 +149,7 @@ test("ACCEPTANCE: imported workflow missing fails with E_VALIDATE", () => {
 
 test("ACCEPTANCE: unterminated rule block reports parse location and code", () => {
   assert.throws(
-    () => parsejaiph("def bad() {\n  echo x\n", "/fake/main.jh"),
+    () => parsejaiph("def bad() {\n  log \"x\"\n", "/fake/main.jh"),
     /\/fake\/main\.jh:1:1 E_PARSE unterminated block/,
   );
 });
@@ -273,7 +273,7 @@ test("ACCEPTANCE: unterminated mock prompt block fails with E_PARSE", () => {
   );
 });
 
-test("ACCEPTANCE: def with inline brace group cmd || { ... } compiles", () => {
+test("ACCEPTANCE: def with inline brace group cmd || { ... } is not a statement", () => {
   withTempDir("jaiph-acc-rule-or-brace-", (root) => {
     writeFileSync(
       join(root, "main.jh"),
@@ -288,11 +288,14 @@ test("ACCEPTANCE: def with inline brace group cmd || { ... } compiles", () => {
         "",
       ].join("\n"),
     );
-    buildScripts(join(root, "main.jh"), join(root, "out"));
+    assert.throws(
+      () => buildScripts(join(root, "main.jh"), join(root, "out")),
+      /E_PARSE.*not a statement/,
+    );
   });
 });
 
-test("ACCEPTANCE: def with single-line || { ... } compiles", () => {
+test("ACCEPTANCE: def with single-line || { ... } is not a statement", () => {
   withTempDir("jaiph-acc-def-or-brace-", (root) => {
     writeFileSync(
       join(root, "main.jh"),
@@ -307,11 +310,14 @@ test("ACCEPTANCE: def with single-line || { ... } compiles", () => {
         "",
       ].join("\n"),
     );
-    buildScripts(join(root, "main.jh"), join(root, "out"));
+    assert.throws(
+      () => buildScripts(join(root, "main.jh"), join(root, "out")),
+      /E_PARSE.*not a statement/,
+    );
   });
 });
 
-test("ACCEPTANCE: workflow shell step with || { ... } is allowed and compiles", () => {
+test("ACCEPTANCE: workflow line with || { ... } is not a statement", () => {
   withTempDir("jaiph-acc-workflow-or-brace-", (root) => {
     writeFileSync(
       join(root, "main.jh"),
@@ -322,11 +328,14 @@ test("ACCEPTANCE: workflow shell step with || { ... } is allowed and compiles", 
         "",
       ].join("\n"),
     );
-    buildScripts(join(root, "main.jh"), join(root, "out"));
+    assert.throws(
+      () => buildScripts(join(root, "main.jh"), join(root, "out")),
+      /E_PARSE.*not a statement/,
+    );
   });
 });
 
-test("ACCEPTANCE: inline shell short-circuit in workflow compiles", () => {
+test("ACCEPTANCE: short-circuit line in a workflow is not a statement", () => {
   withTempDir("jaiph-acc-or-brace-workflow-", (root) => {
     writeFileSync(
       join(root, "main.jh"),
@@ -339,7 +348,10 @@ test("ACCEPTANCE: inline shell short-circuit in workflow compiles", () => {
         "",
       ].join("\n"),
     );
-    buildScripts(join(root, "main.jh"), join(root, "out"));
+    assert.throws(
+      () => buildScripts(join(root, "main.jh"), join(root, "out")),
+      /E_PARSE.*not a statement/,
+    );
   });
 });
 
@@ -739,7 +751,7 @@ test("ACCEPTANCE: run catch with multiple args after catch fails with E_PARSE", 
       join(root, "main.jh"),
       [
         "def some_rule() {",
-        "  true",
+        '  log "ok"',
         "}",
         "",
         "export def main() {",
@@ -763,7 +775,7 @@ test("ACCEPTANCE: run catch without block fails with E_PARSE", () => {
       parsejaiph(
         [
           "def ci_passes() {",
-          "  true",
+          '  log "ok"',
           "}",
           "",
           "export def main() {",

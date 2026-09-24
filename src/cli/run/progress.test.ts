@@ -173,14 +173,15 @@ test("collectDefChildren: collects inline script as 'script (inline)'", () => {
   assert.ok(items.some((i) => i.label === "script (inline)"));
 });
 
-test("collectDefChildren: collects shell step with $ prefix", () => {
-  const mod = modFor([
-    "export def main() {",
-    "  echo hello",
-    "}",
-  ].join("\n"));
-  const items = collectDefChildren(mod, "main");
-  assert.ok(items.some((i) => i.label.startsWith("$ ")));
+test("collectDefChildren: a free-form line is not a statement", () => {
+  assert.throws(
+    () => modFor([
+      "export def main() {",
+      "  echo hello",
+      "}",
+    ].join("\n")),
+    /E_PARSE.*not a statement/,
+  );
 });
 
 test("collectDefChildren: skips trivia (comments / blank lines)", () => {

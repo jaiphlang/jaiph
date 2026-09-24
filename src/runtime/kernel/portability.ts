@@ -91,7 +91,7 @@ function resolveWindowsPosixShell(): string {
     }
   }
   throw new Error(
-    "E_NO_POSIX_SHELL Jaiph requires a POSIX `sh` to run inline shell lines and hooks, " +
+    "E_NO_POSIX_SHELL Jaiph requires a POSIX `sh` to run hooks, " +
       "but `sh.exe` was not found on PATH or in the standard Git for Windows install " +
       "locations. Install Git for Windows (https://git-scm.com/download/win), which " +
       "bundles `sh.exe`.",
