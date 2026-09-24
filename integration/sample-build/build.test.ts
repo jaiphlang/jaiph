@@ -69,7 +69,7 @@ test("build fails on missing import file", () => {
         'import "../missing/mod.jh" as mod',
         "",
         "def local() {",
-        "  echo ok",
+        '  log "ok"',
         "}",
         "",
         "def entry() {",
@@ -314,7 +314,7 @@ test("buildScripts extracts scripts for run ... catch workflow", () => {
   }
 });
 
-test("build accepts run catch body with raw shell lines", () => {
+test("build accepts a catch body that calls a script", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-ensure-catch-block-"));
   const outDir = mkdtempSync(join(tmpdir(), "jaiph-ensure-catch-block-out-"));
   try {
@@ -328,7 +328,8 @@ test("build accepts run catch body with raw shell lines", () => {
         "}",
         "",
         "export def main() {",
-        "  ready() catch (failure) { echo fixing; touch ready.txt; }",
+        "  script fix = 'touch ready.txt'",
+        "  ready() catch (failure) { fix() }",
         "}",
         "",
       ].join("\n"),
@@ -341,7 +342,7 @@ test("build accepts run catch body with raw shell lines", () => {
   }
 });
 
-test("buildScripts accepts multiline raw shell in workflow (assignment-style lines)", () => {
+test("buildScripts rejects a free-form line in a def", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-assign-fail-"));
   const outDir = mkdtempSync(join(tmpdir(), "jaiph-assign-fail-out-"));
   try {
@@ -356,7 +357,7 @@ test("buildScripts accepts multiline raw shell in workflow (assignment-style lin
         "",
       ].join("\n"),
     );
-    buildScripts(filePath, outDir);
+    assert.throws(() => buildScripts(filePath, outDir), /E_PARSE.*not a statement/);
   } finally {
     rmSync(root, { recursive: true, force: true });
     rmSync(outDir, { recursive: true, force: true });

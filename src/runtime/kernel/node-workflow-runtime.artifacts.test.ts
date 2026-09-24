@@ -6,6 +6,13 @@ import { join } from "node:path";
 import { buildRuntimeGraph } from "./graph";
 import { NodeWorkflowRuntime } from "./node-workflow-runtime";
 
+function mainErr(runtime: NodeWorkflowRuntime): string {
+  const runDir = runtime.getRunDir();
+  const name = readdirSync(runDir).find((f) => f.includes("def__main") && f.endsWith(".err"));
+  if (!name) throw new Error(`no main .err in ${runDir}: ${readdirSync(runDir).join(", ")}`);
+  return readFileSync(join(runDir, name), "utf8");
+}
+
 test("NodeWorkflowRuntime: runMain writes return_value.txt with the workflow's return value", async () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-node-wf-return-"));
   try {
@@ -486,10 +493,7 @@ test("NodeWorkflowRuntime: nested cross-module run applies callee module config 
     const childJh = join(root, "child.jh");
     const parentJh = join(root, "parent.jh");
     const metaFile = join(root, "config_scope.log");
-    // Scope env is observed through Jaiph `${...}` interpolation on inline
-    // shell lines (resolved kernel-side from scope.env before `sh -c`): the
-    // shell-line child env itself is sterile (env-allowlist.ts), the same as
-    // a script spawn, so bare `$VAR` reads would see nothing.
+    // Scope env is observed through Jaiph `${...}` on the callee's return.
     writeFileSync(
       childJh,
       [
@@ -497,7 +501,7 @@ test("NodeWorkflowRuntime: nested cross-module run applies callee module config 
         '  agent.model = "model-b"',
         "}",
         "def show() {",
-        "  echo child:${JAIPH_AGENT_MODEL} >> ${JAIPH_META_SCOPE_FILE}",
+        '  return "${JAIPH_AGENT_MODEL}"',
         "}",
         "",
       ].join("\n"),
@@ -511,9 +515,10 @@ test("NodeWorkflowRuntime: nested cross-module run applies callee module config 
         '  agent.model = "model-a"',
         "}",
         "export def main() {",
-        "  echo parent_before:${JAIPH_AGENT_MODEL} >> ${JAIPH_META_SCOPE_FILE}",
-        "  child.show()",
-        "  echo parent_after:${JAIPH_AGENT_MODEL} >> ${JAIPH_META_SCOPE_FILE}",
+        '  logerr "parent_before:${JAIPH_AGENT_MODEL}"',
+        "  const seen = child.show()",
+        '  logerr "child:${seen}"',
+        '  logerr "parent_after:${JAIPH_AGENT_MODEL}"',
         "}",
         "",
       ].join("\n"),
@@ -536,7 +541,7 @@ test("NodeWorkflowRuntime: nested cross-module run applies callee module config 
     const status = await runtime.runMain([]);
     assert.equal(status, 0);
 
-    const actual = readFileSync(metaFile, "utf8");
+    const actual = mainErr(runtime);
     const expected = "parent_before:\nchild:\nparent_after:\n";
     assert.equal(actual, expected);
   } finally {
@@ -549,7 +554,7 @@ test("NodeWorkflowRuntime: config agent.model applies to prompt only via PROMPT_
   try {
     const jh = join(root, "prompt_model.jh");
     const metaFile = join(root, "scope.log");
-    // Shell-line observation: scope env is what an inline shell step sees.
+    // Scope env is observed through Jaiph `${...}` on the callee's return.
     writeFileSync(
       jh,
       [
@@ -560,12 +565,13 @@ test("NodeWorkflowRuntime: config agent.model applies to prompt only via PROMPT_
         "  config {",
         "    agent.model = model",
         "  }",
-        "  echo shell:${JAIPH_AGENT_MODEL} >> ${JAIPH_SCOPE_LOG}",
         '  const answer = prompt "hello"',
+        '  return "${JAIPH_AGENT_MODEL}"',
         "}",
         "",
         "export def main() {",
-        '  with_prompt("workflow-model")',
+        '  const seen = with_prompt("workflow-model")',
+        '  logerr "shell:${seen}"',
         "}",
         "",
       ].join("\n"),
@@ -597,7 +603,7 @@ test("NodeWorkflowRuntime: config agent.model applies to prompt only via PROMPT_
       else process.env.JAIPH_RUN_SUMMARY_FILE = prevSummaryEnv;
     }
 
-    assert.equal(readFileSync(metaFile, "utf8"), "shell:\n");
+    assert.equal(mainErr(runtime), "shell:\n");
 
     const summaryLines = readFileSync(join(runtime.getRunDir(), "run_summary.jsonl"), "utf8")
       .trim()
@@ -629,7 +635,7 @@ test("NodeWorkflowRuntime: nested cross-module run applies callee def-level conf
         '  config {',
         '    agent.model = "child-workflow-model"',
         "  }",
-        "  echo child:${JAIPH_AGENT_MODEL} >> ${JAIPH_META_SCOPE_FILE}",
+        '  return "${JAIPH_AGENT_MODEL}"',
         "}",
         "",
       ].join("\n"),
@@ -643,7 +649,8 @@ test("NodeWorkflowRuntime: nested cross-module run applies callee def-level conf
         '  agent.model = "model-a"',
         "}",
         "export def main() {",
-        "  child.show()",
+        "  const seen = child.show()",
+        '  logerr "child:${seen}"',
         "}",
         "",
       ].join("\n"),
@@ -666,7 +673,7 @@ test("NodeWorkflowRuntime: nested cross-module run applies callee def-level conf
     const status = await runtime.runMain([]);
     assert.equal(status, 0);
 
-    const actual = readFileSync(metaFile, "utf8");
+    const actual = mainErr(runtime);
     assert.equal(actual, "child:\n");
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -689,7 +696,7 @@ test("NodeWorkflowRuntime: nested cross-module run honors locked JAIPH_AGENT_MOD
         '  config {',
         '    agent.model = "child-workflow-model"',
         "  }",
-        "  echo child:${JAIPH_AGENT_MODEL} >> ${JAIPH_META_SCOPE_FILE}",
+        '  return "${JAIPH_AGENT_MODEL}"',
         "}",
         "",
       ].join("\n"),
@@ -703,7 +710,8 @@ test("NodeWorkflowRuntime: nested cross-module run honors locked JAIPH_AGENT_MOD
         '  agent.model = "model-a"',
         "}",
         "export def main() {",
-        "  child.show()",
+        "  const seen = child.show()",
+        '  logerr "child:${seen}"',
         "}",
         "",
       ].join("\n"),
@@ -726,7 +734,7 @@ test("NodeWorkflowRuntime: nested cross-module run honors locked JAIPH_AGENT_MOD
     const status = await runtime.runMain([]);
     assert.equal(status, 0);
 
-    const actual = readFileSync(metaFile, "utf8");
+    const actual = mainErr(runtime);
     assert.equal(actual, "child:env-model\n");
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -746,7 +754,7 @@ test("NodeWorkflowRuntime: nested cross-module preserves locked JAIPH_AGENT_BACK
         '  agent.backend = "claude"',
         "}",
         "export def main() {",
-        "  echo child:${JAIPH_AGENT_BACKEND} >> ${JAIPH_META_SCOPE_FILE}",
+        '  return "${JAIPH_AGENT_BACKEND}"',
         "}",
         "",
       ].join("\n"),
@@ -760,9 +768,10 @@ test("NodeWorkflowRuntime: nested cross-module preserves locked JAIPH_AGENT_BACK
         '  agent.backend = "cursor"',
         "}",
         "export def main() {",
-        "  echo parent_before:${JAIPH_AGENT_BACKEND} >> ${JAIPH_META_SCOPE_FILE}",
-        "  child.main()",
-        "  echo parent_after:${JAIPH_AGENT_BACKEND} >> ${JAIPH_META_SCOPE_FILE}",
+        '  logerr "parent_before:${JAIPH_AGENT_BACKEND}"',
+        "  const seen = child.main()",
+        '  logerr "child:${seen}"',
+        '  logerr "parent_after:${JAIPH_AGENT_BACKEND}"',
         "}",
         "",
       ].join("\n"),
@@ -785,7 +794,7 @@ test("NodeWorkflowRuntime: nested cross-module preserves locked JAIPH_AGENT_BACK
     const status = await runtime.runMain([]);
     assert.equal(status, 0);
 
-    const actual = readFileSync(metaFile, "utf8");
+    const actual = mainErr(runtime);
     const expected = "parent_before:claude\nchild:claude\nparent_after:claude\n";
     assert.equal(actual, expected);
   } finally {
@@ -811,19 +820,21 @@ test("NodeWorkflowRuntime: sibling workflows do not inherit each other's metadat
         '    agent.model = "alpha-model"',
         '    agent.backend = "claude"',
         "  }",
-        "  echo alpha:model=${JAIPH_AGENT_MODEL},backend=${JAIPH_AGENT_BACKEND} >> ${JAIPH_SIBLING_LOG}",
+        '  return "alpha:model=${JAIPH_AGENT_MODEL},backend=${JAIPH_AGENT_BACKEND}"',
         "}",
         "",
         "def beta() {",
         "  config {",
         '    agent.model = "beta-model"',
         "  }",
-        "  echo beta:model=${JAIPH_AGENT_MODEL},backend=${JAIPH_AGENT_BACKEND} >> ${JAIPH_SIBLING_LOG}",
+        '  return "beta:model=${JAIPH_AGENT_MODEL},backend=${JAIPH_AGENT_BACKEND}"',
         "}",
         "",
         "export def main() {",
-        "  alpha()",
-        "  beta()",
+        "  const a = alpha()",
+        '  logerr "${a}"',
+        "  const b = beta()",
+        '  logerr "${b}"',
         "}",
         "",
       ].join("\n"),
@@ -848,7 +859,7 @@ test("NodeWorkflowRuntime: sibling workflows do not inherit each other's metadat
     const status = await runtime.runMain([]);
     assert.equal(status, 0);
 
-    const actual = readFileSync(metaFile, "utf8");
+    const actual = mainErr(runtime);
     const expected = "alpha:model=,backend=claude\nbeta:model=,backend=cursor\n";
     assert.equal(actual, expected);
   } finally {
@@ -1430,7 +1441,7 @@ test("NodeWorkflowRuntime: imported module cannot override agent.command by defa
         '  agent.command = "injected-agent"',
         "}",
         "export def main() {",
-        "  echo child:${JAIPH_AGENT_COMMAND} >> ${JAIPH_META_SCOPE_FILE}",
+        '  return "${JAIPH_AGENT_COMMAND}"',
         "}",
         "",
       ].join("\n"),
@@ -1441,8 +1452,9 @@ test("NodeWorkflowRuntime: imported module cannot override agent.command by defa
         'import "child.jh" as child',
         "",
         "export def main() {",
-        "  echo parent:${JAIPH_AGENT_COMMAND} >> ${JAIPH_META_SCOPE_FILE}",
-        "  child.main()",
+        '  logerr "parent:${JAIPH_AGENT_COMMAND}"',
+        "  const seen = child.main()",
+        '  logerr "child:${seen}"',
         "}",
         "",
       ].join("\n"),
@@ -1466,7 +1478,7 @@ test("NodeWorkflowRuntime: imported module cannot override agent.command by defa
     const runtime1 = new NodeWorkflowRuntime(graph, { env: env1, cwd: root, suppressLiveEvents: true });
     assert.equal(await runtime1.runMain([]), 0);
 
-    const actual1 = readFileSync(cmdFile, "utf8");
+    const actual1 = mainErr(runtime1);
     // child sees empty (not "injected-agent") because imported module's command is blocked
     assert.equal(actual1, "parent:\nchild:\n");
 
@@ -1486,7 +1498,7 @@ test("NodeWorkflowRuntime: imported module cannot override agent.command by defa
     const runtime2 = new NodeWorkflowRuntime(graph, { env: env2, cwd: root, suppressLiveEvents: true });
     assert.equal(await runtime2.runMain([]), 0);
 
-    const actual2 = readFileSync(cmdFile, "utf8");
+    const actual2 = mainErr(runtime2);
     // child sees "injected-agent" because IMPORT_UNLOCK is set
     assert.equal(actual2, "parent:\nchild:injected-agent\n");
   } finally {
@@ -1508,10 +1520,14 @@ test("NodeWorkflowRuntime: imported module cannot override trust/argv/run-dir ke
         '  agent.cursor_flags = "--child-flag"',
         '  run.logs_dir = "child-runs"',
         "}",
-        "export def main() {",
-        "  echo child-tw:${JAIPH_AGENT_TRUSTED_WORKSPACE} >> ${JAIPH_META_SCOPE_FILE}",
-        "  echo child-cf:${JAIPH_AGENT_CURSOR_FLAGS} >> ${JAIPH_META_SCOPE_FILE}",
-        "  echo child-rd:${JAIPH_RUNS_DIR} >> ${JAIPH_META_SCOPE_FILE}",
+        "export def tw() {",
+        '  return "${JAIPH_AGENT_TRUSTED_WORKSPACE}"',
+        "}",
+        "export def cf() {",
+        '  return "${JAIPH_AGENT_CURSOR_FLAGS}"',
+        "}",
+        "export def rd() {",
+        '  return "${JAIPH_RUNS_DIR}"',
         "}",
         "",
       ].join("\n"),
@@ -1527,10 +1543,15 @@ test("NodeWorkflowRuntime: imported module cannot override trust/argv/run-dir ke
         'import "child.jh" as child',
         "",
         "export def main() {",
-        "  echo parent-tw:${JAIPH_AGENT_TRUSTED_WORKSPACE} >> ${JAIPH_META_SCOPE_FILE}",
-        "  echo parent-cf:${JAIPH_AGENT_CURSOR_FLAGS} >> ${JAIPH_META_SCOPE_FILE}",
-        "  echo parent-rd:${JAIPH_RUNS_DIR} >> ${JAIPH_META_SCOPE_FILE}",
-        "  child.main()",
+        '  logerr "parent-tw:${JAIPH_AGENT_TRUSTED_WORKSPACE}"',
+        '  logerr "parent-cf:${JAIPH_AGENT_CURSOR_FLAGS}"',
+        '  logerr "parent-rd:${JAIPH_RUNS_DIR}"',
+        "  const tw = child.tw()",
+        '  logerr "child-tw:${tw}"',
+        "  const cf = child.cf()",
+        '  logerr "child-cf:${cf}"',
+        "  const rd = child.rd()",
+        '  logerr "child-rd:${rd}"',
         "}",
         "",
       ].join("\n"),
@@ -1568,7 +1589,7 @@ test("NodeWorkflowRuntime: imported module cannot override trust/argv/run-dir ke
     const runtime1 = new NodeWorkflowRuntime(graph, { env: baseEnv(), cwd: root, suppressLiveEvents: true });
     assert.equal(await runtime1.runMain([]), 0);
     assert.equal(
-      readFileSync(scopeFile, "utf8"),
+      mainErr(runtime1),
       [
         "parent-tw:entry-trust",
         "parent-cf:--entry-flag",
@@ -1589,7 +1610,7 @@ test("NodeWorkflowRuntime: imported module cannot override trust/argv/run-dir ke
     const runtime2 = new NodeWorkflowRuntime(graph, { env: env2, cwd: root, suppressLiveEvents: true });
     assert.equal(await runtime2.runMain([]), 0);
     assert.equal(
-      readFileSync(scopeFile, "utf8"),
+      mainErr(runtime2),
       [
         "parent-tw:entry-trust",
         "parent-cf:--entry-flag",
@@ -1617,8 +1638,8 @@ test("NodeWorkflowRuntime: JAIPH_AGENT_TRUSTED_WORKSPACE_LOCKED blocks metadata 
         "config {",
         '  agent.trusted_workspace = "child-trust"',
         "}",
-        "export def main() {",
-        "  echo child-tw:${JAIPH_AGENT_TRUSTED_WORKSPACE} >> ${JAIPH_META_SCOPE_FILE}",
+        "export def tw() {",
+        '  return "${JAIPH_AGENT_TRUSTED_WORKSPACE}"',
         "}",
         "",
       ].join("\n"),
@@ -1632,8 +1653,9 @@ test("NodeWorkflowRuntime: JAIPH_AGENT_TRUSTED_WORKSPACE_LOCKED blocks metadata 
         'import "child.jh" as child',
         "",
         "export def main() {",
-        "  echo parent-tw:${JAIPH_AGENT_TRUSTED_WORKSPACE} >> ${JAIPH_META_SCOPE_FILE}",
-        "  child.main()",
+        '  logerr "parent-tw:${JAIPH_AGENT_TRUSTED_WORKSPACE}"',
+        "  const tw = child.tw()",
+        '  logerr "child-tw:${tw}"',
         "}",
         "",
       ].join("\n"),
@@ -1658,7 +1680,7 @@ test("NodeWorkflowRuntime: JAIPH_AGENT_TRUSTED_WORKSPACE_LOCKED blocks metadata 
     const runtime = new NodeWorkflowRuntime(graph, { env, cwd: root, suppressLiveEvents: true });
     assert.equal(await runtime.runMain([]), 0);
     assert.equal(
-      readFileSync(scopeFile, "utf8"),
+      mainErr(runtime),
       ["parent-tw:host-trust", "child-tw:host-trust", ""].join("\n"),
     );
   } finally {
@@ -1678,7 +1700,7 @@ test("NodeWorkflowRuntime: entry module agent.command config is applied", async 
         '  agent.command = "my-custom-agent"',
         "}",
         "export def main() {",
-        "  echo cmd:${JAIPH_AGENT_COMMAND} >> ${JAIPH_CMD_LOG}",
+        '  logerr "cmd:${JAIPH_AGENT_COMMAND}"',
         "}",
         "",
       ].join("\n"),
@@ -1700,7 +1722,7 @@ test("NodeWorkflowRuntime: entry module agent.command config is applied", async 
     const runtime = new NodeWorkflowRuntime(graph, { env, cwd: root, suppressLiveEvents: true });
     assert.equal(await runtime.runMain([]), 0);
 
-    assert.equal(readFileSync(cmdFile, "utf8"), "cmd:my-custom-agent\n");
+    assert.equal(mainErr(runtime), "cmd:my-custom-agent\n");
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

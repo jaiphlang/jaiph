@@ -164,7 +164,7 @@ test("win32: NEVER calls process.kill with a negative PID (SIGTERM, SIGINT, SIGK
 });
 
 // ---------------------------------------------------------------------------
-// resolveShell(): single POSIX-sh seam for inline shell lines and hooks.
+// resolveShell(): single POSIX-sh seam for hooks.
 // ---------------------------------------------------------------------------
 
 /** Stub `_portability.fileExists` and `process.env` while `fn` runs. */
@@ -358,7 +358,7 @@ test("no production source file invokes spawn(\"sh\", …) directly — all go t
   assert.deepEqual(
     offenders,
     [],
-    `inline shell must resolve through resolveShell(); offenders: ${offenders.join(", ")}`,
+    `spawn("sh") must resolve through resolveShell(); offenders: ${offenders.join(", ")}`,
   );
 });
 

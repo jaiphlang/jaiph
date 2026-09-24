@@ -36,7 +36,7 @@ test("module-graph: buildScripts + buildRuntimeGraph reuse pre-parsed ASTs and n
         "}",
         "export script helper = 'echo hi'",
         "export def inner() {",
-        "  echo ok",
+        '  log "ok"',
         "}",
         "",
       ].join("\n"),
@@ -103,7 +103,7 @@ test("module-graph: cross-module workflow, rule, and script resolution", () => {
         "}",
         "export script helper = 'echo hi'",
         "export def inner() {",
-        "  echo ok",
+        '  log "ok"',
         "}",
         "",
       ].join("\n"),
@@ -167,7 +167,7 @@ test("module-graph: serialize round-trip preserves the import closure for the ch
       lib,
       [
         "export def inner() {",
-        "  echo ok",
+        '  log "ok"',
         "}",
         "",
       ].join("\n"),
@@ -212,7 +212,7 @@ test("module-graph: handles a 3-module closure with one shared parse", () => {
     const main = join(dir, "main.jh");
     const libA = join(dir, "a.jh");
     const libB = join(dir, "b.jh");
-    write(libA, "export def a() {\n  echo ok\n}\n");
+    write(libA, "export def a() {\n  log \"ok\"\n}\n");
     write(
       libB,
       [

@@ -26,14 +26,22 @@
       "message": "Channel \"typo\" is not defined"
     }
   ],
-  "validate-errors.txt > rule with inline brace group fails shell-step ban": [],
-  "validate-errors.txt > rule with multi-line brace group fails shell-step ban": [
+  "validate-errors.txt > rule with inline brace group is not a statement": [
     {
       "file": "input.jh",
-      "line": 6,
-      "col": 1,
+      "line": 2,
+      "col": 3,
       "code": "E_PARSE",
-      "message": "unsupported top-level statement: }"
+      "message": "not a statement; put the command in a script"
+    }
+  ],
+  "validate-errors.txt > rule with multi-line brace group is not a statement": [
+    {
+      "file": "input.jh",
+      "line": 2,
+      "col": 3,
+      "code": "E_PARSE",
+      "message": "not a statement; put the command in a script"
     }
   ],
   "validate-errors.txt > unsupported type in returns schema": [
@@ -50,8 +58,8 @@
       "file": "input.jh",
       "line": 5,
       "col": 3,
-      "code": "E_VALIDATE",
-      "message": "use f() — a bare name that refers to a script or workflow must be called as a managed step"
+      "code": "E_PARSE",
+      "message": "not a statement; put the command in a script"
     }
   ],
   "validate-errors.txt > workflow raw shell that names a workflow must use run": [
@@ -59,8 +67,8 @@
       "file": "input.jh",
       "line": 6,
       "col": 3,
-      "code": "E_VALIDATE",
-      "message": "use w() — a bare name that refers to a script or workflow must be called as a managed step"
+      "code": "E_PARSE",
+      "message": "not a statement; put the command in a script"
     }
   ],
   "validate-errors.txt > send RHS cannot invoke workflow via shell": [
@@ -672,8 +680,8 @@
       "file": "main.jh",
       "line": 3,
       "col": 3,
-      "code": "E_VALIDATE",
-      "message": "use lib.deploy() — \"lib.deploy\" is a valid script or def reference; call it as a managed step"
+      "code": "E_PARSE",
+      "message": "not a statement; put the command in a script"
     }
   ],
   "validate-errors.txt > bare imported script as shell line must use run": [
@@ -681,8 +689,8 @@
       "file": "main.jh",
       "line": 3,
       "col": 3,
-      "code": "E_VALIDATE",
-      "message": "use lib.helper() — \"lib.helper\" is a valid script or def reference; call it as a managed step"
+      "code": "E_PARSE",
+      "message": "not a statement; put the command in a script"
     }
   ],
   "validate-errors.txt > command substitution invokes rule in send shell RHS": [
@@ -960,8 +968,8 @@
       "file": "main.jh",
       "line": 3,
       "col": 3,
-      "code": "E_VALIDATE",
-      "message": "imported def or script \"lib.nonexistent_thing\" does not exist"
+      "code": "E_PARSE",
+      "message": "not a statement; put the command in a script"
     }
   ],
   "validate-errors-multi-module.txt > run non-exported script from module with exports": [

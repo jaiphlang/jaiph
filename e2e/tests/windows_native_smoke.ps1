@@ -130,7 +130,7 @@ function Send-CtrlC {
 }
 
 try {
-  # ── 1. Sample workflow: inline shell + node script + interpolation + log ─────
+  # ── 1. Sample workflow: script + node script + interpolation + log ─────
   Write-Host "`n== Sample workflow runs host-only against jaiph.exe =="
 
   $sampleWf = Join-Path $Work "sample.jh"
@@ -139,9 +139,11 @@ script node_step = '''node
 process.stdout.write("node-step-output\n");
 '''
 
+script greet = 'echo "greet for $1"'
+
 export def main() {
   const who = "Windows"
-  echo "inline shell for ${who}"
+  greet(who)
   node_step()
   log "smoke greeting for ${who}"
 }
