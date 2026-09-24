@@ -4,6 +4,8 @@
 
 ## All changes
 
+- **Fix — `jaiph serve` OIDC subject isolation:** an OIDC principal's audit/isolation identity is now namespaced by its claim type — `sub:<sub>` for a token `sub`, `client_id:<client_id>` for a `sub`-less machine token — so a token whose `sub` equals another token's `client_id`, or whose subject equals the `operator` (static) or `anonymous` (open) sentinels, can no longer share that other principal's runs, artifacts, or idempotency namespace. `principalSubject` in `src/cli/serve/auth.ts` returned the raw claim text, which `lookupRun` and the idempotency composite in `src/cli/serve/handler.ts` compared directly against `record.principal`; both now compare the namespaced value, and OIDC stays non-owning of all runs. The `principal` field on the run object and persisted `run.json`, the invoke/cancel audit log lines, and the `jaiph.principal` OTLP resource attribute and Sentry tag therefore carry the `sub:` / `client_id:` prefix in OIDC mode (open and static stay `anonymous` / `operator`). Docs: [CLI — `jaiph serve`](docs/cli.md#jaiph-serve). Tests: `src/cli/serve/auth.test.ts`, `src/cli/serve/handler.test.ts`, `integration/serve-auth.test.ts`.
+
 # 0.15.0
 
 ## Summary

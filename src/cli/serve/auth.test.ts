@@ -82,13 +82,24 @@ test("capabilitiesFromClaims: a token with no jaiph scopes yields no capabilitie
 
 // === principal identity (finding M-9) ===
 
-test("principalSubject: prefers sub, falls back to client_id, else null — never a shared constant", () => {
-  assert.equal(principalSubject({ sub: "alice" }), "alice");
+test("principalSubject: namespaces by claim type (sub:/client_id:), prefers sub, else null — never a raw or shared constant", () => {
+  // The identity is namespaced by claim type, never the raw claim text.
+  assert.equal(principalSubject({ sub: "alice" }), "sub:alice");
   // sub-less machine token (OAuth2 client-credentials) → distinct per-client identity.
-  assert.equal(principalSubject({ client_id: "service-a" } as Record<string, unknown>), "service-a");
-  assert.equal(principalSubject({ client_id: "service-b" } as Record<string, unknown>), "service-b");
+  assert.equal(principalSubject({ client_id: "service-a" } as Record<string, unknown>), "client_id:service-a");
+  assert.equal(principalSubject({ client_id: "service-b" } as Record<string, unknown>), "client_id:service-b");
   // sub wins when both are present.
-  assert.equal(principalSubject({ sub: "alice", client_id: "svc" } as Record<string, unknown>), "alice");
+  assert.equal(principalSubject({ sub: "alice", client_id: "svc" } as Record<string, unknown>), "sub:alice");
+  // A `sub` and a `client_id` with the same raw value are distinct principals.
+  assert.notEqual(
+    principalSubject({ sub: "alice" }),
+    principalSubject({ client_id: "alice" } as Record<string, unknown>),
+  );
+  // A verified subject can never equal the static/open sentinels.
+  assert.equal(principalSubject({ sub: "operator" }), "sub:operator");
+  assert.notEqual(principalSubject({ sub: "operator" }), "operator");
+  assert.equal(principalSubject({ sub: "anonymous" }), "sub:anonymous");
+  assert.notEqual(principalSubject({ sub: "anonymous" }), "anonymous");
   // Neither claim → no identity; the caller is rejected, never bucketed together.
   assert.equal(principalSubject({}), null);
   assert.equal(principalSubject({ sub: "" }), null);

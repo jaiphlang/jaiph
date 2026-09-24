@@ -257,7 +257,9 @@ test("jaiph serve OIDC: capabilities are separate, runs are per-principal, and i
     assert.equal(created.status, 200);
     const run = await created.json();
     assert.equal(run.status, "succeeded");
-    assert.equal(run.principal, "alice", "the run records its creating principal");
+    // The audit subject is namespaced by claim type (`sub:`), so it can never
+    // collide with a `client_id` of the same value or the static/open sentinels.
+    assert.equal(run.principal, "sub:alice", "the run records its creating principal, namespaced by claim type");
 
     // Bob (valid, fully-scoped) cannot see or cancel Alice's run.
     assert.equal((await fetch(`${srv.baseUrl}/runs/${run.run_id}`, { headers: bearer(bobTok) })).status, 404);
@@ -284,7 +286,7 @@ test("jaiph serve OIDC: capabilities are separate, runs are per-principal, and i
     // (the collapsed per-call line: `Running <wf> run_id=… principal=…`),
     // and the raw JWT never appears.
     const logged = srv.stderr();
-    assert.match(logged, /Running greet run_id=.*principal=alice/, "invoke is audited with the acting principal");
+    assert.match(logged, /Running greet run_id=.*principal=sub:alice/, "invoke is audited with the acting principal (namespaced by claim type)");
     assert.ok(!logged.includes(aliceTok), "the audit log never contains the bearer token");
   } finally {
     await srv.close();
@@ -322,7 +324,9 @@ test("jaiph serve OIDC: sub-less machine tokens get distinct client_id identitie
     assert.equal(created.status, 200);
     const run = await created.json();
     assert.equal(run.status, "succeeded");
-    assert.equal(run.principal, "service-a", "the run records its creating client_id");
+    // The client_id identity is namespaced by claim type (`client_id:`), so it
+    // can never collide with a `sub` of the same value.
+    assert.equal(run.principal, "client_id:service-a", "the run records its creating client_id, namespaced by claim type");
     assert.notEqual(run.principal, "unknown", "no principal collapses onto the shared constant");
 
     // Client B (a distinct sub-less token) cannot enumerate or cancel client A's run.
