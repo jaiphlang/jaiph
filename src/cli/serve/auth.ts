@@ -17,8 +17,12 @@ import { createRemoteJWKSet, jwtVerify, errors as joseErrors, type JWTPayload, t
  *   issuer's JWKS (a maintained JWT library, `jose`, does the crypto: signature,
  *   `exp`/`nbf`, `aud`, `iss`, and `kid` selection with unknown-key refetch).
  *   The principal identity is the token `sub`, falling back to `client_id` for
- *   `sub`-less machine tokens; a verified token carrying neither is rejected
- *   (never a shared constant — finding M-9). Its capabilities come from OAuth
+ *   `sub`-less machine tokens, each namespaced by its claim type (`sub:` /
+ *   `client_id:`) so two different claim types with the same raw value — or a
+ *   subject equal to the `operator`/`anonymous` sentinels — can never share a
+ *   run-visibility bucket or idempotency namespace; a verified token carrying
+ *   neither claim is rejected (never a shared constant — finding M-9). Its
+ *   capabilities come from OAuth
  *   scopes (`jaiph:invoke` / `jaiph:inspect` / `jaiph:cancel`); it may
  *   inspect/cancel only the runs it created.
  */
@@ -42,7 +46,7 @@ const SCOPE_FOR: Record<string, Capability> = {
  * logs, OTLP resource attributes, and Sentry tags.
  */
 export interface Principal {
-  /** Audit identity: JWT `sub` else `client_id` (oidc), `operator` (static), `anonymous` (open). */
+  /** Audit identity: `sub:<sub>` else `client_id:<client_id>` (oidc), `operator` (static), `anonymous` (open). */
   subject: string;
   /** Actions this principal is authorized for. */
   capabilities: Set<Capability>;
@@ -116,15 +120,19 @@ function bearerToken(header: string | undefined): string | null {
 /**
  * Derive the stable audit/isolation identity from a verified token. Prefer the
  * standard `sub`; fall back to `client_id` (OAuth2 client-credentials / machine
- * tokens commonly omit `sub`). Returns `null` when neither is a non-empty
- * string — such a token is rejected rather than collapsed onto a shared
- * constant, so two distinct callers can never share a run-visibility bucket or
- * idempotency namespace (finding M-9).
+ * tokens commonly omit `sub`). The identity is namespaced by its claim type —
+ * `sub:<sub>` or `client_id:<client_id>` — so a `sub` and a `client_id` that
+ * carry the same raw value are distinct principals, and no verified subject can
+ * ever equal the `operator` (static) or `anonymous` (open) sentinels that scope
+ * run visibility and idempotency in `handler.ts`. Returns `null` when neither
+ * claim is a non-empty string — such a token is rejected rather than collapsed
+ * onto a shared constant, so two distinct callers can never share a
+ * run-visibility bucket or idempotency namespace (finding M-9).
  */
 export function principalSubject(payload: JWTPayload): string | null {
-  if (typeof payload.sub === "string" && payload.sub.length > 0) return payload.sub;
+  if (typeof payload.sub === "string" && payload.sub.length > 0) return `sub:${payload.sub}`;
   const clientId = (payload as Record<string, unknown>).client_id;
-  if (typeof clientId === "string" && clientId.length > 0) return clientId;
+  if (typeof clientId === "string" && clientId.length > 0) return `client_id:${clientId}`;
   return null;
 }
 

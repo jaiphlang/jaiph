@@ -16,22 +16,6 @@ Process rules:
 7. Acceptance criteria are non-negotiable. A task is not done until every
    acceptance bullet is verified by a test that fails when the contract is violated.
 
-## Namespace OIDC serve subjects #dev-ready
-
-Context: `jaiph serve` OIDC mode isolates runs and idempotency keys by `principal.subject` alone. Static mode stores `operator` and open mode stores `anonymous`.
-
-Problem: `principalSubject` in `src/cli/serve/auth.ts` returns the raw JWT `sub`, or else the raw `client_id`, with no claim-type prefix and no reserved-name check. `lookupRun` and the idempotency composite in `src/cli/serve/handler.ts` compare that string to `record.principal`. A token whose `sub` equals another token's `client_id`, or whose subject equals `operator` or `anonymous`, shares that other principal's runs, artifacts, and idempotency namespace.
-
-Location: `src/cli/serve/auth.ts` `principalSubject`; `src/cli/serve/handler.ts` `lookupRun` and idempotency composite.
-
-Remediation: Namespace the subject by claim type (`sub:` vs `client_id:`) and reject or prefix the sentinel values `operator` and `anonymous` so they cannot equal the static or open principals. Keep `ownsAllRuns` false for OIDC.
-
-### Acceptance criteria
-- A unit test builds two OIDC principals, one from `sub` `alice` and one from `client_id` `alice`, and shows `lookupRun` and idempotency-key reuse do not cross between them.
-- A unit test shows a verified token with `sub` `operator` or `anonymous` does not match a run record whose `principal` is the static or open sentinel.
-- Existing OIDC tests that use a normal `sub` still pass, including scope checks and 403 when no `jaiph:*` scope is present.
-- The test fails if `principalSubject` returns the raw claim text unchanged.
-
 ## Require a commit pin on library lockfile restore #dev-ready
 
 Context: `jaiph install <name>` refuses a registry entry with no commit unless `--allow-unpinned`, and verifies `entry.signature` when present. `jaiph install` with no arguments restores from `.jaiph/libs.lock` and does not re-read the registry.

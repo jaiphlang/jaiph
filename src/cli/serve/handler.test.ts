@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ServeHandler, type RunRecord, type ServeRequest, type ServeResponse } from "./handler";
 import { hashArgs } from "./run-store";
+import { principalSubject } from "./auth";
 import type { Authenticator, Capability, Principal } from "./auth";
 import type { StreamTarget } from "./runfiles";
 import type { McpToolSpec } from "../shared/mcp-tools";
@@ -262,6 +263,96 @@ test("authz: a principal cannot inspect or cancel another principal's runs (404,
   const aliceGet = await h.handleRequest(req("GET", `/runs/${run.run_id}`, { headers: aliceHdr }));
   assert.equal(aliceGet.status, 200);
   assert.equal(bodyJson(await h.handleRequest(req("GET", "/runs", { headers: aliceHdr }))).total, 1);
+});
+
+// A terminal run record seeded into the registry, owned by `owner`.
+function seededRun(runId: string, owner: string): RunRecord {
+  return {
+    run_id: runId,
+    def: "build",
+    status: "succeeded",
+    started_at: "2026-07-23T00:00:00.000Z",
+    ended_at: "2026-07-23T00:00:01.000Z",
+    exit_status: 0,
+    signal: null,
+    result_text: "built",
+    run_dir: `/runs/${runId}`,
+    cancelled: false,
+    order: 0,
+    principal: owner,
+  };
+}
+
+test("isolation: an OIDC sub and a client_id with the same raw value are distinct principals — no shared runs or idempotency", async () => {
+  // Build both principals through the real subject derivation, so this test
+  // fails if principalSubject stops namespacing by claim type.
+  const subAlice = principal(principalSubject({ sub: "alice" })!, ["invoke", "inspect", "cancel"]);
+  const cidAlice = principal(principalSubject({ client_id: "alice" } as Record<string, unknown>)!, [
+    "invoke",
+    "inspect",
+    "cancel",
+  ]);
+  assert.notEqual(subAlice.subject, cidAlice.subject, "sub:alice and client_id:alice are distinct subjects");
+
+  let spawns = 0;
+  const h = makeHandler({
+    tools: [BUILD_TOOL],
+    authenticator: tokenAuth({ "sub-tok": subAlice, "cid-tok": cidAlice }),
+    callTool: async () => {
+      spawns += 1;
+      return { text: "built", isError: false, exitStatus: 0, runDir: "/runs/x" };
+    },
+  });
+  const subHdr = { authorization: "Bearer sub-tok" };
+  const cidHdr = { authorization: "Bearer cid-tok" };
+
+  // sub:alice creates a run under idempotency key "k".
+  const subRun = bodyJson(await h.handleRequest(idemReq("app", "k", subHdr)));
+  assert.equal(subRun.status, "succeeded");
+  // client_id:alice replaying the SAME key + same args + same workflow must NOT
+  // reuse sub:alice's run — the idempotency namespace does not cross principals.
+  const cidRun = bodyJson(await h.handleRequest(idemReq("app", "k", cidHdr)));
+  assert.notEqual(cidRun.run_id, subRun.run_id, "idempotency reuse does not cross between principals");
+  assert.equal(spawns, 2, "each principal spawned its own run");
+
+  // lookupRun: client_id:alice cannot see or cancel sub:alice's run (404, not leaked).
+  assert.equal((await h.handleRequest(req("GET", `/runs/${subRun.run_id}`, { headers: cidHdr }))).status, 404);
+  assert.equal((await h.handleRequest(req("POST", `/runs/${subRun.run_id}/cancel`, { headers: cidHdr }))).status, 404);
+  assert.equal((await h.handleRequest(req("GET", `/runs/${cidRun.run_id}`, { headers: subHdr }))).status, 404);
+  // Each principal's listing shows only its own run.
+  assert.equal(bodyJson(await h.handleRequest(req("GET", "/runs", { headers: subHdr }))).total, 1);
+  assert.equal(bodyJson(await h.handleRequest(req("GET", "/runs", { headers: cidHdr }))).total, 1);
+});
+
+test("isolation: an OIDC token whose sub is 'operator' or 'anonymous' cannot reach the static/open sentinel principal's runs", async () => {
+  const subOperator = principal(principalSubject({ sub: "operator" })!, ["invoke", "inspect", "cancel"]);
+  const subAnon = principal(principalSubject({ sub: "anonymous" })!, ["invoke", "inspect", "cancel"]);
+  // The namespaced subjects can never equal the bare sentinels.
+  assert.equal(subOperator.subject, "sub:operator");
+  assert.equal(subAnon.subject, "sub:anonymous");
+
+  const h = makeHandler({
+    // Runs owned by the static ("operator") and open ("anonymous") sentinels.
+    initialRuns: [seededRun("static-run", "operator"), seededRun("open-run", "anonymous")],
+    authenticator: tokenAuth({ "op-tok": subOperator, "anon-tok": subAnon }),
+  });
+  // Neither sentinel-named OIDC principal can reach either sentinel's run.
+  for (const [tok, id] of [
+    ["op-tok", "static-run"],
+    ["op-tok", "open-run"],
+    ["anon-tok", "static-run"],
+    ["anon-tok", "open-run"],
+  ] as const) {
+    const hdr = { authorization: `Bearer ${tok}` };
+    assert.equal(
+      (await h.handleRequest(req("GET", `/runs/${id}`, { headers: hdr }))).status,
+      404,
+      `${tok} must not match the ${id} sentinel record`,
+    );
+  }
+  // And the sentinel runs never appear in either principal's listing.
+  assert.equal(bodyJson(await h.handleRequest(req("GET", "/runs", { headers: { authorization: "Bearer op-tok" } }))).total, 0);
+  assert.equal(bodyJson(await h.handleRequest(req("GET", "/runs", { headers: { authorization: "Bearer anon-tok" } }))).total, 0);
 });
 
 test("docs exposure can be disabled (404) while /healthz stays open", async () => {
