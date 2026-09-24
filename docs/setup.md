@@ -15,7 +15,7 @@ The curl installer downloads a standalone binary built for your platform from th
 
 ## Prerequisites
 
-- A POSIX `sh` on `PATH`. The runtime uses `sh -c` to run inline shell lines inside workflows. Any `script` step also needs the interpreter named by its shebang on `PATH` (`bash` by default). The runtime spawns that interpreter directly instead of relying on the file's exec bit, so scripts still run under `noexec` mounts.
+- A POSIX `sh` on `PATH` for hooks. Any `script` step also needs the interpreter named by its shebang on `PATH` (`bash` by default). The runtime spawns that interpreter directly instead of relying on the file's exec bit, so scripts still run under `noexec` mounts.
 - For the curl installer (step 1): `curl` and either `shasum` or `sha256sum` on `PATH`.
 - For the PowerShell installer (step 1, Windows): PowerShell (`irm`/`Invoke-WebRequest` and `Get-FileHash` are built in).
 - [`minisign`](https://jedisct1.github.io/minisign/) on `PATH` to verify the detached release signature. Both installers embed the project public key (`jaiph.pub`) and require a valid signature by default. When `minisign` is missing, the install aborts rather than falling back to a checksum-only install (finding M-5). For a deliberate checksum-only install, set `JAIPH_ALLOW_UNSIGNED=1`, which checks only the checksum and prints a warning. See [Verify the release signature](#verify-the-release-signature).

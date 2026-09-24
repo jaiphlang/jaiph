@@ -22,8 +22,8 @@ export def main() {
   send "x" -> typo
 }
 
-=== rule with inline brace group fails shell-step ban
-# @expect ok
+=== rule with inline brace group is not a statement
+# @expect error E_PARSE "not a statement; put the command in a script" @2:3
 --- input.jh
 def example() {
   check_something || { echo "failed"; exit 1; }
@@ -33,8 +33,8 @@ export def main() {
   example()
 }
 
-=== rule with multi-line brace group fails shell-step ban
-# @expect error E_PARSE "unsupported top-level statement: }" @6:1
+=== rule with multi-line brace group is not a statement
+# @expect error E_PARSE "not a statement; put the command in a script" @2:3
 --- input.jh
 def example() {
   check_something || {
@@ -55,7 +55,7 @@ export def main() {
 }
 
 === workflow raw shell that names a script must use run
-# @expect error E_VALIDATE "use f() — a bare name that refers to a script or workflow must be called as a managed step" @5:3
+# @expect error E_PARSE "not a statement; put the command in a script" @5:3
 --- input.jh
 script f = '''
 printf '%s' 'x'
@@ -65,7 +65,7 @@ export def main() {
 }
 
 === workflow raw shell that names a workflow must use run
-# @expect error E_VALIDATE "use w() — a bare name that refers to a script or workflow must be called as a managed step" @6:3
+# @expect error E_PARSE "not a statement; put the command in a script" @6:3
 --- input.jh
 script w_impl = 'echo x'
 def w() {
@@ -877,7 +877,7 @@ export def main() {
 }
 
 === bare imported workflow as shell line must use run
-# @expect error E_VALIDATE "use lib.deploy() —" @3:3
+# @expect error E_PARSE "not a statement; put the command in a script" @3:3
 --- main.jh
 import "lib.jh" as lib
 export def main() {
@@ -889,7 +889,7 @@ export def deploy() {
 }
 
 === bare imported script as shell line must use run
-# @expect error E_VALIDATE "use lib.helper() —" @3:3
+# @expect error E_PARSE "not a statement; put the command in a script" @3:3
 --- main.jh
 import "lib.jh" as lib
 export def main() {

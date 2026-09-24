@@ -383,7 +383,7 @@ test("workflow config: rejects duplicate config in same workflow", () => {
 test("workflow config: rejects config after steps", () => {
   const src = [
     "export def main() {",
-    '  echo "step"',
+    '  log "step"',
     "  config {",
     '    agent.backend = "claude"',
     "  }",
@@ -449,10 +449,10 @@ test("workflow config: coexists with module-level config", () => {
     "  config {",
     '    agent.backend = "claude"',
     "  }",
-    '  echo "a"',
+    '  log "a"',
     "}",
     "def b() {",
-    '  echo "b"',
+    '  log "b"',
     "}",
   ].join("\n");
   const mod = parsejaiph(src, "test.jh");

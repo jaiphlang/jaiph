@@ -16,15 +16,16 @@ import { scrubPromptEnv } from "./env-allowlist";
 // journal that verifies, nor silently delete the authoritative record.
 
 const WF = [
-  // Dumps the script subprocess environment so the test can assert the key and
-  // the journal path are absent from it.
+  "script dump_env_impl = 'env > env_dump.txt'",
   "def dump_env() {",
-  "  env > env_dump.txt",
+  "  dump_env_impl()",
   "}",
   "",
-  // Attempts to destroy the authoritative journal the way the finding describes.
+  "script tamper_impl = '''",
+  ': > "$JAIPH_RUN_DIR/run_summary.jsonl"',
+  "'''",
   "def tamper() {",
-  '  : > "$JAIPH_RUN_DIR/run_summary.jsonl"',
+  "  tamper_impl()",
   "}",
   "",
 ].join("\n");

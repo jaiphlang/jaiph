@@ -50,13 +50,11 @@ test("AC5: STATEMENT row alone enables a new top-level keyword", () => {
   }
 });
 
-test("AC5: without the STATEMENT row, the same keyword falls through to the shell handler", () => {
-  // Sanity: when the dispatch table has no row for our synthetic keyword,
-  // parseBlockStatement falls through to the shell fallback (current behavior
-  // for unknown leading tokens). This makes (1) load-bearing: removing the row
-  // changes the parse result.
-  const result = parseBlockStatement("/synthetic.jh", ["zzznoop"], 0);
-  assert.equal(result.step.type, "exec");
+test("AC5: without the STATEMENT row, the same keyword is not a statement", () => {
+  assert.throws(
+    () => parseBlockStatement("/synthetic.jh", ["zzznoop"], 0),
+    /E_PARSE.*not a statement/,
+  );
 });
 
 /**

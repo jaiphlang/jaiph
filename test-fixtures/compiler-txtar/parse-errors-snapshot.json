@@ -1,10 +1,10 @@
 {
   "unterminated block": {
     "file": "input.jh",
-    "line": 1,
-    "col": 1,
+    "line": 2,
+    "col": 3,
     "code": "E_PARSE",
-    "message": "unterminated block, expected \"}\""
+    "message": "not a statement; put the command in a script"
   },
   "invalid script declaration": {
     "file": "input.jh",
@@ -882,11 +882,11 @@
     "message": "shell fallback syntax (e.g. ${var:-default}) is not supported; use conditional logic or named params instead"
   },
   "run without parentheses in workflow requires parens": {
-    "file": "<no-error>",
-    "line": 0,
-    "col": 0,
-    "code": "OK",
-    "message": "compilation succeeded but fixture expected a parse error"
+    "file": "input.jh",
+    "line": 3,
+    "col": 3,
+    "code": "E_PARSE",
+    "message": "not a statement; put the command in a script"
   },
   "return with single-quoted string": {
     "file": "input.jh",

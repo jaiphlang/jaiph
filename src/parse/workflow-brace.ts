@@ -640,8 +640,8 @@ function localDeclStep(decl: LocalDecl, loc: { line: number; col: number }): Ste
 
 /**
  * `export` on a nested `script` / `def` / `prompt` is rejected: nested
- * declarations are private to the enclosing def. A non-declaration `export`
- * (a bash `export FOO=bar` shell line) falls through to the shell handler.
+ * declarations are private to the enclosing def. Any other `export` line
+ * is not a statement.
  */
 function tryParseExportInDef(c: BlockCtx): BlockResult | null {
   const m = c.inner.match(/^export\s+(script|def|prompt)\b/);
@@ -1181,16 +1181,20 @@ function tryLegacySend(c: BlockCtx): BlockResult | null {
   fail(c.filePath, "use 'send <payload> -> <channel>'", c.innerNo);
 }
 
-function shellFallthrough(c: BlockCtx): BlockResult {
-  const loc = { line: c.innerNo, col: colFromRaw(c.innerRaw) };
-  return { step: execStep({ kind: "shell", command: c.inner, loc }, loc), nextIdx: c.idx + 1 };
+function rejectNonStatement(c: BlockCtx): never {
+  fail(
+    c.filePath,
+    "not a statement; put the command in a script",
+    c.innerNo,
+    colFromRaw(c.innerRaw),
+  );
 }
 
 /**
  * One workflow statement inside `{ … }` (catch body, etc.).
  *
- * Dispatches by leading keyword through `STATEMENT`; falls through to
- * shell for non-keyword lines.
+ * Dispatches by leading keyword through `STATEMENT`. A line that is not a
+ * keyword and not a call is `E_PARSE`.
  */
 export function parseBlockStatement(
   filePath: string,
@@ -1225,7 +1229,7 @@ export function parseBlockStatement(
     }
   }
 
-  return tryBareCall(c) ?? tryLegacySend(c) ?? shellFallthrough(c);
+  return tryBareCall(c) ?? tryLegacySend(c) ?? rejectNonStatement(c);
 }
 
 const KEYWORD_EXAMPLE = {

@@ -17,11 +17,11 @@ test("buildRuntimeGraph loads entry module and imports", () => {
     write(
       lib,
       `export def check() {
-  echo ok
+  log "ok"
 }
 export script helper = 'echo hi'
 export def inner() {
-  echo ok
+  log "ok"
 }`,
     );
     write(
@@ -48,18 +48,18 @@ test("lookup helpers resolve local and imported symbols", () => {
     write(
       lib,
       `export def check() {
-  echo ok
+  log "ok"
 }
 export script helper = 'echo hi'
 export def inner() {
-  echo ok
+  log "ok"
 }`,
     );
     write(
       main,
       `import "./lib.jh" as lib
 def local_check() {
-  echo local
+  log "local"
 }
 script local_script = 'echo local'
 export def main() {

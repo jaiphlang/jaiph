@@ -215,14 +215,11 @@ test("catch: empty inline catch block throws", () => {
 
 // === catch: statement varieties ===
 
-test("catch: single shell command", () => {
-  const e = asRunExec(parseOneWorkflowStep(["my_rule() catch (failure) echo fallback"]));
-  if (e.catch && "single" in e.catch) {
-    assert.equal(e.catch.single.type, "exec");
-    if (e.catch.single.type === "exec") {
-      assert.equal(e.catch.single.body.kind, "shell");
-    }
-  }
+test("catch: a free-form single command is not a statement", () => {
+  assert.throws(
+    () => parseOneWorkflowStep(["my_rule() catch (failure) echo fallback"]),
+    /E_PARSE.*not a statement/,
+  );
 });
 
 test("catch: single logerr statement", () => {

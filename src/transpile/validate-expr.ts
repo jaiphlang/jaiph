@@ -2,7 +2,6 @@ import type { Expr } from "../types";
 import {
   BARE_SEND_REF_MSG,
   PROMPT_REF_EXPECT,
-  RUN_TARGET_REF_EXPECT,
   validateRef,
 } from "./validate-ref-resolution";
 import { validatePromptReturnsSchema } from "./validate-prompt-schema";
@@ -32,8 +31,7 @@ import {
 import type { ExprLabel, ValidatorCtx } from "./validate-step-ctx";
 
 // Expression-level validators: the `validateExpr` dispatcher and its per-kind
-// bodies (literal, prompt, callable/`run`, and workflow-only inline
-// shell). Split out of `validate-step.ts` so the step dispatcher stays small.
+// bodies. Split out of `validate-step.ts` so the step dispatcher stays small.
 
 export function validateExpr(
   expr: Expr,
@@ -301,61 +299,3 @@ function validateCallable(expr: Expr, ctx: ValidatorCtx): void {
   }
 }
 
-/** Emits W_PROMPT_IN_SHELL when a prompt capture is spliced directly into a shell line. */
-function warnPromptInShellLine(
-  body: Extract<Expr, { kind: "shell" }>,
-  ctx: ValidatorCtx,
-): void {
-  if (ctx.promptCaptures.size === 0) return;
-  const RE = /\$\{([A-Za-z_][A-Za-z0-9_]*)(?:\.[A-Za-z_][A-Za-z0-9_]*)?\}/g;
-  let m: RegExpExecArray | null;
-  while ((m = RE.exec(body.command)) !== null) {
-    const varName = m[1]!;
-    if (ctx.promptCaptures.has(varName)) {
-      ctx.diag.error(
-        ctx.ast.filePath,
-        body.loc.line,
-        body.loc.col,
-        "W_PROMPT_IN_SHELL",
-        `prompt capture "${varName}" is interpolated into a shell line without quoting or validation; ` +
-          `prefer passing it as a script argument: my_script(${varName}) — ` +
-          `scripts receive arguments as $1 $2 … (argv), which bypasses shell word-splitting. ` +
-          `See: language.md`,
-      );
-      return; // one diagnostic per shell step is enough
-    }
-  }
-}
-
-export function validateWorkflowShellExec(
-  body: Extract<Expr, { kind: "shell" }>,
-  ctx: ValidatorCtx,
-): void {
-  warnPromptInShellLine(body, ctx);
-  const t = body.command.trim();
-  if (/^(?:[A-Za-z_][A-Za-z0-9_]*)(?:\.[A-Za-z_][A-Za-z0-9_]*)*$/.test(t)) {
-    if (!t.includes(".")) {
-      if (ctx.localScripts.has(t) || ctx.localDefs.has(t)) {
-        ctx.diag.error(
-          ctx.ast.filePath,
-          body.loc.line,
-          body.loc.col,
-          "E_VALIDATE",
-          `use ${t}() — a bare name that refers to a script or workflow must be called as a managed step`,
-        );
-      }
-    } else {
-      validateRef({ value: t, loc: body.loc }, ctx.ast, ctx.refCtx, {
-        mode: "expect",
-        expect: RUN_TARGET_REF_EXPECT,
-      });
-      ctx.diag.error(
-        ctx.ast.filePath,
-        body.loc.line,
-        body.loc.col,
-        "E_VALIDATE",
-        `use ${t}() — "${t}" is a valid script or def reference; call it as a managed step`,
-      );
-    }
-  }
-}

@@ -19,8 +19,7 @@ test("callDef (serve/mcp host path): a run exceeding JAIPH_RUN_TIMEOUT is termin
   const tempRoot = mkdtempSync(join(tmpdir(), "jaiph-call-timeout-gen-"));
   try {
     const jh = join(root, "slow.jh");
-    // Bare shell line → a managed `exec` shell step that sleeps well past the budget.
-    writeFileSync(jh, ["export def main() {", "  sleep 30", "}", ""].join("\n"));
+    writeFileSync(jh, ["script pause = 'sleep 30'", "export def main() {", "  pause()", "}", ""].join("\n"));
 
     const gen = loadGeneration(jh, root, tempRoot, 1, { JAIPH_RUN_TIMEOUT: "1" }, () => {}, "test");
     assert.ok(gen.state, `generation failed: ${gen.failures.join("\n")}`);

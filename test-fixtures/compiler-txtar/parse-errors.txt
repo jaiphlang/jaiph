@@ -150,7 +150,7 @@ export def main() {
 # @expect error E_PARSE "config block inside def must appear before any steps" @3:1
 --- input.jh
 export def main() {
-  echo "step"
+  log "step"
   config {
     agent.backend = "claude"
   }
@@ -389,7 +389,7 @@ export def main() {
 # @expect error E_PARSE "catch requires explicit bindings: catch (<name>) { ... }" @6:18
 --- input.jh
 def some_rule() {
-  true
+  log "ok"
 }
 
 export def main() {
@@ -402,7 +402,7 @@ export def main() {
 # @expect error E_PARSE "catch requires explicit bindings and a body: catch (<name>) { ... }" @6:26
 --- input.jh
 def ci_passes() {
-  true
+  log "ok"
 }
 
 export def main() {

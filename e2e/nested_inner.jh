@@ -1,5 +1,6 @@
 #!/usr/bin/env jaiph
 # E2E fixture: nested workflow via run.
+script nested_inner_impl = 'echo "e2e-nested-inner"'
 export def main() {
-  echo "e2e-nested-inner"
+  nested_inner_impl()
 }

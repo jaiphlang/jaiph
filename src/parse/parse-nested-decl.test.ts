@@ -132,10 +132,11 @@ test("E_PARSE: export on a nested prompt is rejected", () => {
   );
 });
 
-test("a bash `export FOO=bar` shell line inside a def still parses (not a declaration)", () => {
-  const ast = parsejaiph("export def main() {\n  export FOO=bar\n}\n", "t.jh");
-  const step = ast.defs[0].steps.find((s) => s.type === "exec");
-  assert.ok(step, "export FOO=bar is a shell exec step, not a declaration");
+test("E_PARSE: a bash `export FOO=bar` line inside a def is not a statement", () => {
+  assert.throws(
+    () => parsejaiph("export def main() {\n  export FOO=bar\n}\n", "t.jh"),
+    /E_PARSE.*not a statement/,
+  );
 });
 
 test("E_PARSE: import inside a nested def is rejected (would run as shell)", () => {
@@ -248,18 +249,13 @@ test("E_PARSE: single-statement catch import in a nested def is rejected", () =>
   );
 });
 
-test("top-level def catch body: `import` still falls through to shell (unchanged)", () => {
-  const ast = parsejaiph(
-    'export def main() {\n  s() catch (e) {\n    import photo.png\n  }\n}\n',
-    "t.jh",
-  );
-  const step = ast.defs[0].steps.find((s) => s.type === "exec");
-  assert.ok(step && step.type === "exec" && step.catch && "block" in step.catch);
-  if (!(step && step.type === "exec" && step.catch && "block" in step.catch)) return;
-  const shell = step.catch.block.find((s) => s.type === "exec");
-  assert.ok(
-    shell && shell.type === "exec" && shell.body.kind === "shell",
-    "a top-level def catch body keeps the shell fallthrough for import",
+test("E_PARSE: top-level def catch body rejects a non-statement", () => {
+  assert.throws(
+    () => parsejaiph(
+      'export def main() {\n  s() catch (e) {\n    import photo.png\n  }\n}\n',
+      "t.jh",
+    ),
+    /E_PARSE.*not a statement/,
   );
 });
 
@@ -280,12 +276,10 @@ test("a nested def with only run / const / nested script still compiles", () => 
   assert.ok(inner && inner.type === "local_decl" && inner.decl.kind === "def", "inner def parses");
 });
 
-test("top-level def body: `import` still falls through to shell (unchanged)", () => {
-  const ast = parsejaiph("export def main() {\n  import photo.png\n}\n", "t.jh");
-  const step = ast.defs[0].steps.find((s) => s.type === "exec");
-  assert.ok(
-    step && step.type === "exec" && step.body.kind === "shell",
-    "a top-level def body keeps the shell fallthrough for import",
+test("E_PARSE: top-level def body rejects a non-statement", () => {
+  assert.throws(
+    () => parsejaiph("export def main() {\n  import photo.png\n}\n", "t.jh"),
+    /E_PARSE.*not a statement/,
   );
 });
 

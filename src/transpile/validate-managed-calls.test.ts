@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { buildScripts } from "../transpiler";
 
-test("buildScripts accepts subshell capture in workflow shell line", () => {
+test("buildScripts rejects a subshell line in a def", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-val-sub-fn-"));
   const out = join(root, "out");
   try {
@@ -21,7 +21,7 @@ test("buildScripts accepts subshell capture in workflow shell line", () => {
         "",
       ].join("\n"),
     );
-    buildScripts(join(root, "m.jh"), out);
+    assert.throws(() => buildScripts(join(root, "m.jh"), out), /E_PARSE.*not a statement/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -44,7 +44,7 @@ test("E_VALIDATE: bare script name as raw shell line must be called as f()", () 
     );
     assert.throws(
       () => buildScripts(join(root, "m.jh"), join(root, "out")),
-      /use f()/,
+      /not a statement/,
     );
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -237,7 +237,7 @@ test("E_VALIDATE: bare workflow name as raw shell line must be called as w()", (
     );
     assert.throws(
       () => buildScripts(join(root, "m.jh"), join(root, "out")),
-      /use w()/,
+      /not a statement/,
     );
   } finally {
     rmSync(root, { recursive: true, force: true });

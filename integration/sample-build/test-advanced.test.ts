@@ -362,7 +362,7 @@ test("parser parses mock def and script in test block", () => {
 test("parser ignores test keyword in non-test file", () => {
   const source = [
     "export def main() {",
-    '  echo "hello"',
+    '  log "hello"',
     "}",
     "",
   ].join("\n");

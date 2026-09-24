@@ -8,7 +8,7 @@
  * this file re-exports the surface `validate.ts` (and the visitor tests) consume.
  */
 import type { StepDef } from "../types";
-import { validateExpr, validateNamedPromptReturnsCapture, validateWorkflowShellExec } from "./validate-expr";
+import { validateExpr, validateNamedPromptReturnsCapture } from "./validate-expr";
 import {
   makeImportedKindLookup,
   validateChannelRef,
@@ -253,10 +253,6 @@ function validateExecStep(s: StepDef, ctx: ValidatorCtx): void {
     validateExpr(body, s.loc, "const", ctx);
     validatePromptStepReturns(body, s.captureName, ctx.ast.filePath);
     validateNamedPromptReturnsCapture(body, s.captureName, ctx);
-    return;
-  }
-  if (body.kind === "shell") {
-    validateWorkflowShellExec(body, ctx);
     return;
   }
   validateExpr(body, s.loc, "exec", ctx);

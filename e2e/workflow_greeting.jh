@@ -1,6 +1,7 @@
 #!/usr/bin/env jaiph
 # E2E fixture: workflow used by workflow_greeting.test.jh (Given/When/Then with mocked prompt).
+script done_impl = 'echo "done"'
 export def main() {
   prompt "e2e-greeting-prompt"
-  echo "done"
+  done_impl()
 }

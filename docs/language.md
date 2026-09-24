@@ -65,11 +65,11 @@ The unified per-module namespace covers channels, defs, scripts, named prompts, 
 
 ## Def body — step types
 
-There are nine `StepDef` variants. Every body line that does not match a managed form becomes a `shell` step.
+There are nine `StepDef` variants. A body line that is not one of these statements is `E_PARSE` (`not a statement; put the command in a script`).
 
 | Type | Surface | Description |
 |---|---|---|
-| `exec` | call / `prompt` / standalone `match` / inline shell | Side-effecting managed call statement. The discriminator (call / inline_script / prompt / match / shell) lives in `body.kind`. Carries optional `catch` or `recover`. |
+| `exec` | call / `prompt` / standalone `match` | Side-effecting managed call statement. The discriminator (call / inline_script / prompt / match) lives in `body.kind`. Carries optional `catch` or `recover`. |
 | `const` | `const NAME = <expr>` | Bind a value expression to a name. |
 | `return` | `return <expr>` | Set the managed return value. |
 | `send` | `send <expr> -> channel` | Enqueue a payload on a channel for the current def context. |
@@ -90,7 +90,7 @@ Every value position (`const` RHS, `return`, `send` RHS, `log` / `logerr` / `fai
 | `inline_script` | `` 'body'(args) `` / `'''lang...body...'''(args)` | Inline script body emitted as `scripts/__inline_<hash>`. |
 | `prompt` | `prompt body [returns "<schema>"]` | Sends body to the agent backend; JSON-quoted in transport. |
 | `match` | `match <subject> { … }` | Walks arms top-to-bottom; first match wins. |
-| `shell` | Free-form def body line; raw shell fragment on a `send` payload | An unparsed line becomes an inline-shell `exec` step. Send: a raw shell fragment (e.g. `send echo "$payload" -> findings`) is a valid managed shell payload. `send` is the only position that accepts `shell`; it is `E_VALIDATE` anywhere else. |
+| `shell` | Raw shell fragment on a `send` payload | A raw shell fragment (e.g. `send echo "$payload" -> findings`) is a managed shell payload. `send` is the only position that accepts `shell`; it is `E_VALIDATE` anywhere else. |
 | `bare_ref` | A bare symbol on a `send` RHS | Always rejected by the validator; preserved so the error can name the symbol. |
 
 ## Calls — execute a def or script
@@ -122,7 +122,7 @@ Call arguments:
 | Bare dotted `IDENT.IDENT` | Typed-prompt field access. Base must be a typed-prompt capture; field must appear in its `returns` schema (`E_VALIDATE` otherwise). |
 | Nested call `ref(args)` | A call in argument position — `foo(bar())`. The inner call is evaluated and its captured value is passed as the argument. |
 
-**Hard error contract:** a bare call whose `)` never closes (the file ends or the block closes first) is `E_PARSE` — such a line is **never** silently treated as an inline shell step. A leading `run` (`run name(args)`, `return run name()`, `const x = run name()`) is `E_PARSE` (`'run' is not a keyword`), and an assignment without `const` (`x = name()`) is `E_PARSE` (`assignment without "const" is no longer supported`). A `return` RHS that is not a string, identifier, call, `prompt`, or `match` is `E_PARSE`.
+**Hard error contract:** a bare call whose `)` never closes (the file ends or the block closes first) is `E_PARSE`. A line that is not a statement is `E_PARSE` (`not a statement; put the command in a script`). A leading `run` (`run name(args)`, `return run name()`, `const x = run name()`) is `E_PARSE` (`'run' is not a keyword`), and an assignment without `const` (`x = name()`) is `E_PARSE` (`assignment without "const" is no longer supported`). A `return` RHS that is not a string, identifier, call, `prompt`, or `match` is `E_PARSE`.
 
 ### Arguments and `stdin`
 {: #arguments-and-stdin}
@@ -240,7 +240,6 @@ Sends text to the configured agent backend. The body can take one of these forms
 | Typed `returns` | Flat `{ field: type, … }` with `string` / `number` / `boolean`. Stored verbatim as text per-field. |
 | Capture required when `returns` | `prompt … returns "…"` without `const` is `E_PARSE`. |
 | Dot notation | Bare `result.field` (in `return`, `if` / `match` subjects, and call arguments) and `${result.field}` **inside strings** require that the base is a typed-prompt capture and the field appears in the schema. Unquoted `${result.field}` in call-argument position is `E_VALIDATE`. |
-| Interpolation into shell steps | A prompt capture (`const x = prompt …`, typed or untyped) interpolated into an inline shell step — e.g. `echo "${x}"` as a free-form body line — is `W_PROMPT_IN_SHELL`. Shell steps run via `sh -c`, and the runtime shell-quotes every value it interpolates into the line, so an agent-controlled value reaches the shell as data and cannot inject a command; the diagnostic still fires to steer you to the argv path. Pass it as a script argument instead (`my_script(x)` → `$1`, which is argv, not shell-expanded). Only shell steps are flagged; `script(x)`, `log`, `logerr`, and non-prompt variables are not. |
 | Transport retry | Transport failures retry on a backoff schedule; deterministic post-processing failures do not. See [Configuration — Prompt retry on transport failure](configuration.md#prompt-retry-on-transport-failure). |
 
 ### Named prompts
@@ -504,7 +503,7 @@ No string-RHS site accepts two of these but rejects the third.
 
 If an inline capture fails, the enclosing step fails. Nested inline captures (`${foo(${bar()})}`) are `E_PARSE` — extract the inner call to a `const`.
 
-Values interpolated into an inline shell step (a free-form body line that runs via `sh -c`) are shell-quoted first, so a value that contains shell metacharacters is passed to the shell as data and cannot inject a command. Every other string position interpolates the raw value.
+String positions interpolate the raw value.
 
 ## Subprocess environment
 

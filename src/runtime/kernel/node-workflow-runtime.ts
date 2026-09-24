@@ -20,7 +20,6 @@ import {
   resolveModel,
   resolvePromptConfig,
   resolvePromptStepName,
-  shellQuote,
   type PromptSource,
 } from "./prompt";
 import { appendRunSummaryLine, CHAIN_KEY_ENV } from "./emit";
@@ -42,7 +41,7 @@ import {
   stripOuterQuotes,
   type PromptSchemaField,
 } from "./runtime-arg-parser";
-import { killProcessTreeEscalating, resolveShell } from "./portability";
+import { killProcessTreeEscalating } from "./portability";
 import { RuntimeEventEmitter, type Frame } from "./runtime-event-emitter";
 import { createStepIdleOutputWarn } from "./step-idle-warn";
 import { parseMaxSteps, maxStepsTrippedMessage } from "./max-steps";
@@ -812,23 +811,17 @@ export class NodeWorkflowRuntime {
    * Interpolate `${var}` refs and inline `${ref(args)}`
    * captures: each capture is executed and replaced with its output, then regular
    * `${var}` interpolation runs. Returns { ok: true, value } or { ok: false, result }.
-   *
-   * `quoteValue` (only passed for shell-fallthrough lines — `shellQuote`) escapes
-   * every substituted value, both `${var}` refs and inline-capture results, so no
-   * caller-controlled value can be re-evaluated by `sh -c`. All other value
-   * positions omit it and interpolate raw.
    */
   private async interpolateWithCaptures(
     input: string,
     scope: Scope,
-    quoteValue?: (s: string) => string,
   ): Promise<{ ok: true; value: string } | { ok: false; result: StepResult }> {
     // Resolve any handle-valued vars referenced in the input before interpolating.
     const handleErr = await this.resolveHandlesInInput(scope, input);
     if (handleErr) return { ok: false, result: handleErr };
     const re = new RegExp(NodeWorkflowRuntime.INLINE_CAPTURE_RE.source, "g");
     if (!re.test(input)) {
-      return { ok: true, value: interpolate(input, scope.vars, scope.env, quoteValue) };
+      return { ok: true, value: interpolate(input, scope.vars, scope.env) };
     }
     re.lastIndex = 0;
     let result = "";
@@ -840,11 +833,11 @@ export class NodeWorkflowRuntime {
       const r = await this.executeRunRef(scope, ref, argsRaw);
       if (r.status !== 0) return { ok: false, result: r };
       const captured = this.forceValue(r);
-      result += quoteValue ? quoteValue(captured) : captured;
+      result += captured;
       lastIndex = m.index + m[0].length;
     }
     result += input.slice(lastIndex);
-    return { ok: true, value: interpolate(result, scope.vars, scope.env, quoteValue) };
+    return { ok: true, value: interpolate(result, scope.vars, scope.env) };
   }
 
   private async evaluateMatch(
@@ -1368,26 +1361,6 @@ export class NodeWorkflowRuntime {
           const matchResult = await this.evaluateMatch(scope, body.match);
           if (!matchResult.ok) return this.mergeStepResult(accOut, accErr, matchResult.result);
           if (step.captureName) scope.vars.set(step.captureName, matchResult.value);
-          continue;
-        }
-        if (body.kind === "shell") {
-          // Shell-fallthrough lines are the one `sh -c` interpolation sink, so
-          // every interpolated value is shell-quoted (H-1): a caller-controlled
-          // param/capture/iterator/channel value can never inject command
-          // substitution or a metacharacter breakout.
-          const cmdIr = await this.interpolateWithCaptures(body.command, scope, shellQuote);
-          if (!cmdIr.ok) return this.mergeStepResult(accOut, accErr, cmdIr.result);
-          const stepName = `sh_line_${body.loc.line}`;
-          const result = await this.executeManagedStep(
-            "script",
-            stepName,
-            [],
-            (io) => this.executeShLine(scope, cmdIr.value, io),
-          );
-          if (step.captureName && result.status === 0) {
-            scope.vars.set(step.captureName, this.forceValue(result));
-          }
-          if (result.status !== 0) return this.mergeStepResult(accOut, accErr, result);
           continue;
         }
         return this.mergeStepResult(accOut, accErr, {
@@ -2471,18 +2444,6 @@ export class NodeWorkflowRuntime {
     const interp = resolveInterpreterFromShebang(firstLine);
     if (!interp) return { ok: true, command: "bash", prefixArgs: [] };
     return { ok: true, command: interp.command, prefixArgs: interp.prefixArgs };
-  }
-
-  /**
-   * Run a raw workflow shell line (after Jaiph interpolation) via `sh -c` in
-   * the workspace, matching script cwd semantics. Shell lines have no
-   * definition site and therefore no `use` clause, so they get the same
-   * sterile env as an inline script: base process mechanics plus the runtime
-   * contract keys — never ambient host secrets or kernel keys.
-   */
-  private executeShLine(scope: Scope, command: string, io: StepIO): Promise<StepResult> {
-    const env = this.buildScriptSpawnEnv(scope.env, undefined);
-    return this.spawnAndCapture(resolveShell(), ["-c", command], env, this.scriptCwd(scope.env, scope.filePath), io);
   }
 
   private async executeInlineScript(
