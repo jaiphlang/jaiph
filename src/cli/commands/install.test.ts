@@ -200,8 +200,8 @@ test("install: restore-from-lock warm path skips existing directories without in
       lockPath,
       JSON.stringify({
         libs: [
-          { name: "alpha", url: "https://example.com/alpha.git" },
-          { name: "beta", url: "https://example.com/beta.git" },
+          { name: "alpha", url: "https://example.com/alpha.git", commit: "a".repeat(40) },
+          { name: "beta", url: "https://example.com/beta.git", commit: "b".repeat(40) },
         ],
       }) + "\n",
       "utf8",
@@ -413,8 +413,8 @@ test("install: restore-from-lock never reads the registry", async () => {
       lockPath,
       JSON.stringify({
         libs: [
-          { name: "alpha", url: "https://example.com/alpha.git" },
-          { name: "beta", url: "https://example.com/beta.git", version: "v2" },
+          { name: "alpha", url: "https://example.com/alpha.git", commit: "a".repeat(40) },
+          { name: "beta", url: "https://example.com/beta.git", version: "v2", commit: "b".repeat(40) },
         ],
       }) + "\n",
       "utf8",
@@ -579,7 +579,7 @@ test("install: fixture repo with no .jh modules fails and leaves no lib dir or l
   }
 });
 
-test("install: legacy lockfile without commit field still restores", async () => {
+test("install: lockfile entry without commit field is refused on restore", async () => {
   const dir = makeTempProject();
   try {
     const remote = makeFixtureRepo(dir, "remote-gamma");
@@ -591,12 +591,14 @@ test("install: legacy lockfile without commit field still restores", async () =>
       "utf8",
     );
 
-    const code = await runInstall([], { cwd: dir });
+    const { result: code, stderr } = await captureStderr(() => runInstall([], { cwd: dir }));
 
-    assert.equal(code, 0, "restore from legacy lockfile (no commit) must succeed");
-    const libDir = join(dir, ".jaiph", "libs", "remote-gamma");
-    assert.ok(existsSync(libDir), "lib dir should be present after restore");
-    assert.ok(!existsSync(join(libDir, ".git")), ".git directory must still be stripped on restore");
+    assert.notEqual(code, 0, "restore of an unpinned lock entry (no commit) must exit non-zero");
+    assert.ok(stderr.includes("has no pinned commit"), `expected unpinned refusal; got: ${stderr}`);
+    assert.ok(
+      !existsSync(join(dir, ".jaiph", "libs", "remote-gamma")),
+      "refused entry must not leave a lib directory",
+    );
   } finally {
     cleanup(dir);
   }
@@ -758,6 +760,80 @@ test("install: detached library signature that verifies against the trusted regi
     );
     assert.equal(code, 0, "signature under the trusted key must install");
     assert.ok(existsSync(join(dir, ".jaiph", "libs", "signed", "main.jh")), "signed lib must land on disk");
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test("install: lock persists the registry signature and restore re-verifies it", async () => {
+  const dir = makeTempProject();
+  try {
+    const remote = makeFixtureRepo(dir, "remote-sig-lock");
+    const trusted = makeMinisignFixture();
+    const goodSignature = trusted.sign(Buffer.from(gitHead(remote), "utf8"));
+    const registryPath = writeRawRegistryFile(dir, {
+      signed: { url: remote, description: "demo", commit: gitHead(remote), signature: goodSignature },
+    });
+
+    const code = await withRegistry(registryPath, () =>
+      runInstall(["signed"], { cwd: dir, registryPublicKey: trusted.publicKey }),
+    );
+    assert.equal(code, 0, "named install with a valid signature must succeed");
+
+    const lockPath = join(dir, ".jaiph", "libs.lock");
+    const lock = JSON.parse(readFileSync(lockPath, "utf8")) as {
+      libs: { name: string; commit?: string; signature?: string }[];
+    };
+    assert.equal(
+      lock.libs[0]!.signature,
+      goodSignature,
+      ".jaiph/libs.lock must persist the registry signature",
+    );
+
+    // Delete the installed copy and corrupt the stored signature, then restore.
+    const libDir = join(dir, ".jaiph", "libs", "signed");
+    rmSync(libDir, { recursive: true, force: true });
+    const corrupted = {
+      libs: lock.libs.map((e) => ({ ...e, signature: "untrusted comment: tampered\nAAAA\n" })),
+    };
+    writeFileSync(lockPath, JSON.stringify(corrupted) + "\n", "utf8");
+
+    const { result: restoreCode, stderr } = await captureStderr(() =>
+      runInstall([], { cwd: dir, registryPublicKey: trusted.publicKey }),
+    );
+
+    assert.notEqual(restoreCode, 0, "restore with a corrupted stored signature must exit non-zero");
+    assert.ok(stderr.includes("signature verification failed"), `expected signature failure; got: ${stderr}`);
+    assert.ok(!existsSync(libDir), "lib dir must be removed after a signature failure on restore");
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test("install: restore of an entry with a matching commit and no signature succeeds", async () => {
+  const dir = makeTempProject();
+  try {
+    const remote = makeFixtureRepo(dir, "remote-nosig");
+
+    // First install pins the real commit and records no signature.
+    const firstCode = await runInstall([remote], { cwd: dir });
+    assert.equal(firstCode, 0, "initial install must succeed");
+
+    const lockPath = join(dir, ".jaiph", "libs.lock");
+    const lock = JSON.parse(readFileSync(lockPath, "utf8")) as {
+      libs: { name: string; commit?: string; signature?: string }[];
+    };
+    assert.match(lock.libs[0]!.commit ?? "", /^[0-9a-f]{40}$/, "lock must pin a commit");
+    assert.equal(lock.libs[0]!.signature, undefined, "no signature is recorded for an unsigned source");
+
+    // Delete the installed copy and restore purely from the lock (matching commit, no signature).
+    const libDir = join(dir, ".jaiph", "libs", "remote-nosig");
+    rmSync(libDir, { recursive: true, force: true });
+
+    const restoreCode = await runInstall([], { cwd: dir });
+    assert.equal(restoreCode, 0, "restore of a commit-pinned, unsigned entry must succeed");
+    assert.ok(existsSync(join(libDir, "main.jh")), "lib must be restored on disk");
+    assert.ok(!existsSync(join(libDir, ".git")), ".git must be stripped on restore");
   } finally {
     cleanup(dir);
   }

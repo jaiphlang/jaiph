@@ -41,6 +41,8 @@ interface LockEntry {
   url: string;
   version?: string;
   commit?: string;
+  /** Detached minisign signature over the pinned commit SHA; re-verified on restore when present. */
+  signature?: string;
 }
 
 interface LockFile {
@@ -125,6 +127,7 @@ function specToLockEntry(spec: InstallSpec, commit?: string): LockEntry {
     url: spec.url,
     ...(spec.version ? { version: spec.version } : {}),
     ...(commit ? { commit } : {}),
+    ...(spec.signature ? { signature: spec.signature } : {}),
   };
 }
 
@@ -342,6 +345,9 @@ export async function runInstall(rest: string[], opts: RunInstallOptions = {}): 
   const isRestoreFromLock = args.length === 0;
   let lock: LockFile;
   let specs: InstallSpec[];
+  // Restore-only: lock entries refused before any clone (no pinned commit). Reported
+  // as failed outcomes so the run exits non-zero without ever cloning a mutable ref.
+  const restoreRejections: CloneOutcome[] = [];
 
   if (isRestoreFromLock) {
     lock = readLockFile(lockPath);
@@ -350,13 +356,31 @@ export async function runInstall(rest: string[], opts: RunInstallOptions = {}): 
       return 0;
     }
     process.stdout.write(`\nRestoring ${lock.libs.length} lib(s) from lockfile\n\n`);
-    specs = lock.libs.map((e) => ({
-      name: e.name,
-      url: e.url,
-      version: e.version,
-      libDir: join(libsDir, e.name),
-      expectedCommit: e.commit,
-    }));
+    specs = [];
+    for (const e of lock.libs) {
+      const spec: InstallSpec = {
+        name: e.name,
+        url: e.url,
+        version: e.version,
+        libDir: join(libsDir, e.name),
+        expectedCommit: e.commit,
+        signature: e.signature,
+      };
+      if (!e.commit) {
+        // Without a pinned commit, a restore would clone whatever the mutable ref
+        // now points at. Refuse before cloning so no unverified tree ever lands.
+        restoreRejections.push({
+          spec,
+          ok: false,
+          message:
+            `lib "${e.name}" has no pinned commit in ${lockPath} — refusing to restore an ` +
+            `unpinned lock entry (its ref could move to arbitrary code); re-run ` +
+            `\`jaiph install ${e.name}\` to re-pin it`,
+        });
+        continue;
+      }
+      specs.push(spec);
+    }
   } else {
     process.stdout.write("\n");
     lock = readLockFile(lockPath);
@@ -396,7 +420,8 @@ export async function runInstall(rest: string[], opts: RunInstallOptions = {}): 
     if (post.commit) commits.set(spec.name, post.commit);
     return out;
   };
-  const outcomes = await runWithConcurrency(jobs, concurrency, wrappedRunner);
+  const cloneOutcomes = await runWithConcurrency(jobs, concurrency, wrappedRunner);
+  const outcomes = [...restoreRejections, ...cloneOutcomes];
 
   let allOk = true;
   for (const outcome of outcomes) {

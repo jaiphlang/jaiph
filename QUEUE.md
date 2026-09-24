@@ -16,22 +16,6 @@ Process rules:
 7. Acceptance criteria are non-negotiable. A task is not done until every
    acceptance bullet is verified by a test that fails when the contract is violated.
 
-## Require a commit pin on library lockfile restore #dev-ready
-
-Context: `jaiph install <name>` refuses a registry entry with no commit unless `--allow-unpinned`, and verifies `entry.signature` when present. `jaiph install` with no arguments restores from `.jaiph/libs.lock` and does not re-read the registry.
-
-Problem: `specToLockEntry` in `src/cli/commands/install.ts` never writes `signature`. No-arg restore builds specs without `signature` and with `expectedCommit` only when the lock has `commit`. `postCloneHygiene` checks a commit only when `expectedCommit` is set and verifies a signature only when `spec.signature` is set. A lock entry with no `commit` clones the mutable ref. The test `install: legacy lockfile without commit field still restores` currently expects that restore to succeed.
-
-Location: `src/cli/commands/install.ts` `specToLockEntry`, no-arg restore in `runInstall`, `postCloneHygiene`.
-
-Remediation: Persist `signature` on the lock entry when the install spec has one. On restore, refuse an entry that has no `commit`. When a signature is present, verify it against the cloned commit with the same registry public key as named install. A lock entry that has a commit and no signature still restores only when the cloned commit matches.
-
-### Acceptance criteria
-- Change `install: legacy lockfile without commit field still restores` so a lock entry without `commit` makes `runInstall([])` exit non-zero and does not leave the lib directory.
-- A test named-installs a fixture whose registry entry has a commit and a signature, then asserts `.jaiph/libs.lock` contains that signature. Delete the lib dir, corrupt the stored signature, run no-arg restore, and assert non-zero exit and no leftover lib dir.
-- A test restores a lock entry that has a matching `commit` and no `signature`, and asserts success. A different cloned commit still fails the existing mismatch check.
-- Named install of an unpinned registry entry still fails unless `--allow-unpinned`.
-
 ## Gate imported agent trust and flags like agent.command #dev-ready
 
 Context: `applyMetadataScope` in `src/runtime/kernel/node-workflow-runtime.ts` applies `agent.command` and `agent.backend` from an imported module only when `fromEntryModule` is true or the matching `IMPORT_UNLOCK` env var is set. `docs/configuration.md` states that `agent.trusted_workspace`, `agent.cursor_flags`, `agent.claude_flags`, and `run.logs_dir` are not restricted.

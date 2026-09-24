@@ -39,7 +39,7 @@ See [CLI — `jaiph install`](cli.md#jaiph-install) for the argument-resolution 
 jaiph install
 ```
 
-With no arguments, `jaiph install` restores every entry in `.jaiph/libs.lock`. It clones any missing library directory, and existing directories are skipped unless you pass `--force`. When a lock entry includes a `commit`, the cloned HEAD must match it. On a mismatch the directory is removed and the run fails, reporting the locked SHA and the cloned SHA. Lock entries without `commit` (older lockfiles) restore without that check. The registry is never read on this path.
+With no arguments, `jaiph install` restores every entry in `.jaiph/libs.lock`. It clones any missing library directory, and existing directories are skipped unless you pass `--force`. Each entry must be commit-pinned: an entry without a `commit` (an older, unpinned lockfile) is refused and the run fails before cloning anything — re-run `jaiph install <name>` to re-pin it. The cloned commit (and any recorded signature) is then verified as described in [Restore-from-lockfile mode](cli.md#restore-from-lockfile-mode). The registry is never read on this path.
 
 ### 3. Import from a program
 
