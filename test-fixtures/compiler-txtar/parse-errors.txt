@@ -328,7 +328,7 @@ export def main() {
 # @expect error E_PARSE "unterminated block, expected" @1:1
 --- input.jh
 def bad() {
-  echo x
+  log "x"
 
 === unsupported top-level statement
 # @expect error E_PARSE "unsupported top-level statement: echo" @1:1
@@ -1145,7 +1145,7 @@ export def main() {
 }
 
 === run without parentheses in workflow requires parens
-# @expect error E_VALIDATE "use helper() — a bare name that refers to a script or workflow must be called as a managed step" @3:3
+# @expect error E_PARSE "not a statement; put the command in a script" @3:3
 --- input.jh
 script helper = 'echo "hi"'
 export def main() {
@@ -1178,7 +1178,7 @@ export def main() {
 }
 
 === run without parentheses in workflow requires parens
-# @expect error E_VALIDATE "use helper() — a bare name that refers to a script or workflow must be called as a managed step" @3:3
+# @expect error E_PARSE "not a statement; put the command in a script" @3:3
 --- input.jh
 script helper = 'echo "hi"'
 export def main() {

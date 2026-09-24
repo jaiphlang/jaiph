@@ -1,10 +1,10 @@
 {
   "unterminated block": {
     "file": "input.jh",
-    "line": 2,
-    "col": 3,
+    "line": 1,
+    "col": 1,
     "code": "E_PARSE",
-    "message": "not a statement; put the command in a script"
+    "message": "unterminated block, expected \"}\""
   },
   "invalid script declaration": {
     "file": "input.jh",
