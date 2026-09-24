@@ -226,7 +226,7 @@ Each successful clone runs these checks before the lib counts as installed:
 
 ### Restore-from-lockfile mode
 
-`jaiph install` with no positional args reads `.jaiph/libs.lock` and clones each entry. The registry is never contacted. If a lock entry carries a `commit`, the cloned HEAD must match it; on mismatch the directory is removed and the run fails with the locked vs cloned SHAs and the remedy. Lock entries without `commit` (older lockfiles) restore without the check.
+`jaiph install` with no positional args reads `.jaiph/libs.lock` and clones each entry. The registry is never contacted. Every entry must carry a `commit`; the cloned HEAD must match it, and on mismatch the directory is removed and the run fails with the locked vs cloned SHAs and the remedy. An entry without a `commit` (an older, unpinned lockfile) is refused before any clone — the run fails and nothing is cloned; re-run `jaiph install <name>` to re-pin it. When an entry also carries a `signature`, it is re-verified against the cloned commit with the same embedded project key as a named install, failing closed on mismatch.
 
 ### Parallel clones
 
@@ -260,13 +260,14 @@ Missing libraries are cloned with bounded concurrency (default **4 in flight**).
       "name": "queue-lib",
       "url": "https://github.com/you/queue-lib.git",
       "version": "v1.0",
-      "commit": "fedcba9876543210fedcba9876543210fedcba98"
+      "commit": "fedcba9876543210fedcba9876543210fedcba98",
+      "signature": "RUR...=="
     }
   ]
 }
 ```
 
-The lock entry stores the resolved clone URL so restore works without the registry. `commit` is written automatically after each successful clone.
+The lock entry stores the resolved clone URL so restore works without the registry. `commit` is written automatically after each successful clone. When the install spec carried a `signature` (from a signed registry entry), it is persisted on the entry too, so restore can re-verify it.
 
 ## `jaiph use`
 
