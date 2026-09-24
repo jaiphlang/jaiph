@@ -79,7 +79,7 @@ jaiph install https://github.com/you/queue-lib.git@v1.1 --force
 
 ### Trust boundary for the execution binary
 
-An imported library cannot silently redirect which binary runs your `prompt` steps: Jaiph honors the `agent.command` and `agent.backend` keys only from your entry module. See the [import trust boundary](configuration.md#import-trust-boundary) section of the configuration reference for the full cross-module scoping contract and the advanced import-unlock opt-ins.
+An imported library cannot silently change how your `prompt` steps run. Jaiph honors the execution-binary keys (`agent.command`, `agent.backend`) and the trust, argv, and run-directory keys (`agent.trusted_workspace`, `agent.cursor_flags`, `agent.claude_flags`, `run.logs_dir`) only from your entry module. See the [import trust boundary](configuration.md#import-trust-boundary) section of the configuration reference for the full cross-module scoping contract and the advanced import-unlock opt-ins.
 
 ## Part B. Publish a library
 

@@ -2563,9 +2563,11 @@ export class NodeWorkflowRuntime {
     moduleMeta: DefMetadata | undefined,
     defMeta: DefMetadata | undefined,
     vars: Map<string, string> | undefined,
-    // Only the entry module's config may set execution-binary keys by default.
-    // Set JAIPH_AGENT_COMMAND_IMPORT_UNLOCK=1 / JAIPH_AGENT_BACKEND_IMPORT_UNLOCK=1
-    // to allow imported modules to override (advanced use).
+    // Only the entry module's config may set the execution-binary keys
+    // (agent.command / agent.backend) and the trust/argv/run-dir keys
+    // (agent.trusted_workspace / agent.cursor_flags / agent.claude_flags /
+    // run.logs_dir) by default. Set the matching JAIPH_*_IMPORT_UNLOCK=1 var to
+    // allow imported modules to override (advanced use).
     fromEntryModule: boolean,
   ): NodeJS.ProcessEnv {
     const nextEnv: NodeJS.ProcessEnv = { ...parentEnv };
@@ -2582,20 +2584,33 @@ export class NodeWorkflowRuntime {
           nextEnv.JAIPH_AGENT_BACKEND = resolved.agent.backend;
         }
       }
+      // These four keys shape the agent trust path (`--trust`), the agent argv
+      // (`cursor_flags` / `claude_flags` appended by buildBackendArgs), and the
+      // run directory. Like the execution-binary keys above, an imported module
+      // may only set them when this call is from the entry module or the matching
+      // `*_IMPORT_UNLOCK` opt-in is set. `*_LOCKED` still wins over unlock.
       if (
         parentEnv.JAIPH_AGENT_TRUSTED_WORKSPACE_LOCKED !== "1" &&
         resolved.agent?.trustedWorkspace !== undefined
       ) {
-        nextEnv.JAIPH_AGENT_TRUSTED_WORKSPACE = resolved.agent.trustedWorkspace;
+        if (fromEntryModule || parentEnv.JAIPH_AGENT_TRUSTED_WORKSPACE_IMPORT_UNLOCK === "1") {
+          nextEnv.JAIPH_AGENT_TRUSTED_WORKSPACE = resolved.agent.trustedWorkspace;
+        }
       }
       if (parentEnv.JAIPH_AGENT_CURSOR_FLAGS_LOCKED !== "1" && resolved.agent?.cursorFlags !== undefined) {
-        nextEnv.JAIPH_AGENT_CURSOR_FLAGS = resolved.agent.cursorFlags;
+        if (fromEntryModule || parentEnv.JAIPH_AGENT_CURSOR_FLAGS_IMPORT_UNLOCK === "1") {
+          nextEnv.JAIPH_AGENT_CURSOR_FLAGS = resolved.agent.cursorFlags;
+        }
       }
       if (parentEnv.JAIPH_AGENT_CLAUDE_FLAGS_LOCKED !== "1" && resolved.agent?.claudeFlags !== undefined) {
-        nextEnv.JAIPH_AGENT_CLAUDE_FLAGS = resolved.agent.claudeFlags;
+        if (fromEntryModule || parentEnv.JAIPH_AGENT_CLAUDE_FLAGS_IMPORT_UNLOCK === "1") {
+          nextEnv.JAIPH_AGENT_CLAUDE_FLAGS = resolved.agent.claudeFlags;
+        }
       }
       if (parentEnv.JAIPH_RUNS_DIR_LOCKED !== "1" && resolved.run?.logsDir !== undefined) {
-        nextEnv.JAIPH_RUNS_DIR = resolved.run.logsDir;
+        if (fromEntryModule || parentEnv.JAIPH_RUNS_DIR_IMPORT_UNLOCK === "1") {
+          nextEnv.JAIPH_RUNS_DIR = resolved.run.logsDir;
+        }
       }
       if (parentEnv.JAIPH_DEBUG_LOCKED !== "1" && resolved.run?.debug !== undefined) {
         nextEnv.JAIPH_DEBUG = resolved.run.debug ? "true" : "false";

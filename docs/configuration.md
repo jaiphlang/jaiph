@@ -124,7 +124,7 @@ The `use` request lives on a script declaration (named `script`, `export script`
 |---|---|
 | Root entry (`jaiph run file.jh`) | Full module + def metadata applied with normal precedence. |
 | Same-module call | Callee's def-level `config` is layered on top of the caller's effective env. Module-level config is not re-applied. |
-| Cross-module call (e.g. `alias.main()`) | Callee's module-level config is layered, then def-level on top — same as root-entry precedence, respecting `${NAME}_LOCKED`. **`agent.command` and `agent.backend` are not applied from imported modules** (see [Import trust boundary](#import-trust-boundary)). |
+| Cross-module call (e.g. `alias.main()`) | Callee's module-level config is layered, then def-level on top — same as root-entry precedence, respecting `${NAME}_LOCKED`. **The entry-module-only keys (`agent.command`, `agent.backend`, `agent.trusted_workspace`, `agent.cursor_flags`, `agent.claude_flags`, `run.logs_dir`) are not applied from imported modules** (see [Import trust boundary](#import-trust-boundary)). |
 
 After any nested call returns, the caller's scope is restored exactly as before.
 
@@ -140,18 +140,24 @@ Locked names: `JAIPH_AGENT_BACKEND`, `JAIPH_AGENT_MODEL`, `JAIPH_AGENT_COMMAND`,
 
 `agent.command` and `agent.backend` are **execution-binary keys** — they determine which process runs `prompt` steps. To prevent a third-party `.jh` library from silently redirecting execution to a different binary, these two keys may only be set from the **entry module's** `config {}` block (module-level or def-level). Imported modules that declare `agent.command` or `agent.backend` in their `config {}` are silently ignored for these keys.
 
+`agent.trusted_workspace`, `agent.cursor_flags`, `agent.claude_flags`, and `run.logs_dir` carry the same **entry-module-only** restriction. They shape the agent trust path (passed to Cursor as `--trust`), the agent argv (`cursor_flags` / `claude_flags` are appended to the invocation), and the run directory — so an imported module setting them could redirect trust, alter the agent command line, or move run logs for its own `prompt` steps. Imported modules that declare these keys in their `config {}` are silently ignored for them.
+
 Host secrets carry a related boundary: a script — imported or local — receives a host key only through its own `use` clause **and** an explicit operator `--env` grant, so a library cannot pull host secrets into its steps without the operator naming each key on the command line (see [Script env keys](#trusted-envs)).
 
-All other config keys (`agent.model`, `agent.trusted_workspace`, `agent.cursor_flags`, `agent.claude_flags`, `run.logs_dir`, `run.debug`) are not restricted and follow the normal scoping rules for cross-module calls.
+The remaining config keys (`agent.model`, `run.debug`) are not restricted and follow the normal scoping rules for cross-module calls.
 
-**Advanced unlock (use with caution):** to allow an imported module to override these keys, set one or both of the following environment variables before the run:
+**Advanced unlock (use with caution):** to allow an imported module to override an entry-module-only key, set the matching environment variable before the run:
 
 | Variable | Effect |
 |---|---|
 | `JAIPH_AGENT_COMMAND_IMPORT_UNLOCK=1` | Allow any imported module to set `agent.command`. |
 | `JAIPH_AGENT_BACKEND_IMPORT_UNLOCK=1` | Allow any imported module to set `agent.backend`. |
+| `JAIPH_AGENT_TRUSTED_WORKSPACE_IMPORT_UNLOCK=1` | Allow any imported module to set `agent.trusted_workspace`. |
+| `JAIPH_AGENT_CURSOR_FLAGS_IMPORT_UNLOCK=1` | Allow any imported module to set `agent.cursor_flags`. |
+| `JAIPH_AGENT_CLAUDE_FLAGS_IMPORT_UNLOCK=1` | Allow any imported module to set `agent.claude_flags`. |
+| `JAIPH_RUNS_DIR_IMPORT_UNLOCK=1` | Allow any imported module to set `run.logs_dir`. |
 
-The existing `JAIPH_AGENT_COMMAND_LOCKED=1` / `JAIPH_AGENT_BACKEND_LOCKED=1` flags still apply on top — a locked key cannot be changed regardless of the source.
+The matching `${NAME}_LOCKED=1` flag still applies on top — a locked key cannot be changed regardless of the source.
 
 ## Config-to-env mapping
 
