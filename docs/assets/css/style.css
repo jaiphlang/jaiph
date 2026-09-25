@@ -531,6 +531,8 @@ pre {
     font-size: 0.9rem;
     border: 1px solid var(--pre-border);
     position: relative;
+    /* One line plus the Copy button is shorter than the button. Two lines clears it. */
+    min-height: calc(2lh + 2rem);
 }
 
 code {
@@ -654,6 +656,20 @@ pre code .code-line::before {
 
 .try-it-out .copy-code-button:hover {
     background: #415d83;
+}
+
+/* Install snippets are commands, not listings. No line numbers; inset replaces the gutter. */
+.try-it-out pre code .code-line::before {
+    content: none;
+}
+
+.try-it-out pre code .code-line {
+    width: max-content;
+    min-width: 100%;
+    box-sizing: border-box;
+    padding-left: 1rem;
+    /* Clears the overlay Copy button so the command can scroll out from under it. */
+    padding-right: 7rem;
 }
 
 [data-theme="dark"] .try-it-out .copy-code-button {
@@ -1434,10 +1450,6 @@ pre code .code-line::before {
 
     .try-it-out pre {
         font-size: 0.72rem;
-    }
-
-    .try-it-out pre code .code-line {
-        padding-left: 2.4em;
     }
 
     .tagline .separator {
