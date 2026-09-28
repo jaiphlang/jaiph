@@ -22,6 +22,8 @@ export {
   matchSendOperator,
   isJaiphInterpolationRef,
   argsToRuntimeString,
+  MODULE_FIELDS,
+  isReservedBuiltinName,
 } from "./parse/core";
 export { createTrivia } from "./parse/trivia";
 export type { NodeTrivia, Trivia } from "./parse/trivia";

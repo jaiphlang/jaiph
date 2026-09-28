@@ -20,10 +20,21 @@ export function interpolate(
   vars: Map<string, string>,
   env?: NodeJS.ProcessEnv,
   quoteValue?: (s: string) => string,
+  /**
+   * Resolver for the builtin `module` record. Supplied by the runtime (which
+   * knows the current file via `scope.filePath`); `interpolate` itself never
+   * reads `process.cwd()` / `process.env` for it. When present, `${module.x}`
+   * bypasses `vars` / `env` entirely so a stray env var named `module` cannot
+   * affect the result; an unknown field throws (defensive — the compiler
+   * already rejects it). When absent (config-time interpolation), `module` has
+   * no special meaning and falls through to the normal lookup.
+   */
+  moduleField?: (field: string | undefined) => string,
 ): string {
   const lookup = (key: string): string => vars.get(key) ?? env?.[key] ?? "";
   const q = quoteValue ?? ((s: string) => s);
   return input.replace(/\$\{([a-zA-Z_][a-zA-Z0-9_]*)(?:\.([a-zA-Z_][a-zA-Z0-9_]*))?\}/g, (_m, base, field) => {
+    if (moduleField && base === "module") return q(moduleField(field));
     if (!field) return q(lookup(String(base)));
     // Dot field access: parse JSON stored in the base variable and extract the field.
     const raw = lookup(String(base));

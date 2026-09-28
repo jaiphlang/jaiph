@@ -116,8 +116,26 @@ const JAIPH_KEYWORDS = new Set([
   "prompt", "return", "fail", "log", "logerr", "logwarn",
   "if", "else", "not", "const", "match", "import", "export",
   "def", "script", "channel", "config", "catch", "async", "stdin",
-  "returns", "send", "true", "false", "for", "in", "use",
+  "returns", "send", "true", "false", "for", "in", "use", "module",
 ]);
+
+/**
+ * The five fields of the builtin `module` record. Shared by the compiler
+ * (`validateDotFieldRef`) and the runtime (`resolveModuleField`) so "what the
+ * validator accepts" and "what the runtime resolves" stay in lockstep.
+ */
+export const MODULE_FIELDS: readonly string[] = ["file", "dir", "name", "version", "description"];
+
+/**
+ * Names of builtin records (currently just `module`). A builtin record is a
+ * value the compiler knows the fields of; its name is reserved and cannot be
+ * bound by any declaration (param, const, def, script, prompt, channel, import
+ * alias), at the top level or nested. Parameter names are rejected separately
+ * via `JAIPH_KEYWORDS` in `parseParamList`.
+ */
+export function isReservedBuiltinName(name: string): boolean {
+  return name === "module";
+}
 
 /** Check if a token is a bare identifier (valid identifier, not a keyword). */
 export function isBareIdentifier(token: string): boolean {

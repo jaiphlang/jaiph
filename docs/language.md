@@ -63,6 +63,27 @@ Visibility: same-file, all names. Across `import`, only names in `mod.exports` (
 
 The unified per-module namespace covers channels, defs, scripts, named prompts, script-import aliases, and top-level `const`. Duplicates are `E_PARSE`. `main` is reserved as the run entry: if a symbol named `main` exists, it must be `export def main`.
 
+## The `module` record
+
+`module` is a builtin record that lets any def read the `.jh` file it is running in. It is the same kind of value as a `prompt` capture with a `returns` schema, so the compiler knows its fields and reports a bad field name as `E_VALIDATE`. It is not JSON in your program, and it is not a struct you declare. `module` is a [reserved name](grammar.md#lexical-rules), so no `def` parameter, `const`, `def`, `script`, `prompt`, `channel`, or import alias may be named `module`, whether at the top level or nested (`E_PARSE`).
+
+| Field | Value |
+|---|---|
+| `module.file` | Absolute path of the `.jh` file that contains the def now running. |
+| `module.dir` | Directory of that file. No trailing slash, so `"${module.dir}/sources.json"` joins correctly. |
+| `module.name` | The `module.name` string from that file's module-level [`config`](configuration.md#module-keys), or `""` when unset. |
+| `module.version` | Same, for `module.version`. |
+| `module.description` | Same, for `module.description`. |
+
+The value follows the file, not the process. `main` in `flow.jh` sees `flow.jh`. A def in an imported `lib.jh` sees `lib.jh`, even when `flow.jh` called it. A nested def sees the file it was written in. The fields read the same way wherever a value can appear, so you can use them inside a `"${module.dir}"` string, in a `return`, in an `if` / `match` subject, and as a bare call argument such as `save(module.dir)`. A script never sees Jaiph names in its environment, so a def passes `module.dir` to a script as an argument.
+
+```jaiph
+export def main() {
+  const manifest = "${module.dir}/sources.json"
+  return module.file
+}
+```
+
 ## Def body — step types
 
 There are nine `StepDef` variants. A body line that is not one of these statements is `E_PARSE` (`not a statement; put the command in a script`).

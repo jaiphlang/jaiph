@@ -9,6 +9,7 @@ import {
   hasUnescapedClosingQuote,
   indexOfClosingDoubleQuote,
   isJaiphInterpolationRef,
+  isReservedBuiltinName,
   matchLegacySendOperator,
   matchSendOperator,
   parseSendChannelArrow,
@@ -613,6 +614,9 @@ function tryParseConst(c: BlockCtx): BlockResult | null {
   const m = c.inner.match(/^const\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+)$/s);
   if (!m) return null;
   const name = m[1];
+  if (isReservedBuiltinName(name)) {
+    fail(c.filePath, `"${name}" is a reserved builtin record and cannot be used as a const name`, c.innerNo, c.innerRaw.indexOf("const") + 1);
+  }
   const rhs = m[2].trim();
   // const out = stdin <expr> -> ref()  →  an exec step that captures into `out`.
   if (rhs === "stdin" || rhs.startsWith("stdin ")) {
@@ -634,7 +638,11 @@ function tryParseConst(c: BlockCtx): BlockResult | null {
 }
 
 /** Wrap a nested declaration node in a `local_decl` step. */
-function localDeclStep(decl: LocalDecl, loc: { line: number; col: number }): StepDef {
+function localDeclStep(filePath: string, decl: LocalDecl, loc: { line: number; col: number }): StepDef {
+  const name = decl.kind === "script" ? decl.script.name : decl.kind === "def" ? decl.def.name : decl.prompt.name;
+  if (isReservedBuiltinName(name)) {
+    fail(filePath, `"${name}" is a reserved builtin record and cannot be used as a ${decl.kind} name`, loc.line, loc.col);
+  }
   return { type: "local_decl", decl, loc };
 }
 
@@ -659,7 +667,7 @@ function tryParseLocalScript(c: BlockCtx): BlockResult | null {
   if (c.inner !== "script" && !c.inner.startsWith("script ")) return null;
   const { scriptDef, nextIndex } = parseScriptBlock(c.filePath, c.lines, c.idx, [], c.trivia);
   const loc = { line: c.innerNo, col: c.innerRaw.indexOf("script") + 1 };
-  return { step: localDeclStep({ kind: "script", script: scriptDef }, loc), nextIdx: nextIndex };
+  return { step: localDeclStep(c.filePath, { kind: "script", script: scriptDef }, loc), nextIdx: nextIndex };
 }
 
 /** Nested `def name(params) { … }` declaration, local to the enclosing def. */
@@ -674,7 +682,7 @@ function tryParseLocalDef(c: BlockCtx): BlockResult | null {
   );
   def.steps.push(...steps);
   stripTrailingBlankLines(def.steps);
-  return { step: localDeclStep({ kind: "def", def }, loc), nextIdx };
+  return { step: localDeclStep(c.filePath, { kind: "def", def }, loc), nextIdx };
 }
 
 /**
@@ -877,7 +885,7 @@ function tryParsePrompt(c: BlockCtx): BlockResult | null {
   if (looksLikeNamedPromptDef(c.inner)) {
     const { promptDef, nextIndex } = parsePromptDefBlock(c.filePath, c.lines, c.idx, [], c.trivia);
     const loc = { line: c.innerNo, col: c.innerRaw.indexOf("prompt") + 1 };
-    return { step: localDeclStep({ kind: "prompt", prompt: promptDef }, loc), nextIdx: nextIndex };
+    return { step: localDeclStep(c.filePath, { kind: "prompt", prompt: promptDef }, loc), nextIdx: nextIndex };
   }
   const promptCol = c.innerRaw.indexOf("prompt") + 1;
   const promptArg = c.innerRaw.slice(c.innerRaw.indexOf("prompt") + "prompt".length).trimStart();
