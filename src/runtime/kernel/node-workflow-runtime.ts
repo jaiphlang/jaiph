@@ -9,6 +9,7 @@ import { inlineScriptName, nestedScriptName } from "../../inline-script-name";
 import {
   argsToRuntimeString,
   canonicalizeTripleQuotedString,
+  MODULE_FIELDS,
   resolveInterpreterFromShebang,
 } from "../../parser";
 import type { CatchBody, Def, Expr, LocalDecl, MatchExprDef, MatchPatternDef, StepDef } from "../../types";
@@ -26,7 +27,7 @@ import { appendRunSummaryLine, CHAIN_KEY_ENV } from "./emit";
 import { buildStepDisplayParamPairs } from "./format-params";
 import { resolveScriptRef, resolveDefRef, resolvePromptRef, type RuntimeGraph } from "./graph";
 import type { DefMetadata } from "../../types";
-import { interpolateDefMetadata } from "../../config";
+import { interpolateDefMetadata, resolveModuleMetadata } from "../../config";
 import { extractJson, validateFields } from "./schema";
 import {
   commaArgsToInterpolated,
@@ -389,6 +390,17 @@ export class NodeWorkflowRuntime {
   ): Promise<{ ok: true; value: string } | { ok: false; result: StepResult }> {
     const dotIdx = subject.indexOf(".");
     const base = dotIdx === -1 ? subject : subject.slice(0, dotIdx);
+    // The builtin `module` record follows the file, not scope vars/env: never
+    // read `scope.vars` / `scope.env` for it. An unknown field fails the step
+    // (defensive — the compiler already rejects it); it does not become "".
+    if (base === "module") {
+      const field = dotIdx === -1 ? undefined : subject.slice(dotIdx + 1);
+      try {
+        return { ok: true, value: this.resolveModuleField(scope.filePath, field) };
+      } catch (err) {
+        return { ok: false, result: { status: 1, output: "", error: errText(err) } };
+      }
+    }
     const rawBase = scope.vars.get(base);
     if (rawBase && this.isHandle(rawBase)) {
       const hr = await this.resolveHandleVar(scope, base);
@@ -406,6 +418,35 @@ export class NodeWorkflowRuntime {
       // fall through to empty
     }
     return { ok: true, value: "" };
+  }
+
+  /**
+   * Resolve a builtin `module.<field>` for the def whose file is `filePath`.
+   * The value follows the file, not the process: `file` / `dir` come from the
+   * absolute path already stored on the module graph (no `realpath`, no cwd,
+   * no entry-file path), and `name` / `version` / `description` come from that
+   * file's module-level `config` (resolved, `""` when unset). An unknown field
+   * throws — the compiler rejects it, so this only fires if validation was
+   * skipped, and it must fail rather than return an empty path.
+   */
+  private resolveModuleField(filePath: string, field: string | undefined): string {
+    if (field === "file") return filePath;
+    if (field === "dir") return dirname(filePath);
+    if (field === "name" || field === "version" || field === "description") {
+      const node = this.graph.modules.get(filePath);
+      const meta = node ? resolveModuleMetadata(node.ast, this.env) : undefined;
+      return meta?.module?.[field] ?? "";
+    }
+    throw new Error(`module has no field "${field ?? ""}"; valid fields: ${MODULE_FIELDS.join(", ")}`);
+  }
+
+  /**
+   * A `${module.x}` resolver bound to a scope's file, passed to `interpolate`
+   * so string / log / call-argument interpolation resolves `module` from the
+   * running def's file without `interpolate` knowing about the graph.
+   */
+  private moduleFieldFor(scope: Scope): (field: string | undefined) => string {
+    return (field) => this.resolveModuleField(scope.filePath, field);
   }
 
   /** Scan input for ${var} references and resolve any that are handles. */
@@ -821,7 +862,7 @@ export class NodeWorkflowRuntime {
     if (handleErr) return { ok: false, result: handleErr };
     const re = new RegExp(NodeWorkflowRuntime.INLINE_CAPTURE_RE.source, "g");
     if (!re.test(input)) {
-      return { ok: true, value: interpolate(input, scope.vars, scope.env) };
+      return { ok: true, value: interpolate(input, scope.vars, scope.env, undefined, this.moduleFieldFor(scope)) };
     }
     re.lastIndex = 0;
     let result = "";
@@ -837,7 +878,7 @@ export class NodeWorkflowRuntime {
       lastIndex = m.index + m[0].length;
     }
     result += input.slice(lastIndex);
-    return { ok: true, value: interpolate(result, scope.vars, scope.env) };
+    return { ok: true, value: interpolate(result, scope.vars, scope.env, undefined, this.moduleFieldFor(scope)) };
   }
 
   private async evaluateMatch(
@@ -1562,7 +1603,7 @@ export class NodeWorkflowRuntime {
         // Resolve handles before interpolating.
         const handleErr = await this.resolveHandlesInInput(scope, token.value);
         if (handleErr) return handleErr;
-        resolved.push(interpolate(token.value, scope.vars, scope.env));
+        resolved.push(interpolate(token.value, scope.vars, scope.env, undefined, this.moduleFieldFor(scope)));
         continue;
       }
       if (token.kind === "managed_inline_script") {

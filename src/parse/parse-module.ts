@@ -1,6 +1,6 @@
 import { jaiphModule, TopLevelEmitOrder } from "../types";
 import { Trivia, createTrivia } from "./trivia";
-import { fail } from "./core";
+import { fail, isReservedBuiltinName } from "./core";
 import { parseChannelLine } from "./channels";
 import { parseImportLine, parseScriptImportLine } from "./imports";
 import {
@@ -203,6 +203,19 @@ export function parsejaiphWithTrivia(source: string, filePath: string): ParseRes
     { items: mod.defs.map((w) => ({ name: w.name, loc: w.loc })), kind: "def" },
     { items: (mod.envDecls ?? []).map((e) => ({ name: e.name, loc: e.loc })), kind: "const" },
   ];
+  // A builtin record name (e.g. `module`) is reserved: no declaration may bind
+  // it. Checked across imports plus every namespace group, before the dedup pass
+  // so the reserved-name error wins over a same-name collision message.
+  const bindings: Array<{ name: string; loc: { line: number; col: number }; kind: string }> = [
+    ...mod.imports.map((im) => ({ name: im.alias, loc: im.loc, kind: "import alias" })),
+    ...groups.flatMap((g) => g.items.map((it) => ({ name: it.name, loc: it.loc, kind: g.kind }))),
+  ];
+  for (const { name, loc, kind } of bindings) {
+    if (isReservedBuiltinName(name)) {
+      fail(filePath, `"${name}" is a reserved builtin record and cannot be used as a ${kind} name`, loc.line, loc.col);
+    }
+  }
+
   for (const { items, kind } of groups) {
     for (const { name, loc } of items) {
       const prev = seen.get(name);

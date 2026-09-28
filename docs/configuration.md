@@ -83,7 +83,7 @@ Interpolation runs when the config scope is applied (def entry for def-level key
 
 ## Module keys
 
-Informational metadata only; does not affect execution. Allowed in module-level config only — any `module.*` key inside a def-level config is `E_PARSE`.
+Informational metadata only; does not affect execution. Allowed in module-level config only — any `module.*` key inside a def-level config is `E_PARSE`. A running def reads these back as `module.name` / `module.version` / `module.description` (empty string when unset) via the builtin [module record](language.md#the-module-record).
 
 | Key | Type | Default |
 |---|---|---|

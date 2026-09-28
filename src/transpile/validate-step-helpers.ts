@@ -1,5 +1,5 @@
 import type { Diagnostics } from "../diagnostics";
-import { isJaiphInterpolationRef } from "../parser";
+import { isJaiphInterpolationRef, MODULE_FIELDS } from "../parser";
 import type { Arg, jaiphModule } from "../types";
 import {
   lookupKind,
@@ -143,6 +143,21 @@ export function validateDotFieldRef(
   loc: { line: number; col: number },
   ctx: ValidatorCtx,
 ): void {
+  // `module` is a builtin record (not a prompt capture): the compiler knows its
+  // five fields, so a bad field name fails here rather than silently resolving
+  // to "" at runtime. Same check in every module, including imported ones.
+  if (varName === "module") {
+    if (!MODULE_FIELDS.includes(fieldName)) {
+      ctx.diag.error(
+        ctx.ast.filePath,
+        loc.line,
+        loc.col,
+        "E_VALIDATE",
+        `module has no field "${fieldName}"; valid fields: ${MODULE_FIELDS.join(", ")}`,
+      );
+    }
+    return;
+  }
   const fields = ctx.promptSchemas.get(varName);
   if (!fields) {
     ctx.diag.error(
