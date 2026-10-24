@@ -8,7 +8,7 @@ diataxis: how-to
 
 Jaiph executes programs on the host. It does not ship a Docker sandbox driver. Isolation is an outer concern: wrap `jaiph` in a container, a Kubernetes pod, a CI runner, or another sandbox you already operate.
 
-Each release publishes a lean runner image to GHCR: `ghcr.io/jaiphlang/jaiph-runtime` (`:<version>`, `:v<version>`, and `:latest` on a stable tag; `:nightly` on the rolling nightly). It has `jaiph`, `python3`, `git`, and `curl` on `PATH`, running as uid `10001`. It is not a sandbox and not a toolchain image. Layer agent CLIs (`claude`, `cursor-agent`, `codex`) and any script dependencies yourself. From a clone, `./docs/build-jaiph-dev-image.sh` builds the same image locally (`docs/install-from-local.sh` does not).
+Each release publishes a runner image to GHCR: `ghcr.io/jaiphlang/jaiph-runtime` (`:<version>`, `:v<version>`, and `:latest` on a stable tag; `:nightly` on the rolling nightly). It has `jaiph`, `python3`, `git`, `curl`, `claude`, `cursor-agent`, and `codex` on `PATH`, running as uid `10001`. It is not a sandbox and not a language toolchain. Layer script interpreters your programs need (`node`, `go`, and so on) in a derived image. From a clone, `./docs/build-jaiph-dev-image.sh` builds the same image locally (`docs/install-from-local.sh` does not).
 
 A complete, apply-ready Kubernetes example lives at [`docs/deploy/k8s.yaml`](https://github.com/jaiphlang/jaiph/blob/main/docs/deploy/k8s.yaml). The example uses the published image. Pin a version tag in production.
 
@@ -35,10 +35,10 @@ This isolates Jaiph from **you**. It does not isolate the agent from a script in
 
 ## Run one program in a container you own
 
-Mount your working directory and run the CLI as the container command. The published image has `jaiph` on `PATH`; add the agent CLI your program uses if the entry file has a `prompt` step:
+Mount your working directory and run the CLI as the container command. The published image has `jaiph`, `claude`, `cursor-agent`, and `codex` on `PATH`:
 
 ```bash
-# claude backend (Anthropic) — image must also have `claude` on PATH
+# claude backend (Anthropic)
 docker run --rm -e ANTHROPIC_API_KEY -v "$PWD":/work -w /work \
   ghcr.io/jaiphlang/jaiph-runtime:latest jaiph run flow.jh
 ```
@@ -61,7 +61,7 @@ docker run --rm -e OPENAI_API_KEY -v "$PWD":/work -w /work \
 
 Jaiph already runs headless on a standard Linux runner. Install the CLI (`docs/install` or `docs/install-from-local.sh`), install any agent CLI your programs need, and run `jaiph run flow.jh`. A GitHub-hosted Linux runner is itself a virtual machine; that outer boundary is the sandbox.
 
-Use a container image when you want a preinstalled toolchain. Fit the one-shot `docker run` above into any CI step:
+Use the published image when you want `jaiph` and the agent CLIs already installed. Fit the one-shot `docker run` above into any CI step:
 
 ```yaml
 - name: Run jaiph

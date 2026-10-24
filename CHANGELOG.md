@@ -2,11 +2,22 @@
 
 ## Summary
 
+## All changes
+
+# 0.15.1
+
+## Summary
+
+- **Runner image:** `ghcr.io/jaiphlang/jaiph-runtime` has `claude`, `cursor-agent`, and `codex` on `PATH`.
 - **Builtin `module` record:** any def can read the `.jh` file it runs in. `module.file` and `module.dir` are that file's absolute path and directory, and `module.name` / `module.version` / `module.description` read back that file's module-level `config`. The value follows the file, so an imported `lib.jh` sees itself, not the entry file.
+- **Def bodies:** a line inside a `def` that is not a statement is `E_PARSE`. Put the command in a script.
 
 ## All changes
 
+- **Fix — Runner image:** `runtime/Dockerfile` installs pinned `claude` 2.1.310, `cursor-agent` 2026.10.22-27dcf5f, and `codex` 0.164.0 onto `/usr/local/bin`, and checks each archive's sha256 before install. The binaries stay on `PATH` when Kubernetes sets `HOME` to a writable emptyDir. The image is still not a language toolchain: add `node`, `go`, and other script interpreters in a derived image. Docs: [Deploy jaiph](docs/deploy.md). Tests: `integration/release-workflow.test.ts`.
 - **Language / Runtime — builtin `module` record:** a def can read the `.jh` file it is running in through a builtin record named `module`. It has five string fields: `module.file` (the absolute path of that file), `module.dir` (its directory, with no trailing slash), and `module.name` / `module.version` / `module.description` (the resolved module-level `config` values, `""` when unset). `module` is the same kind of value as a `prompt` capture with a `returns` schema, so the compiler knows the fields and reports an unknown one as `E_VALIDATE` that lists the five legal fields; there is no new expression kind and no user-declared struct. The value follows the file, not the process, so a def in an imported `lib.jh` sees `lib.jh` even when the entry `flow.jh` called it, read from the absolute path already stored on the module graph (no `realpath`, no `process.cwd()`, no entry-file path). `module` is now a reserved name that no `def` parameter, `const`, `def`, `script`, `prompt`, `channel`, or import alias may bind, at the top level or nested (`E_PARSE`); `config { module.name = "..." }` still parses, and a def-level `module.*` config key is still `E_PARSE`. `${module.dir}` in strings, logs, and call arguments resolves through a resolver the runtime passes to `interpolate` (`src/config.ts`), and `if` / `match` on `module.dir` resolves through `resolveSubjectValue` (`src/runtime/kernel/node-workflow-runtime.ts`); neither reads `scope.vars` or `scope.env`, so an environment variable named `module` cannot affect the result, and a script subprocess never gains a `module` variable. Docs: [Language — The `module` record](docs/language.md#the-module-record), [Grammar](docs/grammar.md#lexical-rules), [Configuration — Module keys](docs/configuration.md#module-keys). Tests: `src/parse/parse-module-record.test.ts`, `src/transpile/validate-module-record.test.ts`, `src/runtime/kernel/node-workflow-runtime.module-record.test.ts`.
+- **Fix — Language:** a line inside a `def` that is not a statement is `E_PARSE` (`not a statement; put the command in a script`). A shell command belongs in a `script`. Docs: [Language](docs/language.md). Tests: `src/parse/parse-steps.test.ts`, `src/transpile/compiler-edge.acceptance.test.ts`.
+- **Fix — Docs site:** install samples stay readable beside the Copy button. `docs/assets/css/style.css`.
 
 # 0.15.0
 

@@ -312,5 +312,8 @@ test("runner Dockerfile installs the matching linux binary as uid 10001", () => 
   assert.match(RUNNER_DOCKERFILE, /USER jaiph/);
   assert.match(RUNNER_DOCKERFILE, /python3/);
   assert.match(RUNNER_DOCKERFILE, /\bgit\b/);
+  assert.match(RUNNER_DOCKERFILE, /\/usr\/local\/bin\/claude/);
+  assert.match(RUNNER_DOCKERFILE, /\/usr\/local\/bin\/cursor-agent/);
+  assert.match(RUNNER_DOCKERFILE, /\/usr\/local\/bin\/codex/);
   assert.doesNotMatch(RUNNER_DOCKERFILE, /openjdk|golang|rustup|npm install/i);
 });

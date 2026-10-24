@@ -41,7 +41,7 @@ bun build --compile --target=bun-linux-arm64 ./src/cli.ts --outfile runtime/jaip
 bun build --compile --target=bun-linux-x64 ./src/cli.ts --outfile runtime/jaiph-linux-x64
 chmod +x runtime/jaiph-linux-arm64 runtime/jaiph-linux-x64
 
-docker build --platform "linux/${DOCKER_ARCH}" \
+DOCKER_BUILDKIT=1 docker build --platform "linux/${DOCKER_ARCH}" \
   -f runtime/Dockerfile \
   -t "${IMAGE}:latest" \
   -t "${IMAGE}" \
