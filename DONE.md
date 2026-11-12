@@ -73,3 +73,50 @@ These need scope and stay `E_VALIDATE` in `validateMatchExpr`: unknown identifie
 - Unknown identifier, invalid regex, and wildcard-count errors are still `E_VALIDATE` (existing tests stay green).
 - `integration/format-roundtrip.test.ts`, `npm test`, `npm run lint`, and `bash e2e/test_all.sh` pass.
 - `docs/grammar.md` match-arm grammar and the validation catalog list the arm-body forms and move these errors from `E_VALIDATE` to `E_PARSE`. Add a CHANGELOG entry under Unreleased.
+
+## Add a Jaiph tokenizer (parser not wired yet)
+
+Completed: 2026-11-12
+
+### PO notes
+
+Implemented directly (no product-owner run). The original kind table could not meet the lossless criterion: sources that parse today use `=~` / `!~` with a regex operand, bare `$x` / `${…}`, `;` between arms, `\` line continuation, regex patterns in `mock prompt { … }`, and raw shell bodies in `mock script … { … }`. The spec was revised in the queue (see "Spec revision") before implementation, at the user's request.
+
+Notes for the parser-migration tasks:
+- `raw_body` is triggered by a line matching `mock script … ) {`; the parser still owns what a mock body means.
+- Regex position is tracked with a brace stack (`match` / `mock prompt` blocks, `${` interpolations, plain braces). A `/` anywhere else is `unexpected character`.
+- `"""` / `'''` closers end after the three quotes, so `""")`, `""" returns "…"` and `'''(x)` tokenize as block + following tokens.
+- The corpus collector moved to `integration/jaiph-corpus.ts`, shared with the format round-trip test.
+
+Tests: `src/parse/lexer.test.ts` (20 cases incl. the not-imported-by-parser guard, to be dropped when B2 wires it in), `integration/lexer-lossless.test.ts`.
+
+The parser reads `.jh` source line by line with `startsWith` checks and ad hoc quote scanners (`indexOfClosingDoubleQuote`, `hasUnescapedClosingQuote` in `src/parse/core.ts`, the scanners in `src/parse/call-args.ts`, `src/parse/statement-split.ts`, `src/parse/nested-arg.ts`). This task adds a standalone tokenizer. It does not change the parser; later tasks move the parser onto it.
+
+### Required
+
+Add `src/parse/lexer.ts` exporting `tokenize(source: string, filePath: string): Token[]`. Every token has `kind`, `text` (the exact source slice), `line`, and `col` (1-based). Kinds:
+
+| Kind | Source |
+|---|---|
+| `ident` | `[A-Za-z_][A-Za-z0-9_]*` (keywords are idents; the parser decides) |
+| `string` | single-line `"…"`; `\"` is the only escape |
+| `triple_string` | `"""` … `"""` block. The opening `"""` ends its line; the closer is the first later line whose trimmed text starts with `"""`, and the token ends after those three quotes (text after the closer, such as `)` or `returns "…"`, is tokenized normally) |
+| `script_oneline` | `'…'` with an optional interpreter tag touching the quote (`python3'…'`); no escapes, first `'` closes |
+| `script_fenced` | `'''` … `'''` with an optional tag before the opening quotes (`node'''`); closer is a trimmed line starting with `'''` |
+| `number` | `[0-9]+` |
+| `regex` | `/…/` (first unescaped `/` closes, same line) in two positions only: a pattern in a `match … {` or `mock prompt {` block (first token of an arm: after `{`, a newline, `,`, or `;`, or after the pattern-alternation bar), and the right-hand operand of `=~` / `!~` in `if` |
+| `punct` | `( ) { } , = . ; $ ${ => -> == != =~ !~`, the pattern-alternation bar, and `\` before a newline (line continuation, as in `prompt "…" \` + `returns "…"`); longest match first |
+| `raw_body` | the shell lines of a `mock script ref(…) {` block in a `*.test.jh` file: from the start of the first body line up to the start of the first line whose trimmed text is `}` (newlines included) |
+| `newline`, `comment` (`#` to end of line) | |
+
+Any other character outside a token (including `/` outside a regex position) is `E_PARSE` (`unexpected character`). Tags follow `[A-Za-z_][A-Za-z0-9_.-]*`. A tag separated from the quote by whitespace is an `ident` followed by a script token. `${…}` inside a string stays part of the `string` token. Removed forms keep their current errors: triple backticks and one-line backticks are `E_PARSE` with the messages in `src/parse/fence.ts`.
+
+### Acceptance
+
+- Unit tests in `src/parse/lexer.test.ts` cover every kind (including every punct, regex after `=~` / `!~` and in `mock prompt { … }`, `raw_body`, and line continuation), `/` outside a regex position, tags with `.` and `-`, `\"` inside strings, an apostrophe inside a string (`"it's"`), and unterminated string / block errors (`E_PARSE` with line and column).
+- Lossless: for every source collected by `integration/format-roundtrip.test.ts` (tracked `.jh` files, compiler-txtar valid inputs, e2e heredocs, docs code blocks) that parses today, concatenating `text` of all tokens plus the skipped whitespace reproduces the source exactly. Add this as a test.
+- The tokenizer is not imported by any parser module yet. `npm test`, `npm run lint`, and `npm run arch:check` pass.
+
+### Spec revision (2026-11-12)
+
+The first version of this task listed only `( ) { } , = . => ->`, the bar, `==` and `!=` as punct, and allowed regex only in match-pattern position. Sources that parse today also use `=~` / `!~` with a regex operand (`if name =~ /^feat-/ {`), bare `$x` and `${…}` outside strings (`return $bad`), `;` between arms on one line, `\` line continuation, regex patterns in `mock prompt { … }`, and raw shell bodies in `mock script … { … }`, so the lossless criterion could not pass. The kind table above adds them.
