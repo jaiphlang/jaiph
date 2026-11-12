@@ -3,6 +3,7 @@ import { createTrivia, type Trivia } from "./trivia";
 import { fail } from "./core";
 import { parseDefHeader, stripTrailingBlankLines } from "./def-header";
 import { parseBraceBlockBody } from "./workflow-brace";
+import { BodyCursor } from "./body-cursor";
 
 export function parseDefBlock(
   filePath: string,
@@ -12,7 +13,12 @@ export function parseDefBlock(
   trivia: Trivia = createTrivia(),
 ): { def: Def; nextIndex: number; exported: boolean } {
   const lineNo = startIndex + 1;
-  const header = parseDefHeader(filePath, lines[startIndex], lineNo);
+  const header = parseDefHeader(
+    filePath,
+    lines[startIndex]!,
+    lineNo,
+    BodyCursor.of(filePath, lines).lineTokensOf(startIndex),
+  );
   const def: Def = {
     name: header.name,
     params: header.params,

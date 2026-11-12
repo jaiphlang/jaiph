@@ -1,65 +1,63 @@
 import type { EnvDeclDef } from "../types";
-import { decodeQuotedInner, fail, SINGLE_QUOTE_MESSAGE, hasUnescapedClosingQuote, indexOfClosingDoubleQuote } from "./core";
-import { parseTripleQuoteBlock } from "./triple-quote";
+import { decodeQuotedInner, fail, SINGLE_QUOTE_MESSAGE } from "./core";
+import { BodyCursor } from "./body-cursor";
+import { readTripleQuoteBlock } from "./triple-quote";
 
+/** Module-level `const NAME = VALUE` on line `startIndex`. */
 export function parseEnvDecl(
   filePath: string,
   lines: string[],
   startIndex: number,
 ): { envDecl: EnvDeclDef; nextIndex: number } {
   const lineNo = startIndex + 1;
-  const raw = lines[startIndex];
-  const line = raw.trim();
+  const raw = lines[startIndex]!;
+  const toks = BodyCursor.of(filePath, lines).lineTokensOf(startIndex);
+  const [kw, nameTok, eqTok] = toks;
 
-  // Match: const NAME = "value" or ... = barevalue
-  const match = line.match(/^const\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)/);
-  if (!match) {
+  // const NAME = "value" | """…""" | barevalue
+  if (kw?.text !== "const" || nameTok?.kind !== "ident" || !eqTok?.text.startsWith("=")) {
     fail(filePath, 'invalid declaration — expected: const NAME = VALUE', lineNo);
   }
-  const name = match[1];
-  let valuePart = match[2].trim();
+  const name = nameTok.text;
+  const loc = { line: lineNo, col: 1 };
+  // The value is everything after the first `=` (a `==` leaves a bare `= …`).
+  const valuePart = raw.slice(eqTok.col).trim();
+  const value = eqTok.text === "=" ? toks.slice(3) : [];
+  const first = value[0];
 
   // Triple-quoted multiline string
-  if (valuePart.startsWith('"""')) {
-    const tqLines = [...lines];
-    tqLines[startIndex] = valuePart;
-    const { body, nextIdx, afterClose } = parseTripleQuoteBlock(filePath, tqLines, startIndex);
+  if (first?.text === '"""') {
+    const { body, nextIdx, afterClose } = readTripleQuoteBlock(filePath, lines, startIndex, valuePart);
     if (afterClose.length > 0) {
       fail(filePath, 'unexpected content after closing """ in const declaration', nextIdx);
     }
     return {
-      envDecl: { name, value: body, loc: { line: lineNo, col: 1 }, wasQuoted: true, tripleQuoted: true },
+      envDecl: { name, value: body, loc, wasQuoted: true, tripleQuoted: true },
       nextIndex: nextIdx,
     };
   }
 
   // Double-quoted string (single-line only)
-  if (valuePart.startsWith('"')) {
-    if (!hasUnescapedClosingQuote(valuePart, 1)) {
-      fail(filePath, 'multiline strings use triple quotes: const name = """...""""', lineNo);
-    }
-    const closeIdx = indexOfClosingDoubleQuote(valuePart, 1);
-    if (closeIdx === -1) {
-      fail(filePath, "unterminated string in const declaration", lineNo);
-    }
-    const afterClose = valuePart.slice(closeIdx + 1).trim();
-    if (afterClose.length > 0) {
+  if (first?.kind === "string") {
+    if (value.length > 1) {
       fail(filePath, "unexpected content after closing quote in const declaration", lineNo);
     }
-    const value = decodeQuotedInner(valuePart.slice(1, closeIdx));
     return {
-      envDecl: { name, value, loc: { line: lineNo, col: 1 }, wasQuoted: true },
+      envDecl: { name, value: decodeQuotedInner(first.text.slice(1, -1)), loc, wasQuoted: true },
       nextIndex: startIndex + 1,
     };
   }
+  if (first?.text === '"') {
+    fail(filePath, 'multiline strings use triple quotes: const name = """...""""', lineNo);
+  }
 
-  if (valuePart.startsWith("'")) {
+  if (first?.text.startsWith("'")) {
     fail(filePath, SINGLE_QUOTE_MESSAGE, lineNo);
   }
 
   // Bare value (rest of line)
   return {
-    envDecl: { name, value: valuePart, loc: { line: lineNo, col: 1 } },
+    envDecl: { name, value: valuePart, loc },
     nextIndex: startIndex + 1,
   };
 }

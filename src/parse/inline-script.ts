@@ -1,17 +1,14 @@
 import { fail, parseSingleQuoteScriptBody } from "./core";
 import { parseParenArgs } from "./call-args";
-import { BodyCursor } from "./body-cursor";
 import {
-  checkFenceOpener,
-  dedentFencedScriptBody,
   rejectRemovedOnelineBacktick,
   rejectRemovedScriptFence,
   rejectTagWithShebang,
   SCRIPT_FENCE,
   splitScriptLangPrefix,
   startsScriptFence,
-  UNTERMINATED_FENCE_MESSAGE,
 } from "./fence";
+import { readFencedScript } from "./triple-quote";
 import { validateScriptBodyNoInterpolation } from "./scripts";
 import type { Arg } from "../types";
 
@@ -29,34 +26,6 @@ export interface InlineScriptParsed {
   trailing: string;
   /** Source used the fenced `'''…'''` form (the formatter keeps it). */
   fenced: boolean;
-}
-
-/**
- * Read the `'''` block that opens at the end of line `idx`; `openText` is the
- * line's text from the opening quotes on (interpreter tag split off). The
- * block is one `script_fenced` token: its body is the lines between the
- * quotes, dedented; `afterClose` is the rest of the closing line.
- */
-function readFencedScript(
-  filePath: string,
-  lines: string[],
-  idx: number,
-  openText: string,
-): { body: string; afterClose: string; nextIdx: number } {
-  checkFenceOpener(filePath, openText.trim(), idx + 1);
-  const cursor = BodyCursor.of(filePath, lines);
-  let tok;
-  try {
-    tok = cursor.tokenAt(idx, lines[idx]!.trimEnd().length - 2);
-  } catch {
-    tok = undefined;
-  }
-  if (tok?.kind !== "script_fenced") fail(filePath, UNTERMINATED_FENCE_MESSAGE, idx + 1);
-  return {
-    body: dedentFencedScriptBody(tok.text.split("\n").slice(1, -1).join("\n")),
-    afterClose: cursor.textAfter(tok).trimEnd(),
-    nextIdx: BodyCursor.endLineIdx(tok) + 1,
-  };
 }
 
 /**

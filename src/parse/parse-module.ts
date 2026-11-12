@@ -11,9 +11,12 @@ import {
   parseEnvDecl,
 } from "./blocks";
 import { parsePromptDefBlock } from "./prompt-def";
+import { BodyCursor, topLevelKeyword } from "./body-cursor";
 
 // The module parser: the single top-to-bottom scan that turns source lines into
-// a `jaiphModule` AST plus formatting trivia. It lives here (private to the
+// a `jaiphModule` AST plus formatting trivia. Each declaration is dispatched on
+// the leading tokens of its line (`topLevelKeyword`) and its parser reads the
+// line's tokens from the shared `BodyCursor`. It lives here (private to the
 // parse package) so the public entry `src/parser.ts` stays a curated facade;
 // outside code still imports `parsejaiph` / `parsejaiphWithTrivia` from there.
 
@@ -38,29 +41,31 @@ export function parsejaiphWithTrivia(source: string, filePath: string): ParseRes
     defs: [],
   };
   const topLevelOrder: TopLevelEmitOrder[] = [];
+  const cursor = BodyCursor.of(filePath, lines);
   let i = 0;
   let pendingTopLevelComments: string[] = [];
 
   while (i < lines.length) {
+    const idx = i;
     const lineNo = i + 1;
-    const raw = lines[i];
-    const line = raw.trim();
+    const raw = lines[i]!;
+    const toks = cursor.lineTokensOf(idx);
+    const head = toks[0];
     i += 1;
 
-    if (!line) {
+    if (!head) {
       continue;
     }
 
-    if (lineNo === 1 && line.startsWith("#!")) {
+    if (head.kind === "other" && head.text === "#") {
+      if (lineNo === 1 && raw[head.col] === "!") continue;
+      pendingTopLevelComments.push(raw.trim());
       continue;
     }
 
-    if (line.startsWith("#")) {
-      pendingTopLevelComments.push(line);
-      continue;
-    }
+    const kw = topLevelKeyword(toks, raw);
 
-    if (/^config\s*\{/.test(line)) {
+    if (kw === "config") {
       if (mod.metadata !== undefined) {
         fail(filePath, "duplicate config block (only one allowed per file)", lineNo, 1);
       }
@@ -68,14 +73,14 @@ export function parsejaiphWithTrivia(source: string, filePath: string): ParseRes
         trivia.setModule({ configLeadingComments: [...pendingTopLevelComments] });
         pendingTopLevelComments = [];
       }
-      const { metadata, nextIndex } = parseConfigBlock(filePath, lines, i - 1, trivia);
+      const { metadata, nextIndex } = parseConfigBlock(filePath, lines, idx, trivia);
       mod.metadata = metadata;
       i = nextIndex;
       continue;
     }
 
-    if (line.startsWith("import script ")) {
-      const si = parseScriptImportLine(filePath, line, raw, lineNo);
+    if (kw === "import script") {
+      const si = parseScriptImportLine(filePath, raw, lineNo, toks);
       if (pendingTopLevelComments.length > 0) {
         trivia.setNode(si, { leadingComments: [...pendingTopLevelComments] });
         pendingTopLevelComments = [];
@@ -85,8 +90,8 @@ export function parsejaiphWithTrivia(source: string, filePath: string): ParseRes
       continue;
     }
 
-    if (line.startsWith("import ")) {
-      const imp = parseImportLine(filePath, line, raw, lineNo);
+    if (kw === "import") {
+      const imp = parseImportLine(filePath, raw, lineNo, toks);
       if (pendingTopLevelComments.length > 0) {
         trivia.setNode(imp, { leadingComments: [...pendingTopLevelComments] });
         pendingTopLevelComments = [];
@@ -95,8 +100,8 @@ export function parsejaiphWithTrivia(source: string, filePath: string): ParseRes
       continue;
     }
 
-    if (line.startsWith("channel ")) {
-      const ch = parseChannelLine(filePath, line, raw, lineNo);
+    if (kw === "channel") {
+      const ch = parseChannelLine(filePath, raw, lineNo, toks);
       if (pendingTopLevelComments.length > 0) {
         trivia.setNode(ch, { leadingComments: [...pendingTopLevelComments] });
         pendingTopLevelComments = [];
@@ -105,19 +110,14 @@ export function parsejaiphWithTrivia(source: string, filePath: string): ParseRes
       continue;
     }
 
-    if (line.startsWith("test ")) {
+    if (kw === "test") {
       if (!filePath.endsWith(".test.jh")) {
         fail(filePath, "test blocks belong in *.test.jh files; rename the file or remove the test block", lineNo);
       }
       if (!mod.tests) {
         mod.tests = [];
       }
-      const { testBlock, nextIndex } = parseTestBlock(
-        filePath,
-        lines,
-        i - 1,
-        trivia,
-      );
+      const { testBlock, nextIndex } = parseTestBlock(filePath, lines, idx, trivia);
       if (pendingTopLevelComments.length > 0) {
         trivia.setNode(testBlock, { leadingComments: [...pendingTopLevelComments] });
       }
@@ -128,8 +128,8 @@ export function parsejaiphWithTrivia(source: string, filePath: string): ParseRes
       continue;
     }
 
-    if (/^const\s+[A-Za-z_]/.test(line)) {
-      const { envDecl, nextIndex } = parseEnvDecl(filePath, lines, i - 1);
+    if (kw === "const") {
+      const { envDecl, nextIndex } = parseEnvDecl(filePath, lines, idx);
       if (pendingTopLevelComments.length > 0) {
         envDecl.comments = [...pendingTopLevelComments];
         pendingTopLevelComments = [];
@@ -143,13 +143,12 @@ export function parsejaiphWithTrivia(source: string, filePath: string): ParseRes
       continue;
     }
 
-    if (/^(export\s+)?(rule|workflow)\s/.test(line)) {
-      const kind = /(?:export\s+)?(rule|workflow)\s/.exec(line)?.[1] ?? "rule";
-      fail(filePath, `'${kind}' is not a keyword; use 'def'`, lineNo);
+    if (kw === "rule" || kw === "workflow") {
+      fail(filePath, `'${kw}' is not a keyword; use 'def'`, lineNo);
     }
 
-    if (/^(export\s+)?script\s/.test(line)) {
-      const { scriptDef, nextIndex, exported } = parseScriptBlock(filePath, lines, i - 1, pendingTopLevelComments, trivia);
+    if (kw === "script") {
+      const { scriptDef, nextIndex, exported } = parseScriptBlock(filePath, lines, idx, pendingTopLevelComments, trivia);
       pendingTopLevelComments = [];
       if (exported) {
         mod.exports.push(scriptDef.name);
@@ -160,8 +159,8 @@ export function parsejaiphWithTrivia(source: string, filePath: string): ParseRes
       continue;
     }
 
-    if (/^(export\s+)?prompt\s/.test(line)) {
-      const { promptDef, nextIndex, exported } = parsePromptDefBlock(filePath, lines, i - 1, pendingTopLevelComments, trivia);
+    if (kw === "prompt") {
+      const { promptDef, nextIndex, exported } = parsePromptDefBlock(filePath, lines, idx, pendingTopLevelComments, trivia);
       pendingTopLevelComments = [];
       if (exported) {
         mod.exports.push(promptDef.name);
@@ -173,8 +172,8 @@ export function parsejaiphWithTrivia(source: string, filePath: string): ParseRes
       continue;
     }
 
-    if (/^(export\s+)?def\s/.test(line)) {
-      const { def, nextIndex, exported } = parseDefBlock(filePath, lines, i - 1, pendingTopLevelComments, trivia);
+    if (kw === "def") {
+      const { def, nextIndex, exported } = parseDefBlock(filePath, lines, idx, pendingTopLevelComments, trivia);
       pendingTopLevelComments = [];
       if (exported) {
         mod.exports.push(def.name);
@@ -185,7 +184,7 @@ export function parsejaiphWithTrivia(source: string, filePath: string): ParseRes
       continue;
     }
 
-    fail(filePath, `unsupported top-level statement: ${line}`, lineNo);
+    fail(filePath, `unsupported top-level statement: ${raw.trim()}`, lineNo);
   }
 
   trivia.setModule({ topLevelOrder });

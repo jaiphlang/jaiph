@@ -1,117 +1,173 @@
-import type { MatchArmDef, TestBlockDef, StepDef } from "../types";
-import { createTrivia, type Trivia } from "./trivia";
-import {
-  colFromRaw,
-  fail,
-  hasUnescapedClosingQuote,
-  isRef,
-  parseParamList,
-  SINGLE_QUOTE_MESSAGE,
-  stripQuotes,
-  decodeQuotedInner,
-  rejectRemovedEscapes,
-} from "./core";
-import { parseMatchArms } from "./match";
-import { dedentTripleQuotedBody, parseTripleQuoteBlock } from "./triple-quote";
-import { parseBraceBlockBody } from "./workflow-brace";
+// `test "…" { … }` blocks in `*.test.jh` files. Each step line is read from
+// its physical-line tokens (`BodyCursor.lineTokensOf`) and tried against the
+// step forms in a fixed order: the mocks here, then the assertions, `const`,
+// and runs in `test-steps.ts`, then the removed forms with their migration
+// messages.
 
-function parseMockPromptBlock(
-  filePath: string,
-  lines: string[],
-  startLineIndex: number,
-  blockStartLineNo: number,
-  blockStartCol: number,
-): {
-  step: {
-    type: "test_mock_prompt_block";
-    arms: MatchArmDef[];
-    loc: { line: number; col: number };
-  };
-  nextIndex: number;
-} {
-  const { arms, nextIndex } = parseMatchArms(filePath, lines, startLineIndex + 1, blockStartLineNo);
-  if (arms.length === 0) {
-    fail(filePath, "mock prompt block must have at least one arm", blockStartLineNo);
+import type { TestBlockDef } from "../types";
+import { createTrivia, type Trivia } from "./trivia";
+import { fail, parseParamList, rejectRemovedEscapes, SINGLE_QUOTE_MESSAGE, stripQuotes } from "./core";
+import { parseMatchArms } from "./match";
+import type { Token } from "./lexer";
+import { adjacent, BodyCursor, isPunct } from "./body-cursor";
+import { parseBraceBlockBody } from "./workflow-brace";
+import {
+  decodeTestString,
+  isWord,
+  parseExpect,
+  parseTestConst,
+  parseTestRun,
+  refAt,
+  spacedBeforeNext,
+  type TestLine,
+  type TestStepResult,
+} from "./test-steps";
+
+/**
+ * `mock <kind> <more>` with one space after each word: the index of the
+ * token after `<kind>`, or -1.
+ */
+function mockPrefix(t: TestLine, kind: string): number {
+  const [mock, kw, more] = t.toks;
+  if (!isWord(mock, "mock") || !isWord(kw, kind) || !more) return -1;
+  const oneSpace = (tok: Token): boolean => t.raw[tok.col - 1 + tok.text.length] === " ";
+  return kw!.col === mock!.col + 5 && oneSpace(mock!) && oneSpace(kw!) ? 2 : -1;
+}
+
+/**
+ * `mock def|script <ref>(params) {` (or the old `mock def|script <ref> {`,
+ * rejected): the ref and parameters. Null when the line is another form.
+ */
+function parseMockHeader(t: TestLine, kind: "def" | "script"): { ref: string; params: string[] } | null {
+  const at = mockPrefix(t, kind);
+  const ref = at === -1 ? null : refAt(t.toks, at);
+  if (!ref) return null;
+  const next = t.toks[ref.next];
+  if (isPunct(next, "{") && ref.next === t.toks.length - 1) {
+    fail(t.filePath, `mock ${kind} requires parentheses: mock ${kind} ${ref.ref}() { … }`, t.lineNo, t.col);
   }
-  for (const arm of arms) {
-    const body = arm.body.trim();
-    if (!arm.tripleQuotedBody && body.startsWith('"') && body.endsWith('"')) {
-      rejectRemovedEscapes(filePath, body.slice(1, -1), "test", blockStartLineNo);
+  if (!isPunct(next, "(")) return null;
+  // The parameter list runs to the first `)`; only `{` may follow it.
+  const closeAt = t.toks.findIndex((tok, k) => k > ref.next && tok.text.includes(")"));
+  if (!isPunct(t.toks[closeAt], ")") || closeAt !== t.toks.length - 2 || !isPunct(t.toks[closeAt + 1], "{")) {
+    return null;
+  }
+  const inner = t.raw.slice(next!.col, t.toks[closeAt]!.col - 1);
+  return { ref: ref.ref, params: inner.trim() ? parseParamList(t.filePath, inner, t.lineNo) : [] };
+}
+
+/** `mock prompt "<response>"`, `mock prompt <const>`, or a `mock prompt { pattern => response }` block. */
+function parseMockPrompt(t: TestLine): TestStepResult | null {
+  const at = mockPrefix(t, "prompt");
+  if (at === -1) return null;
+  const arg = t.toks.slice(at);
+  const loc = { line: t.lineNo, col: t.col };
+  if (arg.length === 1 && isPunct(arg[0], "{")) {
+    const { arms, nextIndex } = parseMatchArms(t.filePath, t.cursor.lines, t.idx + 1, t.lineNo);
+    if (arms.length === 0) {
+      fail(t.filePath, "mock prompt block must have at least one arm", t.lineNo);
     }
+    for (const arm of arms) {
+      const body = arm.body.trim();
+      if (!arm.tripleQuotedBody && body.startsWith('"') && body.endsWith('"')) {
+        rejectRemovedEscapes(t.filePath, body.slice(1, -1), "test", t.lineNo);
+      }
+    }
+    return { step: { type: "test_mock_prompt_block", arms, loc }, nextIdx: nextIndex };
+  }
+  // Columns here count from 0, as they always have.
+  if (arg[0]?.text.startsWith("'")) {
+    fail(t.filePath, SINGLE_QUOTE_MESSAGE, t.lineNo, t.col - 1);
+  }
+  // `mock prompt <ident>` resolves the ident from a previously declared `const` in this block.
+  if (arg.length === 1 && arg[0]!.kind === "ident") {
+    return { step: { type: "test_mock_prompt", response: "", responseVar: arg[0]!.text, loc }, nextIdx: t.idx + 1 };
+  }
+  if (arg[0]?.kind !== "string" && arg[0]?.text !== '"""') {
+    fail(
+      t.filePath,
+      'mock prompt must be: mock prompt "<response>", mock prompt <const_name>, or mock prompt { "pattern" => "response", _ => "default" }',
+      t.lineNo,
+      t.col - 1,
+    );
+  }
+  // A string followed by more text keeps its quotes (the whole rest is the response).
+  const text = stripQuotes(t.raw.slice(arg[0]!.col - 1));
+  return {
+    step: { type: "test_mock_prompt", response: decodeTestString(t.filePath, text, t.lineNo, t.col), loc },
+    nextIdx: t.idx + 1,
+  };
+}
+
+function parseMockDef(t: TestLine, trivia: Trivia): TestStepResult | null {
+  const header = parseMockHeader(t, "def");
+  if (!header) return null;
+  const { steps, nextIdx } = parseBraceBlockBody(t.filePath, t.cursor.lines, t.idx + 1, t.lineNo, trivia);
+  return { step: { type: "test_mock_def", ...header, steps, loc: { line: t.lineNo, col: t.col } }, nextIdx };
+}
+
+/** `mock script ref(params) {`: the body is raw shell up to a line that is just `}`. */
+function parseMockScript(t: TestLine): TestStepResult | null {
+  const header = parseMockHeader(t, "script");
+  if (!header) return null;
+  const raw = t.cursor.rawBodyAfter(t.idx);
+  if (!raw) {
+    fail(t.filePath, "unterminated mock block", t.lineNo + 1);
   }
   return {
-    step: {
-      type: "test_mock_prompt_block",
-      arms,
-      loc: { line: blockStartLineNo, col: blockStartCol },
-    },
-    nextIndex,
+    step: { type: "test_mock_script", ...header, body: raw.body, loc: { line: t.lineNo, col: t.col } },
+    nextIdx: raw.closeIdx + 1,
   };
 }
 
-/** Reads lines until "}" and returns body (trimmed lines joined) and nextIndex. */
-function parseMockScriptBlock(
-  filePath: string,
-  lines: string[],
-  startLineIndex: number,
-): { body: string; nextIndex: number } {
-  const bodyLines: string[] = [];
-  let i = startLineIndex + 1;
-  while (i < lines.length) {
-    const raw = lines[i];
-    const line = raw.trim();
-    if (line === "}") {
-      return { body: bodyLines.join("\n"), nextIndex: i + 1 };
-    }
-    bodyLines.push(raw);
-    i += 1;
+/** Removed mock forms: `mock workflow|rule …` and `mock function …`. */
+function rejectRemovedMocks(t: TestLine): void {
+  const [head, kind] = t.toks;
+  if (!isWord(head, "mock") || kind?.kind !== "ident" || adjacent(head!, kind) || !spacedBeforeNext(t.toks, 1)) return;
+  if (kind.text === "workflow" || kind.text === "rule") {
+    fail(t.filePath, `'${kind.text}' is not a keyword; use 'mock def'`, t.lineNo, t.col);
   }
-  fail(filePath, "unterminated mock block", startLineIndex + 2);
+  if (kind.text === "function") {
+    fail(t.filePath, '"mock function" is no longer supported; use "mock script"', t.lineNo, t.col);
+  }
 }
 
-/** Decode the inner text of a test-DSL `"…"` string: `\"` is the only escape. */
-function decodeTestString(filePath: string, inner: string, lineNo: number, col: number): string {
-  rejectRemovedEscapes(filePath, inner, "test", lineNo, col);
-  return decodeQuotedInner(inner);
+const CAMEL_CASE: Record<string, string> = {
+  expectContain: "expect_contain",
+  expectNotContain: "expect_not_contain",
+  expectEqual: "expect_equal",
+};
+
+function rejectCamelCase(t: TestLine): void {
+  const head = t.toks[0]!;
+  const snake = head.kind === "ident" && Object.prototype.hasOwnProperty.call(CAMEL_CASE, head.text) ? CAMEL_CASE[head.text] : undefined;
+  if (snake && spacedBeforeNext(t.toks, 0)) {
+    fail(t.filePath, `camelCase assertions are no longer supported; use "${snake}"`, t.lineNo, t.col);
+  }
 }
 
-/** Parse mock params: "()" or "(a, b)" from a string like "alias.name(a, b) {" */
-function parseMockHeader(
-  filePath: string,
-  inner: string,
-  prefix: string,
-  lineNo: number,
-  col: number,
-): { ref: string; params: string[]; hasBlock: boolean } | null {
-  if (!inner.startsWith(prefix)) return null;
-  const after = inner.slice(prefix.length).trim();
-  // Match: ref(params) { or ref() {
-  const m = after.match(/^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)\s*\(([^)]*)\)\s*\{\s*$/);
-  if (!m) return null;
-  const ref = m[1];
-  if (!isRef(ref)) {
-    fail(filePath, `mock ${prefix.split(/\s+/).pop()} ref must be <alias> or <alias>.<name>`, lineNo, col);
+/** Old forms with a migration message (`x = ref`, a bare `a.b`); anything else is not a step. */
+function rejectNonStep(t: TestLine): never {
+  const [head, second] = t.toks;
+  const endsHere = (next: number): boolean => next === t.toks.length || spacedBeforeNext(t.toks, next - 1);
+  const assigned = head!.kind === "ident" && isPunct(second, "=") ? refAt(t.toks, 2) : null;
+  if (assigned && endsHere(assigned.next)) {
+    fail(t.filePath, `use "const ${head!.text} = ${assigned.ref}(…)" to capture def output`, t.lineNo, t.col);
   }
-  const params = m[2].trim() ? parseParamList(filePath, m[2], lineNo) : [];
-  return { ref, params, hasBlock: true };
+  const bare = refAt(t.toks, 0);
+  if (bare && bare.ref.includes(".") && endsHere(bare.next)) {
+    fail(t.filePath, `use "${bare.ref}(…)" to call a def in tests`, t.lineNo, t.col);
+  }
+  fail(t.filePath, `unrecognized test step: ${t.raw.trim()}`, t.lineNo, t.col);
 }
 
-/** Reject old mock syntax without parens: `mock def ref{` */
-function rejectOldMockSyntax(
-  filePath: string,
-  inner: string,
-  keyword: string,
-  lineNo: number,
-  col: number,
-): void {
-  const prefix = `mock ${keyword} `;
-  if (!inner.startsWith(prefix)) return;
-  const after = inner.slice(prefix.length).trim();
-  // Old syntax: ref { (no parens)
-  const oldMatch = after.match(/^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)\s*\{\s*$/);
-  if (oldMatch) {
-    fail(filePath, `mock ${keyword} requires parentheses: mock ${keyword} ${oldMatch[1]}() { … }`, lineNo, col);
-  }
+/** One step line inside a test block; forms are tried in this order. */
+function parseTestStep(t: TestLine, trivia: Trivia): TestStepResult {
+  const step = parseMockPrompt(t) ?? parseMockDef(t, trivia) ?? parseMockScript(t) ?? parseExpect(t);
+  if (step) return step;
+  rejectRemovedMocks(t);
+  rejectCamelCase(t);
+  return parseTestConst(t) ?? parseTestRun(t) ?? rejectNonStep(t);
 }
 
 export function parseTestBlock(
@@ -121,314 +177,43 @@ export function parseTestBlock(
   trivia: Trivia = createTrivia(),
 ): { testBlock: TestBlockDef; nextIndex: number } {
   const lineNo = startIndex + 1;
-  const raw = lines[startIndex];
-  const line = raw.trim();
-
-  const testMatch = line.match(/^test\s+"((?:[^"\\]|\\.)*)"\s*\{\s*$/);
-  if (!testMatch) {
+  const cursor = BodyCursor.of(filePath, lines);
+  const [kw, desc, open, extra] = cursor.lineTokensOf(startIndex);
+  if (kw?.text !== "test" || desc?.kind !== "string" || adjacent(kw, desc) || !isPunct(open, "{") || extra) {
     fail(filePath, 'test block must match: test "description" {', lineNo);
   }
-  const description = testMatch[1].replace(/\\"/g, '"');
+  const description = desc.text.slice(1, -1).replace(/\\"/g, '"');
   const testBlock: TestBlockDef = {
     description,
     steps: [],
-    loc: { line: lineNo, col: raw.indexOf("test") + 1 },
+    loc: { line: lineNo, col: kw.col },
   };
 
   let i = startIndex + 1;
-  for (; i < lines.length; i += 1) {
-    const innerNo = i + 1;
-    const innerRaw = lines[i];
-    const inner = innerRaw.trim();
-    if (!inner) {
+  while (i < lines.length) {
+    const toks = cursor.lineTokensOf(i);
+    const head = toks[0];
+    if (!head) {
       const last = testBlock.steps[testBlock.steps.length - 1];
       if (last && last.type !== "blank_line") {
         testBlock.steps.push({ type: "blank_line" });
       }
+      i += 1;
       continue;
     }
-    if (inner === "}") {
-      break;
+    if (toks.length === 1 && isPunct(head, "}")) {
+      return { testBlock, nextIndex: i + 1 };
     }
-    if (inner.startsWith("#")) {
-      testBlock.steps.push({
-        type: "comment",
-        text: inner,
-        loc: { line: innerNo, col: colFromRaw(innerRaw) },
-      });
+    const raw = lines[i]!;
+    if (head.kind === "other" && head.text === "#") {
+      testBlock.steps.push({ type: "comment", text: raw.trim(), loc: { line: i + 1, col: head.col } });
+      i += 1;
       continue;
     }
-    const col = colFromRaw(innerRaw);
-    const loc = { line: innerNo, col };
-
-    // --- mock prompt ---
-    if (inner.startsWith("mock prompt ")) {
-      const arg = inner.slice("mock prompt ".length).trim();
-      if (arg === "{") {
-        const { step, nextIndex } = parseMockPromptBlock(filePath, lines, i, innerNo, colFromRaw(innerRaw));
-        testBlock.steps.push(step);
-        i = nextIndex - 1;
-        continue;
-      }
-      if (arg.startsWith("'")) {
-        fail(filePath, SINGLE_QUOTE_MESSAGE, innerNo, innerRaw.indexOf("mock"));
-      }
-      // `mock prompt <ident>` resolves the ident from a previously declared `const` in this block.
-      if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(arg)) {
-        testBlock.steps.push({
-          type: "test_mock_prompt",
-          response: "",
-          responseVar: arg,
-          loc,
-        });
-        continue;
-      }
-      const isDoubleQuoted = arg.startsWith('"') && hasUnescapedClosingQuote(arg, 1);
-      if (!isDoubleQuoted) {
-        fail(filePath, 'mock prompt must be: mock prompt "<response>", mock prompt <const_name>, or mock prompt { "pattern" => "response", _ => "default" }', innerNo, innerRaw.indexOf("mock"));
-      }
-      testBlock.steps.push({
-        type: "test_mock_prompt",
-        response: decodeTestString(filePath, stripQuotes(arg), innerNo, col),
-        loc,
-      });
-      continue;
-    }
-
-    // --- mock def (requires parens, body is Jaiph steps) ---
-    rejectOldMockSyntax(filePath, inner, "def", innerNo, col);
-    const mockWfHeader = parseMockHeader(filePath, inner, "mock def ", innerNo, col);
-    if (mockWfHeader) {
-      const { steps, nextIdx } = parseBraceBlockBody(filePath, lines, i + 1, innerNo, trivia);
-      testBlock.steps.push({ type: "test_mock_def", ref: mockWfHeader.ref, params: mockWfHeader.params, steps, loc });
-      i = nextIdx - 1;
-      continue;
-    }
-
-    if (/^mock\s+(workflow|rule)\s/.test(inner)) {
-      fail(filePath, `'${inner.match(/^mock\s+(workflow|rule)/)?.[1]}' is not a keyword; use 'mock def'`, innerNo, col);
-    }
-
-    // --- mock script (new: requires parens, body stays shell) ---
-    rejectOldMockSyntax(filePath, inner, "script", innerNo, col);
-    const mockScriptHeader = parseMockHeader(filePath, inner, "mock script ", innerNo, col);
-    if (mockScriptHeader) {
-      const { body, nextIndex } = parseMockScriptBlock(filePath, lines, i);
-      testBlock.steps.push({ type: "test_mock_script", ref: mockScriptHeader.ref, params: mockScriptHeader.params, body, loc });
-      i = nextIndex - 1;
-      continue;
-    }
-
-    // --- mock function (deprecated) ---
-    if (/^mock\s+function\s+/.test(inner)) {
-      fail(filePath, '"mock function" is no longer supported; use "mock script"', innerNo, col);
-    }
-
-    // --- expect_contain (snake_case) ---
-    const expectContainMatch = inner.match(/^expect_contain\s+([A-Za-z_][A-Za-z0-9_]*)\s+"((?:[^"\\]|\\.)*)"\s*$/);
-    if (expectContainMatch) {
-      testBlock.steps.push({
-        type: "test_expect_contain",
-        variable: expectContainMatch[1],
-        substring: decodeTestString(filePath, expectContainMatch[2], innerNo, col),
-        loc,
-      });
-      continue;
-    }
-    const expectContainVarMatch = inner.match(/^expect_contain\s+([A-Za-z_][A-Za-z0-9_]*)\s+([A-Za-z_][A-Za-z0-9_]*)\s*$/);
-    if (expectContainVarMatch) {
-      testBlock.steps.push({
-        type: "test_expect_contain",
-        variable: expectContainVarMatch[1],
-        substring: "",
-        substringVar: expectContainVarMatch[2],
-        loc,
-      });
-      continue;
-    }
-
-    // --- expect_not_contain (snake_case) ---
-    const expectNotContainMatch = inner.match(/^expect_not_contain\s+([A-Za-z_][A-Za-z0-9_]*)\s+"((?:[^"\\]|\\.)*)"\s*$/);
-    if (expectNotContainMatch) {
-      testBlock.steps.push({
-        type: "test_expect_not_contain",
-        variable: expectNotContainMatch[1],
-        substring: decodeTestString(filePath, expectNotContainMatch[2], innerNo, col),
-        loc,
-      });
-      continue;
-    }
-    const expectNotContainVarMatch = inner.match(/^expect_not_contain\s+([A-Za-z_][A-Za-z0-9_]*)\s+([A-Za-z_][A-Za-z0-9_]*)\s*$/);
-    if (expectNotContainVarMatch) {
-      testBlock.steps.push({
-        type: "test_expect_not_contain",
-        variable: expectNotContainVarMatch[1],
-        substring: "",
-        substringVar: expectNotContainVarMatch[2],
-        loc,
-      });
-      continue;
-    }
-
-    // --- expect_equal (snake_case) ---
-    const expectEqualMatch = inner.match(/^expect_equal\s+([A-Za-z_][A-Za-z0-9_]*)\s+"((?:[^"\\]|\\.)*)"\s*$/);
-    if (expectEqualMatch) {
-      testBlock.steps.push({
-        type: "test_expect_equal",
-        variable: expectEqualMatch[1],
-        expected: decodeTestString(filePath, expectEqualMatch[2], innerNo, col),
-        loc,
-      });
-      continue;
-    }
-    const expectEqualVarMatch = inner.match(/^expect_equal\s+([A-Za-z_][A-Za-z0-9_]*)\s+([A-Za-z_][A-Za-z0-9_]*)\s*$/);
-    if (expectEqualVarMatch) {
-      testBlock.steps.push({
-        type: "test_expect_equal",
-        variable: expectEqualVarMatch[1],
-        expected: "",
-        expectedVar: expectEqualVarMatch[2],
-        loc,
-      });
-      continue;
-    }
-
-    // --- Reject old camelCase assertions ---
-    if (/^expectContain\s/.test(inner)) {
-      fail(filePath, 'camelCase assertions are no longer supported; use "expect_contain"', innerNo, col);
-    }
-    if (/^expectNotContain\s/.test(inner)) {
-      fail(filePath, 'camelCase assertions are no longer supported; use "expect_not_contain"', innerNo, col);
-    }
-    if (/^expectEqual\s/.test(inner)) {
-      fail(filePath, 'camelCase assertions are no longer supported; use "expect_equal"', innerNo, col);
-    }
-
-    // --- const NAME = """ … """ (multi-line test-scope string binding) ---
-    const constTripleMatch = inner.match(/^const\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*"""\s*$/);
-    if (constTripleMatch) {
-      const tqLines = [...lines];
-      tqLines[i] = inner.slice(inner.indexOf('"""'));
-      const { body, nextIdx, afterClose } = parseTripleQuoteBlock(filePath, tqLines, i);
-      if (afterClose.trim()) {
-        fail(filePath, `unexpected content after closing """: '${afterClose.trim()}'`, nextIdx, col);
-      }
-      testBlock.steps.push({
-        type: "test_const",
-        name: constTripleMatch[1],
-        value: dedentTripleQuotedBody(body),
-        loc,
-      });
-      i = nextIdx - 1;
-      continue;
-    }
-
-    // --- const NAME = "literal" (test-scope string binding) ---
-    // Must come before the `const ... = run` matcher so plain literal consts win.
-    // Only double-quoted string literals are supported in v1; no interpolation.
-    const constLiteralMatch = inner.match(/^const\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*"((?:[^"\\]|\\.)*)"\s*$/);
-    if (constLiteralMatch) {
-      testBlock.steps.push({
-        type: "test_const",
-        name: constLiteralMatch[1],
-        value: decodeTestString(filePath, constLiteralMatch[2], innerNo, col),
-        loc,
-      });
-      continue;
-    }
-
-    // --- const capture = ref("args") [allow_failure] ---
-    const constRunMatch = inner.match(
-      /^const\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)\s*\(([^)]*)\)(?:\s+(allow_failure))?\s*$/,
-    );
-    if (constRunMatch) {
-      const captureName = constRunMatch[1];
-      const defRef = constRunMatch[2];
-      if (!isRef(defRef)) {
-        fail(filePath, "const ... = must target a valid reference: const name = ref(args)", innerNo, col);
-      }
-      const argsRaw = constRunMatch[3].trim();
-      const args: string[] = argsRaw ? parseTestCallArgs(filePath, argsRaw, innerNo, col) : [];
-      const allowFailure = constRunMatch[4] === "allow_failure";
-      testBlock.steps.push({
-        type: "test_run_def",
-        captureName,
-        defRef,
-        args: args.length > 0 ? args : undefined,
-        allowFailure: allowFailure || undefined,
-        loc,
-      });
-      continue;
-    }
-
-    // --- ref("args") [allow_failure] (no capture) ---
-    const runMatch = inner.match(
-      /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)\s*\(([^)]*)\)(?:\s+(allow_failure))?\s*$/,
-    );
-    if (runMatch) {
-      const defRef = runMatch[1];
-      if (!isRef(defRef)) {
-        fail(filePath, "test call must target a valid reference: ref(args)", innerNo, col);
-      }
-      const argsRaw = runMatch[2].trim();
-      const args: string[] = argsRaw ? parseTestCallArgs(filePath, argsRaw, innerNo, col) : [];
-      const allowFailure = runMatch[3] === "allow_failure";
-      testBlock.steps.push({
-        type: "test_run_def",
-        defRef,
-        args: args.length > 0 ? args : undefined,
-        allowFailure: allowFailure || undefined,
-        loc,
-      });
-      continue;
-    }
-
-    // --- Reject old syntax: bare assignment without const ---
-    const oldAssignMatch = inner.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)(?:\s|$)/);
-    if (oldAssignMatch) {
-      fail(filePath, `use "const ${oldAssignMatch[1]} = ${oldAssignMatch[2]}(…)" to capture def output`, innerNo, col);
-    }
-
-    // --- Reject a bare def reference without parentheses ---
-    const oldBareCallMatch = inner.match(/^([A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*)(?:\s|$)/);
-    if (oldBareCallMatch) {
-      fail(filePath, `use "${oldBareCallMatch[1]}(…)" to call a def in tests`, innerNo, col);
-    }
-
-    // --- No fallback: reject unrecognized lines ---
-    fail(filePath, `unrecognized test step: ${inner}`, innerNo, col);
+    const t: TestLine = { filePath, cursor, idx: i, raw, toks, lineNo: i + 1, col: head.col };
+    const { step, nextIdx } = parseTestStep(t, trivia);
+    testBlock.steps.push(step);
+    i = nextIdx;
   }
-
-  if (i >= lines.length) {
-    fail(filePath, `unterminated test block: ${description}`, lineNo);
-  }
-  return { testBlock, nextIndex: i + 1 };
+  fail(filePath, `unterminated test block: ${description}`, lineNo);
 }
-
-/** Parse comma-separated args from inside parentheses: "arg1", "arg2" */
-function parseTestCallArgs(filePath: string, argsRaw: string, lineNo: number, col: number): string[] {
-  const decodeTestArg = (token: string): string =>
-    token.startsWith('"') && token.endsWith('"') ? decodeTestString(filePath, token.slice(1, -1), lineNo, col) : token;
-  const args: string[] = [];
-  let current = "";
-  let inQuote = false;
-  for (let j = 0; j < argsRaw.length; j += 1) {
-    const ch = argsRaw[j];
-    if (ch === '"' && (j === 0 || argsRaw[j - 1] !== "\\")) {
-      inQuote = !inQuote;
-      current += ch;
-      continue;
-    }
-    if (ch === "," && !inQuote) {
-      const trimmed = current.trim();
-      if (trimmed) args.push(decodeTestArg(trimmed));
-      current = "";
-      continue;
-    }
-    current += ch;
-  }
-  const trimmed = current.trim();
-  if (trimmed) args.push(decodeTestArg(trimmed));
-  return args;
-}
-

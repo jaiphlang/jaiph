@@ -41,7 +41,7 @@ export function tryParseLocalScript(c: BlockCtx): BlockResult | null {
 export function tryParseLocalDef(c: BlockCtx): BlockResult | null {
   if (!isKeywordForm(c, "def")) return null;
   const lineNo = c.innerNo;
-  const header = parseDefHeader(c.filePath, c.innerRaw, lineNo);
+  const header = parseDefHeader(c.filePath, c.innerRaw, lineNo, c.cursor.lineTokensOf(c.idx));
   const loc = { line: lineNo, col: c.tokens[0]!.col };
   const def: Def = { name: header.name, params: header.params, comments: [], steps: [], loc };
   const { steps, nextIdx } = c.parse.body(c, c.idx + 1, lineNo, { preserveBlankLines: true, inNestedDef: true });

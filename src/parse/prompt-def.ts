@@ -2,7 +2,8 @@ import type { PromptDef } from "../types";
 import { createTrivia, type Trivia } from "./trivia";
 import { fail } from "./core";
 import { parsePromptStep } from "./prompt";
-import { parseUseClauseKeys } from "./scripts";
+import { BodyCursor, declHead, isPunct } from "./body-cursor";
+import { parseUseClauseKeys, useClauseAndEquals } from "./scripts";
 
 /**
  * Parse a module-level named prompt definition:
@@ -28,14 +29,17 @@ export function parsePromptDefBlock(
   trivia: Trivia = createTrivia(),
 ): { promptDef: PromptDef; nextIndex: number; exported: boolean } {
   const lineNo = startIndex + 1;
-  const raw = lines[startIndex];
-  const line = raw.trim();
+  const raw = lines[startIndex]!;
+  const toks = BodyCursor.of(filePath, lines).lineTokensOf(startIndex);
 
-  const match = line.match(
-    /^(export\s+)?prompt\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)(?:\s+use\s+([^=]+?))?\s*=\s*(.*)$/s,
-  );
-  if (!match) {
-    if (/^(export\s+)?prompt\s+[A-Za-z_][A-Za-z0-9_]*\s*\(/.test(line)) {
+  // [export] prompt name (params) [use KEY …] = rhs. The parameter list runs
+  // to the first `)` on the line.
+  const head = declHead(toks, "prompt");
+  const open = head?.name.kind === "ident" ? toks[head.at + 2] : undefined;
+  const close = isPunct(open, "(") ? raw.indexOf(")", open!.col) : -1;
+  const eq = close === -1 ? null : useClauseAndEquals(raw, close + 1);
+  if (!head || !eq) {
+    if (isPunct(open, "(")) {
       fail(
         filePath,
         'named prompt definitions require = after the parameter list: prompt name(params) = "..."',
@@ -49,9 +53,10 @@ export function parsePromptDefBlock(
     );
   }
 
-  const isExported = Boolean(match[1]);
-  const promptName = match[2];
-  const params = match[3]
+  const isExported = head.at === 1;
+  const promptName = head.name.text;
+  const params = raw
+    .slice(open!.col, close)
     .split(",")
     .map((p) => p.trim())
     .filter((p) => p.length > 0);
@@ -60,8 +65,8 @@ export function parsePromptDefBlock(
       fail(filePath, `invalid prompt parameter name "${p}"`, lineNo);
     }
   }
-  const useKeys = match[4] !== undefined ? parseUseClauseKeys(filePath, match[4], lineNo) : undefined;
-  const rhs = match[5].trimStart();
+  const useKeys = eq.use !== undefined ? parseUseClauseKeys(filePath, eq.use, lineNo) : undefined;
+  const rhs = raw.slice(eq.afterEq).trim();
 
   if (!rhs.startsWith('"')) {
     fail(
@@ -73,10 +78,8 @@ export function parsePromptDefBlock(
 
   // Reuse the prompt-step body parser: the RHS after `=` is exactly a prompt
   // step body (string or triple-quoted), with optional `returns`.
-  const bodyLines = [...lines];
-  bodyLines[startIndex] = rhs;
-  const promptCol = raw.indexOf("=") + 2;
-  const result = parsePromptStep(filePath, bodyLines, startIndex, rhs, promptCol, undefined, trivia);
+  const promptCol = eq.afterEq + 1;
+  const result = parsePromptStep(filePath, lines, startIndex, rhs, promptCol, undefined, trivia);
   const step = result.step;
   if (step.type !== "exec" || step.body.kind !== "prompt") {
     fail(filePath, "internal: named prompt body parse error", lineNo);
