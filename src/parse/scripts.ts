@@ -14,6 +14,8 @@ import { ENV_KEY_RE, isReservedEnvKey } from "../env-reserved";
 
 /** Re-exported for the public parser entry (match-arm inline-script check in validate). */
 export { looksLikeInlineScriptCall } from "./fence";
+/** Re-exported for the public parser entry (validator, emitter, and runtime share it). */
+export { parseNestedCallArg, type NestedCallArg } from "./nested-arg";
 
 /**
  * Parse the `use KEY [KEY …]` clause on a script declaration (named script or
@@ -74,18 +76,23 @@ export function validateScriptBodyNoInterpolation(
   lineNo: number,
   col: number,
 ): void {
-  // Match ${identifier} or ${identifier.identifier} — simple Jaiph interpolation
-  // but NOT bash forms like ${var:-...}, ${var:+...}, ${var%%...}, ${var//...}, ${#var}, ${!var}, ${var:N:M}
-  const jaiphInterp = /\$\{([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)\}/;
-  const m = jaiphInterp.exec(body);
-  if (m) {
-    fail(
-      filePath,
-      `script bodies cannot contain Jaiph interpolation (\${${m[1]}}); use $1, $2 positional arguments instead`,
-      lineNo,
-      col,
-    );
+  const name = findJaiphInterpolation(body);
+  if (name !== null) {
+    fail(filePath, jaiphInterpolationInScriptMessage(name), lineNo, col);
   }
+}
+
+/**
+ * First Jaiph-style `${identifier}` / `${identifier.field}` in a one-line script
+ * body, or null. Bash forms (`${var:-…}`, `${#var}`, `${var%%…}`) do not match.
+ */
+export function findJaiphInterpolation(body: string): string | null {
+  const m = /\$\{([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)\}/.exec(body);
+  return m ? m[1] : null;
+}
+
+export function jaiphInterpolationInScriptMessage(name: string): string {
+  return `script bodies cannot contain Jaiph interpolation (\${${name}}); use $1, $2 positional arguments instead`;
 }
 
 export function parseScriptBlock(

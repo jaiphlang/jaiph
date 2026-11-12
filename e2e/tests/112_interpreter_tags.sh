@@ -194,3 +194,45 @@ else
   # nondeterministic: error includes absolute file path prefix which varies
   e2e::assert_contains "${run_out}" "interpreter tags go before the opening quotes: python3'''...''' (not '''python3)" "old tag position produces fix-it error"
 fi
+
+# ---------- inline scripts nested in call arguments ----------
+
+e2e::section "Interpreter tag: inline scripts nested in call arguments"
+
+if [[ "${HAS_PYTHON3}" -eq 0 ]]; then
+  e2e::fail "python3 not in PATH — cannot run nested inline-script e2e"
+else
+  e2e::prepare_test_env "interpreter_tag_nested_arg"
+
+  e2e::file "nested.jh" <<'EOF'
+script show = 'echo "[$1]"'
+
+export def main() {
+  const who = "world"
+  const a = show('echo hi'())
+  const b = show(python3'import sys; print(sys.argv[1].upper())'(who))
+  log "${a} ${b}"
+}
+EOF
+
+  run_out="$(e2e::run "nested.jh")"
+  e2e::expect_stdout "${run_out}" <<'EOF'
+
+Jaiph: Running nested.jh
+
+def main
+  ▸ script __inline_56a79f3b1154
+  ✓ script __inline_56a79f3b1154 (<time>)
+  ▸ script show (1="hi")
+  ✓ script show (<time>)
+  ▸ script __inline_056dd99b3dca (1="world")
+  ✓ script __inline_056dd99b3dca (<time>)
+  ▸ script show (1="WORLD")
+  ✓ script show (<time>)
+  ℹ [hi] [WORLD]
+
+✓ PASS def main (<time>)
+EOF
+
+  e2e::pass "nested inline scripts run with their interpreter and resolve bare-variable args"
+fi

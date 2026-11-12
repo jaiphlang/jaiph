@@ -181,6 +181,7 @@ print("hi")
 | Fenced form | `${…}` passes through to the shell. Triple backticks and one-line backticks are `E_PARSE`. |
 | Interpreter tag | Optional, written directly before the opening quote on either form: `python3'…'()`, `node'''…'''()`. Maps to `#!/usr/bin/env <tag>`. A tag after the opening quotes (`'''python3`) is `E_PARSE`. |
 | Mixing interpreter tag + manual shebang | Error. |
+| As a call argument | A one-liner can be passed as an argument: `show('echo hi'())`, `show(python3'print(1)'(x))`. It runs first and its output becomes the argument. The compiler checks it like any other call. |
 | Default shebang | `#!/usr/bin/env bash` when neither tag nor `#!` line is present. |
 | Emitted name | `scripts/__inline_<12-hex>`; deterministic across runs. |
 | `catch` / `recover` | Allowed on a standalone call step with inline-script body. Forbidden on inline scripts in `log` / `logerr` / `logwarn` / `return` / `const` RHS. |

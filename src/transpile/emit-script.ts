@@ -1,6 +1,6 @@
 import { inlineScriptName, nestedScriptName } from "../inline-script-name";
-import type { Expr, jaiphModule, ScriptDef, ScriptImportDef, StepDef } from "../types";
-import { scriptShebangIsBash, langToShebang, shebangForLang } from "../parser";
+import type { Arg, Expr, jaiphModule, ScriptDef, ScriptImportDef, StepDef } from "../types";
+import { scriptShebangIsBash, langToShebang, parseNestedCallArg, shebangForLang } from "../parser";
 
 /**
  * Replace `alias.name` patterns in shell commands with
@@ -68,11 +68,31 @@ function wrapBashStandaloneScriptBody(body: string, envPreamble: string): string
 
 export type ScriptArtifact = { name: string; content: string };
 
+/**
+ * Inline scripts nested in call arguments (`foo('echo $1'(x))`) are stored as
+ * literal argument text; recognize them with the parser's shared recognizer and
+ * emit their script files too, recursing into their own arguments.
+ */
+function emitInlineFromArgs(args: Arg[] | undefined, seen: Set<string>, out: ScriptArtifact[]): void {
+  for (const arg of args ?? []) {
+    if (arg.kind !== "literal") continue;
+    const nested = parseNestedCallArg(arg.raw);
+    if (!nested) continue;
+    if (nested.kind === "inline_script") {
+      emitInlineScriptArtifact(nested.body, shebangForLang(nested.lang), seen, out);
+    }
+    emitInlineFromArgs(nested.args, seen, out);
+  }
+}
+
 /** Walk all `Expr` nodes carried by a step and yield inline-script bodies. */
 function emitInlineFromExpr(expr: Expr, seen: Set<string>, out: ScriptArtifact[]): void {
   if (expr.kind === "inline_script") {
     const shebang = shebangForLang(expr.lang);
     emitInlineScriptArtifact(expr.body, shebang, seen, out);
+  }
+  if (expr.kind === "inline_script" || expr.kind === "call" || expr.kind === "prompt") {
+    emitInlineFromArgs(expr.args, seen, out);
   }
 }
 
