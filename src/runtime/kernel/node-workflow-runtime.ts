@@ -866,20 +866,24 @@ export class NodeWorkflowRuntime {
       return { ok: true, value: interpolate(input, scope.vars, scope.env, undefined, this.moduleFieldFor(scope)) };
     }
     re.lastIndex = 0;
+    // Interpolate only the literal text between captures. A capture's output is
+    // data: it is appended as-is and never scanned for `${…}`, so output that
+    // happens to contain `${secret}` cannot read Jaiph variables or the env.
+    const fill = (text: string): string =>
+      interpolate(text, scope.vars, scope.env, undefined, this.moduleFieldFor(scope));
     let result = "";
     let lastIndex = 0;
     let m: RegExpExecArray | null;
     while ((m = re.exec(input)) !== null) {
-      result += input.slice(lastIndex, m.index);
+      result += fill(input.slice(lastIndex, m.index));
       const { ref, argsRaw } = parseInlineCaptureCall(m[1]);
       const r = await this.executeRunRef(scope, ref, argsRaw);
       if (r.status !== 0) return { ok: false, result: r };
-      const captured = this.forceValue(r);
-      result += captured;
+      result += this.forceValue(r);
       lastIndex = m.index + m[0].length;
     }
-    result += input.slice(lastIndex);
-    return { ok: true, value: interpolate(result, scope.vars, scope.env, undefined, this.moduleFieldFor(scope)) };
+    result += fill(input.slice(lastIndex));
+    return { ok: true, value: result };
   }
 
   private async evaluateMatch(
