@@ -152,3 +152,31 @@ Call arguments and string literals are parsed today by character scanners that e
 - `e2e/tests/154_string_values.sh` and `e2e/tests/112_interpreter_tags.sh` pass.
 - A comma or `)` inside a quoted argument, `\"` inside an argument, and a nested call three levels deep each have a unit test.
 - `npm test`, `npm run lint`, `npm run arch:check`, and `bash e2e/test_all.sh` pass.
+
+## Dispatch def-body statements from tokens
+
+Completed: 2026-11-12
+
+### PO notes
+
+Implemented by a subagent, reviewed and gated in the main session. `parseBraceBlockBody` reads lines through `BodyCursor` (src/parse/body-cursor.ts; lenient per-line lexing, a `"""` / `'''` block is one token); `STATEMENT` dispatches on `keyOf(tokens[0])`. Handlers live in `stmt-{call,invoke,control,say,return,decl}.ts`, `attached-block.ts`, `block-ctx.ts`; recursion goes through a parsers object so there is no import cycle. Override removed from eslint.config.mjs. No snapshot/golden/fixture changes; a differential run of old vs new parser over 1516 sources plus ~445k line mutations found no diffs.
+
+Left for the helper-removal task: handlers still slice text after the keyword and use `hasUnescapedClosingQuote` / `indexOfClosingDoubleQuote` (to choose "unterminated" vs "multiline strings use triple quotes" messages), `IF_CONDITION_RE`, catch/recover splitting, `splitStatementsOnSemicolons` for inline `{ a; b }`, `startsInlineScript`, and `innerRaw.indexOf(...)` columns. Top-level `scripts.ts`, `env.ts`, `prompt-def.ts`, `tests.ts` still copy `[...lines]`.
+
+Pre-existing bug, preserved (not in scope): `STATEMENT[keyword]` is a plain property lookup, so a def-body line `toString()` / `constructor()` hits Object.prototype and fails with `unterminated block`.
+
+Prerequisite: `src/parse/lexer.ts` exports `tokenize()` (line/column tokens for strings, `"""` blocks, one-line and fenced scripts with interpreter tags, idents, punctuation). If it does not exist, this task is blocked.
+
+`src/parse/workflow-brace.ts` (about 1,400 lines) parses def bodies line by line. The `STATEMENT` table dispatches on `c.inner.startsWith("<keyword> ")`, and fenced / `"""` blocks are parsed by copying the whole `lines` array (`[...lines]`) and splicing one line, once per block, in `workflow-brace.ts`, `const-rhs.ts`, `send-rhs.ts`, `prompt.ts`, `inline-script.ts`, and `triple-quote.ts`. It is exempt from the ESLint `max-lines` and `import/max-dependencies` caps in `eslint.config.mjs`.
+
+### Required
+
+- Def-body statements are parsed from a token cursor. `STATEMENT` dispatches on the first token's kind and text, not on string prefixes.
+- No `[...lines]` copies remain in these files; block parsers advance the cursor.
+- Split `workflow-brace.ts` into cohesive modules under the ESLint caps without an import cycle (`npm run arch:check` enforces `no-circular`), and delete its override in `eslint.config.mjs`.
+- The AST and its trivia are unchanged: same `StepDef` shapes, same `loc` values, same error codes and messages and columns.
+
+### Acceptance
+
+- Golden ASTs, `test-fixtures/compiler-txtar/parse-errors-snapshot.json` (no snapshot update needed), compiler fixtures, and `integration/format-roundtrip.test.ts` are unchanged.
+- `npm test`, `npm run lint` (with the override removed), `npm run arch:check`, and `bash e2e/test_all.sh` pass.
