@@ -180,3 +180,30 @@ Prerequisite: `src/parse/lexer.ts` exports `tokenize()` (line/column tokens for 
 
 - Golden ASTs, `test-fixtures/compiler-txtar/parse-errors-snapshot.json` (no snapshot update needed), compiler fixtures, and `integration/format-roundtrip.test.ts` are unchanged.
 - `npm test`, `npm run lint` (with the override removed), `npm run arch:check`, and `bash e2e/test_all.sh` pass.
+
+## Parse top-level declarations from tokens
+
+Completed: 2026-11-12
+
+### PO notes
+
+Implemented by a subagent, reviewed and gated in the main session. parse-module dispatches on `topLevelKeyword(BodyCursor.lineTokensOf(idx))`; import / import script / channel / config / const / script / prompt def / def header / test blocks and DSL steps (new `test-steps.ts`) read tokens. No `[...lines]` copies remain in src/parse. Differential run vs HEAD over 1516 sources + ~900k mutations: no diffs except the accepted test-DSL string change (`\"` is now the only escape in test strings; CHANGELOG entry added).
+
+Still line/string based (blocks the helper-removal task's prerequisite): parse-module `source.split`, `parseMatchArms` + `statement-split.ts` (match and mock prompt arms), prompt.ts quote scanners, def-body handler text slicing (see the def-body task notes), free-text regions kept for byte-identical errors (import path, param lists, use clause, config values, test call args via `parseTestCallArgs`).
+
+Pre-existing bugs preserved: channel locations via `raw.indexOf(name)` (wrong col when the name is a substring of `channel`); `mock prompt` errors report a 0-based column; config accepts `"a" "b"`; `const x == y` accepted; `import \t as y` gives an empty path; `mock prompt "a" x` accepted.
+
+Prerequisite: `src/parse/lexer.ts` exports `tokenize()` (line/column tokens for strings, `"""` blocks, one-line and fenced scripts with interpreter tags, idents, punctuation). If it does not exist, this task is blocked.
+
+Top-level declarations are parsed line by line: `src/parse/parse-module.ts` dispatches each line, and `scripts.ts`, `env.ts`, `imports.ts`, `channels.ts`, `metadata.ts` (`config { … }`), `prompt-def.ts`, and `tests.ts` (`*.test.jh` blocks) each re-scan raw text with their own regexes.
+
+### Required
+
+- Every top-level declaration is parsed from a token cursor: `import`, `import script`, `channel` and routes, `config { … }`, `const`, `script` (with `use` clause and interpreter tag), `prompt` definitions, `def` / `export def` headers, and `test "…" { … }` blocks with their DSL statements.
+- Config values keep their rules: `\"` is the only escape; `\n`, `\t`, `\\` are `E_PARSE` with the existing migration message (`rejectRemovedEscapes` in `src/parse/core.ts`).
+- The AST and trivia are unchanged, including `ConfigBodyPart.bareSource` and `EnvDeclDef.tripleQuoted`.
+
+### Acceptance
+
+- Golden ASTs, `test-fixtures/compiler-txtar/parse-errors-snapshot.json` (no snapshot update needed), compiler fixtures, and `integration/format-roundtrip.test.ts` are unchanged.
+- `npm test`, `npm run lint`, `npm run arch:check`, and `bash e2e/test_all.sh` pass.
