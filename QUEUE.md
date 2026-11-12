@@ -16,35 +16,7 @@ Process rules:
 7. Acceptance criteria are non-negotiable. A task is not done until every
    acceptance bullet is verified by a test that fails when the contract is violated.
 
-## Add a Jaiph tokenizer (parser not wired yet) #dev-ready
-
-The parser reads `.jh` source line by line with `startsWith` checks and ad hoc quote scanners (`indexOfClosingDoubleQuote`, `hasUnescapedClosingQuote` in `src/parse/core.ts`, the scanners in `src/parse/call-args.ts`, `src/parse/statement-split.ts`, `src/parse/nested-arg.ts`). This task adds a standalone tokenizer. It does not change the parser; later tasks move the parser onto it.
-
-### Required
-
-Add `src/parse/lexer.ts` exporting `tokenize(source: string, filePath: string): Token[]`. Every token has `kind`, `text` (the exact source slice), `line`, and `col` (1-based). Kinds:
-
-| Kind | Source |
-|---|---|
-| `ident` | `[A-Za-z_][A-Za-z0-9_]*` (keywords are idents; the parser decides) |
-| `string` | single-line `"…"`; `\"` is the only escape |
-| `triple_string` | `"""` … `"""` block (opening `"""` ends its line) |
-| `script_oneline` | `'…'` with an optional interpreter tag touching the quote (`python3'…'`); no escapes, first `'` closes |
-| `script_fenced` | `'''` … `'''` with an optional tag before the opening quotes (`node'''`); closer is a trimmed line starting with `'''` |
-| `number` | `[0-9]+` |
-| `regex` | `/…/` in match-pattern position only (after `match … {`, or after the pattern-alternation bar inside a match block) |
-| `punct` | `( ) { } , = . => ->`, the pattern-alternation bar, and `==` / `!=` |
-| `newline`, `comment` (`#` to end of line) | |
-
-Tags follow `[A-Za-z_][A-Za-z0-9_.-]*`. A tag separated from the quote by whitespace is an `ident` followed by a script token. `${…}` inside a string stays part of the `string` token. Removed forms keep their current errors: triple backticks and one-line backticks are `E_PARSE` with the messages in `src/parse/fence.ts`.
-
-### Acceptance
-
-- Unit tests in `src/parse/lexer.test.ts` cover every kind, tags with `.` and `-`, `\"` inside strings, an apostrophe inside a string (`"it's"`), and unterminated string / block errors (`E_PARSE` with line and column).
-- Lossless: for every source collected by `integration/format-roundtrip.test.ts` (tracked `.jh` files, compiler-txtar valid inputs, e2e heredocs, docs code blocks) that parses today, concatenating `text` of all tokens plus the skipped whitespace reproduces the source exactly. Add this as a test.
-- The tokenizer is not imported by any parser module yet. `npm test`, `npm run lint`, and `npm run arch:check` pass.
-
-## Parse strings and call arguments from tokens
+## Parse strings and call arguments from tokens #dev-ready
 
 Prerequisite: `src/parse/lexer.ts` exports `tokenize()` with `string`, `triple_string`, `script_oneline`, `ident`, and `punct` tokens carrying line and column. If it does not exist, this task is blocked.
 
@@ -63,8 +35,6 @@ Call arguments and string literals are parsed today by character scanners that e
 - `e2e/tests/154_string_values.sh` and `e2e/tests/112_interpreter_tags.sh` pass.
 - A comma or `)` inside a quoted argument, `\"` inside an argument, and a nested call three levels deep each have a unit test.
 - `npm test`, `npm run lint`, `npm run arch:check`, and `bash e2e/test_all.sh` pass.
-
-Note for implementer: `src/parse/lexer.ts` does not currently exist in the repo. This task stays blocked until that tokenizer module lands.
 
 ## Dispatch def-body statements from tokens
 
