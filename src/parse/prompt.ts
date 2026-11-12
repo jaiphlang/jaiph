@@ -2,7 +2,7 @@ import type { Expr, StepDef } from "../types";
 import { createTrivia, type Trivia } from "./trivia";
 import { fail, SINGLE_QUOTE_MESSAGE, hasUnescapedClosingQuote, indexOfClosingDoubleQuote, isJaiphInterpolationRef, rejectTrailingContent } from "./core";
 import { parseCallRef } from "./call-args";
-import { dedentTripleQuotedBody, parseTripleQuoteBlock, tripleQuoteBodyToRaw } from "./triple-quote";
+import { dedentTripleQuotedBody, readTripleQuoteBlock, tripleQuoteBodyToRaw } from "./triple-quote";
 
 /**
  * Prompt body source tag stored in trivia.
@@ -149,8 +149,9 @@ function parsePromptTripleQuoteBlock(
   filePath: string,
   lines: string[],
   tripleQuoteLineIdx: number,
+  openText: string,
 ): { body: string; nextIdx: number; returns?: string } {
-  const { body, nextIdx, afterClose } = parseTripleQuoteBlock(filePath, lines, tripleQuoteLineIdx);
+  const { body, nextIdx, afterClose } = readTripleQuoteBlock(filePath, lines, tripleQuoteLineIdx, openText);
   if (afterClose.length === 0) {
     return { body, nextIdx };
   }
@@ -221,23 +222,14 @@ export function parsePromptStep(
 
   // --- Case 1: Triple-quoted block ---
   if (promptArg.startsWith('"""')) {
-    let tqLines: string[];
-    let tripleQuoteLineIdx: number;
-    if (lines.length === 0) {
-      tqLines = promptArg.split(/\r?\n/);
-      tripleQuoteLineIdx = 0;
-    } else {
-      tqLines = [...lines];
-      tqLines[lineIdx] = promptArg;
-      tripleQuoteLineIdx = lineIdx;
-    }
+    const linesForReturns = lines.length === 0 ? promptArg.split(/\r?\n/) : lines;
     const { body, nextIdx: realNextIdx, returns: returnsOnClosingLine } = parsePromptTripleQuoteBlock(
       filePath,
-      tqLines,
-      tripleQuoteLineIdx,
+      linesForReturns,
+      lines.length === 0 ? 0 : lineIdx,
+      lines.length === 0 ? linesForReturns[0]! : promptArg,
     );
     const raw = tripleQuoteBodyToRaw(dedentTripleQuotedBody(body));
-    const linesForReturns = lines.length === 0 ? tqLines : lines;
     let returnsSchema: string | undefined = returnsOnClosingLine;
     let consumeEndIdx = realNextIdx;
     if (returnsSchema === undefined) {

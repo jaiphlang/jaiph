@@ -117,20 +117,7 @@ export function parseFencedBlock(
   fenceLineIdx: number,
 ): { body: string; afterClose: string; nextIdx: number } {
   const lineNo = fenceLineIdx + 1;
-  const openLine = lines[fenceLineIdx].trim();
-
-  rejectRemovedScriptFence(filePath, openLine, lineNo);
-
-  if (!openLine.startsWith(SCRIPT_FENCE)) {
-    fail(filePath, `expected opening fence ${SCRIPT_FENCE}`, lineNo);
-  }
-  const afterQuotes = openLine.slice(SCRIPT_FENCE.length);
-  if (afterQuotes.length > 0) {
-    if (LANG_TAG_RE.test(afterQuotes)) {
-      fail(filePath, removedFenceTagMessage(afterQuotes), lineNo);
-    }
-    fail(filePath, `invalid opening fence: nothing may follow ${SCRIPT_FENCE} on the opening line`, lineNo);
-  }
+  checkFenceOpener(filePath, lines[fenceLineIdx].trim(), lineNo);
 
   // Collect body lines until closing fence
   const bodyLines: string[] = [];
@@ -147,7 +134,28 @@ export function parseFencedBlock(
     bodyLines.push(lines[i]);
   }
 
-  fail(filePath, `unterminated fenced block: no closing ${SCRIPT_FENCE} before end of file`, lineNo);
+  fail(filePath, UNTERMINATED_FENCE_MESSAGE, lineNo);
+}
+
+export const UNTERMINATED_FENCE_MESSAGE = `unterminated fenced block: no closing ${SCRIPT_FENCE} before end of file`;
+
+/**
+ * Check a fenced block's opening line (trimmed): exactly `'''`, with any
+ * interpreter tag already split off.
+ */
+export function checkFenceOpener(filePath: string, openLine: string, lineNo: number): void {
+  rejectRemovedScriptFence(filePath, openLine, lineNo);
+
+  if (!openLine.startsWith(SCRIPT_FENCE)) {
+    fail(filePath, `expected opening fence ${SCRIPT_FENCE}`, lineNo);
+  }
+  const afterQuotes = openLine.slice(SCRIPT_FENCE.length);
+  if (afterQuotes.length > 0) {
+    if (LANG_TAG_RE.test(afterQuotes)) {
+      fail(filePath, removedFenceTagMessage(afterQuotes), lineNo);
+    }
+    fail(filePath, `invalid opening fence: nothing may follow ${SCRIPT_FENCE} on the opening line`, lineNo);
+  }
 }
 
 /** Remove the block's common leading margin so indented `.jh` script bodies run correctly. */

@@ -2,10 +2,10 @@ import type { StepDef } from "../types";
 import { fail, parseParamList } from "./core";
 
 // Def-header parsing shared by the module-level def parser (`defs.ts`) and the
-// nested-def handler in `workflow-brace.ts`. Kept in a leaf that imports only
-// `core` so `workflow-brace.ts` can reuse it without the
-// `workflow-brace -> defs -> workflow-brace` import cycle (defs.ts pulls the
-// recursive body parser `parseBraceBlockBody` from workflow-brace).
+// nested-def handler in `stmt-decl.ts`. Kept in a leaf that imports only
+// `core` so the def-body statement modules can reuse it without an import
+// cycle through `defs.ts` (which pulls the recursive body parser
+// `parseBraceBlockBody` from workflow-brace).
 
 export interface DefHeader {
   name: string;

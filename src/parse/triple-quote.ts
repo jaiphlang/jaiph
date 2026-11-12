@@ -1,5 +1,7 @@
 import { dedentCommonLeadingWhitespace } from "./dedent";
 import { decodeQuotedInner, fail } from "./core";
+import { BodyCursor } from "./body-cursor";
+import type { Token } from "./lexer";
 
 /** Per language.md: trim blank lines adjacent to opening/closing `"""` only — do not dedent inner margin. */
 export function trimAdjacentBlankLines(text: string): string {
@@ -22,29 +24,48 @@ export function parseTripleQuoteBlock(
   lines: string[],
   tripleQuoteLineIdx: number,
 ): { body: string; nextIdx: number; afterClose: string } {
-  const lineNo = tripleQuoteLineIdx + 1;
-  const openLine = lines[tripleQuoteLineIdx].trim();
+  return readTripleQuoteBlock(filePath, lines, tripleQuoteLineIdx, lines[tripleQuoteLineIdx]!);
+}
+
+/**
+ * Read the `"""` block that opens at the end of line `idx`. `openText` is the
+ * line's text from the opening quotes on (a step argument such as the text
+ * after `log `). The block is one `triple_string` token: its body is the lines
+ * between the quotes, blank lines next to either trimmed; `afterClose` is the
+ * rest of the closing line (trimmed) and `nextIdx` the line after it.
+ */
+export function readTripleQuoteBlock(
+  filePath: string,
+  lines: string[],
+  idx: number,
+  openText: string,
+): { body: string; nextIdx: number; afterClose: string } {
+  const lineNo = idx + 1;
+  const openLine = openText.trim();
 
   if (!openLine.startsWith('"""')) {
     fail(filePath, 'expected opening triple-quote """', lineNo);
   }
-  const afterOpen = openLine.slice(3);
-  if (afterOpen.trim().length > 0) {
+  if (openLine.slice(3).trim().length > 0) {
     fail(filePath, 'opening """ must not have content on the same line', lineNo);
   }
 
-  const bodyLines: string[] = [];
-  let i = tripleQuoteLineIdx + 1;
-  for (; i < lines.length; i++) {
-    const trimmed = lines[i].trim();
-    if (trimmed.startsWith('"""')) {
-      const afterClose = trimmed.slice(3).trim();
-      return { body: joinTripleQuoteBody(bodyLines), nextIdx: i + 1, afterClose };
-    }
-    bodyLines.push(lines[i]);
+  const cursor = BodyCursor.of(filePath, lines);
+  let tok: Token;
+  try {
+    tok = cursor.tokenAt(idx, lines[idx]!.trimEnd().length - 2);
+  } catch {
+    tok = { kind: "other", text: "", line: lineNo, col: 1, offset: 0 };
   }
-
-  fail(filePath, 'unterminated triple-quoted block: no closing """ before end of file', lineNo);
+  if (tok.kind !== "triple_string") {
+    fail(filePath, 'unterminated triple-quoted block: no closing """ before end of file', lineNo);
+  }
+  const bodyLines = tok.text.split("\n").slice(1, -1);
+  return {
+    body: joinTripleQuoteBody(bodyLines),
+    nextIdx: BodyCursor.endLineIdx(tok) + 1,
+    afterClose: cursor.textAfter(tok).trim(),
+  };
 }
 
 function joinTripleQuoteBody(bodyLines: string[]): string {
@@ -83,9 +104,9 @@ export function canonicalizeTripleQuotedString(raw: string): string {
 }
 
 /**
- * Helper for step parsers: when a step argument starts with `"""`, splice it back
- * onto the source line and parse the triple-quoted block. Errors if any content
- * trails the closing `"""`. Returns the message body and the next source index.
+ * Helper for step parsers: a step argument `arg` that starts with `"""` on line
+ * `idx`. Errors if any content trails the closing `"""`. Returns the message
+ * body and the next source index.
  */
 export function consumeTripleQuotedArg(
   filePath: string,
@@ -93,9 +114,7 @@ export function consumeTripleQuotedArg(
   idx: number,
   arg: string,
 ): { body: string; nextIdx: number } {
-  const tqLines = [...lines];
-  tqLines[idx] = arg;
-  const { body, nextIdx, afterClose } = parseTripleQuoteBlock(filePath, tqLines, idx);
+  const { body, nextIdx, afterClose } = readTripleQuoteBlock(filePath, lines, idx, arg);
   if (afterClose) fail(filePath, 'unexpected content after closing """', nextIdx);
   return { body, nextIdx };
 }

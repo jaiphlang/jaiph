@@ -207,3 +207,12 @@ test("lexer: removed backtick forms keep their fence.ts messages", () => {
   throwsAt("script s = ```\necho\n```", 1, 12, /script bodies use triple single quotes/);
   throwsAt("script s = `echo`", 1, 12, /script one-liners use single quotes/);
 });
+
+test("start + startAt: lexes from an offset without recounting lines; positions stay absolute", () => {
+  const src = 'a\nb\n  log "x"\n';
+  const start = src.indexOf("log");
+  const counted = tokenize(src, "t.jh", { start });
+  const given = tokenize(src, "t.jh", { start, startAt: { line: 3, col: 3 } });
+  assert.deepEqual(given, counted);
+  assert.deepEqual(given[0], { kind: "ident", text: "log", line: 3, col: 3, offset: start });
+});

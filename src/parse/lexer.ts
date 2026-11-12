@@ -1,5 +1,6 @@
-// Standalone tokenizer for `.jh` source. Not used by the parser yet: later
-// tasks move the line-based parser onto these tokens.
+// Tokenizer for `.jh` source. Call arguments and def-body statements (through
+// `BodyCursor`) are parsed from these tokens; top-level declarations still read
+// lines.
 //
 // Lossless: every source character belongs to exactly one token, except spaces,
 // tabs and carriage returns between tokens. Each token's `text` is the exact
@@ -50,6 +51,11 @@ export interface LexOptions {
    * whole `source`, so errors point at the real file position.
    */
   start?: number;
+  /**
+   * 1-based line and column of `start`, when the caller already knows them.
+   * Skips counting the newlines before `start`.
+   */
+  startAt?: { line: number; col: number };
 }
 
 /** Longest first, so `=>` wins over `=` and `${` over `$`. */
@@ -78,10 +84,15 @@ export function* lex(source: string, filePath: string, options: LexOptions = {})
   let pos = options.start ?? 0;
   let line = 1;
   let lineStart = 0;
-  for (let i = 0; i < pos; i += 1) {
-    if (source[i] === "\n") {
-      line += 1;
-      lineStart = i + 1;
+  if (options.startAt) {
+    line = options.startAt.line;
+    lineStart = pos - (options.startAt.col - 1);
+  } else {
+    for (let i = 0; i < pos; i += 1) {
+      if (source[i] === "\n") {
+        line += 1;
+        lineStart = i + 1;
+      }
     }
   }
 

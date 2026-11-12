@@ -2,7 +2,7 @@ import type { Expr, DefRef } from "../types";
 import { createTrivia, type Trivia } from "./trivia";
 import { fail, rejectTrailingContent } from "./core";
 import { parseCallRefMultiline, parseCallRef } from "./call-args";
-import { dedentTripleQuotedBody, parseTripleQuoteBlock, tripleQuoteBodyToRaw } from "./triple-quote";
+import { dedentTripleQuotedBody, readTripleQuoteBlock, tripleQuoteBodyToRaw } from "./triple-quote";
 import { parseAnonymousInlineScript, startsInlineScript } from "./inline-script";
 import { parsePromptStep } from "./prompt";
 import { parseMatchAfterKeyword } from "./match";
@@ -131,9 +131,7 @@ export function parseConstRhs(
   }
   // const name = """..."""
   if (head.startsWith('"""')) {
-    const tqLines = [...lines];
-    tqLines[lineIdx] = head;
-    const { body, nextIdx, afterClose } = parseTripleQuoteBlock(filePath, tqLines, lineIdx);
+    const { body, nextIdx, afterClose } = readTripleQuoteBlock(filePath, lines, lineIdx, head);
     if (afterClose) fail(filePath, 'unexpected content after closing """', nextIdx);
     const value: Expr = { kind: "literal", raw: tripleQuoteBodyToRaw(dedentTripleQuotedBody(body)) };
     trivia.setNode(value, { tripleQuoted: true, rawBody: body });

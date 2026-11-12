@@ -5,11 +5,22 @@ import { join } from "node:path";
 import { parsejaiph } from "../parser";
 import type { StepDef } from "../types";
 
-// `parseAttachedBlock` was merged into workflow-brace.ts to break the former
-// steps.ts <-> workflow-brace.ts import cycle (see docs/agent-analyzability.md);
-// the shape guard below now runs against its current home.
-const attachedBlockPath = join(process.cwd(), "src/parse/workflow-brace.ts");
-const attachedBlockSource = readFileSync(attachedBlockPath, "utf8");
+// The shape guard below runs against every def-body statement module: the
+// dispatcher (workflow-brace.ts), `parseAttachedBlock` (attached-block.ts), and
+// the statement handlers (stmt-*.ts).
+const statementModules = [
+  "workflow-brace.ts",
+  "attached-block.ts",
+  "stmt-call.ts",
+  "stmt-invoke.ts",
+  "stmt-control.ts",
+  "stmt-say.ts",
+  "stmt-return.ts",
+  "stmt-decl.ts",
+];
+const attachedBlockSource = statementModules
+  .map((f) => readFileSync(join(process.cwd(), "src/parse", f), "utf8"))
+  .join("\n");
 
 // === AC1: no legacy per-host catch/recover mini-parser reappears ===
 

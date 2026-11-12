@@ -15,7 +15,7 @@ const STRING_RHS_FILES = [
   "core.ts",           // parseLogMessageRhs
   "metadata.ts",       // parseMetadataValue
   "prompt.ts",         // parsePromptStep
-  "workflow-brace.ts", // tryParseFail
+  "stmt-say.ts",       // tryParseFail
 ];
 
 test("string-rhs parity: all string-RHS parsers use isJaiphInterpolationRef", () => {
