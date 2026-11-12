@@ -246,3 +246,39 @@ Statement dispatch and top-level declarations read tokens, but several parsers s
 - A differential run of the parser before and after the change, over every repo source (tracked `.jh`, compiler-txtar inputs, e2e heredocs, docs blocks) plus per-line mutations of match arms and statement operands, reports no difference in AST (with `loc`), formatter output, or exact error text. Record the run size in the task notes.
 - `grep` finds no call to the six helpers above in parser code under `src/parse/` (definitions and tests excepted).
 - `npm test`, `npm run lint`, `npm run arch:check`, and `bash e2e/test_all.sh` pass.
+
+## Remove the line-based parser helpers
+
+Completed: 2026-11-13
+
+### PO notes
+
+Implemented by a subagent, reviewed and gated in the main session. One `BodyCursor` over the whole source; positions are line-start offsets; parsers take `(cursor, at)` and return `next`. Deleted statement-split.ts and the quote/prefix scanners (see commit). New guard test `src/parse/line-scan-grep.test.ts`; contributing.md test table updated. Remaining `split(` calls in src/parse split params, `use` clauses, route lists, shebang words, or a block token's own text — none split the source into lines. `text(at)` / `lineNo(at)` still read source text by offset for free-form regions, error messages, and the multi-line `returns` scan.
+
+Differential vs HEAD: 1516 sources, whole-source variants (CRLF, CR, no final newline, truncations), 24 structural mutators; ~2.4M checks, 0 diffs. `atEnd` is `!(at <= source.length)` on purpose to keep the `Object.prototype` STATEMENT quirk's old "unterminated block" result.
+
+Note for the user: `.claude/settings.local.json` still allow-lists `node --test dist/src/parse/statement-split.test.js` (file deleted); not edited.
+
+Prerequisite: def bodies, top-level declarations, strings, and call arguments are all parsed from `tokenize()` in `src/parse/lexer.ts`. If any parser module still scans raw lines, this task is blocked.
+
+### Required
+
+- Delete every helper that only served line-based parsing: string-prefix detectors (`startsInlineScript`, `startsTaggedScriptFence`, `splitScriptLangPrefix`, `looksLikeInlineScriptCall` if still present), quote scanners (`indexOfClosingDoubleQuote`, `hasUnescapedClosingQuote`), `src/parse/statement-split.ts` if unused, and anything `ts-prune`-style dead after the migration. Keep functions the runtime or validator still import through `src/parser.ts`.
+- Update `docs/architecture.md` (parser section) to describe the tokenizer and the cursor-based parsers, and remove references to deleted helpers. `docs/agent-analyzability.md` parse row stays accurate.
+
+### Acceptance
+
+- No file under `src/parse/` reads `.split("\n")` lines for parsing except `tokenize()`.
+- Golden ASTs, compiler fixtures, and `integration/format-roundtrip.test.ts` are unchanged.
+- `npm test`, `npm run lint`, `npm run arch:check`, and `bash e2e/test_all.sh` pass. Add a CHANGELOG entry under Unreleased.
+
+### Known remaining line-based reads (as of the match-arm / operand task)
+
+- `src/parse/parse-module.ts`: `source.split(/\r?\n/)`; the `lines` array is the `BodyCursor` backbone and the `{ nextIndex }` contract between parsers. `src/parse/call-args.ts` computes a `lineOffset` from it.
+- `src/parse/prompt.ts`: `returns` parsing joins `\` continuation lines and scans a schema string that may continue on later lines.
+- `src/parse/attached-block.ts`: multi-line block `}` pre-scan over `lines`.
+- `src/parse/triple-quote.ts` `readTripleQuoteBlock` / `readFencedScript`: opener column from `lines[idx].trimEnd().length`.
+- Free-form text regions kept for byte-identical errors: import path, parameter lists, `use` clause, config values, `channel` names (`raw.indexOf`), test call args (`parseTestCallArgs`), `matchSendOperator` / `matchLegacySendOperator`, assignment-guard regexes, `MATCH_HEAD_RE`.
+- Helper definitions now unused by parser code: `splitStatementsOnSemicolons` (only dead `expandBlockLineStatements` and tests), `hasUnescapedClosingQuote`, `indexOfClosingDoubleQuote`, `startsInlineScript`, `splitScriptLangPrefix` — check validator / formatter / runtime imports through `src/parser.ts` before deleting.
+
+Behaviour must stay unchanged (AST, trivia, loc, messages, columns). Use a before/after differential run of the parser over every repo source plus line mutations, as the previous parser tasks did.
