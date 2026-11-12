@@ -202,9 +202,9 @@ function emitInlineScriptArtifact(
   seen.add(name);
   const resolvedShebang = shebang ?? "#!/usr/bin/env bash";
   const isBash = scriptShebangIsBash(shebang);
-  // Inline script body uses \n as newline escape in the DSL string
-  const expandedBody = body.replace(/\\n/g, "\n");
-  const wrapped = isBash ? wrapBashStandaloneScriptBody(expandedBody, "") : expandedBody;
+  // The body is emitted exactly as written: a `\n` in shell code (printf, sed,
+  // echo -e) must reach the interpreter as backslash + n, not a newline.
+  const wrapped = isBash ? wrapBashStandaloneScriptBody(body, "") : body;
   const content = wrapped.length > 0 ? `${resolvedShebang}\n${wrapped}\n` : `${resolvedShebang}\n`;
   out.push({ name, content });
 }

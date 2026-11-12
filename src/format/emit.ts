@@ -8,7 +8,7 @@ import type {
   DefMetadata,
   TopLevelEmitOrder,
 } from "../types";
-import { createTrivia, type Trivia } from "../parser";
+import { createTrivia, encodeQuoted, type Trivia } from "../parser";
 import {
   emitComments,
   emitCommentBlock,
@@ -155,7 +155,7 @@ export function emitModule(
  * string, so `"${model}"` is never rewritten to bare `model`.
  */
 function emitConfigStringRhs(value: string, bareSource?: string): string {
-  return bareSource ?? JSON.stringify(value);
+  return bareSource ?? encodeQuoted(value);
 }
 
 /**
@@ -256,11 +256,13 @@ function emitEnvDecl(env: EnvDeclDef): string[] {
   if (env.wasQuoted) {
     // Author wrote a double-quoted string. Preserve the quoted form regardless
     // of value content (the formatter must not toggle delimiters based on
-    // whether the value happens to contain a space).
-    if (/["\\]/.test(env.value)) {
+    // whether the value happens to contain a space). `env.value` is the source
+    // text between the quotes, so re-wrapping it reproduces the source exactly.
+    // An unescaped `"` can only come from a `"""` block, so keep that form.
+    if (/(^|[^\\])"/.test(env.value)) {
       return [`const ${env.name} = """`, env.value, '"""'];
     }
-    return [`const ${env.name} = ${JSON.stringify(env.value)}`];
+    return [`const ${env.name} = "${env.value}"`];
   }
   if (/^[A-Za-z0-9_./@+#%^&=*:~?-]+$/.test(env.value)) {
     return [`const ${env.name} = ${env.value}`];

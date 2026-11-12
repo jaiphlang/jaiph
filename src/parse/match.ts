@@ -1,5 +1,5 @@
 import type { MatchArmDef, MatchExprDef, MatchPatternDef } from "../types";
-import { fail, SINGLE_QUOTE_MESSAGE, indexOfClosingDoubleQuote, unescapeDoubleQuotedInner } from "./core";
+import { decodeQuotedInner, fail, indexOfClosingDoubleQuote, rejectRemovedEscapes, SINGLE_QUOTE_MESSAGE } from "./core";
 import { splitStatementsOnSemicolons } from "./statement-split";
 import { looksLikeInlineScriptCall } from "./fence";
 import { tripleQuoteBodyToRaw, trimAdjacentBlankLines } from "./triple-quote";
@@ -36,7 +36,9 @@ function parsePattern(filePath: string, text: string, lineNo: number): { pattern
     if (closeIdx === -1) {
       fail(filePath, "unterminated string in match pattern", lineNo);
     }
-    const value = unescapeDoubleQuotedInner(t.slice(1, closeIdx));
+    const inner = t.slice(1, closeIdx);
+    rejectRemovedEscapes(filePath, inner, "match pattern", lineNo);
+    const value = decodeQuotedInner(inner);
     const rest = t.slice(closeIdx + 1).trimStart();
     return { pattern: { kind: "string_literal", value }, rest };
   }

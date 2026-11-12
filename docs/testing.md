@@ -46,7 +46,7 @@ mock prompt "first response"
 mock prompt "second response"
 ```
 
-Multiple `mock prompt` lines queue in order, and one response is consumed per `prompt` call. Strings must use double quotes, and they support the `\"`, `\n`, and `\\` escapes. A bare identifier refers to a test-block `const` declared earlier as a double-quoted string:
+Multiple `mock prompt` lines queue in order, and one response is consumed per `prompt` call. Strings use double quotes. `\"` is the only escape, and every other backslash stays as written. For multi-line text, declare a test-block `const` with a `"""…"""` block and refer to it by name. A bare identifier refers to a test-block `const` declared earlier:
 
 ```jh
 const greeting = "hi"
