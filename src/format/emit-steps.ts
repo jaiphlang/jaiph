@@ -38,6 +38,33 @@ function emitLogLiteralRhs(message: string): string {
   return `"${message}"`;
 }
 
+/**
+ * Append an exec step's `catch` / `recover` handler to the last line of its
+ * call (a managed call or an inline script, whose closing line ends in `(args)`).
+ */
+function attachHandler(
+  headLines: string[],
+  step: Extract<StepDef, { type: "exec" }>,
+  ci: string,
+  pad: string,
+  trivia: Trivia,
+): string[] {
+  const handler = step.recover ? { kw: "recover", h: step.recover } : step.catch ? { kw: "catch", h: step.catch } : null;
+  if (!handler) return headLines;
+  const out = headLines.slice(0, -1);
+  const last = headLines[headLines.length - 1];
+  const bindStr = `(${handler.h.bindings.failure})`;
+  if ("single" in handler.h) {
+    const text = emitStep(handler.h.single, pad, "", trivia).map((l) => l.trim()).join("\n");
+    out.push(`${last} ${handler.kw} ${bindStr} ${text}`);
+  } else {
+    out.push(`${last} ${handler.kw} ${bindStr} {`);
+    out.push(...emitSteps(handler.h.block, pad, ci + pad, trivia));
+    out.push(`${ci}}`);
+  }
+  return out;
+}
+
 export function emitSteps(steps: StepDef[], pad: string, currentIndent: string, trivia: Trivia): string[] {
   const lines: string[] = [];
   for (const step of steps) {
@@ -283,40 +310,14 @@ function emitStep(step: StepDef, pad: string, currentIndent: string, trivia: Tri
       const ref = emitRef(body.callee, body.args);
       const asyncPrefix = body.async ? "async " : "";
       const head = stdinPrefix ? `${stdinPrefix}${ref}` : `${asyncPrefix}${ref}`;
-      if (step.recover) {
-        const b = step.recover.bindings;
-        const bindStr = `(${b.failure})`;
-        if ("single" in step.recover) {
-          const recoverLines = emitStep(step.recover.single, pad, "", trivia);
-          const recoverText = recoverLines.map((l) => l.trim()).join("\n");
-          lines.push(`${ci}${capture}${head} recover ${bindStr} ${recoverText}`);
-        } else {
-          lines.push(`${ci}${capture}${head} recover ${bindStr} {`);
-          lines.push(...emitSteps(step.recover.block, pad, ci + pad, trivia));
-          lines.push(`${ci}}`);
-        }
-      } else if (step.catch) {
-        const b = step.catch.bindings;
-        const bindStr = `(${b.failure})`;
-        if ("single" in step.catch) {
-          const recoverLines = emitStep(step.catch.single, pad, "", trivia);
-          const recoverText = recoverLines.map((l) => l.trim()).join("\n");
-          lines.push(`${ci}${capture}${head} catch ${bindStr} ${recoverText}`);
-        } else {
-          lines.push(`${ci}${capture}${head} catch ${bindStr} {`);
-          lines.push(...emitSteps(step.catch.block, pad, ci + pad, trivia));
-          lines.push(`${ci}}`);
-        }
-      } else {
-        lines.push(`${ci}${capture}${head}`);
-      }
+      lines.push(...attachHandler([`${ci}${capture}${head}`], step, ci, pad, trivia));
       return lines;
     }
     if (body.kind === "inline_script") {
       const inlineLines = emitInlineScriptLines(
         `${ci}${capture}${stdinPrefix}`, body, trivia, ci, `${ci}${pad}`,
       );
-      lines.push(...inlineLines);
+      lines.push(...attachHandler(inlineLines, step, ci, pad, trivia));
       return lines;
     }
     if (body.kind === "prompt") {
