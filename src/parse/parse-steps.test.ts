@@ -7,7 +7,7 @@ import type { StepDef } from "../types";
  * After Refactor 2 the per-host catch/recover parsers (`parseEnsureStep`,
  * `parseRunCatchStep`, `parseRunRecoverStep`) and their mini body parser
  * (`parseCatchStatement`) are gone. The contract is now exercised end-to-end
- * through `parsejaiph` — `parseAttachedBlock` (in `src/parse/workflow-brace.ts`)
+ * through `parsejaiph` — `parseAttachedBlock` (in `src/parse/attached-block.ts`)
  * delegates body parsing to the same `parseBlockStatement` used at the top
  * level.
  */

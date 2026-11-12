@@ -1,83 +1,67 @@
-import type { CatchBody, Def, Expr, DefMetadata, LocalDecl, StepDef } from "../types";
-import { createTrivia, type Trivia } from "./trivia";
-import { parseScriptBlock } from "./scripts";
-import { parsePromptDefBlock } from "./prompt-def";
-import { parseDefHeader, stripTrailingBlankLines } from "./def-header";
-import {
-  colFromRaw,
-  fail,
-  hasUnescapedClosingQuote,
-  indexOfClosingDoubleQuote,
-  isJaiphInterpolationRef,
-  isReservedBuiltinName,
-  matchLegacySendOperator,
-  matchSendOperator,
-  parseSendChannelArrow,
-  parseLogMessageRhs,
-  rejectTrailingContent,
-  SINGLE_QUOTE_MESSAGE,
-} from "./core";
-import { consumeTripleQuotedArg, dedentTripleQuotedBody, parseTripleQuoteBlock, tripleQuoteBodyToRaw } from "./triple-quote";
-import { parseCallRef, parseCallRefMultiline } from "./call-args";
-import { parseConstRhs } from "./const-rhs";
-import { parseAnonymousInlineScript } from "./inline-script";
-import { startsInlineScript, startsTaggedScriptFence } from "./fence";
-import { parseConfigBlock } from "./metadata";
-import { splitStatementsOnSemicolons } from "./statement-split";
-import { parsePromptStep } from "./prompt";
-import { parseSendRhs } from "./send-rhs";
-import { parseMatchAfterKeyword } from "./match";
-import { dottedReturnToQuotedString, isBareDottedIdentifierReturn, isBareIdentifierReturn, bareIdentifierToQuotedString } from "./workflow-return-dotted";
+// Def-body statement dispatcher. `parseBraceBlockBody` walks a `{ … }` body
+// one statement at a time on a `BodyCursor`; `parseBlockStatement` dispatches
+// a statement on its first token through the `STATEMENT` table. The handlers
+// live in the stmt-*.ts modules and reach back into these two functions only
+// through `BlockCtx.parse`, so there is no import cycle.
 
-export type BlockParseOpts = {
-  /** When true, push `blank_line` trivia steps so the formatter can preserve spacing. */
-  preserveBlankLines?: boolean;
-  /**
-   * When set, allow a `config { … }` block as the first non-comment statement.
-   * The callback receives the parsed metadata and may throw via `fail()` to
-   * reject specific keys (workflows reject `module.*`).
-   */
-  onConfigBlock?: (metadata: DefMetadata, lineNo: number) => void;
-  /**
-   * When set (used for `if` bodies), also close the block on a `} else {`
-   * line and signal it via `closedWithElse` in the return value. Without
-   * this flag, `} else {` is parsed as a normal statement line (and errors).
-   */
-  allowElseTerminator?: boolean;
-  /**
-   * When set (nested `def` bodies), reject `import` / `import script` and
-   * `config { … }` lines as parse errors instead of letting them fall
-   * through to the shell handler — same class as the nested `export`
-   * rejection. Top-level def bodies and module level are unaffected.
-   */
-  inNestedDef?: boolean;
+import type { StepDef } from "../types";
+import { createTrivia, type Trivia } from "./trivia";
+import { fail } from "./core";
+import { BodyCursor, isPunct, keyOf } from "./body-cursor";
+import { elseTerminator, tryParseElseError, tryParseFor, tryParseIf, tryParseStandaloneMatch } from "./stmt-control";
+import { tryParseConst, tryBareCall, tryParseAsync, tryParseStdin } from "./stmt-invoke";
+import { tryParseFail, tryParseLog, tryParseLogerr, tryParseLogwarn, tryParsePrompt, tryParseSend } from "./stmt-say";
+import { tryParseReturn } from "./stmt-return";
+import {
+  applyAssignmentGuards,
+  rejectNestedModuleForms,
+  rejectNonStatement,
+  rejectRouteDeclaration,
+  tryConfigBlock,
+  tryLegacySend,
+  tryParseEnsureRemoved,
+  tryParseExportInDef,
+  tryParseLocalDef,
+  tryParseLocalScript,
+  tryParseRunKeywordRemoved,
+  tryParseWait,
+} from "./stmt-decl";
+import type { BlockCtx, BlockHandler as Handler, BlockParseOpts, BlockResult, BodyParsers, BraceBodyResult } from "./block-ctx";
+
+/** A `STATEMENT` row: parses one statement, or returns null to fall through. */
+export type BlockHandler = Handler;
+
+const PARSERS: BodyParsers = {
+  body: (c, startIdx, openerLineNo, opts) =>
+    parseBraceBlockBody(c.filePath, c.lines, startIdx, openerLineNo, c.trivia, opts),
+  inline: (c, hostIdx, stmt) => {
+    // Padded lines keep the host line number in nested error messages.
+    const padded = new Array<string>(hostIdx).fill("");
+    padded.push(stmt);
+    return parseBlockStatement(c.filePath, padded, hostIdx, c.trivia, c.opts).step;
+  },
 };
 
-/** Reject module-level forms that would otherwise become `sh -c` inside a nested def. */
-function rejectNestedModuleForms(
-  filePath: string,
-  inner: string,
-  innerRaw: string,
-  innerNo: number,
-  opts: BlockParseOpts | undefined,
-): void {
-  if (!opts?.inNestedDef) return;
-  if (/^config\s*\{/.test(inner)) {
-    fail(
-      filePath,
-      "config blocks are not allowed inside a nested def; move config to the top of the enclosing def or module",
-      innerNo,
-      innerRaw.indexOf("config") + 1,
-    );
-  }
-  if (/^import\b/.test(inner)) {
-    fail(
-      filePath,
-      "import declarations are not allowed inside a nested def; move the import to the top of the file",
-      innerNo,
-      innerRaw.indexOf("import") + 1,
-    );
-  }
+function makeCtx(cursor: BodyCursor, idx: number, trivia: Trivia, opts: BlockParseOpts | undefined): BlockCtx {
+  const innerRaw = cursor.lines[idx]!;
+  return {
+    filePath: cursor.filePath,
+    lines: cursor.lines,
+    idx,
+    innerRaw,
+    inner: innerRaw.trim(),
+    innerNo: idx + 1,
+    trivia,
+    opts,
+    cursor,
+    tokens: cursor.tokens(idx),
+    parse: PARSERS,
+  };
+}
+
+/** A `#` comment line, kept as trivia. */
+function commentStep(c: BlockCtx): StepDef {
+  return { type: "trivia", kind: "comment", text: c.inner, loc: { line: c.innerNo, col: 1 } };
 }
 
 /** Parse statements until a closing `}` at the current block level. */
@@ -88,15 +72,15 @@ export function parseBraceBlockBody(
   openerLineNo: number,
   trivia: Trivia = createTrivia(),
   opts?: BlockParseOpts,
-): { steps: StepDef[]; nextIdx: number; closedWithElse?: boolean; closedWithElseIf?: boolean } {
+): BraceBodyResult {
+  const cursor = BodyCursor.of(filePath, lines);
   const steps: StepDef[] = [];
   let idx = startIdx;
   let hadNonCommentStep = false;
   while (idx < lines.length) {
-    const innerRaw = lines[idx];
-    const inner = innerRaw.trim();
-    const innerNo = idx + 1;
-    if (inner === "") {
+    const c = makeCtx(cursor, idx, trivia, opts);
+    const head = c.tokens[0];
+    if (!head) {
       if (opts?.preserveBlankLines) {
         const last = steps[steps.length - 1];
         if (last && !(last.type === "trivia" && last.kind === "blank_line")) {
@@ -106,973 +90,45 @@ export function parseBraceBlockBody(
       idx += 1;
       continue;
     }
-    if (inner.startsWith("#")) {
-      steps.push({
-        type: "trivia",
-        kind: "comment",
-        text: innerRaw.trim(),
-        loc: { line: innerNo, col: 1 },
-      });
+    if (isComment(c)) {
+      steps.push(commentStep(c));
       idx += 1;
       continue;
     }
-    if (opts?.allowElseTerminator && /^}\s*else\b/.test(inner)) {
-      if (/^}\s*else\s+if\b/.test(inner)) {
-        // `} else if ...` closes this body; the caller (tryParseIf) re-reads
-        // this same line to parse the next arm, so nextIdx points at `idx`.
-        return { steps, nextIdx: idx, closedWithElseIf: true };
-      }
-      if (/^}\s*else\s*\{\s*$/.test(inner)) {
-        return { steps, nextIdx: idx + 1, closedWithElse: true };
-      }
-      fail(
-        filePath,
-        '"else" must appear on the same line as the closing "}" of the "if" block, followed by "{" (e.g., "} else {")',
-        innerNo,
-        innerRaw.indexOf("else") + 1,
-      );
+    if (opts?.allowElseTerminator) {
+      const terminator = elseTerminator(c);
+      // `} else if ...` closes this body; the caller (the `if` handler)
+      // re-reads this same line to parse the next arm, so nextIdx points at it.
+      if (terminator === "else_if") return { steps, nextIdx: idx, closedWithElseIf: true };
+      if (terminator === "else") return { steps, nextIdx: idx + 1, closedWithElse: true };
     }
-    if (inner === "}") {
+    if (isPunct(head, "}") && c.tokens.length === 1) {
       return { steps, nextIdx: idx + 1 };
     }
-    if (opts?.onConfigBlock && /^config\s*\{/.test(inner)) {
-      if (hadNonCommentStep) {
-        fail(filePath, "config block inside def must appear before any steps", innerNo);
-      }
-      const { metadata, nextIndex } = parseConfigBlock(filePath, lines, idx, trivia);
-      opts.onConfigBlock(metadata, innerNo);
-      idx = nextIndex;
+    const afterConfig = tryConfigBlock(c, hadNonCommentStep);
+    if (afterConfig !== null) {
+      idx = afterConfig;
       continue;
     }
     // Nested defs carry no config scope and cannot re-import modules; without
     // this rejection both lines would fall through to the shell handler and
     // run under `sh -c` (same class as the nested `export` rejection).
-    rejectNestedModuleForms(filePath, inner, innerRaw, innerNo, opts);
-    // Reject route declarations at body level: routes belong at the top of the file.
-    // `send … -> channel` is a send statement, not a route.
-    const routeMatch = inner.match(
-      /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)\s+->\s+(.+)$/,
-    );
-    if (routeMatch && routeMatch[1] !== "send") {
-      fail(
-        filePath,
-        `route declarations belong at the top level: channel ${routeMatch[1]} -> ${routeMatch[2].trim()}`,
-        innerNo,
-      );
-    }
+    rejectNestedModuleForms(c);
+    rejectRouteDeclaration(c);
     hadNonCommentStep = true;
-    const one = parseBlockStatement(filePath, lines, idx, trivia, opts);
+    const one = dispatch(c);
     steps.push(one.step);
     idx = one.nextIdx;
   }
   fail(filePath, 'unterminated block, expected "}"', openerLineNo);
 }
 
-/** Build an `exec` step from a value expression and optional capture/catch/recover/stdin. */
-function execStep(
-  body: Expr,
-  loc: { line: number; col: number },
-  extras: { captureName?: string; catch?: CatchBody; recover?: CatchBody; stdin?: Expr } = {},
-): StepDef {
-  return {
-    type: "exec",
-    body,
-    ...(extras.captureName ? { captureName: extras.captureName } : {}),
-    ...(extras.stdin ? { stdin: extras.stdin } : {}),
-    ...(extras.catch ? { catch: extras.catch } : {}),
-    ...(extras.recover ? { recover: extras.recover } : {}),
-    loc,
-  };
-}
-
 /**
- * Split the first `stdin` operand token off `after` (the text following the
- * `stdin` keyword). A double-quoted string runs to its closing quote (may
- * contain spaces); any other token runs to the next whitespace.
- */
-function takeStdinOperand(after: string): { operand: string; rest: string } {
-  if (after.startsWith('"')) {
-    const close = indexOfClosingDoubleQuote(after, 1);
-    if (close === -1) return { operand: after, rest: "" };
-    return { operand: after.slice(0, close + 1), rest: after.slice(close + 1).trim() };
-  }
-  const sp = after.search(/\s/);
-  if (sp === -1) return { operand: after, rest: "" };
-  return { operand: after.slice(0, sp), rest: after.slice(sp).trim() };
-}
-
-/**
- * Normalize a `stdin` operand into a `literal` Expr. Quoted strings are kept
- * verbatim; a bare identifier / `IDENT.IDENT` / `${…}` ref is wrapped as a
- * quoted interpolation so the runtime resolves it exactly like a value string.
- * Bare forms also stash `bareSource` on trivia so the formatter re-emits them
- * without rewriting to `"${…}"` (same pattern as `return foo`).
- */
-function stdinOperandToExpr(
-  filePath: string,
-  innerNo: number,
-  col: number,
-  operand: string,
-  trivia: Trivia,
-): Expr {
-  const t = operand.trim();
-  if (t.startsWith('"')) {
-    if (!hasUnescapedClosingQuote(t, 1)) {
-      fail(filePath, 'multiline strings use triple quotes: stdin """..."""', innerNo, col);
-    }
-    return { kind: "literal", raw: t };
-  }
-  if (t.startsWith("'")) {
-    fail(filePath, SINGLE_QUOTE_MESSAGE, innerNo, col);
-  }
-  if (isJaiphInterpolationRef(t)) return { kind: "literal", raw: `"${t}"` };
-  if (isBareDottedIdentifierReturn(t)) {
-    const expr: Expr = { kind: "literal", raw: dottedReturnToQuotedString(t) };
-    trivia.setNode(expr, { bareSource: t });
-    return expr;
-  }
-  if (isBareIdentifierReturn(t)) {
-    const expr: Expr = { kind: "literal", raw: bareIdentifierToQuotedString(t) };
-    trivia.setNode(expr, { bareSource: t });
-    return expr;
-  }
-  fail(filePath, 'stdin value must be a string, identifier, or ${...} interpolation', innerNo, col);
-}
-
-/**
- * Parse a bare call statement `<ref>(args)` (or `async <ref>(args)`),
- * optionally followed by `catch (binding) { ... }` or `recover(binding) { ... }`.
- *
- * `hostBody` is the invoke text with no leading keyword. `stdin`, when set, is
- * the value already parsed from a leading `stdin <expr> -> ` connect clause and
- * carried onto the resulting exec step. `hostName` / `hostCol` name and locate
- * the form for error messages.
- *
- * The catch/recover clause is parsed via the unified `parseAttachedBlock`, whose
- * body uses the same `parseBlockStatement` as the top-level dispatcher.
- */
-function parseCallStatement(
-  filePath: string,
-  lines: string[],
-  idx: number,
-  innerNo: number,
-  innerRaw: string,
-  hostBody: string,
-  isAsync: boolean,
-  captureName: string | undefined,
-  stdin: Expr | undefined,
-  hostName: string,
-  hostCol: number,
-  trivia: Trivia,
-  opts?: BlockParseOpts,
-): { step: StepDef; nextIdx: number } {
-  const stepLoc = { line: innerNo, col: hostCol };
-
-  if (/\scatch$/.test(hostBody)) {
-    fail(
-      filePath,
-      'catch requires explicit bindings and a body: catch (<name>) { ... }',
-      innerNo,
-      innerRaw.indexOf("catch") + 1,
-    );
-  }
-  if (/ recover$/.test(hostBody)) {
-    fail(
-      filePath,
-      'recover requires explicit bindings and a body: recover(<name>) { ... }',
-      innerNo,
-      innerRaw.indexOf("recover") + 1,
-    );
-  }
-
-  let attached:
-    | { keyword: "catch" | "recover"; left: string; after: string }
-    | null = null;
-  const m = hostBody.match(/ recover(?=[\s(])/);
-  if (m) {
-    const pos = m.index!;
-    attached = {
-      keyword: "recover",
-      left: hostBody.slice(0, pos).trim(),
-      after: hostBody.slice(pos + " recover".length),
-    };
-  }
-  if (!attached) {
-    const ci = hostBody.indexOf(" catch ");
-    if (ci !== -1) {
-      attached = {
-        keyword: "catch",
-        left: hostBody.slice(0, ci).trim(),
-        after: hostBody.slice(ci + " catch ".length),
-      };
-    }
-  }
-
-  // Fall back to plain parsing when the call before catch/recover has trailing
-  // content, preserving the "unexpected content" error shape.
-  if (attached) {
-    const probe = parseCallRef(attached.left);
-    if (!probe || probe.rest.trim()) {
-      attached = null;
-    }
-  }
-
-  if (!attached) {
-    const call = parseCallRefMultiline(filePath, lines, idx, hostBody);
-    if (!call) {
-      fail(
-        filePath,
-        `${hostName} must target a valid reference: ${hostName} ref() or ${hostName} ref(args) — parentheses are required`,
-        innerNo,
-      );
-    }
-    rejectTrailingContent(filePath, innerNo, hostName, call.rest);
-    const callee = { value: call.ref, loc: stepLoc };
-    const body: Expr = { kind: "call", callee, args: call.args, ...(isAsync ? { async: true as const } : {}) };
-    return { step: execStep(body, stepLoc, { captureName, stdin }), nextIdx: call.nextLineIdx };
-  }
-
-  const call = parseCallRef(attached.left);
-  if (!call) {
-    fail(
-      filePath,
-      `${hostName} must target a valid reference: ${hostName} ref() or ${hostName} ref(args) — parentheses are required`,
-      innerNo,
-    );
-  }
-  rejectTrailingContent(filePath, innerNo, hostName, call.rest);
-  const callee = { value: call.ref, loc: stepLoc };
-  const body: Expr = { kind: "call", callee, args: call.args, ...(isAsync ? { async: true as const } : {}) };
-
-  const result = parseAttachedBlock(
-    filePath, lines, idx, innerNo, innerRaw, attached.keyword, attached.after, trivia, opts,
-  );
-  const extras = attached.keyword === "catch"
-    ? { captureName, stdin, catch: result.body }
-    : { captureName, stdin, recover: result.body };
-  return { step: execStep(body, stepLoc, extras), nextIdx: result.nextIdx };
-}
-
-/**
- * Parse a single pipeline stage (a script call or a single-line inline script)
- * off the start of `s`. Returns the parsed `Expr` and the text after it, or
- * `null` when `s` is not a bare call / single-line inline script (it is then the
- * final stage, which may carry a trailing `catch` / fenced body). Fenced and
- * multiline inline scripts are only supported as the final stage.
- */
-function tryParsePipelineStage(
-  filePath: string,
-  lines: string[],
-  idx: number,
-  innerNo: number,
-  col: number,
-  s: string,
-): { expr: Expr; rest: string } | null {
-  const t = s.trimStart();
-  if (startsTaggedScriptFence(t)) return null;
-  if (startsInlineScript(t)) {
-    const res = parseAnonymousInlineScript(filePath, lines, idx, t, innerNo, col, true);
-    if (res.closingLineIdx !== idx) return null;
-    return { expr: makeInlineScriptExpr(res), rest: res.trailing };
-  }
-  const call = parseCallRef(t);
-  if (!call) return null;
-  return {
-    expr: {
-      kind: "call",
-      callee: { value: call.ref, loc: { line: innerNo, col } },
-      ...(call.args ? { args: call.args } : {}),
-    },
-    rest: call.rest,
-  };
-}
-
-/**
- * Parse the `stdin <producer> -> <stage> [-> <stage>...]` connect / pipeline
- * form. `afterStdin` is the text after the `stdin` keyword; `captureName` is set
- * when the form is the RHS of a `const` binding.
- *
- * The producer (left of the first `->`) is a value (`stdin_value`) or a call to
- * a def / script / inline script whose output handle streams into the chain.
- * Each stage after the first `->` is a script (named or inline); the final stage
- * becomes the exec step's `body`, and any intermediate stages are collected into
- * `step.stages`.
- *
- * A **pipeline** — a call producer, or two or more `->` stages — rejects
- * `recover` (`E_PARSE`); `catch` stays legal as a one-shot. `async` anywhere is
- * `E_PARSE`. A plain `stdin <value> -> script()` connect keeps `recover`.
- */
-export function parseStdinConnect(
-  filePath: string,
-  lines: string[],
-  idx: number,
-  innerNo: number,
-  innerRaw: string,
-  afterStdin: string,
-  captureName: string | undefined,
-  stdinCol: number,
-  trivia: Trivia,
-  opts?: BlockParseOpts,
-): { step: StepDef; nextIdx: number } {
-  const t = afterStdin.trimStart();
-  if (t === "") {
-    fail(filePath, "stdin requires a value expression: stdin <expr> -> ref()", innerNo, stdinCol);
-  }
-  // Producer: an inline-script / def / script call whose output handle streams
-  // into the chain, or a value (string / identifier / `${…}`). A call producer
-  // makes this a pipeline (recover is then rejected below).
-  let stdin: Expr;
-  let afterOperand: string;
-  let producerIsCall = false;
-  if (startsInlineScript(t)) {
-    const res = parseAnonymousInlineScript(filePath, lines, idx, t, innerNo, stdinCol, true);
-    stdin = makeInlineScriptExpr(res, trivia);
-    afterOperand = res.trailing.trimStart();
-    producerIsCall = true;
-  } else {
-    const producerCall = parseCallRef(t);
-    if (producerCall) {
-      stdin = {
-        kind: "call",
-        callee: { value: producerCall.ref, loc: { line: innerNo, col: stdinCol } },
-        ...(producerCall.args ? { args: producerCall.args } : {}),
-      };
-      afterOperand = producerCall.rest.trimStart();
-      producerIsCall = true;
-    } else {
-      const { operand, rest } = takeStdinOperand(t);
-      stdin = stdinOperandToExpr(filePath, innerNo, stdinCol, operand, trivia);
-      afterOperand = rest.trimStart();
-    }
-  }
-  if (!afterOperand.startsWith("->")) {
-    fail(filePath, "stdin requires '-> ref()' after the value: stdin <expr> -> ref()", innerNo, stdinCol);
-  }
-  let remaining = afterOperand.slice(2).trimStart();
-  if (remaining === "") {
-    fail(filePath, "stdin requires a call target: stdin <expr> -> ref()", innerNo, stdinCol);
-  }
-  // Collect intermediate consumer stages: each bare call / single-line inline
-  // script followed by another `->`. The first stage not followed by `->` (or a
-  // final stage with a trailing catch / fenced body) is left in `remaining` for
-  // the shared final-target logic below.
-  const stages: Expr[] = [];
-  while (true) {
-    const stage = tryParsePipelineStage(filePath, lines, idx, innerNo, stdinCol, remaining);
-    if (!stage) break;
-    const after = stage.rest.trimStart();
-    if (!after.startsWith("->")) break;
-    stages.push(stage.expr);
-    remaining = after.slice(2).trimStart();
-    if (remaining === "") {
-      fail(filePath, "stdin requires a call target: stdin <expr> -> ref()", innerNo, stdinCol);
-    }
-  }
-
-  const isPipeline = producerIsCall || stages.length > 0;
-  const target = remaining;
-  if (/^async(?:\s|$)/.test(target)) {
-    fail(filePath, "async is not supported with stdin", innerNo, stdinCol);
-  }
-  let result: { step: StepDef; nextIdx: number };
-  if (startsInlineScript(target)) {
-    const res = parseAnonymousInlineScript(filePath, lines, idx, target, innerNo, stdinCol, true);
-    const body = makeInlineScriptExpr(res, trivia);
-    const stepLoc = { line: innerNo, col: stdinCol };
-    const c: BlockCtx = { filePath, lines, idx, innerRaw, inner: innerRaw.trim(), innerNo, trivia, opts };
-    result = parseInlineScriptTail(c, res, body, stepLoc, stdinCol, stdin, captureName);
-  } else {
-    result = parseCallStatement(
-      filePath, lines, idx, innerNo, innerRaw, target, false, captureName, stdin, "stdin", stdinCol, trivia, opts,
-    );
-  }
-
-  // Pipeline invariants: recover is rejected; intermediate stages are attached.
-  if (isPipeline && result.step.type === "exec" && result.step.recover) {
-    fail(filePath, "recover is not supported on a stdin pipeline; use catch", innerNo, stdinCol);
-  }
-  if (stages.length > 0 && result.step.type === "exec") {
-    result.step.stages = stages;
-  }
-  return result;
-}
-
-export type BlockCtx = {
-  filePath: string;
-  lines: string[];
-  idx: number;
-  innerRaw: string;
-  inner: string;
-  innerNo: number;
-  trivia: Trivia;
-  opts: BlockParseOpts | undefined;
-};
-export type BlockResult = { step: StepDef; nextIdx: number };
-export type BlockHandler = (c: BlockCtx) => BlockResult | null;
-
-/**
- * Condition grammar shared by a top-level `if` and each `else if` arm. The
- * optional leading `else` lets the same regex validate an `else if` head after
- * its `} else ` prefix has been stripped.
- */
-const IF_CONDITION_RE =
-  /^(?:else\s+)?if\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)\s+(==|!=|=~|!~)\s+("(?:[^"\\]|\\.)*"|\/(?:[^/\\]|\\.)*\/)\s*\{\s*$/;
-
-/**
- * Parse one `if` / `else if` arm and its body, recursing into `else if` chains.
- * A chain desugars to nested `if`/`else`: each `else if` arm becomes the single
- * `if` step inside the parent arm's `elseBody`, matching a human-written tree.
- *
- * `headIdx` is the 0-based index of the head line; when `isElseIf` is set the
- * leading `} else ` is stripped so the same condition grammar applies.
- */
-function parseIfArm(c: BlockCtx, headIdx: number, isElseIf: boolean): BlockResult {
-  const raw = c.lines[headIdx];
-  const trimmed = raw.trim();
-  const head = isElseIf ? trimmed.replace(/^}\s*else\s+/, "") : trimmed;
-  const ifCol = raw.indexOf("if", isElseIf ? raw.indexOf("else") : 0) + 1;
-  const ifLoc = { line: headIdx + 1, col: ifCol };
-  const m = head.match(IF_CONDITION_RE);
-  if (!m) {
-    fail(
-      c.filePath,
-      'invalid if syntax; expected: if <identifier> <op> <operand> { ... } where op is ==, !=, =~, or !~ and operand is "string" or /regex/',
-      headIdx + 1,
-      ifCol,
-    );
-  }
-  const subject = m![1];
-  const operator = m![2] as "==" | "!=" | "=~" | "!~";
-  const rawOperand = m![3];
-  const operand: { kind: "string_literal"; value: string } | { kind: "regex"; source: string } =
-    rawOperand.startsWith('"')
-      ? { kind: "string_literal", value: rawOperand.slice(1, -1) }
-      : { kind: "regex", source: rawOperand.slice(1, -1) };
-  if ((operator === "==" || operator === "!=") && operand.kind === "regex") {
-    fail(c.filePath, `operator "${operator}" requires a string operand ("..."), not a regex`, headIdx + 1, ifCol);
-  }
-  if ((operator === "=~" || operator === "!~") && operand.kind === "string_literal") {
-    fail(c.filePath, `operator "${operator}" requires a regex operand (/pattern/), not a string`, headIdx + 1, ifCol);
-  }
-  const thenResult = parseBraceBlockBody(
-    c.filePath, c.lines, headIdx + 1, headIdx + 1, c.trivia,
-    { allowElseTerminator: true, inNestedDef: c.opts?.inNestedDef },
-  );
-  if (isElseIf && thenResult.steps.length === 0) {
-    fail(c.filePath, '"else if" body cannot be empty', headIdx + 1, ifCol);
-  }
-  const base = { type: "if" as const, subject, operator, operand, body: thenResult.steps, loc: ifLoc };
-  if (thenResult.closedWithElseIf) {
-    const nested = parseIfArm(c, thenResult.nextIdx, true);
-    return { step: { ...base, elseBody: [nested.step] }, nextIdx: nested.nextIdx };
-  }
-  if (thenResult.closedWithElse) {
-    const elseResult = parseBraceBlockBody(
-      c.filePath, c.lines, thenResult.nextIdx, thenResult.nextIdx, c.trivia,
-      { inNestedDef: c.opts?.inNestedDef },
-    );
-    return { step: { ...base, elseBody: elseResult.steps }, nextIdx: elseResult.nextIdx };
-  }
-  return { step: base, nextIdx: thenResult.nextIdx };
-}
-
-function tryParseIf(c: BlockCtx): BlockResult | null {
-  if (!IF_CONDITION_RE.test(c.inner)) {
-    if (/^if[\s(]/.test(c.inner)) {
-      fail(
-        c.filePath,
-        'invalid if syntax; expected: if <identifier> <op> <operand> { ... } where op is ==, !=, =~, or !~ and operand is "string" or /regex/',
-        c.innerNo,
-        c.innerRaw.indexOf("if") + 1,
-      );
-    }
-    return null;
-  }
-  return parseIfArm(c, c.idx, false);
-}
-
-function tryParseFor(c: BlockCtx): BlockResult | null {
-  const forLoc = { line: c.innerNo, col: c.innerRaw.indexOf("for") + 1 };
-  const m = c.inner.match(/^for\s+([A-Za-z_][A-Za-z0-9_]*)\s+in\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{\s*$/);
-  if (!m) {
-    if (/^for\s/.test(c.inner)) {
-      fail(
-        c.filePath,
-        'invalid for syntax; expected: for <identifier> in <identifier> { ... }',
-        c.innerNo,
-        forLoc.col,
-      );
-    }
-    return null;
-  }
-  const { steps: body, nextIdx } = parseBraceBlockBody(c.filePath, c.lines, c.idx + 1, c.innerNo, c.trivia, c.opts);
-  return { step: { type: "for_lines", iterVar: m[1], sourceVar: m[2], body, loc: forLoc }, nextIdx };
-}
-
-function tryParseConst(c: BlockCtx): BlockResult | null {
-  const m = c.inner.match(/^const\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+)$/s);
-  if (!m) return null;
-  const name = m[1];
-  if (isReservedBuiltinName(name)) {
-    fail(c.filePath, `"${name}" is a reserved builtin record and cannot be used as a const name`, c.innerNo, c.innerRaw.indexOf("const") + 1);
-  }
-  const rhs = m[2].trim();
-  // const out = stdin <expr> -> ref()  →  an exec step that captures into `out`.
-  if (rhs === "stdin" || rhs.startsWith("stdin ")) {
-    const eqIdx = c.innerRaw.indexOf("=");
-    const stdinCol = c.innerRaw.indexOf("stdin", eqIdx) + 1;
-    const after = rhs === "stdin" ? "" : rhs.slice("stdin ".length);
-    return parseStdinConnect(
-      c.filePath, c.lines, c.idx, c.innerNo, c.innerRaw, after, name, stdinCol, c.trivia, c.opts,
-    );
-  }
-  const { value, nextLineIdx } = parseConstRhs(
-    c.filePath, c.lines, c.idx, rhs, c.innerNo, c.innerRaw.indexOf(rhs) + 1, name, c.trivia,
-  );
-  const nextLine = nextLineIdx > c.idx ? nextLineIdx + 1 : c.idx + 1;
-  return {
-    step: { type: "const", name, value, loc: { line: c.innerNo, col: c.innerRaw.indexOf("const") + 1 } },
-    nextIdx: nextLine,
-  };
-}
-
-/** Wrap a nested declaration node in a `local_decl` step. */
-function localDeclStep(filePath: string, decl: LocalDecl, loc: { line: number; col: number }): StepDef {
-  const name = decl.kind === "script" ? decl.script.name : decl.kind === "def" ? decl.def.name : decl.prompt.name;
-  if (isReservedBuiltinName(name)) {
-    fail(filePath, `"${name}" is a reserved builtin record and cannot be used as a ${decl.kind} name`, loc.line, loc.col);
-  }
-  return { type: "local_decl", decl, loc };
-}
-
-/**
- * `export` on a nested `script` / `def` / `prompt` is rejected: nested
- * declarations are private to the enclosing def. Any other `export` line
- * is not a statement.
- */
-function tryParseExportInDef(c: BlockCtx): BlockResult | null {
-  const m = c.inner.match(/^export\s+(script|def|prompt)\b/);
-  if (!m) return null;
-  fail(
-    c.filePath,
-    `nested ${m[1]} declarations cannot be exported; drop 'export' (nested declarations are private to the enclosing def)`,
-    c.innerNo,
-    c.innerRaw.indexOf("export") + 1,
-  );
-}
-
-/** Nested `script name [use …] = …` declaration, local to the enclosing def. */
-function tryParseLocalScript(c: BlockCtx): BlockResult | null {
-  if (c.inner !== "script" && !c.inner.startsWith("script ")) return null;
-  const { scriptDef, nextIndex } = parseScriptBlock(c.filePath, c.lines, c.idx, [], c.trivia);
-  const loc = { line: c.innerNo, col: c.innerRaw.indexOf("script") + 1 };
-  return { step: localDeclStep(c.filePath, { kind: "script", script: scriptDef }, loc), nextIdx: nextIndex };
-}
-
-/** Nested `def name(params) { … }` declaration, local to the enclosing def. */
-function tryParseLocalDef(c: BlockCtx): BlockResult | null {
-  if (c.inner !== "def" && !c.inner.startsWith("def ")) return null;
-  const lineNo = c.innerNo;
-  const header = parseDefHeader(c.filePath, c.innerRaw, lineNo);
-  const loc = { line: lineNo, col: c.innerRaw.indexOf("def") + 1 };
-  const def: Def = { name: header.name, params: header.params, comments: [], steps: [], loc };
-  const { steps, nextIdx } = parseBraceBlockBody(
-    c.filePath, c.lines, c.idx + 1, lineNo, c.trivia, { preserveBlankLines: true, inNestedDef: true },
-  );
-  def.steps.push(...steps);
-  stripTrailingBlankLines(def.steps);
-  return { step: localDeclStep(c.filePath, { kind: "def", def }, loc), nextIdx };
-}
-
-/**
- * A named-prompt *definition* (`prompt name(params) [use …] = …`) — distinct
- * from a prompt *step* / invocation. The `= ` after the parameter list is the
- * discriminator: an invocation `prompt foo(a)` has no `=`.
- */
-function looksLikeNamedPromptDef(inner: string): boolean {
-  return /^prompt\s+[A-Za-z_][A-Za-z0-9_]*\s*\([^)]*\)(?:\s+use\s+[^=]+?)?\s*=/.test(inner);
-}
-
-type InlineScriptResult = ReturnType<typeof parseAnonymousInlineScript>;
-
-/** Build an `inline_script` Expr from a parsed anonymous-script result. */
-function makeInlineScriptExpr(result: InlineScriptResult, trivia?: Trivia): Expr {
-  const expr: Expr = {
-    kind: "inline_script",
-    body: result.body,
-    ...(result.lang ? { lang: result.lang } : {}),
-    args: result.args,
-  };
-  trivia?.setNode(expr, { scriptBodyKind: result.fenced ? "fenced" : "oneline" });
-  return expr;
-}
-
-/** Build a triple-quoted literal Expr (stored in the shared quoted form) and record its trivia. */
-function makeTripleQuotedLiteral(trivia: Trivia, body: string): Expr {
-  const expr: Expr = { kind: "literal", raw: tripleQuoteBodyToRaw(dedentTripleQuotedBody(body)) };
-  trivia.setNode(expr, { tripleQuoted: true, rawBody: body });
-  return expr;
-}
-
-function tryParseFail(c: BlockCtx): BlockResult | null {
-  if (!/^fail\s+/.test(c.inner)) return null;
-  const arg = c.inner.slice("fail".length).trimStart();
-  const failCol = c.innerRaw.indexOf("fail") + 1;
-  const stepLoc = { line: c.innerNo, col: failCol };
-  if (arg.startsWith('"""')) {
-    const { body, nextIdx } = consumeTripleQuotedArg(c.filePath, c.lines, c.idx, arg);
-    const message = makeTripleQuotedLiteral(c.trivia, body);
-    return { step: { type: "say", level: "fail", message, loc: stepLoc }, nextIdx };
-  }
-  if (isJaiphInterpolationRef(arg.trim())) {
-    const message: Expr = { kind: "literal", raw: arg.trim() };
-    return { step: { type: "say", level: "fail", message, loc: stepLoc }, nextIdx: c.idx + 1 };
-  }
-  if (!arg.startsWith('"')) {
-    fail(c.filePath, 'fail must match: fail "<reason>" or fail """..."""', c.innerNo, failCol);
-  }
-  if (!hasUnescapedClosingQuote(arg, 1)) {
-    fail(c.filePath, 'multiline strings use triple quotes: fail """..."""', c.innerNo, failCol);
-  }
-  const closeIdx = indexOfClosingDoubleQuote(arg, 1);
-  if (closeIdx === -1) {
-    fail(c.filePath, "unterminated fail string", c.innerNo, failCol);
-  }
-  const raw = arg.slice(0, closeIdx + 1);
-  return {
-    step: { type: "say", level: "fail", message: { kind: "literal", raw }, loc: stepLoc },
-    nextIdx: c.idx + 1,
-  };
-}
-
-function tryParseWait(c: BlockCtx): BlockResult | null {
-  if (c.inner !== "wait") return null;
-  fail(c.filePath, '"wait" has been removed from the language', c.innerNo, c.innerRaw.indexOf("wait") + 1);
-}
-
-function tryParseEnsureRemoved(c: BlockCtx): BlockResult | null {
-  if (!c.inner.startsWith("ensure ") && c.inner !== "ensure") return null;
-  fail(
-    c.filePath,
-    "'ensure' is not a keyword; call the target directly (e.g. name(args))",
-    c.innerNo,
-    c.innerRaw.indexOf("ensure") + 1,
-  );
-}
-
-/**
- * After a bare `` 'body'(args) `` / `'''...'''(args)` inline script,
- * optionally parse an attached `catch (...) { ... }` or `recover(...) { ... }`
- * clause. Same semantics and bindings as a named-ref call. `recover` and
- * `catch` are mutually exclusive — when both appear on the same step the
- * leftover keyword falls through and is rejected with the existing "unexpected
- * content after anonymous inline script" error. `stdin` / `captureName` are
- * carried through from a leading `stdin` connect or `const` binding.
- */
-function parseInlineScriptTail(
-  c: BlockCtx,
-  result: { closingLineIdx: number; trailing: string; nextLineIdx: number },
-  body: Expr,
-  stepLoc: { line: number; col: number },
-  hostCol: number,
-  stdin?: Expr,
-  captureName?: string,
-): BlockResult {
-  const closingRaw = c.lines[result.closingLineIdx]!;
-  const closingNo = result.closingLineIdx + 1;
-  const trimmed = result.trailing.trimStart();
-  if (trimmed === "") {
-    return { step: execStep(body, stepLoc, { stdin, captureName }), nextIdx: result.nextLineIdx };
-  }
-  const recoverMatch = trimmed.match(/^recover([\s(].*)$/s);
-  const catchMatch = trimmed.match(/^catch(\s.*)$/s);
-  const attached =
-    recoverMatch !== null
-      ? { keyword: "recover" as const, after: recoverMatch[1] }
-      : catchMatch !== null
-        ? { keyword: "catch" as const, after: catchMatch[1] }
-        : null;
-  if (!attached) {
-    fail(
-      c.filePath,
-      `unexpected content after anonymous inline script: '${trimmed}'`,
-      result.closingLineIdx + 1,
-      hostCol,
-    );
-  }
-  const block = parseAttachedBlock(
-    c.filePath, c.lines, result.closingLineIdx, closingNo, closingRaw,
-    attached.keyword, attached.after, c.trivia, c.opts,
-  );
-  const extras = attached.keyword === "catch"
-    ? { stdin, captureName, catch: block.body }
-    : { stdin, captureName, recover: block.body };
-  return { step: execStep(body, stepLoc, extras), nextIdx: block.nextIdx };
-}
-
-/**
- * Tombstone: `run` is no longer the invoke keyword. `run(...)` / bare `run`
- * fall through so a symbol literally named `run` can still be called; anything
- * else that begins `run <…>` is the removed keyword form and is `E_PARSE`.
- */
-function tryParseRunKeywordRemoved(c: BlockCtx): BlockResult | null {
-  if (c.inner === "run" || /^run\s*\(/.test(c.inner)) return null;
-  fail(
-    c.filePath,
-    "'run' is not a keyword; call the target directly (e.g. name(args)) instead of 'run name(args)'",
-    c.innerNo,
-    c.innerRaw.indexOf("run") + 1,
-  );
-}
-
-/** `async <ref>(args)` — an async capture in statement position. */
-function tryParseAsync(c: BlockCtx): BlockResult | null {
-  if (c.inner !== "async" && !c.inner.startsWith("async ")) return null;
-  const col = c.innerRaw.indexOf("async") + 1;
-  const rest = c.inner === "async" ? "" : c.inner.slice("async ".length).trim();
-  if (startsInlineScript(rest)) {
-    fail(c.filePath, "async is not supported with inline scripts", c.innerNo, col);
-  }
-  if (rest === "stdin" || rest.startsWith("stdin ")) {
-    fail(c.filePath, "async is not supported with stdin", c.innerNo, col);
-  }
-  return parseCallStatement(
-    c.filePath, c.lines, c.idx, c.innerNo, c.innerRaw, rest, true, undefined, undefined, "async", col, c.trivia, c.opts,
-  );
-}
-
-/** `stdin <expr> -> <call>` connect form in statement position. */
-function tryParseStdin(c: BlockCtx): BlockResult | null {
-  if (c.inner !== "stdin" && !c.inner.startsWith("stdin ")) return null;
-  const stdinCol = c.innerRaw.indexOf("stdin") + 1;
-  const after = c.inner === "stdin" ? "" : c.inner.slice("stdin ".length);
-  return parseStdinConnect(
-    c.filePath, c.lines, c.idx, c.innerNo, c.innerRaw, after, undefined, stdinCol, c.trivia, c.opts,
-  );
-}
-
-/**
- * A bare call statement: `` 'body'(args) `` inline script or `ref(args)` managed
- * call, optionally with an attached `catch` / `recover`. Fires only after the
- * keyword dispatch table misses, so a keyword line never reaches here. Returns
- * null for any line that is not call-shaped so it falls through to shell.
- */
-function tryBareCall(c: BlockCtx): BlockResult | null {
-  const inner = c.inner;
-  if (startsInlineScript(inner)) {
-    const col = colFromRaw(c.innerRaw);
-    const result = parseAnonymousInlineScript(c.filePath, c.lines, c.idx, inner, c.innerNo, col, true);
-    const body = makeInlineScriptExpr(result, c.trivia);
-    const stepLoc = { line: c.innerNo, col };
-    return parseInlineScriptTail(c, result, body, stepLoc, col);
-  }
-  // Any `ident(.ident)*(` is a call attempt; a malformed ref shape (e.g. a
-  // three-part `a.b.c(`) then fails in parseCallStatement rather than silently
-  // becoming a shell line.
-  if (!/^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*\s*\(/.test(inner)) return null;
-  const col = colFromRaw(c.innerRaw);
-  return parseCallStatement(
-    c.filePath, c.lines, c.idx, c.innerNo, c.innerRaw, inner, false, undefined, undefined, "call", col, c.trivia, c.opts,
-  );
-}
-
-function tryParsePrompt(c: BlockCtx): BlockResult | null {
-  if (!c.inner.startsWith("prompt ")) return null;
-  if (looksLikeNamedPromptDef(c.inner)) {
-    const { promptDef, nextIndex } = parsePromptDefBlock(c.filePath, c.lines, c.idx, [], c.trivia);
-    const loc = { line: c.innerNo, col: c.innerRaw.indexOf("prompt") + 1 };
-    return { step: localDeclStep(c.filePath, { kind: "prompt", prompt: promptDef }, loc), nextIdx: nextIndex };
-  }
-  const promptCol = c.innerRaw.indexOf("prompt") + 1;
-  const promptArg = c.innerRaw.slice(c.innerRaw.indexOf("prompt") + "prompt".length).trimStart();
-  const result = parsePromptStep(c.filePath, c.lines, c.idx, promptArg, promptCol, undefined, c.trivia);
-  return { step: result.step, nextIdx: result.nextLineIdx + 1 };
-}
-
-function parseSayBody(
-  c: BlockCtx,
-  level: "log" | "logerr" | "logwarn",
-): BlockResult {
-  const arg = c.inner.slice(level.length).trimStart();
-  const col = c.innerRaw.indexOf(level) + 1;
-  const stepLoc = { line: c.innerNo, col };
-  if (startsInlineScript(arg)) {
-    const result = parseAnonymousInlineScript(c.filePath, c.lines, c.idx, arg, c.innerNo, col);
-    const message = makeInlineScriptExpr(result, c.trivia);
-    return { step: { type: "say", level, message, loc: stepLoc }, nextIdx: result.nextLineIdx };
-  }
-  if (arg.startsWith('"""')) {
-    const { body, nextIdx } = consumeTripleQuotedArg(c.filePath, c.lines, c.idx, arg);
-    const message = makeTripleQuotedLiteral(c.trivia, body);
-    return { step: { type: "say", level, message, loc: stepLoc }, nextIdx };
-  }
-  if (arg.startsWith('"') && !hasUnescapedClosingQuote(arg, 1)) {
-    fail(c.filePath, `multiline strings use triple quotes: ${level} """..."""`, c.innerNo, col);
-  }
-  const messageRaw = parseLogMessageRhs(c.filePath, c.innerNo, col, arg, level);
-  return {
-    step: { type: "say", level, message: { kind: "literal", raw: messageRaw }, loc: stepLoc },
-    nextIdx: c.idx + 1,
-  };
-}
-
-/** Build a `log`/`logerr`/`logwarn` handler that fires on `<level>` or `<level> …`. */
-function makeSayHandler(level: "log" | "logerr" | "logwarn"): BlockHandler {
-  return (c) => {
-    if (!c.inner.startsWith(`${level} `) && c.inner !== level) return null;
-    return parseSayBody(c, level);
-  };
-}
-
-const tryParseLog = makeSayHandler("log");
-const tryParseLogerr = makeSayHandler("logerr");
-const tryParseLogwarn = makeSayHandler("logwarn");
-
-function tryParseReturn(c: BlockCtx): BlockResult | null {
-  const retLoc = { line: c.innerNo, col: c.innerRaw.indexOf("return") + 1 };
-  if (c.inner.trim() === "return") {
-    return {
-      step: { type: "return", value: { kind: "literal", raw: '""' }, loc: retLoc },
-      nextIdx: c.idx + 1,
-    };
-  }
-  const m = c.inner.match(/^return\s+(.+)$/s);
-  if (!m) return null;
-  const returnValue = m[1].trim();
-  if (returnValue.startsWith('"""')) {
-    const { body, nextIdx } = consumeTripleQuotedArg(c.filePath, c.lines, c.idx, returnValue);
-    const value = makeTripleQuotedLiteral(c.trivia, body);
-    return { step: { type: "return", value, loc: retLoc }, nextIdx };
-  }
-  if (returnValue.startsWith("match ") || returnValue === "match") {
-    const after = returnValue === "match" ? "" : returnValue.slice("match ".length);
-    const { expr, nextIndex } = parseMatchAfterKeyword(c.filePath, c.lines, c.idx, after, retLoc);
-    return { step: { type: "return", value: { kind: "match", match: expr }, loc: retLoc }, nextIdx: nextIndex };
-  }
-  if (returnValue.startsWith("prompt ") || returnValue === "prompt") {
-    const promptCol = c.innerRaw.indexOf("prompt") + 1;
-    const promptArg = returnValue === "prompt" ? "" : returnValue.slice("prompt ".length).trimStart();
-    const result = parsePromptStep(c.filePath, c.lines, c.idx, promptArg, promptCol, undefined, c.trivia);
-    const st = result.step;
-    if (st.type !== "exec" || st.body.kind !== "prompt") {
-      fail(c.filePath, "return prompt internal parse error", c.innerNo, retLoc.col);
-    }
-    const promptBody = st.body;
-    const promptTrivia = c.trivia.getNode(st);
-    if (promptTrivia) {
-      c.trivia.setNode(promptBody, {
-        ...(promptTrivia.bodyKind ? { bodyKind: promptTrivia.bodyKind } : {}),
-        ...(promptTrivia.bodyIdentifier ? { bodyIdentifier: promptTrivia.bodyIdentifier } : {}),
-        ...(promptTrivia.rawBody !== undefined ? { rawBody: promptTrivia.rawBody } : {}),
-      });
-    }
-    return {
-      step: { type: "return", value: promptBody, loc: retLoc },
-      nextIdx: result.nextLineIdx > c.idx ? result.nextLineIdx + 1 : c.idx + 1,
-    };
-  }
-  if (returnValue.startsWith("run ") && !/^run\s*\(/.test(returnValue)) {
-    fail(
-      c.filePath,
-      "'run' is not a keyword; return the call directly: return name(...)",
-      c.innerNo,
-      c.innerRaw.indexOf("run") + 1,
-    );
-  }
-  if (returnValue.startsWith("ensure ")) {
-    fail(c.filePath, "'ensure' is not a keyword; return the call directly: return name(...)", c.innerNo, c.innerRaw.indexOf("ensure") + 1);
-  }
-  if (startsInlineScript(returnValue)) {
-    const result = parseAnonymousInlineScript(c.filePath, c.lines, c.idx, returnValue, c.innerNo, retLoc.col);
-    const value = makeInlineScriptExpr(result, c.trivia);
-    return { step: { type: "return", value, loc: retLoc }, nextIdx: result.nextLineIdx };
-  }
-  // Bare call `return ref(args)`. parseCallRefMultiline returns null when the
-  // value does not start with `ref(`; when it starts with `ref(` but the call
-  // is incomplete it calls fail() so the line never becomes a shell step.
-  if (/^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?\s*\(/.test(returnValue)) {
-    const call = parseCallRefMultiline(c.filePath, c.lines, c.idx, returnValue);
-    if (call) {
-      rejectTrailingContent(c.filePath, c.innerNo, "return", call.rest);
-      const callee = { value: call.ref, loc: retLoc };
-      return {
-        step: { type: "return", value: { kind: "call", callee, args: call.args }, loc: retLoc },
-        nextIdx: call.nextLineIdx,
-      };
-    }
-  }
-  if (returnValue.startsWith("'")) {
-    fail(c.filePath, SINGLE_QUOTE_MESSAGE, c.innerNo, retLoc.col);
-  }
-  if (/^[0-9]+$/.test(returnValue) || returnValue === "$?") {
-    fail(
-      c.filePath,
-      'bash exit codes are only valid in scripts; use return "..." for a workflow value',
-      c.innerNo,
-      retLoc.col,
-    );
-  }
-  if (
-    returnValue.startsWith('"') ||
-    returnValue.startsWith("$") ||
-    isBareDottedIdentifierReturn(returnValue) ||
-    isBareIdentifierReturn(returnValue)
-  ) {
-    if (returnValue.startsWith('"') && !hasUnescapedClosingQuote(returnValue, 1)) {
-      fail(c.filePath, 'multiline strings use triple quotes: return """..."""', c.innerNo, retLoc.col);
-    }
-    const isBareDotted = isBareDottedIdentifierReturn(returnValue);
-    const isBare = !isBareDotted && isBareIdentifierReturn(returnValue);
-    const raw = isBareDotted
-      ? dottedReturnToQuotedString(returnValue)
-      : isBare
-        ? bareIdentifierToQuotedString(returnValue)
-        : returnValue;
-    const value: Expr = { kind: "literal", raw };
-    if (isBareDotted || isBare) {
-      c.trivia.setNode(value, { bareSource: returnValue.trim() });
-    }
-    return { step: { type: "return", value, loc: retLoc }, nextIdx: c.idx + 1 };
-  }
-  fail(
-    c.filePath,
-    'return value must be a string, identifier, call, prompt …, or match …',
-    c.innerNo,
-    retLoc.col,
-  );
-}
-
-function tryParseElseError(c: BlockCtx): BlockResult | null {
-  const elseCol = c.innerRaw.indexOf("else") + 1;
-  if (/^else\s+if\b/.test(c.inner)) {
-    fail(
-      c.filePath,
-      '"else if" must appear on the same line as the closing "}" of the preceding "if" block (e.g., "} else if ...")',
-      c.innerNo,
-      elseCol,
-    );
-  }
-  fail(
-    c.filePath,
-    '"else" must appear on the same line as the closing "}" of an "if" block (e.g., "} else {")',
-    c.innerNo,
-    elseCol,
-  );
-}
-
-function tryParseStandaloneMatch(c: BlockCtx): BlockResult | null {
-  if (c.inner !== "match" && !c.inner.startsWith("match ")) return null;
-  const matchLoc = { line: c.innerNo, col: c.innerRaw.indexOf("match") + 1 };
-  const after = c.inner === "match" ? "" : c.inner.slice("match ".length);
-  const { expr, nextIndex } = parseMatchAfterKeyword(c.filePath, c.lines, c.idx, after, matchLoc);
-  return { step: execStep({ kind: "match", match: expr }, matchLoc), nextIdx: nextIndex };
-}
-
-/**
- * STATEMENT dispatch table keyed by the leading keyword. Handlers fire only
- * when the first token matches the key; each handler either returns a step
- * (terminating), calls `fail(...)` (also terminating), or returns null to
- * allow fallthrough to send / shell handling.
+ * STATEMENT dispatch table keyed by the leading keyword: the first token when
+ * it is an identifier, or the identifier an interpreter-tagged script token
+ * starts with (`log'…'`). Each handler either returns a step (terminating),
+ * calls `fail(...)` (also terminating), or returns null to allow fallthrough
+ * to the bare-call / legacy-send handling.
  *
  * To add a new top-level keyword, add (a) a row here pointing at the parser
  * and (b) the keyword to the JAIPH_KEYWORDS set in `core.ts`. No other file
@@ -1101,104 +157,29 @@ export const STATEMENT: Record<string, BlockHandler> = {
   send: tryParseSend,
 };
 
-/** Error guards for assignment-shape lines. Emit a fail() or no-op; never return a step. */
-function applyAssignmentGuards(c: BlockCtx): void {
-  const promptAssign = c.inner.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*prompt\s+(.+)$/s);
-  if (promptAssign) {
-    fail(
-      c.filePath,
-      'use "const name = prompt ..." to capture the prompt result (e.g. const answer = prompt "..." )',
-      c.innerNo,
-      c.innerRaw.indexOf(promptAssign[1]) + 1,
-    );
-  }
-  const generic = c.inner.match(/^([A-Za-z_][A-Za-z0-9_]*)\s+=\s*(.+)$/s);
-  if (
-    generic &&
-    !generic[2].trimStart().startsWith("prompt ") &&
-    !generic[2].trimStart().startsWith('"') &&
-    !generic[2].trimStart().startsWith("$")
-  ) {
-    const captureName = generic[1];
-    const rest = generic[2].trim();
-    if (rest.startsWith("send ") || rest === "send") {
-      fail(
-        c.filePath,
-        "use 'send <payload> -> <channel>'",
-        c.innerNo,
-        c.innerRaw.indexOf(captureName) + 1,
-      );
-    }
-    const looksInvoke =
-      rest.startsWith("run ") ||
-      rest.startsWith("ensure ") ||
-      rest.startsWith("async ") ||
-      rest.startsWith("stdin ") ||
-      startsInlineScript(rest) ||
-      /^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?\s*\(/.test(rest);
-    if (looksInvoke) {
-      fail(
-        c.filePath,
-        `assignment without "const" is no longer supported; use "const ${captureName} = ${rest}"`,
-        c.innerNo,
-        c.innerRaw.indexOf(captureName) + 1,
-      );
-    }
-  }
+function isComment(c: BlockCtx): boolean {
+  const head = c.tokens[0];
+  return head?.kind === "other" && head.text.startsWith("#");
 }
 
-function tryParseSend(c: BlockCtx): BlockResult | null {
-  if (c.inner !== "send" && !c.inner.startsWith("send ")) return null;
-  const rest = c.inner.slice("send".length).trimStart();
-  if (rest.startsWith('"""')) {
-    const tqLines = [...c.lines];
-    tqLines[c.idx] = rest;
-    const { body, nextIdx, afterClose } = parseTripleQuoteBlock(c.filePath, tqLines, c.idx);
-    const channel = parseSendChannelArrow(afterClose);
-    if (!channel) {
-      fail(c.filePath, "use 'send <payload> -> <channel>'", c.innerNo);
-    }
-    const value: Expr = { kind: "literal", raw: tripleQuoteBodyToRaw(dedentTripleQuotedBody(body)) };
-    c.trivia.setNode(value, { tripleQuoted: true, rawBody: body });
-    return {
-      step: { type: "send", channel, value, loc: { line: c.innerNo, col: 1 } },
-      nextIdx,
-    };
+function dispatch(c: BlockCtx): BlockResult {
+  if (isComment(c)) return { step: commentStep(c), nextIdx: c.idx + 1 };
+  rejectNestedModuleForms(c);
+  applyAssignmentGuards(c);
+  const keyword = keyOf(c.tokens[0]);
+  const handler = keyword === undefined ? undefined : STATEMENT[keyword];
+  if (handler) {
+    const result = handler(c);
+    if (result) return result;
   }
-  const sendMatch = matchSendOperator(c.inner);
-  if (!sendMatch) {
-    fail(c.filePath, "use 'send <payload> -> <channel>'", c.innerNo);
-  }
-  const sendKw = c.innerRaw.match(/^\s*send\s+/);
-  const rhsCol = sendKw ? sendKw[0].length + 1 : colFromRaw(c.innerRaw);
-  const { value, nextIdx } = parseSendRhs(
-    c.filePath, sendMatch.rhsText, c.innerNo, rhsCol, c.lines, c.idx, c.trivia,
-  );
-  return {
-    step: { type: "send", channel: sendMatch.channel, value, loc: { line: c.innerNo, col: 1 } },
-    nextIdx,
-  };
-}
-
-function tryLegacySend(c: BlockCtx): BlockResult | null {
-  if (!matchLegacySendOperator(c.inner)) return null;
-  fail(c.filePath, "use 'send <payload> -> <channel>'", c.innerNo);
-}
-
-function rejectNonStatement(c: BlockCtx): never {
-  fail(
-    c.filePath,
-    "not a statement; put the command in a script",
-    c.innerNo,
-    colFromRaw(c.innerRaw),
-  );
+  return tryBareCall(c) ?? tryLegacySend(c) ?? rejectNonStatement(c);
 }
 
 /**
  * One workflow statement inside `{ … }` (catch body, etc.).
  *
- * Dispatches by leading keyword through `STATEMENT`. A line that is not a
- * keyword and not a call is `E_PARSE`.
+ * Dispatches on the first token through `STATEMENT`. A line that is not a
+ * keyword statement and not a call is `E_PARSE`.
  */
 export function parseBlockStatement(
   filePath: string,
@@ -1206,170 +187,6 @@ export function parseBlockStatement(
   idx: number,
   trivia: Trivia = createTrivia(),
   opts?: BlockParseOpts,
-): { step: StepDef; nextIdx: number } {
-  const innerRaw = lines[idx];
-  const inner = innerRaw.trim();
-  const innerNo = idx + 1;
-  const c: BlockCtx = {
-    filePath, lines, idx, innerRaw, inner, innerNo, trivia, opts,
-  };
-
-  if (inner.startsWith("#")) {
-    return {
-      step: { type: "trivia", kind: "comment", text: innerRaw.trim(), loc: { line: innerNo, col: 1 } },
-      nextIdx: idx + 1,
-    };
-  }
-
-  rejectNestedModuleForms(filePath, inner, innerRaw, innerNo, opts);
-  applyAssignmentGuards(c);
-
-  const keyword = inner.match(/^([A-Za-z_][A-Za-z0-9_]*)/)?.[1];
-  if (keyword) {
-    const handler = STATEMENT[keyword];
-    if (handler) {
-      const result = handler(c);
-      if (result) return result;
-    }
-  }
-
-  return tryBareCall(c) ?? tryLegacySend(c) ?? rejectNonStatement(c);
-}
-
-const KEYWORD_EXAMPLE = {
-  catch: "catch (<name>) { ... }",
-  recover: "recover(<name>) { ... }",
-} as const;
-
-/**
- * Parse a `(<binding>) { … } | <single-stmt>` clause attached to a host
- * `run` step. The body is parsed by the same `parseBlockStatement`
- * used at the top level — there is no separate mini parser for catch/recover.
- *
- * `textAfterKeyword` is whatever follows `catch` / `recover` on the host line
- * (the leading `(` may be preceded by whitespace). Returns the constructed
- * `CatchBody` plus the next line index to resume parsing from.
- */
-export function parseAttachedBlock(
-  filePath: string,
-  lines: string[],
-  idx: number,
-  innerNo: number,
-  innerRaw: string,
-  keyword: "catch" | "recover",
-  textAfterKeyword: string,
-  trivia: Trivia = createTrivia(),
-  opts?: BlockParseOpts,
-): { body: CatchBody; nextIdx: number } {
-  const keywordCol = innerRaw.indexOf(keyword) + 1;
-  const right = textAfterKeyword.trimStart();
-
-  if (!right.startsWith("(")) {
-    fail(
-      filePath,
-      `${keyword} requires explicit bindings: ${KEYWORD_EXAMPLE[keyword]}`,
-      innerNo,
-      keywordCol,
-    );
-  }
-  const closeParen = right.indexOf(")");
-  if (closeParen === -1) {
-    fail(filePath, `unterminated ${keyword} bindings: expected ")"`, innerNo, keywordCol);
-  }
-
-  const bindingParts = right
-    .slice(1, closeParen)
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
-  if (bindingParts.length === 0) {
-    fail(
-      filePath,
-      `${keyword} requires exactly one binding: ${KEYWORD_EXAMPLE[keyword]}`,
-      innerNo,
-      keywordCol,
-    );
-  }
-  if (bindingParts.length > 1) {
-    if (keyword === "catch") {
-      fail(
-        filePath,
-        "catch accepts exactly one binding: catch (<name>) — the second binding (attempt) has been removed",
-        innerNo,
-        keywordCol,
-      );
-    }
-    fail(filePath, "recover accepts exactly one binding: recover(<name>)", innerNo, keywordCol);
-  }
-  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(bindingParts[0])) {
-    fail(
-      filePath,
-      `invalid ${keyword} binding name: "${bindingParts[0]}" — must be a valid identifier`,
-      innerNo,
-      keywordCol,
-    );
-  }
-  const bindings = { failure: bindingParts[0] };
-  const afterBindings = right.slice(closeParen + 1).trim();
-
-  // Multi-line block: `{` at end of host line; body lives on subsequent lines.
-  if (afterBindings === "{") {
-    // Pre-scan for the matching `}` so the unterminated message names the clause.
-    let depth = 1;
-    let probe = idx + 1;
-    while (probe < lines.length) {
-      const t = lines[probe].trim();
-      if (t.endsWith("{")) depth += 1;
-      if (t === "}") {
-        depth -= 1;
-        if (depth === 0) break;
-      }
-      probe += 1;
-    }
-    if (probe >= lines.length) {
-      fail(filePath, `unterminated ${keyword} block, expected "}"`, innerNo, keywordCol);
-    }
-    const { steps, nextIdx } = parseBraceBlockBody(filePath, lines, idx + 1, innerNo, trivia, opts);
-    if (steps.length === 0) {
-      fail(filePath, `${keyword} block must contain at least one statement`, innerNo, keywordCol);
-    }
-    return { body: { block: steps, bindings }, nextIdx };
-  }
-
-  // Inline block on a single line: `{ stmt[; stmt]* }`.
-  if (afterBindings.startsWith("{")) {
-    if (!afterBindings.endsWith("}")) {
-      fail(filePath, `unterminated ${keyword} block, expected "}"`, innerNo, keywordCol);
-    }
-    const content = afterBindings.slice(1, -1).trim();
-    const stmts = content === "" ? [] : splitStatementsOnSemicolons(content);
-    if (stmts.length === 0) {
-      fail(filePath, `${keyword} block must contain at least one statement`, innerNo, keywordCol);
-    }
-    const blockSteps = stmts.map((stmt) => parseAtHostLine(filePath, idx, stmt, trivia, opts));
-    return { body: { block: blockSteps, bindings }, nextIdx: idx + 1 };
-  }
-
-  if (afterBindings === "") {
-    fail(filePath, `${keyword} requires a body after bindings`, innerNo, keywordCol);
-  }
-
-  const single = parseAtHostLine(filePath, idx, afterBindings, trivia, opts);
-  return { body: { single, bindings }, nextIdx: idx + 1 };
-}
-
-/**
- * Parse a single statement string as if it lived on the host line. Padded
- * lines preserve the source line number in nested error messages.
- */
-function parseAtHostLine(
-  filePath: string,
-  hostIdx: number,
-  stmt: string,
-  trivia: Trivia,
-  opts?: BlockParseOpts,
-): StepDef {
-  const padded = new Array<string>(hostIdx).fill("");
-  padded.push(stmt);
-  return parseBlockStatement(filePath, padded, hostIdx, trivia, opts).step;
+): BlockResult {
+  return dispatch(makeCtx(BodyCursor.of(filePath, lines), idx, trivia, opts));
 }

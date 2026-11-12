@@ -2,7 +2,7 @@ import type { Expr, DefRef } from "../types";
 import { createTrivia, type Trivia } from "./trivia";
 import { fail, hasUnescapedClosingQuote, indexOfClosingDoubleQuote, isRef, rejectTrailingContent } from "./core";
 import { parseCallRef } from "./call-args";
-import { dedentTripleQuotedBody, parseTripleQuoteBlock, tripleQuoteBodyToRaw } from "./triple-quote";
+import { dedentTripleQuotedBody, readTripleQuoteBlock, tripleQuoteBodyToRaw } from "./triple-quote";
 
 const SEND_RHS_HINT =
   'send right-hand side must be a quoted string ("..."), a variable ($name or ${...}), or a call "ref(args)" — not raw shell; use a script or use const';
@@ -26,9 +26,7 @@ export function parseSendRhs(
     fail(filePath, "use 'send <payload> -> <channel>'", lineNo, col);
   }
   if (t.startsWith('"""') && lines && idx !== undefined) {
-    const tqLines = [...lines];
-    tqLines[idx] = t;
-    const { body, nextIdx, afterClose } = parseTripleQuoteBlock(filePath, tqLines, idx);
+    const { body, nextIdx, afterClose } = readTripleQuoteBlock(filePath, lines, idx, t);
     if (afterClose) fail(filePath, 'unexpected content after closing """', nextIdx);
     const value: Expr = { kind: "literal", raw: tripleQuoteBodyToRaw(dedentTripleQuotedBody(body)) };
     trivia.setNode(value, { tripleQuoted: true, rawBody: body });

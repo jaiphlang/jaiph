@@ -46,7 +46,8 @@ export default [
   // one-line reason. Twelve of the original sixteen grandfathered files were
   // split into sibling modules and de-grandfathered in this task (mcp, serve,
   // generation, cli/index, workflow-call, parser, runtime/index, validate,
-  // validate-step, format/emit, kernel/prompt). The four below
+  // validate-step, format/emit, kernel/prompt); parse/workflow-brace was split
+  // into the def-body statement modules later. The three below
   // remain: each is an exceptionally large / tightly-coupled unit whose split
   // needs a multi-file decomposition of its own, and is explicit follow-up work
   // out of scope for this change (see fresh per-file reasons below).
@@ -63,14 +64,6 @@ export default [
     // route inline; a clean split is per-route handler modules behind a small
     // router — deferred as explicit follow-up.
     files: ["src/cli/serve/handler.ts"],
-    rules: { "import/max-dependencies": "off", "max-lines": "off" },
-  },
-  {
-    // 812 lines + 12 imports: the statement parser is a dispatch table whose
-    // handlers are mutually recursive with the block-body / attached-block
-    // structural parsers, so a file split needs care to avoid an import cycle
-    // (dependency-cruiser `no-circular`) — deferred as explicit follow-up.
-    files: ["src/parse/workflow-brace.ts"],
     rules: { "import/max-dependencies": "off", "max-lines": "off" },
   },
   {
