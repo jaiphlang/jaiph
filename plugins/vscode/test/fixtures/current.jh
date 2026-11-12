@@ -16,7 +16,7 @@ const REPO = "my-project"
 channel alerts
 channel findings -> handler
 
-script setup_env = '''bash
+script setup_env = bash'''
 mkdir -p out
 '''
 

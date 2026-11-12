@@ -64,7 +64,7 @@ export def main() {
 test("parser: run script() with fenced block and lang tag", () => {
   const src = [
     "export def main() {",
-    "  '''python3",
+    "  python3'''",
     "print('hello')",
     "'''()",
     "}",

@@ -153,6 +153,26 @@ test("injections resolve embedded script languages", () => {
     caps.some((c) => c.name === "content"),
     "expected an @content injection region",
   );
+  // A tagged fence injects only its tag's language: the shell default must not
+  // also claim the body of `bash'''` / `python3'''` (current.jh has no bare
+  // fence, so every @content comes from a tagged opener).
+  const langs = caps.filter((c) => c.name === "language").length;
+  const contents = caps.filter((c) => c.name === "content").length;
+  assert.equal(contents, langs, "each tagged fence body must be injected exactly once");
+});
+
+test("interpreter tags before the opening quote highlight as @tag", () => {
+  const caps = runQuery("highlights.scm", "current.jh");
+  // Fenced openers `bash'''` / `python3'''` and the one-line `node'…'()`.
+  for (const tag of ["bash", "python3", "node"]) {
+    assert.ok(has(caps, "tag", tag), `interpreter tag \`${tag}\` should be @tag`);
+    assert.ok(!has(caps, "variable", tag), `interpreter tag \`${tag}\` must not be @variable`);
+  }
+  // The tagged one-line body still highlights as a string.
+  assert.ok(
+    has(caps, "string", "node'console.log(1)'"),
+    "tagged one-line script body should be @string",
+  );
 });
 
 test("extension.toml pins the grammar and references only in-tree files", () => {

@@ -206,3 +206,80 @@ test("stale surface from the old extension is not highlighted", async () => {
     );
   }
 });
+
+test("interpreter tags before the opening quote scope as language tags", async () => {
+  // The interpreter tag sits immediately before the opening quote: fenced
+  // `python3'''` … `'''`, inline `node'''` … `'''(args)`, and the one-line
+  // `python3'…'` forms. The tag scopes as a language tag, the fence as fence
+  // punctuation, and the body enters the matching embedded language.
+  const fixture = await tokenizeFixture("current.jh");
+  assert.ok(
+    hasScope(fixture, "bash", "entity.name.tag.language.jaiph"),
+    "`script setup_env = bash'''` must scope `bash` as a language tag",
+  );
+  assert.ok(
+    fixture.some(
+      (t) => t.text.trim() === "mkdir -p out" && t.scopes.includes("meta.embedded.block.shell.jaiph"),
+    ),
+    "bash fenced body must be an embedded shell block",
+  );
+
+  const t = await tokenizeSource(
+    [
+      "script py = python3'''",
+      "print(1)",
+      "'''",
+      "script sh = '''",
+      "echo plain",
+      "'''",
+      "script one = python3'print(2)'",
+      "def main() {",
+      "  const y = node'''",
+      "console.log(3)",
+      "'''(\"a\")",
+      "  ruby'''",
+      "puts 4",
+      "'''()",
+      "  '''",
+      "echo untagged",
+      "'''()",
+      "  const z = python3'print(5)'(\"b\")",
+      "  log lua'print(6)'()",
+      "  'echo hello'()",
+      "}",
+      "",
+    ].join("\n"),
+  );
+  const bodyIn = (text: string, scope: string) =>
+    t.some((tok) => tok.text.trim() === text && tok.scopes.includes(scope));
+
+  for (const tag of ["python3", "node", "ruby", "lua"]) {
+    assert.ok(hasScope(t, tag, "entity.name.tag.language.jaiph"), `\`${tag}\` must scope as a language tag`);
+  }
+  assert.ok(
+    scopeCount(t, "python3", "entity.name.tag.language.jaiph") >= 3,
+    "fenced, one-line declaration, and one-line inline python3 tags must all scope as tags",
+  );
+  // Each fenced opener scopes the bare `'''` as the opening fence.
+  assert.ok(
+    scopeCount(t, "'''", "punctuation.definition.fence.begin.jaiph") >= 4,
+    "every opening `'''` must scope as fence-begin punctuation",
+  );
+  assert.ok(bodyIn("print(1)", "meta.embedded.block.python.jaiph"), "python3''' body must embed python");
+  assert.ok(bodyIn("echo plain", "meta.embedded.block.shell.jaiph"), "untagged fence must default to shell");
+  assert.ok(bodyIn("console.log(3)", "meta.embedded.block.javascript.jaiph"), "inline node''' body must embed javascript");
+  assert.ok(bodyIn("puts 4", "meta.embedded.block.ruby.jaiph"), "inline ruby''' body must embed ruby");
+  // A bare `'''` on its own line opens an untagged inline fence (not a close).
+  assert.ok(bodyIn("echo untagged", "meta.embedded.block.shell.jaiph"), "untagged inline fence must open and default to shell");
+  // A script block's closing `'''` must close it, not open a new inline fence
+  // that swallows the following declarations.
+  assert.ok(
+    hasScope(t, "one", "entity.name.function.script.jaiph"),
+    "declarations after a closed script fence must still highlight",
+  );
+  // One-line bodies keep the one-line script scope, with or without a tag.
+  for (const body of ["'print(2)'", "'print(5)'", "'print(6)'", "'echo hello'"]) {
+    assert.ok(hasScope(t, body, "string.unquoted.script.jaiph"), `${body} must scope as a one-line script body`);
+  }
+  assert.ok(hasScope(t, '"b"', "variable.parameter.jaiph"), "one-line tagged inline call args must scope as parameters");
+});

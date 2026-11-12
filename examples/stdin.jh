@@ -2,15 +2,15 @@
 
 # Jaiph streams stdin pipelines so a script can produce a lot of data
 # without loading it all into memory. Chain stages with ->.
-script gen = '''bash
+script gen = bash'''
   printf 'alpha\nbeta\ngamma\n'
 '''
 
-script upper = '''bash
+script upper = bash'''
   tr 'a-z' 'A-Z'
 '''
 
-script count = '''bash
+script count = bash'''
   wc -l | tr -d ' '
 '''
 

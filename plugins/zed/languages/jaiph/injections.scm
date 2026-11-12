@@ -1,9 +1,12 @@
-; Embedded script/inline-script bodies: '''lang ... ''' .
-; When the fence carries a language tag, inject that grammar into the body.
+; Embedded script/inline-script bodies: lang''' ... ''' .
+; When the fence carries an interpreter tag (`python3'''`), inject that grammar
+; into the body.
 (fenced_block
-  (language) @language
-  (embedded) @content)
+  language: (language) @language
+  body: (embedded) @content)
 
-; A bare fence ('''  ... ''') defaults to shell, matching Jaiph's runtime.
-((fenced_block (embedded) @content)
+; A bare fence (''' ... ''') defaults to shell, matching Jaiph's runtime.
+((fenced_block
+  !language
+  body: (embedded) @content)
   (#set! "language" "bash"))

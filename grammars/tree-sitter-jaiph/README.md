@@ -34,8 +34,9 @@ Commit the regenerated `src/` alongside the `grammar.js` change.
 
 Corpus tests under `test/corpus/` pin the token shapes editor highlighting
 relies on — bare-call invoke (`save(path)`, `async save(path)`), stdin connect
-(`stdin x -> save(path)`), and that `run` tokenizes as an ordinary identifier
-(there is no `run` invoke keyword):
+(`stdin x -> save(path)`), that `run` tokenizes as an ordinary identifier
+(there is no `run` invoke keyword), and interpreter tags written before the
+opening quote of a script body (`python3'''`, `node'…'`):
 
 ```bash
 npm test             # regenerates, then runs the corpus tests

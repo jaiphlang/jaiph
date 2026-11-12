@@ -31,7 +31,7 @@ export {
   scriptShebangIsBash,
   resolveInterpreterFromShebang,
 } from "./parse/script-bash";
-export { langToShebang } from "./parse/scripts";
+export { langToShebang, looksLikeInlineScriptCall } from "./parse/scripts";
 export { canonicalizeTripleQuotedString } from "./parse/triple-quote";
 export {
   validateJaiphStringContent,

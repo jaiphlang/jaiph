@@ -1,6 +1,7 @@
 import type { MatchArmDef, MatchExprDef, MatchPatternDef } from "../types";
 import { fail, SINGLE_QUOTE_MESSAGE, indexOfClosingDoubleQuote, unescapeDoubleQuotedInner } from "./core";
 import { splitStatementsOnSemicolons } from "./statement-split";
+import { looksLikeInlineScriptCall } from "./fence";
 import { tripleQuoteBodyToRaw, trimAdjacentBlankLines } from "./triple-quote";
 
 const IDENT_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
@@ -121,7 +122,7 @@ function parseArmBody(filePath: string, text: string, lineNo: number): { body: s
   if (t.startsWith("'") || t.startsWith("`")) {
     // `'…'()` / leftover `` `…`() `` stay raw so validate can reject inline
     // scripts in match arms. A lone `'…'` is still not a Jaiph string.
-    if (t.startsWith("'''") || t.startsWith("```") || /'[^']*'\s*\(/.test(t) || /`[^`]*`\s*\(/.test(t)) {
+    if (looksLikeInlineScriptCall(t) || t.startsWith("```") || /`[^`]*`\s*\(/.test(t)) {
       return { body: t, rest: "" };
     }
     fail(filePath, SINGLE_QUOTE_MESSAGE, lineNo);

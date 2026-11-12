@@ -19,7 +19,7 @@ Multi-line note for ${REPO}
 channel alerts
 channel findings -> handler
 
-script setup_env = '''bash
+script setup_env = bash'''
 mkdir -p out
 '''
 
@@ -64,9 +64,10 @@ export def main(task) {
 
   async helpers.scan()
 
-  const script_out = '''python3
+  const script_out = python3'''
 print("inline")
 '''(task)
+  const ver = node'console.log(1)'()
 
   const answer = prompt "Summarize ${task}" returns "{ risk: string }"
   log "risk: ${answer.risk}"

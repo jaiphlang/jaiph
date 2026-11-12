@@ -21,7 +21,7 @@ else
   e2e::prepare_test_env "interpreter_tag_node"
 
   e2e::file "tag_node.jh" <<'EOF'
-script greet = '''node
+script greet = node'''
 process.stdout.write("hello-from-node\n");
 '''
 
@@ -61,7 +61,7 @@ else
   e2e::prepare_test_env "interpreter_tag_python3"
 
   e2e::file "tag_python.jh" <<'EOF'
-script py_greet = '''python3
+script py_greet = python3'''
 import sys
 sys.stdout.write("hello-from-python\n")
 sys.exit(0)
@@ -118,7 +118,7 @@ e2e::section "Interpreter tag: duplicate shebang rejected"
 e2e::prepare_test_env "interpreter_tag_dup_shebang"
 
 e2e::file "dup_shebang.jh" <<'EOF'
-script my_script = '''node
+script my_script = node'''
 #!/usr/bin/env node
 console.log("hi");
 '''
@@ -132,5 +132,65 @@ if run_out="$(e2e::run "dup_shebang.jh" 2>&1)"; then
   e2e::fail "expected compile error for duplicate shebang, but run succeeded"
 else
   # nondeterministic: error includes absolute file path prefix which varies
-  e2e::assert_contains "${run_out}" 'fence tag "node" already sets the shebang' "duplicate shebang produces actionable error"
+  e2e::assert_contains "${run_out}" 'interpreter tag "node" already sets the shebang' "duplicate shebang produces actionable error"
+fi
+
+# ---------- tagged one-liners (inline, const capture, named) ----------
+
+e2e::section "Interpreter tag: one-line tagged scripts"
+
+if [[ "${HAS_PYTHON3}" -eq 0 || "${HAS_NODE}" -eq 0 ]]; then
+  e2e::fail "python3 and node must be in PATH for tagged one-liner e2e"
+else
+  e2e::prepare_test_env "interpreter_tag_oneliner"
+
+  e2e::file "tag_oneliner.jh" <<'EOF'
+script py_upper = python3'import sys; print(sys.argv[1].upper())'
+
+export def main() {
+  const a = node'console.log("node-" + process.argv[2])'("x")
+  const b = py_upper("y")
+  log "${a} ${b}"
+}
+EOF
+
+  run_out="$(e2e::run "tag_oneliner.jh")"
+  e2e::expect_stdout "${run_out}" <<'EOF'
+
+Jaiph: Running tag_oneliner.jh
+
+def main
+  ▸ script __inline_dbbc62459ed7 (1="x")
+  ✓ script __inline_dbbc62459ed7 (<time>)
+  ▸ script py_upper (1="y")
+  ✓ script py_upper (<time>)
+  ℹ node-x Y
+
+✓ PASS def main (<time>)
+EOF
+
+  e2e::pass "tagged one-liners run with their interpreter"
+fi
+
+# ---------- removed form: tag after the opening fence ----------
+
+e2e::section "Interpreter tag: tag after the opening fence rejected"
+
+e2e::prepare_test_env "interpreter_tag_after_fence"
+
+e2e::file "tag_after_fence.jh" <<'EOF'
+script my_script = '''python3
+print("hi")
+'''
+
+export def main() {
+  my_script()
+}
+EOF
+
+if run_out="$(e2e::run "tag_after_fence.jh" 2>&1)"; then
+  e2e::fail "expected compile error for '''python3, but run succeeded"
+else
+  # nondeterministic: error includes absolute file path prefix which varies
+  e2e::assert_contains "${run_out}" "interpreter tags go before the opening quotes: python3'''...''' (not '''python3)" "old tag position produces fix-it error"
 fi

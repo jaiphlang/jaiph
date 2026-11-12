@@ -168,7 +168,7 @@ export def main() {
 === script tag with manual shebang conflict
 # @expect error E_PARSE "already sets the shebang — remove the manual" @1:1
 --- input.jh
-script transform = '''node
+script transform = node'''
 #!/usr/bin/env node
 console.log('hi');
 '''
@@ -1274,7 +1274,7 @@ echo hello
 # @expect error E_PARSE "already sets the shebang — remove the manual" @2:3
 --- input.jh
 export def main() {
-  '''node
+  node'''
 #!/usr/bin/env node
 console.log("hi");
 '''()
@@ -1295,12 +1295,33 @@ export def main() {
   'echo hello'
 }
 
-=== inline script fenced with invalid lang token
-# @expect error E_PARSE "invalid opening fence: only a single lang token is allowed after '''" @2:1
+=== inline script fenced with text after the opening fence
+# @expect error E_PARSE "invalid opening fence: nothing may follow ''' on the opening line" @2:1
 --- input.jh
 export def main() {
   '''not a lang'''()
 }
+
+=== script tag after the opening fence (removed form)
+# @expect error E_PARSE "interpreter tags go before the opening quotes: python3'''...''' (not '''python3)" @1:1
+--- input.jh
+script transform = '''python3
+print("hi")
+'''
+
+=== inline script tag after the opening fence (removed form)
+# @expect error E_PARSE "interpreter tags go before the opening quotes: node'''...''' (not '''node)" @2:1
+--- input.jh
+export def main() {
+  '''node
+console.log("hi");
+'''()
+}
+
+=== script tag separated from the quote by whitespace
+# @expect error E_PARSE "interpreter tag must touch the opening quote: script transform = python3'...' (no space)" @1:1
+--- input.jh
+script transform = python3 'print(1)'
 
 === config block unterminated
 # @expect error E_PARSE "config block not closed with '}'" @1:1

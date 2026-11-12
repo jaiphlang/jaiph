@@ -9,7 +9,7 @@
 # python3 instead of `echo`, so backslashes and dash-leading content
 # are written verbatim. Content arrives on stdin (not argv), so it is
 # not bounded by ARG_MAX and can be arbitrarily large.
-export script save_string_to_file = '''python3
+export script save_string_to_file = python3'''
   import sys
   if len(sys.argv) < 2:
       sys.exit(2)

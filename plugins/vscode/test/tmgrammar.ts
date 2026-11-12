@@ -31,8 +31,13 @@ function loadGrammar(): Promise<vsctm.IGrammar> {
         return vsctm.parseRawGrammar(fs.readFileSync(GRAMMAR_PATH, "utf8"), GRAMMAR_PATH);
       }
       // Embedded languages (python, shell, …) are not needed for jaiph-scope
-      // assertions; returning null lets textmate skip them gracefully.
-      return null;
+      // assertions, so serve an empty stub grammar. Returning null instead
+      // makes vscode-textmate drop every rule that includes the missing scope
+      // (the fenced-script rules), which would hide them from the tests.
+      return vsctm.parseRawGrammar(
+        JSON.stringify({ scopeName, patterns: [] }),
+        `${scopeName}.json`,
+      );
     },
   });
   grammarPromise = registry.loadGrammar("source.jaiph").then((g) => {

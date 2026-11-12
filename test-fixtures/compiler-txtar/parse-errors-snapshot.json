@@ -165,7 +165,7 @@
     "line": 1,
     "col": 1,
     "code": "E_PARSE",
-    "message": "fence tag \"node\" already sets the shebang — remove the manual \"#!\" line"
+    "message": "interpreter tag \"node\" already sets the shebang — remove the manual \"#!\" line"
   },
   "script tag with parentheses": {
     "file": "input.jh",
@@ -991,7 +991,7 @@
     "line": 2,
     "col": 3,
     "code": "E_PARSE",
-    "message": "fence tag \"node\" already sets the shebang — remove the manual \"#!\" line"
+    "message": "interpreter tag \"node\" already sets the shebang — remove the manual \"#!\" line"
   },
   "inline script fenced unterminated in workflow": {
     "file": "input.jh",
@@ -1007,12 +1007,33 @@
     "code": "E_PARSE",
     "message": "anonymous inline script requires argument list after closing quote: 'body'(args) or 'body'()"
   },
-  "inline script fenced with invalid lang token": {
+  "inline script fenced with text after the opening fence": {
     "file": "input.jh",
     "line": 2,
     "col": 1,
     "code": "E_PARSE",
-    "message": "invalid opening fence: only a single lang token is allowed after '''"
+    "message": "invalid opening fence: nothing may follow ''' on the opening line"
+  },
+  "script tag after the opening fence (removed form)": {
+    "file": "input.jh",
+    "line": 1,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "interpreter tags go before the opening quotes: python3'''...''' (not '''python3)"
+  },
+  "inline script tag after the opening fence (removed form)": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "interpreter tags go before the opening quotes: node'''...''' (not '''node)"
+  },
+  "script tag separated from the quote by whitespace": {
+    "file": "input.jh",
+    "line": 1,
+    "col": 1,
+    "code": "E_PARSE",
+    "message": "interpreter tag must touch the opening quote: script transform = python3'...' (no space)"
   },
   "config block unterminated": {
     "file": "input.jh",

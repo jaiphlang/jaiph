@@ -5,10 +5,15 @@ import {
   parseFencedScriptBlock,
   rejectRemovedOnelineBacktick,
   rejectRemovedScriptFence,
+  rejectTagWithShebang,
   SCRIPT_FENCE,
+  splitScriptLangPrefix,
   startsScriptFence,
 } from "./fence";
 import { ENV_KEY_RE, isReservedEnvKey } from "../env-reserved";
+
+/** Re-exported for the public parser entry (match-arm inline-script check in validate). */
+export { looksLikeInlineScriptCall } from "./fence";
 
 /**
  * Parse the `use KEY [KEY …]` clause on a script declaration (named script or
@@ -44,7 +49,7 @@ export function parseUseClauseKeys(
 }
 
 /**
- * Convert a fence language tag to a shebang line.
+ * Convert an interpreter tag (`python3'…'`) to a shebang line.
  * Any tag is valid — no hardcoded allowlist.
  */
 export function langToShebang(lang: string): string {
@@ -125,29 +130,25 @@ export function parseScriptBlock(
     fail(filePath, `"use" is reserved and cannot be a script name`, lineNo);
   }
   const useKeys = match[3] !== undefined ? parseUseClauseKeys(filePath, match[3], lineNo) : undefined;
-  const rhs = match[4].trimStart();
+  const rhsRaw = match[4].trimStart();
 
-  rejectRemovedScriptFence(filePath, rhs, lineNo);
-  rejectRemovedOnelineBacktick(filePath, rhs, lineNo);
+  rejectRemovedScriptFence(filePath, rhsRaw, lineNo);
+  rejectRemovedOnelineBacktick(filePath, rhsRaw, lineNo);
+
+  // Optional interpreter tag directly before the opening quote: python3'…' / node'''…'''
+  const { lang, rest: rhs } = splitScriptLangPrefix(rhsRaw);
 
   // Case 1: Fenced block — opening ''' must be on the same line as script name =
   if (startsScriptFence(rhs)) {
     const fenceLines = [...lines];
     fenceLines[startIndex] = rhs;
-    const { body, lang, nextIdx, afterClose } = parseFencedScriptBlock(filePath, fenceLines, startIndex);
+    const { body, nextIdx, afterClose } = parseFencedScriptBlock(filePath, fenceLines, startIndex);
 
     if (afterClose.trim()) {
       fail(filePath, `unexpected content after closing fence: '${afterClose.trim()}'`, lineNo);
     }
 
-    // Check for both fence tag and manual shebang
-    if (lang && body.trimStart().startsWith("#!")) {
-      fail(
-        filePath,
-        `fence tag "${lang}" already sets the shebang — remove the manual "#!" line`,
-        lineNo,
-      );
-    }
+    rejectTagWithShebang(filePath, lang, body, lineNo);
 
     const scriptDef: ScriptDef = {
       name: scriptName,
@@ -174,11 +175,13 @@ export function parseScriptBlock(
     }
 
     validateScriptBodyNoInterpolation(body, filePath, lineNo, 1);
+    rejectTagWithShebang(filePath, lang, body, lineNo);
 
     const scriptDef: ScriptDef = {
       name: scriptName,
       comments: pendingComments,
       body,
+      ...(lang ? { lang } : {}),
       ...(useKeys ? { use: useKeys } : {}),
       loc: { line: lineNo, col: 1 },
     };
@@ -195,6 +198,19 @@ export function parseScriptBlock(
     fail(
       filePath,
       `script bodies use single quotes: script ${scriptName} = '...'`,
+      lineNo,
+    );
+  }
+
+  if (lang) {
+    fail(filePath, `expected ' or ${SCRIPT_FENCE} directly after interpreter tag "${lang}"`, lineNo);
+  }
+
+  const spacedTag = /^([A-Za-z_][A-Za-z0-9_.-]*)\s+'/.exec(rhs);
+  if (spacedTag) {
+    fail(
+      filePath,
+      `interpreter tag must touch the opening quote: script ${scriptName} = ${spacedTag[1]}'...' (no space)`,
       lineNo,
     );
   }

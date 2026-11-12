@@ -31,6 +31,22 @@
     "fields": {}
   },
   {
+    "type": "quote_script",
+    "named": true,
+    "fields": {
+      "language": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "language",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
     "type": "source_file",
     "named": true,
     "root": true,
@@ -264,10 +280,6 @@
   },
   {
     "type": "qualified_identifier",
-    "named": true
-  },
-  {
-    "type": "quote_script",
     "named": true
   },
   {
