@@ -45,23 +45,35 @@ export function emitSteps(steps: StepDef[], pad: string, currentIndent: string, 
   return lines;
 }
 
+/**
+ * A body stays fenced when it cannot be written as a one-liner: it spans lines,
+ * contains `'`, or contains `${name}` (passes through in a fence, E_PARSE in a one-liner).
+ */
+function inlineScriptNeedsFence(body: string): boolean {
+  return (
+    body.includes("\n") ||
+    body.includes("'") ||
+    /\$\{[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?\}/.test(body)
+  );
+}
+
 function emitInlineScriptLines(
   prefix: string,
-  body: string,
-  lang: string | undefined,
-  args: Arg[] | undefined,
+  expr: Extract<Expr, { kind: "inline_script" }>,
+  trivia: Trivia,
   closeIndent: string,
   bodyIndent: string,
 ): string[] {
+  const { body, lang, args } = expr;
   const argsStr = formatArgs(args);
-  if (lang || body.includes("\n") || body.includes("'")) {
-    const langTag = lang ?? "";
-    const result = [`${prefix}'''${langTag}`];
+  const langTag = lang ?? "";
+  if (tn(trivia, expr).scriptBodyKind === "fenced" || inlineScriptNeedsFence(body)) {
+    const result = [`${prefix}${langTag}'''`];
     result.push(...emitFencedScriptBodyLines(body, bodyIndent));
     result.push(`${closeIndent}'''(${argsStr})`);
     return result;
   }
-  return [`${prefix}'${body}'(${argsStr})`];
+  return [`${prefix}${langTag}'${body}'(${argsStr})`];
 }
 
 /**
@@ -77,7 +89,7 @@ function emitStageInline(expr: Expr, trivia: Trivia): string {
     return bare ?? expr.raw;
   }
   if (expr.kind === "call") return emitRef(expr.callee, expr.args);
-  if (expr.kind === "inline_script") return `'${expr.body}'(${formatArgs(expr.args)})`;
+  if (expr.kind === "inline_script") return `${expr.lang ?? ""}'${expr.body}'(${formatArgs(expr.args)})`;
   return "";
 }
 
@@ -133,14 +145,14 @@ function emitExprFirstLine(
     return { head: `${asyncMod}${emitRef(expr.callee, expr.args)}`, tail: [] };
   }
   if (expr.kind === "inline_script") {
-    if (expr.lang || expr.body.includes("\n")) {
-      const langTag = expr.lang ?? "";
+    const langTag = expr.lang ?? "";
+    if (valueTrivia.scriptBodyKind === "fenced" || inlineScriptNeedsFence(expr.body)) {
       const bodyIndent = `${ci}${pad}`;
       const tail = emitFencedScriptBodyLines(expr.body, bodyIndent);
       tail.push(`${ci}'''(${formatArgs(expr.args)})`);
-      return { head: `'''${langTag}`, tail };
+      return { head: `${langTag}'''`, tail };
     }
-    return { head: `'${expr.body}'(${formatArgs(expr.args)})`, tail: [] };
+    return { head: `${langTag}'${expr.body}'(${formatArgs(expr.args)})`, tail: [] };
   }
   if (expr.kind === "prompt") {
     if (expr.name !== undefined) {
@@ -219,7 +231,7 @@ function emitStep(step: StepDef, pad: string, currentIndent: string, trivia: Tri
     const verb = step.level;
     if (message.kind === "inline_script") {
       lines.push(
-        ...emitInlineScriptLines(`${ci}${verb} `, message.body, message.lang, message.args, ci, `${ci}${pad}`),
+        ...emitInlineScriptLines(`${ci}${verb} `, message, trivia, ci, `${ci}${pad}`),
       );
       return lines;
     }
@@ -301,7 +313,7 @@ function emitStep(step: StepDef, pad: string, currentIndent: string, trivia: Tri
     }
     if (body.kind === "inline_script") {
       const inlineLines = emitInlineScriptLines(
-        `${ci}${capture}${stdinPrefix}`, body.body, body.lang, body.args, ci, `${ci}${pad}`,
+        `${ci}${capture}${stdinPrefix}`, body, trivia, ci, `${ci}${pad}`,
       );
       lines.push(...inlineLines);
       return lines;

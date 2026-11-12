@@ -28,9 +28,67 @@ export function startsRemovedOnelineBacktick(s: string): boolean {
   return s.startsWith(REMOVED_SCRIPT_ONELINER);
 }
 
-/** One-line `'…'` or fenced `'''…'''`. Backticks still match so the parser can reject them. */
+/**
+ * Interpreter tag written directly before the opening quote: `python3'…'`,
+ * `node'''…'''`. Any identifier-like token is accepted (no allowlist); it maps
+ * to `#!/usr/bin/env <tag>`. No whitespace between tag and quote.
+ */
+const LANG_TAG_SRC = "[A-Za-z_][A-Za-z0-9_.-]*";
+const LANG_PREFIX_RE = new RegExp(`^(${LANG_TAG_SRC})(?=')`);
+const LANG_TAG_RE = new RegExp(`^${LANG_TAG_SRC}$`);
+
+/** Split an optional interpreter-tag prefix off a script body opener. */
+export function splitScriptLangPrefix(s: string): { lang?: string; rest: string } {
+  const m = LANG_PREFIX_RE.exec(s);
+  if (!m) return { rest: s };
+  return { lang: m[1], rest: s.slice(m[1].length) };
+}
+
+/** Removed form: the tag after the opening fence (`'''python3`). Always E_PARSE. */
+export function removedFenceTagMessage(tag: string): string {
+  return `interpreter tags go before the opening quotes: ${tag}${SCRIPT_FENCE}...${SCRIPT_FENCE} (not ${SCRIPT_FENCE}${tag})`;
+}
+
+/** Fenced `'''…'''`, with or without an interpreter-tag prefix. */
+export function startsTaggedScriptFence(s: string): boolean {
+  return startsScriptFence(splitScriptLangPrefix(s).rest);
+}
+
+/**
+ * One-line `'…'` or fenced `'''…'''`, optionally prefixed by an interpreter tag
+ * (`python3'…'`). Backticks still match so the parser can reject them.
+ */
 export function startsInlineScript(s: string): boolean {
-  return s.startsWith("'") || s.startsWith(REMOVED_SCRIPT_ONELINER);
+  return s.startsWith("'") || s.startsWith(REMOVED_SCRIPT_ONELINER) || LANG_PREFIX_RE.test(s);
+}
+
+/**
+ * Strict shape check for contexts where bare words are otherwise legal (match
+ * arm bodies): `[tag]'''` or `[tag]'…'(`. A plain apostrophe (`it's`) does not match.
+ */
+export function looksLikeInlineScriptCall(s: string): boolean {
+  const { rest } = splitScriptLangPrefix(s);
+  return startsScriptFence(rest) || /^'[^']*'\s*\(/.test(rest);
+}
+
+/**
+ * Reject a manual `#!` line when an interpreter tag already sets the shebang.
+ */
+export function rejectTagWithShebang(
+  filePath: string,
+  lang: string | undefined,
+  body: string,
+  lineNo: number,
+  col?: number,
+): void {
+  if (lang && body.trimStart().startsWith("#!")) {
+    fail(
+      filePath,
+      `interpreter tag "${lang}" already sets the shebang — remove the manual "#!" line`,
+      lineNo,
+      col,
+    );
+  }
 }
 
 export function rejectRemovedOnelineBacktick(
@@ -56,32 +114,31 @@ export function rejectRemovedScriptFence(
 }
 
 /**
- * Parse a fenced block (''' ... ''') starting at fenceLineIdx.
- * Returns the body between fences, optional lang token, the trailing text on
- * the closing fence line (after the closing ''', callers parse this for
- * (args) / returns "…" / etc.), and the next line index.
+ * Parse a fenced block (''' ... ''') starting at fenceLineIdx. The opening line
+ * must be exactly ''' — callers split any interpreter tag off first
+ * (`python3'''`). Returns the body between fences, the trailing text on the
+ * closing fence line (after the closing ''', callers parse this for (args) /
+ * returns "…" / etc.), and the next line index.
  */
 export function parseFencedBlock(
   filePath: string,
   lines: string[],
   fenceLineIdx: number,
-): { body: string; lang?: string; afterClose: string; nextIdx: number } {
+): { body: string; afterClose: string; nextIdx: number } {
   const lineNo = fenceLineIdx + 1;
   const openLine = lines[fenceLineIdx].trim();
 
   rejectRemovedScriptFence(filePath, openLine, lineNo);
 
-  // Parse opening fence: must be ''' or '''lang (single token, nothing else)
   if (!openLine.startsWith(SCRIPT_FENCE)) {
     fail(filePath, `expected opening fence ${SCRIPT_FENCE}`, lineNo);
   }
   const afterQuotes = openLine.slice(SCRIPT_FENCE.length);
-  let lang: string | undefined;
   if (afterQuotes.length > 0) {
-    if (/\s/.test(afterQuotes)) {
-      fail(filePath, `invalid opening fence: only a single lang token is allowed after ${SCRIPT_FENCE}`, lineNo);
+    if (LANG_TAG_RE.test(afterQuotes)) {
+      fail(filePath, removedFenceTagMessage(afterQuotes), lineNo);
     }
-    lang = afterQuotes;
+    fail(filePath, `invalid opening fence: nothing may follow ${SCRIPT_FENCE} on the opening line`, lineNo);
   }
 
   // Collect body lines until closing fence
@@ -92,7 +149,6 @@ export function parseFencedBlock(
     if (trimmed.startsWith(SCRIPT_FENCE)) {
       return {
         body: bodyLines.join("\n"),
-        ...(lang ? { lang } : {}),
         afterClose: trimmed.slice(SCRIPT_FENCE.length),
         nextIdx: i + 1,
       };
@@ -116,7 +172,7 @@ export function parseFencedScriptBlock(
   filePath: string,
   lines: string[],
   fenceLineIdx: number,
-): { body: string; lang?: string; afterClose: string; nextIdx: number } {
+): { body: string; afterClose: string; nextIdx: number } {
   const parsed = parseFencedBlock(filePath, lines, fenceLineIdx);
   return { ...parsed, body: dedentFencedScriptBody(parsed.body) };
 }

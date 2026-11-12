@@ -201,8 +201,10 @@ export function parseConfigBlock(
       );
     }
 
-    bodySequence.push({ kind: "assign", key });
     const value = parseMetadataValue(filePath, raw, valuePart, lineNo);
+    const trimmedValue = valuePart.trim();
+    const bareSource = typeof value === "string" && !trimmedValue.startsWith('"') ? trimmedValue : undefined;
+    bodySequence.push({ kind: "assign", key, ...(bareSource !== undefined ? { bareSource } : {}) });
     assignConfigKey(filePath, out, key, value, lineNo, raw);
   }
 

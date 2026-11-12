@@ -36,13 +36,13 @@ e2e::section "Overlap: producer and consumer run concurrently"
 # ---------------------------------------------------------------------------
 
 e2e::file "overlap.jh" <<'EOF'
-script producer = '''bash
+script producer = bash'''
 printf 'start\n'
 sleep 2
 if [ -f "$1/consumer_saw_start" ]; then printf 'end:overlap\n'; else printf 'end:sequential\n'; fi
 '''
 
-script consumer = '''bash
+script consumer = bash'''
 while IFS= read -r line; do
   printf 'saw %s\n' "$line" >> "$1/result.txt"
   [ "$line" = "start" ] && : > "$1/consumer_saw_start"
@@ -68,15 +68,15 @@ e2e::section "Tee: middle stage .out holds the streamed body"
 # ---------------------------------------------------------------------------
 
 e2e::file "tee.jh" <<'EOF'
-script foo = '''bash
+script foo = bash'''
 printf 'a\nb\n'
 '''
 
-script bar = '''bash
+script bar = bash'''
 tr 'a-z' 'A-Z'
 '''
 
-script baz = '''bash
+script baz = bash'''
 grep -c '^[A-Z]' || true
 '''
 
@@ -95,11 +95,11 @@ e2e::section "Volume: 64 MiB streams through the pipeline off the JS heap"
 # ---------------------------------------------------------------------------
 
 e2e::file "volume.jh" <<'EOF'
-script gen = '''bash
+script gen = bash'''
 head -c "$1" /dev/zero | tr '\0' a
 '''
 
-script sink = '''bash
+script sink = bash'''
 wc -c | tr -d ' \n' > "$2"
 '''
 

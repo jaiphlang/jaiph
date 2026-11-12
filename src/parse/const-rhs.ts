@@ -3,7 +3,7 @@ import { createTrivia, type Trivia } from "./trivia";
 import { fail, parseCallRef, rejectTrailingContent } from "./core";
 import { parseCallRefMultiline } from "./call-args";
 import { dedentTripleQuotedBody, parseTripleQuoteBlock, tripleQuoteBodyToRaw } from "./triple-quote";
-import { parseAnonymousInlineScript } from "./inline-script";
+import { parseAnonymousInlineScript, startsInlineScript } from "./inline-script";
 import { parsePromptStep } from "./prompt";
 import { parseMatchAfterKeyword } from "./match";
 import {
@@ -95,7 +95,7 @@ export function parseConstRhs(
   // const x = async ref() — async capture returning a handle
   if (head === "async" || head.startsWith("async ")) {
     const asyncRest = head === "async" ? "" : head.slice("async ".length).trim();
-    if (asyncRest.startsWith("'") || asyncRest.startsWith("`")) {
+    if (startsInlineScript(asyncRest)) {
       fail(filePath, "async is not supported with inline scripts", lineNo, col);
     }
     const call = parseCallRef(asyncRest);
@@ -110,17 +110,16 @@ export function parseConstRhs(
     };
   }
   // const x = 'body'(args) — inline script
-  if (head.startsWith("'") || head.startsWith("`")) {
+  if (startsInlineScript(head)) {
     const result = parseAnonymousInlineScript(filePath, lines, lineIdx, head, lineNo, col);
-    return {
-      value: {
-        kind: "inline_script",
-        body: result.body,
-        ...(result.lang ? { lang: result.lang } : {}),
-        args: result.args,
-      },
-      nextLineIdx: result.nextLineIdx - 1,
+    const value: Expr = {
+      kind: "inline_script",
+      body: result.body,
+      ...(result.lang ? { lang: result.lang } : {}),
+      args: result.args,
     };
+    trivia.setNode(value, { scriptBodyKind: result.fenced ? "fenced" : "oneline" });
+    return { value, nextLineIdx: result.nextLineIdx - 1 };
   }
   // const name = match var { ... }  (compact one-line or multiline `{` opener)
   if (head.startsWith("match ") || head === "match") {

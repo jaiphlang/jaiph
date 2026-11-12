@@ -120,13 +120,13 @@ function returnValue(runtime: NodeWorkflowRuntime): string {
 // is its own progress step. `baz` counts only UPPERCASE-leading lines so that
 // dropping or swapping a stage changes the number and fails the assertion.
 const PIPE_MODULE = [
-  "script foo = '''bash",
+  "script foo = bash'''",
   "printf 'a\\nb\\n'",
   "'''",
-  "script bar = '''bash",
+  "script bar = bash'''",
   "tr 'a-z' 'A-Z'",
   "'''",
-  "script baz = '''bash",
+  "script baz = bash'''",
   "grep -c '^[A-Z]' || true",
   "'''",
 ].join("\n");
@@ -220,13 +220,13 @@ test("stdin gen() -> boom() -> sink() catch: a failing middle stage runs the one
     const runtime = makeRuntime(
       root,
       [
-        "script gen = '''bash",
+        "script gen = bash'''",
         "echo hi",
         "'''",
-        "script boom = '''bash",
+        "script boom = bash'''",
         "exit 3",
         "'''",
-        "script sink = '''bash",
+        "script sink = bash'''",
         "cat",
         "'''",
         "export def main() {",
@@ -265,12 +265,12 @@ test("stdin prod() -> cons(): producer and consumer overlap (streamed, not mater
     const runtime = makeRuntime(
       root,
       [
-        "script prod = '''bash",
+        "script prod = bash'''",
         "printf 'start\\n'",
         'for i in $(seq 1 400); do [ -f "$1/ack" ] && break; sleep 0.05; done',
         "printf 'end\\n'",
         "'''",
-        "script cons = '''bash",
+        "script cons = bash'''",
         "while IFS= read -r line; do",
         "  printf 'saw %s\\n' \"$line\"",
         '  [ "$line" = "start" ] && : > "$1/ack"',

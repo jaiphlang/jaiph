@@ -1,5 +1,5 @@
 import type { Diagnostics } from "../diagnostics";
-import { canonicalizeTripleQuotedString } from "../parser";
+import { canonicalizeTripleQuotedString, looksLikeInlineScriptCall } from "../parser";
 import type { MatchExprDef, MatchPatternDef } from "../types";
 
 /** All regex sources in a pattern, descending into alternation alternands. */
@@ -44,7 +44,7 @@ export function validateMatchExpr(
         `match arm body must not start with "return"; the match expression itself produces the value — use the expression directly after =>`,
       );
     }
-    if (/'[^']*'\s*\(/.test(bodyTrimmed) || /`[^`]*`\s*\(/.test(bodyTrimmed) || bodyTrimmed.startsWith("'''") || bodyTrimmed.startsWith("```")) {
+    if (looksLikeInlineScriptCall(bodyTrimmed) || /'[^']*'\s*\(/.test(bodyTrimmed) || /`[^`]*`\s*\(/.test(bodyTrimmed) || bodyTrimmed.startsWith("```")) {
       diag.error(
         filePath,
         expr.loc.line,

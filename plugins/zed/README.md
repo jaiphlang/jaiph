@@ -18,9 +18,10 @@ bare calls (`name(args)`, `async name(args)`), stdin connect
 `expect_contain` / `expect_not_contain` / `expect_equal`), plus comments,
 double- and triple-quoted strings, regex patterns, numbers, and booleans.
 
-Fenced and inline script bodies (`'''bash`, `'''python3`, …)
-inject the embedded language via `languages/jaiph/injections.scm`; a bare fence
-defaults to shell, matching the Jaiph runtime.
+Fenced and inline script bodies (`bash'''`, `python3'''`, …) inject the
+language named by the interpreter tag via `languages/jaiph/injections.scm`; a
+bare fence defaults to shell, matching the Jaiph runtime. The tag is also
+highlighted on tagged one-line bodies (`python3'print(1)'`).
 
 Zed language extensions require a **Tree-sitter** grammar (they cannot reuse a
 TextMate grammar like the VS Code extension), so this extension is backed by

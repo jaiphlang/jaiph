@@ -76,7 +76,7 @@ test("one-line `'…'` and fenced `'''` script bodies paint as strings", () => {
     "one-line script body `'echo hello'` must be a string span",
   );
 
-  const fence = highlightJaiphWithParser("script greet = '''bash");
+  const fence = highlightJaiphWithParser("script greet = bash'''");
   assert.ok(
     fence.includes('<span class="ralph-string">&#39;&#39;&#39;</span>') ||
       fence.includes(`<span class="ralph-string">'''</span>`),

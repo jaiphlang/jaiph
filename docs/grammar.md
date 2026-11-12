@@ -25,8 +25,8 @@ This page is the authoritative syntactic reference for Jaiph: lexical rules, sta
 | Shebang | A `#!` first line of the file is ignored by the parser. |
 | Single-line string | Double-quoted `"…"`. Single-quoted strings are `E_PARSE`. Write `\"` to include a quote without ending the string. In orchestration strings the backslash is otherwise passed through verbatim — `\n`, `\t`, and `\\` are **not** decoded to newline/tab/backslash (use a `"""…"""` block or a `script` for literal newlines). Config-block string values are the exception: they decode `\"`, `\\`, `\n`, and `\t`. Match string patterns are a second exception: they decode `\"`, `\n`, and `\\` (but not `\t`). |
 | Multiline string | Triple-quoted `"""…"""`. The opening `"""` must end the line; the closing `"""` must be on its own line. |
-| Script body (single-line) | Single quotes `'…'`. No escapes: the first `'` closes. A body that needs `'` must use a fenced block. Jaiph `${identifier}` / `${identifier.field}` interpolation is `E_PARSE`; bash parameter expansion (for example `${var:-default}`) passes through. One-line backticks are `E_PARSE`. |
-| Script body (fenced) | Triple single quotes `'''`…`'''`. Optional lang tag `'''<tag>`. `${…}` passes through to the shell. Triple backticks are `E_PARSE`. The closer is any trimmed line that starts with `'''` (no tagged closer). |
+| Script body (single-line) | Single quotes `'…'`, with an optional interpreter tag directly before the opening quote (`python3'…'`). No escapes: the first `'` closes. A body that needs `'` must use a fenced block. Jaiph `${identifier}` / `${identifier.field}` interpolation is `E_PARSE`; bash parameter expansion (for example `${var:-default}`) passes through. One-line backticks are `E_PARSE`. |
+| Script body (fenced) | Triple single quotes `'''`…`'''`, with an optional interpreter tag directly before the opening quotes (`<tag>'''`). The opening `'''` must end the line; a tag after it (`'''python3`) is `E_PARSE`. `${…}` passes through to the shell. Triple backticks are `E_PARSE`. The closer is any trimmed line that starts with `'''` (no tagged closer). |
 | Required parentheses | All call sites require parentheses, including zero-argument calls (`setup()`). A name with no `()` is not a call: on a statement line it is `E_PARSE`, and in a value position it is a string reference. |
 
 ## File structure
@@ -126,9 +126,9 @@ Script RHS:
 
 ```ebnf
 script_rhs           = oneline_script_body | fenced_script_block ;
-oneline_script_body  = "'" script_text "'" ;
-fenced_script_block  = "'''" [ LANG_TAG ] newline { script_line newline } "'''" ;
-LANG_TAG             = IDENT ;
+oneline_script_body  = [ LANG_TAG ] "'" script_text "'" ;
+fenced_script_block  = [ LANG_TAG ] "'''" newline { script_line newline } "'''" ;
+LANG_TAG             = ( letter | "_" ) { letter | digit | "_" | "." | "-" } ;  (* no whitespace before the quote *)
 ```
 
 The optional `use` clause (`script aaa use GITHUB_TOKEN NPM_TOKEN = …`) sits between the name and `=`: one clause, space-separated env key identifiers. It requests host keys for this script's subprocess; each key must also be granted with `--env KEY[=VALUE]` at run time or `jaiph run` / `serve` / `mcp` refuse to start (`E_ENV_MISSING`). Script env is otherwise sterile — see [Environment variables](env-vars.md#script-env). Invalid key names are `E_ENV_INVALID`; reserved keys are `E_ENV_RESERVED` (same set as `--env`). The identical `use` clause is available on a **named prompt definition** (see below); it is not syntax on defs, plain call sites, `prompt` call sites, or anonymous `prompt` steps.
@@ -137,7 +137,7 @@ The optional `use` clause (`script aaa use GITHUB_TOKEN NPM_TOKEN = …`) sits b
 
 A `prompt_decl` binds a reusable, parameterised prompt in the same unified namespace as `script` / `def` / `const` / channels. The `prompt_rhs` uses the same bodies as a `prompt` step — a double-quoted single line or a `"""…"""` block (no script fence). The optional `use` clause (`prompt analyze(log) use GITHUB_TOKEN = …`) sits between the parameter list and `=`, with the same grammar as `use` on a script. For invocation, `returns`, `use` injection, and scope, see [Language — Named prompts](language.md#named-prompts).
 
-The lang tag maps directly to `#!/usr/bin/env <tag>` (e.g. `'''python3` → `#!/usr/bin/env python3`); any identifier tag is accepted with no hardcoded allowlist. Combining a lang tag with a leading `#!` shebang in the body is an error. With neither, the emitter writes `#!/usr/bin/env bash`.
+The interpreter tag maps directly to `#!/usr/bin/env <tag>` (for example `python3'''` becomes `#!/usr/bin/env python3`). Any identifier-like tag is accepted, with no hardcoded allowlist. The tag must touch the quote: `python3 '…'` is `E_PARSE`. The tag works on one-liners too (`node'console.log(1)'`). Combining a tag with a leading `#!` shebang in the body is an error. With neither, the emitter writes `#!/usr/bin/env bash`. The old form with the tag after the opening quotes (`'''python3`) is `E_PARSE` with a message that shows the new spelling.
 
 ## Call sites
 
@@ -365,10 +365,10 @@ Validator entry points (`src/transpile/validate.ts` for the outer layer; `src/tr
 
 | Source form | Emitted artifact |
 |---|---|
-| `script name = '…'` (single-line) | `scripts/<name>` with `#!/usr/bin/env bash` (or the fence-tag / manual shebang). |
-| `script name = '''<tag>…'''` (fenced) | `scripts/<name>` with `#!/usr/bin/env <tag>` or the manual `#!` line. |
-| `` 'body'(args) `` / `'''lang body'''(args)` | `scripts/__inline_<12-hex>` with the deterministic name from `inlineScriptName`. |
-| `script name = …` **nested inside a def** | `scripts/__nested_<12-hex>` with the deterministic name from `nestedScriptName` (hash of name, lang tag, `use` keys, and body). Same interpreter/shebang path as a top-level script; the OS exec bit is not required. |
+| `script name = [<tag>]'…'` (single-line) | `scripts/<name>` with `#!/usr/bin/env bash` (or `#!/usr/bin/env <tag>`). |
+| `script name = <tag>'''…'''` (fenced) | `scripts/<name>` with `#!/usr/bin/env <tag>` or the manual `#!` line. |
+| `` 'body'(args) `` / `<tag>'''body'''(args)` | `scripts/__inline_<12-hex>` with the deterministic name from `inlineScriptName`. |
+| `script name = …` **nested inside a def** | `scripts/__nested_<12-hex>` with the deterministic name from `nestedScriptName` (hash of name, interpreter tag, `use` keys, and body). Same interpreter/shebang path as a top-level script; the OS exec bit is not required. |
 | `import script "path" as name` | Copied verbatim to `scripts/<name>` with its original shebang preserved; the runtime resolves it through `JAIPH_SCRIPTS` like any other script. |
 
 Defs, prompts, channels, and control flow are interpreted by `NodeWorkflowRuntime` from the AST. There is no def-level shell emission. Script subprocesses inherit the runner's `process.env` plus Jaiph metadata.

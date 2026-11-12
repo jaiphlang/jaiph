@@ -22,7 +22,7 @@ import { consumeTripleQuotedArg, dedentTripleQuotedBody, parseTripleQuoteBlock, 
 import { parseCallRefMultiline } from "./call-args";
 import { parseConstRhs } from "./const-rhs";
 import { parseAnonymousInlineScript } from "./inline-script";
-import { startsInlineScript, startsScriptFence } from "./fence";
+import { startsInlineScript, startsTaggedScriptFence } from "./fence";
 import { parseConfigBlock } from "./metadata";
 import { splitStatementsOnSemicolons } from "./statement-split";
 import { parsePromptStep } from "./prompt";
@@ -370,7 +370,7 @@ function tryParsePipelineStage(
   s: string,
 ): { expr: Expr; rest: string } | null {
   const t = s.trimStart();
-  if (startsScriptFence(t)) return null;
+  if (startsTaggedScriptFence(t)) return null;
   if (startsInlineScript(t)) {
     const res = parseAnonymousInlineScript(filePath, lines, idx, t, innerNo, col, true);
     if (res.closingLineIdx !== idx) return null;
@@ -427,7 +427,7 @@ export function parseStdinConnect(
   let producerIsCall = false;
   if (startsInlineScript(t)) {
     const res = parseAnonymousInlineScript(filePath, lines, idx, t, innerNo, stdinCol, true);
-    stdin = makeInlineScriptExpr(res);
+    stdin = makeInlineScriptExpr(res, trivia);
     afterOperand = res.trailing.trimStart();
     producerIsCall = true;
   } else {
@@ -478,7 +478,7 @@ export function parseStdinConnect(
   let result: { step: StepDef; nextIdx: number };
   if (startsInlineScript(target)) {
     const res = parseAnonymousInlineScript(filePath, lines, idx, target, innerNo, stdinCol, true);
-    const body = makeInlineScriptExpr(res);
+    const body = makeInlineScriptExpr(res, trivia);
     const stepLoc = { line: innerNo, col: stdinCol };
     const c: BlockCtx = { filePath, lines, idx, innerRaw, inner: innerRaw.trim(), innerNo, trivia, opts };
     result = parseInlineScriptTail(c, res, body, stepLoc, stdinCol, stdin, captureName);
@@ -697,13 +697,15 @@ function looksLikeNamedPromptDef(inner: string): boolean {
 type InlineScriptResult = ReturnType<typeof parseAnonymousInlineScript>;
 
 /** Build an `inline_script` Expr from a parsed anonymous-script result. */
-function makeInlineScriptExpr(result: InlineScriptResult): Expr {
-  return {
+function makeInlineScriptExpr(result: InlineScriptResult, trivia?: Trivia): Expr {
+  const expr: Expr = {
     kind: "inline_script",
     body: result.body,
     ...(result.lang ? { lang: result.lang } : {}),
     args: result.args,
   };
+  trivia?.setNode(expr, { scriptBodyKind: result.fenced ? "fenced" : "oneline" });
+  return expr;
 }
 
 /**
@@ -866,7 +868,7 @@ function tryBareCall(c: BlockCtx): BlockResult | null {
   if (startsInlineScript(inner)) {
     const col = colFromRaw(c.innerRaw);
     const result = parseAnonymousInlineScript(c.filePath, c.lines, c.idx, inner, c.innerNo, col, true);
-    const body = makeInlineScriptExpr(result);
+    const body = makeInlineScriptExpr(result, c.trivia);
     const stepLoc = { line: c.innerNo, col };
     return parseInlineScriptTail(c, result, body, stepLoc, col);
   }
@@ -902,7 +904,7 @@ function parseSayBody(
   const stepLoc = { line: c.innerNo, col };
   if (startsInlineScript(arg)) {
     const result = parseAnonymousInlineScript(c.filePath, c.lines, c.idx, arg, c.innerNo, col);
-    const message = makeInlineScriptExpr(result);
+    const message = makeInlineScriptExpr(result, c.trivia);
     return { step: { type: "say", level, message, loc: stepLoc }, nextIdx: result.nextLineIdx };
   }
   if (arg.startsWith('"""')) {
@@ -988,7 +990,7 @@ function tryParseReturn(c: BlockCtx): BlockResult | null {
   }
   if (startsInlineScript(returnValue)) {
     const result = parseAnonymousInlineScript(c.filePath, c.lines, c.idx, returnValue, c.innerNo, retLoc.col);
-    const value = makeInlineScriptExpr(result);
+    const value = makeInlineScriptExpr(result, c.trivia);
     return { step: { type: "return", value, loc: retLoc }, nextIdx: result.nextLineIdx };
   }
   // Bare call `return ref(args)`. parseCallRefMultiline returns null when the

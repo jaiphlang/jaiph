@@ -92,10 +92,15 @@ export function parseArgsRaw(raw: string, vars: Map<string, string>, env?: NodeJ
   return out;
 }
 
-/** Try to parse `'body'(args)` from a string at a given position. */
-export function parseInlineScriptAt(s: string): { body: string; argsRaw: string; consumed: number } | null {
-  const t = s.trimStart();
-  const skippedWs = s.length - t.length;
+/** Try to parse `'body'(args)` / `lang'body'(args)` from a string at a given position. */
+export function parseInlineScriptAt(
+  s: string,
+): { body: string; lang?: string; argsRaw: string; consumed: number } | null {
+  const trimmed = s.trimStart();
+  const tagMatch = /^[A-Za-z_][A-Za-z0-9_.-]*(?=')/.exec(trimmed);
+  const lang = tagMatch?.[0];
+  const t = lang ? trimmed.slice(lang.length) : trimmed;
+  const skippedWs = s.length - trimmed.length + (lang?.length ?? 0);
   if (!t.startsWith("'") || t.startsWith("'''")) return null;
   const closeIdx = t.indexOf("'", 1);
   if (closeIdx === -1) return null;
@@ -118,7 +123,7 @@ export function parseInlineScriptAt(s: string): { body: string; argsRaw: string;
   }
   if (depth !== 0) return null;
   const argsContent = afterClose.slice(1, i - 1).trim();
-  return { body, argsRaw: argsContent, consumed: skippedWs + closeIdx + 1 + i };
+  return { body, ...(lang ? { lang } : {}), argsRaw: argsContent, consumed: skippedWs + closeIdx + 1 + i };
 }
 
 /**
@@ -137,6 +142,7 @@ export function parseManagedArgAt(raw: string, start: number): { token: ParsedAr
       token: {
         kind: "managed_inline_script",
         body: inlineResult.body,
+        ...(inlineResult.lang ? { lang: inlineResult.lang } : {}),
         argsRaw: inlineResult.argsRaw,
       },
       next: start + skipped + inlineResult.consumed,

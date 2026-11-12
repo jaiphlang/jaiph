@@ -156,23 +156,37 @@ def b() {
 === script:node interpreter tag
 # @expect ok
 --- input.jh
-script transform = '''node
+script transform = node'''
 console.log('hi');
 '''
 
 === script:python3 interpreter tag
 # @expect ok
 --- input.jh
-script analyze = '''python3
+script analyze = python3'''
 print('hello')
 '''
 
 === script:bash interpreter tag
 # @expect ok
 --- input.jh
-script setup = '''bash
+script setup = bash'''
 echo hello
 '''
+
+=== one-line script with interpreter tag
+# @expect ok
+--- input.jh
+script hello = python3'print("hello")'
+
+=== one-line inline script with interpreter tag
+# @expect ok
+--- input.jh
+export def main() {
+  node'console.log(1)'()
+  const x = python3'print(2)'()
+  log python3'print(3)'()
+}
 
 === plain script without interpreter tag
 # @expect ok
@@ -338,7 +352,7 @@ export def main() {
 # @expect ok
 --- input.jh
 export def main() {
-  '''python3
+  python3'''
 print('hello')
 '''()
 }

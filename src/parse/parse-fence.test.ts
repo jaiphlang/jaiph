@@ -6,7 +6,6 @@ test("fence: basic body extraction", () => {
   const lines = ["'''", "line one", "line two", "'''"];
   const result = parseFencedBlock("test.jh", lines, 0);
   assert.equal(result.body, "line one\nline two");
-  assert.equal(result.lang, undefined);
   assert.equal(result.nextIdx, 4);
 });
 
@@ -24,25 +23,18 @@ test("fence: empty body", () => {
   assert.equal(result.nextIdx, 2);
 });
 
-test("fence: lang extraction", () => {
+test("fence: tag after the opening quotes is rejected with a fix-it", () => {
   const lines = ["'''python3", "print('hi')", "'''"];
-  const result = parseFencedBlock("test.jh", lines, 0);
-  assert.equal(result.body, "print('hi')");
-  assert.equal(result.lang, "python3");
-  assert.equal(result.nextIdx, 3);
-});
-
-test("fence: lang token with various values", () => {
-  const lines = ["'''node", "console.log(1)", "'''"];
-  const result = parseFencedBlock("test.jh", lines, 0);
-  assert.equal(result.lang, "node");
+  assert.throws(
+    () => parseFencedBlock("test.jh", lines, 0),
+    /interpreter tags go before the opening quotes: python3'''\.\.\.''' \(not '''python3\)/,
+  );
 });
 
 test("fence: fenceLineIdx not at start", () => {
-  const lines = ["some preamble", "'''bash", "echo hello", "'''", "after"];
+  const lines = ["some preamble", "'''", "echo hello", "'''", "after"];
   const result = parseFencedBlock("test.jh", lines, 1);
   assert.equal(result.body, "echo hello");
-  assert.equal(result.lang, "bash");
   assert.equal(result.nextIdx, 4);
 });
 
@@ -66,11 +58,10 @@ test("fenced script block: dedents common leading whitespace", () => {
   assert.equal(result.body, "line1\n  line2\ncat <<'EOF'\ncontent\nEOF");
 });
 
-test("fenced script block: python3 lang tag with uniform margin", () => {
-  const lines = ["'''python3", "  import sys", "  print(sys.argv[1])", "'''"];
+test("fenced script block: uniform margin is removed", () => {
+  const lines = ["'''", "  import sys", "  print(sys.argv[1])", "'''"];
   const result = parseFencedScriptBlock("test.jh", lines, 0);
   assert.equal(result.body, "import sys\nprint(sys.argv[1])");
-  assert.equal(result.lang, "python3");
 });
 
 test("fence: error on unterminated fence", () => {
@@ -81,7 +72,7 @@ test("fence: error on unterminated fence", () => {
   );
 });
 
-test("fence: error on text after opening backticks that isn't single token", () => {
+test("fence: error on other text after the opening quotes", () => {
   const lines = ["'''python3 extra", "body", "'''"];
   assert.throws(
     () => parseFencedBlock("test.jh", lines, 0),
@@ -104,11 +95,10 @@ test("fence: closing line may include returns schema on same line as '''", () =>
   assert.equal(result.nextIdx, 3);
 });
 
-test("fence: same-line trailing content with lang on opening fence", () => {
-  const lines = ["'''text", "x", "''' (args)"];
+test("fence: same-line trailing content after the closing fence", () => {
+  const lines = ["'''", "x", "''' (args)"];
   const result = parseFencedBlock("test.jh", lines, 0);
   assert.equal(result.body, "x");
-  assert.equal(result.lang, "text");
   assert.equal(result.afterClose, " (args)");
 });
 

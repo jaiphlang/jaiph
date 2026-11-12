@@ -108,7 +108,7 @@ Every value position (`const` RHS, `return`, `send` RHS, `log` / `logerr` / `fai
 |---|---|---|
 | `literal` | `"…"`, `"""…"""`, `${var}`, post-dedent triple-quoted body | Interpolated against the current scope; `${ref(args)}` performs inline managed calls. |
 | `call` | `ref(args)`, `async ref(args)` | Managed def/script call. `async: true` on the `async` capture position. |
-| `inline_script` | `` 'body'(args) `` / `'''lang...body...'''(args)` | Inline script body emitted as `scripts/__inline_<hash>`. |
+| `inline_script` | `` 'body'(args) `` / `<tag>'''...body...'''(args)` | Inline script body emitted as `scripts/__inline_<hash>`. |
 | `prompt` | `prompt body [returns "<schema>"]` | Sends body to the agent backend; JSON-quoted in transport. |
 | `match` | `match <subject> { … }` | Walks arms top-to-bottom; first match wins. |
 | `shell` | Raw shell fragment on a `send` payload | A raw shell fragment (e.g. `send echo "$payload" -> findings`) is a managed shell payload. `send` is the only position that accepts `shell`; it is `E_VALIDATE` anywhere else. |
@@ -162,14 +162,15 @@ This is a connect form — not a shell pipe (`|`) and not a `run` suffix. argv s
 
 ### Inline scripts
 
-Inline scripts embed a script body in a step without a separate `script` definition. Use single quotes for one-liners, and triple single quotes for multiline bodies or bodies written in another language. A one-liner cannot contain `'`; use a block.
+Inline scripts embed a script body in a step without a separate `script` definition. Use single quotes for one-liners and triple single quotes for multiline bodies. A one-liner cannot contain `'`; use a block. To run the body with something other than bash, write the interpreter name directly before the opening quote.
 
 ```jaiph
 'echo hello'()
 const x = 'echo captured'()
 const y = 'date +%s'()
 'echo $1-$2'("hello", "world")   # => hello-world
-'''python3
+node'console.log(process.argv[2])'("hi")
+python3'''
 print("hi")
 '''()
 ```
@@ -177,8 +178,9 @@ print("hi")
 | Aspect | Rule |
 |---|---|
 | One-liner | `'…'()`. No `'` in the body and no escapes. `${…}` Jaiph interpolation is `E_PARSE`. Use `$1`, `$2`, …. One-line backticks are `E_PARSE`. |
-| Fenced form | `${…}` passes through to the shell. Optional lang tag selects the interpreter (`'''python3` → `#!/usr/bin/env python3`). Triple backticks and one-line backticks are `E_PARSE`. |
-| Mixing fence tag + manual shebang | Error. |
+| Fenced form | `${…}` passes through to the shell. Triple backticks and one-line backticks are `E_PARSE`. |
+| Interpreter tag | Optional, written directly before the opening quote on either form: `python3'…'()`, `node'''…'''()`. Maps to `#!/usr/bin/env <tag>`. A tag after the opening quotes (`'''python3`) is `E_PARSE`. |
+| Mixing interpreter tag + manual shebang | Error. |
 | Default shebang | `#!/usr/bin/env bash` when neither tag nor `#!` line is present. |
 | Emitted name | `scripts/__inline_<12-hex>`; deterministic across runs. |
 | `catch` / `recover` | Allowed on a standalone call step with inline-script body. Forbidden on inline scripts in `log` / `logerr` / `logwarn` / `return` / `const` RHS. |

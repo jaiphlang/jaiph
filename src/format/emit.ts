@@ -149,11 +149,13 @@ export function emitModule(
   return sections.join("\n\n") + "\n";
 }
 
-/** Emit a config string RHS, preserving bare-identifier sugar for a single `${name}` reference. */
-function emitConfigStringRhs(value: string): string {
-  const singleRef = value.match(/^\$\{([A-Za-z_][A-Za-z0-9_]*)\}$/);
-  if (singleRef) return singleRef[1]!;
-  return JSON.stringify(value);
+/**
+ * Emit a config string RHS. An unquoted source value (`model`, `${model}`) is
+ * written back as the author spelled it; everything else stays a quoted
+ * string, so `"${model}"` is never rewritten to bare `model`.
+ */
+function emitConfigStringRhs(value: string, bareSource?: string): string {
+  return bareSource ?? JSON.stringify(value);
 }
 
 /**
@@ -175,44 +177,45 @@ const DEFAULT_CONFIG_KEY_ORDER = [
   "module.description",
 ];
 
-function emitConfigKeyLines(meta: DefMetadata, key: string, pad: string): string[] {
+function emitConfigKeyLines(meta: DefMetadata, key: string, pad: string, bareSource?: string): string[] {
+  const str = (value: string): string => emitConfigStringRhs(value, bareSource);
   switch (key) {
     case "agent.model":
       if (meta.agent?.model === undefined) return [];
-      return [`${pad}agent.model = ${emitConfigStringRhs(meta.agent.model)}`];
+      return [`${pad}agent.model = ${str(meta.agent.model)}`];
     case "agent.command":
       if (meta.agent?.command === undefined) return [];
-      return [`${pad}agent.command = ${emitConfigStringRhs(meta.agent.command)}`];
+      return [`${pad}agent.command = ${str(meta.agent.command)}`];
     case "agent.backend":
       if (meta.agent?.backend === undefined) return [];
-      return [`${pad}agent.backend = ${emitConfigStringRhs(meta.agent.backend)}`];
+      return [`${pad}agent.backend = ${str(meta.agent.backend)}`];
     case "agent.trusted_workspace":
       if (meta.agent?.trustedWorkspace === undefined) return [];
-      return [`${pad}agent.trusted_workspace = ${emitConfigStringRhs(meta.agent.trustedWorkspace)}`];
+      return [`${pad}agent.trusted_workspace = ${str(meta.agent.trustedWorkspace)}`];
     case "agent.cursor_flags":
       if (meta.agent?.cursorFlags === undefined) return [];
-      return [`${pad}agent.cursor_flags = ${emitConfigStringRhs(meta.agent.cursorFlags)}`];
+      return [`${pad}agent.cursor_flags = ${str(meta.agent.cursorFlags)}`];
     case "agent.claude_flags":
       if (meta.agent?.claudeFlags === undefined) return [];
-      return [`${pad}agent.claude_flags = ${emitConfigStringRhs(meta.agent.claudeFlags)}`];
+      return [`${pad}agent.claude_flags = ${str(meta.agent.claudeFlags)}`];
     case "run.debug":
       if (meta.run?.debug === undefined) return [];
       return [`${pad}run.debug = ${meta.run.debug}`];
     case "run.logs_dir":
       if (meta.run?.logsDir === undefined) return [];
-      return [`${pad}run.logs_dir = ${emitConfigStringRhs(meta.run.logsDir)}`];
+      return [`${pad}run.logs_dir = ${str(meta.run.logsDir)}`];
     case "run.recover_limit":
       if (meta.run?.recoverLimit === undefined) return [];
       return [`${pad}run.recover_limit = ${meta.run.recoverLimit}`];
     case "module.name":
       if (meta.module?.name === undefined) return [];
-      return [`${pad}module.name = ${emitConfigStringRhs(meta.module.name)}`];
+      return [`${pad}module.name = ${str(meta.module.name)}`];
     case "module.version":
       if (meta.module?.version === undefined) return [];
-      return [`${pad}module.version = ${emitConfigStringRhs(meta.module.version)}`];
+      return [`${pad}module.version = ${str(meta.module.version)}`];
     case "module.description":
       if (meta.module?.description === undefined) return [];
-      return [`${pad}module.description = ${emitConfigStringRhs(meta.module.description)}`];
+      return [`${pad}module.description = ${str(meta.module.description)}`];
     default:
       return [];
   }
@@ -226,7 +229,7 @@ function emitConfig(meta: DefMetadata, pad: string, trivia: Trivia): string {
       if (part.kind === "comment") {
         lines.push(`${pad}${part.text}`);
       } else {
-        lines.push(...emitConfigKeyLines(meta, part.key, pad));
+        lines.push(...emitConfigKeyLines(meta, part.key, pad, part.bareSource));
       }
     }
     lines.push("}");

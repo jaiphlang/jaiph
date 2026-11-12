@@ -4,6 +4,19 @@
 
 ## All changes
 
+# 0.16.0
+
+## Summary
+
+- **Breaking: script interpreter tags go before the quotes.** Write `python3'''…'''` and `node'…'()`, not `'''python3`. The old form is `E_PARSE` and the message shows the new spelling. One-liners can now carry a tag too.
+- **Formatter:** `jaiph format` keeps a quoted config value like `agent.model = "${model}"` quoted. It no longer rewrites it to bare `model`.
+
+## All changes
+
+- **Breaking — Language:** the interpreter tag on a script body moves from after the opening fence to directly before the opening quote: `script report = python3'''…'''`, `node'''…'''(args)`. One-line bodies accept a tag as well: `script hi = python3'print(1)'`, `node'console.log(1)'()`. The tag still maps to `#!/usr/bin/env <tag>` with no allowlist, and must touch the quote (`python3 '…'` is `E_PARSE`). A tag after the opening quotes (`'''python3`) is `E_PARSE` with `interpreter tags go before the opening quotes: python3'''...''' (not '''python3)`. A tag plus a manual `#!` line is still an error (message now says "interpreter tag"). Nested inline scripts in call arguments keep their tag at run time. `jaiph format` emits the tag before the quotes and keeps an inline script fenced or one-line as written. Editor grammars (VS Code, tree-sitter, Zed) and the docs site follow. Docs: [Grammar](docs/grammar.md), [Language — Inline scripts](docs/language.md#inline-scripts). Tests: `src/parse/parse-interpreter-tags.test.ts`, `src/parse/parse-fence.test.ts`, `src/format/emit.test.ts`, `test-fixtures/compiler-txtar/`.
+- **Fix — Formatter:** `jaiph format` writes each `config` string value as the author spelled it. A quoted `"${model}"` stays quoted, a bare `model` stays bare, and an unquoted `${model}` stays as is. Before, any value that was exactly `"${name}"` was rewritten to bare `name`. The parser records the source spelling of unquoted values in config trivia (`ConfigBodyPart.bareSource`). `src/parse/metadata.ts`, `src/format/emit.ts`. Tests: `src/format/emit.test.ts`.
+- **Editor plugins:** VS Code, tree-sitter, and Zed highlight the interpreter tag before the quotes on fenced and one-line scripts (`python3'''`, `node'…'()`); the tree-sitter parser is regenerated. VS Code: a `script x = '''…'''` block's closing `'''` no longer opens a stray inline fence that mis-highlighted the rest of the file, and the grammar tests now load stub embedded grammars so fenced-block rules are actually exercised. Zed: the bash default injection no longer also claims tagged fences. `plugins/vscode/`, `grammars/tree-sitter-jaiph/`, `plugins/zed/`.
+
 # 0.15.1
 
 ## Summary

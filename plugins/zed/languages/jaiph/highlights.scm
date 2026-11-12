@@ -20,6 +20,12 @@
   (quote_script)
 ] @string
 
+; Interpreter tag before a script body: `python3'''` … `'''`, `node'…'`.
+; Placed after the string rule so the tag, not the string scope, wins on the
+; tag's range inside a tagged one-line `quote_script`.
+(fenced_block language: (language) @tag)
+(quote_script language: (language) @tag)
+
 (regex) @string.regex
 
 (number) @number

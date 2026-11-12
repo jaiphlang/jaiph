@@ -1,0 +1,129 @@
+==================
+Tagged fenced script declaration
+==================
+
+script analyze = python3'''
+print(1)
+'''
+
+---
+
+(source_file
+  (identifier)
+  (operator)
+  (fenced_block
+    language: (language)
+    body: (embedded)))
+
+==================
+Untagged fenced script defaults to no language
+==================
+
+script setup = '''
+echo hi
+'''
+
+---
+
+(source_file
+  (identifier)
+  (operator)
+  (fenced_block
+    body: (embedded)))
+
+==================
+Tagged fenced inline script with args
+==================
+
+const y = node'''
+console.log(1)
+'''("a")
+
+---
+
+(source_file
+  (identifier)
+  (operator)
+  (fenced_block
+    language: (language)
+    body: (embedded))
+  (string))
+
+==================
+Dotted and dashed interpreter tags
+==================
+
+script a = python3.11'''
+print(1)
+'''
+script b = ts-node'''
+console.log(1)
+'''
+
+---
+
+(source_file
+  (identifier)
+  (operator)
+  (fenced_block
+    language: (language)
+    body: (embedded))
+  (identifier)
+  (operator)
+  (fenced_block
+    language: (language)
+    body: (embedded)))
+
+==================
+Tagged one-line scripts
+==================
+
+script one = python3'print(1)'
+const z = node'console.log(1)'("a")
+log lua'print(2)'()
+
+---
+
+(source_file
+  (identifier)
+  (operator)
+  (quote_script
+    language: (language))
+  (identifier)
+  (operator)
+  (quote_script
+    language: (language))
+  (string)
+  (quote_script
+    language: (language)))
+
+==================
+A tag separated from the quote by whitespace is a plain identifier
+==================
+
+foo '''
+echo
+'''()
+bar 'x'
+
+---
+
+(source_file
+  (identifier)
+  (fenced_block
+    body: (embedded))
+  (identifier)
+  (quote_script))
+
+==================
+A dash before a send arrow is not a tag
+==================
+
+send x->ch
+
+---
+
+(source_file
+  (identifier)
+  (operator)
+  (identifier))

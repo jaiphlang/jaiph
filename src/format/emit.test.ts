@@ -71,7 +71,7 @@ describe("emitModule", () => {
       "'''",
       "",
       "export def main() {",
-      "  '''bash",
+      "  bash'''",
       "  echo inline",
       "  '''()",
       "}",
@@ -85,13 +85,32 @@ describe("emitModule", () => {
       "'''",
       "",
       "export def main() {",
-      "  '''bash",
+      "  bash'''",
       "    echo inline",
       "  '''()",
       "}",
       "",
     ].join("\n");
     assert.equal(roundTrip(source), expected);
+  });
+
+  it("keeps interpreter-tag prefixes on one-line and fenced scripts", () => {
+    const source = [
+      "script hello = python3'print(1)'",
+      "",
+      "script report = node'''",
+      "  console.log(1)",
+      "'''",
+      "",
+      "export def main() {",
+      "  node'console.log(2)'()",
+      "  const x = python3'print(3)'(\"a\")",
+      "  log python3'print(4)'()",
+      "  stdin x -> python3'import sys; print(sys.stdin.read())'()",
+      "}",
+      "",
+    ].join("\n");
+    assert.equal(roundTrip(source), source);
   });
 
   it("formats const with different RHS types", () => {
@@ -214,6 +233,31 @@ describe("emitModule", () => {
       "}",
       "",
       "export def main() {",
+      '  log "ok"',
+      "}",
+      "",
+    ].join("\n");
+    assert.equal(roundTrip(source), source);
+  });
+
+  it("keeps config string values quoted or bare exactly as written", () => {
+    // `"${model}"` must stay a quoted string; it is never rewritten to bare `model`.
+    const source = [
+      "config {",
+      '  agent.model = "${model}"',
+      "  agent.command = cmd",
+      '  agent.backend = "claude"',
+      "}",
+      "",
+      'const model = "sonnet"',
+      "",
+      'const cmd = "claude"',
+      "",
+      "export def main() {",
+      "  config {",
+      '    agent.model = "${model}"',
+      "    agent.command = ${cmd}",
+      "  }",
       '  log "ok"',
       "}",
       "",

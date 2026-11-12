@@ -32,7 +32,7 @@ Scripts and tool-capable prompts run as the user who launched Jaiph; Jaiph is no
 ## Working polyglot example
 
 ```jaiph
-script extension_counts = '''python3
+script extension_counts = python3'''
   import collections
   import pathlib
   import sys
@@ -45,7 +45,7 @@ script extension_counts = '''python3
       print(f"{suffix}: {count}")
 '''
 
-script write_report = '''node
+script write_report = node'''
   const fs = require("fs");
   const chunks = [];
   process.stdin.on("data", chunk => chunks.push(chunk));

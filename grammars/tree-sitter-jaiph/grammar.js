@@ -76,22 +76,56 @@ module.exports = grammar({
     triple_string: ($) =>
       token(seq('"""', repeat(choice(/[^"]/, /"[^"]/, /""[^"]/)), '"""')),
 
-    // One-line script body `'…'`. Lower precedence than `fenced_block` so
-    // `'''` is not tokenized as an empty quote_script plus a leftover `'`.
-    quote_script: ($) => token(prec(-1, seq("'", /[^'\n]*/, "'"))),
+    // One-line script body `'…'`, optionally tagged with an interpreter:
+    // `python3'print(1)'`. The tag must touch the opening quote, so the body
+    // after a tag is an immediate token. Lower precedence than `fenced_block`
+    // so `'''` is not tokenized as an empty quote_script plus a leftover `'`.
+    quote_script: ($) =>
+      choice(
+        $._quote_body,
+        seq(field("language", $._script_tag), $._quote_body_immediate),
+      ),
 
-    // Fenced script / inline-script body: '''lang ... ''' . The optional
-    // language tag drives injection (see injections.scm); the body is aliased
-    // to `embedded` so a query can hand it to another grammar.
+    _quote_body: ($) => token(prec(-1, seq("'", /[^'\n]*/, "'"))),
+
+    _quote_body_immediate: ($) =>
+      token.immediate(prec(-1, seq("'", /[^'\n]*/, "'"))),
+
+    // Fenced script / inline-script body: lang''' ... ''' . The optional
+    // interpreter tag sits before the opening fence and must touch it
+    // (`python3'''`, not `python3 '''`), so the opener after a tag is an
+    // immediate `'''` token. The tag drives injection (see injections.scm);
+    // the body is aliased to `embedded` so a query can hand it to another
+    // grammar.
     fenced_block: ($) =>
       prec(1, seq(
-        "'''",
-        optional(field("language", alias($.fence_language, $.language))),
+        choice(
+          "'''",
+          seq(field("language", $._script_tag), token.immediate("'''")),
+        ),
         optional(field("body", alias($.fence_content, $.embedded))),
         "'''",
       )),
 
-    fence_language: ($) => token.immediate(/[A-Za-z0-9_]+/),
+    // Interpreter tag `[A-Za-z_][A-Za-z0-9_.-]*`. A plain tag lexes as an
+    // `identifier` (or `qualified_identifier` when it has dots), so it never
+    // conflicts lexically with ordinary names; the parser takes the tag reading
+    // only when an immediate quote follows. Any other tag (`ts-node`,
+    // `python3.11`) needs its own token: `tag_word` only matches text that has
+    // a `-` or a `.` followed by a digit, so it never shadows an identifier or
+    // a qualified name, and it never ends in `-`, so `x->ch` still lexes as an
+    // arrow.
+    _script_tag: ($) =>
+      choice(
+        alias($.identifier, $.language),
+        alias($.qualified_identifier, $.language),
+        alias($.tag_word, $.language),
+      ),
+
+    tag_word: ($) =>
+      token(
+        /[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*(-[A-Za-z0-9_]|\.[0-9])([A-Za-z0-9_]|[.-][A-Za-z0-9_])*/,
+      ),
 
     fence_content: ($) => token(prec(-1, /([^']|'[^']|''[^'])+/)),
   },

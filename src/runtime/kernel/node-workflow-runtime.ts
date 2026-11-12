@@ -1607,7 +1607,8 @@ export class NodeWorkflowRuntime {
         continue;
       }
       if (token.kind === "managed_inline_script") {
-        const result = await this.executeInlineScript(scope, token.body, undefined, token.argsRaw);
+        const shebang = token.lang ? `#!/usr/bin/env ${token.lang}` : undefined;
+        const result = await this.executeInlineScript(scope, token.body, shebang, token.argsRaw);
         if (result.status !== 0) return result;
         resolved.push(this.forceValue(result));
         continue;

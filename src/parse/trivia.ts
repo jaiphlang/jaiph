@@ -3,7 +3,15 @@ import type { TopLevelEmitOrder } from "../types";
 /** One line inside `config { }`: comment or assignment (formatter round-trip order). */
 export type ConfigBodyPart =
   | { kind: "comment"; text: string }
-  | { kind: "assign"; key: string };
+  | {
+      kind: "assign";
+      key: string;
+      /**
+       * Source spelling of an unquoted string value (`model`, `${model}`). Absent
+       * when the author wrote a quoted string, so the formatter keeps it quoted.
+       */
+      bareSource?: string;
+    };
 
 /**
  * Per-node source-fidelity data. Each field is optional; presence indicates a
@@ -22,7 +30,7 @@ export type ConfigBodyPart =
  *   `"${foo}"`.
  * - `bodyKind` (prompt): `"string" | "identifier" | "triple_quoted"`.
  * - `bodyIdentifier` (prompt): identifier name when `bodyKind === "identifier"`.
- * - `scriptBodyKind` (script): `"oneline" | "fenced"`.
+ * - `scriptBodyKind` (script, inline_script expr): `"oneline" | "fenced"`.
  * - `leadingComments`: `#` lines immediately before an import / channel /
  *   test block / env decl.
  */
