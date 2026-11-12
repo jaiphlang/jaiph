@@ -253,16 +253,12 @@ function emitEnvDecl(env: EnvDeclDef): string[] {
     lines.push('"""');
     return lines;
   }
+  if (env.tripleQuoted) {
+    return [`const ${env.name} = """`, ...env.value.split("\n"), '"""'];
+  }
   if (env.wasQuoted) {
-    // Author wrote a double-quoted string. Preserve the quoted form regardless
-    // of value content (the formatter must not toggle delimiters based on
-    // whether the value happens to contain a space). `env.value` is the source
-    // text between the quotes, so re-wrapping it reproduces the source exactly.
-    // An unescaped `"` can only come from a `"""` block, so keep that form.
-    if (/(^|[^\\])"/.test(env.value)) {
-      return [`const ${env.name} = """`, env.value, '"""'];
-    }
-    return [`const ${env.name} = "${env.value}"`];
+    // `env.value` is the decoded text; re-encode it as a one-line string.
+    return [`const ${env.name} = ${encodeQuoted(env.value)}`];
   }
   if (/^[A-Za-z0-9_./@+#%^&=*:~?-]+$/.test(env.value)) {
     return [`const ${env.name} = ${env.value}`];

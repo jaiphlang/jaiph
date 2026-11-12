@@ -25,6 +25,7 @@ export {
   MODULE_FIELDS,
   isReservedBuiltinName,
   encodeQuoted,
+  literalText,
 } from "./parse/core";
 export { createTrivia } from "./parse/trivia";
 export type { NodeTrivia, Trivia } from "./parse/trivia";

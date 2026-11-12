@@ -285,6 +285,31 @@ describe("emitModule", () => {
     assert.equal(roundTrip(source), source);
   });
 
+  it("writes a multi-line call argument back as a \"\"\" block, never a one-line string", () => {
+    const source = [
+      "export def main() {",
+      "  const a = echo1(",
+      '    """',
+      '    line one "q"',
+      "    two \\d",
+      '    """',
+      "  )",
+      "}",
+      "",
+    ].join("\n");
+    const expected = [
+      "export def main() {",
+      '  const a = echo1("""',
+      '    line one "q"',
+      "    two \\d",
+      '  """)',
+      "}",
+      "",
+    ].join("\n");
+    assert.equal(roundTrip(source), expected);
+    assert.equal(roundTrip(expected), expected);
+  });
+
   it("round-trips test-DSL strings and a multi-line test const", () => {
     const source = [
       'test "says \\"hi\\"" {',

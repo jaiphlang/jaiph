@@ -11,6 +11,7 @@ import {
   canonicalizeTripleQuotedString,
   MODULE_FIELDS,
   resolveInterpreterFromShebang,
+  literalText,
   shebangForLang,
 } from "../../parser";
 import type { CatchBody, Def, Expr, LocalDecl, MatchExprDef, MatchPatternDef, StepDef } from "../../types";
@@ -40,7 +41,6 @@ import {
   parseInlineCaptureCall,
   parsePromptSchema,
   sanitizeName,
-  stripOuterQuotes,
   type PromptSchemaField,
 } from "./runtime-arg-parser";
 import { killProcessTreeEscalating } from "./portability";
@@ -903,9 +903,9 @@ export class NodeWorkflowRuntime {
         // fail "message" — abort with failure
         if (body.startsWith("fail ")) {
           const msgRaw = body.slice(5).trimStart();
-          const msgIr = await this.interpolateWithCaptures(msgRaw, scope);
+          const msgIr = await this.interpolateWithCaptures(literalText(msgRaw), scope);
           if (!msgIr.ok) return msgIr;
-          return { ok: false, result: { status: 1, output: "", error: stripOuterQuotes(msgIr.value) } };
+          return { ok: false, result: { status: 1, output: "", error: msgIr.value } };
         }
 
         // ref(args) — execute script/workflow and capture return value
@@ -924,9 +924,9 @@ export class NodeWorkflowRuntime {
         }
 
         // Default: string expression
-        const bodyIr = await this.interpolateWithCaptures(body, scope);
+        const bodyIr = await this.interpolateWithCaptures(literalText(body), scope);
         if (!bodyIr.ok) return bodyIr;
-        return { ok: true, value: stripOuterQuotes(bodyIr.value) };
+        return { ok: true, value: bodyIr.value };
       }
     }
     // Should not reach here if validation ensures a wildcard arm exists.
@@ -950,7 +950,7 @@ export class NodeWorkflowRuntime {
     io: StepIO | undefined,
   ): Promise<{ ok: true; value: string; output: string } | { ok: false; result: StepResult; output: string }> {
     if (expr.kind === "literal") {
-      const ir = await this.interpolateWithCaptures(expr.raw, scope);
+      const ir = await this.interpolateWithCaptures(literalText(expr.raw), scope);
       if (!ir.ok) return { ok: false, result: ir.result, output: "" };
       return { ok: true, value: ir.value, output: "" };
     }
@@ -1036,11 +1036,9 @@ export class NodeWorkflowRuntime {
           if (result.status !== 0) return this.mergeStepResult(accOut, accErr, result);
           message = this.forceValue(result);
         } else if (step.message.kind === "literal") {
-          const ir = await this.interpolateWithCaptures(step.message.raw, scope);
+          const ir = await this.interpolateWithCaptures(literalText(step.message.raw), scope);
           if (!ir.ok) return this.mergeStepResult(accOut, accErr, ir.result);
-          message = step.level === "fail" || step.level === "logerr" || step.level === "logwarn"
-            ? stripOuterQuotes(ir.value)
-            : ir.value;
+          message = ir.value;
         } else {
           return this.mergeStepResult(accOut, accErr, {
             status: 1,
@@ -1069,9 +1067,9 @@ export class NodeWorkflowRuntime {
       if (step.type === "return") {
         const value = step.value;
         if (value.kind === "literal") {
-          const retIr = await this.interpolateWithCaptures(value.raw, scope);
+          const retIr = await this.interpolateWithCaptures(literalText(value.raw), scope);
           if (!retIr.ok) return this.mergeStepResult(accOut, accErr, retIr.result);
-          returnValue = stripOuterQuotes(retIr.value);
+          returnValue = retIr.value;
           return this.mergeStepResult(accOut, accErr, { status: 0, output: "", error: "", returnValue });
         }
         // `return <call>()` / `return <inline_script>()` propagates the callee's
@@ -1116,9 +1114,9 @@ export class NodeWorkflowRuntime {
         let payload = "";
         const sendValue = step.value;
         if (sendValue.kind === "literal") {
-          const sendIr = await this.interpolateWithCaptures(sendValue.raw, scope);
+          const sendIr = await this.interpolateWithCaptures(literalText(sendValue.raw), scope);
           if (!sendIr.ok) return this.mergeStepResult(accOut, accErr, sendIr.result);
-          payload = stripOuterQuotes(sendIr.value);
+          payload = sendIr.value;
         } else if (sendValue.kind === "call") {
           const r = await this.executeRunRef(scope, sendValue.callee.value, argsToRuntimeString(sendValue.args));
           if (r.status !== 0) return this.mergeStepResult(accOut, accErr, r);
@@ -1176,9 +1174,9 @@ export class NodeWorkflowRuntime {
       if (step.type === "const") {
         const v = step.value;
         if (v.kind === "literal") {
-          const exprIr = await this.interpolateWithCaptures(v.raw, scope);
+          const exprIr = await this.interpolateWithCaptures(literalText(v.raw), scope);
           if (!exprIr.ok) return this.mergeStepResult(accOut, accErr, exprIr.result);
-          scope.vars.set(step.name, stripOuterQuotes(exprIr.value));
+          scope.vars.set(step.name, exprIr.value);
           continue;
         }
         if (v.kind === "call" && v.async) {
@@ -1653,9 +1651,9 @@ export class NodeWorkflowRuntime {
         return { ok: true, source: this.handleStdinSource(r) };
       }
     }
-    const ir = await this.interpolateWithCaptures(raw, scope);
+    const ir = await this.interpolateWithCaptures(literalText(raw), scope);
     if (!ir.ok) return { ok: false, result: ir.result };
-    return { ok: true, source: { kind: "bytes", bytes: stripOuterQuotes(ir.value) } };
+    return { ok: true, source: { kind: "bytes", bytes: ir.value } };
   }
 
   /**
@@ -2038,7 +2036,7 @@ export class NodeWorkflowRuntime {
     } else if (fileSource) {
       promptText = "";
     } else {
-      const promptIr = await this.interpolateWithCaptures(raw, scope);
+      const promptIr = await this.interpolateWithCaptures(literalText(raw), scope);
       if (!promptIr.ok) return { ok: false, result: promptIr.result, output: "" };
       promptText = promptIr.value;
     }

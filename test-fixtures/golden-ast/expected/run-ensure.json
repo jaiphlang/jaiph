@@ -51,7 +51,7 @@
           "level": "log",
           "message": {
             "kind": "literal",
-            "raw": "helping"
+            "raw": "\"helping\""
           },
           "type": "say"
         }

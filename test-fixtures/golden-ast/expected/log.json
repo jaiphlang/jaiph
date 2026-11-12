@@ -10,7 +10,7 @@
           "level": "log",
           "message": {
             "kind": "literal",
-            "raw": "hello world"
+            "raw": "\"hello world\""
           },
           "type": "say"
         },
@@ -18,7 +18,7 @@
           "level": "log",
           "message": {
             "kind": "literal",
-            "raw": "${USER} logged in"
+            "raw": "\"${USER} logged in\""
           },
           "type": "say"
         },
@@ -26,7 +26,7 @@
           "level": "logerr",
           "message": {
             "kind": "literal",
-            "raw": "something went wrong"
+            "raw": "\"something went wrong\""
           },
           "type": "say"
         },
@@ -34,7 +34,7 @@
           "level": "logwarn",
           "message": {
             "kind": "literal",
-            "raw": "heads up"
+            "raw": "\"heads up\""
           },
           "type": "say"
         }

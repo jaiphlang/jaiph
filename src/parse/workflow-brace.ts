@@ -708,14 +708,9 @@ function makeInlineScriptExpr(result: InlineScriptResult, trivia?: Trivia): Expr
   return expr;
 }
 
-/**
- * Build a triple-quoted literal Expr and record its trivia. `toRaw` selects the
- * escaping: `fail` / `return` bodies go through `tripleQuoteBodyToRaw`, while
- * `say`/`log` bodies keep the dedented body verbatim.
- */
-function makeTripleQuotedLiteral(trivia: Trivia, body: string, toRaw: boolean): Expr {
-  const dedented = dedentTripleQuotedBody(body);
-  const expr: Expr = { kind: "literal", raw: toRaw ? tripleQuoteBodyToRaw(dedented) : dedented };
+/** Build a triple-quoted literal Expr (stored in the shared quoted form) and record its trivia. */
+function makeTripleQuotedLiteral(trivia: Trivia, body: string): Expr {
+  const expr: Expr = { kind: "literal", raw: tripleQuoteBodyToRaw(dedentTripleQuotedBody(body)) };
   trivia.setNode(expr, { tripleQuoted: true, rawBody: body });
   return expr;
 }
@@ -727,7 +722,7 @@ function tryParseFail(c: BlockCtx): BlockResult | null {
   const stepLoc = { line: c.innerNo, col: failCol };
   if (arg.startsWith('"""')) {
     const { body, nextIdx } = consumeTripleQuotedArg(c.filePath, c.lines, c.idx, arg);
-    const message = makeTripleQuotedLiteral(c.trivia, body, true);
+    const message = makeTripleQuotedLiteral(c.trivia, body);
     return { step: { type: "say", level: "fail", message, loc: stepLoc }, nextIdx };
   }
   if (isJaiphInterpolationRef(arg.trim())) {
@@ -909,7 +904,7 @@ function parseSayBody(
   }
   if (arg.startsWith('"""')) {
     const { body, nextIdx } = consumeTripleQuotedArg(c.filePath, c.lines, c.idx, arg);
-    const message = makeTripleQuotedLiteral(c.trivia, body, false);
+    const message = makeTripleQuotedLiteral(c.trivia, body);
     return { step: { type: "say", level, message, loc: stepLoc }, nextIdx };
   }
   if (arg.startsWith('"') && !hasUnescapedClosingQuote(arg, 1)) {
@@ -947,7 +942,7 @@ function tryParseReturn(c: BlockCtx): BlockResult | null {
   const returnValue = m[1].trim();
   if (returnValue.startsWith('"""')) {
     const { body, nextIdx } = consumeTripleQuotedArg(c.filePath, c.lines, c.idx, returnValue);
-    const value = makeTripleQuotedLiteral(c.trivia, body, true);
+    const value = makeTripleQuotedLiteral(c.trivia, body);
     return { step: { type: "return", value, loc: retLoc }, nextIdx };
   }
   if (returnValue.startsWith("match ") || returnValue === "match") {

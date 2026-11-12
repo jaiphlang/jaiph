@@ -1,5 +1,5 @@
 import type { EnvDeclDef } from "../types";
-import { fail, SINGLE_QUOTE_MESSAGE, hasUnescapedClosingQuote, indexOfClosingDoubleQuote } from "./core";
+import { decodeQuotedInner, fail, SINGLE_QUOTE_MESSAGE, hasUnescapedClosingQuote, indexOfClosingDoubleQuote } from "./core";
 import { parseTripleQuoteBlock } from "./triple-quote";
 
 export function parseEnvDecl(
@@ -28,7 +28,7 @@ export function parseEnvDecl(
       fail(filePath, 'unexpected content after closing """ in const declaration', nextIdx);
     }
     return {
-      envDecl: { name, value: body, loc: { line: lineNo, col: 1 }, wasQuoted: true },
+      envDecl: { name, value: body, loc: { line: lineNo, col: 1 }, wasQuoted: true, tripleQuoted: true },
       nextIndex: nextIdx,
     };
   }
@@ -46,7 +46,7 @@ export function parseEnvDecl(
     if (afterClose.length > 0) {
       fail(filePath, "unexpected content after closing quote in const declaration", lineNo);
     }
-    const value = valuePart.slice(1, closeIdx);
+    const value = decodeQuotedInner(valuePart.slice(1, closeIdx));
     return {
       envDecl: { name, value, loc: { line: lineNo, col: 1 }, wasQuoted: true },
       nextIndex: startIndex + 1,

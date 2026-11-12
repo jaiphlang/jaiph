@@ -2,6 +2,7 @@ import { resolve } from "node:path";
 import { jaiphModule, type Expr, type StepDef } from "../../types";
 import { moduleSymbolForFile } from "../../transpiler";
 import { canUseAnsi } from "../../runtime";
+import { literalText } from "../../parser";
 
 export type TreeRow = {
   rawLabel: string;
@@ -122,7 +123,8 @@ export function collectDefChildren(
       return [];
     }
     if (s.type === "say") {
-      const msg = exprLabel(s.message);
+      // A message row shows the text, not its stored quoted form.
+      const msg = s.message.kind === "literal" ? literalText(s.message.raw) : exprLabel(s.message);
       if (s.level === "log") return [{ label: `ℹ ${msg}` }];
       if (s.level === "logerr") return [{ label: `! ${msg}` }];
       if (s.level === "logwarn") return [{ label: `\u26a0 ${msg}` }];

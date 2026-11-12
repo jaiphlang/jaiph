@@ -23,6 +23,8 @@ import { emitScriptDecl, emitPromptDecl } from "./emit-decls";
 
 /** Bare-identifier form for `log <ident>` / `logerr <ident>` / `logwarn <ident>`. */
 function emitLogLiteralRhs(message: string): string {
+  // A quoted message is stored exactly as written, quotes included.
+  if (message.startsWith('"')) return message;
   if (
     message.length >= 3 &&
     message[0] === "$" &&
@@ -34,8 +36,7 @@ function emitLogLiteralRhs(message: string): string {
       return inner;
     }
   }
-  // `message` is the source text between the quotes, kept as written.
-  return `"${message}"`;
+  return message;
 }
 
 /**
@@ -170,7 +171,7 @@ function emitExprFirstLine(
   }
   if (expr.kind === "call") {
     const asyncMod = expr.async ? "async " : "";
-    return { head: `${asyncMod}${emitRef(expr.callee, expr.args)}`, tail: [] };
+    return { head: `${asyncMod}${emitRef(expr.callee, expr.args, ci, ci + pad)}`, tail: [] };
   }
   if (expr.kind === "inline_script") {
     const langTag = expr.lang ?? "";
@@ -266,7 +267,7 @@ function emitStep(step: StepDef, pad: string, currentIndent: string, trivia: Tri
     if (message.kind === "literal") {
       const msgTrivia = tn(trivia, message);
       if (msgTrivia.tripleQuoted) {
-        const inner = msgTrivia.rawBody ?? message.raw;
+        const inner = msgTrivia.rawBody ?? decodeTripleQuotedInner(message.raw);
         lines.push(`${ci}${verb} """`);
         for (const bl of inner.split("\n")) lines.push(bl);
         lines.push(`${ci}"""`);
@@ -307,7 +308,7 @@ function emitStep(step: StepDef, pad: string, currentIndent: string, trivia: Tri
       ? `stdin ${emitStageInline(step.stdin, trivia)} -> ${stagesPrefix}`
       : "";
     if (body.kind === "call") {
-      const ref = emitRef(body.callee, body.args);
+      const ref = emitRef(body.callee, body.args, ci, ci + pad);
       const asyncPrefix = body.async ? "async " : "";
       const head = stdinPrefix ? `${stdinPrefix}${ref}` : `${asyncPrefix}${ref}`;
       lines.push(...attachHandler([`${ci}${capture}${head}`], step, ci, pad, trivia));

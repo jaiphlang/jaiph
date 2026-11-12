@@ -29,6 +29,18 @@ export function decodeQuotedInner(inner: string): string {
   return inner.replace(/\\"/g, '"');
 }
 
+/**
+ * The text of a stored string literal: a quoted stored form (`"…"`, from a
+ * single-line string or a `"""` block) loses its outer quotes and has `\"`
+ * decoded; anything else (`${x}` sugar) is returned as is. Every consumer
+ * decodes with this *before* interpolation, so a variable's value is never
+ * decoded or re-scanned.
+ */
+export function literalText(raw: string): string {
+  if (raw.length >= 2 && raw.startsWith('"') && raw.endsWith('"')) return decodeQuotedInner(raw.slice(1, -1));
+  return raw;
+}
+
 /** Inverse of `decodeQuotedInner`: wrap a value as a single-line `"…"` string. */
 export function encodeQuoted(value: string): string {
   return `"${value.replace(/"/g, '\\"')}"`;
@@ -199,7 +211,7 @@ export function parseLogMessageRhs(
     if (trailing) {
       fail(filePath, `unexpected content after ${keyword} string: '${trailing}'`, lineNo, keywordCol);
     }
-    return logArg.slice(1, closeIdx);
+    return logArg.slice(0, closeIdx + 1);
   }
   if (isBareIdentifier(trimmed) && trimmed === logArg.trim()) {
     return `\${${trimmed}}`;
