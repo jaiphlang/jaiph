@@ -13,7 +13,7 @@
           "level": "log",
           "message": {
             "kind": "literal",
-            "raw": "${greeting}, ${name}!"
+            "raw": "\"${greeting}, ${name}!\""
           },
           "type": "say"
         }

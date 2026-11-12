@@ -9,9 +9,8 @@ import { dedentTripleQuotedBody, parseTripleQuoteBlock, tripleQuoteBodyToRaw } f
  * token on their line and are stored as `{ kind: "literal", raw }` with the body
  * dedented to the common margin.
  *
- * The formatter normalises triple-quoted call args to inline double-quoted strings
- * (intentional: `Arg` objects do not carry trivia, so the round-trip form is the
- * dedented inline `"…"` value).
+ * A `"""` may also open on the call line (`foo("""`). The formatter writes a
+ * multi-line argument back as a `"""` block (`formatArgs`).
  *
  * Calls `fail()` (E_PARSE) when:
  * - The matching `)` is not found before end of file.
@@ -39,6 +38,22 @@ export function parseMultilineCallArgList(
         pendingText += ch;
         if (ch === '"' && toScan[i - 1] !== "\\") inDoubleQuote = false;
         i++;
+        continue;
+      }
+      // `"""` opening an argument on this line (`foo("""` or `foo(a, """`): the
+      // block body starts on the next line, exactly like a `"""` on its own line.
+      if (ch === '"' && toScan.startsWith('"""', i) && !pendingText.trim()) {
+        const tqLines = [...lines];
+        tqLines[lineIdx] = toScan.slice(i);
+        const { body, nextIdx, afterClose } = parseTripleQuoteBlock(filePath, tqLines, lineIdx);
+        args.push({ kind: "literal", raw: tripleQuoteBodyToRaw(dedentTripleQuotedBody(body)) });
+        pendingText = "";
+        lineIdx = nextIdx - 1;
+        toScan = afterClose;
+        i = 0;
+        // After the block only `,` or `)` may follow; skip to them.
+        const lead = toScan.match(/^\s*,?/);
+        if (lead && lead[0].includes(",")) toScan = toScan.slice(lead[0].length);
         continue;
       }
       if (ch === '"') { inDoubleQuote = true; pendingText += ch; i++; continue; }

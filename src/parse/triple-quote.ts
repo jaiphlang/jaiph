@@ -1,5 +1,5 @@
 import { dedentCommonLeadingWhitespace } from "./dedent";
-import { fail } from "./core";
+import { decodeQuotedInner, fail } from "./core";
 
 /** Per language.md: trim blank lines adjacent to opening/closing `"""` only — do not dedent inner margin. */
 export function trimAdjacentBlankLines(text: string): string {
@@ -52,11 +52,12 @@ function joinTripleQuoteBody(bodyLines: string[]): string {
 }
 
 /**
- * Wrap a triple-quoted body into the internal escaped-quoted format used by the runtime.
- * Returns `"escaped body"` with `\` and `"` properly escaped.
+ * Wrap a triple-quoted body as a string literal's stored form: the same form a
+ * single-line `"…"` string has — outer quotes, `"` written as `\"`, every other
+ * character (backslashes included) as is. `literalText` reverses it.
  */
 export function tripleQuoteBodyToRaw(body: string): string {
-  return `"${body.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+  return `"${body.replace(/"/g, '\\"')}"`;
 }
 
 /**
@@ -68,10 +69,6 @@ export function dedentTripleQuotedBody(body: string): string {
   return dedentCommonLeadingWhitespace(body);
 }
 
-function unescapeDslDoubleQuotedInner(inner: string): string {
-  return inner.replace(/\\"/g, '"').replace(/\\\\/g, "\\");
-}
-
 /**
  * Canonicalize a triple-quoted body that was stored in `tripleQuoteBodyToRaw`
  * (`"…escaped…"`) form. Used by match-arm bodies, which still carry their own
@@ -81,7 +78,7 @@ function unescapeDslDoubleQuotedInner(inner: string): string {
  */
 export function canonicalizeTripleQuotedString(raw: string): string {
   if (raw.length < 2 || raw[0] !== '"' || raw[raw.length - 1] !== '"') return raw;
-  const inner = unescapeDslDoubleQuotedInner(raw.slice(1, -1));
+  const inner = decodeQuotedInner(raw.slice(1, -1));
   return tripleQuoteBodyToRaw(dedentCommonLeadingWhitespace(inner));
 }
 

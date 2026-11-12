@@ -259,7 +259,7 @@ test("NodeWorkflowRuntime: workflow step .out accumulates Command:/Prompt: and l
     assert.ok(defaultOut, `expected def__main.out, got ${outs.join(", ")}`);
     const content = readFileSync(join(runDir, defaultOut), "utf8");
     assert.match(content, /^Command:\n/);
-    assert.match(content, /Prompt:\n"hello-mock"/);
+    assert.match(content, /Prompt:\nhello-mock\n/);
     assert.match(content, /mocked-agent-reply/);
   } finally {
     rmSync(root, { recursive: true, force: true });

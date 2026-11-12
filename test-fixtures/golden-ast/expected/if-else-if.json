@@ -14,7 +14,7 @@
               "level": "log",
               "message": {
                 "kind": "literal",
-                "raw": "a"
+                "raw": "\"a\""
               },
               "type": "say"
             }
@@ -26,7 +26,7 @@
                   "level": "log",
                   "message": {
                     "kind": "literal",
-                    "raw": "b"
+                    "raw": "\"b\""
                   },
                   "type": "say"
                 }
@@ -36,7 +36,7 @@
                   "level": "log",
                   "message": {
                     "kind": "literal",
-                    "raw": "other"
+                    "raw": "\"other\""
                   },
                   "type": "say"
                 }
@@ -73,7 +73,7 @@
               "level": "log",
               "message": {
                 "kind": "literal",
-                "raw": "healthy"
+                "raw": "\"healthy\""
               },
               "type": "say"
             }
@@ -85,7 +85,7 @@
                   "level": "logwarn",
                   "message": {
                     "kind": "literal",
-                    "raw": "degraded"
+                    "raw": "\"degraded\""
                   },
                   "type": "say"
                 }
@@ -97,7 +97,7 @@
                       "level": "logerr",
                       "message": {
                         "kind": "literal",
-                        "raw": "unhealthy"
+                        "raw": "\"unhealthy\""
                       },
                       "type": "say"
                     }
@@ -107,7 +107,7 @@
                       "level": "log",
                       "message": {
                         "kind": "literal",
-                        "raw": "unknown: ${status}"
+                        "raw": "\"unknown: ${status}\""
                       },
                       "type": "say"
                     }

@@ -137,6 +137,13 @@ export function parseArgTokens(raw: string): ParsedArgToken[] {
     while (i < raw.length) {
       const ch = raw[i]!;
       if (quote) {
+        if (quote === '"' && ch === "\\" && raw[i + 1] === '"') {
+          // `\"` inside a double-quoted argument is a literal quote (the one
+          // escape a Jaiph string has); every other backslash is kept.
+          cur += '"';
+          i += 2;
+          continue;
+        }
         if (ch === quote) {
           quote = null;
         } else {

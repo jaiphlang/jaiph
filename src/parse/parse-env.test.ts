@@ -99,8 +99,9 @@ test("parseEnvDecl: rejects legacy local keyword", () => {
   );
 });
 
-test("parseEnvDecl: handles escaped quotes in double-quoted value", () => {
-  const { envDecl } = parseEnvDecl("test.jh", ['const X = "say \\"hi\\""'], 0);
+test("parseEnvDecl: \\\" decodes to a quote; other backslashes stay", () => {
+  const { envDecl } = parseEnvDecl("test.jh", ['const X = "say \\"hi\\" \\d"'], 0);
   assert.equal(envDecl.name, "X");
-  assert.equal(envDecl.value, 'say \\"hi\\"');
+  assert.equal(envDecl.value, 'say "hi" \\d');
+  assert.equal(envDecl.tripleQuoted, undefined);
 });

@@ -14,7 +14,7 @@
               "level": "log",
               "message": {
                 "kind": "literal",
-                "raw": "healthy"
+                "raw": "\"healthy\""
               },
               "type": "say"
             }
@@ -24,7 +24,7 @@
               "level": "logerr",
               "message": {
                 "kind": "literal",
-                "raw": "unhealthy: ${status}"
+                "raw": "\"unhealthy: ${status}\""
               },
               "type": "say"
             }

@@ -17,9 +17,26 @@ export function emitCommentBlock(comments: string[]): string {
   return emitComments(comments).join("\n");
 }
 
-export function formatArgs(args: Arg[] | undefined): string {
+/**
+ * Format a call's argument list. A multi-line literal (from a `"""` argument)
+ * is written back as a `"""` block opening on the call line — writing it as a
+ * single-line `"…"` would put a raw newline inside a one-line string. Body
+ * lines get `bodyIndent`; the closing `"""` gets `closeIndent`.
+ */
+export function formatArgs(args: Arg[] | undefined, closeIndent = "", bodyIndent = closeIndent): string {
   if (!args || args.length === 0) return "";
-  return args.map((a) => (a.kind === "var" ? a.name : a.raw)).join(", ");
+  return args
+    .map((a) => {
+      if (a.kind === "var") return a.name;
+      if (a.raw.startsWith('"') && a.raw.includes("\n")) {
+        const body = decodeTripleQuotedInner(a.raw)
+          .split("\n")
+          .map((l) => (l ? `${bodyIndent}${l}` : ""));
+        return ['"""', ...body, `${closeIndent}"""`].join("\n");
+      }
+      return a.raw;
+    })
+    .join(", ");
 }
 
 /** Re-indent a dedented fenced script body for readable `.jh` output. */
@@ -34,9 +51,14 @@ export function emitFencedScriptBodyLines(body: string, lineIndent: string): str
  * `trivia.rawBody` (the verbatim original body) is absent.
  */
 export function decodeTripleQuotedInner(raw: string): string {
-  return raw.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+  return raw.slice(1, -1).replace(/\\"/g, '"');
 }
 
-export function emitRef(ref: { value: string }, args: Arg[] | undefined): string {
-  return `${ref.value}(${formatArgs(args)})`;
+export function emitRef(
+  ref: { value: string },
+  args: Arg[] | undefined,
+  closeIndent = "",
+  bodyIndent = closeIndent,
+): string {
+  return `${ref.value}(${formatArgs(args, closeIndent, bodyIndent)})`;
 }

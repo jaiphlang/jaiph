@@ -197,10 +197,9 @@ test('prompt "wrap ${failure}": interpolated body forces and delivers the wrappe
     assert.equal(status, 0);
     const delivered = readFileSync(capture, "utf8");
     // The interpolation path forces the handle and builds a string; the delivered
-    // body is the wrapped string with the payload embedded (the literal outer
-    // quotes are the pre-existing quoted-body transport form, unchanged here),
-    // never the raw handle file alone.
-    assert.equal(delivered, '"wrap PAYLOAD end"', "interpolated body is the wrapped string, not the handle alone");
+    // body is the wrapped text with the payload embedded — no outer quotes from
+    // the stored string form — never the raw handle file alone.
+    assert.equal(delivered, "wrap PAYLOAD end", "interpolated body is the wrapped string, not the handle alone");
     assert.doesNotMatch(delivered, /\.jaiph\/runs\/.+\.out/, "delivered body must never be a run-dir path");
   } finally {
     rmSync(root, { recursive: true, force: true });
