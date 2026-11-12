@@ -32,7 +32,15 @@ export {
   scriptShebangIsBash,
   resolveInterpreterFromShebang,
 } from "./parse/script-bash";
-export { langToShebang, looksLikeInlineScriptCall, shebangForLang } from "./parse/scripts";
+export {
+  findJaiphInterpolation,
+  jaiphInterpolationInScriptMessage,
+  langToShebang,
+  looksLikeInlineScriptCall,
+  parseNestedCallArg,
+  shebangForLang,
+  type NestedCallArg,
+} from "./parse/scripts";
 export { canonicalizeTripleQuotedString } from "./parse/triple-quote";
 export {
   validateJaiphStringContent,

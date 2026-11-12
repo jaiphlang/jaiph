@@ -5,7 +5,7 @@
  * resolve interpolated strings, parse call argument lists (including managed
  * calls and inline-script forms), and validate prompt return schemas.
  */
-import { argsToRuntimeString, parseCallRef } from "../../parser";
+import { argsToRuntimeString, parseNestedCallArg } from "../../parser";
 import { interpolate } from "../../config";
 import { formatUtcTimestamp } from "./emit";
 
@@ -92,76 +92,31 @@ export function parseArgsRaw(raw: string, vars: Map<string, string>, env?: NodeJ
   return out;
 }
 
-/** Try to parse `'body'(args)` / `lang'body'(args)` from a string at a given position. */
-export function parseInlineScriptAt(
-  s: string,
-): { body: string; lang?: string; argsRaw: string; consumed: number } | null {
-  const trimmed = s.trimStart();
-  const tagMatch = /^[A-Za-z_][A-Za-z0-9_.-]*(?=')/.exec(trimmed);
-  const lang = tagMatch?.[0];
-  const t = lang ? trimmed.slice(lang.length) : trimmed;
-  const skippedWs = s.length - trimmed.length + (lang?.length ?? 0);
-  if (!t.startsWith("'") || t.startsWith("'''")) return null;
-  const closeIdx = t.indexOf("'", 1);
-  if (closeIdx === -1) return null;
-  const body = t.slice(1, closeIdx);
-  const afterClose = t.slice(closeIdx + 1);
-  if (!afterClose.startsWith("(")) return null;
-  let depth = 1;
-  let i = 1;
-  let inQuote: string | null = null;
-  while (i < afterClose.length && depth > 0) {
-    const ch = afterClose[i];
-    if (inQuote) {
-      if (ch === inQuote && afterClose[i - 1] !== "\\") inQuote = null;
-    } else {
-      if (ch === '"' || ch === "'") inQuote = ch;
-      else if (ch === "(") depth++;
-      else if (ch === ")") depth--;
-    }
-    i++;
-  }
-  if (depth !== 0) return null;
-  const argsContent = afterClose.slice(1, i - 1).trim();
-  return { body, ...(lang ? { lang } : {}), argsRaw: argsContent, consumed: skippedWs + closeIdx + 1 + i };
-}
-
 /**
- * Recognize a bare nested managed call in argument position: an inline script
- * `'body'(args)` or a `ref(args)` call. A quoted string or a bare `${var}`
- * is not a call and returns null so the caller stores it as a literal token.
+ * Recognize a nested managed call in argument position: an inline script
+ * `'body'(args)` / `lang'body'(args)` or a `ref(args)` call. Uses the parser's
+ * `parseNestedCallArg`, the same recognizer the validator and the script
+ * emitter use, so all three agree on what is a nested call. A quoted string or
+ * a bare `${var}` is not a call and returns null (the caller keeps a literal).
  */
 export function parseManagedArgAt(raw: string, start: number): { token: ParsedArgToken; next: number } | null {
   const rest = raw.slice(start);
-  const afterWs = rest.trimStart();
-  const skipped = rest.length - afterWs.length;
-  // Inline script form: 'body'(args)
-  const inlineResult = parseInlineScriptAt(afterWs);
-  if (inlineResult) {
+  const nested = parseNestedCallArg(rest);
+  if (!nested) return null;
+  const next = raw.length - nested.rest.length;
+  const argsRaw = argsToRuntimeString(nested.args);
+  if (nested.kind === "inline_script") {
     return {
       token: {
         kind: "managed_inline_script",
-        body: inlineResult.body,
-        ...(inlineResult.lang ? { lang: inlineResult.lang } : {}),
-        argsRaw: inlineResult.argsRaw,
+        body: nested.body,
+        ...(nested.lang ? { lang: nested.lang } : {}),
+        argsRaw,
       },
-      next: start + skipped + inlineResult.consumed,
+      next,
     };
   }
-  // Bare managed call form: ref(args)
-  const call = parseCallRef(afterWs);
-  if (call && (call.rest.length === 0 || /^\s/.test(call.rest))) {
-    const consumed = afterWs.length - call.rest.length;
-    return {
-      token: {
-        kind: "managed",
-        ref: call.ref,
-        argsRaw: argsToRuntimeString(call.args),
-      },
-      next: start + skipped + consumed,
-    };
-  }
-  return null;
+  return { token: { kind: "managed", ref: nested.ref, argsRaw }, next };
 }
 
 export function parseArgTokens(raw: string): ParsedArgToken[] {

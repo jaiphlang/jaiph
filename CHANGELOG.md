@@ -6,6 +6,7 @@
 - **Fix:** inline script bodies run exactly as written. A `\n` in shell code is no longer turned into a newline.
 - **Fix:** `jaiph format` no longer doubles backslashes in `log` messages, config values, or top-level `const` strings.
 - **Fix:** `jaiph format` no longer deletes a `catch` or `recover` block attached to an inline script.
+- **Fix:** an inline script passed as a call argument (`show('echo hi'())`) runs. It used to fail with "script file not found". Calls nested in arguments are now checked at compile time.
 
 ## All changes
 
@@ -13,6 +14,7 @@
 - **Fix — Runtime:** inline script bodies (`'…'()` and `'''…'''()`) are emitted verbatim. The emitter replaced every `\n` with a newline, a leftover from when inline bodies were double-quoted strings, so `echo 'a\nb'` or `sed 's/x/\n/'` ran different code than written. `src/transpile/emit-script.ts`. Tests: `src/transpile/inline-script-verbatim.test.ts`.
 - **Fix — Formatter:** string values are written back without re-escaping. `log` messages and config values went through `JSON.stringify`, which doubled every backslash (`"\d+"` became `"\\d+"`) and changed the program; a quoted top-level `const` with a backslash was moved into a `"""` block; match patterns and test-DSL strings were written without escaping `"`. `src/format/emit.ts`, `src/format/emit-steps.ts`, `src/format/emit-test.ts`. Tests: `src/format/emit.test.ts`.
 - **Fix — Formatter:** a `catch` or `recover` handler on an inline-script statement (`'false'() catch (err) { … }`) was silently dropped, deleting the handler from the file. Call and inline-script statements now share one handler emitter. Found by a new property test, `integration/format-roundtrip.test.ts`, which formats every Jaiph source in the repo (tracked `.jh` files, compiler fixtures, e2e heredocs, and docs code blocks, about 500 programs) and fails if the output does not parse, is not idempotent, or parses to a different program. `src/format/emit-steps.ts`.
+- **Fix — Compiler / Runtime:** managed calls nested in call arguments (`show(bar())`, `show('echo $1'(x))`, `show(python3'print(1)'())`) are stored as literal argument text and were only parsed at run time. The emitter never wrote script files for nested inline scripts, so every such call failed with `script file not found`, and nothing checked them at compile time. One recognizer, `parseNestedCallArg` (`src/parse/nested-arg.ts`), is now shared by the validator, the script emitter, and the runtime, replacing the runtime-only parser. The emitter writes nested inline scripts (at any depth); the validator checks nested callees, arity, bare-identifier arguments, and one-line bodies (`${x}` is `E_PARSE`, tag plus `#!` is an error). A bare identifier passed to a nested inline script is now a variable, as it already was for nested `ref(x)` calls. Arguments of a top-level inline script are validated like call arguments. Tests: `src/transpile/nested-call-args.test.ts`, `src/runtime/kernel/runtime-arg-parser.test.ts`, `e2e/tests/112_interpreter_tags.sh`.
 
 # 0.16.0
 

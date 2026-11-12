@@ -1,4 +1,5 @@
-import type { Expr } from "../types";
+import type { Arg, Expr } from "../types";
+import { findJaiphInterpolation, jaiphInterpolationInScriptMessage, parseNestedCallArg } from "../parser";
 import {
   BARE_SEND_REF_MSG,
   PROMPT_REF_EXPECT,
@@ -48,6 +49,8 @@ export function validateExpr(
     return;
   }
   if (expr.kind === "inline_script") {
+    validateArgVarRefs(ctx.diag, ctx.ast.filePath, stepLoc, expr.args, ctx.knownVars, ctx.recoverBindings, ctx);
+    validateNestedCallArgs(expr.args, stepLoc, ctx);
     return;
   }
   if (expr.kind === "match") {
@@ -296,6 +299,48 @@ function validateCallable(expr: Expr, ctx: ValidatorCtx): void {
     });
     validateArity(ctx.diag, ctx.ast.filePath, loc, expr.callee.value, expr.args, ctx.ast, ctx.refCtx);
     validateArgVarRefs(ctx.diag, ctx.ast.filePath, loc, expr.args, ctx.knownVars, ctx.recoverBindings, ctx);
+    validateNestedCallArgs(expr.args, loc, ctx);
+  }
+}
+
+/**
+ * Managed calls written as call arguments (`foo(bar(x))`, `foo('echo $1'(x))`)
+ * are stored as literal argument text. Recognize them with the parser's shared
+ * recognizer and apply the same checks as a top-level call: the callee resolves,
+ * the arity matches, bare-identifier arguments are known, and a one-line
+ * inline-script body has no Jaiph interpolation or doubled shebang.
+ */
+function validateNestedCallArgs(
+  args: Arg[] | undefined,
+  loc: { line: number; col: number },
+  ctx: ValidatorCtx,
+): void {
+  const fp = ctx.ast.filePath;
+  for (const arg of args ?? []) {
+    if (arg.kind !== "literal") continue;
+    const nested = parseNestedCallArg(arg.raw);
+    if (!nested) continue;
+    if (nested.kind === "call") {
+      validateRef({ value: nested.ref, loc }, ctx.ast, ctx.refCtx, {
+        mode: "expect",
+        expect: ctx.scope.runRefExpect,
+      });
+      validateArity(ctx.diag, fp, loc, nested.ref, nested.args, ctx.ast, ctx.refCtx);
+    } else {
+      const name = findJaiphInterpolation(nested.body);
+      if (name !== null) ctx.diag.error(fp, loc.line, loc.col, "E_PARSE", jaiphInterpolationInScriptMessage(name));
+      if (nested.lang && nested.body.trimStart().startsWith("#!")) {
+        ctx.diag.error(
+          fp,
+          loc.line,
+          loc.col,
+          "E_PARSE",
+          `interpreter tag "${nested.lang}" already sets the shebang — remove the manual "#!" line`,
+        );
+      }
+    }
+    validateArgVarRefs(ctx.diag, fp, loc, nested.args, ctx.knownVars, ctx.recoverBindings, ctx);
+    validateNestedCallArgs(nested.args, loc, ctx);
   }
 }
 

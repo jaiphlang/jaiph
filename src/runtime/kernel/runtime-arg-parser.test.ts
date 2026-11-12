@@ -7,7 +7,6 @@ import {
   parseArgTokens,
   parseArgsRaw,
   parseInlineCaptureCall,
-  parseInlineScriptAt,
   parseManagedArgAt,
   parsePromptSchema,
   sanitizeName,
@@ -104,25 +103,6 @@ describe("parseArgsRaw", () => {
   });
 });
 
-describe("parseInlineScriptAt", () => {
-  it("parses inline-script form 'body'(args)", () => {
-    const result = parseInlineScriptAt("'echo hi'(arg1 arg2) rest");
-    assert.ok(result);
-    assert.equal(result!.body, "echo hi");
-    assert.equal(result!.argsRaw, "arg1 arg2");
-    // consumed includes everything up to and including the closing paren
-    assert.equal(result!.consumed, "'echo hi'(arg1 arg2)".length);
-  });
-
-  it("returns null when input does not start with a one-line script", () => {
-    assert.equal(parseInlineScriptAt("not a script"), null);
-  });
-
-  it("returns null when paren is unbalanced", () => {
-    assert.equal(parseInlineScriptAt("'body'(unclosed"), null);
-  });
-});
-
 describe("parseManagedArgAt", () => {
   it("parses bare `ref(args)` form (bare idents already wrapped by parseCallRef)", () => {
     const result = parseManagedArgAt("greet(x)", 0);
@@ -143,15 +123,27 @@ describe("parseManagedArgAt", () => {
     }
   });
 
-  it("parses bare `\'body\'(args)` as inline script", () => {
+  it("parses bare `\'body\'(args)` as inline script; a bare identifier arg is a variable", () => {
     const result = parseManagedArgAt("'echo hi'(x)", 0);
     assert.ok(result);
     if (result!.token.kind === "managed_inline_script") {
       assert.equal(result!.token.body, "echo hi");
-      assert.equal(result!.token.argsRaw, "x");
+      assert.equal(result!.token.argsRaw, "${x}");
     } else {
       assert.fail(`expected managed_inline_script, got ${result!.token.kind}`);
     }
+  });
+
+  it("parses a tagged inline script and reports where it ends", () => {
+    const raw = `pre python3'print(1)'("a", b) post`;
+    const result = parseManagedArgAt(raw, 3);
+    assert.ok(result);
+    assert.deepEqual(result!.token, { kind: "managed_inline_script", body: "print(1)", lang: "python3", argsRaw: '"a" ${b}' });
+    assert.equal(raw.slice(result!.next), " post");
+  });
+
+  it("returns null for an unbalanced inline script", () => {
+    assert.equal(parseManagedArgAt("'body'(unclosed", 0), null);
   });
 
   it("returns null when not a run/run prefix", () => {
