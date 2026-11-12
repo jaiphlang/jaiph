@@ -77,9 +77,7 @@ test "propose_task accept writes via add_task_from_file" {
   mock prompt {
     _ => "{\"verdict\":\"accepted\",\"title\":\"New Task\",\"body\":\"Do it.\",\"tags\":\"dev-ready\"}"
   }
-  const out = po.propose_task("## New Task
-
-Do it.")
+  const out = po.propose_task("New Task: do it.")
   expect_contain out "accepted: New Task"
 }
 
@@ -153,4 +151,38 @@ test "task_details persists an answer" {
   }
   const out = po.task_details("Claimed", "which file?")
   expect_contain out "use the public entry"
+}
+
+def demote_sample() {
+  const input = """
+    Intro.
+
+    ## Current
+    text
+    # Required
+    ```bash
+    # a comment, not a heading
+    ## also code
+    ```
+    ### Kept
+  """
+  const out = po.demote_headings(input)
+  return out
+}
+
+test "demote_headings turns body headings into ### outside code fences" {
+  const expected = """
+    Intro.
+
+    ### Current
+    text
+    ### Required
+    ```bash
+    # a comment, not a heading
+    ## also code
+    ```
+    ### Kept
+  """
+  const out = demote_sample()
+  expect_equal out expected
 }

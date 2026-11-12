@@ -40,6 +40,18 @@ script git_evidence = '''
   echo "---"
   git diff --stat HEAD~1 2>/dev/null || true
 '''
+# A task body sits under its `## Title` heading, and every `##` heading in the
+# queue is a task. Demote `#` / `##` headings in a body to `###` so a body's own
+# sections never become separate tasks. Lines inside ``` code fences are left
+# alone (a `# comment` in example code is not a heading).
+export script demote_headings = '''
+  printf '%s\n' "$1" | awk '
+    /^[[:space:]]*```/ { fence = !fence; print; next }
+    !fence && /^##? / { sub(/^##? /, "### ") }
+    { print }
+  '
+'''
+
 script format_task_file = '''
   title="$1"
   tags="$2"
@@ -130,7 +142,8 @@ export def propose_task(spec) {
   const tmpdir = common.jaiph_tmp_dir()
   common.mkdir_p_simple(tmpdir)
   const spec_file = "${tmpdir}/po_propose_task.md"
-  format_task_file("${result.title}", "${result.tags}", "${result.body}", spec_file)
+  const body = demote_headings("${result.body}")
+  format_task_file("${result.title}", "${result.tags}", body, spec_file)
   queue.add_task_from_file(spec_file)
   return "accepted: ${result.title}"
 }
@@ -273,7 +286,8 @@ export def update_task(header, request) {
   const tmpdir = common.jaiph_tmp_dir()
   common.mkdir_p_simple(tmpdir)
   const body_file = "${tmpdir}/po_update_body.md"
-  stdin "${result.body}" -> common.save_string_to_file(body_file)
+  const body = demote_headings("${result.body}")
+  stdin body -> common.save_string_to_file(body_file)
   const title = first_line_task(task)
   queue.set_task_description_from_file(title, body_file)
   return "accepted: ${title}"
