@@ -37,7 +37,6 @@ export {
   findJaiphInterpolation,
   jaiphInterpolationInScriptMessage,
   langToShebang,
-  looksLikeInlineScriptCall,
   parseNestedCallArg,
   shebangForLang,
   type NestedCallArg,

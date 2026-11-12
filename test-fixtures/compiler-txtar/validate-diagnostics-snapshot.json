@@ -439,24 +439,6 @@
       "message": "scripts cannot be interpolated; \"helper\" is a script definition"
     }
   ],
-  "validate-errors.txt > match arm body cannot start with return": [
-    {
-      "file": "input.jh",
-      "line": 3,
-      "col": 3,
-      "code": "E_VALIDATE",
-      "message": "match arm body must not start with \"return\"; the match expression itself produces the value — use the expression directly after =>"
-    }
-  ],
-  "validate-errors.txt > inline script in match arm body rejected": [
-    {
-      "file": "input.jh",
-      "line": 3,
-      "col": 3,
-      "code": "E_VALIDATE",
-      "message": "inline scripts are not allowed in match arm bodies; use a named script with \"script_name(…)\" instead"
-    }
-  ],
   "validate-errors.txt > strings are not executable in workflow run": [
     {
       "file": "input.jh",
@@ -464,15 +446,6 @@
       "col": 3,
       "code": "E_VALIDATE",
       "message": "strings are not executable; \"name\" is a string — use a script instead"
-    }
-  ],
-  "validate-errors.txt > match arm body cannot start with return in const context": [
-    {
-      "file": "input.jh",
-      "line": 3,
-      "col": 13,
-      "code": "E_VALIDATE",
-      "message": "match arm body must not start with \"return\"; the match expression itself produces the value — use the expression directly after =>"
     }
   ],
   "validate-errors.txt > unknown identifier in fail string": [

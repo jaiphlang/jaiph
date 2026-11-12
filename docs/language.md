@@ -474,9 +474,18 @@ match cmd {
 | Patterns | String literal (exact equality), `/regex/`, or `_` (wildcard — exactly one required). |
 | Alternation | `"a" \| "b" \| /^c/ => body` — pipe-separated string literals and/or regexes share one arm, which matches if **any** alternand matches (OR). String and regex alternands may be mixed. Arm order still decides ties (first matching arm wins). `_` cannot participate (`_ \| "x"` / `"x" \| _` are `E_PARSE`); a trailing `\|` before `=>` is `E_PARSE`. |
 | Arm delimiter | Two forms, with different delimiters. In the multiline block form (`match x { … }` spread over its own lines) arms are one per line, or `;` to place several on one line, and commas are `E_PARSE`. In the compact one-line form (`const x = match s { "a" => "b", _ => "c" }`) arms are comma-separated, and `;` or a newline is `E_PARSE`. |
-| Arm bodies | String literal, triple-quoted block, bare in-scope identifier, `$var` / `${var}`, `fail "…"`, a call `ref(…)`. |
-| Disallowed in arms | `return` (use `return match … { … }` outside), inline scripts, unknown bare identifiers (`E_VALIDATE: unknown identifier "…" in match arm body; declare it with "const", use a capture, or add a parameter`). |
+| Arm bodies | Exactly one of: string literal, triple-quoted block, bare in-scope identifier, dotted field (`result.field`), `${…}`, a call `ref(…)` / `alias.ref(…)`, or `fail "…"`. The same forms apply in `mock prompt { … }` blocks. |
+| Disallowed in arms | Any other body is `E_PARSE` at the body's column: `return` (use `return match … { … }` outside), inline scripts, `verb args` other than `fail "…"`, `$var`, and trailing text after a string. An unknown bare identifier is `E_VALIDATE: unknown identifier "…" in match arm body; declare it with "const", use a capture, or add a parameter`. See the table below. |
 | Expression form | Usable with `const x = match …` or `return match …`. |
+
+A rejected arm body is `E_PARSE` at the line and column where the body starts:
+
+| Body | Message |
+|---|---|
+| `return …` | `match arm body must not start with "return"; …` |
+| inline script (`'…'(`, `lang'…'(`, `'''`, backticks) | `inline scripts are not allowed in match arm bodies; …` |
+| `ident words…` | `unknown match arm verb "ident"; allowed: fail "...", ref(...).` (`error` adds `did you mean "fail"?`) |
+| anything else (`$x`, `"a" extra`, `fail x`) | `invalid match arm body: <body>; expected a string, """ block, identifier, ${…}, ref(...), or fail "..."` |
 
 When a `const x = match …` step contains arms with calls, the progress tree surfaces the called targets as child steps of the `const` row.
 

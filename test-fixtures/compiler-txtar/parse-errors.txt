@@ -584,7 +584,7 @@ export def main() {
 }
 
 === match: empty arm body
-# @expect error E_PARSE "match arm body cannot be empty" @4:1
+# @expect error E_PARSE "match arm body cannot be empty" @4:15
 --- input.jh
 export def main() {
   const x = "hello"
@@ -595,7 +595,7 @@ export def main() {
 }
 
 === match: unterminated string in arm body
-# @expect error E_PARSE "unterminated string in match arm body" @4:1
+# @expect error E_PARSE "unterminated string in match arm body" @4:16
 --- input.jh
 export def main() {
   const x = "hello"
@@ -617,7 +617,7 @@ export def main() {
 }
 
 === match: single-quoted arm body
-# @expect error E_PARSE "single-quoted strings are not supported; use double quotes (" @4:1
+# @expect error E_PARSE "single-quoted strings are not supported; use double quotes (" @4:16
 --- input.jh
 export def main() {
   const x = "hello"
@@ -2679,4 +2679,166 @@ hi
 """ trailing
 export def main() {
   log "hi"
+}
+
+=== match arm body cannot start with return
+# @expect error E_PARSE "match arm body must not start with "return"; the match expression itself produces the value" @4:16
+--- input.jh
+export def main() {
+  const x = "hello"
+  return match x {
+    "hello" => return "yes"
+    _ => "no"
+  }
+}
+
+=== match arm body cannot start with return in const context
+# @expect error E_PARSE "match arm body must not start with "return"; the match expression itself produces the value" @4:16
+--- input.jh
+export def main() {
+  const x = "hello"
+  const y = match x {
+    "hello" => return "yes"
+    _ => "no"
+  }
+}
+
+=== inline script in match arm body rejected
+# @expect error E_PARSE "inline scripts are not allowed in match arm bodies; use a named script with" @4:16
+--- input.jh
+export def main() {
+  const x = "hello"
+  return match x {
+    "hello" => 'echo yes'()
+    _ => "no"
+  }
+}
+
+=== match arm body: tagged inline script rejected
+# @expect error E_PARSE "inline scripts are not allowed in match arm bodies; use a named script with" @4:16
+--- input.jh
+export def main() {
+  const x = "hello"
+  return match x {
+    "hello" => python3'print(1)'()
+    _ => "no"
+  }
+}
+
+=== match arm body: dotted tag inline script rejected
+# @expect error E_PARSE "inline scripts are not allowed in match arm bodies; use a named script with" @4:16
+--- input.jh
+export def main() {
+  const x = "hello"
+  return match x {
+    "hello" => node.v-2'x'()
+    _ => "no"
+  }
+}
+
+=== match arm body: fenced inline script rejected
+# @expect error E_PARSE "inline scripts are not allowed in match arm bodies; use a named script with" @4:16
+--- input.jh
+export def main() {
+  const x = "hello"
+  return match x {
+    "hello" => '''
+    _ => "no"
+  }
+}
+
+=== match arm body: one-line backtick script rejected
+# @expect error E_PARSE "inline scripts are not allowed in match arm bodies; use a named script with" @4:16
+--- input.jh
+export def main() {
+  const x = "hello"
+  return match x {
+    "hello" => `echo yes`()
+    _ => "no"
+  }
+}
+
+=== match arm body: triple backtick rejected
+# @expect error E_PARSE "inline scripts are not allowed in match arm bodies; use a named script with" @4:16
+--- input.jh
+export def main() {
+  const x = "hello"
+  return match x {
+    "hello" => ```
+    _ => "no"
+  }
+}
+
+=== match arm body: unknown verb
+# @expect error E_PARSE "unknown match arm verb "some"; allowed: fail "...", ref(...)." @4:16
+--- input.jh
+export def main() {
+  const x = "hello"
+  return match x {
+    "hello" => some bare words
+    _ => "no"
+  }
+}
+
+=== match arm body: error verb hints fail
+# @expect error E_PARSE "unknown match arm verb "error"; allowed: fail "...", ref(...). did you mean "fail"?" @4:16
+--- input.jh
+export def main() {
+  const x = "hello"
+  return match x {
+    "hello" => error "missing"
+    _ => "no"
+  }
+}
+
+=== match arm body: dollar variable is invalid
+# @expect error E_PARSE "invalid match arm body: $x; expected a string, """ block, identifier, ${…}, ref(...), or fail "..."" @4:16
+--- input.jh
+export def main() {
+  const x = "hello"
+  return match x {
+    "hello" => $x
+    _ => "no"
+  }
+}
+
+=== match arm body: trailing content after string is invalid
+# @expect error E_PARSE "invalid match arm body: "yes" extra; expected a string" @4:16
+--- input.jh
+export def main() {
+  const x = "hello"
+  return match x {
+    "hello" => "yes" extra
+    _ => "no"
+  }
+}
+
+=== match arm body: fail without a string is invalid
+# @expect error E_PARSE "invalid match arm body: fail x; expected a string" @4:16
+--- input.jh
+export def main() {
+  const x = "hello"
+  return match x {
+    "hello" => fail x
+    _ => "no"
+  }
+}
+
+=== match arm body: unbalanced call is invalid
+# @expect error E_PARSE "invalid match arm body: ref(a; expected a string" @4:16
+--- input.jh
+export def main() {
+  const x = "hello"
+  return match x {
+    "hello" => ref(a
+    _ => "no"
+  }
+}
+
+=== match arm body: compact form reports body column
+# @expect error E_PARSE "unknown match arm verb "some"" @3:43
+--- input.jh
+export def main() {
+  const x = "hello"
+  return match x { "hello" => "yes", _ => some words }
 }

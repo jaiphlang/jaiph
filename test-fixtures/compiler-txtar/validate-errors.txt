@@ -570,28 +570,6 @@ export def main() {
   log "result: ${helper}"
 }
 
-=== match arm body cannot start with return
-# @expect error E_VALIDATE "match arm body must not start with" @3:3
---- input.jh
-export def main() {
-  const x = "hello"
-  return match x {
-    "hello" => return "yes"
-    _ => "no"
-  }
-}
-
-=== inline script in match arm body rejected
-# @expect error E_VALIDATE "inline scripts are not allowed in match arm bodies; use a named script with" @3:3
---- input.jh
-export def main() {
-  const x = "hello"
-  return match x {
-    "hello" => 'echo yes'()
-    _ => "no"
-  }
-}
-
 === strings are not executable in workflow run
 # @expect error E_VALIDATE "strings are not executable;" @3:3
 --- input.jh
@@ -609,17 +587,6 @@ def check() {
 }
 export def main() {
   check()
-}
-
-=== match arm body cannot start with return in const context
-# @expect error E_VALIDATE "match arm body must not start with" @3:13
---- input.jh
-export def main() {
-  const x = "hello"
-  const y = match x {
-    "hello" => return "yes"
-    _ => "no"
-  }
 }
 
 === unknown identifier in fail string

@@ -13,7 +13,6 @@ import {
 import { ENV_KEY_RE, isReservedEnvKey } from "../env-reserved";
 
 /** Re-exported for the public parser entry (match-arm inline-script check in validate). */
-export { looksLikeInlineScriptCall } from "./fence";
 /** Re-exported for the public parser entry (validator, emitter, and runtime share it). */
 export { parseNestedCallArg, type NestedCallArg } from "./nested-arg";
 
