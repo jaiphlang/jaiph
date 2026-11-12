@@ -58,40 +58,6 @@ export function commaArgsToInterpolated(raw: string): string {
   }).join(" ");
 }
 
-export function parseArgsRaw(raw: string, vars: Map<string, string>, env?: NodeJS.ProcessEnv): string[] {
-  if (!raw.trim()) return [];
-  const out: string[] = [];
-  let cur = "";
-  let quote: "'" | '"' | null = null;
-  for (let i = 0; i < raw.length; i += 1) {
-    const ch = raw[i]!;
-    if (quote) {
-      if (ch === quote) {
-        quote = null;
-      } else {
-        cur += ch;
-      }
-      continue;
-    }
-    if (ch === "'" || ch === '"') {
-      quote = ch;
-      continue;
-    }
-    if (/\s/.test(ch)) {
-      if (cur.length > 0) {
-        out.push(interpolate(cur, vars, env));
-        cur = "";
-      }
-      continue;
-    }
-    cur += ch;
-  }
-  if (cur.length > 0) {
-    out.push(interpolate(cur, vars, env));
-  }
-  return out;
-}
-
 /**
  * Recognize a nested managed call in argument position: an inline script
  * `'body'(args)` / `lang'body'(args)` or a `ref(args)` call. Uses the parser's

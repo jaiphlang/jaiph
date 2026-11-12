@@ -29,7 +29,7 @@ const transpileSources = listTsFiles(join(repoRoot, "src/transpile"));
 /**
  * AC2: no production code under src/parse/ or src/transpile/ may re-parse a
  * call's `args` payload into bare-identifier components. The tokenizer / parser
- * builds `Arg[]` once via `commaArgsToArgList` in `src/parse/core.ts`;
+ * builds `Arg[]` once from tokens via `parseCallArgs` in `src/parse/call-args.ts`;
  * downstream consumers walk that typed list directly — no `args.split(",")`,
  * no `bareIdentifierArgs` shadow field, no ad-hoc rescans.
  */

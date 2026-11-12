@@ -1,4 +1,5 @@
-import { fail, parseParenArgs, parseSingleQuoteScriptBody } from "./core";
+import { fail, parseSingleQuoteScriptBody } from "./core";
+import { parseParenArgs } from "./call-args";
 import {
   parseFencedScriptBlock,
   rejectRemovedOnelineBacktick,

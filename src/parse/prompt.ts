@@ -1,6 +1,7 @@
 import type { Expr, StepDef } from "../types";
 import { createTrivia, type Trivia } from "./trivia";
-import { fail, SINGLE_QUOTE_MESSAGE, hasUnescapedClosingQuote, indexOfClosingDoubleQuote, isJaiphInterpolationRef, parseCallRef, rejectTrailingContent } from "./core";
+import { fail, SINGLE_QUOTE_MESSAGE, hasUnescapedClosingQuote, indexOfClosingDoubleQuote, isJaiphInterpolationRef, rejectTrailingContent } from "./core";
+import { parseCallRef } from "./call-args";
 import { dedentTripleQuotedBody, parseTripleQuoteBlock, tripleQuoteBodyToRaw } from "./triple-quote";
 
 /**

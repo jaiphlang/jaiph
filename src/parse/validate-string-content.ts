@@ -16,7 +16,7 @@
  */
 
 import { jaiphError } from "../errors";
-import { parseCallRef } from "./core";
+import { parseCallRef } from "./call-args";
 import type { Arg } from "../types";
 
 /**

@@ -5,7 +5,6 @@ import {
   commaArgsToInterpolated,
   interpolate,
   parseArgTokens,
-  parseArgsRaw,
   parseInlineCaptureCall,
   parseManagedArgAt,
   parsePromptSchema,
@@ -84,22 +83,6 @@ describe("commaArgsToInterpolated", () => {
   it("returns empty string for empty input", () => {
     assert.equal(commaArgsToInterpolated(""), "");
     assert.equal(commaArgsToInterpolated("   "), "");
-  });
-});
-
-describe("parseArgsRaw", () => {
-  it("splits on whitespace and interpolates each token", () => {
-    const vars = new Map([["name", "world"]]);
-    assert.deepEqual(parseArgsRaw("hello ${name} 42", vars), ["hello", "world", "42"]);
-  });
-
-  it("respects single- and double-quoted spans", () => {
-    assert.deepEqual(parseArgsRaw('"hello world" foo', new Map()), ["hello world", "foo"]);
-    assert.deepEqual(parseArgsRaw("'a b' c", new Map()), ["a b", "c"]);
-  });
-
-  it("returns empty array for empty input", () => {
-    assert.deepEqual(parseArgsRaw("", new Map()), []);
   });
 });
 

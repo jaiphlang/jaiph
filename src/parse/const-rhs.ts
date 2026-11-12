@@ -1,7 +1,7 @@
 import type { Expr, DefRef } from "../types";
 import { createTrivia, type Trivia } from "./trivia";
-import { fail, parseCallRef, rejectTrailingContent } from "./core";
-import { parseCallRefMultiline } from "./call-args";
+import { fail, rejectTrailingContent } from "./core";
+import { parseCallRefMultiline, parseCallRef } from "./call-args";
 import { dedentTripleQuotedBody, parseTripleQuoteBlock, tripleQuoteBodyToRaw } from "./triple-quote";
 import { parseAnonymousInlineScript, startsInlineScript } from "./inline-script";
 import { parsePromptStep } from "./prompt";

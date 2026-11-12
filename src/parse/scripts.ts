@@ -14,7 +14,7 @@ import { ENV_KEY_RE, isReservedEnvKey } from "../env-reserved";
 
 /** Re-exported for the public parser entry (match-arm inline-script check in validate). */
 /** Re-exported for the public parser entry (validator, emitter, and runtime share it). */
-export { parseNestedCallArg, type NestedCallArg } from "./nested-arg";
+export { parseCallRef, parseNestedCallArg, type NestedCallArg } from "./call-args";
 
 /**
  * Parse the `use KEY [KEY …]` clause on a script declaration (named script or

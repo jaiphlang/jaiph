@@ -1,7 +1,5 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readdirSync, readFileSync } from "node:fs";
-import { join, resolve } from "node:path";
 import { tokenize, type Token, type TokenKind } from "./lexer";
 
 const toks = (src: string): Array<[TokenKind, string]> =>
@@ -208,17 +206,4 @@ test("lexer: content after an opening triple quote is E_PARSE", () => {
 test("lexer: removed backtick forms keep their fence.ts messages", () => {
   throwsAt("script s = ```\necho\n```", 1, 12, /script bodies use triple single quotes/);
   throwsAt("script s = `echo`", 1, 12, /script one-liners use single quotes/);
-});
-
-test("lexer: not imported by any parser module yet", () => {
-  const parseDir = resolve(__dirname, "../../../src/parse");
-  const offenders: string[] = [];
-  const files = readdirSync(parseDir)
-    .filter((f) => f.endsWith(".ts") && !f.endsWith(".test.ts") && f !== "lexer.ts")
-    .map((f) => join(parseDir, f));
-  files.push(join(parseDir, "..", "parser.ts"));
-  for (const f of files) {
-    if (/from\s+["'][./]*(parse\/)?lexer["']/.test(readFileSync(f, "utf8"))) offenders.push(f);
-  }
-  assert.deepEqual(offenders, []);
 });

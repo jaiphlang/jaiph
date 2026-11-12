@@ -8,12 +8,12 @@ import {
   colFromRaw,
   braceDepthDelta,
   fail,
-  parseCallRef,
   isBareIdentifier,
   isBareDottedIdentifier,
   isJaiphInterpolationRef,
   argsToRuntimeString,
 } from "./core";
+import { parseCallRef } from "./call-args";
 
 // === stripQuotes ===
 

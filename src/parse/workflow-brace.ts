@@ -13,13 +13,12 @@ import {
   matchLegacySendOperator,
   matchSendOperator,
   parseSendChannelArrow,
-  parseCallRef,
   parseLogMessageRhs,
   rejectTrailingContent,
   SINGLE_QUOTE_MESSAGE,
 } from "./core";
 import { consumeTripleQuotedArg, dedentTripleQuotedBody, parseTripleQuoteBlock, tripleQuoteBodyToRaw } from "./triple-quote";
-import { parseCallRefMultiline } from "./call-args";
+import { parseCallRef, parseCallRefMultiline } from "./call-args";
 import { parseConstRhs } from "./const-rhs";
 import { parseAnonymousInlineScript } from "./inline-script";
 import { startsInlineScript, startsTaggedScriptFence } from "./fence";
