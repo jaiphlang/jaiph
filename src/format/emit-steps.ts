@@ -131,7 +131,10 @@ function emitMatchPattern(p: MatchPatternDef): string {
 
 export function emitMatchArm(arm: MatchArmDef, armIndent: string, bodyIndent: string): string[] {
   const patStr = emitMatchPattern(arm.pattern);
-  if (arm.body.startsWith('"') && arm.body.endsWith('"') && arm.body.includes("\n")) {
+  // Use the parser's flag, not "contains a newline": a one-line `"""` body keeps
+  // its source margin until the runtime dedents it, so writing it as `"…"` would
+  // put that margin into the value.
+  if (arm.tripleQuotedBody) {
     const inner = decodeTripleQuotedInner(arm.body);
     const lines: string[] = [`${armIndent}${patStr} => """`];
     for (const bl of inner.split("\n")) {
