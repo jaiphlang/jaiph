@@ -1,6 +1,5 @@
-// Tokenizer for `.jh` source. Call arguments and def-body statements (through
-// `BodyCursor`) are parsed from these tokens; top-level declarations still read
-// lines.
+// Tokenizer for `.jh` source. Call arguments, def-body statements, and
+// top-level declarations (through `BodyCursor`) are parsed from these tokens.
 //
 // Lossless: every source character belongs to exactly one token, except spaces,
 // tabs and carriage returns between tokens. Each token's `text` is the exact

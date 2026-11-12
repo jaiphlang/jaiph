@@ -2,6 +2,7 @@ import { dedentCommonLeadingWhitespace } from "./dedent";
 import { decodeQuotedInner, fail } from "./core";
 import { BodyCursor } from "./body-cursor";
 import type { Token } from "./lexer";
+import { checkFenceOpener, dedentFencedScriptBody, UNTERMINATED_FENCE_MESSAGE } from "./fence";
 
 /** Per language.md: trim blank lines adjacent to opening/closing `"""` only — do not dedent inner margin. */
 export function trimAdjacentBlankLines(text: string): string {
@@ -12,19 +13,6 @@ export function trimAdjacentBlankLines(text: string): string {
   while (start < end && lines[start]!.trim() === "") start++;
   while (end > start && lines[end - 1]!.trim() === "") end--;
   return lines.slice(start, end).join("\n");
-}
-
-/**
- * Parse a triple-quoted string block (`"""..."""`).
- * Opening `"""` must be at the start of `lines[tripleQuoteLineIdx]` (trimmed).
- * Returns the body string, next line index, and any text after the closing `"""`.
- */
-export function parseTripleQuoteBlock(
-  filePath: string,
-  lines: string[],
-  tripleQuoteLineIdx: number,
-): { body: string; nextIdx: number; afterClose: string } {
-  return readTripleQuoteBlock(filePath, lines, tripleQuoteLineIdx, lines[tripleQuoteLineIdx]!);
 }
 
 /**
@@ -65,6 +53,34 @@ export function readTripleQuoteBlock(
     body: joinTripleQuoteBody(bodyLines),
     nextIdx: BodyCursor.endLineIdx(tok) + 1,
     afterClose: cursor.textAfter(tok).trim(),
+  };
+}
+
+/**
+ * Read the `'''` block that opens at the end of line `idx`; `openText` is the
+ * line's text from the opening quotes on (interpreter tag split off). The
+ * block is one `script_fenced` token: its body is the lines between the
+ * quotes, dedented; `afterClose` is the rest of the closing line.
+ */
+export function readFencedScript(
+  filePath: string,
+  lines: string[],
+  idx: number,
+  openText: string,
+): { body: string; afterClose: string; nextIdx: number } {
+  checkFenceOpener(filePath, openText.trim(), idx + 1);
+  const cursor = BodyCursor.of(filePath, lines);
+  let tok;
+  try {
+    tok = cursor.tokenAt(idx, lines[idx]!.trimEnd().length - 2);
+  } catch {
+    tok = undefined;
+  }
+  if (tok?.kind !== "script_fenced") fail(filePath, UNTERMINATED_FENCE_MESSAGE, idx + 1);
+  return {
+    body: dedentFencedScriptBody(tok.text.split("\n").slice(1, -1).join("\n")),
+    afterClose: cursor.textAfter(tok).trimEnd(),
+    nextIdx: BodyCursor.endLineIdx(tok) + 1,
   };
 }
 

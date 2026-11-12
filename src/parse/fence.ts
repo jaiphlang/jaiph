@@ -104,39 +104,6 @@ export function rejectRemovedScriptFence(
   }
 }
 
-/**
- * Parse a fenced block (''' ... ''') starting at fenceLineIdx. The opening line
- * must be exactly ''' — callers split any interpreter tag off first
- * (`python3'''`). Returns the body between fences, the trailing text on the
- * closing fence line (after the closing ''', callers parse this for (args) /
- * returns "…" / etc.), and the next line index.
- */
-export function parseFencedBlock(
-  filePath: string,
-  lines: string[],
-  fenceLineIdx: number,
-): { body: string; afterClose: string; nextIdx: number } {
-  const lineNo = fenceLineIdx + 1;
-  checkFenceOpener(filePath, lines[fenceLineIdx].trim(), lineNo);
-
-  // Collect body lines until closing fence
-  const bodyLines: string[] = [];
-  let i = fenceLineIdx + 1;
-  for (; i < lines.length; i++) {
-    const trimmed = lines[i].trim();
-    if (trimmed.startsWith(SCRIPT_FENCE)) {
-      return {
-        body: bodyLines.join("\n"),
-        afterClose: trimmed.slice(SCRIPT_FENCE.length),
-        nextIdx: i + 1,
-      };
-    }
-    bodyLines.push(lines[i]);
-  }
-
-  fail(filePath, UNTERMINATED_FENCE_MESSAGE, lineNo);
-}
-
 export const UNTERMINATED_FENCE_MESSAGE = `unterminated fenced block: no closing ${SCRIPT_FENCE} before end of file`;
 
 /**
@@ -161,17 +128,4 @@ export function checkFenceOpener(filePath: string, openLine: string, lineNo: num
 /** Remove the block's common leading margin so indented `.jh` script bodies run correctly. */
 export function dedentFencedScriptBody(body: string): string {
   return dedentCommonLeadingWhitespace(body);
-}
-
-/**
- * Parse a fenced script / inline-script block and return a dedented body suitable
- * for emission and execution (heredoc delimiters, Python module indent, etc.).
- */
-export function parseFencedScriptBlock(
-  filePath: string,
-  lines: string[],
-  fenceLineIdx: number,
-): { body: string; afterClose: string; nextIdx: number } {
-  const parsed = parseFencedBlock(filePath, lines, fenceLineIdx);
-  return { ...parsed, body: dedentFencedScriptBody(parsed.body) };
 }

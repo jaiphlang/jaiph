@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { BodyCursor, keyOf } from "./body-cursor";
+import { BodyCursor, keyOf, tokenizeLine, topLevelKeyword } from "./body-cursor";
 
 const kinds = (cursor: BodyCursor, idx: number): string[] => cursor.tokens(idx).map((t) => `${t.kind}:${t.text}`);
 
@@ -45,4 +45,43 @@ test("keyOf: the identifier a statement starts with", () => {
   assert.equal(keyOf(cursor.tokens(1)[0]), "if");
   assert.equal(keyOf(cursor.tokens(2)[0]), undefined);
   assert.equal(keyOf(cursor.tokens(3)[0]), undefined);
+});
+
+const lineKinds = (cursor: BodyCursor, idx: number): string[] =>
+  cursor.lineTokensOf(idx).map((t) => `${t.kind}:${t.text}`);
+
+test("lineTokensOf: a block opener stays one token on its own line", () => {
+  const lines = ['const x = """', "  body", '"""', "script s = py'''", "print(1)", "'''"];
+  const cursor = BodyCursor.of("m.jh", lines);
+  assert.deepEqual(lineKinds(cursor, 0), ["ident:const", "ident:x", "punct:=", 'other:"""']);
+  assert.deepEqual(lineKinds(cursor, 3), ["ident:script", "ident:s", "punct:=", "other:py'''"]);
+  const opener = cursor.lineTokensOf(3)[3]!;
+  assert.equal(opener.offset, cursor.offset(3, opener.col));
+});
+
+test("lineTokensOf: lexing resumes after the lexeme it stopped at", () => {
+  const cursor = BodyCursor.of("m.jh", [`import 'x" as y`, "f(`a`, z'q)"]);
+  assert.deepEqual(lineKinds(cursor, 0), ["ident:import", "other:'", "ident:x", 'other:"', "ident:as", "ident:y"]);
+  assert.deepEqual(lineKinds(cursor, 1), [
+    "ident:f", "punct:(", "other:`", "ident:a", "other:`", "punct:,", "other:z'", "ident:q", "punct:)",
+  ]);
+});
+
+test("topLevelKeyword: the declaration a line starts with", () => {
+  const keyword = (line: string): string | undefined => topLevelKeyword(tokenizeLine("m.jh", line, 1), line);
+  assert.equal(keyword('import script "a.py" as a'), "import script");
+  assert.equal(keyword('import "a.jh" as a'), "import");
+  assert.equal(keyword('import\t"a.jh" as a'), undefined);
+  assert.equal(keyword("config{"), "config");
+  assert.equal(keyword("export  def w() {"), "def");
+  assert.equal(keyword("const 1 = x"), undefined);
+  assert.equal(keyword("script"), undefined);
+});
+
+test("rawBodyAfter: the shell body of a mock script, up to its closing line", () => {
+  const lines = ["  mock script a.b() {", "    echo hi", "  }", "  mock script c() {", "  }", "  mock script d() {"];
+  const cursor = BodyCursor.of("t.test.jh", lines);
+  assert.deepEqual(cursor.rawBodyAfter(0), { body: "    echo hi", closeIdx: 2 });
+  assert.deepEqual(cursor.rawBodyAfter(3), { body: "", closeIdx: 4 });
+  assert.equal(cursor.rawBodyAfter(5), null);
 });

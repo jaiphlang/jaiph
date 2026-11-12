@@ -1,15 +1,10 @@
 import type { ScriptDef } from "../types";
 import { createTrivia, type Trivia } from "./trivia";
-import { fail, parseSingleQuoteScriptBody } from "./core";
-import {
-  parseFencedScriptBlock,
-  rejectRemovedOnelineBacktick,
-  rejectRemovedScriptFence,
-  rejectTagWithShebang,
-  SCRIPT_FENCE,
-  splitScriptLangPrefix,
-  startsScriptFence,
-} from "./fence";
+import type { Token } from "./lexer";
+import { fail } from "./core";
+import { rejectRemovedOnelineBacktick, rejectRemovedScriptFence, rejectTagWithShebang, SCRIPT_FENCE } from "./fence";
+import { BLOCK_OPENER, BodyCursor, declHead, isPunct, keyOf } from "./body-cursor";
+import { readFencedScript } from "./triple-quote";
 import { ENV_KEY_RE, isReservedEnvKey } from "../env-reserved";
 
 /** Re-exported for the public parser entry (match-arm inline-script check in validate). */
@@ -94,6 +89,42 @@ export function jaiphInterpolationInScriptMessage(name: string): string {
   return `script bodies cannot contain Jaiph interpolation (\${${name}}); use $1, $2 positional arguments instead`;
 }
 
+/**
+ * The optional `use KEY …` clause and the `=` after a declaration's name or
+ * parameter list, read from the line text at index `from`: the clause text
+ * (up to the first `=`) and the index just past the `=`. Null when neither
+ * `= …` nor `use … =` follows.
+ */
+export function useClauseAndEquals(raw: string, from: number): { use?: string; afterEq: number } | null {
+  const m = /^(?:\s+use\s+([^=]+?))?\s*=/.exec(raw.slice(from));
+  return m ? { ...(m[1] !== undefined ? { use: m[1] } : {}), afterEq: from + m[0].length } : null;
+}
+
+function failScriptHeader(filePath: string, toks: Token[], lineNo: number): never {
+  const head = declHead(toks, "script");
+  const name = keyOf(head?.name);
+  if (!head || name === undefined) {
+    fail(filePath, "invalid script declaration", lineNo);
+  }
+  const next = head.name.kind === "ident" ? toks[head.at + 2] : undefined;
+  if (isPunct(next, "{")) {
+    fail(
+      filePath,
+      `brace-style script bodies are no longer supported; use: script name = '...' or script name = ${SCRIPT_FENCE}...${SCRIPT_FENCE}`,
+      lineNo,
+    );
+  }
+  if (isPunct(next, "(")) {
+    fail(filePath, `definitions must not use parentheses: script ${name} = '...'`, lineNo);
+  }
+  fail(filePath, `script definitions require = after the name: script ${name} = '...'`, lineNo);
+}
+
+/**
+ * `[export] script name [use KEY …] = <body>` on line `startIndex` (module
+ * level, or nested in a def body). The body is one `'…'` script token or a
+ * `'''` block, either with an optional interpreter tag (`python3'…'`).
+ */
 export function parseScriptBlock(
   filePath: string,
   lines: string[],
@@ -102,106 +133,70 @@ export function parseScriptBlock(
   trivia: Trivia = createTrivia(),
 ): { scriptDef: ScriptDef; nextIndex: number; exported: boolean } {
   const lineNo = startIndex + 1;
-  const raw = lines[startIndex];
-  const line = raw.trim();
+  const raw = lines[startIndex]!;
+  const toks = BodyCursor.of(filePath, lines).lineTokensOf(startIndex);
 
-  // Match: [export] script name [use KEY ...] = ...
-  const match = line.match(/^(export\s+)?script\s+([A-Za-z_][A-Za-z0-9_]*)(?:\s+use\s+([^=]+?))?\s*=\s*(.*)$/);
-  if (!match) {
-    // Check for old brace syntax
-    if (/^(export\s+)?script\s+[A-Za-z_][A-Za-z0-9_]*\s*\{/.test(line)) {
-      fail(
-        filePath,
-        `brace-style script bodies are no longer supported; use: script name = '...' or script name = ${SCRIPT_FENCE}...${SCRIPT_FENCE}`,
-        lineNo,
-      );
-    }
-    if (/^(export\s+)?script\s+[A-Za-z_][A-Za-z0-9_]*\s*\(/.test(line)) {
-      const nameM = line.match(/^(?:export\s+)?script\s+([A-Za-z_][A-Za-z0-9_]*)/);
-      fail(
-        filePath,
-        `definitions must not use parentheses: script ${nameM?.[1] ?? "name"} = '...'`,
-        lineNo,
-      );
-    }
-    if (/^(export\s+)?script\s+[A-Za-z_][A-Za-z0-9_]*/.test(line)) {
-      const nameM = line.match(/^(?:export\s+)?script\s+([A-Za-z_][A-Za-z0-9_]*)/);
-      fail(
-        filePath,
-        `script definitions require = after the name: script ${nameM?.[1] ?? "name"} = '...'`,
-        lineNo,
-      );
-    }
-    fail(filePath, "invalid script declaration", lineNo);
+  const head = declHead(toks, "script");
+  const nameEnd = head ? head.name.col - 1 + head.name.text.length : 0;
+  const eq = head?.name.kind === "ident" ? useClauseAndEquals(raw, nameEnd) : null;
+  if (!head || !eq) {
+    failScriptHeader(filePath, toks, lineNo);
   }
 
-  const isExported = Boolean(match[1]);
-  const scriptName = match[2];
+  const isExported = head.at === 1;
+  const scriptName = head.name.text;
   if (scriptName === "use") {
     fail(filePath, `"use" is reserved and cannot be a script name`, lineNo);
   }
-  const useKeys = match[3] !== undefined ? parseUseClauseKeys(filePath, match[3], lineNo) : undefined;
-  const rhsRaw = match[4].trimStart();
+  const useKeys = eq.use !== undefined ? parseUseClauseKeys(filePath, eq.use, lineNo) : undefined;
+  const afterEq = raw.slice(eq.afterEq);
+  const rhs = afterEq.trim();
+  const rhsStart = eq.afterEq + afterEq.length - afterEq.trimStart().length;
+  const value = toks.filter((t) => t.col - 1 >= rhsStart);
+  const first = value[0]?.col === rhsStart + 1 ? value[0] : undefined;
 
-  rejectRemovedScriptFence(filePath, rhsRaw, lineNo);
-  rejectRemovedOnelineBacktick(filePath, rhsRaw, lineNo);
+  rejectRemovedScriptFence(filePath, rhs, lineNo);
+  rejectRemovedOnelineBacktick(filePath, rhs, lineNo);
 
-  // Optional interpreter tag directly before the opening quote: python3'…' / node'''…'''
-  const { lang, rest: rhs } = splitScriptLangPrefix(rhsRaw);
+  const make = (body: string, lang: string | undefined, kind: "fenced" | "oneline"): ScriptDef => {
+    rejectTagWithShebang(filePath, lang, body, lineNo);
+    const scriptDef: ScriptDef = {
+      name: scriptName,
+      comments: pendingComments,
+      body,
+      ...(lang ? { lang } : {}),
+      ...(useKeys ? { use: useKeys } : {}),
+      loc: { line: lineNo, col: 1 },
+    };
+    trivia.setNode(scriptDef, { scriptBodyKind: kind });
+    return scriptDef;
+  };
 
-  // Case 1: Fenced block — opening ''' must be on the same line as script name =
-  if (startsScriptFence(rhs)) {
-    const fenceLines = [...lines];
-    fenceLines[startIndex] = rhs;
-    const { body, nextIdx, afterClose } = parseFencedScriptBlock(filePath, fenceLines, startIndex);
-
+  // Case 1: Fenced block — opening ''' (after an optional tag) ends the line.
+  const opener = first?.kind === "other" ? BLOCK_OPENER.exec(first.text) : null;
+  if (opener && first!.text.endsWith(SCRIPT_FENCE)) {
+    const lang = opener[1];
+    const { body, nextIdx, afterClose } = readFencedScript(filePath, lines, startIndex, rhs.slice(lang?.length ?? 0));
     if (afterClose.trim()) {
       fail(filePath, `unexpected content after closing fence: '${afterClose.trim()}'`, lineNo);
     }
-
-    rejectTagWithShebang(filePath, lang, body, lineNo);
-
-    const scriptDef: ScriptDef = {
-      name: scriptName,
-      comments: pendingComments,
-      body,
-      ...(lang ? { lang } : {}),
-      ...(useKeys ? { use: useKeys } : {}),
-      loc: { line: lineNo, col: 1 },
-    };
-    trivia.setNode(scriptDef, { scriptBodyKind: "fenced" });
-    return {
-      scriptDef,
-      nextIndex: nextIdx,
-      exported: isExported,
-    };
+    return { scriptDef: make(body, lang, "fenced"), nextIndex: nextIdx, exported: isExported };
   }
 
   // Case 2: One-line single-quote script body
-  if (rhs.startsWith("'")) {
-    const { body, restAfterClose } = parseSingleQuoteScriptBody(rhs, filePath, lineNo, 1);
-    const trailing = restAfterClose.trim();
+  if (first?.kind === "script_oneline") {
+    const quote = first.text.indexOf("'");
+    const body = first.text.slice(quote + 1, -1);
+    const trailing = raw.slice(first.col - 1 + first.text.length).trim();
     if (trailing) {
       fail(filePath, `unexpected content after script body: '${trailing}'`, lineNo);
     }
-
     validateScriptBodyNoInterpolation(body, filePath, lineNo, 1);
-    rejectTagWithShebang(filePath, lang, body, lineNo);
-
-    const scriptDef: ScriptDef = {
-      name: scriptName,
-      comments: pendingComments,
-      body,
-      ...(lang ? { lang } : {}),
-      ...(useKeys ? { use: useKeys } : {}),
-      loc: { line: lineNo, col: 1 },
-    };
-    trivia.setNode(scriptDef, { scriptBodyKind: "oneline" });
-    return {
-      scriptDef,
-      nextIndex: startIndex + 1,
-      exported: isExported,
-    };
+    const lang = quote > 0 ? first.text.slice(0, quote) : undefined;
+    return { scriptDef: make(body, lang, "oneline"), nextIndex: startIndex + 1, exported: isExported };
+  }
+  if (first?.kind === "other" && /^(?:[A-Za-z_][A-Za-z0-9_.-]*)?'$/.test(first.text)) {
+    fail(filePath, "unterminated one-line script — missing closing '", lineNo, 1);
   }
 
   // Rejected: double-quoted string body
@@ -211,10 +206,6 @@ export function parseScriptBlock(
       `script bodies use single quotes: script ${scriptName} = '...'`,
       lineNo,
     );
-  }
-
-  if (lang) {
-    fail(filePath, `expected ' or ${SCRIPT_FENCE} directly after interpreter tag "${lang}"`, lineNo);
   }
 
   const spacedTag = /^([A-Za-z_][A-Za-z0-9_.-]*)\s+'/.exec(rhs);
@@ -227,7 +218,7 @@ export function parseScriptBlock(
   }
 
   // Rejected: bare identifier body
-  if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(rhs)) {
+  if (first?.kind === "ident" && value.length === 1) {
     fail(
       filePath,
       `script bodies must be a one-liner or fenced block: script ${scriptName} = '...' or script ${scriptName} = ${SCRIPT_FENCE}...${SCRIPT_FENCE}`,

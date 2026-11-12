@@ -1,7 +1,8 @@
 import type { DefMetadata } from "../types";
 import type { Trivia, ConfigBodyPart } from "./trivia";
+import type { Token } from "./lexer";
+import { BodyCursor, isPunct } from "./body-cursor";
 import {
-  colFromRaw,
   fail,
   isBareIdentifier,
   isJaiphInterpolationRef,
@@ -49,40 +50,47 @@ const KEY_TYPES: Record<string, "string" | "boolean" | "number"> = {
   "module.description": "string",
 };
 
-function parseMetadataValue(filePath: string, rawLine: string, valuePart: string, lineNo: number): string | boolean | number {
-  const trimmed = valuePart.trim();
-  if (trimmed === "true") {
-    return true;
+/**
+ * A config value: the tokens after the `=` and the same text, trimmed. A
+ * string value is the text between its outer quotes, with `\"` the only
+ * escape.
+ */
+function parseMetadataValue(
+  filePath: string,
+  value: Token[],
+  text: string,
+  lineNo: number,
+  col: number,
+): string | boolean | number {
+  const only = value.length === 1 ? value[0] : undefined;
+  if (only?.kind === "ident" && (only.text === "true" || only.text === "false")) {
+    return only.text === "true";
   }
-  if (trimmed === "false") {
-    return false;
+  if (only?.kind === "number") {
+    return Number(only.text);
   }
-  if (/^[0-9]+$/.test(trimmed)) {
-    return Number(trimmed);
+  if (value[0]?.text.startsWith(`'`)) {
+    return fail(filePath, SINGLE_QUOTE_MESSAGE, lineNo, col);
   }
-  if (trimmed.startsWith(`'`)) {
-    return fail(filePath, SINGLE_QUOTE_MESSAGE, lineNo, colFromRaw(rawLine));
-  }
-  if (trimmed.startsWith(`"`) && trimmed.endsWith(`"`)) {
-    const inner = trimmed.slice(1, -1);
-    rejectRemovedEscapes(filePath, inner, "config", lineNo, colFromRaw(rawLine));
+  if (value[0]?.text.startsWith(`"`) && text.endsWith(`"`)) {
+    const inner = text.slice(1, -1);
+    rejectRemovedEscapes(filePath, inner, "config", lineNo, col);
     const content = decodeQuotedInner(inner);
     if (configValueHasInterpolation(content)) {
-      validateJaiphStringContent(content, filePath, lineNo, colFromRaw(rawLine), "config");
+      validateJaiphStringContent(content, filePath, lineNo, col, "config");
     }
     return content;
   }
-  if (isBareIdentifier(trimmed)) {
-    return `\${${trimmed}}`;
+  if (only?.kind === "ident" && isBareIdentifier(only.text)) {
+    return `\${${only.text}}`;
   }
-  if (isJaiphInterpolationRef(trimmed)) {
-    validateJaiphStringContent(trimmed, filePath, lineNo, colFromRaw(rawLine), "config");
-    return trimmed;
+  if (isJaiphInterpolationRef(text)) {
+    validateJaiphStringContent(text, filePath, lineNo, col, "config");
+    return text;
   }
-  const col = rawLine.indexOf(valuePart) >= 0 ? colFromRaw(rawLine) : 1;
   return fail(
     filePath,
-    `config value must be a quoted string, bare identifier, or true/false: ${trimmed}`,
+    `config value must be a quoted string, bare identifier, or true/false: ${text}`,
     lineNo,
     col,
   );
@@ -93,19 +101,19 @@ function validateKeyType(
   key: string,
   value: string | boolean | number,
   lineNo: number,
-  raw: string,
+  col: number,
 ): void {
   const expected = KEY_TYPES[key];
   if (!expected) return;
 
   if (expected === "string" && typeof value !== "string") {
-    return fail(filePath, `${key} must be a string`, lineNo, colFromRaw(raw));
+    return fail(filePath, `${key} must be a string`, lineNo, col);
   }
   if (expected === "boolean" && typeof value !== "boolean") {
-    return fail(filePath, `${key} must be true or false`, lineNo, colFromRaw(raw));
+    return fail(filePath, `${key} must be true or false`, lineNo, col);
   }
   if (expected === "number" && typeof value !== "number") {
-    return fail(filePath, `${key} must be an integer`, lineNo, colFromRaw(raw));
+    return fail(filePath, `${key} must be an integer`, lineNo, col);
   }
 }
 
@@ -131,9 +139,9 @@ function assignConfigKey(
   key: string,
   value: ConfigValue,
   lineNo: number,
-  raw: string,
+  col: number,
 ): void {
-  validateKeyType(filePath, key, value, lineNo, raw);
+  validateKeyType(filePath, key, value, lineNo, col);
   if (key === "agent.backend") {
     if (
       typeof value === "string" &&
@@ -142,7 +150,7 @@ function assignConfigKey(
       value !== "claude" &&
       value !== "codex"
     ) {
-      fail(filePath, 'agent.backend must be "cursor", "claude", or "codex"', lineNo, colFromRaw(raw));
+      fail(filePath, 'agent.backend must be "cursor", "claude", or "codex"', lineNo, col);
     }
     (out.agent ??= {}).backend = value as "cursor" | "claude" | "codex";
     return;
@@ -156,59 +164,56 @@ export function parseConfigBlock(
   startIndex: number,
   trivia?: Trivia,
 ): { metadata: DefMetadata; nextIndex: number } {
-  const openLineNo = startIndex + 1;
-  const rawOpen = lines[startIndex];
-  const lineOpen = rawOpen.trim();
-
-  if (!/^config\s*\{\s*$/.test(lineOpen)) {
-    return fail(filePath, "config block must be exactly 'config {' on its own line", openLineNo, colFromRaw(rawOpen));
+  const cursor = BodyCursor.of(filePath, lines);
+  const open = cursor.lineTokensOf(startIndex);
+  if (open.length !== 2 || open[0]!.text !== "config" || !isPunct(open[1], "{")) {
+    return fail(filePath, "config block must be exactly 'config {' on its own line", startIndex + 1, open[0]?.col ?? 1);
   }
 
   const out: DefMetadata = {};
   const bodySequence: ConfigBodyPart[] = [];
-  let idx = startIndex + 1;
-
-  for (; idx < lines.length; idx += 1) {
+  for (let idx = startIndex + 1; idx < lines.length; idx += 1) {
     const lineNo = idx + 1;
-    const raw = lines[idx];
-    const line = raw.trim();
-
-    if (!line) {
+    const raw = lines[idx]!;
+    const toks = cursor.lineTokensOf(idx);
+    const head = toks[0];
+    if (!head) {
       continue;
     }
-    if (line.startsWith("#")) {
-      bodySequence.push({ kind: "comment", text: line });
+    if (head.kind === "other" && head.text === "#") {
+      bodySequence.push({ kind: "comment", text: raw.trim() });
       continue;
     }
-    if (line === "}") {
+    if (toks.length === 1 && isPunct(head, "}")) {
       if (bodySequence.length > 0 && trivia) {
         trivia.setNode(out, { configBodySequence: bodySequence });
       }
-      idx += 1;
-      return { metadata: out, nextIndex: idx };
+      return { metadata: out, nextIndex: idx + 1 };
     }
 
-    const eq = line.indexOf("=");
-    if (eq === -1) {
-      return fail(filePath, `config line must be key = value: ${line}`, lineNo, colFromRaw(raw));
+    // `key = value`: the key is the text before the first `=`.
+    const eqAt = toks.findIndex((t) => t.text.includes("="));
+    if (eqAt === -1) {
+      return fail(filePath, `config line must be key = value: ${raw.trim()}`, lineNo, head.col);
     }
-    const key = line.slice(0, eq).trim();
-    const valuePart = line.slice(eq + 1);
-
+    const eqTok = toks[eqAt]!;
+    const eq = eqTok.col - 1 + eqTok.text.indexOf("=");
+    const key = raw.slice(0, eq).trim();
     if (!ALLOWED_KEYS.has(key)) {
       return fail(
         filePath,
         `unknown config key: ${key}. Allowed: ${[...ALLOWED_KEYS].join(", ")}`,
         lineNo,
-        colFromRaw(raw),
+        head.col,
       );
     }
 
-    const value = parseMetadataValue(filePath, raw, valuePart, lineNo);
-    const trimmedValue = valuePart.trim();
-    const bareSource = typeof value === "string" && !trimmedValue.startsWith('"') ? trimmedValue : undefined;
+    const text = raw.slice(eq + 1).trim();
+    const valueToks = eqTok.text === "=" ? toks.slice(eqAt + 1) : [];
+    const value = parseMetadataValue(filePath, valueToks, text, lineNo, head.col);
+    const bareSource = typeof value === "string" && !text.startsWith('"') ? text : undefined;
     bodySequence.push({ kind: "assign", key, ...(bareSource !== undefined ? { bareSource } : {}) });
-    assignConfigKey(filePath, out, key, value, lineNo, raw);
+    assignConfigKey(filePath, out, key, value, lineNo, head.col);
   }
 
   return fail(filePath, "config block not closed with '}'", startIndex + 1, 1);
