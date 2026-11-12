@@ -6,7 +6,7 @@ import type {
   MatchPatternDef,
   MatchArmDef,
 } from "../types";
-import type { Trivia } from "../parser";
+import { encodeQuoted, type Trivia } from "../parser";
 import {
   decodeTripleQuotedInner,
   emitComments,
@@ -34,7 +34,8 @@ function emitLogLiteralRhs(message: string): string {
       return inner;
     }
   }
-  return JSON.stringify(message);
+  // `message` is the source text between the quotes, kept as written.
+  return `"${message}"`;
 }
 
 export function emitSteps(steps: StepDef[], pad: string, currentIndent: string, trivia: Trivia): string[] {
@@ -94,7 +95,7 @@ function emitStageInline(expr: Expr, trivia: Trivia): string {
 }
 
 function emitMatchPattern(p: MatchPatternDef): string {
-  if (p.kind === "string_literal") return `"${p.value}"`;
+  if (p.kind === "string_literal") return encodeQuoted(p.value);
   if (p.kind === "regex") return `/${p.source}/`;
   if (p.kind === "alternation") return p.patterns.map(emitMatchPattern).join(" | ");
   return "_";

@@ -240,15 +240,30 @@ test("parseConfigBlock: rejects shell fallback ${model:-x} in bare ref", () => {
   );
 });
 
-test("parseConfigBlock: handles escape sequences in string values", () => {
+test("parseConfigBlock: \\\" is the only escape; other backslashes stay verbatim", () => {
   const lines = [
     "config {",
-    '  agent.cursor_flags = "flag\\nvalue"',
+    '  agent.cursor_flags = "--re \\d+ --say \\"hi\\""',
+    '  run.logs_dir = "C:\\logs"',
     "}",
   ];
   const { metadata } = parseConfigBlock("test.jh", lines, 0);
-  assert.equal(metadata.agent?.cursorFlags, "flag\nvalue");
+  assert.equal(metadata.agent?.cursorFlags, '--re \\d+ --say "hi"');
+  assert.equal(metadata.run?.logsDir, "C:\\logs");
 });
+
+for (const esc of ["\\n", "\\t", "\\\\"]) {
+  test(`parseConfigBlock: removed escape ${esc} is E_PARSE with a migration hint`, () => {
+    const lines = ["config {", `  agent.cursor_flags = "a${esc}b"`, "}"];
+    assert.throws(
+      () => parseConfigBlock("test.jh", lines, 0),
+      (err: Error) =>
+        err.message.includes("E_PARSE") &&
+        err.message.includes(`config strings no longer decode ${esc}`) &&
+        err.message.includes('use a """ block for multi-line text'),
+    );
+  });
+}
 
 test("parseConfigBlock: fails on type mismatch (number where string expected)", () => {
   const lines = [

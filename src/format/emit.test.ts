@@ -265,6 +265,43 @@ describe("emitModule", () => {
     assert.equal(roundTrip(source), source);
   });
 
+  it("round-trips backslashes and escaped quotes in every single-line string context", () => {
+    const source = [
+      "config {",
+      '  run.logs_dir = "C:\\logs \\"x\\""',
+      "}",
+      "",
+      'const top = "a\\d \\"q\\""',
+      "",
+      "export def main(k) {",
+      '  log "re: \\d+ say \\"hi\\""',
+      "  const m = match k {",
+      '    "a\\b \\"c\\"" => "hit"',
+      '    _ => "miss"',
+      "  }",
+      "}",
+      "",
+    ].join("\n");
+    assert.equal(roundTrip(source), source);
+  });
+
+  it("round-trips test-DSL strings and a multi-line test const", () => {
+    const source = [
+      'test "says \\"hi\\"" {',
+      '  const expected = """',
+      '    line "one"',
+      "    two \\d",
+      '  """',
+      '  mock prompt "re \\d \\"q\\""',
+      '  const out = main("x \\d")',
+      '  expect_contain out "\\d"',
+      "  expect_equal out expected",
+      "}",
+      "",
+    ].join("\n");
+    assert.equal(roundTrip(source, "t.test.jh"), source);
+  });
+
   it("is a bit-for-bit no-op on a first-agent const = prompt triple-quoted def body", () => {
     // The shebang is CLI-only trivia (see docs/cli.md), so the module body here
     // omits it. A formatter that collapses `prompt """ … """` to a double-quoted

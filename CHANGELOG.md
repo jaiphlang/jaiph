@@ -2,7 +2,15 @@
 
 ## Summary
 
+- **Breaking: one escape rule for every single-line string.** `\"` is the only escape; every other backslash stays as written. Config values, match patterns, and the test DSL no longer decode `\n`, `\t`, or `\\`, and those are `E_PARSE` there for one release. Use a `"""` block for multi-line text; test blocks now accept `const x = """…"""`.
+- **Fix:** inline script bodies run exactly as written. A `\n` in shell code is no longer turned into a newline.
+- **Fix:** `jaiph format` no longer doubles backslashes in `log` messages, config values, or top-level `const` strings.
+
 ## All changes
+
+- **Breaking — Language:** single-line `"…"` strings follow one rule everywhere: `\"` is the only escape and every other backslash is kept verbatim. Config values decoded `\n`, `\t`, `\"`, `\\` (in an order that turned `"C:\\new"` into `C:\` + newline + `ew`); match patterns decoded `\"`, `\n`, `\\`; the test DSL decoded `\"`, `\n`, `\\` (and `mock prompt { … }` responses again at run time). In those three contexts `\n`, `\t`, and `\\` are now `E_PARSE` (`<context> strings no longer decode \n; \" is the only escape …`) so an old file fails instead of silently changing meaning; the guard will be dropped in a later release. Test blocks accept `const name = """ … """` for multi-line values, usable from `mock prompt name` and `expect_* var name`. Docs: [Grammar](docs/grammar.md), [Testing](docs/testing.md). Tests: `src/parse/string-escapes.test.ts`, `src/parse/parse-metadata.test.ts`.
+- **Fix — Runtime:** inline script bodies (`'…'()` and `'''…'''()`) are emitted verbatim. The emitter replaced every `\n` with a newline, a leftover from when inline bodies were double-quoted strings, so `echo 'a\nb'` or `sed 's/x/\n/'` ran different code than written. `src/transpile/emit-script.ts`. Tests: `src/transpile/inline-script-verbatim.test.ts`.
+- **Fix — Formatter:** string values are written back without re-escaping. `log` messages and config values went through `JSON.stringify`, which doubled every backslash (`"\d+"` became `"\\d+"`) and changed the program; a quoted top-level `const` with a backslash was moved into a `"""` block; match patterns and test-DSL strings were written without escaping `"`. `src/format/emit.ts`, `src/format/emit-steps.ts`, `src/format/emit-test.ts`. Tests: `src/format/emit.test.ts`.
 
 # 0.16.0
 

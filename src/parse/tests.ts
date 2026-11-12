@@ -8,9 +8,11 @@ import {
   parseParamList,
   SINGLE_QUOTE_MESSAGE,
   stripQuotes,
-  unescapeDoubleQuotedInner,
+  decodeQuotedInner,
+  rejectRemovedEscapes,
 } from "./core";
 import { parseMatchArms } from "./match";
+import { dedentTripleQuotedBody, parseTripleQuoteBlock } from "./triple-quote";
 import { parseBraceBlockBody } from "./workflow-brace";
 
 function parseMockPromptBlock(
@@ -30,6 +32,12 @@ function parseMockPromptBlock(
   const { arms, nextIndex } = parseMatchArms(filePath, lines, startLineIndex + 1, blockStartLineNo);
   if (arms.length === 0) {
     fail(filePath, "mock prompt block must have at least one arm", blockStartLineNo);
+  }
+  for (const arm of arms) {
+    const body = arm.body.trim();
+    if (!arm.tripleQuotedBody && body.startsWith('"') && body.endsWith('"')) {
+      rejectRemovedEscapes(filePath, body.slice(1, -1), "test", blockStartLineNo);
+    }
   }
   return {
     step: {
@@ -61,8 +69,10 @@ function parseMockScriptBlock(
   fail(filePath, "unterminated mock block", startLineIndex + 2);
 }
 
-function decodeQuotedTestString(arg: string): string {
-  return unescapeDoubleQuotedInner(stripQuotes(arg));
+/** Decode the inner text of a test-DSL `"…"` string: `\"` is the only escape. */
+function decodeTestString(filePath: string, inner: string, lineNo: number, col: number): string {
+  rejectRemovedEscapes(filePath, inner, "test", lineNo, col);
+  return decodeQuotedInner(inner);
 }
 
 /** Parse mock params: "()" or "(a, b)" from a string like "alias.name(a, b) {" */
@@ -179,7 +189,7 @@ export function parseTestBlock(
       }
       testBlock.steps.push({
         type: "test_mock_prompt",
-        response: decodeQuotedTestString(arg),
+        response: decodeTestString(filePath, stripQuotes(arg), innerNo, col),
         loc,
       });
       continue;
@@ -220,7 +230,7 @@ export function parseTestBlock(
       testBlock.steps.push({
         type: "test_expect_contain",
         variable: expectContainMatch[1],
-        substring: expectContainMatch[2].replace(/\\"/g, '"').replace(/\\n/g, "\n"),
+        substring: decodeTestString(filePath, expectContainMatch[2], innerNo, col),
         loc,
       });
       continue;
@@ -243,7 +253,7 @@ export function parseTestBlock(
       testBlock.steps.push({
         type: "test_expect_not_contain",
         variable: expectNotContainMatch[1],
-        substring: expectNotContainMatch[2].replace(/\\"/g, '"').replace(/\\n/g, "\n"),
+        substring: decodeTestString(filePath, expectNotContainMatch[2], innerNo, col),
         loc,
       });
       continue;
@@ -266,7 +276,7 @@ export function parseTestBlock(
       testBlock.steps.push({
         type: "test_expect_equal",
         variable: expectEqualMatch[1],
-        expected: expectEqualMatch[2].replace(/\\"/g, '"').replace(/\\n/g, "\n"),
+        expected: decodeTestString(filePath, expectEqualMatch[2], innerNo, col),
         loc,
       });
       continue;
@@ -294,6 +304,25 @@ export function parseTestBlock(
       fail(filePath, 'camelCase assertions are no longer supported; use "expect_equal"', innerNo, col);
     }
 
+    // --- const NAME = """ … """ (multi-line test-scope string binding) ---
+    const constTripleMatch = inner.match(/^const\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*"""\s*$/);
+    if (constTripleMatch) {
+      const tqLines = [...lines];
+      tqLines[i] = inner.slice(inner.indexOf('"""'));
+      const { body, nextIdx, afterClose } = parseTripleQuoteBlock(filePath, tqLines, i);
+      if (afterClose.trim()) {
+        fail(filePath, `unexpected content after closing """: '${afterClose.trim()}'`, nextIdx, col);
+      }
+      testBlock.steps.push({
+        type: "test_const",
+        name: constTripleMatch[1],
+        value: dedentTripleQuotedBody(body),
+        loc,
+      });
+      i = nextIdx - 1;
+      continue;
+    }
+
     // --- const NAME = "literal" (test-scope string binding) ---
     // Must come before the `const ... = run` matcher so plain literal consts win.
     // Only double-quoted string literals are supported in v1; no interpolation.
@@ -302,7 +331,7 @@ export function parseTestBlock(
       testBlock.steps.push({
         type: "test_const",
         name: constLiteralMatch[1],
-        value: unescapeDoubleQuotedInner(constLiteralMatch[2]),
+        value: decodeTestString(filePath, constLiteralMatch[2], innerNo, col),
         loc,
       });
       continue;
@@ -319,7 +348,7 @@ export function parseTestBlock(
         fail(filePath, "const ... = must target a valid reference: const name = ref(args)", innerNo, col);
       }
       const argsRaw = constRunMatch[3].trim();
-      const args: string[] = argsRaw ? parseTestCallArgs(argsRaw) : [];
+      const args: string[] = argsRaw ? parseTestCallArgs(filePath, argsRaw, innerNo, col) : [];
       const allowFailure = constRunMatch[4] === "allow_failure";
       testBlock.steps.push({
         type: "test_run_def",
@@ -342,7 +371,7 @@ export function parseTestBlock(
         fail(filePath, "test call must target a valid reference: ref(args)", innerNo, col);
       }
       const argsRaw = runMatch[2].trim();
-      const args: string[] = argsRaw ? parseTestCallArgs(argsRaw) : [];
+      const args: string[] = argsRaw ? parseTestCallArgs(filePath, argsRaw, innerNo, col) : [];
       const allowFailure = runMatch[3] === "allow_failure";
       testBlock.steps.push({
         type: "test_run_def",
@@ -377,7 +406,9 @@ export function parseTestBlock(
 }
 
 /** Parse comma-separated args from inside parentheses: "arg1", "arg2" */
-function parseTestCallArgs(argsRaw: string): string[] {
+function parseTestCallArgs(filePath: string, argsRaw: string, lineNo: number, col: number): string[] {
+  const decodeTestArg = (token: string): string =>
+    token.startsWith('"') && token.endsWith('"') ? decodeTestString(filePath, token.slice(1, -1), lineNo, col) : token;
   const args: string[] = [];
   let current = "";
   let inQuote = false;
@@ -401,9 +432,3 @@ function parseTestCallArgs(argsRaw: string): string[] {
   return args;
 }
 
-function decodeTestArg(token: string): string {
-  if (token.startsWith('"') && token.endsWith('"')) {
-    return unescapeDoubleQuotedInner(token.slice(1, -1));
-  }
-  return token;
-}

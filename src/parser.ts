@@ -24,6 +24,7 @@ export {
   argsToRuntimeString,
   MODULE_FIELDS,
   isReservedBuiltinName,
+  encodeQuoted,
 } from "./parse/core";
 export { createTrivia } from "./parse/trivia";
 export type { NodeTrivia, Trivia } from "./parse/trivia";

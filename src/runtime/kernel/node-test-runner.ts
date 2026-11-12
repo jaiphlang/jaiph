@@ -6,6 +6,7 @@ import type { ModuleGraph } from "../../transpiler";
 import { NodeWorkflowRuntime, type MockBodyDef } from "./node-workflow-runtime";
 import type { MockPromptArm } from "./mock";
 import type { TestBlockDef, TestStepDef } from "../../types";
+import { canonicalizeTripleQuotedString } from "../../parser";
 
 type TestResult = { pass: boolean; error?: string };
 
@@ -63,15 +64,28 @@ function resolveMockBodies(
   return bodies;
 }
 
+/**
+ * A mock arm response is either a single-line `"…"` (only `\"` is an escape,
+ * like every single-line string) or a `"""` block, which the parser stores in
+ * the internal escaped form; that form is decoded in one pass.
+ */
+function decodeMockArmResponse(arm: { body: string; tripleQuotedBody?: boolean }): string {
+  if (arm.tripleQuotedBody) {
+    const raw = canonicalizeTripleQuotedString(arm.body);
+    return raw.slice(1, -1).replace(/\\(["\\])/g, "$1");
+  }
+  const body = arm.body.trim();
+  if (body.length >= 2 && body.startsWith('"') && body.endsWith('"')) {
+    return body.slice(1, -1).replace(/\\"/g, '"');
+  }
+  return body;
+}
+
 function buildMockArms(
   step: Extract<TestStepDef, { type: "test_mock_prompt_block" }>,
 ): MockPromptArm[] {
   return step.arms.map((arm): MockPromptArm => {
-    const response = arm.body
-      .replace(/^["']|["']$/g, "")
-      .replace(/\\"/g, '"')
-      .replace(/\\n/g, "\n")
-      .replace(/\\\\/g, "\\");
+    const response = decodeMockArmResponse(arm);
     if (arm.pattern.kind === "string_literal") return { kind: "string", pattern: arm.pattern.value, response };
     if (arm.pattern.kind === "regex") return { kind: "regex", pattern: arm.pattern.source, response };
     return { kind: "wildcard", response };

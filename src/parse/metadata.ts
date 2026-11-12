@@ -6,7 +6,8 @@ import {
   isBareIdentifier,
   isJaiphInterpolationRef,
   SINGLE_QUOTE_MESSAGE,
-  unescapeConfigInner,
+  decodeQuotedInner,
+  rejectRemovedEscapes,
 } from "./core";
 import { validateJaiphStringContent } from "./validate-string-content";
 
@@ -63,7 +64,9 @@ function parseMetadataValue(filePath: string, rawLine: string, valuePart: string
     return fail(filePath, SINGLE_QUOTE_MESSAGE, lineNo, colFromRaw(rawLine));
   }
   if (trimmed.startsWith(`"`) && trimmed.endsWith(`"`)) {
-    const content = unescapeConfigInner(trimmed.slice(1, -1));
+    const inner = trimmed.slice(1, -1);
+    rejectRemovedEscapes(filePath, inner, "config", lineNo, colFromRaw(rawLine));
+    const content = decodeQuotedInner(inner);
     if (configValueHasInterpolation(content)) {
       validateJaiphStringContent(content, filePath, lineNo, colFromRaw(rawLine), "config");
     }

@@ -21,20 +21,43 @@ export function stripQuotes(value: string): string {
 }
 
 /**
- * Unescape the inner text of a double-quoted DSL string. The replacement order
- * (`\"` → `"`, then `\n` → newline, then `\\` → `\`) is significant and matches
- * every double-quoted-string decode site in the parser.
+ * Decode the inner text of a single-line double-quoted string. One rule for
+ * every context: `\"` is the only escape and every other backslash stays as
+ * written. Multi-line text uses a `"""` block.
  */
-export function unescapeDoubleQuotedInner(inner: string): string {
-  return inner.replace(/\\"/g, '"').replace(/\\n/g, "\n").replace(/\\\\/g, "\\");
+export function decodeQuotedInner(inner: string): string {
+  return inner.replace(/\\"/g, '"');
 }
 
+/** Inverse of `decodeQuotedInner`: wrap a value as a single-line `"…"` string. */
+export function encodeQuoted(value: string): string {
+  return `"${value.replace(/"/g, '\\"')}"`;
+}
+
+/** Escapes some contexts used to decode (config, match patterns, test DSL). */
+const REMOVED_ESCAPE_RE = /\\[nt\\]/;
+
 /**
- * Unescape the inner text of a config/metadata string value. Adds `\t` handling
- * and uses the config-site order (`\n`, `\t`, `\"`, `\\`).
+ * Migration guard: `\n`, `\t`, and `\\` used to be decoded in config values,
+ * match patterns, and test-DSL strings. They are kept verbatim now, so reject
+ * them for one release instead of silently changing what an old file means.
  */
-export function unescapeConfigInner(inner: string): string {
-  return inner.replace(/\\n/g, "\n").replace(/\\t/g, "\t").replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+export function rejectRemovedEscapes(
+  filePath: string,
+  inner: string,
+  context: string,
+  lineNo: number,
+  col?: number,
+): void {
+  const m = REMOVED_ESCAPE_RE.exec(inner);
+  if (!m) return;
+  fail(
+    filePath,
+    `${context} strings no longer decode ${m[0]}; \\" is the only escape. ` +
+      `Write the character itself (a single \\ for a backslash), or use a """ block for multi-line text`,
+    lineNo,
+    col,
+  );
 }
 
 export function isRef(value: string): boolean {

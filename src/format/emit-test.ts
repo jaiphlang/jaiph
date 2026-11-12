@@ -1,5 +1,5 @@
 import type { TestBlockDef, TestStepDef } from "../types";
-import type { Trivia } from "../parser";
+import { encodeQuoted, type Trivia } from "../parser";
 import { emitComments, tn } from "./emit-shared";
 import { emitMatchArm, emitSteps } from "./emit-steps";
 
@@ -13,7 +13,7 @@ export function emitTestBlock(test: TestBlockDef, pad: string, trivia: Trivia): 
   if (lc?.length) {
     lines.push(...emitComments(lc));
   }
-  lines.push(`test "${test.description}" {`);
+  lines.push(`test ${encodeQuoted(test.description)} {`);
   for (const step of test.steps) {
     lines.push(...emitTestStep(step, pad, trivia));
   }
@@ -28,11 +28,18 @@ function emitTestStep(step: TestStepDef, pad: string, trivia: Trivia): string[] 
     case "blank_line":
       return [""];
     case "test_const":
-      return [`${pad}const ${step.name} = "${step.value.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n")}"`];
+      if (step.value.includes("\n")) {
+        return [
+          `${pad}const ${step.name} = """`,
+          ...step.value.split("\n").map((l) => (l ? `${pad}${pad}${l}` : "")),
+          `${pad}"""`,
+        ];
+      }
+      return [`${pad}const ${step.name} = ${encodeQuoted(step.value)}`];
     case "test_mock_prompt":
       return step.responseVar
         ? [`${pad}mock prompt ${step.responseVar}`]
-        : [`${pad}mock prompt "${step.response}"`];
+        : [`${pad}mock prompt ${encodeQuoted(step.response)}`];
     case "test_mock_prompt_block": {
       const lines = [`${pad}mock prompt {`];
       for (const arm of step.arms) {
@@ -43,22 +50,22 @@ function emitTestStep(step: TestStepDef, pad: string, trivia: Trivia): string[] 
     }
     case "test_run_def": {
       const capture = step.captureName ? `const ${step.captureName} = ` : "";
-      const args = step.args && step.args.length > 0 ? step.args.map((a) => `"${a}"`).join(", ") : "";
+      const args = step.args && step.args.length > 0 ? step.args.map((a) => encodeQuoted(a)).join(", ") : "";
       const allow = step.allowFailure ? " allow_failure" : "";
       return [`${pad}${capture}${step.defRef}(${args})${allow}`];
     }
     case "test_expect_contain":
       return step.substringVar
         ? [`${pad}expect_contain ${step.variable} ${step.substringVar}`]
-        : [`${pad}expect_contain ${step.variable} "${step.substring}"`];
+        : [`${pad}expect_contain ${step.variable} ${encodeQuoted(step.substring)}`];
     case "test_expect_not_contain":
       return step.substringVar
         ? [`${pad}expect_not_contain ${step.variable} ${step.substringVar}`]
-        : [`${pad}expect_not_contain ${step.variable} "${step.substring}"`];
+        : [`${pad}expect_not_contain ${step.variable} ${encodeQuoted(step.substring)}`];
     case "test_expect_equal":
       return step.expectedVar
         ? [`${pad}expect_equal ${step.variable} ${step.expectedVar}`]
-        : [`${pad}expect_equal ${step.variable} "${step.expected}"`];
+        : [`${pad}expect_equal ${step.variable} ${encodeQuoted(step.expected)}`];
     case "test_mock_def": {
       const paramStr = `(${step.params.join(", ")})`;
       const lines = [`${pad}mock def ${step.ref}${paramStr} {`];
