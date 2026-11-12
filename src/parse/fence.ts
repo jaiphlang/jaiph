@@ -49,11 +49,6 @@ export function removedFenceTagMessage(tag: string): string {
   return `interpreter tags go before the opening quotes: ${tag}${SCRIPT_FENCE}...${SCRIPT_FENCE} (not ${SCRIPT_FENCE}${tag})`;
 }
 
-/** Fenced `'''…'''`, with or without an interpreter-tag prefix. */
-export function startsTaggedScriptFence(s: string): boolean {
-  return startsScriptFence(splitScriptLangPrefix(s).rest);
-}
-
 /**
  * One-line `'…'` or fenced `'''…'''`, optionally prefixed by an interpreter tag
  * (`python3'…'`). Backticks still match so the parser can reject them.

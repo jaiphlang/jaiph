@@ -191,8 +191,9 @@ export function isJaiphInterpolationRef(token: string): boolean {
 }
 
 /**
- * Parse `log` / `logerr` / `logwarn` RHS: either a double-quoted string, a single bare identifier,
- * or a bare `${name}` / `${name.field}` interpolation ref (stored as-is).
+ * Parse an unquoted `log` / `logerr` / `logwarn` RHS (the caller reads a
+ * quoted string from its token): a single bare identifier, or a bare
+ * `${name}` / `${name.field}` interpolation ref (stored as-is).
  */
 export function parseLogMessageRhs(
   filePath: string,
@@ -202,17 +203,6 @@ export function parseLogMessageRhs(
   keyword: "log" | "logerr" | "logwarn",
 ): string {
   const trimmed = logArg.trim();
-  if (trimmed.startsWith('"')) {
-    const closeIdx = indexOfClosingDoubleQuote(logArg, 1);
-    if (closeIdx === -1) {
-      fail(filePath, `unterminated ${keyword} string`, lineNo, keywordCol);
-    }
-    const trailing = logArg.slice(closeIdx + 1).trim();
-    if (trailing) {
-      fail(filePath, `unexpected content after ${keyword} string: '${trailing}'`, lineNo, keywordCol);
-    }
-    return logArg.slice(0, closeIdx + 1);
-  }
   if (isBareIdentifier(trimmed) && trimmed === logArg.trim()) {
     return `\${${trimmed}}`;
   }

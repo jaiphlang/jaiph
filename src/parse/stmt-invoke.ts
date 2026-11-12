@@ -6,17 +6,16 @@ import type { Expr } from "../types";
 import type { Trivia } from "./trivia";
 import {
   fail,
-  hasUnescapedClosingQuote,
-  indexOfClosingDoubleQuote,
   isJaiphInterpolationRef,
   isReservedBuiltinName,
   SINGLE_QUOTE_MESSAGE,
 } from "./core";
 import { parseCallRef } from "./call-args";
-import { parseAnonymousInlineScript, startsInlineScript } from "./inline-script";
+import { parseAnonymousInlineScript } from "./inline-script";
+import { firstToken, startsScript } from "./slice-lexer";
 import { parseConstRhs } from "./const-rhs";
 import { isCallShaped, isScriptHead, parseCallStatement, parseInlineScriptTail } from "./stmt-call";
-import { isKeywordForm, makeInlineScriptExpr, type BlockCtx, type BlockResult } from "./block-ctx";
+import { firstCol, isKeywordForm, makeInlineScriptExpr, type BlockCtx, type BlockResult } from "./block-ctx";
 import {
   bareIdentifierToQuotedString,
   dottedReturnToQuotedString,
@@ -29,11 +28,11 @@ import {
  * `stdin` keyword). A double-quoted string runs to its closing quote (may
  * contain spaces); any other token runs to the next whitespace.
  */
-function takeStdinOperand(after: string): { operand: string; rest: string } {
+function takeStdinOperand(filePath: string, after: string): { operand: string; rest: string } {
   if (after.startsWith('"')) {
-    const close = indexOfClosingDoubleQuote(after, 1);
-    if (close === -1) return { operand: after, rest: "" };
-    return { operand: after.slice(0, close + 1), rest: after.slice(close + 1).trim() };
+    const str = firstToken(filePath, after)!;
+    if (str.kind !== "string") return { operand: after, rest: "" };
+    return { operand: str.text, rest: after.slice(str.text.length).trim() };
   }
   const sp = after.search(/\s/);
   if (sp === -1) return { operand: after, rest: "" };
@@ -56,7 +55,7 @@ function stdinOperandToExpr(
 ): Expr {
   const t = operand.trim();
   if (t.startsWith('"')) {
-    if (!hasUnescapedClosingQuote(t, 1)) {
+    if (firstToken(filePath, t)!.kind !== "string") {
       fail(filePath, 'multiline strings use triple quotes: stdin """..."""', innerNo, col);
     }
     return { kind: "literal", raw: t };
@@ -87,7 +86,7 @@ function stdinOperandToExpr(
  */
 function tryParsePipelineStage(c: BlockCtx, col: number, s: string): { expr: Expr; rest: string } | null {
   const t = s.trimStart();
-  if (startsInlineScript(t)) {
+  if (startsScript(c.filePath, t)) {
     const res = parseAnonymousInlineScript(c.filePath, c.lines, c.idx, t, c.innerNo, col, true);
     if (res.closingLineIdx !== c.idx || res.fenced) return null;
     return { expr: makeInlineScriptExpr(res), rest: res.trailing };
@@ -110,7 +109,7 @@ function parseStdinProducer(
   t: string,
   stdinCol: number,
 ): { stdin: Expr; afterOperand: string; producerIsCall: boolean } {
-  if (startsInlineScript(t)) {
+  if (startsScript(c.filePath, t)) {
     const res = parseAnonymousInlineScript(c.filePath, c.lines, c.idx, t, c.innerNo, stdinCol, true);
     return { stdin: makeInlineScriptExpr(res, c.trivia), afterOperand: res.trailing.trimStart(), producerIsCall: true };
   }
@@ -123,7 +122,7 @@ function parseStdinProducer(
     };
     return { stdin, afterOperand: producerCall.rest.trimStart(), producerIsCall: true };
   }
-  const { operand, rest } = takeStdinOperand(t);
+  const { operand, rest } = takeStdinOperand(c.filePath, t);
   const stdin = stdinOperandToExpr(c.filePath, c.innerNo, stdinCol, operand, c.trivia);
   return { stdin, afterOperand: rest.trimStart(), producerIsCall: false };
 }
@@ -185,7 +184,7 @@ export function parseStdinConnect(
     fail(filePath, "async is not supported with stdin", innerNo, stdinCol);
   }
   let result: BlockResult;
-  if (startsInlineScript(target)) {
+  if (startsScript(filePath, target)) {
     const res = parseAnonymousInlineScript(filePath, c.lines, c.idx, target, innerNo, stdinCol, true);
     const body = makeInlineScriptExpr(res, c.trivia);
     const stepLoc = { line: innerNo, col: stdinCol };
@@ -261,12 +260,12 @@ export function tryParseConst(c: BlockCtx): BlockResult | null {
   }
   // const out = stdin <expr> -> ref()  →  an exec step that captures into `out`.
   if (rhs === "stdin" || rhs.startsWith("stdin ")) {
-    const stdinCol = c.innerRaw.indexOf("stdin", eqTok.col - 1) + 1;
+    const stdinCol = c.tokens[3]!.col;
     const after = rhs === "stdin" ? "" : rhs.slice("stdin ".length);
     return parseStdinConnect(c, after, name, stdinCol);
   }
   const { value, nextLineIdx } = parseConstRhs(
-    c.filePath, c.lines, c.idx, rhs, c.innerNo, c.innerRaw.indexOf(rhs) + 1, name, c.trivia,
+    c.filePath, c.lines, c.idx, rhs, c.innerNo, firstCol(c, rhs), name, c.trivia,
   );
   const nextLine = nextLineIdx > c.idx ? nextLineIdx + 1 : c.idx + 1;
   return {

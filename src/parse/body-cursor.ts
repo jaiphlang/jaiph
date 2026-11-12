@@ -245,6 +245,22 @@ export class BodyCursor {
     return it.next().value as Token;
   }
 
+  /**
+   * 1-based column where `text` (no leading whitespace) first occurs on line
+   * `idx`, or 0. An occurrence starts inside a token, so only token positions
+   * are tried. Reproduces the columns the line grammar reported when the first
+   * occurrence is not the token being reported (`const x = x`).
+   */
+  firstCol(idx: number, text: string): number {
+    const raw = this.lines[idx]!;
+    for (const tok of this.lineTokensOf(idx)) {
+      const from = tok.col - 1;
+      const to = from + tok.text.length;
+      for (let at = from; at < to; at += 1) if (raw.startsWith(text, at)) return at + 1;
+    }
+    return 0;
+  }
+
   /** 0-based index of the line a token ends on. */
   static endLineIdx(tok: Token): number {
     let n = tok.line - 1;

@@ -4,10 +4,7 @@
 
 import type { Expr } from "../types";
 import {
-  colFromRaw,
   fail,
-  hasUnescapedClosingQuote,
-  indexOfClosingDoubleQuote,
   isJaiphInterpolationRef,
   matchSendOperator,
   parseLogMessageRhs,
@@ -45,19 +42,16 @@ export function tryParseFail(c: BlockCtx): BlockResult | null {
     const message: Expr = { kind: "literal", raw: arg.trim() };
     return { step: { type: "say", level: "fail", message, loc: stepLoc }, nextIdx: c.idx + 1 };
   }
-  if (!arg.startsWith('"')) {
+  const message = c.tokens[1];
+  if (!message?.text.startsWith('"')) {
     fail(c.filePath, 'fail must match: fail "<reason>" or fail """..."""', c.innerNo, failCol);
   }
-  if (!hasUnescapedClosingQuote(arg, 1)) {
+  // A quote the lexer could not close is the rest of the line as one `other` token.
+  if (message.kind !== "string") {
     fail(c.filePath, 'multiline strings use triple quotes: fail """..."""', c.innerNo, failCol);
   }
-  const closeIdx = indexOfClosingDoubleQuote(arg, 1);
-  if (closeIdx === -1) {
-    fail(c.filePath, "unterminated fail string", c.innerNo, failCol);
-  }
-  const raw = arg.slice(0, closeIdx + 1);
   return {
-    step: { type: "say", level: "fail", message: { kind: "literal", raw }, loc: stepLoc },
+    step: { type: "say", level: "fail", message: { kind: "literal", raw: message.text }, loc: stepLoc },
     nextIdx: c.idx + 1,
   };
 }
@@ -75,10 +69,20 @@ function parseSayBody(c: BlockCtx, level: "log" | "logerr" | "logwarn"): BlockRe
     const { expr: message, nextIdx } = tripleQuotedArg(c, arg);
     return { step: { type: "say", level, message, loc: stepLoc }, nextIdx };
   }
-  if (arg.startsWith('"') && !hasUnescapedClosingQuote(arg, 1)) {
-    fail(c.filePath, `multiline strings use triple quotes: ${level} """..."""`, c.innerNo, col);
+  const quoted = c.tokens[1];
+  let messageRaw: string;
+  if (quoted?.text.startsWith('"')) {
+    if (quoted.kind !== "string") {
+      fail(c.filePath, `multiline strings use triple quotes: ${level} """..."""`, c.innerNo, col);
+    }
+    const trailing = c.cursor.textAfter(quoted).trim();
+    if (trailing) {
+      fail(c.filePath, `unexpected content after ${level} string: '${trailing}'`, c.innerNo, col);
+    }
+    messageRaw = quoted.text;
+  } else {
+    messageRaw = parseLogMessageRhs(c.filePath, c.innerNo, col, arg, level);
   }
-  const messageRaw = parseLogMessageRhs(c.filePath, c.innerNo, col, arg, level);
   return {
     step: { type: "say", level, message: { kind: "literal", raw: messageRaw }, loc: stepLoc },
     nextIdx: c.idx + 1,
@@ -136,8 +140,7 @@ export function tryParseSend(c: BlockCtx): BlockResult | null {
   if (!sendMatch) {
     fail(c.filePath, "use 'send <payload> -> <channel>'", c.innerNo);
   }
-  const sendKw = c.innerRaw.match(/^\s*send\s+/);
-  const rhsCol = sendKw ? sendKw[0].length + 1 : colFromRaw(c.innerRaw);
+  const rhsCol = c.tokens[1]!.col;
   const { value, nextIdx } = parseSendRhs(
     c.filePath, sendMatch.rhsText, c.innerNo, rhsCol, c.lines, c.idx, c.trivia,
   );

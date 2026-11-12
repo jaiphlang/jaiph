@@ -3,15 +3,59 @@
 
 import { fail } from "./core";
 import { parseMatchAfterKeyword } from "./match";
-import { isPunct, keyOf } from "./body-cursor";
+import { adjacent, isPunct, keyOf } from "./body-cursor";
 import { afterKeyword, execStep, isKeywordForm, type BlockCtx, type BlockResult } from "./block-ctx";
+import { SliceLexer, type SliceMode } from "./slice-lexer";
+
+type IfOperator = "==" | "!=" | "=~" | "!~";
+type IfCondition = { subject: string; operator: IfOperator; rawOperand: string };
+
+const OPERATORS = ["==", "!=", "=~", "!~"];
+const PAIR: SliceMode = { triple: "pair" };
 
 /**
- * Condition grammar shared by a top-level `if` and each `else if` arm, matched
- * against the line text from the `if` keyword on.
+ * An operand that reads differently under the old `if` escape rule, where a
+ * backslash escapes any character (so `\\"` ends a string and `\\/` a regex),
+ * than under the lexer's (`\"` is the only escape). Kept so those lines parse
+ * as before; only text with two backslashes in a row reaches it.
  */
-const IF_CONDITION_RE =
-  /^if\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)\s+(==|!=|=~|!~)\s+("(?:[^"\\]|\\.)*"|\/(?:[^/\\]|\\.)*\/)\s*\{\s*$/;
+const BACKSLASH_OPERAND_RE = /^("(?:[^"\\]|\\.)*"|\/(?:[^/\\]|\\.)*\/)\s*\{\s*$/;
+
+/**
+ * The condition `if <subject> <op> <operand> {` from its tokens: `text` is the
+ * line from the `if` keyword on, at line `lineNo`, column `col`. The subject
+ * is an identifier or `a.b`; the operand a `"…"` string or `/…/` regex
+ * (whatever the operator); `{` ends the line. Null when the line is not that shape.
+ */
+function readIfCondition(filePath: string, text: string, lineNo: number, col: number): IfCondition | null {
+  const L = new SliceLexer(filePath, text, lineNo, col, 0);
+  const kw = L.at(0, PAIR);
+  const head = kw && L.at(L.end(kw), PAIR);
+  if (kw?.kind !== "ident" || kw.text !== "if" || head?.kind !== "ident" || adjacent(kw, head)) return null;
+  let last = head;
+  let subject = head.text;
+  const dot = L.at(L.end(head), PAIR);
+  if (isPunct(dot, ".") && adjacent(head, dot!)) {
+    const field = L.at(L.end(dot!), PAIR);
+    if (field?.kind !== "ident" || !adjacent(dot!, field)) return null;
+    subject += `.${field.text}`;
+    last = field;
+  }
+  const op = L.at(L.end(last), PAIR);
+  if (op?.kind !== "punct" || !OPERATORS.includes(op.text) || adjacent(last, op)) return null;
+  const operand = L.at(L.end(op), { regex: true, triple: "pair" });
+  if (!operand || adjacent(op, operand)) return null;
+  const operator = op.text as IfOperator;
+  const rest = L.text.slice(L.rel(operand));
+  if (rest.includes("\\\\")) {
+    const m = BACKSLASH_OPERAND_RE.exec(rest);
+    return m ? { subject, operator, rawOperand: m[1]! } : null;
+  }
+  if (operand.kind !== "string" && operand.kind !== "regex") return null;
+  const brace = L.at(L.end(operand), PAIR);
+  if (!isPunct(brace, "{") || L.at(L.end(brace!), PAIR)) return null;
+  return { subject, operator, rawOperand: operand.text };
+}
 
 const INVALID_IF =
   'invalid if syntax; expected: if <identifier> <op> <operand> { ... } where op is ==, !=, =~, or !~ and operand is "string" or /regex/';
@@ -30,13 +74,11 @@ function parseIfArm(c: BlockCtx, headIdx: number, isElseIf: boolean): BlockResul
   const ifCol = ifTok.col;
   const ifLoc = { line: headIdx + 1, col: ifCol };
   const head = c.lines[headIdx]!.trim().slice(ifTok.offset - toks[0]!.offset);
-  const m = head.match(IF_CONDITION_RE);
-  if (!m) {
+  const cond = readIfCondition(c.filePath, head, headIdx + 1, ifCol);
+  if (!cond) {
     fail(c.filePath, INVALID_IF, headIdx + 1, ifCol);
   }
-  const subject = m[1];
-  const operator = m[2] as "==" | "!=" | "=~" | "!~";
-  const rawOperand = m[3];
+  const { subject, operator, rawOperand } = cond;
   const operand: { kind: "string_literal"; value: string } | { kind: "regex"; source: string } =
     rawOperand.startsWith('"')
       ? { kind: "string_literal", value: rawOperand.slice(1, -1) }
@@ -70,7 +112,7 @@ function parseIfArm(c: BlockCtx, headIdx: number, isElseIf: boolean): BlockResul
 
 export function tryParseIf(c: BlockCtx): BlockResult | null {
   const head = c.tokens[0]!;
-  if (!IF_CONDITION_RE.test(c.inner)) {
+  if (!readIfCondition(c.filePath, c.inner, c.innerNo, head.col)) {
     if (head.kind === "ident" && (isPunct(c.tokens[1], "(") || /^\s/.test(afterKeyword(c)))) {
       fail(c.filePath, INVALID_IF, c.innerNo, head.col);
     }

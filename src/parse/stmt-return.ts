@@ -1,7 +1,7 @@
 // `return <value>` in a def body.
 
 import type { Expr } from "../types";
-import { fail, hasUnescapedClosingQuote, rejectTrailingContent, SINGLE_QUOTE_MESSAGE } from "./core";
+import { fail, rejectTrailingContent, SINGLE_QUOTE_MESSAGE } from "./core";
 import { parseCallRefMultiline } from "./call-args";
 import { parseAnonymousInlineScript } from "./inline-script";
 import { parsePromptStep } from "./prompt";
@@ -12,6 +12,7 @@ import {
   isKeywordForm,
   makeInlineScriptExpr,
   tripleQuotedArg,
+  firstCol,
   type BlockCtx,
   type BlockResult,
 } from "./block-ctx";
@@ -24,7 +25,7 @@ import {
 
 /** `return prompt …`: the prompt expression, with its body trivia moved onto it. */
 function parseReturnPrompt(c: BlockCtx, returnValue: string, retLoc: { line: number; col: number }): BlockResult {
-  const promptCol = c.innerRaw.indexOf("prompt") + 1;
+  const promptCol = firstCol(c, "prompt");
   const promptArg = returnValue === "prompt" ? "" : returnValue.slice("prompt ".length).trimStart();
   const result = parsePromptStep(c.filePath, c.lines, c.idx, promptArg, promptCol, undefined, c.trivia);
   const st = result.step;
@@ -48,7 +49,8 @@ function parseReturnPrompt(c: BlockCtx, returnValue: string, retLoc: { line: num
 
 /** `return "…"`, `return $x`, `return name`, `return a.b`: a string value. */
 function parseReturnString(c: BlockCtx, returnValue: string, retLoc: { line: number; col: number }): BlockResult {
-  if (returnValue.startsWith('"') && !hasUnescapedClosingQuote(returnValue, 1)) {
+  const valueTok = c.tokens[1]!;
+  if (valueTok.text.startsWith('"') && valueTok.kind !== "string") {
     fail(c.filePath, 'multiline strings use triple quotes: return """..."""', c.innerNo, retLoc.col);
   }
   const isBareDotted = isBareDottedIdentifierReturn(returnValue);
@@ -98,11 +100,11 @@ export function tryParseReturn(c: BlockCtx): BlockResult | null {
       c.filePath,
       "'run' is not a keyword; return the call directly: return name(...)",
       c.innerNo,
-      c.innerRaw.indexOf("run") + 1,
+      firstCol(c, "run"),
     );
   }
   if (spaced && value.text === "ensure") {
-    fail(c.filePath, "'ensure' is not a keyword; return the call directly: return name(...)", c.innerNo, c.innerRaw.indexOf("ensure") + 1);
+    fail(c.filePath, "'ensure' is not a keyword; return the call directly: return name(...)", c.innerNo, firstCol(c, "ensure"));
   }
   if (isScriptHead(value)) {
     const result = parseAnonymousInlineScript(c.filePath, c.lines, c.idx, returnValue, c.innerNo, retLoc.col);

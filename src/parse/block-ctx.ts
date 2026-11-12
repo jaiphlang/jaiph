@@ -85,6 +85,11 @@ export function afterKeyword(c: BlockCtx): string {
   return c.innerRaw.trimEnd().slice(head.col - 1 + head.text.length);
 }
 
+/** `BodyCursor.firstCol` on the statement's line (or line `idx`). */
+export function firstCol(c: BlockCtx, text: string, idx = c.idx): number {
+  return c.cursor.firstCol(idx, text);
+}
+
 /** First token is the identifier `kw`, alone on the line or followed by a space. */
 export function isKeywordForm(c: BlockCtx, kw: string): boolean {
   const head = c.tokens[0];
