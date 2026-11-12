@@ -2,6 +2,27 @@
 
 type SchemaField = { name: string; type: string };
 
+/**
+ * Index just past the `}` that closes the `{` at `from`, ignoring braces inside
+ * JSON string literals (`"…"` with backslash escapes); -1 if it never closes.
+ */
+function balancedObjectEnd(text: string, from: number): number {
+  let depth = 0;
+  let inString = false;
+  for (let i = from; i < text.length; i++) {
+    const c = text[i];
+    if (inString) {
+      if (c === "\\") i++;
+      else if (c === '"') inString = false;
+      continue;
+    }
+    if (c === '"') inString = true;
+    else if (c === "{") depth++;
+    else if (c === "}" && --depth === 0) return i + 1;
+  }
+  return -1;
+}
+
 /** Try to extract a JSON object from the raw prompt response using multiple strategies. */
 export function extractJson(raw: string): { obj: Record<string, unknown>; source: string } | null {
   const lines = raw.split(/\n/).filter((l) => l.trim().length > 0);
@@ -22,29 +43,25 @@ export function extractJson(raw: string): { obj: Record<string, unknown>; source
     }
     return "";
   })();
+  // Scan lines from the end; on the first line holding a JSON object, take the
+  // LONGEST object that parses. Prose before the answer can contain a small
+  // parseable object (`{ }`, `{"a":1}`), and the answer itself can contain braces
+  // inside string values, so: count braces outside JSON strings only, and prefer
+  // the largest object on the line over the first one found.
   const balancedObject = (() => {
     for (const line of [...lines].reverse()) {
       const trimmed = line.trim();
-      let from = 0;
-      while ((from = trimmed.indexOf("{", from)) >= 0) {
-        let depth = 0;
-        for (let i = from; i < trimmed.length; i++) {
-          const c = trimmed[i];
-          if (c === "{") depth++;
-          else if (c === "}") {
-            depth--;
-            if (depth === 0) {
-              const slice = trimmed.slice(from, i + 1);
-              try {
-                const o = JSON.parse(slice);
-                if (typeof o === "object" && o !== null && !Array.isArray(o)) return slice;
-              } catch { /* try next */ }
-              break;
-            }
-          }
-        }
-        from++;
+      let best = "";
+      for (let from = trimmed.indexOf("{"); from >= 0; from = trimmed.indexOf("{", from + 1)) {
+        const end = balancedObjectEnd(trimmed, from);
+        if (end < 0 || end - from <= best.length) continue;
+        const slice = trimmed.slice(from, end);
+        try {
+          const o = JSON.parse(slice);
+          if (typeof o === "object" && o !== null && !Array.isArray(o)) best = slice;
+        } catch { /* not JSON; try the next "{" */ }
       }
+      if (best) return best;
     }
     return "";
   })();

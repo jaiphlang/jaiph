@@ -22,6 +22,22 @@ describe("extractJson", () => {
     assert.deepEqual(result.obj, { role: "dev" });
   });
 
+  it("prefers the answer over a small object in prose on the same line", () => {
+    // A model wrote its explanation and the answer on one line; the prose
+    // contained `{ }`, which parses as an empty object and used to win.
+    const raw = 'Checked the punct list `( ) { }` and it is fine. {"verdict":"accepted","tags":"dev-ready"}';
+    const result = extractJson(raw);
+    assert.ok(result);
+    assert.deepEqual(result.obj, { verdict: "accepted", tags: "dev-ready" });
+  });
+
+  it("ignores braces inside JSON string values", () => {
+    const raw = 'Done: {"body":"match … { and a stray } and ${x}","ok":"yes"}';
+    const result = extractJson(raw);
+    assert.ok(result);
+    assert.deepEqual(result.obj, { body: "match … { and a stray } and ${x}", ok: "yes" });
+  });
+
   it("extracts embedded JSON from a line", () => {
     const raw = "Result: {\"name\":\"test\"} here";
     const result = extractJson(raw);
