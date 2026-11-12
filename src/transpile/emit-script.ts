@@ -1,6 +1,6 @@
 import { inlineScriptName, nestedScriptName } from "../inline-script-name";
 import type { Expr, jaiphModule, ScriptDef, ScriptImportDef, StepDef } from "../types";
-import { scriptShebangIsBash, langToShebang } from "../parser";
+import { scriptShebangIsBash, langToShebang, shebangForLang } from "../parser";
 
 /**
  * Replace `alias.name` patterns in shell commands with
@@ -71,7 +71,7 @@ export type ScriptArtifact = { name: string; content: string };
 /** Walk all `Expr` nodes carried by a step and yield inline-script bodies. */
 function emitInlineFromExpr(expr: Expr, seen: Set<string>, out: ScriptArtifact[]): void {
   if (expr.kind === "inline_script") {
-    const shebang = expr.lang ? langToShebang(expr.lang) : undefined;
+    const shebang = shebangForLang(expr.lang);
     emitInlineScriptArtifact(expr.body, shebang, seen, out);
   }
 }

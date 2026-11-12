@@ -11,6 +11,7 @@ import {
   canonicalizeTripleQuotedString,
   MODULE_FIELDS,
   resolveInterpreterFromShebang,
+  shebangForLang,
 } from "../../parser";
 import type { CatchBody, Def, Expr, LocalDecl, MatchExprDef, MatchPatternDef, StepDef } from "../../types";
 import {
@@ -955,7 +956,7 @@ export class NodeWorkflowRuntime {
       return { ok: true, value: this.forceValue(r), output: "" };
     }
     if (expr.kind === "inline_script") {
-      const shebang = expr.lang ? `#!/usr/bin/env ${expr.lang}` : undefined;
+      const shebang = shebangForLang(expr.lang);
       const r = await this.executeInlineScript(scope, expr.body, shebang, argsToRuntimeString(expr.args));
       if (r.status !== 0) return { ok: false, result: r, output: "" };
       return { ok: true, value: this.forceValue(r), output: "" };
@@ -1026,7 +1027,7 @@ export class NodeWorkflowRuntime {
       if (step.type === "say") {
         let message: string;
         if (step.message.kind === "inline_script") {
-          const shebang = step.message.lang ? `#!/usr/bin/env ${step.message.lang}` : undefined;
+          const shebang = shebangForLang(step.message.lang);
           const result = await this.executeInlineScript(scope, step.message.body, shebang, argsToRuntimeString(step.message.args));
           if (result.status !== 0) return this.mergeStepResult(accOut, accErr, result);
           message = this.forceValue(result);
@@ -1081,7 +1082,7 @@ export class NodeWorkflowRuntime {
             : await this.executeInlineScript(
                 scope,
                 value.body,
-                value.lang ? `#!/usr/bin/env ${value.lang}` : undefined,
+                shebangForLang(value.lang),
                 argsToRuntimeString(value.args),
               );
           if (r.status !== 0) return this.mergeStepResult(accOut, accErr, r);
@@ -1316,7 +1317,7 @@ export class NodeWorkflowRuntime {
           continue;
         }
         if (body.kind === "inline_script") {
-          const shebang = body.lang ? `#!/usr/bin/env ${body.lang}` : undefined;
+          const shebang = shebangForLang(body.lang);
           const argsRaw = argsToRuntimeString(body.args);
           // Streaming pipeline whose final stage is an inline script; stages run
           // concurrently through bounded buffers. `recover` is rejected at parse.
@@ -1607,7 +1608,7 @@ export class NodeWorkflowRuntime {
         continue;
       }
       if (token.kind === "managed_inline_script") {
-        const shebang = token.lang ? `#!/usr/bin/env ${token.lang}` : undefined;
+        const shebang = shebangForLang(token.lang);
         const result = await this.executeInlineScript(scope, token.body, shebang, token.argsRaw);
         if (result.status !== 0) return result;
         resolved.push(this.forceValue(result));
@@ -1667,7 +1668,7 @@ export class NodeWorkflowRuntime {
     endGate?: Promise<unknown>,
   ): Promise<StepResult> {
     if (stage.kind === "inline_script") {
-      const shebang = stage.lang ? `#!/usr/bin/env ${stage.lang}` : undefined;
+      const shebang = shebangForLang(stage.lang);
       return this.executeInlineScript(scope, stage.body, shebang, argsToRuntimeString(stage.args), source, onSpawn, endGate);
     }
     if (stage.kind === "call") {

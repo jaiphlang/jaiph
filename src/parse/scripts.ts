@@ -56,6 +56,11 @@ export function langToShebang(lang: string): string {
   return `#!/usr/bin/env ${lang}`;
 }
 
+/** Shebang for an optional interpreter tag; `undefined` means the bash default. */
+export function shebangForLang(lang: string | undefined): string | undefined {
+  return lang ? langToShebang(lang) : undefined;
+}
+
 /**
  * Validate that a script body does not contain Jaiph `${identifier}` interpolation.
  * Scripts use shell `$1`, `$2` positional arguments only.
