@@ -4,6 +4,7 @@ import { fail, SINGLE_QUOTE_MESSAGE, isJaiphInterpolationRef, rejectTrailingCont
 import { firstToken } from "./slice-lexer";
 import { parseCallRef } from "./call-args";
 import { dedentTripleQuotedBody, readTripleQuoteBlock, tripleQuoteBodyToRaw } from "./triple-quote";
+import type { BodyCursor } from "./body-cursor";
 
 /**
  * Prompt body source tag stored in trivia.
@@ -13,29 +14,35 @@ import { dedentTripleQuotedBody, readTripleQuoteBlock, tripleQuoteBodyToRaw } fr
  */
 export type PromptBodyKind = "string" | "identifier" | "triple_quoted";
 
+/** True when the line after the one at `at` exists. */
+function hasNextLine(cursor: BodyCursor, at: number): boolean {
+  return !cursor.atEnd(cursor.next(at));
+}
+
 /**
- * Split the prompt string token `promptRaw` (at the start of `rawPrompt`)
- * from an optional `returns "..."` after it. Consumes line continuation
- * (trailing \) after the closing quote. Returns the optional returns schema
- * string and the next line index.
+ * Split the prompt string token `promptRaw` (at the start of `rawPrompt`, on
+ * the line at `at`) from an optional `returns "..."` after it. Consumes line
+ * continuation (trailing \) after the closing quote; the schema string may
+ * continue on later lines, which are read as text. Returns the optional
+ * returns schema string and the position after the last line read.
  */
 function splitPromptAndReturns(
   filePath: string,
   lineNo: number,
   rawPrompt: string,
   promptRaw: string,
-  lines: string[],
-  lineIndexAfterPrompt: number,
-): { returns?: string; nextIndex: number } {
+  cursor: BodyCursor,
+  at: number,
+): { returns?: string; next: number } {
   let rest = rawPrompt.slice(promptRaw.length);
-  let nextIdx = lineIndexAfterPrompt;
-  while (nextIdx + 1 < lines.length && /\\\s*$/.test(rest.trimEnd())) {
-    rest = rest.replace(/\\\s*$/, "") + "\n" + lines[nextIdx + 1].replace(/\\\s*$/, "").trimStart();
-    nextIdx += 1;
+  let last = at;
+  while (hasNextLine(cursor, last) && /\\\s*$/.test(rest.trimEnd())) {
+    last = cursor.next(last);
+    rest = rest.replace(/\\\s*$/, "") + "\n" + cursor.text(last).replace(/\\\s*$/, "").trimStart();
   }
   let trimmed = rest.trim();
   if (trimmed.length === 0) {
-    return { nextIndex: nextIdx + 1 };
+    return { next: cursor.next(last) };
   }
   const returnsMatch = trimmed.match(/^returns\s+"/);
   if (!returnsMatch) {
@@ -64,9 +71,9 @@ function splitPromptAndReturns(
       }
     }
     if (contentEnd >= 0) break;
-    if (nextIdx + 1 >= lines.length) break;
-    rest += "\n" + lines[nextIdx + 1];
-    nextIdx += 1;
+    if (!hasNextLine(cursor, last)) break;
+    last = cursor.next(last);
+    rest += "\n" + cursor.text(last);
     trimmed = rest.trim();
     contentStart = trimmed.indexOf('"', trimmed.indexOf("returns")) + 1;
   }
@@ -74,30 +81,32 @@ function splitPromptAndReturns(
     fail(filePath, "unterminated returns schema string", lineNo, 1);
   }
   const returnsContent = trimmed.slice(contentStart, contentEnd).replace(/\\"/g, '"');
-  return { returns: returnsContent, nextIndex: nextIdx + 1 };
+  return { returns: returnsContent, next: cursor.next(last) };
 }
 
 /**
- * Parse optional `returns "..."` after any prompt body form.
- * `rest` is the remaining text on the line after the body, `lines[nextIdx]` is the next unprocessed line.
+ * Parse optional `returns "..."` after any prompt body form. `rest` is the
+ * remaining text after the body on the line at `at`; continuation lines and a
+ * schema string that continues on later lines are read as text. Returns the
+ * position after the last line read.
  */
-export function parseReturnsClause(
+function parseReturnsClause(
   filePath: string,
   lineNo: number,
   rest: string,
-  lines: string[],
-  nextIdx: number,
-): { returns?: string; nextIndex: number } {
+  cursor: BodyCursor,
+  at: number,
+): { returns?: string; next: number } {
   let buf = rest;
-  let idx = nextIdx;
+  let last = at;
   // consume line continuations
-  while (idx + 1 < lines.length && /\\\s*$/.test(buf.trimEnd())) {
-    buf = buf.replace(/\\\s*$/, "") + "\n" + lines[idx + 1].replace(/\\\s*$/, "").trimStart();
-    idx += 1;
+  while (hasNextLine(cursor, last) && /\\\s*$/.test(buf.trimEnd())) {
+    last = cursor.next(last);
+    buf = buf.replace(/\\\s*$/, "") + "\n" + cursor.text(last).replace(/\\\s*$/, "").trimStart();
   }
   const trimmed = buf.trim();
   if (trimmed.length === 0) {
-    return { nextIndex: idx + 1 };
+    return { next: cursor.next(last) };
   }
   const returnsMatch = trimmed.match(/^returns\s+"/);
   if (!returnsMatch) {
@@ -114,7 +123,6 @@ export function parseReturnsClause(
   let contentStart = trimmed.indexOf('"', trimmed.indexOf("returns")) + 1;
   let contentEnd = -1;
   let curBuf = buf;
-  let curIdx = idx;
   while (true) {
     const curTrimmed = curBuf.trim();
     contentStart = curTrimmed.indexOf('"', curTrimmed.indexOf("returns")) + 1;
@@ -127,11 +135,11 @@ export function parseReturnsClause(
     }
     if (contentEnd >= 0) {
       const returnsContent = curTrimmed.slice(contentStart, contentEnd).replace(/\\"/g, '"');
-      return { returns: returnsContent, nextIndex: curIdx + 1 };
+      return { returns: returnsContent, next: cursor.next(last) };
     }
-    if (curIdx + 1 >= lines.length) break;
-    curBuf += "\n" + lines[curIdx + 1];
-    curIdx += 1;
+    if (!hasNextLine(cursor, last)) break;
+    last = cursor.next(last);
+    curBuf += "\n" + cursor.text(last);
   }
   fail(filePath, "unterminated returns schema string", lineNo, 1);
 }
@@ -140,48 +148,46 @@ export function parseReturnsClause(
  * Parse a prompt triple-quoted block, allowing optional `returns "..."` on the closing `"""` line.
  */
 function parsePromptTripleQuoteBlock(
-  filePath: string,
-  lines: string[],
-  tripleQuoteLineIdx: number,
+  cursor: BodyCursor,
+  at: number,
   openText: string,
-): { body: string; nextIdx: number; returns?: string } {
-  const { body, nextIdx, afterClose } = readTripleQuoteBlock(filePath, lines, tripleQuoteLineIdx, openText);
+): { body: string; next: number; returns?: string } {
+  const { body, next, closeLine, afterClose } = readTripleQuoteBlock(cursor, at, openText);
   if (afterClose.length === 0) {
-    return { body, nextIdx };
+    return { body, next };
   }
   const m = afterClose.match(/^returns\s+"((?:[^"\\]|\\.)*)"\s*$/);
   if (m) {
     const content = m[1].replace(/\\"/g, '"');
-    return { body, returns: content, nextIdx };
+    return { body, returns: content, next };
   }
   fail(
-    filePath,
+    cursor.filePath,
     'closing """ must be alone, or followed by returns "{ ... }" (same line)',
-    nextIdx,
+    closeLine,
   );
 }
 
 /**
- * Parse a prompt step (captured or uncaptured). Returns an `exec` step whose
- * `body` is an `Expr` with `kind: "prompt"`.
+ * Parse a prompt step (captured or uncaptured) on the line at `at`. Returns
+ * an `exec` step whose `body` is an `Expr` with `kind: "prompt"`, and the
+ * position after the step's last line.
  *
  * Supports three body forms:
  *   1. Single-line string literal: prompt "text"
  *   2. Bare identifier: prompt myVar
  *   3. Triple-quoted block: prompt """ ... """
- *
- * For catch statements where multiline scanning is unnecessary, pass `[]` for lines.
  */
 export function parsePromptStep(
-  filePath: string,
-  lines: string[],
-  lineIdx: number,
+  cursor: BodyCursor,
+  at: number,
   promptArg: string,
   promptCol: number,
   captureName?: string,
   trivia: Trivia = createTrivia(),
-): { step: StepDef; nextLineIdx: number } {
-  const lineNo = lineIdx + 1;
+): { step: StepDef; next: number } {
+  const filePath = cursor.filePath;
+  const lineNo = cursor.lineNo(at);
 
   // --- Reject script fences for prompts (''' now, ``` previously) ---
   if (promptArg.startsWith("'''") || promptArg.startsWith("```")) {
@@ -198,8 +204,8 @@ export function parsePromptStep(
   const buildStep = (
     body: Expr,
     bodyTrivia: { bodyKind?: PromptBodyKind; bodyIdentifier?: string; rawBody?: string },
-    nextLineIdx: number,
-  ): { step: StepDef; nextLineIdx: number } => {
+    next: number,
+  ): { step: StepDef; next: number } => {
     trivia.setNode(body, {
       ...(bodyTrivia.bodyKind ? { bodyKind: bodyTrivia.bodyKind } : {}),
       ...(bodyTrivia.bodyIdentifier ? { bodyIdentifier: bodyTrivia.bodyIdentifier } : {}),
@@ -211,33 +217,21 @@ export function parsePromptStep(
       ...(captureName ? { captureName } : {}),
       loc: stepLoc,
     };
-    return { step, nextLineIdx };
+    return { step, next };
   };
 
   // --- Case 1: Triple-quoted block ---
   if (promptArg.startsWith('"""')) {
-    const linesForReturns = lines.length === 0 ? promptArg.split(/\r?\n/) : lines;
-    const { body, nextIdx: realNextIdx, returns: returnsOnClosingLine } = parsePromptTripleQuoteBlock(
-      filePath,
-      linesForReturns,
-      lines.length === 0 ? 0 : lineIdx,
-      lines.length === 0 ? linesForReturns[0]! : promptArg,
-    );
+    const { body, next: afterBlock, returns: returnsOnClosingLine } = parsePromptTripleQuoteBlock(cursor, at, promptArg);
     const raw = tripleQuoteBodyToRaw(dedentTripleQuotedBody(body));
     let returnsSchema: string | undefined = returnsOnClosingLine;
-    let consumeEndIdx = realNextIdx;
+    let consumeEnd = afterBlock;
     if (returnsSchema === undefined) {
-      const lineAfterClose = (linesForReturns[realNextIdx] ?? "").trim();
+      const lineAfterClose = cursor.text(afterBlock).trim();
       if (lineAfterClose.startsWith("returns ")) {
-        const pr = parseReturnsClause(
-          filePath,
-          realNextIdx + 1,
-          lineAfterClose,
-          linesForReturns,
-          realNextIdx,
-        );
+        const pr = parseReturnsClause(filePath, cursor.lineNo(afterBlock), lineAfterClose, cursor, afterBlock);
         returnsSchema = pr.returns;
-        consumeEndIdx = pr.nextIndex;
+        consumeEnd = pr.next;
       }
     }
     const expr: Expr = {
@@ -246,7 +240,7 @@ export function parsePromptStep(
       loc: stepLoc,
       ...(returnsSchema !== undefined ? { returns: returnsSchema } : {}),
     };
-    return buildStep(expr, { bodyKind: "triple_quoted", rawBody: body }, consumeEndIdx - 1);
+    return buildStep(expr, { bodyKind: "triple_quoted", rawBody: body }, consumeEnd);
   }
 
   // --- Case 2: String literal ---
@@ -256,21 +250,14 @@ export function parsePromptStep(
       fail(filePath, 'multiline prompt strings are no longer supported; use a triple-quoted block instead: prompt """...""""', lineNo, promptCol);
     }
     const promptRaw = str.text;
-    const { returns: returnsSchema, nextIndex } = splitPromptAndReturns(
-      filePath,
-      lineNo,
-      promptArg,
-      promptRaw,
-      lines,
-      lineIdx,
-    );
+    const { returns: returnsSchema, next } = splitPromptAndReturns(filePath, lineNo, promptArg, promptRaw, cursor, at);
     const expr: Expr = {
       kind: "prompt",
       raw: promptRaw,
       loc: stepLoc,
       ...(returnsSchema !== undefined ? { returns: returnsSchema } : {}),
     };
-    return buildStep(expr, { bodyKind: "string" }, nextIndex - 1);
+    return buildStep(expr, { bodyKind: "string" }, next);
   }
 
   // --- Case 2b: Bare ${name} or ${name.field} interpolation ref ---
@@ -280,7 +267,7 @@ export function parsePromptStep(
       const refToken = promptArg.slice(0, closeIdx + 1);
       if (isJaiphInterpolationRef(refToken)) {
         const afterRef = promptArg.slice(closeIdx + 1);
-        const { returns: returnsSchema, nextIndex } = parseReturnsClause(filePath, lineNo, afterRef, lines, lineIdx);
+        const { returns: returnsSchema, next } = parseReturnsClause(filePath, lineNo, afterRef, cursor, at);
         const raw = `"${refToken}"`;
         const expr: Expr = {
           kind: "prompt",
@@ -288,7 +275,7 @@ export function parsePromptStep(
           loc: stepLoc,
           ...(returnsSchema !== undefined ? { returns: returnsSchema } : {}),
         };
-        return buildStep(expr, { bodyKind: "string" }, nextIndex - 1);
+        return buildStep(expr, { bodyKind: "string" }, next);
       }
     }
   }
@@ -306,7 +293,7 @@ export function parsePromptStep(
       name: call.ref,
       ...(call.args ? { args: call.args } : {}),
     };
-    return buildStep(expr, {}, lineIdx);
+    return buildStep(expr, {}, cursor.next(at));
   }
 
   // --- Case 3: Bare identifier ---
@@ -320,13 +307,7 @@ export function parsePromptStep(
   const identifier = identMatch[1];
   const afterIdent = promptArg.slice(identifier.length);
 
-  const { returns: returnsSchema, nextIndex } = parseReturnsClause(
-    filePath,
-    lineNo,
-    afterIdent,
-    lines,
-    lineIdx,
-  );
+  const { returns: returnsSchema, next } = parseReturnsClause(filePath, lineNo, afterIdent, cursor, at);
 
   // Store as "${identifier}" so the runtime interpolates the variable.
   const raw = `"\${${identifier}}"`;
@@ -336,5 +317,5 @@ export function parsePromptStep(
     loc: stepLoc,
     ...(returnsSchema !== undefined ? { returns: returnsSchema } : {}),
   };
-  return buildStep(expr, { bodyKind: "identifier", bodyIdentifier: identifier }, nextIndex - 1);
+  return buildStep(expr, { bodyKind: "identifier", bodyIdentifier: identifier }, next);
 }

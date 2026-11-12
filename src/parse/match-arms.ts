@@ -8,9 +8,9 @@
 import type { MatchArmDef, MatchPatternDef } from "../types";
 import type { Token } from "./lexer";
 import { decodeQuotedInner, fail, rejectRemovedEscapes, SINGLE_QUOTE_MESSAGE } from "./core";
-import { adjacent, BodyCursor, isPunct } from "./body-cursor";
+import { adjacent, isPunct, type BodyCursor } from "./body-cursor";
 import { SliceLexer, splitStatements, type SliceMode } from "./slice-lexer";
-import { tripleQuoteBodyToRaw, trimAdjacentBlankLines } from "./triple-quote";
+import { blockBody, tripleQuoteBodyToRaw } from "./triple-quote";
 
 /** Pattern position: a `/` opens a regex; `'` is a stray character. */
 const PATTERN: SliceMode = { regex: true, scripts: false, triple: "pair" };
@@ -167,28 +167,27 @@ function colAt(L: SliceLexer, tok: Token | undefined): number {
 }
 
 /**
- * Parse match arms from the lines inside `{ … }`, from line `startIndex` up to
- * the closing `}` line. Each line holds one arm, or several separated by `;`;
- * a `pattern => """` arm reads the block on the following lines. Returns the
- * arms and the index after the closing `}`.
+ * Parse match arms inside `{ … }`, from position `start` up to the closing
+ * `}` line. Each line holds one arm, or several separated by `;`; a
+ * `pattern => """` arm reads the block on the following lines. Returns the
+ * arms and the position after the closing `}`.
  */
 export function parseMatchArms(
-  filePath: string,
-  lines: string[],
-  startIndex: number,
+  cursor: BodyCursor,
+  start: number,
   openerLineNo: number,
-): { arms: MatchArmDef[]; nextIndex: number } {
-  const cursor = BodyCursor.of(filePath, lines);
+): { arms: MatchArmDef[]; next: number } {
+  const filePath = cursor.filePath;
   const arms: MatchArmDef[] = [];
-  let i = startIndex;
-  while (i < lines.length) {
-    const lineNo = i + 1;
-    const line = new SliceLexer(filePath, lines[i]!, lineNo, 1, cursor.offset(i));
+  let at = start;
+  while (!cursor.atEnd(at)) {
+    const lineNo = cursor.lineNo(at);
+    const line = new SliceLexer(filePath, cursor.text(at), lineNo, 1, at);
     const first = line.at(0, PATTERN);
-    if (isPunct(first, "}") && !line.at(line.end(first!), PATTERN)) return { arms, nextIndex: i + 1 };
-    let next = i + 1;
+    if (isPunct(first, "}") && !line.at(line.end(first!), PATTERN)) return { arms, next: cursor.next(at) };
+    let next = cursor.next(at);
     if (first?.text.startsWith("#")) {
-      i = next;
+      at = next;
       continue;
     }
     for (const [from, to] of splitStatements(line, true)) {
@@ -202,16 +201,16 @@ export function parseMatchArms(
         }
         let block: Token;
         try {
-          block = cursor.tokenAt(i, bodyTok.col);
+          block = cursor.tokenAt(at, bodyTok.col);
         } catch {
           fail(filePath, 'unterminated triple-quoted block in match arm: no closing """ before end of match', lineNo);
         }
-        next = BodyCursor.endLineIdx(block) + 1;
+        const closeAt = cursor.closeOf(block);
+        next = cursor.next(closeAt);
         if (cursor.textAfter(block).trim()) {
-          fail(filePath, 'closing """ in match arm must not have content on the same line', next);
+          fail(filePath, 'closing """ in match arm must not have content on the same line', cursor.lineNo(closeAt));
         }
-        const body = trimAdjacentBlankLines(block.text.split("\n").slice(1, -1).join("\n"));
-        arms.push({ pattern, body: tripleQuoteBodyToRaw(body), tripleQuotedBody: true });
+        arms.push({ pattern, body: tripleQuoteBodyToRaw(blockBody(block)), tripleQuotedBody: true });
         break;
       }
       const col = colAt(L, bodyTok);
@@ -220,7 +219,7 @@ export function parseMatchArms(
       if (rest) fail(filePath, invalidArmBodyMessage(L.text.slice(L.rel(bodyTok!))), lineNo, col);
       arms.push({ pattern, body });
     }
-    i = next;
+    at = next;
   }
   fail(filePath, "unterminated match block", openerLineNo);
 }

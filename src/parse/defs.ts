@@ -3,22 +3,17 @@ import { createTrivia, type Trivia } from "./trivia";
 import { fail } from "./core";
 import { parseDefHeader, stripTrailingBlankLines } from "./def-header";
 import { parseBraceBlockBody } from "./workflow-brace";
-import { BodyCursor } from "./body-cursor";
+import type { BodyCursor } from "./body-cursor";
 
 export function parseDefBlock(
-  filePath: string,
-  lines: string[],
-  startIndex: number,
+  cursor: BodyCursor,
+  at: number,
   pendingComments: string[],
   trivia: Trivia = createTrivia(),
-): { def: Def; nextIndex: number; exported: boolean } {
-  const lineNo = startIndex + 1;
-  const header = parseDefHeader(
-    filePath,
-    lines[startIndex]!,
-    lineNo,
-    BodyCursor.of(filePath, lines).lineTokensOf(startIndex),
-  );
+): { def: Def; next: number; exported: boolean } {
+  const filePath = cursor.filePath;
+  const lineNo = cursor.lineNo(at);
+  const header = parseDefHeader(filePath, cursor.text(at), lineNo, cursor.lineTokensOf(at));
   const def: Def = {
     name: header.name,
     params: header.params,
@@ -27,10 +22,9 @@ export function parseDefBlock(
     loc: { line: lineNo, col: 1 },
   };
 
-  const { steps: bodySteps, nextIdx: afterClose } = parseBraceBlockBody(
-    filePath,
-    lines,
-    startIndex + 1,
+  const { steps: bodySteps, next } = parseBraceBlockBody(
+    cursor,
+    cursor.next(at),
     lineNo,
     trivia,
     {
@@ -48,5 +42,5 @@ export function parseDefBlock(
   );
   def.steps.push(...bodySteps);
   stripTrailingBlankLines(def.steps);
-  return { def, nextIndex: afterClose, exported: header.exported };
+  return { def, next, exported: header.exported };
 }

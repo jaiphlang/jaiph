@@ -2,6 +2,7 @@ import type { Expr, DefRef } from "../types";
 import { createTrivia, type Trivia } from "./trivia";
 import { fail, isRef, rejectTrailingContent } from "./core";
 import { SliceLexer } from "./slice-lexer";
+import type { BodyCursor } from "./body-cursor";
 import { parseCallRef } from "./call-args";
 import { dedentTripleQuotedBody, readTripleQuoteBlock, tripleQuoteBodyToRaw } from "./triple-quote";
 
@@ -9,29 +10,30 @@ const SEND_RHS_HINT =
   'send right-hand side must be a quoted string ("..."), a variable ($name or ${...}), or a call "ref(args)" — not raw shell; use a script or use const';
 
 /**
- * Parse the payload of `send <payload> -> channel`. Returns the parsed payload
- * as an `Expr` plus the next line index.
+ * Parse the payload `rhs` of `send <payload> -> channel` on the line at `at`,
+ * starting at column `col`. Returns the parsed payload as an `Expr` plus the
+ * position after the statement.
  */
 export function parseSendRhs(
-  filePath: string,
+  cursor: BodyCursor,
+  at: number,
   rhs: string,
-  lineNo: number,
   col: number,
-  lines?: string[],
-  idx?: number,
   trivia: Trivia = createTrivia(),
-): { value: Expr; nextIdx: number } {
+): { value: Expr; next: number } {
+  const filePath = cursor.filePath;
+  const lineNo = cursor.lineNo(at);
   const t = rhs.trim();
-  const defaultNext = (idx ?? lineNo - 1) + 1;
+  const defaultNext = cursor.next(at);
   if (t === "") {
     fail(filePath, "use 'send <payload> -> <channel>'", lineNo, col);
   }
-  if (t.startsWith('"""') && lines && idx !== undefined) {
-    const { body, nextIdx, afterClose } = readTripleQuoteBlock(filePath, lines, idx, t);
-    if (afterClose) fail(filePath, 'unexpected content after closing """', nextIdx);
+  if (t.startsWith('"""')) {
+    const { body, next, closeLine, afterClose } = readTripleQuoteBlock(cursor, at, t);
+    if (afterClose) fail(filePath, 'unexpected content after closing """', closeLine);
     const value: Expr = { kind: "literal", raw: tripleQuoteBodyToRaw(dedentTripleQuotedBody(body)) };
     trivia.setNode(value, { tripleQuoted: true, rawBody: body });
-    return { value, nextIdx };
+    return { value, next };
   }
   if (t.startsWith('"')) {
     const L = new SliceLexer(filePath, t, lineNo, col, 0);
@@ -42,7 +44,7 @@ export function parseSendRhs(
     if (L.at(L.end(str), { triple: "pair" })) {
       fail(filePath, SEND_RHS_HINT, lineNo, col);
     }
-    return { value: { kind: "literal", raw: str.text }, nextIdx: defaultNext };
+    return { value: { kind: "literal", raw: str.text }, next: defaultNext };
   }
   if (/^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?\s*\(/.test(t)) {
     const call = parseCallRef(t);
@@ -51,12 +53,12 @@ export function parseSendRhs(
       const callee: DefRef = { value: call.ref, loc: { line: lineNo, col } };
       return {
         value: { kind: "call", callee, ...(call.args ? { args: call.args } : {}) },
-        nextIdx: defaultNext,
+        next: defaultNext,
       };
     }
   }
   if (/^\$[A-Za-z_][A-Za-z0-9_]*$/.test(t)) {
-    return { value: { kind: "literal", raw: t }, nextIdx: defaultNext };
+    return { value: { kind: "literal", raw: t }, next: defaultNext };
   }
   if (t.startsWith("${")) {
     let depth = 1;
@@ -85,17 +87,17 @@ export function parseSendRhs(
     if (braced.includes("$(")) {
       fail(filePath, SEND_RHS_HINT, lineNo, col);
     }
-    return { value: { kind: "literal", raw: braced }, nextIdx: defaultNext };
+    return { value: { kind: "literal", raw: braced }, next: defaultNext };
   }
   const bareWord = t.match(/^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)$/);
   if (bareWord && isRef(bareWord[1])) {
     return {
       value: { kind: "bare_ref", ref: { value: bareWord[1], loc: { line: lineNo, col } } },
-      nextIdx: defaultNext,
+      next: defaultNext,
     };
   }
   return {
     value: { kind: "shell", command: t, loc: { line: lineNo, col } },
-    nextIdx: defaultNext,
+    next: defaultNext,
   };
 }

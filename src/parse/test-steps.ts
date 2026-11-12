@@ -12,7 +12,8 @@ import { dedentTripleQuotedBody, readTripleQuoteBlock } from "./triple-quote";
 export type TestLine = {
   filePath: string;
   cursor: BodyCursor;
-  idx: number;
+  /** Position of the step's line. */
+  at: number;
   raw: string;
   toks: Token[];
   /** 1-based line number. */
@@ -21,7 +22,7 @@ export type TestLine = {
   col: number;
 };
 
-export type TestStepResult = { step: TestStepDef; nextIdx: number };
+export type TestStepResult = { step: TestStepDef; next: number };
 
 /** Decode the inner text of a test-DSL `"…"` string: `\"` is the only escape. */
 export function decodeTestString(filePath: string, inner: string, lineNo: number, col: number): string {
@@ -88,7 +89,7 @@ export function parseExpect(t: TestLine): TestStepResult | null {
     type === "test_expect_equal"
       ? { type, variable: variable!.text, expected: literal, ...(byVar ? { expectedVar: byVar } : {}), loc }
       : { type, variable: variable!.text, substring: literal, ...(byVar ? { substringVar: byVar } : {}), loc };
-  return { step, nextIdx: t.idx + 1 };
+  return { step, next: t.cursor.next(t.at) };
 }
 
 const EXPECT: Record<string, "test_expect_contain" | "test_expect_not_contain" | "test_expect_equal"> = {
@@ -106,20 +107,20 @@ export function parseTestConst(t: TestLine): TestStepResult | null {
   if (!isWord(kw, "const") || name?.kind !== "ident" || adjacent(kw!, name) || !isPunct(eq, "=")) return null;
   const loc = { line: t.lineNo, col: t.col };
   if (t.toks.length === 4 && value!.kind === "other" && value!.text === '"""') {
-    const { body, nextIdx, afterClose } = readTripleQuoteBlock(t.filePath, t.cursor.lines, t.idx, '"""');
+    const { body, next, closeLine, afterClose } = readTripleQuoteBlock(t.cursor, t.at, '"""');
     if (afterClose.trim()) {
-      fail(t.filePath, `unexpected content after closing """: '${afterClose.trim()}'`, nextIdx, t.col);
+      fail(t.filePath, `unexpected content after closing """: '${afterClose.trim()}'`, closeLine, t.col);
     }
-    return { step: { type: "test_const", name: name.text, value: dedentTripleQuotedBody(body), loc }, nextIdx };
+    return { step: { type: "test_const", name: name.text, value: dedentTripleQuotedBody(body), loc }, next };
   }
   if (t.toks.length === 4 && value!.kind === "string") {
     const text = decodeTestString(t.filePath, value!.text.slice(1, -1), t.lineNo, t.col);
-    return { step: { type: "test_const", name: name.text, value: text, loc }, nextIdx: t.idx + 1 };
+    return { step: { type: "test_const", name: name.text, value: text, loc }, next: t.cursor.next(t.at) };
   }
   const call = refAt(t.toks, 3);
   const tail = call ? callTail(t, call.next) : null;
   if (!call || !tail) return null;
-  return { step: runStep(t, call.ref, tail, name.text), nextIdx: t.idx + 1 };
+  return { step: runStep(t, call.ref, tail, name.text), next: t.cursor.next(t.at) };
 }
 
 /** `ref(args) [allow_failure]` with no capture. */
@@ -127,7 +128,7 @@ export function parseTestRun(t: TestLine): TestStepResult | null {
   const call = refAt(t.toks, 0);
   const tail = call ? callTail(t, call.next) : null;
   if (!call || !tail) return null;
-  return { step: runStep(t, call.ref, tail), nextIdx: t.idx + 1 };
+  return { step: runStep(t, call.ref, tail), next: t.cursor.next(t.at) };
 }
 
 function runStep(

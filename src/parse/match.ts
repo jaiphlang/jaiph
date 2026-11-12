@@ -1,6 +1,6 @@
 import type { MatchArmDef, MatchExprDef, MatchPatternDef } from "../types";
 import { fail } from "./core";
-import { BodyCursor, isPunct } from "./body-cursor";
+import { isPunct, type BodyCursor } from "./body-cursor";
 import { compactClose, parseCompactMatchArms, parseMatchArms } from "./match-arms";
 
 export { parseMatchArms } from "./match-arms";
@@ -13,7 +13,7 @@ const DOT_IDENT_RE = /^[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*$/;
  * (typed prompt capture field). Dot-field resolution and schema enforcement
  * happen in the validator, mirroring `${var.field}` interpolation.
  */
-export function validateMatchSubject(filePath: string, subject: string, lineNo: number): void {
+function validateMatchSubject(filePath: string, subject: string, lineNo: number): void {
   if (subject.startsWith("${") || subject.startsWith("$")) {
     fail(filePath, `match subject should be a bare identifier: match varName { ... }`, lineNo);
   }
@@ -24,23 +24,22 @@ export function validateMatchSubject(filePath: string, subject: string, lineNo: 
 
 /**
  * Parse a match expression: `match <subject> { ... }`
- * Given the subject string and the lines starting from the `{` line.
+ * Given the subject string and the position of the `{` line.
  */
-export function parseMatchExpr(
-  filePath: string,
-  lines: string[],
-  braceLineIndex: number,
+function parseMatchExpr(
+  cursor: BodyCursor,
+  braceAt: number,
   subject: string,
   loc: { line: number; col: number },
-): { expr: MatchExprDef; nextIndex: number } {
-  validateMatchSubject(filePath, subject, loc.line);
-  const { arms, nextIndex } = parseMatchArms(filePath, lines, braceLineIndex + 1, loc.line);
+): { expr: MatchExprDef; next: number } {
+  validateMatchSubject(cursor.filePath, subject, loc.line);
+  const { arms, next } = parseMatchArms(cursor, cursor.next(braceAt), loc.line);
   if (arms.length === 0) {
-    fail(filePath, "match must have at least one arm", loc.line);
+    fail(cursor.filePath, "match must have at least one arm", loc.line);
   }
   return {
     expr: { subject, arms, loc },
-    nextIndex,
+    next,
   };
 }
 
@@ -54,12 +53,12 @@ const MATCH_HEAD_RE =
  * Callers that already know the token is `match` must not fall through to shell.
  */
 export function parseMatchAfterKeyword(
-  filePath: string,
-  lines: string[],
-  lineIdx: number,
+  cursor: BodyCursor,
+  at: number,
   afterMatchKw: string,
   loc: { line: number; col: number },
-): { expr: MatchExprDef; nextIndex: number } {
+): { expr: MatchExprDef; next: number } {
+  const filePath = cursor.filePath;
   const head = afterMatchKw.trim();
   const m = head.match(MATCH_HEAD_RE);
   if (!m) {
@@ -75,9 +74,9 @@ export function parseMatchAfterKeyword(
   const subject = m[1];
   const afterBrace = m[2];
   if (afterBrace.trim() === "") {
-    return parseMatchExpr(filePath, lines, lineIdx, subject, loc);
+    return parseMatchExpr(cursor, at, subject, loc);
   }
-  const braceTok = BodyCursor.of(filePath, lines).tokens(lineIdx).find((t) => isPunct(t, "{"));
+  const braceTok = cursor.tokens(at).find((t) => isPunct(t, "{"));
   const afterBraceCol = braceTok ? braceTok.col + 1 : loc.col;
   const close = compactClose(filePath, afterBrace, loc.line, afterBraceCol);
   if (close === -1) {
@@ -92,5 +91,5 @@ export function parseMatchAfterKeyword(
   if (arms.length === 0) {
     fail(filePath, "match must have at least one arm", loc.line);
   }
-  return { expr: { subject, arms, loc }, nextIndex: lineIdx + 1 };
+  return { expr: { subject, arms, loc }, next: cursor.next(at) };
 }

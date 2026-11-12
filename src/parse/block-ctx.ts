@@ -38,27 +38,28 @@ export type BlockParseOpts = {
 
 export type BraceBodyResult = {
   steps: StepDef[];
-  nextIdx: number;
+  /** Position after the body's closing line. */
+  next: number;
   closedWithElse?: boolean;
   closedWithElseIf?: boolean;
 };
 
 /** The recursive entry points, supplied by the dispatcher. */
 export type BodyParsers = {
-  /** Statements from line `startIdx` up to the `}` that closes the block. */
-  body(c: BlockCtx, startIdx: number, openerLineNo: number, opts?: BlockParseOpts): BraceBodyResult;
+  /** Statements from position `start` up to the `}` that closes the block. */
+  body(c: BlockCtx, start: number, openerLineNo: number, opts?: BlockParseOpts): BraceBodyResult;
   /**
-   * One statement written inline on line `hostIdx` (a `catch` / `recover`
-   * body). It is parsed as its own line, so columns count from its start.
+   * One statement written inline on the line at `hostAt` (a `catch` /
+   * `recover` body). It is parsed as its own line, so columns count from its
+   * start.
    */
-  inline(c: BlockCtx, hostIdx: number, stmt: string): StepDef;
+  inline(c: BlockCtx, hostAt: number, stmt: string): StepDef;
 };
 
 export type BlockCtx = {
   filePath: string;
-  lines: string[];
-  /** 0-based index of the statement's line. */
-  idx: number;
+  /** Position of the statement's line. */
+  at: number;
   /** The line as written. */
   innerRaw: string;
   /** The line, trimmed. */
@@ -72,7 +73,7 @@ export type BlockCtx = {
   tokens: Token[];
   parse: BodyParsers;
 };
-export type BlockResult = { step: StepDef; nextIdx: number };
+export type BlockResult = { step: StepDef; next: number };
 export type BlockHandler = (c: BlockCtx) => BlockResult | null;
 
 /**
@@ -85,9 +86,9 @@ export function afterKeyword(c: BlockCtx): string {
   return c.innerRaw.trimEnd().slice(head.col - 1 + head.text.length);
 }
 
-/** `BodyCursor.firstCol` on the statement's line (or line `idx`). */
-export function firstCol(c: BlockCtx, text: string, idx = c.idx): number {
-  return c.cursor.firstCol(idx, text);
+/** `BodyCursor.firstCol` on the statement's line. */
+export function firstCol(c: BlockCtx, text: string): number {
+  return c.cursor.firstCol(c.at, text);
 }
 
 /** First token is the identifier `kw`, alone on the line or followed by a space. */
@@ -135,9 +136,9 @@ export function makeTripleQuotedLiteral(trivia: Trivia, body: string): Expr {
 }
 
 /** A step argument `arg` on the statement's line that opens a `"""` block, as a literal. */
-export function tripleQuotedArg(c: BlockCtx, arg: string): { expr: Expr; nextIdx: number } {
-  const { body, nextIdx } = consumeTripleQuotedArg(c.filePath, c.lines, c.idx, arg);
-  return { expr: makeTripleQuotedLiteral(c.trivia, body), nextIdx };
+export function tripleQuotedArg(c: BlockCtx, arg: string): { expr: Expr; next: number } {
+  const { body, next } = consumeTripleQuotedArg(c.cursor, c.at, arg);
+  return { expr: makeTripleQuotedLiteral(c.trivia, body), next };
 }
 
 /** Wrap a nested declaration node in a `local_decl` step. */

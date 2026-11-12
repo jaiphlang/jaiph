@@ -13,10 +13,11 @@ import {
 import { parsePromptDefBlock } from "./prompt-def";
 import { BodyCursor, topLevelKeyword } from "./body-cursor";
 
-// The module parser: the single top-to-bottom scan that turns source lines into
-// a `jaiphModule` AST plus formatting trivia. Each declaration is dispatched on
-// the leading tokens of its line (`topLevelKeyword`) and its parser reads the
-// line's tokens from the shared `BodyCursor`. It lives here (private to the
+// The module parser: the single top-to-bottom scan that turns the source into a
+// `jaiphModule` AST plus formatting trivia. A `BodyCursor` over the source
+// holds the position; each declaration is dispatched on its leading tokens
+// (`topLevelKeyword`), and its parser reads tokens from that position and
+// returns the position after the declaration. It lives here (private to the
 // parse package) so the public entry `src/parser.ts` stays a curated facade;
 // outside code still imports `parsejaiph` / `parsejaiphWithTrivia` from there.
 
@@ -31,7 +32,6 @@ export function parsejaiph(source: string, filePath: string): jaiphModule {
 
 export function parsejaiphWithTrivia(source: string, filePath: string): ParseResult {
   const trivia = createTrivia();
-  const lines = source.split(/\r?\n/);
   const mod: jaiphModule = {
     filePath,
     imports: [],
@@ -41,17 +41,18 @@ export function parsejaiphWithTrivia(source: string, filePath: string): ParseRes
     defs: [],
   };
   const topLevelOrder: TopLevelEmitOrder[] = [];
-  const cursor = BodyCursor.of(filePath, lines);
-  let i = 0;
+  // Line endings are `\n` from here on: a `\r` before a newline is dropped.
+  const cursor = BodyCursor.of(filePath, source.replace(/\r\n/g, "\n"));
+  let at = 0;
   let pendingTopLevelComments: string[] = [];
 
-  while (i < lines.length) {
-    const idx = i;
-    const lineNo = i + 1;
-    const raw = lines[i]!;
-    const toks = cursor.lineTokensOf(idx);
+  while (!cursor.atEnd(at)) {
+    const start = at;
+    const lineNo = cursor.lineNo(start);
+    const raw = cursor.text(start);
+    const toks = cursor.lineTokensOf(start);
     const head = toks[0];
-    i += 1;
+    at = cursor.next(start);
 
     if (!head) {
       continue;
@@ -73,9 +74,9 @@ export function parsejaiphWithTrivia(source: string, filePath: string): ParseRes
         trivia.setModule({ configLeadingComments: [...pendingTopLevelComments] });
         pendingTopLevelComments = [];
       }
-      const { metadata, nextIndex } = parseConfigBlock(filePath, lines, idx, trivia);
+      const { metadata, next } = parseConfigBlock(cursor, start, trivia);
       mod.metadata = metadata;
-      i = nextIndex;
+      at = next;
       continue;
     }
 
@@ -117,19 +118,19 @@ export function parsejaiphWithTrivia(source: string, filePath: string): ParseRes
       if (!mod.tests) {
         mod.tests = [];
       }
-      const { testBlock, nextIndex } = parseTestBlock(filePath, lines, idx, trivia);
+      const { testBlock, next } = parseTestBlock(cursor, start, trivia);
       if (pendingTopLevelComments.length > 0) {
         trivia.setNode(testBlock, { leadingComments: [...pendingTopLevelComments] });
       }
       pendingTopLevelComments = [];
       mod.tests.push(testBlock);
       topLevelOrder.push({ kind: "test", index: mod.tests.length - 1 });
-      i = nextIndex;
+      at = next;
       continue;
     }
 
     if (kw === "const") {
-      const { envDecl, nextIndex } = parseEnvDecl(filePath, lines, idx);
+      const { envDecl, next } = parseEnvDecl(cursor, start);
       if (pendingTopLevelComments.length > 0) {
         envDecl.comments = [...pendingTopLevelComments];
         pendingTopLevelComments = [];
@@ -139,7 +140,7 @@ export function parsejaiphWithTrivia(source: string, filePath: string): ParseRes
       }
       mod.envDecls.push(envDecl);
       topLevelOrder.push({ kind: "env", index: mod.envDecls.length - 1 });
-      i = nextIndex;
+      at = next;
       continue;
     }
 
@@ -148,19 +149,19 @@ export function parsejaiphWithTrivia(source: string, filePath: string): ParseRes
     }
 
     if (kw === "script") {
-      const { scriptDef, nextIndex, exported } = parseScriptBlock(filePath, lines, idx, pendingTopLevelComments, trivia);
+      const { scriptDef, next, exported } = parseScriptBlock(cursor, start, pendingTopLevelComments, trivia);
       pendingTopLevelComments = [];
       if (exported) {
         mod.exports.push(scriptDef.name);
       }
       mod.scripts.push(scriptDef);
       topLevelOrder.push({ kind: "script", index: mod.scripts.length - 1 });
-      i = nextIndex;
+      at = next;
       continue;
     }
 
     if (kw === "prompt") {
-      const { promptDef, nextIndex, exported } = parsePromptDefBlock(filePath, lines, idx, pendingTopLevelComments, trivia);
+      const { promptDef, next, exported } = parsePromptDefBlock(cursor, start, pendingTopLevelComments, trivia);
       pendingTopLevelComments = [];
       if (exported) {
         mod.exports.push(promptDef.name);
@@ -168,19 +169,19 @@ export function parsejaiphWithTrivia(source: string, filePath: string): ParseRes
       if (!mod.prompts) mod.prompts = [];
       mod.prompts.push(promptDef);
       topLevelOrder.push({ kind: "prompt", index: mod.prompts.length - 1 });
-      i = nextIndex;
+      at = next;
       continue;
     }
 
     if (kw === "def") {
-      const { def, nextIndex, exported } = parseDefBlock(filePath, lines, idx, pendingTopLevelComments, trivia);
+      const { def, next, exported } = parseDefBlock(cursor, start, pendingTopLevelComments, trivia);
       pendingTopLevelComments = [];
       if (exported) {
         mod.exports.push(def.name);
       }
       mod.defs.push(def);
       topLevelOrder.push({ kind: "def", index: mod.defs.length - 1 });
-      i = nextIndex;
+      at = next;
       continue;
     }
 

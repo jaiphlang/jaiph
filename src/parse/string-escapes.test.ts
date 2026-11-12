@@ -2,6 +2,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { parsejaiph } from "../parser";
 import { parseTestBlock } from "./tests";
+import { BodyCursor } from "./body-cursor";
+
+/** The cursor over `lines` and the position of 0-based line `idx`. */
+function src(lines: string[], idx: number, filePath = "test.jh"): [BodyCursor, number] {
+  return [BodyCursor.of(filePath, lines.join("\n")), lines.slice(0, idx).reduce((n, l) => n + l.length + 1, 0)];
+}
 
 // One rule for single-line strings: `\"` is the only escape; every other
 // backslash stays as written. `\n`, `\t`, `\\` used to be decoded in config,
@@ -33,14 +39,16 @@ const testBlock = (...body: string[]): string[] => ['test "t" {', ...body.map((l
 
 test("test DSL: strings keep backslashes verbatim; \\\" decodes", () => {
   const { testBlock: tb } = parseTestBlock(
-    "t.test.jh",
-    testBlock(
-      'const c = "re \\d \\"q\\""',
-      'mock prompt "p \\d"',
-      'expect_contain out "x \\d"',
-      'expect_equal out "y \\"z\\""',
+    ...src(
+      testBlock(
+        'const c = "re \\d \\"q\\""',
+        'mock prompt "p \\d"',
+        'expect_contain out "x \\d"',
+        'expect_equal out "y \\"z\\""',
+      ),
+      0,
+      "t.test.jh",
     ),
-    0,
   );
   assert.deepEqual(
     tb.steps.map((s) =>
@@ -57,7 +65,7 @@ test("test DSL: strings keep backslashes verbatim; \\\" decodes", () => {
 for (const line of ['const c = "a\\nb"', 'mock prompt "a\\tb"', 'expect_equal out "a\\\\b"', 'run(\"a\\nb\")']) {
   test(`test DSL: removed escape in ${line} is E_PARSE`, () => {
     assert.throws(
-      () => parseTestBlock("t.test.jh", testBlock(line), 0),
+      () => parseTestBlock(...src(testBlock(line), 0, "t.test.jh")),
       (err: Error) => err.message.includes("test strings no longer decode"),
     );
   });
@@ -65,9 +73,7 @@ for (const line of ['const c = "a\\nb"', 'mock prompt "a\\tb"', 'expect_equal ou
 
 test('test DSL: const = """…""" holds multi-line text verbatim', () => {
   const { testBlock: tb } = parseTestBlock(
-    "t.test.jh",
-    testBlock('const expected = """', '  line one "q"', "  two \\d", '"""', "expect_equal out expected"),
-    0,
+    ...src(testBlock('const expected = """', '  line one "q"', "  two \\d", '"""', "expect_equal out expected"), 0, "t.test.jh"),
   );
   const c = tb.steps[0];
   assert.equal(c.type, "test_const");

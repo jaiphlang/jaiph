@@ -2,7 +2,7 @@ import type { PromptDef } from "../types";
 import { createTrivia, type Trivia } from "./trivia";
 import { fail } from "./core";
 import { parsePromptStep } from "./prompt";
-import { BodyCursor, declHead, isPunct } from "./body-cursor";
+import { declHead, isPunct, type BodyCursor } from "./body-cursor";
 import { parseUseClauseKeys, useClauseAndEquals } from "./scripts";
 
 /**
@@ -22,15 +22,15 @@ import { parseUseClauseKeys, useClauseAndEquals } from "./scripts";
  * reserved-key rules with `use` on scripts.
  */
 export function parsePromptDefBlock(
-  filePath: string,
-  lines: string[],
-  startIndex: number,
+  cursor: BodyCursor,
+  at: number,
   pendingComments: string[],
   trivia: Trivia = createTrivia(),
-): { promptDef: PromptDef; nextIndex: number; exported: boolean } {
-  const lineNo = startIndex + 1;
-  const raw = lines[startIndex]!;
-  const toks = BodyCursor.of(filePath, lines).lineTokensOf(startIndex);
+): { promptDef: PromptDef; next: number; exported: boolean } {
+  const filePath = cursor.filePath;
+  const lineNo = cursor.lineNo(at);
+  const raw = cursor.text(at);
+  const toks = cursor.lineTokensOf(at);
 
   // [export] prompt name (params) [use KEY …] = rhs. The parameter list runs
   // to the first `)` on the line.
@@ -79,7 +79,7 @@ export function parsePromptDefBlock(
   // Reuse the prompt-step body parser: the RHS after `=` is exactly a prompt
   // step body (string or triple-quoted), with optional `returns`.
   const promptCol = eq.afterEq + 1;
-  const result = parsePromptStep(filePath, lines, startIndex, rhs, promptCol, undefined, trivia);
+  const result = parsePromptStep(cursor, at, rhs, promptCol, undefined, trivia);
   const step = result.step;
   if (step.type !== "exec" || step.body.kind !== "prompt") {
     fail(filePath, "internal: named prompt body parse error", lineNo);
@@ -109,5 +109,5 @@ export function parsePromptDefBlock(
     });
   }
 
-  return { promptDef, nextIndex: result.nextLineIdx + 1, exported: isExported };
+  return { promptDef, next: result.next, exported: isExported };
 }

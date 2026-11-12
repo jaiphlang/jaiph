@@ -4,7 +4,7 @@
 // stops, `stop` turns the lexeme into a token the caller can read.
 
 import { lex, type Token } from "./lexer";
-import { adjacent, BodyCursor, isPunct } from "./body-cursor";
+import { adjacent, isPunct } from "./body-cursor";
 
 export type SliceMode = {
   /** A `/` here opens a regex. */
@@ -169,11 +169,6 @@ export function isScriptHead(tok: Token | undefined): boolean {
   if (!tok) return false;
   if (tok.kind === "script_oneline" || tok.kind === "script_fenced") return true;
   return tok.kind === "other" && /^(?:['`]|[A-Za-z_][A-Za-z0-9_.-]*')/.test(tok.text);
-}
-
-/** `BodyCursor.firstCol` for line `idx` of `lines`. */
-export function firstColOnLine(filePath: string, lines: string[], idx: number, text: string): number {
-  return BodyCursor.of(filePath, lines).firstCol(idx, text);
 }
 
 /** True when one-line `text` starts with an inline script (or a quote / backtick the script parser rejects). */

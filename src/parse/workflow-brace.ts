@@ -32,29 +32,28 @@ import type { BlockCtx, BlockHandler as Handler, BlockParseOpts, BlockResult, Bo
 export type BlockHandler = Handler;
 
 const PARSERS: BodyParsers = {
-  body: (c, startIdx, openerLineNo, opts) =>
-    parseBraceBlockBody(c.filePath, c.lines, startIdx, openerLineNo, c.trivia, opts),
-  inline: (c, hostIdx, stmt) => {
-    // Padded lines keep the host line number in nested error messages.
-    const padded = new Array<string>(hostIdx).fill("");
-    padded.push(stmt);
-    return parseBlockStatement(c.filePath, padded, hostIdx, c.trivia, c.opts).step;
+  body: (c, start, openerLineNo, opts) => parseBraceBlockBody(c.cursor, start, openerLineNo, c.trivia, opts),
+  inline: (c, hostAt, stmt) => {
+    // Blank lines before the statement keep the host line number in nested
+    // error messages; the statement is the last line of its own source.
+    const blank = c.cursor.lineNo(hostAt) - 1;
+    const cursor = BodyCursor.of(c.filePath, "\n".repeat(blank) + stmt);
+    return parseBlockStatement(cursor, blank, c.trivia, c.opts).step;
   },
 };
 
-function makeCtx(cursor: BodyCursor, idx: number, trivia: Trivia, opts: BlockParseOpts | undefined): BlockCtx {
-  const innerRaw = cursor.lines[idx]!;
+function makeCtx(cursor: BodyCursor, at: number, trivia: Trivia, opts: BlockParseOpts | undefined): BlockCtx {
+  const innerRaw = cursor.text(at);
   return {
     filePath: cursor.filePath,
-    lines: cursor.lines,
-    idx,
+    at,
     innerRaw,
     inner: innerRaw.trim(),
-    innerNo: idx + 1,
+    innerNo: cursor.lineNo(at),
     trivia,
     opts,
     cursor,
-    tokens: cursor.tokens(idx),
+    tokens: cursor.tokens(at),
     parse: PARSERS,
   };
 }
@@ -66,19 +65,17 @@ function commentStep(c: BlockCtx): StepDef {
 
 /** Parse statements until a closing `}` at the current block level. */
 export function parseBraceBlockBody(
-  filePath: string,
-  lines: string[],
-  startIdx: number,
+  cursor: BodyCursor,
+  start: number,
   openerLineNo: number,
   trivia: Trivia = createTrivia(),
   opts?: BlockParseOpts,
 ): BraceBodyResult {
-  const cursor = BodyCursor.of(filePath, lines);
   const steps: StepDef[] = [];
-  let idx = startIdx;
+  let at = start;
   let hadNonCommentStep = false;
-  while (idx < lines.length) {
-    const c = makeCtx(cursor, idx, trivia, opts);
+  while (!cursor.atEnd(at)) {
+    const c = makeCtx(cursor, at, trivia, opts);
     const head = c.tokens[0];
     if (!head) {
       if (opts?.preserveBlankLines) {
@@ -87,27 +84,27 @@ export function parseBraceBlockBody(
           steps.push({ type: "trivia", kind: "blank_line" });
         }
       }
-      idx += 1;
+      at = cursor.next(at);
       continue;
     }
     if (isComment(c)) {
       steps.push(commentStep(c));
-      idx += 1;
+      at = cursor.next(at);
       continue;
     }
     if (opts?.allowElseTerminator) {
       const terminator = elseTerminator(c);
       // `} else if ...` closes this body; the caller (the `if` handler)
-      // re-reads this same line to parse the next arm, so nextIdx points at it.
-      if (terminator === "else_if") return { steps, nextIdx: idx, closedWithElseIf: true };
-      if (terminator === "else") return { steps, nextIdx: idx + 1, closedWithElse: true };
+      // re-reads this same line to parse the next arm, so `next` points at it.
+      if (terminator === "else_if") return { steps, next: at, closedWithElseIf: true };
+      if (terminator === "else") return { steps, next: cursor.next(at), closedWithElse: true };
     }
     if (isPunct(head, "}") && c.tokens.length === 1) {
-      return { steps, nextIdx: idx + 1 };
+      return { steps, next: cursor.next(at) };
     }
     const afterConfig = tryConfigBlock(c, hadNonCommentStep);
     if (afterConfig !== null) {
-      idx = afterConfig;
+      at = afterConfig;
       continue;
     }
     // Nested defs carry no config scope and cannot re-import modules; without
@@ -118,9 +115,9 @@ export function parseBraceBlockBody(
     hadNonCommentStep = true;
     const one = dispatch(c);
     steps.push(one.step);
-    idx = one.nextIdx;
+    at = one.next;
   }
-  fail(filePath, 'unterminated block, expected "}"', openerLineNo);
+  fail(cursor.filePath, 'unterminated block, expected "}"', openerLineNo);
 }
 
 /**
@@ -163,7 +160,7 @@ function isComment(c: BlockCtx): boolean {
 }
 
 function dispatch(c: BlockCtx): BlockResult {
-  if (isComment(c)) return { step: commentStep(c), nextIdx: c.idx + 1 };
+  if (isComment(c)) return { step: commentStep(c), next: c.cursor.next(c.at) };
   rejectNestedModuleForms(c);
   applyAssignmentGuards(c);
   const keyword = keyOf(c.tokens[0]);
@@ -182,11 +179,10 @@ function dispatch(c: BlockCtx): BlockResult {
  * keyword statement and not a call is `E_PARSE`.
  */
 export function parseBlockStatement(
-  filePath: string,
-  lines: string[],
-  idx: number,
+  cursor: BodyCursor,
+  at: number,
   trivia: Trivia = createTrivia(),
   opts?: BlockParseOpts,
 ): BlockResult {
-  return dispatch(makeCtx(BodyCursor.of(filePath, lines), idx, trivia, opts));
+  return dispatch(makeCtx(cursor, at, trivia, opts));
 }

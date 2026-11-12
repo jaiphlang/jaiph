@@ -1,23 +1,29 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { parseEnvDecl } from "./env";
+import { BodyCursor } from "./body-cursor";
+
+/** The cursor over `lines` and the position of 0-based line `idx`. */
+function src(lines: string[], idx: number, filePath = "test.jh"): [BodyCursor, number] {
+  return [BodyCursor.of(filePath, lines.join("\n")), lines.slice(0, idx).reduce((n, l) => n + l.length + 1, 0)];
+}
 
 test("parseEnvDecl: parses double-quoted single-line value", () => {
-  const { envDecl, nextIndex } = parseEnvDecl("test.jh", ['const FOO = "bar"'], 0);
+  const { envDecl, next } = parseEnvDecl(...src(['const FOO = "bar"'], 0));
   assert.equal(envDecl.name, "FOO");
   assert.equal(envDecl.value, "bar");
-  assert.equal(nextIndex, 1);
+  assert.equal(next, src(['const FOO = "bar"'], 1)[1]);
 });
 
 test("parseEnvDecl: rejects single-quoted value", () => {
   assert.throws(
-    () => parseEnvDecl("test.jh", ["const NAME = 'hello'"], 0),
+    () => parseEnvDecl(...src(["const NAME = 'hello'"], 0)),
     /single-quoted strings are not supported/,
   );
 });
 
 test("parseEnvDecl: parses bare value", () => {
-  const { envDecl } = parseEnvDecl("test.jh", ["const COUNT = 42"], 0);
+  const { envDecl } = parseEnvDecl(...src(["const COUNT = 42"], 0));
   assert.equal(envDecl.name, "COUNT");
   assert.equal(envDecl.value, "42");
 });
@@ -28,7 +34,7 @@ test("parseEnvDecl: rejects multiline double-quoted value", () => {
     'world"',
   ];
   assert.throws(
-    () => parseEnvDecl("test.jh", lines, 0),
+    () => parseEnvDecl(...src(lines, 0)),
     /multiline strings use triple quotes/,
   );
 });
@@ -40,10 +46,10 @@ test("parseEnvDecl: parses triple-quoted multiline value", () => {
     "world",
     '"""',
   ];
-  const { envDecl, nextIndex } = parseEnvDecl("test.jh", lines, 0);
+  const { envDecl, next } = parseEnvDecl(...src(lines, 0));
   assert.equal(envDecl.name, "MSG");
   assert.equal(envDecl.value, "hello\nworld");
-  assert.equal(nextIndex, 4);
+  assert.equal(next, src(lines, 4)[1]);
 });
 
 test("parseEnvDecl: triple-quoted with interpolation", () => {
@@ -53,54 +59,54 @@ test("parseEnvDecl: triple-quoted with interpolation", () => {
     "  Done",
     '"""',
   ];
-  const { envDecl } = parseEnvDecl("test.jh", lines, 0);
+  const { envDecl } = parseEnvDecl(...src(lines, 0));
   assert.equal(envDecl.value, "  Hello ${name}\n  Done");
 });
 
 test("parseEnvDecl: rejects unclosed double-quoted string as multiline error", () => {
   assert.throws(
-    () => parseEnvDecl("test.jh", ['const X = "no close'], 0),
+    () => parseEnvDecl(...src(['const X = "no close'], 0)),
     /multiline strings use triple quotes/,
   );
 });
 
 test("parseEnvDecl: rejects single-quoted string even if unterminated", () => {
   assert.throws(
-    () => parseEnvDecl("test.jh", ["const X = 'no close"], 0),
+    () => parseEnvDecl(...src(["const X = 'no close"], 0)),
     /single-quoted strings are not supported/,
   );
 });
 
 test("parseEnvDecl: fails on content after closing double quote", () => {
   assert.throws(
-    () => parseEnvDecl("test.jh", ['const X = "val" extra'], 0),
+    () => parseEnvDecl(...src(['const X = "val" extra'], 0)),
     /unexpected content after closing quote/,
   );
 });
 
 test("parseEnvDecl: rejects single-quoted string with trailing content", () => {
   assert.throws(
-    () => parseEnvDecl("test.jh", ["const X = 'val' extra"], 0),
+    () => parseEnvDecl(...src(["const X = 'val' extra"], 0)),
     /single-quoted strings are not supported/,
   );
 });
 
 test("parseEnvDecl: fails on invalid declaration format", () => {
   assert.throws(
-    () => parseEnvDecl("test.jh", ["not a const"], 0),
+    () => parseEnvDecl(...src(["not a const"], 0)),
     /invalid declaration/,
   );
 });
 
 test("parseEnvDecl: rejects legacy local keyword", () => {
   assert.throws(
-    () => parseEnvDecl("test.jh", ['local X = "v"'], 0),
+    () => parseEnvDecl(...src(['local X = "v"'], 0)),
     /invalid declaration/,
   );
 });
 
 test("parseEnvDecl: \\\" decodes to a quote; other backslashes stay", () => {
-  const { envDecl } = parseEnvDecl("test.jh", ['const X = "say \\"hi\\" \\d"'], 0);
+  const { envDecl } = parseEnvDecl(...src(['const X = "say \\"hi\\" \\d"'], 0));
   assert.equal(envDecl.name, "X");
   assert.equal(envDecl.value, 'say "hi" \\d');
   assert.equal(envDecl.tripleQuoted, undefined);

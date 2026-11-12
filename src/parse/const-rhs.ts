@@ -3,7 +3,8 @@ import { createTrivia, type Trivia } from "./trivia";
 import { fail, rejectTrailingContent } from "./core";
 import { parseCallRefMultiline, parseCallRef } from "./call-args";
 import { dedentTripleQuotedBody, readTripleQuoteBlock, tripleQuoteBodyToRaw } from "./triple-quote";
-import { firstColOnLine, parseAnonymousInlineScript, startsScript } from "./inline-script";
+import { parseAnonymousInlineScript, startsScript } from "./inline-script";
+import type { BodyCursor } from "./body-cursor";
 import { parsePromptStep } from "./prompt";
 import { parseMatchAfterKeyword } from "./match";
 import {
@@ -49,24 +50,25 @@ export function validateConstBashExpr(filePath: string, expr: string, lineNo: nu
 }
 
 /**
- * Parse RHS after `const name = ` (trimmed).
- * Returns an `Expr` node — the typed value-form that replaces the legacy `ConstRhs` union.
+ * Parse RHS after `const name = ` (trimmed) on the line at `at`.
+ * Returns an `Expr` node — the typed value-form that replaces the legacy
+ * `ConstRhs` union — and the position after the value's last line.
  */
 export function parseConstRhs(
-  filePath: string,
-  lines: string[],
-  lineIdx: number,
+  cursor: BodyCursor,
+  at: number,
   rhs: string,
   lineNo: number,
   col: number,
   constName: string,
   trivia: Trivia = createTrivia(),
-): { value: Expr; nextLineIdx: number } {
+): { value: Expr; next: number } {
+  const filePath = cursor.filePath;
   const head = rhs.trimStart();
   if (head.startsWith("prompt ")) {
-    const promptCol = firstColOnLine(filePath, lines, lineIdx, "prompt");
+    const promptCol = cursor.firstCol(at, "prompt");
     const promptArg = head.slice("prompt".length).trimStart();
-    const result = parsePromptStep(filePath, lines, lineIdx, promptArg, promptCol, constName, trivia);
+    const result = parsePromptStep(cursor, at, promptArg, promptCol, constName, trivia);
     const st = result.step;
     if (st.type !== "exec" || st.body.kind !== "prompt" || st.captureName !== constName) {
       fail(filePath, "const ... = prompt internal parse error", lineNo, col);
@@ -83,7 +85,7 @@ export function parseConstRhs(
         ...(promptTrivia.rawBody !== undefined ? { rawBody: promptTrivia.rawBody } : {}),
       });
     }
-    return { value: promptBody, nextLineIdx: result.nextLineIdx };
+    return { value: promptBody, next: result.next };
   }
   if (head.startsWith("run ") && !/^run\s*\(/.test(head)) {
     fail(filePath, "'run' is not a keyword; capture the call directly: const name = ref(args)", lineNo, col);
@@ -105,12 +107,12 @@ export function parseConstRhs(
     const callee: DefRef = { value: call.ref, loc: { line: lineNo, col } };
     return {
       value: { kind: "call", callee, args: call.args, async: true },
-      nextLineIdx: lineIdx,
+      next: cursor.next(at),
     };
   }
   // const x = 'body'(args) — inline script
   if (startsScript(filePath, head)) {
-    const result = parseAnonymousInlineScript(filePath, lines, lineIdx, head, lineNo, col);
+    const result = parseAnonymousInlineScript(cursor, at, head, lineNo, col);
     const value: Expr = {
       kind: "inline_script",
       body: result.body,
@@ -118,32 +120,30 @@ export function parseConstRhs(
       args: result.args,
     };
     trivia.setNode(value, { scriptBodyKind: result.fenced ? "fenced" : "oneline" });
-    return { value, nextLineIdx: result.nextLineIdx - 1 };
+    return { value, next: result.next };
   }
   // const name = match var { ... }  (compact one-line or multiline `{` opener)
   if (head.startsWith("match ") || head === "match") {
     const after = head === "match" ? "" : head.slice("match ".length);
-    const { expr, nextIndex } = parseMatchAfterKeyword(
-      filePath, lines, lineIdx, after, { line: lineNo, col },
-    );
-    return { value: { kind: "match", match: expr }, nextLineIdx: nextIndex - 1 };
+    const { expr, next } = parseMatchAfterKeyword(cursor, at, after, { line: lineNo, col });
+    return { value: { kind: "match", match: expr }, next };
   }
   // const name = """..."""
   if (head.startsWith('"""')) {
-    const { body, nextIdx, afterClose } = readTripleQuoteBlock(filePath, lines, lineIdx, head);
-    if (afterClose) fail(filePath, 'unexpected content after closing """', nextIdx);
+    const { body, next, closeLine, afterClose } = readTripleQuoteBlock(cursor, at, head);
+    if (afterClose) fail(filePath, 'unexpected content after closing """', closeLine);
     const value: Expr = { kind: "literal", raw: tripleQuoteBodyToRaw(dedentTripleQuotedBody(body)) };
     trivia.setNode(value, { tripleQuoted: true, rawBody: body });
-    return { value, nextLineIdx: nextIdx - 1 };
+    return { value, next };
   }
   // const x = ref(args) — managed call
-  const call = head.includes("(") ? parseCallRefMultiline(filePath, lines, lineIdx, head) : null;
+  const call = head.includes("(") ? parseCallRefMultiline(cursor, at, head) : null;
   if (call) {
     rejectTrailingContent(filePath, lineNo, "const", call.rest);
     const callee: DefRef = { value: call.ref, loc: { line: lineNo, col } };
     return {
       value: { kind: "call", callee, args: call.args },
-      nextLineIdx: call.nextLineIdx - 1,
+      next: call.next,
     };
   }
   validateConstBashExpr(filePath, head, lineNo, col);
@@ -154,5 +154,5 @@ export function parseConstRhs(
     : isBare
       ? bareIdentifierToQuotedString(head)
       : head;
-  return { value: { kind: "literal", raw }, nextLineIdx: lineIdx };
+  return { value: { kind: "literal", raw }, next: cursor.next(at) };
 }

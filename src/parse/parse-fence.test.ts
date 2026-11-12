@@ -1,31 +1,33 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { BodyCursor } from "./body-cursor";
 import { readFencedScript } from "./triple-quote";
 
-/** Read the `'''` block that opens on line `idx`. */
+/** Read the `'''` block that opens on 0-based line `idx`. */
 function readFence(lines: string[], idx: number) {
-  return readFencedScript("test.jh", lines, idx, lines[idx]!);
+  const at = lines.slice(0, idx).reduce((n, l) => n + l.length + 1, 0);
+  return readFencedScript(BodyCursor.of("test.jh", lines.join("\n")), at, lines[idx]!);
 }
 
 test("fence: basic body extraction", () => {
   const lines = ["'''", "line one", "line two", "'''"];
   const result = readFence(lines, 0);
   assert.equal(result.body, "line one\nline two");
-  assert.equal(result.nextIdx, 4);
+  assert.equal(result.closeLine, 4);
 });
 
 test("fence: single-line body", () => {
   const lines = ["'''", "hello world", "'''"];
   const result = readFence(lines, 0);
   assert.equal(result.body, "hello world");
-  assert.equal(result.nextIdx, 3);
+  assert.equal(result.closeLine, 3);
 });
 
 test("fence: empty body", () => {
   const lines = ["'''", "'''"];
   const result = readFence(lines, 0);
   assert.equal(result.body, "");
-  assert.equal(result.nextIdx, 2);
+  assert.equal(result.closeLine, 2);
 });
 
 test("fence: tag after the opening quotes is rejected with a fix-it", () => {
@@ -40,7 +42,7 @@ test("fence: fenceLineIdx not at start", () => {
   const lines = ["some preamble", "'''", "echo hello", "'''", "after"];
   const result = readFence(lines, 1);
   assert.equal(result.body, "echo hello");
-  assert.equal(result.nextIdx, 4);
+  assert.equal(result.closeLine, 4);
 });
 
 test("fence: body keeps indentation relative to its margin", () => {
@@ -97,7 +99,7 @@ test("fence: closing line may include returns schema on same line as '''", () =>
   const result = readFence(lines, 0);
   assert.equal(result.body, "body");
   assert.equal(result.afterClose, ' returns "{ role: string }"');
-  assert.equal(result.nextIdx, 3);
+  assert.equal(result.closeLine, 3);
 });
 
 test("fence: same-line trailing content after the closing fence", () => {
@@ -119,5 +121,5 @@ test("fence: closing fence with surrounding whitespace is accepted", () => {
   const lines = ["'''", "body", "  '''  "];
   const result = readFence(lines, 0);
   assert.equal(result.body, "body");
-  assert.equal(result.nextIdx, 3);
+  assert.equal(result.closeLine, 3);
 });

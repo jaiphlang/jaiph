@@ -1,7 +1,8 @@
 import type { Arg } from "../types";
 import { fail, isBareDottedIdentifier, isBareIdentifier, isRef } from "./core";
 import { lex, type Token } from "./lexer";
-import { dedentTripleQuotedBody, trimAdjacentBlankLines, tripleQuoteBodyToRaw } from "./triple-quote";
+import type { BodyCursor } from "./body-cursor";
+import { blockBody, dedentTripleQuotedBody, tripleQuoteBodyToRaw } from "./triple-quote";
 
 /** Thrown when an argument list reaches end of input before its closing `)`. */
 class UnterminatedArgList extends Error {}
@@ -14,8 +15,7 @@ const CALL_HEAD_RE = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)\(/;
  * and encoded with `tripleQuoteBodyToRaw` (decoded by `literalText`).
  */
 function tripleStringRaw(tok: Token): string {
-  const bodyLines = tok.text.split("\n").slice(1, -1);
-  return tripleQuoteBodyToRaw(dedentTripleQuotedBody(trimAdjacentBlankLines(bodyLines.join("\n"))));
+  return tripleQuoteBodyToRaw(dedentTripleQuotedBody(blockBody(tok)));
 }
 
 /** One argument from its tokens: a bare (dotted) identifier is a variable, anything else a literal. */
@@ -49,7 +49,7 @@ function argFromTokens(filePath: string, source: string, toks: Token[], out: Arg
  * `UnterminatedArgList` when the input ends first; lexer errors (an
  * unterminated string or block) propagate as `E_PARSE`.
  */
-function parseCallArgs(source: string, start: number, filePath: string): { args: Arg[]; end: number; closeLine: number } {
+function parseCallArgs(source: string, start: number, filePath: string): { args: Arg[]; end: number } {
   const args: Arg[] = [];
   let current: Token[] = [];
   let depth = 1;
@@ -60,7 +60,7 @@ function parseCallArgs(source: string, start: number, filePath: string): { args:
       depth -= 1;
       if (depth === 0) {
         argFromTokens(filePath, source, current, args);
-        return { args, end: tok.offset + 1, closeLine: tok.line };
+        return { args, end: tok.offset + 1 };
       }
     }
     if (tok.kind === "punct" && tok.text === "," && depth === 1) {
@@ -108,9 +108,10 @@ export function parseParenArgs(s: string): { args?: Arg[]; rest: string } | null
 }
 
 /**
- * Collect call arguments for a managed call whose `(` is on `openLineIdx` and
- * may span multiple source lines. `textAfterOpenParen` is the text on the
- * opening line after `(`. A `"""` argument may open on the call line
+ * Collect call arguments for a managed call whose `(` is on the line at `at`
+ * and may span multiple source lines. `textAfterOpenParen` is the text on the
+ * opening line after `(`. Returns the arguments, the text after `)` on its
+ * line, and the position after that line. A `"""` argument may open on the call line
  * (`foo("""`) or on its own line, and is stored dedented to the common margin.
  *
  * Fails with `E_PARSE` when the matching `)` is missing before end of file, a
@@ -118,35 +119,31 @@ export function parseParenArgs(s: string): { args?: Arg[]; rest: string } | null
  * a `"""` block.
  */
 export function parseMultilineCallArgList(
-  filePath: string,
-  lines: string[],
-  openLineIdx: number,
+  cursor: BodyCursor,
+  at: number,
   textAfterOpenParen: string,
-): { args: Arg[]; nextLineIdx: number; rest: string } {
-  const source = lines.join("\n");
-  let lineOffset = 0;
-  for (let i = 0; i < openLineIdx; i += 1) lineOffset += lines[i]!.length + 1;
-  const start = lineOffset + lines[openLineIdx]!.length - textAfterOpenParen.length;
-  let parsed: { args: Arg[]; end: number; closeLine: number };
+): { args: Arg[]; next: number; rest: string } {
+  const { source, filePath } = cursor;
+  const start = at + cursor.text(at).length - textAfterOpenParen.length;
+  let parsed: { args: Arg[]; end: number };
   try {
     parsed = parseCallArgs(source, start, filePath);
   } catch (err) {
     if (err instanceof UnterminatedArgList) {
-      fail(filePath, 'unterminated multiline call — missing closing ")"', openLineIdx + 1);
+      fail(filePath, 'unterminated multiline call — missing closing ")"', cursor.lineNo(at));
     }
     throw err;
   }
-  const closeLineIdx = parsed.closeLine - 1;
-  const lineEnd = source.indexOf("\n", parsed.end);
-  const rest = source.slice(parsed.end, lineEnd === -1 ? source.length : lineEnd);
-  return { args: parsed.args, nextLineIdx: closeLineIdx + 1, rest };
+  const closeAt = cursor.lineStartAt(parsed.end - 1);
+  const rest = source.slice(parsed.end, closeAt + cursor.text(closeAt).length);
+  return { args: parsed.args, next: cursor.next(closeAt), rest };
 }
 
 /**
  * Parse a call reference `ref(args)` that may span multiple source lines.
  *
  * Single-line calls are handled via `parseCallRef` (fast path).
- * When `(` is not closed on line `idx`, subsequent lines are consumed via
+ * When `(` is not closed on the line at `at`, subsequent lines are consumed via
  * `parseMultilineCallArgList` until the matching `)` is found.
  *
  * Returns `null` when `s` does not start with a valid `ref(` pattern (e.g., bare
@@ -155,11 +152,10 @@ export function parseMultilineCallArgList(
  * forms silently becoming shell steps.
  */
 export function parseCallRefMultiline(
-  filePath: string,
-  lines: string[],
-  idx: number,
+  cursor: BodyCursor,
+  at: number,
   s: string,
-): { ref: string; args?: Arg[]; rest: string; nextLineIdx: number } | null {
+): { ref: string; args?: Arg[]; rest: string; next: number } | null {
   const t = s.trimStart();
 
   const singleLine = parseCallRef(t);
@@ -168,7 +164,7 @@ export function parseCallRefMultiline(
       ref: singleLine.ref,
       ...(singleLine.args ? { args: singleLine.args } : {}),
       rest: singleLine.rest,
-      nextLineIdx: idx + 1,
+      next: cursor.next(at),
     };
   }
 
@@ -176,8 +172,8 @@ export function parseCallRefMultiline(
   if (!m || !isRef(m[1]!)) return null;
 
   const ref = m[1]!;
-  const { args, nextLineIdx, rest } = parseMultilineCallArgList(filePath, lines, idx, m[2]!);
-  return { ref, ...(args.length > 0 ? { args } : {}), rest, nextLineIdx };
+  const { args, next, rest } = parseMultilineCallArgList(cursor, at, m[2]!);
+  return { ref, ...(args.length > 0 ? { args } : {}), rest, next };
 }
 
 /**

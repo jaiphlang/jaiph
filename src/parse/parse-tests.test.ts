@@ -1,6 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { parseTestBlock } from "./tests";
+import { BodyCursor } from "./body-cursor";
+
+/** The cursor over `lines` and the position of 0-based line `idx`. */
+function src(lines: string[], idx: number, filePath = "test.jh"): [BodyCursor, number] {
+  return [BodyCursor.of(filePath, lines.join("\n")), lines.slice(0, idx).reduce((n, l) => n + l.length + 1, 0)];
+}
 
 // === parseTestBlock: header ===
 
@@ -10,16 +16,16 @@ test("parseTestBlock: parses basic test block header", () => {
     '  lib.greet()',
     '}',
   ];
-  const { testBlock, nextIndex } = parseTestBlock("test.jh", lines, 0);
+  const { testBlock, next } = parseTestBlock(...src(lines, 0));
   assert.equal(testBlock.description, "my test");
   assert.equal(testBlock.loc.line, 1);
-  assert.equal(nextIndex, 3);
+  assert.equal(next, src(lines, 3)[1]);
 });
 
 test("parseTestBlock: rejects malformed header", () => {
   const lines = ["test missing_brace"];
   assert.throws(
-    () => parseTestBlock("test.jh", lines, 0),
+    () => parseTestBlock(...src(lines, 0)),
     /test block must match/,
   );
 });
@@ -30,7 +36,7 @@ test("parseTestBlock: unterminated block throws", () => {
     '  lib.greet()',
   ];
   assert.throws(
-    () => parseTestBlock("test.jh", lines, 0),
+    () => parseTestBlock(...src(lines, 0)),
     /unterminated test block/,
   );
 });
@@ -43,7 +49,7 @@ test("parseTestBlock: parses mock prompt with double-quoted string", () => {
     '  mock prompt "response text"',
     '}',
   ];
-  const { testBlock } = parseTestBlock("test.jh", lines, 0);
+  const { testBlock } = parseTestBlock(...src(lines, 0));
   assert.equal(testBlock.steps.length, 1);
   assert.equal(testBlock.steps[0].type, "test_mock_prompt");
   if (testBlock.steps[0].type === "test_mock_prompt") {
@@ -58,7 +64,7 @@ test("parseTestBlock: rejects mock prompt with single-quoted string", () => {
     '}',
   ];
   assert.throws(
-    () => parseTestBlock("test.jh", lines, 0),
+    () => parseTestBlock(...src(lines, 0)),
     /single-quoted strings are not supported/,
   );
 });
@@ -74,7 +80,7 @@ test("parseTestBlock: parses mock prompt block with string literal and wildcard"
     '  }',
     '}',
   ];
-  const { testBlock } = parseTestBlock("test.jh", lines, 0);
+  const { testBlock } = parseTestBlock(...src(lines, 0));
   assert.equal(testBlock.steps.length, 1);
   assert.equal(testBlock.steps[0].type, "test_mock_prompt_block");
   if (testBlock.steps[0].type === "test_mock_prompt_block") {
@@ -96,7 +102,7 @@ test("parseTestBlock: parses mock prompt block with regex and multiple arms", ()
     '  }',
     '}',
   ];
-  const { testBlock } = parseTestBlock("test.jh", lines, 0);
+  const { testBlock } = parseTestBlock(...src(lines, 0));
   assert.equal(testBlock.steps[0].type, "test_mock_prompt_block");
   if (testBlock.steps[0].type === "test_mock_prompt_block") {
     assert.equal(testBlock.steps[0].arms.length, 3);
@@ -116,7 +122,7 @@ test("parseTestBlock: parses mock def block with parens", () => {
     '  }',
     '}',
   ];
-  const { testBlock } = parseTestBlock("test.jh", lines, 0);
+  const { testBlock } = parseTestBlock(...src(lines, 0));
   assert.equal(testBlock.steps.length, 1);
   assert.equal(testBlock.steps[0].type, "test_mock_def");
   if (testBlock.steps[0].type === "test_mock_def") {
@@ -135,7 +141,7 @@ test("parseTestBlock: parses mock def with named params", () => {
     '  }',
     '}',
   ];
-  const { testBlock } = parseTestBlock("test.jh", lines, 0);
+  const { testBlock } = parseTestBlock(...src(lines, 0));
   if (testBlock.steps[0].type === "test_mock_def") {
     assert.deepEqual(testBlock.steps[0].params, ["target", "version"]);
     assert.equal(testBlock.steps[0].steps.length, 2);
@@ -150,7 +156,7 @@ test("parseTestBlock: parses mock def block with parens", () => {
     '  }',
     '}',
   ];
-  const { testBlock } = parseTestBlock("test.jh", lines, 0);
+  const { testBlock } = parseTestBlock(...src(lines, 0));
   assert.equal(testBlock.steps[0].type, "test_mock_def");
   if (testBlock.steps[0].type === "test_mock_def") {
     assert.deepEqual(testBlock.steps[0].params, []);
@@ -165,7 +171,7 @@ test("parseTestBlock: parses mock script block with parens", () => {
     '  }',
     '}',
   ];
-  const { testBlock } = parseTestBlock("test.jh", lines, 0);
+  const { testBlock } = parseTestBlock(...src(lines, 0));
   assert.equal(testBlock.steps[0].type, "test_mock_script");
   if (testBlock.steps[0].type === "test_mock_script") {
     assert.equal(testBlock.steps[0].ref, "my_script");
@@ -181,7 +187,7 @@ test("parseTestBlock: mock script with named params", () => {
     '  }',
     '}',
   ];
-  const { testBlock } = parseTestBlock("test.jh", lines, 0);
+  const { testBlock } = parseTestBlock(...src(lines, 0));
   if (testBlock.steps[0].type === "test_mock_script") {
     assert.deepEqual(testBlock.steps[0].params, ["dir"]);
   }
@@ -195,7 +201,7 @@ test("parseTestBlock: rejects mock function (legacy)", () => {
     '}',
   ];
   assert.throws(
-    () => parseTestBlock("test.jh", lines, 0),
+    () => parseTestBlock(...src(lines, 0)),
     /mock function.*no longer supported/,
   );
 });
@@ -209,7 +215,7 @@ test("parseTestBlock: rejects mock def without parens", () => {
     '}',
   ];
   assert.throws(
-    () => parseTestBlock("test.jh", lines, 0),
+    () => parseTestBlock(...src(lines, 0)),
     /mock def requires parentheses/,
   );
 });
@@ -223,7 +229,7 @@ test("parseTestBlock: rejects mock def without parens", () => {
     '}',
   ];
   assert.throws(
-    () => parseTestBlock("test.jh", lines, 0),
+    () => parseTestBlock(...src(lines, 0)),
     /mock def requires parentheses/,
   );
 });
@@ -237,7 +243,7 @@ test("parseTestBlock: rejects mock script without parens", () => {
     '}',
   ];
   assert.throws(
-    () => parseTestBlock("test.jh", lines, 0),
+    () => parseTestBlock(...src(lines, 0)),
     /mock script requires parentheses/,
   );
 });
@@ -250,7 +256,7 @@ test("parseTestBlock: parses expect_contain", () => {
     '  expect_contain result "expected text"',
     '}',
   ];
-  const { testBlock } = parseTestBlock("test.jh", lines, 0);
+  const { testBlock } = parseTestBlock(...src(lines, 0));
   assert.equal(testBlock.steps[0].type, "test_expect_contain");
   if (testBlock.steps[0].type === "test_expect_contain") {
     assert.equal(testBlock.steps[0].variable, "result");
@@ -264,7 +270,7 @@ test("parseTestBlock: parses expect_not_contain", () => {
     '  expect_not_contain result "bad text"',
     '}',
   ];
-  const { testBlock } = parseTestBlock("test.jh", lines, 0);
+  const { testBlock } = parseTestBlock(...src(lines, 0));
   assert.equal(testBlock.steps[0].type, "test_expect_not_contain");
   if (testBlock.steps[0].type === "test_expect_not_contain") {
     assert.equal(testBlock.steps[0].variable, "result");
@@ -278,7 +284,7 @@ test("parseTestBlock: parses expect_equal", () => {
     '  expect_equal result "exact value"',
     '}',
   ];
-  const { testBlock } = parseTestBlock("test.jh", lines, 0);
+  const { testBlock } = parseTestBlock(...src(lines, 0));
   assert.equal(testBlock.steps[0].type, "test_expect_equal");
   if (testBlock.steps[0].type === "test_expect_equal") {
     assert.equal(testBlock.steps[0].variable, "result");
@@ -292,7 +298,7 @@ test("parseTestBlock: parses test-scope `const NAME = \"literal\"` binding", () 
     '  const expected = "Hello Alice!"',
     '}',
   ];
-  const { testBlock } = parseTestBlock("test.jh", lines, 0);
+  const { testBlock } = parseTestBlock(...src(lines, 0));
   assert.equal(testBlock.steps[0].type, "test_const");
   if (testBlock.steps[0].type === "test_const") {
     assert.equal(testBlock.steps[0].name, "expected");
@@ -307,7 +313,7 @@ test("parseTestBlock: parses `mock prompt <ident>` as a const reference", () => 
     '  mock prompt r',
     '}',
   ];
-  const { testBlock } = parseTestBlock("test.jh", lines, 0);
+  const { testBlock } = parseTestBlock(...src(lines, 0));
   assert.equal(testBlock.steps[1].type, "test_mock_prompt");
   if (testBlock.steps[1].type === "test_mock_prompt") {
     assert.equal(testBlock.steps[1].response, "");
@@ -322,7 +328,7 @@ test("parseTestBlock: parses `expect_equal var <ident>` as a const reference", (
     '  expect_equal response expected',
     '}',
   ];
-  const { testBlock } = parseTestBlock("test.jh", lines, 0);
+  const { testBlock } = parseTestBlock(...src(lines, 0));
   assert.equal(testBlock.steps[1].type, "test_expect_equal");
   if (testBlock.steps[1].type === "test_expect_equal") {
     assert.equal(testBlock.steps[1].variable, "response");
@@ -339,7 +345,7 @@ test("parseTestBlock: parses `expect_contain` and `expect_not_contain` with cons
     '  expect_not_contain response sub',
     '}',
   ];
-  const { testBlock } = parseTestBlock("test.jh", lines, 0);
+  const { testBlock } = parseTestBlock(...src(lines, 0));
   assert.equal(testBlock.steps[1].type, "test_expect_contain");
   if (testBlock.steps[1].type === "test_expect_contain") {
     assert.equal(testBlock.steps[1].substringVar, "sub");
@@ -357,7 +363,7 @@ test("parseTestBlock: rejects old camelCase expectContain", () => {
     '}',
   ];
   assert.throws(
-    () => parseTestBlock("test.jh", lines, 0),
+    () => parseTestBlock(...src(lines, 0)),
     /camelCase assertions are no longer supported/,
   );
 });
@@ -369,7 +375,7 @@ test("parseTestBlock: rejects old camelCase expectEqual", () => {
     '}',
   ];
   assert.throws(
-    () => parseTestBlock("test.jh", lines, 0),
+    () => parseTestBlock(...src(lines, 0)),
     /camelCase assertions are no longer supported/,
   );
 });
@@ -382,7 +388,7 @@ test("parseTestBlock: parses const capture with run", () => {
     '  const result = lib.greet()',
     '}',
   ];
-  const { testBlock } = parseTestBlock("test.jh", lines, 0);
+  const { testBlock } = parseTestBlock(...src(lines, 0));
   assert.equal(testBlock.steps[0].type, "test_run_def");
   if (testBlock.steps[0].type === "test_run_def") {
     assert.equal(testBlock.steps[0].captureName, "result");
@@ -396,7 +402,7 @@ test("parseTestBlock: parses const capture with run and args", () => {
     '  const result = lib.greet("world")',
     '}',
   ];
-  const { testBlock } = parseTestBlock("test.jh", lines, 0);
+  const { testBlock } = parseTestBlock(...src(lines, 0));
   if (testBlock.steps[0].type === "test_run_def") {
     assert.deepEqual(testBlock.steps[0].args, ["world"]);
   }
@@ -408,7 +414,7 @@ test("parseTestBlock: parses const capture with allow_failure", () => {
     '  const result = lib.greet() allow_failure',
     '}',
   ];
-  const { testBlock } = parseTestBlock("test.jh", lines, 0);
+  const { testBlock } = parseTestBlock(...src(lines, 0));
   if (testBlock.steps[0].type === "test_run_def") {
     assert.equal(testBlock.steps[0].allowFailure, true);
   }
@@ -420,7 +426,7 @@ test("parseTestBlock: parses run without capture", () => {
     '  lib.greet()',
     '}',
   ];
-  const { testBlock } = parseTestBlock("test.jh", lines, 0);
+  const { testBlock } = parseTestBlock(...src(lines, 0));
   assert.equal(testBlock.steps[0].type, "test_run_def");
   if (testBlock.steps[0].type === "test_run_def") {
     assert.equal(testBlock.steps[0].defRef, "lib.greet");
@@ -434,7 +440,7 @@ test("parseTestBlock: parses run with args", () => {
     '  lib.greet("Alice")',
     '}',
   ];
-  const { testBlock } = parseTestBlock("test.jh", lines, 0);
+  const { testBlock } = parseTestBlock(...src(lines, 0));
   if (testBlock.steps[0].type === "test_run_def") {
     assert.deepEqual(testBlock.steps[0].args, ["Alice"]);
   }
@@ -446,7 +452,7 @@ test("parseTestBlock: parses run with multiple args", () => {
     '  lib.deploy("prod", "v2")',
     '}',
   ];
-  const { testBlock } = parseTestBlock("test.jh", lines, 0);
+  const { testBlock } = parseTestBlock(...src(lines, 0));
   if (testBlock.steps[0].type === "test_run_def") {
     assert.deepEqual(testBlock.steps[0].args, ["prod", "v2"]);
   }
@@ -461,7 +467,7 @@ test("parseTestBlock: rejects bare assignment without const/run", () => {
     '}',
   ];
   assert.throws(
-    () => parseTestBlock("test.jh", lines, 0),
+    () => parseTestBlock(...src(lines, 0)),
     /use "const/,
   );
 });
@@ -473,7 +479,7 @@ test("parseTestBlock: rejects bare workflow call without run", () => {
     '}',
   ];
   assert.throws(
-    () => parseTestBlock("test.jh", lines, 0),
+    () => parseTestBlock(...src(lines, 0)),
     /to call a def in tests/,
   );
 });
@@ -485,7 +491,7 @@ test("parseTestBlock: unrecognized line is E_PARSE", () => {
     '}',
   ];
   assert.throws(
-    () => parseTestBlock("test.jh", lines, 0),
+    () => parseTestBlock(...src(lines, 0)),
     /unrecognized test step/,
   );
 });
@@ -501,7 +507,7 @@ test("parseTestBlock: preserves comments and blank lines as steps", () => {
     '',
     '}',
   ];
-  const { testBlock } = parseTestBlock("test.jh", lines, 0);
+  const { testBlock } = parseTestBlock(...src(lines, 0));
   assert.equal(testBlock.steps.length, 3);
   assert.equal(testBlock.steps[0].type, "comment");
   assert.equal(testBlock.steps[1].type, "test_run_def");
@@ -518,12 +524,12 @@ test("parseTestBlock: parses multiple steps", () => {
     '  expect_contain result "yes"',
     '}',
   ];
-  const { testBlock, nextIndex } = parseTestBlock("test.jh", lines, 0);
+  const { testBlock, next } = parseTestBlock(...src(lines, 0));
   assert.equal(testBlock.steps.length, 3);
   assert.equal(testBlock.steps[0].type, "test_mock_prompt");
   assert.equal(testBlock.steps[1].type, "test_run_def");
   assert.equal(testBlock.steps[2].type, "test_expect_contain");
-  assert.equal(nextIndex, 5);
+  assert.equal(next, src(lines, 5)[1]);
 });
 
 // === parseTestBlock: escaped description ===
@@ -533,6 +539,6 @@ test("parseTestBlock: handles escaped quotes in description", () => {
     'test "test \\"quoted\\" name" {',
     '}',
   ];
-  const { testBlock } = parseTestBlock("test.jh", lines, 0);
+  const { testBlock } = parseTestBlock(...src(lines, 0));
   assert.equal(testBlock.description, 'test "quoted" name');
 });

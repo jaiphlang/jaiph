@@ -8,8 +8,9 @@ import {
   startsScriptFence,
 } from "./fence";
 import { SliceLexer } from "./slice-lexer";
+import type { BodyCursor } from "./body-cursor";
 
-export { firstColOnLine, startsScript } from "./slice-lexer";
+export { startsScript } from "./slice-lexer";
 import { readFencedScript } from "./triple-quote";
 import { validateScriptBodyNoInterpolation } from "./scripts";
 import type { Arg } from "../types";
@@ -18,10 +19,10 @@ export interface InlineScriptParsed {
   body: string;
   lang?: string;
   args?: Arg[];
-  /** Next line to resume parsing at — the line just after the inline script. */
-  nextLineIdx: number;
-  /** Source line index containing the closing `)`. */
-  closingLineIdx: number;
+  /** Position to resume parsing at — the line just after the inline script. */
+  next: number;
+  /** Position of the line holding the closing `)`. */
+  closingAt: number;
   /** Trailing text after the closing `)` on the closing line (verbatim). */
   trailing: string;
   /** Source used the fenced `'''…'''` form (the formatter keeps it). */
@@ -41,14 +42,14 @@ export interface InlineScriptParsed {
  * non-empty trailing content is rejected with the existing parse error.
  */
 export function parseAnonymousInlineScript(
-  filePath: string,
-  lines: string[],
-  lineIdx: number,
+  cursor: BodyCursor,
+  at: number,
   afterRun: string,
   lineNo: number,
   col: number,
   allowTrailing = false,
 ): InlineScriptParsed {
+  const filePath = cursor.filePath;
   const trimmed = afterRun.trimStart();
 
   rejectRemovedScriptFence(filePath, trimmed, lineNo, col);
@@ -65,13 +66,13 @@ export function parseAnonymousInlineScript(
 
   // Triple single-quote (fenced block)
   if (startsScriptFence(t)) {
-    const { body, afterClose, nextIdx } = readFencedScript(filePath, lines, lineIdx, t);
+    const { body, afterClose, closeAt, closeLine, next } = readFencedScript(cursor, at, t);
     const argsResult = parseParenArgs(afterClose);
     if (!argsResult) {
       fail(
         filePath,
         `anonymous inline script requires argument list after closing fence: ${SCRIPT_FENCE}(args) or ${SCRIPT_FENCE}()`,
-        nextIdx,
+        closeLine,
         col,
       );
     }
@@ -79,7 +80,7 @@ export function parseAnonymousInlineScript(
       fail(
         filePath,
         `unexpected content after anonymous inline script: '${argsResult.rest.trim()}'`,
-        nextIdx,
+        closeLine,
         col,
       );
     }
@@ -88,8 +89,8 @@ export function parseAnonymousInlineScript(
       body,
       ...(lang ? { lang } : {}),
       args: argsResult.args,
-      nextLineIdx: nextIdx,
-      closingLineIdx: nextIdx - 1,
+      next,
+      closingAt: closeAt,
       trailing: argsResult.rest,
       fenced: true,
     };
@@ -126,8 +127,8 @@ export function parseAnonymousInlineScript(
       body,
       ...(lang ? { lang } : {}),
       args: argsResult.args,
-      nextLineIdx: lineIdx + 1,
-      closingLineIdx: lineIdx,
+      next: cursor.next(at),
+      closingAt: at,
       trailing: argsResult.rest,
       fenced: false,
     };

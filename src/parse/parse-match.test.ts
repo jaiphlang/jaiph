@@ -4,6 +4,12 @@ import { parseMatchArms } from "./match";
 import { parsejaiph } from "./parse-module";
 import { parseTestBlock } from "./tests";
 import type { MatchArmDef } from "../types";
+import { BodyCursor } from "./body-cursor";
+
+/** The cursor over `lines` and the position of 0-based line `idx`. */
+function src(lines: string[], idx: number, filePath = "test.jh"): [BodyCursor, number] {
+  return [BodyCursor.of(filePath, lines.join("\n")), lines.slice(0, idx).reduce((n, l) => n + l.length + 1, 0)];
+}
 
 // === parseMatchArms: triple-quoted arm bodies ===
 
@@ -17,7 +23,7 @@ test("parseMatchArms: parses triple-quoted arm body", () => {
     '  _ => "default"',
     "}",
   ];
-  const { arms, nextIndex } = parseMatchArms("test.jh", lines, 1, 1);
+  const { arms, next } = parseMatchArms(...src(lines, 1), 1);
   assert.equal(arms.length, 2);
   assert.deepEqual(arms[0].pattern, { kind: "string_literal", value: "ok" });
   // Body stored as escaped quoted string with actual newlines
@@ -26,7 +32,7 @@ test("parseMatchArms: parses triple-quoted arm body", () => {
   assert.ok(arms[0].body.includes("\n"), "body should contain newline");
   assert.deepEqual(arms[1].pattern, { kind: "wildcard" });
   assert.equal(arms[1].body, '"default"');
-  assert.equal(nextIndex, 7);
+  assert.equal(next, src(lines, 7)[1]);
 });
 
 test("parseMatchArms: rejects content on opening triple-quote line", () => {
@@ -38,7 +44,7 @@ test("parseMatchArms: rejects content on opening triple-quote line", () => {
     "}",
   ];
   assert.throws(
-    () => parseMatchArms("test.jh", lines, 1, 1),
+    () => parseMatchArms(...src(lines, 1), 1),
     /opening """ in match arm must not have content on the same line/,
   );
 });
@@ -51,7 +57,7 @@ test("parseMatchArms: rejects unterminated triple-quoted arm", () => {
     "}",
   ];
   assert.throws(
-    () => parseMatchArms("test.jh", lines, 1, 1),
+    () => parseMatchArms(...src(lines, 1), 1),
     /unterminated triple-quoted block in match arm/,
   );
 });
@@ -65,7 +71,7 @@ test("parseMatchArms: parses string literal arm body", () => {
     '  _ => "default"',
     '}',
   ];
-  const { arms } = parseMatchArms("test.jh", lines, 1, 1);
+  const { arms } = parseMatchArms(...src(lines, 1), 1);
   assert.equal(arms.length, 2);
   assert.equal(arms[0].body, '"result"');
 });
@@ -77,7 +83,7 @@ test("parseMatchArms: parses bare expression arm body", () => {
     '  _ => "default"',
     '}',
   ];
-  const { arms } = parseMatchArms("test.jh", lines, 1, 1);
+  const { arms } = parseMatchArms(...src(lines, 1), 1);
   assert.equal(arms[0].body, 'fail "oops"');
 });
 
@@ -91,7 +97,7 @@ test("parseMatchArms: rejects trailing comma after bare arm body", () => {
     '}',
   ];
   assert.throws(
-    () => parseMatchArms("test.jh", lines, 1, 1),
+    () => parseMatchArms(...src(lines, 1), 1),
     /commas are not allowed in match arms; use one arm per line/,
   );
 });
@@ -104,7 +110,7 @@ test("parseMatchArms: rejects trailing comma after quoted arm body", () => {
     '}',
   ];
   assert.throws(
-    () => parseMatchArms("test.jh", lines, 1, 1),
+    () => parseMatchArms(...src(lines, 1), 1),
     /commas are not allowed in match arms; use one arm per line/,
   );
 });
@@ -116,7 +122,7 @@ test("parseMatchArms: rejects comma-separated arms on one line", () => {
     '}',
   ];
   assert.throws(
-    () => parseMatchArms("test.jh", lines, 1, 1),
+    () => parseMatchArms(...src(lines, 1), 1),
     /commas are not allowed in match arms; use one arm per line/,
   );
 });
@@ -130,7 +136,7 @@ test("parseMatchArms: parses string-literal alternation pattern", () => {
     '  _ => "unknown"',
     "}",
   ];
-  const { arms } = parseMatchArms("test.jh", lines, 1, 1);
+  const { arms } = parseMatchArms(...src(lines, 1), 1);
   assert.deepEqual(arms[0].pattern, {
     kind: "alternation",
     patterns: [
@@ -150,7 +156,7 @@ test("parseMatchArms: parses three-way and regex alternation", () => {
     '  _ => "other"',
     "}",
   ];
-  const { arms } = parseMatchArms("test.jh", lines, 1, 1);
+  const { arms } = parseMatchArms(...src(lines, 1), 1);
   assert.equal(arms[0].pattern.kind, "alternation");
   if (arms[0].pattern.kind === "alternation") {
     assert.equal(arms[0].pattern.patterns.length, 3);
@@ -171,7 +177,7 @@ test("parseMatchArms: allows mixed string and regex alternation", () => {
     '  _ => "miss"',
     "}",
   ];
-  const { arms } = parseMatchArms("test.jh", lines, 1, 1);
+  const { arms } = parseMatchArms(...src(lines, 1), 1);
   assert.deepEqual(arms[0].pattern, {
     kind: "alternation",
     patterns: [
@@ -189,7 +195,7 @@ test("parseMatchArms: rejects wildcard as trailing alternand (\"a\" | _)", () =>
     "}",
   ];
   assert.throws(
-    () => parseMatchArms("test.jh", lines, 1, 1),
+    () => parseMatchArms(...src(lines, 1), 1),
     /wildcard _ cannot participate in match alternation/,
   );
 });
@@ -202,7 +208,7 @@ test("parseMatchArms: rejects wildcard as leading alternand (_ | \"x\")", () => 
     "}",
   ];
   assert.throws(
-    () => parseMatchArms("test.jh", lines, 1, 1),
+    () => parseMatchArms(...src(lines, 1), 1),
     /wildcard _ cannot participate in match alternation/,
   );
 });
@@ -215,7 +221,7 @@ test("parseMatchArms: rejects trailing pipe before =>", () => {
     "}",
   ];
   assert.throws(
-    () => parseMatchArms("test.jh", lines, 1, 1),
+    () => parseMatchArms(...src(lines, 1), 1),
     /trailing \| in match alternation/,
   );
 });
@@ -267,7 +273,7 @@ for (const form of ARM_BODY_FORMS) {
 
   test(`arm-body grammar: ${form.name} parses in a mock prompt block`, () => {
     const lines = ['test "t" {', "  mock prompt {", ...form.lines.map((l) => `    ${l}`), '    _ => "default"', "  }", "}"];
-    const { testBlock } = parseTestBlock("arm.test.jh", lines, 0);
+    const { testBlock } = parseTestBlock(...src(lines, 0, "arm.test.jh"));
     const step = testBlock.steps[0];
     assert.equal(step.type, "test_mock_prompt_block");
     if (step.type !== "test_mock_prompt_block") return;
@@ -313,7 +319,7 @@ for (const { body, message } of REJECTED_BODIES) {
       return true;
     });
     const lines = ['test "t" {', "  mock prompt {", armLine, '    _ => "d"', "  }", "}"];
-    assert.throws(() => parseTestBlock("arm.test.jh", lines, 0), (err: Error) => {
+    assert.throws(() => parseTestBlock(...src(lines, 0, "arm.test.jh")), (err: Error) => {
       assert.match(err.message, new RegExp(`:3:${col} E_PARSE `));
       assert.match(err.message, message);
       return true;

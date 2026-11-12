@@ -1,32 +1,18 @@
-// Token cursor over a module's lines. Def bodies use `tokens(idx)`: one logical
-// line, every token from the start of line `idx` up to its newline, so a `"""`
-// / `'''` block that opens on the line is one token and the tokens after its
-// closer (`""" -> ch`, `'''(args)`) belong to the same line. Top-level
-// declarations and test-block steps use `lineTokensOf(idx)`: the tokens of the
-// physical line only, where a block opener is a one-token placeholder that
-// `tokenAt` / `rawBodyAfter` expand into the whole block.
+// Token cursor over a module's source. A parser holds a position: the source
+// offset where a statement's line starts. It reads the statement's tokens from
+// there and returns the position after the statement (`next`): the start of
+// the line after its last token, so a `"""` / `'''` block, a multi-line call
+// or a nested body moves the position past every line it spans. The position
+// after the last line is `source.length + 1` (`atEnd`).
+//
+// Def bodies use `tokens(at)`: one logical line, every token from `at` up to
+// its newline, so a `"""` / `'''` block that opens on the line is one token and
+// the tokens after its closer (`""" -> ch`, `'''(args)`) belong to the same
+// line. Top-level declarations and test-block steps use `lineTokensOf(at)`: the
+// tokens of the physical line only, where a block opener is a one-token
+// placeholder that `tokenAt` / `rawBodyAfter` expand into the whole block.
 
 import { lex, type Token } from "./lexer";
-
-type LineSource = { source: string; starts: number[] };
-
-const SOURCES = new WeakMap<string[], LineSource>();
-const CURSORS = new WeakMap<string[], Map<string, BodyCursor>>();
-
-function lineSource(lines: string[]): LineSource {
-  let cached = SOURCES.get(lines);
-  if (!cached) {
-    const starts: number[] = [];
-    let at = 0;
-    for (const line of lines) {
-      starts.push(at);
-      at += line.length + 1;
-    }
-    cached = { source: lines.join("\n"), starts };
-    SOURCES.set(lines, cached);
-  }
-  return cached;
-}
 
 /** Leading identifier of a token's text: the keyword a statement starts with, if any. */
 export function keyOf(tok: Token | undefined): string | undefined {
@@ -127,56 +113,87 @@ export function tokenizeLine(filePath: string, text: string, lineNo: number, bas
 export class BodyCursor {
   private readonly lineTokens = new Map<number, Token[]>();
   private readonly physTokens = new Map<number, Token[]>();
+  /** Offsets of the source's newlines, built on the first `lineNo` call. */
+  private newlines: number[] | undefined;
 
   private constructor(
     readonly filePath: string,
-    readonly lines: string[],
-    private readonly src: LineSource,
+    readonly source: string,
   ) {}
 
-  /** The cursor for `lines` (one per array and file, so nested blocks share its token cache). */
-  static of(filePath: string, lines: string[]): BodyCursor {
-    let byFile = CURSORS.get(lines);
-    if (!byFile) {
-      byFile = new Map();
-      CURSORS.set(lines, byFile);
-    }
-    let cursor = byFile.get(filePath);
-    if (!cursor) {
-      cursor = new BodyCursor(filePath, lines, lineSource(lines));
-      byFile.set(filePath, cursor);
-    }
-    return cursor;
-  }
-
-  get source(): string {
-    return this.src.source;
-  }
-
-  /** 0-based source offset of line `idx` (0-based), column `col` (1-based). */
-  offset(idx: number, col = 1): number {
-    return this.src.starts[idx]! + col - 1;
+  /** A cursor over `source`, whose line endings are already `\n`. */
+  static of(filePath: string, source: string): BodyCursor {
+    return new BodyCursor(filePath, source);
   }
 
   /**
-   * Significant tokens of line `idx`, up to its newline. Spacing characters
-   * the lexer does not skip (a no-break space) are dropped. When the lexer
-   * stops on malformed text (an unterminated string or script), the rest of
-   * the line becomes one `other` token and statement parsers report the error
-   * in their own words.
+   * True when position `at` is past the last line. Also true for a position
+   * that is not a number: a `STATEMENT` lookup that hits `Object.prototype`
+   * (`toString()` in a def body) returns no `next`, and the body parser then
+   * reports the block as unterminated, as it always has.
    */
-  tokens(idx: number): Token[] {
-    const cached = this.lineTokens.get(idx);
+  atEnd(at: number): boolean {
+    return !(at <= this.source.length);
+  }
+
+  /** Offset of the newline that ends the line at `at`, or the source length. */
+  private lineEnd(at: number): number {
+    const nl = this.source.indexOf("\n", at);
+    return nl === -1 ? this.source.length : nl;
+  }
+
+  /** Text of the line that starts at `at`, without its newline ("" past the end). */
+  text(at: number): string {
+    return this.atEnd(at) ? "" : this.source.slice(at, this.lineEnd(at));
+  }
+
+  /** Position of the line after the one that starts at `at`. */
+  next(at: number): number {
+    return this.lineEnd(at) + 1;
+  }
+
+  /** Start of the line that holds source offset `offset`. */
+  lineStartAt(offset: number): number {
+    return offset <= 0 ? 0 : this.source.lastIndexOf("\n", offset - 1) + 1;
+  }
+
+  /** Start of the line a token ends on. */
+  closeOf(tok: Token): number {
+    return this.lineStartAt(tok.offset + tok.text.length);
+  }
+
+  /** 1-based line number of position `at` (one past the last line when `atEnd`). */
+  lineNo(at: number): number {
+    if (!this.newlines) {
+      this.newlines = [];
+      for (let nl = this.source.indexOf("\n"); nl !== -1; nl = this.source.indexOf("\n", nl + 1)) this.newlines.push(nl);
+    }
+    const nls = this.newlines;
+    let lo = 0;
+    let hi = nls.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (nls[mid]! < at) lo = mid + 1;
+      else hi = mid;
+    }
+    return lo + 1 + (this.atEnd(at) ? 1 : 0);
+  }
+
+  /**
+   * Significant tokens of the line at `at`, up to its newline. Spacing
+   * characters the lexer does not skip (a no-break space) are dropped. When
+   * the lexer stops on malformed text (an unterminated string or script), the
+   * rest of the line becomes one `other` token and statement parsers report
+   * the error in their own words.
+   */
+  tokens(at: number): Token[] {
+    const cached = this.lineTokens.get(at);
     if (cached) return cached;
     const out: Token[] = [];
-    const lineStart = this.offset(idx);
-    let end = lineStart;
+    const lineNo = this.lineNo(at);
+    let end = at;
     try {
-      for (const tok of lex(this.source, this.filePath, {
-        lenient: true,
-        start: lineStart,
-        startAt: { line: idx + 1, col: 1 },
-      })) {
+      for (const tok of lex(this.source, this.filePath, { lenient: true, start: at, startAt: { line: lineNo, col: 1 } })) {
         if (tok.kind === "newline") break;
         end = tok.offset + tok.text.length;
         if (tok.kind === "other" && /^\s$/.test(tok.text)) continue;
@@ -184,45 +201,44 @@ export class BodyCursor {
       }
     } catch {
       const src = this.source;
-      let at = end;
-      while (at < src.length && src[at] !== "\n" && /\s/.test(src[at]!)) at += 1;
-      const nl = src.indexOf("\n", at);
-      const text = src.slice(at, nl === -1 ? src.length : nl).trimEnd();
-      const before = src.slice(lineStart, at);
-      const line = idx + 1 + (before.match(/\n/g)?.length ?? 0);
-      const col = at - (before.lastIndexOf("\n") === -1 ? lineStart : lineStart + before.lastIndexOf("\n") + 1) + 1;
-      if (text) out.push({ kind: "other", text, line, col, offset: at });
+      let from = end;
+      while (from < src.length && src[from] !== "\n" && /\s/.test(src[from]!)) from += 1;
+      const text = src.slice(from, this.lineEnd(from)).trimEnd();
+      const before = src.slice(at, from);
+      const line = lineNo + (before.match(/\n/g)?.length ?? 0);
+      const col = from - (before.lastIndexOf("\n") === -1 ? at : at + before.lastIndexOf("\n") + 1) + 1;
+      if (text) out.push({ kind: "other", text, line, col, offset: from });
     }
-    this.lineTokens.set(idx, out);
+    this.lineTokens.set(at, out);
     return out;
   }
 
-  /** Tokens of physical line `idx` alone (`tokenizeLine`): a block is just its opener. */
-  lineTokensOf(idx: number): Token[] {
-    let cached = this.physTokens.get(idx);
+  /** Tokens of the physical line at `at` alone (`tokenizeLine`): a block is just its opener. */
+  lineTokensOf(at: number): Token[] {
+    let cached = this.physTokens.get(at);
     if (!cached) {
-      cached = tokenizeLine(this.filePath, this.lines[idx]!, idx + 1, this.offset(idx));
-      this.physTokens.set(idx, cached);
+      cached = tokenizeLine(this.filePath, this.text(at), this.lineNo(at), at);
+      this.physTokens.set(at, cached);
     }
     return cached;
   }
 
   /**
-   * The raw shell body after a `mock script ref(…) {` line `idx` (its
+   * The raw shell body after a `mock script ref(…) {` line at `at` (its
    * `raw_body` token): the lines up to the first line whose trimmed text is
-   * `}`, and that line's index. Null when no such line follows.
+   * `}`, and the position of that line. Null when no such line follows.
    */
-  rawBodyAfter(idx: number): { body: string; closeIdx: number } | null {
+  rawBodyAfter(at: number): { body: string; closeAt: number } | null {
     let afterNewline = false;
     try {
       for (const tok of lex(this.source, this.filePath, {
         lenient: true,
-        start: this.offset(idx),
-        startAt: { line: idx + 1, col: 1 },
+        start: at,
+        startAt: { line: this.lineNo(at), col: 1 },
       })) {
         if (afterNewline) {
-          if (tok.kind !== "raw_body") return { body: "", closeIdx: idx + 1 };
-          return { body: tok.text.slice(0, -1), closeIdx: BodyCursor.endLineIdx(tok) };
+          if (tok.kind !== "raw_body") return { body: "", closeAt: this.next(at) };
+          return { body: tok.text.slice(0, -1), closeAt: this.closeOf(tok) };
         }
         afterNewline = tok.kind === "newline";
       }
@@ -233,45 +249,38 @@ export class BodyCursor {
   }
 
   /**
-   * The one token that starts at line `idx`, column `col`: a `"""` string or
-   * `'''` script block. Throws the lexer's `E_PARSE` when it does not close.
+   * The one token that starts on the line at `at`, column `col`: a `"""`
+   * string or `'''` script block. Throws the lexer's `E_PARSE` when it does
+   * not close.
    */
-  tokenAt(idx: number, col: number): Token {
+  tokenAt(at: number, col: number): Token {
     const it = lex(this.source, this.filePath, {
       lenient: true,
-      start: this.offset(idx, col),
-      startAt: { line: idx + 1, col },
+      start: at + col - 1,
+      startAt: { line: this.lineNo(at), col },
     });
     return it.next().value as Token;
   }
 
   /**
-   * 1-based column where `text` (no leading whitespace) first occurs on line
-   * `idx`, or 0. An occurrence starts inside a token, so only token positions
-   * are tried. Reproduces the columns the line grammar reported when the first
-   * occurrence is not the token being reported (`const x = x`).
+   * 1-based column where `text` (no leading whitespace) first occurs on the
+   * line at `at`, or 0. An occurrence starts inside a token, so only token
+   * positions are tried. Reproduces the columns the line grammar reported when
+   * the first occurrence is not the token being reported (`const x = x`).
    */
-  firstCol(idx: number, text: string): number {
-    const raw = this.lines[idx]!;
-    for (const tok of this.lineTokensOf(idx)) {
+  firstCol(at: number, text: string): number {
+    const raw = this.text(at);
+    for (const tok of this.lineTokensOf(at)) {
       const from = tok.col - 1;
       const to = from + tok.text.length;
-      for (let at = from; at < to; at += 1) if (raw.startsWith(text, at)) return at + 1;
+      for (let i = from; i < to; i += 1) if (raw.startsWith(text, i)) return i + 1;
     }
     return 0;
-  }
-
-  /** 0-based index of the line a token ends on. */
-  static endLineIdx(tok: Token): number {
-    let n = tok.line - 1;
-    for (const ch of tok.text) if (ch === "\n") n += 1;
-    return n;
   }
 
   /** Text after a token on the line it ends on (up to the newline). */
   textAfter(tok: Token): string {
     const from = tok.offset + tok.text.length;
-    const nl = this.source.indexOf("\n", from);
-    return this.source.slice(from, nl === -1 ? this.source.length : nl);
+    return this.source.slice(from, this.lineEnd(from));
   }
 }

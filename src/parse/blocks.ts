@@ -1,7 +1,8 @@
 // Top-level block parsers, grouped so the module dispatcher (`parse-module.ts`)
 // reaches them through one import instead of six — keeping its fan-out under the
-// analyzability cap. Each is a multi-line construct the dispatcher hands the raw
-// lines and the index of its first line to. Explicit named re-exports only
+// analyzability cap. Each is a multi-line construct the dispatcher hands the
+// `BodyCursor` and the position of its first line to; each returns the position
+// after its last line. Explicit named re-exports only
 // (docs/agent-analyzability.md).
 export { parseConfigBlock } from "./metadata";
 export { parseScriptBlock } from "./scripts";
