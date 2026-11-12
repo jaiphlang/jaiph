@@ -255,49 +255,6 @@ export function parseParamList(filePath: string, content: string, lineNo: number
 }
 
 /**
- * Split a comma-separated call argument list into typed `Arg[]`.
- *
- * Each top-level comma-separated segment is classified:
- * - bare identifier (and not a Jaiph keyword): `{ kind: "var", name }`
- * - bare `IDENT.IDENT` (typed-prompt field access): `{ kind: "var", name: "base.field" }`
- *   — sugar for `${base.field}`; runtime expands via the same JSON field path
- * - anything else (quoted string, ${…}, nested `run …` call, inline-script
- *   form, etc.): `{ kind: "literal", raw }`, stored as authored.
- *
- * Commas inside quoted strings are preserved (the scanner tracks quote state).
- */
-export function commaArgsToArgList(content: string): Arg[] {
-  const out: Arg[] = [];
-  let current = "";
-  let inQuote: string | null = null;
-  for (let j = 0; j < content.length; j++) {
-    const ch = content[j];
-    if (inQuote) {
-      current += ch;
-      if (ch === inQuote && content[j - 1] !== "\\") inQuote = null;
-    } else if (ch === ",") {
-      pushArg(out, current);
-      current = "";
-    } else {
-      if (ch === '"' || ch === "'") inQuote = ch;
-      current += ch;
-    }
-  }
-  pushArg(out, current);
-  return out;
-}
-
-export function pushArg(out: Arg[], segment: string): void {
-  const trimmed = segment.trim();
-  if (!trimmed) return;
-  if (isBareIdentifier(trimmed) || isBareDottedIdentifier(trimmed)) {
-    out.push({ kind: "var", name: trimmed });
-    return;
-  }
-  out.push({ kind: "literal", raw: trimmed });
-}
-
-/**
  * Convert `Arg[]` back to the space-separated string the runtime consumes:
  * - `var` → `${name}` (so runtime interpolation expands it against in-scope vars;
  *   dotted names become `${base.field}` and resolve via JSON field access)
@@ -308,55 +265,6 @@ export function pushArg(out: Arg[], segment: string): void {
 export function argsToRuntimeString(args: Arg[] | undefined): string {
   if (!args || args.length === 0) return "";
   return args.map((a) => (a.kind === "var" ? `\${${a.name}}` : a.raw)).join(" ");
-}
-
-/**
- * Parse a call expression `ref(args)` or `ref()` from a string.
- * Returns the ref, optional typed `Arg[]`, and the rest of the string after `)`.
- * Returns null if the string doesn't start with a valid call expression.
- */
-export function parseCallRef(s: string): { ref: string; args?: Arg[]; rest: string } | null {
-  const t = s.trimStart();
-  // Parenthesized form: ref(args) or ref()
-  const refMatch = t.match(/^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)\(/);
-  if (refMatch && isRef(refMatch[1])) {
-    const ref = refMatch[1];
-    const parenStart = refMatch[0].length;
-    let depth = 1;
-    let inQuote: string | null = null;
-    let i = parenStart;
-    while (i < t.length && depth > 0) {
-      const ch = t[i];
-      if (inQuote) {
-        if (ch === inQuote && t[i - 1] !== "\\") inQuote = null;
-      } else {
-        if (ch === '"' || ch === "'") inQuote = ch;
-        else if (ch === "(") depth++;
-        else if (ch === ")") depth--;
-      }
-      i++;
-    }
-    if (depth !== 0) return null;
-    const argsContent = t.slice(parenStart, i - 1).trim();
-    const rest = t.slice(i);
-    if (!argsContent) return { ref, rest };
-    const args = commaArgsToArgList(argsContent);
-    return { ref, ...(args.length > 0 ? { args } : {}), rest };
-  }
-  // Bare identifier form (no parens) is no longer allowed — require parentheses.
-  return null;
-}
-
-/**
- * Parse a parenthesized argument list `(args)' or '()` at the start of a string.
- * Returns typed `Arg[]` and remaining text after `)`. Returns null if the string
- * doesn't start with `(`.
- */
-export function parseParenArgs(s: string): { args?: Arg[]; rest: string } | null {
-  if (!s.trimStart().startsWith("(")) return null;
-  const result = parseCallRef(`__anon${s.trimStart()}`);
-  if (!result) return null;
-  return { args: result.args, rest: result.rest };
 }
 
 const CHANNEL_REF = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)$/;

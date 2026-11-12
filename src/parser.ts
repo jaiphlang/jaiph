@@ -18,7 +18,6 @@ export const parsejaiph = parsejaiphImpl;
 export const parsejaiphWithTrivia = parsejaiphWithTriviaImpl;
 export { configValueHasInterpolation } from "./parse/metadata";
 export {
-  parseCallRef,
   matchSendOperator,
   isJaiphInterpolationRef,
   argsToRuntimeString,
@@ -37,6 +36,7 @@ export {
   findJaiphInterpolation,
   jaiphInterpolationInScriptMessage,
   langToShebang,
+  parseCallRef,
   parseNestedCallArg,
   shebangForLang,
   type NestedCallArg,

@@ -20,7 +20,9 @@ export type TokenKind =
   | "punct"
   | "raw_body"
   | "newline"
-  | "comment";
+  | "comment"
+  /** A character no other kind accepts; produced only with `{ lenient: true }`. */
+  | "other";
 
 export interface Token {
   kind: TokenKind;
@@ -30,6 +32,24 @@ export interface Token {
   line: number;
   /** 1-based column of the first character. */
   col: number;
+  /** 0-based index of the first character in the source. */
+  offset: number;
+}
+
+export interface LexOptions {
+  /**
+   * Emit a one-character `other` token for a character no other kind accepts
+   * (and for `/` outside a regex position, and `#`, which is argument text
+   * there, not a comment) instead of failing. Call-argument
+   * text uses this: arguments keep their source text, and the validator owns
+   * the errors for stray characters in them (shell redirection and the like).
+   */
+  lenient?: boolean;
+  /**
+   * Start lexing at this offset. Line, column and offset stay relative to the
+   * whole `source`, so errors point at the real file position.
+   */
+  start?: number;
 }
 
 /** Longest first, so `=>` wins over `=` and `${` over `$`. */
@@ -43,12 +63,27 @@ const DIGIT = /[0-9]/;
 /** Brace context: a `match … {` block, a `${` interpolation, or any other `{`. */
 type BraceKind = "match" | "interp" | "plain";
 
-export function tokenize(source: string, filePath: string): Token[] {
+export function tokenize(source: string, filePath: string, options: LexOptions = {}): Token[] {
+  return [...lex(source, filePath, options)];
+}
+
+/**
+ * Pull tokens one at a time. A caller that stops early (a call-argument list
+ * that ends at its `)`) never scans, or fails on, the text after it.
+ */
+export function* lex(source: string, filePath: string, options: LexOptions = {}): Generator<Token> {
   const tokens: Token[] = [];
+  let emitted = 0;
   const braces: BraceKind[] = [];
-  let pos = 0;
+  let pos = options.start ?? 0;
   let line = 1;
   let lineStart = 0;
+  for (let i = 0; i < pos; i += 1) {
+    if (source[i] === "\n") {
+      line += 1;
+      lineStart = i + 1;
+    }
+  }
 
   const col = (at: number): number => at - lineStart + 1;
   const lineEnd = (from: number): number => {
@@ -58,7 +93,7 @@ export function tokenize(source: string, filePath: string): Token[] {
   /** Push a token spanning `[start, end)`; advance line bookkeeping past it. */
   const push = (kind: TokenKind, start: number, end: number, startLine: number, startCol: number): void => {
     const text = source.slice(start, end);
-    tokens.push({ kind, text, line: startLine, col: startCol });
+    tokens.push({ kind, text, line: startLine, col: startCol, offset: start });
     for (let i = start; i < end; i += 1) {
       if (source[i] === "\n") {
         line += 1;
@@ -152,6 +187,7 @@ export function tokenize(source: string, filePath: string): Token[] {
   };
 
   while (pos < source.length) {
+    while (emitted < tokens.length) yield tokens[emitted++]!;
     const ch = source[pos]!;
     const startLine = line;
     const startCol = col(pos);
@@ -174,7 +210,7 @@ export function tokenize(source: string, filePath: string): Token[] {
       push("punct", pos, pos + 1, startLine, startCol);
       continue;
     }
-    if (ch === "#") {
+    if (ch === "#" && !options.lenient) {
       push("comment", pos, lineEnd(pos), startLine, startCol);
       continue;
     }
@@ -245,7 +281,11 @@ export function tokenize(source: string, filePath: string): Token[] {
       push("punct", pos, pos + punct.length, startLine, startCol);
       continue;
     }
+    if (options.lenient) {
+      push("other", pos, pos + 1, startLine, startCol);
+      continue;
+    }
     fail(filePath, `unexpected character ${JSON.stringify(ch)}`, startLine, startCol);
   }
-  return tokens;
+  while (emitted < tokens.length) yield tokens[emitted++]!;
 }
