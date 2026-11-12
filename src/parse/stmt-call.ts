@@ -118,11 +118,11 @@ export function parseCallStatement(
     );
 
   if (!attached) {
-    const call = parseCallRefMultiline(filePath, c.lines, c.idx, hostBody) ?? badRef();
+    const call = parseCallRefMultiline(c.cursor, c.at, hostBody) ?? badRef();
     rejectTrailingContent(filePath, innerNo, hostName, call.rest);
     const callee = { value: call.ref, loc: stepLoc };
     const body: Expr = { kind: "call", callee, args: call.args, ...(isAsync ? { async: true as const } : {}) };
-    return { step: execStep(body, stepLoc, { captureName, stdin }), nextIdx: call.nextLineIdx };
+    return { step: execStep(body, stepLoc, { captureName, stdin }), next: call.next };
   }
 
   const call = parseCallRef(attached.left) ?? badRef();
@@ -130,11 +130,11 @@ export function parseCallStatement(
   const callee = { value: call.ref, loc: stepLoc };
   const body: Expr = { kind: "call", callee, args: call.args, ...(isAsync ? { async: true as const } : {}) };
 
-  const result = parseAttachedBlock(c, c.idx, innerNo, attached.keyword, attached.after);
+  const result = parseAttachedBlock(c, c.at, innerNo, attached.keyword, attached.after);
   const extras = attached.keyword === "catch"
     ? { captureName, stdin, catch: result.body }
     : { captureName, stdin, recover: result.body };
-  return { step: execStep(body, stepLoc, extras), nextIdx: result.nextIdx };
+  return { step: execStep(body, stepLoc, extras), next: result.next };
 }
 
 /**
@@ -148,17 +148,17 @@ export function parseCallStatement(
  */
 export function parseInlineScriptTail(
   c: BlockCtx,
-  result: { closingLineIdx: number; trailing: string; nextLineIdx: number },
+  result: { closingAt: number; trailing: string; next: number },
   body: Expr,
   stepLoc: { line: number; col: number },
   hostCol: number,
   stdin?: Expr,
   captureName?: string,
 ): BlockResult {
-  const closingNo = result.closingLineIdx + 1;
+  const closingNo = c.cursor.lineNo(result.closingAt);
   const trimmed = result.trailing.trimStart();
   if (trimmed === "") {
-    return { step: execStep(body, stepLoc, { stdin, captureName }), nextIdx: result.nextLineIdx };
+    return { step: execStep(body, stepLoc, { stdin, captureName }), next: result.next };
   }
   const recoverMatch = trimmed.match(/^recover([\s(].*)$/s);
   const catchMatch = trimmed.match(/^catch(\s.*)$/s);
@@ -172,13 +172,13 @@ export function parseInlineScriptTail(
     fail(
       c.filePath,
       `unexpected content after anonymous inline script: '${trimmed}'`,
-      result.closingLineIdx + 1,
+      closingNo,
       hostCol,
     );
   }
-  const block = parseAttachedBlock(c, result.closingLineIdx, closingNo, attached.keyword, attached.after);
+  const block = parseAttachedBlock(c, result.closingAt, closingNo, attached.keyword, attached.after);
   const extras = attached.keyword === "catch"
     ? { stdin, captureName, catch: block.body }
     : { stdin, captureName, recover: block.body };
-  return { step: execStep(body, stepLoc, extras), nextIdx: block.nextIdx };
+  return { step: execStep(body, stepLoc, extras), next: block.next };
 }

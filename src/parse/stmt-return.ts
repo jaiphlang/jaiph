@@ -27,7 +27,7 @@ import {
 function parseReturnPrompt(c: BlockCtx, returnValue: string, retLoc: { line: number; col: number }): BlockResult {
   const promptCol = firstCol(c, "prompt");
   const promptArg = returnValue === "prompt" ? "" : returnValue.slice("prompt ".length).trimStart();
-  const result = parsePromptStep(c.filePath, c.lines, c.idx, promptArg, promptCol, undefined, c.trivia);
+  const result = parsePromptStep(c.cursor, c.at, promptArg, promptCol, undefined, c.trivia);
   const st = result.step;
   if (st.type !== "exec" || st.body.kind !== "prompt") {
     fail(c.filePath, "return prompt internal parse error", c.innerNo, retLoc.col);
@@ -43,7 +43,7 @@ function parseReturnPrompt(c: BlockCtx, returnValue: string, retLoc: { line: num
   }
   return {
     step: { type: "return", value: promptBody, loc: retLoc },
-    nextIdx: result.nextLineIdx > c.idx ? result.nextLineIdx + 1 : c.idx + 1,
+    next: result.next,
   };
 }
 
@@ -64,7 +64,7 @@ function parseReturnString(c: BlockCtx, returnValue: string, retLoc: { line: num
   if (isBareDotted || isBare) {
     c.trivia.setNode(value, { bareSource: returnValue.trim() });
   }
-  return { step: { type: "return", value, loc: retLoc }, nextIdx: c.idx + 1 };
+  return { step: { type: "return", value, loc: retLoc }, next: c.cursor.next(c.at) };
 }
 
 export function tryParseReturn(c: BlockCtx): BlockResult | null {
@@ -75,7 +75,7 @@ export function tryParseReturn(c: BlockCtx): BlockResult | null {
   if (after === "") {
     return {
       step: { type: "return", value: { kind: "literal", raw: '""' }, loc: retLoc },
-      nextIdx: c.idx + 1,
+      next: c.cursor.next(c.at),
     };
   }
   if (!/^\s/.test(after)) return null;
@@ -83,13 +83,13 @@ export function tryParseReturn(c: BlockCtx): BlockResult | null {
   const value = c.tokens[1]!;
   const valueForm = { ...c, tokens: c.tokens.slice(1) };
   if (value.text.startsWith('"""')) {
-    const { expr, nextIdx } = tripleQuotedArg(c, returnValue);
-    return { step: { type: "return", value: expr, loc: retLoc }, nextIdx };
+    const { expr, next } = tripleQuotedArg(c, returnValue);
+    return { step: { type: "return", value: expr, loc: retLoc }, next };
   }
   if (isKeywordForm(valueForm, "match")) {
     const afterMatch = returnValue === "match" ? "" : returnValue.slice("match ".length);
-    const { expr, nextIndex } = parseMatchAfterKeyword(c.filePath, c.lines, c.idx, afterMatch, retLoc);
-    return { step: { type: "return", value: { kind: "match", match: expr }, loc: retLoc }, nextIdx: nextIndex };
+    const { expr, next } = parseMatchAfterKeyword(c.cursor, c.at, afterMatch, retLoc);
+    return { step: { type: "return", value: { kind: "match", match: expr }, loc: retLoc }, next };
   }
   if (isKeywordForm(valueForm, "prompt")) {
     return parseReturnPrompt(c, returnValue, retLoc);
@@ -107,21 +107,21 @@ export function tryParseReturn(c: BlockCtx): BlockResult | null {
     fail(c.filePath, "'ensure' is not a keyword; return the call directly: return name(...)", c.innerNo, firstCol(c, "ensure"));
   }
   if (isScriptHead(value)) {
-    const result = parseAnonymousInlineScript(c.filePath, c.lines, c.idx, returnValue, c.innerNo, retLoc.col);
+    const result = parseAnonymousInlineScript(c.cursor, c.at, returnValue, c.innerNo, retLoc.col);
     const scriptValue = makeInlineScriptExpr(result, c.trivia);
-    return { step: { type: "return", value: scriptValue, loc: retLoc }, nextIdx: result.nextLineIdx };
+    return { step: { type: "return", value: scriptValue, loc: retLoc }, next: result.next };
   }
   // Bare call `return ref(args)`. parseCallRefMultiline returns null when the
   // value does not start with `ref(`; when it starts with `ref(` but the call
   // is incomplete it calls fail() so the line never becomes a shell step.
   if (isCallShaped(c.tokens, 1, 1)) {
-    const call = parseCallRefMultiline(c.filePath, c.lines, c.idx, returnValue);
+    const call = parseCallRefMultiline(c.cursor, c.at, returnValue);
     if (call) {
       rejectTrailingContent(c.filePath, c.innerNo, "return", call.rest);
       const callee = { value: call.ref, loc: retLoc };
       return {
         step: { type: "return", value: { kind: "call", callee, args: call.args }, loc: retLoc },
-        nextIdx: call.nextLineIdx,
+        next: call.next,
       };
     }
   }

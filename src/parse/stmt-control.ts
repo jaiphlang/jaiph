@@ -65,18 +65,19 @@ const INVALID_IF =
  * A chain desugars to nested `if`/`else`: each `else if` arm becomes the single
  * `if` step inside the parent arm's `elseBody`, matching a human-written tree.
  *
- * `headIdx` is the 0-based index of the head line; for an `else if` arm the
+ * `headAt` is the position of the head line; for an `else if` arm the
  * condition is read from the `if` token after `} else`.
  */
-function parseIfArm(c: BlockCtx, headIdx: number, isElseIf: boolean): BlockResult {
-  const toks = c.cursor.tokens(headIdx);
+function parseIfArm(c: BlockCtx, headAt: number, isElseIf: boolean): BlockResult {
+  const toks = c.cursor.tokens(headAt);
   const ifTok = toks[isElseIf ? 2 : 0]!;
   const ifCol = ifTok.col;
-  const ifLoc = { line: headIdx + 1, col: ifCol };
-  const head = c.lines[headIdx]!.trim().slice(ifTok.offset - toks[0]!.offset);
-  const cond = readIfCondition(c.filePath, head, headIdx + 1, ifCol);
+  const headNo = c.cursor.lineNo(headAt);
+  const ifLoc = { line: headNo, col: ifCol };
+  const head = c.cursor.text(headAt).trim().slice(ifTok.offset - toks[0]!.offset);
+  const cond = readIfCondition(c.filePath, head, headNo, ifCol);
   if (!cond) {
-    fail(c.filePath, INVALID_IF, headIdx + 1, ifCol);
+    fail(c.filePath, INVALID_IF, headNo, ifCol);
   }
   const { subject, operator, rawOperand } = cond;
   const operand: { kind: "string_literal"; value: string } | { kind: "regex"; source: string } =
@@ -84,30 +85,31 @@ function parseIfArm(c: BlockCtx, headIdx: number, isElseIf: boolean): BlockResul
       ? { kind: "string_literal", value: rawOperand.slice(1, -1) }
       : { kind: "regex", source: rawOperand.slice(1, -1) };
   if ((operator === "==" || operator === "!=") && operand.kind === "regex") {
-    fail(c.filePath, `operator "${operator}" requires a string operand ("..."), not a regex`, headIdx + 1, ifCol);
+    fail(c.filePath, `operator "${operator}" requires a string operand ("..."), not a regex`, headNo, ifCol);
   }
   if ((operator === "=~" || operator === "!~") && operand.kind === "string_literal") {
-    fail(c.filePath, `operator "${operator}" requires a regex operand (/pattern/), not a string`, headIdx + 1, ifCol);
+    fail(c.filePath, `operator "${operator}" requires a regex operand (/pattern/), not a string`, headNo, ifCol);
   }
-  const thenResult = c.parse.body(c, headIdx + 1, headIdx + 1, {
+  const thenResult = c.parse.body(c, c.cursor.next(headAt), headNo, {
     allowElseTerminator: true,
     inNestedDef: c.opts?.inNestedDef,
   });
   if (isElseIf && thenResult.steps.length === 0) {
-    fail(c.filePath, '"else if" body cannot be empty', headIdx + 1, ifCol);
+    fail(c.filePath, '"else if" body cannot be empty', headNo, ifCol);
   }
   const base = { type: "if" as const, subject, operator, operand, body: thenResult.steps, loc: ifLoc };
   if (thenResult.closedWithElseIf) {
-    const nested = parseIfArm(c, thenResult.nextIdx, true);
-    return { step: { ...base, elseBody: [nested.step] }, nextIdx: nested.nextIdx };
+    const nested = parseIfArm(c, thenResult.next, true);
+    return { step: { ...base, elseBody: [nested.step] }, next: nested.next };
   }
   if (thenResult.closedWithElse) {
-    const elseResult = c.parse.body(c, thenResult.nextIdx, thenResult.nextIdx, {
+    // The `} else {` line opens the else body: its line number is the one before `next`.
+    const elseResult = c.parse.body(c, thenResult.next, c.cursor.lineNo(thenResult.next) - 1, {
       inNestedDef: c.opts?.inNestedDef,
     });
-    return { step: { ...base, elseBody: elseResult.steps }, nextIdx: elseResult.nextIdx };
+    return { step: { ...base, elseBody: elseResult.steps }, next: elseResult.next };
   }
-  return { step: base, nextIdx: thenResult.nextIdx };
+  return { step: base, next: thenResult.next };
 }
 
 export function tryParseIf(c: BlockCtx): BlockResult | null {
@@ -118,7 +120,7 @@ export function tryParseIf(c: BlockCtx): BlockResult | null {
     }
     return null;
   }
-  return parseIfArm(c, c.idx, false);
+  return parseIfArm(c, c.at, false);
 }
 
 export function tryParseFor(c: BlockCtx): BlockResult | null {
@@ -138,8 +140,8 @@ export function tryParseFor(c: BlockCtx): BlockResult | null {
     }
     return null;
   }
-  const { steps: body, nextIdx } = c.parse.body(c, c.idx + 1, c.innerNo, c.opts);
-  return { step: { type: "for_lines", iterVar: iter.text, sourceVar: source.text, body, loc: forLoc }, nextIdx };
+  const { steps: body, next } = c.parse.body(c, c.cursor.next(c.at), c.innerNo, c.opts);
+  return { step: { type: "for_lines", iterVar: iter.text, sourceVar: source.text, body, loc: forLoc }, next };
 }
 
 export function tryParseElseError(c: BlockCtx): BlockResult | null {
@@ -164,8 +166,8 @@ export function tryParseStandaloneMatch(c: BlockCtx): BlockResult | null {
   if (!isKeywordForm(c, "match")) return null;
   const matchLoc = { line: c.innerNo, col: c.tokens[0]!.col };
   const after = c.inner === "match" ? "" : c.inner.slice("match ".length);
-  const { expr, nextIndex } = parseMatchAfterKeyword(c.filePath, c.lines, c.idx, after, matchLoc);
-  return { step: execStep({ kind: "match", match: expr }, matchLoc), nextIdx: nextIndex };
+  const { expr, next } = parseMatchAfterKeyword(c.cursor, c.at, after, matchLoc);
+  return { step: execStep({ kind: "match", match: expr }, matchLoc), next };
 }
 
 /**

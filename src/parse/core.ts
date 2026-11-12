@@ -76,54 +76,6 @@ export function isRef(value: string): boolean {
   return /^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?$/.test(value);
 }
 
-export function hasUnescapedClosingQuote(text: string, startIndex: number): boolean {
-  for (let i = startIndex; i < text.length; i += 1) {
-    if (text[i] === `"` && text[i - 1] !== `\\`) {
-      return true;
-    }
-  }
-  return false;
-}
-
-/** Index of the first unescaped double-quote at or after startIndex, or -1. */
-export function indexOfClosingDoubleQuote(text: string, startIndex: number): number {
-  for (let i = startIndex; i < text.length; i += 1) {
-    if (text[i] === `"` && text[i - 1] !== `\\`) {
-      return i;
-    }
-  }
-  return -1;
-}
-
-export function colFromRaw(raw: string): number {
-  return (raw.match(/\S/)?.index ?? 0) + 1;
-}
-
-/**
- * Parse a one-line script body `'…'` from the start of `text`.
- * No escapes: the first `'` after the opener closes. A body that needs `'`
- * must use a `'''` block. Errors if the closer is missing or the body spans lines.
- */
-export function parseSingleQuoteScriptBody(
-  text: string,
-  filePath: string,
-  lineNo: number,
-  col: number,
-): { body: string; restAfterClose: string } {
-  if (!text.startsWith("'")) {
-    fail(filePath, "expected opening ' for a one-line script body", lineNo, col);
-  }
-  const closeIdx = text.indexOf("'", 1);
-  if (closeIdx === -1) {
-    fail(filePath, "unterminated one-line script — missing closing '", lineNo, col);
-  }
-  const body = text.slice(1, closeIdx);
-  if (body.includes("\n")) {
-    fail(filePath, "one-line script body must be one line — use ''' for multiline", lineNo, col);
-  }
-  return { body, restAfterClose: text.slice(closeIdx + 1) };
-}
-
 /** Reject non-empty trailing content after a call expression (e.g. shell redirection). */
 export function rejectTrailingContent(
   filePath: string,
@@ -134,16 +86,6 @@ export function rejectTrailingContent(
   const trimmed = rest.trim();
   if (!trimmed) return;
   fail(filePath, `unexpected content after ${keyword} call: '${trimmed}'; shell redirection (>, |, &) is not supported — use a script block`, lineNo);
-}
-
-/** Count brace depth change for a line (ignores quotes; used for inline { ... } in rule/workflow bodies). */
-export function braceDepthDelta(line: string): number {
-  let delta = 0;
-  for (let i = 0; i < line.length; i += 1) {
-    if (line[i] === "{") delta += 1;
-    else if (line[i] === "}") delta -= 1;
-  }
-  return delta;
 }
 
 /** Jaiph keywords that cannot be used as bare identifier arguments. */

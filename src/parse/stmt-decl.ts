@@ -32,22 +32,22 @@ export function tryParseExportInDef(c: BlockCtx): BlockResult | null {
 /** Nested `script name [use …] = …` declaration, local to the enclosing def. */
 export function tryParseLocalScript(c: BlockCtx): BlockResult | null {
   if (!isKeywordForm(c, "script")) return null;
-  const { scriptDef, nextIndex } = parseScriptBlock(c.filePath, c.lines, c.idx, [], c.trivia);
+  const { scriptDef, next } = parseScriptBlock(c.cursor, c.at, [], c.trivia);
   const loc = { line: c.innerNo, col: c.tokens[0]!.col };
-  return { step: localDeclStep(c.filePath, { kind: "script", script: scriptDef }, loc), nextIdx: nextIndex };
+  return { step: localDeclStep(c.filePath, { kind: "script", script: scriptDef }, loc), next };
 }
 
 /** Nested `def name(params) { … }` declaration, local to the enclosing def. */
 export function tryParseLocalDef(c: BlockCtx): BlockResult | null {
   if (!isKeywordForm(c, "def")) return null;
   const lineNo = c.innerNo;
-  const header = parseDefHeader(c.filePath, c.innerRaw, lineNo, c.cursor.lineTokensOf(c.idx));
+  const header = parseDefHeader(c.filePath, c.innerRaw, lineNo, c.cursor.lineTokensOf(c.at));
   const loc = { line: lineNo, col: c.tokens[0]!.col };
   const def: Def = { name: header.name, params: header.params, comments: [], steps: [], loc };
-  const { steps, nextIdx } = c.parse.body(c, c.idx + 1, lineNo, { preserveBlankLines: true, inNestedDef: true });
+  const { steps, next } = c.parse.body(c, c.cursor.next(c.at), lineNo, { preserveBlankLines: true, inNestedDef: true });
   def.steps.push(...steps);
   stripTrailingBlankLines(def.steps);
-  return { step: localDeclStep(c.filePath, { kind: "def", def }, loc), nextIdx };
+  return { step: localDeclStep(c.filePath, { kind: "def", def }, loc), next };
 }
 
 export function tryParseWait(c: BlockCtx): BlockResult | null {
@@ -67,7 +67,7 @@ export function tryParseEnsureRemoved(c: BlockCtx): BlockResult | null {
 
 /**
  * A def-level `config { … }` block (only where `opts.onConfigBlock` allows
- * it, before any step). Returns the line after the block, or null when the
+ * it, before any step). Returns the position after the block, or null when the
  * line is not a config block.
  */
 export function tryConfigBlock(c: BlockCtx, hadNonCommentStep: boolean): number | null {
@@ -78,9 +78,9 @@ export function tryConfigBlock(c: BlockCtx, hadNonCommentStep: boolean): number 
   if (hadNonCommentStep) {
     fail(c.filePath, "config block inside def must appear before any steps", c.innerNo);
   }
-  const { metadata, nextIndex } = parseConfigBlock(c.filePath, c.lines, c.idx, c.trivia);
+  const { metadata, next } = parseConfigBlock(c.cursor, c.at, c.trivia);
   c.opts.onConfigBlock(metadata, c.innerNo);
-  return nextIndex;
+  return next;
 }
 
 /**

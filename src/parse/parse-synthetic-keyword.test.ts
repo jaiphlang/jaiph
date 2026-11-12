@@ -13,6 +13,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { BodyCursor } from "./body-cursor";
 import {
   STATEMENT,
   parseBlockStatement,
@@ -32,14 +33,14 @@ test("AC5: STATEMENT row alone enables a new top-level keyword", () => {
         text: `<synthetic:${SYNTHETIC}>`,
         loc: { line: c.innerNo, col: 1 },
       },
-      nextIdx: c.idx + 1,
+      next: c.cursor.next(c.at),
     };
   };
 
   STATEMENT[SYNTHETIC] = handler;
   try {
-    const result = parseBlockStatement("/synthetic.jh", [SYNTHETIC], 0);
-    assert.equal(result.nextIdx, 1);
+    const result = parseBlockStatement(BodyCursor.of("/synthetic.jh", SYNTHETIC), 0);
+    assert.equal(result.next, SYNTHETIC.length + 1);
     assert.equal(result.step.type, "trivia");
     assert.equal(
       result.step.type === "trivia" && result.step.kind === "comment" && result.step.text,
@@ -52,7 +53,7 @@ test("AC5: STATEMENT row alone enables a new top-level keyword", () => {
 
 test("AC5: without the STATEMENT row, the same keyword is not a statement", () => {
   assert.throws(
-    () => parseBlockStatement("/synthetic.jh", ["zzznoop"], 0),
+    () => parseBlockStatement(BodyCursor.of("/synthetic.jh", "zzznoop"), 0),
     /E_PARSE.*not a statement/,
   );
 });

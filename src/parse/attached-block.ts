@@ -66,49 +66,50 @@ function parseBinding(
 
 /**
  * Parse a `(<binding>) { … } | <single-stmt>` clause attached to a host
- * call step on line `idx`. The body is parsed by the same statement parser
+ * call step on the line at `at`. The body is parsed by the same statement parser
  * used at the top level (through `c.parse`) — there is no separate mini
  * parser for catch/recover.
  *
  * `textAfterKeyword` is whatever follows `catch` / `recover` on the host line
  * (the leading `(` may be preceded by whitespace). Returns the constructed
- * `CatchBody` plus the next line index to resume parsing from.
+ * `CatchBody` plus the position to resume parsing from.
  */
 export function parseAttachedBlock(
   c: BlockCtx,
-  idx: number,
+  at: number,
   innerNo: number,
   keyword: "catch" | "recover",
   textAfterKeyword: string,
-): { body: CatchBody; nextIdx: number } {
-  const { filePath, lines } = c;
-  const keywordCol = c.cursor.firstCol(idx, keyword);
+): { body: CatchBody; next: number } {
+  const { filePath, cursor } = c;
+  const keywordCol = cursor.firstCol(at, keyword);
   const right = textAfterKeyword.trimStart();
   const { failure, afterBindings } = parseBinding(filePath, innerNo, keyword, keywordCol, right);
   const bindings = { failure };
 
   // Multi-line block: `{` at end of host line; body lives on subsequent lines.
   if (afterBindings === "{") {
-    // Pre-scan for the matching `}` so the unterminated message names the clause.
+    // Pre-scan the following lines' text for the matching `}` so the
+    // unterminated message names the clause.
     let depth = 1;
-    let probe = idx + 1;
-    while (probe < lines.length) {
-      const t = lines[probe].trim();
+    let probe = cursor.next(at);
+    while (!cursor.atEnd(probe)) {
+      const t = cursor.text(probe).trim();
       if (t.endsWith("{")) depth += 1;
       if (t === "}") {
         depth -= 1;
         if (depth === 0) break;
       }
-      probe += 1;
+      probe = cursor.next(probe);
     }
-    if (probe >= lines.length) {
+    if (cursor.atEnd(probe)) {
       fail(filePath, `unterminated ${keyword} block, expected "}"`, innerNo, keywordCol);
     }
-    const { steps, nextIdx } = c.parse.body(c, idx + 1, innerNo, c.opts);
+    const { steps, next } = c.parse.body(c, cursor.next(at), innerNo, c.opts);
     if (steps.length === 0) {
       fail(filePath, `${keyword} block must contain at least one statement`, innerNo, keywordCol);
     }
-    return { body: { block: steps, bindings }, nextIdx };
+    return { body: { block: steps, bindings }, next };
   }
 
   // Inline block on a single line: `{ stmt[; stmt]* }`.
@@ -121,14 +122,14 @@ export function parseAttachedBlock(
     if (stmts.length === 0) {
       fail(filePath, `${keyword} block must contain at least one statement`, innerNo, keywordCol);
     }
-    const blockSteps = stmts.map((stmt) => c.parse.inline(c, idx, stmt));
-    return { body: { block: blockSteps, bindings }, nextIdx: idx + 1 };
+    const blockSteps = stmts.map((stmt) => c.parse.inline(c, at, stmt));
+    return { body: { block: blockSteps, bindings }, next: cursor.next(at) };
   }
 
   if (afterBindings === "") {
     fail(filePath, `${keyword} requires a body after bindings`, innerNo, keywordCol);
   }
 
-  const single = c.parse.inline(c, idx, afterBindings);
-  return { body: { single, bindings }, nextIdx: idx + 1 };
+  const single = c.parse.inline(c, at, afterBindings);
+  return { body: { single, bindings }, next: cursor.next(at) };
 }

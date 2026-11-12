@@ -87,8 +87,8 @@ function stdinOperandToExpr(
 function tryParsePipelineStage(c: BlockCtx, col: number, s: string): { expr: Expr; rest: string } | null {
   const t = s.trimStart();
   if (startsScript(c.filePath, t)) {
-    const res = parseAnonymousInlineScript(c.filePath, c.lines, c.idx, t, c.innerNo, col, true);
-    if (res.closingLineIdx !== c.idx || res.fenced) return null;
+    const res = parseAnonymousInlineScript(c.cursor, c.at, t, c.innerNo, col, true);
+    if (res.closingAt !== c.at || res.fenced) return null;
     return { expr: makeInlineScriptExpr(res), rest: res.trailing };
   }
   const call = parseCallRef(t);
@@ -110,7 +110,7 @@ function parseStdinProducer(
   stdinCol: number,
 ): { stdin: Expr; afterOperand: string; producerIsCall: boolean } {
   if (startsScript(c.filePath, t)) {
-    const res = parseAnonymousInlineScript(c.filePath, c.lines, c.idx, t, c.innerNo, stdinCol, true);
+    const res = parseAnonymousInlineScript(c.cursor, c.at, t, c.innerNo, stdinCol, true);
     return { stdin: makeInlineScriptExpr(res, c.trivia), afterOperand: res.trailing.trimStart(), producerIsCall: true };
   }
   const producerCall = parseCallRef(t);
@@ -142,7 +142,7 @@ function parseStdinProducer(
  * `recover` (`E_PARSE`); `catch` stays legal as a one-shot. `async` anywhere is
  * `E_PARSE`. A plain `stdin <value> -> script()` connect keeps `recover`.
  */
-export function parseStdinConnect(
+function parseStdinConnect(
   c: BlockCtx,
   afterStdin: string,
   captureName: string | undefined,
@@ -185,7 +185,7 @@ export function parseStdinConnect(
   }
   let result: BlockResult;
   if (startsScript(filePath, target)) {
-    const res = parseAnonymousInlineScript(filePath, c.lines, c.idx, target, innerNo, stdinCol, true);
+    const res = parseAnonymousInlineScript(c.cursor, c.at, target, innerNo, stdinCol, true);
     const body = makeInlineScriptExpr(res, c.trivia);
     const stepLoc = { line: innerNo, col: stdinCol };
     result = parseInlineScriptTail(c, res, body, stepLoc, stdinCol, stdin, captureName);
@@ -234,7 +234,7 @@ export function tryBareCall(c: BlockCtx): BlockResult | null {
   const head = c.tokens[0];
   if (!head) return null;
   if (isScriptHead(head)) {
-    const result = parseAnonymousInlineScript(c.filePath, c.lines, c.idx, c.inner, c.innerNo, head.col, true);
+    const result = parseAnonymousInlineScript(c.cursor, c.at, c.inner, c.innerNo, head.col, true);
     const body = makeInlineScriptExpr(result, c.trivia);
     const stepLoc = { line: c.innerNo, col: head.col };
     return parseInlineScriptTail(c, result, body, stepLoc, head.col);
@@ -264,12 +264,9 @@ export function tryParseConst(c: BlockCtx): BlockResult | null {
     const after = rhs === "stdin" ? "" : rhs.slice("stdin ".length);
     return parseStdinConnect(c, after, name, stdinCol);
   }
-  const { value, nextLineIdx } = parseConstRhs(
-    c.filePath, c.lines, c.idx, rhs, c.innerNo, firstCol(c, rhs), name, c.trivia,
-  );
-  const nextLine = nextLineIdx > c.idx ? nextLineIdx + 1 : c.idx + 1;
+  const { value, next } = parseConstRhs(c.cursor, c.at, rhs, c.innerNo, firstCol(c, rhs), name, c.trivia);
   return {
     step: { type: "const", name, value, loc: { line: c.innerNo, col: constCol } },
-    nextIdx: nextLine,
+    next,
   };
 }

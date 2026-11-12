@@ -9,7 +9,7 @@ import { createTrivia, type Trivia } from "./trivia";
 import { fail, parseParamList, rejectRemovedEscapes, SINGLE_QUOTE_MESSAGE, stripQuotes } from "./core";
 import { parseMatchArms } from "./match";
 import type { Token } from "./lexer";
-import { adjacent, BodyCursor, isPunct } from "./body-cursor";
+import { adjacent, isPunct, type BodyCursor } from "./body-cursor";
 import { parseBraceBlockBody } from "./workflow-brace";
 import {
   decodeTestString,
@@ -63,7 +63,7 @@ function parseMockPrompt(t: TestLine): TestStepResult | null {
   const arg = t.toks.slice(at);
   const loc = { line: t.lineNo, col: t.col };
   if (arg.length === 1 && isPunct(arg[0], "{")) {
-    const { arms, nextIndex } = parseMatchArms(t.filePath, t.cursor.lines, t.idx + 1, t.lineNo);
+    const { arms, next } = parseMatchArms(t.cursor, t.cursor.next(t.at), t.lineNo);
     if (arms.length === 0) {
       fail(t.filePath, "mock prompt block must have at least one arm", t.lineNo);
     }
@@ -73,7 +73,7 @@ function parseMockPrompt(t: TestLine): TestStepResult | null {
         rejectRemovedEscapes(t.filePath, body.slice(1, -1), "test", t.lineNo);
       }
     }
-    return { step: { type: "test_mock_prompt_block", arms, loc }, nextIdx: nextIndex };
+    return { step: { type: "test_mock_prompt_block", arms, loc }, next };
   }
   // Columns here count from 0, as they always have.
   if (arg[0]?.text.startsWith("'")) {
@@ -81,7 +81,7 @@ function parseMockPrompt(t: TestLine): TestStepResult | null {
   }
   // `mock prompt <ident>` resolves the ident from a previously declared `const` in this block.
   if (arg.length === 1 && arg[0]!.kind === "ident") {
-    return { step: { type: "test_mock_prompt", response: "", responseVar: arg[0]!.text, loc }, nextIdx: t.idx + 1 };
+    return { step: { type: "test_mock_prompt", response: "", responseVar: arg[0]!.text, loc }, next: t.cursor.next(t.at) };
   }
   if (arg[0]?.kind !== "string" && arg[0]?.text !== '"""') {
     fail(
@@ -95,28 +95,28 @@ function parseMockPrompt(t: TestLine): TestStepResult | null {
   const text = stripQuotes(t.raw.slice(arg[0]!.col - 1));
   return {
     step: { type: "test_mock_prompt", response: decodeTestString(t.filePath, text, t.lineNo, t.col), loc },
-    nextIdx: t.idx + 1,
+    next: t.cursor.next(t.at),
   };
 }
 
 function parseMockDef(t: TestLine, trivia: Trivia): TestStepResult | null {
   const header = parseMockHeader(t, "def");
   if (!header) return null;
-  const { steps, nextIdx } = parseBraceBlockBody(t.filePath, t.cursor.lines, t.idx + 1, t.lineNo, trivia);
-  return { step: { type: "test_mock_def", ...header, steps, loc: { line: t.lineNo, col: t.col } }, nextIdx };
+  const { steps, next } = parseBraceBlockBody(t.cursor, t.cursor.next(t.at), t.lineNo, trivia);
+  return { step: { type: "test_mock_def", ...header, steps, loc: { line: t.lineNo, col: t.col } }, next };
 }
 
 /** `mock script ref(params) {`: the body is raw shell up to a line that is just `}`. */
 function parseMockScript(t: TestLine): TestStepResult | null {
   const header = parseMockHeader(t, "script");
   if (!header) return null;
-  const raw = t.cursor.rawBodyAfter(t.idx);
+  const raw = t.cursor.rawBodyAfter(t.at);
   if (!raw) {
     fail(t.filePath, "unterminated mock block", t.lineNo + 1);
   }
   return {
     step: { type: "test_mock_script", ...header, body: raw.body, loc: { line: t.lineNo, col: t.col } },
-    nextIdx: raw.closeIdx + 1,
+    next: t.cursor.next(raw.closeAt),
   };
 }
 
@@ -170,15 +170,15 @@ function parseTestStep(t: TestLine, trivia: Trivia): TestStepResult {
   return parseTestConst(t) ?? parseTestRun(t) ?? rejectNonStep(t);
 }
 
+/** `test "…" { … }` opening on the line at `at`: the block and the position after its `}` line. */
 export function parseTestBlock(
-  filePath: string,
-  lines: string[],
-  startIndex: number,
+  cursor: BodyCursor,
+  at: number,
   trivia: Trivia = createTrivia(),
-): { testBlock: TestBlockDef; nextIndex: number } {
-  const lineNo = startIndex + 1;
-  const cursor = BodyCursor.of(filePath, lines);
-  const [kw, desc, open, extra] = cursor.lineTokensOf(startIndex);
+): { testBlock: TestBlockDef; next: number } {
+  const filePath = cursor.filePath;
+  const lineNo = cursor.lineNo(at);
+  const [kw, desc, open, extra] = cursor.lineTokensOf(at);
   if (kw?.text !== "test" || desc?.kind !== "string" || adjacent(kw, desc) || !isPunct(open, "{") || extra) {
     fail(filePath, 'test block must match: test "description" {', lineNo);
   }
@@ -189,31 +189,32 @@ export function parseTestBlock(
     loc: { line: lineNo, col: kw.col },
   };
 
-  let i = startIndex + 1;
-  while (i < lines.length) {
-    const toks = cursor.lineTokensOf(i);
+  let pos = cursor.next(at);
+  while (!cursor.atEnd(pos)) {
+    const toks = cursor.lineTokensOf(pos);
     const head = toks[0];
     if (!head) {
       const last = testBlock.steps[testBlock.steps.length - 1];
       if (last && last.type !== "blank_line") {
         testBlock.steps.push({ type: "blank_line" });
       }
-      i += 1;
+      pos = cursor.next(pos);
       continue;
     }
     if (toks.length === 1 && isPunct(head, "}")) {
-      return { testBlock, nextIndex: i + 1 };
+      return { testBlock, next: cursor.next(pos) };
     }
-    const raw = lines[i]!;
+    const raw = cursor.text(pos);
+    const stepNo = cursor.lineNo(pos);
     if (head.kind === "other" && head.text === "#") {
-      testBlock.steps.push({ type: "comment", text: raw.trim(), loc: { line: i + 1, col: head.col } });
-      i += 1;
+      testBlock.steps.push({ type: "comment", text: raw.trim(), loc: { line: stepNo, col: head.col } });
+      pos = cursor.next(pos);
       continue;
     }
-    const t: TestLine = { filePath, cursor, idx: i, raw, toks, lineNo: i + 1, col: head.col };
-    const { step, nextIdx } = parseTestStep(t, trivia);
+    const t: TestLine = { filePath, cursor, at: pos, raw, toks, lineNo: stepNo, col: head.col };
+    const { step, next } = parseTestStep(t, trivia);
     testBlock.steps.push(step);
-    i = nextIdx;
+    pos = next;
   }
   fail(filePath, `unterminated test block: ${description}`, lineNo);
 }

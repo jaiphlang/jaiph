@@ -3,7 +3,7 @@ import { createTrivia, type Trivia } from "./trivia";
 import type { Token } from "./lexer";
 import { fail } from "./core";
 import { rejectRemovedOnelineBacktick, rejectRemovedScriptFence, rejectTagWithShebang, SCRIPT_FENCE } from "./fence";
-import { BLOCK_OPENER, BodyCursor, declHead, isPunct, keyOf } from "./body-cursor";
+import { BLOCK_OPENER, declHead, isPunct, keyOf, type BodyCursor } from "./body-cursor";
 import { readFencedScript } from "./triple-quote";
 import { ENV_KEY_RE, isReservedEnvKey } from "../env-reserved";
 
@@ -126,15 +126,15 @@ function failScriptHeader(filePath: string, toks: Token[], lineNo: number): neve
  * `'''` block, either with an optional interpreter tag (`python3'…'`).
  */
 export function parseScriptBlock(
-  filePath: string,
-  lines: string[],
-  startIndex: number,
+  cursor: BodyCursor,
+  at: number,
   pendingComments: string[],
   trivia: Trivia = createTrivia(),
-): { scriptDef: ScriptDef; nextIndex: number; exported: boolean } {
-  const lineNo = startIndex + 1;
-  const raw = lines[startIndex]!;
-  const toks = BodyCursor.of(filePath, lines).lineTokensOf(startIndex);
+): { scriptDef: ScriptDef; next: number; exported: boolean } {
+  const filePath = cursor.filePath;
+  const lineNo = cursor.lineNo(at);
+  const raw = cursor.text(at);
+  const toks = cursor.lineTokensOf(at);
 
   const head = declHead(toks, "script");
   const nameEnd = head ? head.name.col - 1 + head.name.text.length : 0;
@@ -176,11 +176,11 @@ export function parseScriptBlock(
   const opener = first?.kind === "other" ? BLOCK_OPENER.exec(first.text) : null;
   if (opener && first!.text.endsWith(SCRIPT_FENCE)) {
     const lang = opener[1];
-    const { body, nextIdx, afterClose } = readFencedScript(filePath, lines, startIndex, rhs.slice(lang?.length ?? 0));
+    const { body, next, afterClose } = readFencedScript(cursor, at, rhs.slice(lang?.length ?? 0));
     if (afterClose.trim()) {
       fail(filePath, `unexpected content after closing fence: '${afterClose.trim()}'`, lineNo);
     }
-    return { scriptDef: make(body, lang, "fenced"), nextIndex: nextIdx, exported: isExported };
+    return { scriptDef: make(body, lang, "fenced"), next, exported: isExported };
   }
 
   // Case 2: One-line single-quote script body
@@ -193,7 +193,7 @@ export function parseScriptBlock(
     }
     validateScriptBodyNoInterpolation(body, filePath, lineNo, 1);
     const lang = quote > 0 ? first.text.slice(0, quote) : undefined;
-    return { scriptDef: make(body, lang, "oneline"), nextIndex: startIndex + 1, exported: isExported };
+    return { scriptDef: make(body, lang, "oneline"), next: cursor.next(at), exported: isExported };
   }
   if (first?.kind === "other" && /^(?:[A-Za-z_][A-Za-z0-9_.-]*)?'$/.test(first.text)) {
     fail(filePath, "unterminated one-line script — missing closing '", lineNo, 1);

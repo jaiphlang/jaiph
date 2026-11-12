@@ -3,6 +3,12 @@ import assert from "node:assert/strict";
 import { parseConfigBlock } from "./metadata";
 import { parsejaiph } from "../parser";
 import { createTrivia } from "./trivia";
+import { BodyCursor } from "./body-cursor";
+
+/** The cursor over `lines` and the position of 0-based line `idx`. */
+function src(lines: string[], idx: number, filePath = "test.jh"): [BodyCursor, number] {
+  return [BodyCursor.of(filePath, lines.join("\n")), lines.slice(0, idx).reduce((n, l) => n + l.length + 1, 0)];
+}
 
 test("parseConfigBlock: parses minimal config with one key", () => {
   const lines = [
@@ -10,9 +16,9 @@ test("parseConfigBlock: parses minimal config with one key", () => {
     '  agent.model = "gpt-4"',
     "}",
   ];
-  const { metadata, nextIndex } = parseConfigBlock("test.jh", lines, 0);
+  const { metadata, next } = parseConfigBlock(...src(lines, 0));
   assert.equal(metadata.agent?.model, "gpt-4");
-  assert.equal(nextIndex, 3);
+  assert.equal(next, src(lines, 3)[1]);
 });
 
 test("parseConfigBlock: parses boolean values", () => {
@@ -21,7 +27,7 @@ test("parseConfigBlock: parses boolean values", () => {
     "  run.debug = true",
     "}",
   ];
-  const { metadata } = parseConfigBlock("test.jh", lines, 0);
+  const { metadata } = parseConfigBlock(...src(lines, 0));
   assert.equal(metadata.run?.debug, true);
 });
 
@@ -31,7 +37,7 @@ test("parseConfigBlock: parses integer values", () => {
     "  run.recover_limit = 3",
     "}",
   ];
-  const { metadata } = parseConfigBlock("test.jh", lines, 0);
+  const { metadata } = parseConfigBlock(...src(lines, 0));
   assert.equal(metadata.run?.recoverLimit, 3);
 });
 
@@ -42,7 +48,7 @@ test("parseConfigBlock: fails on unknown config key", () => {
     "}",
   ];
   assert.throws(
-    () => parseConfigBlock("test.jh", lines, 0),
+    () => parseConfigBlock(...src(lines, 0)),
     /unknown config key/,
   );
 });
@@ -54,7 +60,7 @@ test("parseConfigBlock: fails on removed run.inbox_parallel key", () => {
     "}",
   ];
   assert.throws(
-    () => parseConfigBlock("test.jh", lines, 0),
+    () => parseConfigBlock(...src(lines, 0)),
     /unknown config key: run\.inbox_parallel/,
   );
 });
@@ -66,7 +72,7 @@ test("parseConfigBlock: fails on type mismatch (string where boolean expected)",
     "}",
   ];
   assert.throws(
-    () => parseConfigBlock("test.jh", lines, 0),
+    () => parseConfigBlock(...src(lines, 0)),
     /run\.debug must be true or false/,
   );
 });
@@ -78,7 +84,7 @@ test("parseConfigBlock: fails on invalid backend value", () => {
     "}",
   ];
   assert.throws(
-    () => parseConfigBlock("test.jh", lines, 0),
+    () => parseConfigBlock(...src(lines, 0)),
     /agent\.backend must be "cursor", "claude", or "codex"/,
   );
 });
@@ -89,7 +95,7 @@ test("parseConfigBlock: accepts cursor as backend", () => {
     '  agent.backend = "cursor"',
     "}",
   ];
-  const { metadata } = parseConfigBlock("test.jh", lines, 0);
+  const { metadata } = parseConfigBlock(...src(lines, 0));
   assert.equal(metadata.agent?.backend, "cursor");
 });
 
@@ -99,7 +105,7 @@ test("parseConfigBlock: accepts claude as backend", () => {
     '  agent.backend = "claude"',
     "}",
   ];
-  const { metadata } = parseConfigBlock("test.jh", lines, 0);
+  const { metadata } = parseConfigBlock(...src(lines, 0));
   assert.equal(metadata.agent?.backend, "claude");
 });
 
@@ -109,7 +115,7 @@ test("parseConfigBlock: accepts codex as backend", () => {
     '  agent.backend = "codex"',
     "}",
   ];
-  const { metadata } = parseConfigBlock("test.jh", lines, 0);
+  const { metadata } = parseConfigBlock(...src(lines, 0));
   assert.equal(metadata.agent?.backend, "codex");
 });
 
@@ -119,7 +125,7 @@ test("parseConfigBlock: fails on unclosed config block", () => {
     '  agent.model = "gpt-4"',
   ];
   assert.throws(
-    () => parseConfigBlock("test.jh", lines, 0),
+    () => parseConfigBlock(...src(lines, 0)),
     /config block not closed/,
   );
 });
@@ -134,7 +140,7 @@ test("parseConfigBlock: skips empty lines and comments", () => {
     "}",
   ];
   const trivia = createTrivia();
-  const { metadata } = parseConfigBlock("test.jh", lines, 0, trivia);
+  const { metadata } = parseConfigBlock(...src(lines, 0), trivia);
   assert.equal(metadata.agent?.command, "claude");
   assert.deepEqual(trivia.getNode(metadata)?.configBodySequence, [
     { kind: "comment", text: "# this is a comment" },
@@ -149,7 +155,7 @@ test("parseConfigBlock: fails on line without = separator", () => {
     "}",
   ];
   assert.throws(
-    () => parseConfigBlock("test.jh", lines, 0),
+    () => parseConfigBlock(...src(lines, 0)),
     /config line must be key = value/,
   );
 });
@@ -161,7 +167,7 @@ test("parseConfigBlock: fails on bare unquoted string value", () => {
     "}",
   ];
   assert.throws(
-    () => parseConfigBlock("test.jh", lines, 0),
+    () => parseConfigBlock(...src(lines, 0)),
     /config value must be a quoted string, bare identifier, or true\/false/,
   );
 });
@@ -172,7 +178,7 @@ test("parseConfigBlock: bare identifier is sugar for interpolated string", () =>
     "  agent.model = model",
     "}",
   ];
-  const { metadata } = parseConfigBlock("test.jh", lines, 0);
+  const { metadata } = parseConfigBlock(...src(lines, 0));
   assert.equal(metadata.agent?.model, "${model}");
 });
 
@@ -182,7 +188,7 @@ test("parseConfigBlock: quoted string with interpolation is stored literally", (
     '  agent.model = "prefix-${model}-suffix"',
     "}",
   ];
-  const { metadata } = parseConfigBlock("test.jh", lines, 0);
+  const { metadata } = parseConfigBlock(...src(lines, 0));
   assert.equal(metadata.agent?.model, "prefix-${model}-suffix");
 });
 
@@ -192,7 +198,7 @@ test("parseConfigBlock: interpolated agent.backend is accepted at parse time", (
     "  agent.backend = backend",
     "}",
   ];
-  const { metadata } = parseConfigBlock("test.jh", lines, 0);
+  const { metadata } = parseConfigBlock(...src(lines, 0));
   assert.equal(metadata.agent?.backend, "${backend}");
 });
 
@@ -202,7 +208,7 @@ test("parseConfigBlock: unquoted ${name} is sugar for interpolated string", () =
     "  agent.model = ${model}",
     "}",
   ];
-  const { metadata } = parseConfigBlock("test.jh", lines, 0);
+  const { metadata } = parseConfigBlock(...src(lines, 0));
   assert.equal(metadata.agent?.model, "${model}");
 });
 
@@ -212,7 +218,7 @@ test("parseConfigBlock: unquoted ${name.field} is sugar for interpolated string"
     "  agent.model = ${config.model}",
     "}",
   ];
-  const { metadata } = parseConfigBlock("test.jh", lines, 0);
+  const { metadata } = parseConfigBlock(...src(lines, 0));
   assert.equal(metadata.agent?.model, "${config.model}");
 });
 
@@ -223,7 +229,7 @@ test("parseConfigBlock: rejects unclosed ${name interpolation ref", () => {
     "}",
   ];
   assert.throws(
-    () => parseConfigBlock("test.jh", lines, 0),
+    () => parseConfigBlock(...src(lines, 0)),
     /config value must be a quoted string, bare identifier, or true\/false/,
   );
 });
@@ -235,7 +241,7 @@ test("parseConfigBlock: rejects shell fallback ${model:-x} in bare ref", () => {
     "}",
   ];
   assert.throws(
-    () => parseConfigBlock("test.jh", lines, 0),
+    () => parseConfigBlock(...src(lines, 0)),
     /config value must be a quoted string, bare identifier, or true\/false/,
   );
 });
@@ -247,7 +253,7 @@ test("parseConfigBlock: \\\" is the only escape; other backslashes stay verbatim
     '  run.logs_dir = "C:\\logs"',
     "}",
   ];
-  const { metadata } = parseConfigBlock("test.jh", lines, 0);
+  const { metadata } = parseConfigBlock(...src(lines, 0));
   assert.equal(metadata.agent?.cursorFlags, '--re \\d+ --say "hi"');
   assert.equal(metadata.run?.logsDir, "C:\\logs");
 });
@@ -256,7 +262,7 @@ for (const esc of ["\\n", "\\t", "\\\\"]) {
   test(`parseConfigBlock: removed escape ${esc} is E_PARSE with a migration hint`, () => {
     const lines = ["config {", `  agent.cursor_flags = "a${esc}b"`, "}"];
     assert.throws(
-      () => parseConfigBlock("test.jh", lines, 0),
+      () => parseConfigBlock(...src(lines, 0)),
       (err: Error) =>
         err.message.includes("E_PARSE") &&
         err.message.includes(`config strings no longer decode ${esc}`) &&
@@ -272,7 +278,7 @@ test("parseConfigBlock: fails on type mismatch (number where string expected)", 
     "}",
   ];
   assert.throws(
-    () => parseConfigBlock("test.jh", lines, 0),
+    () => parseConfigBlock(...src(lines, 0)),
     /agent\.model must be a string/,
   );
 });
@@ -289,7 +295,7 @@ test("parseConfigBlock: parses module.name, module.version, module.description",
     '  module.description = "A helpful workflow"',
     "}",
   ];
-  const { metadata } = parseConfigBlock("test.jh", lines, 0);
+  const { metadata } = parseConfigBlock(...src(lines, 0));
   assert.equal(metadata.module?.name, "my-workflow");
   assert.equal(metadata.module?.version, "1.2.3");
   assert.equal(metadata.module?.description, "A helpful workflow");
@@ -301,7 +307,7 @@ test("parseConfigBlock: module keys are optional (partial set)", () => {
     '  module.name = "only-name"',
     "}",
   ];
-  const { metadata } = parseConfigBlock("test.jh", lines, 0);
+  const { metadata } = parseConfigBlock(...src(lines, 0));
   assert.equal(metadata.module?.name, "only-name");
   assert.equal(metadata.module?.version, undefined);
   assert.equal(metadata.module?.description, undefined);
@@ -314,7 +320,7 @@ test("parseConfigBlock: module keys coexist with other config keys", () => {
     '  agent.backend = "claude"',
     "}",
   ];
-  const { metadata } = parseConfigBlock("test.jh", lines, 0);
+  const { metadata } = parseConfigBlock(...src(lines, 0));
   assert.equal(metadata.module?.name, "proj");
   assert.equal(metadata.agent?.backend, "claude");
 });
@@ -450,7 +456,7 @@ test("parseConfigBlock: trusted_envs is an unknown config key (removed)", () => 
     "}",
   ];
   assert.throws(
-    () => parseConfigBlock("test.jh", lines, 0),
+    () => parseConfigBlock(...src(lines, 0)),
     /unknown config key: trusted_envs/,
   );
 });

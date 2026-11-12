@@ -1,11 +1,11 @@
 import { dedentCommonLeadingWhitespace } from "./dedent";
 import { decodeQuotedInner, fail } from "./core";
-import { BodyCursor } from "./body-cursor";
+import type { BodyCursor } from "./body-cursor";
 import type { Token } from "./lexer";
 import { checkFenceOpener, dedentFencedScriptBody, UNTERMINATED_FENCE_MESSAGE } from "./fence";
 
 /** Per language.md: trim blank lines adjacent to opening/closing `"""` only — do not dedent inner margin. */
-export function trimAdjacentBlankLines(text: string): string {
+function trimAdjacentBlankLines(text: string): string {
   if (text === "") return "";
   const lines = text.split("\n");
   let start = 0;
@@ -15,20 +15,50 @@ export function trimAdjacentBlankLines(text: string): string {
   return lines.slice(start, end).join("\n");
 }
 
+/** The text between a block token's opening and closing lines. */
+function blockLines(tok: Token): string {
+  return tok.text.split("\n").slice(1, -1).join("\n");
+}
+
+/** A `"""` token's body: the lines between its quotes, blank lines next to either trimmed. */
+export function blockBody(tok: Token): string {
+  return trimAdjacentBlankLines(blockLines(tok));
+}
+
 /**
- * Read the `"""` block that opens at the end of line `idx`. `openText` is the
- * line's text from the opening quotes on (a step argument such as the text
- * after `log `). The block is one `triple_string` token: its body is the lines
- * between the quotes, blank lines next to either trimmed; `afterClose` is the
- * rest of the closing line (trimmed) and `nextIdx` the line after it.
+ * Where a block token ends: the position (`closeAt`) and 1-based number
+ * (`closeLine`) of its closing line, and the position after that line.
+ */
+export type BlockEnd = { closeAt: number; closeLine: number; next: number };
+
+function blockEnd(cursor: BodyCursor, tok: Token): BlockEnd {
+  const closeAt = cursor.closeOf(tok);
+  return { closeAt, closeLine: cursor.lineNo(closeAt), next: cursor.next(closeAt) };
+}
+
+/** The block token that opens at the end of the line at `at` (its last three characters), if it lexes. */
+function blockOpeningAt(cursor: BodyCursor, at: number): Token | undefined {
+  try {
+    return cursor.tokenAt(at, cursor.text(at).trimEnd().length - 2);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Read the `"""` block that opens at the end of the line at `at`. `openText`
+ * is the line's text from the opening quotes on (a step argument such as the
+ * text after `log `). The block is one `triple_string` token: its body is the
+ * lines between the quotes, blank lines next to either trimmed; `afterClose`
+ * is the rest of the closing line (trimmed).
  */
 export function readTripleQuoteBlock(
-  filePath: string,
-  lines: string[],
-  idx: number,
+  cursor: BodyCursor,
+  at: number,
   openText: string,
-): { body: string; nextIdx: number; afterClose: string } {
-  const lineNo = idx + 1;
+): BlockEnd & { body: string; afterClose: string } {
+  const filePath = cursor.filePath;
+  const lineNo = cursor.lineNo(at);
   const openLine = openText.trim();
 
   if (!openLine.startsWith('"""')) {
@@ -38,54 +68,33 @@ export function readTripleQuoteBlock(
     fail(filePath, 'opening """ must not have content on the same line', lineNo);
   }
 
-  const cursor = BodyCursor.of(filePath, lines);
-  let tok: Token;
-  try {
-    tok = cursor.tokenAt(idx, lines[idx]!.trimEnd().length - 2);
-  } catch {
-    tok = { kind: "other", text: "", line: lineNo, col: 1, offset: 0 };
-  }
-  if (tok.kind !== "triple_string") {
+  const tok = blockOpeningAt(cursor, at);
+  if (tok?.kind !== "triple_string") {
     fail(filePath, 'unterminated triple-quoted block: no closing """ before end of file', lineNo);
   }
-  const bodyLines = tok.text.split("\n").slice(1, -1);
-  return {
-    body: joinTripleQuoteBody(bodyLines),
-    nextIdx: BodyCursor.endLineIdx(tok) + 1,
-    afterClose: cursor.textAfter(tok).trim(),
-  };
+  return { body: blockBody(tok), afterClose: cursor.textAfter(tok).trim(), ...blockEnd(cursor, tok) };
 }
 
 /**
- * Read the `'''` block that opens at the end of line `idx`; `openText` is the
- * line's text from the opening quotes on (interpreter tag split off). The
- * block is one `script_fenced` token: its body is the lines between the
+ * Read the `'''` block that opens at the end of the line at `at`; `openText`
+ * is the line's text from the opening quotes on (interpreter tag split off).
+ * The block is one `script_fenced` token: its body is the lines between the
  * quotes, dedented; `afterClose` is the rest of the closing line.
  */
 export function readFencedScript(
-  filePath: string,
-  lines: string[],
-  idx: number,
+  cursor: BodyCursor,
+  at: number,
   openText: string,
-): { body: string; afterClose: string; nextIdx: number } {
-  checkFenceOpener(filePath, openText.trim(), idx + 1);
-  const cursor = BodyCursor.of(filePath, lines);
-  let tok;
-  try {
-    tok = cursor.tokenAt(idx, lines[idx]!.trimEnd().length - 2);
-  } catch {
-    tok = undefined;
-  }
-  if (tok?.kind !== "script_fenced") fail(filePath, UNTERMINATED_FENCE_MESSAGE, idx + 1);
+): BlockEnd & { body: string; afterClose: string } {
+  const lineNo = cursor.lineNo(at);
+  checkFenceOpener(cursor.filePath, openText.trim(), lineNo);
+  const tok = blockOpeningAt(cursor, at);
+  if (tok?.kind !== "script_fenced") fail(cursor.filePath, UNTERMINATED_FENCE_MESSAGE, lineNo);
   return {
-    body: dedentFencedScriptBody(tok.text.split("\n").slice(1, -1).join("\n")),
+    body: dedentFencedScriptBody(blockLines(tok)),
     afterClose: cursor.textAfter(tok).trimEnd(),
-    nextIdx: BodyCursor.endLineIdx(tok) + 1,
+    ...blockEnd(cursor, tok),
   };
-}
-
-function joinTripleQuoteBody(bodyLines: string[]): string {
-  return trimAdjacentBlankLines(bodyLines.join("\n"));
 }
 
 /**
@@ -120,17 +129,12 @@ export function canonicalizeTripleQuotedString(raw: string): string {
 }
 
 /**
- * Helper for step parsers: a step argument `arg` that starts with `"""` on line
- * `idx`. Errors if any content trails the closing `"""`. Returns the message
- * body and the next source index.
+ * Helper for step parsers: a step argument `arg` that starts with `"""` on the
+ * line at `at`. Errors if any content trails the closing `"""`. Returns the
+ * message body and the position after the block.
  */
-export function consumeTripleQuotedArg(
-  filePath: string,
-  lines: string[],
-  idx: number,
-  arg: string,
-): { body: string; nextIdx: number } {
-  const { body, nextIdx, afterClose } = readTripleQuoteBlock(filePath, lines, idx, arg);
-  if (afterClose) fail(filePath, 'unexpected content after closing """', nextIdx);
-  return { body, nextIdx };
+export function consumeTripleQuotedArg(cursor: BodyCursor, at: number, arg: string): { body: string; next: number } {
+  const { body, next, closeLine, afterClose } = readTripleQuoteBlock(cursor, at, arg);
+  if (afterClose) fail(cursor.filePath, 'unexpected content after closing """', closeLine);
+  return { body, next };
 }

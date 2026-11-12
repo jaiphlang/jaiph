@@ -1,17 +1,14 @@
 import type { EnvDeclDef } from "../types";
 import { decodeQuotedInner, fail, SINGLE_QUOTE_MESSAGE } from "./core";
-import { BodyCursor } from "./body-cursor";
+import type { BodyCursor } from "./body-cursor";
 import { readTripleQuoteBlock } from "./triple-quote";
 
-/** Module-level `const NAME = VALUE` on line `startIndex`. */
-export function parseEnvDecl(
-  filePath: string,
-  lines: string[],
-  startIndex: number,
-): { envDecl: EnvDeclDef; nextIndex: number } {
-  const lineNo = startIndex + 1;
-  const raw = lines[startIndex]!;
-  const toks = BodyCursor.of(filePath, lines).lineTokensOf(startIndex);
+/** Module-level `const NAME = VALUE` on the line at `at`. */
+export function parseEnvDecl(cursor: BodyCursor, at: number): { envDecl: EnvDeclDef; next: number } {
+  const filePath = cursor.filePath;
+  const lineNo = cursor.lineNo(at);
+  const raw = cursor.text(at);
+  const toks = cursor.lineTokensOf(at);
   const [kw, nameTok, eqTok] = toks;
 
   // const NAME = "value" | """…""" | barevalue
@@ -27,13 +24,13 @@ export function parseEnvDecl(
 
   // Triple-quoted multiline string
   if (first?.text === '"""') {
-    const { body, nextIdx, afterClose } = readTripleQuoteBlock(filePath, lines, startIndex, valuePart);
+    const { body, next, closeLine, afterClose } = readTripleQuoteBlock(cursor, at, valuePart);
     if (afterClose.length > 0) {
-      fail(filePath, 'unexpected content after closing """ in const declaration', nextIdx);
+      fail(filePath, 'unexpected content after closing """ in const declaration', closeLine);
     }
     return {
       envDecl: { name, value: body, loc, wasQuoted: true, tripleQuoted: true },
-      nextIndex: nextIdx,
+      next,
     };
   }
 
@@ -44,7 +41,7 @@ export function parseEnvDecl(
     }
     return {
       envDecl: { name, value: decodeQuotedInner(first.text.slice(1, -1)), loc, wasQuoted: true },
-      nextIndex: startIndex + 1,
+      next: cursor.next(at),
     };
   }
   if (first?.text === '"') {
@@ -58,6 +55,6 @@ export function parseEnvDecl(
   // Bare value (rest of line)
   return {
     envDecl: { name, value: valuePart, loc },
-    nextIndex: startIndex + 1,
+    next: cursor.next(at),
   };
 }

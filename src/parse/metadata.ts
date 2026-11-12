@@ -1,7 +1,7 @@
 import type { DefMetadata } from "../types";
 import type { Trivia, ConfigBodyPart } from "./trivia";
 import type { Token } from "./lexer";
-import { BodyCursor, isPunct } from "./body-cursor";
+import { isPunct, type BodyCursor } from "./body-cursor";
 import {
   fail,
   isBareIdentifier,
@@ -158,24 +158,25 @@ function assignConfigKey(
   KEY_SETTERS[key]?.(out, value);
 }
 
+/** `config { … }` opening on the line at `at`: the metadata and the position after its `}` line. */
 export function parseConfigBlock(
-  filePath: string,
-  lines: string[],
-  startIndex: number,
+  cursor: BodyCursor,
+  at: number,
   trivia?: Trivia,
-): { metadata: DefMetadata; nextIndex: number } {
-  const cursor = BodyCursor.of(filePath, lines);
-  const open = cursor.lineTokensOf(startIndex);
+): { metadata: DefMetadata; next: number } {
+  const filePath = cursor.filePath;
+  const openNo = cursor.lineNo(at);
+  const open = cursor.lineTokensOf(at);
   if (open.length !== 2 || open[0]!.text !== "config" || !isPunct(open[1], "{")) {
-    return fail(filePath, "config block must be exactly 'config {' on its own line", startIndex + 1, open[0]?.col ?? 1);
+    return fail(filePath, "config block must be exactly 'config {' on its own line", openNo, open[0]?.col ?? 1);
   }
 
   const out: DefMetadata = {};
   const bodySequence: ConfigBodyPart[] = [];
-  for (let idx = startIndex + 1; idx < lines.length; idx += 1) {
-    const lineNo = idx + 1;
-    const raw = lines[idx]!;
-    const toks = cursor.lineTokensOf(idx);
+  for (let pos = cursor.next(at); !cursor.atEnd(pos); pos = cursor.next(pos)) {
+    const lineNo = cursor.lineNo(pos);
+    const raw = cursor.text(pos);
+    const toks = cursor.lineTokensOf(pos);
     const head = toks[0];
     if (!head) {
       continue;
@@ -188,7 +189,7 @@ export function parseConfigBlock(
       if (bodySequence.length > 0 && trivia) {
         trivia.setNode(out, { configBodySequence: bodySequence });
       }
-      return { metadata: out, nextIndex: idx + 1 };
+      return { metadata: out, next: cursor.next(pos) };
     }
 
     // `key = value`: the key is the text before the first `=`.
@@ -216,5 +217,5 @@ export function parseConfigBlock(
     assignConfigKey(filePath, out, key, value, lineNo, head.col);
   }
 
-  return fail(filePath, "config block not closed with '}'", startIndex + 1, 1);
+  return fail(filePath, "config block not closed with '}'", openNo, 1);
 }

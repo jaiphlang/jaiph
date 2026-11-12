@@ -5,7 +5,7 @@ import { fail } from "./core";
 export const SCRIPT_FENCE = "'''";
 
 /** Removed delimiter. A CommonMark code fence. Always E_PARSE. */
-export const REMOVED_SCRIPT_FENCE = "```";
+const REMOVED_SCRIPT_FENCE = "```";
 
 export const REMOVED_SCRIPT_FENCE_MESSAGE =
   "script bodies use triple single quotes: '''...''' (triple backticks are markdown fences)";
@@ -14,17 +14,17 @@ export function startsScriptFence(s: string): boolean {
   return s.startsWith(SCRIPT_FENCE);
 }
 
-export function startsRemovedScriptFence(s: string): boolean {
+function startsRemovedScriptFence(s: string): boolean {
   return s.startsWith(REMOVED_SCRIPT_FENCE);
 }
 
 /** Removed one-liner delimiter. Always E_PARSE. */
-export const REMOVED_SCRIPT_ONELINER = "`";
+const REMOVED_SCRIPT_ONELINER = "`";
 
 export const REMOVED_SCRIPT_ONELINER_MESSAGE =
   "script one-liners use single quotes: '...' (backticks are removed)";
 
-export function startsRemovedOnelineBacktick(s: string): boolean {
+function startsRemovedOnelineBacktick(s: string): boolean {
   return s.startsWith(REMOVED_SCRIPT_ONELINER);
 }
 
@@ -34,27 +34,11 @@ export function startsRemovedOnelineBacktick(s: string): boolean {
  * to `#!/usr/bin/env <tag>`. No whitespace between tag and quote.
  */
 const LANG_TAG_SRC = "[A-Za-z_][A-Za-z0-9_.-]*";
-const LANG_PREFIX_RE = new RegExp(`^(${LANG_TAG_SRC})(?=')`);
 const LANG_TAG_RE = new RegExp(`^${LANG_TAG_SRC}$`);
 
-/** Split an optional interpreter-tag prefix off a script body opener. */
-export function splitScriptLangPrefix(s: string): { lang?: string; rest: string } {
-  const m = LANG_PREFIX_RE.exec(s);
-  if (!m) return { rest: s };
-  return { lang: m[1], rest: s.slice(m[1].length) };
-}
-
 /** Removed form: the tag after the opening fence (`'''python3`). Always E_PARSE. */
-export function removedFenceTagMessage(tag: string): string {
+function removedFenceTagMessage(tag: string): string {
   return `interpreter tags go before the opening quotes: ${tag}${SCRIPT_FENCE}...${SCRIPT_FENCE} (not ${SCRIPT_FENCE}${tag})`;
-}
-
-/**
- * One-line `'…'` or fenced `'''…'''`, optionally prefixed by an interpreter tag
- * (`python3'…'`). Backticks still match so the parser can reject them.
- */
-export function startsInlineScript(s: string): boolean {
-  return s.startsWith("'") || s.startsWith(REMOVED_SCRIPT_ONELINER) || LANG_PREFIX_RE.test(s);
 }
 
 /**
