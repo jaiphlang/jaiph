@@ -120,3 +120,35 @@ Any other character outside a token (including `/` outside a regex position) is 
 ### Spec revision (2026-11-12)
 
 The first version of this task listed only `( ) { } , = . => ->`, the bar, `==` and `!=` as punct, and allowed regex only in match-pattern position. Sources that parse today also use `=~` / `!~` with a regex operand (`if name =~ /^feat-/ {`), bare `$x` and `${…}` outside strings (`return $bad`), `;` between arms on one line, `\` line continuation, regex patterns in `mock prompt { … }`, and raw shell bodies in `mock script … { … }`, so the lossless criterion could not pass. The kind table above adds them.
+
+## Parse strings and call arguments from tokens
+
+Completed: 2026-11-12
+
+### PO notes
+
+Implemented directly. One token-based parser (`parseCallArgs`, private to `src/parse/call-args.ts`) builds every `Arg[]`; `parseCallRef`, `parseParenArgs`, `parseMultilineCallArgList`, and `parseNestedCallArg` (shared by validator, emitter, runtime via `src/parser.ts`) use it. Golden ASTs, compiler fixtures, parse-error snapshots, and the format round-trip were unchanged with no snapshot refresh.
+
+Lexer changes needed for this: `lex()` pull-based generator (a call stops at its `)` and never scans the rest of the line), `{ lenient: true }` (stray characters become `other` tokens and `#` is text, so `foo(a > b)` still reaches the validator's E_VALIDATE), `{ start }` (absolute line/col/offset when lexing from mid-file), and an `offset` on every token.
+
+Deleted: `commaArgsToArgList`, `pushArg`, the multiline char scanner, `src/parse/nested-arg.ts`, runtime `parseArgsRaw` + tests, and the "lexer not imported by the parser" guard test. `parseCallRef` / `parseParenArgs` moved from core.ts to call-args.ts (re-exported through scripts.ts to stay under parser.ts's max-dependencies cap).
+
+Tests: `src/parse/call-args.test.ts`.
+
+Prerequisite: `src/parse/lexer.ts` exports `tokenize()` with `string`, `triple_string`, `script_oneline`, `ident`, and `punct` tokens carrying line and column. If it does not exist, this task is blocked.
+
+Call arguments and string literals are parsed today by character scanners that each handle quotes differently: `commaArgsToArgList` and `pushArg` in `src/parse/core.ts`, `parseMultilineCallArgList` in `src/parse/call-args.ts`, `parseNestedCallArg` in `src/parse/nested-arg.ts`, and `parseCallRef`. Move all of them onto the tokenizer.
+
+### Required
+
+- One function parses an argument list from tokens and returns the existing `Arg[]` shape (`{ kind: "var" }` / `{ kind: "literal", raw }`) with `raw` in the shared stored form (`"` + text with `"` written as `\"` + `"`, produced by `tripleQuoteBodyToRaw` in `src/parse/triple-quote.ts`; decoded by `literalText` in `src/parse/core.ts`).
+- Nested calls (`foo(bar(x))`, `foo('echo $1'(x))`, `foo(python3'print(1)'())`) are recognized from tokens. The validator, the script emitter (`src/transpile/emit-script.ts`), and the runtime (`parseManagedArgAt` in `src/runtime/kernel/runtime-arg-parser.ts`) keep calling one shared recognizer exported from `src/parser.ts`.
+- A `"""` argument may open on the call line or its own line, as today.
+- Delete the replaced scanners. Delete `parseArgsRaw` in `src/runtime/kernel/runtime-arg-parser.ts` (unused outside its tests) and its tests.
+
+### Acceptance
+
+- Golden ASTs (`npm run test:golden-ast`), compiler fixtures (`npm run test:compiler`), and `integration/format-roundtrip.test.ts` are unchanged.
+- `e2e/tests/154_string_values.sh` and `e2e/tests/112_interpreter_tags.sh` pass.
+- A comma or `)` inside a quoted argument, `\"` inside an argument, and a nested call three levels deep each have a unit test.
+- `npm test`, `npm run lint`, `npm run arch:check`, and `bash e2e/test_all.sh` pass.
