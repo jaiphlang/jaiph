@@ -499,14 +499,14 @@
   "match: empty arm body": {
     "file": "input.jh",
     "line": 4,
-    "col": 1,
+    "col": 15,
     "code": "E_PARSE",
     "message": "match arm body cannot be empty"
   },
   "match: unterminated string in arm body": {
     "file": "input.jh",
     "line": 4,
-    "col": 1,
+    "col": 16,
     "code": "E_PARSE",
     "message": "unterminated string in match arm body"
   },
@@ -520,7 +520,7 @@
   "match: single-quoted arm body": {
     "file": "input.jh",
     "line": 4,
-    "col": 1,
+    "col": 16,
     "code": "E_PARSE",
     "message": "single-quoted strings are not supported; use double quotes (\"...\") instead"
   },
@@ -1986,5 +1986,110 @@
     "col": 1,
     "code": "E_PARSE",
     "message": "invalid declaration — expected: const NAME = VALUE"
+  },
+  "match arm body cannot start with return": {
+    "file": "input.jh",
+    "line": 4,
+    "col": 16,
+    "code": "E_PARSE",
+    "message": "match arm body must not start with \"return\"; the match expression itself produces the value — use the expression directly after =>"
+  },
+  "match arm body cannot start with return in const context": {
+    "file": "input.jh",
+    "line": 4,
+    "col": 16,
+    "code": "E_PARSE",
+    "message": "match arm body must not start with \"return\"; the match expression itself produces the value — use the expression directly after =>"
+  },
+  "inline script in match arm body rejected": {
+    "file": "input.jh",
+    "line": 4,
+    "col": 16,
+    "code": "E_PARSE",
+    "message": "inline scripts are not allowed in match arm bodies; use a named script with \"script_name(…)\" instead"
+  },
+  "match arm body: tagged inline script rejected": {
+    "file": "input.jh",
+    "line": 4,
+    "col": 16,
+    "code": "E_PARSE",
+    "message": "inline scripts are not allowed in match arm bodies; use a named script with \"script_name(…)\" instead"
+  },
+  "match arm body: dotted tag inline script rejected": {
+    "file": "input.jh",
+    "line": 4,
+    "col": 16,
+    "code": "E_PARSE",
+    "message": "inline scripts are not allowed in match arm bodies; use a named script with \"script_name(…)\" instead"
+  },
+  "match arm body: fenced inline script rejected": {
+    "file": "input.jh",
+    "line": 4,
+    "col": 16,
+    "code": "E_PARSE",
+    "message": "inline scripts are not allowed in match arm bodies; use a named script with \"script_name(…)\" instead"
+  },
+  "match arm body: one-line backtick script rejected": {
+    "file": "input.jh",
+    "line": 4,
+    "col": 16,
+    "code": "E_PARSE",
+    "message": "inline scripts are not allowed in match arm bodies; use a named script with \"script_name(…)\" instead"
+  },
+  "match arm body: triple backtick rejected": {
+    "file": "input.jh",
+    "line": 4,
+    "col": 16,
+    "code": "E_PARSE",
+    "message": "inline scripts are not allowed in match arm bodies; use a named script with \"script_name(…)\" instead"
+  },
+  "match arm body: unknown verb": {
+    "file": "input.jh",
+    "line": 4,
+    "col": 16,
+    "code": "E_PARSE",
+    "message": "unknown match arm verb \"some\"; allowed: fail \"...\", ref(...)."
+  },
+  "match arm body: error verb hints fail": {
+    "file": "input.jh",
+    "line": 4,
+    "col": 16,
+    "code": "E_PARSE",
+    "message": "unknown match arm verb \"error\"; allowed: fail \"...\", ref(...). did you mean \"fail\"?"
+  },
+  "match arm body: dollar variable is invalid": {
+    "file": "input.jh",
+    "line": 4,
+    "col": 16,
+    "code": "E_PARSE",
+    "message": "invalid match arm body: $x; expected a string, \"\"\" block, identifier, ${…}, ref(...), or fail \"...\""
+  },
+  "match arm body: trailing content after string is invalid": {
+    "file": "input.jh",
+    "line": 4,
+    "col": 16,
+    "code": "E_PARSE",
+    "message": "invalid match arm body: \"yes\" extra; expected a string, \"\"\" block, identifier, ${…}, ref(...), or fail \"...\""
+  },
+  "match arm body: fail without a string is invalid": {
+    "file": "input.jh",
+    "line": 4,
+    "col": 16,
+    "code": "E_PARSE",
+    "message": "invalid match arm body: fail x; expected a string, \"\"\" block, identifier, ${…}, ref(...), or fail \"...\""
+  },
+  "match arm body: unbalanced call is invalid": {
+    "file": "input.jh",
+    "line": 4,
+    "col": 16,
+    "code": "E_PARSE",
+    "message": "invalid match arm body: ref(a; expected a string, \"\"\" block, identifier, ${…}, ref(...), or fail \"...\""
+  },
+  "match arm body: compact form reports body column": {
+    "file": "input.jh",
+    "line": 3,
+    "col": 43,
+    "code": "E_PARSE",
+    "message": "unknown match arm verb \"some\"; allowed: fail \"...\", ref(...)."
   }
 }

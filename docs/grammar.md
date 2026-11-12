@@ -300,11 +300,11 @@ match_arms      = match_arm { NEWLINE match_arm } | match_arm { "," match_arm } 
 match_arm       = match_pattern "=>" arm_body ;
 match_pattern   = match_alternand { "|" match_alternand } | "_" ;
 match_alternand = double_quoted_string | "/" regex_source "/" ;
-arm_body      = double_quoted_string | triple_quoted_block
-              | IDENT
-              | "$" IDENT | "${" IDENT "}"
-              | "fail" double_quoted_string
-              | call_ref ;
+arm_body        = double_quoted_string | triple_quoted_block
+                | IDENT | IDENT "." IDENT
+                | "${" interpolation "}"
+                | call_ref "(" [ call_args ] ")"
+                | "fail" double_quoted_string ;
 ```
 
 For subject rules, alternation, arm delimiters, arm bodies, and the expression form, see [Language — `match`](language.md#match-pattern-match).
@@ -340,9 +340,9 @@ Validator entry points (`src/transpile/validate.ts` for the outer layer; `src/tr
 
 | Code | Triggers |
 |---|---|
-| `E_PARSE` | Duplicate config; duplicate top-level names in the unified namespace; invalid keys/values; `$(…)` in orchestration strings; Jaiph `${identifier}` interpolation in one-line script bodies; `prompt … returns` without `const` capture; `name = prompt …` / non-`const` capture; leading `run` (removed keyword — `run name()`, `return run name()`, `const x = run name()`); assignment without `const`; top-level `local`; invalid send RHS; trailing shell redirection after a call; arguments after `catch` / `recover`; bare `catch` / `recover` without binding; nested inline captures; removed `wait` keyword; invalid parameter names; missing `{` on definition line. |
+| `E_PARSE` | Duplicate config; duplicate top-level names in the unified namespace; invalid keys/values; `$(…)` in orchestration strings; Jaiph `${identifier}` interpolation in one-line script bodies; `prompt … returns` without `const` capture; `name = prompt …` / non-`const` capture; leading `run` (removed keyword — `run name()`, `return run name()`, `const x = run name()`); assignment without `const`; top-level `local`; invalid send RHS; trailing shell redirection after a call; arguments after `catch` / `recover`; bare `catch` / `recover` without binding; nested inline captures; removed `wait` keyword; match arm body outside the [arm-body grammar](#match) (`return …`, inline script, unknown verb, any other form); invalid parameter names; missing `{` on definition line. |
 | `E_SCHEMA` | Invalid `returns` schema — empty, non-flat, unsupported type. |
-| `E_VALIDATE` | Unknown def / script; duplicate import alias; forbidden Jaiph usage inside `$(…)`; dot notation on non-prompt variable or invalid field name; bare identifier argument referencing an unknown variable; unquoted `${…}` in call-argument position; `${ident}` referencing an unknown variable in orchestration strings; arity mismatch; shell redirection (`>`, `>>`, `|`, `&`) inside unquoted call-argument text; `stdin` connect targeting a non-script; type crossings (`prompt` on a script, calling a string, `const x = scriptName`, `${scriptName}`). |
+| `E_VALIDATE` | Unknown def / script; duplicate import alias; forbidden Jaiph usage inside `$(…)`; dot notation on non-prompt variable or invalid field name; bare identifier argument referencing an unknown variable; unquoted `${…}` in call-argument position; `${ident}` referencing an unknown variable in orchestration strings; arity mismatch; match arm: unknown bare identifier in a body, invalid regex, wildcard count other than one, no arms; shell redirection (`>`, `>>`, `|`, `&`) inside unquoted call-argument text; `stdin` connect targeting a non-script; type crossings (`prompt` on a script, calling a string, `const x = scriptName`, `${scriptName}`). |
 | `E_IMPORT_NOT_FOUND` | Import target does not exist (module or script). |
 
 ### Validation rules

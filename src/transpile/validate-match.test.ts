@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { buildScripts } from "../transpiler";
 
-test("E_VALIDATE: return as leading token of match arm body is rejected", () => {
+test("E_PARSE: return as leading token of match arm body is rejected", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-val-match-ret-"));
   try {
     writeFileSync(
@@ -23,14 +23,14 @@ test("E_VALIDATE: return as leading token of match arm body is rejected", () => 
     );
     assert.throws(
       () => buildScripts(join(root, "m.jh"), join(root, "out")),
-      /match arm body must not start with "return"/,
+      /:4:13 E_PARSE match arm body must not start with "return"/,
     );
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
 });
 
-test("E_VALIDATE: inline script in match arm body is rejected", () => {
+test("E_PARSE: inline script in match arm body is rejected", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-val-match-inline-"));
   try {
     writeFileSync(
@@ -48,7 +48,7 @@ test("E_VALIDATE: inline script in match arm body is rejected", () => {
     );
     assert.throws(
       () => buildScripts(join(root, "m.jh"), join(root, "out")),
-      /inline scripts are not allowed in match arm bodies/,
+      /:4:13 E_PARSE inline scripts are not allowed in match arm bodies/,
     );
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -128,7 +128,7 @@ test("match arm with run ref body is accepted", () => {
   }
 });
 
-test("match arm with unknown verb (e.g. error) is rejected with hint", () => {
+test("E_PARSE: match arm with unknown verb (e.g. error) is rejected with hint", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-val-match-unknown-verb-"));
   try {
     writeFileSync(
@@ -146,7 +146,7 @@ test("match arm with unknown verb (e.g. error) is rejected with hint", () => {
     );
     assert.throws(
       () => buildScripts(join(root, "m.jh"), join(root, "out")),
-      { message: /unknown match arm verb "error".*did you mean "fail"/ },
+      { message: /:4:11 E_PARSE unknown match arm verb "error".*did you mean "fail"/ },
     );
   } finally {
     rmSync(root, { recursive: true, force: true });

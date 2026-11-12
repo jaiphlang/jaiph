@@ -63,15 +63,6 @@ export function startsInlineScript(s: string): boolean {
 }
 
 /**
- * Strict shape check for contexts where bare words are otherwise legal (match
- * arm bodies): `[tag]'''` or `[tag]'…'(`. A plain apostrophe (`it's`) does not match.
- */
-export function looksLikeInlineScriptCall(s: string): boolean {
-  const { rest } = splitScriptLangPrefix(s);
-  return startsScriptFence(rest) || /^'[^']*'\s*\(/.test(rest);
-}
-
-/**
  * Reject a manual `#!` line when an interpreter tag already sets the shebang.
  */
 export function rejectTagWithShebang(

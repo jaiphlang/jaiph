@@ -1,5 +1,4 @@
 import type { Diagnostics } from "../diagnostics";
-import { canonicalizeTripleQuotedString, looksLikeInlineScriptCall } from "../parser";
 import type { MatchExprDef, MatchPatternDef } from "../types";
 
 /** All regex sources in a pattern, descending into alternation alternands. */
@@ -34,53 +33,18 @@ export function validateMatchExpr(
         );
       }
     }
-    const bodyTrimmed = (arm.tripleQuotedBody ? canonicalizeTripleQuotedString(arm.body) : arm.body).trimStart();
-    if (/^return(\s|$)/.test(bodyTrimmed)) {
-      diag.error(
-        filePath,
-        expr.loc.line,
-        expr.loc.col,
-        "E_VALIDATE",
-        `match arm body must not start with "return"; the match expression itself produces the value — use the expression directly after =>`,
-      );
-    }
-    if (looksLikeInlineScriptCall(bodyTrimmed) || /'[^']*'\s*\(/.test(bodyTrimmed) || /`[^`]*`\s*\(/.test(bodyTrimmed) || bodyTrimmed.startsWith("```")) {
-      diag.error(
-        filePath,
-        expr.loc.line,
-        expr.loc.col,
-        "E_VALIDATE",
-        `inline scripts are not allowed in match arm bodies; use a named script with "script_name(…)" instead`,
-      );
-    }
     if (!arm.tripleQuotedBody) {
-      const idMatch = bodyTrimmed.match(/^([A-Za-z_][A-Za-z0-9_]*)/);
-      if (idMatch) {
-        const ident = idMatch[1]!;
-        const after = bodyTrimmed.slice(ident.length);
-        const startsCall = after.startsWith("(");
-        const startsArgs = /^\s+\S/.test(after);
-        // A bare call `ref(...)` is a valid arm; `verb args` (space, no parens)
-        // other than `fail "..."` is an unknown verb.
-        if (startsArgs && ident !== "fail") {
-          const hint = ident === "error" ? ` did you mean "fail"?` : "";
-          diag.error(
-            filePath,
-            expr.loc.line,
-            expr.loc.col,
-            "E_VALIDATE",
-            `unknown match arm verb "${ident}"; allowed: fail "...", ref(...).${hint}`,
-          );
-        }
-        if (!startsCall && !startsArgs && after.trim() === "" && !knownVars.has(ident)) {
-          diag.error(
-            filePath,
-            expr.loc.line,
-            expr.loc.col,
-            "E_VALIDATE",
-            `unknown identifier "${ident}" in match arm body; declare it with "const", use a capture, or add a parameter`,
-          );
-        }
+      // The parser has already checked the arm-body grammar; only scope
+      // checks remain here. A bare identifier must be in scope.
+      const bodyTrimmed = arm.body.trim();
+      if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(bodyTrimmed) && !knownVars.has(bodyTrimmed)) {
+        diag.error(
+          filePath,
+          expr.loc.line,
+          expr.loc.col,
+          "E_VALIDATE",
+          `unknown identifier "${bodyTrimmed}" in match arm body; declare it with "const", use a capture, or add a parameter`,
+        );
       }
     }
   }
