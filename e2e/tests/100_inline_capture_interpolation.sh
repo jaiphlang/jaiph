@@ -245,3 +245,31 @@ test_out="$(jaiph test "${TEST_DIR}/ic_lib.test.jh" 2>&1)" || {
 # assert_contains: test output includes dynamic run metadata
 e2e::assert_contains "${test_out}" "inline run capture in log" "test case name in output"
 e2e::pass "jaiph test with inline captures passes"
+
+# --- captured output is data: it is never re-interpolated ---
+e2e::section "inline capture output is not re-interpolated"
+
+e2e::file "ic_inject.jh" <<'EOF'
+script emit = '''
+  printf '%s' 'user said ${secret} and ${HOME}'
+'''
+
+export def main() {
+  const secret = "TOP-SECRET"
+  log "captured: ${emit()} | ${secret}"
+}
+EOF
+
+inject_out="$(e2e::run "ic_inject.jh")"
+e2e::expect_stdout "${inject_out}" <<'EOF'
+
+Jaiph: Running ic_inject.jh
+
+def main
+  ▸ script emit
+  ✓ script emit (<time>)
+  ℹ captured: user said ${secret} and ${HOME} | TOP-SECRET
+
+✓ PASS def main (<time>)
+EOF
+e2e::pass "a capture's output cannot read Jaiph variables or the environment"
