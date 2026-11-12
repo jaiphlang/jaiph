@@ -1,6 +1,6 @@
 import type { CatchBody } from "../types";
 import { fail } from "./core";
-import { splitStatementsOnSemicolons } from "./statement-split";
+import { SliceLexer, splitStatements } from "./slice-lexer";
 import type { BlockCtx } from "./block-ctx";
 
 const KEYWORD_EXAMPLE = {
@@ -78,12 +78,11 @@ export function parseAttachedBlock(
   c: BlockCtx,
   idx: number,
   innerNo: number,
-  innerRaw: string,
   keyword: "catch" | "recover",
   textAfterKeyword: string,
 ): { body: CatchBody; nextIdx: number } {
   const { filePath, lines } = c;
-  const keywordCol = innerRaw.indexOf(keyword) + 1;
+  const keywordCol = c.cursor.firstCol(idx, keyword);
   const right = textAfterKeyword.trimStart();
   const { failure, afterBindings } = parseBinding(filePath, innerNo, keyword, keywordCol, right);
   const bindings = { failure };
@@ -117,8 +116,8 @@ export function parseAttachedBlock(
     if (!afterBindings.endsWith("}")) {
       fail(filePath, `unterminated ${keyword} block, expected "}"`, innerNo, keywordCol);
     }
-    const content = afterBindings.slice(1, -1).trim();
-    const stmts = content === "" ? [] : splitStatementsOnSemicolons(content);
+    const content = new SliceLexer(filePath, afterBindings.slice(1, -1), innerNo, 1, 0);
+    const stmts = splitStatements(content, false).map(([from, to]) => content.text.slice(from, to));
     if (stmts.length === 0) {
       fail(filePath, `${keyword} block must contain at least one statement`, innerNo, keywordCol);
     }

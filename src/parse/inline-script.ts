@@ -1,18 +1,18 @@
-import { fail, parseSingleQuoteScriptBody } from "./core";
+import { fail } from "./core";
 import { parseParenArgs } from "./call-args";
 import {
   rejectRemovedOnelineBacktick,
   rejectRemovedScriptFence,
   rejectTagWithShebang,
   SCRIPT_FENCE,
-  splitScriptLangPrefix,
   startsScriptFence,
 } from "./fence";
+import { SliceLexer } from "./slice-lexer";
+
+export { firstColOnLine, startsScript } from "./slice-lexer";
 import { readFencedScript } from "./triple-quote";
 import { validateScriptBodyNoInterpolation } from "./scripts";
 import type { Arg } from "../types";
-
-export { startsInlineScript } from "./fence";
 
 export interface InlineScriptParsed {
   body: string;
@@ -54,8 +54,14 @@ export function parseAnonymousInlineScript(
   rejectRemovedScriptFence(filePath, trimmed, lineNo, col);
   rejectRemovedOnelineBacktick(filePath, trimmed, lineNo, col);
 
-  // Optional interpreter tag directly before the opening quote: python3'…' / node'''…'''
-  const { lang, rest: t } = splitScriptLangPrefix(trimmed);
+  // The opening token: a one-line `'…'` script, or (a lexer stop) a `'''`
+  // block opener or an unterminated `'`; an interpreter tag touching the
+  // quote is part of it: python3'…' / node'''…'''.
+  const head = new SliceLexer(filePath, trimmed, lineNo, col, 0).at(0, { triple: "span" });
+  const quote = head?.text.indexOf("'") ?? -1;
+  const tag = quote > 0 ? head!.text.slice(0, quote) : "";
+  const lang = /^[A-Za-z_][A-Za-z0-9_.-]*$/.test(tag) ? tag : undefined;
+  const t = trimmed.slice(lang?.length ?? 0);
 
   // Triple single-quote (fenced block)
   if (startsScriptFence(t)) {
@@ -91,8 +97,11 @@ export function parseAnonymousInlineScript(
 
   // One-line single-quote script
   if (t.startsWith("'")) {
-    const { body, restAfterClose } = parseSingleQuoteScriptBody(t, filePath, lineNo, col);
-    const argsResult = parseParenArgs(restAfterClose);
+    if (head!.kind !== "script_oneline") {
+      fail(filePath, "unterminated one-line script — missing closing '", lineNo, col);
+    }
+    const body = head!.text.slice(quote + 1, -1);
+    const argsResult = parseParenArgs(trimmed.slice(head!.text.length));
     if (!argsResult) {
       fail(
         filePath,

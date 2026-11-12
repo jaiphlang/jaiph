@@ -8,19 +8,10 @@ import { fail, rejectTrailingContent } from "./core";
 import { parseCallRef, parseCallRefMultiline } from "./call-args";
 import { parseAttachedBlock } from "./attached-block";
 import { adjacent, isPunct } from "./body-cursor";
-import { execStep, type BlockCtx, type BlockResult } from "./block-ctx";
+import { execStep, firstCol, type BlockCtx, type BlockResult } from "./block-ctx";
+import { SliceLexer } from "./slice-lexer";
 
-/**
- * A statement's first token opens an anonymous inline script: `'…'`,
- * `'''…'''`, tagged `python3'…'`, or (after a lexer stop) the rest of the
- * line starting with a quote or a removed backtick, which the inline-script
- * parser then rejects.
- */
-export function isScriptHead(tok: Token | undefined): boolean {
-  if (!tok) return false;
-  if (tok.kind === "script_oneline" || tok.kind === "script_fenced") return true;
-  return tok.kind === "other" && /^(?:['`]|[A-Za-z_][A-Za-z0-9_.-]*')/.test(tok.text);
-}
+export { isScriptHead } from "./slice-lexer";
 
 /**
  * Tokens from index `from` start a call: `ident(.ident)*` written without
@@ -39,6 +30,49 @@ export function isCallShaped(tokens: Token[], from = 0, maxDots = Infinity): boo
     i += 2;
   }
   return isPunct(tokens[i + 1], "(");
+}
+
+type Clause = { keyword: "catch" | "recover"; left: string; after: string };
+
+/**
+ * The attached `recover` / `catch` clause on call text `hostBody`, read from
+ * its tokens. The first ` recover` (then, when there is none, the first
+ * ` catch `) decides, even one written inside a quoted argument or after
+ * another clause: the text before it must then be exactly one call, or the
+ * statement has no clause and the call's trailing-content check reports it.
+ */
+function findClause(filePath: string, line: number, hostBody: string): Clause | null {
+  const L = new SliceLexer(filePath, hostBody, line, 1, 0);
+  const toks = L.all(0, { triple: "pair" });
+  const spaceBefore = (tok: Token): boolean => hostBody[L.rel(tok) - 1] === " ";
+  const find = (keyword: Clause["keyword"], after: RegExp, inside: RegExp): Clause | null | undefined => {
+    for (const tok of toks) {
+      const next = hostBody[L.end(tok)] ?? "";
+      if (tok.kind === "ident" && tok.text === keyword && spaceBefore(tok) && after.test(next)) {
+        const left = hostBody.slice(0, L.rel(tok) - 1).trim();
+        const probe = parseCallRef(left);
+        if (!probe || probe.rest.trim()) return null;
+        return { keyword, left, after: hostBody.slice(L.end(tok) + (keyword === "catch" ? 1 : 0)) };
+      }
+      // Inside a quoted token the text before it never closes as a call.
+      if (inside.test(tok.text + next)) return null;
+    }
+    return undefined;
+  };
+  const recover = find("recover", /^[\s(]/, / recover[\s(]/);
+  if (recover !== undefined) return recover;
+  return find("catch", /^ /, / catch /) ?? null;
+}
+
+/** `hostBody` ends with the clause keyword alone (a space or, for `catch`, any whitespace before it). */
+function endsWithBareKeyword(filePath: string, line: number, hostBody: string, keyword: "catch" | "recover"): boolean {
+  const L = new SliceLexer(filePath, hostBody, line, 1, 0);
+  const toks = L.all(0, { triple: "pair" });
+  const last = toks[toks.length - 1];
+  if (!last) return false;
+  const before = keyword === "catch" ? /\s/ : / /;
+  if (last.kind === "ident" && last.text === keyword) return before.test(hostBody[L.rel(last) - 1] ?? "");
+  return new RegExp(`${before.source}${keyword}$`).test(last.text);
 }
 
 /**
@@ -62,57 +96,19 @@ export function parseCallStatement(
   hostName: string,
   hostCol: number,
 ): BlockResult {
-  const { filePath, innerNo, innerRaw } = c;
+  const { filePath, innerNo } = c;
   const stepLoc = { line: innerNo, col: hostCol };
 
-  if (/\scatch$/.test(hostBody)) {
-    fail(
-      filePath,
-      'catch requires explicit bindings and a body: catch (<name>) { ... }',
-      innerNo,
-      innerRaw.indexOf("catch") + 1,
-    );
+  if (endsWithBareKeyword(filePath, innerNo, hostBody, "catch")) {
+    fail(filePath, 'catch requires explicit bindings and a body: catch (<name>) { ... }', innerNo, firstCol(c, "catch"));
   }
-  if (/ recover$/.test(hostBody)) {
-    fail(
-      filePath,
-      'recover requires explicit bindings and a body: recover(<name>) { ... }',
-      innerNo,
-      innerRaw.indexOf("recover") + 1,
-    );
+  if (endsWithBareKeyword(filePath, innerNo, hostBody, "recover")) {
+    fail(filePath, 'recover requires explicit bindings and a body: recover(<name>) { ... }', innerNo, firstCol(c, "recover"));
   }
 
-  let attached:
-    | { keyword: "catch" | "recover"; left: string; after: string }
-    | null = null;
-  const m = hostBody.match(/ recover(?=[\s(])/);
-  if (m) {
-    const pos = m.index!;
-    attached = {
-      keyword: "recover",
-      left: hostBody.slice(0, pos).trim(),
-      after: hostBody.slice(pos + " recover".length),
-    };
-  }
-  if (!attached) {
-    const ci = hostBody.indexOf(" catch ");
-    if (ci !== -1) {
-      attached = {
-        keyword: "catch",
-        left: hostBody.slice(0, ci).trim(),
-        after: hostBody.slice(ci + " catch ".length),
-      };
-    }
-  }
-
-  // Fall back to plain parsing when the call before catch/recover has trailing
-  // content, preserving the "unexpected content" error shape.
-  if (attached) {
-    const probe = parseCallRef(attached.left);
-    if (!probe || probe.rest.trim()) {
-      attached = null;
-    }
-  }
+  // Without a clause (or when the text before it is not one call) the call is
+  // parsed alone, so trailing content gets the "unexpected content" error.
+  const attached = findClause(filePath, innerNo, hostBody);
 
   const badRef = (): never =>
     fail(
@@ -134,7 +130,7 @@ export function parseCallStatement(
   const callee = { value: call.ref, loc: stepLoc };
   const body: Expr = { kind: "call", callee, args: call.args, ...(isAsync ? { async: true as const } : {}) };
 
-  const result = parseAttachedBlock(c, c.idx, innerNo, innerRaw, attached.keyword, attached.after);
+  const result = parseAttachedBlock(c, c.idx, innerNo, attached.keyword, attached.after);
   const extras = attached.keyword === "catch"
     ? { captureName, stdin, catch: result.body }
     : { captureName, stdin, recover: result.body };
@@ -159,7 +155,6 @@ export function parseInlineScriptTail(
   stdin?: Expr,
   captureName?: string,
 ): BlockResult {
-  const closingRaw = c.lines[result.closingLineIdx]!;
   const closingNo = result.closingLineIdx + 1;
   const trimmed = result.trailing.trimStart();
   if (trimmed === "") {
@@ -181,7 +176,7 @@ export function parseInlineScriptTail(
       hostCol,
     );
   }
-  const block = parseAttachedBlock(c, result.closingLineIdx, closingNo, closingRaw, attached.keyword, attached.after);
+  const block = parseAttachedBlock(c, result.closingLineIdx, closingNo, attached.keyword, attached.after);
   const extras = attached.keyword === "catch"
     ? { stdin, captureName, catch: block.body }
     : { stdin, captureName, recover: block.body };

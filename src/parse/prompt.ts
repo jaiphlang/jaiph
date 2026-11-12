@@ -1,6 +1,7 @@
 import type { Expr, StepDef } from "../types";
 import { createTrivia, type Trivia } from "./trivia";
-import { fail, SINGLE_QUOTE_MESSAGE, hasUnescapedClosingQuote, indexOfClosingDoubleQuote, isJaiphInterpolationRef, rejectTrailingContent } from "./core";
+import { fail, SINGLE_QUOTE_MESSAGE, isJaiphInterpolationRef, rejectTrailingContent } from "./core";
+import { firstToken } from "./slice-lexer";
 import { parseCallRef } from "./call-args";
 import { dedentTripleQuotedBody, readTripleQuoteBlock, tripleQuoteBodyToRaw } from "./triple-quote";
 
@@ -13,27 +14,20 @@ import { dedentTripleQuotedBody, readTripleQuoteBlock, tripleQuoteBodyToRaw } fr
 export type PromptBodyKind = "string" | "identifier" | "triple_quoted";
 
 /**
- * Split raw prompt literal (opening " to closing ") and optional `returns "..."`.
- * Consumes line continuation (trailing \) after the closing quote.
- * Returns promptRaw (including quotes), optional returns schema string, and next line index.
+ * Split the prompt string token `promptRaw` (at the start of `rawPrompt`)
+ * from an optional `returns "..."` after it. Consumes line continuation
+ * (trailing \) after the closing quote. Returns the optional returns schema
+ * string and the next line index.
  */
 function splitPromptAndReturns(
   filePath: string,
   lineNo: number,
   rawPrompt: string,
+  promptRaw: string,
   lines: string[],
   lineIndexAfterPrompt: number,
-): { promptRaw: string; returns?: string; nextIndex: number } {
-  const openIdx = rawPrompt.indexOf('"');
-  if (openIdx === -1) {
-    fail(filePath, "unterminated prompt string", lineNo, 1);
-  }
-  const closeIdx = indexOfClosingDoubleQuote(rawPrompt, openIdx + 1);
-  if (closeIdx === -1) {
-    fail(filePath, "unterminated prompt string", lineNo, 1);
-  }
-  const promptRaw = rawPrompt.slice(0, closeIdx + 1);
-  let rest = rawPrompt.slice(closeIdx + 1);
+): { returns?: string; nextIndex: number } {
+  let rest = rawPrompt.slice(promptRaw.length);
   let nextIdx = lineIndexAfterPrompt;
   while (nextIdx + 1 < lines.length && /\\\s*$/.test(rest.trimEnd())) {
     rest = rest.replace(/\\\s*$/, "") + "\n" + lines[nextIdx + 1].replace(/\\\s*$/, "").trimStart();
@@ -41,7 +35,7 @@ function splitPromptAndReturns(
   }
   let trimmed = rest.trim();
   if (trimmed.length === 0) {
-    return { promptRaw, nextIndex: nextIdx + 1 };
+    return { nextIndex: nextIdx + 1 };
   }
   const returnsMatch = trimmed.match(/^returns\s+"/);
   if (!returnsMatch) {
@@ -80,7 +74,7 @@ function splitPromptAndReturns(
     fail(filePath, "unterminated returns schema string", lineNo, 1);
   }
   const returnsContent = trimmed.slice(contentStart, contentEnd).replace(/\\"/g, '"');
-  return { promptRaw, returns: returnsContent, nextIndex: nextIdx + 1 };
+  return { returns: returnsContent, nextIndex: nextIdx + 1 };
 }
 
 /**
@@ -257,13 +251,16 @@ export function parsePromptStep(
 
   // --- Case 2: String literal ---
   if (promptArg.startsWith('"')) {
-    if (!hasUnescapedClosingQuote(promptArg, 1)) {
+    const str = firstToken(filePath, promptArg)!;
+    if (str.kind !== "string") {
       fail(filePath, 'multiline prompt strings are no longer supported; use a triple-quoted block instead: prompt """...""""', lineNo, promptCol);
     }
-    const { promptRaw, returns: returnsSchema, nextIndex } = splitPromptAndReturns(
+    const promptRaw = str.text;
+    const { returns: returnsSchema, nextIndex } = splitPromptAndReturns(
       filePath,
       lineNo,
       promptArg,
+      promptRaw,
       lines,
       lineIdx,
     );

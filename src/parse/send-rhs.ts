@@ -1,6 +1,7 @@
 import type { Expr, DefRef } from "../types";
 import { createTrivia, type Trivia } from "./trivia";
-import { fail, hasUnescapedClosingQuote, indexOfClosingDoubleQuote, isRef, rejectTrailingContent } from "./core";
+import { fail, isRef, rejectTrailingContent } from "./core";
+import { SliceLexer } from "./slice-lexer";
 import { parseCallRef } from "./call-args";
 import { dedentTripleQuotedBody, readTripleQuoteBlock, tripleQuoteBodyToRaw } from "./triple-quote";
 
@@ -33,17 +34,15 @@ export function parseSendRhs(
     return { value, nextIdx };
   }
   if (t.startsWith('"')) {
-    if (!hasUnescapedClosingQuote(t, 1)) {
+    const L = new SliceLexer(filePath, t, lineNo, col, 0);
+    const str = L.at(0, { triple: "pair" })!;
+    if (str.kind !== "string") {
       fail(filePath, 'multiline strings use triple quotes: send """...""" -> channel', lineNo, col);
     }
-    const close = indexOfClosingDoubleQuote(t, 1);
-    if (close === -1) {
-      fail(filePath, "unterminated string in send right-hand side", lineNo, col);
-    }
-    if (t.slice(close + 1).trim() !== "") {
+    if (L.at(L.end(str), { triple: "pair" })) {
       fail(filePath, SEND_RHS_HINT, lineNo, col);
     }
-    return { value: { kind: "literal", raw: t.slice(0, close + 1) }, nextIdx: defaultNext };
+    return { value: { kind: "literal", raw: str.text }, nextIdx: defaultNext };
   }
   if (/^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?\s*\(/.test(t)) {
     const call = parseCallRef(t);

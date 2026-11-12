@@ -55,6 +55,13 @@ export interface LexOptions {
    * Skips counting the newlines before `start`.
    */
   startAt?: { line: number; col: number };
+  /** A `/` at `start` (the first token) opens a regex, whatever comes before it. */
+  regexFirst?: boolean;
+  /**
+   * `false`: a `'` is an `other` token and an interpreter tag an identifier
+   * (no script tokens). Match-arm splitting reads quotes this way.
+   */
+  scripts?: boolean;
 }
 
 /** Longest first, so `=>` wins over `=` and `${` over `$`. */
@@ -128,7 +135,7 @@ export function* lex(source: string, filePath: string, options: LexOptions = {})
    */
   const regexAllowed = (): boolean => {
     const p = prev();
-    if (!p) return false;
+    if (!p) return options.regexFirst === true;
     if (p.kind === "punct" && (p.text === "=~" || p.text === "!~")) return true;
     if (braces[braces.length - 1] !== "match") return false;
     return p.kind === "newline" || (p.kind === "punct" && ["{", ",", ";", "|"].includes(p.text));
@@ -242,10 +249,10 @@ export function* lex(source: string, filePath: string, options: LexOptions = {})
       push("string", pos, i + 1, startLine, startCol);
       continue;
     }
-    if (IDENT_START.test(ch) || ch === "'") {
+    if (IDENT_START.test(ch) || (ch === "'" && options.scripts !== false)) {
       // An interpreter tag touches the opening quote: `python3'…'`, `node.v-2'''`.
       let tagEnd = pos;
-      if (ch !== "'") {
+      if (ch !== "'" && options.scripts !== false) {
         while (tagEnd < source.length && TAG_CHAR.test(source[tagEnd]!)) tagEnd += 1;
       }
       if (source[tagEnd] === "'") {

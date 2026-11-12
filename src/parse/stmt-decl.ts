@@ -5,13 +5,13 @@
 // assignments without `const`, and the removed `channel <- payload` send.
 
 import type { Def } from "../types";
-import { colFromRaw, fail, matchLegacySendOperator } from "./core";
+import { fail, matchLegacySendOperator } from "./core";
 import { parseScriptBlock } from "./scripts";
 import { parseConfigBlock } from "./metadata";
 import { parseDefHeader, stripTrailingBlankLines } from "./def-header";
-import { startsInlineScript } from "./fence";
 import { adjacent, isPunct, keyOf } from "./body-cursor";
-import { afterKeyword, isKeywordForm, localDeclStep, type BlockCtx, type BlockResult } from "./block-ctx";
+import { afterKeyword, firstCol, isKeywordForm, localDeclStep, type BlockCtx, type BlockResult } from "./block-ctx";
+import { startsScript } from "./slice-lexer";
 
 /**
  * `export` on a nested `script` / `def` / `prompt` is rejected: nested
@@ -52,7 +52,7 @@ export function tryParseLocalDef(c: BlockCtx): BlockResult | null {
 
 export function tryParseWait(c: BlockCtx): BlockResult | null {
   if (c.tokens[0]!.kind !== "ident" || afterKeyword(c) !== "") return null;
-  fail(c.filePath, '"wait" has been removed from the language', c.innerNo, c.tokens[0]!.col);
+  fail(c.filePath, '"wait" has been removed from the language', c.innerNo, c.tokens[0]?.col ?? 1);
 }
 
 export function tryParseEnsureRemoved(c: BlockCtx): BlockResult | null {
@@ -150,7 +150,7 @@ export function applyAssignmentGuards(c: BlockCtx): void {
       c.filePath,
       'use "const name = prompt ..." to capture the prompt result (e.g. const answer = prompt "..." )',
       c.innerNo,
-      c.innerRaw.indexOf(promptAssign[1]) + 1,
+      firstCol(c, promptAssign[1]!),
     );
   }
   const generic = c.inner.match(/^([A-Za-z_][A-Za-z0-9_]*)\s+=\s*(.+)$/s);
@@ -167,7 +167,7 @@ export function applyAssignmentGuards(c: BlockCtx): void {
         c.filePath,
         "use 'send <payload> -> <channel>'",
         c.innerNo,
-        c.innerRaw.indexOf(captureName) + 1,
+        firstCol(c, captureName),
       );
     }
     const looksInvoke =
@@ -175,14 +175,14 @@ export function applyAssignmentGuards(c: BlockCtx): void {
       rest.startsWith("ensure ") ||
       rest.startsWith("async ") ||
       rest.startsWith("stdin ") ||
-      startsInlineScript(rest) ||
+      startsScript(c.filePath, rest) ||
       /^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?\s*\(/.test(rest);
     if (looksInvoke) {
       fail(
         c.filePath,
         `assignment without "const" is no longer supported; use "const ${captureName} = ${rest}"`,
         c.innerNo,
-        c.innerRaw.indexOf(captureName) + 1,
+        firstCol(c, captureName),
       );
     }
   }
@@ -195,5 +195,5 @@ export function tryLegacySend(c: BlockCtx): BlockResult | null {
 }
 
 export function rejectNonStatement(c: BlockCtx): never {
-  fail(c.filePath, "not a statement; put the command in a script", c.innerNo, colFromRaw(c.innerRaw));
+  fail(c.filePath, "not a statement; put the command in a script", c.innerNo, c.tokens[0]?.col ?? 1);
 }

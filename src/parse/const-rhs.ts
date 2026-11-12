@@ -3,7 +3,7 @@ import { createTrivia, type Trivia } from "./trivia";
 import { fail, rejectTrailingContent } from "./core";
 import { parseCallRefMultiline, parseCallRef } from "./call-args";
 import { dedentTripleQuotedBody, readTripleQuoteBlock, tripleQuoteBodyToRaw } from "./triple-quote";
-import { parseAnonymousInlineScript, startsInlineScript } from "./inline-script";
+import { firstColOnLine, parseAnonymousInlineScript, startsScript } from "./inline-script";
 import { parsePromptStep } from "./prompt";
 import { parseMatchAfterKeyword } from "./match";
 import {
@@ -64,9 +64,8 @@ export function parseConstRhs(
 ): { value: Expr; nextLineIdx: number } {
   const head = rhs.trimStart();
   if (head.startsWith("prompt ")) {
-    const innerRaw = lines[lineIdx];
-    const promptCol = innerRaw.indexOf("prompt") + 1;
-    const promptArg = rhs.slice(rhs.indexOf("prompt") + "prompt".length).trimStart();
+    const promptCol = firstColOnLine(filePath, lines, lineIdx, "prompt");
+    const promptArg = head.slice("prompt".length).trimStart();
     const result = parsePromptStep(filePath, lines, lineIdx, promptArg, promptCol, constName, trivia);
     const st = result.step;
     if (st.type !== "exec" || st.body.kind !== "prompt" || st.captureName !== constName) {
@@ -95,7 +94,7 @@ export function parseConstRhs(
   // const x = async ref() — async capture returning a handle
   if (head === "async" || head.startsWith("async ")) {
     const asyncRest = head === "async" ? "" : head.slice("async ".length).trim();
-    if (startsInlineScript(asyncRest)) {
+    if (startsScript(filePath, asyncRest)) {
       fail(filePath, "async is not supported with inline scripts", lineNo, col);
     }
     const call = parseCallRef(asyncRest);
@@ -110,7 +109,7 @@ export function parseConstRhs(
     };
   }
   // const x = 'body'(args) — inline script
-  if (startsInlineScript(head)) {
+  if (startsScript(filePath, head)) {
     const result = parseAnonymousInlineScript(filePath, lines, lineIdx, head, lineNo, col);
     const value: Expr = {
       kind: "inline_script",
