@@ -14,14 +14,6 @@ const OPERATORS = ["==", "!=", "=~", "!~"];
 const PAIR: SliceMode = { triple: "pair" };
 
 /**
- * An operand that reads differently under the old `if` escape rule, where a
- * backslash escapes any character (so `\\"` ends a string and `\\/` a regex),
- * than under the lexer's (`\"` is the only escape). Kept so those lines parse
- * as before; only text with two backslashes in a row reaches it.
- */
-const BACKSLASH_OPERAND_RE = /^("(?:[^"\\]|\\.)*"|\/(?:[^/\\]|\\.)*\/)\s*\{\s*$/;
-
-/**
  * The condition `if <subject> <op> <operand> {` from its tokens: `text` is the
  * line from the `if` keyword on, at line `lineNo`, column `col`. The subject
  * is an identifier or `a.b`; the operand a `"…"` string or `/…/` regex
@@ -46,11 +38,6 @@ function readIfCondition(filePath: string, text: string, lineNo: number, col: nu
   const operand = L.at(L.end(op), { regex: true, triple: "pair" });
   if (!operand || adjacent(op, operand)) return null;
   const operator = op.text as IfOperator;
-  const rest = L.text.slice(L.rel(operand));
-  if (rest.includes("\\\\")) {
-    const m = BACKSLASH_OPERAND_RE.exec(rest);
-    return m ? { subject, operator, rawOperand: m[1]! } : null;
-  }
   if (operand.kind !== "string" && operand.kind !== "regex") return null;
   const brace = L.at(L.end(operand), PAIR);
   if (!isPunct(brace, "{") || L.at(L.end(brace!), PAIR)) return null;

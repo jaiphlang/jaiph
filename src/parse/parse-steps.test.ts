@@ -471,6 +471,32 @@ test("else if: malformed else if without a condition is E_PARSE", () => {
   );
 });
 
+// === if operand escape rule (one escape: `\"` only) ===
+
+test('if: string operand `"a\\\\"` is an unterminated string, E_PARSE', () => {
+  // Under the one escape rule a backslash escapes only `"`, so `"a\\"` reads as
+  // `"a\` + `\"` (an escaped quote) and never closes — the same E_PARSE any
+  // other malformed `if` operand gives. The deleted fallback used to accept it.
+  assert.throws(() => parseOneWorkflowStep(['if x == "a\\\\" {', '  log "y"', "}"]), /E_PARSE invalid if syntax/);
+});
+
+test('if: string operand keeps `\\"` as an escaped quote', () => {
+  const step = parseOneWorkflowStep(['if x == "a\\"b" {', '  log "y"', "}"]);
+  assert.equal(step.type, "if");
+  if (step.type !== "if") return;
+  assert.equal(step.operand.kind, "string_literal");
+  assert.equal(step.operator, "==");
+});
+
+test('if: regex operand keeps `\\/` as a non-terminating slash', () => {
+  const step = parseOneWorkflowStep(['if x =~ /a\\/b/ {', '  log "y"', "}"]);
+  assert.equal(step.type, "if");
+  if (step.type !== "if") return;
+  assert.equal(step.operand.kind, "regex");
+  if (step.operand.kind !== "regex") return;
+  assert.equal(step.operand.source, "a\\/b");
+});
+
 test("else if: else if on its own line (not attached to closing brace) is E_PARSE", () => {
   assert.throws(
     () =>
