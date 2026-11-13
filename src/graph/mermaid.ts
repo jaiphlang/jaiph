@@ -102,6 +102,8 @@ function limit(n: number): string {
   return Number.isFinite(n) ? String(n) : "all";
 }
 
+const SUBGRAPH_STYLE = "fill:#f6f7f6,stroke:#b9c0bb,color:#1d2420";
+
 /** `%% collapsed: …` trailer naming what was not drawn and the flags that draw it. */
 function collapsedComment(model: GraphModel): string | null {
   const { depth, imports, libs } = model.collapsed;
@@ -140,7 +142,10 @@ export function emitMermaid(model: GraphModel): string {
   for (const e of model.edges) lines.push("  " + edgeSyntax(e));
   const trailer: string[] = [];
   for (const n of model.nodes) if (n.kind === "fork") trailer.push(`  class ${n.id} fork`);
-  for (const sg of model.subgraphs) if (sg.imported) trailer.push(`  style ${sg.id} stroke-dasharray:5 4`);
+  // Grey subgraph background; Mermaid's default theme fills subgraphs yellow.
+  for (const sg of model.subgraphs) {
+    trailer.push(`  style ${sg.id} ${SUBGRAPH_STYLE}${sg.imported ? ",stroke-dasharray:5 4" : ""}`);
+  }
   model.edges.forEach((e, i) => {
     if (e.kind === "fail") trailer.push(`  linkStyle ${i} stroke:#b42318,color:#b42318`);
     if (e.kind === "comm") trailer.push(`  linkStyle ${i} stroke:#22857b,stroke-width:2px`);

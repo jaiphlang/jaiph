@@ -49,7 +49,7 @@ test("each edge kind has its own Mermaid syntax; failure and comm edges get a li
   n1 --o|"↯ ch"| n2
   n1 ==>|"deliver ch"| n2
 
-  style g1 stroke-dasharray:5 4
+  style g1 fill:#f6f7f6,stroke:#b9c0bb,color:#1d2420,stroke-dasharray:5 4
   linkStyle 2 stroke:#b42318,color:#b42318
   linkStyle 3 stroke:#22857b,stroke-width:2px
 `,

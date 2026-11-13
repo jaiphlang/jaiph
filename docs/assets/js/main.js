@@ -789,7 +789,9 @@
                     return;
                 }
 
-                const root = button.closest(".card");
+                // A .code-tabs group scopes its own tabs, so several groups can
+                // share one card (docs/execution-flow.md has one per example).
+                const root = button.closest(".code-tabs") || button.closest(".card");
                 if (!root) {
                     return;
                 }

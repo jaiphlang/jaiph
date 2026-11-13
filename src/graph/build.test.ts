@@ -36,11 +36,15 @@ function mermaid(mods: Mod[] | string, opts?: GraphOptions): string {
   return emitMermaid(model!);
 }
 
-/** Output without classDef lines and blank lines, for compact expectations. */
+/**
+ * Output without classDef lines, the grey style line every subgraph gets, and
+ * blank lines, for compact expectations. The full output is pinned by the
+ * import-depth test below.
+ */
 function body(out: string): string {
   return out
     .split("\n")
-    .filter((l) => !l.includes("classDef") && l.trim() !== "")
+    .filter((l) => !l.includes("classDef") && !/^  style g\d+ fill:#f6f7f6,stroke:#b9c0bb,color:#1d2420$/.test(l) && l.trim() !== "")
     .join("\n");
 }
 
@@ -265,6 +269,9 @@ def b() {
   n4 --> n5
   n5 --> n6
 
+  style g1 fill:#f6f7f6,stroke:#b9c0bb,color:#1d2420
+  style g2 fill:#f6f7f6,stroke:#b9c0bb,color:#1d2420
+
 %% collapsed: 1 def beyond --depth 1 (use -d all to expand)
 `,
   );
@@ -322,7 +329,8 @@ test("defaults: imported defs one hop away expand (dashed border); deeper import
   n5 --> n6
   n6 --> n7
 
-  style g2 stroke-dasharray:5 4
+  style g1 fill:#f6f7f6,stroke:#b9c0bb,color:#1d2420
+  style g2 fill:#f6f7f6,stroke:#b9c0bb,color:#1d2420,stroke-dasharray:5 4
 
 %% collapsed: 1 def beyond --import-depth 1, 1 library def (use -i all, -l to expand)
 `,
