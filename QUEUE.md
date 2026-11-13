@@ -15,3 +15,198 @@ Process rules:
 6. Hard rewrite semantics: breaking changes are allowed unless a task says otherwise.
 7. Acceptance criteria are non-negotiable. A task is not done until every
    acceptance bullet is verified by a test that fails when the contract is violated.
+
+## Decide catch / recover clauses from tokens outside strings #dev-ready
+
+A quoted argument that contains the word ` recover` or ` catch ` breaks a valid statement.
+
+### Current behavior
+
+- `findClause` in `src/parse/stmt-call.ts` takes the first ` recover` (or, when there is none, the first ` catch `) anywhere in the call text, including text inside a quoted string or inside the clause body. If the text before that match is not exactly one call, it reports "no clause". The call's trailing-content check then fails.
+- Example: with `script f = 'true'`, the line `f() catch (e) { log "do not recover now" }` fails with `E_PARSE unexpected content after call call: 'catch (e) { log "do not recover now" }'`. The ` recover` inside the log string wins over the real ` catch`.
+- The same happens with `f("x catch y") catch (e) { … }` and `f() recover (e) { log "catch me" }`.
+- The doc comment on `findClause` describes this quirk.
+
+### Required
+
+- The clause keyword is the first `catch` or `recover` identifier token at the top level of the statement: after the call's closing `)`, and not inside a string, `"""` block, inline script, or nested parentheses.
+- Text inside strings, and text inside the clause body, never selects or blocks a clause.
+- Every statement that parses today parses to the same AST.
+- Error messages for genuinely malformed clauses (missing binding, missing body, two bindings) keep their current text and columns.
+- The doc comment on `findClause` describes the new rule.
+- CHANGELOG `Unreleased` gets a Fix entry.
+
+### Acceptance
+
+- Unit tests in `src/parse/` cover all of these, each parsing to a call step with the right clause kind, binding and body:
+  - `f() catch (e) { log "do not recover now" }`
+  - `f("a catch b") catch (e) { log "x" }`
+  - `f("a recover(b)") recover (e) { log "y" }`
+  - `f() recover (e) { log "catch me" }`
+- A unit test shows `f() catch` with no binding still fails with today's message and column.
+- Golden ASTs, `test-fixtures/compiler-txtar/parse-errors-snapshot.json`, and the compiler fixtures pass unchanged.
+- `npm test`, `npm run lint`, `npm run arch:check`, and `bash e2e/test_all.sh` pass.
+
+## Split compact match arms only on top-level commas #dev-ready
+
+The one-line `match` form rejects a call arm whose arguments contain a comma.
+
+### Current behavior
+
+- Given `def f(a, b) { … }`, this line fails:
+
+  `const r = match x { "a" => f(x, x), _ => "n" }`
+
+  It reports `E_PARSE invalid match arm body: f(x; expected a string, """ block, identifier, ${…}, ref(...), or fail "..."`.
+- Compact arms in `src/parse/match-arms.ts` split the `{ … }` body on every `,` outside strings and regexes, including commas inside a call's parentheses.
+- The multiline and `;`-separated forms accept the same arm.
+- `mock prompt { … }` in `*.test.jh` uses the same compact splitter.
+
+### Required
+
+- The compact form splits arms only on commas at parenthesis depth 0 that are outside strings, regexes, `"""` blocks, and inline scripts.
+- An arm body `f(x, y)` or `'echo $1'(a, b)` becomes one arm whose body is the call with both arguments, the same AST the multiline form produces.
+- Every compact match that parses today keeps its AST.
+- An unbalanced `(` in a compact arm is an `E_PARSE` at the arm body's column, not a silent split.
+- CHANGELOG `Unreleased` gets a Fix entry.
+
+### Acceptance
+
+- A unit test parses `match x { "a" => f(x, y), _ => "n" }` and compares its AST, `loc` excepted, with the same match written in multiline form.
+- A unit test covers a nested call `f(g(a, b), c)` and an inline-script arm with two arguments.
+- A unit test covers `mock prompt { "a" => "x, y", _ => "z" }`, keeping it at two arms.
+- A unit test shows an unbalanced `(` fails with `E_PARSE` at the arm body's column.
+- `docs/grammar.md` or `docs/language.md`, wherever the compact form is described, says that commas inside calls do not separate arms.
+- `npm test`, `npm run lint`, `npm run arch:check`, and `bash e2e/test_all.sh` pass.
+
+## Reject trailing text after fail and return values #dev-ready
+
+`fail "x" y` silently drops `y`, and `return "x" y` stores `"x" y` as the value. `log "x" y` is already rejected.
+
+### Current behavior
+
+- In a def body, `fail "x" y` parses to `{ type: "say", level: "fail", message: { raw: '"x"' } }`, and `y` disappears.
+- `return "x" y` parses to `{ type: "return", value: { kind: "literal", raw: '"x" y' } }`. At runtime it does not return the string `x`.
+- `log "x" y`, `logerr` and `logwarn` fail with `E_PARSE unexpected content after log string: 'y'` at the statement column. The code is in `src/parse/stmt-say.ts`.
+- The return parsing is in `src/parse/stmt-return.ts`.
+
+### Required
+
+- After a `fail` or `return` value that is a `"…"` string, any token other than end of line or a trailing comment is `E_PARSE`. The messages mirror the log message: `unexpected content after fail string: '<text>'` and `unexpected content after return string: '<text>'`, at the same column rule `log` uses.
+- `return` values that are not strings (`return name`, `return a.b`, `return f(x)`, `return match …`, `return prompt …`, `return """…"""`) keep their current behaviour and errors.
+- Before changing anything, grep every repo source (tracked `.jh`, compiler-txtar inputs, e2e heredocs, docs blocks) for `fail "…" <text>` and `return "…" <text>`. Fix or delete any matches; record what was found in the task notes.
+- CHANGELOG `Unreleased` gets a Breaking entry. Programs that relied on the dropped or stored text now fail to parse.
+
+### Acceptance
+
+- `test-fixtures/compiler-txtar/parse-errors.txt` gets fixtures for `fail "x" y` and `return "x" y` with exact message, line and column. The parse-errors snapshot is regenerated, and the diff contains only those additions.
+- A unit test shows `fail "x"  # note` and `return "x"  # note` still parse.
+- `npm test`, `npm run lint`, `npm run arch:check`, and `bash e2e/test_all.sh` pass.
+
+## Look up def-body keywords without Object.prototype #dev-ready
+
+A def-body line that starts with `toString(`, `constructor(` or another `Object.prototype` method name fails with a misleading "unterminated block".
+
+### Current behavior
+
+- `STATEMENT` in `src/parse/workflow-brace.ts` is a plain object literal, and `dispatch` reads it as `STATEMENT[keyword]`.
+- For `toString()` the lookup returns `Object.prototype.toString`, which runs as a handler. The body then fails at the def line with `E_PARSE unterminated block, expected "}"`.
+- `constructor()`, `hasOwnProperty()`, `valueOf()` and the other `Object.prototype` names fail the same way.
+- A comment in `src/parse/body-cursor.ts`, around line 131, mentions this lookup.
+- Top-level dispatch in `src/parse/parse-module.ts` may have the same pattern; check it.
+
+### Required
+
+- Keyword tables used for dispatch (`STATEMENT`, and any top-level equivalent) cannot return inherited properties. Use a `Map`, a null-prototype object, or an own-property check.
+- A def-body line `toString()` is handled like any other bare call to an unknown name. It either parses as a call step to `toString` (a later validation reports an unknown ref) or fails with the same error as `fooBar()`. Whichever it is, it must match an ordinary unknown name exactly.
+- The comment in `body-cursor.ts` is updated or removed.
+- CHANGELOG `Unreleased` gets a Fix entry.
+
+### Acceptance
+
+- A unit test shows `toString()`, `constructor()` and `hasOwnProperty()` in a def body get the same parse result or error as `fooBar()`.
+- A unit test checks the same names as top-level lines, if top-level dispatch had the issue.
+- Golden ASTs and the parse-errors snapshot pass unchanged.
+- `npm test`, `npm run lint`, `npm run arch:check`, and `bash e2e/test_all.sh` pass.
+
+## Reject malformed config values, const assignments, empty import paths, and mock prompt trailing text #dev-ready
+
+The parser accepts four malformed inputs and stores nonsense instead of reporting `E_PARSE`.
+
+### Current behavior
+
+- **Config:** `config { agent.model = "a" "b" }`, written on separate lines, parses to `agent.model` = `a" "b`. The value is taken from the first to the last quote. The code is in `src/parse/metadata.ts`.
+- **Const:** `const x == y` in a def body parses to a const step whose value is the literal `= y`. The right-hand-side parsing is in `src/parse/stmt-decl.ts` and `src/parse/const-rhs.ts`.
+- **Import:** `import "" as x` parses to an import with an empty path. The code is in `src/parse/imports.ts`. `import script "" as x` probably behaves the same; check it.
+- **Mock prompt:** `mock prompt "a" x` in a `*.test.jh` test block is accepted, and the trailing `x` is ignored. The code is in `src/parse/test-steps.ts` / `src/parse/tests.ts`.
+
+### Required
+
+- **Config:** a config string value is exactly one `"…"` string token, optionally followed by a comment. Anything else after it is `E_PARSE unexpected content after config value: '<text>'` at the column of the extra text.
+- **Const:** `const <name> = <rhs>` needs exactly one `=` token after the name. `==` (or any other operator token) there is `E_PARSE` with the existing `const` shape message, at the operator's column.
+- **Import:** an empty path `""` in `import` or `import script` is `E_PARSE import path must not be empty`, at the path's column.
+- **Mock prompt:** any text after `mock prompt "<response>"` or `mock prompt <const_name>` is `E_PARSE` with the existing `mock prompt must be: …` message, at the column of the extra text.
+- Before changing anything, grep every repo source (tracked `.jh`, compiler-txtar inputs, e2e heredocs, docs blocks) for each form. Record what was found in the task notes.
+- CHANGELOG `Unreleased` gets one Breaking entry that lists all four.
+
+### Acceptance
+
+- `test-fixtures/compiler-txtar/parse-errors.txt` gets one fixture per form, with exact message, line and column. The parse-errors snapshot diff contains only those additions.
+- Unit tests show the valid neighbours still parse:
+  - `agent.model = "a"  # c`
+  - `const x = "y"`
+  - `import "./a.jh" as a`
+  - `mock prompt "a"`
+- `npm test`, `npm run lint`, `npm run arch:check`, and `bash e2e/test_all.sh` pass.
+
+## Report channel and mock prompt columns correctly #dev-ready
+
+Two diagnostics point at the wrong column.
+
+### Current behavior
+
+- `src/parse/channels.ts` finds a channel name's column with `raw.indexOf(name)`, and does the same for the route target. When the name also occurs inside the word `channel`, the column is wrong.
+  - `channel c`, `channel ch` and `channel an` get column 1, where `c` is found inside `channel`; the correct column is 9.
+  - `channel abc` gets 9, which is correct.
+  - The wrong `loc` reaches AST consumers and diagnostics such as `duplicate name "c"`.
+- `mock prompt` errors in `*.test.jh` use 0-based columns. With two-space indentation, `mock prompt 5` reports `t.test.jh:2:2` where the statement starts at column 3. The code is in `src/parse/test-steps.ts` / `src/parse/tests.ts`.
+
+### Required
+
+- Channel `loc.col` and the target's column come from the token positions of the name and the target.
+- `mock prompt` errors report the 1-based column of the `mock` token, the same rule every other test-block statement uses.
+- Check the other test-block statements for the same off-by-one, and fix any that have it.
+- Golden ASTs that encode the wrong channel columns, if any, are updated. Every changed column is listed in the task notes.
+- CHANGELOG `Unreleased` gets a Fix entry.
+
+### Acceptance
+
+- A unit test shows `channel c`, `channel ch -> target` and `channel abc` report `loc.col` 9 for the name, and the target's column is correct.
+- A `parse-errors.txt` fixture shows a duplicate `channel c` error at column 9.
+- A `parse-errors.txt` fixture shows an indented `mock prompt 5` error at the `mock` token's 1-based column.
+- `npm test`, `npm run lint`, `npm run arch:check`, and `bash e2e/test_all.sh` pass.
+
+## Use the single string escape rule in if operands #dev-ready
+
+`if` operands still read a backslash as escaping any character. Everywhere else in Jaiph, `\"` is the only escape.
+
+### Current behavior
+
+- `readIfCondition` in `src/parse/stmt-control.ts` has a fallback, `BACKSLASH_OPERAND_RE`, for operands containing two backslashes in a row. Under that fallback `\\` escapes the next backslash, so `"a\\"` ends at the last quote.
+- Under the lexer's rule, a backslash escapes only `"`. So the operand `"a\\"` reads as `"a\` + `\"`, an unterminated string.
+- The fallback exists only to keep old parses unchanged.
+- Regex operands (`/…/`) also go through the fallback; their escape rule is a separate concern.
+
+### Required
+
+- String operands follow the lexer rule: `\"` is the only escape, the same as all other Jaiph strings. `docs/grammar.md` states it for `if` operands.
+- `BACKSLASH_OPERAND_RE` and its branch are deleted. `if x == "a\\" {` becomes the same unterminated-string `E_PARSE` any other string gives.
+- Regex operands keep their current behaviour (`\/` does not end a regex) and are covered by a test.
+- Before changing anything, grep every repo source for `if` operands containing `\\`, and record the matches in the task notes.
+- CHANGELOG `Unreleased` gets an entry: Breaking if any accepted program changes meaning.
+
+### Acceptance
+
+- Unit tests pin the rule for `if x == "a\\" {`, `if x == "a\"b" {`, and `if x =~ /a\/b/ {`.
+- `docs/grammar.md` states the rule for `if` operands.
+- `npm test`, `npm run lint`, `npm run arch:check`, and `bash e2e/test_all.sh` pass.
