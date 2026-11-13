@@ -16,7 +16,7 @@ import { blockBody, tripleQuoteBodyToRaw } from "./triple-quote";
 const PATTERN: SliceMode = { regex: true, scripts: false, triple: "pair" };
 /** Arm body: quotes pair up, `'…'` is a script, `/` is a plain character. */
 const BODY: SliceMode = { triple: "pair" };
-/** Splitting a compact `{ … }` body on `,`: any `/` opens a regex. */
+/** Splitting a compact `{ … }` body on `,`: any `/` opens a regex. Commas inside a call's `(…)` do not split. */
 const COMPACT: SliceMode = { regex: true, scripts: false, triple: "pair" };
 
 const ARM_RETURN_MESSAGE =
@@ -241,8 +241,15 @@ export function parseCompactMatchArms(filePath: string, inner: string, lineNo: n
   const L = new SliceLexer(filePath, inner, lineNo, col, 0);
   const arms: MatchArmDef[] = [];
   const segments: Token[][] = [[]];
+  // Split only on commas at parenthesis depth 0, so a comma inside a call's
+  // `(…)` — `f(x, y)`, `'echo'(a, b)` — stays in one arm. An unbalanced `(`
+  // keeps depth above 0, so the rest of the line stays one arm and `armBody`
+  // reports an `E_PARSE` at the body column instead of splitting silently.
+  let depth = 0;
   for (const tok of L.all(0, COMPACT)) {
-    if (isPunct(tok, ",")) segments.push([]);
+    if (isPunct(tok, "(")) depth += 1;
+    else if (isPunct(tok, ")") && depth > 0) depth -= 1;
+    if (depth === 0 && isPunct(tok, ",")) segments.push([]);
     else segments[segments.length - 1]!.push(tok);
   }
   for (const seg of segments) {

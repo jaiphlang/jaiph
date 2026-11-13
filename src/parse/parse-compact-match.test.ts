@@ -60,6 +60,58 @@ test("return echo hi is E_PARSE, not a shell step", () => {
   );
 });
 
+/** The match expr value of the single `return` step in `main`, with `loc` stripped. */
+function returnMatch(src: string): unknown {
+  const ret = mainSteps(src).find((s) => s.type === "return")!;
+  assert.equal(ret.type, "return");
+  if (ret.type !== "return") throw new Error("not a return");
+  assert.equal(ret.value.kind, "match");
+  const json = JSON.stringify(ret.value, (k, v) => (k === "loc" ? undefined : v));
+  return JSON.parse(json);
+}
+
+const CALLEES = `export def f(a, b) {\n  return a\n}\nexport def g(a, b) {\n  return a\n}\n`;
+
+test("compact call arm with a comma is one arm, same AST as multiline", () => {
+  const compact = returnMatch(
+    `${CALLEES}export def main() {\n  const x = "a"\n  return match x { "a" => f(x, x), _ => "n" }\n}`,
+  );
+  const multiline = returnMatch(
+    `${CALLEES}export def main() {\n  const x = "a"\n  return match x {\n    "a" => f(x, x)\n    _ => "n"\n  }\n}`,
+  );
+  assert.deepEqual(compact, multiline);
+});
+
+test("compact nested call arm keeps inner commas in one arm", () => {
+  const steps = mainSteps(`${CALLEES}export def main() {\n  const x = "a"\n  return match x { "a" => f(g(x, x), x), _ => "n" }\n}`);
+  const ret = steps.find((s) => s.type === "return")!;
+  if (ret.type !== "return" || ret.value.kind !== "match") throw new Error("not a match return");
+  assert.equal(ret.value.match.arms.length, 2);
+  assert.equal(ret.value.match.arms[0]!.body, "f(g(x, x), x)");
+});
+
+test("compact inline-script arm with two args is one arm, rejected like multiline", () => {
+  const compact = `export def main() {\n  const x = "a"\n  return match x { "a" => 'echo $1 $2'(x, x), _ => "n" }\n}`;
+  const multiline = `export def main() {\n  const x = "a"\n  return match x {\n    "a" => 'echo $1 $2'(x, x)\n    _ => "n"\n  }\n}`;
+  const msg = /inline scripts are not allowed in match arm bodies/;
+  // The inner comma must not split the arm; both forms reach the same arm-body rule.
+  assert.throws(() => parsejaiph(compact, "test.jh"), msg);
+  assert.throws(() => parsejaiph(multiline, "test.jh"), msg);
+});
+
+test("compact arm with an unbalanced ( is E_PARSE at the arm body column", () => {
+  const line = `  return match x { "a" => f(x, _ => "n" }`;
+  const src = `${CALLEES}export def main() {\n  const x = "a"\n${line}\n}`;
+  const bodyCol = line.indexOf("f(") + 1;
+  assert.throws(
+    () => parsejaiph(src, "test.jh"),
+    (e: Error) => {
+      assert.match(e.message, new RegExp(`test\\.jh:\\d+:${bodyCol} E_PARSE`));
+      return true;
+    },
+  );
+});
+
 test("multiline return match still parses", () => {
   const steps = mainSteps(
     [
