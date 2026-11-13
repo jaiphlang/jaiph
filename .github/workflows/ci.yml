@@ -61,7 +61,10 @@ jobs:
 
   docs-local:
     name: Getting started (local)
-    runs-on: ubuntu-latest
+    # Pin to 24.04: Playwright 1.58.2 has no browser/dependency support entry
+    # for ubuntu26.04-x64, so `playwright install --with-deps` fails on the
+    # newer ubuntu-latest image.
+    runs-on: ubuntu-24.04
     env:
       CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
       CURSOR_TOKEN: ${{ secrets.CURSOR_TOKEN }}
