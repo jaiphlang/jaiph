@@ -1424,6 +1424,20 @@ export def main() {
   logerr "hello" extra
 }
 
+=== fail with trailing content after string
+# @expect error E_PARSE "unexpected content after fail string: 'y'" @2:3
+--- input.jh
+export def main() {
+  fail "x" y
+}
+
+=== return with trailing content after string
+# @expect error E_PARSE "unexpected content after return string: 'y'" @2:3
+--- input.jh
+export def main() {
+  return "x" y
+}
+
 === catch: prompt capture without const
 # @expect error E_PARSE "const name = prompt ..." @6:5
 --- input.jh

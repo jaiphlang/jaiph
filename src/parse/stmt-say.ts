@@ -22,6 +22,7 @@ import {
   localDeclStep,
   makeInlineScriptExpr,
   makeTripleQuotedLiteral,
+  rejectTrailingAfterString,
   tripleQuotedArg,
   type BlockCtx,
   type BlockHandler,
@@ -50,6 +51,7 @@ export function tryParseFail(c: BlockCtx): BlockResult | null {
   if (message.kind !== "string") {
     fail(c.filePath, 'multiline strings use triple quotes: fail """..."""', c.innerNo, failCol);
   }
+  rejectTrailingAfterString(c, "fail", message, failCol);
   return {
     step: { type: "say", level: "fail", message: { kind: "literal", raw: message.text }, loc: stepLoc },
     next: c.cursor.next(c.at),

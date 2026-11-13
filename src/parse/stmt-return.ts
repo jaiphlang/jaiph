@@ -11,6 +11,7 @@ import {
   afterKeyword,
   isKeywordForm,
   makeInlineScriptExpr,
+  rejectTrailingAfterString,
   tripleQuotedArg,
   firstCol,
   type BlockCtx,
@@ -52,6 +53,9 @@ function parseReturnString(c: BlockCtx, returnValue: string, retLoc: { line: num
   const valueTok = c.tokens[1]!;
   if (valueTok.text.startsWith('"') && valueTok.kind !== "string") {
     fail(c.filePath, 'multiline strings use triple quotes: return """..."""', c.innerNo, retLoc.col);
+  }
+  if (valueTok.kind === "string") {
+    rejectTrailingAfterString(c, "return", valueTok, retLoc.col);
   }
   const isBareDotted = isBareDottedIdentifierReturn(returnValue);
   const isBare = !isBareDotted && isBareIdentifierReturn(returnValue);

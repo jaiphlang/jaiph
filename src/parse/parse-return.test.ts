@@ -114,6 +114,40 @@ test("return with string value is Expr.literal", () => {
   }
 });
 
+test("return string with trailing comment still parses", () => {
+  const mod = parsejaiph(
+    `export def main() {\n  return "x"  # note\n}`,
+    "test.jh",
+  );
+  const step = mod.defs[0].steps[0];
+  assert.equal(step.type, "return");
+  assert.equal(step.type === "return" && step.value.kind, "literal");
+});
+
+test("return string with trailing content is E_PARSE", () => {
+  assert.throws(
+    () => parsejaiph(`export def main() {\n  return "x" y\n}`, "test.jh"),
+    /2:3 E_PARSE unexpected content after return string: 'y'/,
+  );
+});
+
+test("fail string with trailing comment still parses", () => {
+  const mod = parsejaiph(
+    `export def main() {\n  fail "x"  # note\n}`,
+    "test.jh",
+  );
+  const step = mod.defs[0].steps[0];
+  assert.equal(step.type, "say");
+  assert.equal(step.type === "say" && step.level, "fail");
+});
+
+test("fail string with trailing content is E_PARSE", () => {
+  assert.throws(
+    () => parsejaiph(`export def main() {\n  fail "x" y\n}`, "test.jh"),
+    /2:3 E_PARSE unexpected content after fail string: 'y'/,
+  );
+});
+
 test("bare return is Expr.literal with empty string", () => {
   const mod = parsejaiph(
     `export def main() {\n  return\n}`,

@@ -91,6 +91,17 @@ export function firstCol(c: BlockCtx, text: string): number {
   return c.cursor.firstCol(c.at, text);
 }
 
+/**
+ * After a `fail` / `return` single-line `"…"` string value (`stringTok`),
+ * reject any trailing text other than end of line or a `#` comment. Mirrors the
+ * `log` trailing-content rule and message, reported at the keyword column.
+ */
+export function rejectTrailingAfterString(c: BlockCtx, keyword: "fail" | "return", stringTok: Token, col: number): void {
+  const after = c.cursor.textAfter(stringTok).trim();
+  if (!after || after.startsWith("#")) return;
+  fail(c.filePath, `unexpected content after ${keyword} string: '${after}'`, c.innerNo, col);
+}
+
 /** First token is the identifier `kw`, alone on the line or followed by a space. */
 export function isKeywordForm(c: BlockCtx, kw: string): boolean {
   const head = c.tokens[0];
