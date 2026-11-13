@@ -72,8 +72,16 @@ function parseMetadataValue(
   if (value[0]?.text.startsWith(`'`)) {
     return fail(filePath, SINGLE_QUOTE_MESSAGE, lineNo, col);
   }
-  if (value[0]?.text.startsWith(`"`) && text.endsWith(`"`)) {
-    const inner = text.slice(1, -1);
+  if (value[0]?.kind === "string") {
+    // A string value is exactly one `"…"` token, optionally followed by a comment.
+    const next = value[1];
+    if (next && !(next.kind === "other" && next.text === "#")) {
+      const comment = value.slice(1).find((t) => t.kind === "other" && t.text === "#");
+      const end = comment ? comment.col - value[0].col : text.length;
+      const extra = text.slice(next.col - value[0].col, end).trim();
+      return fail(filePath, `unexpected content after config value: '${extra}'`, lineNo, next.col);
+    }
+    const inner = value[0].text.slice(1, -1);
     rejectRemovedEscapes(filePath, inner, "config", lineNo, col);
     const content = decodeQuotedInner(inner);
     if (configValueHasInterpolation(content)) {

@@ -69,6 +69,30 @@ test("parseTestBlock: rejects mock prompt with single-quoted string", () => {
   );
 });
 
+test("parseTestBlock: rejects text after a mock prompt string response", () => {
+  const lines = [
+    'test "t1" {',
+    '  mock prompt "a" x',
+    '}',
+  ];
+  assert.throws(
+    () => parseTestBlock(...src(lines, 0)),
+    /mock prompt must be: mock prompt/,
+  );
+});
+
+test("parseTestBlock: rejects text after a mock prompt const response", () => {
+  const lines = [
+    'test "t1" {',
+    '  mock prompt resp x',
+    '}',
+  ];
+  assert.throws(
+    () => parseTestBlock(...src(lines, 0)),
+    /mock prompt must be: mock prompt/,
+  );
+});
+
 // === parseTestBlock: mock prompt block (match arms) ===
 
 test("parseTestBlock: parses mock prompt block with string literal and wildcard", () => {

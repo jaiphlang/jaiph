@@ -59,7 +59,7 @@ env_decl  = "const" IDENT "=" env_value ;
 env_value = double_quoted_string | triple_quoted_block | bare_value ;
 ```
 
-Values: double-quoted string (single-line; multi-line double-quoted is `E_PARSE`), triple-quoted multiline, or a bare token (e.g. `const N = 42` stores the string `"42"`). Top-level `local` is `E_PARSE` — use `const`. Top-level `const` shares the unified per-module namespace with channels, defs, scripts, and script-import aliases.
+Values: double-quoted string (single-line; multi-line double-quoted is `E_PARSE`), triple-quoted multiline, or a bare token (e.g. `const N = 42` stores the string `"42"`). The name must be followed by exactly one `=`, so another operator there, such as `==` in `const x == y`, is `E_PARSE` (`invalid declaration — expected: const NAME = VALUE`) at the operator's column. Top-level `local` is `E_PARSE` — use `const`. Top-level `const` shares the unified per-module namespace with channels, defs, scripts, and script-import aliases.
 
 ## Imports and exports
 
@@ -75,6 +75,7 @@ ENV_KEY            = IDENT ;
 | Module import path | Quoted string. `.jh` extension auto-appended when omitted. Relative resolution against the importing file's directory. |
 | Library fallback | When relative resolution finds no file and the path contains `/`, the path is split as `<lib-name>/<sub-path>` and resolved to `<workspace>/.jaiph/libs/<lib-name>/<sub-path>.jh`. |
 | Script import path | Quoted string. Relative-only (no library fallback). The path refers to a raw script file (no `.jh` appended). |
+| Empty path | An empty `""` path in `import` or `import script` is `E_PARSE` (`import path must not be empty`) at the path's column. |
 | `use` clause | Optional, after the alias. Requests host env keys for this script's spawns, same clause as on a named `script` declaration — identifiers only (no quotes, no `${…}`; invalid names are `E_ENV_INVALID`, reserved keys `E_ENV_RESERVED`, same set as `--env`). A key reaches the subprocess only when granted with `--env KEY[=VALUE]`. `use` is reserved: it cannot be a script name or alias. See [Environment variables](env-vars.md#script-env). |
 | Missing target | `E_IMPORT_NOT_FOUND` at compile time. |
 | Alias collision | A duplicate module-import alias is `E_VALIDATE`. Script-import aliases (`import script … as name`) join the parse-time unified namespace shared with channels, defs, scripts, and top-level `const`, so a name clash there is `E_PARSE`. See [rule 4](#validation-rules). |

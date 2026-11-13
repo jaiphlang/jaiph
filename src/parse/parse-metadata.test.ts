@@ -271,6 +271,28 @@ for (const esc of ["\\n", "\\t", "\\\\"]) {
   });
 }
 
+test("parseConfigBlock: string value accepts a trailing comment", () => {
+  const lines = [
+    "config {",
+    '  agent.model = "a"  # c',
+    "}",
+  ];
+  const { metadata } = parseConfigBlock(...src(lines, 0));
+  assert.equal(metadata.agent?.model, "a");
+});
+
+test("parseConfigBlock: rejects trailing content after a string value", () => {
+  const lines = [
+    "config {",
+    '  agent.model = "a" "b"',
+    "}",
+  ];
+  assert.throws(
+    () => parseConfigBlock(...src(lines, 0)),
+    /unexpected content after config value: '"b"'/,
+  );
+});
+
 test("parseConfigBlock: fails on type mismatch (number where string expected)", () => {
   const lines = [
     "config {",

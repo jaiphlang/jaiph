@@ -2105,5 +2105,33 @@
     "col": 43,
     "code": "E_PARSE",
     "message": "unknown match arm verb \"some\"; allowed: fail \"...\", ref(...)."
+  },
+  "config string value with trailing content": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 21,
+    "code": "E_PARSE",
+    "message": "unexpected content after config value: '\"b\"'"
+  },
+  "const with double-equals operator": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 11,
+    "code": "E_PARSE",
+    "message": "invalid declaration — expected: const NAME = VALUE"
+  },
+  "import with empty path": {
+    "file": "input.jh",
+    "line": 1,
+    "col": 8,
+    "code": "E_PARSE",
+    "message": "import path must not be empty"
+  },
+  "mock prompt with trailing content": {
+    "file": "input.test.jh",
+    "line": 4,
+    "col": 18,
+    "code": "E_PARSE",
+    "message": "mock prompt must be: mock prompt \"<response>\", mock prompt <const_name>, or mock prompt { \"pattern\" => \"response\", _ => \"default\" }"
   }
 }

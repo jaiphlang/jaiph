@@ -1,5 +1,5 @@
 import type { EnvDeclDef } from "../types";
-import { decodeQuotedInner, fail, SINGLE_QUOTE_MESSAGE } from "./core";
+import { CONST_DECL_SHAPE_MESSAGE, decodeQuotedInner, fail, SINGLE_QUOTE_MESSAGE } from "./core";
 import type { BodyCursor } from "./body-cursor";
 import { readTripleQuoteBlock } from "./triple-quote";
 
@@ -13,7 +13,7 @@ export function parseEnvDecl(cursor: BodyCursor, at: number): { envDecl: EnvDecl
 
   // const NAME = "value" | """…""" | barevalue
   if (kw?.text !== "const" || nameTok?.kind !== "ident" || !eqTok?.text.startsWith("=")) {
-    fail(filePath, 'invalid declaration — expected: const NAME = VALUE', lineNo);
+    fail(filePath, CONST_DECL_SHAPE_MESSAGE, lineNo);
   }
   const name = nameTok.text;
   const loc = { line: lineNo, col: 1 };

@@ -9,6 +9,19 @@ test("parseImportLine: parses valid double-quoted import", () => {
   assert.equal(result.loc.line, 1);
 });
 
+test("parseImportLine: parses relative path neighbour", () => {
+  const result = parseImportLine("test.jh", 'import "./a.jh" as a', 1);
+  assert.equal(result.path, "./a.jh");
+  assert.equal(result.alias, "a");
+});
+
+test("parseImportLine: rejects empty import path", () => {
+  assert.throws(
+    () => parseImportLine("test.jh", 'import "" as x', 1),
+    /import path must not be empty/,
+  );
+});
+
 test("parseImportLine: rejects single-quoted import path", () => {
   assert.throws(
     () => parseImportLine("test.jh", "import 'other.jh' as other", 2),
@@ -45,6 +58,13 @@ test("parseScriptImportLine: parses valid script import", () => {
   assert.equal(result.path, "./queue.py");
   assert.equal(result.alias, "queue");
   assert.equal(result.loc.line, 1);
+});
+
+test("parseScriptImportLine: rejects empty import path", () => {
+  assert.throws(
+    () => parseScriptImportLine("test.jh", 'import script "" as x', 1),
+    /import path must not be empty/,
+  );
 });
 
 test("parseScriptImportLine: rejects single-quoted path", () => {

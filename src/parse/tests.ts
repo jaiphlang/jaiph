@@ -25,6 +25,9 @@ import {
   type TestStepResult,
 } from "./test-steps";
 
+const MOCK_PROMPT_MESSAGE =
+  'mock prompt must be: mock prompt "<response>", mock prompt <const_name>, or mock prompt { "pattern" => "response", _ => "default" }';
+
 /**
  * `mock <kind> <more>` with one space after each word: the index of the
  * token after `<kind>`, or -1.
@@ -101,18 +104,19 @@ function parseMockPrompt(t: TestLine): TestStepResult | null {
     fail(t.filePath, SINGLE_QUOTE_MESSAGE, t.lineNo, t.col - 1);
   }
   // `mock prompt <ident>` resolves the ident from a previously declared `const` in this block.
-  if (arg.length === 1 && arg[0]!.kind === "ident") {
+  if (arg[0]?.kind === "ident") {
+    if (arg.length > 1) {
+      fail(t.filePath, MOCK_PROMPT_MESSAGE, t.lineNo, arg[1]!.col - 1);
+    }
     return { step: { type: "test_mock_prompt", response: "", responseVar: arg[0]!.text, loc }, next: t.cursor.next(t.at) };
   }
   if (arg[0]?.kind !== "string" && arg[0]?.text !== '"""') {
-    fail(
-      t.filePath,
-      'mock prompt must be: mock prompt "<response>", mock prompt <const_name>, or mock prompt { "pattern" => "response", _ => "default" }',
-      t.lineNo,
-      t.col - 1,
-    );
+    fail(t.filePath, MOCK_PROMPT_MESSAGE, t.lineNo, t.col - 1);
   }
-  // A string followed by more text keeps its quotes (the whole rest is the response).
+  // Exactly one `"<response>"` token; any text after it is extra.
+  if (arg.length > 1) {
+    fail(t.filePath, MOCK_PROMPT_MESSAGE, t.lineNo, arg[1]!.col - 1);
+  }
   const text = stripQuotes(t.raw.slice(arg[0]!.col - 1));
   return {
     step: { type: "test_mock_prompt", response: decodeTestString(t.filePath, text, t.lineNo, t.col), loc },

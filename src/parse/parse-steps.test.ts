@@ -29,6 +29,24 @@ function parseOneWorkflowStep(bodyLines: string[]): StepDef {
   return steps[0];
 }
 
+// === const: assignment operator shape ===
+
+test("const: parses a single-`=` assignment", () => {
+  const step = parseOneWorkflowStep(['const x = "y"']);
+  assert.equal(step.type, "const");
+  if (step.type === "const") {
+    assert.equal(step.name, "x");
+    assert.equal(step.value.kind, "literal");
+  }
+});
+
+test("const: rejects `==` where a single `=` is required", () => {
+  assert.throws(
+    () => parseOneWorkflowStep(["const x == y"]),
+    /invalid declaration — expected: const NAME = VALUE/,
+  );
+});
+
 // === run: basic ===
 
 test("run: parses basic run call", () => {

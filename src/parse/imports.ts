@@ -43,8 +43,13 @@ function parsePathAlias(
   if (pathRaw.startsWith("'")) {
     fail(filePath, SINGLE_QUOTE_MESSAGE, lineNo);
   }
+  const path = stripQuotes(pathRaw);
+  if (path === "") {
+    const pathCol = pathStart + (between.length - between.trimStart().length) + 1;
+    fail(filePath, "import path must not be empty", lineNo, pathCol);
+  }
   return {
-    path: stripQuotes(pathRaw),
+    path,
     alias: alias.text,
     loc: { line: lineNo, col: toks[0]!.col },
   };

@@ -30,6 +30,7 @@ Configuration sources, in priority order:
 | Duplicate block | `E_PARSE duplicate config block (only one allowed per file)` / `E_PARSE duplicate config block inside def (only one allowed per def)`. |
 | Unknown key | `E_PARSE unknown config key: <key>. Allowed: …` (lists every allowed key). |
 | Wrong value type | `E_PARSE`. |
+| Trailing content after a string value | A config string value is exactly one `"…"` token, optionally followed by a `#` comment. Anything else after it is `E_PARSE` (`unexpected content after config value: '<text>'`) at the extra text's column, so `agent.model = "a" "b"` is rejected and `agent.model = "a"  # c` still parses. |
 
 ### Value syntax
 
