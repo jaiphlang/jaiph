@@ -16,32 +16,6 @@ Process rules:
 7. Acceptance criteria are non-negotiable. A task is not done until every
    acceptance bullet is verified by a test that fails when the contract is violated.
 
-## Look up def-body keywords without Object.prototype #dev-ready
-
-A def-body line that starts with `toString(`, `constructor(` or another `Object.prototype` method name fails with a misleading "unterminated block".
-
-### Current behavior
-
-- `STATEMENT` in `src/parse/workflow-brace.ts` is a plain object literal, and `dispatch` reads it as `STATEMENT[keyword]`.
-- For `toString()` the lookup returns `Object.prototype.toString`, which runs as a handler. The body then fails at the def line with `E_PARSE unterminated block, expected "}"`.
-- `constructor()`, `hasOwnProperty()`, `valueOf()` and the other `Object.prototype` names fail the same way.
-- A comment in `src/parse/body-cursor.ts`, around line 131, mentions this lookup.
-- Top-level dispatch in `src/parse/parse-module.ts` may have the same pattern; check it.
-
-### Required
-
-- Keyword tables used for dispatch (`STATEMENT`, and any top-level equivalent) cannot return inherited properties. Use a `Map`, a null-prototype object, or an own-property check.
-- A def-body line `toString()` is handled like any other bare call to an unknown name. It either parses as a call step to `toString` (a later validation reports an unknown ref) or fails with the same error as `fooBar()`. Whichever it is, it must match an ordinary unknown name exactly.
-- The comment in `body-cursor.ts` is updated or removed.
-- CHANGELOG `Unreleased` gets a Fix entry.
-
-### Acceptance
-
-- A unit test shows `toString()`, `constructor()` and `hasOwnProperty()` in a def body get the same parse result or error as `fooBar()`.
-- A unit test checks the same names as top-level lines, if top-level dispatch had the issue.
-- Golden ASTs and the parse-errors snapshot pass unchanged.
-- `npm test`, `npm run lint`, `npm run arch:check`, and `bash e2e/test_all.sh` pass.
-
 ## Reject malformed config values, const assignments, empty import paths, and mock prompt trailing text #dev-ready
 
 The parser accepts four malformed inputs and stores nonsense instead of reporting `E_PARSE`.
