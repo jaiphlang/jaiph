@@ -127,11 +127,15 @@ export function parseBraceBlockBody(
  * calls `fail(...)` (also terminating), or returns null to allow fallthrough
  * to the bare-call / legacy-send handling.
  *
+ * Null-prototype so a lookup of an `Object.prototype` name (`toString`,
+ * `constructor`, `hasOwnProperty`, …) returns undefined and the line falls
+ * through to the bare-call path like any other unknown name.
+ *
  * To add a new top-level keyword, add (a) a row here pointing at the parser
  * and (b) the keyword to the JAIPH_KEYWORDS set in `core.ts`. No other file
  * needs to change.
  */
-export const STATEMENT: Record<string, BlockHandler> = {
+export const STATEMENT: Record<string, BlockHandler> = Object.assign(Object.create(null), {
   if: tryParseIf,
   else: tryParseElseError,
   for: tryParseFor,
@@ -152,7 +156,7 @@ export const STATEMENT: Record<string, BlockHandler> = {
   return: tryParseReturn,
   match: tryParseStandaloneMatch,
   send: tryParseSend,
-};
+});
 
 function isComment(c: BlockCtx): boolean {
   const head = c.tokens[0];

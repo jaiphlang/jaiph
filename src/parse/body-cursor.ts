@@ -126,12 +126,7 @@ export class BodyCursor {
     return new BodyCursor(filePath, source);
   }
 
-  /**
-   * True when position `at` is past the last line. Also true for a position
-   * that is not a number: a `STATEMENT` lookup that hits `Object.prototype`
-   * (`toString()` in a def body) returns no `next`, and the body parser then
-   * reports the block as unterminated, as it always has.
-   */
+  /** True when position `at` is past the last line. */
   atEnd(at: number): boolean {
     return !(at <= this.source.length);
   }
