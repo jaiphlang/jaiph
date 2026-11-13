@@ -16,36 +16,6 @@ Process rules:
 7. Acceptance criteria are non-negotiable. A task is not done until every
    acceptance bullet is verified by a test that fails when the contract is violated.
 
-## Reject malformed config values, const assignments, empty import paths, and mock prompt trailing text #dev-ready
-
-The parser accepts four malformed inputs and stores nonsense instead of reporting `E_PARSE`.
-
-### Current behavior
-
-- **Config:** `config { agent.model = "a" "b" }`, written on separate lines, parses to `agent.model` = `a" "b`. The value is taken from the first to the last quote. The code is in `src/parse/metadata.ts`.
-- **Const:** `const x == y` in a def body parses to a const step whose value is the literal `= y`. The right-hand-side parsing is in `src/parse/stmt-decl.ts` and `src/parse/const-rhs.ts`.
-- **Import:** `import "" as x` parses to an import with an empty path. The code is in `src/parse/imports.ts`. `import script "" as x` probably behaves the same; check it.
-- **Mock prompt:** `mock prompt "a" x` in a `*.test.jh` test block is accepted, and the trailing `x` is ignored. The code is in `src/parse/test-steps.ts` / `src/parse/tests.ts`.
-
-### Required
-
-- **Config:** a config string value is exactly one `"…"` string token, optionally followed by a comment. Anything else after it is `E_PARSE unexpected content after config value: '<text>'` at the column of the extra text.
-- **Const:** `const <name> = <rhs>` needs exactly one `=` token after the name. `==` (or any other operator token) there is `E_PARSE` with the existing `const` shape message, at the operator's column.
-- **Import:** an empty path `""` in `import` or `import script` is `E_PARSE import path must not be empty`, at the path's column.
-- **Mock prompt:** any text after `mock prompt "<response>"` or `mock prompt <const_name>` is `E_PARSE` with the existing `mock prompt must be: …` message, at the column of the extra text.
-- Before changing anything, grep every repo source (tracked `.jh`, compiler-txtar inputs, e2e heredocs, docs blocks) for each form. Record what was found in the task notes.
-- CHANGELOG `Unreleased` gets one Breaking entry that lists all four.
-
-### Acceptance
-
-- `test-fixtures/compiler-txtar/parse-errors.txt` gets one fixture per form, with exact message, line and column. The parse-errors snapshot diff contains only those additions.
-- Unit tests show the valid neighbours still parse:
-  - `agent.model = "a"  # c`
-  - `const x = "y"`
-  - `import "./a.jh" as a`
-  - `mock prompt "a"`
-- `npm test`, `npm run lint`, `npm run arch:check`, and `bash e2e/test_all.sh` pass.
-
 ## Report channel and mock prompt columns correctly #dev-ready
 
 Two diagnostics point at the wrong column.

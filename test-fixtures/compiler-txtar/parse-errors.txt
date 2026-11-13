@@ -2856,3 +2856,44 @@ export def main() {
   const x = "hello"
   return match x { "hello" => "yes", _ => some words }
 }
+
+=== config string value with trailing content
+# @expect error E_PARSE "unexpected content after config value: '"b"'" @2:21
+--- input.jh
+config {
+  agent.model = "a" "b"
+}
+
+export def main() {
+  log "hello"
+}
+
+=== const with double-equals operator
+# @expect error E_PARSE "invalid declaration — expected: const NAME = VALUE" @2:11
+--- input.jh
+export def main() {
+  const x == y
+}
+
+=== import with empty path
+# @expect error E_PARSE "import path must not be empty" @1:8
+--- input.jh
+import "" as x
+
+export def main() {
+  log "hello"
+}
+
+=== mock prompt with trailing content
+# @expect error E_PARSE "mock prompt must be: mock prompt" @4:18
+--- input.test.jh
+import "lib.jh" as lib
+
+test "bad mock" {
+  mock prompt "a" x
+  const out = lib.main()
+}
+--- lib.jh
+export def main() {
+  log "ok"
+}

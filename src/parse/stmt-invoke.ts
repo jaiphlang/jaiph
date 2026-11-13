@@ -5,6 +5,7 @@
 import type { Expr } from "../types";
 import type { Trivia } from "./trivia";
 import {
+  CONST_DECL_SHAPE_MESSAGE,
   fail,
   isJaiphInterpolationRef,
   isReservedBuiltinName,
@@ -250,6 +251,11 @@ export function tryParseConst(c: BlockCtx): BlockResult | null {
   const [constTok, nameTok, eqTok] = c.tokens;
   if (constTok!.kind !== "ident" || nameTok?.kind !== "ident" || eqTok?.kind !== "punct" || !eqTok.text.startsWith("=")) {
     return null;
+  }
+  // Exactly one `=` is required after the name; `==` (or any other `=`-operator
+  // token) is a const-shape error at the operator's column.
+  if (eqTok.text !== "=") {
+    fail(c.filePath, CONST_DECL_SHAPE_MESSAGE, c.innerNo, eqTok.col);
   }
   const rhs = c.innerRaw.trimEnd().slice(eqTok.col).trim();
   if (rhs === "") return null;
