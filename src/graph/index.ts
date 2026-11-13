@@ -3,4 +3,15 @@
 // never src/graph/** internals. Explicit named re-exports — no `export *`.
 export { buildGraph, entryDefNames } from "./build";
 export { emitMermaid } from "./mermaid";
-export type { GraphModel, GraphNode, GraphEdge, GraphSubgraph, NodeShape } from "./model";
+export { DEFAULT_GRAPH_OPTIONS } from "./model";
+export type {
+  CollapsedCounts,
+  EdgeKind,
+  GraphEdge,
+  GraphModel,
+  GraphNode,
+  GraphOptions,
+  GraphSubgraph,
+  Label,
+  NodeKind,
+} from "./model";

@@ -16,6 +16,7 @@ const SRC_DIR = join(REPO_ROOT, "src");
 
 const REFERENCE_PAGES: Array<{ file: string; permalink: string }> = [
   { file: "cli.md", permalink: "/reference/cli" },
+  { file: "graph.md", permalink: "/reference/graph" },
   { file: "configuration.md", permalink: "/reference/configuration" },
   { file: "grammar.md", permalink: "/reference/grammar" },
   { file: "language.md", permalink: "/reference/language" },

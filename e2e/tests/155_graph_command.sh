@@ -66,7 +66,7 @@ def helper() {
 EOF
 
 helper_out="$(jaiph graph --def helper "${TEST_DIR}/two.jh")"
-if ! printf "%s\n" "${helper_out}" | grep -q 'subgraph sg1 \["def helper"\]'; then
+if ! printf "%s\n" "${helper_out}" | grep -qF 'subgraph g1 ["<b>def</b> helper"]'; then
   printf "%s\n" "${helper_out}" >&2
   e2e::fail "--def helper should graph the helper def"
 fi
@@ -80,3 +80,57 @@ if ! printf "%s\n" "${missing_err}" | grep -q "Available defs: main, helper"; th
   e2e::fail "missing-def error should list available defs"
 fi
 e2e::pass "missing def lists available defs"
+
+e2e::section "jaiph graph --depth, --import-depth and --libs"
+
+mkdir -p "${TEST_DIR}/.jaiph/libs/acme" "${TEST_DIR}/sub"
+e2e::file ".jaiph/libs/acme/tools.jh" <<'EOF'
+export def lib_step() {
+  log "lib"
+}
+EOF
+e2e::file "sub/local.jh" <<'EOF'
+export def local_step() {
+  log "local"
+}
+EOF
+e2e::file "deep.jh" <<'EOF'
+import "acme/tools" as tools
+import "sub/local.jh" as local
+
+export def main() {
+  tools.lib_step()
+  local.local_step()
+  level1()
+}
+def level1() {
+  level2()
+}
+def level2() {
+  log "deep"
+}
+EOF
+
+default_out="$(jaiph graph "${TEST_DIR}/deep.jh")"
+e2e::assert_equals "$(printf "%s\n" "${default_out}" | tail -n 1)" \
+  "%% collapsed: 1 library def (use -l to expand)" "default: library def collapsed and counted"
+
+shallow_out="$(jaiph graph -d 1 -i 0 "${TEST_DIR}/deep.jh")"
+e2e::assert_equals "$(printf "%s\n" "${shallow_out}" | tail -n 1)" \
+  "%% collapsed: 1 def beyond --depth 1, 1 def beyond --import-depth 0, 1 library def (use -d all, -i all, -l to expand)" \
+  "-d 1 -i 0: each limit is counted in the trailer"
+
+full_out="$(jaiph graph -d all -i all -l "${TEST_DIR}/deep.jh")"
+if printf "%s\n" "${full_out}" | grep -q "collapsed"; then
+  printf "%s\n" "${full_out}" >&2
+  e2e::fail "-d all -i all -l should draw every def"
+fi
+if ! printf "%s\n" "${full_out}" | grep -qF '["<b>def</b> tools.lib_step"]'; then
+  printf "%s\n" "${full_out}" >&2
+  e2e::fail "-l should draw the library def as a subgraph"
+fi
+e2e::pass "-d all -i all -l draws every def"
+
+bad_exit=0
+jaiph graph -d many "${TEST_DIR}/deep.jh" >/dev/null 2>&1 || bad_exit=$?
+e2e::assert_equals "${bad_exit}" "1" "a non-numeric --depth is a usage error"

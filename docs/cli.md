@@ -156,10 +156,10 @@ Within each entry's import closure, diagnostics are sorted by `(file, line, col)
 ## `jaiph graph`
 {: #jaiph-graph}
 
-Print one def's execution flow as a Mermaid [`flowchart TD`](https://mermaid.js.org/syntax/flowchart.html) document to stdout, then exit `0`. Like [`jaiph compile`](#jaiph-compile), it loads the file's import closure with `loadModuleGraph`, validates it with `collectDiagnostics`, and **runs nothing**: no `scripts/` are emitted, no agent or prompt is called, and no workflow runner is spawned. GitHub renders the output inline, so you can paste it straight into a PR or a doc.
+Print one def's execution flow as a Mermaid [`flowchart TD`](https://mermaid.js.org/syntax/flowchart.html) document to stdout, then exit `0`. Like [`jaiph compile`](#jaiph-compile), it loads the file's import closure with `loadModuleGraph`, validates it with `collectDiagnostics`, and **runs nothing**: no `scripts/` are emitted, no agent or prompt is called, and no workflow runner is spawned. GitHub renders the output inline (the `async` fork bar needs Mermaid 11.3 or later), so you can paste it straight into a PR or a doc.
 
 ```text
-jaiph graph [--def <name>] [--workspace <dir>] <file.jh>
+jaiph graph [--def <name>] [-d <n|all>] [-i <n|all>] [-l] [--workspace <dir>] <file.jh>
 ```
 
 The entry def is `main` by default; `--def <name>` graphs any def in the file, exported or not. A `*.test.jh` argument is a usage error.
@@ -167,52 +167,14 @@ The entry def is `main` by default; `--def <name>` graphs any def in the file, e
 | Flag | Argument | Effect |
 |---|---|---|
 | `--def` | `<name>` | Entry def to graph. Default `main`. A missing name exits `1` with the error naming the def and listing the defs that exist. |
+| `-d`, `--depth` | `<n>` or `all` | Def-call levels drawn below the entry def. Default `3`. Route targets of the entry file's channels count as one level. |
+| `-i`, `--import-depth` | `<n>` or `all` | Import hops from the entry file whose defs are drawn. Default `1`. |
+| `-l`, `--libs` | — | Also draw defs of library modules (under `<workspace>/.jaiph/libs/`); they still count against `--depth`. Off by default. |
 | `--workspace` | `<dir>` | Workspace root for import resolution. Without it, auto-detected from the `.jh` file. |
 
-Validation runs first: any diagnostic is written to stderr as `path:line:col CODE message` with exit `1` and nothing on stdout (same shape as `jaiph compile`). Node ids are deterministic (`n1`, `n2`, … in depth-first source order), so the same input gives byte-identical output.
+A limit that is not a non-negative integer or `all` is a usage error (exit `1`). Validation runs first: any diagnostic is written to stderr as `path:line:col CODE message` with exit `1` and nothing on stdout (same shape as `jaiph compile`). Node ids are deterministic (`n1`, `n2`, … in depth-first source order), so the same input gives byte-identical output.
 
-Each reachable def (in the same module or through an import) is drawn once as a Mermaid subgraph with its own start and end; recursion and repeated calls reuse that subgraph. Labels are escaped for Mermaid and cut to 60 characters with `…`.
-
-| Node | Shape | Step |
-|---|---|---|
-| start / end | stadium `([…])` | the def's entry and exit |
-| def call | rectangle `[…]` | a call into another def's subgraph |
-| script / inline script | subroutine `[[…]]` | a leaf script step |
-| `prompt` | hexagon `{{…}}` | a prompt step |
-| `if` / `match` | diamond `{…}` | a branch (`yes` / `no`, or one edge per arm) |
-| `fail` | styled rectangle | a terminal failure |
-
-`log` / `logerr` / `logwarn`, comments, blank lines, and a `const` bound to a plain value are not nodes. A `const` bound to a call, prompt, or match shows that node with the bound name in its label (`x = f()`). `return` adds an edge to the def's end, labelled with the value when it is short. `catch` and `recover` add a dashed `on failure` edge into their body (and `recover` a `retry` edge back to the call); `async` calls and `send` route targets use dashed edges.
-
-For example, [`examples/say_hello.jh`](https://github.com/jaiphlang/jaiph/blob/main/examples/say_hello.jh) graphs as:
-
-```text
-jaiph graph examples/say_hello.jh
-```
-
-```mermaid
-flowchart TD
-  subgraph sg1 ["def main"]
-    n1(["start"])
-    n2(["end"])
-    n3["name = valid_name(name_arg)"]
-    n8{{"response = prompt Say hello to $#123;name#125; and provide a fun fa…"}}
-  end
-  subgraph sg2 ["def valid_name"]
-    n4(["start"])
-    n5(["end"])
-    n6{"match name_arg"}
-    n7["fail You provided an invalid name :("]:::failure
-  end
-  n1 --> n3
-  n4 --> n6
-  n6 -->|"_"| n7
-  n6 -->|"/[A-Z][a-z]+/"| n5
-  n3 --> n4
-  n5 --> n8
-  n8 -->|"#34;$#123;response#125;#34;"| n2
-  classDef failure fill:#fdd,stroke:#d33,color:#900;
-```
+A def left out by a limit is drawn as a dashed call node with no subgraph, and the output ends with a Mermaid comment counting those defs and naming the flags that draw them, for example `%% collapsed: 2 defs beyond --depth 3, 4 library defs (use -d all, -l to expand)`. For the node shapes, edge styles, label rules, and rendered samples, see [Flowcharts](graph.md).
 
 ## `jaiph format`
 

@@ -67,6 +67,12 @@ const DOC_SIZE_ALLOWLIST: Record<string, string> = {
   // subcommand, its flags, and exit codes) — one topic, not splittable.
   "cli.md":
     "single-owner reference for every jaiph subcommand; one topic, not splittable",
+  // graph.md is the single owner of the `jaiph graph` notation; most of its
+  // body is generated sample output pinned byte for byte by
+  // integration/docs-graph-samples.test.ts, so splitting it would only split
+  // the samples from the legend they illustrate.
+  "graph.md":
+    "single-owner flowchart notation; body is mostly test-pinned generated samples",
   // grammar.md is the single owner of the full surface grammar (every
   // production in one EBNF listing) — one topic, not splittable.
   "grammar.md":
