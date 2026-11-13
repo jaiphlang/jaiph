@@ -1126,6 +1126,20 @@
     "code": "E_PARSE",
     "message": "unexpected content after logerr string: 'extra'"
   },
+  "fail with trailing content after string": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 3,
+    "code": "E_PARSE",
+    "message": "unexpected content after fail string: 'y'"
+  },
+  "return with trailing content after string": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 3,
+    "code": "E_PARSE",
+    "message": "unexpected content after return string: 'y'"
+  },
   "catch: prompt capture without const": {
     "file": "input.jh",
     "line": 6,

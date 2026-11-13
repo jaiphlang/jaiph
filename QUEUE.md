@@ -16,30 +16,6 @@ Process rules:
 7. Acceptance criteria are non-negotiable. A task is not done until every
    acceptance bullet is verified by a test that fails when the contract is violated.
 
-## Reject trailing text after fail and return values #dev-ready
-
-`fail "x" y` silently drops `y`, and `return "x" y` stores `"x" y` as the value. `log "x" y` is already rejected.
-
-### Current behavior
-
-- In a def body, `fail "x" y` parses to `{ type: "say", level: "fail", message: { raw: '"x"' } }`, and `y` disappears.
-- `return "x" y` parses to `{ type: "return", value: { kind: "literal", raw: '"x" y' } }`. At runtime it does not return the string `x`.
-- `log "x" y`, `logerr` and `logwarn` fail with `E_PARSE unexpected content after log string: 'y'` at the statement column. The code is in `src/parse/stmt-say.ts`.
-- The return parsing is in `src/parse/stmt-return.ts`.
-
-### Required
-
-- After a `fail` or `return` value that is a `"…"` string, any token other than end of line or a trailing comment is `E_PARSE`. The messages mirror the log message: `unexpected content after fail string: '<text>'` and `unexpected content after return string: '<text>'`, at the same column rule `log` uses.
-- `return` values that are not strings (`return name`, `return a.b`, `return f(x)`, `return match …`, `return prompt …`, `return """…"""`) keep their current behaviour and errors.
-- Before changing anything, grep every repo source (tracked `.jh`, compiler-txtar inputs, e2e heredocs, docs blocks) for `fail "…" <text>` and `return "…" <text>`. Fix or delete any matches; record what was found in the task notes.
-- CHANGELOG `Unreleased` gets a Breaking entry. Programs that relied on the dropped or stored text now fail to parse.
-
-### Acceptance
-
-- `test-fixtures/compiler-txtar/parse-errors.txt` gets fixtures for `fail "x" y` and `return "x" y` with exact message, line and column. The parse-errors snapshot is regenerated, and the diff contains only those additions.
-- A unit test shows `fail "x"  # note` and `return "x"  # note` still parse.
-- `npm test`, `npm run lint`, `npm run arch:check`, and `bash e2e/test_all.sh` pass.
-
 ## Look up def-body keywords without Object.prototype #dev-ready
 
 A def-body line that starts with `toString(`, `constructor(` or another `Object.prototype` method name fails with a misleading "unterminated block".
