@@ -291,6 +291,8 @@ if_op          = "==" | "!=" | "=~" | "!~" ;
 if_operand     = double_quoted_string | "/" regex_source "/" ;
 ```
 
+A string operand follows the [single-line string](#lexical-rules) escape rule (`\"` is the only escape), so `if x == "a\\" {` is an unterminated string (`E_PARSE`). A regex operand is unaffected, because `\/` does not end it.
+
 For operator/operand pairing, `else` / `else if` desugaring, and value semantics, see [Language — `if`](language.md#if-conditional-guard).
 
 ### `match`
