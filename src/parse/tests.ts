@@ -8,6 +8,8 @@ import type { TestBlockDef } from "../types";
 import { createTrivia, type Trivia } from "./trivia";
 import { fail, parseParamList, rejectRemovedEscapes, SINGLE_QUOTE_MESSAGE, stripQuotes } from "./core";
 import { parseMatchArms } from "./match";
+import { parseCompactMatchArms } from "./match-arms";
+import type { MatchArmDef } from "../types";
 import type { Token } from "./lexer";
 import { adjacent, isPunct, type BodyCursor } from "./body-cursor";
 import { parseBraceBlockBody } from "./workflow-brace";
@@ -56,6 +58,25 @@ function parseMockHeader(t: TestLine, kind: "def" | "script"): { ref: string; pa
   return { ref: ref.ref, params: inner.trim() ? parseParamList(t.filePath, inner, t.lineNo) : [] };
 }
 
+/** Finish a `mock prompt { … }` block (multiline or compact): guard arm count, reject removed escapes, build the step. */
+function mockPromptBlock(
+  t: TestLine,
+  arms: MatchArmDef[],
+  next: number,
+  loc: { line: number; col: number },
+): TestStepResult {
+  if (arms.length === 0) {
+    fail(t.filePath, "mock prompt block must have at least one arm", t.lineNo);
+  }
+  for (const arm of arms) {
+    const body = arm.body.trim();
+    if (!arm.tripleQuotedBody && body.startsWith('"') && body.endsWith('"')) {
+      rejectRemovedEscapes(t.filePath, body.slice(1, -1), "test", t.lineNo);
+    }
+  }
+  return { step: { type: "test_mock_prompt_block", arms, loc }, next };
+}
+
 /** `mock prompt "<response>"`, `mock prompt <const>`, or a `mock prompt { pattern => response }` block. */
 function parseMockPrompt(t: TestLine): TestStepResult | null {
   const at = mockPrefix(t, "prompt");
@@ -64,16 +85,16 @@ function parseMockPrompt(t: TestLine): TestStepResult | null {
   const loc = { line: t.lineNo, col: t.col };
   if (arg.length === 1 && isPunct(arg[0], "{")) {
     const { arms, next } = parseMatchArms(t.cursor, t.cursor.next(t.at), t.lineNo);
-    if (arms.length === 0) {
-      fail(t.filePath, "mock prompt block must have at least one arm", t.lineNo);
-    }
-    for (const arm of arms) {
-      const body = arm.body.trim();
-      if (!arm.tripleQuotedBody && body.startsWith('"') && body.endsWith('"')) {
-        rejectRemovedEscapes(t.filePath, body.slice(1, -1), "test", t.lineNo);
-      }
-    }
-    return { step: { type: "test_mock_prompt_block", arms, loc }, next };
+    return mockPromptBlock(t, arms, next, loc);
+  }
+  // Compact one-line block `mock prompt { "a" => "x", _ => "d" }`: same arm
+  // grammar and comma splitter as the compact `match` form.
+  const open = arg[0];
+  const close = arg[arg.length - 1];
+  if (open && close && isPunct(open, "{") && isPunct(close, "}")) {
+    const inner = t.raw.slice(open.col, close.col - 1);
+    const arms = parseCompactMatchArms(t.filePath, inner, t.lineNo, open.col + 1);
+    return mockPromptBlock(t, arms, t.cursor.next(t.at), loc);
   }
   // Columns here count from 0, as they always have.
   if (arg[0]?.text.startsWith("'")) {

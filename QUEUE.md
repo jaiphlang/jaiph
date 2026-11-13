@@ -16,38 +16,6 @@ Process rules:
 7. Acceptance criteria are non-negotiable. A task is not done until every
    acceptance bullet is verified by a test that fails when the contract is violated.
 
-## Split compact match arms only on top-level commas #dev-ready
-
-The one-line `match` form rejects a call arm whose arguments contain a comma.
-
-### Current behavior
-
-- Given `def f(a, b) { … }`, this line fails:
-
-  `const r = match x { "a" => f(x, x), _ => "n" }`
-
-  It reports `E_PARSE invalid match arm body: f(x; expected a string, """ block, identifier, ${…}, ref(...), or fail "..."`.
-- Compact arms in `src/parse/match-arms.ts` split the `{ … }` body on every `,` outside strings and regexes, including commas inside a call's parentheses.
-- The multiline and `;`-separated forms accept the same arm.
-- `mock prompt { … }` in `*.test.jh` uses the same compact splitter.
-
-### Required
-
-- The compact form splits arms only on commas at parenthesis depth 0 that are outside strings, regexes, `"""` blocks, and inline scripts.
-- An arm body `f(x, y)` or `'echo $1'(a, b)` becomes one arm whose body is the call with both arguments, the same AST the multiline form produces.
-- Every compact match that parses today keeps its AST.
-- An unbalanced `(` in a compact arm is an `E_PARSE` at the arm body's column, not a silent split.
-- CHANGELOG `Unreleased` gets a Fix entry.
-
-### Acceptance
-
-- A unit test parses `match x { "a" => f(x, y), _ => "n" }` and compares its AST, `loc` excepted, with the same match written in multiline form.
-- A unit test covers a nested call `f(g(a, b), c)` and an inline-script arm with two arguments.
-- A unit test covers `mock prompt { "a" => "x, y", _ => "z" }`, keeping it at two arms.
-- A unit test shows an unbalanced `(` fails with `E_PARSE` at the arm body's column.
-- `docs/grammar.md` or `docs/language.md`, wherever the compact form is described, says that commas inside calls do not separate arms.
-- `npm test`, `npm run lint`, `npm run arch:check`, and `bash e2e/test_all.sh` pass.
-
 ## Reject trailing text after fail and return values #dev-ready
 
 `fail "x" y` silently drops `y`, and `return "x" y` stores `"x" y` as the value. `log "x" y` is already rejected.
