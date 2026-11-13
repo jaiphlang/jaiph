@@ -1,567 +1,411 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { parsejaiph } from "../parser";
-import { moduleGraphFromAsts } from "../transpiler";
+import type { ModuleGraph, ModuleNode } from "../transpiler";
 import { buildGraph, entryDefNames } from "./build";
 import { emitMermaid } from "./mermaid";
+import type { GraphOptions } from "./model";
 
-const ENTRY = "/t/entry.jh";
+// The landing-page samples (prompt, match, recover, inbox, async, stdin) are
+// pinned end to end by integration/docs-graph-samples.test.ts; these cases
+// cover the remaining step kinds and the expansion limits.
 
-/** Parse `src` (plus any extra imported modules) and emit Mermaid for `def`. */
-function graphOf(
-  src: string,
-  def = "main",
-  extra: Array<{ path: string; src: string }> = [],
-): string {
-  const astByFile = new Map([[ENTRY, parsejaiph(src, ENTRY)]]);
-  for (const e of extra) astByFile.set(e.path, parsejaiph(e.src, e.path));
-  const graph = moduleGraphFromAsts(ENTRY, astByFile);
-  const model = buildGraph(graph, def);
-  assert.ok(model, `no def ${def}`);
+interface Mod {
+  path: string;
+  src: string;
+  imports?: Record<string, string>;
+}
+
+/** Build a module graph by hand (library imports only resolve on disk otherwise). */
+function graphOf(mods: Mod[]): ModuleGraph {
+  const modules = new Map<string, ModuleNode>();
+  for (const m of mods) {
+    modules.set(m.path, {
+      filePath: m.path,
+      ast: parsejaiph(m.src, m.path),
+      imports: new Map(Object.entries(m.imports ?? {})),
+    });
+  }
+  return { entryFile: mods[0].path, workspaceRoot: "/w", modules };
+}
+
+function mermaid(mods: Mod[] | string, opts?: GraphOptions): string {
+  const list = typeof mods === "string" ? [{ path: "/w/e.jh", src: mods }] : mods;
+  const model = buildGraph(graphOf(list), "main", opts);
+  assert.ok(model, "no def main");
   return emitMermaid(model!);
 }
 
-test("sequential calls each become a rectangle linked through its subgraph", () => {
-  const out = graphOf(`
-export def main() {
-  a()
-  b()
+/** Output without classDef lines and blank lines, for compact expectations. */
+function body(out: string): string {
+  return out
+    .split("\n")
+    .filter((l) => !l.includes("classDef") && l.trim() !== "")
+    .join("\n");
 }
-def a() {
-  log "x"
-}
-def b() {
-  log "y"
-}
-`);
-  assert.equal(
-    out,
-    `flowchart TD
-  subgraph sg1 ["def main"]
-    n1(["start"])
-    n2(["end"])
-    n3["a()"]
-    n6["b()"]
-  end
-  subgraph sg2 ["def a"]
-    n4(["start"])
-    n5(["end"])
-  end
-  subgraph sg3 ["def b"]
-    n7(["start"])
-    n8(["end"])
-  end
-  n1 --> n3
-  n4 --> n5
-  n3 --> n4
-  n5 --> n6
-  n7 --> n8
-  n6 --> n7
-  n8 --> n2
-`,
-  );
-});
 
-test("script, inline script, and prompt become subroutine/subroutine/hexagon leaves", () => {
-  const out = graphOf(`
-script s = '''
-  echo hi
-'''
-export def main() {
-  s()
-  'echo inline'()
-  prompt "do the thing"
-}
-`);
-  assert.equal(
-    out,
-    `flowchart TD
-  subgraph sg1 ["def main"]
-    n1(["start"])
-    n2(["end"])
-    n3[["s()"]]
-    n4[["'echo inline'()"]]
-    n5{{"prompt do the thing"}}
-  end
-  n1 --> n3
-  n3 --> n4
-  n4 --> n5
-  n5 --> n2
-`,
-  );
-});
-
-test("if without else lets the no edge fall through to the next step", () => {
-  const out = graphOf(`
+test("if / else branches yes and no; fail ends its branch; log is not drawn", () => {
+  const out = mermaid(`script check = 'true'
 export def main(x) {
-  if x == "y" {
-    a()
-  }
-  b()
-}
-def a() {
-  log "a"
-}
-def b() {
-  log "b"
-}
-`);
-  assert.equal(
-    out,
-    `flowchart TD
-  subgraph sg1 ["def main"]
-    n1(["start"])
-    n2(["end"])
-    n3{"x == #34;y#34;"}
-    n4["a()"]
-    n7["b()"]
-  end
-  subgraph sg2 ["def a"]
-    n5(["start"])
-    n6(["end"])
-  end
-  subgraph sg3 ["def b"]
-    n8(["start"])
-    n9(["end"])
-  end
-  n1 --> n3
-  n3 -->|"yes"| n4
-  n5 --> n6
-  n4 --> n5
-  n6 --> n7
-  n3 -->|"no"| n7
-  n8 --> n9
-  n7 --> n8
-  n9 --> n2
-`,
-  );
-});
-
-test("if with else branches both arms before rejoining", () => {
-  const out = graphOf(`
-export def main(x) {
-  if x =~ /ok/ {
-    a()
+  if x == "a" {
+    check()
   } else {
-    b()
+    fail "nope"
   }
-}
-def a() {
-  log "a"
-}
-def b() {
-  log "b"
+  log "done"
 }
 `);
   assert.equal(
-    out,
+    body(out),
     `flowchart TD
-  subgraph sg1 ["def main"]
-    n1(["start"])
-    n2(["end"])
-    n3{"x =~ /ok/"}
-    n4["a()"]
-    n7["b()"]
+  subgraph g1 ["<b>def</b> main"]
+    n1(["start"]):::term
+    n2[/"in: x"/]:::input
+    n3{"<b>if</b> x == #quot;a#quot;"}:::decision
+    n4["<b>script</b> check()"]:::script
+    n5(["<b>fail</b> #quot;nope#quot;"]):::fail
+    n6(["end"]):::term
   end
-  subgraph sg2 ["def a"]
-    n5(["start"])
-    n6(["end"])
-  end
-  subgraph sg3 ["def b"]
-    n8(["start"])
-    n9(["end"])
-  end
-  n1 --> n3
+  n1 --> n2
+  n2 --> n3
   n3 -->|"yes"| n4
-  n5 --> n6
-  n4 --> n5
-  n3 -->|"no"| n7
-  n8 --> n9
-  n7 --> n8
-  n6 --> n2
-  n9 --> n2
-`,
+  n3 -->|"no"| n5
+  n4 --> n6`,
   );
 });
 
-test("match with three arms labels one edge per arm; a fail arm is a failure node", () => {
-  const out = graphOf(`
-export def main(x) {
-  const r = match x {
-    "a" => alpha
-    "b" => fail "nope"
-    _ => omega
+test("for is a preparation node with next back into it and done out of it", () => {
+  const out = mermaid(`script step = 'true'
+export def main(items) {
+  for line in items {
+    step(line)
   }
 }
 `);
   assert.equal(
-    out,
+    body(out),
     `flowchart TD
-  subgraph sg1 ["def main"]
-    n1(["start"])
-    n2(["end"])
-    n3{"r = match x"}
-    n4["fail nope"]:::failure
+  subgraph g1 ["<b>def</b> main"]
+    n1(["start"]):::term
+    n2[/"in: items"/]:::input
+    n3{{"for line in items"}}:::loop
+    n4["<b>script</b> step(line)"]:::script
+    n5(["end"]):::term
   end
-  n1 --> n3
-  n3 -->|"#34;b#34;"| n4
-  n3 -->|"#34;a#34;"| n2
-  n3 -->|"_"| n2
-  classDef failure fill:#fdd,stroke:#d33,color:#900;
-`,
+  n1 --> n2
+  n2 --> n3
+  n3 --> n4
+  n4 -->|"next"| n3
+  n3 -->|"done"| n5`,
   );
 });
 
-test("for has a loop node with a back edge", () => {
-  const out = graphOf(`
-export def main(paths) {
-  for p in paths {
-    a()
+test("catch draws a bold red catch edge that continues to the next step", () => {
+  const out = mermaid(`script s = 'true'
+export def main() {
+  s() catch (err) {
+    logerr "x"
   }
+  return "ok"
+}
+`);
+  assert.equal(
+    body(out),
+    `flowchart TD
+  subgraph g1 ["<b>def</b> main"]
+    n1(["start"]):::term
+    n2["<b>script</b> s()"]:::script
+    n3(["end"]):::term
+  end
+  n1 --> n2
+  n2 -->|"return #quot;ok#quot;"| n3
+  n2 -. "<b>catch</b>" .-> n3
+  linkStyle 2 stroke:#b42318,color:#b42318`,
+  );
+});
+
+test("recursion draws each def once and links back into the existing subgraph", () => {
+  const out = mermaid(`export def main() {
+  a()
 }
 def a() {
-  log "a"
-}
-`);
-  assert.equal(
-    out,
-    `flowchart TD
-  subgraph sg1 ["def main"]
-    n1(["start"])
-    n2(["end"])
-    n3["for p in paths"]
-    n4["a()"]
-  end
-  subgraph sg2 ["def a"]
-    n5(["start"])
-    n6(["end"])
-  end
-  n1 --> n3
-  n3 --> n4
-  n5 --> n6
-  n4 --> n5
-  n6 -->|"loop"| n3
-  n3 --> n2
-`,
-  );
-});
-
-test("catch adds a dashed on-failure edge then continues", () => {
-  const out = graphOf(`
-export def main() {
-  a() catch (e) {
-    log "recovered"
-  }
   b()
 }
-def a() {
-  log "a"
-}
 def b() {
-  log "b"
+  a()
 }
 `);
   assert.equal(
-    out,
+    body(out),
     `flowchart TD
-  subgraph sg1 ["def main"]
-    n1(["start"])
-    n2(["end"])
-    n3["a()"]
-    n6["b()"]
+  subgraph g1 ["<b>def</b> main"]
+    n1(["start"]):::term
+    n2[["<b>def</b> a()"]]:::def
+    n9(["end"]):::term
   end
-  subgraph sg2 ["def a"]
-    n4(["start"])
-    n5(["end"])
+  subgraph g2 ["<b>def</b> a"]
+    n3(["start"]):::term
+    n4[["<b>def</b> b()"]]:::def
+    n8(["end"]):::term
   end
-  subgraph sg3 ["def b"]
-    n7(["start"])
-    n8(["end"])
+  subgraph g3 ["<b>def</b> b"]
+    n5(["start"]):::term
+    n6[["<b>def</b> a()"]]:::def
+    n7(["end"]):::term
   end
-  n1 --> n3
-  n4 --> n5
+  n1 --> n2
+  n2 --> n3
   n3 --> n4
+  n4 --> n5
   n5 --> n6
-  n3 -.->|"on failure"| n6
+  n6 --> n3
+  n8 --> n7
   n7 --> n8
-  n6 --> n7
-  n8 --> n2
-`,
+  n8 --> n9`,
   );
 });
 
-test("recover adds a dashed on-failure edge and a retry edge back to the call", () => {
-  const out = graphOf(`
-export def main() {
-  a() recover (e) {
-    fix()
-  }
-}
-def a() {
-  log "a"
-}
-def fix() {
-  log "fix"
+test("a named prompt shows its call; stdin from a value prefixes the script stage", () => {
+  const out = mermaid(`prompt review(diff) = "Review: \${diff}"
+export def main(d) {
+  const r = prompt review(d)
+  const v = stdin d -> 'wc -l'()
 }
 `);
   assert.equal(
-    out,
+    body(out),
     `flowchart TD
-  subgraph sg1 ["def main"]
-    n1(["start"])
-    n2(["end"])
-    n3["a()"]
-    n6["fix()"]
+  subgraph g1 ["<b>def</b> main"]
+    n1(["start"]):::term
+    n2[/"in: d"/]:::input
+    n3["r = <b>prompt</b> review(d)"]:::prompt
+    n4["v = stdin d → <b>script</b> 'wc -l'()"]:::script
+    n5(["end"]):::term
   end
-  subgraph sg2 ["def a"]
-    n4(["start"])
-    n5(["end"])
-  end
-  subgraph sg3 ["def fix"]
-    n7(["start"])
-    n8(["end"])
-  end
-  n1 --> n3
-  n4 --> n5
+  n1 --> n2
+  n2 --> n3
   n3 --> n4
-  n3 -.->|"on failure"| n6
-  n7 --> n8
-  n6 --> n7
-  n8 -->|"retry"| n3
-  n5 --> n2
-`,
+  n4 --> n5`,
   );
 });
 
-test("fail is a terminal failure node; a short return value labels the edge to end", () => {
-  const out = graphOf(`
-export def main(x) {
-  if x == "bad" {
-    fail "it is bad"
-  }
-  return "all good"
-}
-`);
-  assert.equal(
-    out,
-    `flowchart TD
-  subgraph sg1 ["def main"]
-    n1(["start"])
-    n2(["end"])
-    n3{"x == #34;bad#34;"}
-    n4["fail it is bad"]:::failure
-  end
-  n1 --> n3
-  n3 -->|"yes"| n4
-  n3 -->|"#34;all good#34;"| n2
-  classDef failure fill:#fdd,stroke:#d33,color:#900;
-`,
-  );
-});
-
-test("const x = f() shows the call with the bound name in the label", () => {
-  const out = graphOf(`
-export def main() {
-  const v = compute()
-  return v
-}
-def compute() {
-  return "42"
-}
-`);
-  assert.equal(
-    out,
-    `flowchart TD
-  subgraph sg1 ["def main"]
-    n1(["start"])
-    n2(["end"])
-    n3["v = compute()"]
-  end
-  subgraph sg2 ["def compute"]
-    n4(["start"])
-    n5(["end"])
-  end
-  n1 --> n3
-  n4 -->|"#34;42#34;"| n5
-  n3 --> n4
-  n5 -->|"#34;$#123;v#125;#34;"| n2
-`,
-  );
-});
-
-test("send has a dashed edge to each route target def of the channel", () => {
-  const out = graphOf(`
-channel ch -> handler
-export def main() {
-  send "payload" -> ch
-}
-def handler(msg) {
-  log "got"
-}
-`);
-  assert.equal(
-    out,
-    `flowchart TD
-  subgraph sg1 ["def main"]
-    n1(["start"])
-    n2(["end"])
-    n3["send #34;payload#34; -#62; ch"]
-  end
-  subgraph sg2 ["def handler"]
-    n4(["start"])
-    n5(["end"])
-  end
-  n1 --> n3
-  n4 --> n5
-  n3 -.-> n4
-  n3 --> n2
-`,
-  );
-});
-
-test("async uses a dashed fork edge and continues past the call", () => {
-  const out = graphOf(`
-export def main() {
-  async worker()
-}
-def worker() {
+test("async fans out from a fork bar; the def continues and joins before end", () => {
+  const out = mermaid(`def w() {
   log "w"
 }
-`);
-  assert.equal(
-    out,
-    `flowchart TD
-  subgraph sg1 ["def main"]
-    n1(["start"])
-    n2(["end"])
-    n3["worker()"]
-  end
-  subgraph sg2 ["def worker"]
-    n4(["start"])
-    n5(["end"])
-  end
-  n1 --> n3
-  n4 --> n5
-  n3 -.-> n4
-  n3 --> n2
-`,
-  );
-});
-
-test("a stdin pipeline shows its stages in order", () => {
-  const out = graphOf(`
-script gen = '''
-  echo hi
-'''
-script up = '''
-  tr a-z A-Z
-'''
-script cnt = '''
-  wc -l
-'''
+script s = 'true'
 export def main() {
-  const n = stdin gen() -> up() -> cnt()
-  return n
+  async w()
+  s()
 }
 `);
   assert.equal(
-    out,
+    body(out),
     `flowchart TD
-  subgraph sg1 ["def main"]
-    n1(["start"])
-    n2(["end"])
-    n3[["gen()"]]
-    n4[["up()"]]
-    n5[["n = cnt()"]]
+  subgraph g1 ["<b>def</b> main"]
+    n1(["start"]):::term
+    n2@{ shape: fork, label: "" }
+    n3[["async <b>def</b> w()"]]:::def
+    n6["<b>script</b> s()"]:::script
+    n7@{ shape: fork, label: "" }
+    n8(["end"]):::term
   end
-  n1 --> n3
+  subgraph g2 ["<b>def</b> w"]
+    n4(["start"]):::term
+    n5(["end"]):::term
+  end
+  n1 --> n2
+  n2 -->|"async"| n3
   n3 --> n4
   n4 --> n5
-  n5 -->|"#34;$#123;n#125;#34;"| n2
-`,
+  n2 --> n6
+  n6 --> n7
+  n5 --> n7
+  n7 -->|"all done"| n8
+  class n2 fork
+  class n7 fork`,
   );
 });
 
-test("an imported def through an alias is a subgraph titled alias.name", () => {
-  const out = graphOf(
-    `
-import "./lib.jh" as lib
-export def main() {
-  lib.helper()
-}
-`,
-    "main",
-    [{ path: "/t/lib.jh", src: `export def helper() {\n  log "h"\n}\n` }],
-  );
-  assert.equal(
-    out,
-    `flowchart TD
-  subgraph sg1 ["def main"]
-    n1(["start"])
-    n2(["end"])
-    n3["lib.helper()"]
-  end
-  subgraph sg2 ["lib.helper"]
-    n4(["start"])
-    n5(["end"])
-  end
-  n1 --> n3
-  n4 --> n5
-  n3 --> n4
-  n5 --> n2
-`,
-  );
-});
-
-test("recursion draws each subgraph once (a calls b, b calls a)", () => {
-  const out = graphOf(`
-export def main() {
+test("--depth collapses defs below the limit and counts them in the trailer", () => {
+  const out = mermaid(
+    `export def main() {
   a()
 }
 def a() {
   b()
 }
 def b() {
-  a()
+  log "b"
 }
-`);
+`,
+    { depth: 1, importDepth: 1, libs: false },
+  );
   assert.equal(
     out,
     `flowchart TD
-  subgraph sg1 ["def main"]
-    n1(["start"])
-    n2(["end"])
-    n3["a()"]
+  classDef term fill:#ffffff,stroke:#8a938d,color:#1d2420
+  classDef def fill:#dce7fb,stroke:#3563c9,color:#132f66,stroke-width:1.5px
+  classDef defx fill:#dce7fb,stroke:#3563c9,color:#132f66,stroke-width:1.5px,stroke-dasharray:4 3
+
+  subgraph g1 ["<b>def</b> main"]
+    n1(["start"]):::term
+    n2[["<b>def</b> a()"]]:::def
+    n6(["end"]):::term
   end
-  subgraph sg2 ["def a"]
-    n4(["start"])
-    n5(["end"])
-    n6["b()"]
+  subgraph g2 ["<b>def</b> a"]
+    n3(["start"]):::term
+    n4[["<b>def</b> b()"]]:::defx
+    n5(["end"]):::term
   end
-  subgraph sg3 ["def b"]
-    n7(["start"])
-    n8(["end"])
-    n9["a()"]
-  end
-  n1 --> n3
-  n4 --> n6
-  n7 --> n9
-  n9 --> n4
-  n5 --> n8
-  n6 --> n7
-  n8 --> n5
+
+  n1 --> n2
+  n2 --> n3
   n3 --> n4
-  n5 --> n2
+  n4 --> n5
+  n5 --> n6
+
+%% collapsed: 1 def beyond --depth 1 (use -d all to expand)
 `,
   );
 });
 
-test("default entry is main; a missing def is reported with the available defs", () => {
-  const astByFile = new Map([
-    [ENTRY, parsejaiph(`export def main() {\n  log "x"\n}\ndef helper() {\n  log "y"\n}\n`, ENTRY)],
+const IMPORTS: Mod[] = [
+  {
+    path: "/w/e.jh",
+    src: `import "lib.jh" as lib
+import "acme/x" as x
+export def main() {
+  lib.go()
+  x.run()
+}
+`,
+    imports: { lib: "/w/lib.jh", x: "/w/.jaiph/libs/acme/x.jh" },
+  },
+  {
+    path: "/w/lib.jh",
+    src: `import "deeper.jh" as deeper
+export def go() {
+  deeper.go()
+}
+`,
+    imports: { deeper: "/w/deeper.jh" },
+  },
+  { path: "/w/deeper.jh", src: `export def go() {\n  log "d"\n}\n` },
+  { path: "/w/.jaiph/libs/acme/x.jh", src: `export def run() {\n  log "x"\n}\n` },
+];
+
+test("defaults: imported defs one hop away expand (dashed border); deeper imports and libraries collapse", () => {
+  assert.equal(
+    mermaid(IMPORTS),
+    `flowchart TD
+  classDef term fill:#ffffff,stroke:#8a938d,color:#1d2420
+  classDef def fill:#dce7fb,stroke:#3563c9,color:#132f66,stroke-width:1.5px
+  classDef defx fill:#dce7fb,stroke:#3563c9,color:#132f66,stroke-width:1.5px,stroke-dasharray:4 3
+
+  subgraph g1 ["<b>def</b> main"]
+    n1(["start"]):::term
+    n2[["<b>def</b> lib.go()"]]:::def
+    n6[["<b>def</b> x.run()"]]:::defx
+    n7(["end"]):::term
+  end
+  subgraph g2 ["<b>def</b> lib.go"]
+    n3(["start"]):::term
+    n4[["<b>def</b> deeper.go()"]]:::defx
+    n5(["end"]):::term
+  end
+
+  n1 --> n2
+  n2 --> n3
+  n3 --> n4
+  n4 --> n5
+  n5 --> n6
+  n6 --> n7
+
+  style g2 stroke-dasharray:5 4
+
+%% collapsed: 1 def beyond --import-depth 1, 1 library def (use -i all, -l to expand)
+`,
+  );
+});
+
+test("-i all -l draws imported and library defs, with no collapsed trailer", () => {
+  const out = mermaid(IMPORTS, { depth: Infinity, importDepth: Infinity, libs: true });
+  assert.ok(out.includes('subgraph g3 ["<b>def</b> deeper.go"]'), out);
+  assert.ok(out.includes('subgraph g4 ["<b>def</b> x.run"]'), out);
+  assert.ok(!out.includes("%% collapsed"), out);
+  assert.ok(!out.includes(":::defx"), out);
+});
+
+test("a routed send feeds the inbox; at -d 0 the route target is a collapsed call", () => {
+  const out = mermaid(
+    `channel ch -> handler
+def handler(msg) {
+  log "h"
+}
+export def main() {
+  send "hi" -> ch
+}
+`,
+    { depth: 0, importDepth: 1, libs: false },
+  );
+  assert.equal(
+    body(out),
+    `flowchart TD
+  subgraph g1 ["<b>def</b> main"]
+    n1(["start"]):::term
+    n2["<b>send</b> #quot;hi#quot; → ch"]:::send
+    n3[("main inbox")]:::channel
+    n4((" ")):::join
+    n5[["<b>def</b> handler()"]]:::defx
+    n6(["end"]):::term
+  end
+  n1 --> n2
+  n2 --o|"↯ ch"| n3
+  n2 -->|"steps done"| n4
+  n4 ==>|"deliver ch"| n5
+  n5 --> n6
+  linkStyle 1 stroke:#22857b,stroke-width:2px
+%% collapsed: 1 def beyond --depth 0 (use -d all to expand)`,
+  );
+});
+
+test("a channel routed only in an imported module is not delivered", () => {
+  const out = mermaid([
+    { path: "/w/e.jh", src: `import "m.jh" as m\nexport def main() {\n  m.go()\n}\n`, imports: { m: "/w/m.jh" } },
+    {
+      path: "/w/m.jh",
+      src: `channel ch -> h\ndef h(msg) {\n  log "h"\n}\nexport def go() {\n  send "x" -> ch\n}\n`,
+    },
   ]);
-  const graph = moduleGraphFromAsts(ENTRY, astByFile);
-  assert.deepEqual(entryDefNames(graph), ["main", "helper"]);
+  assert.ok(out.includes('n4["<b>send</b> #quot;x#quot; → ch"]:::send'), out);
+  assert.ok(!out.includes("inbox"), out);
+  assert.ok(!out.includes("deliver"), out);
+});
+
+test("labels are capped: 70 characters overall, 40 for a fail message, bold keyword kept", () => {
+  const out = mermaid(`script a_really_long_script_name_that_keeps_going_on = 'true'
+export def main() {
+  const some_binding_name = a_really_long_script_name_that_keeps_going_on("an argument", "another | argument")
+  fail "a {weird} <message> with # and | in it, that is long"
+}
+`);
+  assert.ok(
+    out.includes(
+      'n2["some_binding_name = <b>script</b> a_really_long_script_name_that_keeps_goi..."]:::script',
+    ),
+    out,
+  );
+  assert.ok(
+    out.includes('n3(["<b>fail</b> #quot;a #123;weird#125; #lt;message#gt; with #35; and #124; in it...#quot;"]):::fail'),
+    out,
+  );
+});
+
+test("output is byte-identical across builds; a missing def returns null", () => {
+  const src = `export def main() {\n  helper()\n}\ndef helper() {\n  log "x"\n}\n`;
+  assert.equal(mermaid(src), mermaid(src));
+  const graph = graphOf([{ path: "/w/e.jh", src }]);
   assert.equal(buildGraph(graph, "nope"), null);
-  assert.ok(buildGraph(graph, "helper"));
+  assert.deepEqual(entryDefNames(graph), ["main", "helper"]);
 });

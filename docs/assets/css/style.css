@@ -733,6 +733,24 @@ pre code .code-line::before {
     display: block;
 }
 
+/* docs/graph.md: rendered `jaiph graph` samples. The flowchart classes use
+   fixed light fills, so the canvas stays light in dark mode too. */
+.graph-render {
+    background: #ffffff;
+    border: 1px solid var(--table-border);
+    border-radius: 8px;
+    padding: 1rem;
+    margin-top: 0.75rem;
+    overflow-x: auto;
+}
+
+.graph-render svg {
+    display: block;
+    margin: 0 auto;
+    max-width: 100%;
+    height: auto;
+}
+
 .os-switch {
     display: flex;
     gap: 0.4rem;

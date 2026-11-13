@@ -53,7 +53,7 @@ test("graph: default entry is main and emits a flowchart to stdout", () => {
     assert.equal(r.code, 0);
     assert.equal(r.stderr, "");
     assert.ok(r.stdout.startsWith("flowchart TD\n"), r.stdout);
-    assert.ok(r.stdout.includes('subgraph sg1 ["def main"]'), r.stdout);
+    assert.ok(r.stdout.includes('subgraph g1 ["<b>def</b> main"]'), r.stdout);
   });
 });
 
@@ -61,7 +61,7 @@ test("graph: --def picks a non-exported def", () => {
   withFile("flow.jh", VALID, (path) => {
     const r = captureGraph(["--def", "helper", path]);
     assert.equal(r.code, 0);
-    assert.ok(r.stdout.includes('subgraph sg1 ["def helper"]'), r.stdout);
+    assert.ok(r.stdout.includes('subgraph g1 ["<b>def</b> helper"]'), r.stdout);
   });
 });
 
@@ -97,4 +97,33 @@ test("graph: --help prints usage and exits 0", () => {
   const r = captureGraph(["--help"]);
   assert.equal(r.code, 0);
   assert.match(r.stdout, /Usage: jaiph graph/);
+});
+
+test("graph: -d 0 collapses callees and ends with the collapsed comment", () => {
+  withFile("flow.jh", VALID, (path) => {
+    const r = captureGraph(["-d", "0", path]);
+    assert.equal(r.code, 0, r.stderr);
+    assert.ok(r.stdout.includes('[["<b>def</b> helper()"]]:::defx'), r.stdout);
+    assert.ok(r.stdout.endsWith("%% collapsed: 1 def beyond --depth 0 (use -d all to expand)\n"), r.stdout);
+  });
+});
+
+test("graph: --depth all, --import-depth all and --libs are accepted", () => {
+  withFile("flow.jh", VALID, (path) => {
+    const r = captureGraph(["--depth", "all", "--import-depth", "all", "--libs", path]);
+    assert.equal(r.code, 0, r.stderr);
+    assert.ok(r.stdout.includes('subgraph g2 ["<b>def</b> helper"]'), r.stdout);
+    assert.ok(!r.stdout.includes("%% collapsed"), r.stdout);
+  });
+});
+
+test("graph: a limit that is not a number or all is a usage error", () => {
+  withFile("flow.jh", VALID, (path) => {
+    for (const args of [["-d", "many", path], ["-i", "-1", path], ["-d"]]) {
+      const r = captureGraph(args);
+      assert.equal(r.code, 1, args.join(" "));
+      assert.equal(r.stdout, "");
+      assert.match(r.stderr, /Usage: jaiph graph/);
+    }
+  });
 });

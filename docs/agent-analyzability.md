@@ -65,7 +65,7 @@ Each package is a **deep module**: narrow public surface, large private capabili
 | Parse | `src/parser.ts` (sole external entry; re-exports the intentional public API, with no `export *` barrel) | `src/parse/**` |
 | Format | `src/format/index.ts` (sole external entry; re-exports the intentional formatter API, no `export *` barrel) | other `src/format/**` |
 | Transpile | `src/transpiler.ts` (sole external entry; re-exports the compile/validate surface plus the full module-graph API, no `export *` barrel) | `module-graph.ts`, `validate-*.ts`, emit internals, etc. |
-| Graph | `src/graph/index.ts` (sole external entry; re-exports the graph builder and Mermaid emitter, no `export *` barrel) | `build.ts`, `mermaid.ts`, `model.ts` |
+| Graph | `src/graph/index.ts` (sole external entry; re-exports the graph builder and Mermaid emitter, no `export *` barrel) | `build.ts`, `scope.ts`, `labels.ts`, `mermaid.ts`, `model.ts` |
 | Runtime | `src/runtime/index.ts` (launch, runner, `buildRuntimeGraph`, shared types/helpers intended for CLI); `src/runtime/testing.ts` is a second entry for named test seams that cross-package `*.test.ts` files reach (kept off the production entry) | `src/runtime/kernel/**` and other internals |
 | CLI | `src/cli/index.ts` plus per-slice entries under `src/cli/<slice>/` as needed | slice-private files |
 
