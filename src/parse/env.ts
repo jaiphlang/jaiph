@@ -15,11 +15,17 @@ export function parseEnvDecl(cursor: BodyCursor, at: number): { envDecl: EnvDecl
   if (kw?.text !== "const" || nameTok?.kind !== "ident" || !eqTok?.text.startsWith("=")) {
     fail(filePath, CONST_DECL_SHAPE_MESSAGE, lineNo);
   }
+  // Exactly one `=` is required after the name; `==` (or any other `=`-operator
+  // token) is a const-shape error at the operator's column — same rule as a def
+  // body (tryParseConst in stmt-invoke.ts).
+  if (eqTok.text !== "=") {
+    fail(filePath, CONST_DECL_SHAPE_MESSAGE, lineNo, eqTok.col);
+  }
   const name = nameTok.text;
   const loc = { line: lineNo, col: 1 };
-  // The value is everything after the first `=` (a `==` leaves a bare `= …`).
+  // The value is everything after the `=`.
   const valuePart = raw.slice(eqTok.col).trim();
-  const value = eqTok.text === "=" ? toks.slice(3) : [];
+  const value = toks.slice(3);
   const first = value[0];
 
   // Triple-quoted multiline string

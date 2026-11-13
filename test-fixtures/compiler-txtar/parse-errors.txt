@@ -2898,6 +2898,24 @@ export def main() {
   const x == y
 }
 
+=== top-level const with double-equals operator
+# @expect error E_PARSE "invalid declaration — expected: const NAME = VALUE" @1:9
+--- input.jh
+const x == "y"
+
+export def main() {
+  log "hello"
+}
+
+=== top-level const with fat-arrow operator
+# @expect error E_PARSE "invalid declaration — expected: const NAME = VALUE" @1:9
+--- input.jh
+const x => "y"
+
+export def main() {
+  log "hello"
+}
+
 === import with empty path
 # @expect error E_PARSE "import path must not be empty" @1:8
 --- input.jh
