@@ -67,6 +67,7 @@ function mockPromptBlock(
   arms: MatchArmDef[],
   next: number,
   loc: { line: number; col: number },
+  compact: boolean,
 ): TestStepResult {
   if (arms.length === 0) {
     fail(t.filePath, "mock prompt block must have at least one arm", t.lineNo);
@@ -77,7 +78,7 @@ function mockPromptBlock(
       rejectRemovedEscapes(t.filePath, body.slice(1, -1), "test", t.lineNo);
     }
   }
-  return { step: { type: "test_mock_prompt_block", arms, loc }, next };
+  return { step: { type: "test_mock_prompt_block", arms, ...(compact ? { compact: true } : {}), loc }, next };
 }
 
 /** `mock prompt "<response>"`, `mock prompt <const>`, or a `mock prompt { pattern => response }` block. */
@@ -88,7 +89,7 @@ function parseMockPrompt(t: TestLine): TestStepResult | null {
   const loc = { line: t.lineNo, col: t.col };
   if (arg.length === 1 && isPunct(arg[0], "{")) {
     const { arms, next } = parseMatchArms(t.cursor, t.cursor.next(t.at), t.lineNo);
-    return mockPromptBlock(t, arms, next, loc);
+    return mockPromptBlock(t, arms, next, loc, false);
   }
   // Compact one-line block `mock prompt { "a" => "x", _ => "d" }`: same arm
   // grammar and comma splitter as the compact `match` form.
@@ -97,7 +98,7 @@ function parseMockPrompt(t: TestLine): TestStepResult | null {
   if (open && close && isPunct(open, "{") && isPunct(close, "}")) {
     const inner = t.raw.slice(open.col, close.col - 1);
     const arms = parseCompactMatchArms(t.filePath, inner, t.lineNo, open.col + 1);
-    return mockPromptBlock(t, arms, t.cursor.next(t.at), loc);
+    return mockPromptBlock(t, arms, t.cursor.next(t.at), loc, true);
   }
   // Errors report the 1-based column of the `mock` token, like every other step.
   if (arg[0]?.text.startsWith("'")) {

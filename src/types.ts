@@ -353,6 +353,8 @@ export type TestStepDef =
   | {
       type: "test_mock_prompt_block";
       arms: MatchArmDef[];
+      /** Block was authored as a compact one-line `{ … }` (formatter keeps it on one line). */
+      compact?: boolean;
       loc: SourceLoc;
     }
   | {

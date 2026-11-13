@@ -65,7 +65,7 @@ mock prompt {
 }
 ```
 
-Arms are checked from top to bottom, and the first match wins. A `/regex/` arm matches when its pattern is found anywhere in the prompt text. A `"string"` arm matches only when the whole prompt text equals it exactly. Without a `_` wildcard arm, an unmatched prompt fails the test.
+Arms are checked from top to bottom, and the first match wins. A `/regex/` arm matches when its pattern is found anywhere in the prompt text. A `"string"` arm matches only when the whole prompt text equals it exactly. Without a `_` wildcard arm, an unmatched prompt fails the test. The same block can also be written on one line, with the arms separated by commas, as in `mock prompt { "a" => "x", _ => "z" }`. A comma inside a `"…"` response or inside a call's arguments (`f(x, y)`) does not split the arms. The arms follow the same rules as a [compact `match`](language.md#match-pattern-match). `jaiph format` keeps a one-line block on one line and a multiline block on multiple lines.
 
 ## 3. (Optional) Stub defs or scripts
 

@@ -327,6 +327,39 @@ describe("emitModule", () => {
     assert.equal(roundTrip(source, "t.test.jh"), source);
   });
 
+  it("keeps a one-line mock prompt block on one line and a multiline block multiline", () => {
+    const oneLine = [
+      'test "one" {',
+      '  mock prompt { "a" => "x", _ => "z" }',
+      "}",
+      "",
+    ].join("\n");
+    const multiLine = [
+      'test "multi" {',
+      "  mock prompt {",
+      '    "a" => "x"',
+      "    _ => \"z\"",
+      "  }",
+      "}",
+      "",
+    ].join("\n");
+    // One-line stays one line, multiline stays multiline, and both are idempotent.
+    assert.equal(roundTrip(oneLine, "t.test.jh"), oneLine);
+    assert.equal(roundTrip(roundTrip(oneLine, "t.test.jh"), "t.test.jh"), oneLine);
+    assert.equal(roundTrip(multiLine, "t.test.jh"), multiLine);
+    assert.equal(roundTrip(roundTrip(multiLine, "t.test.jh"), "t.test.jh"), multiLine);
+  });
+
+  it("keeps a call arm with a comma inside a one-line mock prompt block", () => {
+    const source = [
+      'test "call" {',
+      '  mock prompt { "a" => f(x, y), _ => "z" }',
+      "}",
+      "",
+    ].join("\n");
+    assert.equal(roundTrip(source, "t.test.jh"), source);
+  });
+
   it("is a bit-for-bit no-op on a first-agent const = prompt triple-quoted def body", () => {
     // The shebang is CLI-only trivia (see docs/cli.md), so the module body here
     // omits it. A formatter that collapses `prompt """ … """` to a double-quoted
