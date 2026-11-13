@@ -1,7 +1,6 @@
-import { existsSync } from "node:fs";
 import { errText } from "../errors";
-import { resolve } from "node:path";
 import { printUsage } from "./shared/usage";
+import { pathExists } from "./shared/paths";
 import {
   runWorkflow,
   runTest,
@@ -39,10 +38,10 @@ export async function main(argv: string[]): Promise<number> {
     return 0;
   }
   try {
-    if (cmd.endsWith(".test.jh") && existsSync(resolve(cmd))) {
+    if (cmd.endsWith(".test.jh") && pathExists(cmd)) {
       return await runTest([cmd, ...rest]);
     }
-    if (cmd.endsWith(".jh") && existsSync(resolve(cmd))) {
+    if (cmd.endsWith(".jh") && pathExists(cmd)) {
       return runWorkflow([cmd, ...rest]);
     }
     if (cmd === "run") {
@@ -65,6 +64,12 @@ export async function main(argv: string[]): Promise<number> {
     }
     if (cmd === "compile") {
       return runCompile(rest);
+    }
+    if (cmd === "graph") {
+      // Lazy import keeps the eager dispatch fan-out under the analyzability cap;
+      // `graph` pulls in the graph builder/emitter (src/graph) only on demand.
+      const { runGraph } = await import("./commands/graph");
+      return runGraph(rest);
     }
     // `--mcp` is an ergonomic alias for the `mcp` subcommand (`jaiph --mcp tools.jh`).
     if (cmd === "mcp" || cmd === "--mcp") {

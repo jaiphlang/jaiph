@@ -46,6 +46,7 @@ Imports may point only **downward**. Lower layers never import higher ones.
 |-------|--------|-----------------|
 | **4** CLI | `src/cli/**`, `src/cli.ts` | 3, 2, 1, 0 |
 | **3** Runtime | `src/runtime/**` | 2 (only the transpile public entry `src/transpiler.ts`), 1, 0, but **not** CLI |
+| **2.5** Graph | `src/graph/**` | 2 (`src/transpiler.ts`), 1 (`src/parser.ts`), 0, but **not** runtime or CLI |
 | **2** Compile | `src/transpile/**`, `src/transpiler.ts` | 1, 0, but **not** runtime |
 | **1** Parse / format | `src/parse/**`, `src/parser.ts`, `src/format/**` | 0 only |
 | **0** Shared leaf | `src/types.ts`, `src/errors.ts`, `src/diagnostics.ts`, `src/version.ts`, `src/env-reserved.ts`, `src/inline-script-name.ts` | other layer-0 files only |
@@ -64,6 +65,7 @@ Each package is a **deep module**: narrow public surface, large private capabili
 | Parse | `src/parser.ts` (sole external entry; re-exports the intentional public API, with no `export *` barrel) | `src/parse/**` |
 | Format | `src/format/index.ts` (sole external entry; re-exports the intentional formatter API, no `export *` barrel) | other `src/format/**` |
 | Transpile | `src/transpiler.ts` (sole external entry; re-exports the compile/validate surface plus the full module-graph API, no `export *` barrel) | `module-graph.ts`, `validate-*.ts`, emit internals, etc. |
+| Graph | `src/graph/index.ts` (sole external entry; re-exports the graph builder and Mermaid emitter, no `export *` barrel) | `build.ts`, `mermaid.ts`, `model.ts` |
 | Runtime | `src/runtime/index.ts` (launch, runner, `buildRuntimeGraph`, shared types/helpers intended for CLI); `src/runtime/testing.ts` is a second entry for named test seams that cross-package `*.test.ts` files reach (kept off the production entry) | `src/runtime/kernel/**` and other internals |
 | CLI | `src/cli/index.ts` plus per-slice entries under `src/cli/<slice>/` as needed | slice-private files |
 
@@ -112,7 +114,7 @@ These are **guardrails**, not conventions. Violations fail CI.
 
 | Mechanism | What it enforces |
 |-----------|------------------|
-| `dependency-cruiser` (`npm run arch:check`) | no cycles; the layer DAG (including `runtime` ↛ `cli`); deep imports past the parse public entry (`no-deep-imports-into-parse`), the transpile public entry (`no-deep-imports-into-transpile`), the runtime public entry (`no-deep-imports-into-runtime`), and the format public entry (`no-deep-imports-into-format`); cross-CLI-slice private imports (`no-cross-cli-slice-imports`). Every layer now sits behind a public-entry gate, and the committed known-violations baseline (`.dependency-cruiser-known-violations.json`) is empty, so no cycles, upward imports, deep imports, or cross-slice edges remain tracked |
+| `dependency-cruiser` (`npm run arch:check`) | no cycles; the layer DAG (including `runtime` ↛ `cli`); deep imports past the parse public entry (`no-deep-imports-into-parse`), the transpile public entry (`no-deep-imports-into-transpile`), the runtime public entry (`no-deep-imports-into-runtime`), the format public entry (`no-deep-imports-into-format`), and the graph public entry (`no-deep-imports-into-graph`); the graph layer's downward-only rule (`graph-no-upward`); cross-CLI-slice private imports (`no-cross-cli-slice-imports`). Every layer now sits behind a public-entry gate, and the committed known-violations baseline (`.dependency-cruiser-known-violations.json`) is empty, so no cycles, upward imports, deep imports, or cross-slice edges remain tracked |
 | ESLint (`npm run lint`) | `import/max-dependencies` and `max-lines` on `src/**/*.ts`. Most former violators were split into sibling modules and now pass under the global caps with no override; the three largest remaining files keep a per-file override in `eslint.config.mjs`, each with a fresh justification |
 | Existing grep/shape tests | e.g. transpile ↛ runtime, trivia isolation, file-size caps on specific hot files |
 | Docs structure tests | Diátaxis front matter, nav bijection, link resolution, summary-first lead, and per-Diátaxis body-line caps of 150 (how-to), 350 (reference), and 500 (tutorial, explanation, contributor) (`integration/docs-structure.test.ts`) |

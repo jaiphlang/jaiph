@@ -33,7 +33,7 @@
 
 ## Core components
 
-- **CLI** (`src/cli`) — `jaiph run` / `test` / `compile` / `format` / `init` / `install` / `use` / `mcp` / `serve`; prepares scripts, spawns the def runner(or in-process test runner), parses `__JAIPH_EVENT__` on stderr, runs hooks on `jaiph run` only.
+- **CLI** (`src/cli`) — `jaiph run` / `test` / `compile` / `graph` / `format` / `init` / `install` / `use` / `mcp` / `serve`; prepares scripts, spawns the def runner(or in-process test runner), parses `__JAIPH_EVENT__` on stderr, runs hooks on `jaiph run` only.
 - **Parser** (`src/parser.ts`, `src/parse/*`) — `.jh` / `.test.jh` → AST.
 - **Validator** (`src/transpile/validate.ts`) — imports and symbol references at compile time.
 - **Transpiler** (`src/transpile/*`) — emits atomic `script` files under `scripts/` only (no def-level shell).

@@ -2,6 +2,7 @@
 
 ## Summary
 
+- **Feature:** `jaiph graph [--def <name>] [--workspace <dir>] <file.jh>` prints a def's execution flow as a Mermaid `flowchart TD` document to stdout. It validates the import closure like `jaiph compile` and runs nothing (no scripts emitted, no agent/prompt called, no runner spawned). Each reachable def is drawn once as a subgraph (recursion and repeated calls reuse it); node shapes mark def calls, scripts, prompts, branches, and failures; output is deterministic and escaped for Mermaid. See [CLI — `jaiph graph`](https://jaiph.org/reference/cli#jaiph-graph).
 - **Breaking:** an `if` string operand follows the one escape rule — `\"` is the only escape. `if x == "a\\" {` used to be accepted (operand `a\\`) and is now the same `E_PARSE` any other unterminated `if` operand gives. Regex operands (`/…/`) are unchanged (`\/` does not end a regex).
 - **Breaking:** a match arm body must be a string, `"""` block, identifier, `a.b` field, `${…}`, call, or `fail "…"`. Anything else, including `$var`, is now a parse error at the body's column.
 - **Breaking:** trailing text after a `fail "…"` or `return "…"` string is now `E_PARSE` (`unexpected content after fail string: '…'` / `unexpected content after return string: '…'`). Programs that relied on `fail "x" y` dropping `y` or `return "x" y` storing `"x" y` no longer parse; a trailing comment is still allowed.

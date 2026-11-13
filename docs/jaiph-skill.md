@@ -85,7 +85,7 @@ The same `.jh` program can run from the CLI, expose tools over MCP, or serve an 
 2. Classify each operation using the table above; make inputs, outputs, failure paths, and the intended CLI, MCP, or HTTP surface explicit.
 3. Write the smallest coherent change. Read the owner page instead of guessing syntax.
 4. Format: `jaiph format <file…>`.
-5. Compile: `jaiph compile <file-or-dir>`. Fix every reported diagnostic.
+5. Compile: `jaiph compile <file-or-dir>`. Fix every reported diagnostic. To review a workflow's shape, `jaiph graph [--def <name>] <file.jh>` prints its execution flow as a Mermaid flowchart (validates only, runs nothing).
 6. Add or update `*.test.jh` coverage. Mock every prompt, then run `jaiph test <file-or-dir>`.
 7. Run `jaiph run <file.jh> [args…]` for an end-to-end check when its external effects and agent calls are intended.
 8. Inspect recorded outputs under `.jaiph/runs/` when debugging or validating behavior; see [Save artifacts](https://jaiph.org/how-to/artifacts).
