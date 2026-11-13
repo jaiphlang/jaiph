@@ -174,7 +174,7 @@ The entry def is `main` by default; `--def <name>` graphs any def in the file, e
 
 A limit that is not a non-negative integer or `all` is a usage error (exit `1`). Validation runs first: any diagnostic is written to stderr as `path:line:col CODE message` with exit `1` and nothing on stdout (same shape as `jaiph compile`). Node ids are deterministic (`n1`, `n2`, … in depth-first source order), so the same input gives byte-identical output.
 
-A def left out by a limit is drawn as a dashed call node with no subgraph, and the output ends with a Mermaid comment counting those defs and naming the flags that draw them, for example `%% collapsed: 2 defs beyond --depth 3, 4 library defs (use -d all, -l to expand)`. For the node shapes, edge styles, label rules, and rendered samples, see [Flowcharts](graph.md).
+A def left out by a limit is drawn as a dashed call node with no subgraph, and the output ends with a Mermaid comment counting those defs and naming the flags that draw them, for example `%% collapsed: 2 defs beyond --depth 3, 4 library defs (use -d all, -l to expand)`. For how to read the chart and rendered examples, see [Execution flow](execution-flow.md).
 
 ## `jaiph format`
 

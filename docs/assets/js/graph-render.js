@@ -1,4 +1,4 @@
-// Renders the `jaiph graph` samples on docs/graph.md. Loaded as a module only
+// Renders the `jaiph graph` examples on docs/execution-flow.md. Loaded as a module only
 // by pages whose front matter sets `mermaid: true` (see _layouts/docs.html).
 // Each `[data-graph-mermaid]` block holds real command output; its rendered SVG
 // goes into the `.graph-render` element that follows it. main.js keeps the
@@ -17,6 +17,6 @@ for (let i = 0; i < blocks.length; i += 1) {
     const { svg } = await mermaid.render(`graph-sample-${i}`, text);
     target.innerHTML = svg;
   } catch (err) {
-    target.textContent = `Could not render this flowchart: ${err?.message ?? err}`;
+    target.textContent = `Could not render this chart: ${err?.message ?? err}`;
   }
 }
