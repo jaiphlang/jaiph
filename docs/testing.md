@@ -53,7 +53,7 @@ const greeting = "hi"
 mock prompt greeting
 ```
 
-A queued `mock prompt` line is the keyword followed by exactly one response, either a `"…"` string or a bare `const` name. Any text after the response is `E_PARSE` (`mock prompt must be: …`) at the extra text's column, so `mock prompt "a" x` is rejected.
+A queued `mock prompt` line is the keyword followed by exactly one response, either a `"…"` string or a bare `const` name. Any text after the response is `E_PARSE` (`mock prompt must be: …`) at the `mock` keyword's column, like every other test-block statement, so `mock prompt "a" x` is rejected.
 
 To pick a response based on the content of the prompt, use the pattern form. Do not mix queued `mock prompt "…"` or `mock prompt <const>` lines with a `mock prompt { … }` block in one test, because the compiler rejects that with an `E_VALIDATE` error. Separate tests in the same file may use different styles:
 

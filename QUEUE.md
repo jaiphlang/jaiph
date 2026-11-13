@@ -16,33 +16,6 @@ Process rules:
 7. Acceptance criteria are non-negotiable. A task is not done until every
    acceptance bullet is verified by a test that fails when the contract is violated.
 
-## Report channel and mock prompt columns correctly #dev-ready
-
-Two diagnostics point at the wrong column.
-
-### Current behavior
-
-- `src/parse/channels.ts` finds a channel name's column with `raw.indexOf(name)`, and does the same for the route target. When the name also occurs inside the word `channel`, the column is wrong.
-  - `channel c`, `channel ch` and `channel an` get column 1, where `c` is found inside `channel`; the correct column is 9.
-  - `channel abc` gets 9, which is correct.
-  - The wrong `loc` reaches AST consumers and diagnostics such as `duplicate name "c"`.
-- `mock prompt` errors in `*.test.jh` use 0-based columns. With two-space indentation, `mock prompt 5` reports `t.test.jh:2:2` where the statement starts at column 3. The code is in `src/parse/test-steps.ts` / `src/parse/tests.ts`.
-
-### Required
-
-- Channel `loc.col` and the target's column come from the token positions of the name and the target.
-- `mock prompt` errors report the 1-based column of the `mock` token, the same rule every other test-block statement uses.
-- Check the other test-block statements for the same off-by-one, and fix any that have it.
-- Golden ASTs that encode the wrong channel columns, if any, are updated. Every changed column is listed in the task notes.
-- CHANGELOG `Unreleased` gets a Fix entry.
-
-### Acceptance
-
-- A unit test shows `channel c`, `channel ch -> target` and `channel abc` report `loc.col` 9 for the name, and the target's column is correct.
-- A `parse-errors.txt` fixture shows a duplicate `channel c` error at column 9.
-- A `parse-errors.txt` fixture shows an indented `mock prompt 5` error at the `mock` token's 1-based column.
-- `npm test`, `npm run lint`, `npm run arch:check`, and `bash e2e/test_all.sh` pass.
-
 ## Use the single string escape rule in if operands #dev-ready
 
 `if` operands still read a backslash as escaping any character. Everywhere else in Jaiph, `\"` is the only escape.

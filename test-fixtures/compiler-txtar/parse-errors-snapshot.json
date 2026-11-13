@@ -573,6 +573,13 @@
     "code": "E_PARSE",
     "message": "invalid def reference in channel route: \"123bad\""
   },
+  "duplicate channel name reports the name column": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 9,
+    "code": "E_PARSE",
+    "message": "duplicate name \"c\" — channels, defs, and scripts share a single namespace (already declared as channel)"
+  },
   "route inside workflow body is parse error": {
     "file": "input.jh",
     "line": 2,
@@ -793,7 +800,14 @@
   "test: mock prompt invalid format": {
     "file": "input.test.jh",
     "line": 4,
-    "col": 2,
+    "col": 3,
+    "code": "E_PARSE",
+    "message": "mock prompt must be: mock prompt \"<response>\", mock prompt <const_name>, or mock prompt { \"pattern\" => \"response\", _ => \"default\" }"
+  },
+  "test: indented mock prompt error reports the mock token column": {
+    "file": "input.test.jh",
+    "line": 4,
+    "col": 3,
     "code": "E_PARSE",
     "message": "mock prompt must be: mock prompt \"<response>\", mock prompt <const_name>, or mock prompt { \"pattern\" => \"response\", _ => \"default\" }"
   },
@@ -1528,7 +1542,7 @@
   "mock prompt single-quoted string rejected": {
     "file": "input.test.jh",
     "line": 4,
-    "col": 2,
+    "col": 3,
     "code": "E_PARSE",
     "message": "single-quoted strings are not supported; use double quotes (\"...\") instead"
   },
@@ -2130,7 +2144,7 @@
   "mock prompt with trailing content": {
     "file": "input.test.jh",
     "line": 4,
-    "col": 18,
+    "col": 3,
     "code": "E_PARSE",
     "message": "mock prompt must be: mock prompt \"<response>\", mock prompt <const_name>, or mock prompt { \"pattern\" => \"response\", _ => \"default\" }"
   }

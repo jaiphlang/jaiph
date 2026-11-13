@@ -99,23 +99,23 @@ function parseMockPrompt(t: TestLine): TestStepResult | null {
     const arms = parseCompactMatchArms(t.filePath, inner, t.lineNo, open.col + 1);
     return mockPromptBlock(t, arms, t.cursor.next(t.at), loc);
   }
-  // Columns here count from 0, as they always have.
+  // Errors report the 1-based column of the `mock` token, like every other step.
   if (arg[0]?.text.startsWith("'")) {
-    fail(t.filePath, SINGLE_QUOTE_MESSAGE, t.lineNo, t.col - 1);
+    fail(t.filePath, SINGLE_QUOTE_MESSAGE, t.lineNo, t.col);
   }
   // `mock prompt <ident>` resolves the ident from a previously declared `const` in this block.
   if (arg[0]?.kind === "ident") {
     if (arg.length > 1) {
-      fail(t.filePath, MOCK_PROMPT_MESSAGE, t.lineNo, arg[1]!.col - 1);
+      fail(t.filePath, MOCK_PROMPT_MESSAGE, t.lineNo, t.col);
     }
     return { step: { type: "test_mock_prompt", response: "", responseVar: arg[0]!.text, loc }, next: t.cursor.next(t.at) };
   }
   if (arg[0]?.kind !== "string" && arg[0]?.text !== '"""') {
-    fail(t.filePath, MOCK_PROMPT_MESSAGE, t.lineNo, t.col - 1);
+    fail(t.filePath, MOCK_PROMPT_MESSAGE, t.lineNo, t.col);
   }
   // Exactly one `"<response>"` token; any text after it is extra.
   if (arg.length > 1) {
-    fail(t.filePath, MOCK_PROMPT_MESSAGE, t.lineNo, arg[1]!.col - 1);
+    fail(t.filePath, MOCK_PROMPT_MESSAGE, t.lineNo, t.col);
   }
   const text = stripQuotes(t.raw.slice(arg[0]!.col - 1));
   return {

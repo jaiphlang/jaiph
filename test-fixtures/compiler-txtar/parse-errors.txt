@@ -684,6 +684,15 @@ export def main() {
   log "ok"
 }
 
+=== duplicate channel name reports the name column
+# @expect error E_PARSE "duplicate name" @2:9
+--- input.jh
+channel c
+channel c
+export def main() {
+  log "ok"
+}
+
 === route inside workflow body is parse error
 # @expect error E_PARSE "route declarations belong at the top level: channel findings -> analyst" @2:1
 --- input.jh
@@ -1007,12 +1016,26 @@ export def main() {
 }
 
 === test: mock prompt invalid format
-# @expect error E_PARSE "mock prompt must be: mock prompt" @4:2
+# @expect error E_PARSE "mock prompt must be: mock prompt" @4:3
 --- input.test.jh
 import "lib.jh" as lib
 
 test "bad mock" {
   mock prompt 123-not-a-string
+  const out = lib.main()
+}
+--- lib.jh
+export def main() {
+  log "ok"
+}
+
+=== test: indented mock prompt error reports the mock token column
+# @expect error E_PARSE "mock prompt must be: mock prompt" @4:3
+--- input.test.jh
+import "lib.jh" as lib
+
+test "bad mock" {
+  mock prompt 5
   const out = lib.main()
 }
 --- lib.jh
@@ -2057,7 +2080,7 @@ export def main() {
 }
 
 === mock prompt single-quoted string rejected
-# @expect error E_PARSE "single-quoted strings are not supported; use double quotes (" @4:2
+# @expect error E_PARSE "single-quoted strings are not supported; use double quotes (" @4:3
 --- input.test.jh
 import "lib.jh" as lib
 
@@ -2885,7 +2908,7 @@ export def main() {
 }
 
 === mock prompt with trailing content
-# @expect error E_PARSE "mock prompt must be: mock prompt" @4:18
+# @expect error E_PARSE "mock prompt must be: mock prompt" @4:3
 --- input.test.jh
 import "lib.jh" as lib
 
