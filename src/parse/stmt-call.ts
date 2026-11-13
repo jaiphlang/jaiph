@@ -36,32 +36,38 @@ type Clause = { keyword: "catch" | "recover"; left: string; after: string };
 
 /**
  * The attached `recover` / `catch` clause on call text `hostBody`, read from
- * its tokens. The first ` recover` (then, when there is none, the first
- * ` catch `) decides, even one written inside a quoted argument or after
- * another clause: the text before it must then be exactly one call, or the
- * statement has no clause and the call's trailing-content check reports it.
+ * its tokens. The clause keyword is the first `recover` (then, when there is
+ * none, the first `catch`) identifier token at the top level of the statement:
+ * after the call's closing `)`, at paren and brace depth 0, and so never inside
+ * a string, `"""` block, inline script, or nested parentheses — those are single
+ * tokens or sit at non-zero depth. The text before the keyword must then be
+ * exactly one call, or the statement has no clause and the call's
+ * trailing-content check reports it.
  */
 function findClause(filePath: string, line: number, hostBody: string): Clause | null {
   const L = new SliceLexer(filePath, hostBody, line, 1, 0);
   const toks = L.all(0, { triple: "pair" });
   const spaceBefore = (tok: Token): boolean => hostBody[L.rel(tok) - 1] === " ";
-  const find = (keyword: Clause["keyword"], after: RegExp, inside: RegExp): Clause | null | undefined => {
+  const find = (keyword: Clause["keyword"], after: RegExp): Clause | null | undefined => {
+    let depth = 0;
     for (const tok of toks) {
       const next = hostBody[L.end(tok)] ?? "";
-      if (tok.kind === "ident" && tok.text === keyword && spaceBefore(tok) && after.test(next)) {
+      if (depth === 0 && tok.kind === "ident" && tok.text === keyword && spaceBefore(tok) && after.test(next)) {
         const left = hostBody.slice(0, L.rel(tok) - 1).trim();
         const probe = parseCallRef(left);
         if (!probe || probe.rest.trim()) return null;
         return { keyword, left, after: hostBody.slice(L.end(tok) + (keyword === "catch" ? 1 : 0)) };
       }
-      // Inside a quoted token the text before it never closes as a call.
-      if (inside.test(tok.text + next)) return null;
+      if (tok.kind === "punct") {
+        if (tok.text === "(" || tok.text === "{" || tok.text === "${") depth += 1;
+        else if (tok.text === ")" || tok.text === "}") depth -= 1;
+      }
     }
     return undefined;
   };
-  const recover = find("recover", /^[\s(]/, / recover[\s(]/);
+  const recover = find("recover", /^[\s(]/);
   if (recover !== undefined) return recover;
-  return find("catch", /^ /, / catch /) ?? null;
+  return find("catch", /^ /) ?? null;
 }
 
 /** `hostBody` ends with the clause keyword alone (a space or, for `catch`, any whitespace before it). */

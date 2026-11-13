@@ -16,37 +16,6 @@ Process rules:
 7. Acceptance criteria are non-negotiable. A task is not done until every
    acceptance bullet is verified by a test that fails when the contract is violated.
 
-## Decide catch / recover clauses from tokens outside strings #dev-ready
-
-A quoted argument that contains the word ` recover` or ` catch ` breaks a valid statement.
-
-### Current behavior
-
-- `findClause` in `src/parse/stmt-call.ts` takes the first ` recover` (or, when there is none, the first ` catch `) anywhere in the call text, including text inside a quoted string or inside the clause body. If the text before that match is not exactly one call, it reports "no clause". The call's trailing-content check then fails.
-- Example: with `script f = 'true'`, the line `f() catch (e) { log "do not recover now" }` fails with `E_PARSE unexpected content after call call: 'catch (e) { log "do not recover now" }'`. The ` recover` inside the log string wins over the real ` catch`.
-- The same happens with `f("x catch y") catch (e) { … }` and `f() recover (e) { log "catch me" }`.
-- The doc comment on `findClause` describes this quirk.
-
-### Required
-
-- The clause keyword is the first `catch` or `recover` identifier token at the top level of the statement: after the call's closing `)`, and not inside a string, `"""` block, inline script, or nested parentheses.
-- Text inside strings, and text inside the clause body, never selects or blocks a clause.
-- Every statement that parses today parses to the same AST.
-- Error messages for genuinely malformed clauses (missing binding, missing body, two bindings) keep their current text and columns.
-- The doc comment on `findClause` describes the new rule.
-- CHANGELOG `Unreleased` gets a Fix entry.
-
-### Acceptance
-
-- Unit tests in `src/parse/` cover all of these, each parsing to a call step with the right clause kind, binding and body:
-  - `f() catch (e) { log "do not recover now" }`
-  - `f("a catch b") catch (e) { log "x" }`
-  - `f("a recover(b)") recover (e) { log "y" }`
-  - `f() recover (e) { log "catch me" }`
-- A unit test shows `f() catch` with no binding still fails with today's message and column.
-- Golden ASTs, `test-fixtures/compiler-txtar/parse-errors-snapshot.json`, and the compiler fixtures pass unchanged.
-- `npm test`, `npm run lint`, `npm run arch:check`, and `bash e2e/test_all.sh` pass.
-
 ## Split compact match arms only on top-level commas #dev-ready
 
 The one-line `match` form rejects a call arm whose arguments contain a comma.
