@@ -2134,6 +2134,20 @@
     "code": "E_PARSE",
     "message": "invalid declaration — expected: const NAME = VALUE"
   },
+  "top-level const with double-equals operator": {
+    "file": "input.jh",
+    "line": 1,
+    "col": 9,
+    "code": "E_PARSE",
+    "message": "invalid declaration — expected: const NAME = VALUE"
+  },
+  "top-level const with fat-arrow operator": {
+    "file": "input.jh",
+    "line": 1,
+    "col": 9,
+    "code": "E_PARSE",
+    "message": "invalid declaration — expected: const NAME = VALUE"
+  },
   "import with empty path": {
     "file": "input.jh",
     "line": 1,

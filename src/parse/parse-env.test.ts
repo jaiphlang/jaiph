@@ -111,3 +111,30 @@ test("parseEnvDecl: \\\" decodes to a quote; other backslashes stay", () => {
   assert.equal(envDecl.value, 'say "hi" \\d');
   assert.equal(envDecl.tripleQuoted, undefined);
 });
+
+test("parseEnvDecl: exactly one `=` still parses the three value shapes unchanged", () => {
+  const quoted = parseEnvDecl(...src(['const x = "y"'], 0)).envDecl;
+  assert.deepEqual(quoted, { name: "x", value: "y", loc: { line: 1, col: 1 }, wasQuoted: true });
+
+  const bare = parseEnvDecl(...src(["const x = y"], 0)).envDecl;
+  assert.deepEqual(bare, { name: "x", value: "y", loc: { line: 1, col: 1 } });
+
+  const triple = parseEnvDecl(...src(['const x = """', "y", '"""'], 0)).envDecl;
+  assert.deepEqual(triple, {
+    name: "x",
+    value: "y",
+    loc: { line: 1, col: 1 },
+    wasQuoted: true,
+    tripleQuoted: true,
+  });
+});
+
+test("parseEnvDecl: `==`/`=>`/`=~` are shape errors at the operator's column", () => {
+  for (const op of ["==", "=>", "=~"]) {
+    assert.throws(
+      () => parseEnvDecl(...src([`const x ${op} "y"`], 0)),
+      /:1:9 E_PARSE invalid declaration — expected: const NAME = VALUE/,
+      op,
+    );
+  }
+});
