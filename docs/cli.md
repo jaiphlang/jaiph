@@ -34,6 +34,7 @@ The reserved internal marker `__workflow-runner` is excluded from `--help`/usage
 | `run` | Compile, launch, and observe one run on the host. |
 | `test` | Execute `*.test.jh` blocks in-process with mocks. |
 | `compile` | Multi-error validation pass — no `scripts/` emission, no runtime spawn. |
+| `graph` | Print a def's execution flow as a Mermaid `flowchart TD` — validates only, nothing runs. |
 | `format` | Rewrite `.jh` / `.test.jh` files into canonical style. |
 | `init` | Initialize `.jaiph/` directory layout in a workspace. |
 | `install` | Install project-scoped libraries from the registry or git URLs. |
@@ -151,6 +152,67 @@ At least one path is required. Unlike the other subcommands (which stop scanning
 | `--workspace <dir>` | Override library resolution root for all reached modules. Without it, the workspace is auto-detected per path. |
 
 Within each entry's import closure, diagnostics are sorted by `(file, line, col)`; when multiple entry points are supplied, those batches are appended in discovery order (not re-sorted globally). Without `--json`, the same set is written to stderr as `path:line:col CODE message` lines. Any non-empty diagnostic set exits `1`. Parser/loader failures abort the affected entry's closure with a single diagnostic for that entry; siblings continue.
+
+## `jaiph graph`
+{: #jaiph-graph}
+
+Print one def's execution flow as a Mermaid [`flowchart TD`](https://mermaid.js.org/syntax/flowchart.html) document to stdout, then exit `0`. Like [`jaiph compile`](#jaiph-compile), it loads the file's import closure with `loadModuleGraph`, validates it with `collectDiagnostics`, and **runs nothing**: no `scripts/` are emitted, no agent or prompt is called, and no workflow runner is spawned. GitHub renders the output inline, so you can paste it straight into a PR or a doc.
+
+```text
+jaiph graph [--def <name>] [--workspace <dir>] <file.jh>
+```
+
+The entry def is `main` by default; `--def <name>` graphs any def in the file, exported or not. A `*.test.jh` argument is a usage error.
+
+| Flag | Argument | Effect |
+|---|---|---|
+| `--def` | `<name>` | Entry def to graph. Default `main`. A missing name exits `1` with the error naming the def and listing the defs that exist. |
+| `--workspace` | `<dir>` | Workspace root for import resolution. Without it, auto-detected from the `.jh` file. |
+
+Validation runs first: any diagnostic is written to stderr as `path:line:col CODE message` with exit `1` and nothing on stdout (same shape as `jaiph compile`). Node ids are deterministic (`n1`, `n2`, … in depth-first source order), so the same input gives byte-identical output.
+
+Each reachable def (in the same module or through an import) is drawn once as a Mermaid subgraph with its own start and end; recursion and repeated calls reuse that subgraph. Labels are escaped for Mermaid and cut to 60 characters with `…`.
+
+| Node | Shape | Step |
+|---|---|---|
+| start / end | stadium `([…])` | the def's entry and exit |
+| def call | rectangle `[…]` | a call into another def's subgraph |
+| script / inline script | subroutine `[[…]]` | a leaf script step |
+| `prompt` | hexagon `{{…}}` | a prompt step |
+| `if` / `match` | diamond `{…}` | a branch (`yes` / `no`, or one edge per arm) |
+| `fail` | styled rectangle | a terminal failure |
+
+`log` / `logerr` / `logwarn`, comments, blank lines, and a `const` bound to a plain value are not nodes. A `const` bound to a call, prompt, or match shows that node with the bound name in its label (`x = f()`). `return` adds an edge to the def's end, labelled with the value when it is short. `catch` and `recover` add a dashed `on failure` edge into their body (and `recover` a `retry` edge back to the call); `async` calls and `send` route targets use dashed edges.
+
+For example, [`examples/say_hello.jh`](https://github.com/jaiphlang/jaiph/blob/main/examples/say_hello.jh) graphs as:
+
+```text
+jaiph graph examples/say_hello.jh
+```
+
+```mermaid
+flowchart TD
+  subgraph sg1 ["def main"]
+    n1(["start"])
+    n2(["end"])
+    n3["name = valid_name(name_arg)"]
+    n8{{"response = prompt Say hello to $#123;name#125; and provide a fun fa…"}}
+  end
+  subgraph sg2 ["def valid_name"]
+    n4(["start"])
+    n5(["end"])
+    n6{"match name_arg"}
+    n7["fail You provided an invalid name :("]:::failure
+  end
+  n1 --> n3
+  n4 --> n6
+  n6 -->|"_"| n7
+  n6 -->|"/[A-Z][a-z]+/"| n5
+  n3 --> n4
+  n5 --> n8
+  n8 -->|"#34;$#123;response#125;#34;"| n2
+  classDef failure fill:#fdd,stroke:#d33,color:#900;
+```
 
 ## `jaiph format`
 

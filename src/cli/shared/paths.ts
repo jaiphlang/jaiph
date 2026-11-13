@@ -70,6 +70,11 @@ function skipStrayWorkspaceMarkerUnderMacOsTempTree(candidateRoot: string, absSt
   return s.startsWith(prefix);
 }
 
+/** True when `pathArg` resolves to an existing filesystem entry (file-shorthand routing). */
+export function pathExists(pathArg: string): boolean {
+  return existsSync(resolve(pathArg));
+}
+
 export function detectWorkspaceRoot(startDir: string): string {
   const fallback = resolve(startDir);
   if (basename(fallback) === ".jaiph") {

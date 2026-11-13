@@ -14,6 +14,9 @@ const LAYER0 =
   "^src/(types|errors|diagnostics|version|env-reserved|inline-script-name)\\.ts$";
 const LAYER1 = "^src/(parse/|parser\\.ts$|format/)";
 const LAYER2 = "^src/(transpile/|transpiler\\.ts$)";
+// Graph (model/builder/emitter) sits above compile and below cli: it reuses the
+// parse and transpile public entries and types, never runtime or cli.
+const LAYER_GRAPH = "^src/graph/";
 const LAYER3 = "^src/runtime/";
 const LAYER4 = "^src/(cli/|cli\\.ts$)";
 
@@ -99,6 +102,22 @@ module.exports = {
       severity: "error",
       from: { pathNot: "^src/runtime/" },
       to: { path: "^src/runtime/", pathNot: "^src/runtime/(index|testing)\\.ts$" },
+    },
+    {
+      name: "graph-no-upward",
+      comment:
+        "Graph (src/graph/**) may import only the parse/transpile public entries and the shared leaf, never runtime or cli.",
+      severity: "error",
+      from: { path: LAYER_GRAPH },
+      to: { path: `${LAYER3}|${LAYER4}` },
+    },
+    {
+      name: "no-deep-imports-into-graph",
+      comment:
+        "Graph is a deep module: code OUTSIDE the graph package imports only its public entry (src/graph/index.ts), never src/graph/** internals (build.ts, mermaid.ts, model.ts). Add a named re-export to src/graph/index.ts instead of reaching in.",
+      severity: "error",
+      from: { pathNot: "^src/graph/" },
+      to: { path: "^src/graph/", pathNot: "^src/graph/index\\.ts$" },
     },
     {
       name: "no-deep-imports-into-format",

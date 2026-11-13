@@ -106,6 +106,7 @@ TEST_SCRIPTS=(
   "e2e/tests/148_nested_decls.sh"
   "e2e/tests/153_stdin_pipeline_stream.sh"
   "e2e/tests/154_string_values.sh"
+  "e2e/tests/155_graph_command.sh"
   "e2e/tests/210_standalone_binary.sh"
 )
 
