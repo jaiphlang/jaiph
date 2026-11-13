@@ -21,7 +21,7 @@ The chart starts at `main` unless `--def <name>` picks another def. The flags ar
 
 Each def is a grey box with the def's name at the top. The steps inside the box run from top to bottom, from **start** to **end**. When a def calls another def, an arrow goes from the call into the box of the called def, and the arrow that leaves that box's **end** goes back to the step after the call. Each def is drawn once, even when several steps call it.
 
-A def from an imported file keeps the name it was imported under, e.g. `git.commit`, and its box has a dashed border. The shapes follow the ISO 5807 flowchart standard, and Mermaid 11.3 or later is needed to draw the bars of `async` calls.
+A def from an imported file keeps the name it was imported under, e.g. `git.commit`, and its box has a dashed border. The shapes follow the ISO 5807 flowchart standard, and Mermaid 11.3 or later is needed to draw the bars of `async` calls. ISO 5807 has no dashed variants, so the dashed border of an imported def and the dashed outline of a def call that isn't drawn are Jaiph's own markings.
 
 ## Steps
 
@@ -29,7 +29,7 @@ A def from an imported file keeps the name it was imported under, e.g. `git.comm
 |---|---|---|---|
 | <span class="flow-icon flow-icon-term" aria-hidden="true"></span> | Start and end | Terminator | Where a def begins and where it returns. |
 | <span class="flow-icon flow-icon-input" aria-hidden="true"></span> | Parameters | Data | The def's parameters, e.g. `in: name`. |
-| <span class="flow-icon flow-icon-def" aria-hidden="true"></span> | Def call | Predefined process | A call to another def. A dashed outline means the called def isn't drawn, as explained in [Defs that aren't drawn](#defs-that-arent-drawn). |
+| <span class="flow-icon flow-icon-def" aria-hidden="true"></span> | Def call | Predefined process | A call to another def. A dashed outline, which is Jaiph's own marking and not part of ISO 5807, means the called def isn't drawn, as explained in [Defs that aren't drawn](#defs-that-arent-drawn). |
 | <span class="flow-icon flow-icon-script" aria-hidden="true"></span> | Script | Process | A script, an inline script, or one stage of a `stdin` pipeline. |
 | <span class="flow-icon flow-icon-prompt" aria-hidden="true"></span> | Prompt | Process | A prompt sent to an agent. |
 | <span class="flow-icon flow-icon-send" aria-hidden="true"></span> | Send | Process | A message sent to a channel. |
