@@ -15,28 +15,3 @@ Process rules:
 6. Hard rewrite semantics: breaking changes are allowed unless a task says otherwise.
 7. Acceptance criteria are non-negotiable. A task is not done until every
    acceptance bullet is verified by a test that fails when the contract is violated.
-
-## Use the single string escape rule in if operands #dev-ready
-
-`if` operands still read a backslash as escaping any character. Everywhere else in Jaiph, `\"` is the only escape.
-
-### Current behavior
-
-- `readIfCondition` in `src/parse/stmt-control.ts` has a fallback, `BACKSLASH_OPERAND_RE`, for operands containing two backslashes in a row. Under that fallback `\\` escapes the next backslash, so `"a\\"` ends at the last quote.
-- Under the lexer's rule, a backslash escapes only `"`. So the operand `"a\\"` reads as `"a\` + `\"`, an unterminated string.
-- The fallback exists only to keep old parses unchanged.
-- Regex operands (`/…/`) also go through the fallback; their escape rule is a separate concern.
-
-### Required
-
-- String operands follow the lexer rule: `\"` is the only escape, the same as all other Jaiph strings. `docs/grammar.md` states it for `if` operands.
-- `BACKSLASH_OPERAND_RE` and its branch are deleted. `if x == "a\\" {` becomes the same unterminated-string `E_PARSE` any other string gives.
-- Regex operands keep their current behaviour (`\/` does not end a regex) and are covered by a test.
-- Before changing anything, grep every repo source for `if` operands containing `\\`, and record the matches in the task notes.
-- CHANGELOG `Unreleased` gets an entry: Breaking if any accepted program changes meaning.
-
-### Acceptance
-
-- Unit tests pin the rule for `if x == "a\\" {`, `if x == "a\"b" {`, and `if x =~ /a\/b/ {`.
-- `docs/grammar.md` states the rule for `if` operands.
-- `npm test`, `npm run lint`, `npm run arch:check`, and `bash e2e/test_all.sh` pass.
