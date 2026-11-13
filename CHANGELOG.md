@@ -2,6 +2,7 @@
 
 ## Summary
 
+- **Feature:** a `mock prompt { … }` block in `*.test.jh` can be written on one line with comma-separated arms (`mock prompt { "a" => "x", _ => "z" }`). A comma inside a string or a call's arguments does not split arms, the arm rules match a compact `match`, and `jaiph format` keeps the form as written (one-line stays one-line, multiline stays multiline). See [Testing — mock prompt](https://jaiph.org/how-to/testing).
 - **Feature:** `jaiph graph [--def <name>] [--workspace <dir>] <file.jh>` prints a def's execution flow as a Mermaid `flowchart TD` document to stdout. It validates the import closure like `jaiph compile` and runs nothing (no scripts emitted, no agent/prompt called, no runner spawned). Each reachable def is drawn once as a subgraph (recursion and repeated calls reuse it); node shapes mark def calls, scripts, prompts, branches, and failures; output is deterministic and escaped for Mermaid. See [CLI — `jaiph graph`](https://jaiph.org/reference/cli#jaiph-graph).
 - **Breaking:** an `if` string operand follows the one escape rule — `\"` is the only escape. `if x == "a\\" {` used to be accepted (operand `a\\`) and is now the same `E_PARSE` any other unterminated `if` operand gives. Regex operands (`/…/`) are unchanged (`\/` does not end a regex).
 - **Breaking:** a match arm body must be a string, `"""` block, identifier, `a.b` field, `${…}`, call, or `fail "…"`. Anything else, including `$var`, is now a parse error at the body's column.

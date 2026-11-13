@@ -281,3 +281,47 @@ e2e::assert_equals "${cmp_exit2}" "0" "second format pass is also a no-op"
 # focused sub-assertion pinning the specific ${name} acceptance criterion.
 e2e::assert_contains "$(cat "${TEST_DIR}/first_agent.jh")" 'Say hello to ${name} and provide' \
   "\${name} preserved as authored interpolation"
+
+# -------------------------------------------------------------------
+e2e::section "jaiph format keeps mock prompt blocks in their authored shape"
+
+# A one-line `mock prompt { … }` block stays on one line (including a call-arm
+# whose comma is inside the call), and a multiline block stays multiline. The
+# fixture is already canonical, so format is a no-op and a second pass is too.
+e2e::file "mock_prompt_shape.test.jh" <<'EOF'
+test "one-line block" {
+  mock prompt { "a" => "x", _ => "z" }
+}
+
+test "one-line call arm" {
+  mock prompt { "a" => f(x, y), _ => "z" }
+}
+
+test "multiline block" {
+  mock prompt {
+    "a" => "x"
+    _ => "z"
+  }
+}
+EOF
+
+jaiph format "${TEST_DIR}/mock_prompt_shape.test.jh"
+mock_shape="$(cat "${TEST_DIR}/mock_prompt_shape.test.jh")"
+e2e::assert_equals "${mock_shape}" 'test "one-line block" {
+  mock prompt { "a" => "x", _ => "z" }
+}
+
+test "one-line call arm" {
+  mock prompt { "a" => f(x, y), _ => "z" }
+}
+
+test "multiline block" {
+  mock prompt {
+    "a" => "x"
+    _ => "z"
+  }
+}' "format keeps one-line and multiline mock prompt blocks as authored"
+
+jaiph format "${TEST_DIR}/mock_prompt_shape.test.jh"
+mock_shape2="$(cat "${TEST_DIR}/mock_prompt_shape.test.jh")"
+e2e::assert_equals "${mock_shape}" "${mock_shape2}" "mock prompt block shape is idempotent"
