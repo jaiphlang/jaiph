@@ -24,6 +24,16 @@ test("parseChannelLine: parses channel with alphanumeric name", () => {
   assert.equal(result.name, "ch2");
 });
 
+// Name columns come from the name token, not `raw.indexOf(name)`, so a name
+// that also occurs inside the word `channel` still reports column 9.
+test("parseChannelLine: name col is the name token, not a substring of 'channel'", () => {
+  assert.equal(parseChannelLine("test.jh", "channel c", 1).loc.col, 9);
+  assert.equal(parseChannelLine("test.jh", "channel abc", 1).loc.col, 9);
+  const routed = parseChannelLine("test.jh", "channel ch -> target", 1);
+  assert.equal(routed.loc.col, 9);
+  assert.equal(routed.routes![0].loc.col, 15);
+});
+
 test("parseChannelLine: parses channel with single route target", () => {
   const result = parseChannelLine("test.jh", "channel findings -> analyst", 1);
   assert.equal(result.name, "findings");

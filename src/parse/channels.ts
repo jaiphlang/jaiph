@@ -22,8 +22,8 @@ function splitAtCommas(toks: Token[]): Token[][] {
 }
 
 /**
- * `channel <name> [-> target1, target2, ...]` on line `raw`. Locations are
- * the first place each name's text occurs on the line.
+ * `channel <name> [-> target1, target2, ...]` on line `raw`. Locations come
+ * from the token positions of the name and each target.
  */
 export function parseChannelLine(
   filePath: string,
@@ -47,7 +47,7 @@ export function parseChannelLine(
     );
   }
   const name = nameTok.text;
-  const loc = { line: lineNo, col: raw.indexOf(name) + 1 };
+  const loc = { line: lineNo, col: nameTok.col };
   if (!routed) {
     return { name, loc };
   }
@@ -65,7 +65,7 @@ export function parseChannelLine(
   }
   const routes: DefRef[] = pieces.map((piece) => {
     const value = piece.map((t) => t.text).join("");
-    return { value, loc: { line: lineNo, col: raw.indexOf(value) + 1 } };
+    return { value, loc: { line: lineNo, col: piece[0]!.col } };
   });
   return { name, routes, loc };
 }
