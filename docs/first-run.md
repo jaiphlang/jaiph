@@ -2,6 +2,7 @@
 title: Your first run
 permalink: /tutorials/first-run
 diataxis: tutorial
+mermaid: true
 redirect_from:
   - /tutorials/first-workflow
   - /getting-started
@@ -10,13 +11,13 @@ redirect_from:
 
 # Your first run
 
-This tutorial walks you through writing and running your first Jaiph program. By the end of it you will have written a single `.jh` file, run it with the `jaiph` CLI, watched the live progress tree, and looked at the run artifacts the runtime writes under `.jaiph/runs/`.
+In this tutorial you write a Jaiph program, run it, and look at the files the run leaves behind. The program is one `.jh` file with five lines, and the tutorial takes about five minutes.
 
-This tutorial uses only `script` steps, so you do not need an agent backend or API keys. The follow-up tutorial [Your first agent run](first-agent-run.md) adds a `prompt` step on top of what you build here.
+The program only runs a script, so you don't need an AI agent or an API key. The next tutorial, [Your first agent run](first-agent-run.md), adds a step that calls an agent.
 
 ## What you will build
 
-You will write a file with one script step that prints a greeting, and a `return` that passes the script's output back as the run's return value. The whole file is five lines.
+You will write a file with one script that prints a greeting. The program runs the script and returns what the script printed.
 
 ## Prerequisites
 
@@ -65,16 +66,38 @@ Here is what each line does:
 - `export def main(who)` is the run entry. Every `.jh` file invoked with `jaiph run` enters at `export def main`. The `who` parameter is bound by position from the CLI arguments after the file path.
 - `return greet(who)` calls the script with `who` as `${1}`, captures its stdout as the step value, and returns it as the run's return value.
 
+Before you run the file, you can look at its steps as a chart. `jaiph graph ./hello.jh` prints the chart below as [Mermaid](https://mermaid.js.org/) text, and it doesn't run anything. [Execution flow](execution-flow.md) explains every shape and arrow.
+
+<div class="graph-sample" data-graph-sample="first-run" data-graph-block="1">
+<div class="graph-render" role="img" aria-label="Execution flow of hello.jh"></div>
+{% raw %}<script type="text/plain" data-graph-mermaid>
+flowchart TD
+  classDef term fill:#ffffff,stroke:#8a938d,color:#1d2420
+  classDef input fill:#fff3d1,stroke:#b7871a,color:#4d3600
+  classDef script fill:#e2f1e7,stroke:#3a8657,color:#163b25
+
+  subgraph g1 ["<b>def</b> main"]
+    n1(["start"]):::term
+    n2[/"in: who"/]:::input
+    n3["<b>script</b> greet(who)"]:::script
+    n4(["end"]):::term
+  end
+
+  n1 --> n2
+  n2 --> n3
+  n3 -->|"return"| n4
+
+  style g1 fill:#f6f7f6,stroke:#b9c0bb,color:#1d2420
+</script>{% endraw %}
+</div>
+
 ## 3. Run it
 
 ```bash
 jaiph run ./hello.jh "Adam"
 ```
 
-Before any step runs, the CLI prepares the file in two steps:
-
-- The CLI loads the entry file and its import closure into a `ModuleGraph` once. This file has no imports, so the closure is one module.
-- The CLI validates the graph and emits each `script` body as an executable file under a temporary `scripts/` directory that `$JAIPH_SCRIPTS` points to. Def steps stay as interpreted AST, so there is no transpiled `main.sh`.
+The CLI checks the whole file before it runs the first step, so it reports a mistake such as a call to a script that doesn't exist without running anything. [Architecture](architecture.md) describes what happens between the command and the first step.
 
 You should see this (timings will differ):
 
@@ -90,7 +113,7 @@ def main (who="Adam")
 Hello, Adam!
 ```
 
-The first line is the run banner. The `def main` row and the indented `▸` and `✓` rows are the live progress tree. A `▸` marks a step that has started, a `✓' marks a step that has finished, and '(0s)` is the elapsed time for that step. The root row is static, and only nested steps print `▸` and `✓` lines. The `Hello, Adam!` line after `PASS` is the return value of `export def main`, which `jaiph run` prints on stdout after a successful run.
+The first line is the run banner. The `def main` row and the indented `▸` and `✓` rows are the live progress tree. A `▸` marks a step that has started, a `✓` marks a step that has finished, and `(0s)` is the elapsed time for that step. The root row is static, and only nested steps print `▸` and `✓` lines. The `Hello, Adam!` line after `PASS` is the return value of `export def main`, which `jaiph run` prints on stdout after a successful run.
 
 ## 4. Inspect the run artifacts
 

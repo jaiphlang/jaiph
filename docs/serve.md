@@ -6,7 +6,7 @@ diataxis: how-to
 
 # Serve defs over HTTP
 
-Turn a `.jh` file into an HTTP API. `jaiph serve ./tools.jh` exposes the file's defs as endpoints, publishes an [OpenAPI 3.1](https://spec.openapis.org/oas/v3.1.0) document, and serves a Swagger UI, so any HTTP client — a CI job, another service, or a browser — can invoke the tested defs and inspect their runs. It reuses the same validation, host execution, and `.jaiph/runs/` artifacts as [`jaiph run`](cli.md#jaiph-run) and the same exposure rules as [`jaiph mcp`](mcp.md); the stdio sibling binds to a parent process, while `jaiph serve` reaches the defs over the network.
+This guide turns a `.jh` file into an HTTP API. `jaiph serve ./tools.jh` exposes the file's defs as endpoints, publishes an [OpenAPI 3.1](https://spec.openapis.org/oas/v3.1.0) document, and serves a Swagger UI. Any HTTP client, such as a CI job, another service, or a browser, can then call the defs and look at their runs. The server checks and runs the file the same way [`jaiph run`](cli.md#jaiph-run) does, and it writes the same files under `.jaiph/runs/`. It follows the same rules as [`jaiph mcp`](mcp.md) for which defs it exposes. `jaiph mcp` talks to one parent process over stdio, and `jaiph serve` is reached over the network.
 
 > **Security.** An exposed def is arbitrary shell that anyone who can reach the port can run. Auth is off by default on loopback (same as `jaiph mcp` stdio). Set a token or OIDC for anything beyond a single operator, pass `--allow-anonymous` only when you must bind off-loopback without auth, front the server with a TLS-terminating reverse proxy (step 7), and treat the run directory as sensitive.
 

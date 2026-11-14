@@ -1,4 +1,10 @@
 :root {
+    /* Page widths shared by the landing page and the docs pages: sections and
+       wide content (code, tables, charts) use --page-width, and running text
+       stops at --text-width so its lines stay easy to read. */
+    --page-width: 1400px;
+    --text-width: 900px;
+
     --navy: #1f2a37;
     --navy-light: #415d83;
     --orange: #fca228;
@@ -141,7 +147,7 @@ body {
 }
 
 .top-nav-inner {
-    max-width: 1000px;
+    max-width: var(--page-width);
     margin: 0 auto;
     padding: 0 1.5rem;
     display: flex;
@@ -266,7 +272,8 @@ body {
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    padding: 0.75rem 1.5rem 1rem;
+    /* The logo hangs about 2.2rem below the bar, so the list starts below it. */
+    padding: 2.75rem 1.5rem 1rem;
     max-height: min(70vh, 28rem);
     overflow-y: auto;
     box-shadow: 0 12px 24px rgba(0, 0, 0, 0.2);
@@ -275,6 +282,21 @@ body {
 [data-theme="dark"] .docs-nav-panel {
     background: rgba(31, 42, 55, 0.98);
     border-bottom-color: var(--pre-border);
+}
+
+/* Group labels (Tutorials, How-to guides, …) in the docs menu. The menu is
+   dark in both themes, so the labels use a fixed light grey. */
+.docs-nav-list .docs-nav-group {
+    margin-top: 0.75rem;
+    color: #9aa5b4;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.docs-nav-list .docs-nav-group:first-child {
+    margin-top: 0;
 }
 
 .docs-nav-panel[hidden] {
@@ -288,7 +310,7 @@ body {
     display: flex;
     flex-direction: column;
     gap: 0.35rem;
-    max-width: 1000px;
+    max-width: var(--page-width);
     margin-left: auto;
     margin-right: auto;
 }
@@ -681,16 +703,22 @@ pre code .code-line::before {
     background: #30363d;
 }
 
+/* Tabs: borderless buttons with rounded top corners that sit on a full-width
+   line in the selected tab's color, so the selected tab joins the line. */
 .code-tab-list {
     display: flex;
-    align-items: center;
-    gap: 0.5rem;
+    align-items: flex-end;
+    gap: 0.25rem;
     margin-bottom: 0.75rem;
+    border-bottom: 2px solid var(--tab-active-bg);
 }
 
+/* The tab row shares the toolbar with the platform link, so the line runs
+   under the whole toolbar instead of under the tab row. */
 .try-it-toolbar {
     display: flex;
-    align-items: center;
+    align-items: flex-end;
+    border-bottom: 2px solid var(--tab-active-bg);
     justify-content: space-between;
     gap: 0.75rem 1.25rem;
     flex-wrap: wrap;
@@ -699,13 +727,14 @@ pre code .code-line::before {
 
 .try-it-toolbar .code-tab-list {
     margin-bottom: 0;
+    border-bottom: none;
     flex: 1 1 auto;
 }
 
 .code-tab-button {
-    border: 1px solid var(--tab-border);
-    border-radius: 8px;
-    background: var(--tab-bg);
+    border: none;
+    border-radius: 8px 8px 0 0;
+    background: transparent;
     color: var(--muted);
     font-size: 0.9rem;
     font-weight: 600;
@@ -714,9 +743,12 @@ pre code .code-line::before {
     cursor: pointer;
 }
 
+.code-tab-button:hover {
+    background: var(--pre-bg);
+}
+
 .code-tab-button.is-active {
     background: var(--tab-active-bg);
-    border-color: var(--tab-active-border);
     color: var(--tab-active-color);
 }
 
@@ -1017,6 +1049,163 @@ pre code .code-line::before {
     line-height: 1.5rem;
     margin: 1.5em 0;
     transition: color 0.25s ease;
+}
+
+/* ── Landing page: wider than the docs text column, for code beside a chart ── */
+
+.container.container-landing,
+.container.doc-sections {
+    max-width: var(--page-width);
+}
+
+/* Long lines are hard to read, so running text stays narrower than the
+   sections it sits in. Code, tables, and charts keep the full width. */
+.container-landing p,
+.doc-sections p,
+.doc-sections ul,
+.doc-sections ol,
+.doc-sections blockquote {
+    max-width: var(--text-width);
+}
+
+.problem h2 {
+    margin-top: 0;
+}
+
+.try-it-out h2 {
+    margin-top: 5rem;
+}
+
+/* ── Landing page: an agent on its own vs. the same job in Jaiph ── */
+
+.contrast-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+.contrast-col {
+    background: var(--card-bg);
+    border: 1px solid var(--pre-border);
+    border-top: 4px solid var(--muted);
+    border-radius: 10px;
+    padding: 1rem 1.5rem 1.15rem;
+}
+
+.contrast-after {
+    border-top-color: var(--orange);
+}
+
+.contrast-col h3 {
+    margin: 0 0 0.5rem;
+    font-size: 1.15rem;
+    color: var(--navy);
+}
+
+.contrast-col ul {
+    margin: 0;
+    padding-left: 1.15rem;
+}
+
+.contrast-col li {
+    margin: 0.45rem 0;
+    line-height: 1.5;
+}
+
+.contrast-before li {
+    color: var(--muted);
+}
+
+/* ── Landing page: a sample's source beside its `jaiph graph` chart ── */
+
+.sample-split {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 1.25rem;
+    align-items: start;
+    margin: 1rem 0;
+}
+
+.sample-split .graph-render {
+    margin: 0;
+    min-height: 8rem;
+}
+
+/* The Graph and Terminal Output tabs have a fixed height, and the code column
+   starts the same distance down, so the code, the chart, and the terminal
+   output all start at the same height. */
+.sample-split {
+    --sample-tabs-height: 2.25rem;
+    --sample-tabs-gap: 0.5rem;
+}
+
+.sample-view .code-tab-list {
+    box-sizing: border-box;
+    height: var(--sample-tabs-height);
+    margin: 0 0 var(--sample-tabs-gap);
+}
+
+.sample-code {
+    padding-top: calc(var(--sample-tabs-height) + var(--sample-tabs-gap));
+}
+
+.sample-code > .code-block-wrap > pre,
+.sample-code > pre,
+.sample-view .code-tab-panel > pre,
+.sample-view .code-tab-panel > .code-block-wrap > pre {
+    margin-top: 0;
+}
+
+/* The description of a sample sits under its code, in the code column. */
+.sample-notes p {
+    margin: 0.85rem 0 0;
+    line-height: 1.55;
+}
+
+.card > .sample-split:first-child {
+    margin-top: 0;
+}
+
+/* A paragraph in the Terminal Output tab reads like the description under
+   the code. */
+.sample-view .code-tab-panel > p {
+    margin: 0.85rem 0 1.25rem;
+    line-height: 1.55;
+}
+
+.sample-split .graph-caption {
+    font-size: 0.85rem;
+    margin: 0.5rem 0 0;
+}
+
+/* ── Landing page: what an evaluator gets ── */
+
+.fact-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+.fact-card {
+    background: var(--card-bg);
+    border: 1px solid var(--pre-border);
+    border-radius: 10px;
+    padding: 1.15rem 1.25rem;
+}
+
+.fact-card h3 {
+    margin: 0 0 0.4rem;
+    font-size: 1.05rem;
+    color: var(--navy);
+}
+
+.fact-card p {
+    margin: 0;
+    font-size: 0.92rem;
+    line-height: 1.5;
+    color: var(--muted);
 }
 
 /* ── Start-here path cards ── */
@@ -1493,6 +1682,7 @@ pre code .code-line::before {
     }
 
     .docs-nav-panel {
+        padding-top: 0.75rem;
         padding-left: 1rem;
         padding-right: 1rem;
     }
@@ -1570,6 +1760,17 @@ pre code .code-line::before {
         flex-wrap: wrap;
     }
 
+    /* On a phone the platform link wraps below the tabs, so the line goes
+       back under the tab row. */
+    .try-it-toolbar {
+        border-bottom: none;
+    }
+
+    .try-it-toolbar .code-tab-list {
+        border-bottom: 2px solid var(--tab-active-bg);
+        flex-basis: 100%;
+    }
+
     .code-tab-button {
         font-size: 0.82rem;
         padding: 0.4rem 0.75rem;
@@ -1586,6 +1787,16 @@ pre code .code-line::before {
 
     .path-grid {
         grid-template-columns: 1fr;
+    }
+
+    .contrast-grid,
+    .fact-grid,
+    .sample-split {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .sample-code {
+        padding-top: 0;
     }
 
     .doc-header {

@@ -6,7 +6,7 @@ diataxis: how-to
 
 # Export traces to an OTLP collector
 
-Every Jaiph run produces a complete, credential-redacted event timeline in `run_summary.jsonl` (see [Architecture](architecture.md#durable-artifact-layout)). The steps below turn that timeline into one OpenTelemetry trace per run, exported over OTLP/HTTP with a JSON payload to any collector that accepts OTLP (a local `otel-collector`, Grafana Tempo, Honeycomb, Datadog). Export runs on the host after a run reaches its terminal state.
+Every Jaiph run writes a complete list of its events, with credentials removed, to `run_summary.jsonl` (see [Architecture](architecture.md#durable-artifact-layout)). This guide shows how to export that list as one OpenTelemetry trace per run. Jaiph sends the trace over OTLP/HTTP as JSON to any collector that accepts OTLP, such as a local `otel-collector`, Grafana Tempo, Honeycomb, or Datadog. The export runs on the host after the run has passed or failed.
 
 ## Prerequisites
 

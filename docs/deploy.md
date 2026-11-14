@@ -6,7 +6,7 @@ diataxis: how-to
 
 # Deploy jaiph in your own image or pod
 
-Jaiph executes programs on the host. It does not ship a Docker sandbox driver. Isolation is an outer concern: wrap `jaiph` in a container, a Kubernetes pod, a CI runner, or another sandbox you already operate.
+Jaiph runs a program directly on the machine where you start it, and it does not include a sandbox. If you want to isolate a run, start `jaiph` inside a container, a Kubernetes pod, a CI runner, or another sandbox you already operate. This guide shows how.
 
 Each release publishes a runner image to GHCR: `ghcr.io/jaiphlang/jaiph-runtime` (`:<version>`, `:v<version>`, and `:latest` on a stable tag; `:nightly` on the rolling nightly). It has `jaiph`, `python3`, `git`, `curl`, `claude`, `cursor-agent`, and `codex` on `PATH`, running as uid `10001`. It is not a sandbox and not a language toolchain. Layer script interpreters your programs need (`node`, `go`, and so on) in a derived image. From a clone, `./docs/build-jaiph-dev-image.sh` builds the same image locally (`docs/install-from-local.sh` does not).
 

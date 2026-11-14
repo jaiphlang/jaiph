@@ -2,6 +2,7 @@
 title: Your first agent run
 permalink: /tutorials/first-agent-run
 diataxis: tutorial
+mermaid: true
 ---
 
 # Your first agent run
@@ -10,7 +11,7 @@ This tutorial builds on [Your first run](first-run.md). You already have the `ja
 
 ## What you will build
 
-You will build a file with two steps. The first step runs a `def` that checks a name with `match`. The second step is a `prompt` that asks an agent to greet that name.
+You will build a file with two steps. The first step checks that the name you pass looks like a name. The second step is a `prompt` that asks an agent to greet that name.
 
 ## Credentials
 
@@ -72,17 +73,56 @@ The file uses some syntax that [Your first run](first-run.md) did not:
 
 Save the file as `greet.jh`.
 
+The chart below shows the two steps. The name check comes first, and a name that fails the check ends the run before the agent is called. `jaiph graph ./greet.jh` prints the chart, and [Execution flow](execution-flow.md) explains how to read it.
+
+<div class="graph-sample" data-graph-sample="first-agent-run" data-graph-block="1">
+<div class="graph-render" role="img" aria-label="Execution flow of greet.jh"></div>
+{% raw %}<script type="text/plain" data-graph-mermaid>
+flowchart TD
+  classDef term fill:#ffffff,stroke:#8a938d,color:#1d2420
+  classDef fail fill:#fde2e2,stroke:#b42318,color:#7a1a12
+  classDef input fill:#fff3d1,stroke:#b7871a,color:#4d3600
+  classDef def fill:#dce7fb,stroke:#3563c9,color:#132f66,stroke-width:1.5px
+  classDef prompt fill:#eee2fd,stroke:#7646d6,color:#381a72
+  classDef decision fill:#f1f2f1,stroke:#5f6762,color:#1d2420
+
+  subgraph g2 ["<b>def</b> valid_name"]
+    n4(["start"]):::term
+    n5[/"in: name_arg"/]:::input
+    n6{"<b>match</b> name_arg"}:::decision
+    n7(["<b>fail</b> #quot;You provided an invalid name :(#quot;"]):::fail
+    n8(["end"]):::term
+  end
+  subgraph g1 ["<b>def</b> main"]
+    n1(["start"]):::term
+    n2[/"in: name_arg"/]:::input
+    n3[["name = <b>def</b> valid_name(name_arg)"]]:::def
+    n9["response = <b>prompt</b> #quot;Say hello to $#123;name#125; and add one fun...#quot;"]:::prompt
+    n10(["end"]):::term
+  end
+
+  n1 --> n2
+  n2 --> n3
+  n3 --> n4
+  n4 --> n5
+  n5 --> n6
+  n6 -->|"_"| n7
+  n6 -->|"/[A-Z][a-z]+/ → name_arg"| n8
+  n8 --> n9
+  n9 -->|"return response"| n10
+
+  style g1 fill:#f6f7f6,stroke:#b9c0bb,color:#1d2420
+  style g2 fill:#f6f7f6,stroke:#b9c0bb,color:#1d2420
+</script>{% endraw %}
+</div>
+
 ## 2. Run it
 
 ```bash
 jaiph run ./greet.jh "Adam"
 ```
 
-The CLI does a few things before any step runs:
-
-1. **Loads the module graph.** It parses the entry file, which is the only file in this tutorial.
-2. **Runs the credential pre-flight** for the selected backend.
-3. **Prints the banner, then validates the module and emits its scripts.** After that it **spawns the host runner**.
+Before the first step runs, the CLI checks the file for errors and checks that the backend you selected has the credentials it needs.
 
 You should see the following, though timings, model output, and the exact step name will differ:
 

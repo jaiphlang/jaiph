@@ -142,20 +142,20 @@ def b() {
   assert.equal(
     body(out),
     `flowchart TD
-  subgraph g1 ["<b>def</b> main"]
-    n1(["start"]):::term
-    n2[["<b>def</b> a()"]]:::def
-    n9(["end"]):::term
+  subgraph g3 ["<b>def</b> b"]
+    n5(["start"]):::term
+    n6[["<b>def</b> a()"]]:::def
+    n7(["end"]):::term
   end
   subgraph g2 ["<b>def</b> a"]
     n3(["start"]):::term
     n4[["<b>def</b> b()"]]:::def
     n8(["end"]):::term
   end
-  subgraph g3 ["<b>def</b> b"]
-    n5(["start"]):::term
-    n6[["<b>def</b> a()"]]:::def
-    n7(["end"]):::term
+  subgraph g1 ["<b>def</b> main"]
+    n1(["start"]):::term
+    n2[["<b>def</b> a()"]]:::def
+    n9(["end"]):::term
   end
   n1 --> n2
   n2 --> n3
@@ -206,6 +206,10 @@ export def main() {
   assert.equal(
     body(out),
     `flowchart TD
+  subgraph g2 ["<b>def</b> w"]
+    n4(["start"]):::term
+    n5(["end"]):::term
+  end
   subgraph g1 ["<b>def</b> main"]
     n1(["start"]):::term
     n2@{ shape: fork, label: "" }
@@ -213,10 +217,6 @@ export def main() {
     n6["<b>script</b> s()"]:::script
     n7@{ shape: fork, label: "" }
     n8(["end"]):::term
-  end
-  subgraph g2 ["<b>def</b> w"]
-    n4(["start"]):::term
-    n5(["end"]):::term
   end
   n1 --> n2
   n2 -->|"async"| n3
@@ -252,15 +252,15 @@ def b() {
   classDef def fill:#dce7fb,stroke:#3563c9,color:#132f66,stroke-width:1.5px
   classDef defx fill:#dce7fb,stroke:#3563c9,color:#132f66,stroke-width:1.5px,stroke-dasharray:4 3
 
-  subgraph g1 ["<b>def</b> main"]
-    n1(["start"]):::term
-    n2[["<b>def</b> a()"]]:::def
-    n6(["end"]):::term
-  end
   subgraph g2 ["<b>def</b> a"]
     n3(["start"]):::term
     n4[["<b>def</b> b()"]]:::defx
     n5(["end"]):::term
+  end
+  subgraph g1 ["<b>def</b> main"]
+    n1(["start"]):::term
+    n2[["<b>def</b> a()"]]:::def
+    n6(["end"]):::term
   end
 
   n1 --> n2
@@ -310,16 +310,16 @@ test("defaults: imported defs one hop away expand (dashed border); deeper import
   classDef def fill:#dce7fb,stroke:#3563c9,color:#132f66,stroke-width:1.5px
   classDef defx fill:#dce7fb,stroke:#3563c9,color:#132f66,stroke-width:1.5px,stroke-dasharray:4 3
 
+  subgraph g2 ["<b>def</b> lib.go"]
+    n3(["start"]):::term
+    n4[["<b>def</b> deeper.go()"]]:::defx
+    n5(["end"]):::term
+  end
   subgraph g1 ["<b>def</b> main"]
     n1(["start"]):::term
     n2[["<b>def</b> lib.go()"]]:::def
     n6[["<b>def</b> x.run()"]]:::defx
     n7(["end"]):::term
-  end
-  subgraph g2 ["<b>def</b> lib.go"]
-    n3(["start"]):::term
-    n4[["<b>def</b> deeper.go()"]]:::defx
-    n5(["end"]):::term
   end
 
   n1 --> n2

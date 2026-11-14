@@ -1,20 +1,20 @@
 #!/usr/bin/env jaiph
 
-# scripts are defined in fenced blocks or single line backticks
-# by default it's bash, but it cany be any env: ```node, ```python3, etc.
+# a script body goes in '…' or '''…''' quotes
+# it is bash by default; for another language, put the
+# interpreter before the quotes: node'''…''', python3'''…'''
 script check_report_exists = '''
   test -f report.txt
 '''
 
 export def main() {
-  # Recovery in loop: when check_report_exists() fails, the recovery body
-  # is executed to fix it, and then check_report_exists() is retried.
-  # By default, the retry limit is 10.
+  # when check_report_exists() fails, the recover body runs,
+  # and then check_report_exists() runs again (up to 10 times)
   check_report_exists() recover (failure) {
     logerr "Failed to check report.txt"
     prompt "report.txt is missing. Create it with a short dummy summary."
   }
 
-  # scripts can be also executed inline
+  # a script can also be written inline
   return 'cat report.txt'()
 }

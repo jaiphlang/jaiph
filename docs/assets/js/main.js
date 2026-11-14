@@ -780,6 +780,12 @@
         }
     }
 
+    /** The tab group an element belongs to: its nearest .code-tabs, else its card. */
+    function tabScope(el) {
+        const group = el.parentElement && el.parentElement.closest(".code-tabs");
+        return group || el.closest(".card");
+    }
+
     function attachCodeTabs() {
         const buttons = document.querySelectorAll(".code-tab-button");
         buttons.forEach(function (button) {
@@ -790,18 +796,24 @@
                 }
 
                 // A .code-tabs group scopes its own tabs, so several groups can
-                // share one card (docs/execution-flow.md has one per example).
-                const root = button.closest(".code-tabs") || button.closest(".card");
+                // share one card (docs/execution-flow.md has one per example), and
+                // a group can sit inside another group's panel (the Graph and
+                // Output tabs inside each landing-page sample).
+                const root = tabScope(button);
                 if (!root) {
                     return;
                 }
 
                 root.querySelectorAll(".code-tab-button").forEach(function (btn) {
-                    btn.classList.toggle("is-active", btn === button);
+                    if (tabScope(btn) === root) {
+                        btn.classList.toggle("is-active", btn === button);
+                    }
                 });
 
                 root.querySelectorAll(".code-tab-panel").forEach(function (panel) {
-                    panel.classList.toggle("is-active", panel.getAttribute("data-panel") === target);
+                    if (tabScope(panel) === root) {
+                        panel.classList.toggle("is-active", panel.getAttribute("data-panel") === target);
+                    }
                 });
             });
         });

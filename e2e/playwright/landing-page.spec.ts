@@ -319,6 +319,10 @@ test.describe.serial('docs landing page', () => {
             chmodSync(join(tmpRoot, 'say_hello.jh'), 0o755);
           }
 
+          // The run output sits in the sample's Output tab, next to the Graph tab.
+          const outputTab = panel.locator('.sample-view .code-tab-button[data-target$="-output"]');
+          if ((await outputTab.count()) > 0) await outputTab.click();
+
           const outputs = panel.locator('[data-sample-output]');
           const outCount = await outputs.count();
           expect(outCount, `${sampleId}: expected at least one [data-sample-output] block on the page`).toBeGreaterThan(

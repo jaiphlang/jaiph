@@ -45,6 +45,8 @@ export def main() {
 
 A bare `async lint()` with no capture still starts the work. The implicit join at the end of the step list waits for it.
 
+To see where a def starts work in parallel and where it waits, draw it with `jaiph graph`. The [async example](execution-flow.md#examples) in Execution flow shows the two bars that mark the start and the end of the parallel calls.
+
 ## 2. Recover a failing async branch
 
 `catch` and `recover` attach only to the statement form. A captured `const h = async foo()` cannot carry those blocks. Wrap the target in a def if you need both a handle and a retry loop.

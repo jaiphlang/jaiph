@@ -24,7 +24,7 @@ layout: null
     </script>
 </head>
 
-<body>
+<body class="landing">
 
     <nav class="top-nav">
         <div class="top-nav-inner">
@@ -48,6 +48,10 @@ layout: null
 
     <header>
         <h1>J<span class="jaiph-accent">ai</span>ph</h1>
+        <div class="tagline">
+            Open Source<span class="separator">&middot;</span>Powerful<span class="separator">&middot;</span>Friendly!
+        </div>
+        <p class="value-prop">Prompts and any language, composed into repeatable programs.</p>
         <div class="hero-cta">
             <a href="#start-here" rel="noopener noreferrer" class="button button-primary">Start here</a>
             <a href="#samples" rel="noopener noreferrer" class="button button-dark">Samples</a>
@@ -56,13 +60,112 @@ layout: null
             <a href="https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md"
                 target="_blank" rel="noopener noreferrer" class="button button-dark">Agent skill</a>
         </div>
-        <p class="value-prop">Prompts and any language, composed into repeatable programs.</p>
-        <div class="tagline">
-            Open Source<span class="separator">&middot;</span>Powerful<span class="separator">&middot;</span>Friendly!
-        </div>
     </header>
 
-    <div class="container">
+    <div class="container container-landing">
+
+        <section class="problem">
+            <h2 id="first-sample">Your first sample</h2>
+            <div class="card doc-content">
+                <div class="sample-split" data-graph-sample="fix-tests">
+                    <div class="sample-code">
+                        <pre><code class="language-jaiph">script run_tests = 'npm test'
+
+export def main() {
+  # When the tests fail, an agent fixes the code
+  # and the tests run again.
+  run_tests() recover (failure) {
+    prompt "The tests failed. Fix the code. ${failure}"
+  }
+
+  return "tests pass"
+}</code></pre>
+                        <div class="sample-notes">
+                            <p>This program runs a project's tests. When the tests fail, it sends the failure to an
+                                agent, and then it runs the tests again. The Graph tab shows the steps as a chart,
+                                and the Terminal Output tab shows one run.</p>
+                        </div>
+                    </div>
+                    <div class="sample-graph sample-view code-tabs">
+                        <div class="code-tab-list">
+                            <button type="button" class="code-tab-button is-active" data-target="fix-tests-graph">Graph</button>
+                            <button type="button" class="code-tab-button" data-target="fix-tests-output">Terminal Output</button>
+                        </div>
+                        <div class="code-tab-panel is-active" data-panel="fix-tests-graph">
+                            <div class="graph-render" role="img" aria-label="Flowchart of fix_tests.jh"></div>
+                        <p class="small graph-caption">Drawn by <code>jaiph graph fix_tests.jh</code>. Nothing runs.
+                            <a href="/reference/execution-flow">How to read the chart</a></p>
+                        {% raw %}<script type="text/plain" data-graph-mermaid>
+flowchart TD
+  classDef term fill:#ffffff,stroke:#8a938d,color:#1d2420
+  classDef script fill:#e2f1e7,stroke:#3a8657,color:#163b25
+  classDef prompt fill:#eee2fd,stroke:#7646d6,color:#381a72
+
+  subgraph g1 ["<b>def</b> main"]
+    n1(["start"]):::term
+    n2["<b>script</b> run_tests()"]:::script
+    n3["<b>prompt</b> #quot;The tests failed. Fix the code...#quot;"]:::prompt
+    n4(["end"]):::term
+  end
+
+  n1 --> n2
+  n2 -. "<b>recover</b>" .-> n3
+  n3 -->|"retry"| n2
+  n2 -->|"return #quot;tests pass#quot;"| n4
+
+  style g1 fill:#f6f7f6,stroke:#b9c0bb,color:#1d2420
+  linkStyle 1 stroke:#b42318,color:#b42318
+</script>{% endraw %}
+                        </div>
+                        <div class="code-tab-panel" data-panel="fix-tests-output">
+                        <pre><code class="jaiph-run"><span class="run-command">➜  ./fix_tests.jh</span>
+
+Jaiph: Running fix_tests.jh
+
+<span class="run-keyword">def</span> main
+  <span class="run-marker">▸</span> <span class="run-keyword">script</span> run_tests
+  <span class="run-fail">✗ script run_tests (0s)</span>
+  <span class="run-marker">▸</span> <span class="run-keyword">prompt</span> fix-agent "The tests failed. Fix th..." <span class="run-params">(failure="&gt; test &gt; node test.js expected s...")</span>
+  <span class="run-pass">✓</span> <span class="run-time">prompt fix-agent (0s)</span>
+  <span class="run-marker">▸</span> <span class="run-keyword">script</span> run_tests
+  <span class="run-pass">✓</span> <span class="run-time">script run_tests (0s)</span>
+
+<span class="run-pass">✓ PASS</span> <span class="run-keyword">def</span> main <span class="run-time">(0.8s)</span>
+
+tests pass</code></pre>
+                        <p>One run in which the tests fail once. A small test program played the agent in
+                            this run, so the prompt line shows its name, <code>fix-agent</code>, instead of
+                            <code>cursor</code>.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section>
+            <h2 id="why">What Jaiph changes</h2>
+            <div class="contrast-grid">
+                <div class="contrast-col contrast-before">
+                    <h3>An agent on its own</h3>
+                    <ul>
+                        <li>You describe a job with several steps, and the agent decides the steps again on
+                            every run.</li>
+                        <li>You can't review the steps before the run, and you can't test them.</li>
+                        <li>When a run goes wrong, you read a long transcript to find out where.</li>
+                    </ul>
+                </div>
+                <div class="contrast-col contrast-after">
+                    <h3>The same job in Jaiph</h3>
+                    <ul>
+                        <li>The steps are in one small file that you review like any other code.</li>
+                        <li>Scripts do the exact work, and the agent is called only where a step needs
+                            judgment.</li>
+                        <li>Jaiph saves the output of every step, so you can see which step failed and
+                            why.</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
 
         <section class="try-it-out">
             <h2>Try it out!</h2>
@@ -123,70 +226,50 @@ layout: null
         </section>
 
         <section>
-            <h2>What is Jaiph?</h2>
+            <h2 id="what">What is Jaiph?</h2>
             <div class="card doc-content">
-                <p><strong>Jaiph</strong> is a polyglot orchestration language and runtime. It turns the prompts
-                    and scripts (Bash, Python, Node, and others) an agent would otherwise chain ad hoc into a
-                    repeatable, testable workflow.</p>
-                <p>One Jaiph file can run as a command-line app, an MCP server over stdio, or an HTTP API
-                    with OpenAPI and HTTP MCP, with explicit secret grants and recorded outputs.</p>
+                <p><strong>Jaiph</strong> is a small language and a runtime for jobs that mix AI agents with
+                    ordinary scripts in Bash, Python, Node, or another language. You write the steps in a
+                    <code>.jh</code> file. Jaiph runs the steps in order, saves what each step printed, and
+                    stops with a clear error when a step fails.</p>
             </div>
-        </section>
-
-        <section>
-            <h2 id="start-here">Start here</h2>
-            <div class="path-grid">
-                <a class="path-card" href="/tutorials/first-run">
-                    <h3>Your first run</h3>
-                    <p>Five minutes. No API keys. Write a file and watch the run tree.</p>
-                </a>
-                <a class="path-card" href="/how-to/mcp">
-                    <h3>MCP server in 30 seconds</h3>
-                    <p><code>jaiph mcp ./tools.jh</code> — Claude Code, Cursor, or any MCP client.</p>
-                </a>
-                <a class="path-card" href="/tutorials/first-agent-run">
-                    <h3>Your first agent run</h3>
-                    <p>Add a <code>prompt</code>. Cursor, Claude, or Codex — you pick the backend.</p>
-                </a>
-                <a class="path-card" href="/how-to/serve">
-                    <h3>HTTP API in one command</h3>
-                    <p><code>jaiph serve ./tools.jh</code> — REST, OpenAPI, Swagger UI, and HTTP MCP.</p>
-                </a>
-                <a class="path-card" href="/how-to/testing">
-                    <h3>Test your programs</h3>
-                    <p>Mocks, assertions, <code>*.test.jh</code>. CI-friendly and deterministic.</p>
-                </a>
-                <a class="path-card" href="/reference/language">
-                    <h3>Language reference</h3>
-                    <p>Defs, prompts, scripts, recover, channels. The full lookup.</p>
-                </a>
-            </div>
-        </section>
-
-        <section>
-            <h2>Why Jaiph?</h2>
-            <div class="card doc-content">
-                <div class="comparison-grid">
-                    <div class="comparison-col">
-                        <h3>Language</h3>
-                        <p>Simple, small, easy to learn</p>
-                        <p>Reusable workflows instead of one-off agent command chains</p>
-                        <p>Named channels between steps. Parallel runs</p>
-                        <p>Compose prompts with scripts in any language</p>
-                    </div>
-                    <div class="comparison-col">
-                        <h3>Tooling</h3>
-                        <p>One file: CLI, stdio MCP, or HTTP API with MCP</p>
-                        <p>Runs on your machine. Put it in a container if you want a sandbox</p>
-                        <p>Built-in tests with prompt mocks</p>
-                        <p>Every agent response is saved</p>
-                    </div>
-                    <div class="comparison-col">
-                        <h3>Open Source</h3>
-                        <p>No vendor lock-in. Use any agent.</p>
-                        <p>No tracking. Read the <a href="https://github.com/jaiphlang/jaiph"
-                                target="_blank" rel="noopener noreferrer">source</a>.</p>
-                    </div>
+            <div class="fact-grid">
+                <div class="fact-card">
+                    <h3>One file, three ways to run</h3>
+                    <p>The same file runs from the command line with <code>jaiph run</code>, as tools for
+                        Claude Code or Cursor with <a href="/how-to/mcp"><code>jaiph mcp</code></a>, and as
+                        an HTTP API with <a href="/how-to/serve"><code>jaiph serve</code></a>.</p>
+                </div>
+                <div class="fact-card">
+                    <h3>Tests that don't call an agent</h3>
+                    <p>A <a href="/how-to/testing">test file</a> replaces each agent reply with fixed text,
+                        so a test gives the same result on every run and can run in CI.</p>
+                </div>
+                <div class="fact-card">
+                    <h3>A record of every run</h3>
+                    <p>Jaiph saves the output of every step and every agent reply under
+                        <code>.jaiph/runs/</code>, and it can
+                        <a href="/how-to/observability">export traces</a> to your monitoring tools.</p>
+                </div>
+                <div class="fact-card">
+                    <h3>Secrets are granted by name</h3>
+                    <p>A script gets a secret from your shell only when the file
+                        <a href="/how-to/script-env">asks for that secret</a> and you grant it when you
+                        start the run.</p>
+                </div>
+                <div class="fact-card">
+                    <h3>Isolation is your choice</h3>
+                    <p>Jaiph runs on the machine where you start it, and it is not a sandbox. To isolate a
+                        run, <a href="/how-to/deploy">start it in a container</a>. Each release publishes a
+                        runner image.</p>
+                </div>
+                <div class="fact-card">
+                    <h3>Any agent, open source</h3>
+                    <p><a href="/how-to/configure-backend">Cursor, Claude, and Codex</a> work today, and
+                        one config line switches between them. The
+                        <a href="https://github.com/jaiphlang/jaiph" target="_blank"
+                            rel="noopener noreferrer">source</a> is under the Apache 2.0 license, and
+                        Jaiph has no tracking.</p>
                 </div>
             </div>
         </section>
@@ -208,10 +291,9 @@ layout: null
 
                 <div class="code-tab-panel is-active" data-panel="say-hello-jh" data-sample="say-hello"
                     data-sample-file="say_hello.jh">
-                    <p>A <code>.jh</code> file is a program. <code>def</code> is a procedure,
-                        <code>prompt</code> calls an agent, <code>script</code> runs code.
-                        <code>jaiph run</code> enters at <code>export def main</code>.</p>
-                    <pre><code class="language-jaiph" data-sample-source>#!/usr/bin/env jaiph
+                    <div class="sample-split" data-graph-sample="lp-say-hello">
+                        <div class="sample-code">
+                            <pre><code class="language-jaiph" data-sample-source>#!/usr/bin/env jaiph
 
 # check the name before calling the agent
 def valid_name(name_arg) {
@@ -221,20 +303,78 @@ def valid_name(name_arg) {
   }
 }
 
-# export def main is the jaiph run entry
+# jaiph run starts at export def main
 export def main(name_arg) {
   const name = valid_name(name_arg)
 
-  # prompts call agents - cursor by default, but it's configurable
+  # a prompt calls an agent (Cursor by default)
   const response = prompt """
-    Say hello to ${name} and provide a fun fact about a person with the same name.
-    Respond with a single line. Do not inspect files or run tools.
+    Say hello to ${name} and provide a fun fact
+    about a person with the same name.
+    Respond with a single line.
+    Do not inspect files or run tools.
   """
 
   return response
 }</code></pre>
-                    <p>Running the file:</p>
-                    <pre><code class="jaiph-run" data-sample-output="success"><span class="run-command">➜  ./say_hello.jh Adam</span>
+                            <div class="sample-notes">
+                                <p>A <code>.jh</code> file is a program. A <code>def</code> is a procedure, a
+                                    <code>prompt</code> step calls an agent, and a <code>script</code> runs code.
+                                    <code>jaiph run</code> starts at <code>export def main</code>.</p>
+                                <p>To get structured data from a prompt, add
+                                    <code>returns "{ hello: string, fact: string }"</code> to the prompt and read
+                                    <code>${response.hello}</code>.</p>
+                            </div>
+                        </div>
+                        <div class="sample-graph sample-view code-tabs">
+                            <div class="code-tab-list">
+                                <button type="button" class="code-tab-button is-active" data-target="lp-say-hello-graph">Graph</button>
+                                <button type="button" class="code-tab-button" data-target="lp-say-hello-output">Terminal Output</button>
+                            </div>
+                            <div class="code-tab-panel is-active" data-panel="lp-say-hello-graph">
+                                <div class="graph-render" role="img" aria-label="Flowchart of say_hello.jh"></div>
+                            <p class="small graph-caption">Drawn by <code>jaiph graph say_hello.jh</code>. Nothing runs.
+                                <a href="/reference/execution-flow">How to read the chart</a></p>
+                            {% raw %}<script type="text/plain" data-graph-mermaid>
+flowchart TD
+  classDef term fill:#ffffff,stroke:#8a938d,color:#1d2420
+  classDef fail fill:#fde2e2,stroke:#b42318,color:#7a1a12
+  classDef input fill:#fff3d1,stroke:#b7871a,color:#4d3600
+  classDef def fill:#dce7fb,stroke:#3563c9,color:#132f66,stroke-width:1.5px
+  classDef prompt fill:#eee2fd,stroke:#7646d6,color:#381a72
+  classDef decision fill:#f1f2f1,stroke:#5f6762,color:#1d2420
+
+  subgraph g2 ["<b>def</b> valid_name"]
+    n4(["start"]):::term
+    n5[/"in: name_arg"/]:::input
+    n6{"<b>match</b> name_arg"}:::decision
+    n7(["<b>fail</b> #quot;You provided an invalid name :(#quot;"]):::fail
+    n8(["end"]):::term
+  end
+  subgraph g1 ["<b>def</b> main"]
+    n1(["start"]):::term
+    n2[/"in: name_arg"/]:::input
+    n3[["name = <b>def</b> valid_name(name_arg)"]]:::def
+    n9["response = <b>prompt</b> #quot;Say hello to $#123;name#125; and provide a fun...#quot;"]:::prompt
+    n10(["end"]):::term
+  end
+
+  n1 --> n2
+  n2 --> n3
+  n3 --> n4
+  n4 --> n5
+  n5 --> n6
+  n6 -->|"_"| n7
+  n6 -->|"/[A-Z][a-z]+/ → name_arg"| n8
+  n8 --> n9
+  n9 -->|"return response"| n10
+
+  style g1 fill:#f6f7f6,stroke:#b9c0bb,color:#1d2420
+  style g2 fill:#f6f7f6,stroke:#b9c0bb,color:#1d2420
+</script>{% endraw %}
+                            </div>
+                            <div class="code-tab-panel" data-panel="lp-say-hello-output">
+                            <pre><code class="jaiph-run" data-sample-output="success"><span class="run-command">➜  ./say_hello.jh Adam</span>
 
 Jaiph: Running say_hello.jh
 
@@ -247,8 +387,8 @@ Jaiph: Running say_hello.jh
 <span class="run-pass">✓ PASS</span> <span class="run-keyword">def</span> main <span class="run-time">(5.1s)</span>
 
 Hello, Adam—Adam Smith, the 18th-century Scottish economist and philosopher, is often called the father of modern economics for his landmark work *The Wealth of Nations*.</code></pre>
-                    <p>Missing name fails before the prompt:</p>
-                    <pre><code class="jaiph-run" data-sample-output="failure"><span class="run-command">➜  ./say_hello.jh</span>
+                            <p>With the name Adam, the agent replies with a greeting.</p>
+                            <pre><code class="jaiph-run" data-sample-output="failure"><span class="run-command">➜  ./say_hello.jh</span>
 
 Jaiph: Running say_hello.jh
 
@@ -264,17 +404,19 @@ Jaiph: Running say_hello.jh
 
   Output of failed step:
     You provided an invalid name :(</code></pre>
-                    <p>Need a JSON shape? <code>prompt "..." returns "{ hello: string, fact: string }"</code>
-                        then read <code>${response.hello}</code>.</p>
+                            <p>Without a name, the run fails before the agent is called.</p>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- The first test is written to fail so this page can show real failing-test output. -->
                 <div class="code-tab-panel" data-panel="say-hello-test-jh" data-sample="say-hello-test"
                     data-sample-file="say_hello.test.jh">
-                    <p>Native tests. Files named <code>*.test.jh</code> are test suites. Mock prompts so runs stay
-                        deterministic.</p>
-                    <p>The first test is written to fail on purpose: the expected string drops the trailing
-                        <code>:(</code>, so you can see what a miss looks like. The second test passes.</p>
+                    <p>A file named <code>*.test.jh</code> is a test file. A test replaces the agent's reply
+                        with fixed text, so the test gives the same result on every run.</p>
+                    <p>The first test below fails on purpose, so that you can see what a failed test prints. Its
+                        expected text leaves out the trailing <code>:(</code>. The second test passes.</p>
                     <pre><code class="language-jaiph" data-sample-source>#!/usr/bin/env jaiph
 
 import "say_hello.jh" as hello
@@ -302,7 +444,7 @@ test "with name, returns greeting and logs response" {
   # Then
   expect_equal response expected_response
 }</code></pre>
-                    <p>That first test's output:</p>
+                    <p>Running the test file:</p>
                     <pre><code class="jaiph-run" data-sample-output="failing-run"><span class="run-command">➜  ./say_hello.test.jh</span>
 testing say_hello.test.jh
   <span class="run-marker">▸</span> without name, main fails with validation message
@@ -319,30 +461,68 @@ testing say_hello.test.jh
 
                 <div class="code-tab-panel" data-panel="recover-loop-jh" data-sample="recover-loop"
                     data-sample-file="recover_loop.jh">
-                    <p>When a step fails, <code>recover</code> repairs it and retries. Default limit is 10.</p>
-                    <pre><code class="language-jaiph" data-sample-source>#!/usr/bin/env jaiph
+                    <div class="sample-split" data-graph-sample="lp-recover-loop">
+                        <div class="sample-code">
+                            <pre><code class="language-jaiph" data-sample-source>#!/usr/bin/env jaiph
 
-# scripts are defined in fenced blocks or one-line single quotes
-# by default it's bash; put the interpreter before the quotes for others: node''', python3'''
+# a script body goes in '…' or '''…''' quotes
+# it is bash by default; for another language, put the
+# interpreter before the quotes: node'''…''', python3'''…'''
 script check_report_exists = '''
   test -f report.txt
 '''
 
 export def main() {
-  # Recovery in loop: when check_report_exists() fails, the recovery body
-  # is executed to fix it, and then check_report_exists() is retried.
-  # By default, the retry limit is 10.
-  check_report_exists() recover(failure) {
+  # when check_report_exists() fails, the recover body runs,
+  # and then check_report_exists() runs again (up to 10 times)
+  check_report_exists() recover (failure) {
     logerr "Failed to check report.txt"
     prompt "report.txt is missing. Create it with a short dummy summary."
   }
 
-  # scripts can be also executed inline
+  # a script can also be written inline
   return 'cat report.txt'()
 }</code></pre>
-                    <p>First attempt fails, the agent creates the file, retry passes.
-                        For a one-shot handler, use <code>catch</code>.</p>
-                    <pre><code class="jaiph-run" data-sample-output="run"><span class="run-command">➜  ./recover_loop.jh</span>
+                            <div class="sample-notes">
+                                <p>When a step fails, its <code>recover</code> body runs and then the step runs
+                                    again, up to 10 times by default.</p>
+                            </div>
+                        </div>
+                        <div class="sample-graph sample-view code-tabs">
+                            <div class="code-tab-list">
+                                <button type="button" class="code-tab-button is-active" data-target="lp-recover-loop-graph">Graph</button>
+                                <button type="button" class="code-tab-button" data-target="lp-recover-loop-output">Terminal Output</button>
+                            </div>
+                            <div class="code-tab-panel is-active" data-panel="lp-recover-loop-graph">
+                                <div class="graph-render" role="img" aria-label="Flowchart of recover_loop.jh"></div>
+                            <p class="small graph-caption">Drawn by <code>jaiph graph recover_loop.jh</code>. Nothing runs.
+                                <a href="/reference/execution-flow">How to read the chart</a></p>
+                            {% raw %}<script type="text/plain" data-graph-mermaid>
+flowchart TD
+  classDef term fill:#ffffff,stroke:#8a938d,color:#1d2420
+  classDef script fill:#e2f1e7,stroke:#3a8657,color:#163b25
+  classDef prompt fill:#eee2fd,stroke:#7646d6,color:#381a72
+
+  subgraph g1 ["<b>def</b> main"]
+    n1(["start"]):::term
+    n2["<b>script</b> check_report_exists()"]:::script
+    n3["<b>prompt</b> #quot;report.txt is missing. Create it with a...#quot;"]:::prompt
+    n4["<b>script</b> 'cat report.txt'()"]:::script
+    n5(["end"]):::term
+  end
+
+  n1 --> n2
+  n2 -. "<b>recover</b>" .-> n3
+  n3 -->|"retry"| n2
+  n2 --> n4
+  n4 -->|"return"| n5
+
+  style g1 fill:#f6f7f6,stroke:#b9c0bb,color:#1d2420
+  linkStyle 1 stroke:#b42318,color:#b42318
+</script>{% endraw %}
+                            </div>
+                            <div class="code-tab-panel" data-panel="lp-recover-loop-output">
+                            <pre><code class="jaiph-run" data-sample-output="run"><span class="run-command">➜  ./recover_loop.jh</span>
 
 Jaiph: Running recover_loop.jh
 
@@ -369,24 +549,29 @@ this file; it exists only to satisfy tooling or documentation that expects
 - Status: OK (dummy)
 - Artifacts: none
 - Next steps: replace with a real report when you add automated reporting</code></pre>
+                            <p>The first check fails, the agent creates the file, and the second check passes. To
+                        handle a failure once without a retry, use <code>catch</code>.</p>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="code-tab-panel" data-panel="inbox-pipeline-jh" data-sample="agent-inbox"
                     data-sample-file="agent_inbox.jh">
-                    <p>Named channels route messages. <code>channel findings -&gt; analyst</code> runs
-                        <code>analyst</code> on every send.</p>
-                    <pre><code class="language-jaiph" data-sample-source>#!/usr/bin/env jaiph
+                    <div class="sample-split" data-graph-sample="lp-agent-inbox">
+                        <div class="sample-code">
+                            <pre><code class="language-jaiph" data-sample-source>#!/usr/bin/env jaiph
 
-channel findings -> analyst
-channel report -> reviewer
+channel findings -&gt; analyst
+channel report -&gt; reviewer
 
 def scanner() {
   log "Scanning for issues..."
-  send "Found 3 issues in auth module" -> findings
+  send "Found 3 issues in auth module" -&gt; findings
 }
 
 def analyst(msg) {
-  send "Summary: ${msg}" -> report
+  send "Summary: ${msg}" -&gt; report
 }
 
 def reviewer(msg) {
@@ -396,8 +581,79 @@ def reviewer(msg) {
 export def main() {
   scanner()
 }</code></pre>
-                    <p>Running the file:</p>
-                    <pre><code class="jaiph-run" data-sample-output="run"><span class="run-command">➜  ./agent_inbox.jh</span>
+                            <div class="sample-notes">
+                                <p>A channel passes messages between defs. <code>channel findings -&gt; analyst</code>
+                                    calls <code>analyst</code> once for every message sent to <code>findings</code>.</p>
+                            </div>
+                        </div>
+                        <div class="sample-graph sample-view code-tabs">
+                            <div class="code-tab-list">
+                                <button type="button" class="code-tab-button is-active" data-target="lp-agent-inbox-graph">Graph</button>
+                                <button type="button" class="code-tab-button" data-target="lp-agent-inbox-output">Terminal Output</button>
+                            </div>
+                            <div class="code-tab-panel is-active" data-panel="lp-agent-inbox-graph">
+                                <div class="graph-render" role="img" aria-label="Flowchart of agent_inbox.jh"></div>
+                            <p class="small graph-caption">Drawn by <code>jaiph graph agent_inbox.jh</code>. Nothing runs.
+                                <a href="/reference/execution-flow">How to read the chart</a></p>
+                            {% raw %}<script type="text/plain" data-graph-mermaid>
+flowchart TD
+  classDef term fill:#ffffff,stroke:#8a938d,color:#1d2420
+  classDef input fill:#fff3d1,stroke:#b7871a,color:#4d3600
+  classDef def fill:#dce7fb,stroke:#3563c9,color:#132f66,stroke-width:1.5px
+  classDef send fill:#d8f1ee,stroke:#22857b,color:#0d3a35
+  classDef channel fill:#d8f1ee,stroke:#22857b,color:#0d3a35
+  classDef join fill:#8a938d,stroke:#8a938d,color:#8a938d
+
+  subgraph g4 ["<b>def</b> reviewer"]
+    n12(["start"]):::term
+    n13[/"in: msg"/]:::input
+    n14(["end"]):::term
+  end
+  subgraph g3 ["<b>def</b> analyst"]
+    n8(["start"]):::term
+    n9[/"in: msg"/]:::input
+    n10["<b>send</b> #quot;Summary: $#123;msg#125;#quot; → report"]:::send
+    n11(["end"]):::term
+  end
+  subgraph g2 ["<b>def</b> scanner"]
+    n3(["start"]):::term
+    n4["<b>send</b> #quot;Found 3 issues in auth module#quot; → findings"]:::send
+    n6(["end"]):::term
+  end
+  subgraph g1 ["<b>def</b> main"]
+    n1(["start"]):::term
+    n2[["<b>def</b> scanner()"]]:::def
+    n5[("main inbox")]:::channel
+    n7((" ")):::join
+    n15(["end"]):::term
+  end
+
+  n1 --> n2
+  n2 --> n3
+  n3 --> n4
+  n4 --o|"↯ findings"| n5
+  n4 --> n6
+  n6 -->|"steps done"| n7
+  n8 --> n9
+  n9 --> n10
+  n10 --o|"↯ report"| n5
+  n10 --> n11
+  n7 ==>|"deliver findings"| n8
+  n12 --> n13
+  n13 --> n14
+  n11 ==>|"deliver report"| n12
+  n14 --> n15
+
+  style g1 fill:#f6f7f6,stroke:#b9c0bb,color:#1d2420
+  style g2 fill:#f6f7f6,stroke:#b9c0bb,color:#1d2420
+  style g3 fill:#f6f7f6,stroke:#b9c0bb,color:#1d2420
+  style g4 fill:#f6f7f6,stroke:#b9c0bb,color:#1d2420
+  linkStyle 3 stroke:#22857b,stroke-width:2px
+  linkStyle 8 stroke:#22857b,stroke-width:2px
+</script>{% endraw %}
+                            </div>
+                            <div class="code-tab-panel" data-panel="lp-agent-inbox-output">
+                            <pre><code class="jaiph-run" data-sample-output="run"><span class="run-command">➜  ./agent_inbox.jh</span>
 
 Jaiph: Running agent_inbox.jh
 
@@ -412,34 +668,108 @@ Jaiph: Running agent_inbox.jh
   <span class="run-pass">✓</span> <span class="run-time">def reviewer (0s)</span>
 
 <span class="run-pass">✓ PASS</span> <span class="run-keyword">def</span> main <span class="run-time">(0s)</span></code></pre>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="code-tab-panel" data-panel="async-jh" data-sample="async" data-sample-file="async.jh">
-                    <p>Two prompts in parallel, Cursor and Claude. <code>async</code> fans out;
-                        the parent waits for both.</p>
-                    <pre><code class="language-jaiph" data-sample-source>#!/usr/bin/env jaiph
+                    <div class="sample-split" data-graph-sample="lp-async">
+                        <div class="sample-code">
+                            <pre><code class="language-jaiph" data-sample-source>#!/usr/bin/env jaiph
 
 const prompt_text = "Say: Greetings! I am [model name]."
 
 def cursor_say_hello(name) {
-  config { agent.backend = "cursor" }
+  config {
+    agent.backend = "cursor"
+  }
   const response = prompt "${prompt_text}"
   log response
 }
 
 def claude_say_hello(name) {
-  config { agent.backend = "claude" }
+  config {
+    agent.backend = "claude"
+  }
   const response = prompt "${prompt_text}"
   log response
 }
 
-# surrounding def waits for all to complete
+# main waits until both async calls finish
 export def main(name) {
   async cursor_say_hello(name)
   async claude_say_hello(name)
 }</code></pre>
-                    <p>Running the file:</p>
-                    <pre><code class="jaiph-run" data-sample-output="run"><span class="run-command">➜  ./async.jh</span>
+                            <div class="sample-notes">
+                                <p><code>async</code> starts a call without waiting for it. Here Cursor and Claude get
+                                    the same prompt at the same time, and <code>main</code> waits for both.</p>
+                            </div>
+                        </div>
+                        <div class="sample-graph sample-view code-tabs">
+                            <div class="code-tab-list">
+                                <button type="button" class="code-tab-button is-active" data-target="lp-async-graph">Graph</button>
+                                <button type="button" class="code-tab-button" data-target="lp-async-output">Terminal Output</button>
+                            </div>
+                            <div class="code-tab-panel is-active" data-panel="lp-async-graph">
+                                <div class="graph-render" role="img" aria-label="Flowchart of async.jh"></div>
+                            <p class="small graph-caption">Drawn by <code>jaiph graph async.jh</code>. Nothing runs.
+                                <a href="/reference/execution-flow">How to read the chart</a></p>
+                            {% raw %}<script type="text/plain" data-graph-mermaid>
+flowchart TD
+  classDef term fill:#ffffff,stroke:#8a938d,color:#1d2420
+  classDef input fill:#fff3d1,stroke:#b7871a,color:#4d3600
+  classDef def fill:#dce7fb,stroke:#3563c9,color:#132f66,stroke-width:1.5px
+  classDef prompt fill:#eee2fd,stroke:#7646d6,color:#381a72
+  classDef fork fill:#1d2420,stroke:#1d2420
+
+  subgraph g3 ["<b>def</b> claude_say_hello"]
+    n10(["start"]):::term
+    n11[/"in: name"/]:::input
+    n12["response = <b>prompt</b> #quot;$#123;prompt_text#125;#quot;"]:::prompt
+    n13(["end"]):::term
+  end
+  subgraph g2 ["<b>def</b> cursor_say_hello"]
+    n5(["start"]):::term
+    n6[/"in: name"/]:::input
+    n7["response = <b>prompt</b> #quot;$#123;prompt_text#125;#quot;"]:::prompt
+    n8(["end"]):::term
+  end
+  subgraph g1 ["<b>def</b> main"]
+    n1(["start"]):::term
+    n2[/"in: name"/]:::input
+    n3@{ shape: fork, label: "" }
+    n4[["async <b>def</b> cursor_say_hello(name)"]]:::def
+    n9[["async <b>def</b> claude_say_hello(name)"]]:::def
+    n14@{ shape: fork, label: "" }
+    n15(["end"]):::term
+  end
+
+  n1 --> n2
+  n2 --> n3
+  n3 -->|"async"| n4
+  n4 --> n5
+  n5 --> n6
+  n6 --> n7
+  n7 --> n8
+  n3 -->|"async"| n9
+  n9 --> n10
+  n10 --> n11
+  n11 --> n12
+  n12 --> n13
+  n8 --> n14
+  n13 --> n14
+  n14 -->|"all done"| n15
+
+  class n3 fork
+  class n14 fork
+  style g1 fill:#f6f7f6,stroke:#b9c0bb,color:#1d2420
+  style g2 fill:#f6f7f6,stroke:#b9c0bb,color:#1d2420
+  style g3 fill:#f6f7f6,stroke:#b9c0bb,color:#1d2420
+</script>{% endraw %}
+                            </div>
+                            <div class="code-tab-panel" data-panel="lp-async-output">
+                            <pre><code class="jaiph-run" data-sample-output="run"><span class="run-command">➜  ./async.jh</span>
 
 Jaiph: Running async.jh
 
@@ -456,20 +786,20 @@ Jaiph: Running async.jh
  <span class="run-marker">₂</span><span class="run-pass">✓</span> <span class="run-time">def claude_say_hello (4s)</span>
 
 <span class="run-pass">✓ PASS</span> <span class="run-keyword">def</span> main <span class="run-time">(4.6s)</span></code></pre>
-                    <p>Cursor finished first in this run.</p>
+                            <p>Cursor finished first in this run.</p>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="code-tab-panel" data-panel="stdin-jh" data-sample="stdin"
                     data-sample-file="stdin.jh">
-                    <p>Jaiph supports streaming of <code>stdin</code> pipelines so scripts can
-                        produce a lot of data without loading it all into memory. Chain stages
-                        with <code>-&gt;</code>. The first call produces the bytes; every stage
-                        after it is a <code>script</code> that reads stdin and writes stdout. A
-                        <code>const</code> at the end names the last stage's result.</p>
-                    <pre><code class="language-jaiph" data-sample-source>#!/usr/bin/env jaiph
+                    <div class="sample-split" data-graph-sample="lp-stdin">
+                        <div class="sample-code">
+                            <pre><code class="language-jaiph" data-sample-source>#!/usr/bin/env jaiph
 
-# Jaiph streams stdin pipelines so a script can produce a lot of data
-# without loading it all into memory. Chain stages with -&gt;.
+# stdin connects scripts with -&gt;, and the data streams
+# from one script to the next without being held in memory
 script gen = bash'''
   printf 'alpha\nbeta\ngamma\n'
 '''
@@ -483,12 +813,48 @@ script count = bash'''
 '''
 
 export def main() {
-  # generate lines -&gt; uppercase them -&gt; reduce to a line count
+  # make three lines -&gt; uppercase them -&gt; count them
   const n = stdin gen() -&gt; upper() -&gt; count()
   return n
 }</code></pre>
-                    <p>Each stage is its own step; <code>main</code> returns the line count:</p>
-                    <pre><code class="jaiph-run" data-sample-output="run"><span class="run-command">➜  ./stdin.jh</span>
+                            <div class="sample-notes">
+                                <p><code>stdin</code> connects scripts with <code>-&gt;</code>. The first call produces
+                                    the data, and each script after it reads stdin and writes stdout. The data streams
+                                    from one script to the next, so a large output is never held in memory.</p>
+                            </div>
+                        </div>
+                        <div class="sample-graph sample-view code-tabs">
+                            <div class="code-tab-list">
+                                <button type="button" class="code-tab-button is-active" data-target="lp-stdin-graph">Graph</button>
+                                <button type="button" class="code-tab-button" data-target="lp-stdin-output">Terminal Output</button>
+                            </div>
+                            <div class="code-tab-panel is-active" data-panel="lp-stdin-graph">
+                                <div class="graph-render" role="img" aria-label="Flowchart of stdin.jh"></div>
+                            <p class="small graph-caption">Drawn by <code>jaiph graph stdin.jh</code>. Nothing runs.
+                                <a href="/reference/execution-flow">How to read the chart</a></p>
+                            {% raw %}<script type="text/plain" data-graph-mermaid>
+flowchart TD
+  classDef term fill:#ffffff,stroke:#8a938d,color:#1d2420
+  classDef script fill:#e2f1e7,stroke:#3a8657,color:#163b25
+
+  subgraph g1 ["<b>def</b> main"]
+    n1(["start"]):::term
+    n2["stdin <b>script</b> gen()"]:::script
+    n3["<b>script</b> upper()"]:::script
+    n4["n = <b>script</b> count()"]:::script
+    n5(["end"]):::term
+  end
+
+  n1 --> n2
+  n2 -->|"stdout → stdin"| n3
+  n3 -->|"stdout → stdin"| n4
+  n4 -->|"return n"| n5
+
+  style g1 fill:#f6f7f6,stroke:#b9c0bb,color:#1d2420
+</script>{% endraw %}
+                            </div>
+                            <div class="code-tab-panel" data-panel="lp-stdin-output">
+                            <pre><code class="jaiph-run" data-sample-output="run"><span class="run-command">➜  ./stdin.jh</span>
 
 Jaiph: Running stdin.jh
 
@@ -503,11 +869,43 @@ Jaiph: Running stdin.jh
 <span class="run-pass">✓ PASS</span> <span class="run-keyword">def</span> main <span class="run-time">(0.1s)</span>
 
 3</code></pre>
+                            <p>Each script is its own step, and <code>main</code> returns the line count.</p>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-
             </div>
         </section>
 
+        <section>
+            <h2 id="start-here">Start here</h2>
+            <div class="path-grid">
+                <a class="path-card" href="/tutorials/first-run">
+                    <h3>Your first run</h3>
+                    <p>Takes five minutes and needs no API key. You write a file and watch it run.</p>
+                </a>
+                <a class="path-card" href="/how-to/mcp">
+                    <h3>MCP server in 30 seconds</h3>
+                    <p><code>jaiph mcp ./tools.jh</code> gives your defs to Claude Code, Cursor, or any MCP client as tools.</p>
+                </a>
+                <a class="path-card" href="/tutorials/first-agent-run">
+                    <h3>Your first agent run</h3>
+                    <p>Add a <code>prompt</code> step, and choose Cursor, Claude, or Codex as the backend.</p>
+                </a>
+                <a class="path-card" href="/how-to/serve">
+                    <h3>HTTP API in one command</h3>
+                    <p><code>jaiph serve ./tools.jh</code> adds a REST API, an OpenAPI document, Swagger UI, and HTTP MCP.</p>
+                </a>
+                <a class="path-card" href="/how-to/testing">
+                    <h3>Test your programs</h3>
+                    <p>Write <code>*.test.jh</code> files with mocked agent replies and assertions, and run them in CI.</p>
+                </a>
+                <a class="path-card" href="/reference/language">
+                    <h3>Language reference</h3>
+                    <p>Look up defs, prompts, scripts, <code>recover</code>, and channels.</p>
+                </a>
+            </div>
+        </section>
     </div>
 
     <div class="footer">
@@ -528,6 +926,7 @@ Jaiph: Running stdin.jh
     </div>
 
     <script src="assets/js/main.js"></script>
+    <script type="module" src="assets/js/graph-render.js"></script>
     <!-- Cloudflare Web Analytics -->
     <script defer src='https://static.cloudflareinsights.com/beacon.min.js'
         data-cf-beacon='{"token": "562e85f871544db4a71520a1b6ac317a"}'></script><!-- End Cloudflare Web Analytics -->

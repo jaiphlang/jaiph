@@ -1,7 +1,7 @@
 #!/usr/bin/env jaiph
 
-# Jaiph streams stdin pipelines so a script can produce a lot of data
-# without loading it all into memory. Chain stages with ->.
+# stdin connects scripts with ->, and the data streams
+# from one script to the next without being held in memory
 script gen = bash'''
   printf 'alpha\nbeta\ngamma\n'
 '''
@@ -15,7 +15,7 @@ script count = bash'''
 '''
 
 export def main() {
-  # generate lines -> uppercase them -> reduce to a line count
+  # make three lines -> uppercase them -> count them
   const n = stdin gen() -> upper() -> count()
   return n
 }

@@ -13,7 +13,9 @@
 
 ## What is Jaiph?
 
-**Jaiph** is a composable scripting language and runtime for defining and orchestrating AI agent programs. You write **`.jh`** files that combine `def`, `script`, and `prompt` into executable pipelines. The CLI parses source into an AST, validates references at compile time, and the Node runtime interprets the AST directly.
+**Jaiph** is a small language and a runtime for jobs that mix AI agents with ordinary scripts in Bash, Python, Node, or another language. When you give an agent a job with several steps, the agent decides the steps again on every run. In Jaiph you write the steps in a **`.jh`** file: a `script` does the exact work, a `prompt` calls an agent where a step needs judgment, and a `def` puts the steps in order. Jaiph runs the steps, saves what each step printed, and stops with a clear error when a step fails.
+
+`jaiph graph` draws the steps of a file as a flowchart without running anything ([Execution flow](docs/execution-flow.md)). The CLI checks the whole file before it runs the first step.
 
 > [!WARNING]
 > Jaiph is still in an early stage. Expect breaking changes.

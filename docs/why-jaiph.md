@@ -6,11 +6,13 @@ diataxis: explanation
 
 # Why Jaiph
 
-Jaiph is a small language and runtime for AI-assisted automation. This page explains the design behind Jaiph: the kind of problem it solves, the parts a program is built from, and the trade-offs it makes on purpose. For the implementation map, see [Architecture](architecture.md). For syntax, see [Language](language.md) and [Grammar](grammar.md).
+Jaiph is a small language and a runtime for jobs that mix AI agents with ordinary scripts. This page explains the problem Jaiph solves, the three parts a program is built from, and the limits Jaiph keeps on purpose. [Architecture](architecture.md) describes how Jaiph is built, and [Language](language.md) and [Grammar](grammar.md) describe the syntax.
 
 ## The problem
 
-An automation pipeline often has to do four different kinds of work in the same flow:
+When you give an agent a job with several steps, the agent decides the steps again on every run. You can't review the steps before the run or test them, and two runs of the same job can do different things. Jaiph moves the steps into a file. Scripts do the work that has one right answer, and the agent is called only for the steps that need judgment.
+
+A job like that often has to do four different kinds of work in the same flow:
 
 - **Deterministic checks** — does this file exist, does the build pass, does the schema match.
 - **Real shell** — running a build tool, calling a CLI, changing files.
@@ -29,13 +31,13 @@ Jaiph is built from three parts, and a program is what you get when you combine 
 - **`script`** — a named block of code you can run (shell, Python, Node, or anything with a shebang line). A def body can also run a `` 'body'(args) `` step. Shell you want to reuse belongs in a `script`. A script does not inherit module-level `const` bindings, so pass any values it needs as positional arguments.
 - **`prompt`** — a task you hand to an AI agent. Jaiph fills in any variables in the body, captures the agent's stdout, and, when you declare a shape with `returns "{ field: type }"`, parses that output and checks it against the shape.
 
-A call result is an output handle whose bytes a force site slurps into a string (see [Value types](language.md#value-types)), every step is logged, and every run leaves lasting files under `.jaiph/runs/`, including a `.out` and `.err` capture for each step and an append-only `run_summary.jsonl`. A program written this way gives you automation you can repeat, inspect, and test, unlike shell you wire together by hand.
+Jaiph records what every step does. Each run leaves files under `.jaiph/runs/`, which include the captured stdout and stderr of each step and a `run_summary.jsonl` file that lists the events of the run in order. You can run a program written this way again, read what each step did, and test it. The result of a call stays on disk until a step needs it as text, as [Value types](language.md#value-types) explains.
 
 ## Design commitments
 
 The design makes three commitments, and each one settles many smaller questions:
 
-1. **Strict structure around AI steps.** An agent's response can vary from run to run, so the language gives you the surrounding pieces that do not. With `def` and `run` you can check conditions before and after a prompt in the same pipeline. With `prompt … returns "{ … }"` you require the agent's output to match a JSON shape, and the step fails if it does not. With `recover` you retry a failed `run` after a repair body runs, up to `run.recover_limit` times, which helps when an agent's output needs a fix before the pipeline can go on.
+1. **Strict structure around AI steps.** An agent's response can vary from run to run, so the language gives you the surrounding pieces that do not. In a `def` you can check conditions with scripts before and after a prompt. With `prompt … returns "{ … }"` you require the agent's output to match a JSON shape, and the step fails if it does not. With `recover` a failed call runs again after a repair body runs, up to `run.recover_limit` times, which helps when an agent's output needs a fix before the pipeline can go on.
 
 2. **Spawn-env and journal guardrails, not a sandbox.** Jaiph shapes each child `env` so a host key reaches a script or named-prompt agent only when its declaration `use`s the key and the operator grants it with `--env`; credential-shaped values are redacted from the run journal. The grant mechanics — the sterile base set, the prompt scrub, and the reserved names — live in [Environment variables — Script subprocess environment](env-vars.md#script-env), with the step-by-step recipe in [Pass a host key to a script](script-env.md). These rules stop accidental inherit and tokens leaking into the journal; they do not isolate the agent. This is not a sandbox: a `cursor` or `claude` prompt that can run tools runs as the same user as `jaiph` and can still reach a key on disk or in another process regardless of child `env`, while the `codex` backend talks to an HTTP endpoint and runs no local program. Isolation of the whole run is an outer concern — a container, pod, or a dedicated user you create, not an install-time account. See [Deploy jaiph](deploy.md).
 

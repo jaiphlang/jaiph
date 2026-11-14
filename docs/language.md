@@ -9,7 +9,7 @@ redirect_from:
 
 # Language
 
-Jaiph is a small language for writing defs. A `def` is a function whose body is steps. You invoke it with a bare call — `greet(name)` — you do not pass it around. Each step either runs something (a script, another def, or an agent prompt), binds a value to a name, returns or logs a value, makes a decision with `if` or `match`, loops over lines of text with `for`, or sends a message on a channel.
+Jaiph is a small language for orchestrating scripts and agent calls. The steps go in a `def`, which is a function whose body is a list of steps, and a def is called by its name, e.g. `greet(name)`. A def is not a value, so it can't be stored in a variable or passed as an argument. Each step either runs something (a script, another def, or an agent prompt), binds a value to a name, returns or logs a value, makes a decision with `if` or `match`, loops over lines of text with `for`, or sends a message on a channel.
 
 You write a Jaiph program as one or more modules. Each `.jh` module holds top-level definitions: defs, scripts, channels, constants, imports, and an optional `config` block. The rest of this page describes what you can write inside those definitions.
 

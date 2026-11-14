@@ -2,6 +2,7 @@
 title: Inbox & Dispatch
 permalink: /inbox
 diataxis: explanation
+mermaid: true
 redirect_from:
   - /inbox.md
 ---
@@ -58,6 +59,45 @@ def analyst(message) {
   log "analyst got: ${message}"
 }
 ```
+
+The chart of this program shows the two phases. The `send` puts the message in the inbox of `main` and does not wait. After `main` has finished its own steps, it delivers the message to `analyst`. [Execution flow](execution-flow.md) explains the shapes and arrows.
+
+<div class="graph-sample" data-graph-sample="inbox-round-trip" data-graph-block="2">
+<div class="graph-render" role="img" aria-label="Execution flow of the round trip: main sends to findings, and analyst receives the message"></div>
+{% raw %}<script type="text/plain" data-graph-mermaid>
+flowchart TD
+  classDef term fill:#ffffff,stroke:#8a938d,color:#1d2420
+  classDef input fill:#fff3d1,stroke:#b7871a,color:#4d3600
+  classDef send fill:#d8f1ee,stroke:#22857b,color:#0d3a35
+  classDef channel fill:#d8f1ee,stroke:#22857b,color:#0d3a35
+  classDef join fill:#8a938d,stroke:#8a938d,color:#8a938d
+
+  subgraph g2 ["<b>def</b> analyst"]
+    n5(["start"]):::term
+    n6[/"in: message"/]:::input
+    n7(["end"]):::term
+  end
+  subgraph g1 ["<b>def</b> main"]
+    n1(["start"]):::term
+    n2["<b>send</b> #quot;found a null deref in parser.ts#quot; → findings"]:::send
+    n3[("main inbox")]:::channel
+    n4((" ")):::join
+    n8(["end"]):::term
+  end
+
+  n1 --> n2
+  n2 --o|"↯ findings"| n3
+  n2 -->|"steps done"| n4
+  n5 --> n6
+  n6 --> n7
+  n4 ==>|"deliver findings"| n5
+  n7 --> n8
+
+  style g1 fill:#f6f7f6,stroke:#b9c0bb,color:#1d2420
+  style g2 fill:#f6f7f6,stroke:#b9c0bb,color:#1d2420
+  linkStyle 1 stroke:#22857b,stroke-width:2px
+</script>{% endraw %}
+</div>
 
 Routes are top-level data on `ChannelDef`, not statements inside a def body. Declaring routes on the channel has the following effects:
 
