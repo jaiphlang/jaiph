@@ -6,7 +6,7 @@ diataxis: how-to
 
 # MCP server in 30 seconds
 
-Turn a `.jh` file into an [MCP](https://modelcontextprotocol.io/) server so any MCP client (Claude Code, Claude Desktop, Cursor) can call the file's exported defs as tools. `jaiph mcp ./tools.jh` reuses the same validation, runner, and `.jaiph/runs/` artifacts as [`jaiph run`](cli.md#jaiph-run), with no SDK or build step. For the network sibling that speaks MCP over HTTP, see [Serve defs over HTTP](serve.md).
+This guide turns a `.jh` file into an [MCP](https://modelcontextprotocol.io/) server, so that an MCP client such as Claude Code, Claude Desktop, or Cursor can call the file's exported defs as tools. `jaiph mcp ./tools.jh` checks and runs the file the same way [`jaiph run`](cli.md#jaiph-run) does and writes the same files under `.jaiph/runs/`. You don't need an SDK or a build step. To offer the same tools over the network, see [Serve defs over HTTP](serve.md).
 
 ## Prerequisites
 

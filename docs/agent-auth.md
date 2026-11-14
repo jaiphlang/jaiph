@@ -6,7 +6,13 @@ diataxis: how-to
 
 # Authenticate agent backends
 
-This guide sets the credentials each agent backend needs, so the CLI's credential pre-flight passes and `prompt` steps can reach the model. `jaiph run` runs a host-side pre-flight before it spawns the runner: a missing `codex` credential is a hard failure (`E_AGENT_CREDENTIALS`) that stops the run, a missing `cursor` credential only warns, and `claude` is not checked. The full pre-flight scope-and-dedup rules live in [Configuration — Credential pre-flight](configuration.md#credential-pre-flight), and the credential names live in [Environment variables — Agent credentials](env-vars.md#agent-credentials).
+This guide shows how to give each agent backend the credentials it needs, so that `prompt` steps can reach the model. Before a run starts, `jaiph run` checks the credentials of the backend the file selects. The check is called the credential pre-flight, and it treats each backend differently:
+
+- **`codex`.** A missing credential stops the run with `E_AGENT_CREDENTIALS`.
+- **`cursor`.** A missing credential prints a warning, and the run continues, because a stored CLI login may still work.
+- **`claude`.** The credential is not checked, because a stored Claude CLI login is enough.
+
+The full rules of the pre-flight are in [Configuration — Credential pre-flight](configuration.md#credential-pre-flight), and the credential names live in [Environment variables — Agent credentials](env-vars.md#agent-credentials).
 
 ## Prerequisites
 

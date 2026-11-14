@@ -8,14 +8,16 @@ def valid_name(name_arg) {
   }
 }
 
-# export def main is the jaiph run entry
+# jaiph run starts at export def main
 export def main(name_arg) {
   const name = valid_name(name_arg)
 
-  # prompts call agents - cursor by default, but it's configurable
+  # a prompt calls an agent (Cursor by default)
   const response = prompt """
-    Say hello to ${name} and provide a fun fact about a person with the same name.
-    Respond with a single line. Do not inspect files or run tools.
+    Say hello to ${name} and provide a fun fact
+    about a person with the same name.
+    Respond with a single line.
+    Do not inspect files or run tools.
   """
 
   return response

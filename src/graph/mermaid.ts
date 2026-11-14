@@ -2,8 +2,8 @@ import type { GraphEdge, GraphModel, GraphNode, Label, NodeKind } from "./model"
 
 /**
  * Emits a {@link GraphModel} as a Mermaid `flowchart TD` document. Output is
- * deterministic (arrays render in creation order) and byte-identical across
- * runs for the same model. Labels are escaped with Mermaid's `#…;` entities
+ * deterministic (nodes and edges render in creation order, subgraphs in
+ * reverse creation order) and byte-identical across runs for the same model. Labels are escaped with Mermaid's `#…;` entities
  * and cut at 70 visible characters; construct keywords render bold. Shapes
  * follow ISO 5807 (see model.ts); the fork bar needs Mermaid 11.3 or later.
  */
@@ -133,7 +133,10 @@ export function emitMermaid(model: GraphModel): string {
   }
   lines.push("");
   const byId = new Map(model.nodes.map((n) => [n.id, n]));
-  for (const sg of model.subgraphs) {
+  // Mermaid lays out the subgraph written last on the left. The entry def is
+  // the first subgraph of the model, so the subgraphs are written in reverse:
+  // the entry def is drawn on the left and the defs it calls to its right.
+  for (const sg of [...model.subgraphs].reverse()) {
     lines.push(`  subgraph ${sg.id} ["${renderLabel(sg.title)}"]`);
     for (const id of sg.nodeIds) lines.push("    " + nodeSyntax(byId.get(id)!));
     lines.push("  end");

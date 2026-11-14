@@ -18,7 +18,7 @@ def claude_say_hello(name) {
   log response
 }
 
-# surrounding workflow waits for all to complete
+# main waits until both async calls finish
 export def main(name) {
   async cursor_say_hello(name)
   async claude_say_hello(name)

@@ -19,7 +19,7 @@ The chart starts at `main` unless `--def <name>` picks another def. The flags ar
 
 ## How to read the chart
 
-Each def is a grey box with the def's name at the top. The steps inside the box run from top to bottom, from **start** to **end**. When a def calls another def, an arrow goes from the call into the box of the called def, and the arrow that leaves that box's **end** goes back to the step after the call. Each def is drawn once, even when several steps call it.
+Each def is a grey box with the def's name at the top. The steps inside the box run from top to bottom, from **start** to **end**. When a def calls another def, an arrow goes from the call into the box of the called def, and the arrow that leaves that box's **end** goes back to the step after the call. Each def is drawn once, even when several steps call it. The def the chart starts at is on the left, and the defs it calls are to its right. Two defs that the starting def runs in parallel with `async` are drawn on either side of it.
 
 A def from an imported file keeps the name it was imported under, e.g. `git.commit`, and its box has a dashed border. The shapes follow the ISO 5807 flowchart standard, and Mermaid 11.3 or later is needed to draw the bars of `async` calls. ISO 5807 has no dashed variants, so the dashed border of an imported def and the dashed outline of a def call that isn't drawn are Jaiph's own markings.
 
@@ -149,14 +149,16 @@ def valid_name(name_arg) {
   }
 }
 
-# export def main is the jaiph run entry
+# jaiph run starts at export def main
 export def main(name_arg) {
   const name = valid_name(name_arg)
 
-  # prompts call agents - cursor by default, but it's configurable
+  # a prompt calls an agent (Cursor by default)
   const response = prompt """
-    Say hello to ${name} and provide a fun fact about a person with the same name.
-    Respond with a single line. Do not inspect files or run tools.
+    Say hello to ${name} and provide a fun fact
+    about a person with the same name.
+    Respond with a single line.
+    Do not inspect files or run tools.
   """
 
   return response
@@ -172,19 +174,19 @@ export def main(name_arg) {
   classDef prompt fill:#eee2fd,stroke:#7646d6,color:#381a72
   classDef decision fill:#f1f2f1,stroke:#5f6762,color:#1d2420
 
-  subgraph g1 ["&lt;b&gt;def&lt;/b&gt; main"]
-    n1(["start"]):::term
-    n2[/"in: name_arg"/]:::input
-    n3[["name = &lt;b&gt;def&lt;/b&gt; valid_name(name_arg)"]]:::def
-    n9["response = &lt;b&gt;prompt&lt;/b&gt; #quot;Say hello to $#123;name#125; and provide a fun...#quot;"]:::prompt
-    n10(["end"]):::term
-  end
   subgraph g2 ["&lt;b&gt;def&lt;/b&gt; valid_name"]
     n4(["start"]):::term
     n5[/"in: name_arg"/]:::input
     n6{"&lt;b&gt;match&lt;/b&gt; name_arg"}:::decision
     n7(["&lt;b&gt;fail&lt;/b&gt; #quot;You provided an invalid name :(#quot;"]):::fail
     n8(["end"]):::term
+  end
+  subgraph g1 ["&lt;b&gt;def&lt;/b&gt; main"]
+    n1(["start"]):::term
+    n2[/"in: name_arg"/]:::input
+    n3[["name = &lt;b&gt;def&lt;/b&gt; valid_name(name_arg)"]]:::def
+    n9["response = &lt;b&gt;prompt&lt;/b&gt; #quot;Say hello to $#123;name#125; and provide a fun...#quot;"]:::prompt
+    n10(["end"]):::term
   end
 
   n1 --&gt; n2
@@ -222,22 +224,22 @@ When `check_report_exists` fails, the red **recover** arrow leads to the prompt 
 <div class="code-tab-panel" data-panel="recover-loop-src-0">
 <pre><code class="language-jaiph" data-sample-source="recover_loop.jh">#!/usr/bin/env jaiph
 
-# scripts are defined in fenced blocks or single line backticks
-# by default it's bash, but it cany be any env: ```node, ```python3, etc.
+# a script body goes in '…' or '''…''' quotes
+# it is bash by default; for another language, put the
+# interpreter before the quotes: node'''…''', python3'''…'''
 script check_report_exists = '''
   test -f report.txt
 '''
 
 export def main() {
-  # Recovery in loop: when check_report_exists() fails, the recovery body
-  # is executed to fix it, and then check_report_exists() is retried.
-  # By default, the retry limit is 10.
+  # when check_report_exists() fails, the recover body runs,
+  # and then check_report_exists() runs again (up to 10 times)
   check_report_exists() recover (failure) {
     logerr "Failed to check report.txt"
     prompt "report.txt is missing. Create it with a short dummy summary."
   }
 
-  # scripts can be also executed inline
+  # a script can also be written inline
   return 'cat report.txt'()
 }</code></pre>
 </div>
@@ -317,17 +319,10 @@ export def main() {
   classDef channel fill:#d8f1ee,stroke:#22857b,color:#0d3a35
   classDef join fill:#8a938d,stroke:#8a938d,color:#8a938d
 
-  subgraph g1 ["&lt;b&gt;def&lt;/b&gt; main"]
-    n1(["start"]):::term
-    n2[["&lt;b&gt;def&lt;/b&gt; scanner()"]]:::def
-    n5[("main inbox")]:::channel
-    n7((" ")):::join
-    n15(["end"]):::term
-  end
-  subgraph g2 ["&lt;b&gt;def&lt;/b&gt; scanner"]
-    n3(["start"]):::term
-    n4["&lt;b&gt;send&lt;/b&gt; #quot;Found 3 issues in auth module#quot; → findings"]:::send
-    n6(["end"]):::term
+  subgraph g4 ["&lt;b&gt;def&lt;/b&gt; reviewer"]
+    n12(["start"]):::term
+    n13[/"in: msg"/]:::input
+    n14(["end"]):::term
   end
   subgraph g3 ["&lt;b&gt;def&lt;/b&gt; analyst"]
     n8(["start"]):::term
@@ -335,10 +330,17 @@ export def main() {
     n10["&lt;b&gt;send&lt;/b&gt; #quot;Summary: $#123;msg#125;#quot; → report"]:::send
     n11(["end"]):::term
   end
-  subgraph g4 ["&lt;b&gt;def&lt;/b&gt; reviewer"]
-    n12(["start"]):::term
-    n13[/"in: msg"/]:::input
-    n14(["end"]):::term
+  subgraph g2 ["&lt;b&gt;def&lt;/b&gt; scanner"]
+    n3(["start"]):::term
+    n4["&lt;b&gt;send&lt;/b&gt; #quot;Found 3 issues in auth module#quot; → findings"]:::send
+    n6(["end"]):::term
+  end
+  subgraph g1 ["&lt;b&gt;def&lt;/b&gt; main"]
+    n1(["start"]):::term
+    n2[["&lt;b&gt;def&lt;/b&gt; scanner()"]]:::def
+    n5[("main inbox")]:::channel
+    n7((" ")):::join
+    n15(["end"]):::term
   end
 
   n1 --&gt; n2
@@ -404,7 +406,7 @@ def claude_say_hello(name) {
   log response
 }
 
-# surrounding workflow waits for all to complete
+# main waits until both async calls finish
 export def main(name) {
   async cursor_say_hello(name)
   async claude_say_hello(name)
@@ -419,6 +421,18 @@ export def main(name) {
   classDef prompt fill:#eee2fd,stroke:#7646d6,color:#381a72
   classDef fork fill:#1d2420,stroke:#1d2420
 
+  subgraph g3 ["&lt;b&gt;def&lt;/b&gt; claude_say_hello"]
+    n10(["start"]):::term
+    n11[/"in: name"/]:::input
+    n12["response = &lt;b&gt;prompt&lt;/b&gt; #quot;$#123;prompt_text#125;#quot;"]:::prompt
+    n13(["end"]):::term
+  end
+  subgraph g2 ["&lt;b&gt;def&lt;/b&gt; cursor_say_hello"]
+    n5(["start"]):::term
+    n6[/"in: name"/]:::input
+    n7["response = &lt;b&gt;prompt&lt;/b&gt; #quot;$#123;prompt_text#125;#quot;"]:::prompt
+    n8(["end"]):::term
+  end
   subgraph g1 ["&lt;b&gt;def&lt;/b&gt; main"]
     n1(["start"]):::term
     n2[/"in: name"/]:::input
@@ -427,18 +441,6 @@ export def main(name) {
     n9[["async &lt;b&gt;def&lt;/b&gt; claude_say_hello(name)"]]:::def
     n14@{ shape: fork, label: "" }
     n15(["end"]):::term
-  end
-  subgraph g2 ["&lt;b&gt;def&lt;/b&gt; cursor_say_hello"]
-    n5(["start"]):::term
-    n6[/"in: name"/]:::input
-    n7["response = &lt;b&gt;prompt&lt;/b&gt; #quot;$#123;prompt_text#125;#quot;"]:::prompt
-    n8(["end"]):::term
-  end
-  subgraph g3 ["&lt;b&gt;def&lt;/b&gt; claude_say_hello"]
-    n10(["start"]):::term
-    n11[/"in: name"/]:::input
-    n12["response = &lt;b&gt;prompt&lt;/b&gt; #quot;$#123;prompt_text#125;#quot;"]:::prompt
-    n13(["end"]):::term
   end
 
   n1 --&gt; n2
@@ -485,8 +487,8 @@ The three scripts form a `stdin` pipeline, so the output of each script is the i
 <div class="code-tab-panel" data-panel="stdin-src-0">
 <pre><code class="language-jaiph" data-sample-source="stdin.jh">#!/usr/bin/env jaiph
 
-# Jaiph streams stdin pipelines so a script can produce a lot of data
-# without loading it all into memory. Chain stages with -&gt;.
+# stdin connects scripts with -&gt;, and the data streams
+# from one script to the next without being held in memory
 script gen = bash'''
   printf 'alpha\nbeta\ngamma\n'
 '''
@@ -500,7 +502,7 @@ script count = bash'''
 '''
 
 export def main() {
-  # generate lines -&gt; uppercase them -&gt; reduce to a line count
+  # make three lines -&gt; uppercase them -&gt; count them
   const n = stdin gen() -&gt; upper() -&gt; count()
   return n
 }</code></pre>
@@ -556,14 +558,16 @@ def valid_name(name_arg) {
   }
 }
 
-# export def main is the jaiph run entry
+# jaiph run starts at export def main
 export def main(name_arg) {
   const name = valid_name(name_arg)
 
-  # prompts call agents - cursor by default, but it's configurable
+  # a prompt calls an agent (Cursor by default)
   const response = prompt """
-    Say hello to ${name} and provide a fun fact about a person with the same name.
-    Respond with a single line. Do not inspect files or run tools.
+    Say hello to ${name} and provide a fun fact
+    about a person with the same name.
+    Respond with a single line.
+    Do not inspect files or run tools.
   """
 
   return response

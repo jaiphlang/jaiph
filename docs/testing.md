@@ -9,7 +9,7 @@ redirect_from:
 
 # Write & run tests
 
-This guide shows how to write a `*.test.jh` file with mocked prompts and stubbed dependencies, and then run it with `jaiph test`. Each test block runs the def under test in-process through `NodeWorkflowRuntime`, which is the same interpreter that `jaiph run` uses, and then checks the captured output.
+This guide shows how to write a `*.test.jh` file with mocked prompts and stubbed dependencies, and then run it with `jaiph test`. Each test block runs the def under test with the same interpreter that `jaiph run` uses, and then checks the output the def produced.
 
 `jaiph test` runs on the host in-process. It does not run the credential pre-flight, and it does not run hooks.
 
