@@ -2,12 +2,14 @@ name: VS Code plugin
 
 # Path-filtered so core PRs do not rebuild the extension by default. Runs when
 # the plugin tree changes, or when the compile command it depends on changes
-# (the diagnostics tests invoke the real `jaiph compile --json` contract).
+# (the tests invoke the real `jaiph compile --json` and `jaiph graph` contracts).
 on:
   push:
     paths:
       - "plugins/vscode/**"
       - "src/cli/commands/compile.ts"
+      - "src/cli/commands/graph.ts"
+      - "src/graph/**"
       - ".github/workflows/vscode-plugin.yml"
 
 jobs:
@@ -18,10 +20,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # @vscode/vsce 4 (used by `npm run package`) needs Node 22.
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: npm
 
       # The plugin's diagnostics tests run the real monorepo CLI, so build it.

@@ -1,7 +1,7 @@
 # Jaiph Syntax for VS Code
 
-Syntax highlighting, compiler diagnostics, and formatting for Jaiph (`.jh` and
-`*.test.jh` files).
+Syntax highlighting, compiler diagnostics, formatting, and an execution-flow
+graph preview for Jaiph (`.jh` and `*.test.jh` files).
 
 - Website: [jaiph.org](https://jaiph.org)
 - Lives in the monorepo at `plugins/vscode/` ([jaiphlang/jaiph](https://github.com/jaiphlang/jaiph))
@@ -20,6 +20,16 @@ Syntax highlighting, compiler diagnostics, and formatting for Jaiph (`.jh` and
   `prompt` / `const` inside a def highlight the same way.
 - Compiler diagnostics on open/save via `jaiph compile --json`.
 - Document formatting via `jaiph format`.
+- Graph preview, like the Markdown preview: the **Open Graph Preview to the
+  Side** button in the editor title bar (or `Cmd+K V` / `Ctrl+K V`;
+  `Cmd+Shift+V` / `Ctrl+Shift+V` opens it in place) renders the file's
+  execution flow from `jaiph graph`. The toolbar sets the entry **Def**, the
+  **Depth** of def calls drawn (`--depth`, default 3), the **Imports** hops
+  drawn (`--import-depth`, default 1), and **Libs** (`--libs`). The preview
+  re-renders when any `.jh` file is saved, so it reflects saved files, not
+  unsaved edits. A file with errors shows the compiler message instead. Mermaid
+  is bundled with the extension, so the preview needs no network. See
+  [Execution flow](https://jaiph.org/execution-flow) for how to read the chart.
 - Embedded grammars for script/prompt bodies (shell, python, node/js,
   typescript, ruby, perl, lua, powershell, php, markdown).
 
@@ -29,6 +39,9 @@ Syntax highlighting, compiler diagnostics, and formatting for Jaiph (`.jh` and
   on `PATH`). Defaults to `jaiph`. If the binary cannot be found, the extension
   surfaces a clear error instead of failing silently.
 - `jaiph.diagnostics.enabled` — toggle compile-on-save/open diagnostics.
+
+The graph preview uses `jaiph.compilerPath` too, and needs a CLI that has the
+`jaiph graph` command.
 
 ## Local development
 
@@ -51,8 +64,8 @@ The test suite (`test/`) has two lanes:
 - **Grammar** — tokenizes fixtures with `vscode-textmate` and asserts scopes,
   including a regression fixture that fails if stale surface (e.g. the removed
   `wait` / `local` / `rule` / `workflow` / `ensure` / `inbox` keywords) is reintroduced.
-- **Diagnostics** — runs the real monorepo `jaiph compile --json` against
-  fixtures, so it breaks if the CLI diagnostics contract changes. Build the CLI
+- **Diagnostics and graph** — run the real monorepo `jaiph compile --json` and
+  `jaiph graph` against fixtures, so they break if either CLI contract changes. Build the CLI
   once at the repo root first: `npm run build` in the monorepo root.
 
 ## Package
@@ -64,6 +77,21 @@ npm run package   # produces a .vsix in this directory (gitignored)
 
 ## Publish
 
+Releases publish automatically. Pushing a `vX.Y.Z` tag runs
+[`.github/workflows/vscode-publish.yml`](https://github.com/jaiphlang/jaiph/blob/main/.github/workflows/vscode-publish.yml),
+which tests and packages this extension and publishes it to the
+[Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=jaiph.jaiph-syntax-vscode)
+and [Open VSX](https://open-vsx.org/extension/jaiph/jaiph-syntax-vscode).
+The tag must equal the `version` in this `package.json`;
+`.jaiph/prepare_release.jh` sets both. The workflow stores no tokens: both
+registries trust it through GitHub OIDC (trusted publishing). See
+[Contributing](https://jaiph.org/contributing#version-tags-releases-and-npm) for the
+one-time registry setup.
+
+To publish by hand instead (with personal access tokens):
+
 ```bash
-npx @vscode/vsce publish   # requires a marketplace publisher token
+npm run package
+npx vsce publish --packagePath jaiph-syntax-vscode-<version>.vsix   # VSCE_PAT
+npx ovsx publish --packagePath jaiph-syntax-vscode-<version>.vsix   # OVSX_PAT
 ```

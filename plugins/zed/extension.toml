@@ -16,5 +16,5 @@ repository = "https://github.com/jaiphlang/jaiph"
 #   repository = "file:///absolute/path/to/jaiph"
 [grammars.jaiph]
 repository = "https://github.com/jaiphlang/jaiph"
-rev = "7419e63f231f2af276f78346de1a98157ddf6b02"
+rev = "adeabc4c4a28b78df1df7d2346354f9143b95939"
 path = "grammars/tree-sitter-jaiph"

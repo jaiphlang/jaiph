@@ -1,0 +1,73 @@
+body {
+  margin: 0;
+  padding: 0;
+  color: var(--vscode-foreground);
+  background: var(--vscode-editor-background);
+  font-family: var(--vscode-font-family);
+  font-size: var(--vscode-font-size);
+}
+
+.toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  padding: 6px 12px;
+  background: var(--vscode-editor-background);
+  border-bottom: 1px solid var(--vscode-panel-border, transparent);
+}
+
+.toolbar label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.toolbar .spacer {
+  flex: 1;
+}
+
+select {
+  color: var(--vscode-dropdown-foreground);
+  background: var(--vscode-dropdown-background);
+  border: 1px solid var(--vscode-dropdown-border, transparent);
+  padding: 2px 4px;
+}
+
+button {
+  color: var(--vscode-button-secondaryForeground);
+  background: var(--vscode-button-secondaryBackground);
+  border: none;
+  padding: 3px 9px;
+  cursor: pointer;
+}
+
+button:hover {
+  background: var(--vscode-button-secondaryHoverBackground);
+}
+
+#canvas {
+  padding: 12px;
+  overflow: auto;
+}
+
+#canvas svg {
+  display: block;
+  margin: 0 auto;
+  padding: 12px;
+  border-radius: 6px;
+  background: #ffffff;
+}
+
+.status {
+  color: var(--vscode-descriptionForeground);
+}
+
+.error {
+  white-space: pre-wrap;
+  font-family: var(--vscode-editor-font-family);
+  color: var(--vscode-errorForeground);
+}

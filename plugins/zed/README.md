@@ -1,7 +1,8 @@
 # Jaiph for Zed
 
 Tree-sitter syntax highlighting for Jaiph (`.jh` and `*.test.jh`) in
-[Zed](https://zed.dev).
+[Zed](https://zed.dev), plus a task that previews a file's execution-flow
+graph.
 
 - Website: [jaiph.org](https://jaiph.org)
 - Lives in the monorepo at `plugins/zed/` ([jaiphlang/jaiph](https://github.com/jaiphlang/jaiph))
@@ -26,6 +27,48 @@ highlighted on tagged one-line bodies (`python3'print(1)'`).
 Zed language extensions require a **Tree-sitter** grammar (they cannot reuse a
 TextMate grammar like the VS Code extension), so this extension is backed by
 the grammar at [`../../grammars/tree-sitter-jaiph`](../../grammars/tree-sitter-jaiph).
+
+## Graph preview
+
+Zed extensions cannot add a preview pane, but Zed's built-in Markdown preview
+renders Mermaid. So the graph preview is a task: it writes the output of
+`jaiph graph` for the current file into a Markdown file and opens it. Add this
+to your project's `.zed/tasks.json` (or the global `tasks.json`):
+
+````json
+[
+  {
+    "label": "jaiph: graph preview",
+    "command": "f=\"$ZED_WORKTREE_ROOT/.jaiph/graph/$ZED_STEM.md\"; g=$(jaiph graph -d \"$JAIPH_GRAPH_DEPTH\" -i \"$JAIPH_GRAPH_IMPORTS\" \"$ZED_FILE\") || exit 1; mkdir -p \"$(dirname \"$f\")\" && printf '```mermaid\\n%s\\n```\\n' \"$g\" > \"$f\" && zed \"$f\"",
+    "env": { "JAIPH_GRAPH_DEPTH": "3", "JAIPH_GRAPH_IMPORTS": "1" },
+    "reveal": "no_focus",
+    "hide": "on_success"
+  },
+  {
+    "label": "jaiph: graph preview (everything)",
+    "command": "f=\"$ZED_WORKTREE_ROOT/.jaiph/graph/$ZED_STEM.md\"; g=$(jaiph graph -d all -i all -l \"$ZED_FILE\") || exit 1; mkdir -p \"$(dirname \"$f\")\" && printf '```mermaid\\n%s\\n```\\n' \"$g\" > \"$f\" && zed \"$f\"",
+    "reveal": "no_focus",
+    "hide": "on_success"
+  }
+]
+````
+
+Then, with a `.jh` file open:
+
+1. Run **task: spawn** and pick **jaiph: graph preview**. The task opens
+   `.jaiph/graph/<file>.md`.
+2. Run **markdown: open preview to the side** on that file. The preview
+   updates each time you rerun the task.
+
+Set the depth in the task's `env`: `JAIPH_GRAPH_DEPTH` is `--depth` (def-call
+levels, default 3) and `JAIPH_GRAPH_IMPORTS` is `--import-depth` (import hops,
+default 1). Each takes a number or `all`. Copy the task with other values to
+keep several presets. To graph a def other than `main`, add `--def <name>` to
+the command. If the file has errors, the task fails and its terminal shows the
+compiler message.
+
+The task needs `jaiph` and the `zed` command-line tool on `PATH` (install the
+CLI with **cli: install**). Add `.jaiph/graph/` to `.gitignore`.
 
 ## The grammar and how it is version-pinned
 

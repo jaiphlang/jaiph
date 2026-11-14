@@ -1,0 +1,8 @@
+def helper(name) {
+  log "hello ${name}"
+}
+
+export def main() {
+  helper("world")
+  return "done"
+}
