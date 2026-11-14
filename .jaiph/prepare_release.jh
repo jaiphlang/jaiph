@@ -205,7 +205,10 @@ const changelog_reviewer_role = """
     ## All changes
     …
 
-  Summary bullets: 5–10 max, end-user facing, bold lead token.
+  Summary bullets: 2–6, end-user facing, bold lead token, one or two
+  short plain sentences each (match the last few releases, e.g. 0.15.0 and
+  0.16.0). Only headline changes and breaking changes; detail goes in
+  All changes.
   All changes: exhaustive, grouped by Feat/Fix/Change/Breaking, one bullet
   per commit-worthy change. Do not drop existing detail when merging.
 """
@@ -252,9 +255,9 @@ def review_changelog(version) {
          title), keep chronological/newest-first within All changes.
        - Otherwise rename # Unreleased to # ${version} in place.
     4. Fix stale All-changes wording superseded by later work.
-    5. Ensure Summary covers the headline themes: trusted_envs, language sugar (else if, match |), logging,
-       and anything from the merged 0.11.0 tranche (MCP,
-       Windows, --env, agent.model) when that section is being folded in.
+    5. Keep Summary short: the release's headline themes and every breaking
+       change, nothing else. Move any detailed Summary bullet into All changes
+       instead of dropping it.
     6. Replace the top of CHANGELOG.md with a fresh empty scaffold:
          # Unreleased
 
