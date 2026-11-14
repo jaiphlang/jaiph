@@ -4,8 +4,8 @@ Jaiph editor integrations live in this monorepo so language changes and highligh
 
 | Path | Product |
 |------|---------|
-| [`vscode/`](vscode/) | VS Code / Cursor extension (TextMate + CLI diagnostics/format) |
-| [`zed/`](zed/) | Zed extension (Tree-sitter highlights/injections) |
+| [`vscode/`](vscode/) | VS Code / Cursor extension (TextMate + CLI diagnostics/format + graph preview) |
+| [`zed/`](zed/) | Zed extension (Tree-sitter highlights/injections; graph preview via a task) |
 
 The Zed extension is backed by the Tree-sitter grammar at [`../grammars/tree-sitter-jaiph/`](../grammars/tree-sitter-jaiph/) (not under `plugins/` — it is a standalone grammar package that any Tree-sitter host can consume, and `plugins/zed/extension.toml` pins it by repository + revision).
 

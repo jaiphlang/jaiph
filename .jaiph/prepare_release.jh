@@ -71,6 +71,38 @@ script update_install_release_ref = python3'''
       total += count
   print(total)
 '''
+# The editor plugins and the Tree-sitter grammar ship the CLI's version, and
+# .github/workflows/vscode-publish.yml refuses a tag that does not match
+# plugins/vscode/package.json. npm-written JSON is rewritten through
+# JSON.stringify (same bytes npm writes); tree-sitter.json and extension.toml
+# are hand-formatted, so only their version line is replaced.
+script set_plugin_versions = node'''
+  const fs = require("fs");
+  const v = process.argv[2];
+  const setJson = (path, apply) => {
+    const data = JSON.parse(fs.readFileSync(path, "utf8"));
+    apply(data);
+    fs.writeFileSync(path, JSON.stringify(data, null, 2) + "\n");
+  };
+  const setLine = (path, re, line) => {
+    const src = fs.readFileSync(path, "utf8");
+    if (!re.test(src)) {
+      process.stderr.write(`${path}: version line not found\n`);
+      process.exit(1);
+    }
+    fs.writeFileSync(path, src.replace(re, line));
+  };
+  for (const p of ["plugins/vscode/package.json", "plugins/zed/package.json", "grammars/tree-sitter-jaiph/package.json"]) {
+    setJson(p, (d) => { d.version = v; });
+  }
+  setJson("plugins/vscode/package-lock.json", (d) => {
+    d.version = v;
+    d.packages[""].version = v;
+  });
+  setLine("plugins/zed/extension.toml", /^version = "[^"]*"$/m, `version = "${v}"`);
+  setLine("grammars/tree-sitter-jaiph/tree-sitter.json", /"version": "[^"]*"/, `"version": "${v}"`);
+'''
+
 script run_npm_build = 'npm run build >&2'
 
 script assert_built_cli_version_equals = '''
@@ -255,6 +287,7 @@ export def preflight(version) {
 
 def apply_version_change(old_version, new_version) {
   npm_version_no_tag(new_version)
+  set_plugin_versions(new_version)
   update_install_release_ref(old_version, new_version)
 }
 
@@ -277,6 +310,7 @@ export def main(arg) {
   log """
     prepare_release: staged release v${version}
       - package.json + package-lock.json (npm version ${version})
+      - plugins/vscode, plugins/zed, grammars/tree-sitter-jaiph versions (${version})
       - docs/install + docs/install.ps1 (release ref v${old_version} -> v${version})
       - docs/registry (regenerated)
       - dist/ (rebuilt; jaiph --version == jaiph ${version})
@@ -287,7 +321,9 @@ export def main(arg) {
       3. Confirm MINISIGN_SECRET_KEY is set in GitHub Actions secrets
          (see docs/contributing.md → Release signing).
       4. Tag: git tag v${version}
-      5. Push branch + tag (tag push triggers release.yml)
+      5. Push branch + tag (tag push triggers release.yml and
+         vscode-publish.yml, which publishes the VS Code extension through
+         trusted publishing)
       6. Smoke check: jaiph use ${version}
   """
   return version

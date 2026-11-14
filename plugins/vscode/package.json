@@ -1,7 +1,7 @@
 {
   "name": "jaiph-syntax-vscode",
   "displayName": "Jaiph Syntax",
-  "description": "Syntax highlighting and compiler diagnostics for the Jaiph orchestration language (.jh files)",
+  "description": "Syntax highlighting, compiler diagnostics, and execution-flow graph preview for the Jaiph orchestration language (.jh files)",
   "version": "0.16.0",
   "publisher": "jaiph",
   "license": "MIT",
@@ -17,21 +17,25 @@
     "directory": "plugins/vscode"
   },
   "activationEvents": [
-    "onLanguage:jaiph"
+    "onLanguage:jaiph",
+    "onWebviewPanel:jaiph.graphPreview"
   ],
   "scripts": {
-    "compile": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --sourcemap",
-    "watch": "npm run compile -- --watch",
+    "compile": "npm run copy:mermaid && esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --sourcemap",
+    "watch": "npm run copy:mermaid && esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --sourcemap --watch",
     "check": "tsc -p tsconfig.json --noEmit",
     "build:test": "tsc -p tsconfig.test.json",
     "test": "npm run check && npm run compile && npm run build:test && node --test out-test/test/*.test.js",
-    "package": "npm run compile -- --minify && vsce package"
+    "package": "npm run compile -- --minify && vsce package",
+    "copy:mermaid": "node -e \"require('fs').mkdirSync('dist',{recursive:true});require('fs').copyFileSync('node_modules/mermaid/dist/mermaid.min.js','dist/mermaid.min.js')\""
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
     "@types/vscode": "^1.85.0",
-    "@vscode/vsce": "^3.6.0",
+    "@vscode/vsce": "4.1.0",
     "esbuild": "^0.25.0",
+    "mermaid": "11.4.1",
+    "ovsx": "1.3.0",
     "typescript": "^5.7.0",
     "vscode-oniguruma": "^2.0.1",
     "vscode-textmate": "^9.0.0"
@@ -47,7 +51,10 @@
     "syntax",
     "highlighting",
     "diagnostics",
-    "language"
+    "language",
+    "graph",
+    "preview",
+    "mermaid"
   ],
   "contributes": {
     "languages": [
@@ -126,6 +133,67 @@
           "description": "Enable compiler diagnostics on save and file open"
         }
       }
-    }
+    },
+    "commands": [
+      {
+        "command": "jaiph.showGraphPreview",
+        "title": "Open Graph Preview",
+        "category": "Jaiph",
+        "icon": "$(open-preview)"
+      },
+      {
+        "command": "jaiph.showGraphPreviewToSide",
+        "title": "Open Graph Preview to the Side",
+        "category": "Jaiph",
+        "icon": "$(open-preview)"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "jaiph.showGraphPreviewToSide",
+          "when": "editorLangId == jaiph && !(resourceFilename =~ /\\.test\\.jh$/)",
+          "group": "navigation"
+        }
+      ],
+      "editor/title/context": [
+        {
+          "command": "jaiph.showGraphPreview",
+          "when": "resourceExtname == .jh && !(resourceFilename =~ /\\.test\\.jh$/)",
+          "group": "1_open"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "jaiph.showGraphPreview",
+          "when": "resourceExtname == .jh && !(resourceFilename =~ /\\.test\\.jh$/)",
+          "group": "navigation"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "jaiph.showGraphPreview",
+          "when": "editorLangId == jaiph && !(resourceFilename =~ /\\.test\\.jh$/)"
+        },
+        {
+          "command": "jaiph.showGraphPreviewToSide",
+          "when": "editorLangId == jaiph && !(resourceFilename =~ /\\.test\\.jh$/)"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "jaiph.showGraphPreview",
+        "key": "ctrl+shift+v",
+        "mac": "cmd+shift+v",
+        "when": "editorLangId == jaiph && !(resourceFilename =~ /\\.test\\.jh$/)"
+      },
+      {
+        "command": "jaiph.showGraphPreviewToSide",
+        "key": "ctrl+k v",
+        "mac": "cmd+k v",
+        "when": "editorLangId == jaiph && !(resourceFilename =~ /\\.test\\.jh$/)"
+      }
+    ]
   }
 }

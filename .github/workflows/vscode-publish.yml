@@ -1,0 +1,167 @@
+name: Publish VS Code extension
+
+# Publishes plugins/vscode to the Visual Studio Marketplace and Open VSX when a
+# stable release tag (vX.Y.Z) is pushed. The tag must equal the version in
+# plugins/vscode/package.json; .jaiph/prepare_release.jh bumps both together.
+#
+# No stored tokens: both registries trust this repository through GitHub OIDC
+# ("trusted publishing"). Each publish job requests a short-lived GitHub ID
+# token (id-token: write) and exchanges it for a registry credential. The
+# registries must each have a trusted-publisher entry for owner `jaiphlang`,
+# repository `jaiph`, workflow `vscode-publish.yml`, and environment `release`
+# (see docs/contributing.md). Restrict the `release` environment to `v*` tags
+# in the repository settings so only release tags can publish.
+#
+# Both registries get the same .vsix. A version already on a registry is
+# skipped, so re-running (workflow_dispatch with the tag) only fills in the
+# registry that failed.
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to publish (e.g. v0.16.0)"
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: vscode-publish-${{ inputs.tag || github.ref_name }}
+
+env:
+  TAG: ${{ inputs.tag || github.ref_name }}
+
+jobs:
+  package:
+    name: Test and package
+    runs-on: ubuntu-latest
+    outputs:
+      vsix: ${{ steps.version.outputs.vsix }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+
+      - name: Check the tag matches the extension version
+        id: version
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./plugins/vscode/package.json').version")"
+          if [ "v${version}" != "${TAG}" ]; then
+            echo "::error::Tag ${TAG} does not match plugins/vscode/package.json version ${version}. Run .jaiph/prepare_release.jh to bump both."
+            exit 1
+          fi
+          echo "vsix=jaiph-syntax-vscode-${version}.vsix" >> "${GITHUB_OUTPUT}"
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            plugins/vscode/package-lock.json
+
+      # The plugin's diagnostics and graph tests run the real monorepo CLI.
+      - name: Build the jaiph CLI
+        run: |
+          npm ci
+          npm run build
+
+      - name: Install plugin dependencies
+        run: npm ci
+        working-directory: plugins/vscode
+
+      - name: Typecheck, compile, and test
+        run: npm test
+        working-directory: plugins/vscode
+
+      - name: Package
+        run: |
+          npm run compile -- --minify
+          npx vsce package --out "${{ steps.version.outputs.vsix }}"
+        working-directory: plugins/vscode
+
+      - name: Upload the .vsix
+        uses: actions/upload-artifact@v4
+        with:
+          name: vsix
+          path: plugins/vscode/${{ steps.version.outputs.vsix }}
+          if-no-files-found: error
+
+  marketplace:
+    name: Publish to Visual Studio Marketplace
+    needs: package
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: plugins/vscode/package-lock.json
+
+      # Installs the locked @vscode/vsce (4.1.0+ for --oidc).
+      - name: Install plugin dependencies
+        run: npm ci
+        working-directory: plugins/vscode
+
+      - name: Download the .vsix
+        uses: actions/download-artifact@v4
+        with:
+          name: vsix
+          path: plugins/vscode
+
+      - name: Publish (trusted publishing)
+        run: npx vsce publish --oidc --packagePath "${{ needs.package.outputs.vsix }}" --skip-duplicate
+        working-directory: plugins/vscode
+
+  open-vsx:
+    name: Publish to Open VSX
+    needs: package
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: plugins/vscode/package-lock.json
+
+      # Installs the locked ovsx (1.3.0+ for --trusted-publishing).
+      - name: Install plugin dependencies
+        run: npm ci
+        working-directory: plugins/vscode
+
+      - name: Download the .vsix
+        uses: actions/download-artifact@v4
+        with:
+          name: vsix
+          path: plugins/vscode
+
+      - name: Publish (trusted publishing)
+        run: npx ovsx publish --trusted-publishing --packagePath "${{ needs.package.outputs.vsix }}" --skip-duplicate
+        working-directory: plugins/vscode

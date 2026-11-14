@@ -6,5 +6,5 @@
     "types": ["node"],
     "sourceMap": false
   },
-  "include": ["src/compile.ts", "test/**/*.ts"]
+  "include": ["src/compile.ts", "src/graph.ts", "test/**/*.ts"]
 }
