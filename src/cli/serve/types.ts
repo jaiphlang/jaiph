@@ -117,6 +117,27 @@ export interface ServeHandlerOptions {
    * surface. `/healthz` is always available and credential-free.
    */
   exposeDocs?: boolean;
+  /**
+   * The address the server bound (`--host`), used by the cross-origin / Host
+   * guard to decide whether this is a loopback bind. Defaults to `127.0.0.1`.
+   */
+  boundHost?: string;
+  /**
+   * The port actually bound, read per request so `--port 0` (resolved only
+   * after `listen`) still validates against the real port. Defaults to `0`.
+   */
+  getBoundPort?: () => number;
+  /**
+   * Exact origins allowed beyond same-origin (`JAIPH_SERVE_ALLOWED_ORIGINS`).
+   * A present `Origin` that is neither same-origin nor listed here is `403`.
+   */
+  allowedOrigins?: string[];
+  /**
+   * `Host` authorities (`host:port`) allowed on a non-loopback bind
+   * (`JAIPH_SERVE_ALLOWED_HOSTS`). `undefined` skips the Host check on a
+   * non-loopback bind; it never relaxes the loopback-only check.
+   */
+  allowedHosts?: string[];
   /** Cap on simultaneously-running workflows (429 beyond it). */
   maxConcurrent: number;
   /**

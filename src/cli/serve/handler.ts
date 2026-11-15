@@ -25,6 +25,7 @@ import { hashArgs } from "./run-store";
 import { verifyRunJournal } from "../../runtime";
 import { createAuthenticator, openPrincipal, type Authenticator, type Capability, type Principal } from "./auth";
 import { safeJsonObject, isJsonContentType, clampInt } from "./http-util";
+import { checkRequestOrigin, type OriginGuardConfig } from "./origin";
 import type { RunStatus, RunRecord, ServeRequest, ServeResponse, ServeHandlerOptions } from "./types";
 
 export type { RunStatus, RunRecord, ServeRequest, ServeResponse, ServeHandlerOptions } from "./types";
@@ -83,6 +84,11 @@ export class ServeHandler {
   private readonly auth: Authenticator;
   /** Whether `/docs` and `/openapi.json` are exposed. */
   private readonly exposeDocs: boolean;
+  /** Bound address + allowlists for the cross-origin / Host guard. */
+  private readonly boundHost: string;
+  private readonly getBoundPort: () => number;
+  private readonly allowedOrigins: Set<string>;
+  private readonly allowedHosts: Set<string> | undefined;
   /**
    * The authenticated principal + correlation id of the request in flight,
    * propagated across every async step (including the MCP engine's `tools/call`
@@ -97,6 +103,10 @@ export class ServeHandler {
     this.newRunId = opts.newRunId ?? randomUUID;
     this.auth = opts.authenticator ?? createAuthenticator({ token: opts.token });
     this.exposeDocs = opts.exposeDocs ?? true;
+    this.boundHost = opts.boundHost ?? "127.0.0.1";
+    this.getBoundPort = opts.getBoundPort ?? (() => 0);
+    this.allowedOrigins = new Set(opts.allowedOrigins ?? []);
+    this.allowedHosts = opts.allowedHosts ? new Set(opts.allowedHosts) : undefined;
     this.mcp = new McpServer({
       serverVersion: opts.version,
       getTools: opts.getTools,
@@ -223,6 +233,13 @@ export class ServeHandler {
   async handleRequest(req: ServeRequest): Promise<ServeResponse> {
     const { method, path } = req;
 
+    // Reject a cross-origin `Origin` or a wrong `Host` before any routing, so a
+    // web page on another origin (or a DNS-rebinding name) can neither start a
+    // run nor read `/runs`, events, or artifacts. A same-origin request (the
+    // Swagger UI) and a request with no `Origin` (curl, MCP clients) pass.
+    const rejection = checkRequestOrigin(req.headers, this.originConfig());
+    if (rejection) return this.error(403, rejection.code, rejection.message);
+
     if (path === "/" && method === "GET") {
       return { status: 302, headers: { location: "/docs" }, body: "" };
     }
@@ -282,6 +299,21 @@ export class ServeHandler {
   /** Identity of the request in flight; open-mode default outside a request. */
   private currentCtx(): { principal: Principal; correlationId: string } {
     return this.reqCtx.getStore() ?? { principal: openPrincipal(), correlationId: "" };
+  }
+
+  /** Current cross-origin / Host guard config (bound port is read per request). */
+  private originConfig(): OriginGuardConfig {
+    return {
+      boundHost: this.boundHost,
+      boundPort: this.getBoundPort(),
+      allowedOrigins: this.allowedOrigins,
+      allowedHosts: this.allowedHosts,
+    };
+  }
+
+  /** 415 for a run-initiating POST (`/mcp`, `POST /{name}`) without a JSON body type. */
+  private unsupportedMediaType(): ServeResponse {
+    return this.error(415, "E_UNSUPPORTED_MEDIA_TYPE", "request body must be application/json");
   }
 
   /**
@@ -388,10 +420,13 @@ export class ServeHandler {
     if (req.bodyTooLarge) {
       return this.error(413, "E_BODY_TOO_LARGE", `request body exceeds ${MAX_BODY_BYTES} bytes`);
     }
-    const hasBody = req.body.length > 0;
-    if (hasBody && !isJsonContentType(req.headers["content-type"])) {
-      return this.error(415, "E_UNSUPPORTED_MEDIA_TYPE", "request body must be application/json");
+    // A run-initiating POST must declare application/json even with no body, so a
+    // cross-origin page cannot start a run with a no-preflight simple request
+    // (which can only set text/plain, form, or multipart content types).
+    if (!isJsonContentType(req.headers["content-type"])) {
+      return this.unsupportedMediaType();
     }
+    const hasBody = req.body.length > 0;
     let raw: Record<string, unknown>;
     if (hasBody) {
       let parsed: unknown;
@@ -501,6 +536,10 @@ export class ServeHandler {
           error: { code: -32000, message: "use POST for MCP Streamable HTTP" },
         }),
       };
+    }
+    // Same simple-request defense as REST: `POST /mcp` must be application/json.
+    if (!isJsonContentType(req.headers["content-type"])) {
+      return this.unsupportedMediaType();
     }
     if (req.bodyTooLarge) {
       return this.error(413, "E_BODY_TOO_LARGE", `request body exceeds ${MAX_BODY_BYTES} bytes`);

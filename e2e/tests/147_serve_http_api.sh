@@ -255,3 +255,26 @@ print(r["result_text"])
 e2e::assert_equals "${p_newest_wf}" "greet" "the MCP call appears in the shared /runs registry"
 e2e::assert_equals "${p_newest_status}" "succeeded" "the MCP-initiated run status is succeeded"
 e2e::assert_equals "${p_newest_text}" "hello mcp" "the MCP-initiated run's result_text matches the tool result"
+
+# --- cross-origin / Host / content-type guard ---
+# A cross-origin Origin and a wrong Host are rejected before any routing, and a
+# run-initiating POST without a JSON content type is 415 — even with no body.
+evil_origin_code="$(curl -s -o /dev/null -w '%{http_code}' -X POST "${base}/mcp" \
+  -H 'content-type: application/json' -H 'Origin: https://evil.example' \
+  -d '{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"greet","arguments":{"name":"x"}}}')"
+e2e::assert_equals "${evil_origin_code}" "403" "a cross-origin Origin on /mcp is 403"
+
+evil_origin_invoke_code="$(curl -s -o /dev/null -w '%{http_code}' -X POST "${base}/greet?wait=true" \
+  -H 'content-type: application/json' -H 'Origin: https://evil.example' -d '{"name":"x"}')"
+e2e::assert_equals "${evil_origin_invoke_code}" "403" "a cross-origin Origin on POST /{name} is 403"
+
+evil_host_code="$(curl -s -o /dev/null -w '%{http_code}' -H "Host: evil.example:${port}" "${base}/healthz")"
+e2e::assert_equals "${evil_host_code}" "403" "a wrong Host on a loopback bind is 403"
+
+text_plain_code="$(curl -s -o /dev/null -w '%{http_code}' -X POST "${base}/mcp" \
+  -H 'content-type: text/plain' \
+  -d '{"jsonrpc":"2.0","id":9,"method":"tools/list"}')"
+e2e::assert_equals "${text_plain_code}" "415" "a text/plain body on /mcp is 415"
+
+bodyless_code="$(curl -s -o /dev/null -w '%{http_code}' -X POST "${base}/greet?wait=true")"
+e2e::assert_equals "${bodyless_code}" "415" "a bodyless POST /{name} without a JSON content type is 415"
