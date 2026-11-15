@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { execFileSync, spawn } from "node:child_process";
 import { colorPalette } from "../shared/errors";
@@ -15,6 +15,14 @@ import {
   verifyMinisign,
   type RegistryIndex,
 } from "./registry";
+import {
+  assertSafeRemote,
+  buildLibDir,
+  deriveLibName,
+  readLockFile,
+  type LockEntry,
+  type LockFile,
+} from "./install-validate";
 
 const INSTALL_USAGE =
   "Usage: jaiph install [--force] [<name[@version]> | <repo-url[@version]> ...]\n\n" +
@@ -35,19 +43,6 @@ const INSTALL_USAGE =
   "  jaiph install jaiphlang\n" +
   "  jaiph install mylib@v1.2\n" +
   "  jaiph install https://github.com/you/queue-lib.git@v1.0\n";
-
-interface LockEntry {
-  name: string;
-  url: string;
-  version?: string;
-  commit?: string;
-  /** Detached minisign signature over the pinned commit SHA; re-verified on restore when present. */
-  signature?: string;
-}
-
-interface LockFile {
-  libs: LockEntry[];
-}
 
 export interface InstallSpec {
   name: string;
@@ -82,11 +77,6 @@ export interface RunInstallOptions {
 
 const DEFAULT_CONCURRENCY = 4;
 
-function deriveLibName(url: string): string {
-  const lastSegment = url.split("/").pop() ?? url;
-  return lastSegment.replace(/\.git$/, "");
-}
-
 /** Splits a clone URL and optional @ref. Ref after `.../.git@` is recognized for any transport (https, git@, scp). */
 export function parseUrlAndVersion(arg: string): { url: string; version?: string } {
   const m = arg.match(/^(.+?\.git)@([A-Za-z0-9._+/-]+)$/);
@@ -99,13 +89,6 @@ export function parseUrlAndVersion(arg: string): { url: string; version?: string
     return { url: arg.slice(0, atIdx), version: arg.slice(atIdx + 1) };
   }
   return { url: arg };
-}
-
-function readLockFile(lockPath: string): LockFile {
-  if (!existsSync(lockPath)) {
-    return { libs: [] };
-  }
-  return JSON.parse(readFileSync(lockPath, "utf8")) as LockFile;
 }
 
 function writeLockFile(lockPath: string, lock: LockFile): void {
@@ -194,6 +177,15 @@ function postCloneHygiene(spec: InstallSpec, registryPublicKey: string): PostClo
     commit = revParseHead(spec.libDir);
     rmSync(gitDir, { recursive: true, force: true });
   }
+  if (spec.expectedCommit && !commit) {
+    rmSync(spec.libDir, { recursive: true, force: true });
+    return {
+      ok: false,
+      message:
+        `lib "${spec.name}" is pinned to ${spec.expectedCommit} but the cloned commit could not be read — ` +
+        `the clone has no readable git HEAD, so the pin cannot be verified`,
+    };
+  }
   if (spec.expectedCommit && commit && commit !== spec.expectedCommit) {
     const versionLabel = spec.version ?? "<ref>";
     rmSync(spec.libDir, { recursive: true, force: true });
@@ -219,15 +211,24 @@ function postCloneHygiene(spec: InstallSpec, registryPublicKey: string): PostClo
   return { ok: true, commit };
 }
 
-/** Default clone runner: `git clone --depth 1 [--branch <ref>] <url> <libDir>` via spawn. */
+/**
+ * Build the `git clone` argv. A `--` separator precedes the positional `<url>`
+ * and `<libDir>` so git never reads a url that starts with `-` as an option
+ * (leading-dash values are already rejected up front by `assertSafeRemote`).
+ */
+export function buildGitCloneArgs(spec: InstallSpec): string[] {
+  const args = ["clone", "--depth", "1"];
+  if (spec.version) {
+    args.push("--branch", spec.version);
+  }
+  args.push("--", spec.url, spec.libDir);
+  return args;
+}
+
+/** Default clone runner: `git clone --depth 1 [--branch <ref>] -- <url> <libDir>` via spawn. */
 function gitCloneRunner(spec: InstallSpec): Promise<CloneOutcome> {
   return new Promise((done) => {
-    const args = ["clone", "--depth", "1"];
-    if (spec.version) {
-      args.push("--branch", spec.version);
-    }
-    args.push(spec.url, spec.libDir);
-    const child = spawn("git", args, { stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn("git", buildGitCloneArgs(spec), { stdio: ["ignore", "pipe", "pipe"] });
     let stderr = "";
     child.stderr.on("data", (chunk: Buffer) => {
       stderr += chunk.toString();
@@ -304,20 +305,22 @@ async function resolveInstallSpecs(
           `warning: installing "${name}" from registry ${source} without a pinned commit (--allow-unpinned)\n`,
         );
       }
-      assertAllowedRemoteScheme(entry.url, `lib "${name}" url`);
+      const libDir = buildLibDir(name, libsDir, "lib");
+      assertSafeRemote(entry.url, version, name);
       specs.push({
         name,
         url: entry.url,
         version,
-        libDir: join(libsDir, name),
+        libDir,
         expectedCommit: entry.commit,
         signature: entry.signature,
       });
     } else {
       const { url, version } = parseUrlAndVersion(arg);
       const name = deriveLibName(url);
-      assertAllowedRemoteScheme(url, `lib "${name}" url`);
-      specs.push({ name, url, version, libDir: join(libsDir, name) });
+      assertSafeRemote(url, version, name);
+      const libDir = buildLibDir(name, libsDir, "lib");
+      specs.push({ name, url, version, libDir });
     }
   }
   return specs;
@@ -343,53 +346,56 @@ export async function runInstall(rest: string[], opts: RunInstallOptions = {}): 
   mkdirSync(libsDir, { recursive: true });
 
   const isRestoreFromLock = args.length === 0;
-  let lock: LockFile;
-  let specs: InstallSpec[];
+  let lock: LockFile = { libs: [] };
+  let specs: InstallSpec[] = [];
   // Restore-only: lock entries refused before any clone (no pinned commit). Reported
   // as failed outcomes so the run exits non-zero without ever cloning a mutable ref.
   const restoreRejections: CloneOutcome[] = [];
 
-  if (isRestoreFromLock) {
-    lock = readLockFile(lockPath);
-    if (lock.libs.length === 0) {
-      process.stdout.write("No libs in lockfile.\n");
-      return 0;
-    }
-    process.stdout.write(`\nRestoring ${lock.libs.length} lib(s) from lockfile\n\n`);
-    specs = [];
-    for (const e of lock.libs) {
-      const spec: InstallSpec = {
-        name: e.name,
-        url: e.url,
-        version: e.version,
-        libDir: join(libsDir, e.name),
-        expectedCommit: e.commit,
-        signature: e.signature,
-      };
-      if (!e.commit) {
-        // Without a pinned commit, a restore would clone whatever the mutable ref
-        // now points at. Refuse before cloning so no unverified tree ever lands.
-        restoreRejections.push({
-          spec,
-          ok: false,
-          message:
-            `lib "${e.name}" has no pinned commit in ${lockPath} — refusing to restore an ` +
-            `unpinned lock entry (its ref could move to arbitrary code); re-run ` +
-            `\`jaiph install ${e.name}\` to re-pin it`,
-        });
-        continue;
+  try {
+    if (isRestoreFromLock) {
+      lock = readLockFile(lockPath);
+      if (lock.libs.length === 0) {
+        process.stdout.write("No libs in lockfile.\n");
+        return 0;
       }
-      specs.push(spec);
-    }
-  } else {
-    process.stdout.write("\n");
-    lock = readLockFile(lockPath);
-    try {
+      process.stdout.write(`\nRestoring ${lock.libs.length} lib(s) from lockfile\n\n`);
+      for (const e of lock.libs) {
+        // Validate the name and remote before building a spec, so a crafted lock
+        // entry can never remove or clone into a path outside .jaiph/libs/.
+        const libDir = buildLibDir(e.name, libsDir, "lock entry");
+        assertSafeRemote(e.url, e.version, e.name);
+        const spec: InstallSpec = {
+          name: e.name,
+          url: e.url,
+          version: e.version,
+          libDir,
+          expectedCommit: e.commit,
+          signature: e.signature,
+        };
+        if (!e.commit) {
+          // Without a pinned commit, a restore would clone whatever the mutable ref
+          // now points at. Refuse before cloning so no unverified tree ever lands.
+          restoreRejections.push({
+            spec,
+            ok: false,
+            message:
+              `lib "${e.name}" has no pinned commit in ${lockPath} — refusing to restore an ` +
+              `unpinned lock entry (its ref could move to arbitrary code); re-run ` +
+              `\`jaiph install ${e.name}\` to re-pin it`,
+          });
+          continue;
+        }
+        specs.push(spec);
+      }
+    } else {
+      process.stdout.write("\n");
+      lock = readLockFile(lockPath);
       specs = await resolveInstallSpecs(args, libsDir, allowUnpinned);
-    } catch (err) {
-      process.stderr.write(`${(err as Error).message}\n`);
-      return 1;
     }
+  } catch (err) {
+    process.stderr.write(`${(err as Error).message}\n`);
+    return 1;
   }
 
   // Plan phase: skip warm-path libs without invoking the cloner; queue the rest.
@@ -437,7 +443,13 @@ export async function runInstall(rest: string[], opts: RunInstallOptions = {}): 
   if (!isRestoreFromLock) {
     for (const spec of skipped) {
       const existing = lock.libs.find((e) => e.name === spec.name);
-      upsertLockEntry(lock, specToLockEntry(spec, existing?.commit));
+      if (existing) {
+        // A skipped lib keeps its existing lock entry byte-for-byte. Rewriting it —
+        // e.g. `install name@v2` adopting the new version while keeping the old
+        // commit — would make a later clean restore fail with a commit mismatch.
+        continue;
+      }
+      upsertLockEntry(lock, specToLockEntry(spec));
     }
     for (const outcome of outcomes) {
       if (outcome.ok) {

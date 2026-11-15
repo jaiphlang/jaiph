@@ -19,42 +19,6 @@ Process rules:
 7. Acceptance criteria are non-negotiable. A task is not done until every
    acceptance bullet is verified by a test that fails when the contract is violated.
 
-## Validate lockfile entries and lib names in jaiph install #dev-ready
-
-Source: code audit 2026-11-15. Reproduced.
-
-### Current behavior
-
-All in `src/cli/commands/install.ts`:
-
-- Restore builds `libDir: join(libsDir, e.name)` from `.jaiph/libs.lock` without validating `e.name`. A lock entry `{"name":"../../../victim", …}` plus `jaiph install --force` recursively deletes that directory outside the workspace and clones attacker content into it. Without `--force` it writes into any path that does not exist yet.
-- Lock `url` values skip `assertAllowedRemoteScheme`, so `http://` and `git://` are accepted on restore.
-- `readLockFile` casts `JSON.parse` output to `LockFile` with no shape check.
-- `deriveLibName("https://host/you/lib/")` returns `""`, so `libDir === libsDir`. With `--force` this deletes every installed lib and writes a lock entry with an empty name. A URL ending in `/..` targets `.jaiph` itself.
-- The pin check is `spec.expectedCommit && commit && commit !== …`. When `git rev-parse` fails, `commit` is empty and the pin is skipped.
-- `git clone … <url> <libDir>` has no `--` separator, and a url or ref that starts with `-` is not rejected.
-- `jaiph install name@v2` when the lib directory already exists prints "skipping" but rewrites the lock entry to `version: v2` with the old commit. A later clean restore fails with a commit mismatch.
-
-### Required behavior
-
-- One validation function for a lib name, used by the registry path, the URL-derived path and the lock path: it must match the existing `REGISTRY_NAME_REGEX`. After `join`, assert `dirname(libDir) === libsDir`.
-- `readLockFile` checks shape: `libs` is an array; each entry has string `name`, `url`, and optional string `version`, `commit`, `signature`. A bad lockfile is an error that names the entry, and nothing is deleted or cloned.
-- Lock urls go through `assertAllowedRemoteScheme`.
-- `deriveLibName` strips trailing slashes; an empty or invalid derived name is an error.
-- When `expectedCommit` is set and the cloned commit cannot be read, the install fails.
-- Reject a url or ref that starts with `-`; pass `--` before positional arguments to git.
-- A skipped lib keeps its existing lock entry unchanged.
-
-### Acceptance
-
-- Unit tests with the injectable runner: lock names `../x`, `a/b`, `""`, `.`, `..` are rejected and no path outside `.jaiph/libs/<name>` is removed or created (assert with a sentinel directory beside the workspace).
-- `jaiph install --force https://host/you/lib/` installs to `libs/lib`; `https://host/you/` style inputs that derive an invalid name fail and leave other libs in place.
-- Lock entry with `http://` url is rejected.
-- Pin set and unreadable HEAD fails the install.
-- Url `--upload-pack=x` and ref `-x` are rejected; the git argv contains `--` before the url.
-- Skip path leaves the lock file byte-identical.
-- `npm test` passes. `docs/` install page states the name rule. CHANGELOG entry under Unreleased.
-
 ## Scope MCP-over-HTTP in-flight calls to the caller #dev-ready
 
 Source: code audit 2026-11-15. Reproduced against the handler.
