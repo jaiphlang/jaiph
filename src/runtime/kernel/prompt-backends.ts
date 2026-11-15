@@ -242,6 +242,7 @@ export function runBackend(
     // Single-settle guard shared by the normal-exit path and every watchdog.
     let settled = false;
     let exitCode: number | null = null;
+    let exitSignal: NodeJS.Signals | null = null;
     // Extra stream to tear down on settle (the claude `merged` PassThrough).
     let extraStream: { destroy: () => void } | undefined;
     const settle = (final: string, status: number): void => {
@@ -264,6 +265,30 @@ export function runBackend(
       resolve({ final, status });
     };
 
+    // Settle from a process-end event (`exit` / `close`). A `code === null`
+    // means the backend was terminated by a signal (e.g. an OOM SIGKILL) rather
+    // than exiting on its own: a failure named by the signal, so retry/recover
+    // takes over instead of passing truncated output. Script steps already treat
+    // a null code as status 1; this gives the agent backends the same rule. The
+    // watchdog's completion-grace path settles with success *before* its own
+    // kill lands, so by the time that kill's close event reaches here `settled`
+    // is already true and this is a no-op — a graced completion keeps status 0.
+    const settleFromExit = (
+      final: string,
+      code: number | null,
+      signal: NodeJS.Signals | null,
+    ): void => {
+      if (settled) return;
+      const endCode = code ?? exitCode;
+      const endSignal = signal ?? exitSignal;
+      if (endCode === null) {
+        stderr.write(`jaiph: agent backend killed by ${endSignal ?? "a signal"}\n`);
+        settle(final, 1);
+        return;
+      }
+      settle(final, endCode);
+    };
+
     // Watchdog layers (completion grace / idle / absolute cap). For custom
     // commands only layers 2 and 3 apply — there is no result event to trigger
     // layer 1, so markComplete is simply never called.
@@ -279,8 +304,9 @@ export function runBackend(
       stderr.write(`jaiph: failed to start ${command}: ${err.message}\n`);
       settle("", 1);
     });
-    child.on("exit", (code) => {
+    child.on("exit", (code, signal) => {
       exitCode = code;
+      exitSignal = signal;
     });
 
     if (useStdin && child.stdin) {
@@ -318,8 +344,8 @@ export function runBackend(
         writer.writeFinal(text);
         final += text;
       });
-      child.on("close", (code) => {
-        settle(final, code ?? exitCode ?? 0);
+      child.on("close", (code, signal) => {
+        settleFromExit(final, code, signal);
       });
       return;
     }
@@ -343,12 +369,13 @@ export function runBackend(
       onComplete: (finalSoFar) => watchdog.markComplete(finalSoFar),
     }).then((final) => {
       // Stream ended — process closed, or the watchdog already killed it and
-      // settled (in which case `settle` here is a no-op).
-      const close = (code: number | null): void => settle(final, code ?? exitCode ?? 0);
-      if (child.exitCode !== null || exitCode !== null) {
-        close(child.exitCode ?? exitCode);
+      // settled (in which case `settleFromExit` here is a no-op).
+      const code = child.exitCode ?? exitCode;
+      const signal = child.signalCode ?? exitSignal;
+      if (code !== null || signal !== null) {
+        settleFromExit(final, code, signal);
       } else {
-        child.on("close", (code) => close(code));
+        child.on("close", (c, s) => settleFromExit(final, c, s));
       }
     });
 

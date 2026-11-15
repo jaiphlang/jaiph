@@ -351,3 +351,27 @@ Reproduction: the entry file declares `script check = 'echo ENTRY; exit 1'` and 
 - New test: same-named scripts with different `use` clauses; each body sees only its own granted variable.
 - Existing script tests, `npm test`, `npm run lint`, `npm run arch:check`, and `bash e2e/test_all.sh` pass.
 - `docs/architecture.md` describes the new file naming. CHANGELOG entry under Unreleased.
+
+## Fail the prompt step when the agent backend dies from a signal
+
+Completed: 2026-11-15
+
+Source: code audit 2026-11-15. Reproduced with fake `claude`, `cursor-agent` and custom agent binaries.
+
+### Current behavior
+
+`src/runtime/kernel/prompt-backends.ts` settles with `code ?? exitCode ?? 0` (around lines 322 and 347). A process killed by a signal reports `code === null`, so the status becomes 0. An agent that prints partial output and is then OOM-killed passes the prompt step with truncated text. Retry and `recover` never run.
+
+Script steps already handle this correctly (`typeof code === "number" ? code : 1`).
+
+### Required behavior
+
+- Capture the signal from the `exit` / `close` event for the claude, cursor and custom backends.
+- `code === null` is a failure with a message that names the signal, for example `agent backend killed by SIGKILL`.
+- Exception: the watchdog's completion-grace path, which kills a backend that already produced its final result, keeps reporting success.
+
+### Acceptance
+
+- Unit tests through the `_backendSpawn` seam: for each of the three backends, `close(null, "SIGKILL")` after partial output gives a non-zero status and an error naming the signal.
+- Test that the completion-grace kill still returns status 0.
+- `npm test` and `bash e2e/test_all.sh` pass. CHANGELOG entry under Unreleased.
