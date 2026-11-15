@@ -19,28 +19,6 @@ Process rules:
 7. Acceptance criteria are non-negotiable. A task is not done until every
    acceptance bullet is verified by a test that fails when the contract is violated.
 
-## Write inbox events through the audit-chain emitter #dev-ready
-
-Source: code audit 2026-11-15. Reproduced with `examples/agent_inbox.jh`.
-
-### Current behavior
-
-`RuntimeEventEmitter.serializeAndAppend` (`src/runtime/kernel/runtime-event-emitter.ts`) adds `prev_hash` to every journal line and advances the hash chain. The runtime bypasses it for `INBOX_ENQUEUE`, `INBOX_DISPATCH_START` and `INBOX_DISPATCH_COMPLETE`: `node-workflow-runtime.ts` calls `appendRunSummaryLine` directly (around lines 1161, 1531, 1552). Those lines have no `prev_hash`.
-
-Any run that uses `send` exits 0 and then fails `verifyRunJournal` with `expected prev_hash …, got undefined`. Per `docs/architecture.md`, `jaiph serve` then lists the run as failed/tampered, `GET /runs/{id}/events` returns `409 E_TAMPERED`, and OTLP/Sentry export is skipped.
-
-### Required behavior
-
-- The emitter is the only writer of `run_summary.jsonl`. Add an emitter method for inbox events that goes through `serializeAndAppend`.
-- `appendRunSummaryLine` is no longer exported from `src/runtime/kernel/emit.ts` (or is only reachable from the emitter).
-- Inbox line content is unchanged apart from the added `prev_hash`.
-
-### Acceptance
-
-- `src/runtime/kernel/node-workflow-runtime.audit-chain.test.ts`: a workflow with a channel, `send` and a route, run with a chain key; `verifyRunSummaryChain(...).ok` is true.
-- A grep-style test: no file except the emitter calls `appendRunSummaryLine`.
-- `integration/run-summary-jsonl.test.ts` and the inbox e2e scripts stay green. `npm test` and `bash e2e/test_all.sh` pass. CHANGELOG entry under Unreleased.
-
 ## Validate lockfile entries and lib names in jaiph install #dev-ready
 
 Source: code audit 2026-11-15. Reproduced.

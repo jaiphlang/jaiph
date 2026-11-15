@@ -7,7 +7,7 @@ import { buildRuntimeGraph } from "./graph";
 import { NodeWorkflowRuntime } from "./node-workflow-runtime";
 import { loadModuleGraph } from "../../transpiler";
 import { buildScriptsFromGraph } from "../../transpiler";
-import { CHAIN_KEY_ENV, generateChainKey, verifyRunJournal, writeChainKey } from "./emit";
+import { CHAIN_KEY_ENV, generateChainKey, verifyRunJournal, verifyRunSummaryChain, writeChainKey } from "./emit";
 import { scrubPromptEnv } from "./env-allowlist";
 
 // Security regression for finding H-3: the run audit journal is written by the
@@ -44,10 +44,11 @@ async function runWorkflow(
   prefix: string,
   symbol: string,
   key: string,
+  source: string = WF,
 ): Promise<{ root: string; runDir: string }> {
   const root = mkdtempSync(join(tmpdir(), prefix));
   const jh = join(root, "tools.jh");
-  writeFileSync(jh, WF);
+  writeFileSync(jh, source);
   const moduleGraph = loadModuleGraph(jh);
   const { scriptsDir } = buildScriptsFromGraph(moduleGraph, root);
   const graph = buildRuntimeGraph(moduleGraph);
@@ -106,6 +107,53 @@ test("audit chain: a script truncating the journal is detected at the read bound
     const res = verifyRunJournal(runDir);
     assert.equal(res.verified, true, "a key was persisted, so the boundary verifies");
     assert.equal(res.ok, false, "the script's truncation of the journal is detected");
+    rmSync(root, { recursive: true, force: true });
+  } finally {
+    for (const [k, v] of saved) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  }
+});
+
+// Inbox lifecycle events (INBOX_ENQUEUE / INBOX_DISPATCH_*) are written through
+// the emitter's audit chain, not around it. A run that uses `send` over a routed
+// channel must still produce a journal whose keyed hash chain verifies — before
+// the fix those lines were appended without a `prev_hash` and broke the chain.
+const INBOX_WF = [
+  "channel findings -> analyst",
+  "def analyst(msg) {",
+  '  log "analyst got ${msg}"',
+  "}",
+  "def scanner() {",
+  '  send "issue found" -> findings',
+  "}",
+  "export def main() {",
+  "  scanner()",
+  "}",
+  "",
+].join("\n");
+
+test("audit chain: a routed send keeps the journal chain intact", async () => {
+  const saved = TOUCHED.map((k) => [k, process.env[k]] as const);
+  const key = generateChainKey();
+  try {
+    const { root, runDir } = await runWorkflow("jaiph-audit-inbox-", "main", key, INBOX_WF);
+    const summary = join(runDir, "run_summary.jsonl");
+    const lines = readFileSync(summary, "utf8").split("\n").filter((l) => l.trim().length > 0);
+    const inbox = lines
+      .map((l) => JSON.parse(l) as Record<string, unknown>)
+      .filter((e) => String(e.type).startsWith("INBOX_"));
+    // The send is routed, so all three inbox lifecycle events must be present...
+    const inboxTypes = inbox.map((e) => e.type);
+    assert.deepEqual(inboxTypes, ["INBOX_ENQUEUE", "INBOX_DISPATCH_START", "INBOX_DISPATCH_COMPLETE"]);
+    // ...each carrying a chain link (the bug was these lines having no prev_hash)...
+    for (const e of inbox) {
+      assert.equal(typeof e.prev_hash, "string", `${String(e.type)} must carry prev_hash`);
+    }
+    // ...and the whole keyed chain verifies, ending at the RUN_END terminal marker.
+    const res = verifyRunSummaryChain(summary, key, { requireTerminal: true });
+    assert.equal(res.ok, true, res.error);
     rmSync(root, { recursive: true, force: true });
   } finally {
     for (const [k, v] of saved) {

@@ -5,9 +5,9 @@
  * workflow/step/prompt/log events, plus the monotonic step + prompt sequence
  * counters used by both the orchestrator and the prompt pipeline.
  */
-import { writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { appendRunSummaryLine, chainHmac, CHAIN_GENESIS, CHAIN_KEY_ENV } from "./emit";
+import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { chainHmac, CHAIN_GENESIS, CHAIN_KEY_ENV } from "./emit";
 import { redactCredentials } from "./redact";
 import { MAX_EMBED, nowIso, sanitizeName, stripOuterQuotes } from "./runtime-arg-parser";
 
@@ -93,6 +93,17 @@ export class RuntimeEventEmitter {
       run_id: this.runId,
       event_version: 1,
     });
+  }
+
+  /**
+   * Durable-only inbox lifecycle events (`INBOX_ENQUEUE`,
+   * `INBOX_DISPATCH_START`, `INBOX_DISPATCH_COMPLETE`) written through the
+   * audit hash chain. The caller owns the line content; the emitter adds
+   * `prev_hash` and advances the chain, so these lines verify like every other
+   * journal line. There is no live `__JAIPH_EVENT__` for inbox events.
+   */
+  emitInbox(payload: Record<string, unknown>): void {
+    this.serializeAndAppend(payload);
   }
 
   emitStep(payload: Record<string, unknown>): void {
@@ -252,4 +263,17 @@ export class RuntimeEventEmitter {
     };
     this.serializeAndAppend(payload);
   }
+}
+
+/**
+ * Append a single journal line to `run_summary.jsonl` (path from
+ * `JAIPH_RUN_SUMMARY_FILE`). The emitter is the only writer of the journal, so
+ * this stays module-local: every line goes through `serializeAndAppend`, which
+ * adds the `prev_hash` link, so nothing can append an unchained line.
+ */
+function appendRunSummaryLine(line: string): void {
+  const file = process.env.JAIPH_RUN_SUMMARY_FILE;
+  if (!file) return;
+  mkdirSync(dirname(file), { recursive: true });
+  appendFileSync(file, `${line}\n`, { flag: "a" });
 }
