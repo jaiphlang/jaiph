@@ -25,7 +25,7 @@ import {
   resolvePromptStepName,
   type PromptSource,
 } from "./prompt";
-import { appendRunSummaryLine, CHAIN_KEY_ENV } from "./emit";
+import { CHAIN_KEY_ENV } from "./emit";
 import { buildStepDisplayParamPairs } from "./format-params";
 import { resolveScriptRef, resolveDefRef, resolvePromptRef, type RuntimeGraph } from "./graph";
 import type { DefMetadata } from "../../types";
@@ -1158,17 +1158,15 @@ export class NodeWorkflowRuntime {
           mkdirSync(inboxFileDir, { recursive: true });
           writeFileSync(join(inboxFileDir, `${seqPadded}-${channelKey}.txt`), payload, "utf8");
         }
-        appendRunSummaryLine(
-          JSON.stringify({
-            type: "INBOX_ENQUEUE",
-            ts: nowIso(),
-            run_id: this.runId,
-            channel: msg.channel,
-            sender: msg.sender,
-            inbox_seq: msg.seqPadded,
-            event_version: 1,
-          }),
-        );
+        this.emitter.emitInbox({
+          type: "INBOX_ENQUEUE",
+          ts: nowIso(),
+          run_id: this.runId,
+          channel: msg.channel,
+          sender: msg.sender,
+          inbox_seq: msg.seqPadded,
+          event_version: 1,
+        });
         continue;
       }
       if (step.type === "const") {
@@ -1528,18 +1526,16 @@ export class NodeWorkflowRuntime {
       const targets = ctx.routes.get(msg.channel) ?? [];
       if (targets.length === 0) continue;
       for (const target of targets) {
-        appendRunSummaryLine(
-          JSON.stringify({
-            type: "INBOX_DISPATCH_START",
-            ts: nowIso(),
-            run_id: this.runId,
-            channel: msg.channel,
-            sender: msg.sender,
-            inbox_seq: msg.seqPadded,
-            target,
-            event_version: 1,
-          }),
-        );
+        this.emitter.emitInbox({
+          type: "INBOX_DISPATCH_START",
+          ts: nowIso(),
+          run_id: this.runId,
+          channel: msg.channel,
+          sender: msg.sender,
+          inbox_seq: msg.seqPadded,
+          target,
+          event_version: 1,
+        });
         const t0 = Date.now();
         const resolved = resolveDefRef(this.graph, scope.filePath, { value: target, loc: { line: 1, col: 1 } });
         const n = resolved?.def.params.length ?? 0;
@@ -1549,20 +1545,18 @@ export class NodeWorkflowRuntime {
           target,
           inboxArgs,
         );
-        appendRunSummaryLine(
-          JSON.stringify({
-            type: "INBOX_DISPATCH_COMPLETE",
-            ts: nowIso(),
-            run_id: this.runId,
-            channel: msg.channel,
-            sender: msg.sender,
-            inbox_seq: msg.seqPadded,
-            target,
-            status: dispatch.status,
-            elapsed_ms: Date.now() - t0,
-            event_version: 1,
-          }),
-        );
+        this.emitter.emitInbox({
+          type: "INBOX_DISPATCH_COMPLETE",
+          ts: nowIso(),
+          run_id: this.runId,
+          channel: msg.channel,
+          sender: msg.sender,
+          inbox_seq: msg.seqPadded,
+          target,
+          status: dispatch.status,
+          elapsed_ms: Date.now() - t0,
+          event_version: 1,
+        });
         if (dispatch.status !== 0) return dispatch;
       }
     }

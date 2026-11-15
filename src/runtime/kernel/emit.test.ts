@@ -1,11 +1,10 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, relative, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { describe, it } from "node:test";
 import {
-  appendRunSummaryLine,
   CHAIN_GENESIS,
   CHAIN_KEY_ENV,
   chainKeyPath,
@@ -26,18 +25,31 @@ describe("emit kernel", () => {
     assert.ok(!s.includes("."));
   });
 
-  it("appendRunSummaryLine writes under JAIPH_RUN_SUMMARY_FILE", () => {
-    const dir = mkdtempSync(join(tmpdir(), "jaiph-emit-"));
-    try {
-      const summary = join(dir, "run_summary.jsonl");
-      process.env.JAIPH_RUN_SUMMARY_FILE = summary;
-      appendRunSummaryLine('{"type":"X","event_version":1}');
-      const text = readFileSync(summary, "utf8");
-      assert.equal(text.trim(), '{"type":"X","event_version":1}');
-    } finally {
-      delete process.env.JAIPH_RUN_SUMMARY_FILE;
-      rmSync(dir, { recursive: true, force: true });
-    }
+  // The RuntimeEventEmitter is the only writer of run_summary.jsonl: every line
+  // must flow through serializeAndAppend so it carries a prev_hash chain link.
+  // Inbox events used to bypass it via appendRunSummaryLine, leaving unchained
+  // lines that failed verifyRunJournal. Guard that the low-level writer is only
+  // *called* from the emitter module (the needle is split so this test, which
+  // names the function, is not itself a match).
+  it("appendRunSummaryLine is called only from the emitter", () => {
+    const repoRoot = resolve(__dirname, "../../../..");
+    const srcDir = join(repoRoot, "src");
+    const needle = "appendRunSummaryLine" + "(";
+    const callers: string[] = [];
+    const walk = (dir: string): void => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const abs = join(dir, entry.name);
+        if (entry.isDirectory()) {
+          walk(abs);
+        } else if (entry.name.endsWith(".ts")) {
+          if (readFileSync(abs, "utf8").includes(needle)) {
+            callers.push(relative(srcDir, abs));
+          }
+        }
+      }
+    };
+    walk(srcDir);
+    assert.deepEqual(callers, ["runtime/kernel/runtime-event-emitter.ts"]);
   });
 });
 
