@@ -543,3 +543,27 @@ With `JAIPH_STEP_IDLE_KILL_SEC=1`, `script hang = 'sleep 47; echo never'` fails 
 - Same for a fake agent backend under the prompt watchdog.
 - `integration/signal-lifecycle.test.ts` still passes; add a case where SIGINT to `jaiph run` kills a grandchild of a script step.
 - `npm test` and `bash e2e/test_all.sh` pass. CHANGELOG entry under Unreleased.
+
+## Unblock a stdin pipeline when the downstream stage stops reading
+
+Completed: 2026-11-16
+
+Source: code audit 2026-11-15. Reproduced.
+
+### Current behavior
+
+In `node-workflow-runtime.ts` the script spawn tees upstream stdout into a `handoff` PassThrough and pipes it into the next stage's stdin (around lines 2343–2355 and 2411–2418). The upstream stdout is paused when `handoff` is full and resumed only on `drain`. If the consumer exits early or fails to spawn, nothing reads `handoff` and the producer blocks forever.
+
+`const first = stdin gen() -> sink()` with `sink = 'head -c 10'` and a 5 MB producer hangs until `JAIPH_RUN_TIMEOUT`, which is unset by default, so effectively until the 3600 s idle kill. A sink whose shebang interpreter does not exist hangs the same way.
+
+### Required behavior
+
+- When the downstream stdin closes, errors (EPIPE) or the downstream fails to spawn, the upstream stops being back-pressured: either it keeps draining to its `.out` capture only, or its stdout is destroyed so it receives SIGPIPE. Choose one and document it in `docs/language.md` next to the `stdin` pipeline section.
+- `handoff` is ended on idle-kill.
+- The step result of each stage is settled exactly once.
+
+### Acceptance
+
+- Test: producer larger than 64 KB with a consumer that reads 10 bytes and exits; the pipeline settles within 5 seconds.
+- Test: consumer with a missing interpreter; the pipeline fails within 5 seconds with the spawn error.
+- Existing pipeline tests and e2e pass. CHANGELOG entry under Unreleased.
