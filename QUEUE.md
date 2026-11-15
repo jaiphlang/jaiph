@@ -19,30 +19,6 @@ Process rules:
 7. Acceptance criteria are non-negotiable. A task is not done until every
    acceptance bullet is verified by a test that fails when the contract is violated.
 
-## Kill the whole process tree on step idle-kill and prompt watchdog #dev-ready
-
-Source: code audit 2026-11-15. Reproduced.
-
-### Current behavior
-
-`killProcessTree` in `src/runtime/kernel/portability.ts` calls `process.kill(-pid, signal)`, which works only when the child is a process-group leader. Script children (`node-workflow-runtime.ts`, the script spawn) and agent backends (`prompt-backends.ts`) are spawned without `detached: true`, so the call throws ESRCH and falls back to killing the single pid.
-
-With `JAIPH_STEP_IDLE_KILL_SEC=1`, `script hang = 'sleep 47; echo never'` fails as expected, but `sleep 47` survives with ppid 1 after the run exits. A timed-out agent's tool subprocesses and MCP servers keep running and can keep changing the workspace. The watchdog comment "Terminate the backend and any descendants" is false on POSIX.
-
-### Required behavior
-
-- On POSIX, script and backend children are spawned in their own process group.
-- The leader tracks those group ids. On SIGINT/SIGTERM and on run timeout it signals every live child group, so Ctrl-C behaviour stays the same (today it works only because children share the leader's group).
-- Idle-kill and the prompt watchdog kill the child's whole group.
-- Windows behaviour is unchanged.
-
-### Acceptance
-
-- Real-process test: a script backgrounds a grandchild that writes its pid to a file, then hangs; after idle-kill the grandchild pid is dead.
-- Same for a fake agent backend under the prompt watchdog.
-- `integration/signal-lifecycle.test.ts` still passes; add a case where SIGINT to `jaiph run` kills a grandchild of a script step.
-- `npm test` and `bash e2e/test_all.sh` pass. CHANGELOG entry under Unreleased.
-
 ## Unblock a stdin pipeline when the downstream stage stops reading #dev-ready
 
 Source: code audit 2026-11-15. Reproduced.
