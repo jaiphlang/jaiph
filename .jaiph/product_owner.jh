@@ -1,7 +1,9 @@
 #!/usr/bin/env jaiph
 
 #
-# Product owner — sole runtime writer of the task queue.
+# Product owner — the serve / MCP interface to the task queue. The engineer,
+# architect-review and security-review workflows also write it, all through
+# the queue library (.jaiph/libs/jaiphlang/queue.py).
 # Serve (HTTP + MCP on one port):
 #   ./start-product-owner.sh
 #   or: jaiph serve .jaiph/product_owner.jh
@@ -31,6 +33,7 @@ script first_line_task = '''
   line="$(printf '%s\n' "$line" | sed 's/ *#[A-Za-z0-9_-]*//g')"
   printf '%s\n' "$line"
 '''
+
 script git_evidence = '''
   git log -5 --oneline 2>/dev/null || true
   echo "---"
@@ -40,6 +43,7 @@ script git_evidence = '''
   echo "---"
   git diff --stat HEAD~1 2>/dev/null || true
 '''
+
 # A task body sits under its `## Title` heading, and every `##` heading in the
 # queue is a task. Demote `#` / `##` headings in a body to `###` so a body's own
 # sections never become separate tasks. Lines inside ``` code fences are left
@@ -67,6 +71,7 @@ script format_task_file = '''
     printf '%s\n' "$body"
   } > "$dest"
 '''
+
 # Claim one available task. Prefers the first #dev-ready that is not
 # #in-progress; may claim a later one. HTTP 200 either way — empty queue is fail.
 export def pick_task() {

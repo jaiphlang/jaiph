@@ -14,8 +14,11 @@ Process rules:
 1. `pick_task` prefers the first `#dev-ready` task that is not `#in-progress`.
    The product owner may claim a later available task instead.
 2. The first `##` section is the preferred next task in this view.
-3. `#dev-ready` means ready to implement. `#in-progress` means claimed by `pick_task`.
-4. Runtime mutations go through the product-owner defs only.
+3. `#dev-ready` means ready to implement. `#in-progress` means claimed
+   by `pick_task` or by the engineer workflow.
+4. Queue changes go through `.jaiph/libs/jaiphlang/queue.py` only: the
+   product-owner defs, or the engineer, architect-review and security-review
+   workflows. Never by editing this file.
 5. Every task must be standalone: no hidden assumptions, no "read prior task".
 6. Hard rewrite semantics: breaking changes are allowed unless a task says otherwise.
 7. Acceptance criteria are non-negotiable. A task is not done until every

@@ -1,0 +1,34 @@
+#!/usr/bin/env jaiph
+
+import "./simplifier.jh" as simp
+
+# Test calls take literal arguments, so each case passes one path.
+test "guard rejects an integration test" {
+  const out = simp.assert_no_test_paths("integration/x.test.ts") allow_failure
+  expect_contain out "must not modify tests or fixtures: integration/x.test.ts"
+}
+
+test "guard rejects a colocated unit test" {
+  const out = simp.assert_no_test_paths("src/a/b.test.ts") allow_failure
+  expect_contain out "must not modify tests or fixtures: src/a/b.test.ts"
+}
+
+test "guard rejects a fixture" {
+  const out = simp.assert_no_test_paths("test-fixtures/x.txt") allow_failure
+  expect_contain out "must not modify tests or fixtures: test-fixtures/x.txt"
+}
+
+test "guard rejects an e2e script" {
+  const out = simp.assert_no_test_paths("e2e/tests/1.sh") allow_failure
+  expect_contain out "must not modify tests or fixtures: e2e/tests/1.sh"
+}
+
+test "guard rejects test infra" {
+  const out = simp.assert_no_test_paths("test-infra/runner.ts") allow_failure
+  expect_contain out "must not modify tests or fixtures: test-infra/runner.ts"
+}
+
+test "guard accepts a production path" {
+  const out = simp.assert_no_test_paths("src/a.ts")
+  expect_not_contain out "must not modify"
+}

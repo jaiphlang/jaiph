@@ -1,0 +1,111 @@
+#!/usr/bin/env jaiph
+
+import "./engineer.jh" as eng
+import "jaiphlang/queue" as queue
+import "jaiphlang/claude" as claude
+import "jaiphlang/git" as git
+import "./docs_parity.jh" as docs
+import "./ensure_ci_passes.jh" as ci
+
+# next_available is the queue op that skips #in-progress tasks (covered by
+# queue_test.py). The engineer must use it, never the unfiltered first task.
+test "implement_from_queue claims the next available task and archives it after CI" {
+  mock def claude.ensure_usage() {
+    return ""
+  }
+  mock def queue.get_first_task() {
+    fail "engineer must not read the unfiltered first task"
+  }
+  mock def queue.next_available() {
+    return "## Second #dev-ready"
+  }
+  mock def queue.mark_task_in_progress(header) {
+    log "claimed: ${header}"
+  }
+  mock def queue.remove_completed_task(header) {
+    fail "engineer must archive to DONE, not remove"
+  }
+  mock def queue.archive_to_done(header, notes) {
+    log "archived: ${header}"
+  }
+  mock def queue.unmark_task(header, tag) {
+    fail "a completed task must not be released"
+  }
+  mock def ci.ensure_ci_passes() {
+    log "ci: passed"
+  }
+  mock def docs.update_from_task(task) {
+    return ""
+  }
+  mock def git.commit(task) {
+    log "committed"
+  }
+  mock prompt {
+    _ => "{\"role\":\"surgical\"}"
+  }
+  const out = eng.implement_from_queue()
+  expect_contain out "claimed: Second"
+  expect_contain out "ci: passed"
+  expect_contain out "archived: Second"
+  expect_contain out "committed"
+}
+
+test "implement_from_queue leaves the task in the queue when CI fails" {
+  mock def claude.ensure_usage() {
+    return ""
+  }
+  mock def queue.next_available() {
+    return "## Second #dev-ready"
+  }
+  mock def queue.mark_task_in_progress(header) {
+    return ""
+  }
+  mock def queue.remove_completed_task(header) {
+    fail "REMOVED before CI passed"
+  }
+  mock def queue.archive_to_done(header, notes) {
+    fail "ARCHIVED before CI passed"
+  }
+  mock def queue.unmark_task(header, tag) {
+    return ""
+  }
+  mock def ci.ensure_ci_passes() {
+    fail "ci is red"
+  }
+  mock def git.commit(task) {
+    fail "COMMITTED before CI passed"
+  }
+  mock prompt {
+    _ => "{\"role\":\"surgical\"}"
+  }
+  const out = eng.implement_from_queue() allow_failure
+  expect_contain out "left in the queue: Second"
+  expect_contain out "ci is red"
+  expect_not_contain out "REMOVED"
+  expect_not_contain out "ARCHIVED"
+  expect_not_contain out "COMMITTED"
+}
+
+# A failing unmark mock surfaces in the error, which proves the claim is released.
+test "implement_from_queue releases the in-progress claim when CI fails" {
+  mock def claude.ensure_usage() {
+    return ""
+  }
+  mock def queue.next_available() {
+    return "## Second #dev-ready"
+  }
+  mock def queue.mark_task_in_progress(header) {
+    return ""
+  }
+  mock def queue.unmark_task(header, tag) {
+    fail "released: ${header} ${tag}"
+  }
+  mock def ci.ensure_ci_passes() {
+    fail "ci is red"
+  }
+  mock prompt {
+    _ => "{\"role\":\"surgical\"}"
+  }
+  const out = eng.implement_from_queue() allow_failure
+  expect_contain out "released: Second in-progress"
+}

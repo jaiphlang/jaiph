@@ -33,7 +33,7 @@ config {
 script new_security_review_report_path = 'echo ".jaiph/tmp/security_review_$(date +%Y-%m-%d_%H-%M-%S).md"'
 
 script write_security_review_pointer = '''
-printf '%s\n' "$1" > .jaiph/tmp/security_review_active.txt
+  printf '%s\n' "$1" > .jaiph/tmp/security_review_active.txt
 '''
 
 script security_review_tasks_path = 'echo ".jaiph/tmp/security_review_queue_tasks.md"'
@@ -84,6 +84,7 @@ script git_diff_uncommitted = '''
     done
   }
 '''
+
 script git_diff_range = 'git diff "$1"'
 
 script worktree_fingerprint = 'git status --porcelain | sort | cksum'

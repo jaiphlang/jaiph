@@ -10,16 +10,16 @@ config {
 }
 
 script jaiph_review_body_file = '''
-printf '%s\n' "$JAIPH_WORKSPACE/.jaiph/tmp/architect_review_body.txt"
+  printf '%s\n' "$JAIPH_WORKSPACE/.jaiph/tmp/architect_review_body.txt"
 '''
 
-# Packed as: first line = verdict, rest = updated_description (must stay top-level:
-# const … = prompt """…""" is not supported inside run … catch — see parseRecoverStatement).
+# Returns verdict and updated_description as typed fields.
 def architect_agent_review(task) {
   const result = prompt """
     You are a software architect reviewing a task from the Jaiph
-    improvement queue. Jaiph is a TypeScript compiler and runtime
-    for a DSL that transpiles to Bash.
+    improvement queue. Jaiph is a workflow language with a TypeScript
+    compiler front end and a JavaScript kernel that interprets the
+    workflow AST in process (see docs/architecture.md).
 
     Determine whether the task below is ready for development.
     Evaluate against these criteria:
