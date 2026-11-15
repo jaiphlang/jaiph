@@ -234,6 +234,8 @@ jaiph install [--force]                  # restore from lockfile
 | Bare registry name matching `^[A-Za-z0-9_-]+(@[A-Za-z0-9._+/-]+)?$` (no `/`, no `:`) | Looked up in the registry index. Examples: `jaiphlang`, `mylib@v1.2`. |
 | Anything else | Parsed as a git URL with optional trailing `@<version>`. Examples: `https://github.com/you/queue-lib.git`, `git@github.com:org/repo.git@main`. |
 
+The resolved library name — a registry name, a git URL's last path segment (trailing slashes stripped, a trailing `.git` removed), or a lockfile entry's `name` — must match `/^[A-Za-z0-9_-]+$/`; a name that is empty, `.`, `..`, or contains `/` is rejected before any directory is created or removed, so it can never resolve outside `.jaiph/libs/`. A url or ref that starts with `-` is rejected for the same reason, and the `git clone` argv places `--` before the url.
+
 ### Scheme allowlist
 
 Remote registry and library URLs must use an allowed scheme. A value with an explicit URL scheme is accepted only for `https://`, `ssh://`, or `file://`; scheme-less paths and scp-style `git@host:path` remotes (which are SSH) are treated as local/SSH and accepted. `http://`, `git://`, and any other scheme are rejected before any fetch or clone with `... "<url>" uses disallowed scheme "<scheme>://" — only https:// and ssh:// are permitted for remote sources`.
@@ -245,12 +247,12 @@ Each successful clone runs these checks before the lib counts as installed:
 - **`.jh` module check** — at least one `*.jh` file must exist under the clone (recursive, `.git` skipped). Failure removes the directory and aborts with `lib "<name>" contains no .jh modules — not a jaiph library?`. No lock entry written.
 - **Commit capture** — when the clone has a `.git` directory, `git rev-parse HEAD` is recorded as the 40-char `commit` on the lock entry. A clone with no usable git checkout leaves `commit` unset.
 - **`.git` strip** — `<libDir>/.git` is removed recursively, right after the commit is captured and before the two checks below.
-- **Pinned-commit check** — when the registry entry (or lock entry) carries a `commit`, the captured HEAD must equal it, or the directory is removed and the install fails with the locked vs cloned SHAs and the remedy. This makes the *first* install from the registry authenticated, not just restore.
+- **Pinned-commit check** — when the registry entry (or lock entry) carries a `commit`, the captured HEAD must equal it, or the directory is removed and the install fails with the locked vs cloned SHAs and the remedy. If the clone has a `commit` pin but no readable HEAD, the install also fails (the pin cannot be verified). This makes the *first* install from the registry authenticated, not just restore.
 - **Detached signature check** — when the registry entry carries a `signature` (a detached minisign signature over the ASCII commit SHA), it is verified against the embedded `jaiph.pub` project key only, never a key supplied by the entry itself (a self-supplied key attests nothing an attacker controlling the entry could not forge). An invalid or unverifiable signature removes the directory and fails the install closed with `lib "<name>" signature verification failed for commit <sha>`.
 
 ### Restore-from-lockfile mode
 
-`jaiph install` with no positional args reads `.jaiph/libs.lock` and clones each entry. The registry is never contacted. Every entry must carry a `commit`; the cloned HEAD must match it, and on mismatch the directory is removed and the run fails with the locked vs cloned SHAs and the remedy. An entry without a `commit` (an older, unpinned lockfile) is refused before any clone — the run fails and nothing is cloned; re-run `jaiph install <name>` to re-pin it. When an entry also carries a `signature`, it is re-verified against the cloned commit with the same embedded project key as a named install, failing closed on mismatch.
+`jaiph install` with no positional args reads `.jaiph/libs.lock` and clones each entry. A malformed lockfile (not an object, `libs` not an array, or an entry whose `name`/`url` is not a non-empty string or whose `version`/`commit`/`signature` is not a string) is an error naming the entry, and nothing is cloned or removed. Each entry's `url` must satisfy the [scheme allowlist](#scheme-allowlist). The registry is never contacted. Every entry must carry a `commit`; the cloned HEAD must match it, and on mismatch the directory is removed and the run fails with the locked vs cloned SHAs and the remedy. An entry without a `commit` (an older, unpinned lockfile) is refused before any clone — the run fails and nothing is cloned; re-run `jaiph install <name>` to re-pin it. When an entry also carries a `signature`, it is re-verified against the cloned commit with the same embedded project key as a named install, failing closed on mismatch.
 
 ### Parallel clones
 
@@ -291,7 +293,7 @@ Missing libraries are cloned with bounded concurrency (default **4 in flight**).
 }
 ```
 
-The lock entry stores the resolved clone URL so restore works without the registry. `commit` is written automatically after each successful clone. When the install spec carried a `signature` (from a signed registry entry), it is persisted on the entry too, so restore can re-verify it.
+The lock entry stores the resolved clone URL so restore works without the registry. `commit` is written automatically after each successful clone. When the install spec carried a `signature` (from a signed registry entry), it is persisted on the entry too, so restore can re-verify it. A library that is skipped because its directory already exists keeps its existing lock entry unchanged. Only `--force`, which re-clones the library, rewrites the entry with the new URL, ref, and commit, so `jaiph install <name>@v2` on an already-present lib does not adopt `v2` in the lockfile until you re-clone it with `--force`.
 
 ## `jaiph use`
 

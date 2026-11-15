@@ -4,7 +4,8 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import { join } from "node:path";
 import { execSync } from "node:child_process";
 import { tmpdir } from "node:os";
-import { parseUrlAndVersion, runInstall, type CloneRunner, type CloneOutcome, type InstallSpec } from "./install";
+import { dirname } from "node:path";
+import { buildGitCloneArgs, parseUrlAndVersion, runInstall, type CloneRunner, type CloneOutcome, type InstallSpec } from "./install";
 import { makeMinisignFixture } from "./minisign-fixture";
 
 /**
@@ -282,10 +283,11 @@ test("install: unknown ref failure exits non-zero and does not lock the failed l
 test("install: bare registry name installs into .jaiph/libs/<name>/ regardless of url last segment", async () => {
   const dir = makeTempProject();
   try {
-    // Registry entries must pin a commit now; the stub cloner materializes no .git
-    // so post-clone commit capture is undefined and the pin is not cross-checked.
+    // The stub cloner materializes no .git, so post-clone commit capture is
+    // undefined; a pinned entry would fail (pin unverifiable), so this name-
+    // resolution case uses an unpinned entry with --allow-unpinned.
     const registryPath = writeRawRegistryFile(dir, {
-      mylib: { url: "https://example.com/some-other-repo-name.git", description: "demo", commit: "a".repeat(40) },
+      mylib: { url: "https://example.com/some-other-repo-name.git", description: "demo" },
     });
 
     const seen: InstallSpec[] = [];
@@ -297,7 +299,7 @@ test("install: bare registry name installs into .jaiph/libs/<name>/ regardless o
     };
 
     const code = await withRegistry(registryPath, () =>
-      runInstall(["mylib"], { cwd: dir, cloneRunner }),
+      runInstall(["mylib", "--allow-unpinned"], { cwd: dir, cloneRunner }),
     );
 
     assert.equal(code, 0);
@@ -321,8 +323,10 @@ test("install: bare registry name installs into .jaiph/libs/<name>/ regardless o
 test("install: name@version forwards version to clone runner and records it in lock", async () => {
   const dir = makeTempProject();
   try {
+    // Unpinned entry (+ --allow-unpinned) so the stub cloner's missing .git does
+    // not trip the pin-unverifiable check; this case only asserts version forwarding.
     const registryPath = writeRawRegistryFile(dir, {
-      mylib: { url: "https://example.com/mylib.git", description: "demo", commit: "a".repeat(40) },
+      mylib: { url: "https://example.com/mylib.git", description: "demo" },
     });
 
     let observed: InstallSpec | undefined;
@@ -334,7 +338,7 @@ test("install: name@version forwards version to clone runner and records it in l
     };
 
     const code = await withRegistry(registryPath, () =>
-      runInstall(["mylib@v1.2"], { cwd: dir, cloneRunner }),
+      runInstall(["mylib@v1.2", "--allow-unpinned"], { cwd: dir, cloneRunner }),
     );
 
     assert.equal(code, 0);
@@ -407,40 +411,31 @@ test("install: invalid registry JSON fails with message naming source and cause"
 test("install: restore-from-lock never reads the registry", async () => {
   const dir = makeTempProject();
   try {
+    // Real fixture repos so the pinned commits have a readable HEAD (the default
+    // clone runner, which exercises the real restore path end to end).
+    const alpha = makeFixtureRepo(dir, "alpha-src");
+    const beta = makeFixtureRepo(dir, "beta-src");
     const lockPath = join(dir, ".jaiph", "libs.lock");
     mkdirSync(join(dir, ".jaiph"), { recursive: true });
     writeFileSync(
       lockPath,
       JSON.stringify({
         libs: [
-          { name: "alpha", url: "https://example.com/alpha.git", commit: "a".repeat(40) },
-          { name: "beta", url: "https://example.com/beta.git", version: "v2", commit: "b".repeat(40) },
+          { name: "alpha", url: alpha, commit: gitHead(alpha) },
+          { name: "beta", url: beta, commit: gitHead(beta) },
         ],
       }) + "\n",
       "utf8",
     );
 
-    const seen: InstallSpec[] = [];
-    const cloneRunner: CloneRunner = async (spec) => {
-      seen.push(spec);
-      mkdirSync(spec.libDir, { recursive: true });
-      writeFileSync(join(spec.libDir, "lib.jh"), "", "utf8");
-      return { spec, ok: true };
-    };
-
     // Point JAIPH_REGISTRY at a path that does not exist. If restore touched
     // the registry, the load would fail. Restore must succeed regardless.
     const bogusRegistry = join(dir, "nope-no-registry-here.json");
-    const code = await withRegistry(bogusRegistry, () =>
-      runInstall([], { cwd: dir, cloneRunner }),
-    );
+    const code = await withRegistry(bogusRegistry, () => runInstall([], { cwd: dir }));
 
     assert.equal(code, 0, "restore-from-lock must succeed without contacting the registry");
-    assert.equal(seen.length, 2);
-    assert.deepEqual(
-      seen.map((s) => s.name).sort(),
-      ["alpha", "beta"],
-    );
+    assert.ok(existsSync(join(dir, ".jaiph", "libs", "alpha", "main.jh")), "alpha must be restored");
+    assert.ok(existsSync(join(dir, ".jaiph", "libs", "beta", "main.jh")), "beta must be restored");
   } finally {
     cleanup(dir);
   }
@@ -870,6 +865,219 @@ test("install: entry-supplied publicKey cannot authenticate its own signature (v
     assert.ok(!existsSync(join(dir, ".jaiph", "libs", "signed")), "lib dir must be removed on signature failure");
     const lock = JSON.parse(readFileSync(join(dir, ".jaiph", "libs.lock"), "utf8")) as { libs: unknown[] };
     assert.equal(lock.libs.length, 0, "rejected forgery must not produce a lock entry");
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test("install: malicious lockfile names are rejected without touching paths outside .jaiph/libs/<name>", async () => {
+  for (const badName of ["../x", "a/b", "", ".", ".."]) {
+    const dir = makeTempProject();
+    // Sentinel directory beside the workspace: a `../…` escape would land here.
+    const sentinel = join(dirname(dir), `sentinel-${Math.random().toString(36).slice(2)}`);
+    mkdirSync(sentinel, { recursive: true });
+    writeFileSync(join(sentinel, "marker"), "keep\n", "utf8");
+    try {
+      mkdirSync(join(dir, ".jaiph"), { recursive: true });
+      writeFileSync(
+        join(dir, ".jaiph", "libs.lock"),
+        JSON.stringify({ libs: [{ name: badName, url: "https://example.com/x.git", commit: "a".repeat(40) }] }),
+        "utf8",
+      );
+
+      let called = false;
+      const cloneRunner: CloneRunner = async (spec) => {
+        called = true;
+        return { spec, ok: true };
+      };
+
+      // `--force` would normally rmSync the target dir before cloning; a bad name
+      // must be rejected before that happens.
+      const { result: code } = await captureStderr(() =>
+        runInstall(["--force"], { cwd: dir, cloneRunner }),
+      );
+
+      assert.notEqual(code, 0, `lock name ${JSON.stringify(badName)} must be rejected`);
+      assert.equal(called, false, `clone must not run for lock name ${JSON.stringify(badName)}`);
+      assert.ok(existsSync(join(sentinel, "marker")), "sentinel beside workspace must be untouched");
+      assert.ok(existsSync(join(dir, ".jaiph", "libs")), ".jaiph/libs must not be removed");
+    } finally {
+      cleanup(dir);
+      cleanup(sentinel);
+    }
+  }
+});
+
+test("install: --force URL with a trailing slash installs to libs/<segment>", async () => {
+  const dir = makeTempProject();
+  try {
+    const seen: InstallSpec[] = [];
+    const cloneRunner: CloneRunner = async (spec) => {
+      seen.push(spec);
+      mkdirSync(spec.libDir, { recursive: true });
+      writeFileSync(join(spec.libDir, "lib.jh"), "", "utf8");
+      return { spec, ok: true };
+    };
+
+    const code = await runInstall(["--force", "https://example.com/you/lib/"], { cwd: dir, cloneRunner });
+
+    assert.equal(code, 0, "trailing-slash URL must install");
+    assert.equal(seen.length, 1);
+    assert.equal(seen[0]!.name, "lib", "name is the last path segment, trailing slash stripped");
+    assert.equal(seen[0]!.libDir, join(dir, ".jaiph", "libs", "lib"));
+    assert.ok(existsSync(join(dir, ".jaiph", "libs", "lib", "lib.jh")));
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test("install: URL deriving an invalid name fails and leaves other libs in place", async () => {
+  const dir = makeTempProject();
+  try {
+    // Pre-existing installed lib that must survive the failure.
+    const otherDir = join(dir, ".jaiph", "libs", "other");
+    mkdirSync(otherDir, { recursive: true });
+    writeFileSync(join(otherDir, "sentinel"), "keep\n", "utf8");
+
+    let called = false;
+    const cloneRunner: CloneRunner = async (spec) => {
+      called = true;
+      return { spec, ok: true };
+    };
+
+    // Derives the segment ".." — not a valid lib name.
+    const { result: code, stderr } = await captureStderr(() =>
+      runInstall(["--force", "https://example.com/you/.."], { cwd: dir, cloneRunner }),
+    );
+
+    assert.notEqual(code, 0, "URL deriving an invalid name must fail");
+    assert.ok(stderr.includes("is invalid"), `expected invalid-name error; got: ${stderr}`);
+    assert.equal(called, false, "clone must not run for an invalid derived name");
+    assert.equal(readFileSync(join(otherDir, "sentinel"), "utf8"), "keep\n", "other lib must survive");
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test("install: lock entry with an http:// url is rejected before any clone", async () => {
+  const dir = makeTempProject();
+  try {
+    mkdirSync(join(dir, ".jaiph"), { recursive: true });
+    writeFileSync(
+      join(dir, ".jaiph", "libs.lock"),
+      JSON.stringify({ libs: [{ name: "alpha", url: "http://example.com/x.git", commit: "a".repeat(40) }] }),
+      "utf8",
+    );
+
+    let called = false;
+    const cloneRunner: CloneRunner = async (spec) => {
+      called = true;
+      return { spec, ok: true };
+    };
+
+    const { result: code, stderr } = await captureStderr(() => runInstall([], { cwd: dir, cloneRunner }));
+
+    assert.notEqual(code, 0, "http:// lock url must be rejected");
+    assert.ok(stderr.includes('disallowed scheme "http://"'), `expected scheme rejection; got: ${stderr}`);
+    assert.equal(called, false, "clone must not run for a disallowed lock url");
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test("install: a pinned commit whose HEAD cannot be read fails the install", async () => {
+  const dir = makeTempProject();
+  try {
+    mkdirSync(join(dir, ".jaiph"), { recursive: true });
+    writeFileSync(
+      join(dir, ".jaiph", "libs.lock"),
+      JSON.stringify({ libs: [{ name: "alpha", url: "https://example.com/alpha.git", commit: "a".repeat(40) }] }),
+      "utf8",
+    );
+    // Clone succeeds and has a .jh module but leaves no .git, so HEAD is unreadable.
+    const cloneRunner: CloneRunner = async (spec) => {
+      mkdirSync(spec.libDir, { recursive: true });
+      writeFileSync(join(spec.libDir, "lib.jh"), "", "utf8");
+      return { spec, ok: true };
+    };
+
+    const { result: code, stderr } = await captureStderr(() => runInstall([], { cwd: dir, cloneRunner }));
+
+    assert.notEqual(code, 0, "pin set + unreadable HEAD must fail");
+    assert.ok(stderr.includes("could not be read"), `expected unreadable-commit error; got: ${stderr}`);
+    assert.ok(!existsSync(join(dir, ".jaiph", "libs", "alpha")), "lib dir must be removed when the pin cannot be verified");
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test("install: url and ref starting with - are rejected and git argv has -- before the url", async () => {
+  const dir = makeTempProject();
+  try {
+    let called = false;
+    const cloneRunner: CloneRunner = async (spec) => {
+      called = true;
+      return { spec, ok: true };
+    };
+
+    const urlCase = await captureStderr(() =>
+      runInstall(["--upload-pack=x"], { cwd: dir, cloneRunner }),
+    );
+    assert.notEqual(urlCase.result, 0, "a url starting with - must be rejected");
+    assert.ok(urlCase.stderr.includes('must not start with "-"'), `expected dash rejection; got: ${urlCase.stderr}`);
+
+    const refCase = await captureStderr(() =>
+      runInstall(["https://example.com/repo.git@-x"], { cwd: dir, cloneRunner }),
+    );
+    assert.notEqual(refCase.result, 0, "a ref starting with - must be rejected");
+    assert.ok(refCase.stderr.includes('must not start with "-"'), `expected dash rejection; got: ${refCase.stderr}`);
+
+    assert.equal(called, false, "clone must not run for a dash-prefixed url or ref");
+
+    // The default git argv separates options from positionals with `--`.
+    const argv = buildGitCloneArgs({
+      name: "x",
+      url: "https://example.com/x.git",
+      libDir: "/tmp/x",
+    });
+    const sep = argv.indexOf("--");
+    assert.ok(sep >= 0, "git argv must contain a -- separator");
+    assert.equal(argv[sep + 1], "https://example.com/x.git", "-- must come directly before the url");
+    assert.ok(sep < argv.indexOf("https://example.com/x.git"), "-- must precede the url");
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test("install: skipping an existing lib leaves the lockfile byte-identical", async () => {
+  const dir = makeTempProject();
+  try {
+    const libDir = join(dir, ".jaiph", "libs", "alpha");
+    mkdirSync(libDir, { recursive: true });
+    writeFileSync(join(libDir, "lib.jh"), "", "utf8");
+
+    const lockPath = join(dir, ".jaiph", "libs.lock");
+    const original =
+      JSON.stringify(
+        { libs: [{ name: "alpha", url: "https://example.com/alpha.git", version: "v1", commit: "a".repeat(40) }] },
+        null,
+        2,
+      ) + "\n";
+    writeFileSync(lockPath, original, "utf8");
+
+    let called = false;
+    const cloneRunner: CloneRunner = async (spec) => {
+      called = true;
+      return { spec, ok: true };
+    };
+
+    // Re-install at a new @version: the dir exists so the lib is skipped, and the
+    // existing lock entry (old commit, old version) must be preserved verbatim.
+    const code = await runInstall(["https://example.com/alpha.git@v2"], { cwd: dir, cloneRunner });
+
+    assert.equal(code, 0);
+    assert.equal(called, false, "existing dir must be skipped without cloning");
+    assert.equal(readFileSync(lockPath, "utf8"), original, "skipped lib must leave the lockfile byte-identical");
   } finally {
     cleanup(dir);
   }
