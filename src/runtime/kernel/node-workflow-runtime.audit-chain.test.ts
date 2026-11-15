@@ -94,6 +94,60 @@ test("audit chain: the chain key and journal path never reach a script subproces
   }
 });
 
+// Production off-process path: the host hands the key to the runner through the
+// chain-key file, and the runner passes it as `opts.chainKey` — NOT on the
+// kernel env. The journal must key off that in-memory value (so it verifies),
+// while the key stays absent from both the kernel env and any script subprocess.
+test("audit chain: an off-process opts.chainKey keys the journal without ever touching the env", async () => {
+  const saved = TOUCHED.map((k) => [k, process.env[k]] as const);
+  const key = generateChainKey();
+  try {
+    const root = mkdtempSync(join(tmpdir(), "jaiph-audit-opts-"));
+    const jh = join(root, "tools.jh");
+    writeFileSync(jh, WF);
+    const moduleGraph = loadModuleGraph(jh);
+    const { scriptsDir } = buildScriptsFromGraph(moduleGraph, root);
+    const graph = buildRuntimeGraph(moduleGraph);
+
+    // Deliberately do NOT set CHAIN_KEY_ENV on the env — mirror the runner, which
+    // reads the key off-process and never puts it back on process.env.
+    delete process.env[CHAIN_KEY_ENV];
+    process.env.JAIPH_TEST_MODE = "1";
+    process.env.JAIPH_RUNS_DIR = join(root, ".jaiph", "runs");
+    process.env.JAIPH_SCRIPTS = scriptsDir;
+    process.env.JAIPH_WORKSPACE = root;
+    process.env.JAIPH_AUDIT_KEY_DIR = join(root, ".jaiph", "audit-keys");
+
+    const runtime = new NodeWorkflowRuntime(graph, {
+      env: process.env,
+      cwd: root,
+      suppressLiveEvents: true,
+      chainKey: key,
+    });
+    const status = await runtime.runRoot("dump_env", []);
+    assert.equal(status, 0, "workflow ran to completion");
+    const runDir = process.env.JAIPH_RUN_DIR!;
+
+    // The key never rode on the kernel env...
+    assert.equal(process.env[CHAIN_KEY_ENV], undefined, "the key must stay off the kernel env");
+    // ...nor on the script subprocess env...
+    const dump = readFileSync(join(root, "env_dump.txt"), "utf8");
+    assert.ok(!dump.includes("JAIPH_CHAIN_KEY"), "the chain-key env var must not reach a script");
+    assert.ok(!dump.includes(key), "the chain-key value must not reach a script");
+    // ...yet the journal verifies under the in-memory key once persisted.
+    writeChainKey(runDir, key);
+    const res = verifyRunJournal(runDir);
+    assert.equal(res.verified, true);
+    assert.equal(res.ok, true, res.error);
+    rmSync(root, { recursive: true, force: true });
+  } finally {
+    for (const [k, v] of saved) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  }
+});
+
 // AC1 (part 2): a script step that deletes/truncates the journal cannot do so
 // undetected — once the host persists the key, verification hard-fails.
 test("audit chain: a script truncating the journal is detected at the read boundary", async () => {

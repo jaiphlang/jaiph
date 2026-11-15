@@ -1,6 +1,14 @@
 import { basename, resolve } from "node:path";
 import type { JaiphConfig } from "../../config";
-import { buildRunnerBaseEnv, isRunnerEnvAllowed, writeEnvGrantFile, ENV_GRANT_FILE_ENV } from "../../runtime";
+import {
+  buildRunnerBaseEnv,
+  isRunnerEnvAllowed,
+  writeEnvGrantFile,
+  ENV_GRANT_FILE_ENV,
+  writeChainKeyFile,
+  CHAIN_KEY_FILE_ENV,
+  CHAIN_KEY_ENV,
+} from "../../runtime";
 
 // `--env` spec resolution (`resolveEnvPairs`) lives beside `EnvSpec` in
 // `../shared/usage.ts` — the shared flag surface for run, serve, mcp, and test.
@@ -91,6 +99,11 @@ export function resolveRuntimeEnv(
   delete env.JAIPH_MODULE_GRAPH_FILE;
   // Strip stale JAIPH_LIB from a parent shell (removed from the product; scripts use JAIPH_WORKSPACE).
   delete env.JAIPH_LIB;
+  // Per-run audit-chain key and its off-process pointer are generated per run and
+  // handed to the leader out of band (`applyChainKeyFile`). An inherited value
+  // from a parent shell must never be reused or ride on the runner env.
+  delete env[CHAIN_KEY_ENV];
+  delete env[CHAIN_KEY_FILE_ENV];
 
   return env;
 }
@@ -131,4 +144,22 @@ export function applyEnvGrant(
   const grantFile = writeEnvGrantFile(extraEnv);
   runtimeEnv[ENV_GRANT_FILE_ENV] = grantFile;
   return { grantFile };
+}
+
+/**
+ * Hand the per-run audit-chain key to the detached leader out of band. Mirrors
+ * `applyEnvGrant`: the key is written to a private tmpdir file and only the file
+ * *path* is placed on the runner env (`CHAIN_KEY_FILE_ENV`) — never the key
+ * itself, which would otherwise sit on the leader's exec-time environment where
+ * a same-user script child could read it (`ps eww -p $PPID` / `/proc`). The
+ * leader reads the key into memory and removes the file at startup; the caller
+ * removes the returned file's dir after the run as a backstop.
+ */
+export function applyChainKeyFile(
+  runtimeEnv: Record<string, string | undefined>,
+  chainKey: string,
+): string {
+  const chainKeyFile = writeChainKeyFile(chainKey);
+  runtimeEnv[CHAIN_KEY_FILE_ENV] = chainKeyFile;
+  return chainKeyFile;
 }

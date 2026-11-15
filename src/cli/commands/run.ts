@@ -17,7 +17,7 @@ import {
   loadModuleGraph,
   writeModuleGraph,
 } from "../../transpiler";
-import { canUseAnsi, CHAIN_KEY_ENV, generateChainKey, writeChainKey } from "../../runtime";
+import { canUseAnsi, generateChainKey, writeChainKey } from "../../runtime";
 import { resolveModuleMetadata, metadataToConfig } from "../../config";
 import { buildStepDisplayParamPairs, formatNamedParamsForDisplay } from "../shared/format-params.js";
 import {
@@ -59,7 +59,7 @@ import {
   formatRunningBottomLine,
 } from "../run/progress";
 import { loadMergedHooks, registerHooksSubscriber, isProjectHooksTrusted } from "../run/hooks";
-import { resolveRuntimeEnv, applyEnvGrant } from "../run/env";
+import { resolveRuntimeEnv, applyEnvGrant, applyChainKeyFile } from "../run/env";
 import { preflightAgentCredentials } from "../run/preflight-credentials";
 import { planUseEnvs } from "../run/use-envs";
 import { colorize, formatJaiphRunningBannerLines } from "../run/display";
@@ -135,6 +135,7 @@ export async function runWorkflow(rest: string[]): Promise<number> {
   const outDir = target ? resolve(target) : mkdtempSync(join(tmpdir(), "jaiph-run-"));
   const shouldCleanup = !target;
   let grantFile: string | undefined;
+  let chainKeyFile: string | undefined;
   try {
     const colorEnabled = canUseAnsi();
     const isTTY = !!process.stdout.isTTY;
@@ -144,11 +145,13 @@ export async function runWorkflow(rest: string[]): Promise<number> {
     runtimeEnv.JAIPH_SOURCE_ABS = inputAbs;
     const runId = randomUUID();
     runtimeEnv.JAIPH_RUN_ID = runId;
-    // Per-run audit-chain key: generated host-side, forwarded to the trusted
-    // runner, scrubbed from every script/agent subprocess env, and persisted
-    // beside the journal after the run so read/export boundaries can verify it.
+    // Per-run audit-chain key: generated host-side, handed to the trusted runner
+    // out of band (a private tmpdir file, never on the leader's exec-time env),
+    // and persisted beside the journal after the run so read/export boundaries
+    // can verify it. `applyChainKeyFile` puts only the file path on the runner
+    // env; the key itself never rides on any process environment.
     const chainKey = generateChainKey();
-    runtimeEnv[CHAIN_KEY_ENV] = chainKey;
+    chainKeyFile = applyChainKeyFile(runtimeEnv, chainKey);
     // `--env` is the grant. Its VALUES stay off the runner process env: the
     // names go on `JAIPH_ENV_GRANT`, the values into an off-process grant file
     // the detached leader reads. Set unconditionally so a stale grant never leaks.
@@ -247,9 +250,10 @@ export async function runWorkflow(rest: string[]): Promise<number> {
       chainKey,
     );
   } finally {
-    // The leader removes the grant file on read; clean up here too in case the
-    // spawn never reached it (grant values live in a tmpdir dir of their own).
+    // The leader removes the grant / chain-key files on read; clean up here too
+    // in case the spawn never reached it (each lives in a tmpdir dir of its own).
     if (grantFile) rmSync(dirname(grantFile), { recursive: true, force: true });
+    if (chainKeyFile) rmSync(dirname(chainKeyFile), { recursive: true, force: true });
     if (shouldCleanup) {
       rmSync(outDir, { recursive: true, force: true });
     }
@@ -277,11 +281,15 @@ async function runWorkflowRaw(
   const outDir = target ? resolve(target) : mkdtempSync(join(tmpdir(), "jaiph-run-"));
   const shouldCleanup = !target;
   let grantFile: string | undefined;
+  let chainKeyFile: string | undefined;
   try {
     const runtimeEnv = resolveRuntimeEnv(effectiveConfig, workspaceRoot, inputAbs);
     runtimeEnv.JAIPH_SOURCE_ABS = inputAbs;
-    const chainKey = runtimeEnv[CHAIN_KEY_ENV] ?? generateChainKey();
-    runtimeEnv[CHAIN_KEY_ENV] = chainKey;
+    // Fresh per-run key handed off out of band (never on the leader env), same
+    // as the interactive path. `resolveRuntimeEnv` already strips any inherited
+    // chain-key value, so each run keys its own journal.
+    const chainKey = generateChainKey();
+    chainKeyFile = applyChainKeyFile(runtimeEnv, chainKey);
     // Same `--env` grant hand-off as the interactive path: values stay off the
     // runner env (off-process grant file), only the names go on JAIPH_ENV_GRANT.
     // Raw mode skips the graph-wide `use` pre-flight (it loads no graph
@@ -311,6 +319,7 @@ async function runWorkflowRaw(
     return childExit.status;
   } finally {
     if (grantFile) rmSync(dirname(grantFile), { recursive: true, force: true });
+    if (chainKeyFile) rmSync(dirname(chainKeyFile), { recursive: true, force: true });
     if (shouldCleanup) {
       rmSync(outDir, { recursive: true, force: true });
     }

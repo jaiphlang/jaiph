@@ -19,29 +19,6 @@ Process rules:
 7. Acceptance criteria are non-negotiable. A task is not done until every
    acceptance bullet is verified by a test that fails when the contract is violated.
 
-## Keep the audit-chain key out of the workflow leader's environment #dev-ready
-
-Source: code audit 2026-11-15. Reproduced on macOS.
-
-### Current behavior
-
-`jaiph run` puts `JAIPH_CHAIN_KEY` into the environment of the workflow leader (`src/cli/commands/run.ts` around line 150, `src/runtime/kernel/workflow-launch.ts`). The runtime scrubs it from script and prompt child envs, but a child of the same user can read the parent's exec-time environment: a script running `ps eww -p $PPID` (or reading `/proc/$PPID/environ` on Linux) prints `JAIPH_CHAIN_KEY=…` and the backend credentials such as `ANTHROPIC_API_KEY`.
-
-The script also has `JAIPH_RUN_DIR`, so it can forge a journal that verifies. This contradicts `docs/artifacts.md` ("a per-run secret the audited program never sees"), `docs/architecture.md`, and `docs/env-vars.md` ("agent credentials never reaches a script").
-
-### Required behavior
-
-- The chain key reaches the leader the same way `--env` grant values do today (`src/runtime/kernel/env-grant-file.ts`: a `0600` file in a `mkdtemp` directory, read once at start and removed), or over an inherited pipe. It is never in any process's exec-time environment.
-- All three launch paths do this: `jaiph run`, `jaiph run --raw`, and the serve/MCP launcher in `src/cli/shared/workflow-call*.ts`.
-- Backend credentials: either hand them over the same way, or change the three docs pages to say plainly that a script running as the same OS user can read the leader's environment and that the credential scrub is not a security boundary without OS isolation. Pick the file handover if it is small; otherwise fix the docs and say so in the task report.
-
-### Acceptance
-
-- New e2e test: a script step prints the environment of `$PPID` (`ps eww` on macOS, `/proc/$PPID/environ` on Linux); output does not contain `JAIPH_CHAIN_KEY`.
-- The journal of that run still verifies.
-- The key file is gone after the leader starts (test asserts the path does not exist during a step).
-- Docs match the chosen credential behaviour. `npm test` and `bash e2e/test_all.sh` pass. CHANGELOG entry under Unreleased.
-
 ## Kill the whole process tree on step idle-kill and prompt watchdog #dev-ready
 
 Source: code audit 2026-11-15. Reproduced.

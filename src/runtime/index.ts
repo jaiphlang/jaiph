@@ -31,6 +31,7 @@ export {
   type AgentBackend,
 } from "./kernel/env-allowlist";
 export { ENV_GRANT_FILE_ENV, writeEnvGrantFile, readEnvGrantFile } from "./kernel/env-grant-file";
+export { CHAIN_KEY_FILE_ENV, writeChainKeyFile, readChainKeyFile } from "./kernel/chain-key-file";
 
 // Assets embedded into the runtime bundle (skill doc, Swagger UI).
 export {
