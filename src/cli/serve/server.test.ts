@@ -22,9 +22,15 @@ const NOARG_TOOL: McpToolSpec = {
   inputSchema: { type: "object", properties: {}, additionalProperties: false },
 };
 
+// The cross-origin / Host guard validates the request Host against the bound
+// port, but the handler is built before `listen` resolves the port — so each
+// handler carries a mutable port box that `listenAndBind` fills in afterward.
+const boundPorts = new WeakMap<ServeHandler, { port: number }>();
+
 function makeHandler(callTool: () => Promise<DefCallResult>): ServeHandler {
   let n = 0;
-  return new ServeHandler({
+  const portBox = { port: 0 };
+  const handler = new ServeHandler({
     version: "0.0.0-test",
     serverTitle: "jaiph — test.jh",
     getTools: () => [NOARG_TOOL],
@@ -32,7 +38,18 @@ function makeHandler(callTool: () => Promise<DefCallResult>): ServeHandler {
     maxConcurrent: 4,
     now: () => "2026-07-24T00:00:00.000Z",
     newRunId: () => `run-${n++}`,
+    getBoundPort: () => portBox.port,
   });
+  boundPorts.set(handler, portBox);
+  return handler;
+}
+
+/** Bind a loopback socket and teach the handler its real port for the Host guard. */
+async function listenAndBind(server: Server, handler: ServeHandler): Promise<number> {
+  const port = await listen(server, "127.0.0.1", 0);
+  const box = boundPorts.get(handler);
+  if (box) box.port = port;
+  return port;
 }
 
 function delay(ms: number): Promise<void> {
@@ -87,7 +104,7 @@ test("destroying a request mid-upload occupies no run slot and the server keeps 
     return { text: "ok", isError: false, exitStatus: 0 };
   });
   const server = createHttpServer(handler, () => {});
-  const port = await listen(server, "127.0.0.1", 0);
+  const port = await listenAndBind(server, handler);
   try {
     const socket: Socket = connect(port, "127.0.0.1");
     await new Promise<void>((r) => socket.on("connect", () => r()));
@@ -127,8 +144,8 @@ async function serveArtifact(payloadPath: string, payload: Buffer | null): Promi
   if (payload !== null) writeFileSync(join(runDir, "artifacts", payloadPath), payload);
   const handler = makeHandler(async () => ({ text: "ok", isError: false, exitStatus: 0, runDir }));
   const server = createHttpServer(handler, () => {});
-  const port = await listen(server, "127.0.0.1", 0);
-  const res = await fetch(`http://127.0.0.1:${port}/ping?wait=true`, { method: "POST" });
+  const port = await listenAndBind(server, handler);
+  const res = await fetch(`http://127.0.0.1:${port}/ping?wait=true`, { method: "POST", headers: { "content-type": "application/json" } });
   const runId = ((await res.json()) as { run_id: string }).run_id;
   return { server, port, runId, runDir };
 }
@@ -143,9 +160,9 @@ test("GET /runs/{id}/events hard-fails (409) on a tampered journal, streams a cl
     writeChainKey(runDir, "k".repeat(64));
     const handler = makeHandler(async () => ({ text: "ok", isError: false, exitStatus: 0, runDir }));
     const server = createHttpServer(handler, () => {});
-    const port = await listen(server, "127.0.0.1", 0);
+    const port = await listenAndBind(server, handler);
     try {
-      const create = await fetch(`http://127.0.0.1:${port}/ping?wait=true`, { method: "POST" });
+      const create = await fetch(`http://127.0.0.1:${port}/ping?wait=true`, { method: "POST", headers: { "content-type": "application/json" } });
       const runId = ((await create.json()) as { run_id: string }).run_id;
 
       const tampered = await fetch(`http://127.0.0.1:${port}/runs/${runId}/events`);
@@ -193,9 +210,9 @@ test("GET /runs/{id}/events serves a newly-detected credential as [REDACTED]", a
 
     const handler = makeHandler(async () => ({ text: "ok", isError: false, exitStatus: 0, runDir }));
     const server = createHttpServer(handler, () => {});
-    const port = await listen(server, "127.0.0.1", 0);
+    const port = await listenAndBind(server, handler);
     try {
-      const create = await fetch(`http://127.0.0.1:${port}/ping?wait=true`, { method: "POST" });
+      const create = await fetch(`http://127.0.0.1:${port}/ping?wait=true`, { method: "POST", headers: { "content-type": "application/json" } });
       const runId = ((await create.json()) as { run_id: string }).run_id;
       const res = await fetch(`http://127.0.0.1:${port}/runs/${runId}/events`);
       assert.equal(res.status, 200);
@@ -254,7 +271,7 @@ test("disconnecting the client mid-download destroys the artifact file stream", 
     // Never read the response: kernel + stream buffers fill and backpressure
     // pauses the file stream mid-transfer.
     socket.pause();
-    socket.write(`GET /runs/${runId}/artifacts/big.bin HTTP/1.1\r\nhost: localhost\r\n\r\n`);
+    socket.write(`GET /runs/${runId}/artifacts/big.bin HTTP/1.1\r\nhost: localhost:${port}\r\n\r\n`);
     await waitFor(() => created.length === 1, "the artifact file stream to open");
     assert.equal(created[0].destroyed, false, "the stalled stream stays open while the client is connected");
     socket.destroy();

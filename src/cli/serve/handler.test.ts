@@ -55,6 +55,10 @@ function makeHandler(overrides?: {
   authenticator?: Authenticator;
   exposeDocs?: boolean;
   log?: (line: string) => void;
+  boundHost?: string;
+  getBoundPort?: () => number;
+  allowedOrigins?: string[];
+  allowedHosts?: string[];
 }): ServeHandler {
   let n = 0;
   return new ServeHandler({
@@ -66,6 +70,12 @@ function makeHandler(overrides?: {
     authenticator: overrides?.authenticator,
     exposeDocs: overrides?.exposeDocs,
     log: overrides?.log,
+    // Loopback bind on a fixed port so the cross-origin / Host guard has a
+    // concrete own-origin to validate against in tests.
+    boundHost: overrides?.boundHost ?? "127.0.0.1",
+    getBoundPort: overrides?.getBoundPort ?? (() => 5247),
+    allowedOrigins: overrides?.allowedOrigins,
+    allowedHosts: overrides?.allowedHosts,
     maxConcurrent: overrides?.maxConcurrent ?? 4,
     retainRuns: overrides?.retainRuns,
     retainAgeSec: overrides?.retainAgeSec,
@@ -79,13 +89,24 @@ function makeHandler(overrides?: {
   });
 }
 
-function req(method: string, path: string, opts?: { headers?: Record<string, string>; body?: string; bodyTooLarge?: boolean }): ServeRequest {
+function req(
+  method: string,
+  path: string,
+  opts?: { headers?: Record<string, string>; body?: string; bodyTooLarge?: boolean; noJsonDefault?: boolean },
+): ServeRequest {
   const url = new URL(path, "http://x");
+  const headers = { ...(opts?.headers ?? {}) };
+  // Run-initiating POSTs now require application/json; default it here so the
+  // many invoke/cancel fixtures keep their behaviour, while the content-type
+  // negatives opt out with `noJsonDefault` or set the header explicitly.
+  if (method === "POST" && headers["content-type"] === undefined && !opts?.noJsonDefault) {
+    headers["content-type"] = "application/json";
+  }
   return {
     method,
     path: url.pathname,
     query: url.searchParams,
-    headers: opts?.headers ?? {},
+    headers,
     body: opts?.body ?? "",
     bodyTooLarge: opts?.bodyTooLarge,
   };
@@ -155,6 +176,113 @@ test("wrong method on a known path is 405", async () => {
   const res = await makeHandler().handleRequest(req("POST", "/healthz"));
   assert.equal(res.status, 405);
   assert.equal(bodyJson(res).error.code, "E_METHOD_NOT_ALLOWED");
+});
+
+// === cross-origin / Host / content-type guard ===
+//
+// A web page on another origin must not be able to start a run or read runs via
+// a no-preflight fetch, and a DNS-rebinding name must not pass the Host check.
+// Same-origin, allowlisted, and header-less (curl / MCP) requests keep working.
+
+test("cross-origin: Origin https://evil.example on /mcp is 403", async () => {
+  const h = makeHandler();
+  const res = await h.handleRequest(
+    mcpPost(
+      { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "build", arguments: { target: "x" } } },
+      { origin: "https://evil.example" },
+    ),
+  );
+  assert.equal(res.status, 403);
+  assert.equal(bodyJson(res).error.code, "E_FORBIDDEN_ORIGIN");
+});
+
+test("cross-origin: Origin https://evil.example on POST /{name} is 403 and spawns nothing", async () => {
+  let started = 0;
+  const h = makeHandler({
+    tools: [NOARG_TOOL],
+    callTool: async () => {
+      started += 1;
+      return { text: "x", isError: false, exitStatus: 0 };
+    },
+  });
+  const res = await h.handleRequest(req("POST", "/ping?wait=true", { headers: { origin: "https://evil.example" } }));
+  assert.equal(res.status, 403);
+  assert.equal(bodyJson(res).error.code, "E_FORBIDDEN_ORIGIN");
+  assert.equal(started, 0, "a cross-origin invoke never reaches the executor");
+});
+
+test("cross-origin: an allowlisted Origin passes", async () => {
+  const h = makeHandler({ tools: [NOARG_TOOL], allowedOrigins: ["https://app.example"] });
+  const res = await h.handleRequest(req("POST", "/ping?wait=true", { headers: { origin: "https://app.example" } }));
+  assert.equal(res.status, 200);
+  assert.equal(bodyJson(res).status, "succeeded");
+});
+
+test("cross-origin: the server's own origin (same-origin) passes", async () => {
+  const h = makeHandler({ tools: [NOARG_TOOL] });
+  for (const origin of ["http://localhost:5247", "http://127.0.0.1:5247", "http://[::1]:5247"]) {
+    const res = await h.handleRequest(req("POST", "/ping?wait=true", { headers: { origin } }));
+    assert.equal(res.status, 200, `same-origin ${origin} passes`);
+  }
+});
+
+test("cross-origin: no Origin header passes (curl, MCP clients)", async () => {
+  const h = makeHandler({ tools: [NOARG_TOOL] });
+  const res = await h.handleRequest(req("POST", "/ping?wait=true"));
+  assert.equal(res.status, 200);
+});
+
+test("host: a wrong Host on a loopback bind is 403", async () => {
+  const h = makeHandler({ tools: [NOARG_TOOL] });
+  const res = await h.handleRequest(req("POST", "/ping?wait=true", { headers: { host: "evil.example:5247" } }));
+  assert.equal(res.status, 403);
+  assert.equal(bodyJson(res).error.code, "E_FORBIDDEN_HOST");
+});
+
+test("host: loopback authorities with the bound port pass", async () => {
+  const h = makeHandler({ tools: [NOARG_TOOL] });
+  for (const host of ["localhost:5247", "127.0.0.1:5247", "[::1]:5247"]) {
+    const res = await h.handleRequest(req("POST", "/ping?wait=true", { headers: { host } }));
+    assert.equal(res.status, 200, `Host ${host} passes`);
+  }
+});
+
+test("host: on a non-loopback bind the check is skipped unless JAIPH_SERVE_ALLOWED_HOSTS is set", async () => {
+  const open = makeHandler({ tools: [NOARG_TOOL], boundHost: "0.0.0.0", getBoundPort: () => 8080 });
+  assert.equal((await open.handleRequest(req("POST", "/ping?wait=true", { headers: { host: "anything.example" } }))).status, 200);
+
+  const gated = makeHandler({ tools: [NOARG_TOOL], boundHost: "0.0.0.0", getBoundPort: () => 8080, allowedHosts: ["api.example:8080"] });
+  assert.equal((await gated.handleRequest(req("POST", "/ping?wait=true", { headers: { host: "api.example:8080" } }))).status, 200);
+  const bad = await gated.handleRequest(req("POST", "/ping?wait=true", { headers: { host: "evil.example:8080" } }));
+  assert.equal(bad.status, 403);
+  assert.equal(bodyJson(bad).error.code, "E_FORBIDDEN_HOST");
+});
+
+test("content-type: text/plain on /mcp is 415", async () => {
+  const h = makeHandler();
+  const res = await h.handleRequest(
+    req("POST", "/mcp", {
+      headers: { "content-type": "text/plain" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "build", arguments: { target: "x" } } }),
+    }),
+  );
+  assert.equal(res.status, 415);
+  assert.equal(bodyJson(res).error.code, "E_UNSUPPORTED_MEDIA_TYPE");
+});
+
+test("content-type: a bodyless POST /{name} without a JSON content type is 415 and spawns nothing", async () => {
+  let started = 0;
+  const h = makeHandler({
+    tools: [NOARG_TOOL],
+    callTool: async () => {
+      started += 1;
+      return { text: "x", isError: false, exitStatus: 0 };
+    },
+  });
+  const res = await h.handleRequest(req("POST", "/ping?wait=true", { noJsonDefault: true }));
+  assert.equal(res.status, 415);
+  assert.equal(bodyJson(res).error.code, "E_UNSUPPORTED_MEDIA_TYPE");
+  assert.equal(started, 0, "a bodyless invoke with no content type never reaches the executor");
 });
 
 // === auth matrix (token set) ===

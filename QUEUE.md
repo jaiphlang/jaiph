@@ -19,31 +19,6 @@ Process rules:
 7. Acceptance criteria are non-negotiable. A task is not done until every
    acceptance bullet is verified by a test that fails when the contract is violated.
 
-## Reject cross-origin and wrong-Host requests in jaiph serve #dev-ready
-
-Source: code audit 2026-11-15. `/mcp` accepting `text/plain` was reproduced.
-
-### Current behavior
-
-The default `jaiph serve` binds `127.0.0.1` with auth off. No code under `src/cli/serve` reads the `Origin` or `Host` header. `handleMcp` in `handler.ts` does not check `Content-Type`; REST routes return 415 only when the body is non-empty.
-
-Any web page the developer opens can run `fetch("http://127.0.0.1:5247/mcp", {method:"POST", mode:"no-cors", body:'{"jsonrpc":"2.0","id":1,"method":"tools/call",…}'})`. This is a simple request with no preflight, and the workflow runs with attacker-chosen arguments. A def with no parameters can also be started with an empty-body `POST /{name}`. With DNS rebinding the page can read `/runs`, events and artifacts too. The MCP Streamable HTTP spec requires Origin validation for this reason.
-
-### Required behavior
-
-- If an `Origin` header is present and is not the server's own origin or in an allowlist, respond 403 with a JSON error. Add an allowlist setting (`JAIPH_SERVE_ALLOWED_ORIGINS`, comma separated; document it in `docs/env-vars.md`, which has a parity gate against `src/`).
-- When bound to a loopback address, the `Host` header must be `localhost`, `127.0.0.1` or `[::1]` with the bound port; otherwise 403. When bound to a non-loopback address, add an optional `JAIPH_SERVE_ALLOWED_HOSTS` and skip the check when unset.
-- `POST /mcp` and every REST `POST` require `Content-Type: application/json` (parameters allowed), including bodyless POSTs; otherwise 415.
-- `/healthz`, `/docs`, `/openapi.json` and the embedded Swagger assets keep working from the same origin. Requests with no `Origin` (curl, MCP clients) keep working.
-
-### Acceptance
-
-- Handler tests: `Origin: https://evil.example` on `/mcp` and on `POST /{name}` gives 403; an allowlisted origin passes; same-origin passes; no `Origin` passes.
-- `Host: evil.example:5247` on a loopback bind gives 403; `localhost:<port>` and `127.0.0.1:<port>` pass.
-- `Content-Type: text/plain` on `/mcp` gives 415; a bodyless `POST /{name}` without the JSON content type gives 415.
-- Swagger UI "try it out" still works (existing serve tests and any docs e2e pass).
-- `docs/serve.md` (or the serve section in `docs/cli.md`) documents the checks. CHANGELOG entry under Unreleased with a breaking-change note for bodyless POSTs.
-
 ## Keep the audit-chain key out of the workflow leader's environment #dev-ready
 
 Source: code audit 2026-11-15. Reproduced on macOS.
