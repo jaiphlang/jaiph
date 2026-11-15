@@ -2,7 +2,11 @@
 
 ## Summary
 
+- **Security fix:** A `script` call now always runs the body — and the `use` env — of the module it resolves to. Two modules that each declare a same-named script (e.g. `script check`) no longer share one emitted file, so an imported body can no longer replace a same-named entry gate and a third-party body can no longer run with another module's env grants.
+
 ## All changes
+
+- **Fix — Transpiler / Runtime (security):** `emitGraphInto` wrote every module's `script` files under the bare script name (`scripts/<name>`), so two modules that both declared `script <name>` emitted to the same file and the module that sorted last overwrote the others; the runtime then resolved scripts by that bare name while building the `use` env from the calling module's declaration. A failing gate in the entry file could be silently replaced by an imported same-named script, and an imported body could run with the entry script's env grants (`use GITHUB_TOKEN`). Module-level scripts (declared `script` and `import script`) now emit as `scripts/<name>__<hash>`, where `<hash>` is a short sha256 of the module's absolute path (`moduleScriptFileName` in `src/inline-script-name.ts`), and the runtime resolves the file from the same (module path, script name) pair, so a call always runs its own module's body and that definition's `use` env. Inline (`__inline_*`) and nested (`__nested_*`) scripts keep their content-hash names. `src/transpile/emit-script.ts`, `src/runtime/kernel/node-workflow-runtime.ts`. Docs: [Architecture](docs/architecture.md). Tests: `src/runtime/kernel/node-workflow-runtime.script-collision.test.ts`.
 
 # 0.16.0
 

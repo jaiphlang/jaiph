@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildScripts, emitScriptsForModule } from "../transpiler";
 import { parsejaiph } from "../parser";
-import { nestedScriptName } from "../inline-script-name";
+import { moduleScriptFileName, nestedScriptName } from "../inline-script-name";
 
 test("compiler: extracts script bodies for a simple module", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-golden-scripts-"));
@@ -28,7 +28,7 @@ test("compiler: extracts script bodies for a simple module", () => {
       ].join("\n"),
     );
     const scripts = emitScriptsForModule(input, root);
-    const fOk = scripts.find((s) => s.name === "f_ok");
+    const fOk = scripts.find((s) => s.name === moduleScriptFileName(input, "f_ok"));
     assert.ok(fOk);
     assert.match(fOk.content, /set -euo pipefail/);
     assert.doesNotMatch(fOk.content, /set \+u/);
@@ -872,7 +872,7 @@ test("compiler golden: script bodies are opaque bash (cross-script name compiles
       ].join("\n"),
     );
     const scripts = emitScriptsForModule(input, root);
-    const caller = scripts.find((s) => s.name === "caller");
+    const caller = scripts.find((s) => s.name === moduleScriptFileName(input, "caller"));
     assert.ok(caller, "caller script emitted");
     assert.ok(caller!.content.includes("helper"), "opaque body preserves shell line");
   } finally {
@@ -923,7 +923,7 @@ test("compiler: import script emits external file verbatim as script artifact", 
       ].join("\n"),
     );
     const scripts = emitScriptsForModule(input, root);
-    const helperScript = scripts.find((s) => s.name === "helper");
+    const helperScript = scripts.find((s) => s.name === moduleScriptFileName(input, "helper"));
     assert.ok(helperScript, "helper script artifact should exist");
     assert.equal(helperScript.content, scriptContent);
   } finally {
@@ -950,8 +950,8 @@ test("compiler golden: nested script emits under __nested_* and does not collide
     );
 
     const scripts = emitScriptsForModule(input, root);
-    const moduleFoo = scripts.find((s) => s.name === "foo");
-    assert.ok(moduleFoo, "module-level script foo still emits under its bare name");
+    const moduleFoo = scripts.find((s) => s.name === moduleScriptFileName(input, "foo"));
+    assert.ok(moduleFoo, "module-level script foo emits under its module-qualified name");
     assert.ok(moduleFoo.content.includes("MODULE"), "module script body preserved");
 
     const expectedNested = nestedScriptName("foo", nestedBody);
@@ -959,7 +959,7 @@ test("compiler golden: nested script emits under __nested_* and does not collide
     assert.ok(nested, `nested script emits as ${expectedNested}`);
     assert.ok(nested.content.includes("NESTED"), "nested script body preserved");
     assert.ok(nested.name.startsWith("__nested_"));
-    assert.notEqual(nested.name, "foo");
+    assert.notEqual(nested.name, moduleScriptFileName(input, "foo"));
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

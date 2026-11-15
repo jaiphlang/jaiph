@@ -5,6 +5,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildRuntimeGraph } from "./graph";
+import { moduleScriptFileName } from "../../inline-script-name";
 import { NodeWorkflowRuntime, _scriptSpawn } from "./node-workflow-runtime";
 
 /** An ErrnoException carrying the given syscall `code` (e.g. "E2BIG"). */
@@ -253,7 +254,7 @@ test("runRoot: an oversized-argv script spawn does not reject; journal has STEP_
       root,
       ["script big = '''", 'echo "unreachable"', "'''", "", "export def main() {", "  big()", "}", ""].join("\n"),
     );
-    writeFileSync(join(scriptsDir, "big"), '#!/usr/bin/env bash\necho "unreachable"\n');
+    writeFileSync(join(scriptsDir, moduleScriptFileName(join(root, "flow.jh"), "big")), '#!/usr/bin/env bash\necho "unreachable"\n');
     const throwSpawn = (() => {
       throw errnoError("spawn E2BIG", "E2BIG");
     }) as unknown as typeof _scriptSpawn.spawn;
@@ -303,7 +304,7 @@ test("runRoot: recover body runs after a mocked E2BIG on the recovered run step"
         "",
       ].join("\n"),
     );
-    writeFileSync(join(scriptsDir, "big"), '#!/usr/bin/env bash\necho "unreachable"\n');
+    writeFileSync(join(scriptsDir, moduleScriptFileName(join(root, "flow.jh"), "big")), '#!/usr/bin/env bash\necho "unreachable"\n');
     const throwSpawn = (() => {
       throw errnoError("spawn E2BIG", "E2BIG");
     }) as unknown as typeof _scriptSpawn.spawn;

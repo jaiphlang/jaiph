@@ -1,4 +1,4 @@
-import { inlineScriptName, nestedScriptName } from "../inline-script-name";
+import { inlineScriptName, moduleScriptFileName, nestedScriptName } from "../inline-script-name";
 import type { Arg, Expr, jaiphModule, ScriptDef, ScriptImportDef, StepDef } from "../types";
 import { scriptShebangIsBash, langToShebang, parseNestedCallArg, shebangForLang } from "../parser";
 
@@ -250,16 +250,20 @@ export function buildScriptFiles(
 ): ScriptArtifact[] {
   const out: ScriptArtifact[] = [];
 
-  // Emit imported script files verbatim (they are complete executables with shebangs).
+  // Emit imported script files verbatim (they are complete executables with
+  // shebangs). The file name is module-qualified so two modules that import
+  // different scripts under the same alias never collide.
   if (resolvedScriptImports) {
     for (const [name, content] of resolvedScriptImports) {
       const normalized = content.endsWith("\n") ? content : content + "\n";
-      out.push({ name, content: normalized });
+      out.push({ name: moduleScriptFileName(ast.filePath, name), content: normalized });
     }
   }
 
+  // Module-level scripts emit under a per-(module, name) file so a same-named
+  // `script` in another module cannot overwrite this one's body.
   for (const sc of ast.scripts) {
-    out.push(buildOneScriptArtifact(sc, importedModuleSymbols, sc.name));
+    out.push(buildOneScriptArtifact(sc, importedModuleSymbols, moduleScriptFileName(ast.filePath, sc.name)));
   }
 
   // Emit inline script artifacts and nested (def-local) scripts from def steps.

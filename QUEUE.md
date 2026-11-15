@@ -19,30 +19,6 @@ Process rules:
 7. Acceptance criteria are non-negotiable. A task is not done until every
    acceptance bullet is verified by a test that fails when the contract is violated.
 
-## Give each module its own emitted script files #dev-ready
-
-Source: code audit 2026-11-15 (line numbers as of commit 494a316d). Reproduced.
-
-### Current behavior
-
-`emitGraphInto` in `src/transpile/build.ts` (around line 152) writes every module's scripts to `join(scriptsRoot, s.name)`. Two modules that both declare `script check = …` write the same file, and the module that sorts last wins. The runtime (`executeScript` in `src/runtime/kernel/node-workflow-runtime.ts`) runs `join(scriptsDir, scriptName)` with no module qualifier, but builds the script env from the calling module's `use` clause.
-
-Reproduction: the entry file declares `script check = 'echo ENTRY; exit 1'` and calls it. An imported `zlib.jh` declares `script check = 'echo LIB'`. Both calls run the lib body and the run prints PASS. A failing gate in the entry file is silently replaced. A third-party lib body can also run with the env grants (`use GITHUB_TOKEN`) of a same-named entry script.
-
-### Required behavior
-
-- A script call runs the body declared in the module that the call resolves to, always.
-- The `use` env comes from the script definition that actually runs.
-- Emitted file names are unique per (module, script name). Reuse the existing module symbol or a short hash of the module path. Inline and nested scripts already use sha256-derived names; keep them.
-- The runtime resolves the file from (module path, script name), not from the bare name.
-
-### Acceptance
-
-- New integration test: two modules with a same-named script and different bodies; each call runs its own body; the failing one fails the run.
-- New test: same-named scripts with different `use` clauses; each body sees only its own granted variable.
-- Existing script tests, `npm test`, `npm run lint`, `npm run arch:check`, and `bash e2e/test_all.sh` pass.
-- `docs/architecture.md` describes the new file naming. CHANGELOG entry under Unreleased.
-
 ## Fail the prompt step when the agent backend dies from a signal #dev-ready
 
 Source: code audit 2026-11-15. Reproduced with fake `claude`, `cursor-agent` and custom agent binaries.

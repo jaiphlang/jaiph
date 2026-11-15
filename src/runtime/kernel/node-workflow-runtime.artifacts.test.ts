@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildRuntimeGraph } from "./graph";
+import { moduleScriptFileName } from "../../inline-script-name";
 import { NodeWorkflowRuntime } from "./node-workflow-runtime";
 
 function mainErr(runtime: NodeWorkflowRuntime): string {
@@ -369,19 +370,19 @@ test("NodeWorkflowRuntime: run catch binds the failed step's stdout then stderr 
     const scriptsDir = join(root, "scripts");
     mkdirSync(scriptsDir, { recursive: true });
     writeFileSync(
-      join(scriptsDir, "check_ready_impl"),
+      join(scriptsDir, moduleScriptFileName(jh, "check_ready_impl")),
       ['#!/usr/bin/env bash', 'echo "analysis-stdout-log"', 'echo "analysis-stderr-log" >&2', 'test -f ready.txt', ""].join(
         "\n",
       ),
       { mode: 0o755 },
     );
-    writeFileSync(join(scriptsDir, "write_catch_received"), '#!/usr/bin/env bash\nprintf "%s" "$1" > catch_received.txt\n', {
+    writeFileSync(join(scriptsDir, moduleScriptFileName(jh, "write_catch_received")), '#!/usr/bin/env bash\nprintf "%s" "$1" > catch_received.txt\n', {
       mode: 0o755,
     });
-    writeFileSync(join(scriptsDir, "write_catch_arg2"), '#!/usr/bin/env bash\nprintf "%s" "$1" > catch_arg2.txt\n', {
+    writeFileSync(join(scriptsDir, moduleScriptFileName(jh, "write_catch_arg2")), '#!/usr/bin/env bash\nprintf "%s" "$1" > catch_arg2.txt\n', {
       mode: 0o755,
     });
-    writeFileSync(join(scriptsDir, "mark_ready"), "#!/usr/bin/env bash\ntouch ready.txt\n", { mode: 0o755 });
+    writeFileSync(join(scriptsDir, moduleScriptFileName(jh, "mark_ready")), "#!/usr/bin/env bash\ntouch ready.txt\n", { mode: 0o755 });
 
     const graph = buildRuntimeGraph(jh);
     const env: NodeJS.ProcessEnv = {
@@ -445,7 +446,7 @@ test("NodeWorkflowRuntime: recover handle streams a >1MB failed stdout via `stdi
     const scriptsDir = join(root, "scripts");
     mkdirSync(scriptsDir, { recursive: true });
     writeFileSync(
-      join(scriptsDir, "emit_big"),
+      join(scriptsDir, moduleScriptFileName(jh, "emit_big")),
       [
         "#!/usr/bin/env bash",
         `for i in $(seq 1 ${lineCount}); do`,
@@ -457,7 +458,7 @@ test("NodeWorkflowRuntime: recover handle streams a >1MB failed stdout via `stdi
       ].join("\n"),
       { mode: 0o755 },
     );
-    writeFileSync(join(scriptsDir, "record_binding"), '#!/usr/bin/env bash\ncat > "$1"\n', { mode: 0o755 });
+    writeFileSync(join(scriptsDir, moduleScriptFileName(jh, "record_binding")), '#!/usr/bin/env bash\ncat > "$1"\n', { mode: 0o755 });
 
     const graph = buildRuntimeGraph(jh);
     const env: NodeJS.ProcessEnv = {

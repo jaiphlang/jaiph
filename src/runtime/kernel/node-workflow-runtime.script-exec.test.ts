@@ -5,6 +5,7 @@ import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildRuntimeGraph } from "./graph";
+import { moduleScriptFileName } from "../../inline-script-name";
 import { NodeWorkflowRuntime, _scriptSpawn } from "./node-workflow-runtime";
 
 /** Minimal fake ChildProcess that emits `close(exitCode)` on the next tick. */
@@ -114,7 +115,7 @@ test("executeScript: script with exec bit stripped (0o644) still executes throug
     );
     const scriptsDir = join(root, "scripts");
     mkdirSync(scriptsDir, { recursive: true });
-    const scriptPath = join(scriptsDir, "write_marker");
+    const scriptPath = join(scriptsDir, moduleScriptFileName(jh, "write_marker"));
     writeFileSync(
       scriptPath,
       ["#!/usr/bin/env bash", "set -euo pipefail", 'printf "ran-ok" > marker.txt', ""].join("\n"),
@@ -161,7 +162,7 @@ test("executeScript: missing interpreter fails with a diagnosable error naming t
     );
     const scriptsDir = join(root, "scripts");
     mkdirSync(scriptsDir, { recursive: true });
-    writeFileSync(join(scriptsDir, "run_bad"), `#!/usr/bin/env ${missing}\necho unreachable\n`);
+    writeFileSync(join(scriptsDir, moduleScriptFileName(jh, "run_bad")), `#!/usr/bin/env ${missing}\necho unreachable\n`);
 
     const graph = buildRuntimeGraph(jh);
     const env: NodeJS.ProcessEnv = {
@@ -205,8 +206,8 @@ test("executeScript: a use + --env-granted key reaches the script; an un-used ke
     );
     const scriptsDir = join(root, "scripts");
     mkdirSync(scriptsDir, { recursive: true });
-    writeFileSync(join(scriptsDir, "show_token"), '#!/usr/bin/env bash\necho "token=${GITHUB_TOKEN:-}"\n');
-    writeFileSync(join(scriptsDir, "show_bare"), '#!/usr/bin/env bash\necho "bare=${GITHUB_TOKEN:-}"\n');
+    writeFileSync(join(scriptsDir, moduleScriptFileName(jh, "show_token")), '#!/usr/bin/env bash\necho "token=${GITHUB_TOKEN:-}"\n');
+    writeFileSync(join(scriptsDir, moduleScriptFileName(jh, "show_bare")), '#!/usr/bin/env bash\necho "bare=${GITHUB_TOKEN:-}"\n');
 
     const graph = buildRuntimeGraph(jh);
     const env: NodeJS.ProcessEnv = {

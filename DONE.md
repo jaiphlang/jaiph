@@ -325,3 +325,29 @@ Source: code audit 2026-11-15. Not `#dev-ready`: `.jaiph/engineer.jh` forbids th
 - A test for the simplifier guard script: `integration/x.test.ts`, `src/a/b.test.ts` and `test-fixtures/x.txt` are rejected.
 - Extend `e2e/tests/128_examples_format_check.sh` (or add a sibling) to run `jaiph format --check` and `jaiph compile` on `.jaiph/*.jh`.
 - A test that every backticked repo path in `.jaiph/*.jh` prompt text exists, and that the phrase "transpiles to Bash" does not appear under `.jaiph/` or `docs/`.
+
+## Give each module its own emitted script files
+
+Completed: 2026-11-15
+
+Source: code audit 2026-11-15 (line numbers as of commit 494a316d). Reproduced.
+
+### Current behavior
+
+`emitGraphInto` in `src/transpile/build.ts` (around line 152) writes every module's scripts to `join(scriptsRoot, s.name)`. Two modules that both declare `script check = …` write the same file, and the module that sorts last wins. The runtime (`executeScript` in `src/runtime/kernel/node-workflow-runtime.ts`) runs `join(scriptsDir, scriptName)` with no module qualifier, but builds the script env from the calling module's `use` clause.
+
+Reproduction: the entry file declares `script check = 'echo ENTRY; exit 1'` and calls it. An imported `zlib.jh` declares `script check = 'echo LIB'`. Both calls run the lib body and the run prints PASS. A failing gate in the entry file is silently replaced. A third-party lib body can also run with the env grants (`use GITHUB_TOKEN`) of a same-named entry script.
+
+### Required behavior
+
+- A script call runs the body declared in the module that the call resolves to, always.
+- The `use` env comes from the script definition that actually runs.
+- Emitted file names are unique per (module, script name). Reuse the existing module symbol or a short hash of the module path. Inline and nested scripts already use sha256-derived names; keep them.
+- The runtime resolves the file from (module path, script name), not from the bare name.
+
+### Acceptance
+
+- New integration test: two modules with a same-named script and different bodies; each call runs its own body; the failing one fails the run.
+- New test: same-named scripts with different `use` clauses; each body sees only its own granted variable.
+- Existing script tests, `npm test`, `npm run lint`, `npm run arch:check`, and `bash e2e/test_all.sh` pass.
+- `docs/architecture.md` describes the new file naming. CHANGELOG entry under Unreleased.
