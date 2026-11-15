@@ -19,32 +19,6 @@ Process rules:
 7. Acceptance criteria are non-negotiable. A task is not done until every
    acceptance bullet is verified by a test that fails when the contract is violated.
 
-## Scope MCP-over-HTTP in-flight calls to the caller #dev-ready
-
-Source: code audit 2026-11-15. Reproduced against the handler.
-
-### Current behavior
-
-`ServeHandler` (`src/cli/serve/handler.ts`) holds one `McpServer` (`src/cli/shared/mcp-server.ts`) for all HTTP clients. `McpServer.inFlight` is a map keyed only by the client-chosen JSON-RPC id. `handleCancelled` looks up `params.requestId` and calls `cancelRun` with no principal check. `handleMcp` requires a capability only for `tools/call` and `tools/list`, so `notifications/cancelled` needs none.
-
-- In OIDC mode, a caller with a valid token and no scopes can POST `{"jsonrpc":"2.0","method":"notifications/cancelled","params":{"requestId":1}}` and kill another principal's run. Ids are guessable. `docs/cli.md` promises that a principal may cancel only runs it created.
-- In any mode, two concurrent `tools/call` requests with the same id overwrite each other's entry. The first to finish deletes it; the other loses progress notifications and cannot be cancelled. An SSE disconnect cancels by id and can kill the wrong call.
-
-### Required behavior
-
-- Over HTTP, in-flight calls are tracked under a server-generated key, or under (principal, id). Two calls with the same client id are independent.
-- `notifications/cancelled` over HTTP cancels only a call owned by the same principal and requires the `cancel` capability. Otherwise it is a no-op (still 202).
-- An SSE disconnect cancels exactly the call of that request, through a captured handle, not by id lookup.
-- stdio MCP behaviour is unchanged.
-
-### Acceptance
-
-- Handler test with two principals: B's `notifications/cancelled` for A's request id does not cancel A's run; A's own cancel does.
-- A principal without the `cancel` capability cannot cancel its own call through `/mcp`.
-- Two concurrent same-id calls both complete with their own results, and cancelling one leaves the other running.
-- SSE hang-up on one of two same-id calls cancels only that one.
-- `integration/mcp-server.test.ts`, `integration/serve-server.test.ts`, `integration/serve-auth.test.ts` pass. `docs/cli.md` / `docs/mcp.md` state the rule. CHANGELOG entry under Unreleased.
-
 ## Reject cross-origin and wrong-Host requests in jaiph serve #dev-ready
 
 Source: code audit 2026-11-15. `/mcp` accepting `text/plain` was reproduced.

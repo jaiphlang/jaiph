@@ -421,7 +421,7 @@ Startup mirrors `jaiph mcp`: graph load + `collectDiagnostics` (diagnostics to s
 
 ### Endpoints
 
-The **Cap.** column names the capability an authenticated principal must hold to reach each endpoint. In static-token and open (loopback) mode the single principal holds every capability; in OIDC mode capabilities come from the token's OAuth scopes (`jaiph:invoke` / `jaiph:inspect` / `jaiph:cancel`) — see [Auth and limits](#auth-and-limits). `POST /mcp` (MCP Streamable HTTP) shares the same boundary: `tools/call` needs `invoke`, `tools/list` needs `inspect`.
+The **Cap.** column names the capability an authenticated principal must hold to reach each endpoint. In static-token and open (loopback) mode the single principal holds every capability; in OIDC mode capabilities come from the token's OAuth scopes (`jaiph:invoke` / `jaiph:inspect` / `jaiph:cancel`) — see [Auth and limits](#auth-and-limits). `POST /mcp` (MCP Streamable HTTP) shares the same boundary: `tools/call` needs `invoke`, `tools/list` needs `inspect`. Over HTTP each `tools/call` is tracked independently, so two calls that reuse one client-chosen JSON-RPC id never affect each other. A `notifications/cancelled` requires `cancel` and acts only on an in-flight call the **same** principal started, matching the run-ownership rule, so a valid token with no stake in a run (ids are guessable) cannot cancel it. A notification that is unauthorized or names another principal's id is a no-op (still `202`), and hanging up an SSE `tools/call` cancels exactly that call.
 
 | Method & path | Cap. | Behaviour |
 |---|---|---|

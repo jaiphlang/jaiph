@@ -53,7 +53,7 @@ Each parameter is a required string, and a successful `tools/call` returns the d
 
 ## 6. Stream progress and cancel {#7-stream-progress-and-cancel-a-long-call}
 
-Pass a `progressToken` in the call's `params._meta` for per-step `notifications/progress`, and send `notifications/cancelled` to abandon a call; see [the `jaiph mcp` reference](cli.md#jaiph-mcp) for the frame contents and cancellation behavior.
+Pass a `progressToken` in the call's `params._meta` for per-step `notifications/progress`, and send `notifications/cancelled` to abandon a call; see [the `jaiph mcp` reference](cli.md#jaiph-mcp) for the frame contents and cancellation behavior. Over HTTP (`POST /mcp`) a `notifications/cancelled` is additionally scoped to the caller; see [serve endpoints](cli.md#endpoints).
 
 ## 7. Hot reload and shutdown
 
