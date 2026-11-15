@@ -4,7 +4,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { statSync } from "node:fs";
 import { basename, join } from "node:path";
 import type { McpToolSpec } from "../shared/mcp-tools";
-import { McpServer, type McpCallContext } from "../shared/mcp-server";
+import { McpServer, type McpCallContext, type McpHttpScope } from "../shared/mcp-server";
 import type { DefCallResult, DefCallContext } from "../shared/workflow-call";
 import { buildOpenApi } from "./openapi";
 import {
@@ -529,9 +529,20 @@ export class ServeHandler {
       };
     }
 
+    // Per-request MCP scope: isolates every `tools/call` under a server-generated
+    // key (two calls sharing a client id stay independent) and scopes a
+    // `notifications/cancelled` to this principal + its `cancel` capability — so
+    // one principal can never cancel another's call, and an unscoped id can
+    // never reach a run it does not own.
+    const scope: McpHttpScope = {
+      owner: principal.subject,
+      canCancel: principal.capabilities.has("cancel"),
+    };
+
     // A tools/call may emit progress; stream it as SSE when the client offers
-    // that content type. The client hanging up cancels the run through the same
-    // MCP cancel path (kills the child process tree).
+    // that content type. The client hanging up cancels exactly this call through
+    // the handle the MCP engine hands back below (kills the child process tree)
+    // — never an id lookup that could kill a different call sharing the id.
     if (requestId !== undefined && method === "tools/call" && wantsSse) {
       // The stream body runs after this method returns (outside the request's
       // AsyncLocalStorage scope), so capture the identity and re-establish it
@@ -543,15 +554,19 @@ export class ServeHandler {
         headers: { "content-type": "text/event-stream", "cache-control": "no-cache", connection: "keep-alive" },
         body: "",
         stream: (target) => {
-          target.onAbort(() => {
-            void this.mcp.handleLine(
-              JSON.stringify({ jsonrpc: "2.0", method: "notifications/cancelled", params: { requestId } }),
-            );
-          });
+          // Capture this call's own cancel handle (set synchronously as the call
+          // registers) and fire it on disconnect — no id lookup.
+          const control: { cancel?: () => void } = {};
+          target.onAbort(() => control.cancel?.());
+          const streamScope: McpHttpScope = { ...scope, registerCanceller: (fn) => void (control.cancel = fn) };
           return this.reqCtx.run(captured, () =>
-            this.mcp.handleLine(req.body, (m) => {
-              if (!target.aborted) target.write(`data: ${JSON.stringify(m)}\n\n`);
-            }),
+            this.mcp.handleLine(
+              req.body,
+              (m) => {
+                if (!target.aborted) target.write(`data: ${JSON.stringify(m)}\n\n`);
+              },
+              streamScope,
+            ),
           );
         },
       };
@@ -559,7 +574,7 @@ export class ServeHandler {
 
     // JSON mode: buffer this message's outbound traffic and return the reply.
     const collected: Record<string, unknown>[] = [];
-    await this.mcp.handleLine(req.body, (m) => collected.push(m));
+    await this.mcp.handleLine(req.body, (m) => collected.push(m), scope);
     // A pure notification produces nothing to return.
     if (collected.length === 0) return { status: 202, headers: {}, body: "" };
     const reply = collected.find((m) => "id" in m) ?? collected[collected.length - 1];

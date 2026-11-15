@@ -1254,6 +1254,166 @@ test("POST /runs/{id}/cancel cancels an MCP-initiated run in the shared registry
   assert.equal(bodyJson(await h.handleRequest(req("GET", `/runs/${runId}`))).status, "cancelled");
 });
 
+test("POST /mcp notifications/cancelled is principal-scoped: B cannot cancel A's call, A can", async () => {
+  // Over HTTP a cancel must be scoped to the sending principal: a valid token
+  // with no ownership of the target call is a no-op, even though ids are guessable.
+  const alice = principal("alice", ["invoke", "inspect", "cancel"]);
+  const bob = principal("bob", ["invoke", "inspect", "cancel"]);
+  let aliceRunId = "";
+  let aliceResolve!: (r: DefCallResult) => void;
+  const h = makeHandler({
+    tools: [NOARG_TOOL],
+    authenticator: tokenAuth({ "alice-tok": alice, "bob-tok": bob }),
+    callTool: (_spec, _args, runId, ctx) => {
+      aliceRunId = runId;
+      return new Promise<DefCallResult>((resolve) => {
+        aliceResolve = resolve;
+        ctx.onCancelHandle?.(() => resolve({ text: "terminated by signal SIGINT", isError: true, exitStatus: 1, signal: "SIGINT" }));
+      });
+    },
+  });
+  const aliceHdr = { authorization: "Bearer alice-tok" };
+  const bobHdr = { authorization: "Bearer bob-tok" };
+
+  // Alice starts a tools/call with client id 1 (JSON mode, stays in flight).
+  const aliceCall = h.handleRequest(
+    mcpPost({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "ping", arguments: {} } }, aliceHdr),
+  );
+  await flush();
+  assert.equal(bodyJson(await h.handleRequest(req("GET", `/runs/${aliceRunId}`, { headers: aliceHdr }))).status, "running");
+
+  // Bob sends notifications/cancelled for Alice's id — 202, but it does NOT cancel.
+  const bobCancel = await h.handleRequest(
+    mcpPost({ jsonrpc: "2.0", method: "notifications/cancelled", params: { requestId: 1 } }, bobHdr),
+  );
+  assert.equal(bobCancel.status, 202);
+  await flush();
+  assert.equal(
+    bodyJson(await h.handleRequest(req("GET", `/runs/${aliceRunId}`, { headers: aliceHdr }))).status,
+    "running",
+    "B's cancel for A's request id is a no-op",
+  );
+
+  // Alice's own notifications/cancelled cancels her call.
+  const aliceCancel = await h.handleRequest(
+    mcpPost({ jsonrpc: "2.0", method: "notifications/cancelled", params: { requestId: 1 } }, aliceHdr),
+  );
+  assert.equal(aliceCancel.status, 202);
+  await aliceCall;
+  assert.equal(
+    bodyJson(await h.handleRequest(req("GET", `/runs/${aliceRunId}`, { headers: aliceHdr }))).status,
+    "cancelled",
+    "A's own cancel takes effect",
+  );
+  void aliceResolve;
+});
+
+test("POST /mcp notifications/cancelled without the cancel capability cannot cancel the principal's own call", async () => {
+  const carol = principal("carol", ["invoke", "inspect"]); // no `cancel`
+  let runId = "";
+  const h = makeHandler({
+    tools: [NOARG_TOOL],
+    authenticator: tokenAuth({ tok: carol }),
+    callTool: (_spec, _args, rid, ctx) => {
+      runId = rid;
+      return new Promise<DefCallResult>((resolve) => {
+        ctx.onCancelHandle?.(() => resolve({ text: "terminated by signal SIGINT", isError: true, exitStatus: 1, signal: "SIGINT" }));
+      });
+    },
+  });
+  const hdr = { authorization: "Bearer tok" };
+  const call = h.handleRequest(
+    mcpPost({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "ping", arguments: {} } }, hdr),
+  );
+  await flush();
+  const cancel = await h.handleRequest(
+    mcpPost({ jsonrpc: "2.0", method: "notifications/cancelled", params: { requestId: 1 } }, hdr),
+  );
+  assert.equal(cancel.status, 202, "the notification is still accepted");
+  await flush();
+  assert.equal(
+    bodyJson(await h.handleRequest(req("GET", `/runs/${runId}`, { headers: hdr }))).status,
+    "running",
+    "without the cancel capability the call is not cancelled",
+  );
+  void call;
+});
+
+test("POST /mcp: two concurrent same-id tools/call are independent and each returns its own result", async () => {
+  // The bug: two tools/call sharing a client id clobbered one entry. Each must
+  // now be tracked independently and complete with its own result.
+  const resolvers: Array<(r: DefCallResult) => void> = [];
+  const h = makeHandler({
+    tools: [NOARG_TOOL],
+    callTool: () => new Promise<DefCallResult>((resolve) => resolvers.push(resolve)),
+  });
+  const mk = (): ServeRequest =>
+    mcpPost({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "ping", arguments: {} } });
+  const a = h.handleRequest(mk());
+  const b = h.handleRequest(mk());
+  await flush();
+  // Both are registered as distinct running runs despite the shared id 1.
+  assert.equal(bodyJson(await h.handleRequest(req("GET", "/runs"))).total, 2, "same-id calls are tracked independently");
+  assert.equal(resolvers.length, 2);
+  resolvers[0]({ text: "first", isError: false, exitStatus: 0 });
+  resolvers[1]({ text: "second", isError: false, exitStatus: 0 });
+  const resA = bodyJson(await a);
+  const resB = bodyJson(await b);
+  assert.equal(resA.id, 1);
+  assert.equal(resB.id, 1);
+  assert.deepEqual(
+    [resA.result.content[0].text, resB.result.content[0].text].sort(),
+    ["first", "second"],
+    "each same-id call returns its own result",
+  );
+});
+
+test("POST /mcp: SSE hangup on one of two same-id calls cancels only that call", async () => {
+  const handles: Array<{ runId: string; resolve: (r: DefCallResult) => void }> = [];
+  const h = makeHandler({
+    tools: [NOARG_TOOL],
+    callTool: (_spec, _args, runId, ctx) =>
+      new Promise<DefCallResult>((resolve) => {
+        ctx.onCancelHandle?.(() => resolve({ text: "terminated by signal SIGINT", isError: true, exitStatus: 1, signal: "SIGINT" }));
+        handles.push({ runId, resolve });
+      }),
+  });
+  const mk = (): ServeRequest =>
+    mcpPost(
+      { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "ping", arguments: {} } },
+      { accept: "text/event-stream" },
+    );
+  const resA = await h.handleRequest(mk());
+  const resB = await h.handleRequest(mk());
+  assert.ok(resA.stream && resB.stream, "both same-id SSE calls drive their own stream");
+  const targetA = abortableTarget();
+  const targetB = abortableTarget();
+  const streamA = resA.stream!(targetA);
+  const streamB = resB.stream!(targetB);
+  await flush();
+  assert.equal(handles.length, 2, "both calls started");
+
+  // Hang up call A only.
+  targetA.abort();
+  await flush();
+  assert.equal(
+    bodyJson(await h.handleRequest(req("GET", `/runs/${handles[0].runId}`))).status,
+    "cancelled",
+    "the hung-up call is cancelled through its captured handle",
+  );
+  assert.equal(
+    bodyJson(await h.handleRequest(req("GET", `/runs/${handles[1].runId}`))).status,
+    "running",
+    "the other same-id call is untouched",
+  );
+
+  // Finish call B cleanly.
+  handles[1].resolve({ text: "done b", isError: false, exitStatus: 0 });
+  await streamA;
+  await streamB;
+  assert.equal(bodyJson(await h.handleRequest(req("GET", `/runs/${handles[1].runId}`))).status, "succeeded");
+});
+
 test("POST /mcp SSE hangup cancels the run through the shared cancel path", async () => {
   let runPromise!: Promise<DefCallResult>;
   const h = makeHandler({

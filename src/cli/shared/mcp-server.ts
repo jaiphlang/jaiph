@@ -66,12 +66,38 @@ export interface McpServerOptions {
 
 type JsonRpcId = string | number;
 
+/**
+ * Per-request routing + cancellation scope supplied by the HTTP transport
+ * (`jaiph serve`'s `POST /mcp`). Absent over stdio (`jaiph mcp`), where a single
+ * trusted client drives the server and cancellation is keyed by the bare
+ * JSON-RPC id. When present it makes each `tools/call` independent (tracked under
+ * a server-generated key, so two calls sharing a client-chosen id never clobber
+ * each other), scopes a `notifications/cancelled` to the sending principal and
+ * the `cancel` capability, and hands the handler the created call's exact cancel
+ * handle for an SSE disconnect (never an id lookup).
+ */
+export interface McpHttpScope {
+  /** Principal that owns a `tools/call` created in this scope (cancel ownership). */
+  owner: string;
+  /** Whether this request's principal may cancel (the `cancel` capability). */
+  canCancel: boolean;
+  /**
+   * Called synchronously, as a `tools/call` is registered, with that call's
+   * exact cancel handle — so an SSE disconnect cancels precisely this call.
+   */
+  registerCanceller?: (cancel: () => void) => void;
+}
+
 /** Bookkeeping for one in-flight `tools/call` so it can be cancelled. */
 interface InFlightCall {
   /** Set once the client requests cancellation for this request id. */
   cancelled: boolean;
   /** Terminates the running child; populated once the executor spawns it. */
   cancelRun?: () => void;
+  /** Client-chosen JSON-RPC id, matched by `notifications/cancelled`. */
+  requestId: JsonRpcId;
+  /** Principal that created this call over HTTP; `undefined` over stdio. */
+  owner?: string;
 }
 
 function isJsonRpcId(value: unknown): value is JsonRpcId {
@@ -92,8 +118,16 @@ type WriteFn = (message: Record<string, unknown>) => void;
 export class McpServer {
   private readonly opts: McpServerOptions;
   private initialized = false;
-  /** In-flight `tools/call` requests keyed by request id (for cancellation). */
+  /**
+   * In-flight `tools/call` requests, for progress routing + cancellation. Keyed
+   * by the bare JSON-RPC id over stdio (one trusted client), or by a
+   * server-generated key over HTTP so two calls sharing a client id stay
+   * independent. Each entry records its `requestId` + owning principal so a
+   * scoped `notifications/cancelled` finds the right call.
+   */
   private readonly inFlight = new Map<JsonRpcId, InFlightCall>();
+  /** Monotonic source for the per-HTTP-call in-flight key (collision-free). */
+  private callSeq = 0;
   /**
    * Per-`handleLine` outbound writer, set when the transport routes one
    * message's replies to a dedicated sink (the HTTP endpoint). Propagates
@@ -135,12 +169,12 @@ export class McpServer {
    * response and progress notifications — is routed to it instead of the
    * transport default, for the whole async lifetime of the call.
    */
-  handleLine(line: string, write?: WriteFn): Promise<void> {
-    if (write) return this.writeStore.run(write, () => this.dispatch(line));
-    return this.dispatch(line);
+  handleLine(line: string, write?: WriteFn, scope?: McpHttpScope): Promise<void> {
+    if (write) return this.writeStore.run(write, () => this.dispatch(line, scope));
+    return this.dispatch(line, scope);
   }
 
-  private async dispatch(line: string): Promise<void> {
+  private async dispatch(line: string, scope?: McpHttpScope): Promise<void> {
     const trimmed = line.trim();
     if (trimmed.length === 0) return;
 
@@ -172,7 +206,7 @@ export class McpServer {
     if (!hasId) {
       // Notification. `notifications/cancelled` aborts an in-flight call;
       // everything else (`notifications/initialized`, …) is a no-op.
-      if (method === "notifications/cancelled") this.handleCancelled(params);
+      if (method === "notifications/cancelled") this.handleCancelled(params, scope);
       return;
     }
 
@@ -187,7 +221,7 @@ export class McpServer {
         this.handleToolsList(id!);
         return;
       case "tools/call":
-        await this.handleToolsCall(id!, params);
+        await this.handleToolsCall(id!, params, scope);
         return;
       default:
         this.writeError(id!, JSONRPC_METHOD_NOT_FOUND, `method not found: ${method}`);
@@ -216,7 +250,7 @@ export class McpServer {
     this.writeResult(id, { tools });
   }
 
-  private async handleToolsCall(id: JsonRpcId, params: Record<string, unknown>): Promise<void> {
+  private async handleToolsCall(id: JsonRpcId, params: Record<string, unknown>, scope?: McpHttpScope): Promise<void> {
     const name = typeof params.name === "string" ? params.name : "";
     const spec = this.opts.getTools().find((t) => t.name === name);
     if (!spec) {
@@ -251,10 +285,21 @@ export class McpServer {
     const args: Record<string, string> = {};
     for (const p of spec.params) args[p] = rawArgs[p] as string;
 
-    // Track this call so a `notifications/cancelled` for `id` can kill it.
-    const entry: InFlightCall = { cancelled: false };
-    this.inFlight.set(id, entry);
-    const ctx = this.buildCallContext(id, entry, readProgressToken(params));
+    // Track this call for progress routing + cancellation. Over HTTP (scope
+    // present) the key is a server-generated one so two calls sharing the
+    // client id `id` are independent; the bare `id` is kept on the entry for a
+    // `notifications/cancelled` to match, alongside the owning principal. Over
+    // stdio (no scope) the key stays the bare id — one trusted client.
+    const key: JsonRpcId = scope ? `http:${this.callSeq++}` : id;
+    const entry: InFlightCall = { cancelled: false, requestId: id, owner: scope?.owner };
+    this.inFlight.set(key, entry);
+    // Hand the HTTP transport this call's exact cancel handle so an SSE
+    // disconnect cancels precisely this call, never one that shares the id.
+    scope?.registerCanceller?.(() => {
+      entry.cancelled = true;
+      entry.cancelRun?.();
+    });
+    const ctx = this.buildCallContext(key, entry, readProgressToken(params));
     try {
       const result = await this.opts.callTool(spec, args, ctx);
       // A cancelled call must not produce a response (spec requirement).
@@ -270,8 +315,8 @@ export class McpServer {
       this.writeError(id, JSONRPC_INTERNAL_ERROR, `tool "${spec.name}" failed: ${message}`);
     } finally {
       // Drop the entry only after the response is sent: `onStep` gates progress
-      // notifications on `inFlight.has(id)`, so this also stops late progress.
-      this.inFlight.delete(id);
+      // notifications on `inFlight.has(key)`, so this also stops late progress.
+      this.inFlight.delete(key);
     }
   }
 
@@ -281,7 +326,7 @@ export class McpServer {
    * capture the child-termination function for cancellation.
    */
   private buildCallContext(
-    id: JsonRpcId,
+    key: JsonRpcId,
     entry: InFlightCall,
     progressToken: JsonRpcId | undefined,
   ): McpCallContext {
@@ -292,7 +337,7 @@ export class McpServer {
           ? undefined
           : (kind, name): void => {
               // Suppress once the call is cancelled or its response was sent.
-              if (entry.cancelled || !this.inFlight.has(id)) return;
+              if (entry.cancelled || !this.inFlight.has(key)) return;
               progress += 1;
               this.write({
                 jsonrpc: "2.0",
@@ -308,14 +353,24 @@ export class McpServer {
     };
   }
 
-  /** Terminate the child of an in-flight call named by `notifications/cancelled`. */
-  private handleCancelled(params: Record<string, unknown>): void {
+  /**
+   * Terminate the child of an in-flight call named by `notifications/cancelled`.
+   * Over stdio (no scope) it matches the bare request id — one trusted client.
+   * Over HTTP (scope present) it cancels only a call the SAME principal created,
+   * and only when that principal holds the `cancel` capability; otherwise it is
+   * a no-op (the transport still answers 202). Keyed by a server-generated id
+   * over HTTP, so the match is by the entry's recorded `requestId`.
+   */
+  private handleCancelled(params: Record<string, unknown>, scope?: McpHttpScope): void {
     const requestId = params.requestId;
     if (!isJsonRpcId(requestId)) return;
-    const entry = this.inFlight.get(requestId);
-    if (!entry) return;
-    entry.cancelled = true;
-    entry.cancelRun?.();
+    if (scope && !scope.canCancel) return;
+    for (const entry of this.inFlight.values()) {
+      if (entry.requestId !== requestId) continue;
+      if (scope && entry.owner !== scope.owner) continue;
+      entry.cancelled = true;
+      entry.cancelRun?.();
+    }
   }
 
   private writeResult(id: JsonRpcId, result: Record<string, unknown>): void {
