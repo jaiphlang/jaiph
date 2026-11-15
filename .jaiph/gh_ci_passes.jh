@@ -20,13 +20,6 @@ config {
   agent.claude_flags = "--permission-mode bypassPermissions"
 }
 
-script assert_nonempty_file_or_fail = '''
-  test -s "$1" || {
-    echo "jaiph: ci failure log is empty at $1" >&2
-    exit 1
-  }
-'''
-
 # Prefer the log file written by check_ci. When log download fails (empty or
 # missing file), persist the failed step's stdout+stderr so recover still has
 # a run URL / job id / gh error for the agent.
@@ -95,15 +88,6 @@ def ensure_gh_ci_passes(branch, workflow_name) {
   }
 
   common.rm_file_simple(ci_log_file)
-}
-
-def pull_latest_logs(branch, workflow_name) {
-  const ci_log_dir = ".jaiph/tmp"
-  const ci_log_file = "${ci_log_dir}/gh_ci.latest.log"
-  common.mkdir_p_simple(ci_log_dir)
-  gh.pull_logs(branch, "", workflow_name, ci_log_file, "1")
-  assert_nonempty_file_or_fail(ci_log_file)
-  return ci_log_file
 }
 
 export def main(branch, workflow_name) {

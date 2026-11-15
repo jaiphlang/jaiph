@@ -37,30 +37,42 @@ const simplifier_principles = """
   - If a simplification would require a behavior change or large API churn,
     stop and record it in .jaiph/tmp/simplifier_deferred.md instead of doing it
     in this pass.
-  - Do not modify any file under test/ or e2e/ (including fixtures, golden
+  - Do not modify any test: integration/, e2e/, test-infra/, test-fixtures/,
+    and any *.test.ts / *.test.jh file (including fixtures, golden
     expected output, and e2e helpers). Production code must stay compatible with
     existing tests unchanged.
 """
 
 script assert_no_test_or_e2e_in_changed = '''
   local bad=0
-  while IFS= read -r f; do
+  while IFS= read -r f || [ -n "$f" ]; do
     [ -z "$f" ] && continue
-    if [[ "$f" == test/* ]] || [[ "$f" == e2e/* ]]; then
-      echo "Simplifier workflow must not modify tests or e2e: $f" >&2
-      bad=1
-    fi
-  done < <(
-    {
-      git diff --name-only --cached
-      git diff --name-only
-      git ls-files --others --exclude-standard
-    } | sort -u
-  )
+    case "$f" in
+      integration/*|e2e/*|test-infra/*|test-fixtures/*|*.test.ts|*.test.jh)
+        echo "Simplifier workflow must not modify tests or fixtures: $f" >&2
+        bad=1
+        ;;
+    esac
+  done
   return $bad
 '''
+
+script changed_paths = '''
+  {
+    git diff --name-only --cached
+    git diff --name-only
+    git ls-files --others --exclude-standard
+  } | sort -u
+'''
+
+# Fails when any path in the newline-separated list is a test or fixture.
+export def assert_no_test_paths(paths) {
+  stdin "${paths}" -> assert_no_test_or_e2e_in_changed()
+}
+
 def no_test_or_e2e_paths_changed() {
-  assert_no_test_or_e2e_in_changed()
+  const paths = changed_paths()
+  assert_no_test_paths(paths)
 }
 
 script report_file_nonempty = 'test -s ".jaiph/tmp/simplifier_report.md"'
@@ -70,7 +82,7 @@ def find_simplifications() {
     <role>
     You are a senior engineer focused on codebase simplification for the Jaiph
     repository (TypeScript under src/ and supporting scripts). You may read
-    test/ and e2e/ for context; do not edit those trees (hard rule for the
+    integration/ and e2e/ for context; do not edit tests or fixtures (hard rule for the
     follow-up apply step).
 
     <principles>
@@ -84,7 +96,7 @@ def find_simplifications() {
     Cover:
     1. src/ — largest or most complex files; obvious duplication; modules that
        could be split by responsibility.
-    2. test/ and e2e/ — note duplication or harness noise only as follow-up
+    2. integration/ and e2e/ — note duplication or harness noise only as follow-up
        ideas for humans; this workflow will not change those paths.
 
     Output a structured report, one entry per opportunity:
@@ -107,7 +119,7 @@ def find_simplifications() {
 }
 
 script save_simplifier_report = '''
-printf '%s\n' "$1" > .jaiph/tmp/simplifier_report.md
+  printf '%s\n' "$1" > .jaiph/tmp/simplifier_report.md
 '''
 
 script read_simplifier_report = 'cat .jaiph/tmp/simplifier_report.md'
@@ -134,7 +146,8 @@ def apply_simplifications() {
     Rules:
     - Keep each commit-sized chunk of work easy to review; prefer several small
       refactors over one sweeping rewrite.
-    - Do not modify test/ or e2e/ — adjust production code only so existing
+    - Do not modify tests or fixtures (integration/, e2e/, test-infra/,
+      test-fixtures/, *.test.ts) — adjust production code only so existing
       tests keep passing.
     - Run: npm run build && npm test && npm run test:e2e
     - If you defer work, append a brief note to .jaiph/tmp/simplifier_deferred.md
@@ -151,7 +164,7 @@ script mkdir_tmp_jaiph = 'mkdir -p .jaiph/tmp'
 
 const commit_task = """
   Simplifier pass: apply safe code simplifications from
-  .jaiph/tmp/simplifier_report.md. Preserve behavior; no test/ or e2e/ edits.
+  .jaiph/tmp/simplifier_report.md. Preserve behavior; no test or fixture edits.
 """
 
 export def main() {

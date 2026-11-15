@@ -28,6 +28,7 @@ script read_contributing_docs = '''
   sec == 2 { print }
   ' docs/contributing.md
 '''
+
 script read_txtar_format_spec = 'cat test-fixtures/compiler-txtar/README.md'
 
 script read_txtar_fixture_names = '''
@@ -36,6 +37,7 @@ script read_txtar_fixture_names = '''
     grep '^=== ' "$f" | sed 's/^=== /  /'
   done
 '''
+
 script read_txtar_fixtures = '''
   for f in test-fixtures/compiler-txtar/*.txt; do
     echo "========== $f =========="
@@ -43,10 +45,11 @@ script read_txtar_fixtures = '''
     echo ""
   done
 '''
+
 script new_qa_gap_report_path = 'echo ".jaiph/tmp/qa_gap_report_$(date +%Y-%m-%d_%H-%M-%S).md"'
 
 script write_gap_report_pointer = '''
-printf '%s\n' "$1" > .jaiph/tmp/qa_gap_report_active.txt
+  printf '%s\n' "$1" > .jaiph/tmp/qa_gap_report_active.txt
 '''
 
 script gap_report_nonempty = '''
@@ -54,12 +57,14 @@ script gap_report_nonempty = '''
   [ -z "$p" ] && return 1
   test -s "$p"
 '''
+
 script read_gap_report = '''
   p="$(cat .jaiph/tmp/qa_gap_report_active.txt)"
   cat "$p"
 '''
+
 script save_gap_report_file = '''
-printf '%s\n' "$1" > "$2"
+  printf '%s\n' "$1" > "$2"
 '''
 
 const analyze_gaps_prompt = """
@@ -81,7 +86,7 @@ const analyze_gaps_prompt = """
   Use the testing philosophy and layer locations from contributing_docs above.
   The test layers are:
 
-  1. **Compiler tests (txtar)** — language-agnostic fixtures in compiler-tests/*.txt.
+  1. **Compiler tests (txtar)** — language-agnostic fixtures in test-fixtures/compiler-txtar/*.txt.
      Each test case is a .jh source with an expected outcome (ok or error).
      These test parse + validate without execution. This is the PRIMARY layer
      for compiler error paths and valid-source acceptance.
@@ -101,15 +106,14 @@ const analyze_gaps_prompt = """
 
   1. Read every source file in src/parse/*.ts. For each fail() call, check if
      the error is covered by either:
-     - A txtar test case in compiler-tests/*.txt (check existing_txtar_tests above)
+     - A txtar test case in test-fixtures/compiler-txtar/*.txt (check existing_txtar_tests above)
      - A colocated TS test in src/parse/*.test.ts
      List fail() calls with no coverage in either layer. These are COMPILER gaps —
      they should be fixed with txtar test cases.
 
-  2. Read src/transpile/validate.ts, src/transpile/validate-ref-resolution.ts,
-     src/transpile/validate-string.ts, src/transpile/validate-prompt-schema.ts,
-     and src/transpile/shell-jaiph-guard.ts. For each jaiphError() call, check
-     coverage in txtar fixtures and TS tests. List uncovered paths.
+  2. Read src/transpile/validate*.ts and src/transpile/shell-jaiph-guard.ts.
+     For each diag.error(...) and jaiphError(...) call (the E_VALIDATE sites),
+     check coverage in txtar fixtures and TS tests. List uncovered paths.
      These are COMPILER gaps — txtar test cases.
 
   3. Read e2e/tests/*.sh file names and compare against the feature list in
@@ -197,10 +201,10 @@ def write_tests() {
     Rules by test layer:
 
     **txtar (compiler tests):**
-    - Append new test cases to the appropriate file in compiler-tests/:
-      - compiler-tests/parse-errors.txt for E_PARSE errors
-      - compiler-tests/validate-errors.txt for E_VALIDATE errors (create if missing)
-      - compiler-tests/valid.txt for success cases
+    - Append new test cases to the appropriate file in test-fixtures/compiler-txtar/:
+      - test-fixtures/compiler-txtar/parse-errors.txt for E_PARSE errors
+      - test-fixtures/compiler-txtar/validate-errors.txt for E_VALIDATE errors
+      - test-fixtures/compiler-txtar/valid.txt for success cases
     - Use the txtar format shown in txtar_format above.
     - Do NOT duplicate test names already in existing_txtar_fixtures.
     - Each test case must be minimal — only include what triggers the error.

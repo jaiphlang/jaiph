@@ -9,8 +9,11 @@ Process rules:
 1. `pick_task` prefers the first `#dev-ready` task that is not `#in-progress`.
    The product owner may claim a later available task instead.
 2. The first `##` section is the preferred next task in this view.
-3. `#dev-ready` means ready to implement. `#in-progress` means claimed by `pick_task`.
-4. Runtime mutations go through the product-owner defs only.
+3. `#dev-ready` means ready to implement. `#in-progress` means claimed
+   by `pick_task` or by the engineer workflow.
+4. Queue changes go through `.jaiph/libs/jaiphlang/queue.py` only: the
+   product-owner defs, or the engineer, architect-review and security-review
+   workflows. Never by editing this file.
 5. Every task must be standalone: no hidden assumptions, no "read prior task".
 6. Hard rewrite semantics: breaking changes are allowed unless a task says otherwise.
 7. Acceptance criteria are non-negotiable. A task is not done until every
@@ -846,32 +849,3 @@ Build: the `build` script copies `src/runtime` into `dist/src/runtime`, a tree t
 - `npm run arch:check` passes with the new `config.ts` rule; the synthetic violation fails.
 - `tsc`, `npm test`, `npm run lint`, `scripts/build-registry.test.mjs`, the standalone-binary / release smoke tests in CI config, and `bash e2e/test_all.sh` pass.
 - CHANGELOG entry under Unreleased.
-
-## Fix the repo's own agent workflows under .jaiph
-
-Source: code audit 2026-11-15. Not `#dev-ready`: `.jaiph/engineer.jh` forbids the implementing agent from editing `.jaiph/**`, so a maintainer (or a parent session) does this one by hand.
-
-### Current behavior
-
-- **Task loss in `engineer.jh`.** `implement_from_queue` (around line 365) calls `queue.get_first_task()`, which is `queue("get")` with no tag filter: it returns the first task even when it is `#in-progress`. It then calls `queue.remove_completed_task(...)` (line 375) before `verify_docs_and_commit` (line 377), that is, before CI. If CI recovery is exhausted the task is gone from `.jaiph/queue-state.md` (gitignored), never reached DONE.md, and nothing was committed. The prompt text at lines 44–46 describes QUEUE.md rule 4 as it used to read.
-- **Queue writers.** QUEUE.md rule 4 and the `product_owner.jh` header say the product-owner defs are the only queue writers, but `engineer.jh`, `architect_review.jh` (lines 96, 102) and `security_review.jh` (line 247) write the queue directly.
-- **Simplifier guard.** `simplifier.jh` line 49 blocks changes under `test/*` and `e2e/*`. There is no `test/` directory; tests live in `integration/`, `src/**/*.test.ts`, `test-infra/`, `test-fixtures/`. The agent can rewrite tests or golden fixtures and the guard stays green.
-- **QA paths.** `qa.jh` (lines 84, 104, 200–203) tells the agent to add cases to `compiler-tests/*.txt` ("create if missing"); the runner reads `test-fixtures/compiler-txtar`. Lines 109–112 tell it to audit "each jaiphError() call" in `src/transpile/validate.ts`, which uses `diag.error(...)`.
-- **Stale architecture.** `engineer.jh` line 277 and `architect_review.jh` line 22 say Jaiph "transpiles to Bash". `architect_review.jh` lines 16–17 cite `run … catch` and `parseRecoverStatement`, which no longer exist.
-- **Formatting.** `jaiph format --check .jaiph/*.jh` fails for 10 files. `pull_latest_logs` in `gh_ci_passes.jh` (line 100) is never called.
-
-### Required behavior
-
-- `implement_from_queue` takes the first `#dev-ready` task that is not `#in-progress`, marks it in progress, and archives it to DONE (`archive_to_done`) only after CI passes and the commit succeeds. On failure the task stays in the queue and the in-progress mark is removed.
-- Either route architect and security queue writes through the product-owner defs, or reword rule 4 and the "sole writer" header to match what the workflows do.
-- Simplifier guard and prompt cover `integration/*`, `e2e/*`, `test-infra/*`, `test-fixtures/*` and `*.test.ts`.
-- QA prompt names `test-fixtures/compiler-txtar/…` and `diag.error(` sites.
-- Replace the "transpiles to Bash" sentence with the opening sentence of `docs/architecture.md`; drop the removed names.
-- Run `jaiph format .jaiph/*.jh`; delete `pull_latest_logs`.
-
-### Acceptance
-
-- `.jaiph/engineer.test.jh` with mocked prompts and CI: an `#in-progress` first task is skipped; a failing CI leaves the task in the queue and not in DONE.
-- A test for the simplifier guard script: `integration/x.test.ts`, `src/a/b.test.ts` and `test-fixtures/x.txt` are rejected.
-- Extend `e2e/tests/128_examples_format_check.sh` (or add a sibling) to run `jaiph format --check` and `jaiph compile` on `.jaiph/*.jh`.
-- A test that every backticked repo path in `.jaiph/*.jh` prompt text exists, and that the phrase "transpiles to Bash" does not appear under `.jaiph/` or `docs/`.
