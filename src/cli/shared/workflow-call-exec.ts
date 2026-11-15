@@ -10,7 +10,7 @@ import {
 } from "../run/lifecycle";
 import { applyEnvGrant } from "../run/env";
 import { parseLogEvent, parseStepEvent, type StepEvent, type LogEvent } from "../run/events";
-import { redactCredentials } from "../../runtime";
+import { redactCredentials, CHAIN_KEY_FILE_ENV } from "../../runtime";
 import { readMetaFields, readReturnValue } from "./run-meta";
 import {
   DEFAULT_OUTPUT_CAPS,
@@ -62,6 +62,11 @@ export async function callDefHost(
   // The leader removes the grant file on read; clean up here too in case the
   // spawn never reached it.
   if (grantFile) rmSync(dirname(grantFile), { recursive: true, force: true });
+  // Same backstop for the off-process audit-chain key file (callDef set only its
+  // path on runtimeEnv): the leader removes it on read, this covers a spawn that
+  // never got that far.
+  const chainKeyFile = runtimeEnv[CHAIN_KEY_FILE_ENV];
+  if (chainKeyFile) rmSync(dirname(chainKeyFile), { recursive: true, force: true });
 
   const runDir = readMetaFields(metaFile, ["run_dir"]).run_dir;
   // Redaction is name-based over env values. `--env` values are off `runtimeEnv`

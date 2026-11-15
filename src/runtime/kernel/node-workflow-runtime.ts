@@ -497,6 +497,16 @@ export class NodeWorkflowRuntime {
        * Granted `use` keys (gated by `JAIPH_ENV_GRANT`) resolve from here.
        */
       grantValues?: Record<string, string>;
+      /**
+       * The per-run audit-chain HMAC key, supplied off-process (never on `env`,
+       * so it stays off the leader's exec-time environment where a same-user
+       * script child could read it). The runner reads it from the chain-key file
+       * (chain-key-file.ts) and passes it here; it is folded into the emitter's
+       * env for the keyed journal chain, never forwarded to any subprocess. When
+       * absent, an in-process `JAIPH_CHAIN_KEY` (e.g. the audit-chain test) is
+       * used, else the chain is keyless (self-consistent, unverifiable).
+       */
+      chainKey?: string;
     },
   ) {
     this.graph = graph;
@@ -545,14 +555,20 @@ export class NodeWorkflowRuntime {
     this.env.JAIPH_RUN_ID = this.runId;
     this.env.JAIPH_RUN_DIR = this.runDir;
     this.env.JAIPH_ARTIFACTS_DIR = artifactsDir;
+    // The audit-chain key arrives off-process (`opts.chainKey`) so it never sits
+    // on the leader's exec-time env. Fall back to an in-process `JAIPH_CHAIN_KEY`
+    // on `this.env` for in-process callers (the audit-chain test / `jaiph test`).
+    const chainKey = opts.chainKey ?? this.env[CHAIN_KEY_ENV] ?? "";
     this.emitter = new RuntimeEventEmitter({
       runId: this.runId,
       runDir: this.runDir,
       // Credential redaction is name-based over env values. Grant values are off
       // `this.env` now, so fold them into the emitter's redaction view (trusted
       // kernel; not a subprocess env) or a granted credential would slip through
-      // unredacted into the journal/event stream.
-      env: { ...this.env, ...this.grantValues },
+      // unredacted into the journal/event stream. The chain key is injected here
+      // (not on `this.env`) so the emitter keys its HMAC chain without the key
+      // ever riding on a process environment.
+      env: { ...this.env, ...this.grantValues, [CHAIN_KEY_ENV]: chainKey },
       getFrameStack: () => this.getFrameStack(),
       getAsyncIndices: () => this.getAsyncIndices(),
       suppressLiveEvents: opts.suppressLiveEvents,
@@ -2543,9 +2559,12 @@ export class NodeWorkflowRuntime {
    * via this scoped env, a prompt-agent) subprocess: without the key the
    * audited workflow cannot forge a run_summary.jsonl chain that verifies,
    * and without the path it is not even handed the file to overwrite
-   * (finding H-3). Deletes in place on the caller's fresh copy. `this.env`
-   * keeps both — the trusted kernel writes the journal and
-   * `appendRunSummaryLine` reads the path from `process.env`.
+   * (finding H-3). Deletes in place on the caller's fresh copy. The journal
+   * path stays on `this.env` (the trusted kernel writes the journal and
+   * `appendRunSummaryLine` reads the path from `process.env`). The chain key
+   * is held off `this.env` entirely — it arrives off-process and lives only in
+   * the emitter's in-memory env — so this delete of `CHAIN_KEY_ENV` is defense
+   * in depth against an in-process caller that still sets it on `this.env`.
    */
   private scrubKernelKeys(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
     delete env[CHAIN_KEY_ENV];
