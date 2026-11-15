@@ -2365,14 +2365,33 @@ export class NodeWorkflowRuntime {
       // early chunks are not lost. Pause the child if the tee fills.
       child.stderr?.setEncoding("utf8");
       const handoff = onSpawn && child.stdout ? new PassThrough() : undefined;
+      // While `handoffLive`, this stage's stdout is teed into the downstream
+      // stdin and the child is back-pressured when that tee fills. Once the
+      // downstream consumer stops reading — its stdin closed / EPIPE'd, or it
+      // never spawned — it destroys the handoff; we then drop the tee and keep
+      // draining stdout to the `.out` capture only, so this producer finishes
+      // instead of blocking on a full handoff forever (documented in
+      // docs/language.md next to the stdin pipeline section).
+      let handoffLive = handoff !== undefined;
       child.stdout?.on("data", (chunk: Buffer) => {
         io?.appendOut(chunk);
-        if (handoff && !handoff.write(chunk)) child.stdout?.pause();
+        if (handoffLive && handoff && !handoff.write(chunk)) child.stdout?.pause();
       });
       if (handoff) {
-        handoff.on("drain", () => child.stdout?.resume());
+        // The downstream destroys/ends the handoff when it stops reading; drop
+        // the back-pressure so the producer drains to `.out` and settles.
+        const dropHandoff = (): void => {
+          if (!handoffLive) return;
+          handoffLive = false;
+          child.stdout?.resume();
+        };
+        handoff.on("drain", () => {
+          if (handoffLive) child.stdout?.resume();
+        });
         child.stdout?.on("end", () => handoff.end());
         child.stdout?.on("error", () => handoff.destroy());
+        handoff.on("close", dropHandoff);
+        handoff.on("error", dropHandoff);
         onSpawn?.(handoff);
       } else if (onSpawn) {
         onSpawn(undefined);
@@ -2393,6 +2412,9 @@ export class NodeWorkflowRuntime {
         try {
           child.stdout?.destroy();
           child.stderr?.destroy();
+          // End the tee so a downstream stage piping from it sees EOF and settles
+          // instead of blocking on a half-open handoff.
+          handoff?.end();
         } catch {
           // best-effort cleanup
         }
@@ -2415,6 +2437,16 @@ export class NodeWorkflowRuntime {
         const msg = spawnFailureText(err, command, args, env, interpreter);
         error += msg;
         io?.appendErr(msg);
+        // An async spawn failure (e.g. a missing interpreter → ENOENT) leaves the
+        // upstream stage's teed stdout un-read; drain it so the producer doesn't
+        // block (mirrors the synchronous-throw path above).
+        if (stdin?.kind === "fd") {
+          try {
+            stdin.stream.destroy();
+          } catch {
+            // best-effort: upstream may have already gone away
+          }
+        }
         settle({ status: 1, output: "", error, streamed: true });
       });
       child.on("close", (code) => {
@@ -2438,8 +2470,20 @@ export class NodeWorkflowRuntime {
         if (stdin.kind === "bytes") {
           childStdin.end(stdin.bytes, "utf8");
         } else if (stdin.kind === "fd") {
-          stdin.stream.on("error", () => {});
-          stdin.stream.pipe(childStdin);
+          const upstream = stdin.stream;
+          upstream.on("error", () => {});
+          // If our stdin closes (this stage read enough and exited, e.g. a
+          // `head -c 10` that EPIPE'd the write end), destroy the upstream tee so
+          // its producer stops being back-pressured and drains to `.out` instead
+          // of blocking on a full handoff forever.
+          childStdin.on("close", () => {
+            try {
+              upstream.destroy();
+            } catch {
+              // best-effort: upstream may have already gone away
+            }
+          });
+          upstream.pipe(childStdin);
         } else {
           const rs = createReadStream(stdin.path);
           rs.on("error", () => {

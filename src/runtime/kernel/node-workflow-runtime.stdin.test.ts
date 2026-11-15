@@ -303,6 +303,89 @@ test("stdin prod() -> cons(): producer and consumer overlap (streamed, not mater
   }
 });
 
+// AC: a downstream stage that reads a little and exits early (`head -c 10`) must
+// not hang the producer. The producer is larger than the pipe/handoff buffer
+// (64 KB). When the consumer closes its stdin, the producer stops being
+// back-pressured and drains to its `.out` capture, so the pipeline settles
+// quickly instead of blocking until the idle-output kill.
+test("stdin gen() -> sink(): an early-exiting consumer unblocks the producer (settles fast)", async () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-stdin-earlyexit-"));
+  try {
+    const runtime = makeRuntime(
+      root,
+      [
+        "script gen = bash'''",
+        "head -c 200000 /dev/zero | tr '\\0' x", // 200 KB, well beyond the 64 KB handoff
+        "'''",
+        "script sink = bash'''",
+        "head -c 10", // reads 10 bytes, closes stdin, exits 0
+        "'''",
+        "export def main() {",
+        "  stdin gen() -> sink()",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const started = Date.now();
+    const status = await runtime.runRoot("main", []);
+    const elapsed = Date.now() - started;
+    assert.equal(status, 0, "pipeline settled successfully after the consumer exited early");
+    assert.ok(elapsed < 5000, `pipeline must settle within 5 s (took ${elapsed} ms)`);
+    // The producer drained to its `.out` in full even though the consumer stopped
+    // reading after 10 bytes.
+    const runDir = runtime.getRunDir();
+    const genOut = readdirSync(runDir).find((f) => f.endsWith(".out") && f.includes("gen"));
+    assert.ok(genOut, "expected a gen .out capture");
+    assert.equal(readFileSync(join(runDir, genOut!), "utf8").length, 200000, "producer drained to .out in full");
+    const sinkOut = readdirSync(runDir).find((f) => f.endsWith(".out") && f.includes("sink"));
+    assert.ok(sinkOut, "expected a sink .out capture");
+    assert.equal(readFileSync(join(runDir, sinkOut!), "utf8"), "xxxxxxxxxx", "consumer read its 10 bytes");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// AC: a downstream stage whose shebang interpreter does not exist fails to spawn
+// (async ENOENT). The producer's teed stdout is released so it does not block,
+// and the pipeline fails quickly with the spawn error — not after the idle kill.
+test("stdin gen() -> sink(): a missing consumer interpreter fails fast with the spawn error", async () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-stdin-nointerp-"));
+  try {
+    const runtime = makeRuntime(
+      root,
+      [
+        "script gen = bash'''",
+        "head -c 200000 /dev/zero | tr '\\0' x",
+        "'''",
+        "script sink = '''",
+        "#!/usr/bin/env jaiph_no_such_interp_xyz",
+        "cat",
+        "'''",
+        "export def main() {",
+        "  stdin gen() -> sink()",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const started = Date.now();
+    const status = await runtime.runRoot("main", []);
+    const elapsed = Date.now() - started;
+    assert.equal(status, 1, "pipeline failed because the consumer could not spawn");
+    assert.ok(elapsed < 5000, `pipeline must fail within 5 s (took ${elapsed} ms)`);
+    // The failure carries the missing-interpreter spawn error.
+    const runDir = runtime.getRunDir();
+    const sinkErr = readdirSync(runDir).find((f) => f.endsWith(".err") && f.includes("sink"));
+    assert.ok(sinkErr, "expected a sink .err capture");
+    assert.match(
+      readFileSync(join(runDir, sinkErr!), "utf8"),
+      /jaiph_no_such_interp_xyz.*not found/,
+      "the spawn error names the missing interpreter",
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 // AC: an inline-script run also pipes stdin.
 test("'cat'() stdin payload: inline script receives stdin", async () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-stdin-inline-"));
