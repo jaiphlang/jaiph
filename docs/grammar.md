@@ -364,15 +364,15 @@ Validator entry points (`src/transpile/validate.ts` for the outer layer; `src/tr
 
 ## Build artifacts
 
-`jaiph run` and `jaiph test` do not transpile defs to shell. `buildScripts` emits only per-`script` executable files under `scripts/`:
+`jaiph run` and `jaiph test` do not transpile defs to shell. `buildScripts` emits only per-`script` executable files under `scripts/`, one per source form below. A module-level script name carries a `__<hash>` suffix that is unique per module, so two modules that both declare `script <name>` emit to distinct files and a call always runs its own module's body. See [Architecture](architecture.md) for how the suffix is derived and why.
 
 | Source form | Emitted artifact |
 |---|---|
-| `script name = [<tag>]'…'` (single-line) | `scripts/<name>` with `#!/usr/bin/env bash` (or `#!/usr/bin/env <tag>`). |
-| `script name = <tag>'''…'''` (fenced) | `scripts/<name>` with `#!/usr/bin/env <tag>` or the manual `#!` line. |
+| `script name = [<tag>]'…'` (single-line) | `scripts/<name>__<hash>` with `#!/usr/bin/env bash` (or `#!/usr/bin/env <tag>`). |
+| `script name = <tag>'''…'''` (fenced) | `scripts/<name>__<hash>` with `#!/usr/bin/env <tag>` or the manual `#!` line. |
 | `` 'body'(args) `` / `<tag>'''body'''(args)` | `scripts/__inline_<12-hex>` with the deterministic name from `inlineScriptName`. |
 | `script name = …` **nested inside a def** | `scripts/__nested_<12-hex>` with the deterministic name from `nestedScriptName` (hash of name, interpreter tag, `use` keys, and body). Same interpreter/shebang path as a top-level script; the OS exec bit is not required. |
-| `import script "path" as name` | Copied verbatim to `scripts/<name>` with its original shebang preserved; the runtime resolves it through `JAIPH_SCRIPTS` like any other script. |
+| `import script "path" as name` | Copied verbatim to `scripts/<name>__<hash>` with its original shebang preserved; the runtime resolves it through `JAIPH_SCRIPTS` like any other script. |
 
 Defs, prompts, channels, and control flow are interpreted by `NodeWorkflowRuntime` from the AST. There is no def-level shell emission. Script subprocesses inherit the runner's `process.env` plus Jaiph metadata.
 

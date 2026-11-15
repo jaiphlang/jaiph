@@ -4,6 +4,7 @@ import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "n
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { buildScripts } from "../transpiler";
+import { moduleScriptFileName } from "../inline-script-name";
 
 test("buildScripts rejects a subshell line in a def", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-val-sub-fn-"));
@@ -211,9 +212,10 @@ test("buildScripts extracts script for run with capture workflow", () => {
       ].join("\n"),
     );
     buildScripts(join(root, "m.jh"), out);
+    const fileName = moduleScriptFileName(join(root, "m.jh"), "f");
     const names = readdirSync(join(out, "scripts"));
-    assert.ok(names.includes("f"));
-    assert.match(readFileSync(join(out, "scripts", "f"), "utf8"), /printf/);
+    assert.ok(names.includes(fileName));
+    assert.match(readFileSync(join(out, "scripts", fileName), "utf8"), /printf/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

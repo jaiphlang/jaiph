@@ -14,7 +14,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildRuntimeGraph } from "./graph";
-import { inlineScriptName } from "../../inline-script-name";
+import { inlineScriptName, moduleScriptFileName } from "../../inline-script-name";
 import { NodeWorkflowRuntime, _scriptSpawn } from "./node-workflow-runtime";
 
 /** Minimal fake ChildProcess that emits `close(0)` on the next tick. */
@@ -54,9 +54,12 @@ function writeFlow(root: string, name: string, lines: string[]): string {
   return path;
 }
 
-/** Emit a named script file the way buildScriptFiles would (bash shebang). */
-function writeScriptFile(scriptsDir: string, name: string): void {
-  writeFileSync(join(scriptsDir, name), "#!/usr/bin/env bash\necho x\n");
+/**
+ * Emit a module-level script file the way buildScriptFiles would (bash shebang),
+ * under the module-qualified name the runtime resolves for `modulePath`.
+ */
+function writeScriptFile(scriptsDir: string, modulePath: string, name: string): void {
+  writeFileSync(join(scriptsDir, moduleScriptFileName(modulePath, name)), "#!/usr/bin/env bash\necho x\n");
 }
 
 function makeEnv(root: string, scriptsDir: string): NodeJS.ProcessEnv {
@@ -80,7 +83,7 @@ test("sterile: a script with no `use` never sees ambient host keys (incl. agent 
   const root = mkdtempSync(join(tmpdir(), "jaiph-script-env-"));
   try {
     const { scriptsDir } = setup(root);
-    writeScriptFile(scriptsDir, "show");
+    writeScriptFile(scriptsDir, join(root, "flow.jh"), "show");
     const jh = writeFlow(root, "flow.jh", [
       "script show = 'echo x'",
       "export def main() {",
@@ -126,7 +129,7 @@ test("use + grant: the key crosses only when named in JAIPH_ENV_GRANT", async ()
   const root = mkdtempSync(join(tmpdir(), "jaiph-script-env-grant-"));
   try {
     const { scriptsDir } = setup(root);
-    writeScriptFile(scriptsDir, "show");
+    writeScriptFile(scriptsDir, join(root, "flow.jh"), "show");
     const jh = writeFlow(root, "flow.jh", [
       "script show use GITHUB_TOKEN = 'echo x'",
       "export def main() {",
@@ -170,7 +173,7 @@ test("constructed the way jaiph run/test will: the grant value is off `env` but 
   const root = mkdtempSync(join(tmpdir(), "jaiph-script-env-grantmap-"));
   try {
     const { scriptsDir } = setup(root);
-    writeScriptFile(scriptsDir, "show");
+    writeScriptFile(scriptsDir, join(root, "flow.jh"), "show");
     const jh = writeFlow(root, "flow.jh", [
       "script show use GITHUB_TOKEN = 'echo x'",
       "export def main() {",
@@ -204,7 +207,7 @@ test("import script: `use` on the import line has the same spawn contract as a n
   const root = mkdtempSync(join(tmpdir(), "jaiph-script-env-import-"));
   try {
     const { scriptsDir } = setup(root);
-    writeScriptFile(scriptsDir, "gh");
+    writeScriptFile(scriptsDir, join(root, "flow.jh"), "gh");
     writeFileSync(join(root, "gh.sh"), "#!/usr/bin/env bash\necho x\n");
     const jh = writeFlow(root, "flow.jh", [
       'import script "./gh.sh" as gh use GITHUB_TOKEN',
@@ -236,8 +239,8 @@ test("no def-level leak: a callee def's script without `use` stays sterile even 
   const root = mkdtempSync(join(tmpdir(), "jaiph-script-env-def-"));
   try {
     const { scriptsDir } = setup(root);
-    writeScriptFile(scriptsDir, "with_use");
-    writeScriptFile(scriptsDir, "without_use");
+    writeScriptFile(scriptsDir, join(root, "flow.jh"), "with_use");
+    writeScriptFile(scriptsDir, join(root, "flow.jh"), "without_use");
     const jh = writeFlow(root, "flow.jh", [
       "script with_use use GITHUB_TOKEN = 'echo x'",
       "script without_use = 'echo x'",
@@ -280,7 +283,7 @@ test("cross-module use: `lib.publish()` forwards the imported module's use key",
   const root = mkdtempSync(join(tmpdir(), "jaiph-script-env-cross-"));
   try {
     const { scriptsDir } = setup(root);
-    writeScriptFile(scriptsDir, "publish");
+    writeScriptFile(scriptsDir, join(root, "lib.jh"), "publish");
     writeFlow(root, "lib.jh", [
       "export script publish use UE_TOKEN = 'echo x'",
     ]);
@@ -319,7 +322,8 @@ test("inline scripts have no use clause and get the sterile base only", async ()
   try {
     const { scriptsDir } = setup(root);
     // The emitted inline script file must exist for interpreter resolution.
-    writeScriptFile(scriptsDir, inlineScriptName("echo hi", undefined));
+    // Inline scripts keep their content-hash name (not module-qualified).
+    writeFileSync(join(scriptsDir, inlineScriptName("echo hi", undefined)), "#!/usr/bin/env bash\necho x\n");
     const jh = writeFlow(root, "flow.jh", [
       "export def main() {",
       "  'echo hi'()",

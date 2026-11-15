@@ -5,6 +5,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { buildScriptsFromGraph } from "../transpiler";
+import { moduleScriptFileName } from "../inline-script-name";
 import { buildRuntimeGraph, resolveScriptRef, resolveDefRef } from "./kernel/graph";
 import {
   loadModuleGraph,
@@ -67,7 +68,11 @@ test("module-graph: buildScripts + buildRuntimeGraph reuse pre-parsed ASTs and n
     try {
       const { scriptsDir } = buildScriptsFromGraph(graph, outDir);
       const emitted = readdirSync(scriptsDir).sort();
-      assert.deepEqual(emitted, ["helper", "local_script"]);
+      // Module-level scripts emit under per-(module, name) files (moduleScriptFileName).
+      assert.deepEqual(
+        emitted,
+        [moduleScriptFileName(lib, "helper"), moduleScriptFileName(main, "local_script")].sort(),
+      );
 
       const runtime = buildRuntimeGraph(graph);
       assert.equal(runtime.modules.size, 2);
@@ -128,7 +133,11 @@ test("module-graph: cross-module workflow, rule, and script resolution", () => {
     try {
       const { scriptsDir } = buildScriptsFromGraph(graph, outDir);
       const emitted = readdirSync(scriptsDir).sort();
-      assert.deepEqual(emitted, ["helper", "local_script"]);
+      // Module-level scripts emit under per-(module, name) files (moduleScriptFileName).
+      assert.deepEqual(
+        emitted,
+        [moduleScriptFileName(lib, "helper"), moduleScriptFileName(main, "local_script")].sort(),
+      );
 
       const runtime = buildRuntimeGraph(graph);
       const localWf = resolveDefRef(runtime, main, {

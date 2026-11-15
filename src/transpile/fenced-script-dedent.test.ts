@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { emitScriptsForModule } from "../transpiler";
+import { moduleScriptFileName } from "../inline-script-name";
 
 test("emit: dedented fenced script preserves heredoc delimiter at column 0", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-fenced-dedent-"));
@@ -26,7 +27,7 @@ test("emit: dedented fenced script preserves heredoc delimiter at column 0", () 
     writeFileSync(input, source, "utf8");
 
     const scripts = emitScriptsForModule(input, root);
-    const artifact = scripts.find((s) => s.name === "write_queue");
+    const artifact = scripts.find((s) => s.name === moduleScriptFileName(input, "write_queue"));
     assert.ok(artifact, "write_queue script artifact missing");
     assert.match(artifact.content, /cat > "\$tmp_dir\/QUEUE\.md" <<'EOF'\n# Queue\nroundtrip-ok\nEOF/);
     assert.doesNotMatch(artifact.content, /  EOF/);

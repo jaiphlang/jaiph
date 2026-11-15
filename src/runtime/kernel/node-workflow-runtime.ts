@@ -5,7 +5,7 @@ import { basename, dirname, join, resolve as resolvePath } from "node:path";
 import { PassThrough, type Readable } from "node:stream";
 import { randomUUID } from "node:crypto";
 import { AsyncLocalStorage } from "node:async_hooks";
-import { inlineScriptName, nestedScriptName } from "../../inline-script-name";
+import { inlineScriptName, moduleScriptFileName, nestedScriptName } from "../../inline-script-name";
 import {
   argsToRuntimeString,
   canonicalizeTripleQuotedString,
@@ -1845,14 +1845,17 @@ export class NodeWorkflowRuntime {
         return this.executeManagedStep("script", ref, args, async () => this.dispatchMockBody(ref, mockBody, args));
       }
       // Sterile script env: base process mechanics + runtime contract keys +
-      // this script's `use` keys intersected with the `--env` grant.
+      // this script's `use` keys intersected with the `--env` grant. Both the
+      // env and the emitted file are taken from the module this call resolves
+      // to, so a same-named script in another module never shadows this one.
       const scriptEnv = this.buildScriptSpawnEnv(scope.env, resolvedScript.script.use);
+      const fileName = moduleScriptFileName(resolvedScript.filePath, resolvedScript.script.name);
       return this.executeManagedStep(
         "script",
         ref,
         args,
         async (io) =>
-          this.executeScript(resolvedScript.filePath, resolvedScript.script.name, args, scriptEnv, io, stdin, onSpawn),
+          this.executeScript(resolvedScript.filePath, fileName, args, scriptEnv, io, stdin, onSpawn),
         undefined,
         endGate,
       );

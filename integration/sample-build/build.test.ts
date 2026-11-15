@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildScripts } from "../../src/transpiler";
+import { moduleScriptFileName } from "../../src/inline-script-name";
 
 import "./helpers";
 
@@ -124,7 +125,7 @@ test("buildScripts accepts files with no workflows", () => {
     );
 
     buildScripts(filePath, outDir);
-    assert.ok(existsSync(join(outDir, "scripts", "only_rule_impl")));
+    assert.ok(existsSync(join(outDir, "scripts", moduleScriptFileName(filePath, "only_rule_impl"))));
   } finally {
     rmSync(root, { recursive: true, force: true });
     rmSync(outDir, { recursive: true, force: true });
@@ -154,7 +155,7 @@ test("buildScripts extracts scripts for ensure-with-args workflow", () => {
     );
 
     buildScripts(filePath, outDir);
-    assert.ok(readFileSync(join(outDir, "scripts", "check_branch_impl"), "utf8").includes("test "));
+    assert.ok(readFileSync(join(outDir, "scripts", moduleScriptFileName(filePath, "check_branch_impl")), "utf8").includes("test "));
   } finally {
     rmSync(root, { recursive: true, force: true });
     rmSync(outDir, { recursive: true, force: true });
@@ -186,7 +187,10 @@ test("buildScripts writes multiple script stubs", () => {
 
     buildScripts(filePath, outDir);
     const names = readdirSync(join(outDir, "scripts")).sort();
-    assert.deepEqual(names, ["changed_files", "print_value"]);
+    assert.deepEqual(
+      names,
+      [moduleScriptFileName(filePath, "changed_files"), moduleScriptFileName(filePath, "print_value")].sort(),
+    );
   } finally {
     rmSync(root, { recursive: true, force: true });
     rmSync(outDir, { recursive: true, force: true });
@@ -273,7 +277,7 @@ test("buildScripts accepts run inside a rule block", () => {
     );
 
     buildScripts(filePath, outDir);
-    assert.ok(existsSync(join(outDir, "scripts", "dep_impl")));
+    assert.ok(existsSync(join(outDir, "scripts", moduleScriptFileName(filePath, "dep_impl"))));
   } finally {
     rmSync(root, { recursive: true, force: true });
     rmSync(outDir, { recursive: true, force: true });
@@ -307,7 +311,7 @@ test("buildScripts extracts scripts for run ... catch workflow", () => {
     );
 
     buildScripts(filePath, outDir);
-    assert.ok(readdirSync(join(outDir, "scripts")).includes("install_deps_impl"));
+    assert.ok(readdirSync(join(outDir, "scripts")).includes(moduleScriptFileName(filePath, "install_deps_impl")));
   } finally {
     rmSync(root, { recursive: true, force: true });
     rmSync(outDir, { recursive: true, force: true });

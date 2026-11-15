@@ -4,6 +4,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildRuntimeGraph } from "./graph";
+import { moduleScriptFileName } from "../../inline-script-name";
 import { NodeWorkflowRuntime } from "./node-workflow-runtime";
 
 /**
@@ -61,7 +62,7 @@ async function runScriptStep(
   );
   const scriptsDir = join(root, "scripts");
   mkdirSync(scriptsDir, { recursive: true });
-  writeFileSync(join(scriptsDir, scriptName), `#!/usr/bin/env bash\n${scriptBody}\n`);
+  writeFileSync(join(scriptsDir, moduleScriptFileName(jh, scriptName)), `#!/usr/bin/env bash\n${scriptBody}\n`);
   const graph = buildRuntimeGraph(jh);
 
   process.env.JAIPH_TEST_MODE = "1";
