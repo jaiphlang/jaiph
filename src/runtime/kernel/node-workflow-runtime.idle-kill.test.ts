@@ -110,6 +110,61 @@ test(
   },
 );
 
+/** True while `pid` is a signalable live process (ESRCH once it is reaped). */
+function pidAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function waitForPidDead(pid: number, timeoutMs: number): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (!pidAlive(pid)) return true;
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  return !pidAlive(pid);
+}
+
+// AC1 (process tree): a silent script that backgrounds a grandchild is
+// idle-killed as a whole process group — the grandchild (a `sleep` in the
+// script's group) is dead after the kill, not orphaned to ppid 1. This is the
+// regression the detached-group spawn fixes: before it, killing the single
+// script pid left the grandchild running.
+test(
+  "idle kill: a backgrounded grandchild of a silent step is killed with the group",
+  { skip: process.platform === "win32" },
+  async () => {
+    const saved = TOUCHED.map((k) => [k, process.env[k]] as const);
+    const root = mkdtempSync(join(tmpdir(), "jaiph-idle-kill-tree-"));
+    const pidFile = join(root, "grandchild.pid");
+    try {
+      // Background a long `sleep` (the grandchild), record its pid, then hang
+      // the step with no output so the idle-kill fires.
+      const body = `sleep 120 &\necho $! > "${pidFile}"\nsleep 120`;
+      const { status } = await runScriptStep(root, "hang", body, {
+        JAIPH_STEP_IDLE_WARN_SEC: "0",
+        JAIPH_STEP_IDLE_KILL_SEC: "1",
+      });
+      assert.notEqual(status, 0, "workflow fails when the leaf step is idle-killed");
+
+      const grandchildPid = Number(readFileSync(pidFile, "utf8").trim());
+      assert.ok(Number.isInteger(grandchildPid) && grandchildPid > 0, "grandchild pid recorded");
+      const dead = await waitForPidDead(grandchildPid, 8000);
+      assert.ok(dead, `backgrounded grandchild ${grandchildPid} must be dead after the idle-kill`);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+      for (const [k, v] of saved) {
+        if (v === undefined) delete process.env[k];
+        else process.env[k] = v;
+      }
+    }
+  },
+);
+
 // AC2 (end-to-end): a step that keeps emitting output resets the idle clock and
 // runs to completion — the kill never fires even with a 1s threshold.
 test(

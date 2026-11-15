@@ -20,6 +20,7 @@ export {
   redactCredentials,
   canUseAnsi,
   killProcessTree,
+  isLeaderTerminationPending,
   resolveShell,
   buildStepDisplayParamPairs,
   type RuntimeGraph,

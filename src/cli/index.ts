@@ -11,7 +11,7 @@ import {
   runCompile,
   runMcp,
 } from "./commands/entries";
-import { runWorkflowRunner, WORKFLOW_RUNNER_ARG } from "../runtime";
+import { runWorkflowRunner, WORKFLOW_RUNNER_ARG, isLeaderTerminationPending } from "../runtime";
 import { VERSION } from "../version";
 
 export async function main(argv: string[]): Promise<number> {
@@ -94,11 +94,18 @@ export async function main(argv: string[]): Promise<number> {
 export function runCli(argv: string[]): void {
   main(argv)
     .then((code) => {
+      // In the workflow leader a received SIGINT/SIGTERM is being forwarded to
+      // the detached child groups and will re-raise to terminate this process by
+      // signal (see `trackChildGroup`). Exiting here with a status code would
+      // pre-empt that — the host call would then see a failed step instead of
+      // "terminated by signal", and a signal-ignoring grandchild could outlive us.
+      if (isLeaderTerminationPending()) return;
       process.exit(code);
     })
     .catch((error) => {
       const message = errText(error);
       process.stderr.write(`${message}\n`);
+      if (isLeaderTerminationPending()) return;
       process.exit(1);
     });
 }

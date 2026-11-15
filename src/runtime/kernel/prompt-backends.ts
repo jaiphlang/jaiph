@@ -8,7 +8,7 @@ import { spawn as nodeSpawn, type ChildProcess } from "node:child_process";
 export const _backendSpawn = { spawn: nodeSpawn };
 import { PassThrough } from "node:stream";
 import { parseStream, type StreamWriter } from "./stream-parser";
-import { killProcessTreeEscalating } from "./portability";
+import { killProcessTreeEscalating, spawnInOwnGroup, trackChildGroup } from "./portability";
 import { scrubPromptEnv } from "./env-allowlist";
 import {
   buildBackendArgs,
@@ -234,10 +234,16 @@ export function runBackend(
     // Cursor: stdin is not used (prompt is passed as arg), stderr passes through to caller.
     // Claude / custom: stdin receives prompt, stdout is parsed or collected raw.
     const useStdin = isClaude || isCustom;
+    // `detached` on POSIX puts the backend (and any tool subprocesses / MCP
+    // servers it spawns) in its own process group so the prompt watchdog's
+    // `killProcessTreeEscalating` signals the whole group, not just the backend
+    // pid. The leader forwards SIGINT/SIGTERM to that group (see child-groups.ts).
     const child = _backendSpawn.spawn(command, args, {
       stdio: useStdin ? ["pipe", "pipe", "pipe"] : ["ignore", "pipe", "pipe"],
       env: childEnv,
+      detached: spawnInOwnGroup,
     });
+    trackChildGroup(child);
 
     // Single-settle guard shared by the normal-exit path and every watchdog.
     let settled = false;

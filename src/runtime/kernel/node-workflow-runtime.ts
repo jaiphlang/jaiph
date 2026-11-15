@@ -43,7 +43,7 @@ import {
   sanitizeName,
   type PromptSchemaField,
 } from "./runtime-arg-parser";
-import { killProcessTreeEscalating } from "./portability";
+import { killProcessTreeEscalating, spawnInOwnGroup, trackChildGroup } from "./portability";
 import { RuntimeEventEmitter, type Frame } from "./runtime-event-emitter";
 import { createStepIdleOutputWarn } from "./step-idle-warn";
 import { parseMaxSteps, maxStepsTrippedMessage } from "./max-steps";
@@ -2330,7 +2330,15 @@ export class NodeWorkflowRuntime {
       const stdinMode = stdin !== undefined ? "pipe" : "ignore";
       let child: ReturnType<typeof _scriptSpawn.spawn>;
       try {
-        child = _scriptSpawn.spawn(command, args, { cwd, env, stdio: [stdinMode, "pipe", "pipe"] });
+        // `detached` on POSIX puts the script (and any subtree it spawns) in its
+        // own process group so the idle-output kill can signal the whole group.
+        // The leader forwards SIGINT/SIGTERM to that group (see child-groups.ts).
+        child = _scriptSpawn.spawn(command, args, {
+          cwd,
+          env,
+          stdio: [stdinMode, "pipe", "pipe"],
+          detached: spawnInOwnGroup,
+        });
       } catch (err) {
         const msg = spawnFailureText(err, command, args, env, interpreter);
         error += msg;
@@ -2348,6 +2356,9 @@ export class NodeWorkflowRuntime {
         settle({ status: 1, output: "", error, streamed: true });
         return;
       }
+      // Track the child's process group so the leader forwards SIGINT/SIGTERM to
+      // it (it no longer shares the leader's group once detached).
+      trackChildGroup(child);
       // Tee stdout: write `.out` and, when this is a non-terminal pipeline
       // stage, copy the same chunks into a PassThrough the next stage pipes
       // into its stdin. A PassThrough buffers until that pipe attaches, so
