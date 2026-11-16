@@ -1,5 +1,4 @@
 import { jaiphError } from "../errors";
-import type { Arg } from "../types";
 
 export function fail(filePath: string, message: string, lineNo: number, col = 1): never {
   throw jaiphError(filePath, lineNo, col, "E_PARSE", message);
@@ -187,19 +186,6 @@ export function parseParamList(filePath: string, content: string, lineNo: number
     seen.add(name);
   }
   return names;
-}
-
-/**
- * Convert `Arg[]` back to the space-separated string the runtime consumes:
- * - `var` → `${name}` (so runtime interpolation expands it against in-scope vars;
- *   dotted names become `${base.field}` and resolve via JSON field access)
- * - `literal` → raw as authored
- *
- * Empty / undefined → empty string.
- */
-export function argsToRuntimeString(args: Arg[] | undefined): string {
-  if (!args || args.length === 0) return "";
-  return args.map((a) => (a.kind === "var" ? `\${${a.name}}` : a.raw)).join(" ");
 }
 
 const CHANNEL_REF = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)$/;

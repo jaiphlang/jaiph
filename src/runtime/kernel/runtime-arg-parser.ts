@@ -2,10 +2,10 @@
  * Stateless parsing/formatting helpers for the Node workflow runtime.
  *
  * Pure functions only — no I/O, no class state. The runtime composes these to
- * resolve interpolated strings, parse call argument lists (including managed
- * calls and inline-script forms), and validate prompt return schemas.
+ * resolve interpolated strings, sanitize names, and validate prompt return
+ * schemas. (Call arguments are evaluated from typed `Arg[]` directly in the
+ * runtime; there is no argument-string tokenizer here.)
  */
-import { argsToRuntimeString, parseNestedCallArg } from "../../parser";
 import { interpolate } from "../../config";
 import { formatUtcTimestamp } from "./emit";
 
@@ -14,15 +14,8 @@ import { formatUtcTimestamp } from "./emit";
 // import site here.
 export { interpolate };
 
-export const BARE_IDENT_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
-export const BARE_DOTTED_IDENT_RE = /^[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*$/;
 export const MAX_EMBED = 1024 * 1024;
 export const MAX_RECURSION_DEPTH = 256;
-
-export type ParsedArgToken =
-  | { kind: "literal"; value: string }
-  | { kind: "managed"; ref: string; argsRaw: string }
-  | { kind: "managed_inline_script"; body: string; lang?: string; argsRaw: string };
 
 export type PromptSchemaField = { name: string; type: "string" | "number" | "boolean" };
 
@@ -34,104 +27,38 @@ export function nowIso(): string {
   return formatUtcTimestamp();
 }
 
-/** Body of an interpolation capture `${greet()}` (e.g. greet(), greet(x), or greet x). */
-export function parseInlineCaptureCall(body: string): { ref: string; argsRaw: string } {
-  const trimmed = body.trim();
-  const paren = trimmed.match(/^([\w.]+)\s*\(([^)]*)\)\s*$/);
-  if (paren) {
-    return { ref: paren[1], argsRaw: paren[2].trim() };
-  }
-  const spaceIdx = trimmed.indexOf(" ");
-  if (spaceIdx === -1) {
-    return { ref: trimmed, argsRaw: "" };
-  }
-  return { ref: trimmed.slice(0, spaceIdx), argsRaw: trimmed.slice(spaceIdx + 1).trim() };
-}
-
-/** Convert comma-separated call args (as written in source) to space-separated form with bare identifiers wrapped in ${…}. */
-export function commaArgsToInterpolated(raw: string): string {
-  if (!raw.trim()) return "";
-  return raw.split(",").map((seg) => {
-    const t = seg.trim();
-    if (BARE_IDENT_RE.test(t) || BARE_DOTTED_IDENT_RE.test(t)) return `\${${t}}`;
-    return t;
-  }).join(" ");
-}
-
 /**
- * Recognize a nested managed call in argument position: an inline script
- * `'body'(args)` / `lang'body'(args)` or a `ref(args)` call. Uses the parser's
- * `parseNestedCallArg`, the same recognizer the validator and the script
- * emitter use, so all three agree on what is a nested call. A quoted string or
- * a bare `${var}` is not a call and returns null (the caller keeps a literal).
+ * Decode one call-argument literal to the bytes passed to the child: quote
+ * delimiters (`"` or `'`) are removed wherever they open/close, `\"` inside a
+ * double-quoted span is a literal quote (Jaiph's one escape), and every other
+ * character — including whitespace and an unquoted `${…}` to interpolate later —
+ * is kept verbatim. This is the per-`Arg` form of the old argument tokenizer
+ * (same quote handling), minus the whitespace split: one `Arg` yields one argv
+ * element, so `foo("a", bar="b c")` passes `a` and `bar=b c` byte-exact.
  */
-export function parseManagedArgAt(raw: string, start: number): { token: ParsedArgToken; next: number } | null {
-  const rest = raw.slice(start);
-  const nested = parseNestedCallArg(rest);
-  if (!nested) return null;
-  const next = raw.length - nested.rest.length;
-  const argsRaw = argsToRuntimeString(nested.args);
-  if (nested.kind === "inline_script") {
-    return {
-      token: {
-        kind: "managed_inline_script",
-        body: nested.body,
-        ...(nested.lang ? { lang: nested.lang } : {}),
-        argsRaw,
-      },
-      next,
-    };
-  }
-  return { token: { kind: "managed", ref: nested.ref, argsRaw }, next };
-}
-
-export function parseArgTokens(raw: string): ParsedArgToken[] {
-  if (!raw.trim()) return [];
-  const out: ParsedArgToken[] = [];
-  let i = 0;
-  while (i < raw.length) {
-    while (i < raw.length && /\s/.test(raw[i]!)) i += 1;
-    if (i >= raw.length) break;
-    const managed = parseManagedArgAt(raw, i);
-    if (managed) {
-      out.push(managed.token);
-      i = managed.next;
+export function decodeCallArgLiteral(raw: string): string {
+  let out = "";
+  let quote: "'" | '"' | null = null;
+  for (let i = 0; i < raw.length; i += 1) {
+    const ch = raw[i]!;
+    if (quote) {
+      if (quote === '"' && ch === "\\" && raw[i + 1] === '"') {
+        out += '"';
+        i += 1;
+        continue;
+      }
+      if (ch === quote) {
+        quote = null;
+        continue;
+      }
+      out += ch;
       continue;
     }
-    let cur = "";
-    let quote: "'" | '"' | null = null;
-    while (i < raw.length) {
-      const ch = raw[i]!;
-      if (quote) {
-        if (quote === '"' && ch === "\\" && raw[i + 1] === '"') {
-          // `\"` inside a double-quoted argument is a literal quote (the one
-          // escape a Jaiph string has); every other backslash is kept.
-          cur += '"';
-          i += 2;
-          continue;
-        }
-        if (ch === quote) {
-          quote = null;
-        } else {
-          cur += ch;
-        }
-        i += 1;
-        continue;
-      }
-      if (ch === "'" || ch === '"') {
-        quote = ch;
-        i += 1;
-        continue;
-      }
-      if (/\s/.test(ch)) {
-        break;
-      }
-      cur += ch;
-      i += 1;
+    if (ch === "'" || ch === '"') {
+      quote = ch;
+      continue;
     }
-    if (cur.length > 0) {
-      out.push({ kind: "literal", value: cur });
-    }
+    out += ch;
   }
   return out;
 }

@@ -106,18 +106,51 @@ export interface InlineCapture {
   args?: Arg[];
 }
 
-/** Extract inline call captures `${ref(args)}` from string content (unquoted). */
-export function extractInlineCaptures(content: string): InlineCapture[] {
-  const captures: InlineCapture[] = [];
+/**
+ * One inline `${ref(args)}` capture located in string content, with its span
+ * and parsed call. `ref` is null when the body is not a valid call ref (the
+ * validator reports it; the runtime skips it).
+ */
+export interface InlineCaptureMatch {
+  /** Offset of the whole `${…}` match in the scanned content. */
+  index: number;
+  /** Length of the whole `${…}` match. */
+  length: number;
+  /** The capture body inside `${…}`, trimmed. */
+  body: string;
+  /** Parsed call ref, or null when `body` is not a valid call. */
+  ref: string | null;
+  args?: Arg[];
+}
+
+/**
+ * The single inline-capture scanner: find every `${ref(args)}` in `content` and
+ * parse each with `parseCallRef`. One definition behind the compiler validator
+ * and the runtime, so both agree on what is a capture and how its call parses.
+ */
+export function scanInlineCaptures(content: string): InlineCaptureMatch[] {
+  const matches: InlineCaptureMatch[] = [];
   const re = new RegExp(INLINE_CAPTURE_RE.source, "g");
   let m: RegExpExecArray | null;
   while ((m = re.exec(content)) !== null) {
     const body = m[1].trim();
     const call = parseCallRef(body);
-    if (!call) continue;
-    captures.push({ ref: call.ref, args: call.args });
+    matches.push({
+      index: m.index,
+      length: m[0].length,
+      body,
+      ref: call ? call.ref : null,
+      ...(call?.args ? { args: call.args } : {}),
+    });
   }
-  return captures;
+  return matches;
+}
+
+/** Extract inline call captures `${ref(args)}` from string content (unquoted). */
+export function extractInlineCaptures(content: string): InlineCapture[] {
+  return scanInlineCaptures(content)
+    .filter((c) => c.ref !== null)
+    .map((c) => ({ ref: c.ref!, args: c.args }));
 }
 
 /**
@@ -176,20 +209,15 @@ export function validateJaiphStringContent(
   }
 
   // Validate inline call captures: ${ref()} / ${ref(args)}
-  const inlineRe = new RegExp(INLINE_CAPTURE_RE.source, "g");
-  let icm: RegExpExecArray | null;
-  while ((icm = inlineRe.exec(content)) !== null) {
-    const body = icm[1].trim();
-    const call = parseCallRef(body);
-
-    if (!call) {
+  for (const cap of scanInlineCaptures(content)) {
+    if (cap.ref === null) {
       throw jaiphError(
         filePath, line, col, "E_PARSE",
-        `${context} contains invalid inline call reference "${body}"`,
+        `${context} contains invalid inline call reference "${cap.body}"`,
       );
     }
 
-    if (call.args?.some((a) => a.kind === "literal" && /\$\{[A-Za-z_][A-Za-z0-9_.]*\s*\(/.test(a.raw))) {
+    if (cap.args?.some((a) => a.kind === "literal" && /\$\{[A-Za-z_][A-Za-z0-9_.]*\s*\(/.test(a.raw))) {
       throw jaiphError(
         filePath, line, col, "E_PARSE",
         `${context} cannot contain nested inline captures; extract to a const variable`,

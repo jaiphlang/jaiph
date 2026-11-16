@@ -1,16 +1,32 @@
 import { describe, it } from "node:test";
 import * as assert from "node:assert/strict";
 import {
-  BARE_IDENT_RE,
-  commaArgsToInterpolated,
+  decodeCallArgLiteral,
   interpolate,
-  parseArgTokens,
-  parseInlineCaptureCall,
-  parseManagedArgAt,
   parsePromptSchema,
   sanitizeName,
   stripOuterQuotes,
 } from "./runtime-arg-parser";
+
+describe("decodeCallArgLiteral", () => {
+  it("strips quote delimiters wherever they open/close", () => {
+    assert.equal(decodeCallArgLiteral('"hello world"'), "hello world");
+    assert.equal(decodeCallArgLiteral('name="b c"'), "name=b c");
+  });
+
+  it("keeps an empty literal empty", () => {
+    assert.equal(decodeCallArgLiteral('""'), "");
+  });
+
+  it("preserves special bytes inside quotes (commas, parens, spaces)", () => {
+    assert.equal(decodeCallArgLiteral('"a )b, c"'), "a )b, c");
+  });
+
+  it("decodes the one escape (\\\") and leaves ${…} for later interpolation", () => {
+    assert.equal(decodeCallArgLiteral('"q\\"r"'), 'q"r');
+    assert.equal(decodeCallArgLiteral("${x}"), "${x}");
+  });
+});
 
 describe("sanitizeName", () => {
   it("preserves alphanumeric, _, -, .", () => {
@@ -46,111 +62,6 @@ describe("interpolate", () => {
   it("returns empty string for ${var.field} when base is not JSON", () => {
     const vars = new Map([["bad", "not-json"]]);
     assert.equal(interpolate("[${bad.field}]", vars), "[]");
-  });
-});
-
-describe("parseInlineCaptureCall", () => {
-  it("parses paren form: ref(args)", () => {
-    assert.deepEqual(parseInlineCaptureCall("greet(x, y)"), { ref: "greet", argsRaw: "x, y" });
-  });
-
-  it("parses bareword form: ref args", () => {
-    assert.deepEqual(parseInlineCaptureCall("greet x y"), { ref: "greet", argsRaw: "x y" });
-  });
-
-  it("parses ref with no args", () => {
-    assert.deepEqual(parseInlineCaptureCall("greet"), { ref: "greet", argsRaw: "" });
-  });
-
-  it("supports dotted refs", () => {
-    assert.deepEqual(parseInlineCaptureCall("mod.greet()"), { ref: "mod.greet", argsRaw: "" });
-  });
-});
-
-describe("commaArgsToInterpolated", () => {
-  it("wraps bare identifiers in ${...} and space-separates", () => {
-    assert.equal(commaArgsToInterpolated("a, b, c"), "${a} ${b} ${c}");
-  });
-
-  it("wraps bare dotted identifiers in ${...}", () => {
-    assert.equal(commaArgsToInterpolated("result.role, x"), "${result.role} ${x}");
-  });
-
-  it("leaves quoted/literal tokens intact", () => {
-    assert.equal(commaArgsToInterpolated('"hello", x, 42'), '"hello" ${x} 42');
-  });
-
-  it("returns empty string for empty input", () => {
-    assert.equal(commaArgsToInterpolated(""), "");
-    assert.equal(commaArgsToInterpolated("   "), "");
-  });
-});
-
-describe("parseManagedArgAt", () => {
-  it("parses bare `ref(args)` form (bare idents already wrapped by parseCallRef)", () => {
-    const result = parseManagedArgAt("greet(x)", 0);
-    assert.ok(result);
-    assert.equal(result!.token.kind, "managed");
-    if (result!.token.kind === "managed") {
-      assert.equal(result!.token.ref, "greet");
-      assert.equal(result!.token.argsRaw, "${x}");
-    }
-  });
-
-  it("parses bare `ref(args)` form", () => {
-    const result = parseManagedArgAt("check(a, b)", 0);
-    assert.ok(result);
-    if (result!.token.kind === "managed") {
-      assert.equal(result!.token.ref, "check");
-      assert.equal(result!.token.argsRaw, "${a} ${b}");
-    }
-  });
-
-  it("parses bare `\'body\'(args)` as inline script; a bare identifier arg is a variable", () => {
-    const result = parseManagedArgAt("'echo hi'(x)", 0);
-    assert.ok(result);
-    if (result!.token.kind === "managed_inline_script") {
-      assert.equal(result!.token.body, "echo hi");
-      assert.equal(result!.token.argsRaw, "${x}");
-    } else {
-      assert.fail(`expected managed_inline_script, got ${result!.token.kind}`);
-    }
-  });
-
-  it("parses a tagged inline script and reports where it ends", () => {
-    const raw = `pre python3'print(1)'("a", b) post`;
-    const result = parseManagedArgAt(raw, 3);
-    assert.ok(result);
-    assert.deepEqual(result!.token, { kind: "managed_inline_script", body: "print(1)", lang: "python3", argsRaw: '"a" ${b}' });
-    assert.equal(raw.slice(result!.next), " post");
-  });
-
-  it("returns null for an unbalanced inline script", () => {
-    assert.equal(parseManagedArgAt("'body'(unclosed", 0), null);
-  });
-
-  it("returns null when not a run/run prefix", () => {
-    assert.equal(parseManagedArgAt("foo bar", 0), null);
-  });
-});
-
-describe("parseArgTokens", () => {
-  it("returns literal tokens for plain args", () => {
-    const tokens = parseArgTokens("a b c");
-    assert.equal(tokens.length, 3);
-    assert.deepEqual(tokens.map((t) => t.kind), ["literal", "literal", "literal"]);
-  });
-
-  it("recognises bare managed call tokens within a list", () => {
-    const tokens = parseArgTokens("foo greet(x) bar");
-    assert.equal(tokens.length, 3);
-    assert.equal(tokens[0].kind, "literal");
-    assert.equal(tokens[1].kind, "managed");
-    assert.equal(tokens[2].kind, "literal");
-  });
-
-  it("returns empty array for empty input", () => {
-    assert.deepEqual(parseArgTokens(""), []);
   });
 });
 
@@ -198,19 +109,5 @@ describe("parsePromptSchema", () => {
 
   it("throws on malformed entry", () => {
     assert.throws(() => parsePromptSchema("{ no_colon }"));
-  });
-});
-
-describe("BARE_IDENT_RE", () => {
-  it("matches valid identifier characters", () => {
-    assert.ok(BARE_IDENT_RE.test("foo"));
-    assert.ok(BARE_IDENT_RE.test("_bar"));
-    assert.ok(BARE_IDENT_RE.test("a1_b2"));
-  });
-
-  it("rejects names that start with a digit or contain spaces/dashes", () => {
-    assert.ok(!BARE_IDENT_RE.test("1abc"));
-    assert.ok(!BARE_IDENT_RE.test("a b"));
-    assert.ok(!BARE_IDENT_RE.test("a-b"));
   });
 });
