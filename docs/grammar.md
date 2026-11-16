@@ -114,7 +114,7 @@ Crossings (calling a string, `prompt` on a script, `const x = scriptName`, `${sc
 ## Definitions
 
 ```ebnf
-def_decl      = [ "export" ] "def" IDENT "(" [ param_list ] ")" "{" [ def_config ] { def_step } "}" ;
+def_decl      = [ "export" ] "def" IDENT "(" [ param_list ] ")" "{" [ config_block ] { def_step } "}" ;
 script_decl   = [ "export" ] "script" IDENT [ use_clause ] "=" script_rhs ;
 prompt_decl   = [ "export" ] "prompt" IDENT "(" [ param_list ] ")" [ use_clause ] "=" prompt_rhs [ returns_schema ] ;
 prompt_rhs    = double_quoted_string | triple_quoted_block ;
@@ -230,7 +230,7 @@ For body forms, `returns` schemas, the capture requirement, and named-prompt inv
 
 ```ebnf
 const_decl_step = "const" IDENT "=" const_rhs ;
-const_rhs       = double_quoted_string | triple_quoted_block | bash_value_expr
+const_rhs       = double_quoted_string | triple_quoted_block | bare_value
                 | call_ref | inline_script | "async" call_ref
                 | "stdin" stdin_producer "->" stdin_stage { "->" stdin_stage }
                 | "prompt" ( prompt_body | prompt_call ) [ returns_schema ]

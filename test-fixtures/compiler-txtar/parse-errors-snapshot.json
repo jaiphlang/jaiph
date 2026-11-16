@@ -895,6 +895,27 @@
     "code": "E_PARSE",
     "message": "shell fallback syntax (e.g. ${var:-default}) is not supported; use conditional logic or named params instead"
   },
+  "workflow const string followed by concatenation": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 17,
+    "code": "E_PARSE",
+    "message": "unexpected content after string; use \"${name}\" interpolation to build strings"
+  },
+  "workflow const await is not a keyword": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 13,
+    "code": "E_PARSE",
+    "message": "\"await\" is not a keyword; call the def directly: name(...)"
+  },
+  "workflow const string followed by redirect": {
+    "file": "input.jh",
+    "line": 2,
+    "col": 17,
+    "code": "E_PARSE",
+    "message": "unexpected content after string; use \"${name}\" interpolation to build strings"
+  },
   "run without parentheses in workflow requires parens": {
     "file": "input.jh",
     "line": 3,
