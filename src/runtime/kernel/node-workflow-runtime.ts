@@ -61,6 +61,12 @@ import {
 
 export type { MockBodyDef } from "./runtime-mock";
 
+// Registry-key label for an async handle. It is only an internal id for the
+// `handleRegistry` Map and the invalid-handle diagnostic — NEVER a detection
+// marker. Whether a scope variable is a handle is decided by `scope.handles`
+// (the out-of-band map), not by inspecting a string value, so a captured
+// script/agent string that happens to read `__JAIPH_HANDLE__1` can never be
+// mistaken for a handle.
 const HANDLE_PREFIX = "__JAIPH_HANDLE__";
 
 /**
@@ -155,6 +161,16 @@ type AsyncHandle = {
 type Scope = {
   filePath: string;
   vars: Map<string, string>;
+  /**
+   * Async output handles bound in this scope, keyed by variable name and held
+   * OUT OF BAND from `vars` (whose values are plain captured strings). A name is
+   * a handle iff it is present here; a string in `vars` is never interpreted as
+   * a handle. On force, `resolveHandleVar` deletes the entry here and writes the
+   * resolved value into `vars` — so a result that happens to be `__JAIPH_HANDLE__N`
+   * stays a literal. Cloned (not shared) wherever `vars` is copied into a child
+   * scope, so a child's force never mutates the parent's binding.
+   */
+  handles?: Map<string, string>;
   env: NodeJS.ProcessEnv;
   /** Declared parameter names for the active workflow or rule. */
   declaredParamNames?: string[];
@@ -181,10 +197,16 @@ function localDeclName(decl: LocalDecl): string {
  * of that body but does not leak past it — mirroring the validator's block
  * scope, so a shadow inside a branch never overwrites the enclosing binding.
  */
+/** Clone a scope's out-of-band handle map so a child never mutates the parent's. */
+function cloneHandles(scope: Scope): Map<string, string> | undefined {
+  return scope.handles ? new Map(scope.handles) : undefined;
+}
+
 function blockChildScope(scope: Scope): Scope {
   return {
     ...scope,
     vars: new Map(scope.vars),
+    handles: cloneHandles(scope),
     locals: scope.locals ? new Map(scope.locals) : undefined,
   };
 }
@@ -313,8 +335,15 @@ export class NodeWorkflowRuntime {
     return handleId;
   }
 
-  private isHandle(value: string): boolean {
-    return value.startsWith(HANDLE_PREFIX);
+  /**
+   * Bind an async handle to a scope variable out of band from `vars`. The var
+   * name is removed from `scope.vars` so a stale captured string can never
+   * shadow the handle, and the handle lives only in `scope.handles` — where a
+   * captured string can never land, which is the whole point of the fix.
+   */
+  private bindHandle(scope: Scope, name: string, handleId: string): void {
+    (scope.handles ??= new Map()).set(name, handleId);
+    scope.vars.delete(name);
   }
 
   /**
@@ -383,9 +412,12 @@ export class NodeWorkflowRuntime {
 
   /** Resolve a handle value to the string it represents. Updates scope var in place. */
   private async resolveHandleVar(scope: Scope, varName: string): Promise<StepResult> {
-    const val = scope.vars.get(varName);
-    if (!val || !this.isHandle(val)) return { status: 0, output: "", error: "" };
-    const result = await this.resolveHandleResult(val);
+    const handleId = scope.handles?.get(varName);
+    if (handleId === undefined) return { status: 0, output: "", error: "" };
+    const result = await this.resolveHandleResult(handleId);
+    // Consume the binding: the name now holds a plain string value, so a
+    // forced value of `__JAIPH_HANDLE__N` stays a literal on any later read.
+    scope.handles!.delete(varName);
     if (result.status === 0) {
       scope.vars.set(varName, this.forceValue(result));
     } else {
@@ -417,8 +449,7 @@ export class NodeWorkflowRuntime {
         return { ok: false, result: { status: 1, output: "", error: errText(err) } };
       }
     }
-    const rawBase = scope.vars.get(base);
-    if (rawBase && this.isHandle(rawBase)) {
+    if (scope.handles?.has(base)) {
       const hr = await this.resolveHandleVar(scope, base);
       if (hr.status !== 0) return { ok: false, result: hr };
     }
@@ -471,8 +502,7 @@ export class NodeWorkflowRuntime {
     let m: RegExpExecArray | null;
     while ((m = re.exec(input)) !== null) {
       const varName = m[1];
-      const val = scope.vars.get(varName);
-      if (val && this.isHandle(val)) {
+      if (scope.handles?.has(varName)) {
         const r = await this.resolveHandleVar(scope, varName);
         if (r.status !== 0) return r;
       }
@@ -805,6 +835,7 @@ export class NodeWorkflowRuntime {
       const childScope: Scope = {
         filePath: resolved.filePath,
         vars: metadataVars,
+        handles: cloneHandles(scope),
         env: this.scrubKernelKeys(workflowEnv),
         declaredParamNames: resolved.def.params,
       };
@@ -859,6 +890,7 @@ export class NodeWorkflowRuntime {
       const childScope: Scope = {
         filePath: callerScope.filePath,
         vars: childVars,
+        handles: cloneHandles(callerScope),
         env: callerScope.env,
         declaredParamNames: def.params,
         locals: callerScope.locals ? new Map(callerScope.locals) : new Map(),
@@ -951,8 +983,15 @@ export class NodeWorkflowRuntime {
         // Bare in-scope identifier (e.g. `=> name_arg`) — sugar for `=> "${name_arg}"`.
         // Validator already ensures the identifier is in scope; runtime mirrors `return val`.
         const bareIdent = body.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*$/);
-        if (bareIdent && (scope.vars.has(bareIdent[1]!) || scope.env?.[bareIdent[1]!] !== undefined)) {
-          return { ok: true, value: scope.vars.get(bareIdent[1]!) ?? scope.env?.[bareIdent[1]!] ?? "" };
+        if (bareIdent) {
+          const name = bareIdent[1]!;
+          // A bare-ident arm body returns that binding's value. An unresolved
+          // async handle returns its opaque token (the handle id, held out of
+          // band in `handles`) — matching how the value was stored before
+          // handles moved out of `vars`.
+          if (scope.vars.has(name) || scope.handles?.has(name) || scope.env?.[name] !== undefined) {
+            return { ok: true, value: scope.vars.get(name) ?? scope.handles?.get(name) ?? scope.env?.[name] ?? "" };
+          }
         }
 
         // Default: string expression
@@ -1228,7 +1267,7 @@ export class NodeWorkflowRuntime {
           );
           const handleId = this.createHandle(captureRef, promise);
           localHandleIds.push(handleId);
-          scope.vars.set(step.name, handleId);
+          this.bindHandle(scope, step.name, handleId);
           continue;
         }
         const r = await this.evaluateExpr(scope, v, step.name, io);
@@ -1286,7 +1325,7 @@ export class NodeWorkflowRuntime {
           }
           const handleId = this.createHandle(ref, promise);
           localHandleIds.push(handleId);
-          if (step.captureName) scope.vars.set(step.captureName, handleId);
+          if (step.captureName) this.bindHandle(scope, step.captureName, handleId);
           continue;
         }
         if (body.kind === "call") {
@@ -1478,8 +1517,13 @@ export class NodeWorkflowRuntime {
         continue;
       }
       if (step.type === "for_lines") {
+        // `for` does not force an async handle (unlike `if` / `match`, which
+        // resolve their subject): an unresolved handle var iterates as one
+        // opaque token line. The token is the handle id, read from the
+        // out-of-band `handles` map when `vars` has not been forced yet.
         const raw =
           scope.vars.get(step.sourceVar) ??
+          scope.handles?.get(step.sourceVar) ??
           scope.env?.[step.sourceVar] ??
           "";
         for (const line of linesOfDelimitedString(raw)) {
@@ -1547,7 +1591,7 @@ export class NodeWorkflowRuntime {
     params.forEach((name, i) => {
       if (i < values.length) dispatchVars.set(name, values[i]);
     });
-    return { filePath: scope.filePath, vars: dispatchVars, env: scope.env };
+    return { filePath: scope.filePath, vars: dispatchVars, handles: cloneHandles(scope), env: scope.env };
   }
 
   private async drainWorkflowQueue(scope: Scope, ctx: WorkflowContext): Promise<StepResult> {
@@ -1679,9 +1723,9 @@ export class NodeWorkflowRuntime {
     // slurps the failed step's stdout into memory.
     const bare = raw.match(/^"\$\{([A-Za-z_][A-Za-z0-9_]*)\}"$/);
     if (bare) {
-      const bound = scope.vars.get(bare[1]!);
-      if (bound && this.isHandle(bound)) {
-        const r = await this.resolveHandleResult(bound);
+      const handleId = scope.handles?.get(bare[1]!);
+      if (handleId !== undefined) {
+        const r = await this.resolveHandleResult(handleId);
         if (r.status !== 0) return { ok: false, result: r };
         return { ok: true, source: this.handleStdinSource(r) };
       }
@@ -1941,7 +1985,9 @@ export class NodeWorkflowRuntime {
         if (!Array.isArray(argValues)) return { ok: false, result: argValues };
         const childVars = new Map(scope.vars);
         prompt.params.forEach((p, i) => childVars.set(p, argValues[i] ?? ""));
-        const promptScope: Scope = { ...scope, vars: childVars };
+        // Clone handles (not share via spread) so the body's force of an
+        // enclosing handle var does not mutate the caller's binding.
+        const promptScope: Scope = { ...scope, vars: childVars, handles: cloneHandles(scope) };
         return {
           ok: true,
           promptScope,
@@ -1961,7 +2007,9 @@ export class NodeWorkflowRuntime {
     // visible in the body (caller locals are not), mirroring a def call.
     const childVars = this.newScopeVars(resolved.filePath, undefined, scope.env);
     resolved.prompt.params.forEach((p, i) => childVars.set(p, argValues[i] ?? ""));
-    const promptScope: Scope = { ...scope, filePath: resolved.filePath, vars: childVars };
+    // A module named prompt is a definition-site scope: caller locals (and so
+    // caller handles) are not visible — drop them rather than inherit via spread.
+    const promptScope: Scope = { ...scope, filePath: resolved.filePath, vars: childVars, handles: undefined };
     return {
       ok: true,
       promptScope,
@@ -2023,9 +2071,9 @@ export class NodeWorkflowRuntime {
   > {
     const bare = raw.match(/^"\$\{([A-Za-z_][A-Za-z0-9_]*)\}"$/);
     if (!bare) return { ok: true, source: null };
-    const bound = scope.vars.get(bare[1]!);
-    if (!bound || !this.isHandle(bound)) return { ok: true, source: null };
-    const r = await this.resolveHandleResult(bound);
+    const handleId = scope.handles?.get(bare[1]!);
+    if (handleId === undefined) return { ok: true, source: null };
+    const r = await this.resolveHandleResult(handleId);
     if (r.status !== 0) return { ok: false, result: r };
     if (r.returnValue !== undefined) return { ok: true, source: { kind: "bytes", bytes: r.returnValue } };
     if (r.valueFile) return { ok: true, source: { kind: "file", path: r.valueFile } };
@@ -2311,7 +2359,7 @@ export class NodeWorkflowRuntime {
       error: "",
       valueFile: mergedFile,
     });
-    bodyScope.vars.set(catchDef.bindings.failure, handleId);
+    this.bindHandle(bodyScope, catchDef.bindings.failure, handleId);
     return this.executeSteps(bodyScope, recoverSteps);
   }
 
