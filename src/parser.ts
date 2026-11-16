@@ -20,7 +20,6 @@ export { configValueHasInterpolation } from "./parse/metadata";
 export {
   matchSendOperator,
   isJaiphInterpolationRef,
-  argsToRuntimeString,
   MODULE_FIELDS,
   isReservedBuiltinName,
   encodeQuoted,
@@ -45,5 +44,6 @@ export { canonicalizeTripleQuotedString } from "./parse/triple-quote";
 export {
   validateJaiphStringContent,
   extractInlineCaptures,
+  scanInlineCaptures,
 } from "./parse/validate-string-content";
-export type { InlineCapture } from "./parse/validate-string-content";
+export type { InlineCapture, InlineCaptureMatch } from "./parse/validate-string-content";

@@ -143,6 +143,8 @@ Call arguments:
 | Bare dotted `IDENT.IDENT` | Typed-prompt field access. Base must be a typed-prompt capture; field must appear in its `returns` schema (`E_VALIDATE` otherwise). |
 | Nested call `ref(args)` | A call in argument position — `foo(bar())`. The inner call is evaluated and its captured value is passed as the argument. |
 
+Each argument you write becomes exactly one argument to the callee, in order. A quoted argument keeps its exact text, including spaces, commas, quotes, and `)`. An empty string `""` is a real argument, so `show("", "b")` passes two arguments and the first one is empty.
+
 **Hard error contract:** a bare call whose `)` never closes (the file ends or the block closes first) is `E_PARSE`. A line that is not a statement is `E_PARSE` (`not a statement; put the command in a script`). A leading `run` (`run name(args)`, `return run name()`, `const x = run name()`) is `E_PARSE` (`'run' is not a keyword`), and an assignment without `const` (`x = name()`) is `E_PARSE` (`assignment without "const" is no longer supported`). A `return` RHS that is not a string, identifier, call, `prompt`, or `match` is `E_PARSE`.
 
 ### Arguments and `stdin`

@@ -108,6 +108,7 @@ TEST_SCRIPTS=(
   "e2e/tests/154_string_values.sh"
   "e2e/tests/155_graph_command.sh"
   "e2e/tests/156_chain_key_off_leader_env.sh"
+  "e2e/tests/157_typed_call_args.sh"
   "e2e/tests/210_standalone_binary.sh"
 )
 

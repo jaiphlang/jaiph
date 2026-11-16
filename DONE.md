@@ -760,3 +760,30 @@ Source: code audit 2026-11-15. Confirmed by reading.
 - Test: a terminal run with no directory triggers one tree scan across many requests.
 - Test: a run directory created by `jaiph run` (no `run.json`) is not modified by serve startup.
 - `integration/serve-restart.test.ts` passes. CHANGELOG entry under Unreleased.
+
+## Pass call arguments to the runtime as typed values
+
+Completed: 2026-11-16
+
+Source: code audit 2026-11-15. Reproduced.
+
+### Current behavior
+
+The parser produces typed `Arg[]` for a call. `argsToRuntimeString` (`src/parse/core.ts`) joins them into one string, and the runtime re-tokenises that string: `resolveArgsRaw` in `node-workflow-runtime.ts` (around line 1598) feeds it to `parseArgTokens` in `src/runtime/kernel/runtime-arg-parser.ts`, a whitespace-and-quote tokenizer. There are 14 `argsToRuntimeString(` call sites in the runtime. `docs/architecture.md` says no downstream consumer re-parses call arguments.
+
+Bugs from the round trip:
+
+- `show("", "b")` delivers one argument: the empty literal is dropped by `if (cur.length > 0)`. `const e = ""; show(e, "b")` delivers two.
+- `INLINE_CAPTURE_RE` is defined twice (`node-workflow-runtime.ts` near line 850 and `src/parse/validate-string-content.ts` near line 102) with different call parsers behind each.
+
+### Required behavior
+
+- The runtime evaluates `Arg[]` directly: one resulting argv element per `Arg`, nested calls through the existing nested-call path.
+- Delete `argsToRuntimeString`, `parseArgTokens` and `commaArgsToInterpolated` when nothing else uses them (match-arm bodies still use a string form today; if they still need a string parser after this task, keep the minimum and say so in the report).
+- One inline-capture scanner, exported from `src/parser.ts`, used by both the validator and the runtime.
+
+### Acceptance
+
+- Regression tests: `show("", "b")` delivers two arguments, the first empty; arguments containing spaces, quotes, commas, `)` and `${…}` arrive byte-exact; a nested call argument still works.
+- No behaviour change elsewhere: run a before/after differential (old `dist` vs new `dist`) over every `.jh` in `examples/`, `e2e/`, `test-fixtures/` and `.jaiph/` comparing the argv the runtime would pass, and report the diff count; the only allowed diffs are empty-string arguments.
+- `npm test`, `npm run lint`, `npm run arch:check`, `bash e2e/test_all.sh` pass. `docs/architecture.md` is accurate. CHANGELOG entry under Unreleased.
