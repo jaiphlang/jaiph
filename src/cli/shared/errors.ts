@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { closeSync, existsSync, openSync, readFileSync, readSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { canUseAnsi } from "../../runtime";
 
@@ -220,12 +220,48 @@ export function readFailedStepOutput(summaryPath: string): string | null {
   return parts.join("\n");
 }
 
+/** Upper bound on the bytes read to recover a journal's first line. The
+ * `RUN_START` line is small; this cap keeps `findRunDir` from reading a large
+ * journal whole just to inspect its first line. */
+const FIRST_LINE_MAX_BYTES = 64 * 1024;
+
+/**
+ * Read a file's first line without loading the whole file: open it, read at most
+ * `maxBytes`, and return the bytes before the first newline (or the whole read
+ * when none is found within the cap). `null` when the file cannot be opened/read.
+ */
+function readFirstLine(file: string, maxBytes: number): string | null {
+  let fd: number;
+  try {
+    fd = openSync(file, "r");
+  } catch {
+    return null;
+  }
+  try {
+    const buf = Buffer.alloc(maxBytes);
+    const read = readSync(fd, buf, 0, maxBytes, 0);
+    if (read === 0) return "";
+    const nl = buf.indexOf(0x0a);
+    const end = nl !== -1 && nl < read ? nl : read;
+    return buf.toString("utf8", 0, end);
+  } catch {
+    return null;
+  } finally {
+    try {
+      closeSync(fd);
+    } catch {
+      // Already closed; nothing to release.
+    }
+  }
+}
+
 /**
  * Locate a run's host-side directory under `runsRoot` by matching `runId`
  * against the `RUN_START` line (always the first line) of each candidate
  * `run_summary.jsonl`. Works while the run is still executing (that line is
- * written at run start). Scans date/time directories newest-first; returns `null`
- * when no run dir matches or `runsRoot` is unreadable.
+ * written at run start). Only the first line is read (bounded bytes), never the
+ * whole journal. Scans date/time directories newest-first; returns `null` when no
+ * run dir matches or `runsRoot` is unreadable.
  */
 export function findRunDir(runsRoot: string, runId: string): string | null {
   try {
@@ -243,7 +279,7 @@ export function findRunDir(runsRoot: string, runId: string): string | null {
         const runDir = join(datePath, timeDir);
         const summaryFile = join(runDir, "run_summary.jsonl");
         if (!existsSync(summaryFile)) continue;
-        const firstLine = readFileSync(summaryFile, "utf8").split(/\r?\n/)[0];
+        const firstLine = readFirstLine(summaryFile, FIRST_LINE_MAX_BYTES);
         if (!firstLine) continue;
         try {
           const parsed = JSON.parse(firstLine) as { type?: string; run_id?: string };

@@ -50,6 +50,14 @@ export interface RunRecord {
    * the public run object; `run_dir` (set at finalize) takes precedence.
    */
   resolvedRunDir?: string;
+  /**
+   * Negative cache: set once a resolver scan misses for a terminal run (one that
+   * will never gain a directory — e.g. a spawn failure). Subsequent events/
+   * artifacts requests and SSE polls then return "no dir" without rescanning the
+   * whole runs tree. Only set for terminal runs; a still-running run's dir may
+   * still appear on a later poll.
+   */
+  runDirMissCached?: boolean;
 }
 
 /** A normalized inbound request — decoupled from `node:http` so it is unit-testable. */

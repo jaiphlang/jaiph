@@ -1025,11 +1025,41 @@ function fakeTarget(): StreamTarget & { chunks: string[] } {
   const chunks: string[] = [];
   return {
     chunks,
-    write: (c: string) => void chunks.push(c),
+    write: (c: string) => {
+      chunks.push(c);
+      return true;
+    },
+    drain: () => Promise.resolve(),
     aborted: false,
     onAbort: () => {},
   };
 }
+
+test("a terminal run with no directory triggers one tree scan across many requests", async () => {
+  // The run finalizes with no runDir (e.g. a spawn failure), so its record's
+  // run_dir stays null and the resolver scan always misses.
+  let scans = 0;
+  const h = makeHandler({
+    tools: [NOARG_TOOL],
+    callTool: async () => ({ text: "ok", isError: false, exitStatus: 0 }), // no runDir
+    resolveRunDir: () => {
+      scans += 1;
+      return null;
+    },
+  });
+  const started = bodyJson(await h.handleRequest(req("POST", "/ping?wait=true")));
+  assert.equal(started.status, "succeeded"); // terminal
+  assert.equal(started.run_dir, null);
+
+  // Hammer the dir-resolving endpoints; the terminal miss is negative-cached so
+  // only the first request scans the runs tree.
+  for (let i = 0; i < 10; i += 1) {
+    assert.equal((await h.handleRequest(req("GET", `/runs/${started.run_id}/events`))).status, 200);
+    assert.equal((await h.handleRequest(req("GET", `/runs/${started.run_id}/artifacts`))).status, 200);
+    assert.equal((await h.handleRequest(req("GET", `/runs/${started.run_id}/artifacts/x.txt`))).status, 404);
+  }
+  assert.equal(scans, 1, "a terminal run with no dir scans the tree exactly once, then serves from the negative cache");
+});
 
 test("events + artifacts on an unknown run id are 404", async () => {
   const h = makeHandler();
@@ -1126,7 +1156,11 @@ function abortableTarget(): StreamTarget & { chunks: string[]; abort: () => void
   const chunks: string[] = [];
   return {
     chunks,
-    write: (c: string) => void chunks.push(c),
+    write: (c: string) => {
+      chunks.push(c);
+      return true;
+    },
+    drain: () => Promise.resolve(),
     get aborted(): boolean {
       return aborted;
     },

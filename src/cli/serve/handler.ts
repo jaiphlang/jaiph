@@ -710,14 +710,22 @@ export class ServeHandler {
 
   /**
    * Host-side run dir for a record: its own `run_dir` (set at finalize), else
-   * the cached mid-run resolution, else one injected-resolver scan whose hit is
-   * cached on the record — repeated polls never rescan the runs tree.
+   * the cached mid-run resolution, else one injected-resolver scan whose result
+   * is cached on the record — repeated polls never rescan the runs tree. A hit is
+   * cached as `resolvedRunDir`; a miss is cached (as `runDirMissCached`) only once
+   * the run is terminal, since a still-running run's dir may still appear on a
+   * later poll while a terminal run with no dir will never gain one.
    */
   private runDirFor(record: RunRecord): string | null {
     if (record.run_dir) return record.run_dir;
     if (record.resolvedRunDir) return record.resolvedRunDir;
+    if (record.runDirMissCached) return null;
     const dir = this.opts.resolveRunDir ? this.opts.resolveRunDir(record) : null;
-    if (dir) record.resolvedRunDir = dir;
+    if (dir) {
+      record.resolvedRunDir = dir;
+    } else if (isTerminal(record.status)) {
+      record.runDirMissCached = true;
+    }
     return dir;
   }
 

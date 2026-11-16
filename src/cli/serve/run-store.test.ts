@@ -7,9 +7,11 @@ import type { RunRecord } from "./handler";
 import {
   INTERRUPTED_RESULT_TEXT,
   PUBLIC_RUN_FILE,
+  SERVE_MANAGED_MARKER,
   TAMPERED_RESULT_TEXT,
   hashArgs,
   loadPersistedRuns,
+  markServeManaged,
   persistRunRecord,
 } from "./run-store";
 import { RUN_SUMMARY } from "./runfiles";
@@ -80,8 +82,10 @@ test("a run with a journal but no run.json is reconciled to interrupted and pers
   const root = mkdtempSync(join(tmpdir(), "jaiph-runstore-"));
   try {
     const dir = makeRunDir(root, "2026-07-27/11-30-00-tools");
-    // No run.json — the server died while this run was still running.
+    // No run.json — the server died while this run was still running. The serve
+    // marker is what identifies this as a run this server owns and may reconcile.
     writeJournal(dir, "run-b", "slow", false);
+    markServeManaged(dir);
 
     const [rec] = loadPersistedRuns(root, NOW);
     assert.equal(rec.status, "interrupted", "no longer reported as running");
@@ -106,8 +110,51 @@ test("even a run whose journal reached RUN_END is interrupted when no record was
   try {
     const dir = makeRunDir(root, "2026-07-27/11-45-00-tools");
     writeJournal(dir, "run-c", "build", true); // journal is complete, but run.json never written
+    markServeManaged(dir); // owned by this server (died before committing run.json)
     const [rec] = loadPersistedRuns(root, NOW);
     assert.equal(rec.status, "interrupted", "outcome is unknown without a committed record — not silently succeeded");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("a run dir created by `jaiph run` (no run.json, no serve marker) is left untouched", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-runstore-"));
+  try {
+    const dir = makeRunDir(root, "2026-07-27/11-15-00-tools");
+    // A plain `jaiph run` (or a run of a still-live process) writes a journal but
+    // never a run.json and carries no serve ownership marker.
+    writeJournal(dir, "run-foreign", "build", false);
+
+    const recs = loadPersistedRuns(root, NOW);
+    assert.deepEqual(recs, [], "a dir this server does not own is not loaded");
+    // Startup wrote nothing into it — not a run.json, not a reconciliation.
+    assert.ok(!existsSync(join(dir, PUBLIC_RUN_FILE)), "no run.json stamped into a foreign run dir");
+    assert.ok(!existsSync(join(dir, SERVE_MANAGED_MARKER)), "no marker stamped into a foreign run dir");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("loadPersistedRuns applies the retention cap while loading, keeping the newest and not reconciling older marker dirs", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-runstore-"));
+  try {
+    // Three owned, not-yet-finalized runs (marker, no run.json), oldest-first.
+    const oldest = makeRunDir(root, "2026-07-27/09-00-00-tools");
+    writeJournal(oldest, "r-old", "build", false);
+    markServeManaged(oldest);
+    const middle = makeRunDir(root, "2026-07-27/10-00-00-tools");
+    writeJournal(middle, "r-mid", "build", false);
+    markServeManaged(middle);
+    const newest = makeRunDir(root, "2026-07-27/11-00-00-tools");
+    writeJournal(newest, "r-new", "build", false);
+    markServeManaged(newest);
+
+    // Cap of 2 keeps the two newest; the oldest is not loaded and not reconciled.
+    const recs = loadPersistedRuns(root, NOW, 2);
+    assert.deepEqual(recs.map((r) => r.run_id), ["r-mid", "r-new"], "newest `maxRuns` kept, oldest-first");
+    assert.ok(!existsSync(join(oldest, PUBLIC_RUN_FILE)), "the capped-out dir is not reconciled (no run.json written)");
+    assert.ok(existsSync(join(middle, PUBLIC_RUN_FILE)), "a kept marker dir is reconciled and persisted");
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

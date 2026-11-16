@@ -157,7 +157,15 @@ export function openArtifact(
 
 /** The response-body sink an SSE stream writes to; decoupled from `node:http`. */
 export interface StreamTarget {
-  write(chunk: string): void;
+  /**
+   * Queue a chunk. Returns `false` when the socket's write buffer is full (a
+   * slow or non-reading client) — the follower stops reading more of the journal
+   * and awaits {@link drain} before continuing, so an unread stream can never make
+   * the server buffer the whole file. `true` means keep going.
+   */
+  write(chunk: string): boolean;
+  /** Resolves once the socket is ready for more writes after a `false` from {@link write}. */
+  drain(): Promise<void>;
   readonly aborted: boolean;
   onAbort(cb: () => void): void;
 }
@@ -174,16 +182,26 @@ export interface SseEventsOptions {
   keepAliveMs: number;
 }
 
+/** Upper bound on one follower read, so neither a single `readSync` nor the
+ * in-memory copy of appended bytes ever exceeds this — a 50 MB journal is drained
+ * in 64 KB chunks, not loaded whole. */
+export const JOURNAL_CHUNK_BYTES = 64 * 1024;
+
 /**
  * Incremental reader over an append-only journal: an open file descriptor plus
  * a byte offset, so each poll reads only the bytes appended since the previous
- * one — bytes before the current offset are never read again, and no poll
- * loads the whole file. Bytes after the last newline (a partial line still
- * being written) are buffered in memory and completed on a later call, never
- * re-read from disk.
+ * one — bytes before the current offset are never read again, and no call loads
+ * the whole file. Each call reads at most {@link JOURNAL_CHUNK_BYTES}; a caller
+ * that needs to catch up on a large backlog loops until the result is empty.
+ * Bytes after the last newline (a partial line still being written) are buffered
+ * in memory and completed on a later call, never re-read from disk.
  */
 export interface JournalFollower {
-  /** Complete (newline-terminated) lines appended to `file` since the last call. */
+  /**
+   * Complete (newline-terminated) lines from the next bounded chunk of `file`.
+   * An empty result means caught up (no appended bytes, or only a partial line
+   * buffered); otherwise more chunks may remain, so loop until it returns empty.
+   */
   readNewLines(file: string): string[];
   close(): void;
 }
@@ -208,7 +226,10 @@ export function createJournalFollower(): JournalFollower {
         return [];
       }
       if (size <= offset) return [];
-      const appended = Buffer.alloc(size - offset);
+      // Read at most one bounded chunk per call — never `size - offset`, which on
+      // the first poll of a large journal would allocate and read the whole file.
+      const toRead = Math.min(size - offset, JOURNAL_CHUNK_BYTES);
+      const appended = Buffer.alloc(toRead);
       let read = 0;
       try {
         while (read < appended.length) {
@@ -259,20 +280,35 @@ export function createJournalFollower(): JournalFollower {
 export async function streamRunEventsSse(target: StreamTarget, opts: SseEventsOptions): Promise<void> {
   const follower = createJournalFollower();
   let lastKeepAlive = Date.now();
-  const flush = (): void => {
+  // Drain the journal in bounded chunks, honoring backpressure: when `write`
+  // reports a full socket buffer, stop reading more of the file until the client
+  // has drained what is already queued — so a slow reader cannot force the whole
+  // journal into memory.
+  const flush = async (): Promise<void> => {
     const dir = opts.resolveRunDir();
     if (!dir) return;
-    for (const line of follower.readNewLines(join(dir, RUN_SUMMARY))) target.write(`data: ${line}\n\n`);
+    const file = join(dir, RUN_SUMMARY);
+    for (;;) {
+      if (target.aborted) return;
+      const lines = follower.readNewLines(file);
+      if (lines.length === 0) return; // Caught up (or only a partial line buffered).
+      let ready = true;
+      for (const line of lines) {
+        ready = target.write(`data: ${line}\n\n`);
+        if (target.aborted) return;
+      }
+      if (!ready) await target.drain();
+    }
   };
   try {
     for (;;) {
       if (target.aborted) return;
-      flush();
+      await flush();
       if (opts.isTerminal()) {
         // A final line (e.g. RUN_END) may have landed between the read above
         // and the registry marking the run terminal; flush once more so the
         // stream is complete before closing.
-        flush();
+        await flush();
         target.write("event: end\ndata: {}\n\n");
         return;
       }
