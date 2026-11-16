@@ -19,27 +19,6 @@ Process rules:
 7. Acceptance criteria are non-negotiable. A task is not done until every
    acceptance bullet is verified by a test that fails when the contract is violated.
 
-## Apply prompt timeouts to the codex backend #dev-ready
-
-Source: code audit 2026-11-15. Confirmed by reading.
-
-### Current behavior
-
-`src/runtime/kernel/prompt-codex.ts` uses `http(s).request` with no timeout. `installPromptWatchdog` applies only to subprocess backends, so `JAIPH_PROMPT_IDLE_TIMEOUT_SECONDS` and `JAIPH_PROMPT_MAX_SECONDS` are ignored for codex. An endpoint that accepts the connection and stalls mid-stream hangs the run. `res.on("end")` returns status 0 even when `[DONE]` or a `finish_reason` never arrived.
-
-### Required behavior
-
-- The idle timeout resets on each received chunk and destroys the request when it fires. The max timeout is absolute. Both produce the same failure text as the subprocess backends.
-- A stream that ends without `[DONE]` or a `finish_reason` is a failure.
-- The run's abort signal destroys the request.
-
-### Acceptance
-
-- Test with a local HTTP server that sends headers and one chunk, then stalls: the prompt fails within the configured idle timeout.
-- Test with a server that streams slowly forever: fails at the max timeout.
-- Test with a server that closes after one chunk and no `[DONE]`: non-zero status.
-- `docs/env-vars.md` rows for both variables no longer exclude codex. CHANGELOG entry under Unreleased.
-
 ## Do not copy the Claude config directory into the run directory #dev-ready
 
 Source: code audit 2026-11-15. Confirmed by reading.

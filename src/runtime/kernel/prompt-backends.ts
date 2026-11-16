@@ -16,6 +16,8 @@ import {
   DEFAULT_PROMPT_COMPLETION_GRACE_MS,
   DEFAULT_PROMPT_IDLE_TIMEOUT_MS,
   DEFAULT_PROMPT_MAX_DURATION_MS,
+  promptIdleTimeoutReason,
+  promptMaxDurationReason,
   type PromptConfig,
   type PromptSource,
 } from "./prompt-config";
@@ -123,7 +125,7 @@ export function installPromptWatchdog(
     if (idleTimeoutMs <= 0) return;
     if (idleTimer) clearTimeout(idleTimer);
     idleTimer = setTimeout(
-      () => expire(1, `prompt produced no output for ${Math.round(idleTimeoutMs / 1000)}s`),
+      () => expire(1, promptIdleTimeoutReason(idleTimeoutMs)),
       idleTimeoutMs,
     );
     idleTimer.unref?.();
@@ -131,7 +133,7 @@ export function installPromptWatchdog(
 
   if (maxDurationMs > 0) {
     maxTimer = setTimeout(
-      () => expire(1, `prompt exceeded the ${Math.round(maxDurationMs / 1000)}s maximum duration`),
+      () => expire(1, promptMaxDurationReason(maxDurationMs)),
       maxDurationMs,
     );
     maxTimer.unref?.();
@@ -188,15 +190,22 @@ export function runBackend(
    * it at the send site.
    */
   promptSource?: PromptSource,
+  /**
+   * The run's cooperative-cancellation signal. The subprocess backends are
+   * terminated by the leader's OS-signal forwarding to their process group;
+   * codex has no subprocess, so the signal is handed to the HTTP backend to
+   * destroy the in-flight request on abort.
+   */
+  signal?: AbortSignal,
 ): Promise<{ final: string; status: number }> {
   // Codex uses HTTP API, not a CLI subprocess, but the named-prompt `use`
   // contract is identical: the request env is the scrubbed env plus the
   // granted `use` keys, injected last.
   if (config.backend === "codex") {
     const requestEnv = applyUseEnv(scrubPromptEnv(execEnv, config.backend), useEnv);
-    if (!promptSource) return _codexBackend.run(config, promptText, writer, stderr, requestEnv);
+    if (!promptSource) return _codexBackend.run(config, promptText, writer, stderr, requestEnv, signal);
     return consumePromptSource(promptSource).then((text) =>
-      _codexBackend.run(config, text, writer, stderr, requestEnv),
+      _codexBackend.run(config, text, writer, stderr, requestEnv, signal),
     );
   }
 

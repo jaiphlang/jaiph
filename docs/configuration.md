@@ -251,7 +251,7 @@ Each attempt emits its own `PROMPT_START` / `PROMPT_END` and `STEP_START` / `STE
 ## Prompt watchdog timeouts
 {: #prompt-watchdog-timeouts}
 
-The retry backoff above handles a backend that *fails*. A separate set of watchdogs handles a backend that *hangs* — it never exits, so without them the runtime would block on the subprocess indefinitely (no commit, no queue progress, no retry). Each prompt invocation installs three independent layers over the spawned backend process:
+The retry backoff above handles a backend that *fails*. A separate set of watchdogs handles a backend that *hangs* — it never finishes, so without them the runtime would block on the backend indefinitely (no commit, no queue progress, no retry). Each prompt invocation installs three independent layers over the backend:
 
 | Layer | Variable | Default | Trigger | Outcome |
 |---|---|---|---|---|
@@ -260,6 +260,8 @@ The retry backoff above handles a backend that *fails*. A separate set of watchd
 | Absolute cap | `JAIPH_PROMPT_MAX_SECONDS` | `7200` (2h) | Total wall-clock for the single invocation exceeds the cap, regardless of activity. | Terminate the process, return **failure** → feeds the retry backoff. |
 
 Set any variable to `0` to disable that layer. The idle timer resets on every chunk of backend output, so a slow-but-active run is bounded only by the absolute cap.
+
+The idle timeout and the absolute cap apply to every backend. A subprocess backend (cursor, claude, custom) is stopped by a process-tree kill. The `codex` HTTP backend has no process, so when the idle timeout or the absolute cap fires it destroys the in-flight request instead, with the same failure text and the same retry behavior. Completion grace applies only to the subprocess backends, because the codex stream ends with an explicit `[DONE]` or `finish_reason` terminator. Codex never reaches the state where the work finished but the backend will not exit. A codex stream that closes without that terminator is itself a failure, and it feeds the retry backoff.
 
 The completion-grace layer specifically addresses the known `claude -p` failure mode where the CLI streams its final answer (and the terminal `result` event) but the process never exits — often because a descendant it spawned is still holding the output pipe open. When a watchdog fires it terminates the backend's whole process tree (via `killProcessTree`; see [Architecture](architecture.md)) with `SIGTERM`, escalating to `SIGKILL` after 5s, and tears down the runtime's handles on the child's stdio so a lingering descendant cannot keep the run alive. On Windows the tree is force-killed with `taskkill /T` on the first signal, so the `SIGKILL` escalation is a no-op.
 

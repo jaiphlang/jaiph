@@ -704,6 +704,181 @@ describe("codex backend", () => {
       server.close();
     }
   });
+
+  it("codex fails at the idle timeout when the stream stalls mid-chunk", async () => {
+    const http = require("node:http") as typeof import("node:http");
+    let openRes: import("node:http").ServerResponse | undefined;
+    // Send headers and one content chunk, then stall forever (never end).
+    const server = http.createServer((_req, res) => {
+      openRes = res;
+      res.writeHead(200, { "Content-Type": "text/event-stream" });
+      res.write('data: {"choices":[{"delta":{"content":"partial"}}]}\n\n');
+    });
+    await new Promise<void>((resolve) => server.listen(0, resolve));
+    const port = (server.address() as { port: number }).port;
+    const errChunks: string[] = [];
+    const stderr = {
+      write: (c: unknown) => { errChunks.push(String(c)); return true; },
+    } as unknown as NodeJS.WritableStream;
+    const stdout = { write: () => true } as unknown as NodeJS.WritableStream;
+    try {
+      const start = Date.now();
+      const result = await executePrompt(
+        "stall",
+        makeConfig({
+          backend: "codex",
+          codexApiKey: "sk-test",
+          codexApiUrl: `http://localhost:${port}/v1/chat/completions`,
+          // Idle is the cause under test; disable the absolute cap.
+          idleTimeoutMs: 120,
+          maxDurationMs: 0,
+        }),
+        stdout,
+        {},
+        stderr,
+      );
+      assert.equal(result.status, 1);
+      assert.ok(Date.now() - start < 5000, "should fail promptly at the idle timeout");
+      assert.ok(
+        errChunks.join("").includes("produced no output"),
+        "stderr should carry the shared idle-timeout failure text",
+      );
+    } finally {
+      openRes?.destroy();
+      server.close();
+    }
+  });
+
+  it("codex fails at the absolute max duration when the stream never stops", async () => {
+    const http = require("node:http") as typeof import("node:http");
+    let openRes: import("node:http").ServerResponse | undefined;
+    let timer: NodeJS.Timeout | undefined;
+    // Stream a content chunk forever, faster than the idle timeout, so only the
+    // absolute cap can end it.
+    const server = http.createServer((_req, res) => {
+      openRes = res;
+      res.writeHead(200, { "Content-Type": "text/event-stream" });
+      timer = setInterval(() => {
+        res.write('data: {"choices":[{"delta":{"content":"x"}}]}\n\n');
+      }, 20);
+      res.on("close", () => { if (timer) clearInterval(timer); });
+    });
+    await new Promise<void>((resolve) => server.listen(0, resolve));
+    const port = (server.address() as { port: number }).port;
+    const errChunks: string[] = [];
+    const stderr = {
+      write: (c: unknown) => { errChunks.push(String(c)); return true; },
+    } as unknown as NodeJS.WritableStream;
+    const stdout = { write: () => true } as unknown as NodeJS.WritableStream;
+    try {
+      const result = await executePrompt(
+        "forever",
+        makeConfig({
+          backend: "codex",
+          codexApiKey: "sk-test",
+          codexApiUrl: `http://localhost:${port}/v1/chat/completions`,
+          idleTimeoutMs: 5000,
+          maxDurationMs: 150,
+        }),
+        stdout,
+        {},
+        stderr,
+      );
+      assert.equal(result.status, 1);
+      assert.ok(
+        errChunks.join("").includes("maximum duration"),
+        "stderr should carry the shared max-duration failure text",
+      );
+    } finally {
+      if (timer) clearInterval(timer);
+      openRes?.destroy();
+      server.close();
+    }
+  });
+
+  it("codex fails when the stream closes without [DONE] or finish_reason", async () => {
+    const http = require("node:http") as typeof import("node:http");
+    // One content chunk, then a clean close with no terminator.
+    const server = http.createServer((_req, res) => {
+      res.writeHead(200, { "Content-Type": "text/event-stream" });
+      res.write('data: {"choices":[{"delta":{"content":"cut off"}}]}\n\n');
+      res.end();
+    });
+    await new Promise<void>((resolve) => server.listen(0, resolve));
+    const port = (server.address() as { port: number }).port;
+    const errChunks: string[] = [];
+    const stderr = {
+      write: (c: unknown) => { errChunks.push(String(c)); return true; },
+    } as unknown as NodeJS.WritableStream;
+    const stdout = { write: () => true } as unknown as NodeJS.WritableStream;
+    try {
+      const result = await executePrompt(
+        "incomplete",
+        makeConfig({
+          backend: "codex",
+          codexApiKey: "sk-test",
+          codexApiUrl: `http://localhost:${port}/v1/chat/completions`,
+        }),
+        stdout,
+        {},
+        stderr,
+      );
+      assert.equal(result.status, 1);
+      assert.ok(
+        errChunks.join("").includes("without a completion marker"),
+        "stderr should name the missing completion marker",
+      );
+    } finally {
+      server.close();
+    }
+  });
+
+  it("codex request is destroyed when the run's abort signal fires", async () => {
+    const http = require("node:http") as typeof import("node:http");
+    let openRes: import("node:http").ServerResponse | undefined;
+    // Headers + one chunk, then stall; neither watchdog fires before the abort.
+    const server = http.createServer((_req, res) => {
+      openRes = res;
+      res.writeHead(200, { "Content-Type": "text/event-stream" });
+      res.write('data: {"choices":[{"delta":{"content":"working"}}]}\n\n');
+    });
+    await new Promise<void>((resolve) => server.listen(0, resolve));
+    const port = (server.address() as { port: number }).port;
+    const errChunks: string[] = [];
+    const stderr = {
+      write: (c: unknown) => { errChunks.push(String(c)); return true; },
+    } as unknown as NodeJS.WritableStream;
+    const stdout = { write: () => true } as unknown as NodeJS.WritableStream;
+    const controller = new AbortController();
+    const abortTimer = setTimeout(() => controller.abort(), 50);
+    try {
+      const result = await executePrompt(
+        "abort me",
+        makeConfig({
+          backend: "codex",
+          codexApiKey: "sk-test",
+          codexApiUrl: `http://localhost:${port}/v1/chat/completions`,
+          idleTimeoutMs: 5000,
+          maxDurationMs: 0,
+        }),
+        stdout,
+        {},
+        stderr,
+        undefined,
+        undefined,
+        controller.signal,
+      );
+      assert.equal(result.status, 1);
+      assert.ok(
+        errChunks.join("").includes("aborted"),
+        "stderr should report the abort",
+      );
+    } finally {
+      clearTimeout(abortTimer);
+      openRes?.destroy();
+      server.close();
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------

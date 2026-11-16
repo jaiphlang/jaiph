@@ -2144,7 +2144,16 @@ export class NodeWorkflowRuntime {
           io?.appendErr(chunk);
           if (chunk.length > 0) idleWarn?.bump();
         });
-        const result = await executePrompt(promptText, promptConfig, out, scope.env, err, useEnv, promptSource);
+        const result = await executePrompt(
+          promptText,
+          promptConfig,
+          out,
+          scope.env,
+          err,
+          useEnv,
+          promptSource,
+          this.abortController.signal,
+        );
         const promptErr = errChunks.join("");
         this.emitter.emitPromptStepEnd(promptStep, result.status, chunks.join(""), promptErr);
         this.emitter.emitPromptEvent("PROMPT_END", {
