@@ -824,3 +824,37 @@ All three of these pass `jaiph compile`:
 - A grep-style test: no regex or `startsWith` classification of an arm body outside `src/parse/`.
 - `src/format/roundtrip.test.ts`, `integration/format-roundtrip.test.ts`, `src/parse/parse-match.test.ts`, `parse-compact-match.test.ts` pass; golden ASTs are updated deliberately and the diff is limited to match arms.
 - `npm test`, `npm run lint`, `npm run arch:check`, `bash e2e/test_all.sh` pass. CHANGELOG entry under Unreleased.
+
+## Reject expressions on the right side of const
+
+Completed: 2026-11-16
+
+Source: code audit 2026-11-15. Reproduced with the built CLI.
+
+### Current behavior
+
+A bare `const` right-hand side is stored verbatim as text. Each of these compiles and `jaiph run` passes:
+
+- `const r = "a" + a` — `r` is the literal text `"a" + a`.
+- `const x = await h()` — `x` is the literal `await h()`; `h` is never called.
+- `const q = "a" > out.txt` — `q` is the literal text; no file is written.
+
+`docs/grammar.md` (around line 233) lists `bash_value_expr` as a `const_rhs` alternative, but that nonterminal is defined nowhere. `docs/language.md` says "bare token. Stored verbatim."
+
+An LLM that writes concatenation, `await` or a redirect gets a green compile and a green run with wrong data.
+
+### Required behavior
+
+- A bare right-hand side is a single token: a number, or an identifier-like word with no whitespace. Everything else must be one of the existing forms (quoted string, `"""` block, call, prompt, match, inline script, and so on).
+- Rejected with `E_PARSE` at the column of the first offending character:
+  - quoted string followed by more text → `unexpected content after string; use "${name}" interpolation to build strings`
+  - `await …` → `"await" is not a keyword; call the def directly: name(...)`
+  - anything else with whitespace or an operator → `invalid const value; expected a string, number, call, prompt, match, or script`
+- `docs/grammar.md`: remove or define `bash_value_expr` so every nonterminal used is defined.
+
+### Acceptance
+
+- The three inputs are in `test-fixtures/compiler-txtar/parse-errors.txt` with the messages above; snapshot refreshed.
+- A test that every nonterminal referenced in the EBNF blocks of `docs/grammar.md` is defined there.
+- Every `.jh` in `examples/`, `e2e/`, `.jaiph/` and `test-fixtures/` valid cases still compiles (fix sources that relied on the old behaviour, except under `.jaiph/`: list those in the report instead).
+- `npm test` and `bash e2e/test_all.sh` pass. `docs/language.md` updated. CHANGELOG entry under Unreleased as a breaking change.

@@ -93,6 +93,9 @@ export function parseConstRhs(
   if (head.startsWith("ensure ")) {
     fail(filePath, "'ensure' is not a keyword; capture the call directly: const name = ref(args)", lineNo, col);
   }
+  if (head === "await" || /^await\s/.test(head)) {
+    fail(filePath, '"await" is not a keyword; call the def directly: name(...)', lineNo, col);
+  }
   // const x = async ref() — async capture returning a handle
   if (head === "async" || head.startsWith("async ")) {
     const asyncRest = head === "async" ? "" : head.slice("async ".length).trim();
@@ -147,12 +150,56 @@ export function parseConstRhs(
     };
   }
   validateConstBashExpr(filePath, head, lineNo, col);
-  const isBareDotted = isBareDottedIdentifierReturn(head);
-  const isBare = !isBareDotted && isBareIdentifierReturn(head);
-  const raw = isBareDotted
-    ? dottedReturnToQuotedString(head)
-    : isBare
-      ? bareIdentifierToQuotedString(head)
-      : head;
-  return { value: { kind: "literal", raw }, next: cursor.next(at) };
+  // A single-line double-quoted string is a literal; reject any trailing text
+  // (a concatenation, redirect, or operator) instead of storing it verbatim.
+  if (head.startsWith('"')) {
+    const end = closingQuoteIndex(head);
+    if (end !== -1) {
+      const after = head.slice(end + 1);
+      if (after.trim().length > 0) {
+        const offset = end + 1 + (after.length - after.trimStart().length);
+        fail(
+          filePath,
+          'unexpected content after string; use "${name}" interpolation to build strings',
+          lineNo,
+          col + offset,
+        );
+      }
+      return { value: { kind: "literal", raw: head }, next: cursor.next(at) };
+    }
+  }
+  // Bare identifier / dotted identifier desugar to an interpolated literal.
+  if (isBareDottedIdentifierReturn(head)) {
+    return { value: { kind: "literal", raw: dottedReturnToQuotedString(head) }, next: cursor.next(at) };
+  }
+  if (isBareIdentifierReturn(head)) {
+    return { value: { kind: "literal", raw: bareIdentifierToQuotedString(head) }, next: cursor.next(at) };
+  }
+  // A bare number token is stored verbatim.
+  if (/^-?\d+(?:\.\d+)?$/.test(head)) {
+    return { value: { kind: "literal", raw: head }, next: cursor.next(at) };
+  }
+  // Anything else — whitespace, an operator, a redirect — is an expression, not
+  // a const value. Point at the first character past the leading bare token.
+  const lead = /^[A-Za-z0-9_.]*/.exec(head)![0];
+  const rest = head.slice(lead.length);
+  const offset = lead.length + (rest.length - rest.trimStart().length);
+  fail(
+    filePath,
+    "invalid const value; expected a string, number, call, prompt, match, or script",
+    lineNo,
+    col + offset,
+  );
+}
+
+/** Index of the closing `"` of a leading `"…"` string in `s`, honoring `\"`, or -1. */
+function closingQuoteIndex(s: string): number {
+  for (let i = 1; i < s.length; i += 1) {
+    if (s[i] === "\\") {
+      i += 1;
+      continue;
+    }
+    if (s[i] === '"') return i;
+  }
+  return -1;
 }

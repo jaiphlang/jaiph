@@ -53,7 +53,7 @@ Crossings: interpolating, an `if` subject, or a call argument on a handle **is**
 | `import script "path" as name [use KEY …]` | Loads an external script file (no `.jh` appended). Path is relative-only. Treated as a `script` symbol. The optional `use` clause requests host env keys for the script's spawns, same as on a named `script`. |
 | `export def` / `export script` | Marks a definition public. Names are private by default: same-file code can call any name; `import` can only call names listed in `mod.exports`. Zero exports means nothing is public. |
 | `channel name [-> target [, target …]]` | Declares a named queue. Inline routes target defs with 1 to 3 parameters (message, channel, sender). |
-| `const NAME = value` | Module-scoped immutable string. Values: double-quoted, triple-quoted, or bare token. Stored verbatim. |
+| `const NAME = value` | Module-scoped immutable string. The value is a double-quoted or triple-quoted string, or a single bare token (an identifier or a number). An expression is rejected. See [`const`](#const-bind-a-value). |
 | `config { … }` | Module-level configuration block (`agent.*`, `run.*`, and `module.*`). See [Configuration](configuration.md). |
 | `script name [use KEY …] = …` | Executable definition. Invoked with a bare call `name(args)`. The optional `use` clause requests host env keys for this script's subprocess; each key must be granted with `--env KEY[=VALUE]` (see [Subprocess environment](#subprocess-environment)). |
 | `prompt name([params]) [use KEY …] = …` | Named, parameterised [prompt](#named-prompts). Invoked with `prompt name(args)`, never a bare call `name(args)`. The optional `use` clause requests host env keys for this prompt's agent subprocess (same `--env` grant as a script). |
@@ -352,7 +352,11 @@ const label = match status {
 | Call / `async` call | Managed capture — `const x = helper(arg)`, `const h = async task()`. |
 | `prompt` (any body form) | Optional `returns` schema. |
 | `match` expression | Walks arms; first match wins. |
+| Bare token | A single token with no whitespace: an identifier or `IDENT.field` (desugars to `"${…}"`) or a number (its literal text). Anything longer must use another form. |
+| Quoted string followed by more text (`"a" + a`, `"a" > out.txt`) | `E_PARSE` (`unexpected content after string`) at the trailing text — use `"${name}"` interpolation to build strings. |
+| Leading `await` (`const x = await f()`) | `E_PARSE` (`"await" is not a keyword`) — call the def directly. |
 | Leading `run` (`const x = run ref()`) | `E_PARSE` (`'run' is not a keyword`) — capture the call directly. |
+| Any other expression (an operator, a redirect, two words) | `E_PARSE` (`invalid const value`) at the first offending character. |
 | `$(…)`, `${var:-fallback}`, etc. | `E_PARSE` in `const` RHS. |
 
 All bindings — parameters, `const`, captures, `script` names — are immutable in their scope. The validator names the conflicting binding and its origin (`E_VALIDATE: cannot rebind immutable name "x"; already bound as parameter at file.jh:1`).
@@ -531,7 +535,7 @@ No string-RHS site accepts two of these but rejects the third.
 | `${ident}` | Primary | All orchestration strings. |
 | `${var.field}` | Typed-prompt field access | All orchestration strings. |
 | `${ref(args)}` | Inline capture — executes and inlines stdout / return value. | All orchestration strings. |
-| `$ident` (no braces) | `E_PARSE` in `log` / `logerr` / `logwarn` / `fail` / `prompt` / `return` / `send` / `config`. In a `const` RHS a bare `$` is stored verbatim, not treated as a reference. | — |
+| `$ident` (no braces) | `E_PARSE` in `log` / `logerr` / `logwarn` / `fail` / `prompt` / `return` / `send` / `config`. Inside a `const` RHS string `$ident` is stored verbatim, not treated as a reference; an unquoted `$ident` as the whole `const` RHS is `E_PARSE` (`invalid const value`). | — |
 | `$1`, `$2`, … | Positional args | `script` bodies only (interpretation depends on the interpreter). |
 | `${var:-fallback}` (and `:+`, `:=`, `:?`) | `E_PARSE` in every orchestration string (`const`, `log`, `logerr`, `logwarn`, `fail`, `prompt`, `return`, `send`, `config`). Passes through unchanged in one-line and fenced scripts. | — |
 | `${var%%…}`, `${var//…}`, `${#var}` | `E_PARSE` in `const` RHS only. In other orchestration strings and in one-line / fenced scripts they pass through unchanged. | — |

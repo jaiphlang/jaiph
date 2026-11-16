@@ -159,6 +159,46 @@ test("parseConstRhs: call with trailing content throws", () => {
   );
 });
 
+test("parseConstRhs: bare number is a verbatim literal", () => {
+  const result = parseConstRhs(...src(["const x = 42"], 0), "42", 1, 1, "x");
+  assert.equal(result.value.kind, "literal");
+  if (result.value.kind === "literal") {
+    assert.equal(result.value.raw, "42");
+  }
+});
+
+test("parseConstRhs: quoted string followed by more text throws", () => {
+  assert.throws(
+    () => parseConstRhs(...src(['const r = "a" + a'], 0), '"a" + a', 1, 11, "r"),
+    (e: Error) =>
+      /unexpected content after string; use /.test(e.message) && /:1:15 /.test(e.message),
+  );
+});
+
+test("parseConstRhs: quoted string followed by a redirect throws", () => {
+  assert.throws(
+    () => parseConstRhs(...src(['const q = "a" > out.txt'], 0), '"a" > out.txt', 1, 11, "q"),
+    /unexpected content after string; use /,
+  );
+});
+
+test("parseConstRhs: await is not a keyword", () => {
+  assert.throws(
+    () => parseConstRhs(...src(["const x = await h()"], 0), "await h()", 1, 11, "x"),
+    (e: Error) =>
+      /"await" is not a keyword; call the def directly/.test(e.message) && /:1:11 /.test(e.message),
+  );
+});
+
+test("parseConstRhs: bare expression with an operator throws", () => {
+  assert.throws(
+    () => parseConstRhs(...src(["const x = a + b"], 0), "a + b", 1, 11, "x"),
+    (e: Error) =>
+      /invalid const value; expected a string, number, call, prompt, match, or script/.test(e.message) &&
+      /:1:13 /.test(e.message),
+  );
+});
+
 test("parseConstRhs: prompt capture is allowed in def", () => {
   const result = parseConstRhs(...src(['const x = prompt "hello"'], 0), 'prompt "hello"', 1, 1, "x");
   assert.equal(result.value.kind, "prompt");

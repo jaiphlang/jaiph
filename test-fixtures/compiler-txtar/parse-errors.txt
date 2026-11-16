@@ -1167,6 +1167,27 @@ export def main() {
   const x = ${var:-default}
 }
 
+=== workflow const string followed by concatenation
+# @expect error E_PARSE "unexpected content after string; use " @2:17
+--- input.jh
+export def main() {
+  const r = "a" + a
+}
+
+=== workflow const await is not a keyword
+# @expect error E_PARSE "is not a keyword; call the def directly" @2:13
+--- input.jh
+export def main() {
+  const x = await h()
+}
+
+=== workflow const string followed by redirect
+# @expect error E_PARSE "unexpected content after string; use " @2:17
+--- input.jh
+export def main() {
+  const q = "a" > out.txt
+}
+
 === run without parentheses in workflow requires parens
 # @expect error E_PARSE "not a statement; put the command in a script" @3:3
 --- input.jh
