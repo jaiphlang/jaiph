@@ -70,13 +70,16 @@ test(
 
     const stderr = new PassThrough();
     try {
-      // A custom command (basename !== cursor-agent) with a short idle timeout
-      // and the absolute cap / completion grace disabled: only the idle layer
-      // can fire, and it fires fast.
+      // A custom command (basename !== cursor-agent) with the absolute cap /
+      // completion grace disabled: only the idle layer can fire. The idle timer
+      // starts at spawn, so it must stay comfortably longer than the time the
+      // fake agent needs to record the grandchild pid — under full-suite
+      // parallel load the bash child can be slow to schedule, and a timeout too
+      // tight kills it before `echo $! > "$1"` runs, leaving no pid file.
       const config = makeConfig({
         backend: "cursor",
         agentCommand: `${agent} ${pidFile}`,
-        idleTimeoutMs: 600,
+        idleTimeoutMs: 2000,
         maxDurationMs: 0,
         completionGraceMs: 0,
       });

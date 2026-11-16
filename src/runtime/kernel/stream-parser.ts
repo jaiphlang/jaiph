@@ -119,6 +119,15 @@ export function processStreamLine(
       // Claude CLI stream_event envelope
       if (obj.type === "stream_event" && obj.event && typeof obj.event === "object") {
         const event = obj.event as Record<string, unknown>;
+        // A new assistant turn begins: the captured final is only the last
+        // turn's text, so drop any text accumulated from earlier turns. The
+        // live writer already received those turns and keeps showing them.
+        if (event.type === "message_start") {
+          state.final = "";
+          state.sawFinalStreamDelta = false;
+          state.sawVisibleFinalText = false;
+          return;
+        }
         if (event.type === "content_block_delta" && event.delta && typeof event.delta === "object") {
           const delta = event.delta as Record<string, unknown>;
           if (delta.type === "thinking_delta" && typeof delta.thinking === "string" && delta.thinking.length > 0) {
@@ -196,10 +205,16 @@ export function processStreamLine(
       }
       if (obj.type === "result" && typeof obj.result === "string" && obj.result.length > 0) {
         if (!state.sawFinalStreamDelta && !state.sawFinalMessage) {
+          // Nothing streamed to the live writer yet; surface the result there too.
           const normalized = normalizeInitialFinalText(obj.result, state);
           state.final = normalized;
           writeFinalDelta(normalized);
           state.sawFinalMessage = true;
+        } else {
+          // The final text already streamed to the live writer; the terminal
+          // result is authoritative for the captured value (the last turn's
+          // answer only), so take it without re-writing the live stream.
+          state.final = obj.result;
         }
         return;
       }
