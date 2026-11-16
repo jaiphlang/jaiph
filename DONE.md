@@ -656,3 +656,22 @@ Source: code audit 2026-11-15. Confirmed by reading.
 - Test: unwritable config dir containing a fake `.credentials.json` and a large `projects/` tree; after the prompt step nothing named `claude-config` or `.credentials.json` exists under the run dir, `projects/` was not copied anywhere, and the temp directory has mode `0700`.
 - Test: the temp directory is removed at run end.
 - The existing test near `prompt.test.ts:549` is updated to the new path. CHANGELOG entry under Unreleased.
+
+## Store async handles out of band
+
+Completed: 2026-11-16
+
+Source: code audit 2026-11-15. Reproduced.
+
+### Current behavior
+
+Async handles live in `scope.vars` as strings with the prefix `__JAIPH_HANDLE__`; `isHandle` in `node-workflow-runtime.ts` is `value.startsWith(HANDLE_PREFIX)`. A script that prints `__JAIPH_HANDLE__1`, captured into `x`, makes `${x}` resolve to async handle 1's result, or fails with "invalid async handle". Untrusted script or agent output can swap its value for another step's result.
+
+### Required behavior
+
+A captured string is never interpreted as a handle. Keep handles in a separate structure (for example a `Map` from variable name to handle per scope, or a tagged value type instead of `string`). Do not fix this with an unguessable prefix.
+
+### Acceptance
+
+- Test: a script prints `__JAIPH_HANDLE__1` while an async handle 1 exists; the captured variable interpolates to the literal text.
+- Existing async tests and e2e pass. CHANGELOG entry under Unreleased.

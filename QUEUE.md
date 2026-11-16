@@ -19,23 +19,6 @@ Process rules:
 7. Acceptance criteria are non-negotiable. A task is not done until every
    acceptance bullet is verified by a test that fails when the contract is violated.
 
-## Store async handles out of band #dev-ready
-
-Source: code audit 2026-11-15. Reproduced.
-
-### Current behavior
-
-Async handles live in `scope.vars` as strings with the prefix `__JAIPH_HANDLE__`; `isHandle` in `node-workflow-runtime.ts` is `value.startsWith(HANDLE_PREFIX)`. A script that prints `__JAIPH_HANDLE__1`, captured into `x`, makes `${x}` resolve to async handle 1's result, or fails with "invalid async handle". Untrusted script or agent output can swap its value for another step's result.
-
-### Required behavior
-
-A captured string is never interpreted as a handle. Keep handles in a separate structure (for example a `Map` from variable name to handle per scope, or a tagged value type instead of `string`). Do not fix this with an unguessable prefix.
-
-### Acceptance
-
-- Test: a script prints `__JAIPH_HANDLE__1` while an async handle 1 exists; the captured variable interpolates to the literal text.
-- Existing async tests and e2e pass. CHANGELOG entry under Unreleased.
-
 ## Harden serve request handling: bad percent-encoding, non-ASCII file names, reserved def names #dev-ready
 
 Source: code audit 2026-11-15. Reproduced or confirmed by reading.
