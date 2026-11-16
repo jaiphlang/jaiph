@@ -19,26 +19,6 @@ Process rules:
 7. Acceptance criteria are non-negotiable. A task is not done until every
    acceptance bullet is verified by a test that fails when the contract is violated.
 
-## Do not copy the Claude config directory into the run directory #dev-ready
-
-Source: code audit 2026-11-15. Confirmed by reading.
-
-### Current behavior
-
-`src/runtime/kernel/prompt-claude.ts` (around lines 82–98): when `<config>/session-env` is not writable, it runs `cpSync(configuredDir, <JAIPH_RUN_DIR>/claude-config, { recursive: true })`. With a read-only `~/.claude`, every run copies credentials, settings and all project history into `.jaiph/runs/<run>/claude-config`. That directory is never cleaned, every script can read it through `JAIPH_RUN_DIR`, `jaiph serve` can list it as artifacts, and CI commonly uploads run directories.
-
-### Required behavior
-
-- Copy only the files claude needs to authenticate and start (credentials and settings files; find the minimal set by test) into a `0700` directory created with `mkdtemp` under the OS temp dir.
-- Remove that directory when the run ends, including on failure and signal.
-- Nothing from the Claude config lands under the run directory.
-
-### Acceptance
-
-- Test: unwritable config dir containing a fake `.credentials.json` and a large `projects/` tree; after the prompt step nothing named `claude-config` or `.credentials.json` exists under the run dir, `projects/` was not copied anywhere, and the temp directory has mode `0700`.
-- Test: the temp directory is removed at run end.
-- The existing test near `prompt.test.ts:549` is updated to the new path. CHANGELOG entry under Unreleased.
-
 ## Store async handles out of band #dev-ready
 
 Source: code audit 2026-11-15. Reproduced.

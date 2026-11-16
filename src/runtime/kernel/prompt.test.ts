@@ -1,6 +1,6 @@
 import { describe, it, afterEach } from "node:test";
 import * as assert from "node:assert/strict";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { EventEmitter } from "node:events";
@@ -545,10 +545,11 @@ describe("prepareClaudeEnv", () => {
     }
   });
 
-  it("falls back to ephemeral claude config under the run dir when default is not writable", () => {
+  it("falls back to an ephemeral temp claude config (never under the run dir) when default is not writable", () => {
     const root = mkdtempSync(join(tmpdir(), "jaiph-claude-env-fallback-"));
     const runDir = join(root, "run");
     mkdirSync(runDir, { recursive: true });
+    let cleanupDir: string | undefined;
     try {
       const blockedPath = join(root, "blocked-config-path");
       writeFileSync(blockedPath, "not-a-directory");
@@ -556,11 +557,58 @@ describe("prepareClaudeEnv", () => {
         { CLAUDE_CONFIG_DIR: blockedPath, JAIPH_RUN_DIR: runDir },
         join(root, "workspace"),
       );
+      cleanupDir = prepared.cleanupDir;
       assert.equal(prepared.error, undefined);
       assert.ok(prepared.warning);
-      assert.equal(prepared.env.CLAUDE_CONFIG_DIR, join(runDir, "claude-config"));
-      assert.ok(existsSync(join(runDir, "claude-config", "session-env")));
+      // The fallback is a fresh temp dir under the OS temp dir, not the run dir.
+      const configDir = prepared.env.CLAUDE_CONFIG_DIR;
+      assert.ok(configDir && configDir.startsWith(tmpdir()));
+      assert.equal(prepared.cleanupDir, configDir);
+      assert.ok(existsSync(join(configDir!, "session-env")));
+      // Nothing was placed under the run dir.
+      assert.ok(!existsSync(join(runDir, "claude-config")));
     } finally {
+      if (cleanupDir) rmSync(cleanupDir, { recursive: true, force: true });
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("copies only auth/settings files into a 0700 temp dir — not claude-config, .credentials.json, or projects/ under the run dir", () => {
+    const root = mkdtempSync(join(tmpdir(), "jaiph-claude-env-noleak-"));
+    const runDir = join(root, "run");
+    mkdirSync(runDir, { recursive: true });
+    // A config dir holding credentials and a large projects/ history tree whose
+    // session-env slot is unusable (a file, not a directory) so the fallback is
+    // taken — a type conflict, so this holds even when the test runs as root.
+    const configDir = join(root, "home-config");
+    mkdirSync(join(configDir, "projects", "a", "deep"), { recursive: true });
+    writeFileSync(join(configDir, ".credentials.json"), '{"token":"secret"}');
+    writeFileSync(join(configDir, "settings.json"), '{"theme":"dark"}');
+    writeFileSync(join(configDir, "session-env"), "not-a-directory");
+    for (let i = 0; i < 50; i++) {
+      writeFileSync(join(configDir, "projects", "a", "deep", `h${i}.jsonl`), "x".repeat(1000));
+    }
+    let cleanupDir: string | undefined;
+    try {
+      const prepared = prepareClaudeEnv(
+        { CLAUDE_CONFIG_DIR: configDir, JAIPH_RUN_DIR: runDir },
+        join(root, "workspace"),
+      );
+      cleanupDir = prepared.cleanupDir;
+      assert.equal(prepared.error, undefined);
+      const tempDir = prepared.env.CLAUDE_CONFIG_DIR!;
+      // The temp dir is owner-only (0700).
+      assert.equal(statSync(tempDir).mode & 0o777, 0o700);
+      // Credentials + settings were seeded into the temp dir...
+      assert.ok(existsSync(join(tempDir, ".credentials.json")));
+      assert.ok(existsSync(join(tempDir, "settings.json")));
+      // ...but the projects/ history tree was not copied anywhere.
+      assert.ok(!existsSync(join(tempDir, "projects")));
+      // Nothing named claude-config or .credentials.json lives under the run dir.
+      assert.ok(!existsSync(join(runDir, "claude-config")));
+      assert.ok(!existsSync(join(runDir, ".credentials.json")));
+    } finally {
+      if (cleanupDir) rmSync(cleanupDir, { recursive: true, force: true });
       rmSync(root, { recursive: true, force: true });
     }
   });

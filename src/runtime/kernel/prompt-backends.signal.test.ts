@@ -13,7 +13,7 @@ import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
 import { delimiter, join } from "node:path";
 import { tmpdir } from "node:os";
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import type { ChildProcess } from "node:child_process";
 import { runBackend, type PromptConfig } from "./prompt";
 import { _backendSpawn } from "./prompt-backends";
@@ -161,6 +161,72 @@ describe("runBackend: signal kill after partial output fails with the signal nam
       assert.equal(result.status, 1);
       assert.match(err, /killed by SIGKILL/);
     });
+  });
+});
+
+// --- Ephemeral Claude config dir is removed at run end ---
+
+describe("runBackend: claude ephemeral config dir is removed when the run ends", () => {
+  let claudeRoot: string | undefined;
+  let origPath: string | undefined;
+  afterEach(() => {
+    if (origPath !== undefined) {
+      process.env.PATH = origPath;
+      origPath = undefined;
+    }
+    if (claudeRoot) {
+      rmSync(claudeRoot, { recursive: true, force: true });
+      claudeRoot = undefined;
+    }
+  });
+
+  it("removes the temp config dir after settle", async () => {
+    claudeRoot = mkdtempSync(join(tmpdir(), "jaiph-backend-cleanup-claude-"));
+    writeFileSync(join(claudeRoot, "claude"), "#!/usr/bin/env bash\n", { mode: 0o755 });
+    chmodSync(join(claudeRoot, "claude"), 0o755);
+    origPath = process.env.PATH;
+    process.env.PATH = `${claudeRoot}${delimiter}${origPath ?? ""}`;
+
+    // An unwritable configured config dir forces the ephemeral temp fallback.
+    const blockedConfig = join(claudeRoot, "blocked-config");
+    writeFileSync(blockedConfig, "not-a-directory");
+
+    const child = makeFakeChild();
+    const stderr = new PassThrough();
+    // Capture the temp CLAUDE_CONFIG_DIR handed to the spawned child.
+    let tempConfigDir: string | undefined;
+    const origSpawn = _backendSpawn.spawn;
+    _backendSpawn.spawn = ((_cmd: string, _args: string[], opts: { env?: NodeJS.ProcessEnv }) => {
+      tempConfigDir = opts.env?.CLAUDE_CONFIG_DIR;
+      return child;
+    }) as unknown as typeof _backendSpawn.spawn;
+    try {
+      const execEnv: NodeJS.ProcessEnv = {
+        PATH: process.env.PATH,
+        HOME: claudeRoot,
+        CLAUDE_CONFIG_DIR: blockedConfig,
+      };
+      const p = runBackend(
+        makeConfig({ backend: "claude", workspaceRoot: claudeRoot!, trustedWorkspace: claudeRoot! }),
+        "hi",
+        noopWriter,
+        execEnv,
+        stderr,
+      );
+      // The fallback temp dir exists while the backend runs.
+      assert.ok(tempConfigDir && tempConfigDir.startsWith(tmpdir()));
+      assert.ok(existsSync(tempConfigDir!));
+      child.stdout.write('{"type":"assistant","message":{"content":"ok"}}\n');
+      await delay(10);
+      (child as { exitCode: number | null }).exitCode = 0;
+      child.emit("exit", 0, null);
+      child.emit("close", 0, null);
+      await p;
+      // ...and is gone once the run settles.
+      assert.ok(!existsSync(tempConfigDir!), "ephemeral claude config dir must be removed at run end");
+    } finally {
+      _backendSpawn.spawn = origSpawn;
+    }
   });
 });
 

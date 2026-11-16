@@ -35,7 +35,7 @@ export {
   shellQuote,
 } from "./prompt-config";
 export type { ModelResolution, PromptConfig, PromptSource } from "./prompt-config";
-export { prepareClaudeEnv, resolveClaudeFallbackConfigDir } from "./prompt-claude";
+export { prepareClaudeEnv } from "./prompt-claude";
 export type { ClaudeEnvPreparation } from "./prompt-claude";
 export { installPromptWatchdog, runBackend } from "./prompt-backends";
 

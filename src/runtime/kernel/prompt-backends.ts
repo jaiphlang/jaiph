@@ -21,7 +21,7 @@ import {
   type PromptConfig,
   type PromptSource,
 } from "./prompt-config";
-import { commandExists, prepareClaudeEnv } from "./prompt-claude";
+import { commandExists, prepareClaudeEnv, removeClaudeConfigDir } from "./prompt-claude";
 import { runCodexBackend } from "./prompt-codex";
 
 /**
@@ -227,10 +227,19 @@ export function runBackend(
     // credential keys only. `--env`-injected secrets (e.g. GITHUB_TOKEN) stay
     // with trusted `run` steps and never reach the model.
     let childEnv: NodeJS.ProcessEnv = scrubPromptEnv(execEnv, config.backend);
+    // Ephemeral Claude config dir (seeded auth/settings under the OS temp dir)
+    // to remove when the run settles — on success, failure, or signal.
+    let claudeCleanupDir: string | undefined;
+    const removeClaudeCleanupDir = (): void => {
+      removeClaudeConfigDir(claudeCleanupDir);
+      claudeCleanupDir = undefined;
+    };
     if (isClaude) {
       const prepared = prepareClaudeEnv(childEnv, config.workspaceRoot);
+      claudeCleanupDir = prepared.cleanupDir;
       if (prepared.error) {
         stderr.write(`${prepared.error}\n`);
+        removeClaudeCleanupDir();
         resolve({ final: "", status: 1 });
         return;
       }
@@ -277,6 +286,7 @@ export function runBackend(
       } catch {
         // best-effort cleanup
       }
+      removeClaudeCleanupDir();
       resolve({ final, status });
     };
 
