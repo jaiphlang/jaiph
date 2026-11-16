@@ -675,3 +675,36 @@ A captured string is never interpreted as a handle. Keep handles in a separate s
 
 - Test: a script prints `__JAIPH_HANDLE__1` while an async handle 1 exists; the captured variable interpolates to the literal text.
 - Existing async tests and e2e pass. CHANGELOG entry under Unreleased.
+
+## Harden serve request handling: bad percent-encoding, non-ASCII file names, reserved def names
+
+Completed: 2026-11-16
+
+Source: code audit 2026-11-15. Reproduced or confirmed by reading.
+
+### Current behavior
+
+All in `src/cli/serve/handler.ts` unless noted:
+
+- `decodeURIComponent` is unguarded on route segments (around lines 341–378). `GET /runs/%E0%A4%A` or `POST /%` throws `URIError`, which returns 500 `E_INTERNAL` and logs an operator error per request.
+- Artifact download builds `Content-Disposition: … filename="${basename}"` (around line 754). Node throws `ERR_INVALID_CHAR` for names such as `报告.txt`, emoji or control characters, so a listed artifact always returns 500. Backslashes are not escaped.
+- A def or file named `runs`, `defs`, `mcp`, `healthz`, `docs` or `openapi.json` is advertised in OpenAPI, but `POST /runs` hits the list route and returns 405.
+- `X-Correlation-Id` is stripped of CR/LF only (around line 292). A value like `x principal=operator` forges a key=value pair in the audit log line built in `src/cli/shared/server-log.ts`.
+- Artifact download checks containment with `realpathSync` + `statSync` and then reopens the file by path (`src/cli/serve/runfiles.ts`). A running step can swap the final component for a symlink between check and open.
+
+### Required behavior
+
+- One safe-decode helper; a malformed segment is 404 (run/def lookup) with the normal JSON error shape and no operator error log.
+- `Content-Disposition` carries an ASCII fallback `filename=` (with `"` and `\` escaped or replaced) and an RFC 5987 `filename*=UTF-8''…`.
+- Tool derivation (`src/cli/shared/mcp-tools.ts`) rejects a def whose REST name collides with a reserved route, at `jaiph serve` startup, with an error naming the def and the reserved name. MCP stdio is unaffected.
+- The correlation id is restricted to a safe charset (for example `[A-Za-z0-9._:-]`, max 128 chars); other values are replaced by a generated id.
+- The artifact file is opened once (with `O_NOFOLLOW` where available), `fstat` on the descriptor decides size and file type, and the stream reads from that descriptor.
+
+### Acceptance
+
+- `GET /runs/%zz` and `POST /%` return 404, and the test's log sink has no error-level line.
+- Downloading an artifact named `报告.txt` and one named `a"b\c.txt` returns 200 with a parseable header.
+- `jaiph serve` on a file exporting `def runs()` fails at startup with the stated error.
+- A correlation id containing spaces or `=` does not appear verbatim in the audit line.
+- Test that swaps the artifact for a symlink to a file outside the run dir after resolution (inject a hook between resolve and open) does not serve the outside file.
+- `integration/serve-server.test.ts` passes. CHANGELOG entry under Unreleased.

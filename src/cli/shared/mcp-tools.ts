@@ -28,6 +28,29 @@ export interface DeriveToolsResult {
 }
 
 /**
+ * REST route names `jaiph serve` reserves at the top level. A def exposed under
+ * one of these would be advertised in OpenAPI yet unreachable — the fixed route
+ * wins (`POST /runs` hits the run-list route and `405`s) — so serve rejects the
+ * collision at startup. MCP stdio has no routes and is unaffected.
+ */
+export const RESERVED_SERVE_ROUTES = ["runs", "defs", "mcp", "healthz", "docs", "openapi.json"];
+
+/**
+ * Throw if any tool's REST name collides with a reserved `jaiph serve` route.
+ * Called only by `jaiph serve` at startup (not by MCP stdio); the error names the
+ * offending def and the reserved route so the operator can rename the def.
+ */
+export function assertServeToolNames(tools: McpToolSpec[]): void {
+  for (const t of tools) {
+    if (RESERVED_SERVE_ROUTES.includes(t.name)) {
+      throw new Error(
+        `def "${t.def}" is exposed as "${t.name}", which collides with the reserved jaiph serve route "/${t.name}"; rename the def`,
+      );
+    }
+  }
+}
+
+/**
  * Sanitize a file basename into an MCP tool name: strip the `.jh` suffix and
  * replace anything outside `[A-Za-z0-9_-]` with `_`.
  */
