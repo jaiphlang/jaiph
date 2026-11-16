@@ -589,3 +589,25 @@ The def context is per async branch: store it in `AsyncLocalStorage` alongside t
 - Test: two async defs, one slow sender; `sender` in the dispatched message and in the journal is the sending def.
 - Test: two async defs with different def-level `agent.model` (and `run.recover_limit`), each interleaved with a sleep; each prompt/recover uses its own def's value (assert through the mock backend / emitted events).
 - `npm test` and `bash e2e/test_all.sh` pass. CHANGELOG entry under Unreleased.
+
+## Capture only the final answer from a multi-turn agent stream
+
+Completed: 2026-11-16
+
+Source: code audit 2026-11-15. Reproduced on a synthetic stream only; step 1 below confirms the real shape.
+
+### Current behavior
+
+`src/runtime/kernel/stream-parser.ts`: every `text_delta` is appended to `state.final` (around line 132), and the terminal `result` event is ignored once any delta was seen. For a claude stream with narration, a tool call and then the answer, the captured value is `"I'll inspect the repo first.APPROVED"`. `if verdict == "APPROVED"` is then false. `returns` schemas usually survive because `extractJson` scans from the end.
+
+### Required behavior
+
+1. Record a real multi-turn stream from the pinned claude CLI (`claude -p --output-format stream-json --include-partial-messages` with a prompt that forces one tool call) and commit it as a fixture under `test-fixtures/`. Do the same for cursor if its stream has turns. If the real stream shows the bug does not occur, report that and add the fixture as a regression test only.
+2. The captured value is the text of the last assistant turn: prefer the terminal `result` text when the stream has one; otherwise reset `state.final` when a new assistant message starts.
+3. The live progress stream still shows all turns.
+
+### Acceptance
+
+- `stream-parser.test.ts`: the real multi-turn fixture yields only the final turn's text.
+- Single-turn fixtures are unchanged.
+- `npm test` passes. CHANGELOG entry under Unreleased.
