@@ -1,4 +1,4 @@
-import type { Arg, Expr, MatchPatternDef, StepDef } from "../types";
+import type { Arg, Expr, MatchArmBody, MatchPatternDef, StepDef } from "../types";
 
 /**
  * Label text helpers for the graph builder. Everything here returns raw text;
@@ -54,6 +54,13 @@ export function isPlainValue(expr: Expr): boolean {
 export function promptText(expr: Extract<Expr, { kind: "prompt" }>): string {
   if (expr.name) return `${expr.name}(${argsText(expr.args)})`;
   return `"${snippet(unquote(expr.raw))}"`;
+}
+
+/** Source-form text of a non-`fail` match arm value, for a graph edge label. */
+export function matchArmValueText(body: Exclude<MatchArmBody, { kind: "fail" }>): string {
+  if (body.kind === "call") return `${body.callee.value}(${argsText(body.args)})`;
+  if (body.kind === "var") return body.name;
+  return body.raw;
 }
 
 /** Message text of a `fail`: a quoted literal is summarized like a prompt. */

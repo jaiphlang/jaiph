@@ -787,3 +787,40 @@ Bugs from the round trip:
 - Regression tests: `show("", "b")` delivers two arguments, the first empty; arguments containing spaces, quotes, commas, `)` and `${…}` arrive byte-exact; a nested call argument still works.
 - No behaviour change elsewhere: run a before/after differential (old `dist` vs new `dist`) over every `.jh` in `examples/`, `e2e/`, `test-fixtures/` and `.jaiph/` comparing the argv the runtime would pass, and report the diff count; the only allowed diffs are empty-string arguments.
 - `npm test`, `npm run lint`, `npm run arch:check`, `bash e2e/test_all.sh` pass. `docs/architecture.md` is accurate. CHANGELOG entry under Unreleased.
+
+## Parse match-arm bodies into a typed AST node
+
+Completed: 2026-11-16
+
+Source: code audit 2026-11-15. Reproduced.
+
+### Current behavior
+
+`MatchArmDef.body` is a `string` (`src/types.ts` around line 40). The parser classifies the body from tokens (`src/parse/match-arms.ts` around lines 127–160) and then discards the classification. Six places re-classify the string with regexes:
+
+- runtime: `node-workflow-runtime.ts` around lines 898–929 (`startsWith("fail ")`, `/^([A-Za-z_][A-Za-z0-9_.]*)\(([^)]*)\)\s*$/`)
+- validator: `src/transpile/validate-match.ts` around line 39
+- graph: `src/graph/build.ts` around line 138
+- progress tree: `src/cli/run/progress.ts` around line 142
+- test runner: `src/runtime/kernel/node-test-runner.ts` around line 73
+- test parser: `src/parse/tests.ts` around line 76
+
+All three of these pass `jaiph compile`:
+
+- `"a" => nope_missing("x")` fails only at run time with `Unknown run target: nope_missing`.
+- `"a" => echoit("p)q")` does not run the script; the arm returns the literal text `echoit("p)q")` and the run passes, because the runtime regex `[^)]*` disagrees with the parser.
+- `"a" => show("x, y", "z")` passes `x y` as the first argument (the comma is lost). The same call outside a match passes `x, y`.
+
+### Required behavior
+
+- The arm body is a typed sum built once in the parser, for example `{ kind: "fail"; message } | { kind: "value"; expr }`, reusing the existing call / literal / variable expression shapes.
+- The validator resolves the callee and checks arity through the same path as any other call (`E_VALIDATE` for an unknown def or script).
+- The runtime evaluates the expression through its normal expression/call path. Graph, progress tree, test runner and test parser switch on `kind`.
+- The formatter output is unchanged.
+
+### Acceptance
+
+- The three cases above are regression tests: unknown callee is `E_VALIDATE` at compile time; `echoit("p)q")` runs the script with argument `p)q`; `show("x, y", "z")` passes `x, y`.
+- A grep-style test: no regex or `startsWith` classification of an arm body outside `src/parse/`.
+- `src/format/roundtrip.test.ts`, `integration/format-roundtrip.test.ts`, `src/parse/parse-match.test.ts`, `parse-compact-match.test.ts` pass; golden ASTs are updated deliberately and the diff is limited to match arms.
+- `npm test`, `npm run lint`, `npm run arch:check`, `bash e2e/test_all.sh` pass. CHANGELOG entry under Unreleased.

@@ -139,10 +139,9 @@ export function collectDefChildren(
       ];
       if (s.value.kind === "match") {
         for (const arm of s.value.match.arms) {
-          const body = arm.body.trimStart();
-          const runM = body.match(/^([A-Za-z_][A-Za-z0-9_.]*)\(/);
-          if (runM) {
-            constItems.push({ label: `def ${runM[1]}`, nested: runM[1] });
+          if (arm.body.kind === "call") {
+            const name = arm.body.callee.value;
+            constItems.push({ label: `def ${name}`, nested: name });
           }
         }
       }

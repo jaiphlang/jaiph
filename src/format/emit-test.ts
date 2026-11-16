@@ -43,7 +43,7 @@ function emitTestStep(step: TestStepDef, pad: string, trivia: Trivia): string[] 
     case "test_mock_prompt_block": {
       // A compact one-line block (no triple-quoted arm, which only the multiline
       // form allows) stays on one line, like the compact `match` source form.
-      if (step.compact && step.arms.every((arm) => !arm.tripleQuotedBody)) {
+      if (step.compact && step.arms.every((arm) => !(arm.body.kind === "literal" && arm.body.tripleQuoted))) {
         const arms = step.arms.map((arm) => emitMatchArm(arm, "", "")[0]).join(", ");
         return [`${pad}mock prompt { ${arms} }`];
       }

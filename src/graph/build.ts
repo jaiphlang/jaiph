@@ -5,6 +5,7 @@ import {
   failText,
   inlineText,
   isPlainValue,
+  matchArmValueText,
   patternText,
   plainText,
   promptText,
@@ -135,12 +136,11 @@ function emitMatch(
   const arms: Incoming[] = [];
   for (const arm of m.arms) {
     const pat = patternText(arm.pattern);
-    const body = arm.body.trim();
-    if (/^fail\b/.test(body)) {
-      const f = newNode(ctx.b, ctx.sub, "fail", { kw: "fail", text: failText(body.slice(4)) });
+    if (arm.body.kind === "fail") {
+      const f = newNode(ctx.b, ctx.sub, "fail", { kw: "fail", text: failText(arm.body.message) });
       ctx.b.edges.push({ from: node, to: f, kind: "flow", label: pat });
     } else {
-      arms.push({ id: node, label: `${pat} → ${body}` });
+      arms.push({ id: node, label: `${pat} → ${matchArmValueText(arm.body)}` });
     }
   }
   if (arms.length < 2) return { tails: arms, node };

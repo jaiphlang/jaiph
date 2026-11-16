@@ -73,9 +73,9 @@ function mockPromptBlock(
     fail(t.filePath, "mock prompt block must have at least one arm", t.lineNo);
   }
   for (const arm of arms) {
-    const body = arm.body.trim();
-    if (!arm.tripleQuotedBody && body.startsWith('"') && body.endsWith('"')) {
-      rejectRemovedEscapes(t.filePath, body.slice(1, -1), "test", t.lineNo);
+    const body = arm.body;
+    if (body.kind === "literal" && !body.tripleQuoted && body.raw.startsWith('"') && body.raw.endsWith('"')) {
+      rejectRemovedEscapes(t.filePath, body.raw.slice(1, -1), "test", t.lineNo);
     }
   }
   return { step: { type: "test_mock_prompt_block", arms, ...(compact ? { compact: true } : {}), loc }, next };

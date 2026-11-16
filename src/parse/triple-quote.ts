@@ -117,10 +117,10 @@ export function dedentTripleQuotedBody(body: string): string {
 
 /**
  * Canonicalize a triple-quoted body that was stored in `tripleQuoteBodyToRaw`
- * (`"…escaped…"`) form. Used by match-arm bodies, which still carry their own
- * `tripleQuotedBody` flag instead of being dedented at parse time. The runtime
- * and the validator share this helper so that "what the runtime executes" and
- * "what the validator inspects" are bit-for-bit identical.
+ * (`"…escaped…"`) form. Used by match-arm bodies, whose `literal` variant carries
+ * a `tripleQuoted` flag and an undedented `raw` instead of being dedented at
+ * parse time. The runtime and the validator share this helper so that "what the
+ * runtime executes" and "what the validator inspects" are bit-for-bit identical.
  */
 export function canonicalizeTripleQuotedString(raw: string): string {
   if (raw.length < 2 || raw[0] !== '"' || raw[raw.length - 1] !== '"') return raw;

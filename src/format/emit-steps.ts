@@ -129,13 +129,22 @@ function emitMatchPattern(p: MatchPatternDef): string {
   return "_";
 }
 
+/** Source form of a match arm body, reconstructed from its typed classification. */
+function emitMatchArmBody(body: MatchArmDef["body"]): string {
+  if (body.kind === "fail") return `fail ${body.message}`;
+  if (body.kind === "call") return emitRef(body.callee, body.args);
+  if (body.kind === "var") return body.name;
+  return body.raw;
+}
+
 export function emitMatchArm(arm: MatchArmDef, armIndent: string, bodyIndent: string): string[] {
   const patStr = emitMatchPattern(arm.pattern);
+  const body = arm.body;
   // Use the parser's flag, not "contains a newline": a one-line `"""` body keeps
   // its source margin until the runtime dedents it, so writing it as `"…"` would
   // put that margin into the value.
-  if (arm.tripleQuotedBody) {
-    const inner = decodeTripleQuotedInner(arm.body);
+  if (body.kind === "literal" && body.tripleQuoted) {
+    const inner = decodeTripleQuotedInner(body.raw);
     const lines: string[] = [`${armIndent}${patStr} => """`];
     for (const bl of inner.split("\n")) {
       lines.push(bl);
@@ -143,7 +152,7 @@ export function emitMatchArm(arm: MatchArmDef, armIndent: string, bodyIndent: st
     lines.push(`${bodyIndent}"""`);
     return lines;
   }
-  return [`${armIndent}${patStr} => ${arm.body}`];
+  return [`${armIndent}${patStr} => ${emitMatchArmBody(body)}`];
 }
 
 /**

@@ -5,10 +5,11 @@
 // follows the arm-body grammar (a string, `"""` block, identifier, `a.b`,
 // `${…}`, `ref(…)`, or `fail "…"`).
 
-import type { MatchArmDef, MatchPatternDef } from "../types";
+import type { MatchArmBody, MatchArmDef, MatchPatternDef } from "../types";
 import type { Token } from "./lexer";
 import { decodeQuotedInner, fail, rejectRemovedEscapes, SINGLE_QUOTE_MESSAGE } from "./core";
 import { adjacent, isPunct, type BodyCursor } from "./body-cursor";
+import { parseCallRef } from "./call-args";
 import { SliceLexer, splitStatements, type SliceMode } from "./slice-lexer";
 import { blockBody, tripleQuoteBodyToRaw } from "./triple-quote";
 
@@ -119,18 +120,33 @@ function isCallBody(toks: Token[]): boolean {
   return false;
 }
 
+/** The typed `call` body for an arm whose tokens `isCallBody` already accepted. */
+function callArmBody(body: string, lineNo: number, col: number): MatchArmBody {
+  // `isCallBody` guarantees a well-formed `ref(...)` spanning the whole body,
+  // so `parseCallRef` — the single call-argument parser — always succeeds here.
+  const call = parseCallRef(body)!;
+  const callee = { value: call.ref, loc: { line: lineNo, col } };
+  return call.args ? { kind: "call", callee, args: call.args } : { kind: "call", callee };
+}
+
 /**
  * The arm body from index `from` of slice `L` (`"""` blocks are handled by the
- * callers). Returns the body text and, for a quoted body, the token after it.
- * Anything outside the grammar is `E_PARSE` at `col`.
+ * callers). Classifies the body into a typed {@link MatchArmBody} once; returns
+ * it and, for a quoted body, the token after it. Anything outside the grammar is
+ * `E_PARSE` at `col`.
  */
-function armBody(L: SliceLexer, from: number, lineNo: number, col: number): { body: string; rest: Token | undefined } {
+function armBody(
+  L: SliceLexer,
+  from: number,
+  lineNo: number,
+  col: number,
+): { body: MatchArmBody; rest: Token | undefined } {
   const err = (message: string): never => fail(L.filePath, message, lineNo, col);
   const first = L.at(from, BODY);
   if (!first) err("match arm body cannot be empty");
   if (first!.text.startsWith('"')) {
     if (first!.kind !== "string") err("unterminated string in match arm body");
-    return { body: first!.text, rest: L.at(L.end(first!), BODY) };
+    return { body: { kind: "literal", raw: first!.text }, rest: L.at(L.end(first!), BODY) };
   }
   const body = L.text.slice(L.rel(first!));
   const toks = L.all(L.rel(first!), BODY);
@@ -149,14 +165,18 @@ function armBody(L: SliceLexer, from: number, lineNo: number, col: number): { bo
   if (body.startsWith("'")) err(SINGLE_QUOTE_MESSAGE);
   const whole = (n: number): boolean => toks.length === n && toks.slice(1).every((t, k) => adjacent(toks[k]!, t));
   const dotted = whole(3) && isPunct(toks[1], ".") && toks[2]!.kind === "ident";
-  if (head.kind === "ident" && (whole(1) || dotted || isCallBody(toks))) return { body, rest: undefined };
-  if (isInterpBody(toks)) return { body, rest: undefined };
+  if (head.kind === "ident") {
+    if (whole(1)) return { body: { kind: "var", name: head.text }, rest: undefined };
+    if (dotted) return { body: { kind: "literal", raw: body }, rest: undefined };
+    if (isCallBody(toks)) return { body: callArmBody(body, lineNo, col), rest: undefined };
+  }
+  if (isInterpBody(toks)) return { body: { kind: "literal", raw: body }, rest: undefined };
   if (head.kind === "ident" && spaced) {
     if (head.text !== "fail") {
       const hint = head.text === "error" ? ' did you mean "fail"?' : "";
       err(`unknown match arm verb "${head.text}"; allowed: fail "...", ref(...).${hint}`);
     }
-    if (toks.length === 2 && second!.kind === "string") return { body, rest: undefined };
+    if (toks.length === 2 && second!.kind === "string") return { body: { kind: "fail", message: second!.text }, rest: undefined };
   }
   return err(invalidArmBodyMessage(body));
 }
@@ -210,7 +230,7 @@ export function parseMatchArms(
         if (cursor.textAfter(block).trim()) {
           fail(filePath, 'closing """ in match arm must not have content on the same line', cursor.lineNo(closeAt));
         }
-        arms.push({ pattern, body: tripleQuoteBodyToRaw(blockBody(block)), tripleQuotedBody: true });
+        arms.push({ pattern, body: { kind: "literal", raw: tripleQuoteBodyToRaw(blockBody(block)), tripleQuoted: true } });
         break;
       }
       const col = colAt(L, bodyTok);

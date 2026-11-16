@@ -37,11 +37,30 @@ export type MatchPatternDef =
   /** `"a" | "b" | /^c/` — matches if any alternand matches. Never contains `wildcard` or nested `alternation` (parser-enforced). */
   | { kind: "alternation"; patterns: MatchPatternDef[] };
 
+/**
+ * A match-arm body, classified once by the parser (replaces the former
+ * `body: string` that six downstream consumers re-classified with regexes).
+ * It reuses the call / literal / variable value shapes used elsewhere:
+ *
+ * - `fail`: `=> fail "message"` — aborts the workflow with `message` (stored as
+ *   the quoted literal, e.g. `"oops"`), the same text a `say level:"fail"` carries.
+ * - `call`: `=> ref(args)` / `=> alias.ref(args)` — a managed def/script call.
+ *   The validator resolves `callee` and checks arity through the same path as any
+ *   other call; the runtime evaluates it through its normal call path.
+ * - `var`: `=> name` — a bare in-scope identifier, sugar for returning its value.
+ * - `literal`: `=> "..."` / `${...}` / `a.b` / `"""..."""` — `raw` is the source
+ *   form (a `"""` block carries `tripleQuoted: true` and an undedented body that
+ *   the runtime canonicalizes; the formatter keeps the source shape either way).
+ */
+export type MatchArmBody =
+  | { kind: "fail"; message: string }
+  | { kind: "call"; callee: DefRef; args?: Arg[] }
+  | { kind: "var"; name: string }
+  | { kind: "literal"; raw: string; tripleQuoted?: boolean };
+
 export interface MatchArmDef {
   pattern: MatchPatternDef;
-  body: string;
-  /** Arm body was parsed from `pattern => """ ... """` (runtime dedents margin; formatter keeps source). */
-  tripleQuotedBody?: boolean;
+  body: MatchArmBody;
 }
 
 export interface MatchExprDef {
