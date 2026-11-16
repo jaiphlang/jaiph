@@ -109,3 +109,19 @@ test "implement_from_queue releases the in-progress claim when CI fails" {
   const out = eng.implement_from_queue() allow_failure
   expect_contain out "released: Second in-progress"
 }
+
+# Tags are #word; a lone "#" in a title is text. The header passed to the queue
+# must match queue.py clean_header, or every queue op fails with "task not found".
+test "implement_from_queue keeps a lone # in the task header" {
+  mock def claude.ensure_usage() {
+    return ""
+  }
+  mock def queue.next_available() {
+    return "## Accept a trailing # comment #dev-ready"
+  }
+  mock def queue.mark_task_in_progress(header) {
+    fail "claimed=[${header}]"
+  }
+  const out = eng.implement_from_queue() allow_failure
+  expect_contain out "claimed=[Accept a trailing # comment]"
+}
