@@ -10,6 +10,7 @@ import {
   createAuthenticator,
   loadPersistedRuns,
   persistRunRecord,
+  markServeManaged,
   createHttpServer,
   listen,
   type AuthConfig,
@@ -246,7 +247,10 @@ export async function runServe(rest: string[]): Promise<number> {
   try {
     log(`jaiph serve: reconstructing runs from ${hostRunsRoot}...`);
     const reconstructStarted = Date.now();
-    initialRuns = loadPersistedRuns(hostRunsRoot, new Date().toISOString());
+    // Apply the retention cap while loading so a huge runs tree cannot blow up
+    // startup memory; only dirs this server created (run.json or marker) are
+    // touched, so a plain `jaiph run` dir is never reconciled.
+    initialRuns = loadPersistedRuns(hostRunsRoot, new Date().toISOString(), retainRuns);
     log(
       `jaiph serve: reconstructed ${initialRuns.length} run(s) from ${hostRunsRoot} in ${Date.now() - reconstructStarted}ms`,
     );
@@ -279,10 +283,15 @@ export async function runServe(rest: string[]): Promise<number> {
     persistRun: persistRunRecord,
     // A run's dir is only recorded on its object at finalize; while it runs the
     // events/artifacts endpoints locate it by scanning the host runs root for
-    // the run id.
-    // The handler caches the first hit per record, so a live SSE poll loop
-    // scans at most once.
-    resolveRunDir: (record) => findRunDir(hostRunsRoot, record.run_id),
+    // the run id. The handler caches the first hit per record, so a live SSE poll
+    // loop scans at most once. On the first hit, drop an ownership marker into the
+    // dir so a restart can reconcile this run (if it dies mid-flight) without
+    // touching foreign `jaiph run` dirs.
+    resolveRunDir: (record) => {
+      const dir = findRunDir(hostRunsRoot, record.run_id);
+      if (dir) markServeManaged(dir);
+      return dir;
+    },
     getTools: () => generations.current().tools,
     callTool: (spec, args, runId, ctx) => {
       // Bind the run to the generation live at start; the lease keeps its

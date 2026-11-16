@@ -96,10 +96,12 @@ function streamBodyFile(bodyFile: { path: string; size: number } | { fd: number;
 }
 
 /**
- * Wire a `StreamTarget` to a live socket: writes go straight to the response,
- * and the client disconnecting (`req` close) flips `aborted` and fires the
- * registered callbacks so a follow loop stops promptly instead of writing to a
- * dead socket.
+ * Wire a `StreamTarget` to a live socket: writes go straight to the response and
+ * propagate `res.write`'s backpressure signal, the client disconnecting (`req`
+ * close) flips `aborted` and fires the registered callbacks so a follow loop
+ * stops promptly instead of writing to a dead socket, and `drain` resolves once
+ * the socket can accept more (or the client leaves) so the follower never
+ * buffers an unread stream without bound.
  */
 function makeStreamTarget(req: IncomingMessage, res: ServerResponse): StreamTarget {
   let aborted = false;
@@ -112,8 +114,25 @@ function makeStreamTarget(req: IncomingMessage, res: ServerResponse): StreamTarg
   req.on("close", abort);
   res.on("close", abort);
   return {
-    write(chunk: string): void {
-      if (!aborted && res.writable) res.write(chunk);
+    write(chunk: string): boolean {
+      // Nothing is queued when the socket is gone, so report "ready" (no wait).
+      if (aborted || !res.writable) return true;
+      return res.write(chunk);
+    },
+    drain(): Promise<void> {
+      return new Promise((resolve) => {
+        if (aborted || !res.writable) {
+          resolve();
+          return;
+        }
+        const done = (): void => {
+          res.removeListener("drain", done);
+          res.removeListener("close", done);
+          resolve();
+        };
+        res.once("drain", done);
+        res.once("close", done);
+      });
     },
     get aborted(): boolean {
       return aborted;

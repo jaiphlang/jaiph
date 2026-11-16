@@ -18,6 +18,7 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  JOURNAL_CHUNK_BYTES,
   createJournalFollower,
   listArtifacts,
   openArtifact,
@@ -226,8 +227,12 @@ function fakeTarget(): StreamTarget & { chunks: string[]; abort: () => void } {
   const chunks: string[] = [];
   return {
     chunks,
-    write(chunk: string): void {
+    write(chunk: string): boolean {
       chunks.push(chunk);
+      return true;
+    },
+    drain(): Promise<void> {
+      return Promise.resolve();
     },
     get aborted(): boolean {
       return aborted;
@@ -362,6 +367,145 @@ test("SSE follow reads each appended journal byte exactly once, never before the
     offset += r.bytes;
   }
   assert.equal(offset, totalBytes);
+});
+
+test("the follower drains a 50 MB journal in bounded chunks — no single read exceeds 64 KB", () => {
+  const runDir = mkdtempSync(join(tmpdir(), "jaiph-follow-big-"));
+  const file = join(runDir, "run_summary.jsonl");
+  // ~50 MB of complete newline-terminated lines.
+  const line = '{"x":1234567}\n'; // 14 bytes
+  const target = 50 * 1024 * 1024;
+  const count = Math.ceil(target / line.length);
+  writeFileSync(file, Buffer.from(line.repeat(count)));
+  const totalBytes = count * line.length;
+
+  // Measure every positional read against the follower's fd (the only fs reads
+  // during this test). Patch the live CJS module object the compiled code calls.
+  const fsAny = createRequire(__filename)("node:fs") as Record<string, unknown>;
+  const origReadSync = readSync;
+  let maxRead = 0;
+  let bytesRead = 0;
+  const follower = createJournalFollower();
+  try {
+    fsAny.readSync = (fd: number, buffer: Buffer, off: number, len: number, pos: number): number => {
+      const n = (origReadSync as (...a: unknown[]) => number)(fd, buffer, off, len, pos);
+      if (len > maxRead) maxRead = len; // the request size is the real allocation/read bound
+      bytesRead += n;
+      return n;
+    };
+    let lines = 0;
+    for (;;) {
+      const got = follower.readNewLines(file);
+      if (got.length === 0) break;
+      lines += got.length;
+    }
+    assert.ok(maxRead <= JOURNAL_CHUNK_BYTES, `largest single read ${maxRead} must be <= ${JOURNAL_CHUNK_BYTES}`);
+    assert.equal(bytesRead, totalBytes, "every byte was read exactly once across the chunks");
+    assert.equal(lines, count, "every line was delivered");
+  } finally {
+    fsAny.readSync = origReadSync;
+    follower.close();
+    rmSync(runDir, { recursive: true, force: true });
+  }
+});
+
+/** A target whose `write` reports a full socket and whose `drain` resolves only on demand. */
+function backpressureTarget(): StreamTarget & {
+  chunks: string[];
+  allowWrite: (v: boolean) => void;
+  releaseDrain: () => void;
+  drainPending: () => number;
+} {
+  const chunks: string[] = [];
+  let allow = true;
+  let drainers: Array<() => void> = [];
+  return {
+    chunks,
+    write(chunk: string): boolean {
+      chunks.push(chunk);
+      return allow;
+    },
+    drain(): Promise<void> {
+      return new Promise((r) => drainers.push(r));
+    },
+    get aborted(): boolean {
+      return false;
+    },
+    onAbort(): void {},
+    allowWrite(v: boolean): void {
+      allow = v;
+    },
+    releaseDrain(): void {
+      const rs = drainers;
+      drainers = [];
+      for (const r of rs) r();
+    },
+    drainPending(): number {
+      return drainers.length;
+    },
+  };
+}
+
+test("a write that returns false stops further journal reads until drain resolves", async () => {
+  const runDir = mkdtempSync(join(tmpdir(), "jaiph-follow-bp-"));
+  const file = join(runDir, "run_summary.jsonl");
+  // Several chunks' worth of complete lines, so a single flush must read more
+  // than one chunk to catch up — giving a "next read" to gate behind drain.
+  const line = '{"n":1}\n';
+  const count = Math.ceil((JOURNAL_CHUNK_BYTES * 3) / line.length);
+  writeFileSync(file, Buffer.from(line.repeat(count)));
+
+  const fsAny = createRequire(__filename)("node:fs") as Record<string, unknown>;
+  const origReadSync = readSync;
+  let readCalls = 0;
+  const target = backpressureTarget();
+  target.allowWrite(false); // the socket buffer is full on the very first write
+  let terminal = false;
+  try {
+    fsAny.readSync = (...args: unknown[]): number => {
+      readCalls += 1;
+      return (origReadSync as (...a: unknown[]) => number)(...args);
+    };
+    const done = streamRunEventsSse(target, {
+      resolveRunDir: () => runDir,
+      isTerminal: () => terminal,
+      pollMs: 5,
+      keepAliveMs: 15000,
+    });
+    // Wait until the follower has read the first chunk, written it, and parked on
+    // drain (write returned false).
+    const deadline = Date.now() + 5000;
+    while (target.drainPending() === 0) {
+      if (Date.now() > deadline) throw new Error("timed out waiting for the follower to block on drain");
+      await new Promise((r) => setTimeout(r, 5));
+    }
+    const readsWhenBlocked = readCalls;
+    assert.ok(readsWhenBlocked >= 1, "the first chunk was read");
+    // While drain is pending, the follower must not read further chunks.
+    await new Promise((r) => setTimeout(r, 60));
+    assert.equal(readCalls, readsWhenBlocked, "no further reads happen while backpressured on drain");
+
+    // Let it through: writes now succeed and the parked drain resolves, so the
+    // follower reads the remaining chunks and delivers every line.
+    target.allowWrite(true);
+    terminal = true;
+    // Resolve drains until the stream completes (it may park again between chunks
+    // if a later write still reported the socket full, but allow is true now).
+    const complete = (async (): Promise<void> => {
+      for (;;) {
+        target.releaseDrain();
+        await new Promise((r) => setTimeout(r, 5));
+        if (target.chunks.some((c) => c === "event: end\ndata: {}\n\n")) break;
+      }
+    })();
+    await Promise.all([done, complete]);
+    assert.ok(readCalls > readsWhenBlocked, "reads resumed once drain was released");
+    const payloads = target.chunks.filter((c) => c.startsWith("data: ")).length;
+    assert.equal(payloads, count, "every journal line was delivered after drain");
+  } finally {
+    fsAny.readSync = origReadSync;
+    rmSync(runDir, { recursive: true, force: true });
+  }
 });
 
 test("streamRunEventsSse stops promptly when the client disconnects mid-run", async () => {

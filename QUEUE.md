@@ -19,31 +19,6 @@ Process rules:
 7. Acceptance criteria are non-negotiable. A task is not done until every
    acceptance bullet is verified by a test that fails when the contract is violated.
 
-## Bound memory in the serve event follower and run-dir lookup #dev-ready
-
-Source: code audit 2026-11-15. Confirmed by reading.
-
-### Current behavior
-
-- `readNewLines` in `src/cli/serve/runfiles.ts` (around lines 148–170) allocates `Buffer.alloc(size - offset)`; on the first poll the offset is 0, so the whole journal is read synchronously, converted to a string and split. The comment says no poll loads the whole file.
-- The SSE writer ignores the return value of `res.write` (`src/cli/serve/server.ts` around line 100), so a client that does not read makes the server buffer without limit.
-- `runDirFor` caches only hits. For a run with no directory (spawn failure, or before the journal exists), every `/events` or `/artifacts` request and every 250 ms SSE poll calls `findRunDir`, which `readFileSync`s every journal in the tree to read its first line (`src/cli/shared/errors.ts` around lines 230–262).
-- On startup, `src/cli/serve/run-store.ts` loads every run directory with no cap, and stamps any journal without `run.json` as `interrupted`, writing a `run.json` into it. That includes runs made by plain `jaiph run` and runs of a still-live process in the same workspace.
-
-### Required behavior
-
-- The follower reads in bounded chunks (64 KB) and waits for `drain` before reading more.
-- `findRunDir` reads only the first line (bounded bytes) of each journal, and misses are negative-cached for terminal runs.
-- Startup reconciliation only touches run directories that this server created (they already have a `run.json`, or carry a marker written at launch) and applies the retention cap while loading.
-
-### Acceptance
-
-- Test: follower over a 50 MB journal; the largest single read is at most 64 KB (inject the fs read function or measure through a seam).
-- Test: a writer that returns `false` from `write` stops further reads until `drain`.
-- Test: a terminal run with no directory triggers one tree scan across many requests.
-- Test: a run directory created by `jaiph run` (no `run.json`) is not modified by serve startup.
-- `integration/serve-restart.test.ts` passes. CHANGELOG entry under Unreleased.
-
 ## Pass call arguments to the runtime as typed values #dev-ready
 
 Source: code audit 2026-11-15. Reproduced.
