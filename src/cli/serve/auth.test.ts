@@ -1,11 +1,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createServer, type Server } from "node:http";
+import type { AddressInfo } from "node:net";
 import {
   createAuthenticator,
   capabilitiesFromClaims,
   principalSubject,
   openPrincipal,
   oidcVerifyOptions,
+  discoverJwksUri,
+  jwksUriAllowed,
   OIDC_JWT_ALGORITHMS,
   ALL_CAPABILITIES,
   type Capability,
@@ -60,6 +64,28 @@ test("static token: missing, wrong-value, wrong-length, and non-Bearer headers a
       assert.equal(res.code, "E_UNAUTHORIZED");
     }
   }
+});
+
+test("static token: the Bearer scheme is matched case-insensitively (RFC 7235)", async () => {
+  const auth = createAuthenticator({ token: "s3cret" });
+  for (const header of ["bearer s3cret", "BEARER s3cret", "BeArEr s3cret"]) {
+    const res = await auth.authenticate(header);
+    assert.ok(res.ok, `header ${header} must authenticate`);
+    if (res.ok) assert.equal(res.principal.subject, "operator");
+  }
+});
+
+test("empty JAIPH_SERVE_TOKEN fails startup instead of silently selecting open mode", () => {
+  // An empty string (e.g. an unset `${VAR}` in a compose file) must fail closed.
+  assert.throws(() => createAuthenticator({ token: "" }), /JAIPH_SERVE_TOKEN is set but empty/);
+  // Even alongside OIDC, an empty token is surfaced rather than ignored.
+  assert.throws(
+    () => createAuthenticator({ token: "", oidc: { issuer: "https://issuer.example", audience: "aud" } }),
+    /JAIPH_SERVE_TOKEN is set but empty/,
+  );
+  // An unset token (undefined) is still open mode — only an explicit empty string errors.
+  assert.equal(createAuthenticator({}).mode, "none");
+  assert.equal(createAuthenticator({ token: undefined }).mode, "none");
 });
 
 // === scope → capability mapping ===
@@ -127,6 +153,84 @@ test("oidcVerifyOptions: pins issuer, audience, and a non-empty asymmetric algor
   // The returned array is a copy, not the shared constant (jose must not mutate the source of truth).
   assert.notEqual(opts.algorithms, OIDC_JWT_ALGORITHMS);
   assert.deepEqual(opts.algorithms, [...OIDC_JWT_ALGORITHMS]);
+  // `exp` is required so a signed token with no expiry is rejected, not accepted forever.
+  assert.deepEqual(opts.requiredClaims, ["exp"]);
+});
+
+// === JWKS discovery hardening ===
+
+test("jwksUriAllowed: requires https unless the issuer is loopback HTTP", () => {
+  // https is always fine.
+  assert.equal(jwksUriAllowed("https://idp.example/jwks", "https://idp.example"), true);
+  // A plain-HTTP jwks_uri for a non-loopback issuer is rejected (swappable in transit).
+  assert.equal(jwksUriAllowed("http://idp.example/jwks", "https://idp.example"), false);
+  // Loopback HTTP issuers (test fixtures) may serve an http jwks_uri.
+  assert.equal(jwksUriAllowed("http://127.0.0.1:1234/jwks", "http://127.0.0.1:1234"), true);
+  assert.equal(jwksUriAllowed("http://localhost/jwks", "http://localhost"), true);
+  // A loopback jwks_uri does NOT excuse a non-loopback issuer.
+  assert.equal(jwksUriAllowed("http://127.0.0.1/jwks", "http://idp.example"), false);
+});
+
+/**
+ * Stand up a one-shot discovery endpoint. The document is built from the
+ * server's own issuer URL via `makeDoc` so a matching-issuer case does not have
+ * to guess the port in advance.
+ */
+function startDiscovery(makeDoc: (issuer: string) => unknown): Promise<{ issuer: string; close: () => Promise<void> }> {
+  let issuer = "";
+  const server: Server = createServer((req, res) => {
+    if (req.url === "/.well-known/openid-configuration") {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify(makeDoc(issuer)));
+      return;
+    }
+    res.writeHead(404);
+    res.end();
+  });
+  return new Promise((resolve) => {
+    server.listen(0, "127.0.0.1", () => {
+      issuer = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+      resolve({
+        issuer,
+        close: () => new Promise<void>((r) => server.close(() => r())),
+      });
+    });
+  });
+}
+
+test("discoverJwksUri: returns the jwks_uri when the document's issuer matches", async () => {
+  const d = await startDiscovery((issuer) => ({ issuer, jwks_uri: `${issuer}/jwks` }));
+  try {
+    assert.equal(await discoverJwksUri(d.issuer), `${d.issuer}/jwks`);
+  } finally {
+    await d.close();
+  }
+});
+
+test("discoverJwksUri: a document issuer that does not match the configured issuer fails", async () => {
+  const d = await startDiscovery((issuer) => ({ issuer: "https://evil.example", jwks_uri: `${issuer}/jwks` }));
+  try {
+    await assert.rejects(discoverJwksUri(d.issuer), /has issuer "https:\/\/evil\.example", expected/);
+  } finally {
+    await d.close();
+  }
+});
+
+// The http-jwks-rejection branch inside discoverJwksUri only fires for a
+// non-loopback issuer, which cannot be reached by a loopback test server; the
+// `jwksUriAllowed` test above is the direct coverage for that gate.
+
+test("discoverJwksUri: a stalled discovery server trips the timeout and fails startup", async () => {
+  const server: Server = createServer(() => {
+    /* never responds — the request hangs until the abort timeout fires */
+  });
+  await new Promise<void>((r) => server.listen(0, "127.0.0.1", () => r()));
+  const issuer = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  try {
+    await assert.rejects(discoverJwksUri(issuer, 50));
+  } finally {
+    await new Promise<void>((r) => server.close(() => r()));
+  }
 });
 
 // === mode selection ===

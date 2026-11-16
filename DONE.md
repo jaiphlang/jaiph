@@ -708,3 +708,28 @@ All in `src/cli/serve/handler.ts` unless noted:
 - A correlation id containing spaces or `=` does not appear verbatim in the audit line.
 - Test that swaps the artifact for a symlink to a file outside the run dir after resolution (inject a hook between resolve and open) does not serve the outside file.
 - `integration/serve-server.test.ts` passes. CHANGELOG entry under Unreleased.
+
+## Close serve auth edge cases
+
+Completed: 2026-11-16
+
+Source: code audit 2026-11-15. Confirmed by reading `src/cli/serve/auth.ts`.
+
+### Current behavior
+
+- `JAIPH_SERVE_TOKEN=""` (for example from an unset `${VAR}` in a compose file) is falsy at `if (config.token)` and silently selects open mode on loopback.
+- JWT verification passes no `requiredClaims`, so a signed token with no `exp` is accepted forever.
+- `discoverJwksUri` has no request timeout, does not check that the discovery document's `issuer` equals the configured issuer, and accepts a non-https `jwks_uri`.
+- The bearer scheme is matched with a case-sensitive `/^Bearer\s+/`; RFC 7235 schemes are case-insensitive, so `bearer x` gets 401.
+
+### Required behavior
+
+- `JAIPH_SERVE_TOKEN` set to an empty string is a startup error with a clear message.
+- OIDC tokens must carry `exp`.
+- Discovery has a timeout (10 s), requires `issuer` to match, and requires an `https:` `jwks_uri` unless the issuer itself is `http://localhost` / `http://127.0.0.1` (tests).
+- The scheme match is case-insensitive.
+
+### Acceptance
+
+- Unit tests for each bullet: empty token fails startup; token without `exp` is 401; discovery with mismatched issuer, http `jwks_uri`, or a stalled server fails startup; `bearer <token>` authenticates.
+- `integration/serve-auth.test.ts` passes. `docs/` auth section updated. CHANGELOG entry under Unreleased.
