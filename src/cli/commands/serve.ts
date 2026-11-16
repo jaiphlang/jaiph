@@ -13,6 +13,7 @@ import {
   createHttpServer,
   listen,
   type AuthConfig,
+  type Authenticator,
 } from "../serve";
 import { VERSION } from "../../version";
 
@@ -134,9 +135,16 @@ export async function runServe(rest: string[]): Promise<number> {
   }
   const authConfig: AuthConfig =
     oidcIssuer && oidcAudience
-      ? { oidc: { issuer: oidcIssuer, audience: oidcAudience, jwksUri: oidcJwksUri || undefined } }
+      ? { token, oidc: { issuer: oidcIssuer, audience: oidcAudience, jwksUri: oidcJwksUri || undefined } }
       : { token };
-  const authenticator = createAuthenticator(authConfig);
+  let authenticator: Authenticator;
+  try {
+    // Fails closed on a misconfigured secret (e.g. an empty JAIPH_SERVE_TOKEN).
+    authenticator = createAuthenticator(authConfig);
+  } catch (err) {
+    process.stderr.write(`jaiph serve: ${(err as Error).message}\n`);
+    return 1;
+  }
 
   // No token and no OIDC is the default: every REST and /mcp request is the
   // anonymous principal with all capabilities. Loopback binds in that mode

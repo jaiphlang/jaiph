@@ -35,8 +35,8 @@ const FIXTURE = [
 interface Idp {
   issuer: string;
   jwksUri: string;
-  /** Sign a token with the trusted key (kid `k1`). Omit `sub` to mint a machine token (optionally carrying `clientId`). */
-  sign(claims: { sub?: string; scope: string; clientId?: string; issuer?: string; audience?: string; expiresInSec?: number }): Promise<string>;
+  /** Sign a token with the trusted key (kid `k1`). Omit `sub` to mint a machine token (optionally carrying `clientId`); set `noExp` to mint a token with no `exp` claim. */
+  sign(claims: { sub?: string; scope: string; clientId?: string; issuer?: string; audience?: string; expiresInSec?: number; noExp?: boolean }): Promise<string>;
   /** Sign a token with a key whose public half is NOT in the served JWKS. */
   signUnknownKey(claims: { sub: string; scope: string }): Promise<string>;
   /**
@@ -76,15 +76,15 @@ async function startIdp(): Promise<Idp> {
   const port = (server.address() as AddressInfo).port;
   issuer = `http://127.0.0.1:${port}`;
 
-  async function signWith(key: KeyLike, kid: string, claims: { sub?: string; scope: string; clientId?: string; issuer?: string; audience?: string; expiresInSec?: number }): Promise<string> {
+  async function signWith(key: KeyLike, kid: string, claims: { sub?: string; scope: string; clientId?: string; issuer?: string; audience?: string; expiresInSec?: number; noExp?: boolean }): Promise<string> {
     const now = Math.floor(Date.now() / 1000);
     const exp = now + (claims.expiresInSec ?? 3600);
     const jwt = new SignJWT({ scope: claims.scope, ...(claims.clientId ? { client_id: claims.clientId } : {}) })
       .setProtectedHeader({ alg: "RS256", kid })
       .setIssuer(claims.issuer ?? issuer)
       .setAudience(claims.audience ?? AUDIENCE)
-      .setIssuedAt(now)
-      .setExpirationTime(exp);
+      .setIssuedAt(now);
+    if (!claims.noExp) jwt.setExpirationTime(exp);
     if (claims.sub !== undefined) jwt.setSubject(claims.sub);
     return jwt.sign(key);
   }
@@ -158,7 +158,7 @@ function startServe(fixture: string, cwd: string, env: NodeJS.ProcessEnv): Promi
 
 const bearer = (token: string): Record<string, string> => ({ authorization: `Bearer ${token}` });
 
-test("jaiph serve OIDC: token validity matrix (valid, expired, wrong-aud, wrong-iss, unknown-key, disallowed-alg, insufficient-scope, missing)", async () => {
+test("jaiph serve OIDC: token validity matrix (valid, expired, no-exp, wrong-aud, wrong-iss, unknown-key, disallowed-alg, insufficient-scope, missing)", async () => {
   const idp = await startIdp();
   const root = mkdtempSync(join(tmpdir(), "jaiph-oidc-matrix-"));
   const jh = join(root, "tools.jh");
@@ -190,6 +190,11 @@ test("jaiph serve OIDC: token validity matrix (valid, expired, wrong-aud, wrong-
     const expired = await post(await idp.sign({ sub: "alice", scope: fullScope, expiresInSec: -60 }));
     assert.equal(expired.status, 401);
     assert.equal((await expired.json()).error.code, "E_TOKEN_EXPIRED");
+
+    // No `exp` claim → rejected (a signed token with no expiry would be valid forever).
+    const noExp = await post(await idp.sign({ sub: "alice", scope: fullScope, noExp: true }));
+    assert.equal(noExp.status, 401);
+    assert.equal((await noExp.json()).error.code, "E_TOKEN_INVALID");
 
     // Wrong audience.
     const wrongAud = await post(await idp.sign({ sub: "alice", scope: fullScope, audience: "someone-else" }));

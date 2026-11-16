@@ -104,10 +104,14 @@ export function openPrincipal(): Principal {
   return { subject: "anonymous", capabilities: new Set(ALL_CAPABILITIES), ownsAllRuns: true };
 }
 
-/** Extract the token from an `Authorization: Bearer <token>` header. */
+/**
+ * Extract the token from an `Authorization: Bearer <token>` header. The scheme
+ * match is case-insensitive: RFC 7235 auth schemes are case-insensitive, so
+ * `bearer <token>` / `BEARER <token>` are accepted alongside `Bearer <token>`.
+ */
 function bearerToken(header: string | undefined): string | null {
   if (!header) return null;
-  const match = /^Bearer\s+(.+)$/.exec(header);
+  const match = /^Bearer\s+(.+)$/i.exec(header);
   return match ? match[1].trim() : null;
 }
 
@@ -174,14 +178,44 @@ function createStaticAuthenticator(token: string): Authenticator {
   };
 }
 
-/** Discover the JWKS URI from the issuer's OpenID configuration document. */
-async function discoverJwksUri(issuer: string): Promise<string> {
+/** How long OIDC discovery may take before it is treated as a server failure. */
+export const OIDC_DISCOVERY_TIMEOUT_MS = 10_000;
+
+/**
+ * Whether a discovered `jwks_uri` is trusted for the configured issuer. A JWKS
+ * fetched over plain HTTP can be swapped by a network attacker, so `https:` is
+ * required — except when the issuer itself is loopback HTTP
+ * (`http://localhost` / `http://127.0.0.1`), which has no network hop to attack
+ * and is the only way local IdP fixtures (tests) can run without TLS.
+ */
+export function jwksUriAllowed(jwksUri: string, issuer: string): boolean {
+  if (/^https:\/\//i.test(jwksUri)) return true;
+  return /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/i.test(issuer);
+}
+
+/**
+ * Discover the JWKS URI from the issuer's OpenID configuration document. The
+ * fetch is bounded by `OIDC_DISCOVERY_TIMEOUT_MS` so a stalled IdP fails
+ * startup rather than hanging. The document's `issuer` must equal the configured
+ * issuer (an OIDC requirement — a mismatch means the discovery endpoint is
+ * misconfigured or spoofed), and the `jwks_uri` must be `https:` unless the
+ * issuer is loopback HTTP (see `jwksUriAllowed`).
+ */
+export async function discoverJwksUri(issuer: string, timeoutMs = OIDC_DISCOVERY_TIMEOUT_MS): Promise<string> {
   const url = `${issuer.replace(/\/+$/, "")}/.well-known/openid-configuration`;
-  const res = await fetch(url);
+  const res = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
   if (!res.ok) throw new Error(`OIDC discovery failed: ${url} returned ${res.status}`);
-  const doc = (await res.json()) as { jwks_uri?: unknown };
+  const doc = (await res.json()) as { issuer?: unknown; jwks_uri?: unknown };
+  if (doc.issuer !== issuer) {
+    throw new Error(
+      `OIDC discovery document at ${url} has issuer "${String(doc.issuer)}", expected "${issuer}"`,
+    );
+  }
   if (typeof doc.jwks_uri !== "string" || doc.jwks_uri.length === 0) {
     throw new Error(`OIDC discovery document at ${url} has no jwks_uri`);
+  }
+  if (!jwksUriAllowed(doc.jwks_uri, issuer)) {
+    throw new Error(`OIDC discovery document at ${url} has a non-https jwks_uri "${doc.jwks_uri}"`);
   }
   return doc.jwks_uri;
 }
@@ -236,12 +270,19 @@ export const OIDC_JWT_ALGORITHMS: readonly string[] = [
 ];
 
 /**
- * Verification options for an OIDC token: the expected `iss`/`aud` claims plus
- * the pinned `algorithms` allowlist. A fresh algorithms array is returned so the
- * exported constant can never be mutated by `jose`.
+ * Verification options for an OIDC token: the expected `iss`/`aud` claims, the
+ * pinned `algorithms` allowlist, and a required `exp` claim so a signed token
+ * with no expiry is rejected rather than accepted forever (`jose` only validates
+ * `exp` when it is present). A fresh algorithms array is returned so the exported
+ * constant can never be mutated by `jose`.
  */
 export function oidcVerifyOptions(cfg: OidcConfig): JWTVerifyOptions {
-  return { issuer: cfg.issuer, audience: cfg.audience, algorithms: [...OIDC_JWT_ALGORITHMS] };
+  return {
+    issuer: cfg.issuer,
+    audience: cfg.audience,
+    algorithms: [...OIDC_JWT_ALGORITHMS],
+    requiredClaims: ["exp"],
+  };
 }
 
 /** OIDC/JWT authenticator. JWKS is resolved lazily and cached (with refetch on unknown kid). */
@@ -300,6 +341,15 @@ function createOidcAuthenticator(cfg: OidcConfig): Authenticator {
  * capabilities) is returned.
  */
 export function createAuthenticator(config: AuthConfig): Authenticator {
+  // An empty-string token (e.g. an unset `${VAR}` expanded by a compose file)
+  // is a misconfiguration, never "run open": fail closed with a clear message
+  // instead of silently selecting open mode. Checked before OIDC so an empty
+  // token is surfaced even alongside OIDC.
+  if (config.token !== undefined && config.token.length === 0) {
+    throw new Error(
+      "JAIPH_SERVE_TOKEN is set but empty — set a non-empty secret, or unset it to run open on loopback",
+    );
+  }
   if (config.oidc) return createOidcAuthenticator(config.oidc);
   if (config.token) return createStaticAuthenticator(config.token);
   const principal = openPrincipal();
