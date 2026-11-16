@@ -17,10 +17,13 @@ export type PromptConfig = {
   codexApiUrl: string;
   promptFinalFile: string;
   /**
-   * Watchdog timeouts for the subprocess backends (claude / cursor / custom).
-   * All in milliseconds; `0` disables that watchdog. Optional so existing
-   * callers/tests that build a config literal keep working — `runBackend`
-   * falls back to the DEFAULT_* constants when a field is omitted.
+   * Watchdog timeouts. `completionGraceMs` applies only to the subprocess
+   * backends (claude / cursor / custom) — a process that finished but did not
+   * exit. `idleTimeoutMs` and `maxDurationMs` apply to every backend: the
+   * subprocess dispatch and the codex HTTP request alike. All in milliseconds;
+   * `0` disables that watchdog. Optional so existing callers/tests that build a
+   * config literal keep working — `runBackend` and `runCodexBackend` fall back
+   * to the DEFAULT_* constants when a field is omitted.
    */
   completionGraceMs?: number;
   idleTimeoutMs?: number;
@@ -45,6 +48,20 @@ export const DEFAULT_PROMPT_IDLE_TIMEOUT_MS = 900_000; // 15m
  * regardless of activity. Backstop against slow-but-not-idle hangs.
  */
 export const DEFAULT_PROMPT_MAX_DURATION_MS = 7_200_000; // 2h
+
+/**
+ * Idle-timeout failure reason. Shared by every backend's watchdog — the
+ * subprocess dispatch (`prompt-backends.ts`) and the codex HTTP backend
+ * (`prompt-codex.ts`) — so the failure text is identical across backends.
+ */
+export function promptIdleTimeoutReason(idleTimeoutMs: number): string {
+  return `prompt produced no output for ${Math.round(idleTimeoutMs / 1000)}s`;
+}
+
+/** Absolute-cap failure reason. Shared by every backend's watchdog (see above). */
+export function promptMaxDurationReason(maxDurationMs: number): string {
+  return `prompt exceeded the ${Math.round(maxDurationMs / 1000)}s maximum duration`;
+}
 
 /** Parse a "seconds" env value into milliseconds; empty/invalid → default. `0` is honored (disables). */
 function parseSecondsMs(raw: string | undefined, defaultMs: number): number {
