@@ -21,21 +21,30 @@
             "match": {
               "arms": [
                 {
-                  "body": "\"greeting\"",
+                  "body": {
+                    "kind": "literal",
+                    "raw": "\"greeting\""
+                  },
                   "pattern": {
                     "kind": "string_literal",
                     "value": "hello"
                   }
                 },
                 {
-                  "body": "\"farewell\"",
+                  "body": {
+                    "kind": "literal",
+                    "raw": "\"farewell\""
+                  },
                   "pattern": {
                     "kind": "regex",
                     "source": "^bye"
                   }
                 },
                 {
-                  "body": "\"unknown\"",
+                  "body": {
+                    "kind": "literal",
+                    "raw": "\"unknown\""
+                  },
                   "pattern": {
                     "kind": "wildcard"
                   }

@@ -374,3 +374,61 @@ test("triple-quoted arm body parses and validates", () => {
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("E_VALIDATE: unknown callee in a match arm is rejected at compile time", () => {
+  // Regression: a `call` arm body used to skip callee resolution, so an unknown
+  // def/script passed `jaiph compile` and failed only at run time. It now runs
+  // through the same call-site validation as any other call.
+  const root = mkdtempSync(join(tmpdir(), "jaiph-val-match-callee-"));
+  try {
+    writeFileSync(
+      join(root, "m.jh"),
+      [
+        "export def main() {",
+        '  const x = "a"',
+        "  const r = match x {",
+        '    "a" => nope_missing("p")',
+        '    _ => "d"',
+        "  }",
+        "  log r",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    assert.throws(
+      () => buildScripts(join(root, "m.jh"), join(root, "out")),
+      /E_VALIDATE.*nope_missing/,
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("E_VALIDATE: wrong arity on a match arm call is rejected at compile time", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-val-match-arity-"));
+  try {
+    writeFileSync(
+      join(root, "m.jh"),
+      [
+        "export def takesone(a) {",
+        "  return a",
+        "}",
+        "export def main() {",
+        '  const x = "a"',
+        "  const r = match x {",
+        '    "a" => takesone("p", "q")',
+        '    _ => "d"',
+        "  }",
+        "  log r",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    assert.throws(
+      () => buildScripts(join(root, "m.jh"), join(root, "out")),
+      /E_VALIDATE/,
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

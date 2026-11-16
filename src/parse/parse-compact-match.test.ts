@@ -87,7 +87,11 @@ test("compact nested call arm keeps inner commas in one arm", () => {
   const ret = steps.find((s) => s.type === "return")!;
   if (ret.type !== "return" || ret.value.kind !== "match") throw new Error("not a match return");
   assert.equal(ret.value.match.arms.length, 2);
-  assert.equal(ret.value.match.arms[0]!.body, "f(g(x, x), x)");
+  const body = ret.value.match.arms[0]!.body;
+  assert.equal(body.kind, "call");
+  if (body.kind !== "call") return;
+  assert.equal(body.callee.value, "f");
+  assert.deepEqual(body.args, [{ kind: "literal", raw: "g(x, x)" }, { kind: "var", name: "x" }]);
 });
 
 test("compact inline-script arm with two args is one arm, rejected like multiline", () => {

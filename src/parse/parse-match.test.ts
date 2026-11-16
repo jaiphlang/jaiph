@@ -3,12 +3,19 @@ import assert from "node:assert/strict";
 import { parseMatchArms } from "./match";
 import { parsejaiph } from "./parse-module";
 import { parseTestBlock } from "./tests";
-import type { MatchArmDef } from "../types";
+import type { MatchArmBody, MatchArmDef } from "../types";
 import { BodyCursor } from "./body-cursor";
 
 /** The cursor over `lines` and the position of 0-based line `idx`. */
 function src(lines: string[], idx: number, filePath = "test.jh"): [BodyCursor, number] {
   return [BodyCursor.of(filePath, lines.join("\n")), lines.slice(0, idx).reduce((n, l) => n + l.length + 1, 0)];
+}
+
+/** Strip the `loc` from a `call` arm's callee so bodies compare by shape, not position. */
+function normalizeArmBody(body: MatchArmBody): unknown {
+  if (body.kind !== "call") return body;
+  const callee = { value: body.callee.value };
+  return body.args ? { kind: "call", callee, args: body.args } : { kind: "call", callee };
 }
 
 // === parseMatchArms: triple-quoted arm bodies ===
@@ -26,12 +33,16 @@ test("parseMatchArms: parses triple-quoted arm body", () => {
   const { arms, next } = parseMatchArms(...src(lines, 1), 1);
   assert.equal(arms.length, 2);
   assert.deepEqual(arms[0].pattern, { kind: "string_literal", value: "ok" });
-  // Body stored as escaped quoted string with actual newlines
-  assert.ok(arms[0].body.startsWith('"'));
-  assert.ok(arms[0].body.endsWith('"'));
-  assert.ok(arms[0].body.includes("\n"), "body should contain newline");
+  // Body stored as a triple-quoted literal (escaped quoted string with newlines).
+  const body0 = arms[0].body;
+  assert.equal(body0.kind, "literal");
+  if (body0.kind !== "literal") return;
+  assert.equal(body0.tripleQuoted, true);
+  assert.ok(body0.raw.startsWith('"'));
+  assert.ok(body0.raw.endsWith('"'));
+  assert.ok(body0.raw.includes("\n"), "body should contain newline");
   assert.deepEqual(arms[1].pattern, { kind: "wildcard" });
-  assert.equal(arms[1].body, '"default"');
+  assert.deepEqual(arms[1].body, { kind: "literal", raw: '"default"' });
   assert.equal(next, src(lines, 7)[1]);
 });
 
@@ -73,7 +84,7 @@ test("parseMatchArms: parses string literal arm body", () => {
   ];
   const { arms } = parseMatchArms(...src(lines, 1), 1);
   assert.equal(arms.length, 2);
-  assert.equal(arms[0].body, '"result"');
+  assert.deepEqual(arms[0].body, { kind: "literal", raw: '"result"' });
 });
 
 test("parseMatchArms: parses bare expression arm body", () => {
@@ -84,7 +95,7 @@ test("parseMatchArms: parses bare expression arm body", () => {
     '}',
   ];
   const { arms } = parseMatchArms(...src(lines, 1), 1);
-  assert.equal(arms[0].body, 'fail "oops"');
+  assert.deepEqual(arms[0].body, { kind: "fail", message: '"oops"' });
 });
 
 // === parseMatchArms: comma rejection ===
@@ -144,7 +155,7 @@ test("parseMatchArms: parses string-literal alternation pattern", () => {
       { kind: "string_literal", value: "check" },
     ],
   });
-  assert.equal(arms[0].body, '"verify"');
+  assert.deepEqual(arms[0].body, { kind: "literal", raw: '"verify"' });
   assert.deepEqual(arms[1].pattern, { kind: "wildcard" });
 });
 
@@ -240,17 +251,17 @@ function collectArms(node: unknown, out: MatchArmDef[][] = []): MatchArmDef[][] 
   return out;
 }
 
-const ARM_BODY_FORMS: Array<{ name: string; lines: string[]; body: string; tripleQuoted?: boolean }> = [
-  { name: "double-quoted string", lines: ['"x" => "hit"'], body: '"hit"' },
-  { name: "string with an apostrophe", lines: [`"x" => "it's fine"`], body: `"it's fine"` },
-  { name: '""" block', lines: ['"x" => """', "  line one", '  """'], body: '"      line one"', tripleQuoted: true },
-  { name: "identifier", lines: ['"x" => value'], body: "value" },
-  { name: "dotted field", lines: ['"x" => result.field'], body: "result.field" },
-  { name: "${…} reference", lines: ['"x" => ${value}'], body: "${value}" },
-  { name: "managed call", lines: ['"x" => ref(a, "b, c)")'], body: 'ref(a, "b, c)")' },
-  { name: "managed call with alias", lines: ['"x" => alias.ref(a)'], body: "alias.ref(a)" },
-  { name: "managed call without args", lines: ['"x" => ref()'], body: "ref()" },
-  { name: "fail", lines: ['"x" => fail "reason"'], body: 'fail "reason"' },
+const ARM_BODY_FORMS: Array<{ name: string; lines: string[]; body: unknown }> = [
+  { name: "double-quoted string", lines: ['"x" => "hit"'], body: { kind: "literal", raw: '"hit"' } },
+  { name: "string with an apostrophe", lines: [`"x" => "it's fine"`], body: { kind: "literal", raw: `"it's fine"` } },
+  { name: '""" block', lines: ['"x" => """', "  line one", '  """'], body: { kind: "literal", raw: '"      line one"', tripleQuoted: true } },
+  { name: "identifier", lines: ['"x" => value'], body: { kind: "var", name: "value" } },
+  { name: "dotted field", lines: ['"x" => result.field'], body: { kind: "literal", raw: "result.field" } },
+  { name: "${…} reference", lines: ['"x" => ${value}'], body: { kind: "literal", raw: "${value}" } },
+  { name: "managed call", lines: ['"x" => ref(a, "b, c)")'], body: { kind: "call", callee: { value: "ref" }, args: [{ kind: "var", name: "a" }, { kind: "literal", raw: '"b, c)"' }] } },
+  { name: "managed call with alias", lines: ['"x" => alias.ref(a)'], body: { kind: "call", callee: { value: "alias.ref" }, args: [{ kind: "var", name: "a" }] } },
+  { name: "managed call without args", lines: ['"x" => ref()'], body: { kind: "call", callee: { value: "ref" } } },
+  { name: "fail", lines: ['"x" => fail "reason"'], body: { kind: "fail", message: '"reason"' } },
 ];
 
 for (const form of ARM_BODY_FORMS) {
@@ -267,8 +278,7 @@ for (const form of ARM_BODY_FORMS) {
     const [arms] = collectArms(parsejaiph(source, "/tmp/arm.jh"));
     assert.ok(arms, "match expression not found");
     assert.equal(arms.length, 2);
-    assert.equal(arms[0].body, form.body);
-    assert.equal(arms[0].tripleQuotedBody === true, form.tripleQuoted === true);
+    assert.deepEqual(normalizeArmBody(arms[0].body), form.body);
   });
 
   test(`arm-body grammar: ${form.name} parses in a mock prompt block`, () => {
@@ -278,7 +288,7 @@ for (const form of ARM_BODY_FORMS) {
     assert.equal(step.type, "test_mock_prompt_block");
     if (step.type !== "test_mock_prompt_block") return;
     assert.equal(step.arms.length, 2);
-    assert.equal(step.arms[0].body, form.body);
+    assert.deepEqual(normalizeArmBody(step.arms[0].body), form.body);
   });
 }
 
@@ -291,8 +301,16 @@ test("arm-body grammar: compact match accepts every single-line form", () => {
   ].join("\n");
   const [arms] = collectArms(parsejaiph(source, "/tmp/arm.jh"));
   assert.deepEqual(
-    arms.map((a) => a.body),
-    ['"hit"', "value", "result.field", "${value}", "ref(a)", 'fail "no"', `"it's"`],
+    arms.map((a) => normalizeArmBody(a.body)),
+    [
+      { kind: "literal", raw: '"hit"' },
+      { kind: "var", name: "value" },
+      { kind: "literal", raw: "result.field" },
+      { kind: "literal", raw: "${value}" },
+      { kind: "call", callee: { value: "ref" }, args: [{ kind: "var", name: "a" }] },
+      { kind: "fail", message: '"no"' },
+      { kind: "literal", raw: `"it's"` },
+    ],
   );
 });
 

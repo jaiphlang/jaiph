@@ -5,7 +5,7 @@ import { buildRuntimeGraph, resolveDefRef, resolveScriptRef, type RuntimeGraph }
 import type { ModuleGraph } from "../../transpiler";
 import { NodeWorkflowRuntime, type MockBodyDef } from "./node-workflow-runtime";
 import type { MockPromptArm } from "./mock";
-import type { TestBlockDef, TestStepDef } from "../../types";
+import type { MatchArmDef, TestBlockDef, TestStepDef } from "../../types";
 import { canonicalizeTripleQuotedString } from "../../parser";
 
 type TestResult = { pass: boolean; error?: string };
@@ -67,18 +67,26 @@ function resolveMockBodies(
 /**
  * A mock arm response is either a single-line `"…"` (only `\"` is an escape,
  * like every single-line string) or a `"""` block, which the parser stores in
- * the internal escaped form; that form is decoded in one pass.
+ * the internal escaped form; that form is decoded in one pass. Non-literal arm
+ * bodies (a bare identifier, a call, or a `fail`) keep their source text, as the
+ * string form did.
  */
-function decodeMockArmResponse(arm: { body: string; tripleQuotedBody?: boolean }): string {
-  if (arm.tripleQuotedBody) {
-    const raw = canonicalizeTripleQuotedString(arm.body);
+function decodeMockArmResponse(arm: MatchArmDef): string {
+  const body = arm.body;
+  if (body.kind === "fail") return `fail ${body.message}`;
+  if (body.kind === "call") {
+    const args = (body.args ?? []).map((a) => (a.kind === "var" ? a.name : a.raw)).join(", ");
+    return `${body.callee.value}(${args})`;
+  }
+  if (body.kind === "var") return body.name;
+  if (body.tripleQuoted) {
+    const raw = canonicalizeTripleQuotedString(body.raw);
     return raw.slice(1, -1).replace(/\\(["\\])/g, "$1");
   }
-  const body = arm.body.trim();
-  if (body.length >= 2 && body.startsWith('"') && body.endsWith('"')) {
-    return body.slice(1, -1).replace(/\\"/g, '"');
+  if (body.raw.length >= 2 && body.raw.startsWith('"') && body.raw.endsWith('"')) {
+    return body.raw.slice(1, -1).replace(/\\"/g, '"');
   }
-  return body;
+  return body.raw;
 }
 
 function buildMockArms(

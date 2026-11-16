@@ -9,7 +9,6 @@ import { inlineScriptName, moduleScriptFileName, nestedScriptName } from "../../
 import {
   canonicalizeTripleQuotedString,
   MODULE_FIELDS,
-  parseCallRef,
   parseNestedCallArg,
   resolveInterpreterFromShebang,
   literalText,
@@ -968,49 +967,48 @@ export class NodeWorkflowRuntime {
     if (!resolved.ok) return { ok: false, result: resolved.result };
     const subject = resolved.value;
     for (const arm of expr.arms) {
-      if (patternMatches(arm.pattern, subject)) {
-        let body = arm.body.trimStart();
-        if (arm.tripleQuotedBody) {
-          body = canonicalizeTripleQuotedString(arm.body).trimStart();
-        }
+      if (!patternMatches(arm.pattern, subject)) continue;
+      const body = arm.body;
 
-        // fail "message" — abort with failure
-        if (body.startsWith("fail ")) {
-          const msgRaw = body.slice(5).trimStart();
-          const msgIr = await this.interpolateWithCaptures(literalText(msgRaw), scope);
-          if (!msgIr.ok) return msgIr;
-          return { ok: false, result: { status: 1, output: "", error: msgIr.value } };
-        }
-
-        // ref(args) — execute script/workflow and capture return value. The
-        // call's typed `Arg[]` flow straight to the runtime (same as a `run`
-        // step), so an arm body `foo("", x)` passes two arguments.
-        const call = parseCallRef(body);
-        if (call && call.rest.trim() === "") {
-          const result = await this.executeRunRef(scope, call.ref, call.args);
-          if (result.status !== 0) return { ok: false, result };
-          return { ok: true, value: this.forceValue(result) };
-        }
-
-        // Bare in-scope identifier (e.g. `=> name_arg`) — sugar for `=> "${name_arg}"`.
-        // Validator already ensures the identifier is in scope; runtime mirrors `return val`.
-        const bareIdent = body.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*$/);
-        if (bareIdent) {
-          const name = bareIdent[1]!;
-          // A bare-ident arm body returns that binding's value. An unresolved
-          // async handle returns its opaque token (the handle id, held out of
-          // band in `handles`) — matching how the value was stored before
-          // handles moved out of `vars`.
-          if (scope.vars.has(name) || scope.handles?.has(name) || scope.env?.[name] !== undefined) {
-            return { ok: true, value: scope.vars.get(name) ?? scope.handles?.get(name) ?? scope.env?.[name] ?? "" };
-          }
-        }
-
-        // Default: string expression
-        const bodyIr = await this.interpolateWithCaptures(literalText(body), scope);
-        if (!bodyIr.ok) return bodyIr;
-        return { ok: true, value: bodyIr.value };
+      // fail "message" — abort with failure.
+      if (body.kind === "fail") {
+        const msgIr = await this.interpolateWithCaptures(literalText(body.message), scope);
+        if (!msgIr.ok) return msgIr;
+        return { ok: false, result: { status: 1, output: "", error: msgIr.value } };
       }
+
+      // ref(args) — execute script/workflow and capture return value. The call's
+      // typed `Arg[]` flow straight to the runtime (same as a `run` step), so an
+      // arm body `foo("", x)` passes two arguments.
+      if (body.kind === "call") {
+        const result = await this.executeRunRef(scope, body.callee.value, body.args);
+        if (result.status !== 0) return { ok: false, result };
+        return { ok: true, value: this.forceValue(result) };
+      }
+
+      // Bare in-scope identifier (e.g. `=> name_arg`) — sugar for `=> "${name_arg}"`.
+      // Validator already ensures the identifier is in scope; runtime mirrors `return val`.
+      if (body.kind === "var") {
+        const name = body.name;
+        // A bare-ident arm body returns that binding's value. An unresolved
+        // async handle returns its opaque token (the handle id, held out of
+        // band in `handles`) — matching how the value was stored before
+        // handles moved out of `vars`.
+        if (scope.vars.has(name) || scope.handles?.has(name) || scope.env?.[name] !== undefined) {
+          return { ok: true, value: scope.vars.get(name) ?? scope.handles?.get(name) ?? scope.env?.[name] ?? "" };
+        }
+        const varIr = await this.interpolateWithCaptures(literalText(name), scope);
+        if (!varIr.ok) return varIr;
+        return { ok: true, value: varIr.value };
+      }
+
+      // Default: string literal / `${…}` / dotted field expression. A `"""`
+      // block carries its undedented source; canonicalize it to the view the
+      // validator inspected before interpolating.
+      const raw = body.tripleQuoted ? canonicalizeTripleQuotedString(body.raw) : body.raw;
+      const bodyIr = await this.interpolateWithCaptures(literalText(raw), scope);
+      if (!bodyIr.ok) return bodyIr;
+      return { ok: true, value: bodyIr.value };
     }
     // Should not reach here if validation ensures a wildcard arm exists.
     return { ok: false, result: { status: 1, output: "", error: "match: no arm matched" } };

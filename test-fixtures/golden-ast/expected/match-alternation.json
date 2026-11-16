@@ -15,7 +15,10 @@
             "match": {
               "arms": [
                 {
-                  "body": "\"verify\"",
+                  "body": {
+                    "kind": "literal",
+                    "raw": "\"verify\""
+                  },
                   "pattern": {
                     "kind": "alternation",
                     "patterns": [
@@ -31,7 +34,10 @@
                   }
                 },
                 {
-                  "body": "\"go\"",
+                  "body": {
+                    "kind": "literal",
+                    "raw": "\"go\""
+                  },
                   "pattern": {
                     "kind": "alternation",
                     "patterns": [
@@ -47,7 +53,10 @@
                   }
                 },
                 {
-                  "body": "\"regex\"",
+                  "body": {
+                    "kind": "literal",
+                    "raw": "\"regex\""
+                  },
                   "pattern": {
                     "kind": "alternation",
                     "patterns": [
@@ -63,7 +72,10 @@
                   }
                 },
                 {
-                  "body": "\"unknown\"",
+                  "body": {
+                    "kind": "literal",
+                    "raw": "\"unknown\""
+                  },
                   "pattern": {
                     "kind": "wildcard"
                   }

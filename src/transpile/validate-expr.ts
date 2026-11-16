@@ -55,6 +55,14 @@ export function validateExpr(
   }
   if (expr.kind === "match") {
     validateMatchExpr(ctx.diag, ctx.ast.filePath, expr.match, ctx.knownVars);
+    // A `call` arm resolves its callee and checks arity through the same path as
+    // any other call, so an unknown def/script in an arm is `E_VALIDATE` at
+    // compile time instead of failing only at run time.
+    for (const arm of expr.match.arms) {
+      if (arm.body.kind === "call") {
+        validateCallable({ kind: "call", callee: arm.body.callee, args: arm.body.args }, ctx);
+      }
+    }
     validateDotSubject(expr.match.subject, expr.match.loc, ctx);
     validateSubjectForwardConst(expr.match.subject, expr.match.loc, ctx);
     return;
