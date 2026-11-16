@@ -569,6 +569,66 @@ test("jaiph serve: artifacts round-trip — list then byte-identical download, t
   }
 });
 
+test("jaiph serve: downloads artifacts with a non-ASCII name and with quote/backslash (parseable header, 200)", async () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-serve-art-names-"));
+  const jh = join(root, "tools.jh");
+  writeFileSync(jh, BASE_FIXTURE);
+  const srv = await startServe(jh, root, serveEnv(join(root, ".jaiph/runs")));
+  try {
+    const run = await (
+      await fetch(`${srv.baseUrl}/make_artifact?wait=true`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "{}",
+      })
+    ).json();
+    assert.equal(run.status, "succeeded", `run failed: ${JSON.stringify(run)}`);
+
+    // Drop two awkwardly-named files into the run's durable artifacts dir. Node
+    // throws ERR_INVALID_CHAR building a Content-Disposition for either naively,
+    // so a correct header is what makes these 200 instead of 500.
+    writeFileSync(join(run.run_dir, "artifacts", "报告.txt"), "unicode-bytes");
+    writeFileSync(join(run.run_dir, "artifacts", 'a"b\\c.txt'), "special-bytes");
+
+    const dl1 = await fetch(`${srv.baseUrl}/runs/${run.run_id}/artifacts/${encodeURIComponent("报告.txt")}`);
+    assert.equal(dl1.status, 200, "a non-ASCII artifact name downloads");
+    const cd1 = dl1.headers.get("content-disposition") ?? "";
+    // RFC 5987 carries the real UTF-8 name; the header is settable ASCII-only.
+    assert.match(cd1, /filename\*=UTF-8''%E6%8A%A5%E5%91%8A\.txt/);
+    assert.ok(/^[\x20-\x7e]*$/.test(cd1), "the header value is printable ASCII");
+    assert.equal(await dl1.text(), "unicode-bytes");
+
+    const dl2 = await fetch(`${srv.baseUrl}/runs/${run.run_id}/artifacts/${encodeURIComponent('a"b\\c.txt')}`);
+    assert.equal(dl2.status, 200, "a quote/backslash artifact name downloads");
+    const cd2 = dl2.headers.get("content-disposition") ?? "";
+    assert.match(cd2, /filename="a_b_c\.txt"/, "the ASCII fallback replaces quote and backslash");
+    assert.equal(await dl2.text(), "special-bytes");
+  } finally {
+    await srv.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("jaiph serve: a def whose name collides with a reserved route fails at startup, naming the def and the route", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-serve-reserved-"));
+  try {
+    const jh = join(root, "tools.jh");
+    writeFileSync(jh, '# Collides with the reserved /runs route.\nexport def runs() {\n  return "x"\n}\n');
+    const result = spawnSync("node", [CLI_PATH, "serve", "--port", "0", jh], {
+      encoding: "utf8",
+      cwd: root,
+      env: serveEnv(join(root, ".jaiph/runs")),
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    assert.equal(result.status, 1, `expected exit 1, got ${result.status}\n${result.stderr}`);
+    assert.match(result.stderr, /"runs"/, "the error names the offending def");
+    assert.match(result.stderr, /reserved jaiph serve route "\/runs"/, "the error names the reserved route");
+    assert.doesNotMatch(result.stderr, /listening on/, "must not bind before failing");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 /** Resident set size of `pid` in KB via `ps` (0 when unavailable). */
 function sampleRssKb(pid: number): number {
   const out = spawnSync("ps", ["-o", "rss=", "-p", String(pid)], { encoding: "utf8" });

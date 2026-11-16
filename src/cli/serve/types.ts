@@ -71,12 +71,12 @@ export interface ServeResponse {
   headers: Record<string, string>;
   body: string;
   /**
-   * Absolute path + byte count of a file to stream as the body (artifact
-   * download / NDJSON journal). The HTTP layer pipes exactly `size` bytes with
-   * backpressure and never buffers the whole file; takes precedence over
-   * `body`.
+   * A file to stream as the body (NDJSON journal) or an already-open descriptor
+   * to stream from (artifact download — opened once, TOCTOU-safe). The HTTP layer
+   * pipes exactly `size` bytes with backpressure, never buffering the whole file,
+   * and closes an `fd` when the stream ends; takes precedence over `body`.
    */
-  bodyFile?: { path: string; size: number };
+  bodyFile?: { path: string; size: number } | { fd: number; size: number };
   /**
    * When set, the HTTP layer streams the body by driving this function instead
    * of writing `body` — used for the SSE event follow. It resolves when the

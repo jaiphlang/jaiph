@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, closeSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ServeHandler, type RunRecord, type ServeRequest, type ServeResponse } from "./handler";
@@ -524,6 +524,55 @@ test("audit: invoke and cancel log the principal + correlation, never the bearer
   assert.ok(!joined.includes(TOKEN), "the audit log never contains the bearer token");
 });
 
+test("malformed percent-encoding in a route segment is a 404 (not a 500) and logs nothing", async () => {
+  const logs: string[] = [];
+  const h = makeHandler({ log: (l) => logs.push(l) });
+  // A run/def lookup over a malformed segment: a bad decode must be a plain 404
+  // with the normal JSON error shape, never a thrown URIError → 500 + operator log.
+  const cases: Array<[string, string]> = [
+    ["GET", "/runs/%zz"],
+    ["GET", "/runs/%E0%A4%A/events"],
+    ["GET", "/runs/%/artifacts/x"],
+    ["POST", "/runs/%zz/cancel"],
+    ["POST", "/%"],
+  ];
+  for (const [method, path] of cases) {
+    const res = await h.handleRequest(req(method, path));
+    assert.equal(res.status, 404, `${method} ${path} → 404`);
+    assert.equal(bodyJson(res).error.code, "E_NOT_FOUND", `${method} ${path} has the normal error shape`);
+  }
+  assert.deepEqual(logs, [], "a malformed segment produces no operator error line");
+});
+
+test("a correlation id with spaces or '=' is replaced and never surfaces verbatim in the audit line", async () => {
+  const logs: string[] = [];
+  const alice = principal("alice", ["invoke", "inspect", "cancel"]);
+  const forged = "x principal=operator";
+  let runPromise!: Promise<DefCallResult>;
+  const h = makeHandler({
+    tools: [NOARG_TOOL],
+    authenticator: tokenAuth({ tok: alice }),
+    log: (l) => logs.push(l),
+    callTool: (_spec, _args, _runId, ctx) => {
+      runPromise = new Promise<DefCallResult>((resolve) => {
+        ctx.onCancelHandle?.(() => resolve({ text: "t", isError: true, exitStatus: 1 }));
+      });
+      return runPromise;
+    },
+  });
+  const hdr = { authorization: "Bearer tok", "x-correlation-id": forged };
+  const start = bodyJson(await h.handleRequest(req("POST", "/ping", { headers: hdr })));
+  // The forged value is rejected and a generated id used instead.
+  assert.notEqual(start.correlation_id, forged);
+  assert.doesNotMatch(String(start.correlation_id), /principal=operator/);
+
+  await h.handleRequest(req("POST", `/runs/${start.run_id}/cancel`, { headers: { authorization: "Bearer tok" } }));
+  await runPromise.catch(() => {});
+  const joined = logs.join("\n");
+  assert.ok(!joined.includes(forged), "the forged correlation value is absent from the audit line");
+  assert.match(joined, /cancelled — principal=alice/, "the real principal is still audited");
+});
+
 test("authz: an MCP SSE tools/call is owned and audited by the authenticated principal (not anonymous)", async () => {
   const alice = principal("alice", ["invoke", "inspect", "cancel"]);
   const h = makeHandler({
@@ -1007,9 +1056,9 @@ test("NDJSON events on a terminal run stream the run_summary.jsonl file itself",
     const res = await h.handleRequest(req("GET", `/runs/${runId}/events`));
     assert.equal(res.status, 200);
     assert.equal(res.headers["content-type"], "application/x-ndjson");
-    assert.ok(res.bodyFile, "NDJSON is streamed from a file, never buffered whole");
-    assert.equal(res.bodyFile!.path, join(runDir, "run_summary.jsonl"), "the streamed file is the journal");
-    assert.equal(res.bodyFile!.size, Buffer.byteLength(journal), "exactly the journal's bytes are streamed");
+    assert.ok(res.bodyFile && "path" in res.bodyFile, "NDJSON is streamed from a file path, never buffered whole");
+    assert.equal(res.bodyFile.path, join(runDir, "run_summary.jsonl"), "the streamed file is the journal");
+    assert.equal(res.bodyFile.size, Buffer.byteLength(journal), "exactly the journal's bytes are streamed");
     assert.equal(res.headers["content-length"], String(Buffer.byteLength(journal)));
   } finally {
     rmSync(runDir, { recursive: true, force: true });
@@ -1057,9 +1106,10 @@ test("artifacts round-trip through the handler: list then byte-identical downloa
     assert.equal(dl.headers["content-type"], "application/octet-stream");
     assert.match(dl.headers["content-disposition"], /filename="out\.bin"/);
     assert.equal(dl.headers["content-length"], String(payload.length));
-    assert.ok(dl.bodyFile, "the artifact is streamed from disk, never buffered whole");
-    assert.equal(dl.bodyFile!.size, payload.length);
-    assert.deepEqual(readFileSync(dl.bodyFile!.path), payload, "the streamed file is the published artifact");
+    assert.ok(dl.bodyFile && "fd" in dl.bodyFile, "the artifact streams from an already-open descriptor, never buffered whole");
+    assert.equal(dl.bodyFile.size, payload.length);
+    assert.deepEqual(readFileSync(dl.bodyFile.fd), payload, "the open descriptor reads the published artifact");
+    closeSync(dl.bodyFile.fd);
 
     // Traversal to a run-dir file (not under artifacts/) is a 404.
     const escape = await h.handleRequest(req("GET", `/runs/${runId}/artifacts/${encodeURIComponent("../run_summary.jsonl")}`));

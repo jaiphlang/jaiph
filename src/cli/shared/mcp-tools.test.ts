@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { parsejaiph } from "../../parser";
-import { deriveTools, toolNameFromFile } from "./mcp-tools";
+import { assertServeToolNames, deriveTools, toolNameFromFile } from "./mcp-tools";
 
 const FILE = "/ws/deploy-tools.jh";
 
@@ -137,4 +137,34 @@ test("deriveTools: zero params produce an object schema without required", () =>
     properties: {},
     additionalProperties: false,
   });
+});
+
+// === assertServeToolNames: reserved-route collisions ===
+
+test("assertServeToolNames rejects a def whose REST name collides with a reserved route, naming both", () => {
+  const m = mod(["export def runs() {", '  log "x"', "}"].join("\n"));
+  const { tools } = deriveTools(m, FILE);
+  assert.throws(
+    () => assertServeToolNames(tools),
+    (err: Error) => err.message.includes('"runs"') && err.message.includes("/runs"),
+  );
+});
+
+test("assertServeToolNames rejects each reserved route name", () => {
+  for (const name of ["runs", "defs", "mcp", "healthz", "docs", "openapi.json"]) {
+    assert.throws(
+      () =>
+        assertServeToolNames([
+          { name, def: name, description: "", params: [], inputSchema: { type: "object", properties: {}, additionalProperties: false } },
+        ]),
+      /reserved jaiph serve route/,
+      `"${name}" is reserved`,
+    );
+  }
+});
+
+test("assertServeToolNames accepts ordinary def names", () => {
+  const m = mod(["export def deploy() {", '  log "x"', "}", "export def greet(name) {", "  log name", "}"].join("\n"));
+  const { tools } = deriveTools(m, FILE);
+  assert.doesNotThrow(() => assertServeToolNames(tools));
 });

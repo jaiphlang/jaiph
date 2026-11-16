@@ -1,10 +1,30 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, readSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  appendFileSync,
+  closeSync,
+  fstatSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createJournalFollower, listArtifacts, resolveArtifactPath, streamRunEventsSse, type StreamTarget } from "./runfiles";
+import {
+  createJournalFollower,
+  listArtifacts,
+  openArtifact,
+  resolveArtifactPath,
+  streamRunEventsSse,
+  type StreamTarget,
+} from "./runfiles";
 
 /** A run dir with an `artifacts/` subdir and a couple of raw capture files at the root. */
 function makeRunDir(): string {
@@ -130,6 +150,68 @@ test("no capture file is reachable: an artifacts/ symlink to a .out is rejected"
     // And a direct traversal to either capture extension is rejected too.
     assert.equal(resolveArtifactPath(runDir, "../000001-build__step.out"), null);
     assert.equal(resolveArtifactPath(runDir, "../000001-build__step.err"), null);
+  } finally {
+    rmSync(runDir, { recursive: true, force: true });
+  }
+});
+
+// === openArtifact: single-open, TOCTOU-safe ===
+
+test("openArtifact opens a contained file once and fstat reports its size and name", () => {
+  const runDir = makeRunDir();
+  try {
+    const payload = "artifact payload bytes";
+    writeFileSync(join(runDir, "artifacts", "ok.txt"), payload);
+    const opened = openArtifact(runDir, "ok.txt");
+    assert.ok(opened, "a contained regular file opens");
+    assert.equal(opened!.name, "ok.txt");
+    assert.equal(opened!.size, Buffer.byteLength(payload));
+    // fstat on the returned descriptor matches, and the descriptor reads the file.
+    assert.equal(fstatSync(opened!.fd).size, Buffer.byteLength(payload));
+    assert.equal(readFileSync(opened!.fd, "utf8"), payload);
+    closeSync(opened!.fd);
+  } finally {
+    rmSync(runDir, { recursive: true, force: true });
+  }
+});
+
+test("openArtifact returns null (leaking no fd) for a traversal, a directory, and a non-ASCII contained name works", () => {
+  const runDir = makeRunDir();
+  try {
+    mkdirSync(join(runDir, "artifacts", "adir"), { recursive: true });
+    assert.equal(openArtifact(runDir, "../000001-build__step.out"), null, "traversal → null");
+    assert.equal(openArtifact(runDir, "adir"), null, "a directory is not a downloadable artifact");
+    // A non-ASCII file name opens and reports its own basename.
+    writeFileSync(join(runDir, "artifacts", "报告.txt"), "r");
+    const opened = openArtifact(runDir, "报告.txt");
+    assert.ok(opened);
+    assert.equal(opened!.name, "报告.txt");
+    closeSync(opened!.fd);
+  } finally {
+    rmSync(runDir, { recursive: true, force: true });
+  }
+});
+
+test("openArtifact does not serve a file swapped for an escaping symlink after the resolve check (O_NOFOLLOW)", () => {
+  const runDir = makeRunDir();
+  try {
+    // A real regular file passes resolution; an outside secret the attacker targets.
+    const artifact = join(runDir, "artifacts", "report.txt");
+    writeFileSync(artifact, "benign payload");
+    const outside = join(runDir, "secret-outside.txt");
+    writeFileSync(outside, "SECRET OUTSIDE THE RUN DIR");
+
+    // Inject the swap between resolve and open: replace the just-resolved file
+    // with a symlink pointing OUTSIDE the run dir, exactly the TOCTOU race.
+    let swapped = false;
+    const opened = openArtifact(runDir, "report.txt", (resolved) => {
+      unlinkSync(resolved);
+      symlinkSync(outside, resolved);
+      swapped = true;
+    });
+
+    assert.ok(swapped, "the swap hook fired between resolve and open");
+    assert.equal(opened, null, "O_NOFOLLOW refuses the swapped-in symlink instead of following it");
   } finally {
     rmSync(runDir, { recursive: true, force: true });
   }

@@ -1,5 +1,16 @@
-import { closeSync, existsSync, fstatSync, openSync, readSync, readdirSync, realpathSync, statSync, type Dirent } from "node:fs";
-import { join, resolve, sep } from "node:path";
+import {
+  closeSync,
+  constants,
+  existsSync,
+  fstatSync,
+  openSync,
+  readSync,
+  readdirSync,
+  realpathSync,
+  statSync,
+  type Dirent,
+} from "node:fs";
+import { basename, join, resolve, sep } from "node:path";
 
 /** A run's durable journal file name, under its run directory. */
 export const RUN_SUMMARY = "run_summary.jsonl";
@@ -91,6 +102,57 @@ export function resolveArtifactPath(runDir: string, requested: string): string |
   }
   if (!st.isFile()) return null;
   return realCandidate;
+}
+
+/** An opened artifact: a read descriptor plus the size + display name `fstat` reported for it. */
+export interface OpenArtifact {
+  /** Read-only descriptor; the caller owns it and must close it (the download stream does on end). */
+  fd: number;
+  /** Byte size from `fstat` on the descriptor — never a second path-based `stat`. */
+  size: number;
+  /** Basename of the resolved file, for the download's `Content-Disposition`. */
+  name: string;
+}
+
+/**
+ * Resolve and open a requested artifact in one step, closing the check→open
+ * TOCTOU window. After {@link resolveArtifactPath}'s traversal + symlink
+ * containment checks pass, the file is opened once with `O_NOFOLLOW` (where the
+ * platform defines it), so the final path component cannot be swapped for a
+ * symlink after the check; size and regular-file type are then read from the
+ * descriptor with `fstat`, never from a second path `stat` that could resolve to
+ * a different inode. Returns `null` (leaking no descriptor) when the request
+ * escapes the artifacts dir, the final component became a symlink (`ELOOP`), the
+ * file vanished, or the target is not a regular file.
+ *
+ * `beforeOpen` is a test-only seam fired between resolve and open to exercise the
+ * swap race; production callers omit it.
+ */
+export function openArtifact(
+  runDir: string,
+  requested: string,
+  beforeOpen?: (resolved: string) => void,
+): OpenArtifact | null {
+  const abs = resolveArtifactPath(runDir, requested);
+  if (abs === null) return null;
+  beforeOpen?.(abs);
+  let fd: number;
+  try {
+    fd = openSync(abs, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
+  } catch {
+    return null; // Vanished, or the final component is now a symlink (ELOOP).
+  }
+  try {
+    const st = fstatSync(fd);
+    if (!st.isFile()) {
+      closeSync(fd);
+      return null;
+    }
+    return { fd, size: st.size, name: basename(abs) };
+  } catch {
+    closeSync(fd);
+    return null;
+  }
 }
 
 /** The response-body sink an SSE stream writes to; decoupled from `node:http`. */

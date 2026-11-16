@@ -6,6 +6,7 @@ import { parseServerArgs, startGeneration, startReloadWatcher } from "../shared/
 import { createOperatorLog } from "../shared/server-log";
 import {
   ServeHandler,
+  assertServeToolNames,
   createAuthenticator,
   loadPersistedRuns,
   persistRunRecord,
@@ -206,6 +207,17 @@ export async function runServe(rest: string[]): Promise<number> {
   const ctx = started.ctx;
   const { generations, posture, inputAbs, cleanup } = ctx;
   const hostRunsRoot = posture.hostRunsRoot;
+
+  // A def whose REST name collides with a reserved serve route (`/runs`, `/defs`,
+  // …) would be advertised in OpenAPI yet unreachable (the fixed route wins), so
+  // fail fast at startup naming the offending def rather than serving a 405 trap.
+  try {
+    assertServeToolNames(generations.current().tools);
+  } catch (err) {
+    process.stderr.write(`${errText(err)}\n`);
+    cleanup();
+    return 1;
+  }
 
   // Operator log (stderr only, never an HTTP response body): per-call banners +
   // optional workflow-log mirror, over the same injectable `log` sink used for

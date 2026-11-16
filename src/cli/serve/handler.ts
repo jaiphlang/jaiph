@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { errText } from "../../errors";
 import { AsyncLocalStorage } from "node:async_hooks";
-import { statSync } from "node:fs";
-import { basename, join } from "node:path";
+import { closeSync, statSync } from "node:fs";
+import { join } from "node:path";
 import type { McpToolSpec } from "../shared/mcp-tools";
 import { McpServer, type McpCallContext, type McpHttpScope } from "../shared/mcp-server";
 import type { DefCallResult, DefCallContext } from "../shared/workflow-call";
@@ -16,7 +16,7 @@ import {
 } from "./docs";
 import {
   listArtifacts,
-  resolveArtifactPath,
+  openArtifact,
   streamRunEventsSse,
   RUN_SUMMARY,
   type StreamTarget,
@@ -24,7 +24,14 @@ import {
 import { hashArgs } from "./run-store";
 import { verifyRunJournal } from "../../runtime";
 import { createAuthenticator, openPrincipal, type Authenticator, type Capability, type Principal } from "./auth";
-import { safeJsonObject, isJsonContentType, clampInt } from "./http-util";
+import {
+  safeJsonObject,
+  isJsonContentType,
+  clampInt,
+  safeDecodeSegment,
+  safeCorrelationId,
+  contentDisposition,
+} from "./http-util";
 import { checkRequestOrigin, type OriginGuardConfig } from "./origin";
 import type { RunStatus, RunRecord, ServeRequest, ServeResponse, ServeHandlerOptions } from "./types";
 
@@ -318,16 +325,14 @@ export class ServeHandler {
 
   /**
    * The request/correlation id for this request: an `X-Correlation-Id` /
-   * `X-Request-Id` header (sanitized, bounded) if the caller supplied one, else
-   * a fresh UUID. Newlines are stripped so it can never forge an audit log line.
+   * `X-Request-Id` header if the caller supplied an audit-safe one (restricted to
+   * `[A-Za-z0-9._:-]`, ≤128 chars), else a fresh UUID. The charset admits no
+   * whitespace, `=`, or newline, so a caller-chosen value can never forge a
+   * `key=value` pair (or a second line) in an audit log line.
    */
   private correlationOf(req: ServeRequest): string {
     const raw = req.headers["x-correlation-id"] ?? req.headers["x-request-id"];
-    if (typeof raw === "string") {
-      const clean = raw.replace(/[\r\n]/g, "").trim().slice(0, 200);
-      if (clean.length > 0) return clean;
-    }
-    return randomUUID();
+    return safeCorrelationId(raw) ?? randomUUID();
   }
 
   /** 403 for a principal missing a required capability. */
@@ -370,35 +375,45 @@ export class ServeHandler {
     if (events) {
       if (method !== "GET") return this.methodNotAllowed();
       if (!principal.capabilities.has("inspect")) return this.forbidden("inspect");
-      return this.runEvents(req, decodeURIComponent(events[1]));
+      const id = safeDecodeSegment(events[1]);
+      if (id === null) return this.error(404, "E_NOT_FOUND", "unknown run id");
+      return this.runEvents(req, id);
     }
 
     const artifactsList = /^\/runs\/([^/]+)\/artifacts$/.exec(path);
     if (artifactsList) {
       if (method !== "GET") return this.methodNotAllowed();
       if (!principal.capabilities.has("inspect")) return this.forbidden("inspect");
-      return this.listRunArtifacts(decodeURIComponent(artifactsList[1]));
+      const id = safeDecodeSegment(artifactsList[1]);
+      if (id === null) return this.error(404, "E_NOT_FOUND", "unknown run id");
+      return this.listRunArtifacts(id);
     }
 
     const artifactGet = /^\/runs\/([^/]+)\/artifacts\/(.+)$/.exec(path);
     if (artifactGet) {
       if (method !== "GET") return this.methodNotAllowed();
       if (!principal.capabilities.has("inspect")) return this.forbidden("inspect");
-      return this.downloadArtifact(decodeURIComponent(artifactGet[1]), artifactGet[2]);
+      const id = safeDecodeSegment(artifactGet[1]);
+      if (id === null) return this.error(404, "E_NOT_FOUND", "unknown run id");
+      return this.downloadArtifact(id, artifactGet[2]);
     }
 
     const cancel = /^\/runs\/([^/]+)\/cancel$/.exec(path);
     if (cancel) {
       if (method !== "POST") return this.methodNotAllowed();
       if (!principal.capabilities.has("cancel")) return this.forbidden("cancel");
-      return this.cancelRun(decodeURIComponent(cancel[1]));
+      const id = safeDecodeSegment(cancel[1]);
+      if (id === null) return this.error(404, "E_NOT_FOUND", "unknown run id");
+      return this.cancelRun(id);
     }
 
     const getRun = /^\/runs\/([^/]+)$/.exec(path);
     if (getRun) {
       if (method !== "GET") return this.methodNotAllowed();
       if (!principal.capabilities.has("inspect")) return this.forbidden("inspect");
-      const record = this.lookupRun(decodeURIComponent(getRun[1]));
+      const id = safeDecodeSegment(getRun[1]);
+      if (id === null) return this.error(404, "E_NOT_FOUND", "unknown run id");
+      const record = this.lookupRun(id);
       if (!record) return this.error(404, "E_NOT_FOUND", "unknown run id");
       return this.json(200, this.toRunObject(record));
     }
@@ -407,7 +422,9 @@ export class ServeHandler {
     const invoke = /^\/([^/]+)$/.exec(path);
     if (invoke && method === "POST") {
       if (!principal.capabilities.has("invoke")) return this.forbidden("invoke");
-      return this.createRun(req, decodeURIComponent(invoke[1]));
+      const name = safeDecodeSegment(invoke[1]);
+      if (name === null) return this.error(404, "E_NOT_FOUND", `not found: ${path}`);
+      return this.createRun(req, name);
     }
 
     return this.error(404, "E_NOT_FOUND", `not found: ${path}`);
@@ -783,38 +800,32 @@ export class ServeHandler {
     if (!record) return this.error(404, "E_NOT_FOUND", "unknown run id");
     const dir = this.runDirFor(record);
     if (!dir) return this.error(404, "E_NOT_FOUND", "unknown artifact");
-    let requested: string;
-    try {
-      requested = decodeURIComponent(rawPath);
-    } catch {
-      return this.error(404, "E_NOT_FOUND", "unknown artifact");
-    }
-    const abs = resolveArtifactPath(dir, requested);
-    if (!abs) return this.error(404, "E_NOT_FOUND", "unknown artifact");
-    let size: number;
-    try {
-      size = statSync(abs).size;
-    } catch {
-      return this.error(404, "E_NOT_FOUND", "unknown artifact");
-    }
+    const requested = safeDecodeSegment(rawPath);
+    if (requested === null) return this.error(404, "E_NOT_FOUND", "unknown artifact");
+    // Resolve and open in one step: the file is opened once (O_NOFOLLOW) and its
+    // size + type come from fstat on that descriptor, so a step cannot swap the
+    // final component for an escaping symlink between the check and the read. The
+    // HTTP layer streams from this fd and closes it when done.
+    const opened = openArtifact(dir, requested);
+    if (!opened) return this.error(404, "E_NOT_FOUND", "unknown artifact");
     const maxBytes = this.opts.maxArtifactBytes ?? 0;
-    if (maxBytes > 0 && size > maxBytes) {
+    if (maxBytes > 0 && opened.size > maxBytes) {
+      closeSync(opened.fd);
       return this.error(
         413,
         "E_ARTIFACT_TOO_LARGE",
-        `artifact is ${size} bytes; downloads are capped at ${maxBytes} (JAIPH_SERVE_MAX_ARTIFACT_BYTES)`,
+        `artifact is ${opened.size} bytes; downloads are capped at ${maxBytes} (JAIPH_SERVE_MAX_ARTIFACT_BYTES)`,
       );
     }
-    const filename = basename(abs).replace(/"/g, "");
     return {
       status: 200,
       headers: {
         "content-type": "application/octet-stream",
-        "content-disposition": `attachment; filename="${filename}"`,
-        "content-length": String(size),
+        "content-disposition": contentDisposition(opened.name),
+        "content-length": String(opened.size),
       },
       body: "",
-      bodyFile: { path: abs, size },
+      bodyFile: { fd: opened.fd, size: opened.size },
     };
   }
 

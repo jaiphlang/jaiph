@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import { connect, type Socket } from "node:net";
 import type { IncomingMessage, Server } from "node:http";
-import { closeSync, createReadStream, ftruncateSync, mkdirSync, mkdtempSync, openSync, realpathSync, rmSync, writeFileSync, type ReadStream } from "node:fs";
+import { closeSync, createReadStream, ftruncateSync, mkdirSync, mkdtempSync, openSync, rmSync, writeFileSync, type ReadStream } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -253,8 +253,6 @@ test("disconnecting the client mid-download destroys the artifact file stream", 
   const fd = openSync(bigPath, "w");
   ftruncateSync(fd, 256 * 1024 * 1024);
   closeSync(fd);
-  // The download endpoint serves the artifact's real path (symlinks resolved).
-  const realBigPath = realpathSync(bigPath);
   // Patch the live CJS module object (what the compiled server reads at call
   // time) — the tsc `import *` namespace copy is getter-only.
   const fsAny = createRequire(__filename)("node:fs") as Record<string, unknown>;
@@ -263,7 +261,10 @@ test("disconnecting the client mid-download destroys the artifact file stream", 
   try {
     fsAny.createReadStream = (...args: unknown[]): ReadStream => {
       const stream = (origCreateReadStream as (...a: unknown[]) => ReadStream)(...args);
-      if (args[0] === realBigPath) created.push(stream);
+      // The artifact download streams from an already-open descriptor (opened
+      // once, O_NOFOLLOW), not by path — detect it by the `fd` option.
+      const opts = args[1];
+      if (opts && typeof opts === "object" && "fd" in opts) created.push(stream);
       return stream;
     };
     const socket: Socket = connect(port, "127.0.0.1");
