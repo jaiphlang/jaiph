@@ -248,7 +248,18 @@ export class NodeWorkflowRuntime {
   private asyncFrameStack = new AsyncLocalStorage<Frame[]>();
   private asyncIndicesStorage = new AsyncLocalStorage<number[]>();
   private inboxSeq = 0;
+  /**
+   * Root def-context stack for the synchronous (non-async-branch) execution
+   * path. Each `async ref(...)` branch runs against its OWN copy carried in
+   * `asyncDefCtxStack` so a branch's current def (the `send` sender, and the
+   * def-level `agent.model` / `run.recover_limit` an interleaved branch reads)
+   * never leaks across branches. Mirrors the per-branch frame stack
+   * (`asyncFrameStack`); the copied array holds the same `WorkflowContext`
+   * objects, so route lookup and queue delivery stay shared while "which def is
+   * on top" is isolated. Read/written only through `getDefCtxStack()`.
+   */
   private defCtxStack: WorkflowContext[] = [];
+  private asyncDefCtxStack = new AsyncLocalStorage<WorkflowContext[]>();
   private readonly mockBodies: Map<string, MockBodyDef>;
   private handleRegistry = new Map<string, AsyncHandle>();
   private handleIdCounter = 0;
@@ -285,6 +296,10 @@ export class NodeWorkflowRuntime {
 
   private getFrameStack(): Frame[] {
     return this.asyncFrameStack.getStore() ?? this.stack;
+  }
+
+  private getDefCtxStack(): WorkflowContext[] {
+    return this.asyncDefCtxStack.getStore() ?? this.defCtxStack;
   }
 
   private getAsyncIndices(): number[] {
@@ -813,7 +828,8 @@ export class NodeWorkflowRuntime {
           }
         }
       }
-      this.defCtxStack.push(ctx);
+      const defCtxStack = this.getDefCtxStack();
+      defCtxStack.push(ctx);
       try {
         const out = await this.executeSteps(childScope, resolved.def.steps, io);
         if (out.status !== 0) return out;
@@ -821,7 +837,7 @@ export class NodeWorkflowRuntime {
         if (drained.status !== 0) return drained;
         return out;
       } finally {
-        this.defCtxStack.pop();
+        defCtxStack.pop();
       }
     }, resolved.def.params);
   }
@@ -1119,7 +1135,8 @@ export class NodeWorkflowRuntime {
         return this.mergeStepResult(accOut, accErr, { status: 0, output: "", error: "", returnValue });
       }
       if (step.type === "send") {
-        const ctx = this.defCtxStack[this.defCtxStack.length - 1];
+        const defCtxStack = this.getDefCtxStack();
+        const ctx = defCtxStack[defCtxStack.length - 1];
         if (!ctx) {
           return this.mergeStepResult(accOut, accErr, {
             status: 1,
@@ -1161,9 +1178,11 @@ export class NodeWorkflowRuntime {
         };
         let targetCtx = ctx;
         let routed = false;
-        for (let i = this.defCtxStack.length - 1; i >= 0; i -= 1) {
-          if (this.defCtxStack[i]!.routes.has(channelKey)) {
-            targetCtx = this.defCtxStack[i]!;
+        // Walk the enclosing defs of the SENDING branch (its own copy of the
+        // stack) so an interleaved sibling branch cannot redirect this send.
+        for (let i = defCtxStack.length - 1; i >= 0; i -= 1) {
+          if (defCtxStack[i]!.routes.has(channelKey)) {
+            targetCtx = defCtxStack[i]!;
             routed = true;
             break;
           }
@@ -1199,9 +1218,12 @@ export class NodeWorkflowRuntime {
           const captureArgs = argsToRuntimeString(v.args);
           const branchStack = [...this.getFrameStack()];
           const branchIndices = [...this.getAsyncIndices(), asyncCounter];
+          const branchDefCtx = [...this.getDefCtxStack()];
           const promise = this.asyncFrameStack.run(branchStack, () =>
             this.asyncIndicesStorage.run(branchIndices, () =>
-              this.executeRunRef(scope, captureRef, captureArgs),
+              this.asyncDefCtxStack.run(branchDefCtx, () =>
+                this.executeRunRef(scope, captureRef, captureArgs),
+              ),
             ),
           );
           const handleId = this.createHandle(captureRef, promise);
@@ -1225,11 +1247,14 @@ export class NodeWorkflowRuntime {
           asyncCounter += 1;
           const branchStack = [...this.getFrameStack()];
           const branchIndices = [...this.getAsyncIndices(), asyncCounter];
+          const branchDefCtx = [...this.getDefCtxStack()];
           const ref = body.callee.value;
           const argsRaw = argsToRuntimeString(body.args);
           const runInBranch = (fn: () => Promise<StepResult>): Promise<StepResult> =>
             this.asyncFrameStack.run(branchStack, () =>
-              this.asyncIndicesStorage.run(branchIndices, fn),
+              this.asyncIndicesStorage.run(branchIndices, () =>
+                this.asyncDefCtxStack.run(branchDefCtx, fn),
+              ),
             );
           let promise: Promise<StepResult>;
           if (step.recover) {
@@ -2595,7 +2620,8 @@ export class NodeWorkflowRuntime {
   }
 
   private resolveConfigAgentModel(scope: Scope, filePath: string): string | undefined {
-    const ctx = this.defCtxStack[this.defCtxStack.length - 1];
+    const defCtxStack = this.getDefCtxStack();
+    const ctx = defCtxStack[defCtxStack.length - 1];
     const moduleMeta = this.graph.modules.get(filePath)?.ast.metadata;
     const defMeta = ctx?.defMeta;
     const layered: DefMetadata = {};
@@ -2699,7 +2725,8 @@ export class NodeWorkflowRuntime {
   }
 
   private resolveRecoverLimit(filePath: string): number {
-    const activeWorkflowMeta = this.defCtxStack[this.defCtxStack.length - 1]?.defMeta;
+    const defCtxStack = this.getDefCtxStack();
+    const activeWorkflowMeta = defCtxStack[defCtxStack.length - 1]?.defMeta;
     if (activeWorkflowMeta?.run?.recoverLimit !== undefined) {
       return activeWorkflowMeta.run.recoverLimit;
     }

@@ -567,3 +567,25 @@ In `node-workflow-runtime.ts` the script spawn tees upstream stdout into a `hand
 - Test: producer larger than 64 KB with a consumer that reads 10 bytes and exits; the pipeline settles within 5 seconds.
 - Test: consumer with a missing interpreter; the pipeline fails within 5 seconds with the spawn error.
 - Existing pipeline tests and e2e pass. CHANGELOG entry under Unreleased.
+
+## Keep the current-def context per async branch
+
+Completed: 2026-11-16
+
+Source: code audit 2026-11-15. Sender misattribution reproduced.
+
+### Current behavior
+
+`NodeWorkflowRuntime.defCtxStack` (`node-workflow-runtime.ts`, field near line 251) is one array shared by all `async` branches. The frame stack is already isolated per branch with `AsyncLocalStorage`; this one is not. A branch's `pop()` removes whatever is on top, and "current def" is read from the top (lines near 1106, 2530, 2631).
+
+`async fast(); async slow()` where `slow` sleeps and then sends: the receiver gets `sender="fast"` and the journal's `INBOX_ENQUEUE.sender` is `fast`. By reading, `resolveRecoverLimit` and `resolveConfigAgentModel` can apply another branch's def-level `run.recover_limit` or `agent.model`.
+
+### Required behavior
+
+The def context is per async branch: store it in `AsyncLocalStorage` alongside the frame stack, or carry it in `Scope`. Channel route lookup still walks the enclosing defs of the sending branch.
+
+### Acceptance
+
+- Test: two async defs, one slow sender; `sender` in the dispatched message and in the journal is the sending def.
+- Test: two async defs with different def-level `agent.model` (and `run.recover_limit`), each interleaved with a sleep; each prompt/recover uses its own def's value (assert through the mock backend / emitted events).
+- `npm test` and `bash e2e/test_all.sh` pass. CHANGELOG entry under Unreleased.
