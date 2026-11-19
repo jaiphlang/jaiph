@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { dirname, join, parse, relative, resolve, sep } from "node:path";
+import { dirname, isAbsolute, join, parse, relative, resolve, sep } from "node:path";
 
 export const JAIPH_EXT_REGEX = /\.jh$/;
 
@@ -20,6 +20,15 @@ export function toImportSource(importPath: string, inputFile: string, rootDir: s
   const currentRel = relative(rootDir, inputFile).replace(JAIPH_EXT_REGEX, ".sh");
   const currentDir = dirname(currentRel);
   return relative(currentDir, importedRel).split(sep).join("/");
+}
+
+/** True when `target` is `root` or a file inside `root`. */
+export function isUnderRoot(root: string, target: string): boolean {
+  if (root.includes("\0") || target.includes("\0")) return false;
+  const base = resolve(root);
+  const abs = resolve(target);
+  const rel = relative(base, abs);
+  return rel === "" || (rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel));
 }
 
 export function resolveImportPath(fromFile: string, importPath: string, workspaceRoot?: string): string {

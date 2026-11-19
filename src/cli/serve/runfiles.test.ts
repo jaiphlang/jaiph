@@ -283,12 +283,12 @@ test("createJournalFollower emits only complete lines and finishes a split line 
   const file = join(runDir, "run_summary.jsonl");
   const follower = createJournalFollower();
   try {
-    assert.deepEqual(follower.readNewLines(file), [], "missing file is not an error");
+    assert.deepEqual(follower.readNewLines(runDir), [], "missing file is not an error");
     writeFileSync(file, '{"a":1}\n{"b":');
-    assert.deepEqual(follower.readNewLines(file), ['{"a":1}'], "the partial trailing line is withheld");
+    assert.deepEqual(follower.readNewLines(runDir), ['{"a":1}'], "the partial trailing line is withheld");
     appendFileSync(file, '2}\n');
-    assert.deepEqual(follower.readNewLines(file), ['{"b":2}'], "the completed line is emitted from the buffered tail");
-    assert.deepEqual(follower.readNewLines(file), [], "no appended bytes, no lines");
+    assert.deepEqual(follower.readNewLines(runDir), ['{"b":2}'], "the completed line is emitted from the buffered tail");
+    assert.deepEqual(follower.readNewLines(runDir), [], "no appended bytes, no lines");
   } finally {
     follower.close();
     rmSync(runDir, { recursive: true, force: true });
@@ -395,7 +395,7 @@ test("the follower drains a 50 MB journal in bounded chunks — no single read e
     };
     let lines = 0;
     for (;;) {
-      const got = follower.readNewLines(file);
+      const got = follower.readNewLines(runDir);
       if (got.length === 0) break;
       lines += got.length;
     }

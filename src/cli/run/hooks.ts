@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { errText } from "../../errors";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { spawn } from "node:child_process";
 import { resolveShell } from "../../runtime";
 import type { HookConfig, HookEventName, HookPayload } from "../../types";
@@ -70,9 +70,13 @@ export function parseHookConfig(raw: string, sourceLabel: string): HookConfig | 
 
 /** Load config from path if file exists and is valid JSON. Returns null on missing or invalid. */
 function loadHookConfig(path: string): HookConfig | null {
-  if (!existsSync(path)) return null;
+  if (path.includes("\0")) return null;
+  // Only `<dir>/hooks.json`. A different basename is not a hooks file.
+  const file = join(dirname(path), HOOKS_FILENAME);
+  if (resolve(file) !== resolve(path)) return null;
+  if (!existsSync(file)) return null;
   try {
-    const raw = readFileSync(path, "utf8");
+    const raw = readFileSync(file, "utf8");
     const config = parseHookConfig(raw, path);
     if (config === null) {
       process.stderr.write(`jaiph hooks: invalid or unsupported config at ${path}, skipping\n`);

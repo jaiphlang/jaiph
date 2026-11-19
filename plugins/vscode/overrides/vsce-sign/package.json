@@ -1,0 +1,8 @@
+{
+  "name": "@vscode/vsce-sign",
+  "version": "0.0.0",
+  "private": true,
+  "license": "MIT",
+  "description": "Local replacement. Packaging and publishing do not sign the VSIX, so the platform binaries are not installed.",
+  "main": "index.js"
+}
