@@ -198,11 +198,11 @@ export const JOURNAL_CHUNK_BYTES = 64 * 1024;
  */
 export interface JournalFollower {
   /**
-   * Complete (newline-terminated) lines from the next bounded chunk of `file`.
+   * Complete lines from the next bounded chunk of `<dir>/run_summary.jsonl`.
    * An empty result means caught up (no appended bytes, or only a partial line
    * buffered); otherwise more chunks may remain, so loop until it returns empty.
    */
-  readNewLines(file: string): string[];
+  readNewLines(dir: string): string[];
   close(): void;
 }
 
@@ -211,7 +211,9 @@ export function createJournalFollower(): JournalFollower {
   let offset = 0;
   let tail = Buffer.alloc(0);
   return {
-    readNewLines(file: string): string[] {
+    readNewLines(dir: string): string[] {
+      if (dir.includes("\0")) return [];
+      const file = join(resolve(dir), RUN_SUMMARY);
       if (fd === null) {
         try {
           fd = openSync(file, "r");
@@ -287,10 +289,9 @@ export async function streamRunEventsSse(target: StreamTarget, opts: SseEventsOp
   const flush = async (): Promise<void> => {
     const dir = opts.resolveRunDir();
     if (!dir) return;
-    const file = join(dir, RUN_SUMMARY);
     for (;;) {
       if (target.aborted) return;
-      const lines = follower.readNewLines(file);
+      const lines = follower.readNewLines(dir);
       if (lines.length === 0) return; // Caught up (or only a partial line buffered).
       let ready = true;
       for (const line of lines) {
