@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, closeSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ServeHandler, type RunRecord, type ServeRequest, type ServeResponse } from "./handler";
@@ -55,6 +55,10 @@ function makeHandler(overrides?: {
   authenticator?: Authenticator;
   exposeDocs?: boolean;
   log?: (line: string) => void;
+  boundHost?: string;
+  getBoundPort?: () => number;
+  allowedOrigins?: string[];
+  allowedHosts?: string[];
 }): ServeHandler {
   let n = 0;
   return new ServeHandler({
@@ -66,6 +70,12 @@ function makeHandler(overrides?: {
     authenticator: overrides?.authenticator,
     exposeDocs: overrides?.exposeDocs,
     log: overrides?.log,
+    // Loopback bind on a fixed port so the cross-origin / Host guard has a
+    // concrete own-origin to validate against in tests.
+    boundHost: overrides?.boundHost ?? "127.0.0.1",
+    getBoundPort: overrides?.getBoundPort ?? (() => 5247),
+    allowedOrigins: overrides?.allowedOrigins,
+    allowedHosts: overrides?.allowedHosts,
     maxConcurrent: overrides?.maxConcurrent ?? 4,
     retainRuns: overrides?.retainRuns,
     retainAgeSec: overrides?.retainAgeSec,
@@ -79,13 +89,24 @@ function makeHandler(overrides?: {
   });
 }
 
-function req(method: string, path: string, opts?: { headers?: Record<string, string>; body?: string; bodyTooLarge?: boolean }): ServeRequest {
+function req(
+  method: string,
+  path: string,
+  opts?: { headers?: Record<string, string>; body?: string; bodyTooLarge?: boolean; noJsonDefault?: boolean },
+): ServeRequest {
   const url = new URL(path, "http://x");
+  const headers = { ...(opts?.headers ?? {}) };
+  // Run-initiating POSTs now require application/json; default it here so the
+  // many invoke/cancel fixtures keep their behaviour, while the content-type
+  // negatives opt out with `noJsonDefault` or set the header explicitly.
+  if (method === "POST" && headers["content-type"] === undefined && !opts?.noJsonDefault) {
+    headers["content-type"] = "application/json";
+  }
   return {
     method,
     path: url.pathname,
     query: url.searchParams,
-    headers: opts?.headers ?? {},
+    headers,
     body: opts?.body ?? "",
     bodyTooLarge: opts?.bodyTooLarge,
   };
@@ -155,6 +176,113 @@ test("wrong method on a known path is 405", async () => {
   const res = await makeHandler().handleRequest(req("POST", "/healthz"));
   assert.equal(res.status, 405);
   assert.equal(bodyJson(res).error.code, "E_METHOD_NOT_ALLOWED");
+});
+
+// === cross-origin / Host / content-type guard ===
+//
+// A web page on another origin must not be able to start a run or read runs via
+// a no-preflight fetch, and a DNS-rebinding name must not pass the Host check.
+// Same-origin, allowlisted, and header-less (curl / MCP) requests keep working.
+
+test("cross-origin: Origin https://evil.example on /mcp is 403", async () => {
+  const h = makeHandler();
+  const res = await h.handleRequest(
+    mcpPost(
+      { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "build", arguments: { target: "x" } } },
+      { origin: "https://evil.example" },
+    ),
+  );
+  assert.equal(res.status, 403);
+  assert.equal(bodyJson(res).error.code, "E_FORBIDDEN_ORIGIN");
+});
+
+test("cross-origin: Origin https://evil.example on POST /{name} is 403 and spawns nothing", async () => {
+  let started = 0;
+  const h = makeHandler({
+    tools: [NOARG_TOOL],
+    callTool: async () => {
+      started += 1;
+      return { text: "x", isError: false, exitStatus: 0 };
+    },
+  });
+  const res = await h.handleRequest(req("POST", "/ping?wait=true", { headers: { origin: "https://evil.example" } }));
+  assert.equal(res.status, 403);
+  assert.equal(bodyJson(res).error.code, "E_FORBIDDEN_ORIGIN");
+  assert.equal(started, 0, "a cross-origin invoke never reaches the executor");
+});
+
+test("cross-origin: an allowlisted Origin passes", async () => {
+  const h = makeHandler({ tools: [NOARG_TOOL], allowedOrigins: ["https://app.example"] });
+  const res = await h.handleRequest(req("POST", "/ping?wait=true", { headers: { origin: "https://app.example" } }));
+  assert.equal(res.status, 200);
+  assert.equal(bodyJson(res).status, "succeeded");
+});
+
+test("cross-origin: the server's own origin (same-origin) passes", async () => {
+  const h = makeHandler({ tools: [NOARG_TOOL] });
+  for (const origin of ["http://localhost:5247", "http://127.0.0.1:5247", "http://[::1]:5247"]) {
+    const res = await h.handleRequest(req("POST", "/ping?wait=true", { headers: { origin } }));
+    assert.equal(res.status, 200, `same-origin ${origin} passes`);
+  }
+});
+
+test("cross-origin: no Origin header passes (curl, MCP clients)", async () => {
+  const h = makeHandler({ tools: [NOARG_TOOL] });
+  const res = await h.handleRequest(req("POST", "/ping?wait=true"));
+  assert.equal(res.status, 200);
+});
+
+test("host: a wrong Host on a loopback bind is 403", async () => {
+  const h = makeHandler({ tools: [NOARG_TOOL] });
+  const res = await h.handleRequest(req("POST", "/ping?wait=true", { headers: { host: "evil.example:5247" } }));
+  assert.equal(res.status, 403);
+  assert.equal(bodyJson(res).error.code, "E_FORBIDDEN_HOST");
+});
+
+test("host: loopback authorities with the bound port pass", async () => {
+  const h = makeHandler({ tools: [NOARG_TOOL] });
+  for (const host of ["localhost:5247", "127.0.0.1:5247", "[::1]:5247"]) {
+    const res = await h.handleRequest(req("POST", "/ping?wait=true", { headers: { host } }));
+    assert.equal(res.status, 200, `Host ${host} passes`);
+  }
+});
+
+test("host: on a non-loopback bind the check is skipped unless JAIPH_SERVE_ALLOWED_HOSTS is set", async () => {
+  const open = makeHandler({ tools: [NOARG_TOOL], boundHost: "0.0.0.0", getBoundPort: () => 8080 });
+  assert.equal((await open.handleRequest(req("POST", "/ping?wait=true", { headers: { host: "anything.example" } }))).status, 200);
+
+  const gated = makeHandler({ tools: [NOARG_TOOL], boundHost: "0.0.0.0", getBoundPort: () => 8080, allowedHosts: ["api.example:8080"] });
+  assert.equal((await gated.handleRequest(req("POST", "/ping?wait=true", { headers: { host: "api.example:8080" } }))).status, 200);
+  const bad = await gated.handleRequest(req("POST", "/ping?wait=true", { headers: { host: "evil.example:8080" } }));
+  assert.equal(bad.status, 403);
+  assert.equal(bodyJson(bad).error.code, "E_FORBIDDEN_HOST");
+});
+
+test("content-type: text/plain on /mcp is 415", async () => {
+  const h = makeHandler();
+  const res = await h.handleRequest(
+    req("POST", "/mcp", {
+      headers: { "content-type": "text/plain" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "build", arguments: { target: "x" } } }),
+    }),
+  );
+  assert.equal(res.status, 415);
+  assert.equal(bodyJson(res).error.code, "E_UNSUPPORTED_MEDIA_TYPE");
+});
+
+test("content-type: a bodyless POST /{name} without a JSON content type is 415 and spawns nothing", async () => {
+  let started = 0;
+  const h = makeHandler({
+    tools: [NOARG_TOOL],
+    callTool: async () => {
+      started += 1;
+      return { text: "x", isError: false, exitStatus: 0 };
+    },
+  });
+  const res = await h.handleRequest(req("POST", "/ping?wait=true", { noJsonDefault: true }));
+  assert.equal(res.status, 415);
+  assert.equal(bodyJson(res).error.code, "E_UNSUPPORTED_MEDIA_TYPE");
+  assert.equal(started, 0, "a bodyless invoke with no content type never reaches the executor");
 });
 
 // === auth matrix (token set) ===
@@ -394,6 +522,55 @@ test("audit: invoke and cancel log the principal + correlation, never the bearer
   const joined = logs.join("\n");
   assert.match(joined, /cancelled — principal=alice/, "cancel is audited with who");
   assert.ok(!joined.includes(TOKEN), "the audit log never contains the bearer token");
+});
+
+test("malformed percent-encoding in a route segment is a 404 (not a 500) and logs nothing", async () => {
+  const logs: string[] = [];
+  const h = makeHandler({ log: (l) => logs.push(l) });
+  // A run/def lookup over a malformed segment: a bad decode must be a plain 404
+  // with the normal JSON error shape, never a thrown URIError → 500 + operator log.
+  const cases: Array<[string, string]> = [
+    ["GET", "/runs/%zz"],
+    ["GET", "/runs/%E0%A4%A/events"],
+    ["GET", "/runs/%/artifacts/x"],
+    ["POST", "/runs/%zz/cancel"],
+    ["POST", "/%"],
+  ];
+  for (const [method, path] of cases) {
+    const res = await h.handleRequest(req(method, path));
+    assert.equal(res.status, 404, `${method} ${path} → 404`);
+    assert.equal(bodyJson(res).error.code, "E_NOT_FOUND", `${method} ${path} has the normal error shape`);
+  }
+  assert.deepEqual(logs, [], "a malformed segment produces no operator error line");
+});
+
+test("a correlation id with spaces or '=' is replaced and never surfaces verbatim in the audit line", async () => {
+  const logs: string[] = [];
+  const alice = principal("alice", ["invoke", "inspect", "cancel"]);
+  const forged = "x principal=operator";
+  let runPromise!: Promise<DefCallResult>;
+  const h = makeHandler({
+    tools: [NOARG_TOOL],
+    authenticator: tokenAuth({ tok: alice }),
+    log: (l) => logs.push(l),
+    callTool: (_spec, _args, _runId, ctx) => {
+      runPromise = new Promise<DefCallResult>((resolve) => {
+        ctx.onCancelHandle?.(() => resolve({ text: "t", isError: true, exitStatus: 1 }));
+      });
+      return runPromise;
+    },
+  });
+  const hdr = { authorization: "Bearer tok", "x-correlation-id": forged };
+  const start = bodyJson(await h.handleRequest(req("POST", "/ping", { headers: hdr })));
+  // The forged value is rejected and a generated id used instead.
+  assert.notEqual(start.correlation_id, forged);
+  assert.doesNotMatch(String(start.correlation_id), /principal=operator/);
+
+  await h.handleRequest(req("POST", `/runs/${start.run_id}/cancel`, { headers: { authorization: "Bearer tok" } }));
+  await runPromise.catch(() => {});
+  const joined = logs.join("\n");
+  assert.ok(!joined.includes(forged), "the forged correlation value is absent from the audit line");
+  assert.match(joined, /cancelled — principal=alice/, "the real principal is still audited");
 });
 
 test("authz: an MCP SSE tools/call is owned and audited by the authenticated principal (not anonymous)", async () => {
@@ -848,11 +1025,41 @@ function fakeTarget(): StreamTarget & { chunks: string[] } {
   const chunks: string[] = [];
   return {
     chunks,
-    write: (c: string) => void chunks.push(c),
+    write: (c: string) => {
+      chunks.push(c);
+      return true;
+    },
+    drain: () => Promise.resolve(),
     aborted: false,
     onAbort: () => {},
   };
 }
+
+test("a terminal run with no directory triggers one tree scan across many requests", async () => {
+  // The run finalizes with no runDir (e.g. a spawn failure), so its record's
+  // run_dir stays null and the resolver scan always misses.
+  let scans = 0;
+  const h = makeHandler({
+    tools: [NOARG_TOOL],
+    callTool: async () => ({ text: "ok", isError: false, exitStatus: 0 }), // no runDir
+    resolveRunDir: () => {
+      scans += 1;
+      return null;
+    },
+  });
+  const started = bodyJson(await h.handleRequest(req("POST", "/ping?wait=true")));
+  assert.equal(started.status, "succeeded"); // terminal
+  assert.equal(started.run_dir, null);
+
+  // Hammer the dir-resolving endpoints; the terminal miss is negative-cached so
+  // only the first request scans the runs tree.
+  for (let i = 0; i < 10; i += 1) {
+    assert.equal((await h.handleRequest(req("GET", `/runs/${started.run_id}/events`))).status, 200);
+    assert.equal((await h.handleRequest(req("GET", `/runs/${started.run_id}/artifacts`))).status, 200);
+    assert.equal((await h.handleRequest(req("GET", `/runs/${started.run_id}/artifacts/x.txt`))).status, 404);
+  }
+  assert.equal(scans, 1, "a terminal run with no dir scans the tree exactly once, then serves from the negative cache");
+});
 
 test("events + artifacts on an unknown run id are 404", async () => {
   const h = makeHandler();
@@ -879,9 +1086,9 @@ test("NDJSON events on a terminal run stream the run_summary.jsonl file itself",
     const res = await h.handleRequest(req("GET", `/runs/${runId}/events`));
     assert.equal(res.status, 200);
     assert.equal(res.headers["content-type"], "application/x-ndjson");
-    assert.ok(res.bodyFile, "NDJSON is streamed from a file, never buffered whole");
-    assert.equal(res.bodyFile!.path, join(runDir, "run_summary.jsonl"), "the streamed file is the journal");
-    assert.equal(res.bodyFile!.size, Buffer.byteLength(journal), "exactly the journal's bytes are streamed");
+    assert.ok(res.bodyFile && "path" in res.bodyFile, "NDJSON is streamed from a file path, never buffered whole");
+    assert.equal(res.bodyFile.path, join(runDir, "run_summary.jsonl"), "the streamed file is the journal");
+    assert.equal(res.bodyFile.size, Buffer.byteLength(journal), "exactly the journal's bytes are streamed");
     assert.equal(res.headers["content-length"], String(Buffer.byteLength(journal)));
   } finally {
     rmSync(runDir, { recursive: true, force: true });
@@ -929,9 +1136,10 @@ test("artifacts round-trip through the handler: list then byte-identical downloa
     assert.equal(dl.headers["content-type"], "application/octet-stream");
     assert.match(dl.headers["content-disposition"], /filename="out\.bin"/);
     assert.equal(dl.headers["content-length"], String(payload.length));
-    assert.ok(dl.bodyFile, "the artifact is streamed from disk, never buffered whole");
-    assert.equal(dl.bodyFile!.size, payload.length);
-    assert.deepEqual(readFileSync(dl.bodyFile!.path), payload, "the streamed file is the published artifact");
+    assert.ok(dl.bodyFile && "fd" in dl.bodyFile, "the artifact streams from an already-open descriptor, never buffered whole");
+    assert.equal(dl.bodyFile.size, payload.length);
+    assert.deepEqual(readFileSync(dl.bodyFile.fd), payload, "the open descriptor reads the published artifact");
+    closeSync(dl.bodyFile.fd);
 
     // Traversal to a run-dir file (not under artifacts/) is a 404.
     const escape = await h.handleRequest(req("GET", `/runs/${runId}/artifacts/${encodeURIComponent("../run_summary.jsonl")}`));
@@ -948,7 +1156,11 @@ function abortableTarget(): StreamTarget & { chunks: string[]; abort: () => void
   const chunks: string[] = [];
   return {
     chunks,
-    write: (c: string) => void chunks.push(c),
+    write: (c: string) => {
+      chunks.push(c);
+      return true;
+    },
+    drain: () => Promise.resolve(),
     get aborted(): boolean {
       return aborted;
     },
@@ -1252,6 +1464,166 @@ test("POST /runs/{id}/cancel cancels an MCP-initiated run in the shared registry
   await runPromise.catch(() => {});
   await call;
   assert.equal(bodyJson(await h.handleRequest(req("GET", `/runs/${runId}`))).status, "cancelled");
+});
+
+test("POST /mcp notifications/cancelled is principal-scoped: B cannot cancel A's call, A can", async () => {
+  // Over HTTP a cancel must be scoped to the sending principal: a valid token
+  // with no ownership of the target call is a no-op, even though ids are guessable.
+  const alice = principal("alice", ["invoke", "inspect", "cancel"]);
+  const bob = principal("bob", ["invoke", "inspect", "cancel"]);
+  let aliceRunId = "";
+  let aliceResolve!: (r: DefCallResult) => void;
+  const h = makeHandler({
+    tools: [NOARG_TOOL],
+    authenticator: tokenAuth({ "alice-tok": alice, "bob-tok": bob }),
+    callTool: (_spec, _args, runId, ctx) => {
+      aliceRunId = runId;
+      return new Promise<DefCallResult>((resolve) => {
+        aliceResolve = resolve;
+        ctx.onCancelHandle?.(() => resolve({ text: "terminated by signal SIGINT", isError: true, exitStatus: 1, signal: "SIGINT" }));
+      });
+    },
+  });
+  const aliceHdr = { authorization: "Bearer alice-tok" };
+  const bobHdr = { authorization: "Bearer bob-tok" };
+
+  // Alice starts a tools/call with client id 1 (JSON mode, stays in flight).
+  const aliceCall = h.handleRequest(
+    mcpPost({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "ping", arguments: {} } }, aliceHdr),
+  );
+  await flush();
+  assert.equal(bodyJson(await h.handleRequest(req("GET", `/runs/${aliceRunId}`, { headers: aliceHdr }))).status, "running");
+
+  // Bob sends notifications/cancelled for Alice's id — 202, but it does NOT cancel.
+  const bobCancel = await h.handleRequest(
+    mcpPost({ jsonrpc: "2.0", method: "notifications/cancelled", params: { requestId: 1 } }, bobHdr),
+  );
+  assert.equal(bobCancel.status, 202);
+  await flush();
+  assert.equal(
+    bodyJson(await h.handleRequest(req("GET", `/runs/${aliceRunId}`, { headers: aliceHdr }))).status,
+    "running",
+    "B's cancel for A's request id is a no-op",
+  );
+
+  // Alice's own notifications/cancelled cancels her call.
+  const aliceCancel = await h.handleRequest(
+    mcpPost({ jsonrpc: "2.0", method: "notifications/cancelled", params: { requestId: 1 } }, aliceHdr),
+  );
+  assert.equal(aliceCancel.status, 202);
+  await aliceCall;
+  assert.equal(
+    bodyJson(await h.handleRequest(req("GET", `/runs/${aliceRunId}`, { headers: aliceHdr }))).status,
+    "cancelled",
+    "A's own cancel takes effect",
+  );
+  void aliceResolve;
+});
+
+test("POST /mcp notifications/cancelled without the cancel capability cannot cancel the principal's own call", async () => {
+  const carol = principal("carol", ["invoke", "inspect"]); // no `cancel`
+  let runId = "";
+  const h = makeHandler({
+    tools: [NOARG_TOOL],
+    authenticator: tokenAuth({ tok: carol }),
+    callTool: (_spec, _args, rid, ctx) => {
+      runId = rid;
+      return new Promise<DefCallResult>((resolve) => {
+        ctx.onCancelHandle?.(() => resolve({ text: "terminated by signal SIGINT", isError: true, exitStatus: 1, signal: "SIGINT" }));
+      });
+    },
+  });
+  const hdr = { authorization: "Bearer tok" };
+  const call = h.handleRequest(
+    mcpPost({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "ping", arguments: {} } }, hdr),
+  );
+  await flush();
+  const cancel = await h.handleRequest(
+    mcpPost({ jsonrpc: "2.0", method: "notifications/cancelled", params: { requestId: 1 } }, hdr),
+  );
+  assert.equal(cancel.status, 202, "the notification is still accepted");
+  await flush();
+  assert.equal(
+    bodyJson(await h.handleRequest(req("GET", `/runs/${runId}`, { headers: hdr }))).status,
+    "running",
+    "without the cancel capability the call is not cancelled",
+  );
+  void call;
+});
+
+test("POST /mcp: two concurrent same-id tools/call are independent and each returns its own result", async () => {
+  // The bug: two tools/call sharing a client id clobbered one entry. Each must
+  // now be tracked independently and complete with its own result.
+  const resolvers: Array<(r: DefCallResult) => void> = [];
+  const h = makeHandler({
+    tools: [NOARG_TOOL],
+    callTool: () => new Promise<DefCallResult>((resolve) => resolvers.push(resolve)),
+  });
+  const mk = (): ServeRequest =>
+    mcpPost({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "ping", arguments: {} } });
+  const a = h.handleRequest(mk());
+  const b = h.handleRequest(mk());
+  await flush();
+  // Both are registered as distinct running runs despite the shared id 1.
+  assert.equal(bodyJson(await h.handleRequest(req("GET", "/runs"))).total, 2, "same-id calls are tracked independently");
+  assert.equal(resolvers.length, 2);
+  resolvers[0]({ text: "first", isError: false, exitStatus: 0 });
+  resolvers[1]({ text: "second", isError: false, exitStatus: 0 });
+  const resA = bodyJson(await a);
+  const resB = bodyJson(await b);
+  assert.equal(resA.id, 1);
+  assert.equal(resB.id, 1);
+  assert.deepEqual(
+    [resA.result.content[0].text, resB.result.content[0].text].sort(),
+    ["first", "second"],
+    "each same-id call returns its own result",
+  );
+});
+
+test("POST /mcp: SSE hangup on one of two same-id calls cancels only that call", async () => {
+  const handles: Array<{ runId: string; resolve: (r: DefCallResult) => void }> = [];
+  const h = makeHandler({
+    tools: [NOARG_TOOL],
+    callTool: (_spec, _args, runId, ctx) =>
+      new Promise<DefCallResult>((resolve) => {
+        ctx.onCancelHandle?.(() => resolve({ text: "terminated by signal SIGINT", isError: true, exitStatus: 1, signal: "SIGINT" }));
+        handles.push({ runId, resolve });
+      }),
+  });
+  const mk = (): ServeRequest =>
+    mcpPost(
+      { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "ping", arguments: {} } },
+      { accept: "text/event-stream" },
+    );
+  const resA = await h.handleRequest(mk());
+  const resB = await h.handleRequest(mk());
+  assert.ok(resA.stream && resB.stream, "both same-id SSE calls drive their own stream");
+  const targetA = abortableTarget();
+  const targetB = abortableTarget();
+  const streamA = resA.stream!(targetA);
+  const streamB = resB.stream!(targetB);
+  await flush();
+  assert.equal(handles.length, 2, "both calls started");
+
+  // Hang up call A only.
+  targetA.abort();
+  await flush();
+  assert.equal(
+    bodyJson(await h.handleRequest(req("GET", `/runs/${handles[0].runId}`))).status,
+    "cancelled",
+    "the hung-up call is cancelled through its captured handle",
+  );
+  assert.equal(
+    bodyJson(await h.handleRequest(req("GET", `/runs/${handles[1].runId}`))).status,
+    "running",
+    "the other same-id call is untouched",
+  );
+
+  // Finish call B cleanly.
+  handles[1].resolve({ text: "done b", isError: false, exitStatus: 0 });
+  await streamA;
+  await streamB;
+  assert.equal(bodyJson(await h.handleRequest(req("GET", `/runs/${handles[1].runId}`))).status, "succeeded");
 });
 
 test("POST /mcp SSE hangup cancels the run through the shared cancel path", async () => {

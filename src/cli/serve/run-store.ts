@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { readFileSync, readdirSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { RunRecord, RunStatus } from "./types";
 import { RUN_SUMMARY } from "./runfiles";
@@ -16,6 +16,32 @@ export const TAMPERED_RESULT_TEXT =
  * interrupted run is reconciled on startup); read back by {@link loadPersistedRuns}.
  */
 export const PUBLIC_RUN_FILE = "run.json";
+
+/**
+ * Marker file a serve process drops into a run directory it owns, the moment it
+ * first resolves that directory for a still-running run (before any `run.json`
+ * exists). It is the ownership signal startup reconciliation keys on: a run dir
+ * carrying this marker (or a `run.json`) was created by a serve process and may
+ * be reconciled to `interrupted`; a dir with neither — a plain `jaiph run`, or a
+ * run of a still-live process in the same workspace — is left untouched.
+ */
+export const SERVE_MANAGED_MARKER = ".serve-managed";
+
+/**
+ * Drop the {@link SERVE_MANAGED_MARKER} into a run directory this serve process
+ * owns, so a later restart may reconcile it even if it never reached a terminal
+ * state. Idempotent and best-effort: an already-present marker or an unwritable
+ * dir is ignored (it must never break a request).
+ */
+export function markServeManaged(runDir: string): void {
+  const marker = join(runDir, SERVE_MANAGED_MARKER);
+  if (existsSync(marker)) return;
+  try {
+    writeFileSync(marker, "", "utf8");
+  } catch {
+    // Best-effort: a read-only or vanished run dir must not break the response.
+  }
+}
 
 /** Bump when the on-disk shape changes so an old file can be ignored rather than mis-parsed. */
 const SCHEMA_VERSION = 2;
@@ -97,16 +123,27 @@ export function persistRunRecord(record: RunRecord): void {
  * run, oldest-first so the caller can assign monotonic order:
  *
  * - A run with a `run.json` reloads verbatim (terminal state, idempotency key).
- * - A run with a journal but no `run.json` was `running` when the process died;
- *   it is **reconciled** to the explicit terminal status `interrupted` (never
- *   left reported as permanently running) and that reconciliation is persisted
- *   so it survives a second restart.
+ * - A run with a {@link SERVE_MANAGED_MARKER} but no `run.json` was `running`
+ *   when the process died; it is **reconciled** to the explicit terminal status
+ *   `interrupted` (never left reported as permanently running) and that
+ *   reconciliation is persisted so it survives a second restart.
+ *
+ * Only run dirs this server owns (a `run.json` or the marker) are touched — a
+ * plain `jaiph run` dir, or a run of a still-live process in the same workspace,
+ * is neither loaded nor modified. `maxRuns > 0` applies the retention cap while
+ * loading: the newest `maxRuns` owned dirs are processed and older ones are left
+ * untouched (no reconciliation write), so startup memory is bounded.
  *
  * `runsRoot` being absent/unreadable yields an empty registry.
  */
-export function loadPersistedRuns(runsRoot: string, nowIso: string): RunRecord[] {
-  const records: Array<{ dir: string; record: RunRecord }> = [];
-  for (const runDir of scanRunDirs(runsRoot)) {
+export function loadPersistedRuns(runsRoot: string, nowIso: string, maxRuns = 0): RunRecord[] {
+  // Owned dirs, oldest-first: the run dir path is a sortable UTC date/time.
+  const dirs = scanOwnedRunDirs(runsRoot).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  // Retention cap applied before any reconciliation: drop the oldest beyond the
+  // cap so they are never read or stamped, keeping the newest `maxRuns`.
+  const kept = maxRuns > 0 && dirs.length > maxRuns ? dirs.slice(dirs.length - maxRuns) : dirs;
+  const records: RunRecord[] = [];
+  for (const runDir of kept) {
     const record = reloadRun(runDir) ?? reconcileRun(runDir, nowIso);
     if (!record) continue;
     // Hard-fail a tampered journal (finding H-3): a run whose keyed chain does
@@ -117,16 +154,18 @@ export function loadPersistedRuns(runsRoot: string, nowIso: string): RunRecord[]
       record.status = "failed";
       record.result_text = TAMPERED_RESULT_TEXT;
     }
-    records.push({ dir: runDir, record });
+    records.push(record);
   }
-  // Oldest-first: the run dir name is a sortable UTC date/time, so the scan
-  // order already reflects chronology once reversed back to ascending.
-  records.sort((a, b) => (a.dir < b.dir ? -1 : a.dir > b.dir ? 1 : 0));
-  return records.map((r) => r.record);
+  return records;
 }
 
-/** Every run directory (holding a `run_summary.jsonl`) under the runs tree. */
-function scanRunDirs(runsRoot: string): string[] {
+/**
+ * Run directories this server owns — those carrying a `run.json` (a finalized or
+ * already-reconciled run) or the {@link SERVE_MANAGED_MARKER} (a run this server
+ * launched that has not yet finalized). A dir with only a `run_summary.jsonl`
+ * (a plain `jaiph run`, or a foreign/live process) is deliberately excluded.
+ */
+function scanOwnedRunDirs(runsRoot: string): string[] {
   const out: string[] = [];
   let dateDirs: string[];
   try {
@@ -144,7 +183,7 @@ function scanRunDirs(runsRoot: string): string[] {
     }
     for (const timeDir of timeDirs) {
       const runDir = join(datePath, timeDir);
-      if (existsFile(join(runDir, RUN_SUMMARY)) || existsFile(join(runDir, PUBLIC_RUN_FILE))) out.push(runDir);
+      if (existsFile(join(runDir, PUBLIC_RUN_FILE)) || existsFile(join(runDir, SERVE_MANAGED_MARKER))) out.push(runDir);
     }
   }
   return out;

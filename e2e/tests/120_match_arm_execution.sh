@@ -75,3 +75,49 @@ EOF
 
 e2e::expect_out "match_run.jh" "safe_name" "some-name"
 e2e::pass "match arm run executes script and captures value"
+
+# ── 3. call arm argument with a literal ")" runs the script (not the regex) ──
+# Regression: a prior runtime regex `[^)]*` cut the argument at the first ")",
+# so the script never ran. The tokenizer-based arg parser keeps `p)q` whole.
+
+e2e::section "match arm call keeps a literal ) inside a string argument"
+
+e2e::file "match_paren.jh" <<'EOF'
+script echoit = 'printf "%s" "$1"'
+
+export def main() {
+  const x = "a"
+  const r = match x {
+    "a" => echoit("p)q")
+    _ => "d"
+  }
+  log r
+}
+EOF
+
+e2e::run "match_paren.jh" >/dev/null
+e2e::expect_out "match_paren.jh" "echoit" "p)q"
+e2e::pass "call arm passes p)q verbatim and runs the script"
+
+# ── 4. call arm preserves a comma inside a quoted argument ───────────────────
+# Regression: a space-joined arg round trip dropped the comma, so the first
+# argument arrived as `x y` instead of `x, y`.
+
+e2e::section "match arm call keeps a comma inside a quoted argument"
+
+e2e::file "match_comma.jh" <<'EOF'
+script first_arg = 'printf "%s" "$1"'
+
+export def main() {
+  const x = "a"
+  const r = match x {
+    "a" => first_arg("x, y", "z")
+    _ => "d"
+  }
+  log r
+}
+EOF
+
+e2e::run "match_comma.jh" >/dev/null
+e2e::expect_out "match_comma.jh" "first_arg" "x, y"
+e2e::pass "call arm passes x, y as a single argument"

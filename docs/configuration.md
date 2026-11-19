@@ -251,7 +251,7 @@ Each attempt emits its own `PROMPT_START` / `PROMPT_END` and `STEP_START` / `STE
 ## Prompt watchdog timeouts
 {: #prompt-watchdog-timeouts}
 
-The retry backoff above handles a backend that *fails*. A separate set of watchdogs handles a backend that *hangs* — it never exits, so without them the runtime would block on the subprocess indefinitely (no commit, no queue progress, no retry). Each prompt invocation installs three independent layers over the spawned backend process:
+The retry backoff above handles a backend that *fails*. A separate set of watchdogs handles a backend that *hangs* — it never finishes, so without them the runtime would block on the backend indefinitely (no commit, no queue progress, no retry). Each prompt invocation installs three independent layers over the backend:
 
 | Layer | Variable | Default | Trigger | Outcome |
 |---|---|---|---|---|
@@ -260,6 +260,8 @@ The retry backoff above handles a backend that *fails*. A separate set of watchd
 | Absolute cap | `JAIPH_PROMPT_MAX_SECONDS` | `7200` (2h) | Total wall-clock for the single invocation exceeds the cap, regardless of activity. | Terminate the process, return **failure** → feeds the retry backoff. |
 
 Set any variable to `0` to disable that layer. The idle timer resets on every chunk of backend output, so a slow-but-active run is bounded only by the absolute cap.
+
+The idle timeout and the absolute cap apply to every backend. A subprocess backend (cursor, claude, custom) is stopped by a process-tree kill. The `codex` HTTP backend has no process, so when the idle timeout or the absolute cap fires it destroys the in-flight request instead, with the same failure text and the same retry behavior. Completion grace applies only to the subprocess backends, because the codex stream ends with an explicit `[DONE]` or `finish_reason` terminator. Codex never reaches the state where the work finished but the backend will not exit. A codex stream that closes without that terminator is itself a failure, and it feeds the retry backoff.
 
 The completion-grace layer specifically addresses the known `claude -p` failure mode where the CLI streams its final answer (and the terminal `result` event) but the process never exits — often because a descendant it spawned is still holding the output pipe open. When a watchdog fires it terminates the backend's whole process tree (via `killProcessTree`; see [Architecture](architecture.md)) with `SIGTERM`, escalating to `SIGKILL` after 5s, and tears down the runtime's handles on the child's stdio so a lingering descendant cannot keep the run alive. On Windows the tree is force-killed with `taskkill /T` on the first signal, so the `SIGKILL` escalation is a no-op.
 
@@ -279,7 +281,7 @@ The prompt watchdogs bound a single backend call, and the run timeout and step c
 
 `JAIPH_STEP_IDLE_WARN_SEC` (default 180 seconds; `0` disables) sets how long a leaf step can go without any stdout or stderr before the runtime emits a `LOGWARN`. The warning repeats on the same cadence while the step stays silent, so at 180 seconds, then 360, then 540, and so on. Any new output resets the clock. The warning does not fail the step, and it only surfaces a stalled backend or a long-running command.
 
-`JAIPH_STEP_IDLE_KILL_SEC` (default 3600 seconds, one hour; `0` disables) sets a hard limit for a `script` step. When a `script` step goes that long without any stdout or stderr, the runtime emits a `LOGERR` naming the step and how long it was silent, terminates the step's subprocess with `SIGTERM` and then `SIGKILL` (via `killProcessTreeEscalating`; see [Architecture](architecture.md)), and fails the step. Any new output resets this clock too. The warn cadence and the kill limit run off the same idle clock but fire independently. The kill applies to `script` steps only, because a `prompt` step's backend is already bounded by the prompt watchdogs above, so a `prompt` step still gets the idle warnings but is never killed by this limit.
+`JAIPH_STEP_IDLE_KILL_SEC` (default 3600 seconds, one hour; `0` disables) sets a hard limit for a `script` step. When a `script` step goes that long without any stdout or stderr, the runtime emits a `LOGERR` naming the step and how long it was silent, terminates the step's whole process tree with `SIGTERM` and then `SIGKILL` (via `killProcessTreeEscalating`; see [Architecture](architecture.md)), so a process the step backgrounded is killed too and cannot outlive the run, and fails the step. Any new output resets this clock too. The warn cadence and the kill limit run off the same idle clock but fire independently. The kill applies to `script` steps only, because a `prompt` step's backend is already bounded by the prompt watchdogs above, so a `prompt` step still gets the idle warnings but is never killed by this limit.
 
 ## Custom agent commands
 

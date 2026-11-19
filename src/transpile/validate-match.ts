@@ -33,19 +33,17 @@ export function validateMatchExpr(
         );
       }
     }
-    if (!arm.tripleQuotedBody) {
-      // The parser has already checked the arm-body grammar; only scope
-      // checks remain here. A bare identifier must be in scope.
-      const bodyTrimmed = arm.body.trim();
-      if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(bodyTrimmed) && !knownVars.has(bodyTrimmed)) {
-        diag.error(
-          filePath,
-          expr.loc.line,
-          expr.loc.col,
-          "E_VALIDATE",
-          `unknown identifier "${bodyTrimmed}" in match arm body; declare it with "const", use a capture, or add a parameter`,
-        );
-      }
+    // The parser has already classified and grammar-checked the arm body; only
+    // the bare-identifier scope check remains here (callee resolution and arity
+    // for `call` arms run through `validateCallable` in validate-expr.ts).
+    if (arm.body.kind === "var" && !knownVars.has(arm.body.name)) {
+      diag.error(
+        filePath,
+        expr.loc.line,
+        expr.loc.col,
+        "E_VALIDATE",
+        `unknown identifier "${arm.body.name}" in match arm body; declare it with "const", use a capture, or add a parameter`,
+      );
     }
   }
   if (wildcardCount === 0) {

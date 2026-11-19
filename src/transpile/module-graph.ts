@@ -1,8 +1,8 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import { jaiphError } from "../errors";
 import { parsejaiph } from "../parser";
-import { resolveImportPath } from "./resolve";
+import { isUnderRoot, resolveImportPath } from "./resolve";
 import type { jaiphModule } from "../types";
 
 /**
@@ -49,6 +49,22 @@ export function loadModuleGraph(entryFile: string, workspaceRoot?: string): Modu
   while (queue.length > 0) {
     const { file: current, importer } = queue.shift()!;
     if (modules.has(current)) continue;
+    // The entry file is the one the operator named. An import must stay inside
+    // the workspace or the entry file's directory.
+    if (
+      importer &&
+      workspaceRoot &&
+      !isUnderRoot(workspaceRoot, current) &&
+      !isUnderRoot(dirname(entry), current)
+    ) {
+      throw jaiphError(
+        importer.file,
+        importer.loc.line,
+        importer.loc.col,
+        "E_IMPORT_NOT_FOUND",
+        `import "${importer.alias}" resolves outside the workspace: "${current}"`,
+      );
+    }
     if (!existsSync(current)) {
       if (importer) {
         throw jaiphError(

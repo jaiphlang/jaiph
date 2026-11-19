@@ -1,6 +1,6 @@
 import { describe, it, afterEach } from "node:test";
 import * as assert from "node:assert/strict";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { EventEmitter } from "node:events";
@@ -545,10 +545,11 @@ describe("prepareClaudeEnv", () => {
     }
   });
 
-  it("falls back to ephemeral claude config under the run dir when default is not writable", () => {
+  it("falls back to an ephemeral temp claude config (never under the run dir) when default is not writable", () => {
     const root = mkdtempSync(join(tmpdir(), "jaiph-claude-env-fallback-"));
     const runDir = join(root, "run");
     mkdirSync(runDir, { recursive: true });
+    let cleanupDir: string | undefined;
     try {
       const blockedPath = join(root, "blocked-config-path");
       writeFileSync(blockedPath, "not-a-directory");
@@ -556,11 +557,58 @@ describe("prepareClaudeEnv", () => {
         { CLAUDE_CONFIG_DIR: blockedPath, JAIPH_RUN_DIR: runDir },
         join(root, "workspace"),
       );
+      cleanupDir = prepared.cleanupDir;
       assert.equal(prepared.error, undefined);
       assert.ok(prepared.warning);
-      assert.equal(prepared.env.CLAUDE_CONFIG_DIR, join(runDir, "claude-config"));
-      assert.ok(existsSync(join(runDir, "claude-config", "session-env")));
+      // The fallback is a fresh temp dir under the OS temp dir, not the run dir.
+      const configDir = prepared.env.CLAUDE_CONFIG_DIR;
+      assert.ok(configDir && configDir.startsWith(tmpdir()));
+      assert.equal(prepared.cleanupDir, configDir);
+      assert.ok(existsSync(join(configDir!, "session-env")));
+      // Nothing was placed under the run dir.
+      assert.ok(!existsSync(join(runDir, "claude-config")));
     } finally {
+      if (cleanupDir) rmSync(cleanupDir, { recursive: true, force: true });
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("copies only auth/settings files into a 0700 temp dir — not claude-config, .credentials.json, or projects/ under the run dir", () => {
+    const root = mkdtempSync(join(tmpdir(), "jaiph-claude-env-noleak-"));
+    const runDir = join(root, "run");
+    mkdirSync(runDir, { recursive: true });
+    // A config dir holding credentials and a large projects/ history tree whose
+    // session-env slot is unusable (a file, not a directory) so the fallback is
+    // taken — a type conflict, so this holds even when the test runs as root.
+    const configDir = join(root, "home-config");
+    mkdirSync(join(configDir, "projects", "a", "deep"), { recursive: true });
+    writeFileSync(join(configDir, ".credentials.json"), '{"token":"secret"}');
+    writeFileSync(join(configDir, "settings.json"), '{"theme":"dark"}');
+    writeFileSync(join(configDir, "session-env"), "not-a-directory");
+    for (let i = 0; i < 50; i++) {
+      writeFileSync(join(configDir, "projects", "a", "deep", `h${i}.jsonl`), "x".repeat(1000));
+    }
+    let cleanupDir: string | undefined;
+    try {
+      const prepared = prepareClaudeEnv(
+        { CLAUDE_CONFIG_DIR: configDir, JAIPH_RUN_DIR: runDir },
+        join(root, "workspace"),
+      );
+      cleanupDir = prepared.cleanupDir;
+      assert.equal(prepared.error, undefined);
+      const tempDir = prepared.env.CLAUDE_CONFIG_DIR!;
+      // The temp dir is owner-only (0700).
+      assert.equal(statSync(tempDir).mode & 0o777, 0o700);
+      // Credentials + settings were seeded into the temp dir...
+      assert.ok(existsSync(join(tempDir, ".credentials.json")));
+      assert.ok(existsSync(join(tempDir, "settings.json")));
+      // ...but the projects/ history tree was not copied anywhere.
+      assert.ok(!existsSync(join(tempDir, "projects")));
+      // Nothing named claude-config or .credentials.json lives under the run dir.
+      assert.ok(!existsSync(join(runDir, "claude-config")));
+      assert.ok(!existsSync(join(runDir, ".credentials.json")));
+    } finally {
+      if (cleanupDir) rmSync(cleanupDir, { recursive: true, force: true });
       rmSync(root, { recursive: true, force: true });
     }
   });
@@ -701,6 +749,181 @@ describe("codex backend", () => {
       assert.ok(errOutput.includes("Invalid API key"), "error should include API message");
     } finally {
       process.stderr.write = origWrite;
+      server.close();
+    }
+  });
+
+  it("codex fails at the idle timeout when the stream stalls mid-chunk", async () => {
+    const http = require("node:http") as typeof import("node:http");
+    let openRes: import("node:http").ServerResponse | undefined;
+    // Send headers and one content chunk, then stall forever (never end).
+    const server = http.createServer((_req, res) => {
+      openRes = res;
+      res.writeHead(200, { "Content-Type": "text/event-stream" });
+      res.write('data: {"choices":[{"delta":{"content":"partial"}}]}\n\n');
+    });
+    await new Promise<void>((resolve) => server.listen(0, resolve));
+    const port = (server.address() as { port: number }).port;
+    const errChunks: string[] = [];
+    const stderr = {
+      write: (c: unknown) => { errChunks.push(String(c)); return true; },
+    } as unknown as NodeJS.WritableStream;
+    const stdout = { write: () => true } as unknown as NodeJS.WritableStream;
+    try {
+      const start = Date.now();
+      const result = await executePrompt(
+        "stall",
+        makeConfig({
+          backend: "codex",
+          codexApiKey: "sk-test",
+          codexApiUrl: `http://localhost:${port}/v1/chat/completions`,
+          // Idle is the cause under test; disable the absolute cap.
+          idleTimeoutMs: 120,
+          maxDurationMs: 0,
+        }),
+        stdout,
+        {},
+        stderr,
+      );
+      assert.equal(result.status, 1);
+      assert.ok(Date.now() - start < 5000, "should fail promptly at the idle timeout");
+      assert.ok(
+        errChunks.join("").includes("produced no output"),
+        "stderr should carry the shared idle-timeout failure text",
+      );
+    } finally {
+      openRes?.destroy();
+      server.close();
+    }
+  });
+
+  it("codex fails at the absolute max duration when the stream never stops", async () => {
+    const http = require("node:http") as typeof import("node:http");
+    let openRes: import("node:http").ServerResponse | undefined;
+    let timer: NodeJS.Timeout | undefined;
+    // Stream a content chunk forever, faster than the idle timeout, so only the
+    // absolute cap can end it.
+    const server = http.createServer((_req, res) => {
+      openRes = res;
+      res.writeHead(200, { "Content-Type": "text/event-stream" });
+      timer = setInterval(() => {
+        res.write('data: {"choices":[{"delta":{"content":"x"}}]}\n\n');
+      }, 20);
+      res.on("close", () => { if (timer) clearInterval(timer); });
+    });
+    await new Promise<void>((resolve) => server.listen(0, resolve));
+    const port = (server.address() as { port: number }).port;
+    const errChunks: string[] = [];
+    const stderr = {
+      write: (c: unknown) => { errChunks.push(String(c)); return true; },
+    } as unknown as NodeJS.WritableStream;
+    const stdout = { write: () => true } as unknown as NodeJS.WritableStream;
+    try {
+      const result = await executePrompt(
+        "forever",
+        makeConfig({
+          backend: "codex",
+          codexApiKey: "sk-test",
+          codexApiUrl: `http://localhost:${port}/v1/chat/completions`,
+          idleTimeoutMs: 5000,
+          maxDurationMs: 150,
+        }),
+        stdout,
+        {},
+        stderr,
+      );
+      assert.equal(result.status, 1);
+      assert.ok(
+        errChunks.join("").includes("maximum duration"),
+        "stderr should carry the shared max-duration failure text",
+      );
+    } finally {
+      if (timer) clearInterval(timer);
+      openRes?.destroy();
+      server.close();
+    }
+  });
+
+  it("codex fails when the stream closes without [DONE] or finish_reason", async () => {
+    const http = require("node:http") as typeof import("node:http");
+    // One content chunk, then a clean close with no terminator.
+    const server = http.createServer((_req, res) => {
+      res.writeHead(200, { "Content-Type": "text/event-stream" });
+      res.write('data: {"choices":[{"delta":{"content":"cut off"}}]}\n\n');
+      res.end();
+    });
+    await new Promise<void>((resolve) => server.listen(0, resolve));
+    const port = (server.address() as { port: number }).port;
+    const errChunks: string[] = [];
+    const stderr = {
+      write: (c: unknown) => { errChunks.push(String(c)); return true; },
+    } as unknown as NodeJS.WritableStream;
+    const stdout = { write: () => true } as unknown as NodeJS.WritableStream;
+    try {
+      const result = await executePrompt(
+        "incomplete",
+        makeConfig({
+          backend: "codex",
+          codexApiKey: "sk-test",
+          codexApiUrl: `http://localhost:${port}/v1/chat/completions`,
+        }),
+        stdout,
+        {},
+        stderr,
+      );
+      assert.equal(result.status, 1);
+      assert.ok(
+        errChunks.join("").includes("without a completion marker"),
+        "stderr should name the missing completion marker",
+      );
+    } finally {
+      server.close();
+    }
+  });
+
+  it("codex request is destroyed when the run's abort signal fires", async () => {
+    const http = require("node:http") as typeof import("node:http");
+    let openRes: import("node:http").ServerResponse | undefined;
+    // Headers + one chunk, then stall; neither watchdog fires before the abort.
+    const server = http.createServer((_req, res) => {
+      openRes = res;
+      res.writeHead(200, { "Content-Type": "text/event-stream" });
+      res.write('data: {"choices":[{"delta":{"content":"working"}}]}\n\n');
+    });
+    await new Promise<void>((resolve) => server.listen(0, resolve));
+    const port = (server.address() as { port: number }).port;
+    const errChunks: string[] = [];
+    const stderr = {
+      write: (c: unknown) => { errChunks.push(String(c)); return true; },
+    } as unknown as NodeJS.WritableStream;
+    const stdout = { write: () => true } as unknown as NodeJS.WritableStream;
+    const controller = new AbortController();
+    const abortTimer = setTimeout(() => controller.abort(), 50);
+    try {
+      const result = await executePrompt(
+        "abort me",
+        makeConfig({
+          backend: "codex",
+          codexApiKey: "sk-test",
+          codexApiUrl: `http://localhost:${port}/v1/chat/completions`,
+          idleTimeoutMs: 5000,
+          maxDurationMs: 0,
+        }),
+        stdout,
+        {},
+        stderr,
+        undefined,
+        undefined,
+        controller.signal,
+      );
+      assert.equal(result.status, 1);
+      assert.ok(
+        errChunks.join("").includes("aborted"),
+        "stderr should report the abort",
+      );
+    } finally {
+      clearTimeout(abortTimer);
+      openRes?.destroy();
       server.close();
     }
   });

@@ -1,10 +1,31 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, readSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  appendFileSync,
+  closeSync,
+  fstatSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createJournalFollower, listArtifacts, resolveArtifactPath, streamRunEventsSse, type StreamTarget } from "./runfiles";
+import {
+  JOURNAL_CHUNK_BYTES,
+  createJournalFollower,
+  listArtifacts,
+  openArtifact,
+  resolveArtifactPath,
+  streamRunEventsSse,
+  type StreamTarget,
+} from "./runfiles";
 
 /** A run dir with an `artifacts/` subdir and a couple of raw capture files at the root. */
 function makeRunDir(): string {
@@ -135,6 +156,68 @@ test("no capture file is reachable: an artifacts/ symlink to a .out is rejected"
   }
 });
 
+// === openArtifact: single-open, TOCTOU-safe ===
+
+test("openArtifact opens a contained file once and fstat reports its size and name", () => {
+  const runDir = makeRunDir();
+  try {
+    const payload = "artifact payload bytes";
+    writeFileSync(join(runDir, "artifacts", "ok.txt"), payload);
+    const opened = openArtifact(runDir, "ok.txt");
+    assert.ok(opened, "a contained regular file opens");
+    assert.equal(opened!.name, "ok.txt");
+    assert.equal(opened!.size, Buffer.byteLength(payload));
+    // fstat on the returned descriptor matches, and the descriptor reads the file.
+    assert.equal(fstatSync(opened!.fd).size, Buffer.byteLength(payload));
+    assert.equal(readFileSync(opened!.fd, "utf8"), payload);
+    closeSync(opened!.fd);
+  } finally {
+    rmSync(runDir, { recursive: true, force: true });
+  }
+});
+
+test("openArtifact returns null (leaking no fd) for a traversal, a directory, and a non-ASCII contained name works", () => {
+  const runDir = makeRunDir();
+  try {
+    mkdirSync(join(runDir, "artifacts", "adir"), { recursive: true });
+    assert.equal(openArtifact(runDir, "../000001-build__step.out"), null, "traversal → null");
+    assert.equal(openArtifact(runDir, "adir"), null, "a directory is not a downloadable artifact");
+    // A non-ASCII file name opens and reports its own basename.
+    writeFileSync(join(runDir, "artifacts", "报告.txt"), "r");
+    const opened = openArtifact(runDir, "报告.txt");
+    assert.ok(opened);
+    assert.equal(opened!.name, "报告.txt");
+    closeSync(opened!.fd);
+  } finally {
+    rmSync(runDir, { recursive: true, force: true });
+  }
+});
+
+test("openArtifact does not serve a file swapped for an escaping symlink after the resolve check (O_NOFOLLOW)", () => {
+  const runDir = makeRunDir();
+  try {
+    // A real regular file passes resolution; an outside secret the attacker targets.
+    const artifact = join(runDir, "artifacts", "report.txt");
+    writeFileSync(artifact, "benign payload");
+    const outside = join(runDir, "secret-outside.txt");
+    writeFileSync(outside, "SECRET OUTSIDE THE RUN DIR");
+
+    // Inject the swap between resolve and open: replace the just-resolved file
+    // with a symlink pointing OUTSIDE the run dir, exactly the TOCTOU race.
+    let swapped = false;
+    const opened = openArtifact(runDir, "report.txt", (resolved) => {
+      unlinkSync(resolved);
+      symlinkSync(outside, resolved);
+      swapped = true;
+    });
+
+    assert.ok(swapped, "the swap hook fired between resolve and open");
+    assert.equal(opened, null, "O_NOFOLLOW refuses the swapped-in symlink instead of following it");
+  } finally {
+    rmSync(runDir, { recursive: true, force: true });
+  }
+});
+
 // === SSE framing ===
 
 /** Collect every write; report `aborted` and run abort callbacks on demand. */
@@ -144,8 +227,12 @@ function fakeTarget(): StreamTarget & { chunks: string[]; abort: () => void } {
   const chunks: string[] = [];
   return {
     chunks,
-    write(chunk: string): void {
+    write(chunk: string): boolean {
       chunks.push(chunk);
+      return true;
+    },
+    drain(): Promise<void> {
+      return Promise.resolve();
     },
     get aborted(): boolean {
       return aborted;
@@ -196,12 +283,12 @@ test("createJournalFollower emits only complete lines and finishes a split line 
   const file = join(runDir, "run_summary.jsonl");
   const follower = createJournalFollower();
   try {
-    assert.deepEqual(follower.readNewLines(file), [], "missing file is not an error");
+    assert.deepEqual(follower.readNewLines(runDir), [], "missing file is not an error");
     writeFileSync(file, '{"a":1}\n{"b":');
-    assert.deepEqual(follower.readNewLines(file), ['{"a":1}'], "the partial trailing line is withheld");
+    assert.deepEqual(follower.readNewLines(runDir), ['{"a":1}'], "the partial trailing line is withheld");
     appendFileSync(file, '2}\n');
-    assert.deepEqual(follower.readNewLines(file), ['{"b":2}'], "the completed line is emitted from the buffered tail");
-    assert.deepEqual(follower.readNewLines(file), [], "no appended bytes, no lines");
+    assert.deepEqual(follower.readNewLines(runDir), ['{"b":2}'], "the completed line is emitted from the buffered tail");
+    assert.deepEqual(follower.readNewLines(runDir), [], "no appended bytes, no lines");
   } finally {
     follower.close();
     rmSync(runDir, { recursive: true, force: true });
@@ -280,6 +367,145 @@ test("SSE follow reads each appended journal byte exactly once, never before the
     offset += r.bytes;
   }
   assert.equal(offset, totalBytes);
+});
+
+test("the follower drains a 50 MB journal in bounded chunks — no single read exceeds 64 KB", () => {
+  const runDir = mkdtempSync(join(tmpdir(), "jaiph-follow-big-"));
+  const file = join(runDir, "run_summary.jsonl");
+  // ~50 MB of complete newline-terminated lines.
+  const line = '{"x":1234567}\n'; // 14 bytes
+  const target = 50 * 1024 * 1024;
+  const count = Math.ceil(target / line.length);
+  writeFileSync(file, Buffer.from(line.repeat(count)));
+  const totalBytes = count * line.length;
+
+  // Measure every positional read against the follower's fd (the only fs reads
+  // during this test). Patch the live CJS module object the compiled code calls.
+  const fsAny = createRequire(__filename)("node:fs") as Record<string, unknown>;
+  const origReadSync = readSync;
+  let maxRead = 0;
+  let bytesRead = 0;
+  const follower = createJournalFollower();
+  try {
+    fsAny.readSync = (fd: number, buffer: Buffer, off: number, len: number, pos: number): number => {
+      const n = (origReadSync as (...a: unknown[]) => number)(fd, buffer, off, len, pos);
+      if (len > maxRead) maxRead = len; // the request size is the real allocation/read bound
+      bytesRead += n;
+      return n;
+    };
+    let lines = 0;
+    for (;;) {
+      const got = follower.readNewLines(runDir);
+      if (got.length === 0) break;
+      lines += got.length;
+    }
+    assert.ok(maxRead <= JOURNAL_CHUNK_BYTES, `largest single read ${maxRead} must be <= ${JOURNAL_CHUNK_BYTES}`);
+    assert.equal(bytesRead, totalBytes, "every byte was read exactly once across the chunks");
+    assert.equal(lines, count, "every line was delivered");
+  } finally {
+    fsAny.readSync = origReadSync;
+    follower.close();
+    rmSync(runDir, { recursive: true, force: true });
+  }
+});
+
+/** A target whose `write` reports a full socket and whose `drain` resolves only on demand. */
+function backpressureTarget(): StreamTarget & {
+  chunks: string[];
+  allowWrite: (v: boolean) => void;
+  releaseDrain: () => void;
+  drainPending: () => number;
+} {
+  const chunks: string[] = [];
+  let allow = true;
+  let drainers: Array<() => void> = [];
+  return {
+    chunks,
+    write(chunk: string): boolean {
+      chunks.push(chunk);
+      return allow;
+    },
+    drain(): Promise<void> {
+      return new Promise((r) => drainers.push(r));
+    },
+    get aborted(): boolean {
+      return false;
+    },
+    onAbort(): void {},
+    allowWrite(v: boolean): void {
+      allow = v;
+    },
+    releaseDrain(): void {
+      const rs = drainers;
+      drainers = [];
+      for (const r of rs) r();
+    },
+    drainPending(): number {
+      return drainers.length;
+    },
+  };
+}
+
+test("a write that returns false stops further journal reads until drain resolves", async () => {
+  const runDir = mkdtempSync(join(tmpdir(), "jaiph-follow-bp-"));
+  const file = join(runDir, "run_summary.jsonl");
+  // Several chunks' worth of complete lines, so a single flush must read more
+  // than one chunk to catch up — giving a "next read" to gate behind drain.
+  const line = '{"n":1}\n';
+  const count = Math.ceil((JOURNAL_CHUNK_BYTES * 3) / line.length);
+  writeFileSync(file, Buffer.from(line.repeat(count)));
+
+  const fsAny = createRequire(__filename)("node:fs") as Record<string, unknown>;
+  const origReadSync = readSync;
+  let readCalls = 0;
+  const target = backpressureTarget();
+  target.allowWrite(false); // the socket buffer is full on the very first write
+  let terminal = false;
+  try {
+    fsAny.readSync = (...args: unknown[]): number => {
+      readCalls += 1;
+      return (origReadSync as (...a: unknown[]) => number)(...args);
+    };
+    const done = streamRunEventsSse(target, {
+      resolveRunDir: () => runDir,
+      isTerminal: () => terminal,
+      pollMs: 5,
+      keepAliveMs: 15000,
+    });
+    // Wait until the follower has read the first chunk, written it, and parked on
+    // drain (write returned false).
+    const deadline = Date.now() + 5000;
+    while (target.drainPending() === 0) {
+      if (Date.now() > deadline) throw new Error("timed out waiting for the follower to block on drain");
+      await new Promise((r) => setTimeout(r, 5));
+    }
+    const readsWhenBlocked = readCalls;
+    assert.ok(readsWhenBlocked >= 1, "the first chunk was read");
+    // While drain is pending, the follower must not read further chunks.
+    await new Promise((r) => setTimeout(r, 60));
+    assert.equal(readCalls, readsWhenBlocked, "no further reads happen while backpressured on drain");
+
+    // Let it through: writes now succeed and the parked drain resolves, so the
+    // follower reads the remaining chunks and delivers every line.
+    target.allowWrite(true);
+    terminal = true;
+    // Resolve drains until the stream completes (it may park again between chunks
+    // if a later write still reported the socket full, but allow is true now).
+    const complete = (async (): Promise<void> => {
+      for (;;) {
+        target.releaseDrain();
+        await new Promise((r) => setTimeout(r, 5));
+        if (target.chunks.some((c) => c === "event: end\ndata: {}\n\n")) break;
+      }
+    })();
+    await Promise.all([done, complete]);
+    assert.ok(readCalls > readsWhenBlocked, "reads resumed once drain was released");
+    const payloads = target.chunks.filter((c) => c.startsWith("data: ")).length;
+    assert.equal(payloads, count, "every journal line was delivered after drain");
+  } finally {
+    fsAny.readSync = origReadSync;
+    rmSync(runDir, { recursive: true, force: true });
+  }
 });
 
 test("streamRunEventsSse stops promptly when the client disconnects mid-run", async () => {

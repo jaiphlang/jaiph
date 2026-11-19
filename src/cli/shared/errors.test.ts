@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
+import { mkdtempSync, readFileSync, readSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -11,7 +12,45 @@ import {
   latestRunFiles,
   readFailedStepOutput,
   failedStepArtifactPaths,
+  findRunDir,
 } from "./errors";
+
+// === findRunDir ===
+
+test("findRunDir matches the RUN_START run id reading only the first line, never the whole journal", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-findrundir-"));
+  const runDir = join(root, "2026-11-16", "12-00-00-tools");
+  mkdirSync(runDir, { recursive: true });
+  const journal = join(runDir, "run_summary.jsonl");
+  // A large journal: a small RUN_START line followed by megabytes of other lines.
+  const first = JSON.stringify({ type: "RUN_START", run_id: "wanted", def: "build" });
+  const filler = `${'{"type":"STEP_END","status":0}\n'.repeat(200000)}`; // ~6 MB
+  writeFileSync(journal, `${first}\n${filler}`);
+
+  const fsAny = createRequire(__filename)("node:fs") as Record<string, unknown>;
+  const origReadFileSync = readFileSync;
+  const origReadSync = readSync;
+  let wholeFileReads = 0;
+  let maxRead = 0;
+  try {
+    fsAny.readFileSync = (...args: unknown[]): unknown => {
+      if (args[0] === journal) wholeFileReads += 1;
+      return (origReadFileSync as (...a: unknown[]) => unknown)(...args);
+    };
+    fsAny.readSync = (fd: number, buffer: Buffer, off: number, len: number, pos: number): number => {
+      if (len > maxRead) maxRead = len;
+      return (origReadSync as (...a: unknown[]) => number)(fd, buffer, off, len, pos);
+    };
+    assert.equal(findRunDir(root, "wanted"), runDir, "locates the run dir by its RUN_START id");
+    assert.equal(findRunDir(root, "absent"), null, "a run id with no matching RUN_START is null");
+    assert.equal(wholeFileReads, 0, "the journal is never loaded whole to read its first line");
+    assert.ok(maxRead <= 64 * 1024, `first-line read is bounded (<= 64 KB), got ${maxRead}`);
+  } finally {
+    fsAny.readFileSync = origReadFileSync;
+    fsAny.readSync = origReadSync;
+    rmSync(root, { recursive: true, force: true });
+  }
+});
 
 // === summarizeError ===
 

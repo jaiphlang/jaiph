@@ -1,5 +1,11 @@
 import type { StreamWriter } from "./stream-parser";
-import type { PromptConfig } from "./prompt-config";
+import {
+  DEFAULT_PROMPT_IDLE_TIMEOUT_MS,
+  DEFAULT_PROMPT_MAX_DURATION_MS,
+  promptIdleTimeoutReason,
+  promptMaxDurationReason,
+  type PromptConfig,
+} from "./prompt-config";
 
 // The Codex (OpenAI Chat Completions) HTTP backend. Split out of `prompt.ts` so
 // its `node:https` / `node:http` requires do not count against the sibling
@@ -14,6 +20,15 @@ const CODEX_DEFAULT_MODEL = "gpt-4o";
  * plus a named prompt's granted `use` keys (see `runBackend`). Codex has no
  * subprocess to inherit it, so nothing here reads it yet, but the parameter
  * keeps the `use` contract uniform across backends and lets tests observe it.
+ *
+ * Codex has no process for the leader to signal and no stream the subprocess
+ * watchdog can watch, so the two activity-based prompt-watchdog layers are
+ * enforced here instead: the idle timeout (resets on every received chunk) and
+ * the absolute max duration. Both destroy the request and fail the prompt with
+ * the same text the subprocess backends use, feeding the retry/backoff loop.
+ * The completion-grace layer is subprocess-only — the codex stream ends with an
+ * explicit `[DONE]` / `finish_reason`, so there is no "finished but won't exit"
+ * case. `signal` is the run's abort signal; aborting it destroys the request.
  */
 export function runCodexBackend(
   config: PromptConfig,
@@ -21,6 +36,7 @@ export function runCodexBackend(
   writer: StreamWriter,
   stderr: NodeJS.WritableStream,
   requestEnv: NodeJS.ProcessEnv = {},
+  signal?: AbortSignal,
 ): Promise<{ final: string; status: number }> {
   if (!config.codexApiKey) {
     stderr.write(
@@ -43,8 +59,59 @@ export function runCodexBackend(
     ? (require("node:https") as typeof import("node:https"))
     : (require("node:http") as typeof import("node:http"));
 
+  const idleTimeoutMs = config.idleTimeoutMs ?? DEFAULT_PROMPT_IDLE_TIMEOUT_MS;
+  const maxDurationMs = config.maxDurationMs ?? DEFAULT_PROMPT_MAX_DURATION_MS;
+
   return new Promise((resolve) => {
-    const req = httpMod.request(
+    let settled = false;
+    let final = "";
+    let idleTimer: NodeJS.Timeout | undefined;
+    let maxTimer: NodeJS.Timeout | undefined;
+    // Assigned below; referenced only from deferred callbacks, so the request is
+    // always constructed before any of them can fire.
+    let req: import("node:http").ClientRequest;
+
+    const clearTimers = (): void => {
+      if (idleTimer) clearTimeout(idleTimer);
+      if (maxTimer) clearTimeout(maxTimer);
+      idleTimer = maxTimer = undefined;
+    };
+
+    const settle = (status: number): void => {
+      if (settled) return;
+      settled = true;
+      clearTimers();
+      if (signal) signal.removeEventListener("abort", onAbort);
+      resolve({ final, status });
+    };
+
+    // A watchdog layer fired: mirror the subprocess backends — write the same
+    // reason text, destroy the request, and fail into the retry/backoff loop.
+    const expire = (reason: string): void => {
+      if (settled) return;
+      stderr.write(`jaiph: ${reason}; terminating codex backend.\n`);
+      req.destroy();
+      settle(1);
+    };
+
+    // Layer 2 — idle timeout. Armed at request start and reset on every received
+    // chunk, so a server that accepts the connection and stalls mid-stream fails
+    // here rather than hanging the run.
+    const armIdle = (): void => {
+      if (idleTimeoutMs <= 0) return;
+      if (idleTimer) clearTimeout(idleTimer);
+      idleTimer = setTimeout(() => expire(promptIdleTimeoutReason(idleTimeoutMs)), idleTimeoutMs);
+      idleTimer.unref?.();
+    };
+
+    function onAbort(): void {
+      if (settled) return;
+      stderr.write("jaiph: prompt aborted; terminating codex backend.\n");
+      req.destroy();
+      settle(1);
+    }
+
+    req = httpMod.request(
       {
         hostname: url.hostname,
         port: url.port || (isHttps ? 443 : 80),
@@ -59,9 +126,11 @@ export function runCodexBackend(
         if (res.statusCode !== 200) {
           let errBody = "";
           res.on("data", (chunk: Buffer) => {
+            armIdle();
             errBody += chunk.toString();
           });
           res.on("end", () => {
+            if (settled) return;
             let msg = `HTTP ${res.statusCode}`;
             try {
               const parsed = JSON.parse(errBody) as Record<string, unknown>;
@@ -71,27 +140,36 @@ export function runCodexBackend(
               // Use raw status code only.
             }
             stderr.write(`jaiph: codex API error: ${msg}\n`);
-            resolve({ final: "", status: 1 });
+            settle(1);
           });
           return;
         }
 
-        let final = "";
         let wroteFinalHeader = false;
         let buffer = "";
+        // A well-formed stream ends with an explicit terminator: a `[DONE]`
+        // sentinel or a choice carrying a non-null `finish_reason`. A stream that
+        // closes without one was cut off mid-answer and is a failure.
+        let sawTerminator = false;
 
         res.on("data", (chunk: Buffer) => {
+          armIdle();
           buffer += chunk.toString();
           const lines = buffer.split("\n");
           buffer = lines.pop() ?? "";
           for (const line of lines) {
             if (!line.startsWith("data: ")) continue;
             const data = line.slice(6);
-            if (data === "[DONE]") continue;
+            if (data === "[DONE]") {
+              sawTerminator = true;
+              continue;
+            }
             try {
               const obj = JSON.parse(data) as Record<string, unknown>;
               const choices = obj.choices as Array<Record<string, unknown>> | undefined;
-              const delta = choices?.[0]?.delta as Record<string, unknown> | undefined;
+              const choice = choices?.[0];
+              if (choice && choice.finish_reason != null) sawTerminator = true;
+              const delta = choice?.delta as Record<string, unknown> | undefined;
               const content = delta?.content;
               if (typeof content === "string" && content.length > 0) {
                 if (!wroteFinalHeader) {
@@ -108,20 +186,44 @@ export function runCodexBackend(
         });
 
         res.on("end", () => {
-          resolve({ final, status: 0 });
+          if (settled) return;
+          if (sawTerminator) {
+            settle(0);
+            return;
+          }
+          stderr.write(
+            "jaiph: codex stream ended without a completion marker ([DONE] or finish_reason)\n",
+          );
+          settle(1);
         });
 
         res.on("error", (err: Error) => {
+          if (settled) return;
           stderr.write(`jaiph: codex stream error: ${err.message}\n`);
-          resolve({ final, status: 1 });
+          settle(1);
         });
       },
     );
 
     req.on("error", (err: Error) => {
+      if (settled) return;
       stderr.write(`jaiph: codex API request failed: ${err.message}\n`);
-      resolve({ final: "", status: 1 });
+      settle(1);
     });
+
+    if (maxDurationMs > 0) {
+      maxTimer = setTimeout(() => expire(promptMaxDurationReason(maxDurationMs)), maxDurationMs);
+      maxTimer.unref?.();
+    }
+    armIdle();
+
+    if (signal) {
+      if (signal.aborted) {
+        onAbort();
+        return;
+      }
+      signal.addEventListener("abort", onAbort);
+    }
 
     req.write(body);
     req.end();

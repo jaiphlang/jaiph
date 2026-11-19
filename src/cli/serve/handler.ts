@@ -1,10 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { errText } from "../../errors";
 import { AsyncLocalStorage } from "node:async_hooks";
-import { statSync } from "node:fs";
-import { basename, join } from "node:path";
+import { closeSync, statSync } from "node:fs";
+import { join } from "node:path";
 import type { McpToolSpec } from "../shared/mcp-tools";
-import { McpServer, type McpCallContext } from "../shared/mcp-server";
+import { McpServer, type McpCallContext, type McpHttpScope } from "../shared/mcp-server";
 import type { DefCallResult, DefCallContext } from "../shared/workflow-call";
 import { buildOpenApi } from "./openapi";
 import {
@@ -16,7 +16,7 @@ import {
 } from "./docs";
 import {
   listArtifacts,
-  resolveArtifactPath,
+  openArtifact,
   streamRunEventsSse,
   RUN_SUMMARY,
   type StreamTarget,
@@ -24,7 +24,15 @@ import {
 import { hashArgs } from "./run-store";
 import { verifyRunJournal } from "../../runtime";
 import { createAuthenticator, openPrincipal, type Authenticator, type Capability, type Principal } from "./auth";
-import { safeJsonObject, isJsonContentType, clampInt } from "./http-util";
+import {
+  safeJsonObject,
+  isJsonContentType,
+  clampInt,
+  safeDecodeSegment,
+  safeCorrelationId,
+  contentDisposition,
+} from "./http-util";
+import { checkRequestOrigin, type OriginGuardConfig } from "./origin";
 import type { RunStatus, RunRecord, ServeRequest, ServeResponse, ServeHandlerOptions } from "./types";
 
 export type { RunStatus, RunRecord, ServeRequest, ServeResponse, ServeHandlerOptions } from "./types";
@@ -83,6 +91,11 @@ export class ServeHandler {
   private readonly auth: Authenticator;
   /** Whether `/docs` and `/openapi.json` are exposed. */
   private readonly exposeDocs: boolean;
+  /** Bound address + allowlists for the cross-origin / Host guard. */
+  private readonly boundHost: string;
+  private readonly getBoundPort: () => number;
+  private readonly allowedOrigins: Set<string>;
+  private readonly allowedHosts: Set<string> | undefined;
   /**
    * The authenticated principal + correlation id of the request in flight,
    * propagated across every async step (including the MCP engine's `tools/call`
@@ -97,6 +110,10 @@ export class ServeHandler {
     this.newRunId = opts.newRunId ?? randomUUID;
     this.auth = opts.authenticator ?? createAuthenticator({ token: opts.token });
     this.exposeDocs = opts.exposeDocs ?? true;
+    this.boundHost = opts.boundHost ?? "127.0.0.1";
+    this.getBoundPort = opts.getBoundPort ?? (() => 0);
+    this.allowedOrigins = new Set(opts.allowedOrigins ?? []);
+    this.allowedHosts = opts.allowedHosts ? new Set(opts.allowedHosts) : undefined;
     this.mcp = new McpServer({
       serverVersion: opts.version,
       getTools: opts.getTools,
@@ -223,6 +240,13 @@ export class ServeHandler {
   async handleRequest(req: ServeRequest): Promise<ServeResponse> {
     const { method, path } = req;
 
+    // Reject a cross-origin `Origin` or a wrong `Host` before any routing, so a
+    // web page on another origin (or a DNS-rebinding name) can neither start a
+    // run nor read `/runs`, events, or artifacts. A same-origin request (the
+    // Swagger UI) and a request with no `Origin` (curl, MCP clients) pass.
+    const rejection = checkRequestOrigin(req.headers, this.originConfig());
+    if (rejection) return this.error(403, rejection.code, rejection.message);
+
     if (path === "/" && method === "GET") {
       return { status: 302, headers: { location: "/docs" }, body: "" };
     }
@@ -284,18 +308,31 @@ export class ServeHandler {
     return this.reqCtx.getStore() ?? { principal: openPrincipal(), correlationId: "" };
   }
 
+  /** Current cross-origin / Host guard config (bound port is read per request). */
+  private originConfig(): OriginGuardConfig {
+    return {
+      boundHost: this.boundHost,
+      boundPort: this.getBoundPort(),
+      allowedOrigins: this.allowedOrigins,
+      allowedHosts: this.allowedHosts,
+    };
+  }
+
+  /** 415 for a run-initiating POST (`/mcp`, `POST /{name}`) without a JSON body type. */
+  private unsupportedMediaType(): ServeResponse {
+    return this.error(415, "E_UNSUPPORTED_MEDIA_TYPE", "request body must be application/json");
+  }
+
   /**
    * The request/correlation id for this request: an `X-Correlation-Id` /
-   * `X-Request-Id` header (sanitized, bounded) if the caller supplied one, else
-   * a fresh UUID. Newlines are stripped so it can never forge an audit log line.
+   * `X-Request-Id` header if the caller supplied an audit-safe one (restricted to
+   * `[A-Za-z0-9._:-]`, ≤128 chars), else a fresh UUID. The charset admits no
+   * whitespace, `=`, or newline, so a caller-chosen value can never forge a
+   * `key=value` pair (or a second line) in an audit log line.
    */
   private correlationOf(req: ServeRequest): string {
     const raw = req.headers["x-correlation-id"] ?? req.headers["x-request-id"];
-    if (typeof raw === "string") {
-      const clean = raw.replace(/[\r\n]/g, "").trim().slice(0, 200);
-      if (clean.length > 0) return clean;
-    }
-    return randomUUID();
+    return safeCorrelationId(raw) ?? randomUUID();
   }
 
   /** 403 for a principal missing a required capability. */
@@ -338,35 +375,45 @@ export class ServeHandler {
     if (events) {
       if (method !== "GET") return this.methodNotAllowed();
       if (!principal.capabilities.has("inspect")) return this.forbidden("inspect");
-      return this.runEvents(req, decodeURIComponent(events[1]));
+      const id = safeDecodeSegment(events[1]);
+      if (id === null) return this.error(404, "E_NOT_FOUND", "unknown run id");
+      return this.runEvents(req, id);
     }
 
     const artifactsList = /^\/runs\/([^/]+)\/artifacts$/.exec(path);
     if (artifactsList) {
       if (method !== "GET") return this.methodNotAllowed();
       if (!principal.capabilities.has("inspect")) return this.forbidden("inspect");
-      return this.listRunArtifacts(decodeURIComponent(artifactsList[1]));
+      const id = safeDecodeSegment(artifactsList[1]);
+      if (id === null) return this.error(404, "E_NOT_FOUND", "unknown run id");
+      return this.listRunArtifacts(id);
     }
 
     const artifactGet = /^\/runs\/([^/]+)\/artifacts\/(.+)$/.exec(path);
     if (artifactGet) {
       if (method !== "GET") return this.methodNotAllowed();
       if (!principal.capabilities.has("inspect")) return this.forbidden("inspect");
-      return this.downloadArtifact(decodeURIComponent(artifactGet[1]), artifactGet[2]);
+      const id = safeDecodeSegment(artifactGet[1]);
+      if (id === null) return this.error(404, "E_NOT_FOUND", "unknown run id");
+      return this.downloadArtifact(id, artifactGet[2]);
     }
 
     const cancel = /^\/runs\/([^/]+)\/cancel$/.exec(path);
     if (cancel) {
       if (method !== "POST") return this.methodNotAllowed();
       if (!principal.capabilities.has("cancel")) return this.forbidden("cancel");
-      return this.cancelRun(decodeURIComponent(cancel[1]));
+      const id = safeDecodeSegment(cancel[1]);
+      if (id === null) return this.error(404, "E_NOT_FOUND", "unknown run id");
+      return this.cancelRun(id);
     }
 
     const getRun = /^\/runs\/([^/]+)$/.exec(path);
     if (getRun) {
       if (method !== "GET") return this.methodNotAllowed();
       if (!principal.capabilities.has("inspect")) return this.forbidden("inspect");
-      const record = this.lookupRun(decodeURIComponent(getRun[1]));
+      const id = safeDecodeSegment(getRun[1]);
+      if (id === null) return this.error(404, "E_NOT_FOUND", "unknown run id");
+      const record = this.lookupRun(id);
       if (!record) return this.error(404, "E_NOT_FOUND", "unknown run id");
       return this.json(200, this.toRunObject(record));
     }
@@ -375,7 +422,9 @@ export class ServeHandler {
     const invoke = /^\/([^/]+)$/.exec(path);
     if (invoke && method === "POST") {
       if (!principal.capabilities.has("invoke")) return this.forbidden("invoke");
-      return this.createRun(req, decodeURIComponent(invoke[1]));
+      const name = safeDecodeSegment(invoke[1]);
+      if (name === null) return this.error(404, "E_NOT_FOUND", `not found: ${path}`);
+      return this.createRun(req, name);
     }
 
     return this.error(404, "E_NOT_FOUND", `not found: ${path}`);
@@ -388,10 +437,13 @@ export class ServeHandler {
     if (req.bodyTooLarge) {
       return this.error(413, "E_BODY_TOO_LARGE", `request body exceeds ${MAX_BODY_BYTES} bytes`);
     }
-    const hasBody = req.body.length > 0;
-    if (hasBody && !isJsonContentType(req.headers["content-type"])) {
-      return this.error(415, "E_UNSUPPORTED_MEDIA_TYPE", "request body must be application/json");
+    // A run-initiating POST must declare application/json even with no body, so a
+    // cross-origin page cannot start a run with a no-preflight simple request
+    // (which can only set text/plain, form, or multipart content types).
+    if (!isJsonContentType(req.headers["content-type"])) {
+      return this.unsupportedMediaType();
     }
+    const hasBody = req.body.length > 0;
     let raw: Record<string, unknown>;
     if (hasBody) {
       let parsed: unknown;
@@ -502,6 +554,10 @@ export class ServeHandler {
         }),
       };
     }
+    // Same simple-request defense as REST: `POST /mcp` must be application/json.
+    if (!isJsonContentType(req.headers["content-type"])) {
+      return this.unsupportedMediaType();
+    }
     if (req.bodyTooLarge) {
       return this.error(413, "E_BODY_TOO_LARGE", `request body exceeds ${MAX_BODY_BYTES} bytes`);
     }
@@ -529,9 +585,20 @@ export class ServeHandler {
       };
     }
 
+    // Per-request MCP scope: isolates every `tools/call` under a server-generated
+    // key (two calls sharing a client id stay independent) and scopes a
+    // `notifications/cancelled` to this principal + its `cancel` capability — so
+    // one principal can never cancel another's call, and an unscoped id can
+    // never reach a run it does not own.
+    const scope: McpHttpScope = {
+      owner: principal.subject,
+      canCancel: principal.capabilities.has("cancel"),
+    };
+
     // A tools/call may emit progress; stream it as SSE when the client offers
-    // that content type. The client hanging up cancels the run through the same
-    // MCP cancel path (kills the child process tree).
+    // that content type. The client hanging up cancels exactly this call through
+    // the handle the MCP engine hands back below (kills the child process tree)
+    // — never an id lookup that could kill a different call sharing the id.
     if (requestId !== undefined && method === "tools/call" && wantsSse) {
       // The stream body runs after this method returns (outside the request's
       // AsyncLocalStorage scope), so capture the identity and re-establish it
@@ -543,15 +610,19 @@ export class ServeHandler {
         headers: { "content-type": "text/event-stream", "cache-control": "no-cache", connection: "keep-alive" },
         body: "",
         stream: (target) => {
-          target.onAbort(() => {
-            void this.mcp.handleLine(
-              JSON.stringify({ jsonrpc: "2.0", method: "notifications/cancelled", params: { requestId } }),
-            );
-          });
+          // Capture this call's own cancel handle (set synchronously as the call
+          // registers) and fire it on disconnect — no id lookup.
+          const control: { cancel?: () => void } = {};
+          target.onAbort(() => control.cancel?.());
+          const streamScope: McpHttpScope = { ...scope, registerCanceller: (fn) => void (control.cancel = fn) };
           return this.reqCtx.run(captured, () =>
-            this.mcp.handleLine(req.body, (m) => {
-              if (!target.aborted) target.write(`data: ${JSON.stringify(m)}\n\n`);
-            }),
+            this.mcp.handleLine(
+              req.body,
+              (m) => {
+                if (!target.aborted) target.write(`data: ${JSON.stringify(m)}\n\n`);
+              },
+              streamScope,
+            ),
           );
         },
       };
@@ -559,7 +630,7 @@ export class ServeHandler {
 
     // JSON mode: buffer this message's outbound traffic and return the reply.
     const collected: Record<string, unknown>[] = [];
-    await this.mcp.handleLine(req.body, (m) => collected.push(m));
+    await this.mcp.handleLine(req.body, (m) => collected.push(m), scope);
     // A pure notification produces nothing to return.
     if (collected.length === 0) return { status: 202, headers: {}, body: "" };
     const reply = collected.find((m) => "id" in m) ?? collected[collected.length - 1];
@@ -639,14 +710,22 @@ export class ServeHandler {
 
   /**
    * Host-side run dir for a record: its own `run_dir` (set at finalize), else
-   * the cached mid-run resolution, else one injected-resolver scan whose hit is
-   * cached on the record — repeated polls never rescan the runs tree.
+   * the cached mid-run resolution, else one injected-resolver scan whose result
+   * is cached on the record — repeated polls never rescan the runs tree. A hit is
+   * cached as `resolvedRunDir`; a miss is cached (as `runDirMissCached`) only once
+   * the run is terminal, since a still-running run's dir may still appear on a
+   * later poll while a terminal run with no dir will never gain one.
    */
   private runDirFor(record: RunRecord): string | null {
     if (record.run_dir) return record.run_dir;
     if (record.resolvedRunDir) return record.resolvedRunDir;
+    if (record.runDirMissCached) return null;
     const dir = this.opts.resolveRunDir ? this.opts.resolveRunDir(record) : null;
-    if (dir) record.resolvedRunDir = dir;
+    if (dir) {
+      record.resolvedRunDir = dir;
+    } else if (isTerminal(record.status)) {
+      record.runDirMissCached = true;
+    }
     return dir;
   }
 
@@ -729,38 +808,32 @@ export class ServeHandler {
     if (!record) return this.error(404, "E_NOT_FOUND", "unknown run id");
     const dir = this.runDirFor(record);
     if (!dir) return this.error(404, "E_NOT_FOUND", "unknown artifact");
-    let requested: string;
-    try {
-      requested = decodeURIComponent(rawPath);
-    } catch {
-      return this.error(404, "E_NOT_FOUND", "unknown artifact");
-    }
-    const abs = resolveArtifactPath(dir, requested);
-    if (!abs) return this.error(404, "E_NOT_FOUND", "unknown artifact");
-    let size: number;
-    try {
-      size = statSync(abs).size;
-    } catch {
-      return this.error(404, "E_NOT_FOUND", "unknown artifact");
-    }
+    const requested = safeDecodeSegment(rawPath);
+    if (requested === null) return this.error(404, "E_NOT_FOUND", "unknown artifact");
+    // Resolve and open in one step: the file is opened once (O_NOFOLLOW) and its
+    // size + type come from fstat on that descriptor, so a step cannot swap the
+    // final component for an escaping symlink between the check and the read. The
+    // HTTP layer streams from this fd and closes it when done.
+    const opened = openArtifact(dir, requested);
+    if (!opened) return this.error(404, "E_NOT_FOUND", "unknown artifact");
     const maxBytes = this.opts.maxArtifactBytes ?? 0;
-    if (maxBytes > 0 && size > maxBytes) {
+    if (maxBytes > 0 && opened.size > maxBytes) {
+      closeSync(opened.fd);
       return this.error(
         413,
         "E_ARTIFACT_TOO_LARGE",
-        `artifact is ${size} bytes; downloads are capped at ${maxBytes} (JAIPH_SERVE_MAX_ARTIFACT_BYTES)`,
+        `artifact is ${opened.size} bytes; downloads are capped at ${maxBytes} (JAIPH_SERVE_MAX_ARTIFACT_BYTES)`,
       );
     }
-    const filename = basename(abs).replace(/"/g, "");
     return {
       status: 200,
       headers: {
         "content-type": "application/octet-stream",
-        "content-disposition": `attachment; filename="${filename}"`,
-        "content-length": String(size),
+        "content-disposition": contentDisposition(opened.name),
+        "content-length": String(opened.size),
       },
       body: "",
-      bodyFile: { path: abs, size },
+      bodyFile: { fd: opened.fd, size: opened.size },
     };
   }
 

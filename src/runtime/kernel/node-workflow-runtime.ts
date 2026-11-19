@@ -5,16 +5,17 @@ import { basename, dirname, join, resolve as resolvePath } from "node:path";
 import { PassThrough, type Readable } from "node:stream";
 import { randomUUID } from "node:crypto";
 import { AsyncLocalStorage } from "node:async_hooks";
-import { inlineScriptName, nestedScriptName } from "../../inline-script-name";
+import { inlineScriptName, moduleScriptFileName, nestedScriptName } from "../../inline-script-name";
 import {
-  argsToRuntimeString,
   canonicalizeTripleQuotedString,
   MODULE_FIELDS,
+  parseNestedCallArg,
   resolveInterpreterFromShebang,
   literalText,
+  scanInlineCaptures,
   shebangForLang,
 } from "../../parser";
-import type { CatchBody, Def, Expr, LocalDecl, MatchExprDef, MatchPatternDef, StepDef } from "../../types";
+import type { Arg, CatchBody, Def, Expr, LocalDecl, MatchExprDef, MatchPatternDef, StepDef } from "../../types";
 import {
   executePrompt,
   modelForStepEvent,
@@ -25,25 +26,23 @@ import {
   resolvePromptStepName,
   type PromptSource,
 } from "./prompt";
-import { appendRunSummaryLine, CHAIN_KEY_ENV } from "./emit";
+import { CHAIN_KEY_ENV } from "./emit";
 import { buildStepDisplayParamPairs } from "./format-params";
 import { resolveScriptRef, resolveDefRef, resolvePromptRef, type RuntimeGraph } from "./graph";
 import type { DefMetadata } from "../../types";
 import { interpolateDefMetadata, resolveModuleMetadata } from "../../config";
 import { extractJson, validateFields } from "./schema";
 import {
-  commaArgsToInterpolated,
+  decodeCallArgLiteral,
   interpolate,
   MAX_EMBED,
   MAX_RECURSION_DEPTH,
   nowIso,
-  parseArgTokens,
-  parseInlineCaptureCall,
   parsePromptSchema,
   sanitizeName,
   type PromptSchemaField,
 } from "./runtime-arg-parser";
-import { killProcessTreeEscalating } from "./portability";
+import { killProcessTreeEscalating, spawnInOwnGroup, trackChildGroup } from "./portability";
 import { RuntimeEventEmitter, type Frame } from "./runtime-event-emitter";
 import { createStepIdleOutputWarn } from "./step-idle-warn";
 import { parseMaxSteps, maxStepsTrippedMessage } from "./max-steps";
@@ -61,6 +60,12 @@ import {
 
 export type { MockBodyDef } from "./runtime-mock";
 
+// Registry-key label for an async handle. It is only an internal id for the
+// `handleRegistry` Map and the invalid-handle diagnostic — NEVER a detection
+// marker. Whether a scope variable is a handle is decided by `scope.handles`
+// (the out-of-band map), not by inspecting a string value, so a captured
+// script/agent string that happens to read `__JAIPH_HANDLE__1` can never be
+// mistaken for a handle.
 const HANDLE_PREFIX = "__JAIPH_HANDLE__";
 
 /**
@@ -155,6 +160,16 @@ type AsyncHandle = {
 type Scope = {
   filePath: string;
   vars: Map<string, string>;
+  /**
+   * Async output handles bound in this scope, keyed by variable name and held
+   * OUT OF BAND from `vars` (whose values are plain captured strings). A name is
+   * a handle iff it is present here; a string in `vars` is never interpreted as
+   * a handle. On force, `resolveHandleVar` deletes the entry here and writes the
+   * resolved value into `vars` — so a result that happens to be `__JAIPH_HANDLE__N`
+   * stays a literal. Cloned (not shared) wherever `vars` is copied into a child
+   * scope, so a child's force never mutates the parent's binding.
+   */
+  handles?: Map<string, string>;
   env: NodeJS.ProcessEnv;
   /** Declared parameter names for the active workflow or rule. */
   declaredParamNames?: string[];
@@ -181,10 +196,16 @@ function localDeclName(decl: LocalDecl): string {
  * of that body but does not leak past it — mirroring the validator's block
  * scope, so a shadow inside a branch never overwrites the enclosing binding.
  */
+/** Clone a scope's out-of-band handle map so a child never mutates the parent's. */
+function cloneHandles(scope: Scope): Map<string, string> | undefined {
+  return scope.handles ? new Map(scope.handles) : undefined;
+}
+
 function blockChildScope(scope: Scope): Scope {
   return {
     ...scope,
     vars: new Map(scope.vars),
+    handles: cloneHandles(scope),
     locals: scope.locals ? new Map(scope.locals) : undefined,
   };
 }
@@ -248,7 +269,18 @@ export class NodeWorkflowRuntime {
   private asyncFrameStack = new AsyncLocalStorage<Frame[]>();
   private asyncIndicesStorage = new AsyncLocalStorage<number[]>();
   private inboxSeq = 0;
+  /**
+   * Root def-context stack for the synchronous (non-async-branch) execution
+   * path. Each `async ref(...)` branch runs against its OWN copy carried in
+   * `asyncDefCtxStack` so a branch's current def (the `send` sender, and the
+   * def-level `agent.model` / `run.recover_limit` an interleaved branch reads)
+   * never leaks across branches. Mirrors the per-branch frame stack
+   * (`asyncFrameStack`); the copied array holds the same `WorkflowContext`
+   * objects, so route lookup and queue delivery stay shared while "which def is
+   * on top" is isolated. Read/written only through `getDefCtxStack()`.
+   */
   private defCtxStack: WorkflowContext[] = [];
+  private asyncDefCtxStack = new AsyncLocalStorage<WorkflowContext[]>();
   private readonly mockBodies: Map<string, MockBodyDef>;
   private handleRegistry = new Map<string, AsyncHandle>();
   private handleIdCounter = 0;
@@ -287,6 +319,10 @@ export class NodeWorkflowRuntime {
     return this.asyncFrameStack.getStore() ?? this.stack;
   }
 
+  private getDefCtxStack(): WorkflowContext[] {
+    return this.asyncDefCtxStack.getStore() ?? this.defCtxStack;
+  }
+
   private getAsyncIndices(): number[] {
     return this.asyncIndicesStorage.getStore() ?? [];
   }
@@ -298,8 +334,15 @@ export class NodeWorkflowRuntime {
     return handleId;
   }
 
-  private isHandle(value: string): boolean {
-    return value.startsWith(HANDLE_PREFIX);
+  /**
+   * Bind an async handle to a scope variable out of band from `vars`. The var
+   * name is removed from `scope.vars` so a stale captured string can never
+   * shadow the handle, and the handle lives only in `scope.handles` — where a
+   * captured string can never land, which is the whole point of the fix.
+   */
+  private bindHandle(scope: Scope, name: string, handleId: string): void {
+    (scope.handles ??= new Map()).set(name, handleId);
+    scope.vars.delete(name);
   }
 
   /**
@@ -368,9 +411,12 @@ export class NodeWorkflowRuntime {
 
   /** Resolve a handle value to the string it represents. Updates scope var in place. */
   private async resolveHandleVar(scope: Scope, varName: string): Promise<StepResult> {
-    const val = scope.vars.get(varName);
-    if (!val || !this.isHandle(val)) return { status: 0, output: "", error: "" };
-    const result = await this.resolveHandleResult(val);
+    const handleId = scope.handles?.get(varName);
+    if (handleId === undefined) return { status: 0, output: "", error: "" };
+    const result = await this.resolveHandleResult(handleId);
+    // Consume the binding: the name now holds a plain string value, so a
+    // forced value of `__JAIPH_HANDLE__N` stays a literal on any later read.
+    scope.handles!.delete(varName);
     if (result.status === 0) {
       scope.vars.set(varName, this.forceValue(result));
     } else {
@@ -402,8 +448,7 @@ export class NodeWorkflowRuntime {
         return { ok: false, result: { status: 1, output: "", error: errText(err) } };
       }
     }
-    const rawBase = scope.vars.get(base);
-    if (rawBase && this.isHandle(rawBase)) {
+    if (scope.handles?.has(base)) {
       const hr = await this.resolveHandleVar(scope, base);
       if (hr.status !== 0) return { ok: false, result: hr };
     }
@@ -456,8 +501,7 @@ export class NodeWorkflowRuntime {
     let m: RegExpExecArray | null;
     while ((m = re.exec(input)) !== null) {
       const varName = m[1];
-      const val = scope.vars.get(varName);
-      if (val && this.isHandle(val)) {
+      if (scope.handles?.has(varName)) {
         const r = await this.resolveHandleVar(scope, varName);
         if (r.status !== 0) return r;
       }
@@ -497,6 +541,16 @@ export class NodeWorkflowRuntime {
        * Granted `use` keys (gated by `JAIPH_ENV_GRANT`) resolve from here.
        */
       grantValues?: Record<string, string>;
+      /**
+       * The per-run audit-chain HMAC key, supplied off-process (never on `env`,
+       * so it stays off the leader's exec-time environment where a same-user
+       * script child could read it). The runner reads it from the chain-key file
+       * (chain-key-file.ts) and passes it here; it is folded into the emitter's
+       * env for the keyed journal chain, never forwarded to any subprocess. When
+       * absent, an in-process `JAIPH_CHAIN_KEY` (e.g. the audit-chain test) is
+       * used, else the chain is keyless (self-consistent, unverifiable).
+       */
+      chainKey?: string;
     },
   ) {
     this.graph = graph;
@@ -545,14 +599,20 @@ export class NodeWorkflowRuntime {
     this.env.JAIPH_RUN_ID = this.runId;
     this.env.JAIPH_RUN_DIR = this.runDir;
     this.env.JAIPH_ARTIFACTS_DIR = artifactsDir;
+    // The audit-chain key arrives off-process (`opts.chainKey`) so it never sits
+    // on the leader's exec-time env. Fall back to an in-process `JAIPH_CHAIN_KEY`
+    // on `this.env` for in-process callers (the audit-chain test / `jaiph test`).
+    const chainKey = opts.chainKey ?? this.env[CHAIN_KEY_ENV] ?? "";
     this.emitter = new RuntimeEventEmitter({
       runId: this.runId,
       runDir: this.runDir,
       // Credential redaction is name-based over env values. Grant values are off
       // `this.env` now, so fold them into the emitter's redaction view (trusted
       // kernel; not a subprocess env) or a granted credential would slip through
-      // unredacted into the journal/event stream.
-      env: { ...this.env, ...this.grantValues },
+      // unredacted into the journal/event stream. The chain key is injected here
+      // (not on `this.env`) so the emitter keys its HMAC chain without the key
+      // ever riding on a process environment.
+      env: { ...this.env, ...this.grantValues, [CHAIN_KEY_ENV]: chainKey },
       getFrameStack: () => this.getFrameStack(),
       getAsyncIndices: () => this.getAsyncIndices(),
       suppressLiveEvents: opts.suppressLiveEvents,
@@ -774,6 +834,7 @@ export class NodeWorkflowRuntime {
       const childScope: Scope = {
         filePath: resolved.filePath,
         vars: metadataVars,
+        handles: cloneHandles(scope),
         env: this.scrubKernelKeys(workflowEnv),
         declaredParamNames: resolved.def.params,
       };
@@ -797,7 +858,8 @@ export class NodeWorkflowRuntime {
           }
         }
       }
-      this.defCtxStack.push(ctx);
+      const defCtxStack = this.getDefCtxStack();
+      defCtxStack.push(ctx);
       try {
         const out = await this.executeSteps(childScope, resolved.def.steps, io);
         if (out.status !== 0) return out;
@@ -805,7 +867,7 @@ export class NodeWorkflowRuntime {
         if (drained.status !== 0) return drained;
         return out;
       } finally {
-        this.defCtxStack.pop();
+        defCtxStack.pop();
       }
     }, resolved.def.params);
   }
@@ -827,6 +889,7 @@ export class NodeWorkflowRuntime {
       const childScope: Scope = {
         filePath: callerScope.filePath,
         vars: childVars,
+        handles: cloneHandles(callerScope),
         env: callerScope.env,
         declaredParamNames: def.params,
         locals: callerScope.locals ? new Map(callerScope.locals) : new Map(),
@@ -847,12 +910,16 @@ export class NodeWorkflowRuntime {
     };
   }
 
-  private static readonly INLINE_CAPTURE_RE = /\$\{([A-Za-z_][A-Za-z0-9_.]*\s*\([^}]*\))\}/g;
-
   /**
    * Interpolate `${var}` refs and inline `${ref(args)}`
    * captures: each capture is executed and replaced with its output, then regular
    * `${var}` interpolation runs. Returns { ok: true, value } or { ok: false, result }.
+   *
+   * Captures are located with the shared `scanInlineCaptures` scanner (the same
+   * one the compiler validator uses), so both agree on what is a capture and how
+   * its call parses. A validated program never carries an unparseable capture; a
+   * stray one (`ref === null`) is left in the surrounding text and interpolated,
+   * never executed.
    */
   private async interpolateWithCaptures(
     input: string,
@@ -861,26 +928,32 @@ export class NodeWorkflowRuntime {
     // Resolve any handle-valued vars referenced in the input before interpolating.
     const handleErr = await this.resolveHandlesInInput(scope, input);
     if (handleErr) return { ok: false, result: handleErr };
-    const re = new RegExp(NodeWorkflowRuntime.INLINE_CAPTURE_RE.source, "g");
-    if (!re.test(input)) {
-      return { ok: true, value: interpolate(input, scope.vars, scope.env, undefined, this.moduleFieldFor(scope)) };
-    }
-    re.lastIndex = 0;
     // Interpolate only the literal text between captures. A capture's output is
     // data: it is appended as-is and never scanned for `${…}`, so output that
     // happens to contain `${secret}` cannot read Jaiph variables or the env.
     const fill = (text: string): string =>
       interpolate(text, scope.vars, scope.env, undefined, this.moduleFieldFor(scope));
+    const captures = scanInlineCaptures(input).filter((c) => c.ref !== null);
+    if (captures.length === 0) {
+      return { ok: true, value: fill(input) };
+    }
     let result = "";
     let lastIndex = 0;
-    let m: RegExpExecArray | null;
-    while ((m = re.exec(input)) !== null) {
-      result += fill(input.slice(lastIndex, m.index));
-      const { ref, argsRaw } = parseInlineCaptureCall(m[1]);
-      const r = await this.executeRunRef(scope, ref, argsRaw);
+    for (const cap of captures) {
+      result += fill(input.slice(lastIndex, cap.index));
+      // An inline capture's arguments are raw text, not scope references: a bare
+      // word `${greet(world)}` passes the literal `world`, never the value of a
+      // `world` variable (regular call args, pre-classified by the parser,
+      // interpolate instead). The shared scanner parses them with `parseCallRef`,
+      // which marks bare words as `var`, so fold those back to literals here to
+      // keep the historical capture-argument semantics.
+      const capArgs: Arg[] = (cap.args ?? []).map((a) =>
+        a.kind === "var" ? { kind: "literal", raw: a.name } : a,
+      );
+      const r = await this.executeRunRef(scope, cap.ref!, capArgs);
       if (r.status !== 0) return { ok: false, result: r };
       result += this.forceValue(r);
-      lastIndex = m.index + m[0].length;
+      lastIndex = cap.index + cap.length;
     }
     result += fill(input.slice(lastIndex));
     return { ok: true, value: result };
@@ -894,40 +967,48 @@ export class NodeWorkflowRuntime {
     if (!resolved.ok) return { ok: false, result: resolved.result };
     const subject = resolved.value;
     for (const arm of expr.arms) {
-      if (patternMatches(arm.pattern, subject)) {
-        let body = arm.body.trimStart();
-        if (arm.tripleQuotedBody) {
-          body = canonicalizeTripleQuotedString(arm.body).trimStart();
-        }
+      if (!patternMatches(arm.pattern, subject)) continue;
+      const body = arm.body;
 
-        // fail "message" — abort with failure
-        if (body.startsWith("fail ")) {
-          const msgRaw = body.slice(5).trimStart();
-          const msgIr = await this.interpolateWithCaptures(literalText(msgRaw), scope);
-          if (!msgIr.ok) return msgIr;
-          return { ok: false, result: { status: 1, output: "", error: msgIr.value } };
-        }
-
-        // ref(args) — execute script/workflow and capture return value
-        const runM = body.match(/^([A-Za-z_][A-Za-z0-9_.]*)\(([^)]*)\)\s*$/);
-        if (runM) {
-          const result = await this.executeRunRef(scope, runM[1]!, commaArgsToInterpolated(runM[2]!));
-          if (result.status !== 0) return { ok: false, result };
-          return { ok: true, value: this.forceValue(result) };
-        }
-
-        // Bare in-scope identifier (e.g. `=> name_arg`) — sugar for `=> "${name_arg}"`.
-        // Validator already ensures the identifier is in scope; runtime mirrors `return val`.
-        const bareIdent = body.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*$/);
-        if (bareIdent && (scope.vars.has(bareIdent[1]!) || scope.env?.[bareIdent[1]!] !== undefined)) {
-          return { ok: true, value: scope.vars.get(bareIdent[1]!) ?? scope.env?.[bareIdent[1]!] ?? "" };
-        }
-
-        // Default: string expression
-        const bodyIr = await this.interpolateWithCaptures(literalText(body), scope);
-        if (!bodyIr.ok) return bodyIr;
-        return { ok: true, value: bodyIr.value };
+      // fail "message" — abort with failure.
+      if (body.kind === "fail") {
+        const msgIr = await this.interpolateWithCaptures(literalText(body.message), scope);
+        if (!msgIr.ok) return msgIr;
+        return { ok: false, result: { status: 1, output: "", error: msgIr.value } };
       }
+
+      // ref(args) — execute script/workflow and capture return value. The call's
+      // typed `Arg[]` flow straight to the runtime (same as a `run` step), so an
+      // arm body `foo("", x)` passes two arguments.
+      if (body.kind === "call") {
+        const result = await this.executeRunRef(scope, body.callee.value, body.args);
+        if (result.status !== 0) return { ok: false, result };
+        return { ok: true, value: this.forceValue(result) };
+      }
+
+      // Bare in-scope identifier (e.g. `=> name_arg`) — sugar for `=> "${name_arg}"`.
+      // Validator already ensures the identifier is in scope; runtime mirrors `return val`.
+      if (body.kind === "var") {
+        const name = body.name;
+        // A bare-ident arm body returns that binding's value. An unresolved
+        // async handle returns its opaque token (the handle id, held out of
+        // band in `handles`) — matching how the value was stored before
+        // handles moved out of `vars`.
+        if (scope.vars.has(name) || scope.handles?.has(name) || scope.env?.[name] !== undefined) {
+          return { ok: true, value: scope.vars.get(name) ?? scope.handles?.get(name) ?? scope.env?.[name] ?? "" };
+        }
+        const varIr = await this.interpolateWithCaptures(literalText(name), scope);
+        if (!varIr.ok) return varIr;
+        return { ok: true, value: varIr.value };
+      }
+
+      // Default: string literal / `${…}` / dotted field expression. A `"""`
+      // block carries its undedented source; canonicalize it to the view the
+      // validator inspected before interpolating.
+      const raw = body.tripleQuoted ? canonicalizeTripleQuotedString(body.raw) : body.raw;
+      const bodyIr = await this.interpolateWithCaptures(literalText(raw), scope);
+      if (!bodyIr.ok) return bodyIr;
+      return { ok: true, value: bodyIr.value };
     }
     // Should not reach here if validation ensures a wildcard arm exists.
     return { ok: false, result: { status: 1, output: "", error: "match: no arm matched" } };
@@ -955,13 +1036,13 @@ export class NodeWorkflowRuntime {
       return { ok: true, value: ir.value, output: "" };
     }
     if (expr.kind === "call") {
-      const r = await this.executeRunRef(scope, expr.callee.value, argsToRuntimeString(expr.args));
+      const r = await this.executeRunRef(scope, expr.callee.value, expr.args);
       if (r.status !== 0) return { ok: false, result: r, output: "" };
       return { ok: true, value: this.forceValue(r), output: "" };
     }
     if (expr.kind === "inline_script") {
       const shebang = shebangForLang(expr.lang);
-      const r = await this.executeInlineScript(scope, expr.body, shebang, argsToRuntimeString(expr.args));
+      const r = await this.executeInlineScript(scope, expr.body, shebang, expr.args);
       if (r.status !== 0) return { ok: false, result: r, output: "" };
       return { ok: true, value: this.forceValue(r), output: "" };
     }
@@ -1032,7 +1113,7 @@ export class NodeWorkflowRuntime {
         let message: string;
         if (step.message.kind === "inline_script") {
           const shebang = shebangForLang(step.message.lang);
-          const result = await this.executeInlineScript(scope, step.message.body, shebang, argsToRuntimeString(step.message.args));
+          const result = await this.executeInlineScript(scope, step.message.body, shebang, step.message.args);
           if (result.status !== 0) return this.mergeStepResult(accOut, accErr, result);
           message = this.forceValue(result);
         } else if (step.message.kind === "literal") {
@@ -1080,12 +1161,12 @@ export class NodeWorkflowRuntime {
         // the file to the user rather than pulling it through V8.
         if (value.kind === "call" || value.kind === "inline_script") {
           const r = value.kind === "call"
-            ? await this.executeRunRef(scope, value.callee.value, argsToRuntimeString(value.args))
+            ? await this.executeRunRef(scope, value.callee.value, value.args)
             : await this.executeInlineScript(
                 scope,
                 value.body,
                 shebangForLang(value.lang),
-                argsToRuntimeString(value.args),
+                value.args,
               );
           if (r.status !== 0) return this.mergeStepResult(accOut, accErr, r);
           return this.mergeStepResult(accOut, accErr, {
@@ -1103,7 +1184,8 @@ export class NodeWorkflowRuntime {
         return this.mergeStepResult(accOut, accErr, { status: 0, output: "", error: "", returnValue });
       }
       if (step.type === "send") {
-        const ctx = this.defCtxStack[this.defCtxStack.length - 1];
+        const defCtxStack = this.getDefCtxStack();
+        const ctx = defCtxStack[defCtxStack.length - 1];
         if (!ctx) {
           return this.mergeStepResult(accOut, accErr, {
             status: 1,
@@ -1118,7 +1200,7 @@ export class NodeWorkflowRuntime {
           if (!sendIr.ok) return this.mergeStepResult(accOut, accErr, sendIr.result);
           payload = sendIr.value;
         } else if (sendValue.kind === "call") {
-          const r = await this.executeRunRef(scope, sendValue.callee.value, argsToRuntimeString(sendValue.args));
+          const r = await this.executeRunRef(scope, sendValue.callee.value, sendValue.args);
           if (r.status !== 0) return this.mergeStepResult(accOut, accErr, r);
           payload = this.forceValue(r);
         } else {
@@ -1145,9 +1227,11 @@ export class NodeWorkflowRuntime {
         };
         let targetCtx = ctx;
         let routed = false;
-        for (let i = this.defCtxStack.length - 1; i >= 0; i -= 1) {
-          if (this.defCtxStack[i]!.routes.has(channelKey)) {
-            targetCtx = this.defCtxStack[i]!;
+        // Walk the enclosing defs of the SENDING branch (its own copy of the
+        // stack) so an interleaved sibling branch cannot redirect this send.
+        for (let i = defCtxStack.length - 1; i >= 0; i -= 1) {
+          if (defCtxStack[i]!.routes.has(channelKey)) {
+            targetCtx = defCtxStack[i]!;
             routed = true;
             break;
           }
@@ -1158,17 +1242,15 @@ export class NodeWorkflowRuntime {
           mkdirSync(inboxFileDir, { recursive: true });
           writeFileSync(join(inboxFileDir, `${seqPadded}-${channelKey}.txt`), payload, "utf8");
         }
-        appendRunSummaryLine(
-          JSON.stringify({
-            type: "INBOX_ENQUEUE",
-            ts: nowIso(),
-            run_id: this.runId,
-            channel: msg.channel,
-            sender: msg.sender,
-            inbox_seq: msg.seqPadded,
-            event_version: 1,
-          }),
-        );
+        this.emitter.emitInbox({
+          type: "INBOX_ENQUEUE",
+          ts: nowIso(),
+          run_id: this.runId,
+          channel: msg.channel,
+          sender: msg.sender,
+          inbox_seq: msg.seqPadded,
+          event_version: 1,
+        });
         continue;
       }
       if (step.type === "const") {
@@ -1182,17 +1264,20 @@ export class NodeWorkflowRuntime {
         if (v.kind === "call" && v.async) {
           asyncCounter += 1;
           const captureRef = v.callee.value;
-          const captureArgs = argsToRuntimeString(v.args);
+          const captureArgs = v.args;
           const branchStack = [...this.getFrameStack()];
           const branchIndices = [...this.getAsyncIndices(), asyncCounter];
+          const branchDefCtx = [...this.getDefCtxStack()];
           const promise = this.asyncFrameStack.run(branchStack, () =>
             this.asyncIndicesStorage.run(branchIndices, () =>
-              this.executeRunRef(scope, captureRef, captureArgs),
+              this.asyncDefCtxStack.run(branchDefCtx, () =>
+                this.executeRunRef(scope, captureRef, captureArgs),
+              ),
             ),
           );
           const handleId = this.createHandle(captureRef, promise);
           localHandleIds.push(handleId);
-          scope.vars.set(step.name, handleId);
+          this.bindHandle(scope, step.name, handleId);
           continue;
         }
         const r = await this.evaluateExpr(scope, v, step.name, io);
@@ -1211,23 +1296,26 @@ export class NodeWorkflowRuntime {
           asyncCounter += 1;
           const branchStack = [...this.getFrameStack()];
           const branchIndices = [...this.getAsyncIndices(), asyncCounter];
+          const branchDefCtx = [...this.getDefCtxStack()];
           const ref = body.callee.value;
-          const argsRaw = argsToRuntimeString(body.args);
+          const callArgs = body.args;
           const runInBranch = (fn: () => Promise<StepResult>): Promise<StepResult> =>
             this.asyncFrameStack.run(branchStack, () =>
-              this.asyncIndicesStorage.run(branchIndices, fn),
+              this.asyncIndicesStorage.run(branchIndices, () =>
+                this.asyncDefCtxStack.run(branchDefCtx, fn),
+              ),
             );
           let promise: Promise<StepResult>;
           if (step.recover) {
             const recoverLimit = this.resolveRecoverLimit(scope.filePath);
             const recover = step.recover;
             promise = runInBranch(async () => {
-              let lastResult = await this.executeRunRef(scope, ref, argsRaw);
+              let lastResult = await this.executeRunRef(scope, ref, callArgs);
               let attempt = 1;
               while (lastResult.status !== 0 && attempt <= recoverLimit) {
                 const rr = await this.runRecoverBody(scope, recover, lastResult);
                 if (rr.status !== 0 || this.stepReturned(rr)) return rr;
-                lastResult = await this.executeRunRef(scope, ref, argsRaw);
+                lastResult = await this.executeRunRef(scope, ref, callArgs);
                 attempt += 1;
               }
               return lastResult;
@@ -1235,7 +1323,7 @@ export class NodeWorkflowRuntime {
           } else if (step.catch) {
             const recover = step.catch;
             promise = runInBranch(async () => {
-              const result = await this.executeRunRef(scope, ref, argsRaw);
+              const result = await this.executeRunRef(scope, ref, callArgs);
               if (result.status === 0) return result;
               const rr = await this.runRecoverBody(scope, recover, result);
               if (rr.status !== 0) return rr;
@@ -1243,11 +1331,11 @@ export class NodeWorkflowRuntime {
               return { status: 0, output: result.output, error: result.error };
             });
           } else {
-            promise = runInBranch(() => this.executeRunRef(scope, ref, argsRaw));
+            promise = runInBranch(() => this.executeRunRef(scope, ref, callArgs));
           }
           const handleId = this.createHandle(ref, promise);
           localHandleIds.push(handleId);
-          if (step.captureName) scope.vars.set(step.captureName, handleId);
+          if (step.captureName) this.bindHandle(scope, step.captureName, handleId);
           continue;
         }
         if (body.kind === "call") {
@@ -1285,13 +1373,13 @@ export class NodeWorkflowRuntime {
           if (step.recover) {
             const limit = this.resolveRecoverLimit(scope.filePath);
             const ref = body.callee.value;
-            const argsRaw = argsToRuntimeString(body.args);
-            let lastResult = await this.executeRunRef(scope, ref, argsRaw, stdinSource);
+            const callArgs = body.args;
+            let lastResult = await this.executeRunRef(scope, ref, callArgs, stdinSource);
             let attempt = 1;
             while (lastResult.status !== 0 && attempt <= limit) {
               const rr = await this.runRecoverBody(scope, step.recover, lastResult);
               if (rr.status !== 0 || this.stepReturned(rr)) return this.mergeStepResult(accOut, accErr, rr);
-              lastResult = await this.executeRunRef(scope, ref, argsRaw, stdinSource);
+              lastResult = await this.executeRunRef(scope, ref, callArgs, stdinSource);
               attempt += 1;
             }
             if (lastResult.status === 0) {
@@ -1304,7 +1392,7 @@ export class NodeWorkflowRuntime {
             continue;
           }
           const runResult = await this.executeRunRef(
-            scope, body.callee.value, argsToRuntimeString(body.args), stdinSource,
+            scope, body.callee.value, body.args, stdinSource,
           );
           if (runResult.status === 0) {
             if (step.captureName) {
@@ -1320,7 +1408,7 @@ export class NodeWorkflowRuntime {
         }
         if (body.kind === "inline_script") {
           const shebang = shebangForLang(body.lang);
-          const argsRaw = argsToRuntimeString(body.args);
+          const callArgs = body.args;
           // Streaming pipeline whose final stage is an inline script; stages run
           // concurrently through bounded buffers. `recover` is rejected at parse.
           if (step.stdin && this.isPipeline(step)) {
@@ -1349,7 +1437,7 @@ export class NodeWorkflowRuntime {
             stdinSource = sr.source;
           }
           const runOnce = (): Promise<StepResult> =>
-            this.executeInlineScript(scope, body.body, shebang, argsRaw, stdinSource);
+            this.executeInlineScript(scope, body.body, shebang, callArgs, stdinSource);
           if (step.recover) {
             const limit = this.resolveRecoverLimit(scope.filePath);
             let lastResult = await runOnce();
@@ -1439,8 +1527,13 @@ export class NodeWorkflowRuntime {
         continue;
       }
       if (step.type === "for_lines") {
+        // `for` does not force an async handle (unlike `if` / `match`, which
+        // resolve their subject): an unresolved handle var iterates as one
+        // opaque token line. The token is the handle id, read from the
+        // out-of-band `handles` map when `vars` has not been forced yet.
         const raw =
           scope.vars.get(step.sourceVar) ??
+          scope.handles?.get(step.sourceVar) ??
           scope.env?.[step.sourceVar] ??
           "";
         for (const line of linesOfDelimitedString(raw)) {
@@ -1508,7 +1601,7 @@ export class NodeWorkflowRuntime {
     params.forEach((name, i) => {
       if (i < values.length) dispatchVars.set(name, values[i]);
     });
-    return { filePath: scope.filePath, vars: dispatchVars, env: scope.env };
+    return { filePath: scope.filePath, vars: dispatchVars, handles: cloneHandles(scope), env: scope.env };
   }
 
   private async drainWorkflowQueue(scope: Scope, ctx: WorkflowContext): Promise<StepResult> {
@@ -1528,18 +1621,16 @@ export class NodeWorkflowRuntime {
       const targets = ctx.routes.get(msg.channel) ?? [];
       if (targets.length === 0) continue;
       for (const target of targets) {
-        appendRunSummaryLine(
-          JSON.stringify({
-            type: "INBOX_DISPATCH_START",
-            ts: nowIso(),
-            run_id: this.runId,
-            channel: msg.channel,
-            sender: msg.sender,
-            inbox_seq: msg.seqPadded,
-            target,
-            event_version: 1,
-          }),
-        );
+        this.emitter.emitInbox({
+          type: "INBOX_DISPATCH_START",
+          ts: nowIso(),
+          run_id: this.runId,
+          channel: msg.channel,
+          sender: msg.sender,
+          inbox_seq: msg.seqPadded,
+          target,
+          event_version: 1,
+        });
         const t0 = Date.now();
         const resolved = resolveDefRef(this.graph, scope.filePath, { value: target, loc: { line: 1, col: 1 } });
         const n = resolved?.def.params.length ?? 0;
@@ -1549,20 +1640,18 @@ export class NodeWorkflowRuntime {
           target,
           inboxArgs,
         );
-        appendRunSummaryLine(
-          JSON.stringify({
-            type: "INBOX_DISPATCH_COMPLETE",
-            ts: nowIso(),
-            run_id: this.runId,
-            channel: msg.channel,
-            sender: msg.sender,
-            inbox_seq: msg.seqPadded,
-            target,
-            status: dispatch.status,
-            elapsed_ms: Date.now() - t0,
-            event_version: 1,
-          }),
-        );
+        this.emitter.emitInbox({
+          type: "INBOX_DISPATCH_COMPLETE",
+          ts: nowIso(),
+          run_id: this.runId,
+          channel: msg.channel,
+          sender: msg.sender,
+          inbox_seq: msg.seqPadded,
+          target,
+          status: dispatch.status,
+          elapsed_ms: Date.now() - t0,
+          event_version: 1,
+        });
         if (dispatch.status !== 0) return dispatch;
       }
     }
@@ -1595,32 +1684,50 @@ export class NodeWorkflowRuntime {
     });
   }
 
-  private async resolveArgsRaw(scope: Scope, raw: string | string[]): Promise<string[] | StepResult> {
-    if (Array.isArray(raw)) {
-      return raw;
-    }
-    const tokens = parseArgTokens(raw);
+  /**
+   * Build the argv for a call from its typed `Arg[]` — one argv element per
+   * `Arg`, so an empty-string literal (`show("", "b")`) is its own argument and
+   * a literal that contains spaces / quotes / commas / `)` / `${…}` arrives
+   * byte-exact. A `var` interpolates `${name}` (dotted names resolve via JSON
+   * field access); a `literal` that is a nested managed call (`foo(bar(x))`,
+   * `foo('echo'(x))`) runs through the nested-call path and contributes its
+   * captured output; any other literal decodes its stored quoted form and
+   * interpolates. Already-resolved argv (plain `string[]`, e.g. inbox dispatch)
+   * passes through unchanged.
+   */
+  private async resolveArgs(
+    scope: Scope,
+    args: Arg[] | string[] | undefined,
+  ): Promise<string[] | StepResult> {
     const resolved: string[] = [];
-    for (const token of tokens) {
-      if (token.kind === "literal") {
-        // Resolve handles before interpolating.
-        const handleErr = await this.resolveHandlesInInput(scope, token.value);
-        if (handleErr) return handleErr;
-        resolved.push(interpolate(token.value, scope.vars, scope.env, undefined, this.moduleFieldFor(scope)));
+    for (const arg of args ?? []) {
+      if (typeof arg === "string") {
+        resolved.push(arg);
         continue;
       }
-      if (token.kind === "managed_inline_script") {
-        const shebang = shebangForLang(token.lang);
-        const result = await this.executeInlineScript(scope, token.body, shebang, token.argsRaw);
+      if (arg.kind === "var") {
+        const ref = `\${${arg.name}}`;
+        const handleErr = await this.resolveHandlesInInput(scope, ref);
+        if (handleErr) return handleErr;
+        resolved.push(interpolate(ref, scope.vars, scope.env, undefined, this.moduleFieldFor(scope)));
+        continue;
+      }
+      // A literal that is a whole nested managed call: run it and capture.
+      const nested = parseNestedCallArg(arg.raw);
+      if (nested && nested.rest.trim() === "") {
+        const result = nested.kind === "inline_script"
+          ? await this.executeInlineScript(scope, nested.body, shebangForLang(nested.lang), nested.args)
+          : await this.executeRunRef(scope, nested.ref, nested.args);
         if (result.status !== 0) return result;
         resolved.push(this.forceValue(result));
         continue;
       }
-      const result = await this.executeRunRef(scope, token.ref, token.argsRaw);
-      if (result.status !== 0) {
-        return result;
-      }
-      resolved.push(this.forceValue(result));
+      // Plain literal: strip quote delimiters (the same way the old argument
+      // tokenizer did), then interpolate.
+      const text = decodeCallArgLiteral(arg.raw);
+      const handleErr = await this.resolveHandlesInInput(scope, text);
+      if (handleErr) return handleErr;
+      resolved.push(interpolate(text, scope.vars, scope.env, undefined, this.moduleFieldFor(scope)));
     }
     return resolved;
   }
@@ -1644,9 +1751,9 @@ export class NodeWorkflowRuntime {
     // slurps the failed step's stdout into memory.
     const bare = raw.match(/^"\$\{([A-Za-z_][A-Za-z0-9_]*)\}"$/);
     if (bare) {
-      const bound = scope.vars.get(bare[1]!);
-      if (bound && this.isHandle(bound)) {
-        const r = await this.resolveHandleResult(bound);
+      const handleId = scope.handles?.get(bare[1]!);
+      if (handleId !== undefined) {
+        const r = await this.resolveHandleResult(handleId);
         if (r.status !== 0) return { ok: false, result: r };
         return { ok: true, source: this.handleStdinSource(r) };
       }
@@ -1671,10 +1778,10 @@ export class NodeWorkflowRuntime {
   ): Promise<StepResult> {
     if (stage.kind === "inline_script") {
       const shebang = shebangForLang(stage.lang);
-      return this.executeInlineScript(scope, stage.body, shebang, argsToRuntimeString(stage.args), source, onSpawn, endGate);
+      return this.executeInlineScript(scope, stage.body, shebang, stage.args, source, onSpawn, endGate);
     }
     if (stage.kind === "call") {
-      return this.executeRunRef(scope, stage.callee.value, argsToRuntimeString(stage.args), source, onSpawn, endGate);
+      return this.executeRunRef(scope, stage.callee.value, stage.args, source, onSpawn, endGate);
     }
     return Promise.resolve({ status: 1, output: "", error: "internal: invalid stdin pipeline stage" });
   }
@@ -1723,7 +1830,7 @@ export class NodeWorkflowRuntime {
     const liveStages: Expr[] = [];
     let upstream: StdinSource | undefined;
     if (producer.kind === "call" && this.producerIsDef(scope, producer.callee.value)) {
-      const r = await this.executeRunRef(scope, producer.callee.value, argsToRuntimeString(producer.args));
+      const r = await this.executeRunRef(scope, producer.callee.value, producer.args);
       if (r.status !== 0) return r;
       upstream = this.handleStdinSource(r);
     } else if (producer.kind === "call" || producer.kind === "inline_script") {
@@ -1790,12 +1897,12 @@ export class NodeWorkflowRuntime {
   private async executeRunRef(
     scope: Scope,
     ref: string,
-    argsRaw: string | string[],
+    callArgs: Arg[] | string[] | undefined,
     stdin?: StdinSource,
     onSpawn?: (stdout: Readable | undefined) => void,
     endGate?: Promise<unknown>,
   ): Promise<StepResult> {
-    const resolvedArgs = await this.resolveArgsRaw(scope, argsRaw);
+    const resolvedArgs = await this.resolveArgs(scope, callArgs);
     if (!Array.isArray(resolvedArgs)) return resolvedArgs;
     const args = resolvedArgs;
     // Nested (def-local) declarations shadow module symbols and win first.
@@ -1845,14 +1952,17 @@ export class NodeWorkflowRuntime {
         return this.executeManagedStep("script", ref, args, async () => this.dispatchMockBody(ref, mockBody, args));
       }
       // Sterile script env: base process mechanics + runtime contract keys +
-      // this script's `use` keys intersected with the `--env` grant.
+      // this script's `use` keys intersected with the `--env` grant. Both the
+      // env and the emitted file are taken from the module this call resolves
+      // to, so a same-named script in another module never shadows this one.
       const scriptEnv = this.buildScriptSpawnEnv(scope.env, resolvedScript.script.use);
+      const fileName = moduleScriptFileName(resolvedScript.filePath, resolvedScript.script.name);
       return this.executeManagedStep(
         "script",
         ref,
         args,
         async (io) =>
-          this.executeScript(resolvedScript.filePath, resolvedScript.script.name, args, scriptEnv, io, stdin, onSpawn),
+          this.executeScript(resolvedScript.filePath, fileName, args, scriptEnv, io, stdin, onSpawn),
         undefined,
         endGate,
       );
@@ -1899,11 +2009,13 @@ export class NodeWorkflowRuntime {
       const local = scope.locals?.get(expr.name);
       if (local?.kind === "prompt") {
         const prompt = local.prompt;
-        const argValues = await this.resolveArgsRaw(scope, argsToRuntimeString(expr.args));
+        const argValues = await this.resolveArgs(scope, expr.args);
         if (!Array.isArray(argValues)) return { ok: false, result: argValues };
         const childVars = new Map(scope.vars);
         prompt.params.forEach((p, i) => childVars.set(p, argValues[i] ?? ""));
-        const promptScope: Scope = { ...scope, vars: childVars };
+        // Clone handles (not share via spread) so the body's force of an
+        // enclosing handle var does not mutate the caller's binding.
+        const promptScope: Scope = { ...scope, vars: childVars, handles: cloneHandles(scope) };
         return {
           ok: true,
           promptScope,
@@ -1917,13 +2029,15 @@ export class NodeWorkflowRuntime {
     if (!resolved) {
       return { ok: false, result: { status: 1, output: "", error: `Unknown prompt: ${expr.name}` } };
     }
-    const argValues = await this.resolveArgsRaw(scope, argsToRuntimeString(expr.args));
+    const argValues = await this.resolveArgs(scope, expr.args);
     if (!Array.isArray(argValues)) return { ok: false, result: argValues };
     // Definition-site scope: only the prompt's params + its module `const`s are
     // visible in the body (caller locals are not), mirroring a def call.
     const childVars = this.newScopeVars(resolved.filePath, undefined, scope.env);
     resolved.prompt.params.forEach((p, i) => childVars.set(p, argValues[i] ?? ""));
-    const promptScope: Scope = { ...scope, filePath: resolved.filePath, vars: childVars };
+    // A module named prompt is a definition-site scope: caller locals (and so
+    // caller handles) are not visible — drop them rather than inherit via spread.
+    const promptScope: Scope = { ...scope, filePath: resolved.filePath, vars: childVars, handles: undefined };
     return {
       ok: true,
       promptScope,
@@ -1985,9 +2099,9 @@ export class NodeWorkflowRuntime {
   > {
     const bare = raw.match(/^"\$\{([A-Za-z_][A-Za-z0-9_]*)\}"$/);
     if (!bare) return { ok: true, source: null };
-    const bound = scope.vars.get(bare[1]!);
-    if (!bound || !this.isHandle(bound)) return { ok: true, source: null };
-    const r = await this.resolveHandleResult(bound);
+    const handleId = scope.handles?.get(bare[1]!);
+    if (handleId === undefined) return { ok: true, source: null };
+    const r = await this.resolveHandleResult(handleId);
     if (r.status !== 0) return { ok: false, result: r };
     if (r.returnValue !== undefined) return { ok: true, source: { kind: "bytes", bytes: r.returnValue } };
     if (r.valueFile) return { ok: true, source: { kind: "file", path: r.valueFile } };
@@ -2106,7 +2220,16 @@ export class NodeWorkflowRuntime {
           io?.appendErr(chunk);
           if (chunk.length > 0) idleWarn?.bump();
         });
-        const result = await executePrompt(promptText, promptConfig, out, scope.env, err, useEnv, promptSource);
+        const result = await executePrompt(
+          promptText,
+          promptConfig,
+          out,
+          scope.env,
+          err,
+          useEnv,
+          promptSource,
+          this.abortController.signal,
+        );
         const promptErr = errChunks.join("");
         this.emitter.emitPromptStepEnd(promptStep, result.status, chunks.join(""), promptErr);
         this.emitter.emitPromptEvent("PROMPT_END", {
@@ -2264,7 +2387,7 @@ export class NodeWorkflowRuntime {
       error: "",
       valueFile: mergedFile,
     });
-    bodyScope.vars.set(catchDef.bindings.failure, handleId);
+    this.bindHandle(bodyScope, catchDef.bindings.failure, handleId);
     return this.executeSteps(bodyScope, recoverSteps);
   }
 
@@ -2317,7 +2440,15 @@ export class NodeWorkflowRuntime {
       const stdinMode = stdin !== undefined ? "pipe" : "ignore";
       let child: ReturnType<typeof _scriptSpawn.spawn>;
       try {
-        child = _scriptSpawn.spawn(command, args, { cwd, env, stdio: [stdinMode, "pipe", "pipe"] });
+        // `detached` on POSIX puts the script (and any subtree it spawns) in its
+        // own process group so the idle-output kill can signal the whole group.
+        // The leader forwards SIGINT/SIGTERM to that group (see child-groups.ts).
+        child = _scriptSpawn.spawn(command, args, {
+          cwd,
+          env,
+          stdio: [stdinMode, "pipe", "pipe"],
+          detached: spawnInOwnGroup,
+        });
       } catch (err) {
         const msg = spawnFailureText(err, command, args, env, interpreter);
         error += msg;
@@ -2335,20 +2466,42 @@ export class NodeWorkflowRuntime {
         settle({ status: 1, output: "", error, streamed: true });
         return;
       }
+      // Track the child's process group so the leader forwards SIGINT/SIGTERM to
+      // it (it no longer shares the leader's group once detached).
+      trackChildGroup(child);
       // Tee stdout: write `.out` and, when this is a non-terminal pipeline
       // stage, copy the same chunks into a PassThrough the next stage pipes
       // into its stdin. A PassThrough buffers until that pipe attaches, so
       // early chunks are not lost. Pause the child if the tee fills.
       child.stderr?.setEncoding("utf8");
       const handoff = onSpawn && child.stdout ? new PassThrough() : undefined;
+      // While `handoffLive`, this stage's stdout is teed into the downstream
+      // stdin and the child is back-pressured when that tee fills. Once the
+      // downstream consumer stops reading — its stdin closed / EPIPE'd, or it
+      // never spawned — it destroys the handoff; we then drop the tee and keep
+      // draining stdout to the `.out` capture only, so this producer finishes
+      // instead of blocking on a full handoff forever (documented in
+      // docs/language.md next to the stdin pipeline section).
+      let handoffLive = handoff !== undefined;
       child.stdout?.on("data", (chunk: Buffer) => {
         io?.appendOut(chunk);
-        if (handoff && !handoff.write(chunk)) child.stdout?.pause();
+        if (handoffLive && handoff && !handoff.write(chunk)) child.stdout?.pause();
       });
       if (handoff) {
-        handoff.on("drain", () => child.stdout?.resume());
+        // The downstream destroys/ends the handoff when it stops reading; drop
+        // the back-pressure so the producer drains to `.out` and settles.
+        const dropHandoff = (): void => {
+          if (!handoffLive) return;
+          handoffLive = false;
+          child.stdout?.resume();
+        };
+        handoff.on("drain", () => {
+          if (handoffLive) child.stdout?.resume();
+        });
         child.stdout?.on("end", () => handoff.end());
         child.stdout?.on("error", () => handoff.destroy());
+        handoff.on("close", dropHandoff);
+        handoff.on("error", dropHandoff);
         onSpawn?.(handoff);
       } else if (onSpawn) {
         onSpawn(undefined);
@@ -2369,6 +2522,9 @@ export class NodeWorkflowRuntime {
         try {
           child.stdout?.destroy();
           child.stderr?.destroy();
+          // End the tee so a downstream stage piping from it sees EOF and settles
+          // instead of blocking on a half-open handoff.
+          handoff?.end();
         } catch {
           // best-effort cleanup
         }
@@ -2391,6 +2547,16 @@ export class NodeWorkflowRuntime {
         const msg = spawnFailureText(err, command, args, env, interpreter);
         error += msg;
         io?.appendErr(msg);
+        // An async spawn failure (e.g. a missing interpreter → ENOENT) leaves the
+        // upstream stage's teed stdout un-read; drain it so the producer doesn't
+        // block (mirrors the synchronous-throw path above).
+        if (stdin?.kind === "fd") {
+          try {
+            stdin.stream.destroy();
+          } catch {
+            // best-effort: upstream may have already gone away
+          }
+        }
         settle({ status: 1, output: "", error, streamed: true });
       });
       child.on("close", (code) => {
@@ -2414,8 +2580,20 @@ export class NodeWorkflowRuntime {
         if (stdin.kind === "bytes") {
           childStdin.end(stdin.bytes, "utf8");
         } else if (stdin.kind === "fd") {
-          stdin.stream.on("error", () => {});
-          stdin.stream.pipe(childStdin);
+          const upstream = stdin.stream;
+          upstream.on("error", () => {});
+          // If our stdin closes (this stage read enough and exited, e.g. a
+          // `head -c 10` that EPIPE'd the write end), destroy the upstream tee so
+          // its producer stops being back-pressured and drains to `.out` instead
+          // of blocking on a full handoff forever.
+          childStdin.on("close", () => {
+            try {
+              upstream.destroy();
+            } catch {
+              // best-effort: upstream may have already gone away
+            }
+          });
+          upstream.pipe(childStdin);
         } else {
           const rs = createReadStream(stdin.path);
           rs.on("error", () => {
@@ -2495,12 +2673,12 @@ export class NodeWorkflowRuntime {
     scope: Scope,
     body: string,
     shebang: string | undefined,
-    argsRaw: string,
+    callArgs: Arg[] | string[] | undefined,
     stdin?: StdinSource,
     onSpawn?: (stdout: Readable | undefined) => void,
     endGate?: Promise<unknown>,
   ): Promise<StepResult> {
-    const resolvedArgs = await this.resolveArgsRaw(scope, argsRaw);
+    const resolvedArgs = await this.resolveArgs(scope, callArgs);
     if (!Array.isArray(resolvedArgs)) return resolvedArgs;
     const args = resolvedArgs;
     const scriptName = inlineScriptName(body, shebang);
@@ -2527,7 +2705,8 @@ export class NodeWorkflowRuntime {
   }
 
   private resolveConfigAgentModel(scope: Scope, filePath: string): string | undefined {
-    const ctx = this.defCtxStack[this.defCtxStack.length - 1];
+    const defCtxStack = this.getDefCtxStack();
+    const ctx = defCtxStack[defCtxStack.length - 1];
     const moduleMeta = this.graph.modules.get(filePath)?.ast.metadata;
     const defMeta = ctx?.defMeta;
     const layered: DefMetadata = {};
@@ -2546,9 +2725,12 @@ export class NodeWorkflowRuntime {
    * via this scoped env, a prompt-agent) subprocess: without the key the
    * audited workflow cannot forge a run_summary.jsonl chain that verifies,
    * and without the path it is not even handed the file to overwrite
-   * (finding H-3). Deletes in place on the caller's fresh copy. `this.env`
-   * keeps both — the trusted kernel writes the journal and
-   * `appendRunSummaryLine` reads the path from `process.env`.
+   * (finding H-3). Deletes in place on the caller's fresh copy. The journal
+   * path stays on `this.env` (the trusted kernel writes the journal and
+   * `appendRunSummaryLine` reads the path from `process.env`). The chain key
+   * is held off `this.env` entirely — it arrives off-process and lives only in
+   * the emitter's in-memory env — so this delete of `CHAIN_KEY_ENV` is defense
+   * in depth against an in-process caller that still sets it on `this.env`.
    */
   private scrubKernelKeys(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
     delete env[CHAIN_KEY_ENV];
@@ -2628,7 +2810,8 @@ export class NodeWorkflowRuntime {
   }
 
   private resolveRecoverLimit(filePath: string): number {
-    const activeWorkflowMeta = this.defCtxStack[this.defCtxStack.length - 1]?.defMeta;
+    const defCtxStack = this.getDefCtxStack();
+    const activeWorkflowMeta = defCtxStack[defCtxStack.length - 1]?.defMeta;
     if (activeWorkflowMeta?.run?.recoverLimit !== undefined) {
       return activeWorkflowMeta.run.recoverLimit;
     }

@@ -14,10 +14,10 @@
  * OUTSIDE the agent-writable run directory, so a workflow cannot squat the key
  * path or delete the key to disable its own tamper evidence (finding M-3).
  */
-import { appendFileSync, existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { createHash, createHmac, randomBytes } from "node:crypto";
 import { homedir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { join, resolve } from "node:path";
 
 /**
  * Env var carrying the per-run HMAC chain key into the trusted kernel process.
@@ -228,11 +228,4 @@ export function formatUtcTimestamp(): string {
   const d = new Date();
   const p = (n: number) => String(n).padStart(2, "0");
   return `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())}T${p(d.getUTCHours())}:${p(d.getUTCMinutes())}:${p(d.getUTCSeconds())}Z`;
-}
-
-export function appendRunSummaryLine(line: string): void {
-  const file = process.env.JAIPH_RUN_SUMMARY_FILE;
-  if (!file) return;
-  mkdirSync(dirname(file), { recursive: true });
-  appendFileSync(file, `${line}\n`, { flag: "a" });
 }

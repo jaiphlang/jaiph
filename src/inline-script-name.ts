@@ -1,4 +1,20 @@
 import { createHash } from "node:crypto";
+import { resolve } from "node:path";
+
+/**
+ * Deterministic emitted-file name for a module-level `script` (a declared
+ * `script name = …` or an `import script … as name`). The name is unique per
+ * (module, script name): two modules that both declare `script check` emit to
+ * distinct files, so one module's body can never overwrite another's, and a
+ * script call always runs the body of the module it resolves to. The emitter
+ * and the runtime both derive the name from the module's absolute path, so they
+ * agree without a shared side channel. Inline (`__inline_*`) and nested
+ * (`__nested_*`) scripts keep their content-hash names.
+ */
+export function moduleScriptFileName(modulePath: string, scriptName: string): string {
+  const hash = createHash("sha256").update(resolve(modulePath)).digest("hex").slice(0, 12);
+  return `${scriptName}__${hash}`;
+}
 
 /**
  * Deterministic name for an inline script artifact.

@@ -5,7 +5,8 @@
 #
 # CLI / overnight (queue-driven):
 #   jaiph run .jaiph/engineer.jh
-#   → default → implement_from_queue (first #dev-ready QUEUE.md task).
+#   → default → implement_from_queue (first #dev-ready task that is not
+#     #in-progress; claimed, then archived to DONE.md once CI passes).
 #
 # Hub / serve / mcp (task parameter, no QUEUE.md):
 #   export def implement_from_task(task) — used by .jaiph/main.jh engineer(task)
@@ -40,11 +41,11 @@ const safety_constraints = """
     Nested sessions share runtime resources and can crash active sessions.
   - Do not attempt to bypass nested-session guards (for example by unsetting
     environment variables such as CLAUDECODE).
-  - Do not modify QUEUE.md in any way (no deleting the current task, no
-    rewriting headers/bodies, no reordering). QUEUE.md process rule 4 is
-    for orchestration only: after a successful implement, the workflow calls
-    queue.remove_completed_task. If you believe a task is done, finish
-    acceptance work and stop — do not edit the queue file yourself.
+  - Do not modify QUEUE.md or DONE.md in any way (no deleting the current
+    task, no rewriting headers/bodies, no reordering). They are generated
+    views. The workflow claims the task before this prompt and archives it
+    to DONE.md after CI passes. If you believe a task is done, finish
+    acceptance work and stop — do not edit the queue files yourself.
   - Any violation of these constraints is an immediate task failure; stop and report.
 """
 
@@ -220,16 +221,17 @@ def select_role(role_name) {
 }
 
 script task_text_has_header = '''
-printf '%s\n' "$1" | grep -q '^## '
+  printf '%s\n' "$1" | grep -q '^## '
 '''
 
 script first_line_task = '''
   local line
   line="$(printf '%s\n' "$1" | awk 'NR==1 { print; exit }')"
   line="${line#\#\# }"
-  line="$(printf '%s\n' "$line" | sed 's/ *#[A-Za-z0-9_-]*//g')"
+  line="$(printf '%s\n' "$line" | sed -E 's/ *#[A-Za-z0-9_-]+//g')"
   printf '%s\n' "$line"
 '''
+
 def classify_role(task) {
   config {
     agent.model = "sonnet"
@@ -274,7 +276,10 @@ def implement(task, role_name) {
 
     ## Context
     You are working on the Jaiph codebase (https://github.com/jaiphlang/jaiph),
-    a TypeScript compiler and runtime for a DSL that transpiles to Bash.
+    a TypeScript toolchain for the Jaiph workflow language: a compiler front
+    end and a JavaScript kernel that interprets the workflow AST in process.
+    No workflow-level shell is emitted; only `script` bodies run as
+    subprocesses.
     docs/architecture.md is the source of truth for architecture and execution flow.
     design/0003-docs-one-fact-one-owner.md is the source of truth for which
     published docs page owns a contract.
@@ -332,7 +337,6 @@ def implement(task, role_name) {
 }
 
 # Shared post-implement path: CI, docs parity from the task text, commit.
-# Callers that touch QUEUE.md must do so before this (so the commit includes it).
 def verify_docs_and_commit(task) {
   ci.ensure_ci_passes()
   docs.update_from_task(task)
@@ -358,23 +362,36 @@ export def implement_from_task(task) {
   verify_docs_and_commit(task)
 }
 
-# Queue-driven entry for CLI / overnight loops. Always auto-classifies the role.
-export def implement_from_queue() {
-  claude.ensure_usage()
-
-  const task = queue.get_first_task()
-  queue.task_is_dev_ready(task)
-  const task_header = first_line_task(task)
-  log "Implementing task: ${task_header}"
-
+# Work on a claimed queue task: implement, CI, docs, archive, commit.
+# The task is archived to DONE.md only after CI passes, and before the commit
+# so the commit carries the regenerated QUEUE.md / DONE.md views.
+def run_claimed_task(task, task_header) {
   const role_name = classify_role(task)
   log "Role: ${role_name}"
 
   implement(task, role_name)
 
-  queue.remove_completed_task(task_header)
+  ci.ensure_ci_passes()
+  docs.update_from_task(task)
+  queue.archive_to_done(task_header, "")
+  git.commit(task)
+}
 
-  verify_docs_and_commit(task)
+# Queue-driven entry for CLI / overnight loops. Always auto-classifies the role.
+# Takes the first #dev-ready task that is not #in-progress and claims it. On
+# failure the task stays in the queue and the claim is released.
+export def implement_from_queue() {
+  claude.ensure_usage()
+
+  const task = queue.next_available()
+  const task_header = first_line_task(task)
+  queue.mark_task_in_progress(task_header)
+  log "Implementing task: ${task_header}"
+
+  run_claimed_task(task, task_header) catch (err) {
+    queue.unmark_task(task_header, "in-progress")
+    fail "task not completed, left in the queue: ${task_header}: ${err}"
+  }
 }
 
 export def main() {

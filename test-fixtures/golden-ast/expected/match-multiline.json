@@ -21,15 +21,21 @@
             "match": {
               "arms": [
                 {
-                  "body": "\"greeting line one\ngreeting line two\"",
+                  "body": {
+                    "kind": "literal",
+                    "raw": "\"greeting line one\ngreeting line two\"",
+                    "tripleQuoted": true
+                  },
                   "pattern": {
                     "kind": "string_literal",
                     "value": "hello"
-                  },
-                  "tripleQuotedBody": true
+                  }
                 },
                 {
-                  "body": "\"unknown\"",
+                  "body": {
+                    "kind": "literal",
+                    "raw": "\"unknown\""
+                  },
                   "pattern": {
                     "kind": "wildcard"
                   }

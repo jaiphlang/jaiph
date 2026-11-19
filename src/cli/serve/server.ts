@@ -1,7 +1,7 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { errText } from "../../errors";
 import type { AddressInfo } from "node:net";
-import { createReadStream } from "node:fs";
+import { closeSync, createReadStream } from "node:fs";
 import { pipeline } from "node:stream";
 import { MAX_BODY_BYTES, type ServeHandler, type ServeRequest } from "./handler";
 import type { StreamTarget } from "./runfiles";
@@ -68,23 +68,40 @@ export function createHttpServer(handler: ServeHandler, log: (line: string) => v
  * pinned to the `size` advertised in `content-length` even if the file grows
  * mid-stream (an appending journal). Errors after the headers are sent cannot
  * become an HTTP error; the connection is simply torn down by `pipeline`.
+ *
+ * Two body sources: a journal `path` opened here by name, or an artifact `fd`
+ * the handler already opened once (TOCTOU-safe) and this reads from directly —
+ * `autoClose` closes it when the stream ends, errors, or the client disconnects.
  */
-function streamBodyFile(bodyFile: { path: string; size: number }, res: ServerResponse): Promise<void> {
+function streamBodyFile(bodyFile: { path: string; size: number } | { fd: number; size: number }, res: ServerResponse): Promise<void> {
+  const hasFd = "fd" in bodyFile;
   if (bodyFile.size === 0) {
+    // Nothing to stream, but an already-open descriptor must still be released.
+    if (hasFd) {
+      try {
+        closeSync(bodyFile.fd);
+      } catch {
+        // Already closed; nothing to release.
+      }
+    }
     res.end();
     return Promise.resolve();
   }
-  const file = createReadStream(bodyFile.path, { start: 0, end: bodyFile.size - 1 });
+  const file = hasFd
+    ? createReadStream("", { fd: bodyFile.fd, start: 0, end: bodyFile.size - 1, autoClose: true })
+    : createReadStream(bodyFile.path, { start: 0, end: bodyFile.size - 1 });
   return new Promise((resolveStream) => {
     pipeline(file, res, () => resolveStream());
   });
 }
 
 /**
- * Wire a `StreamTarget` to a live socket: writes go straight to the response,
- * and the client disconnecting (`req` close) flips `aborted` and fires the
- * registered callbacks so a follow loop stops promptly instead of writing to a
- * dead socket.
+ * Wire a `StreamTarget` to a live socket: writes go straight to the response and
+ * propagate `res.write`'s backpressure signal, the client disconnecting (`req`
+ * close) flips `aborted` and fires the registered callbacks so a follow loop
+ * stops promptly instead of writing to a dead socket, and `drain` resolves once
+ * the socket can accept more (or the client leaves) so the follower never
+ * buffers an unread stream without bound.
  */
 function makeStreamTarget(req: IncomingMessage, res: ServerResponse): StreamTarget {
   let aborted = false;
@@ -97,8 +114,25 @@ function makeStreamTarget(req: IncomingMessage, res: ServerResponse): StreamTarg
   req.on("close", abort);
   res.on("close", abort);
   return {
-    write(chunk: string): void {
-      if (!aborted && res.writable) res.write(chunk);
+    write(chunk: string): boolean {
+      // Nothing is queued when the socket is gone, so report "ready" (no wait).
+      if (aborted || !res.writable) return true;
+      return res.write(chunk);
+    },
+    drain(): Promise<void> {
+      return new Promise((resolve) => {
+        if (aborted || !res.writable) {
+          resolve();
+          return;
+        }
+        const done = (): void => {
+          res.removeListener("drain", done);
+          res.removeListener("close", done);
+          resolve();
+        };
+        res.once("drain", done);
+        res.once("close", done);
+      });
     },
     get aborted(): boolean {
       return aborted;

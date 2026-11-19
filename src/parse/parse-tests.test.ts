@@ -110,9 +110,9 @@ test("parseTestBlock: parses mock prompt block with string literal and wildcard"
   if (testBlock.steps[0].type === "test_mock_prompt_block") {
     assert.equal(testBlock.steps[0].arms.length, 2);
     assert.deepEqual(testBlock.steps[0].arms[0].pattern, { kind: "string_literal", value: "hello" });
-    assert.equal(testBlock.steps[0].arms[0].body, '"world"');
+    assert.deepEqual(testBlock.steps[0].arms[0].body, { kind: "literal", raw: '"world"' });
     assert.deepEqual(testBlock.steps[0].arms[1].pattern, { kind: "wildcard" });
-    assert.equal(testBlock.steps[0].arms[1].body, '"default"');
+    assert.deepEqual(testBlock.steps[0].arms[1].body, { kind: "literal", raw: '"default"' });
   }
 });
 
@@ -148,9 +148,9 @@ test("parseTestBlock: parses compact one-line mock prompt block, comma in string
   if (testBlock.steps[0].type === "test_mock_prompt_block") {
     assert.equal(testBlock.steps[0].arms.length, 2);
     assert.deepEqual(testBlock.steps[0].arms[0].pattern, { kind: "string_literal", value: "a" });
-    assert.equal(testBlock.steps[0].arms[0].body, '"x, y"');
+    assert.deepEqual(testBlock.steps[0].arms[0].body, { kind: "literal", raw: '"x, y"' });
     assert.deepEqual(testBlock.steps[0].arms[1].pattern, { kind: "wildcard" });
-    assert.equal(testBlock.steps[0].arms[1].body, '"z"');
+    assert.deepEqual(testBlock.steps[0].arms[1].body, { kind: "literal", raw: '"z"' });
   }
 });
 
@@ -167,9 +167,16 @@ test("parseTestBlock: compact one-line mock prompt block keeps a call arm with a
     assert.equal(testBlock.steps[0].compact, true);
     assert.equal(testBlock.steps[0].arms.length, 2);
     assert.deepEqual(testBlock.steps[0].arms[0].pattern, { kind: "string_literal", value: "a" });
-    assert.equal(testBlock.steps[0].arms[0].body, "f(x, y)");
+    {
+      const b = testBlock.steps[0].arms[0].body;
+      assert.equal(b.kind, "call");
+      if (b.kind === "call") {
+        assert.equal(b.callee.value, "f");
+        assert.deepEqual(b.args, [{ kind: "var", name: "x" }, { kind: "var", name: "y" }]);
+      }
+    }
     assert.deepEqual(testBlock.steps[0].arms[1].pattern, { kind: "wildcard" });
-    assert.equal(testBlock.steps[0].arms[1].body, '"z"');
+    assert.deepEqual(testBlock.steps[0].arms[1].body, { kind: "literal", raw: '"z"' });
   }
 });
 

@@ -5,6 +5,7 @@ import { loadModuleGraph, readModuleGraph } from "../../transpiler";
 import { buildRuntimeGraph } from "./graph";
 import { NodeWorkflowRuntime } from "./node-workflow-runtime";
 import { readEnvGrantFile, ENV_GRANT_FILE_ENV } from "./env-grant-file";
+import { readChainKeyFile, CHAIN_KEY_FILE_ENV } from "./chain-key-file";
 
 /**
  * Internal argv marker dispatched from `main` (src/cli/index.ts) to route the
@@ -55,7 +56,12 @@ export async function runWorkflowRunner(positional: string[]): Promise<number> {
   // then drop the pointer so no script/prompt child inherits even the path.
   const grantValues = readEnvGrantFile(process.env[ENV_GRANT_FILE_ENV]);
   delete process.env[ENV_GRANT_FILE_ENV];
-  const runtime = new NodeWorkflowRuntime(graph, { env: process.env, cwd: process.cwd(), grantValues });
+  // Same off-process hand-off for the per-run audit-chain key: read it into
+  // memory (never onto `process.env`, so it stays off the leader's exec-time
+  // environment), remove the file, and drop the pointer.
+  const chainKey = readChainKeyFile(process.env[CHAIN_KEY_FILE_ENV]);
+  delete process.env[CHAIN_KEY_FILE_ENV];
+  const runtime = new NodeWorkflowRuntime(graph, { env: process.env, cwd: process.cwd(), grantValues, chainKey });
   const status = await runtime.runRoot(defName, runArgs);
   writeFileSync(
     metaFile,

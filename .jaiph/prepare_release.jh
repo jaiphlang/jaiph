@@ -14,7 +14,7 @@
 # operator to review, commit, tag, and push manually.
 #
 script read_pkg_version = '''
-node -p "require('./package.json').version"
+  node -p "require('./package.json').version"
 '''
 
 script assert_version_format = '''
@@ -27,6 +27,7 @@ script assert_version_format = '''
     exit 1
   }
 '''
+
 script compute_next_patch = python3'''
   import sys
   v = sys.argv[1]
@@ -37,6 +38,7 @@ script compute_next_patch = python3'''
   parts[-1] = str(int(parts[-1]) + 1)
   print('.'.join(parts))
 '''
+
 script assert_git_tree_clean = '''
   if [ -n "$(git status --porcelain)" ]; then
     echo "git tree is dirty; commit or stash before running prepare_release" >&2
@@ -44,6 +46,7 @@ script assert_git_tree_clean = '''
     exit 1
   fi
 '''
+
 script assert_tag_does_not_exist = '''
   v="$1"
   if git rev-parse -q --verify "refs/tags/v${v}" >/dev/null 2>&1; then
@@ -51,6 +54,7 @@ script assert_tag_does_not_exist = '''
     exit 1
   fi
 '''
+
 script npm_version_no_tag = 'npm version "$1" --no-git-tag-version --allow-same-version >/dev/null'
 
 script update_install_release_ref = python3'''
@@ -71,6 +75,7 @@ script update_install_release_ref = python3'''
       total += count
   print(total)
 '''
+
 # The editor plugins and the Tree-sitter grammar ship the CLI's version, and
 # .github/workflows/vscode-publish.yml refuses a tag that does not match
 # plugins/vscode/package.json. npm-written JSON is rewritten through
@@ -114,10 +119,11 @@ script assert_built_cli_version_equals = '''
     exit 1
   fi
 '''
+
 script run_registry_build = 'node scripts/build-registry.mjs >&2'
 
 script latest_release_tag = '''
-git tag -l 'v*' | sort -V | tail -1
+  git tag -l 'v*' | sort -V | tail -1
 '''
 
 script commits_since_latest_tag = '''
@@ -128,6 +134,7 @@ script commits_since_latest_tag = '''
     git log "${tag}"..HEAD --oneline
   fi
 '''
+
 script read_changelog_unreleased = python3'''
   import re
   import sys
@@ -150,6 +157,7 @@ script read_changelog_unreleased = python3'''
 
   sys.stdout.write("".join(out))
 '''
+
 script read_changelog_version_section = python3'''
   import re
   import sys
@@ -176,6 +184,7 @@ script read_changelog_version_section = python3'''
 
   sys.stdout.write("".join(out))
 '''
+
 script assert_changelog_stamped = '''
   v="$1"
   grep -Eq '^# Unreleased$' CHANGELOG.md || {
@@ -187,6 +196,7 @@ script assert_changelog_stamped = '''
     exit 1
   }
 '''
+
 const changelog_reviewer_role = """
   You are a release engineer preparing Jaiph for publication. You edit
   CHANGELOG.md in the repo root — the operator runs prepare_release next

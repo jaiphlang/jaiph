@@ -35,7 +35,7 @@ export {
   shellQuote,
 } from "./prompt-config";
 export type { ModelResolution, PromptConfig, PromptSource } from "./prompt-config";
-export { prepareClaudeEnv, resolveClaudeFallbackConfigDir } from "./prompt-claude";
+export { prepareClaudeEnv } from "./prompt-claude";
 export type { ClaudeEnvPreparation } from "./prompt-claude";
 export { installPromptWatchdog, runBackend } from "./prompt-backends";
 
@@ -121,6 +121,12 @@ export async function executePrompt(
    * into `promptText`; the transcript omits the full-body dump.
    */
   promptSource?: PromptSource,
+  /**
+   * The run's cooperative-cancellation signal, forwarded to the codex HTTP
+   * backend so an abort destroys the in-flight request. Subprocess backends
+   * ignore it — the leader forwards OS signals to their process group.
+   */
+  signal?: AbortSignal,
 ): Promise<{ final: string; status: number }> {
   writePromptTranscriptHeader(stdout, config, promptText, promptSource);
 
@@ -156,7 +162,7 @@ export async function executePrompt(
     writeFinal: (text) => stdout.write(text),
   };
 
-  const result = await runBackend(config, promptText, writer, execEnv, stderr, useEnv, promptSource);
+  const result = await runBackend(config, promptText, writer, execEnv, stderr, useEnv, promptSource, signal);
   const final =
     config.backend === "cursor"
       ? trimSurroundingBlankLines(result.final)

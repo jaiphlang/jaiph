@@ -16,20 +16,22 @@ Jaiph provides `async` and a value type called `Handle<T>` for overlapping indep
 
 `async ref(args)` schedules the same target a synchronous call would have called, either a def or a script, but it does not block the current step list. The return value is a `Handle<T>`, where `T` is whatever a synchronous call would have produced, which is a def's `return` value, or a script's trimmed stdout on success.
 
-In the runtime variable map the handle is stored as an opaque token of the form `__JAIPH_HANDLE__<id>`. The token is bookkeeping, not a value. The first step that needs the value awaits the scheduled work and then replaces the binding with the resolved string. After that, the variable behaves like any other string.
+The runtime does not store the handle as the variable's string value. It keeps a separate per-scope map from the variable name to the handle, and a name is a handle only while that map holds it. The variable map holds plain strings, so a captured string is never read as a handle. If a script or an agent prints text that happens to read like a handle id, such as `__JAIPH_HANDLE__1`, and you capture it into a `const`, the variable holds that literal text and interpolates to it.
+
+A handle id has the form `__JAIPH_HANDLE__<id>`, but it is only an internal id for the handle registry, not a marker the runtime looks for in a string value. The first step that needs the value awaits the scheduled work, removes the name from the handle map, and writes the resolved string into the variable map. After that, the variable behaves like any other string.
 
 The model separates when work starts from when its value is read:
 
 1. **Eager start.** Work is scheduled the moment `async` runs.
-2. **Lazy resolve.** The handle is not the value yet. The token can stay in its binding while later steps run, and the wait happens at the first resolving read or at the implicit join.
+2. **Lazy resolve.** The handle is not the value yet. The handle can stay in its binding while later steps run, and the wait happens at the first resolving read or at the implicit join.
 
 Separating the start from the read is what lets `async` overlap work. You start the work and keep going, and you only wait at the step that depends on the result.
 
 ## Passthrough versus reads that force resolution
 
-The runtime scans for `${name}` substrings in the places where a handle's contents would matter, and it resolves any binding that still holds a token. There are two cases:
+The runtime scans for `${name}` substrings in the places where a handle's contents would matter, and it resolves any name that is still bound to a handle. There are two cases:
 
-- **Passthrough.** The step does not look at the value. For example, the `const h = async foo()` binding itself keeps the token in the variable until something reads it, and a bare `async` with no capture variable still tracks the handle for the implicit join.
+- **Passthrough.** The step does not look at the value. For example, the `const h = async foo()` binding keeps the handle until something reads it, and a bare `async` with no capture variable still tracks the handle for the implicit join.
 - **Resolving reads.** The step needs the string. A resolving read is any of the following:
   - a `${h}` interpolation, such as `log "result: ${h}"`, a send right-hand side, a prompt body, or a shell one-liner;
   - passing `h` as an argument to a call, since bare-identifier args are rewritten as `${name}` before the call;
@@ -38,7 +40,7 @@ The runtime scans for `${name}` substrings in the places where a handle's conten
 
 There is no `await` keyword, and there is no way to copy a handle without reading it. To keep work overlapping, read the handle late. Hold it in the original binding, and avoid `${…}`, bare-identifier arguments to a call, and `if` or `match` subjects until you need the value. When a resolving read reaches a handle whose underlying call failed with a non-zero exit, the read itself fails. The error then propagates exactly like a failed synchronous call, and the reading step does not continue with an empty value. As a side effect of the failed resolve, the runtime empties the handle's binding in that scope.
 
-`for_lines` is the one exception. It reads the loop source as a plain variable value and does not pass it through handle resolution. If the source is still a handle token, the loop reads the token itself and iterates over the wrong text. Resolve the value first with `const text = "${h}"`, then iterate over `text`.
+`for_lines` is the one exception. It reads the loop source as a plain variable value and does not force a handle. If the name is still an unresolved handle, the loop reads the handle's opaque token and iterates over the wrong text. Resolve the value first with `const text = "${h}"`, then iterate over `text`.
 
 ## Implicit join
 
@@ -61,7 +63,7 @@ Both forms work only with the statement form of `async`. A captured `const h = a
 
 ## Why there is no `await` keyword
 
-`await` is not part of the language because the implicit join already marks the synchronization point on the normal-exit path, which is the end of the step list. Adding `await` would create a second way to express the same boundary. It would also add a third state, "started but neither read nor joined yet", that you would have to reason about. The model keeps only two states, a token in the variable map or a resolved string, which keeps the number of failure modes small.
+`await` is not part of the language because the implicit join already marks the synchronization point on the normal-exit path, which is the end of the step list. Adding `await` would create a second way to express the same boundary. It would also add a third state, "started but neither read nor joined yet", that you would have to reason about. The model keeps only two states, an unresolved handle tracked out of band or a resolved string in the variable map, which keeps the number of failure modes small.
 
 The trade-off is that overlapping a long-running async task with later steps takes care. Read the handle late rather than early, because an early read makes the def wait at that point and removes the overlap.
 
@@ -78,11 +80,11 @@ The parser or the validator enforces both restrictions at compile time, not at r
 
 The runtime tags each concurrent branch with a chain of 1-based indices. It stores the chain as `async_indices` on the `STEP_START`, `STEP_END`, `LOG`, `LOGWARN`, and `LOGERR` events. The CLI shows the chain as a subscript prefix on the live event stream, so interleaved branches stay readable in the progress tree. The runtime builds the chain with `AsyncLocalStorage`, so nested async work, such as an `async` inside another `async`, gets a deeper chain instead of colliding with its parent.
 
-Resolving a handle does not emit a separate event. The branch's own step and log events are the timeline, and the resolve is only the point where one consumer stopped passing the token along.
+Resolving a handle does not emit a separate event. The branch's own step and log events are the timeline, and the resolve is only the point where one consumer stopped passing the handle along.
 
 ## The design in short
 
-Async handles in Jaiph are a token bookkeeping model built on top of a normal call. They start eagerly, resolve lazily, and must be joined when a step list reaches its normal end. Once resolved, they behave like any other synchronous value. There is no scheduler, no thread pool, no `await`, and no detached background task. The model is a small contract that lets steps overlap until a step needs the answer.
+Async handles in Jaiph are a handle bookkeeping model built on top of a normal call. They start eagerly, resolve lazily, and must be joined when a step list reaches its normal end. Once resolved, they behave like any other synchronous value. There is no scheduler, no thread pool, no `await`, and no detached background task. The model is a small contract that lets steps overlap until a step needs the answer.
 
 ## Related
 

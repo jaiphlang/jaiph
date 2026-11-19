@@ -41,7 +41,7 @@ function listJhFiles(dir: string): string[] {
 function collectTripleQuotedArmBodies(expr: Expr, bodies: string[]): void {
   if (expr.kind === "match") {
     for (const arm of expr.match.arms) {
-      if (arm.tripleQuotedBody) bodies.push(arm.body);
+      if (arm.body.kind === "literal" && arm.body.tripleQuoted) bodies.push(arm.body.raw);
     }
   }
 }

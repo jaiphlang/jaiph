@@ -204,7 +204,9 @@ test("jaiph run tree shows function step; params shown when runtime includes the
         "printf '%s %s\\n' \"$1\" \"$2\"",
         "'''",
         "export def main() {",
-        '  echo_args("first" "second")',
+        // Two arguments (comma-separated). Each `Arg` is one argv element, so
+        // the script sees $1="first" and $2="second".
+        '  echo_args("first", "second")',
         "}",
         "",
       ].join("\n"),

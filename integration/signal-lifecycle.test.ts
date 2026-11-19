@@ -225,3 +225,84 @@ test("ACCEPTANCE: jaiph run exits on SIGTERM with bounded time and no stale work
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+/** True while `pid` is a signalable live process (ESRCH once reaped). */
+function pidAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// A script step now runs in its own process group (detached on POSIX), so a
+// SIGINT to `jaiph run` no longer reaches it through a shared group. The leader
+// must forward the signal to that group, killing the step and any subtree it
+// backgrounded. Regression guard: a grandchild of the script step is dead after
+// SIGINT, not orphaned to ppid 1.
+test(
+  "ACCEPTANCE: SIGINT to jaiph run kills a grandchild of a script step",
+  { skip: process.platform === "win32" },
+  async () => {
+    const root = mkdtempSync(join(tmpdir(), "jaiph-sigint-tree-"));
+    const cliPath = join(process.cwd(), "dist/src/cli.js");
+    const pidFile = join(root, "grandchild.pid");
+    try {
+      const workflowPath = join(root, "tree.jh");
+      // Background a long `sleep` (the grandchild), record its pid, then hang
+      // the foreground so the run stays active until the signal arrives.
+      writeFileSync(
+        workflowPath,
+        [
+          `script hang = 'sleep 200 & echo $! > ${pidFile}; sleep 200'`,
+          "export def main() {",
+          "  hang()",
+          "}",
+        ].join("\n"),
+      );
+
+      const child = spawn("node", [cliPath, "run", workflowPath], {
+        stdio: "pipe",
+        cwd: root,
+        env: { ...process.env, JAIPH_RUNS_DIR: join(root, ".jaiph/runs") },
+      });
+      const exitPromise = new Promise<void>((resolve) => child.on("close", () => resolve()));
+
+      // Wait for the grandchild to record its pid.
+      let grandchildPid = 0;
+      for (let i = 0; i < 80; i += 1) {
+        await new Promise((r) => setTimeout(r, 100));
+        if (existsSync(pidFile)) {
+          const n = Number(readFileSync(pidFile, "utf8").trim());
+          if (Number.isInteger(n) && n > 0) {
+            grandchildPid = n;
+            break;
+          }
+        }
+      }
+      assert.ok(grandchildPid > 0, "the script step's backgrounded grandchild recorded its pid");
+
+      child.kill("SIGINT");
+
+      await Promise.race([
+        exitPromise,
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("jaiph run did not exit within 5s after SIGINT")), 5000),
+        ),
+      ]);
+
+      let dead = false;
+      for (let i = 0; i < 100; i += 1) {
+        if (!pidAlive(grandchildPid)) {
+          dead = true;
+          break;
+        }
+        await new Promise((r) => setTimeout(r, 50));
+      }
+      assert.ok(dead, `the grandchild ${grandchildPid} must be dead after SIGINT`);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  },
+);

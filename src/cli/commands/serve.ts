@@ -6,12 +6,15 @@ import { parseServerArgs, startGeneration, startReloadWatcher } from "../shared/
 import { createOperatorLog } from "../shared/server-log";
 import {
   ServeHandler,
+  assertServeToolNames,
   createAuthenticator,
   loadPersistedRuns,
   persistRunRecord,
+  markServeManaged,
   createHttpServer,
   listen,
   type AuthConfig,
+  type Authenticator,
 } from "../serve";
 import { VERSION } from "../../version";
 
@@ -66,6 +69,10 @@ const SERVE_USAGE =
   "--allow-anonymous is only required to bind a non-loopback address with no token and no OIDC\n" +
   "(Docker must listen on 0.0.0.0). Shared or network-exposed hosts should set JAIPH_SERVE_TOKEN\n" +
   "or configure OIDC.\n" +
+  "A request from another browser origin is rejected with 403, as is a wrong Host header on a\n" +
+  "loopback bind, and every POST that starts a run (POST /{name}, POST /mcp) must send\n" +
+  "Content-Type: application/json even with no body (otherwise 415). Allow extra origins or hosts\n" +
+  "with JAIPH_SERVE_ALLOWED_ORIGINS / JAIPH_SERVE_ALLOWED_HOSTS (comma-separated).\n" +
   "Cap concurrent runs with\n" +
   "JAIPH_SERVE_MAX_CONCURRENT (default 4). Bound memory with JAIPH_SERVE_MAX_OUTPUT_BYTES\n" +
   "(per-run stdout/stderr/log/result cap, default 1 MiB), JAIPH_SERVE_RETAIN_RUNS\n" +
@@ -88,6 +95,17 @@ const LOOPBACK_HOSTS = new Set(["127.0.0.1", "::1", "localhost", "0:0:0:0:0:0:0:
 
 function isLoopbackHost(host: string): boolean {
   return LOOPBACK_HOSTS.has(host.toLowerCase());
+}
+
+/**
+ * Parse a comma-separated env var into a trimmed, non-empty list, or `undefined`
+ * when the var is unset or blank — so an unset `JAIPH_SERVE_ALLOWED_HOSTS`
+ * reaches the handler as "skip the check", not "allow nothing".
+ */
+function parseCsvEnv(raw: string | undefined): string[] | undefined {
+  if (raw === undefined) return undefined;
+  const items = raw.split(",").map((s) => s.trim()).filter((s) => s.length > 0);
+  return items.length > 0 ? items : undefined;
 }
 
 export async function runServe(rest: string[]): Promise<number> {
@@ -118,9 +136,16 @@ export async function runServe(rest: string[]): Promise<number> {
   }
   const authConfig: AuthConfig =
     oidcIssuer && oidcAudience
-      ? { oidc: { issuer: oidcIssuer, audience: oidcAudience, jwksUri: oidcJwksUri || undefined } }
+      ? { token, oidc: { issuer: oidcIssuer, audience: oidcAudience, jwksUri: oidcJwksUri || undefined } }
       : { token };
-  const authenticator = createAuthenticator(authConfig);
+  let authenticator: Authenticator;
+  try {
+    // Fails closed on a misconfigured secret (e.g. an empty JAIPH_SERVE_TOKEN).
+    authenticator = createAuthenticator(authConfig);
+  } catch (err) {
+    process.stderr.write(`jaiph serve: ${(err as Error).message}\n`);
+    return 1;
+  }
 
   // No token and no OIDC is the default: every REST and /mcp request is the
   // anonymous principal with all capabilities. Loopback binds in that mode
@@ -145,6 +170,11 @@ export async function runServe(rest: string[]): Promise<number> {
 
   // Hide the API surface (/docs + /openapi.json) with JAIPH_SERVE_EXPOSE_DOCS=false.
   const exposeDocs = !/^(false|0)$/i.test((process.env.JAIPH_SERVE_EXPOSE_DOCS ?? "").trim());
+
+  // Cross-origin / Host guard allowlists. Origins match verbatim; Host
+  // authorities are lowercased to match the header comparison.
+  const allowedOrigins = parseCsvEnv(process.env.JAIPH_SERVE_ALLOWED_ORIGINS);
+  const allowedHosts = parseCsvEnv(process.env.JAIPH_SERVE_ALLOWED_HOSTS)?.map((h) => h.toLowerCase());
 
   const maxRaw = process.env.JAIPH_SERVE_MAX_CONCURRENT;
   let maxConcurrent = DEFAULT_MAX_CONCURRENT;
@@ -187,6 +217,17 @@ export async function runServe(rest: string[]): Promise<number> {
   const { generations, posture, inputAbs, cleanup } = ctx;
   const hostRunsRoot = posture.hostRunsRoot;
 
+  // A def whose REST name collides with a reserved serve route (`/runs`, `/defs`,
+  // …) would be advertised in OpenAPI yet unreachable (the fixed route wins), so
+  // fail fast at startup naming the offending def rather than serving a 405 trap.
+  try {
+    assertServeToolNames(generations.current().tools);
+  } catch (err) {
+    process.stderr.write(`${errText(err)}\n`);
+    cleanup();
+    return 1;
+  }
+
   // Operator log (stderr only, never an HTTP response body): per-call banners +
   // optional workflow-log mirror, over the same injectable `log` sink used for
   // lifecycle lines. Host execution is announced once at startup.
@@ -206,7 +247,10 @@ export async function runServe(rest: string[]): Promise<number> {
   try {
     log(`jaiph serve: reconstructing runs from ${hostRunsRoot}...`);
     const reconstructStarted = Date.now();
-    initialRuns = loadPersistedRuns(hostRunsRoot, new Date().toISOString());
+    // Apply the retention cap while loading so a huge runs tree cannot blow up
+    // startup memory; only dirs this server created (run.json or marker) are
+    // touched, so a plain `jaiph run` dir is never reconciled.
+    initialRuns = loadPersistedRuns(hostRunsRoot, new Date().toISOString(), retainRuns);
     log(
       `jaiph serve: reconstructed ${initialRuns.length} run(s) from ${hostRunsRoot} in ${Date.now() - reconstructStarted}ms`,
     );
@@ -214,11 +258,19 @@ export async function runServe(rest: string[]): Promise<number> {
     log(`jaiph serve: could not reconstruct prior runs: ${errText(err)}`);
   }
 
+  // Resolved below by `listen` (so `--port 0` validates against the real port);
+  // the handler reads it per request through `getBoundPort`.
+  let boundPort = port;
+
   const handler = new ServeHandler({
     version: VERSION,
     serverTitle: `jaiph — ${basename(inputAbs)}`,
     authenticator,
     exposeDocs,
+    boundHost: host,
+    getBoundPort: () => boundPort,
+    allowedOrigins,
+    allowedHosts,
     maxConcurrent,
     retainRuns,
     retainAgeSec,
@@ -231,10 +283,15 @@ export async function runServe(rest: string[]): Promise<number> {
     persistRun: persistRunRecord,
     // A run's dir is only recorded on its object at finalize; while it runs the
     // events/artifacts endpoints locate it by scanning the host runs root for
-    // the run id.
-    // The handler caches the first hit per record, so a live SSE poll loop
-    // scans at most once.
-    resolveRunDir: (record) => findRunDir(hostRunsRoot, record.run_id),
+    // the run id. The handler caches the first hit per record, so a live SSE poll
+    // loop scans at most once. On the first hit, drop an ownership marker into the
+    // dir so a restart can reconcile this run (if it dies mid-flight) without
+    // touching foreign `jaiph run` dirs.
+    resolveRunDir: (record) => {
+      const dir = findRunDir(hostRunsRoot, record.run_id);
+      if (dir) markServeManaged(dir);
+      return dir;
+    },
     getTools: () => generations.current().tools,
     callTool: (spec, args, runId, ctx) => {
       // Bind the run to the generation live at start; the lease keeps its
@@ -263,7 +320,6 @@ export async function runServe(rest: string[]): Promise<number> {
   const watcher = startReloadWatcher(ctx, { reloaded: "def(s)", keepPrevious: "defs" });
 
   const httpServer = createHttpServer(handler, log);
-  let boundPort: number;
   try {
     boundPort = await listen(httpServer, host, port);
   } catch (err) {

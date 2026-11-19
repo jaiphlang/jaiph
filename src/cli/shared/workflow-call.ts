@@ -1,10 +1,10 @@
-import { resolveRuntimeEnv } from "../run/env";
+import { resolveRuntimeEnv, applyChainKeyFile } from "../run/env";
 import {
   runHooksForEvent,
   stepStartHookPayload,
   stepEndHookPayload,
 } from "../run/hooks";
-import { CHAIN_KEY_ENV, generateChainKey, writeChainKey, redactCredentials } from "../../runtime";
+import { generateChainKey, writeChainKey, redactCredentials } from "../../runtime";
 import { deliverRunTelemetryDetached } from "../telemetry/otlp";
 import type { StepEvent, LogEvent } from "../run/events";
 import { formatCallStartLine, formatCallEndLine } from "./server-log";
@@ -60,11 +60,14 @@ export async function callDef(
   runtimeEnv.JAIPH_SOURCE_ABS = env.inputAbs;
   runtimeEnv.JAIPH_RUN_ID = runId;
   runtimeEnv.JAIPH_SCRIPTS = env.scriptsDir;
-  // Per-run audit-chain key (finding H-3): forwarded to the trusted runner,
-  // scrubbed from script/agent subprocess envs, and persisted beside the
-  // journal below so read/export boundaries can verify integrity.
+  // Per-run audit-chain key (finding H-3): handed to the trusted runner out of
+  // band (a private tmpdir file, never on the leader's exec-time env), scrubbed
+  // from script/agent subprocess envs, and persisted beside the journal below so
+  // read/export boundaries can verify integrity.
   const chainKey = generateChainKey();
-  runtimeEnv[CHAIN_KEY_ENV] = chainKey;
+  // Only the file path lands on `runtimeEnv`; `callDefHost` removes it after the
+  // spawn (the leader also removes it on read).
+  applyChainKeyFile(runtimeEnv, chainKey);
 
   const startedAt = Date.now();
   if (env.hooks) {

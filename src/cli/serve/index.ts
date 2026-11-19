@@ -6,5 +6,9 @@ export { ServeHandler } from "./handler";
 export type { RunRecord, RunStatus, ServeHandlerOptions } from "./handler";
 export { createAuthenticator } from "./auth";
 export type { AuthConfig, Authenticator } from "./auth";
-export { loadPersistedRuns, persistRunRecord } from "./run-store";
+export { loadPersistedRuns, persistRunRecord, markServeManaged } from "./run-store";
 export { createHttpServer, listen } from "./server";
+// Startup guard for the serve command: reject a def whose REST name collides
+// with a reserved route. Re-exported here (from the shared tool-derivation
+// module) so the command imports it alongside the rest of its serve surface.
+export { assertServeToolNames } from "../shared/mcp-tools";

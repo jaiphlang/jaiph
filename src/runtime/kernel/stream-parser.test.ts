@@ -1,6 +1,8 @@
 import { describe, it } from "node:test";
 import * as assert from "node:assert/strict";
 import { Readable } from "node:stream";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import {
   processStreamLine,
   createStreamState,
@@ -128,5 +130,47 @@ describe("parseStream", () => {
     const w = collectWriter();
     await parseStream(input, w);
     assert.ok(w.final.includes("Final answer:"));
+  });
+});
+
+// Tests run from dist/src/runtime/kernel/...; walk up to repo root.
+const repoRoot = resolve(__dirname, "../../../..");
+function readFixture(name: string): string {
+  return readFileSync(resolve(repoRoot, "test-fixtures/stream", name), "utf8");
+}
+
+describe("multi-turn stream capture", () => {
+  it("captures only the final turn from the claude multi-turn fixture", async () => {
+    const w = collectWriter();
+    const final = await parseStream(Readable.from(readFixture("claude-multi-turn.jsonl")), w);
+    // The captured value is the last assistant turn's text, not every turn's
+    // deltas concatenated ("I'll inspect the repo first.APPROVED").
+    assert.equal(final, "APPROVED");
+    // The live progress stream still shows all turns.
+    assert.ok(w.final.includes("I'll inspect the repo first."));
+    assert.ok(w.final.includes("APPROVED"));
+  });
+
+  it("leaves single-turn capture unchanged", async () => {
+    const w = collectWriter();
+    const final = await parseStream(Readable.from(readFixture("claude-single-turn.jsonl")), w);
+    assert.equal(final, "The answer is 42.");
+    assert.equal(w.final, "Final answer:\nThe answer is 42.");
+  });
+
+  it("resets final on a new assistant turn when the stream has no result text", () => {
+    const state = createStreamState();
+    const w = collectWriter();
+    const msgStart = JSON.stringify({ type: "stream_event", event: { type: "message_start", message: {} } });
+    const delta = (text: string) =>
+      JSON.stringify({ type: "stream_event", event: { type: "content_block_delta", delta: { type: "text_delta", text } } });
+    processStreamLine(msgStart, state, w);
+    processStreamLine(delta("narration "), state, w);
+    processStreamLine(msgStart, state, w);
+    processStreamLine(delta("final"), state, w);
+    assert.equal(state.final, "final");
+    // Both turns are still visible in the live stream.
+    assert.ok(w.final.includes("narration "));
+    assert.ok(w.final.includes("final"));
   });
 });

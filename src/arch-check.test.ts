@@ -557,10 +557,21 @@ describe("arch:check dependency-cruiser guard", () => {
 
     const srcDir = join(repoRoot, "src");
     const files: string[] = [];
+    // A sibling test (eslint-caps.test.ts) creates and removes throwaway
+    // `src/eslint-caps-fixture-*` dirs while this walk runs. Use Dirent entries
+    // (no per-path statSync) and tolerate a dir vanishing mid-walk so the two
+    // concurrent test files don't race to an ENOENT.
     const walk = (dir: string): void => {
-      for (const name of readdirSync(dir)) {
-        const abs = join(dir, name);
-        if (statSync(abs).isDirectory()) {
+      let entries;
+      try {
+        entries = readdirSync(dir, { withFileTypes: true });
+      } catch (e) {
+        if ((e as NodeJS.ErrnoException).code === "ENOENT") return;
+        throw e;
+      }
+      for (const entry of entries) {
+        const abs = join(dir, entry.name);
+        if (entry.isDirectory()) {
           walk(abs);
         } else if (abs.endsWith(".ts")) {
           files.push(abs);
@@ -580,7 +591,15 @@ describe("arch:check dependency-cruiser guard", () => {
       if (rel.endsWith(".test.ts") || rel.endsWith(".acceptance.test.ts")) {
         continue;
       }
-      if (deepImport.test(readFileSync(abs, "utf8")) && !baselined.has(rel)) {
+      let source;
+      try {
+        source = readFileSync(abs, "utf8");
+      } catch (e) {
+        // A throwaway fixture file collected during the walk may already be gone.
+        if ((e as NodeJS.ErrnoException).code === "ENOENT") continue;
+        throw e;
+      }
+      if (deepImport.test(source) && !baselined.has(rel)) {
         offenders.push(rel);
       }
     }

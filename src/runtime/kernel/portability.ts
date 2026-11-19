@@ -164,3 +164,145 @@ function killSingleProcess(pid: number, signal: NodeJS.Signals): void {
     // no-op: process already gone or not signalable.
   }
 }
+
+// --- Leader-spawned child process groups -----------------------------------
+//
+// The leader spawns two kinds of child it may terminate mid-flight: `script`
+// subprocesses (`spawnAndCapture` in `node-workflow-runtime.ts`) and agent
+// backends (`runBackend` in `prompt-backends.ts`). The idle-output kill and the
+// prompt watchdog terminate one of those with `killProcessTree`, whose POSIX
+// group kill (`process.kill(-pid, …)`) only reaches the child's subtree when the
+// child leads its own group (`pgid == pid`). A child spawned without
+// `detached: true` shares the leader's group, so `-pid` names a non-existent
+// group (ESRCH) and only the single pid is signalled — its grandchildren
+// survive. So on POSIX those children are spawned `detached: true`.
+//
+// The cost of detaching is that they no longer share the leader's group, so a
+// SIGINT/SIGTERM delivered to the leader's group (Ctrl-C, or the CLI run-timeout
+// kill in `lifecycle.ts`) no longer reaches them. `trackChildGroup` records each
+// live child group and installs a one-time leader handler that forwards the
+// received signal to every tracked group and then — mirroring the CLI's own
+// escalation of the leader group — SIGKILLs those groups after a short grace, so
+// a descendant that ignores the first signal (a shell backgrounds async jobs
+// with SIGINT/SIGQUIT ignored) still dies. Windows has no process groups, so both
+// the detach and the tracking are POSIX-only and win32 behaviour is unchanged.
+
+/**
+ * Whether a leader-spawned child should be put in its own process group.
+ * POSIX only: on win32 there is no process group to kill and `detached` changes
+ * console semantics, so it stays `false` and behaviour is unchanged.
+ */
+export const spawnInOwnGroup = process.platform !== "win32";
+
+/**
+ * Grace before the leader SIGKILLs a child group that ignored the forwarded
+ * signal. Must stay below the CLI's own leader-group force-kill grace
+ * (`forceKillAfterMs`, default 1500ms in `src/cli/run/lifecycle.ts`): the leader
+ * must land its SIGKILL and re-raise before the CLI force-kills it, after which
+ * it can no longer signal the detached groups. A group that drains earlier (the
+ * common case — the child dies on the first signal) is detected by polling and
+ * the leader re-raises at once, so a clean Ctrl-C is not delayed by this grace.
+ */
+const CHILD_GROUP_FORCE_KILL_MS = 1200;
+const CHILD_GROUP_POLL_MS = 50;
+
+/** Live child-group leader pids (pgid == pid) the leader may need to signal. */
+const liveChildGroups = new Set<number>();
+let signalForwardingInstalled = false;
+let terminationPending = false;
+
+/**
+ * True once the leader has received SIGINT/SIGTERM and is forwarding it to the
+ * child groups before terminating itself. The runner entry (`runCli`) checks
+ * this so it does not `process.exit(status)` out from under the handler, which
+ * must re-raise the signal so the leader dies *by signal* (preserving the host
+ * call's "terminated by signal" result and matching pre-detach behaviour).
+ */
+export function isLeaderTerminationPending(): boolean {
+  return terminationPending;
+}
+
+/**
+ * Record `child` as a live process group and ensure the leader forwards
+ * SIGINT/SIGTERM to every live group. No-op on win32 (no process groups) and
+ * when the child has no pid (a failed spawn, or a unit-test fake). The pid is
+ * dropped on the child's `exit` and `close` so a reused pid is never signalled.
+ */
+export function trackChildGroup(child: ChildProcess): void {
+  if (process.platform === "win32") return;
+  const pid = child.pid;
+  if (typeof pid !== "number") return;
+  liveChildGroups.add(pid);
+  const forget = (): void => {
+    liveChildGroups.delete(pid);
+  };
+  child.once("exit", forget);
+  child.once("close", forget);
+  installChildGroupSignalForwarding();
+}
+
+/** Whether process group `pgid` still has any live member (ESRCH ⇒ drained). */
+function childGroupAlive(pgid: number): boolean {
+  try {
+    process.kill(-pgid, 0);
+    return true;
+  } catch (err) {
+    // EPERM: the group exists but we may not signal it (not expected for a
+    // same-user child) — treat as alive. ESRCH: no member left — drained.
+    return (err as NodeJS.ErrnoException).code === "EPERM";
+  }
+}
+
+/**
+ * On the first tracked group, install SIGINT/SIGTERM handlers. Installed at most
+ * once per process.
+ */
+function installChildGroupSignalForwarding(): void {
+  if (signalForwardingInstalled) return;
+  signalForwardingInstalled = true;
+  forwardToChildGroupsOnSignal("SIGINT");
+  forwardToChildGroupsOnSignal("SIGTERM");
+}
+
+/**
+ * Forward `signal` to every live child group, then re-raise it on the leader so
+ * the leader dies *by signal* — but only after the groups have drained, so a
+ * descendant that ignores the first signal (a shell sets a backgrounded job's
+ * SIGINT/SIGQUIT to ignore) is SIGKILLed first rather than orphaned. The groups
+ * are snapshotted because a group's leader pid is forgotten when it exits even
+ * while a grandchild keeps the group alive; the group persists by pgid, so the
+ * snapshot still names it. Polling re-raises as soon as every group is gone, so
+ * the common case (the child dies at once) is not delayed. Removing our listener
+ * first means a second identical signal (Ctrl-C again) hits the default
+ * disposition and kills the leader immediately.
+ */
+function forwardToChildGroupsOnSignal(signal: "SIGINT" | "SIGTERM"): void {
+  const handler = (): void => {
+    process.removeListener(signal, handler);
+    terminationPending = true;
+    const groups = [...liveChildGroups];
+    for (const pid of groups) {
+      killProcessTree(pid, signal);
+    }
+    const reraise = (): void => {
+      process.kill(process.pid, signal);
+    };
+    const deadline = Date.now() + CHILD_GROUP_FORCE_KILL_MS;
+    const poll = (): void => {
+      if (!groups.some(childGroupAlive)) {
+        reraise();
+        return;
+      }
+      if (Date.now() >= deadline) {
+        for (const pid of groups) killProcessTree(pid, "SIGKILL");
+        reraise();
+        return;
+      }
+      // Referenced (not unref'd): keep the leader alive until it has resolved the
+      // groups and re-raised, so a grandchild is never orphaned by an early exit.
+      setTimeout(poll, CHILD_GROUP_POLL_MS);
+    };
+    poll();
+  };
+  process.on(signal, handler);
+}

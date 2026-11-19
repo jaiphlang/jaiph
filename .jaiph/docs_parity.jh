@@ -53,6 +53,7 @@ script assert_newline_paths_are_files = '''
     test -f "$f" || return 1
   done <<< "$1"
 '''
+
 def docs_files_present(list) {
   assert_newline_paths_are_files(list)
 }
@@ -73,6 +74,7 @@ script assert_worktree_clean_for_docs = '''
     return 1
   fi
 '''
+
 def worktree_is_clean() {
   assert_worktree_clean_for_docs()
 }
@@ -96,6 +98,7 @@ script assert_only_allowed_changed = '''
     return 1
   done <<< "$after_changed_files"
 '''
+
 def only_expected_docs_changed_after_prompt(allowed) {
   assert_only_allowed_changed(allowed)
 }
@@ -111,6 +114,7 @@ script list_docs_md_paths = '''
   done
   printf '%s\n' "$out"
 '''
+
 # Docs surfaces the agent may edit: markdown/HTML, CHANGELOG, CLI usage/help
 # strings in usage.ts and per-command USAGE constants (e.g. run.ts).
 script build_allowed_paths_block = '''
@@ -121,6 +125,7 @@ script build_allowed_paths_block = '''
   done
   printf '%s\n' "$out"
 '''
+
 export def update_from_task(taskDesc) {
   prompt """
     ${skills_preamble}

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { McpServer, type McpCallResult, type McpCallContext } from "./mcp-server";
+import { McpServer, type McpCallResult, type McpCallContext, type McpHttpScope } from "./mcp-server";
 import type { McpToolSpec } from "./mcp-tools";
 
 /** A promise plus its resolver, so a fake `callTool` can settle on command. */
@@ -394,6 +394,108 @@ test("notifyToolsChanged: emits the list_changed notification once initialized",
   await initialize(server);
   server.notifyToolsChanged();
   assert.deepEqual(written[1], { jsonrpc: "2.0", method: "notifications/tools/list_changed" });
+});
+
+// === HTTP scope: per-principal cancellation + per-call isolation ===
+//
+// Over the HTTP transport (`jaiph serve`) handleLine carries a scope: it isolates
+// each tools/call under a server-generated key, scopes a notifications/cancelled
+// to the sending principal + its cancel capability, and hands back each call's
+// exact cancel handle. stdio (no scope) is unaffected.
+
+test("handleLine scope: notifications/cancelled cancels only the sending principal's call", async () => {
+  let cancelled = false;
+  const call = deferred();
+  const { server } = makeServer({
+    callTool: async (_spec, _args, ctx) => {
+      ctx.onCancelHandle?.(() => {
+        cancelled = true;
+        call.resolve({ text: "terminated by signal SIGINT", isError: true });
+      });
+      return call.promise;
+    },
+  });
+  await initialize(server);
+  const alice: McpHttpScope = { owner: "alice", canCancel: true };
+  const bob: McpHttpScope = { owner: "bob", canCancel: true };
+  const callP = server.handleLine(
+    JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "build", arguments: { target: "x" } } }),
+    () => {},
+    alice,
+  );
+  // Bob tries to cancel alice's request id 1 → no-op (different owner).
+  await server.handleLine(
+    JSON.stringify({ jsonrpc: "2.0", method: "notifications/cancelled", params: { requestId: 1 } }),
+    () => {},
+    bob,
+  );
+  assert.equal(cancelled, false, "a different principal cannot cancel the call");
+  // Alice cancels her own.
+  await server.handleLine(
+    JSON.stringify({ jsonrpc: "2.0", method: "notifications/cancelled", params: { requestId: 1 } }),
+    () => {},
+    alice,
+  );
+  await callP;
+  assert.equal(cancelled, true, "the owning principal's cancel takes effect");
+});
+
+test("handleLine scope: a principal without the cancel capability cannot cancel its own call", async () => {
+  let cancelled = false;
+  const call = deferred();
+  const { server } = makeServer({
+    callTool: async (_spec, _args, ctx) => {
+      ctx.onCancelHandle?.(() => {
+        cancelled = true;
+        call.resolve({ text: "terminated", isError: true });
+      });
+      return call.promise;
+    },
+  });
+  await initialize(server);
+  const carol: McpHttpScope = { owner: "carol", canCancel: false };
+  const callP = server.handleLine(
+    JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "build", arguments: { target: "x" } } }),
+    () => {},
+    carol,
+  );
+  await server.handleLine(
+    JSON.stringify({ jsonrpc: "2.0", method: "notifications/cancelled", params: { requestId: 1 } }),
+    () => {},
+    carol,
+  );
+  assert.equal(cancelled, false, "no cancel capability means the notification is a no-op");
+  call.resolve({ text: "done", isError: false }); // settle so the call drains
+  await callP;
+});
+
+test("handleLine scope: two calls sharing a client id are independent; a captured handle cancels exactly one", async () => {
+  const calls = [deferred(), deferred()];
+  let i = 0;
+  const { server } = makeServer({
+    callTool: async (_spec, _args, ctx) => {
+      const idx = i++;
+      ctx.onCancelHandle?.(() => calls[idx].resolve({ text: `cancelled ${idx}`, isError: true }));
+      return calls[idx].promise;
+    },
+  });
+  await initialize(server);
+  const captured: Array<() => void> = [];
+  const scopeFor = (): McpHttpScope => ({ owner: "op", canCancel: true, registerCanceller: (fn) => void captured.push(fn) });
+  const sinkA: Array<Record<string, unknown>> = [];
+  const sinkB: Array<Record<string, unknown>> = [];
+  const line = JSON.stringify({ jsonrpc: "2.0", id: 7, method: "tools/call", params: { name: "build", arguments: { target: "x" } } });
+  const pA = server.handleLine(line, (m) => void sinkA.push(m), scopeFor());
+  const pB = server.handleLine(line, (m) => void sinkB.push(m), scopeFor());
+  await new Promise((r) => setImmediate(r));
+  assert.equal(captured.length, 2, "each same-id call registered its own cancel handle");
+  // Cancel only the first through its captured handle; finish the second cleanly.
+  captured[0]();
+  calls[1].resolve({ text: "done b", isError: false });
+  await Promise.all([pA, pB]);
+  assert.equal(sinkA.find((m) => m.id === 7), undefined, "the cancelled call sends no response");
+  const resB = sinkB.find((m) => m.id === 7) as { result: { content: [{ text: string }] } };
+  assert.equal(resB.result.content[0].text, "done b", "the other same-id call returns its own result");
 });
 
 // === per-line write routing (HTTP transport) ===

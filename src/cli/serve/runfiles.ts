@@ -1,5 +1,16 @@
-import { closeSync, existsSync, fstatSync, openSync, readSync, readdirSync, realpathSync, statSync, type Dirent } from "node:fs";
-import { join, resolve, sep } from "node:path";
+import {
+  closeSync,
+  constants,
+  existsSync,
+  fstatSync,
+  openSync,
+  readSync,
+  readdirSync,
+  realpathSync,
+  statSync,
+  type Dirent,
+} from "node:fs";
+import { basename, join, resolve, sep } from "node:path";
 
 /** A run's durable journal file name, under its run directory. */
 export const RUN_SUMMARY = "run_summary.jsonl";
@@ -93,9 +104,68 @@ export function resolveArtifactPath(runDir: string, requested: string): string |
   return realCandidate;
 }
 
+/** An opened artifact: a read descriptor plus the size + display name `fstat` reported for it. */
+export interface OpenArtifact {
+  /** Read-only descriptor; the caller owns it and must close it (the download stream does on end). */
+  fd: number;
+  /** Byte size from `fstat` on the descriptor — never a second path-based `stat`. */
+  size: number;
+  /** Basename of the resolved file, for the download's `Content-Disposition`. */
+  name: string;
+}
+
+/**
+ * Resolve and open a requested artifact in one step, closing the check→open
+ * TOCTOU window. After {@link resolveArtifactPath}'s traversal + symlink
+ * containment checks pass, the file is opened once with `O_NOFOLLOW` (where the
+ * platform defines it), so the final path component cannot be swapped for a
+ * symlink after the check; size and regular-file type are then read from the
+ * descriptor with `fstat`, never from a second path `stat` that could resolve to
+ * a different inode. Returns `null` (leaking no descriptor) when the request
+ * escapes the artifacts dir, the final component became a symlink (`ELOOP`), the
+ * file vanished, or the target is not a regular file.
+ *
+ * `beforeOpen` is a test-only seam fired between resolve and open to exercise the
+ * swap race; production callers omit it.
+ */
+export function openArtifact(
+  runDir: string,
+  requested: string,
+  beforeOpen?: (resolved: string) => void,
+): OpenArtifact | null {
+  const abs = resolveArtifactPath(runDir, requested);
+  if (abs === null) return null;
+  beforeOpen?.(abs);
+  let fd: number;
+  try {
+    fd = openSync(abs, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
+  } catch {
+    return null; // Vanished, or the final component is now a symlink (ELOOP).
+  }
+  try {
+    const st = fstatSync(fd);
+    if (!st.isFile()) {
+      closeSync(fd);
+      return null;
+    }
+    return { fd, size: st.size, name: basename(abs) };
+  } catch {
+    closeSync(fd);
+    return null;
+  }
+}
+
 /** The response-body sink an SSE stream writes to; decoupled from `node:http`. */
 export interface StreamTarget {
-  write(chunk: string): void;
+  /**
+   * Queue a chunk. Returns `false` when the socket's write buffer is full (a
+   * slow or non-reading client) — the follower stops reading more of the journal
+   * and awaits {@link drain} before continuing, so an unread stream can never make
+   * the server buffer the whole file. `true` means keep going.
+   */
+  write(chunk: string): boolean;
+  /** Resolves once the socket is ready for more writes after a `false` from {@link write}. */
+  drain(): Promise<void>;
   readonly aborted: boolean;
   onAbort(cb: () => void): void;
 }
@@ -112,17 +182,27 @@ export interface SseEventsOptions {
   keepAliveMs: number;
 }
 
+/** Upper bound on one follower read, so neither a single `readSync` nor the
+ * in-memory copy of appended bytes ever exceeds this — a 50 MB journal is drained
+ * in 64 KB chunks, not loaded whole. */
+export const JOURNAL_CHUNK_BYTES = 64 * 1024;
+
 /**
  * Incremental reader over an append-only journal: an open file descriptor plus
  * a byte offset, so each poll reads only the bytes appended since the previous
- * one — bytes before the current offset are never read again, and no poll
- * loads the whole file. Bytes after the last newline (a partial line still
- * being written) are buffered in memory and completed on a later call, never
- * re-read from disk.
+ * one — bytes before the current offset are never read again, and no call loads
+ * the whole file. Each call reads at most {@link JOURNAL_CHUNK_BYTES}; a caller
+ * that needs to catch up on a large backlog loops until the result is empty.
+ * Bytes after the last newline (a partial line still being written) are buffered
+ * in memory and completed on a later call, never re-read from disk.
  */
 export interface JournalFollower {
-  /** Complete (newline-terminated) lines appended to `file` since the last call. */
-  readNewLines(file: string): string[];
+  /**
+   * Complete lines from the next bounded chunk of `<dir>/run_summary.jsonl`.
+   * An empty result means caught up (no appended bytes, or only a partial line
+   * buffered); otherwise more chunks may remain, so loop until it returns empty.
+   */
+  readNewLines(dir: string): string[];
   close(): void;
 }
 
@@ -131,7 +211,9 @@ export function createJournalFollower(): JournalFollower {
   let offset = 0;
   let tail = Buffer.alloc(0);
   return {
-    readNewLines(file: string): string[] {
+    readNewLines(dir: string): string[] {
+      if (dir.includes("\0")) return [];
+      const file = join(resolve(dir), RUN_SUMMARY);
       if (fd === null) {
         try {
           fd = openSync(file, "r");
@@ -146,7 +228,10 @@ export function createJournalFollower(): JournalFollower {
         return [];
       }
       if (size <= offset) return [];
-      const appended = Buffer.alloc(size - offset);
+      // Read at most one bounded chunk per call — never `size - offset`, which on
+      // the first poll of a large journal would allocate and read the whole file.
+      const toRead = Math.min(size - offset, JOURNAL_CHUNK_BYTES);
+      const appended = Buffer.alloc(toRead);
       let read = 0;
       try {
         while (read < appended.length) {
@@ -197,20 +282,34 @@ export function createJournalFollower(): JournalFollower {
 export async function streamRunEventsSse(target: StreamTarget, opts: SseEventsOptions): Promise<void> {
   const follower = createJournalFollower();
   let lastKeepAlive = Date.now();
-  const flush = (): void => {
+  // Drain the journal in bounded chunks, honoring backpressure: when `write`
+  // reports a full socket buffer, stop reading more of the file until the client
+  // has drained what is already queued — so a slow reader cannot force the whole
+  // journal into memory.
+  const flush = async (): Promise<void> => {
     const dir = opts.resolveRunDir();
     if (!dir) return;
-    for (const line of follower.readNewLines(join(dir, RUN_SUMMARY))) target.write(`data: ${line}\n\n`);
+    for (;;) {
+      if (target.aborted) return;
+      const lines = follower.readNewLines(dir);
+      if (lines.length === 0) return; // Caught up (or only a partial line buffered).
+      let ready = true;
+      for (const line of lines) {
+        ready = target.write(`data: ${line}\n\n`);
+        if (target.aborted) return;
+      }
+      if (!ready) await target.drain();
+    }
   };
   try {
     for (;;) {
       if (target.aborted) return;
-      flush();
+      await flush();
       if (opts.isTerminal()) {
         // A final line (e.g. RUN_END) may have landed between the read above
         // and the registry marking the run terminal; flush once more so the
         // stream is complete before closing.
-        flush();
+        await flush();
         target.write("event: end\ndata: {}\n\n");
         return;
       }

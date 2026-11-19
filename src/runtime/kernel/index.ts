@@ -23,7 +23,7 @@ export {
 export { redactCredentials } from "./redact";
 
 // Terminal portability helpers.
-export { canUseAnsi, killProcessTree, resolveShell } from "./portability";
+export { canUseAnsi, killProcessTree, resolveShell, isLeaderTerminationPending } from "./portability";
 
 // Run-tree param display (the kernel emits these pairs; the CLI formats them).
 export { buildStepDisplayParamPairs } from "./format-params";

@@ -50,6 +50,14 @@ export interface RunRecord {
    * the public run object; `run_dir` (set at finalize) takes precedence.
    */
   resolvedRunDir?: string;
+  /**
+   * Negative cache: set once a resolver scan misses for a terminal run (one that
+   * will never gain a directory — e.g. a spawn failure). Subsequent events/
+   * artifacts requests and SSE polls then return "no dir" without rescanning the
+   * whole runs tree. Only set for terminal runs; a still-running run's dir may
+   * still appear on a later poll.
+   */
+  runDirMissCached?: boolean;
 }
 
 /** A normalized inbound request — decoupled from `node:http` so it is unit-testable. */
@@ -71,12 +79,12 @@ export interface ServeResponse {
   headers: Record<string, string>;
   body: string;
   /**
-   * Absolute path + byte count of a file to stream as the body (artifact
-   * download / NDJSON journal). The HTTP layer pipes exactly `size` bytes with
-   * backpressure and never buffers the whole file; takes precedence over
-   * `body`.
+   * A file to stream as the body (NDJSON journal) or an already-open descriptor
+   * to stream from (artifact download — opened once, TOCTOU-safe). The HTTP layer
+   * pipes exactly `size` bytes with backpressure, never buffering the whole file,
+   * and closes an `fd` when the stream ends; takes precedence over `body`.
    */
-  bodyFile?: { path: string; size: number };
+  bodyFile?: { path: string; size: number } | { fd: number; size: number };
   /**
    * When set, the HTTP layer streams the body by driving this function instead
    * of writing `body` — used for the SSE event follow. It resolves when the
@@ -117,6 +125,27 @@ export interface ServeHandlerOptions {
    * surface. `/healthz` is always available and credential-free.
    */
   exposeDocs?: boolean;
+  /**
+   * The address the server bound (`--host`), used by the cross-origin / Host
+   * guard to decide whether this is a loopback bind. Defaults to `127.0.0.1`.
+   */
+  boundHost?: string;
+  /**
+   * The port actually bound, read per request so `--port 0` (resolved only
+   * after `listen`) still validates against the real port. Defaults to `0`.
+   */
+  getBoundPort?: () => number;
+  /**
+   * Exact origins allowed beyond same-origin (`JAIPH_SERVE_ALLOWED_ORIGINS`).
+   * A present `Origin` that is neither same-origin nor listed here is `403`.
+   */
+  allowedOrigins?: string[];
+  /**
+   * `Host` authorities (`host:port`) allowed on a non-loopback bind
+   * (`JAIPH_SERVE_ALLOWED_HOSTS`). `undefined` skips the Host check on a
+   * non-loopback bind; it never relaxes the loopback-only check.
+   */
+  allowedHosts?: string[];
   /** Cap on simultaneously-running workflows (429 beyond it). */
   maxConcurrent: number;
   /**

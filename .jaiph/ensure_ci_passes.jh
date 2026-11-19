@@ -28,12 +28,14 @@ script npm_run_test_ci = '''
   kill "${hb_pid}" >/dev/null 2>&1 || true
   exit "${rc}"
 '''
+
 script assert_nonempty_file_or_fail = '''
   test -s "$1" || {
     echo "jaiph: ci failure log is empty at $1" >&2
     exit 1
   }
 '''
+
 # recover binds `failure` to the failed step's stdout as an output handle.
 # Stream it into dest — never argv (ARG_MAX), never treat it as a path.
 script save_ci_log = 'cat > "$1"'

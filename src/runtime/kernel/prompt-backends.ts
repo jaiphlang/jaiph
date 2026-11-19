@@ -8,7 +8,7 @@ import { spawn as nodeSpawn, type ChildProcess } from "node:child_process";
 export const _backendSpawn = { spawn: nodeSpawn };
 import { PassThrough } from "node:stream";
 import { parseStream, type StreamWriter } from "./stream-parser";
-import { killProcessTreeEscalating } from "./portability";
+import { killProcessTreeEscalating, spawnInOwnGroup, trackChildGroup } from "./portability";
 import { scrubPromptEnv } from "./env-allowlist";
 import {
   buildBackendArgs,
@@ -16,10 +16,12 @@ import {
   DEFAULT_PROMPT_COMPLETION_GRACE_MS,
   DEFAULT_PROMPT_IDLE_TIMEOUT_MS,
   DEFAULT_PROMPT_MAX_DURATION_MS,
+  promptIdleTimeoutReason,
+  promptMaxDurationReason,
   type PromptConfig,
   type PromptSource,
 } from "./prompt-config";
-import { commandExists, prepareClaudeEnv } from "./prompt-claude";
+import { commandExists, prepareClaudeEnv, removeClaudeConfigDir } from "./prompt-claude";
 import { runCodexBackend } from "./prompt-codex";
 
 /**
@@ -123,7 +125,7 @@ export function installPromptWatchdog(
     if (idleTimeoutMs <= 0) return;
     if (idleTimer) clearTimeout(idleTimer);
     idleTimer = setTimeout(
-      () => expire(1, `prompt produced no output for ${Math.round(idleTimeoutMs / 1000)}s`),
+      () => expire(1, promptIdleTimeoutReason(idleTimeoutMs)),
       idleTimeoutMs,
     );
     idleTimer.unref?.();
@@ -131,7 +133,7 @@ export function installPromptWatchdog(
 
   if (maxDurationMs > 0) {
     maxTimer = setTimeout(
-      () => expire(1, `prompt exceeded the ${Math.round(maxDurationMs / 1000)}s maximum duration`),
+      () => expire(1, promptMaxDurationReason(maxDurationMs)),
       maxDurationMs,
     );
     maxTimer.unref?.();
@@ -188,15 +190,22 @@ export function runBackend(
    * it at the send site.
    */
   promptSource?: PromptSource,
+  /**
+   * The run's cooperative-cancellation signal. The subprocess backends are
+   * terminated by the leader's OS-signal forwarding to their process group;
+   * codex has no subprocess, so the signal is handed to the HTTP backend to
+   * destroy the in-flight request on abort.
+   */
+  signal?: AbortSignal,
 ): Promise<{ final: string; status: number }> {
   // Codex uses HTTP API, not a CLI subprocess, but the named-prompt `use`
   // contract is identical: the request env is the scrubbed env plus the
   // granted `use` keys, injected last.
   if (config.backend === "codex") {
     const requestEnv = applyUseEnv(scrubPromptEnv(execEnv, config.backend), useEnv);
-    if (!promptSource) return _codexBackend.run(config, promptText, writer, stderr, requestEnv);
+    if (!promptSource) return _codexBackend.run(config, promptText, writer, stderr, requestEnv, signal);
     return consumePromptSource(promptSource).then((text) =>
-      _codexBackend.run(config, text, writer, stderr, requestEnv),
+      _codexBackend.run(config, text, writer, stderr, requestEnv, signal),
     );
   }
 
@@ -218,10 +227,19 @@ export function runBackend(
     // credential keys only. `--env`-injected secrets (e.g. GITHUB_TOKEN) stay
     // with trusted `run` steps and never reach the model.
     let childEnv: NodeJS.ProcessEnv = scrubPromptEnv(execEnv, config.backend);
+    // Ephemeral Claude config dir (seeded auth/settings under the OS temp dir)
+    // to remove when the run settles — on success, failure, or signal.
+    let claudeCleanupDir: string | undefined;
+    const removeClaudeCleanupDir = (): void => {
+      removeClaudeConfigDir(claudeCleanupDir);
+      claudeCleanupDir = undefined;
+    };
     if (isClaude) {
       const prepared = prepareClaudeEnv(childEnv, config.workspaceRoot);
+      claudeCleanupDir = prepared.cleanupDir;
       if (prepared.error) {
         stderr.write(`${prepared.error}\n`);
+        removeClaudeCleanupDir();
         resolve({ final: "", status: 1 });
         return;
       }
@@ -234,14 +252,21 @@ export function runBackend(
     // Cursor: stdin is not used (prompt is passed as arg), stderr passes through to caller.
     // Claude / custom: stdin receives prompt, stdout is parsed or collected raw.
     const useStdin = isClaude || isCustom;
+    // `detached` on POSIX puts the backend (and any tool subprocesses / MCP
+    // servers it spawns) in its own process group so the prompt watchdog's
+    // `killProcessTreeEscalating` signals the whole group, not just the backend
+    // pid. The leader forwards SIGINT/SIGTERM to that group (see child-groups.ts).
     const child = _backendSpawn.spawn(command, args, {
       stdio: useStdin ? ["pipe", "pipe", "pipe"] : ["ignore", "pipe", "pipe"],
       env: childEnv,
+      detached: spawnInOwnGroup,
     });
+    trackChildGroup(child);
 
     // Single-settle guard shared by the normal-exit path and every watchdog.
     let settled = false;
     let exitCode: number | null = null;
+    let exitSignal: NodeJS.Signals | null = null;
     // Extra stream to tear down on settle (the claude `merged` PassThrough).
     let extraStream: { destroy: () => void } | undefined;
     const settle = (final: string, status: number): void => {
@@ -261,7 +286,32 @@ export function runBackend(
       } catch {
         // best-effort cleanup
       }
+      removeClaudeCleanupDir();
       resolve({ final, status });
+    };
+
+    // Settle from a process-end event (`exit` / `close`). A `code === null`
+    // means the backend was terminated by a signal (e.g. an OOM SIGKILL) rather
+    // than exiting on its own: a failure named by the signal, so retry/recover
+    // takes over instead of passing truncated output. Script steps already treat
+    // a null code as status 1; this gives the agent backends the same rule. The
+    // watchdog's completion-grace path settles with success *before* its own
+    // kill lands, so by the time that kill's close event reaches here `settled`
+    // is already true and this is a no-op — a graced completion keeps status 0.
+    const settleFromExit = (
+      final: string,
+      code: number | null,
+      signal: NodeJS.Signals | null,
+    ): void => {
+      if (settled) return;
+      const endCode = code ?? exitCode;
+      const endSignal = signal ?? exitSignal;
+      if (endCode === null) {
+        stderr.write(`jaiph: agent backend killed by ${endSignal ?? "a signal"}\n`);
+        settle(final, 1);
+        return;
+      }
+      settle(final, endCode);
     };
 
     // Watchdog layers (completion grace / idle / absolute cap). For custom
@@ -279,8 +329,9 @@ export function runBackend(
       stderr.write(`jaiph: failed to start ${command}: ${err.message}\n`);
       settle("", 1);
     });
-    child.on("exit", (code) => {
+    child.on("exit", (code, signal) => {
       exitCode = code;
+      exitSignal = signal;
     });
 
     if (useStdin && child.stdin) {
@@ -318,8 +369,8 @@ export function runBackend(
         writer.writeFinal(text);
         final += text;
       });
-      child.on("close", (code) => {
-        settle(final, code ?? exitCode ?? 0);
+      child.on("close", (code, signal) => {
+        settleFromExit(final, code, signal);
       });
       return;
     }
@@ -343,12 +394,13 @@ export function runBackend(
       onComplete: (finalSoFar) => watchdog.markComplete(finalSoFar),
     }).then((final) => {
       // Stream ended — process closed, or the watchdog already killed it and
-      // settled (in which case `settle` here is a no-op).
-      const close = (code: number | null): void => settle(final, code ?? exitCode ?? 0);
-      if (child.exitCode !== null || exitCode !== null) {
-        close(child.exitCode ?? exitCode);
+      // settled (in which case `settleFromExit` here is a no-op).
+      const code = child.exitCode ?? exitCode;
+      const signal = child.signalCode ?? exitSignal;
+      if (code !== null || signal !== null) {
+        settleFromExit(final, code, signal);
       } else {
-        child.on("close", (code) => close(code));
+        child.on("close", (c, s) => settleFromExit(final, c, s));
       }
     });
 
