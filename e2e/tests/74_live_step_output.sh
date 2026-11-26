@@ -39,10 +39,14 @@ run_err="$(mktemp)"
 JAIPH_RUNS_DIR="${TEST_DIR}/live_runs" jaiph run "${TEST_DIR}/live_out.jh" 2>"${run_err}" &
 run_pid=$!
 
-# Wait for the run dir and .out/.err files to appear (up to 5s)
+# Wait for the run dir and .out/.err files to appear (up to 20s). The window is
+# generous because on slow runners (notably Windows + WSL) Node startup plus the
+# def main/def slow_writer dispatch can take several seconds before the script
+# step starts and its capture files are created; the loop breaks the instant the
+# files show up, so the extra cap costs nothing on fast runners.
 out_file=""
 err_file=""
-for _ in $(seq 1 50); do
+for _ in $(seq 1 200); do
   sleep 0.1
   shopt -s nullglob
   out_candidates=( "${TEST_DIR}/live_runs/"*/*"live_out.jh/"*slow_writer_impl.out )
