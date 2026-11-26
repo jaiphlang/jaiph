@@ -49,7 +49,7 @@ Crossings: interpolating, an `if` subject, or a call argument on a handle **is**
 
 | Top-level | Description |
 |---|---|
-| `import "path" as alias` | Loads another module. `.jh` is appended unless the path already ends in `.jh`. Resolution: relative-first; then, for paths containing a `/` (and when a workspace root is known), library fallback (`<workspace>/.jaiph/libs/<name>/...`). |
+| `import "path" as alias` | Loads another module. `.jh` is appended unless the path already ends in `.jh`. Resolution: relative-first; then, for paths containing a `/` (and when a workspace root is known), library fallback (`<workspace>/.jaiph/libs/<name>/...`). The resolved file must be inside the workspace or the entry file's directory; otherwise `E_IMPORT_NOT_FOUND`. |
 | `import script "path" as name [use KEY …]` | Loads an external script file (no `.jh` appended). Path is relative-only. Treated as a `script` symbol. The optional `use` clause requests host env keys for the script's spawns, same as on a named `script`. |
 | `export def` / `export script` | Marks a definition public. Names are private by default: same-file code can call any name; `import` can only call names listed in `mod.exports`. Zero exports means nothing is public. |
 | `channel name [-> target [, target …]]` | Declares a named queue. Inline routes target defs with 1 to 3 parameters (message, channel, sender). |
