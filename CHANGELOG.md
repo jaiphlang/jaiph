@@ -1,3 +1,13 @@
+# 0.16.2
+
+## Summary
+
+- **Richer `returns` schemas:** A `prompt … returns "{…}"` field can now be a string enum (`status: "approve" | "reject" | "unsure"`) or an array of records (`key_changes: [{ path: string, start: number }]`). The agent's answer is checked against the schema, and a wrong value fails the step with an error that names the field, the value, and what was allowed. Existing flat schemas behave as before.
+
+## All changes
+
+- **Feat — Parser / Runtime:** `returns` schemas support two new field types. A **string enum** is a union of quoted literals (`status: \"approve\" | \"reject\" | \"unsure\"` inside the schema string); the value must be exactly one of the literals, and anything else is a deterministic post-processing failure (no transport retry) naming the field, the value, and the allowed literals. An **array of records** is `[{ … }]` with one level of nesting and the same inner field types (string, number, boolean, string enum); it must be a JSON array of matching objects (an empty array is allowed), and errors name the path (`key_changes[2].start`). `result.status` compares in `if` / `match` as a string; an array field is passed on as its JSON text. The schema text added to the prompt describes enums and arrays in plain words. Malformed shapes (an empty union, a trailing `|`, a nested `[[…]]`, a record inside a record) are `E_PARSE` at compile time. The schema grammar lives in the shared leaf `src/prompt-schema.ts`, parsed by both the compiler and the runtime; `src/runtime/kernel/schema.ts` validates and describes a parsed schema. Docs: [Language — `prompt`](docs/language.md#prompt-agent-interaction), [Grammar](docs/grammar.md). Tests: `src/prompt-schema.test.ts`, `src/runtime/kernel/schema.test.ts`, `src/transpile/validate-prompt-schema.test.ts`, `test-fixtures/compiler-txtar/valid.txt`, `test-fixtures/compiler-txtar/validate-errors.txt`, `e2e/tests/24_prompt_schema_types.sh`.
+
 # 0.16.1
 
 ## Summary
