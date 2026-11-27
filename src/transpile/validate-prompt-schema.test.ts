@@ -34,17 +34,51 @@ test("validatePromptReturnsSchema: rejects whitespace-only schema", () => {
   );
 });
 
-test("validatePromptReturnsSchema: rejects array types", () => {
-  assert.throws(
-    () => validatePromptReturnsSchema("{ items: string[] }", "test.jh", 1, 1),
-    /no arrays or union types/,
+test("validatePromptReturnsSchema: accepts a string enum", () => {
+  validatePromptReturnsSchema('{ status: "approve" | "reject" | "unsure" }', "test.jh", 1, 1);
+});
+
+test("validatePromptReturnsSchema: accepts an array of records", () => {
+  validatePromptReturnsSchema(
+    '{ key_changes: [{ path: string, start: number, kind: "add" | "del" }] }',
+    "test.jh",
+    1,
+    1,
   );
 });
 
-test("validatePromptReturnsSchema: rejects union types", () => {
+test("validatePromptReturnsSchema: rejects postfix [] as E_PARSE", () => {
+  assert.throws(
+    () => validatePromptReturnsSchema("{ items: string[] }", "test.jh", 1, 1),
+    /E_PARSE/,
+  );
+});
+
+test("validatePromptReturnsSchema: rejects an unquoted type-union as E_PARSE", () => {
   assert.throws(
     () => validatePromptReturnsSchema("{ name: string | number }", "test.jh", 1, 1),
-    /no arrays or union types/,
+    /E_PARSE.*quoted string literals/,
+  );
+});
+
+test("validatePromptReturnsSchema: rejects an empty enum option as E_PARSE", () => {
+  assert.throws(
+    () => validatePromptReturnsSchema('{ status: "a" | }', "test.jh", 1, 1),
+    /E_PARSE.*empty option/,
+  );
+});
+
+test("validatePromptReturnsSchema: rejects a nested array as E_PARSE", () => {
+  assert.throws(
+    () => validatePromptReturnsSchema("{ xs: [[{ a: string }]] }", "test.jh", 1, 1),
+    /E_PARSE.*nested arrays/,
+  );
+});
+
+test("validatePromptReturnsSchema: rejects a record inside a record as E_PARSE", () => {
+  assert.throws(
+    () => validatePromptReturnsSchema("{ xs: [{ a: { b: string } }] }", "test.jh", 1, 1),
+    /E_PARSE.*record inside a record/,
   );
 });
 

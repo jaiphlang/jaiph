@@ -263,10 +263,19 @@ Sends text to the configured agent backend. The body can take one of these forms
 | Aspect | Rule |
 |---|---|
 | Capture | `const name = prompt …`. `name = prompt …` is `E_PARSE`. |
-| Typed `returns` | Flat `{ field: type, … }` with `string` / `number` / `boolean`. Stored verbatim as text per-field. |
+| Typed `returns` | A `{ field: type, … }` schema. Each field type is `string` / `number` / `boolean`, a **string enum** — a union of quoted literals (`status: "approve" \| "reject" \| "unsure"`), or an **array of records** — one level of nesting (`key_changes: [{ path: string, start: number, note: string }]`). The agent's value must match or the step fails deterministically (not a transport retry): an enum value must be exactly one of the literals, and an array must be a JSON array of matching objects (an empty array is allowed). A malformed schema (an empty union, a trailing `\|`, a nested `[[…]]`, or a record inside a record) is a compile-time error. Enum and record-field types are also validated inside array records. |
 | Capture required when `returns` | `prompt … returns "…"` without `const` is `E_PARSE`. |
-| Dot notation | Bare `result.field` (in `return`, `if` / `match` subjects, and call arguments) and `${result.field}` **inside strings** require that the base is a typed-prompt capture and the field appears in the schema. Unquoted `${result.field}` in call-argument position is `E_VALIDATE`. |
+| Dot notation | Bare `result.field` (in `return`, `if` / `match` subjects, and call arguments) and `${result.field}` **inside strings** require that the base is a typed-prompt capture and the field appears in the schema. Unquoted `${result.field}` in call-argument position is `E_VALIDATE`. A scalar or enum field reads as its text (and compares in `if` / `match`); an array field reads as its JSON text. |
 | Transport retry | Transport failures retry on a backoff schedule; deterministic post-processing failures do not. See [Configuration — Prompt retry on transport failure](configuration.md#prompt-retry-on-transport-failure). |
+
+The schema is a double-quoted string, so enum literals inside it are written with escaped quotes:
+
+```
+const review = prompt "Review this change" returns "{ status: \"approve\" | \"reject\", key_changes: [{ path: string, start: number, note: string }] }"
+if review.status == "approve" {
+  ship("${review.key_changes}")
+}
+```
 
 ### Named prompts
 

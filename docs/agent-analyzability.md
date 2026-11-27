@@ -49,7 +49,7 @@ Imports may point only **downward**. Lower layers never import higher ones.
 | **2.5** Graph | `src/graph/**` | 2 (`src/transpiler.ts`), 1 (`src/parser.ts`), 0, but **not** runtime or CLI |
 | **2** Compile | `src/transpile/**`, `src/transpiler.ts` | 1, 0, but **not** runtime |
 | **1** Parse / format | `src/parse/**`, `src/parser.ts`, `src/format/**` | 0 only |
-| **0** Shared leaf | `src/types.ts`, `src/errors.ts`, `src/diagnostics.ts`, `src/version.ts`, `src/env-reserved.ts`, `src/inline-script-name.ts` | other layer-0 files only |
+| **0** Shared leaf | `src/types.ts`, `src/errors.ts`, `src/diagnostics.ts`, `src/version.ts`, `src/env-reserved.ts`, `src/inline-script-name.ts`, `src/prompt-schema.ts` | other layer-0 files only |
 
 **Already pinned today:** compile-time must not import runtime (`src/transpile/no-runtime-imports.test.ts`). The layer table generalizes that rule, and `npm run arch:check` now enforces the whole table (see [Enforcement (CI)](#enforcement-ci)).
 

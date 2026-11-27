@@ -193,22 +193,22 @@
       "message": "returns schema cannot be empty"
     }
   ],
-  "validate-errors.txt > returns schema rejects array types": [
+  "validate-errors.txt > returns schema rejects a non-record array shape": [
     {
       "file": "input.jh",
       "line": 2,
       "col": 3,
-      "code": "E_SCHEMA",
-      "message": "returns schema must be flat (no arrays or union types); only string, number, boolean allowed"
+      "code": "E_PARSE",
+      "message": "an array field must contain a single record: [{ field: type, … }]"
     }
   ],
-  "validate-errors.txt > returns schema rejects union types": [
+  "validate-errors.txt > returns schema rejects an unquoted type-union": [
     {
       "file": "input.jh",
       "line": 2,
       "col": 3,
-      "code": "E_SCHEMA",
-      "message": "returns schema must be flat (no arrays or union types); only string, number, boolean allowed"
+      "code": "E_PARSE",
+      "message": "enum values must be quoted string literals (e.g. \"a\" | \"b\"); got string"
     }
   ],
   "validate-errors.txt > returns schema rejects malformed entry": [

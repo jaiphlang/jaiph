@@ -2,9 +2,10 @@
  * Stateless parsing/formatting helpers for the Node workflow runtime.
  *
  * Pure functions only — no I/O, no class state. The runtime composes these to
- * resolve interpolated strings, sanitize names, and validate prompt return
- * schemas. (Call arguments are evaluated from typed `Arg[]` directly in the
- * runtime; there is no argument-string tokenizer here.)
+ * resolve interpolated strings and sanitize names. (Call arguments are
+ * evaluated from typed `Arg[]` directly in the runtime; there is no
+ * argument-string tokenizer here. The `returns` schema grammar lives in the
+ * shared leaf `src/prompt-schema.ts`.)
  */
 import { interpolate } from "../../config";
 import { formatUtcTimestamp } from "./emit";
@@ -16,8 +17,6 @@ export { interpolate };
 
 export const MAX_EMBED = 1024 * 1024;
 export const MAX_RECURSION_DEPTH = 256;
-
-export type PromptSchemaField = { name: string; type: "string" | "number" | "boolean" };
 
 export function sanitizeName(raw: string): string {
   return raw.replace(/[^a-zA-Z0-9_.-]/g, "_");
@@ -72,28 +71,4 @@ export function stripOuterQuotes(value: string): string {
     }
   }
   return value;
-}
-
-export function parsePromptSchema(rawSchema: string): PromptSchemaField[] {
-  const trimmed = rawSchema.trim();
-  if (trimmed.length === 0) return [];
-  if (/[[\]|]/.test(trimmed)) {
-    throw new Error("returns schema must be flat (no arrays or union types)");
-  }
-  const inner = trimmed.replace(/^\s*\{\s*/, "").replace(/\s*\}\s*$/, "").trim();
-  if (inner.length === 0) return [];
-  const fields: PromptSchemaField[] = [];
-  for (const part of inner.split(",")) {
-    const m = part.trim().match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*:\s*(\S+)\s*$/);
-    if (!m) {
-      throw new Error(`invalid returns schema entry: ${part.trim().slice(0, 40)}`);
-    }
-    const [, name, typeStr] = m;
-    const type = typeStr.toLowerCase();
-    if (type !== "string" && type !== "number" && type !== "boolean") {
-      throw new Error(`unsupported returns schema type: ${typeStr}`);
-    }
-    fields.push({ name, type: type as "string" | "number" | "boolean" });
-  }
-  return fields;
 }

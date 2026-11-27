@@ -1,0 +1,20 @@
+#!/usr/bin/env jaiph
+import "prompt_schema_types.jh" as p
+
+test "enum field compares in if" {
+  mock prompt "{\"status\":\"approve\"}"
+  const got = p.verdict("t")
+  expect_equal got "if-approved"
+}
+
+test "enum field compares in match" {
+  mock prompt "{\"status\":\"reject\"}"
+  const got = p.verdict("t")
+  expect_equal got "match-rejected"
+}
+
+test "array-of-records field interpolates as JSON text" {
+  mock prompt "{\"key_changes\":[{\"path\":\"a.ts\",\"start\":1,\"note\":\"x\"}]}"
+  const got = p.changes("t")
+  expect_equal got "[{\"path\":\"a.ts\",\"start\":1,\"note\":\"x\"}]"
+}

@@ -260,15 +260,15 @@ export def main() {
   const result = prompt "classify" returns ""
 }
 
-=== returns schema rejects array types
-# @expect error E_SCHEMA "returns schema must be flat (no arrays or union types); only string, number, boo" @2:3
+=== returns schema rejects a non-record array shape
+# @expect error E_PARSE "an array field must contain a single record: [{ field: type," @2:3
 --- input.jh
 export def main() {
   const result = prompt "classify" returns "{ items: [string] }"
 }
 
-=== returns schema rejects union types
-# @expect error E_SCHEMA "returns schema must be flat (no arrays or union types); only string, number, boo" @2:3
+=== returns schema rejects an unquoted type-union
+# @expect error E_PARSE "enum values must be quoted string literals" @2:3
 --- input.jh
 export def main() {
   const result = prompt "classify" returns "{ status: string | number }"

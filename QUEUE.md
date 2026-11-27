@@ -19,35 +19,6 @@ Process rules:
 7. Acceptance criteria are non-negotiable. A task is not done until every
    acceptance bullet is verified by a test that fails when the contract is violated.
 
-## Support string enums and arrays of records in prompt returns schemas #dev-ready
-
-Source: Jaiph Factory contract design, 2026-11-27. The factory's stage flows want every agent step to return a typed result through `prompt … returns "{…}"`, but today's schema is too flat for their real outputs.
-
-### Current behavior
-
-A `returns` schema is a flat `{ field: type, … }` with `string`, `number` or `boolean` fields (`docs/language.md`, "`prompt` — agent interaction" and "Named prompts"; parsed in `src/parse/prompt.ts`). Two common needs do not fit:
-
-- A field that must be one of a few words, such as a review verdict, can only be `string`. Every caller then re-validates the value by hand, and a typo from the agent (`aprove`) passes the schema.
-- A list of records, such as the files and line ranges an agent cites, has to travel as a JSON string inside a `string` field, so the caller parses it again and the schema says nothing about its shape.
-
-### Wanted
-
-1. **String enums.** A field type written as a union of string literals, for example `status: "approve" | "reject" | "unsure"`. The returned value must be exactly one of the literals; anything else is a deterministic post-processing failure (not a transport retry), with an error that names the field, the value and the allowed literals.
-2. **Arrays of records.** A field type written as `[ { … } ]` with the same field types inside (string, number, boolean, string enum), for example `key_changes: [{ path: string, start: number, end: number, note: string }]`. One level of nesting is enough; records inside records are out of scope.
-3. **Access.** `result.status` works as today and compares in `if` / `match` as a string. An array field is passed on as its JSON text (to a script, `return`, interpolation, or as a call argument), so existing code that treats it as a string keeps working. `result.key_changes.path` and indexing are out of scope.
-4. **Prompt instruction.** The schema text the runtime adds to the prompt (telling the agent what JSON to return) describes enums and arrays in plain words, so agents produce them reliably.
-5. **Docs.** `docs/language.md` (the `returns` rows for steps and named prompts) and `docs/grammar.md` (the `returns_schema` description, which stays a double-quoted string) describe both types with one example each.
-
-### Acceptance criteria
-
-- A schema with an enum field accepts each listed literal and rejects any other value with an error naming the field, the value and the allowed literals; that rejection does not trigger the transport retry backoff.
-- A schema with an array-of-records field accepts a JSON array of matching objects (including an empty array), and rejects a non-array, a record missing a declared field, or a field of the wrong type, each with an error naming the path (for example `key_changes[2].start`).
-- Enum fields inside array records are validated the same way.
-- `result.field` for an enum compares in `if` and `match`; an array field interpolates and passes to a script as its JSON text.
-- Malformed schemas (an empty union, `"a" |`, a nested `[[…]]`, a record inside a record) are `E_PARSE` at compile time with a message that says what to change.
-- Existing flat schemas behave exactly as before (the current `returns` tests pass unchanged).
-- Every bullet above has a test that fails when the behavior is broken; `docs/language.md` and `docs/grammar.md` examples compile.
-
 ## Accept a trailing # comment after any statement, and compile the doc samples #dev-ready
 
 Source: code audit 2026-11-15. Reproduced with the built CLI.

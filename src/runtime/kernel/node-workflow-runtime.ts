@@ -30,17 +30,16 @@ import { CHAIN_KEY_ENV } from "./emit";
 import { buildStepDisplayParamPairs } from "./format-params";
 import { resolveScriptRef, resolveDefRef, resolvePromptRef, type RuntimeGraph } from "./graph";
 import type { DefMetadata } from "../../types";
-import { interpolateDefMetadata, resolveModuleMetadata } from "../../config";
-import { extractJson, validateFields } from "./schema";
+import { interpolateDefMetadata, resolveModuleMetadata, jsonFieldText } from "../../config";
+import { extractJson, validateSchema, describeSchema } from "./schema";
+import { parseReturnsSchema, type SchemaField } from "../../prompt-schema";
 import {
   decodeCallArgLiteral,
   interpolate,
   MAX_EMBED,
   MAX_RECURSION_DEPTH,
   nowIso,
-  parsePromptSchema,
   sanitizeName,
-  type PromptSchemaField,
 } from "./runtime-arg-parser";
 import { killProcessTreeEscalating, spawnInOwnGroup, trackChildGroup } from "./portability";
 import { RuntimeEventEmitter, type Frame } from "./runtime-event-emitter";
@@ -458,7 +457,7 @@ export class NodeWorkflowRuntime {
     try {
       const obj = JSON.parse(baseVal);
       if (obj != null && typeof obj === "object" && field in obj) {
-        return { ok: true, value: String((obj as Record<string, unknown>)[field]) };
+        return { ok: true, value: jsonFieldText((obj as Record<string, unknown>)[field]) };
       }
     } catch {
       // fall through to empty
@@ -2154,14 +2153,16 @@ export class NodeWorkflowRuntime {
       if (!promptIr.ok) return { ok: false, result: promptIr.result, output: "" };
       promptText = promptIr.value;
     }
-    let schemaFields: PromptSchemaField[] | undefined;
+    let schemaFields: SchemaField[] | undefined;
     let schemaSuffix = "";
     if (returns !== undefined) {
-      schemaFields = parsePromptSchema(returns);
-      const schemaObject = Object.fromEntries(schemaFields.map((f) => [f.name, f.type]));
-      schemaSuffix =
-        "\n\nRespond with exactly one line of valid JSON (no markdown, no explanation) matching this schema: " +
-        JSON.stringify(schemaObject);
+      const parsed = parseReturnsSchema(returns);
+      if (!parsed.ok) {
+        // The compiler already validated the schema, so this is defensive.
+        return { ok: false, result: { status: 1, output: "", error: parsed.message }, output: "" };
+      }
+      schemaFields = parsed.fields;
+      schemaSuffix = describeSchema(schemaFields);
       // A file source appends the schema after the streamed bytes (see
       // `promptSource.suffix`); every other body appends to the string here.
       if (!fileSource) promptText += schemaSuffix;
@@ -2291,18 +2292,18 @@ export class NodeWorkflowRuntime {
           output: lastOutput,
         };
       }
-      const validation = validateFields(extracted.obj, schemaFields);
-      if (validation !== 0) {
+      const schemaErr = validateSchema(extracted.obj, schemaFields);
+      if (schemaErr) {
         return {
           ok: false,
-          result: { status: validation, output: "", error: "prompt response failed schema validation" },
+          result: { status: 1, output: "", error: schemaErr },
           output: lastOutput,
         };
       }
       if (captureName) {
         scope.vars.set(captureName, extracted.source);
         for (const field of schemaFields) {
-          scope.vars.set(`${captureName}_${field.name}`, String(extracted.obj[field.name]));
+          scope.vars.set(`${captureName}_${field.name}`, jsonFieldText(extracted.obj[field.name]));
         }
       }
     } else if (captureName) {

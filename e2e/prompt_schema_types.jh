@@ -1,0 +1,21 @@
+#!/usr/bin/env jaiph
+# Fixture: string-enum and array-of-records returns schemas.
+
+# A string enum field compares in `if` and in `match`.
+export def verdict(task) {
+  const r = prompt "Review \"${task}\"" returns "{ status: \"approve\" | \"reject\" | \"unsure\" }"
+  if r.status == "approve" {
+    return "if-approved"
+  }
+  const v = match r.status {
+    "reject" => "match-rejected"
+    _ => "match-other"
+  }
+  return "${v}"
+}
+
+# An array-of-records field is passed on as its JSON text.
+export def changes(task) {
+  const r = prompt "List changes for \"${task}\"" returns "{ key_changes: [{ path: string, start: number, note: string }] }"
+  return "${r.key_changes}"
+}

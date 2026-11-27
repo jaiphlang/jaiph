@@ -40,11 +40,21 @@ export function interpolate(
     const raw = lookup(String(base));
     try {
       const obj = JSON.parse(raw);
-      return q(obj != null && typeof obj === "object" && field in obj ? String(obj[field]) : "");
+      return q(obj != null && typeof obj === "object" && field in obj ? jsonFieldText(obj[field]) : "");
     } catch {
       return q("");
     }
   });
+}
+
+/**
+ * Render a typed-prompt field value as text: a record or array field (an
+ * array-of-records in a `returns` schema) stringifies to its JSON text so it
+ * passes to a script / interpolation unchanged; a scalar / enum keeps its
+ * plain string form.
+ */
+export function jsonFieldText(v: unknown): string {
+  return v !== null && typeof v === "object" ? JSON.stringify(v) : String(v);
 }
 
 export type JaiphConfig = {

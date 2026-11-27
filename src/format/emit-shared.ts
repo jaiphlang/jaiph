@@ -54,6 +54,17 @@ export function decodeTripleQuotedInner(raw: string): string {
   return raw.slice(1, -1).replace(/\\"/g, '"');
 }
 
+/**
+ * Render a `prompt … returns "<schema>"` clause. The AST stores the schema with
+ * its inner quotes decoded (the parser undoes `\"` → `"`); re-escape them so a
+ * string enum (`status: "a" | "b"`) round-trips through the double-quoted schema
+ * string. Returns `""` when there is no schema.
+ */
+export function returnsClause(returns: string | undefined, prefix = " "): string {
+  if (!returns) return "";
+  return `${prefix}returns "${returns.replace(/"/g, '\\"')}"`;
+}
+
 export function emitRef(
   ref: { value: string },
   args: Arg[] | undefined,

@@ -1,5 +1,6 @@
 import type { Diagnostics } from "../diagnostics";
 import { isJaiphInterpolationRef, MODULE_FIELDS } from "../parser";
+import { schemaFieldNames } from "../prompt-schema";
 import type { Arg, jaiphModule } from "../types";
 import {
   lookupKind,
@@ -352,14 +353,7 @@ export function promptBareIdentifier(raw: string): string | undefined {
 }
 
 export function parseSchemaFieldNames(rawSchema: string): string[] {
-  const inner = rawSchema.trim().replace(/^\s*\{\s*/, "").replace(/\s*\}\s*$/, "").trim();
-  if (!inner) return [];
-  const names: string[] = [];
-  for (const part of inner.split(",")) {
-    const m = part.trim().match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*:\s*\S+\s*$/);
-    if (m) names.push(m[1]);
-  }
-  return names;
+  return schemaFieldNames(rawSchema);
 }
 
 export function makeImportedKindLookup(

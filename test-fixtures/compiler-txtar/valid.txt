@@ -627,6 +627,25 @@ export def main() {
     returns "{ type: string, risk: string }"
 }
 
+=== prompt returns schema with a string enum field
+# @expect ok
+--- input.jh
+export def main() {
+  const review = prompt "Review" returns "{ status: \"approve\" | \"reject\" | \"unsure\" }"
+  if review.status == "approve" {
+    log "shipping"
+  }
+  return "${review.status}"
+}
+
+=== prompt returns schema with an array-of-records field
+# @expect ok
+--- input.jh
+export def main() {
+  const review = prompt "Review" returns "{ summary: string, key_changes: [{ path: string, start: number, end: number, note: string }] }"
+  return "${review.key_changes}"
+}
+
 === valid run catch block
 # @expect ok
 --- input.jh

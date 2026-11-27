@@ -1,6 +1,11 @@
 // Schema validation for typed prompts (returns '{ field: type }').
+//
+// The schema grammar and its parser live in the shared leaf `src/prompt-schema.ts`
+// (also used by the compiler). This file owns the two runtime-only concerns:
+// extracting a JSON object from the agent's raw text, and validating / describing
+// that object against the parsed schema.
 
-type SchemaField = { name: string; type: string };
+import type { FieldType, RecordFieldType, SchemaField } from "../../prompt-schema";
 
 /**
  * Index just past the `}` that closes the `{` at `from`, ignoring braces inside
@@ -90,32 +95,86 @@ export function extractJson(raw: string): { obj: Record<string, unknown>; source
   return null;
 }
 
-/** Validate fields against schema. Returns exit code (0=ok, 2=missing, 3=type mismatch). */
-export function validateFields(
-  obj: Record<string, unknown>,
-  fields: SchemaField[],
-): number {
-  for (const f of fields) {
-    if (!(f.name in obj)) {
-      process.stderr.write(`jaiph: prompt response missing required field: ${f.name}\n`);
-      return 2;
+/** Name a JSON value's type the way the agent sees it (array/null distinguished). */
+function typeName(v: unknown): string {
+  if (Array.isArray(v)) return "array";
+  if (v === null) return "null";
+  return typeof v;
+}
+
+function checkScalar(path: string, v: unknown, type: "string" | "number" | "boolean"): string | null {
+  if (typeof v === type) return null;
+  return `prompt response field "${path}" expected ${type}, got ${typeName(v)}`;
+}
+
+function checkEnum(path: string, v: unknown, values: string[]): string | null {
+  const allowed = values.map((x) => `"${x}"`).join(" | ");
+  if (typeof v !== "string") {
+    return `prompt response field "${path}" expected one of ${allowed}, got ${typeName(v)}`;
+  }
+  if (!values.includes(v)) {
+    return `prompt response field "${path}" must be one of ${allowed}, got "${v}"`;
+  }
+  return null;
+}
+
+function checkScalarOrEnum(path: string, v: unknown, type: RecordFieldType): string | null {
+  return type.kind === "enum" ? checkEnum(path, v, type.values) : checkScalar(path, v, type.type);
+}
+
+function checkField(path: string, v: unknown, type: FieldType): string | null {
+  if (type.kind !== "array") return checkScalarOrEnum(path, v, type);
+  if (!Array.isArray(v)) {
+    return `prompt response field "${path}" expected an array, got ${typeName(v)}`;
+  }
+  for (let i = 0; i < v.length; i += 1) {
+    const el = v[i];
+    if (el === null || typeof el !== "object" || Array.isArray(el)) {
+      return `prompt response field "${path}[${i}]" expected an object, got ${typeName(el)}`;
+    }
+    const rec = el as Record<string, unknown>;
+    for (const rf of type.fields) {
+      const rp = `${path}[${i}].${rf.name}`;
+      if (!(rf.name in rec)) return `prompt response field "${rp}" is missing`;
+      const err = checkScalarOrEnum(rp, rec[rf.name], rf.type);
+      if (err) return err;
     }
   }
+  return null;
+}
+
+/**
+ * Validate a parsed JSON object against the schema. Returns `null` on success
+ * or a message naming the offending field / path, the value, and (for enums)
+ * the allowed literals. A non-null result is a deterministic post-processing
+ * failure and is not retried.
+ */
+export function validateSchema(obj: Record<string, unknown>, fields: SchemaField[]): string | null {
   for (const f of fields) {
-    const v = obj[f.name];
-    const t = f.type;
-    if (t === "string" && typeof v !== "string") {
-      process.stderr.write(`jaiph: prompt response field "${f.name}" expected string, got ${typeof v}\n`);
-      return 3;
-    }
-    if (t === "number" && typeof v !== "number") {
-      process.stderr.write(`jaiph: prompt response field "${f.name}" expected number, got ${typeof v}\n`);
-      return 3;
-    }
-    if (t === "boolean" && typeof v !== "boolean") {
-      process.stderr.write(`jaiph: prompt response field "${f.name}" expected boolean, got ${typeof v}\n`);
-      return 3;
-    }
+    if (!(f.name in obj)) return `prompt response missing required field: ${f.name}`;
+    const err = checkField(f.name, obj[f.name], f.type);
+    if (err) return err;
   }
-  return 0;
+  return null;
+}
+
+function describeType(type: FieldType): string {
+  if (type.kind === "scalar") return type.type;
+  if (type.kind === "enum") return `one of ${type.values.map((v) => `"${v}"`).join(", ")}`;
+  const inner = type.fields
+    .map((rf) => `${rf.name}: ${rf.type.kind === "enum" ? `one of ${rf.type.values.map((v) => `"${v}"`).join(", ")}` : rf.type.type}`)
+    .join(", ");
+  return `an array of objects, each with { ${inner} }`;
+}
+
+/**
+ * The instruction appended to the prompt body telling the agent what JSON to
+ * return. Enums and arrays are described in plain words so agents produce them
+ * reliably.
+ */
+export function describeSchema(fields: SchemaField[]): string {
+  const head = "\n\nRespond with exactly one line of valid JSON (no markdown, no explanation)";
+  if (fields.length === 0) return `${head}: {}`;
+  const lines = fields.map((f) => `- ${f.name}: ${describeType(f.type)}`);
+  return `${head} with these fields:\n${lines.join("\n")}`;
 }

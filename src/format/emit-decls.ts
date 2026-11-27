@@ -4,6 +4,7 @@ import {
   decodeTripleQuotedInner,
   emitComments,
   emitFencedScriptBodyLines,
+  returnsClause,
   tn,
 } from "./emit-shared";
 
@@ -53,13 +54,13 @@ export function emitPromptDecl(
   const prefix = exported ? "export " : "";
   const useClause = emitUseClause(prompt.use);
   const header = `${ci}${prefix}prompt ${prompt.name}(${prompt.params.join(", ")})${useClause} = `;
-  const returns = prompt.returns ? ` returns "${prompt.returns}"` : "";
+  const returns = returnsClause(prompt.returns);
   if (tn(trivia, prompt).bodyKind === "triple_quoted") {
     const inner = decodeTripleQuotedInner(prompt.raw);
     lines.push(`${header}"""`);
     lines.push(...emitFencedScriptBodyLines(inner, `${ci}${pad}`));
     lines.push(`${ci}"""`);
-    if (prompt.returns) lines.push(`${ci}returns "${prompt.returns}"`);
+    if (prompt.returns) lines.push(`${ci}${returnsClause(prompt.returns, "")}`);
   } else {
     lines.push(`${header}${prompt.raw}${returns}`);
   }

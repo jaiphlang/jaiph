@@ -11,7 +11,7 @@
 // The table in docs/agent-analyzability.md is authoritative; keep these in sync.
 
 const LAYER0 =
-  "^src/(types|errors|diagnostics|version|env-reserved|inline-script-name)\\.ts$";
+  "^src/(types|errors|diagnostics|version|env-reserved|inline-script-name|prompt-schema)\\.ts$";
 const LAYER1 = "^src/(parse/|parser\\.ts$|format/)";
 const LAYER2 = "^src/(transpile/|transpiler\\.ts$)";
 // Graph (model/builder/emitter) sits above compile and below cli: it reuses the

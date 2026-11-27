@@ -3,7 +3,6 @@ import * as assert from "node:assert/strict";
 import {
   decodeCallArgLiteral,
   interpolate,
-  parsePromptSchema,
   sanitizeName,
   stripOuterQuotes,
 } from "./runtime-arg-parser";
@@ -80,34 +79,5 @@ describe("stripOuterQuotes", () => {
 
   it("leaves mismatched quotes unchanged", () => {
     assert.equal(stripOuterQuotes("\"hello'"), "\"hello'");
-  });
-});
-
-describe("parsePromptSchema", () => {
-  it("parses a flat object schema with three types", () => {
-    const fields = parsePromptSchema("{ name: string, age: number, active: boolean }");
-    assert.deepEqual(fields, [
-      { name: "name", type: "string" },
-      { name: "age", type: "number" },
-      { name: "active", type: "boolean" },
-    ]);
-  });
-
-  it("returns empty array for empty schema", () => {
-    assert.deepEqual(parsePromptSchema(""), []);
-    assert.deepEqual(parsePromptSchema("{}"), []);
-  });
-
-  it("throws on union/array syntax", () => {
-    assert.throws(() => parsePromptSchema("{ x: string | number }"));
-    assert.throws(() => parsePromptSchema("{ xs: string[] }"));
-  });
-
-  it("throws on unsupported type", () => {
-    assert.throws(() => parsePromptSchema("{ x: object }"));
-  });
-
-  it("throws on malformed entry", () => {
-    assert.throws(() => parsePromptSchema("{ no_colon }"));
   });
 });

@@ -13,6 +13,7 @@ import {
   emitFencedScriptBodyLines,
   emitRef,
   formatArgs,
+  returnsClause,
   tn,
 } from "./emit-shared";
 import { emitScriptDecl, emitPromptDecl } from "./emit-decls";
@@ -199,7 +200,7 @@ function emitExprFirstLine(
     if (expr.name !== undefined) {
       return { head: `prompt ${expr.name}(${formatArgs(expr.args)})`, tail: [] };
     }
-    const returns = expr.returns ? ` returns "${expr.returns}"` : "";
+    const returns = returnsClause(expr.returns);
     if (valueTrivia.bodyKind === "identifier" && valueTrivia.bodyIdentifier) {
       return { head: `prompt ${valueTrivia.bodyIdentifier}${returns}`, tail: [] };
     }
@@ -208,7 +209,7 @@ function emitExprFirstLine(
       const tail = emitFencedScriptBodyLines(inner, `${ci}${pad}`);
       tail.push(`${ci}"""`);
       if (expr.returns) {
-        tail.push(`${ci}returns "${expr.returns}"`);
+        tail.push(`${ci}${returnsClause(expr.returns, "")}`);
       }
       return { head: 'prompt """', tail };
     }
@@ -339,7 +340,7 @@ function emitStep(step: StepDef, pad: string, currentIndent: string, trivia: Tri
         return lines;
       }
       const bodyTrivia = tn(trivia, body);
-      const returns = body.returns ? ` returns "${body.returns}"` : "";
+      const returns = returnsClause(body.returns);
       if (bodyTrivia.bodyKind === "identifier" && bodyTrivia.bodyIdentifier) {
         lines.push(`${ci}${capture}prompt ${bodyTrivia.bodyIdentifier}${returns}`);
       } else if (bodyTrivia.bodyKind === "triple_quoted") {
@@ -347,7 +348,7 @@ function emitStep(step: StepDef, pad: string, currentIndent: string, trivia: Tri
         lines.push(`${ci}${capture}prompt """`);
         lines.push(...emitFencedScriptBodyLines(inner, `${ci}${pad}`));
         lines.push(`${ci}"""`);
-        if (body.returns) lines.push(`${ci}returns "${body.returns}"`);
+        if (body.returns) lines.push(`${ci}${returnsClause(body.returns, "")}`);
       } else {
         lines.push(`${ci}${capture}prompt ${body.raw}${returns}`);
       }
